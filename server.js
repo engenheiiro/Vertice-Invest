@@ -1,22 +1,20 @@
+import 'dotenv/config';
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Configuração para __dirname em ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// --- CONFIGURAÇÃO ---
-// Em produção, restringimos o CORS para aceitar apenas nosso frontend.
-// Por enquanto, usamos '*' para garantir que funcione na primeira implantação.
-app.use(cors({
-  origin: '*', 
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+app.use(cors());
 app.use(express.json());
 
 // --- CONEXÃO COM O BANCO DE DADOS ---
-// O Render injetará a variável MONGO_URI. Localmente, usamos uma string vazia ou fallback.
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
@@ -40,13 +38,12 @@ const UserSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', UserSchema);
 
-// --- ROTAS (API) ---
+// --- ROTAS DA API ---
 
-app.get('/', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.send('API Vértice Invest está Online 🚀');
 });
 
-// 1. Rota de Cadastro
 app.post('/api/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -72,7 +69,6 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// 2. Rota de Login
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -99,8 +95,17 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// --- SERVIR FRONTEND (PRODUÇÃO) ---
+// O Express vai servir os arquivos estáticos gerados pelo 'vite build' na pasta 'dist'
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// Qualquer rota que não seja da API, manda para o React (SPA)
+// FIX: Usamos Regex (/.*/) ao invés de string ('*') para evitar erro de parsing em versões recentes do router
+app.get(/.*/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 // --- INICIALIZAÇÃO ---
-// O Render injeta a variável PORT automaticamente.
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
