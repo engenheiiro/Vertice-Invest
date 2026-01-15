@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server.js",
-    "server": "node --watch server.js"
+    "server": "node --watch server.js",
+    "render-build": "npm install && npm run build"
   },
   "dependencies": {
     "cors": "^2.8.5",

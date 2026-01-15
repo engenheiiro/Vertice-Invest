@@ -3,6 +3,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 // Configuração para __dirname em ES Modules
@@ -96,13 +97,35 @@ app.post('/api/login', async (req, res) => {
 });
 
 // --- SERVIR FRONTEND (PRODUÇÃO) ---
-// O Express vai servir os arquivos estáticos gerados pelo 'vite build' na pasta 'dist'
-app.use(express.static(path.join(__dirname, 'dist')));
+const distPath = path.join(__dirname, 'dist');
 
-// Qualquer rota que não seja da API, manda para o React (SPA)
-// FIX: Usamos Regex (/.*/) ao invés de string ('*') para evitar erro de parsing em versões recentes do router
+// Verifica se a pasta dist existe antes de tentar servir
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+}
+
+// Qualquer rota que não seja da API, tenta mandar para o React (SPA)
 app.get(/.*/, (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  const indexPath = path.join(distPath, 'index.html');
+  
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    // Se o index.html não existe, significa que o build não rodou
+    res.status(500).send(`
+      <div style="font-family: sans-serif; padding: 40px; text-align: center;">
+        <h1 style="color: #e11d48;">⚠️ Build não encontrado</h1>
+        <p>A pasta <code>dist</code> não existe no servidor.</p>
+        <p><strong>Como corrigir no Render:</strong></p>
+        <ol style="display: inline-block; text-align: left;">
+          <li>Vá em <em>Settings</em> no dashboard do Render.</li>
+          <li>Encontre a opção <strong>Build Command</strong>.</li>
+          <li>Mude para: <code>npm run render-build</code></li>
+          <li>Salve e faça um novo deploy (Manual Deploy > Clear cache and deploy).</li>
+        </ol>
+      </div>
+    `);
+  }
 });
 
 // --- INICIALIZAÇÃO ---
