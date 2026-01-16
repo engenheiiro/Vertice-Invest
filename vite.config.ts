@@ -11,7 +11,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(__dirname, "src"), // Removido o "./" para evitar ambiguidades
     },
   },
   server: {
@@ -25,7 +25,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist', // Pasta que o Render vai servir
+    outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false
   }

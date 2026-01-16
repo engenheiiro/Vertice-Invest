@@ -1,5 +1,5 @@
-import { API_URL } from '@/config';
-import { User } from '@/contexts/AuthContext';
+import { API_URL } from '../config';
+import { User } from '../contexts/AuthContext';
 
 interface LoginCredentials {
   email: string;

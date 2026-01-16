@@ -88,7 +88,7 @@ export const AllocationChart = () => {
     const saveTargets = () => {
         const sumPercents = Object.entries(tempTargets).reduce((acc, [key, val]) => {
             if (key === 'CASH') return acc;
-            return acc + (val || 0);
+            return acc + ((val as number) || 0);
         }, 0);
 
         if (Math.abs(sumPercents - 100) > 0.5) {
@@ -289,7 +289,7 @@ export const AllocationChart = () => {
 
                     <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between items-center">
                         {(() => {
-                            const sum = Object.entries(tempTargets).reduce((acc, [k, v]) => k !== 'CASH' ? acc + (v || 0) : acc, 0);
+                            const sum = Object.entries(tempTargets).reduce((acc, [k, v]) => k !== 'CASH' ? acc + ((v as number) || 0) : acc, 0);
                             const isValid = Math.abs(sum - 100) < 0.1;
                             return (
                                 <span className={`text-xs font-bold ${isValid ? 'text-emerald-500' : 'text-red-500'}`}>

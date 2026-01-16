@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../services/auth';
-import { API_URL } from '@/config';
+import { API_URL } from '../config';
 
 export type UserPlan = 'GUEST' | 'ESSENTIAL' | 'PRO' | 'BLACK';
 export type SubscriptionStatus = 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'TRIAL';
