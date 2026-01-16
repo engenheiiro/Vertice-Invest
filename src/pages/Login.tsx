@@ -1,21 +1,23 @@
 import React, { useState } from 'react';
 import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
+import { Button, ButtonStatus } from '../components/ui/Button';
 import { Link, useNavigate } from 'react-router-dom';
-import { API_URL } from '../config';
+import { authService } from '../services/auth';
+import { useAuth } from '../contexts/AuthContext';
 
 export const Login = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [status, setStatus] = useState<ButtonStatus>('idle');
   const [errors, setErrors] = useState<{email?: string, password?: string}>({});
   const [serverError, setServerError] = useState('');
 
   const validate = () => {
     const newErrors: {email?: string, password?: string} = {};
-    if (!email) newErrors.email = "Obrigatório";
-    if (!password) newErrors.password = "Obrigatório";
+    if (!email.trim()) newErrors.email = "Campo obrigatório";
+    if (!password) newErrors.password = "Campo obrigatório";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -25,36 +27,31 @@ export const Login = () => {
     setServerError('');
     if (!validate()) return;
     
-    setIsLoading(true);
+    setStatus('loading');
 
     try {
-      const response = await fetch(`${API_URL}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        // Sucesso: Salva dados do usuário (não sensíveis)
-        localStorage.setItem('user', JSON.stringify(data.user));
-        navigate('/dashboard');
+      const response = await authService.login({ email, password });
+      
+      if (response.user && response.accessToken) {
+          login(response.user, response.accessToken);
+          setStatus('success');
+          setTimeout(() => {
+              navigate('/dashboard');
+          }, 1000);
       } else {
-        // Erro retornado pela API (ex: senha incorreta)
-        setServerError(data.message || 'Credenciais inválidas.');
+          throw new Error("Resposta inválida do servidor");
       }
 
-    } catch (error) {
-      console.error("Erro de conexão:", error);
-      setServerError('Servidor indisponível. Verifique sua conexão ou tente mais tarde.');
-    } finally {
-      setIsLoading(false);
+    } catch (error: any) {
+      console.error("Erro de login:", error);
+      setServerError(error.message || 'Servidor indisponível.');
+      setStatus('error');
+      setTimeout(() => setStatus('idle'), 2500);
     }
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full relative">
       <div className="mb-6 text-center lg:text-left">
         <h2 className="text-xl font-bold text-slate-900 tracking-tight">Portal do Investidor</h2>
         <p className="text-slate-500 mt-1 text-xs font-medium">Insira suas credenciais para continuar.</p>
@@ -70,41 +67,41 @@ export const Login = () => {
         <Input 
           label="Email" 
           type="email" 
-          placeholder="nome@empresa.com" 
           value={email}
           onChange={(e) => {
              setEmail(e.target.value);
              if (errors.email) setErrors({...errors, email: undefined});
              setServerError('');
+             if (status === 'error') setStatus('idle');
           }}
           error={errors.email}
-          disabled={isLoading}
+          disabled={status === 'loading' || status === 'success'}
         />
         
         <div className="relative">
           <Input 
             label="Senha" 
             type="password" 
-            placeholder="••••••••" 
             value={password}
             onChange={(e) => {
               setPassword(e.target.value);
               if (errors.password) setErrors({...errors, password: undefined});
               setServerError('');
+              if (status === 'error') setStatus('idle');
             }}
             error={errors.password}
-            disabled={isLoading}
+            disabled={status === 'loading' || status === 'success'}
           />
-          <button 
-            type="button"
-            className="absolute right-0 top-0 text-[10px] font-bold text-slate-400 hover:text-blue-600 transition-colors uppercase tracking-wide"
+          <Link 
+            to="/forgot-password"
+            className="absolute right-0 top-0 text-[10px] font-bold text-slate-400 hover:text-blue-600 transition-colors uppercase tracking-wide cursor-pointer"
           >
             Esqueceu a senha?
-          </button>
+          </Link>
         </div>
 
         <div className="pt-6">
-            <Button type="submit" isLoading={isLoading}>Entrar</Button>
+            <Button type="submit" status={status}>Entrar</Button>
         </div>
       </form>
 
@@ -114,7 +111,7 @@ export const Login = () => {
             to="/register" 
             className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline transition-colors"
         >
-            Solicitar Acesso
+            Cadastre-se
         </Link>
       </div>
     </div>

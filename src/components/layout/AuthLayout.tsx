@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { ShieldCheck, Sparkles, GraduationCap, Lock, PieChart, BrainCircuit, Layers, Activity } from 'lucide-react';
 
 export const AuthLayout: React.FC = () => {
   const [activeSlide, setActiveSlide] = useState(0);
+  const location = useLocation();
 
-  // Conteúdo Expandido: Foco em Inovação, IA e Diferenciais Proprietários
+  const isWideContent = location.pathname === '/terms';
+
   const slides = [
     {
       icon: <Sparkles size={20} className="text-cyan-400" />,
@@ -39,7 +41,6 @@ export const AuthLayout: React.FC = () => {
     }
   ];
 
-  // Rotação do Carrossel
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveSlide((prev) => (prev + 1) % slides.length);
@@ -48,36 +49,29 @@ export const AuthLayout: React.FC = () => {
   }, [slides.length]);
 
   return (
-    <div className="min-h-screen w-full bg-[#03060D] relative flex items-center justify-center p-4 font-sans selection:bg-blue-600 selection:text-white overflow-hidden">
+    <div className="min-h-screen w-full bg-[#03060D] relative flex items-center justify-center p-4 sm:p-6 font-sans selection:bg-blue-600 selection:text-white overflow-hidden">
       
-      {/* --- Fundo Cinematográfico Escuro --- */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
          <div className="absolute top-[-20%] left-[-10%] w-[80vw] h-[80vw] bg-blue-900/10 rounded-full blur-[150px]"></div>
          <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-900/10 rounded-full blur-[150px]"></div>
          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.04]"></div>
       </div>
 
-      {/* --- O "Monólito" (Card Compacto e Premium) --- */}
-      <div className="relative z-10 w-full max-w-[900px] bg-white rounded-[20px] shadow-2xl shadow-black/80 overflow-hidden flex flex-col lg:flex-row min-h-[550px] animate-fade-in border border-slate-800 ring-1 ring-white/10">
+      <div className="relative z-10 w-full max-w-[450px] lg:max-w-[950px] bg-white rounded-[20px] shadow-2xl shadow-black/80 overflow-hidden flex flex-col lg:flex-row lg:min-h-[600px] animate-fade-in border border-slate-800 ring-1 ring-white/10">
         
-        {/* Lado Esquerdo: Identidade & Diferenciais (Fixo) */}
-        <div className="w-full lg:w-[50%] bg-[#080C14] relative p-10 flex flex-col justify-between text-white overflow-hidden border-r border-slate-800">
-            {/* Layers de Fundo */}
+        <div className="w-full lg:w-[50%] bg-[#080C14] relative p-8 lg:p-12 flex flex-col justify-between text-white overflow-hidden border-b lg:border-b-0 lg:border-r border-slate-800 min-h-[300px] lg:min-h-auto">
             <div className="absolute inset-0 bg-gradient-to-b from-[#0F1729] to-[#080C14] z-0"></div>
             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full blur-[60px] z-0"></div>
             
-            {/* Header Brand */}
             <div className="relative z-10 flex items-center gap-3">
-                {/* Logo com Vértice Blue */}
-                <div className="w-8 h-8 bg-blue-600 flex items-center justify-center rounded shadow-lg shadow-blue-600/20">
+                <div className="w-8 h-8 bg-blue-600 flex items-center justify-center rounded shadow-lg shadow-blue-600/20 shrink-0">
                     <ShieldCheck size={18} className="text-white" />
                 </div>
                 <span className="font-bold text-lg tracking-[0.15em] uppercase text-white">Vertice Invest</span>
             </div>
 
-            {/* Conteúdo Dinâmico (Carrossel) */}
-            <div className="relative z-10 my-auto py-8">
-                <div className="h-[200px] relative">
+            <div className="relative z-10 my-auto py-8 lg:py-0">
+                <div className="h-[180px] lg:h-[200px] relative">
                   {slides.map((slide, index) => (
                     <div 
                       key={index}
@@ -100,8 +94,7 @@ export const AuthLayout: React.FC = () => {
                   ))}
                 </div>
 
-                {/* Indicadores - Usando blue-600 */}
-                <div className="flex gap-1.5 mt-4">
+                <div className="flex gap-1.5 mt-6 lg:mt-4">
                   {slides.map((_, idx) => (
                     <div 
                       key={idx} 
@@ -111,8 +104,7 @@ export const AuthLayout: React.FC = () => {
                 </div>
             </div>
 
-            {/* Footer Esquerdo - Social Proof Profissional */}
-            <div className="relative z-10 flex items-center gap-3 opacity-90">
+            <div className="relative z-10 hidden sm:flex items-center gap-3 opacity-90">
                 <div className="flex -space-x-3">
                    <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=100&h=100" alt="User" className="w-8 h-8 rounded-full border-2 border-[#080C14] object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
                    <img src="https://images.unsplash.com/photo-1573496359-136d4755f357?auto=format&fit=crop&w=100&h=100" alt="User" className="w-8 h-8 rounded-full border-2 border-[#080C14] object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
@@ -125,13 +117,15 @@ export const AuthLayout: React.FC = () => {
             </div>
         </div>
 
-        {/* Lado Direito: Área de Ação (Outlet) */}
-        <div className="w-full lg:w-[50%] bg-white p-8 lg:p-10 flex flex-col justify-center relative">
-            <div className="relative z-10 w-full max-w-[320px] mx-auto animate-fade-in">
+        <div className="w-full lg:w-[50%] bg-white p-6 sm:p-8 lg:p-12 flex flex-col justify-center relative">
+            <div 
+              key={location.pathname}
+              className={`relative z-10 w-full ${isWideContent ? 'max-w-xl' : 'max-w-[360px]'} mx-auto animate-fade-in`}
+            >
                 <Outlet />
             </div>
             
-            <div className="mt-auto pt-6 text-center border-t border-slate-50">
+            <div className="mt-8 pt-6 text-center border-t border-slate-50">
                 <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest flex items-center justify-center gap-1.5">
                     <Lock size={10} />
                     Ambiente Criptografado SSL • 256-bit
