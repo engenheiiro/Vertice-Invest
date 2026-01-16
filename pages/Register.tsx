@@ -41,7 +41,6 @@ export const Register = () => {
     setIsLoading(true);
 
     try {
-      // Usa a URL configurada (Local ou Produção)
       const response = await fetch(`${API_URL}/api/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -61,26 +60,8 @@ export const Register = () => {
       }
 
     } catch (error) {
-      console.warn("Backend indisponível. Usando modo simulação local.");
-      
-      // Simulação de delay de rede
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      const existingUsers = JSON.parse(localStorage.getItem('db_users') || '[]');
-      const userExists = existingUsers.find((u: any) => u.email === formData.email);
-
-      if (userExists) {
-        setServerError('Este email já está em uso (Modo Offline).');
-      } else {
-        const newUser = { 
-            id: Date.now(), 
-            name: formData.name, 
-            email: formData.email, 
-            password: formData.password 
-        };
-        localStorage.setItem('db_users', JSON.stringify([...existingUsers, newUser]));
-        navigate('/login');
-      }
+      console.error("Erro de conexão:", error);
+      setServerError('Servidor indisponível. Verifique sua conexão ou tente mais tarde.');
     } finally {
       setIsLoading(false);
     }
@@ -101,7 +82,7 @@ export const Register = () => {
       </div>
 
       {serverError && (
-        <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs font-bold rounded-lg border border-red-100 flex items-center justify-center animate-fade-in">
+        <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs font-bold rounded-lg border border-red-100 flex items-center justify-center animate-fade-in text-center">
           {serverError}
         </div>
       )}
@@ -115,6 +96,7 @@ export const Register = () => {
               value={formData.name}
               onChange={handleChange}
               error={errors.name}
+              disabled={isLoading}
             />
 
             <Input 
@@ -125,6 +107,7 @@ export const Register = () => {
               value={formData.email}
               onChange={handleChange}
               error={errors.email}
+              disabled={isLoading}
             />
             
             <div className="grid grid-cols-2 gap-3 mt-4">
@@ -136,6 +119,7 @@ export const Register = () => {
                 value={formData.password}
                 onChange={handleChange}
                 error={errors.password}
+                disabled={isLoading}
               />
               <Input 
                 label="Confirmar Senha" 
@@ -145,6 +129,7 @@ export const Register = () => {
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 error={errors.confirmPassword}
+                disabled={isLoading}
               />
             </div>
         </div>

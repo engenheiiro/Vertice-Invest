@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
 
 // Configuração para __dirname em ES Modules
@@ -32,7 +33,7 @@ if (!MONGO_URI) {
 // --- MODELO DE USUÁRIO (SCHEMA) ---
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 });
@@ -53,12 +54,22 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ message: "Preencha todos os campos." });
     }
 
-    const userExists = await User.findOne({ email });
+    // Verifica duplicidade
+    const userExists = await User.findOne({ email: email.toLowerCase() });
     if (userExists) {
       return res.status(400).json({ message: "Este email já está em uso." });
     }
 
-    const newUser = new User({ name, email, password });
+    // SEGURANÇA: Criptografar a senha antes de salvar
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const newUser = new User({ 
+      name, 
+      email: email.toLowerCase(), 
+      password: hashedPassword 
+    });
+    
     await newUser.save();
 
     console.log(`👤 Novo usuário registrado: ${email}`);
@@ -74,13 +85,23 @@ app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    // Busca usuário pelo email
+    const user = await User.findOne({ email: email.toLowerCase() });
     
-    if (!user || user.password !== password) {
-      return res.status(400).json({ message: "Email ou senha incorretos." });
+    if (!user) {
+      return res.status(400).json({ message: "Credenciais inválidas." });
+    }
+
+    // SEGURANÇA: Comparar a senha enviada com o hash do banco
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({ message: "Credenciais inválidas." });
     }
 
     console.log(`🔓 Login realizado: ${email}`);
+    
+    // Retorna dados seguros (sem a senha)
     res.status(200).json({ 
       message: "Login realizado com sucesso!",
       user: {
@@ -99,30 +120,21 @@ app.post('/api/login', async (req, res) => {
 // --- SERVIR FRONTEND (PRODUÇÃO) ---
 const distPath = path.join(__dirname, 'dist');
 
-// Verifica se a pasta dist existe antes de tentar servir
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
 }
 
-// Qualquer rota que não seja da API, tenta mandar para o React (SPA)
 app.get(/.*/, (req, res) => {
   const indexPath = path.join(distPath, 'index.html');
   
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
-    // Se o index.html não existe, significa que o build não rodou
     res.status(500).send(`
       <div style="font-family: sans-serif; padding: 40px; text-align: center;">
         <h1 style="color: #e11d48;">⚠️ Build não encontrado</h1>
         <p>A pasta <code>dist</code> não existe no servidor.</p>
-        <p><strong>Como corrigir no Render:</strong></p>
-        <ol style="display: inline-block; text-align: left;">
-          <li>Vá em <em>Settings</em> no dashboard do Render.</li>
-          <li>Encontre a opção <strong>Build Command</strong>.</li>
-          <li>Mude para: <code>npm run render-build</code></li>
-          <li>Salve e faça um novo deploy (Manual Deploy > Clear cache and deploy).</li>
-        </ol>
+        <p>Certifique-se de ter rodado <code>npm run build</code> ou configurado o Render corretamente.</p>
       </div>
     `);
   }

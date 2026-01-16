@@ -28,7 +28,6 @@ export const Login = () => {
     setIsLoading(true);
 
     try {
-      // Usa a URL configurada (Local ou Produção)
       const response = await fetch(`${API_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -38,27 +37,17 @@ export const Login = () => {
       const data = await response.json();
 
       if (response.ok) {
+        // Sucesso: Salva dados do usuário (não sensíveis)
         localStorage.setItem('user', JSON.stringify(data.user));
         navigate('/dashboard');
       } else {
+        // Erro retornado pela API (ex: senha incorreta)
         setServerError(data.message || 'Credenciais inválidas.');
       }
 
     } catch (error) {
-      console.warn("Backend indisponível. Usando autenticação local.");
-      
-      // Simulação de delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      const localUsers = JSON.parse(localStorage.getItem('db_users') || '[]');
-      const user = localUsers.find((u: any) => u.email === email && u.password === password);
-
-      if (user) {
-        localStorage.setItem('user', JSON.stringify({ name: user.name, email: user.email }));
-        navigate('/dashboard');
-      } else {
-        setServerError('Erro de conexão com o servidor. Tente novamente mais tarde.');
-      }
+      console.error("Erro de conexão:", error);
+      setServerError('Servidor indisponível. Verifique sua conexão ou tente mais tarde.');
     } finally {
       setIsLoading(false);
     }
@@ -72,7 +61,7 @@ export const Login = () => {
       </div>
 
       {serverError && (
-        <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs font-bold rounded-lg border border-red-100 flex items-center justify-center animate-fade-in">
+        <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs font-bold rounded-lg border border-red-100 flex items-center justify-center animate-fade-in text-center">
           {serverError}
         </div>
       )}
@@ -89,6 +78,7 @@ export const Login = () => {
              setServerError('');
           }}
           error={errors.email}
+          disabled={isLoading}
         />
         
         <div className="relative">
@@ -103,6 +93,7 @@ export const Login = () => {
               setServerError('');
             }}
             error={errors.password}
+            disabled={isLoading}
           />
           <button 
             type="button"
