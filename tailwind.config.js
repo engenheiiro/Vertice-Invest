@@ -12,6 +12,8 @@ export default {
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out forwards',
         'shake': 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both',
+        'scroll': 'scroll 40s linear infinite',
+        'shimmer': 'shimmer 2s linear infinite',
       },
       keyframes: {
         fadeIn: {
@@ -23,6 +25,14 @@ export default {
           '20%, 80%': { transform: 'translate3d(2px, 0, 0)' },
           '30%, 50%, 70%': { transform: 'translate3d(-3px, 0, 0)' },
           '40%, 60%': { transform: 'translate3d(3px, 0, 0)' },
+        },
+        scroll: {
+          '0%': { transform: 'translateX(0)' },
+          '100%': { transform: 'translateX(-50%)' },
+        },
+        shimmer: {
+          'from': { backgroundPosition: '0 0' },
+          'to': { backgroundPosition: '-200% 0' },
         }
       }
     },

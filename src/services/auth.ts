@@ -1,4 +1,5 @@
 import { API_URL } from '@/config';
+import { User } from '@/contexts/AuthContext';
 
 interface LoginCredentials {
   email: string;
@@ -12,11 +13,7 @@ interface RegisterData {
 }
 
 interface AuthResponse {
-  user?: {
-    id: string;
-    name: string;
-    email: string;
-  };
+  user?: User;
   accessToken?: string;
   message?: string;
 }

@@ -6,4 +6,7 @@
   body {
     @apply antialiased text-slate-900 bg-white;
   }
+  html {
+    scroll-behavior: smooth;
+  }
 }
