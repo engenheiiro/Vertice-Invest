@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
+import { Button, ButtonStatus } from '../components/ui/Button';
 import { Link, useNavigate } from 'react-router-dom';
-import { API_URL } from '../config';
+import { authService } from '../services/auth';
 
 export const Register = () => {
   const navigate = useNavigate();
@@ -12,21 +12,27 @@ export const Register = () => {
     password: '',
     confirmPassword: ''
   });
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [status, setStatus] = useState<ButtonStatus>('idle');
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.name) newErrors.name = "Obrigatório";
-    if (!formData.email) newErrors.email = "Obrigatório";
+    if (!formData.name) newErrors.name = "Campo obrigatório";
+    if (!formData.email) newErrors.email = "Campo obrigatório";
     else if (!formData.email.includes('@')) newErrors.email = "Inválido";
     
-    if (!formData.password) newErrors.password = "Obrigatório";
+    if (!formData.password) newErrors.password = "Campo obrigatório";
     if (formData.password.length < 6) newErrors.password = "Mínimo 6 caracteres";
     
     if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "Não confere";
+    }
+
+    if (!acceptedTerms) {
+        newErrors.terms = "Você deve aceitar os termos";
     }
 
     setErrors(newErrors);
@@ -38,32 +44,25 @@ export const Register = () => {
     setServerError('');
     if (!validate()) return;
 
-    setIsLoading(true);
+    setStatus('loading');
 
     try {
-      const response = await fetch(`${API_URL}/api/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password
-        })
+      await authService.register({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password
       });
 
-      const data = await response.json();
+      setStatus('success');
+      setTimeout(() => {
+          navigate('/login');
+      }, 1500);
 
-      if (response.ok) {
-        navigate('/login');
-      } else {
-        setServerError(data.message || 'Erro ao criar conta.');
-      }
-
-    } catch (error) {
-      console.error("Erro de conexão:", error);
-      setServerError('Servidor indisponível. Verifique sua conexão ou tente mais tarde.');
-    } finally {
-      setIsLoading(false);
+    } catch (error: any) {
+      console.error("Erro de registro:", error);
+      setServerError(error.message || 'Erro ao criar conta.');
+      setStatus('error');
+      setTimeout(() => setStatus('idle'), 2500);
     }
   };
 
@@ -72,6 +71,7 @@ export const Register = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
     setServerError('');
+    if (status === 'error') setStatus('idle');
   };
 
   return (
@@ -87,55 +87,84 @@ export const Register = () => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <div className="space-y-1">
+      <form onSubmit={handleSubmit} className="w-full">
+        <div>
             <Input 
               label="Nome" 
               name="name"
-              placeholder="Nome completo" 
               value={formData.name}
               onChange={handleChange}
               error={errors.name}
-              disabled={isLoading}
+              disabled={status === 'loading' || status === 'success'}
             />
 
             <Input 
               label="Email" 
               name="email"
               type="email" 
-              placeholder="nome@empresa.com" 
               value={formData.email}
               onChange={handleChange}
               error={errors.email}
-              disabled={isLoading}
+              disabled={status === 'loading' || status === 'success'}
             />
             
-            <div className="grid grid-cols-2 gap-3 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
               <Input 
                 label="Senha" 
                 name="password"
                 type="password" 
-                placeholder="••••••" 
                 value={formData.password}
                 onChange={handleChange}
                 error={errors.password}
-                disabled={isLoading}
+                disabled={status === 'loading' || status === 'success'}
               />
               <Input 
                 label="Confirmar Senha" 
                 name="confirmPassword"
                 type="password" 
-                placeholder="••••••" 
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 error={errors.confirmPassword}
-                disabled={isLoading}
+                disabled={status === 'loading' || status === 'success'}
               />
+            </div>
+
+            <div className="mt-4 flex items-start gap-3">
+                <div className="flex items-center h-5">
+                    <input
+                        id="terms"
+                        name="terms"
+                        type="checkbox"
+                        checked={acceptedTerms}
+                        onChange={(e) => {
+                            setAcceptedTerms(e.target.checked);
+                            if (errors.terms) setErrors({...errors, terms: ''});
+                        }}
+                        disabled={status === 'loading' || status === 'success'}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600 transition-colors cursor-pointer"
+                    />
+                </div>
+                <div className="text-xs">
+                    <div className="flex flex-wrap gap-1">
+                        <label htmlFor="terms" className="font-medium text-slate-600 cursor-pointer select-none">
+                            Li e concordo com os
+                        </label>
+                        <Link to="/terms" className="text-blue-600 hover:underline font-bold hover:text-blue-800 transition-colors">
+                            Termos de Uso
+                        </Link>
+                        <label htmlFor="terms" className="font-medium text-slate-600 cursor-pointer select-none">
+                            da plataforma.
+                        </label>
+                    </div>
+                    {errors.terms && (
+                        <p className="text-red-500 font-bold mt-1 animate-fade-in">{errors.terms}</p>
+                    )}
+                </div>
             </div>
         </div>
 
         <div className="pt-6">
-            <Button type="submit" isLoading={isLoading}>Criar Conta</Button>
+            <Button type="submit" status={status}>Criar Conta</Button>
         </div>
       </form>
 
