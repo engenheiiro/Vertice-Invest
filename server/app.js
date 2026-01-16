@@ -12,6 +12,7 @@ import logger from './config/logger.js';
 
 // Rotas
 import authRoutes from './routes/authRoutes.js';
+import subscriptionRoutes from './routes/subscriptionRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(path.dirname(__filename)); // Sobe um nível para raiz do projeto
@@ -81,6 +82,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api', authRoutes); 
+app.use('/api/subscription', subscriptionRoutes);
 
 // --- SERVIR FRONTEND ---
 const distPath = path.join(__dirname, 'dist');

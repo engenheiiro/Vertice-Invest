@@ -20,19 +20,19 @@ export const Register = () => {
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.name) newErrors.name = "Campo obrigatório";
-    if (!formData.email) newErrors.email = "Campo obrigatório";
+    if (!formData.name) newErrors.name = "Obrigatório";
+    if (!formData.email) newErrors.email = "Obrigatório";
     else if (!formData.email.includes('@')) newErrors.email = "Inválido";
     
-    if (!formData.password) newErrors.password = "Campo obrigatório";
-    if (formData.password.length < 6) newErrors.password = "Mínimo 6 caracteres";
+    if (!formData.password) newErrors.password = "Obrigatório";
+    if (formData.password.length < 6) newErrors.password = "Mín. 6 chars";
     
     if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "Não confere";
     }
 
     if (!acceptedTerms) {
-        newErrors.terms = "Você deve aceitar os termos";
+        newErrors.terms = "Aceite os termos";
     }
 
     setErrors(newErrors);
@@ -76,13 +76,13 @@ export const Register = () => {
 
   return (
     <div className="w-full">
-      <div className="mb-6 text-center lg:text-left">
-        <h2 className="text-xl font-bold text-slate-900 tracking-tight">Nova Credencial</h2>
-        <p className="text-slate-500 mt-1 text-xs font-medium">Preencha os dados para acessar a plataforma.</p>
+      <div className="mb-3 text-center lg:text-left">
+        <h2 className="text-lg font-bold text-slate-900 tracking-tight">Nova Credencial</h2>
+        <p className="text-slate-500 text-[11px] font-medium">Preencha os dados para acessar.</p>
       </div>
 
       {serverError && (
-        <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs font-bold rounded-lg border border-red-100 flex items-center justify-center animate-fade-in text-center">
+        <div className="mb-2 p-1.5 bg-red-50 text-red-600 text-[10px] font-bold rounded-lg border border-red-100 flex items-center justify-center animate-fade-in text-center">
           {serverError}
         </div>
       )}
@@ -96,6 +96,8 @@ export const Register = () => {
               onChange={handleChange}
               error={errors.name}
               disabled={status === 'loading' || status === 'success'}
+              containerClassName="mb-2"
+              className="px-3 py-2.5 text-sm"
             />
 
             <Input 
@@ -106,9 +108,11 @@ export const Register = () => {
               onChange={handleChange}
               error={errors.email}
               disabled={status === 'loading' || status === 'success'}
+              containerClassName="mb-2"
+              className="px-3 py-2.5 text-sm"
             />
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+            <div className="grid grid-cols-2 gap-2 mt-1">
               <Input 
                 label="Senha" 
                 name="password"
@@ -117,19 +121,23 @@ export const Register = () => {
                 onChange={handleChange}
                 error={errors.password}
                 disabled={status === 'loading' || status === 'success'}
+                containerClassName="mb-2"
+                className="px-3 py-2.5 text-sm"
               />
               <Input 
-                label="Confirmar Senha" 
+                label="Confirmar" 
                 name="confirmPassword"
                 type="password" 
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 error={errors.confirmPassword}
                 disabled={status === 'loading' || status === 'success'}
+                containerClassName="mb-2"
+                className="px-3 py-2.5 text-sm"
               />
             </div>
 
-            <div className="mt-4 flex items-start gap-3">
+            <div className="mt-2 flex items-start gap-2">
                 <div className="flex items-center h-5">
                     <input
                         id="terms"
@@ -141,10 +149,10 @@ export const Register = () => {
                             if (errors.terms) setErrors({...errors, terms: ''});
                         }}
                         disabled={status === 'loading' || status === 'success'}
-                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600 transition-colors cursor-pointer"
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600 transition-colors cursor-pointer"
                     />
                 </div>
-                <div className="text-xs">
+                <div className="text-[11px] leading-tight">
                     <div className="flex flex-wrap gap-1">
                         <label htmlFor="terms" className="font-medium text-slate-600 cursor-pointer select-none">
                             Li e concordo com os
@@ -152,25 +160,22 @@ export const Register = () => {
                         <Link to="/terms" className="text-blue-600 hover:underline font-bold hover:text-blue-800 transition-colors">
                             Termos de Uso
                         </Link>
-                        <label htmlFor="terms" className="font-medium text-slate-600 cursor-pointer select-none">
-                            da plataforma.
-                        </label>
                     </div>
                     {errors.terms && (
-                        <p className="text-red-500 font-bold mt-1 animate-fade-in">{errors.terms}</p>
+                        <p className="text-red-500 font-bold mt-0.5 animate-fade-in">{errors.terms}</p>
                     )}
                 </div>
             </div>
         </div>
 
-        <div className="pt-6">
-            <Button type="submit" status={status}>Criar Conta</Button>
+        <div className="pt-3">
+            <Button type="submit" status={status} className="py-2.5 text-sm">Criar Conta</Button>
         </div>
       </form>
 
-      <div className="mt-6 flex items-center justify-center gap-1.5">
-        <span className="text-xs text-slate-500 font-medium">Já possui conta?</span>
-        <Link to="/login" className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline transition-colors">
+      <div className="mt-3 flex items-center justify-center gap-1.5">
+        <span className="text-[11px] text-slate-500 font-medium">Já possui conta?</span>
+        <Link to="/login" className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline transition-colors">
             Fazer Login
         </Link>
       </div>

@@ -49,22 +49,26 @@ export const register = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // Criação do usuário com plano ESSENTIAL padrão (sem expiração definida inicialmente)
     const newUser = new User({ 
       name, 
       email, 
-      password: hashedPassword 
+      password: hashedPassword,
+      plan: 'ESSENTIAL',
+      subscriptionStatus: 'ACTIVE',
+      validUntil: null // Sem data de expiração para o plano base
     });
     
     // Salva usuário dentro da sessão
     await newUser.save({ session });
     
-    // Log de auditoria dentro da mesma transação (Se falhar, desfaz o user)
+    // Log de auditoria dentro da mesma transação
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     await AuditLog.create([{
         user: newUser._id,
         email: email,
         action: 'REGISTER_SUCCESS',
-        details: 'Novo usuário registrado',
+        details: 'Novo usuário registrado (Plano Essential Padrão)',
         ipAddress: Array.isArray(ip) ? ip[0] : ip,
         userAgent: req.headers['user-agent']
     }], { session });
@@ -104,7 +108,7 @@ export const login = async (req, res, next) => {
     }
 
     const accessToken = jwt.sign(
-      { id: user._id, email: user.email },
+      { id: user._id, email: user.email, plan: user.plan }, // Incluindo plano no token
       JWT_SECRET,
       { expiresIn: ACCESS_TOKEN_EXPIRATION }
     );
@@ -118,7 +122,6 @@ export const login = async (req, res, next) => {
       { expiresIn: `${REFRESH_TOKEN_EXPIRATION_DAYS}d` }
     );
 
-    // TODO: Implementar rotação de token (deletar tokens antigos ou usar família de tokens)
     await RefreshToken.create({
       token: refreshTokenString,
       user: user._id,
@@ -134,10 +137,17 @@ export const login = async (req, res, next) => {
 
     logAudit(req, 'LOGIN_SUCCESS', 'Login via Senha', user._id, email);
     
+    // Retorna dados essenciais do usuário para o Frontend
     res.status(200).json({ 
       message: "Login realizado com sucesso.",
       accessToken,
-      user: { id: user._id, name: user.name, email: user.email }
+      user: { 
+        id: user._id, 
+        name: user.name, 
+        email: user.email,
+        plan: user.plan,
+        subscriptionStatus: user.subscriptionStatus
+      }
     });
 
   } catch (error) {
@@ -166,7 +176,7 @@ export const refreshToken = async (req, res, next) => {
     if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
 
     const newAccessToken = jwt.sign(
-      { id: user._id, email: user.email },
+      { id: user._id, email: user.email, plan: user.plan },
       JWT_SECRET,
       { expiresIn: ACCESS_TOKEN_EXPIRATION }
     );

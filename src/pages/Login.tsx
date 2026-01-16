@@ -4,6 +4,7 @@ import { Button, ButtonStatus } from '../components/ui/Button';
 import { Link, useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { useAuth } from '../contexts/AuthContext';
+import { ArrowLeft } from 'lucide-react';
 
 export const Login = () => {
   const navigate = useNavigate();
@@ -52,13 +53,24 @@ export const Login = () => {
 
   return (
     <div className="w-full relative">
-      <div className="mb-6 text-center lg:text-left">
-        <h2 className="text-xl font-bold text-slate-900 tracking-tight">Portal do Investidor</h2>
-        <p className="text-slate-500 mt-1 text-xs font-medium">Insira suas credenciais para continuar.</p>
+      {/* Botão de Voltar Profissional */}
+      <div className="mb-8">
+        <Link 
+            to="/" 
+            className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-colors group"
+        >
+            <ArrowLeft size={12} className="group-hover:-translate-x-1 transition-transform duration-300" />
+            Voltar ao Início
+        </Link>
+      </div>
+
+      <div className="mb-4 text-center lg:text-left">
+        <h2 className="text-lg font-bold text-slate-900 tracking-tight">Portal do Investidor</h2>
+        <p className="text-slate-500 text-[11px] font-medium">Insira suas credenciais para continuar.</p>
       </div>
 
       {serverError && (
-        <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs font-bold rounded-lg border border-red-100 flex items-center justify-center animate-fade-in text-center">
+        <div className="mb-3 p-2 bg-red-50 text-red-600 text-[10px] font-bold rounded-lg border border-red-100 flex items-center justify-center animate-fade-in text-center">
           {serverError}
         </div>
       )}
@@ -76,6 +88,8 @@ export const Login = () => {
           }}
           error={errors.email}
           disabled={status === 'loading' || status === 'success'}
+          containerClassName="mb-3"
+          className="px-4 py-2.5 text-sm" // Compacto
         />
         
         <div className="relative">
@@ -91,25 +105,27 @@ export const Login = () => {
             }}
             error={errors.password}
             disabled={status === 'loading' || status === 'success'}
+            containerClassName="mb-1"
+            className="px-4 py-2.5 text-sm" // Compacto
           />
           <Link 
             to="/forgot-password"
-            className="absolute right-0 top-0 text-[10px] font-bold text-slate-400 hover:text-blue-600 transition-colors uppercase tracking-wide cursor-pointer"
+            className="absolute right-0 top-0 text-[9px] font-bold text-slate-400 hover:text-blue-600 transition-colors uppercase tracking-wide cursor-pointer z-10"
           >
             Esqueceu a senha?
           </Link>
         </div>
 
-        <div className="pt-6">
-            <Button type="submit" status={status}>Entrar</Button>
+        <div className="pt-3">
+            <Button type="submit" status={status} className="py-2.5 text-sm">Entrar</Button>
         </div>
       </form>
 
-      <div className="mt-6 flex items-center justify-center gap-1.5">
-        <span className="text-xs text-slate-500 font-medium">Ainda não é membro?</span>
+      <div className="mt-3 flex items-center justify-center gap-1.5">
+        <span className="text-[11px] text-slate-500 font-medium">Ainda não é membro?</span>
         <Link 
             to="/register" 
-            className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+            className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline transition-colors"
         >
             Cadastre-se
         </Link>
