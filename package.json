@@ -11,6 +11,7 @@
     "client": "npm run dev --prefix client",
     "server": "npm run dev --prefix server",
     "build": "npm run build --prefix client",
+    "render-build": "npm run build",
     "start": "npm start --prefix server"
   },
   "devDependencies": {
