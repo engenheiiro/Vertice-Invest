@@ -2,7 +2,7 @@ import React, { Suspense, lazy, PropsWithChildren } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Loader2, ShieldCheck } from 'lucide-react';
 
-// Importações com Caminhos Relativos Explícitos (Sem Alias '@')
+// Importações com Caminhos Relativos Explícitos (Evita erros de Alias @)
 import { AuthLayout } from './components/layout/AuthLayout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -18,7 +18,7 @@ import { Landing } from './pages/Landing';
 import { Checkout } from './pages/Checkout';
 import { CheckoutSuccess } from './pages/CheckoutSuccess';
 
-// Lazy Loading: Pages Pesadas
+// Lazy Loading: Pages Pesadas (Melhora performance inicial)
 const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
 const Profile = lazy(() => import('./pages/Profile').then(module => ({ default: module.Profile })));
 const Pricing = lazy(() => import('./pages/Pricing').then(module => ({ default: module.Pricing })));
@@ -47,7 +47,8 @@ const PageLoader = () => (
   </div>
 );
 
-// Componente auxiliar para rotas públicas
+// Componente auxiliar para rotas públicas (Login/Register)
+// Redireciona para Dashboard se já estiver logado
 const PublicOnlyRoute: React.FC<PropsWithChildren> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
   
@@ -65,6 +66,7 @@ const LandingRoute: React.FC<PropsWithChildren> = ({ children }) => {
 };
 
 // Wrapper para rotas protegidas que precisam de dados de carteira
+// Garante que o WalletProvider só carregue quando o usuário estiver autenticado
 const ProtectedWalletRoute: React.FC<PropsWithChildren> = ({ children }) => (
     <ProtectedRoute>
         <WalletProvider>

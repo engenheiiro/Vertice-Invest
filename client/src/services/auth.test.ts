@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { authService } from './auth';
 
-global.fetch = vi.fn();
+// Use vi.stubGlobal to mock global fetch in Vitest environment
+vi.stubGlobal('fetch', vi.fn());
 
 describe('AuthService', () => {
   it('should return true when authenticated (token exists)', () => {

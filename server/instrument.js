@@ -1,5 +1,3 @@
-// instrument.js
-// Este arquivo deve ser importado ANTES de qualquer outro módulo no server.js
 import * as Sentry from "@sentry/node";
 
 if (process.env.SENTRY_DSN) {
@@ -10,5 +8,5 @@ if (process.env.SENTRY_DSN) {
     ],
     tracesSampleRate: 1.0,
   });
-  console.log("✅ Sentry Instrumentado (v8)");
+  console.log("✅ Sentry Instrumentado");
 }

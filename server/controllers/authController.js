@@ -8,8 +8,7 @@ import AuditLog from '../models/AuditLog.js';
 import { sendResetPasswordEmail } from '../services/emailService.js';
 import logger from '../config/logger.js';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "fallback_refresh_secret";
+// Configurações
 const ACCESS_TOKEN_EXPIRATION = '15m';
 const REFRESH_TOKEN_EXPIRATION_DAYS = 7;
 
@@ -90,6 +89,12 @@ export const register = async (req, res, next) => {
 
 export const login = async (req, res, next) => {
   try {
+    // Leitura em tempo de execução para garantir que .env já carregou
+    const JWT_SECRET = process.env.JWT_SECRET;
+    const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "fallback_refresh_secret";
+
+    if (!JWT_SECRET) throw new Error("JWT_SECRET não configurado no servidor.");
+
     const { email, password } = req.body;
     
     const user = await User.findOne({ email });
@@ -144,7 +149,7 @@ export const login = async (req, res, next) => {
       user: { 
         id: user._id, 
         name: user.name, 
-        email: user.email,
+        email: user.email, 
         plan: user.plan,
         subscriptionStatus: user.subscriptionStatus
       }
@@ -157,6 +162,9 @@ export const login = async (req, res, next) => {
 
 export const refreshToken = async (req, res, next) => {
   try {
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (!JWT_SECRET) throw new Error("JWT_SECRET não configurado.");
+
     const cookies = req.cookies;
     if (!cookies?.jwt) return res.status(401).json({ message: "Sessão inválida." });
     

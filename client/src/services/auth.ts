@@ -27,10 +27,19 @@ export const authService = {
       credentials: 'include' 
     });
 
-    const data = await response.json();
+    // Lê como texto primeiro para evitar crash em caso de resposta vazia ou HTML
+    const text = await response.text();
+    let data: any;
+
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch (e) {
+        console.error("Resposta inválida do servidor:", text);
+        throw new Error(`Erro de comunicação: O servidor retornou uma resposta não-JSON. (Status: ${response.status})`);
+    }
 
     if (!response.ok) {
-      throw new Error(data.message || 'Erro ao realizar login');
+      throw new Error(data.message || `Erro ${response.status}: Falha ao realizar login`);
     }
 
     if (data.accessToken && data.user) {
@@ -48,7 +57,14 @@ export const authService = {
       body: JSON.stringify(data)
     });
 
-    const responseData = await response.json();
+    const text = await response.text();
+    let responseData: any;
+
+    try {
+        responseData = text ? JSON.parse(text) : {};
+    } catch (e) {
+         throw new Error(`Erro de comunicação: Resposta inválida do servidor. (Status: ${response.status})`);
+    }
 
     if (!response.ok) {
       throw new Error(responseData.message || 'Erro ao criar conta');
@@ -106,8 +122,15 @@ export const authService = {
         body: JSON.stringify({ token, newPassword })
     });
 
+    const text = await response.text();
+    let data;
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch {
+        throw new Error("Erro ao processar resposta do servidor");
+    }
+
     if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.message || "Falha ao redefinir senha");
     }
   },

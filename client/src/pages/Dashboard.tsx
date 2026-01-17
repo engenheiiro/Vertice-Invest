@@ -8,7 +8,10 @@ import { AssetTable } from '../components/dashboard/AssetTable';
 import { AiRadar } from '../components/dashboard/AiRadar';
 
 export const Dashboard = () => {
-  const { portfolio, signals, equity, marketIndices } = useDashboardData();
+  const { portfolio, signals, equity, dividends, marketIndices } = useDashboardData();
+
+  const formatCurrency = (val: number) => 
+        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
     <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
@@ -49,7 +52,9 @@ export const Dashboard = () => {
                             <Lock size={16} />
                         </div>
                         <h4 className="font-bold text-slate-200 text-sm mb-1">Cofre de Dividendos</h4>
-                        <p className="text-xs text-slate-500 mb-4">Você tem <span className="text-white font-bold">R$ 420,00</span> provisionados para receber esta semana.</p>
+                        <p className="text-xs text-slate-500 mb-4">
+                            Você tem <span className="text-white font-bold">{formatCurrency(dividends)}</span> provisionados para receber esta semana.
+                        </p>
                         <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
                             <div className="h-full bg-blue-500 w-[65%] shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
                         </div>
