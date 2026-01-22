@@ -1,3 +1,4 @@
+
 import winston from 'winston';
 
 const levels = {
@@ -16,21 +17,24 @@ const level = () => {
 const colors = {
   error: 'red',
   warn: 'yellow',
-  info: 'green',
+  info: 'cyan', // Mudado para Cyan para destacar informações gerais
   http: 'magenta',
   debug: 'white',
 };
 
 winston.addColors(colors);
 
+// Formato customizado para melhor legibilidade no console
+const consoleFormat = winston.format.printf(({ level, message, timestamp }) => {
+  // Remove caracteres ISO do timestamp para ficar mais limpo (HH:mm:ss)
+  const time = timestamp.split(' ')[1];
+  return `[${time}] ${level}: ${message}`;
+});
+
 const format = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-  process.env.NODE_ENV === 'production' 
-    ? winston.format.json() // Logs JSON estruturados em Prod
-    : winston.format.combine(
-        winston.format.colorize({ all: true }),
-        winston.format.printf((info) => `${info.timestamp} ${info.level}: ${info.message}`)
-      )
+  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  winston.format.colorize({ all: true }),
+  consoleFormat
 );
 
 const transports = [

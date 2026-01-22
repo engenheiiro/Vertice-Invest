@@ -20,26 +20,30 @@ export const AdminPanel = () => {
 
     useEffect(() => {
         loadHistory();
+        // Polling automático do histórico a cada 15 segundos para ver progresso do batch
+        const interval = setInterval(loadHistory, 15000);
+        return () => clearInterval(interval);
     }, []);
 
     const handleRunRoutine = async () => {
-        const confirmMsg = "Confirmar regeração completa? Isso ignorará os relatórios atuais e levará aprox. 5-7 minutos devido às cotas da API.";
+        const confirmMsg = "Iniciar protocolo de ingestão? Isso irá processar todas as categorias em background.";
         if (!confirm(confirmMsg)) return;
 
         setIsRoutineRunning(true);
         setStatusMsg(null);
 
         try {
-            // Enviamos force: true para ignorar o tempo de cache
+            // Backend agora responde imediatamente "202 Accepted"
             await researchService.triggerRoutine(true);
-            setStatusMsg({ type: 'success', text: "Comando de regeração enviado! A IA está trabalhando em segundo plano." });
+            setStatusMsg({ type: 'success', text: "Comando aceito! O Neural Engine está processando as filas." });
             
-            // Atualiza histórico em 30s e depois em intervalos maiores
-            setTimeout(loadHistory, 30000);
-            setTimeout(loadHistory, 120000);
+            // Libera o botão após 3 segundos visualmente
+            setTimeout(() => setIsRoutineRunning(false), 3000);
+            
+            // Força um reload do histórico logo
+            loadHistory();
         } catch (error: any) {
             setStatusMsg({ type: 'error', text: error.message || "Erro ao iniciar rotina." });
-        } finally {
             setIsRoutineRunning(false);
         }
     };
@@ -83,7 +87,7 @@ export const AdminPanel = () => {
                         </div>
                         <h2 className="text-xl font-bold text-white mb-2">Forçar Ingestão Total</h2>
                         <p className="text-slate-400 text-sm mb-6 max-w-sm">
-                            Gera novas análises para todas as categorias agora mesmo, ignorando as travas de cache diário.
+                            Dispara a IA para analisar todas as categorias. O processo roda em segundo plano (~2 min).
                         </p>
                         <button 
                             onClick={handleRunRoutine}
@@ -97,14 +101,14 @@ export const AdminPanel = () => {
                             `}
                         >
                             {isRoutineRunning ? <RefreshCw className="animate-spin" size={16} /> : <Play size={16} />}
-                            {isRoutineRunning ? "Gerando Lote..." : "Regerar Research Agora"}
+                            {isRoutineRunning ? "Iniciando..." : "Regerar Research Agora"}
                         </button>
                     </div>
 
                     <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-8">
                         <div className="flex items-center gap-2 mb-6">
                             <CalendarCheck size={20} className="text-slate-400" />
-                            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Status das Categorias</h3>
+                            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Status das Categorias (Hoje)</h3>
                         </div>
 
                         <div className="space-y-4">
@@ -117,7 +121,7 @@ export const AdminPanel = () => {
                                         <span className="text-sm font-medium text-slate-300">{asset}</span>
                                         {isDone ? (
                                             <span className="text-[10px] font-black text-emerald-500 flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">
-                                                ATUALIZADO HOJE
+                                                ATUALIZADO
                                             </span>
                                         ) : (
                                             <span className="text-[10px] font-black text-slate-500 bg-slate-800 px-2 py-1 rounded border border-slate-700">PENDENTE</span>

@@ -46,13 +46,19 @@ import fs from 'fs';
 
     const PORT = process.env.PORT || 5000;
     const JWT_SECRET = process.env.JWT_SECRET;
+    const API_KEY = process.env.API_KEY;
 
     if (!JWT_SECRET) {
       logger.error("❌ ERRO FATAL: JWT_SECRET não definido.");
       if (process.env.NODE_ENV === 'production') {
           console.error("Aplicação não pode iniciar sem JWT_SECRET em produção.");
-          // No Render, as variáveis de ambiente são configuradas no painel.
       }
+    }
+
+    if (!API_KEY) {
+        logger.warn("⚠️ AVISO: API_KEY do Google Gemini não encontrada. A IA não funcionará.");
+    } else {
+        logger.info(`🔑 API Key detectada (${API_KEY.substring(0, 4)}...${API_KEY.substring(API_KEY.length - 4)})`);
     }
 
     app.listen(PORT, () => {
