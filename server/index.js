@@ -1,35 +1,61 @@
-import './instrument.js'; 
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
-// 1. Configuração de Ambiente (Executa ANTES de importar o app)
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Função auto-executável para inicialização segura
+(async () => {
+  try {
+    // 1. Carrega Variáveis de Ambiente (PRIMEIRO DE TUDO)
+    // Usamos import dinâmico para poder tratar erro se o pacote faltar
+    const dotenv = (await import('dotenv')).default;
+    
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const envPath = path.resolve(__dirname, '../.env');
 
-// Carrega .env da raiz (../.env)
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-// Fallback para .env local se existir
-dotenv.config();
+    if (fs.existsSync(envPath)) {
+        dotenv.config({ path: envPath });
+    } else {
+        dotenv.config();
+    }
 
-// 2. Importações Dinâmicas (Garante que process.env já esteja populado)
-// O uso de 'await import' assegura que o módulo só é carregado após o dotenv
-const { default: app } = await import('./app.js');
-const { default: connectDB } = await import('./config/db.js');
-const { default: logger } = await import('./config/logger.js');
+    // 2. Carrega Instrumentação (Sentry)
+    // Importante: Carregar depois do dotenv para pegar o DSN do .env
+    await import('./instrument.js');
 
-// 3. Inicialização
-connectDB();
+    // 3. Importa Módulos Core
+    const { default: app } = await import('./app.js');
+    const { default: connectDB } = await import('./config/db.js');
+    const { default: logger } = await import('./config/logger.js');
 
-const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET;
+    // 4. Inicializa Banco e Servidor
+    await connectDB();
 
-if (!JWT_SECRET) {
-  logger.error("❌ ERRO FATAL: JWT_SECRET não definido no .env");
-  // Não mata o processo em dev para facilitar debug, mas avisa
-  if (process.env.NODE_ENV === 'production') process.exit(1);
-}
+    const PORT = process.env.PORT || 5000;
+    const JWT_SECRET = process.env.JWT_SECRET;
 
-app.listen(PORT, () => {
-  logger.info(`🚀 Servidor Vértice Invest rodando na porta ${PORT}`);
-});
+    if (!JWT_SECRET) {
+      logger.error("❌ ERRO FATAL: JWT_SECRET não definido no .env");
+      if (process.env.NODE_ENV === 'production') process.exit(1);
+    }
+
+    app.listen(PORT, () => {
+      logger.info(`🚀 Servidor Vértice Invest rodando na porta ${PORT}`);
+      logger.info(`📡 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+    });
+
+  } catch (error) {
+    console.error("\n❌ FALHA CRÍTICA NA INICIALIZAÇÃO:");
+    
+    // Tratamento amigável para erro de módulo não encontrado
+    if (error.code === 'ERR_MODULE_NOT_FOUND') {
+        console.error("⚠️  DEPENDÊNCIAS NÃO ENCONTRADAS!");
+        console.error("👉 Parece que você não instalou as dependências do servidor.");
+        console.error("👉 Execute este comando na raiz do projeto para corrigir tudo:\n");
+        console.error("   npm run setup\n");
+    } else {
+        console.error(error);
+    }
+    process.exit(1);
+  }
+})();

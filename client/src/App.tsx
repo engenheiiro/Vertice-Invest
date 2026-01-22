@@ -5,6 +5,7 @@ import { Loader2, ShieldCheck } from 'lucide-react';
 // Importações com Caminhos Relativos Explícitos (Evita erros de Alias @)
 import { AuthLayout } from './components/layout/AuthLayout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { AdminRoute } from './components/auth/AdminRoute'; // Nova Importação
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WalletProvider } from './contexts/WalletContext';
 
@@ -25,6 +26,7 @@ const Pricing = lazy(() => import('./pages/Pricing').then(module => ({ default: 
 const Wallet = lazy(() => import('./pages/Wallet').then(module => ({ default: module.Wallet })));
 const Research = lazy(() => import('./pages/Research').then(module => ({ default: module.Research })));
 const Courses = lazy(() => import('./pages/Courses').then(module => ({ default: module.Courses })));
+const AdminPanel = lazy(() => import('./pages/admin/AdminPanel').then(module => ({ default: module.AdminPanel }))); // Nova Importação
 
 // Loading Component
 const PageLoader = () => (
@@ -114,6 +116,13 @@ export default function App() {
             <Route path="/wallet" element={<ProtectedWalletRoute><Wallet /></ProtectedWalletRoute>} />
             <Route path="/research" element={<ProtectedWalletRoute><Research /></ProtectedWalletRoute>} />
             <Route path="/courses" element={<ProtectedWalletRoute><Courses /></ProtectedWalletRoute>} />
+
+            {/* Rota ADMIN */}
+            <Route path="/admin" element={
+                <AdminRoute>
+                    <AdminPanel />
+                </AdminRoute>
+            } />
 
             {/* Checkout */}
             <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />

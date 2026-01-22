@@ -33,7 +33,7 @@ export const register = async (req, res, next) => {
   const session = await mongoose.startSession();
   
   try {
-    session.startTransaction(); // 🔒 Início da Transação ACID
+    session.startTransaction();
 
     const { name, email, password } = req.body;
 
@@ -48,40 +48,38 @@ export const register = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Criação do usuário com plano ESSENTIAL padrão (sem expiração definida inicialmente)
+    // Criação do usuário (Padrão: USER e ESSENTIAL)
     const newUser = new User({ 
       name, 
       email, 
       password: hashedPassword,
+      role: 'USER', 
       plan: 'ESSENTIAL',
       subscriptionStatus: 'ACTIVE',
-      validUntil: null // Sem data de expiração para o plano base
+      validUntil: null
     });
     
-    // Salva usuário dentro da sessão
     await newUser.save({ session });
     
-    // Log de auditoria dentro da mesma transação
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     await AuditLog.create([{
         user: newUser._id,
         email: email,
         action: 'REGISTER_SUCCESS',
-        details: 'Novo usuário registrado (Plano Essential Padrão)',
+        details: 'Novo usuário registrado',
         ipAddress: Array.isArray(ip) ? ip[0] : ip,
         userAgent: req.headers['user-agent']
     }], { session });
 
-    await session.commitTransaction(); // ✅ Confirma tudo
+    await session.commitTransaction();
     session.endSession();
     
     logger.info(`Novo usuário registrado: ${email}`);
     res.status(201).json({ message: "Conta criada com sucesso!" });
 
   } catch (error) {
-    await session.abortTransaction(); // ❌ Desfaz tudo em caso de erro
+    await session.abortTransaction();
     session.endSession();
-    
     logger.error(`Erro na transação de registro: ${error.message}`);
     next(error);
   }
@@ -89,7 +87,6 @@ export const register = async (req, res, next) => {
 
 export const login = async (req, res, next) => {
   try {
-    // Leitura em tempo de execução para garantir que .env já carregou
     const JWT_SECRET = process.env.JWT_SECRET;
     const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "fallback_refresh_secret";
 
@@ -112,8 +109,9 @@ export const login = async (req, res, next) => {
         return res.status(401).json({ message: invalidCredentialsMsg });
     }
 
+    // Incluindo ROLE no Payload do Token
     const accessToken = jwt.sign(
-      { id: user._id, email: user.email, plan: user.plan }, // Incluindo plano no token
+      { id: user._id, email: user.email, plan: user.plan, role: user.role }, 
       JWT_SECRET,
       { expiresIn: ACCESS_TOKEN_EXPIRATION }
     );
@@ -142,7 +140,6 @@ export const login = async (req, res, next) => {
 
     logAudit(req, 'LOGIN_SUCCESS', 'Login via Senha', user._id, email);
     
-    // Retorna dados essenciais do usuário para o Frontend
     res.status(200).json({ 
       message: "Login realizado com sucesso.",
       accessToken,
@@ -151,6 +148,7 @@ export const login = async (req, res, next) => {
         name: user.name, 
         email: user.email, 
         plan: user.plan,
+        role: user.role, // Enviando role para o front
         subscriptionStatus: user.subscriptionStatus
       }
     });
@@ -183,8 +181,9 @@ export const refreshToken = async (req, res, next) => {
     const user = await User.findById(tokenInDb.user);
     if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
 
+    // Atualizando Access Token com Role atualizada
     const newAccessToken = jwt.sign(
-      { id: user._id, email: user.email, plan: user.plan },
+      { id: user._id, email: user.email, plan: user.plan, role: user.role },
       JWT_SECRET,
       { expiresIn: ACCESS_TOKEN_EXPIRATION }
     );

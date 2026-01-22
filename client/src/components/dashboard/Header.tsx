@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, LayoutGrid, PieChart, BrainCircuit, 
-  GraduationCap, LogOut, Clock, User as UserIcon, Crown
+  GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings
 } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -32,10 +32,12 @@ export const Header: React.FC = () => {
       if (path.includes('/research')) return 'research';
       if (path.includes('/courses')) return 'courses';
       if (path.includes('/pricing')) return 'pricing';
+      if (path.includes('/admin')) return 'admin';
       return '';
   };
 
   const activeTab = getActiveTab();
+  const isAdmin = user?.role === 'ADMIN';
 
   return (
     <nav className="border-b border-slate-800/60 bg-[#03060D]/80 backdrop-blur-md sticky top-0 z-50">
@@ -49,7 +51,7 @@ export const Header: React.FC = () => {
               {user && <PlanBadge plan={user.plan} className="ml-1" showIcon={false} />}
            </div>
            
-           {/* Main Links - Agora todos habilitados */}
+           {/* Main Links */}
            <div className="hidden md:flex items-center gap-1">
               <Link to="/dashboard">
                 <NavLink icon={<LayoutGrid size={14} />} label="Terminal" active={activeTab === 'terminal'} />
@@ -66,6 +68,21 @@ export const Header: React.FC = () => {
               <Link to="/pricing">
                  <NavLink icon={<Crown size={14} />} label="Planos" active={activeTab === 'pricing'} />
               </Link>
+              
+              {/* ADMIN LINK (Visível apenas para admins) */}
+              {isAdmin && (
+                  <Link to="/admin">
+                     <div className={`
+                        flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ml-2
+                        ${activeTab === 'admin' 
+                            ? 'bg-indigo-900/50 text-indigo-300 border border-indigo-700/50 shadow-sm' 
+                            : 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-900/20 border border-transparent'}
+                     `}>
+                        <Settings size={14} />
+                        Admin
+                     </div>
+                  </Link>
+              )}
            </div>
         </div>
 

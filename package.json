@@ -3,21 +3,19 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "postinstall": "npm run install:client && npm run install:server",
-    "install:client": "npm install --prefix client",
-    "install:server": "npm install --prefix server",
-    "install:all": "npm install",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "client": "npm run dev --prefix client",
     "server": "npm run dev --prefix server",
-    "build": "npm run build --prefix client",
-    "render-build": "npm run build",
-    "start": "npm start --prefix server"
+    "setup": "npm install && npm install --prefix client && npm install --prefix server",
+    "seed:admin": "node server/scripts/seedAdmin.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "yahoo-finance2": "^3.11.2"
   }
 }
