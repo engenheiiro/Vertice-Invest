@@ -1,3 +1,4 @@
+
 {
   "name": "vertice-invest-root",
   "version": "1.0.0",
@@ -7,6 +8,9 @@
     "client": "npm run dev --prefix client",
     "server": "npm run dev --prefix server",
     "setup": "npm install && npm install --prefix client && npm install --prefix server",
+    "build": "npm run build:client",
+    "build:client": "npm install --prefix client && npm run build --prefix client",
+    "start": "node server/index.js",
     "seed:admin": "node server/scripts/seedAdmin.js"
   },
   "devDependencies": {
@@ -14,8 +18,5 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "dependencies": {
-    "yahoo-finance2": "^3.11.2"
   }
 }

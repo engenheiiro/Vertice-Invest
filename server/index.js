@@ -1,3 +1,4 @@
+
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -5,22 +6,34 @@ import fs from 'fs';
 // Função auto-executável para inicialização segura
 (async () => {
   try {
-    // 1. Carrega Variáveis de Ambiente (PRIMEIRO DE TUDO)
-    // Usamos import dinâmico para poder tratar erro se o pacote faltar
-    const dotenv = (await import('dotenv')).default;
-    
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
-    const envPath = path.resolve(__dirname, '../.env');
 
-    if (fs.existsSync(envPath)) {
-        dotenv.config({ path: envPath });
-    } else {
+    // 1. Carrega Variáveis de Ambiente
+    const dotenv = (await import('dotenv')).default;
+    
+    // Procura o .env na raiz do projeto ou no diretório atual
+    const envPaths = [
+        path.resolve(__dirname, '../.env'),
+        path.resolve(__dirname, '../../.env'),
+        path.resolve(process.cwd(), '.env')
+    ];
+
+    let envLoaded = false;
+    for (const p of envPaths) {
+        if (fs.existsSync(p)) {
+            dotenv.config({ path: p });
+            envLoaded = true;
+            break;
+        }
+    }
+
+    if (!envLoaded) {
+        // Tenta carregar sem caminho específico (pega do ambiente real do Render/Vercel)
         dotenv.config();
     }
 
     // 2. Carrega Instrumentação (Sentry)
-    // Importante: Carregar depois do dotenv para pegar o DSN do .env
     await import('./instrument.js');
 
     // 3. Importa Módulos Core
@@ -35,8 +48,11 @@ import fs from 'fs';
     const JWT_SECRET = process.env.JWT_SECRET;
 
     if (!JWT_SECRET) {
-      logger.error("❌ ERRO FATAL: JWT_SECRET não definido no .env");
-      if (process.env.NODE_ENV === 'production') process.exit(1);
+      logger.error("❌ ERRO FATAL: JWT_SECRET não definido.");
+      if (process.env.NODE_ENV === 'production') {
+          console.error("Aplicação não pode iniciar sem JWT_SECRET em produção.");
+          // No Render, as variáveis de ambiente são configuradas no painel.
+      }
     }
 
     app.listen(PORT, () => {
@@ -46,16 +62,7 @@ import fs from 'fs';
 
   } catch (error) {
     console.error("\n❌ FALHA CRÍTICA NA INICIALIZAÇÃO:");
-    
-    // Tratamento amigável para erro de módulo não encontrado
-    if (error.code === 'ERR_MODULE_NOT_FOUND') {
-        console.error("⚠️  DEPENDÊNCIAS NÃO ENCONTRADAS!");
-        console.error("👉 Parece que você não instalou as dependências do servidor.");
-        console.error("👉 Execute este comando na raiz do projeto para corrigir tudo:\n");
-        console.error("   npm run setup\n");
-    } else {
-        console.error(error);
-    }
+    console.error(error);
     process.exit(1);
   }
 })();
