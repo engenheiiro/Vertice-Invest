@@ -1,3 +1,4 @@
+
 import { API_URL } from '../config';
 import { User } from '../contexts/AuthContext';
 
@@ -110,5 +111,29 @@ export const authService = {
     const resData = await response.json();
     if (!response.ok) throw new Error(resData.message || 'Erro ao registrar');
     return resData;
+  },
+
+  async forgotPassword(email: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+    });
+    if (response.status >= 500) {
+        throw new Error("Erro no servidor");
+    }
+  },
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword })
+    });
+
+    if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Falha ao redefinir senha");
+    }
   }
 };
