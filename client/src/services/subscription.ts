@@ -1,14 +1,9 @@
-import { API_URL } from '../config';
+import { authService } from './auth';
 
 export const subscriptionService = {
     async initCheckout(planId: string) {
-        const token = localStorage.getItem('accessToken');
-        const response = await fetch(`${API_URL}/api/subscription/checkout`, {
+        const response = await authService.api('/api/subscription/checkout', {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
             body: JSON.stringify({ planId })
         });
         
@@ -17,13 +12,8 @@ export const subscriptionService = {
     },
 
     async confirmPayment(planId: string, paymentMethod: string) {
-        const token = localStorage.getItem('accessToken');
-        const response = await fetch(`${API_URL}/api/subscription/confirm`, {
+        const response = await authService.api('/api/subscription/confirm', {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
             body: JSON.stringify({ planId, paymentMethod })
         });
         
@@ -32,11 +22,7 @@ export const subscriptionService = {
     },
 
     async getStatus() {
-        const token = localStorage.getItem('accessToken');
-        const response = await fetch(`${API_URL}/api/subscription/status`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
+        const response = await authService.api('/api/subscription/status');
         if (!response.ok) return null;
         return await response.json();
     }

@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../services/auth';
-import { API_URL } from '../config';
 
 export type UserPlan = 'GUEST' | 'ESSENTIAL' | 'PRO' | 'BLACK';
 export type SubscriptionStatus = 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'TRIAL';
+export type UserRole = 'USER' | 'ADMIN';
 
 export interface User {
   id: string;
@@ -11,6 +11,7 @@ export interface User {
   email: string;
   plan: UserPlan;
   subscriptionStatus: SubscriptionStatus;
+  role: UserRole;
 }
 
 interface AuthContextType {
@@ -30,22 +31,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshProfile = async () => {
     try {
-        const token = localStorage.getItem('accessToken');
-        if (!token) return;
-
-        // Assumindo um endpoint que retorna o usuário atualizado (reuso do endpoint de status ou novo)
-        const response = await fetch(`${API_URL}/api/subscription/status`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
+        const response = await authService.api('/api/subscription/status');
         if (response.ok) {
             const data = await response.json();
             if (data.current) {
-                // Merge dos dados novos com os existentes (nome/email mantidos)
-                setUser(prev => prev ? { ...prev, ...data.current } : null);
-                // Atualiza storage
-                const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-                const updatedUser = { ...storedUser, ...data.current };
+                const updatedUser = { ...JSON.parse(localStorage.getItem('user') || '{}'), ...data.current };
+                setUser(updatedUser);
                 localStorage.setItem('user', JSON.stringify(updatedUser));
             }
         }
@@ -56,16 +47,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const initializeAuth = async () => {
-      const storedUser = localStorage.getItem('user');
       const token = localStorage.getItem('accessToken');
+      const storedUser = localStorage.getItem('user');
 
-      if (storedUser && token) {
+      if (token && storedUser) {
         try {
-          setUser(JSON.parse(storedUser));
+          // Valida o token com o servidor na inicialização
+          const response = await authService.api('/api/subscription/status');
+          if (response.ok) {
+            setUser(JSON.parse(storedUser));
+          } else {
+            // Se o status falhou (401/403), o wrapper já tentou refresh.
+            // Se ainda não temos user, limpa tudo.
+            authService.clearSession();
+          }
         } catch (e) {
-          console.error("Erro ao parsear usuário", e);
-          localStorage.removeItem('user');
-          localStorage.removeItem('accessToken');
+          authService.clearSession();
         }
       }
       setIsLoading(false);
@@ -81,15 +78,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    try {
-      await authService.logout();
-    } catch (error) {
-      console.error("Erro no logout", error);
-    } finally {
-      setUser(null);
-      localStorage.removeItem('user');
-      localStorage.removeItem('accessToken');
-    }
+    await authService.logout();
+    setUser(null);
   };
 
   return (

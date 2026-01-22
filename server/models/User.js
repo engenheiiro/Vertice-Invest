@@ -12,18 +12,25 @@ const UserSchema = new mongoose.Schema({
   },
   password: { type: String, required: true },
   
-  // --- Sistema de Assinatura (RBAC) ---
+  // --- Controle de Acesso (RBAC) ---
+  role: { 
+    type: String, 
+    enum: ['USER', 'ADMIN'], 
+    default: 'USER' 
+  },
+
+  // --- Sistema de Assinatura ---
   plan: { 
     type: String, 
     enum: ['GUEST', 'ESSENTIAL', 'PRO', 'BLACK'], 
-    default: 'ESSENTIAL' // Alterado conforme solicitado
+    default: 'ESSENTIAL'
   },
   subscriptionStatus: {
     type: String,
     enum: ['ACTIVE', 'PAST_DUE', 'CANCELED', 'TRIAL'],
-    default: 'ACTIVE' // Alterado conforme solicitado
+    default: 'ACTIVE'
   },
-  validUntil: { type: Date }, // Data de expiração da assinatura
+  validUntil: { type: Date },
   
   // Recuperação de Senha
   resetPasswordToken: { type: String },
@@ -32,7 +39,6 @@ const UserSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-// Prevenção de recompilação do modelo em ambiente de desenvolvimento (Hot Reload)
 const User = mongoose.models.User || mongoose.model('User', UserSchema);
 
 export default User;

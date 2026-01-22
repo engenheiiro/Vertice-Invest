@@ -1,0 +1,47 @@
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import User from '../models/User.js';
+
+// Configuração de ambiente
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
+const promoteToAdmin = async () => {
+  const email = process.argv[2]; // Pega o email do argumento do comando
+
+  if (!email) {
+    console.error("❌ Por favor, forneça o email do usuário. Ex: npm run seed:admin usuario@email.com");
+    process.exit(1);
+  }
+
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log("📡 Conectado ao MongoDB...");
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      console.error(`❌ Usuário não encontrado: ${email}`);
+      process.exit(1);
+    }
+
+    user.role = 'ADMIN';
+    // Opcional: Dar plano BLACK para admins para testes completos
+    user.plan = 'BLACK'; 
+    await user.save();
+
+    console.log(`\n✅ SUCESSO! O usuário ${user.name} (${email}) agora é um ADMIN.`);
+    console.log("👉 Você precisará fazer Logout e Login novamente para que as permissões tenham efeito.\n");
+    
+    process.exit(0);
+
+  } catch (error) {
+    console.error("❌ Erro:", error.message);
+    process.exit(1);
+  }
+};
+
+promoteToAdmin();
