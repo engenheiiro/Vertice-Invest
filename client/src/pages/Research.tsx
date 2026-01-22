@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Header } from '../components/dashboard/Header';
 import { researchService, ResearchReport } from '../services/research';
 import { ResearchViewer } from '../components/research/ResearchViewer';
-import { Bot, Newspaper, Trophy, Loader2, Lock, Crown, Info } from 'lucide-react';
+import { Bot, Newspaper, Trophy, Loader2, Lock, Crown, Info, RefreshCcw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -19,7 +19,6 @@ export const Research = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [selectedAsset, setSelectedAsset] = useState('BRASIL_10');
-    // MUDANÇA: 'RANKING' (Top 10) é o padrão agora
     const [viewMode, setViewMode] = useState<'ANALYSIS' | 'RANKING'>('RANKING');
     const [report, setReport] = useState<ResearchReport | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -36,26 +35,27 @@ export const Research = () => {
         return userLevel >= requiredLevel;
     };
 
-    useEffect(() => {
-        const fetchReport = async () => {
-            if (!checkAccess(selectedAsset)) {
-                setIsLoading(false);
-                setReport(null);
-                return;
-            }
+    const fetchReport = async () => {
+        if (!checkAccess(selectedAsset)) {
+            setIsLoading(false);
+            setReport(null);
+            return;
+        }
 
-            setIsLoading(true);
-            try {
-                const strategy = selectedAsset === 'CRYPTO' ? 'SWING' : 'BUY_HOLD';
-                const data = await researchService.getLatest(selectedAsset, strategy);
-                setReport(data);
-            } catch (err: any) {
-                console.error("Erro ao buscar análise:", err);
-                setReport(null);
-            } finally {
-                setIsLoading(false);
-            }
-        };
+        setIsLoading(true);
+        try {
+            const strategy = selectedAsset === 'CRYPTO' ? 'SWING' : 'BUY_HOLD';
+            const data = await researchService.getLatest(selectedAsset, strategy);
+            setReport(data);
+        } catch (err: any) {
+            console.error("Erro ao buscar análise:", err);
+            setReport(null);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
         fetchReport();
     }, [selectedAsset]);
 
@@ -80,8 +80,8 @@ export const Research = () => {
                         </p>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
-                        <div className="flex bg-[#080C14] border border-slate-800 p-1.5 rounded-2xl overflow-x-auto no-scrollbar gap-1 shadow-inner">
+                    <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-center">
+                        <div className="flex bg-[#080C14] border border-slate-800 p-1.5 rounded-2xl overflow-x-auto no-scrollbar gap-1 shadow-inner w-full sm:w-auto">
                             {ASSETS.map(asset => {
                                 const allowed = checkAccess(asset.id);
                                 return (
@@ -101,22 +101,34 @@ export const Research = () => {
                             })}
                         </div>
 
-                        <div className="flex bg-[#080C14] border border-slate-800 p-1.5 rounded-2xl gap-1 shadow-inner">
+                        <div className="flex gap-2">
+                            <div className="flex bg-[#080C14] border border-slate-800 p-1.5 rounded-2xl gap-1 shadow-inner">
+                                <button 
+                                    onClick={() => setViewMode('RANKING')}
+                                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
+                                        viewMode === 'RANKING' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500'
+                                    }`}
+                                >
+                                    <Trophy size={16} /> Top 10
+                                </button>
+                                <button 
+                                    onClick={() => setViewMode('ANALYSIS')}
+                                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
+                                        viewMode === 'ANALYSIS' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500'
+                                    }`}
+                                >
+                                    <Newspaper size={16} /> Morning Call
+                                </button>
+                            </div>
+
+                            {/* Botão de Refresh Manual */}
                             <button 
-                                onClick={() => setViewMode('RANKING')}
-                                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
-                                    viewMode === 'RANKING' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500'
-                                }`}
+                                onClick={fetchReport}
+                                disabled={isLoading}
+                                className="bg-[#080C14] border border-slate-800 p-3 rounded-2xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                                title="Atualizar Dados"
                             >
-                                <Trophy size={16} /> Top 10
-                            </button>
-                            <button 
-                                onClick={() => setViewMode('ANALYSIS')}
-                                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
-                                    viewMode === 'ANALYSIS' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500'
-                                }`}
-                            >
-                                <Newspaper size={16} /> Morning Call
+                                <RefreshCcw size={18} className={isLoading ? 'animate-spin' : ''} />
                             </button>
                         </div>
                     </div>

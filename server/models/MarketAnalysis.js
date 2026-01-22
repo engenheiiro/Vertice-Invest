@@ -23,7 +23,9 @@ const MarketAnalysisSchema = new mongoose.Schema({
       name: String,
       action: { type: String, enum: ['BUY', 'WAIT', 'SELL'] },
       targetPrice: Number,
-      score: Number,
+      score: Number,       // Score Estrutural (Fundamentos)
+      probability: Number, // Probabilidade Estatística (Novo)
+      thesis: String,      // Tese Principal (Novo ex: DIVIDENDOS)
       reason: String
     }]
   },

@@ -3,10 +3,10 @@ import MarketAnalysis from '../models/MarketAnalysis.js';
 import { aiResearchService } from '../services/aiResearchService.js';
 import logger from '../config/logger.js';
 
+// Delay reduzido para 12s
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const triggerDailyRoutine = async (req, res, isInternal = false) => {
-    // Configuração de força: Se vier do admin ou body, ignoramos a trava de cache
     const forceGenerate = req?.body?.force === true;
 
     const ROUTINE_CONFIG = [
@@ -18,15 +18,19 @@ export const triggerDailyRoutine = async (req, res, isInternal = false) => {
     ];
 
     if (!isInternal && res) {
-        res.status(202).json({ message: "Iniciando processamento em lote..." });
+        res.status(202).json({ 
+            message: "Protocolo de Ingestão iniciado em background.", 
+            estimatedTime: "~2 minutos" 
+        });
     }
 
     const runBatch = async () => {
-        logger.info(`🚀 [BATCH] Iniciando Ingestão (Force: ${forceGenerate})`);
+        logger.info(`===========================================================`);
+        logger.info(`🚀 [BATCH] INICIANDO PROTOCOLO DE INGESTÃO (Force: ${forceGenerate})`);
+        logger.info(`===========================================================`);
         
         for (const task of ROUTINE_CONFIG) {
             try {
-                // Só checamos cache se NÃO for um disparo manual forçado
                 if (!forceGenerate) {
                     const existing = await MarketAnalysis.findOne({
                         assetClass: task.assetClass,
@@ -35,7 +39,7 @@ export const triggerDailyRoutine = async (req, res, isInternal = false) => {
                     });
 
                     if (existing) {
-                        logger.info(`⏩ [BATCH] ${task.assetClass} ignorado (cache ativo).`);
+                        logger.info(`⏩ [BATCH] ${task.assetClass} ignorado (cache recente).`);
                         continue;
                     }
                 }
@@ -52,18 +56,30 @@ export const triggerDailyRoutine = async (req, res, isInternal = false) => {
                         },
                         generatedBy: req?.user?.id || null
                     });
-                    logger.info(`✅ [BATCH] ${task.assetClass} atualizado com sucesso.`);
-                    await sleep(65000); // Intervalo de segurança RPM do Gemini Flash
+                    logger.info(`✅ [BATCH] ${task.assetClass} persistido no banco.`);
+                    
+                    await sleep(12000); 
                 }
             } catch (error) {
-                logger.error(`❌ [BATCH] Erro em ${task.assetClass}: ${error.message}`);
-                await sleep(15000);
+                if (error.code === 'FATAL_AUTH_ERROR' || error.message.includes('FATAL_AUTH_ERROR')) {
+                    logger.error(`⛔ [BATCH] API KEY BLOQUEADA. ABORTANDO.`);
+                    break;
+                }
+
+                logger.error(`❌ [BATCH] Pulo de emergência em ${task.assetClass}. Continuando...`);
+                await sleep(5000); 
             }
         }
-        logger.info("🏁 [BATCH] Rotina finalizada.");
+        logger.info(`===========================================================`);
+        logger.info("🏁 [BATCH] ROTINA FINALIZADA");
+        logger.info(`===========================================================`);
     };
 
-    if (!isInternal) runBatch(); else await runBatch();
+    if (isInternal) {
+        await runBatch();
+    } else {
+        runBatch().catch(err => logger.error(`Falha no Async Batch: ${err.message}`));
+    }
 };
 
 export const getLatestReport = async (req, res, next) => {
@@ -82,7 +98,7 @@ export const getLatestReport = async (req, res, next) => {
 export const generateReport = async (req, res, next) => {
     try {
         const { assetClass, strategy } = req.body;
-        // Geração manual por POST sempre gera um novo registro
+        // Geração manual (Single Shot)
         const analysis = await aiResearchService.generateAnalysis(assetClass, strategy);
         
         if (analysis) {
