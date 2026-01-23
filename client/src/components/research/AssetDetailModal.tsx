@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { X, TrendingUp, Target, Shield, AlertTriangle, CheckCircle2, BookOpen } from 'lucide-react';
+import { X, TrendingUp, Target, Shield, AlertTriangle, CheckCircle2, BarChart3, Info, HeartPulse } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 
 interface AssetDetailModalProps {
@@ -13,124 +12,114 @@ interface AssetDetailModalProps {
 export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onClose, asset }) => {
     if (!isOpen || !asset) return null;
 
-    const details = asset.detailedAnalysis || {
-        summary: "Análise detalhada indisponível para este ativo no momento.",
-        pros: [],
-        cons: [],
-        valuationMethod: "Standard Model"
-    };
+    const m = asset.metrics;
 
     const formatCurrency = (val: number) => 
         new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+    const getAltmanStatus = (z: number) => {
+        if (z > 3) return { label: 'Z-SAFE', color: 'text-emerald-400', desc: 'Saúde financeira excelente.' };
+        if (z > 1.8) return { label: 'Z-ALERT', color: 'text-yellow-400', desc: 'Saúde estável, mas requer atenção.' };
+        return { label: 'Z-DISTRESS', color: 'text-red-400', desc: 'Risco elevado de insolvência.' };
+    };
+
+    const altman = getAltmanStatus(m.altmanZScore);
+
     return createPortal(
         <div className="relative z-[100]" role="dialog" aria-modal="true">
-            {/* Backdrop */}
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity animate-fade-in" onClick={onClose}></div>
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md animate-fade-in" onClick={onClose}></div>
 
-            {/* Modal */}
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
-                    <div className="relative w-full max-w-2xl transform overflow-hidden rounded-2xl bg-[#080C14] border border-slate-700 shadow-2xl transition-all animate-fade-in">
+                    <div className="relative w-full max-w-3xl bg-[#080C14] border border-slate-700 rounded-3xl overflow-hidden shadow-2xl animate-fade-in">
                         
-                        {/* Header */}
-                        <div className="relative h-32 bg-gradient-to-r from-slate-900 to-[#0F1729] border-b border-slate-800 p-6 flex flex-col justify-end">
-                            <div className="absolute top-0 right-0 p-6">
-                                <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors bg-black/20 p-2 rounded-full hover:bg-white/10">
-                                    <X size={20} />
+                        {/* Header Técnico */}
+                        <div className="p-8 border-b border-slate-800 bg-gradient-to-r from-slate-900 to-[#080C14]">
+                            <div className="flex justify-between items-start mb-6">
+                                <div>
+                                    <div className="flex items-center gap-3 mb-1">
+                                        <h2 className="text-4xl font-black text-white">{asset.ticker}</h2>
+                                        <span className="px-3 py-1 rounded bg-blue-600 text-white text-[10px] font-black uppercase">
+                                            {asset.thesis}
+                                        </span>
+                                    </div>
+                                    <p className="text-slate-500 font-medium">{asset.name}</p>
+                                </div>
+                                <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+                                    <X size={24} />
                                 </button>
                             </div>
-                            
-                            <div className="flex items-end justify-between">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <h2 className="text-3xl font-black text-white tracking-tight">{asset.ticker}</h2>
-                                        {asset.thesis && (
-                                            <span className="px-2 py-0.5 rounded border border-blue-500/30 bg-blue-500/10 text-blue-400 text-[10px] font-bold uppercase tracking-wider">
-                                                {asset.thesis}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <p className="text-sm text-slate-400 font-medium">{asset.name}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-[10px] text-slate-500 uppercase font-bold mb-0.5">Target</p>
-                                    <p className="text-2xl font-bold text-emerald-400 font-mono">{formatCurrency(asset.targetPrice)}</p>
-                                </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <MetricBox label="Score Vértice" value={`${asset.score}/100`} color="text-blue-400" />
+                                <MetricBox label="Prob. Sucesso" value={`${asset.probability}%`} color="text-emerald-400" />
+                                <MetricBox label="Alvo Estimado" value={formatCurrency(asset.targetPrice)} />
+                                <MetricBox label="Earnings Yield" value={`${m.earningsYield}%`} color={m.earningsYield > 12 ? 'text-emerald-400' : 'text-white'} />
                             </div>
                         </div>
 
-                        {/* Body */}
-                        <div className="p-6 md:p-8 space-y-8">
-                            
-                            {/* Score Bar */}
-                            <div className="flex items-center gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-                                <div className="flex-1">
-                                    <div className="flex justify-between text-xs font-bold mb-2">
-                                        <span className="text-slate-300 flex items-center gap-2"><Target size={14} /> Score de Convicção IA</span>
-                                        <span className={asset.score > 80 ? "text-emerald-400" : "text-yellow-400"}>{asset.score}/100</span>
+                        {/* Corpo Quantitativo */}
+                        <div className="p-8">
+                            <div className="grid md:grid-cols-2 gap-8">
+                                
+                                {/* Coluna 1: Valuation & Solvência */}
+                                <div className="space-y-6">
+                                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                        <BarChart3 size={14} /> Modelagem de Valor
+                                    </h3>
+                                    
+                                    <div className="p-5 bg-slate-900/50 border border-slate-800 rounded-2xl">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <span className="text-sm font-bold text-slate-300">Graham Fair Value</span>
+                                            <span className="text-lg font-mono font-bold text-emerald-400">{formatCurrency(m.grahamPrice)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm font-bold text-slate-300">PEG Ratio</span>
+                                            <span className={`text-lg font-mono font-bold ${m.pegRatio < 1 ? 'text-emerald-400' : 'text-white'}`}>{m.pegRatio}</span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 mt-4 leading-relaxed">
+                                            *PEG Ratio abaixo de 1.0 indica crescimento subavaliado pelo mercado.
+                                        </p>
                                     </div>
-                                    <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                                        <div 
-                                            className={`h-full rounded-full ${asset.score > 80 ? 'bg-emerald-500' : 'bg-yellow-500'}`}
-                                            style={{ width: `${asset.score}%` }}
-                                        ></div>
+
+                                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                        <HeartPulse size={14} /> Análise de Solvência
+                                    </h3>
+                                    <div className="p-5 bg-slate-900/50 border border-slate-800 rounded-2xl">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className={`text-lg font-black ${altman.color}`}>{altman.label}</span>
+                                            <span className="text-sm font-mono text-slate-400">Score: {m.altmanZScore}</span>
+                                        </div>
+                                        <p className="text-xs text-slate-300">{altman.desc}</p>
                                     </div>
                                 </div>
-                                <div className="text-right min-w-[80px]">
-                                    <span className="text-[10px] text-slate-500 block">Probabilidade</span>
-                                    <span className="text-sm font-bold text-white">{asset.probability}%</span>
-                                </div>
-                            </div>
 
-                            {/* Summary Thesis */}
-                            <div>
-                                <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
-                                    <BookOpen size={16} className="text-blue-500" /> Tese de Investimento
-                                </h3>
-                                <p className="text-sm text-slate-300 leading-relaxed text-justify">
-                                    {details.summary}
-                                </p>
-                            </div>
+                                {/* Coluna 2: Risco & Eficiência */}
+                                <div className="space-y-6">
+                                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                        <Shield size={14} /> Eficiência e Risco
+                                    </h3>
+                                    
+                                    <div className="space-y-4">
+                                        <SimpleMetric label="Sharpe Ratio (Eficiência)" value={m.sharpeRatio} sub="Retorno p/ risco" />
+                                        <SimpleMetric label="ROE (Rentabilidade)" value={`${m.roe}%`} sub="Retorno s/ Patrimônio" />
+                                        <SimpleMetric label="Dividend Yield" value={`${m.dy}%`} sub="Proventos 12m" />
+                                        <SimpleMetric label="P/L" value={m.pl} sub="Preço s/ Lucro" />
+                                    </div>
 
-                            {/* Pros & Cons Grid */}
-                            <div className="grid md:grid-cols-2 gap-6">
-                                <div className="bg-emerald-900/10 border border-emerald-900/30 rounded-xl p-4">
-                                    <h4 className="text-xs font-bold text-emerald-400 uppercase mb-3 flex items-center gap-2">
-                                        <Shield size={14} /> Pontos Fortes (Bull Case)
-                                    </h4>
-                                    <ul className="space-y-2">
-                                        {details.pros?.length > 0 ? details.pros.map((pro, i) => (
-                                            <li key={i} className="flex items-start gap-2 text-xs text-slate-300">
-                                                <CheckCircle2 size={12} className="text-emerald-500 mt-0.5 shrink-0" />
-                                                <span>{pro}</span>
-                                            </li>
-                                        )) : <li className="text-xs text-slate-500">Nenhum destaque específico.</li>}
-                                    </ul>
+                                    <div className="bg-blue-900/10 border border-blue-900/20 p-4 rounded-xl">
+                                        <div className="flex gap-3">
+                                            <Info size={16} className="text-blue-400 shrink-0" />
+                                            <p className="text-[10px] text-blue-300 leading-relaxed italic">
+                                                "O modelo quantitativo Vértice integra fundamentos clássicos com algoritmos de risco para mitigar armadilhas de valor (Value Traps)."
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div className="bg-red-900/10 border border-red-900/30 rounded-xl p-4">
-                                    <h4 className="text-xs font-bold text-red-400 uppercase mb-3 flex items-center gap-2">
-                                        <AlertTriangle size={14} /> Riscos (Bear Case)
-                                    </h4>
-                                    <ul className="space-y-2">
-                                        {details.cons?.length > 0 ? details.cons.map((con, i) => (
-                                            <li key={i} className="flex items-start gap-2 text-xs text-slate-300">
-                                                <div className="w-1 h-1 rounded-full bg-red-500 mt-1.5 shrink-0"></div>
-                                                <span>{con}</span>
-                                            </li>
-                                        )) : <li className="text-xs text-slate-500">Sem riscos críticos detectados.</li>}
-                                    </ul>
-                                </div>
                             </div>
-
-                            {/* Footer Info */}
-                            <div className="pt-4 border-t border-slate-800 text-[10px] text-slate-500 flex justify-between">
-                                <span>Metodologia: <strong className="text-slate-400">{details.valuationMethod}</strong></span>
-                                <span>Ref: Neural Engine v2.4</span>
-                            </div>
-
                         </div>
+
                     </div>
                 </div>
             </div>
@@ -138,3 +127,20 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
         document.body
     );
 };
+
+const MetricBox = ({ label, value, color = "text-white" }: any) => (
+    <div className="bg-[#0B101A] p-3 rounded-xl border border-slate-800">
+        <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">{label}</p>
+        <p className={`text-sm font-black font-mono ${color}`}>{value}</p>
+    </div>
+);
+
+const SimpleMetric = ({ label, value, sub }: any) => (
+    <div className="flex items-center justify-between p-3 border-b border-slate-800/50">
+        <div>
+            <p className="text-xs font-bold text-slate-200">{label}</p>
+            <p className="text-[9px] text-slate-500">{sub}</p>
+        </div>
+        <span className="text-sm font-mono font-bold text-white">{value}</span>
+    </div>
+);

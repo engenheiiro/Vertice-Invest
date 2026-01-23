@@ -1,0 +1,67 @@
+A FAZER:
+
+O arquivo server.js está se tornando monolítico. Refatore a configuração do Express, conexão com o banco de dados e middlewares para arquivos separados em pastas como 'config', 'routes', 'controllers', 'services', seguindo a estrutura de projeto já iniciada.
+
+Analise o código do arquivo `src/hooks/useDashboardData.ts` e sugira otimizações para a forma como os dados do `assets` do `useWallet` são mapeados para `PortfolioItem`. Verifique se há redundância ou ineficiência na conversão.
+
+A analise está pegando do yahoo finance, mas não está pegando renda fixa e reserva. Qual a melhor estratégia para pegar os melhores e montar um ranking?
+
+Analise o arquivo `src/pages/Dashboard.tsx` e verifique se há alguma lógica de negócio que poderia ser extraída para um hook customizado ou para o `useDashboardData.ts`, visando a separação de responsabilidades.
+
+Refactor the Research component to fetch and display Top Picks and Morning Call data separately. Ensure that only the relevant data is fetched and displayed based on the user's selected view (RANKING or ANALYSIS).
+
+Create a detailed modal for displaying individual asset information when a user clicks on an asset in the Top Picks list. This modal should include all relevant quantitative metrics, the AI score, sentiment, and the reasons behind the AI's recommendation, presented in a professional and visually appealing manner.
+
+Enhance the logging within the AI research service (aiResearchService.js) to provide more granular detail on the steps being taken, the models being used (including fallbacks), and any errors encountered during data fetching or analysis. Use distinct log levels (e.g., INFO, WARN, ERROR) and colors for better readability.
+
+Move the calculation of quantitative metrics (Graham Price, PEG Ratio, Altman Z-Score, Sharpe Ratio) from the aiResearchService to the backend. This will centralize business logic and improve security.
+
+Implement logic in the AI service to dynamically select the best available Gemini model based on quota availability and the specific task (e.g., prioritize Gemini 3 Pro for complex analysis, fallback to Gemini 3 Flash or Gemini 2.5 Pro for simpler tasks). Log the model switching behavior.
+
+Refatore os componentes do Dashboard para melhorar a responsividade e a clareza visual em diferentes tamanhos de tela. Preste atenção especial ao layout dos cards na sidebar e à legibilidade da tabela de ativos.
+
+Revise as queries do MongoDB no backend, verificando a performance e identificando oportunidades de otimização através da adição de índices em campos frequentemente usados em filtros e ordenações (ex: `User`, `Ticker` em `UserAsset`, `createdAt` em `AuditLog`).
+
+Refatore o AuthController para encapsular a lógica de criação de tokens JWT e Refresh Token em funções auxiliares. Além disso, extraia a lógica de auditoria para uma função reutilizável para melhorar a legibilidade e manutenção.
+
+Revise e aplique as diretivas do Helmet CSP (`contentSecurityPolicy`) de forma mais rigorosa, removendo `'unsafe-inline'` e `'unsafe-eval'` sempre que possível. Considere a integração com Sentry para monitoramento mais detalhado das políticas de segurança.
+
+Refaça os gráficos de distribuição de carteira e de evolução patrimonial para que sejam mais interativos e visualmente atraentes, adicionando tooltips informativos e animações sutis.
+
+Implemente filtros mais avançados na lista de ativos da carteira, permitindo filtrar por setor, tipo de ativo e rentabilidade, além da ordenação por score da IA.
+
+Aprimore o formulário de adicionar novo ativo para incluir validação em tempo real dos tickers de mercado e sugerir ativos baseados em uma lista pré-aprovada de IA. E reveja se todos os campos estão harmoniosos.
+
+Avalie e otimize o uso da API da Gemini, implementando cache e estratégias de retry com backoff exponencial para evitar erros de cota excedida.
+
+Refaça a lógica de controle de uso do 'Aporte Inteligente' e 'Relatórios' para ser gerenciada pelo backend com base nas assinaturas do usuário, evitando o uso de localStorage.
+
+Refatore o componente `TopPicksCard.tsx` e a lógica de exibição no `ResearchViewer.tsx` para garantir que os rankings de ativos exibam consistentemente os dados esperados. Verifique se os scores estão ordenados corretamente e se as informações de Tese de Investimento, Pontos Fortes e Riscos estão sendo populadas adequadamente, buscando-as junto ao `MarketAnalysis` no backend. Ajuste a lógica para que, ao clicar em um ativo, sejam exibidos os dados detalhados da análise individual, incluindo todas as métricas quantitativas e a razão por trás do score.
+
+Implemente no backend o controle de uso das funcionalidades 'Aporte Inteligente' e 'Relatório', baseando a limitação no plano de assinatura do usuário. Para 'Aporte Inteligente', limite a 1x/mês para Essential, 2x/mês para Pro e ilimitado para Black. Para 'Relatório', limite a 1x/mês para Essential e ilimitado para Pro/Black. Utilize o MongoDB para persistir esses contadores de uso por usuário e mês, garantindo que o frontend verifique essas permissões antes de habilitar ou processar as ações.
+
+Refatore o `WalletContext.tsx` para mover a lógica de cálculo de rentabilidade (preço médio, lucro/prejuízo) e a gestão dos dados da carteira do usuário para o backend (`walletController.js`). Crie os modelos necessários no MongoDB (`UserAsset.js`) para armazenar as transações de adição e remoção de ativos do usuário. Isso garantirá a segurança, auditoria e consistência dos dados financeiros, além de permitir que o frontend consuma apenas dados já processados e validados pelo servidor.
+
+Refaça a lógica de cálculo da carteira no WalletContext para obter os dados de 'currentPrice' e outras métricas diretamente da API de Research, em vez de usar dados mockados ou a estimativa do Yahoo Finance. Certifique-se de que os dados de 'totalDividends' também sejam populados corretamente.
+
+Melhore a IA de análise para refinar a precisão do Score e da Probabilidade em todos os rankings (Ações BR, FIIs, Exterior, Cripto, Renda Fixa). Priorize a incorporação de metodologias quantitativas e o uso de dados mais robustos para determinar o ranking final.
+
+Ajuste a interface do usuário da página de Research para que, ao clicar em um ativo no ranking, os detalhes completos da análise (incluindo métricas quantitativas, scoring, probabilidade e tese) sejam exibidos de forma clara e intuitiva, sem a necessidade de recarregar a página ou dar F5.
+
+Aprimore os logs na funcionalidade de geração de Research. Inclua informações sobre qual modelo de IA está sendo usado, a etapa de processamento em que se encontra (ex: 'Coletando dados', 'Executando modelo quantitativo', 'Gerando narrativa IA'), e registre os erros de forma detalhada com cores e identificação clara para facilitar a depuração.
+
+Analise todo o código fonte do projeto Vértice Invest, incluindo todos os arquivos e pastas. Verifique se há alguma inconsistência na organização, duplicação de código ou padrões que possam estar gerando os erros reportados. Apresente um checklist das melhorias necessárias.
+
+No componente src/components/research/ResearchViewer.tsx, adicione uma funcionalidade para exportar o relatório atual (Morning Call ou Ranking) para PDF. O botão deve estar visível no footer do card do relatório e deve ser estilizado de forma consistente com o restante da UI, utilizando um ícone de download.
+
+No componente `src/components/research/TopPicksCard.tsx`, ao renderizar os itens do ranking, implemente uma animação sutil (ex: fade-in com delay) para cada item quando o componente é carregado ou atualizado. Garanta que o tooltip ao passar o mouse sobre uma métrica (ex: Score Vértice) mostre uma breve explicação do que ela representa.
+
+No `aiResearchService.js` e em `MarketDataService.js`, adicione validações mais rigorosas para os dados recebidos do Yahoo Finance. Ao identificar campos cruciais (como preço, ROE, P/L) como inválidos ou ausentes, registre um aviso no log e, se possível, pule o ativo em questão no cálculo do ranking, em vez de prosseguir com dados potencialmente incorretos.
+
+Revise o código da funcionalidade de ações para garantir a consistência, identificar possíveis refatorações e garantir que os dados estejam sendo tratados corretamente.
+
+Refatore o serviço `marketDataService.js` para tratar erros específicos da API do Yahoo Finance de forma mais granular, incluindo validações de schema e tratamento de símbolos inválidos ou com dados ausentes, e logar esses eventos de forma clara.
+
+Analise e refatore a lógica de obtenção e exibição de dados para criptomoedas, adaptando-a para lidar com a volatilidade e as particularidades desse mercado, como a ausência de certos indicadores técnicos disponíveis para ações.
+
+Aprimore os logs gerados pelo serviço de IA (`aiResearchService.js`) para incluir informações detalhadas sobre a etapa de processamento, qual modelo de IA está sendo usado (incluindo fallback), e registrar erros de forma estruturada com cores para facilitar a leitura e depuração.

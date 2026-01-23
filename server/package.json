@@ -1,4 +1,3 @@
-
 {
   "name": "vertice-invest-server",
   "version": "1.5.0",
@@ -9,9 +8,12 @@
     "dev": "node --watch index.js"
   },
   "dependencies": {
+    "@google/genai": "*",
+    "@sentry/node": "^8.0.0",
+    "@sentry/profiling-node": "^8.0.0",
     "bcryptjs": "^2.4.3",
-    "cookie-parser": "^1.4.6",
     "compression": "^1.7.4",
+    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.18.2",
@@ -19,13 +21,11 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.0",
-    "nodemailer": "^6.9.7",
-    "zod": "^3.22.4",
-    "winston": "^3.11.0",
-    "@sentry/node": "^8.0.0",
-    "@sentry/profiling-node": "^8.0.0",
-    "@google/genai": "*",
     "node-cron": "^3.0.3",
-    "yahoo-finance2": "^3.11.3"
+    "nodemailer": "^6.9.7",
+    "vertice-invest-root": "file:..",
+    "winston": "^3.11.0",
+    "yahoo-finance2": "^3.11.3",
+    "zod": "^3.22.4"
   }
 }
