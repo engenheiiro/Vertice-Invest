@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -9,7 +10,7 @@ import cookieParser from 'cookie-parser';
 import * as Sentry from "@sentry/node";
 import { fileURLToPath } from 'url';
 import logger from './config/logger.js';
-import { initScheduler } from './services/schedulerService.js'; // Import do Scheduler
+import { initScheduler } from './services/schedulerService.js';
 
 // Rotas
 import authRoutes from './routes/authRoutes.js';
@@ -50,18 +51,27 @@ app.use(compression());
 app.use(cookieParser()); 
 app.use(express.json({ limit: '10kb' }));
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  process.env.CLIENT_URL
-].filter(Boolean);
-
+// Configuração de CORS Dinâmica
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === 'production') {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+    // Permite requisições sem origem (como apps mobile ou curl)
+    if (!origin) return callback(null, true);
+
+    // Em produção, verifica whitelist estrita
+    if (process.env.NODE_ENV === 'production') {
+        const allowedOrigins = [process.env.CLIENT_URL].filter(Boolean);
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error('Not allowed by CORS'));
     }
+
+    // Em desenvolvimento, permite qualquer localhost (5173, 5174, etc)
+    if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+        return callback(null, true);
+    }
+
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true 
 }));
@@ -89,6 +99,7 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/research', researchRoutes);
 
 // --- SERVIR FRONTEND ---
+// Localiza o dist do client de forma resiliente
 const distPath = path.resolve(__dirname, '../client/dist');
 
 if (fs.existsSync(distPath)) {
