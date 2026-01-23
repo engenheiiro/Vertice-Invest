@@ -1,5 +1,4 @@
-
-import { API_URL } from '../config';
+import { authService } from './auth';
 
 export interface RankingItem {
     position: number;
@@ -8,80 +7,82 @@ export interface RankingItem {
     action: 'BUY' | 'SELL' | 'WAIT';
     targetPrice: number;
     score: number;
-    probability?: number;
-    thesis?: string;
+    probability: number;
+    thesis: string;
     reason: string;
-    // Novo Objeto Detalhado
-    detailedAnalysis?: {
-        summary: string;
-        pros: string[];
-        cons: string[];
-        valuationMethod: string;
+    metrics: {
+        grahamPrice: number;
+        bazinPrice: number;
+        pegRatio: number;
+        altmanZScore: number;
+        sharpeRatio: number;
+        volatility: number;
+        earningsYield: number;
+        roe: number;
+        dy: number;
+        pl: number;
+        pvp: number;
+        debtToEquity?: number;
+        currentRatio?: number;
     };
 }
 
 export interface ResearchReport {
     _id: string;
     date: string;
-    createdAt: string; 
+    createdAt?: string;
     assetClass: string;
     strategy: string;
-    generatedBy: string;
+    isRankingPublished: boolean;
+    isMorningCallPublished: boolean;
     content: {
-        morningCall: string; 
-        ranking: RankingItem[];    
+        morningCall: string;
+        ranking: RankingItem[];
+        fullAuditLog?: RankingItem[]; // Opcional, vem apenas no details
     };
 }
 
 export const researchService = {
-    async generateReport(assetClass: string, strategy: string) {
-        const token = localStorage.getItem('accessToken');
-        const response = await fetch(`${API_URL}/api/research/generate`, {
+    async crunchNumbers(assetClass?: string, isBulk: boolean = false) {
+        const response = await authService.api('/api/research/crunch', {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ assetClass, strategy })
+            body: JSON.stringify({ assetClass, isBulk })
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || "Erro ao gerar relatório");
-        return data;
+        return await response.json();
     },
 
-    async triggerRoutine(force = false) {
-        const token = localStorage.getItem('accessToken');
-        const response = await fetch(`${API_URL}/api/research/routine`, {
+    async generateNarrative(analysisId: string) {
+        const response = await authService.api('/api/research/narrative', {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ force })
+            body: JSON.stringify({ analysisId })
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || "Erro ao disparar rotina");
-        return data;
+        return await response.json();
+    },
+
+    async publish(analysisId: string, type: 'RANKING' | 'MORNING_CALL' | 'BOTH') {
+        const response = await authService.api('/api/research/publish', {
+            method: 'POST',
+            body: JSON.stringify({ analysisId, type })
+        });
+        return await response.json();
     },
 
     async getHistory() {
-        const token = localStorage.getItem('accessToken');
-        const response = await fetch(`${API_URL}/api/research/history`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const response = await authService.api('/api/research/history');
         if (!response.ok) return [];
         return await response.json();
     },
 
+    // Busca detalhes completos para auditoria
+    async getReportDetails(id: string) {
+        const response = await authService.api(`/api/research/details/${id}`);
+        if (!response.ok) throw new Error("Erro ao buscar detalhes");
+        return await response.json();
+    },
+
     async getLatest(assetClass: string, strategy: string) {
-        const token = localStorage.getItem('accessToken');
-        const response = await fetch(`${API_URL}/api/research/latest?assetClass=${assetClass}&strategy=${strategy}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!response.ok) {
-            if (response.status === 404) return null;
-            throw new Error("Erro ao buscar relatório");
-        }
+        const response = await authService.api(`/api/research/latest?assetClass=${assetClass}&strategy=${strategy}`);
+        if (!response.ok) return null;
         return await response.json();
     }
 };

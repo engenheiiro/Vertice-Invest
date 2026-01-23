@@ -1,202 +1,229 @@
-
-import { createRequire } from 'module';
+import YahooFinance from 'yahoo-finance2';
 import logger from '../config/logger.js';
+import MarketAsset from '../models/MarketAsset.js';
 
-const require = createRequire(import.meta.url);
+const yahoo = new YahooFinance({
+    suppressNotices: ['yahooSurvey']
+});
 
-// --- CONFIGURAÇÃO ROBUSTA YAHOO FINANCE ---
-let yf;
-
-try {
-    const pkg = require('yahoo-finance2');
-    
-    // Tenta obter a instância correta (commonjs vs esm vs default export)
-    // Em versões recentes, pkg.default costuma ser a instância principal configurada
-    if (pkg.default) {
-        yf = pkg.default;
-    } else {
-        yf = pkg;
-    }
-
-    // Configuração Defensiva
-    if (yf) {
-        // Tenta suprimir validação apenas se o método existir (evita crash)
-        if (typeof yf.setGlobalConfig === 'function') {
-            try {
-                yf.setGlobalConfig({ 
-                    validation: { logErrors: false }, // Desliga logs de erro de schema
-                    queue: { concurrency: 2, timeout: 60000 } // Aumenta um pouco a concorrência
-                });
-            } catch (configErr) {
-                logger.debug("YahooFinance: setGlobalConfig falhou, usando padrão.");
-            }
-        }
-        
-        // Propriedade comum para suprimir avisos
-        if ('suppressWarnings' in yf) {
-            yf.suppressWarnings = true;
-        }
-        
-        logger.info("✅ YahooFinance: Driver de dados inicializado.");
-    } else {
-        throw new Error("Módulo yahoo-finance2 não carregou corretamente.");
-    }
-
-} catch (e) {
-    logger.error(`❌ [DATA SYSTEM] Erro fatal no MarketData: ${e.message}`);
-}
-
+// Helper para extrair número seguro
 const validateNumber = (val) => {
     if (val === null || val === undefined) return 0;
-    const num = Number(val);
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    const num = Number(typeof val === 'object' ? val.raw : val);
     return isNaN(num) ? 0 : num;
 };
 
-// --- WATCHLIST (Curadoria de Ativos) ---
-const WATCHLIST = {
-    'STOCK': [
-        'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'PRIO3.SA', 'RENT3.SA', 'BBDC4.SA',
-        'SUZB3.SA', 'HAPV3.SA', 'BPAC11.SA', 'JBSS3.SA', 'VIVT3.SA', 'CMIG4.SA', 'RDOR3.SA', 'EQTL3.SA',
-        'SBSP3.SA', 'CSAN3.SA', 'B3SA3.SA', 'ABEV3.SA', 'TOTS3.SA', 'EMBR3.SA', 'CSNA3.SA', 'LREN3.SA',
-        'MGLU3.SA', 'ASAI3.SA', 'VBBR3.SA', 'CCRO3.SA', 'KLBN11.SA', 'TAEE11.SA', 'ALUP11.SA', 'BBSE3.SA'
-    ],
-    'FII': [
-        'HGLG11.SA', 'KNRI11.SA', 'MXRF11.SA', 'XPML11.SA', 'VISC11.SA', 'BTLG11.SA', 'XPLG11.SA',
-        'HGRU11.SA', 'KNCR11.SA', 'IRDM11.SA', 'CPTS11.SA', 'TRXF11.SA', 'ALZR11.SA', 'BRCO11.SA',
-        'HGBS11.SA', 'KNIP11.SA', 'VGHF11.SA', 'RECR11.SA', 'TGAR11.SA', 'XPCI11.SA', 'BCFF11.SA'
-    ],
-    'STOCK_US': [
-        'NVDA', 'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AMD', 'JPM', 'V', 'NFLX', 'KO',
-        'PEP', 'DIS', 'BRK-B', 'JNJ', 'PG', 'XOM', 'LLY', 'AVGO', 'COST', 'HD', 'WMT'
-    ],
-    'CRYPTO': [
-        'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD', 'ADA-USD', 'DOGE-USD', 'LINK-USD'
-    ]
+// Estratégia de Preço Inteligente (Smart Price v2)
+const getSmartPrice = (quote) => {
+    if (!quote) return 0;
+    
+    const regPrice = validateNumber(quote.regularMarketPrice);
+    const prevClose = validateNumber(quote.regularMarketPreviousClose);
+    const bid = validateNumber(quote.bid);
+    const ask = validateNumber(quote.ask);
+
+    // 1. Tenta preço regular
+    if (regPrice > 0) return regPrice;
+
+    // 2. Se regular for 0, tenta previousClose (comum em FIIs fora de hora)
+    if (prevClose > 0) return prevClose;
+
+    // 3. Tenta média de Bid/Ask
+    if (bid > 0 && ask > 0) return (bid + ask) / 2;
+
+    // 4. Fallback genérico
+    if (validateNumber(quote.currentPrice) > 0) return validateNumber(quote.currentPrice);
+
+    return 0;
 };
 
-const MACRO_INDICES = [
-    { symbol: '^BVSP', name: 'IBOVESPA' },
-    { symbol: '^GSPC', name: 'S&P 500' },
-    { symbol: 'BRL=X', name: 'USD/BRL' }
-];
-
-const calculateGrahamPrice = (eps, bvps) => {
-    if (eps <= 0 || bvps <= 0) return 0;
-    return Math.sqrt(22.5 * eps * bvps);
+// Divide array em pedaços para processamento em lote
+const chunkArray = (array, size) => {
+    const chunked = [];
+    for (let i = 0; i < array.length; i += size) {
+        chunked.push(array.slice(i, i + size));
+    }
+    return chunked;
 };
 
 export const marketDataService = {
-    async getMacroContext() {
-        if (!yf) return [];
+    normalizeSymbol(ticker, type) {
+        if (!ticker) return '';
+        let t = ticker.toUpperCase().trim();
+        
+        // Correções manuais conhecidas
+        if (t === 'GALG11') t = 'GARE11';
+
+        // Cripto: Adiciona -USD se não tiver
+        if (type === 'CRYPTO') {
+            return t.includes('-') ? t : `${t}-USD`;
+        }
+        
+        // Stocks US: Não usa sufixo, mas remove ^ se houver (índices)
+        if (type === 'STOCK_US') {
+            return t; 
+        }
+
+        // Ativos BR (Ações e FIIs): OBRIGATÓRIO ter .SA
+        if (['STOCK', 'FII', 'BRASIL_10'].includes(type)) {
+            if (!t.endsWith('.SA')) return `${t}.SA`;
+        }
+        
+        return t;
+    },
+
+    async getMarketDataByTicker(symbol) {
         try {
-            const promises = MACRO_INDICES.map(async (idx) => {
-                try {
-                    const q = await yf.quote(idx.symbol);
-                    return { 
-                        name: idx.name, 
-                        price: validateNumber(q.regularMarketPrice), 
-                        change: validateNumber(q.regularMarketChangePercent) 
-                    };
-                } catch { return null; }
-            });
-            return (await Promise.all(promises)).filter(r => r !== null);
-        } catch { return []; }
+            if (symbol.includes('RESERVA') || symbol.includes('SELIC') || symbol.includes('CASH')) {
+                return { price: 1.0, change: 0, name: symbol };
+            }
+            const quote = await yahoo.quote(symbol);
+            return {
+                price: getSmartPrice(quote),
+                change: validateNumber(quote.regularMarketChangePercent),
+                name: quote.shortName || symbol
+            };
+        } catch (error) {
+            return { price: 0, change: 0, name: symbol };
+        }
     },
 
     async getMarketData(assetClass) {
-        if (!yf) throw new Error("YahooFinance indisponível.");
-
-        const symbols = WATCHLIST[assetClass];
-        if (!symbols || symbols.length === 0) return [];
-
-        let fallbackCount = 0;
-
         try {
-            logger.info(`🔎 [DATA] Coletando ${assetClass} (${symbols.length} ativos)...`);
-            
-            const dataPromises = symbols.map(async (symbol) => {
-                try {
-                    // 1. Tenta dados completos (modules)
-                    // Usamos apenas modulos essenciais para reduzir chance de erro
-                    const summary = await yf.quoteSummary(symbol, {
-                        modules: ['price', 'financialData', 'defaultKeyStatistics', 'summaryDetail']
-                    });
-                    
-                    if (!summary.price?.regularMarketPrice) throw new Error("Preço ausente");
-                    
-                    return { symbol, ...summary, source: 'deep' };
+            const filter = assetClass === 'BRASIL_10' 
+                ? { type: { $in: ['STOCK', 'FII'] }, isActive: true } 
+                : { type: assetClass, isActive: true };
 
-                } catch (deepError) {
-                    fallbackCount++;
+            const assetsInDb = await MarketAsset.find(filter).limit(300);
+            
+            if (assetsInDb.length === 0) {
+                logger.warn(`Nenhum ativo configurado para: ${assetClass}`);
+                return [];
+            }
+
+            const results = [];
+            
+            // Processa em lotes de 5 para performance e estabilidade
+            const batches = chunkArray(assetsInDb, 5); 
+
+            for (const batch of batches) {
+                const batchPromises = batch.map(async (asset) => {
+                    const symbol = this.normalizeSymbol(asset.ticker, asset.type);
+                    
+                    // Pula ativos sintéticos
+                    if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') return null;
+
                     try {
-                        // 2. Fallback para cotação simples (quote)
-                        const basic = await yf.quote(symbol);
-                        if (!basic?.regularMarketPrice) return null;
-                        
-                        return { 
-                            symbol, 
-                            price: basic, 
-                            financialData: {}, 
-                            defaultKeyStatistics: {}, 
-                            summaryDetail: {},
-                            source: 'basic' 
+                        // Tenta buscar cotação
+                        const [quote, history] = await Promise.all([
+                            yahoo.quote(symbol).catch(e => null),
+                            yahoo.chart(symbol, { period1: '12mo', interval: '1mo' }).catch(e => null)
+                        ]);
+
+                        if (!quote) {
+                            logger.warn(`⚠️ Yahoo não encontrou: ${symbol}`);
+                            return null; 
+                        }
+
+                        const currentPrice = getSmartPrice(quote);
+
+                        // Se preço for zero, tenta salvar com dados mínimos ou ignora
+                        if (currentPrice === 0) {
+                            logger.warn(`⚠️ Preço zerado para: ${symbol}`);
+                        }
+
+                        let data = {
+                            ticker: asset.ticker, // Mantém ticker original (sem .SA) para o front
+                            type: asset.type,
+                            name: quote.shortName || quote.longName || asset.name,
+                            sector: 'Outros',
+                            price: currentPrice,
+                            change: validateNumber(quote.regularMarketChangePercent),
+                            history: history?.quotes || [],
+                            metrics: {
+                                dy: (validateNumber(quote.trailingAnnualDividendYield) * 100),
+                                mktCap: validateNumber(quote.marketCap),
+                                pl: 0, pvp: 0, roe: 0, roa: 0, eps: 0, bvps: 0,
+                                revenueGrowth: 0, netMargin: 0,
+                                debtToEquity: 0, currentRatio: 0,
+                                grahamPrice: 0, bazinPrice: 0, altmanZScore: 0
+                            }
                         };
-                    } catch {
-                        return null; // Falha silenciosa no ativo individual
-                    }
-                }
-            });
 
-            const results = (await Promise.all(dataPromises)).filter(r => r !== null);
+                        // Busca dados financeiros estendidos para Ações e FIIs
+                        if (['STOCK', 'STOCK_US', 'FII'].includes(asset.type)) {
+                            try {
+                                const summary = await yahoo.quoteSummary(symbol, { 
+                                    modules: ['summaryProfile', 'summaryDetail', 'defaultKeyStatistics', 'financialData'] 
+                                });
+
+                                if (summary) {
+                                    const p = summary.summaryProfile || {};
+                                    const d = summary.summaryDetail || {};
+                                    const s = summary.defaultKeyStatistics || {};
+                                    const f = summary.financialData || {};
+
+                                    data.sector = p.sector || p.industry || 'Outros';
+
+                                    // Lógica robusta de DY (Dividend Yield)
+                                    let dy = (validateNumber(d.dividendYield) * 100);
+                                    if (dy === 0) dy = (validateNumber(d.trailingAnnualDividendYield) * 100);
+                                    if (dy === 0 && d.trailingAnnualDividendRate > 0 && currentPrice > 0) {
+                                        dy = (d.trailingAnnualDividendRate / currentPrice) * 100;
+                                    }
+                                    if (dy === 0) dy = data.metrics.dy; // Fallback do quote inicial
+
+                                    // PL e PVP
+                                    let pl = validateNumber(d.trailingPE || d.forwardPE);
+                                    // Fallback manual para PL se necessário
+                                    if (pl === 0 && validateNumber(s.trailingEps) > 0 && currentPrice > 0) {
+                                        pl = currentPrice / s.trailingEps;
+                                    }
+
+                                    let pvp = validateNumber(d.priceToBook);
+                                    // Fallback manual para PVP
+                                    if (pvp === 0 && validateNumber(s.bookValue) > 0 && currentPrice > 0) {
+                                        pvp = currentPrice / s.bookValue;
+                                    }
+
+                                    data.metrics = {
+                                        ...data.metrics,
+                                        pl: pl,
+                                        pvp: pvp,
+                                        dy: dy,
+                                        roe: validateNumber(f.returnOnEquity) * 100,
+                                        roa: validateNumber(f.returnOnAssets) * 100,
+                                        eps: validateNumber(s.trailingEps),
+                                        bvps: validateNumber(s.bookValue),
+                                        debtToEquity: validateNumber(f.debtToEquity),
+                                        currentRatio: validateNumber(f.currentRatio),
+                                        revenueGrowth: validateNumber(f.revenueGrowth) * 100,
+                                        netMargin: validateNumber(f.profitMargins) * 100
+                                    };
+                                }
+                            } catch (e) {
+                                // Falha silenciosa no summary, mantém dados básicos
+                            }
+                        }
+                        return data;
+                    } catch (err) {
+                        logger.error(`[API Error] ${symbol}: ${err.message}`);
+                        return null;
+                    }
+                });
+
+                const batchResults = await Promise.all(batchPromises);
+                results.push(...batchResults.filter(Boolean));
+
+                // Delay suave para não tomar rate limit
+                await new Promise(r => setTimeout(r, 1200));
+            }
             
-            if (results.length === 0) throw new Error(`Falha total de coleta em ${assetClass}`);
-
-            logger.info(`✅ [DATA] ${assetClass}: ${results.length}/${symbols.length} coletados (Basic: ${fallbackCount})`);
-
-            // Normalização e Limpeza
-            return results.map(data => {
-                const price = data.price || {};
-                const financial = data.financialData || {};
-                const stats = data.defaultKeyStatistics || {};
-                const detail = data.summaryDetail || {};
-
-                const currentPrice = validateNumber(price.regularMarketPrice);
-                const eps = validateNumber(stats.trailingEps);
-                const bvps = validateNumber(stats.bookValue);
-                const roe = validateNumber(financial.returnOnEquity);
-                const grossMargins = validateNumber(financial.grossMargins);
-                
-                let grahamPrice = 0;
-                let upsideGraham = 0;
-                if ((assetClass === 'STOCK' || assetClass === 'STOCK_US') && eps > 0 && bvps > 0) {
-                    grahamPrice = calculateGrahamPrice(eps, bvps);
-                    if (grahamPrice > 0) upsideGraham = ((grahamPrice - currentPrice) / currentPrice) * 100;
-                }
-
-                return {
-                    ticker: data.symbol.replace('.SA', ''),
-                    name: price.shortName || data.symbol,
-                    price: currentPrice,
-                    change: validateNumber(price.regularMarketChangePercent).toFixed(2),
-                    metrics: {
-                        pl: validateNumber(detail.trailingPE),
-                        pvp: validateNumber(detail.priceToBook),
-                        dy: validateNumber(detail.dividendYield) * 100,
-                        roe: roe * 100,
-                        mktCap: validateNumber(price.marketCap)
-                    },
-                    analysis: {
-                        grahamPrice: grahamPrice.toFixed(2),
-                        upsideGraham: upsideGraham.toFixed(1),
-                        qualityScore: ((roe * 100) + (grossMargins * 100)).toFixed(0),
-                        isDeepData: data.source === 'deep'
-                    }
-                };
-            }).sort((a, b) => b.metrics.mktCap - a.metrics.mktCap);
-
+            return results;
         } catch (error) {
-            logger.error(`❌ [DATA ERROR] ${error.message}`);
-            throw error;
+            logger.error(`Service Error: ${error.message}`);
+            return [];
         }
     }
 };

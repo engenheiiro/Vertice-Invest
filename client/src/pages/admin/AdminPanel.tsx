@@ -1,181 +1,282 @@
-
 import React, { useEffect, useState } from 'react';
 import { Header } from '../../components/dashboard/Header';
 import { researchService, ResearchReport } from '../../services/research';
-import { Bot, RefreshCw, Activity, Play, CalendarCheck, ShieldAlert, History } from 'lucide-react';
+import { 
+    Zap, Calculator, CheckCircle2, AlertCircle, 
+    Clock, BarChart3, Bot, Globe, ShieldCheck, Layers, Search 
+} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
+
+const ASSET_CLASSES = [
+    { id: 'BRASIL_10', label: 'Brasil 10', icon: <ShieldCheck size={14} className="text-emerald-500" /> },
+    { id: 'STOCK', label: 'Ações BR', icon: <BarChart3 size={14} className="text-blue-500" /> },
+    { id: 'FII', label: 'FIIs BR', icon: <Layers size={14} className="text-indigo-500" /> },
+    { id: 'STOCK_US', label: 'Exterior', icon: <Globe size={14} className="text-cyan-500" /> },
+    { id: 'CRYPTO', label: 'Cripto', icon: <Zap size={14} className="text-purple-500" /> },
+];
 
 export const AdminPanel = () => {
     const [history, setHistory] = useState<ResearchReport[]>([]);
-    const [isRoutineRunning, setIsRoutineRunning] = useState(false);
+    const [loading, setLoading] = useState<string | null>(null);
     const [statusMsg, setStatusMsg] = useState<{type: 'success' | 'error', text: string} | null>(null);
+    
+    // Estados para Auditoria
+    const [auditModalOpen, setAuditModalOpen] = useState(false);
+    const [selectedAuditReport, setSelectedAuditReport] = useState<ResearchReport | null>(null);
 
-    const loadHistory = async () => {
+    const loadData = async () => {
         try {
             const data = await researchService.getHistory();
             setHistory(data);
-        } catch (error) {
-            console.error("Erro ao carregar histórico", error);
+        } catch (e) {
+            console.error("Erro ao carregar histórico", e);
         }
     };
 
-    useEffect(() => {
-        loadHistory();
-        // Polling automático do histórico a cada 15 segundos para ver progresso do batch
-        const interval = setInterval(loadHistory, 15000);
-        return () => clearInterval(interval);
-    }, []);
+    useEffect(() => { loadData(); }, []);
 
-    const handleRunRoutine = async () => {
-        const confirmMsg = "Iniciar protocolo de ingestão? Isso irá processar todas as categorias em background.";
-        if (!confirm(confirmMsg)) return;
-
-        setIsRoutineRunning(true);
+    const handleBatchSync = async () => {
+        setLoading('batch');
         setStatusMsg(null);
-
         try {
-            // Backend agora responde imediatamente "202 Accepted"
-            await researchService.triggerRoutine(true);
-            setStatusMsg({ type: 'success', text: "Comando aceito! O Neural Engine está processando as filas." });
+            await researchService.crunchNumbers(undefined, true);
+            setStatusMsg({ type: 'success', text: "Processamento em Lote Concluído! Dados Atualizados." });
+            await loadData();
+        } catch (error) {
+            setStatusMsg({ type: 'error', text: "Erro no processamento em lote." });
+        } finally { setLoading(null); }
+    };
+
+    const handleAction = async (id: string, action: 'IA' | 'PUB_RANK' | 'PUB_MC' | 'PUB_BOTH') => {
+        setLoading(`${id}-${action}`);
+        try {
+            if (action === 'IA') await researchService.generateNarrative(id);
+            if (action === 'PUB_RANK') await researchService.publish(id, 'RANKING');
+            if (action === 'PUB_MC') await researchService.publish(id, 'MORNING_CALL');
+            if (action === 'PUB_BOTH') await researchService.publish(id, 'BOTH');
             
-            // Libera o botão após 3 segundos visualmente
-            setTimeout(() => setIsRoutineRunning(false), 3000);
-            
-            // Força um reload do histórico logo
-            loadHistory();
-        } catch (error: any) {
-            setStatusMsg({ type: 'error', text: error.message || "Erro ao iniciar rotina." });
-            setIsRoutineRunning(false);
+            setStatusMsg({ type: 'success', text: "Ação executada com sucesso." });
+            await loadData();
+        } catch (error) {
+            setStatusMsg({ type: 'error', text: "Falha na execução." });
+        } finally { setLoading(null); }
+    };
+
+    const openAudit = async (reportId: string) => {
+        // Busca o relatório completo (com fullAuditLog) antes de abrir
+        try {
+            const fullReport = await researchService.getReportDetails(reportId);
+            setSelectedAuditReport(fullReport);
+            setAuditModalOpen(true);
+        } catch (e) {
+            alert("Erro ao carregar detalhes da auditoria.");
         }
+    };
+
+    const getLatestForClass = (classId: string) => {
+        return history.find(h => h.assetClass === classId);
     };
 
     return (
-        <div className="min-h-screen bg-[#02040a] text-white font-sans">
+        <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
             <Header />
-
+            
             <main className="max-w-[1200px] mx-auto p-6 animate-fade-in">
                 
-                <div className="flex items-center justify-between mb-8">
+                {/* Header Compacto */}
+                <div className="flex items-center justify-between mb-8 border-b border-slate-800 pb-6">
                     <div>
-                        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-                            <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-600/20">
-                                <Bot size={24} className="text-white" />
-                            </div>
-                            Vértice AI Control Room
-                        </h1>
-                        <p className="text-slate-400 text-sm mt-1 ml-13">Controle soberano do Neural Engine e ingestão de Research.</p>
+                        <div className="flex items-center gap-2 mb-1">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                            <h1 className="text-lg font-black tracking-tight uppercase">Vértice Intelligence Unit</h1>
+                        </div>
+                        <p className="text-xs text-slate-500 font-medium italic">Painel de Orquestração Quantitativa & IA</p>
                     </div>
-                    
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-green-900/20 border border-green-900/50 rounded-full">
-                        <Activity size={12} className="text-green-500 animate-pulse" />
-                        <span className="text-xs font-bold text-green-500 uppercase tracking-widest">Engine Online</span>
-                    </div>
+
+                    <Button 
+                        onClick={handleBatchSync} 
+                        status={loading === 'batch' ? 'loading' : 'idle'}
+                        className="w-auto py-2.5 px-6 text-xs bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/20"
+                    >
+                        <Calculator size={14} className="mr-2" /> Sincronizar Todos os Rankings
+                    </Button>
                 </div>
 
+                {/* Feedback Message */}
                 {statusMsg && (
                     <div className={`mb-6 p-4 rounded-xl border flex items-center gap-3 animate-fade-in ${
                         statusMsg.type === 'success' ? 'bg-emerald-900/10 border-emerald-900/30 text-emerald-400' : 'bg-red-900/10 border-red-900/30 text-red-400'
                     }`}>
-                        <ShieldAlert size={20} />
+                        {statusMsg.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
                         <span className="text-sm font-bold">{statusMsg.text}</span>
                     </div>
                 )}
 
-                <div className="grid md:grid-cols-2 gap-6 mb-8">
-                    <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-8 flex flex-col items-center justify-center text-center group transition-all hover:border-slate-700">
-                        <div className="w-16 h-16 bg-blue-900/20 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                            <Play size={32} className="text-blue-500 ml-1" />
-                        </div>
-                        <h2 className="text-xl font-bold text-white mb-2">Forçar Ingestão Total</h2>
-                        <p className="text-slate-400 text-sm mb-6 max-w-sm">
-                            Dispara a IA para analisar todas as categorias. O processo roda em segundo plano (~2 min).
-                        </p>
-                        <button 
-                            onClick={handleRunRoutine}
-                            disabled={isRoutineRunning}
-                            className={`
-                                px-8 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2
-                                ${isRoutineRunning 
-                                    ? 'bg-slate-800 text-slate-500 cursor-wait' 
-                                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20'
-                                }
-                            `}
-                        >
-                            {isRoutineRunning ? <RefreshCw className="animate-spin" size={16} /> : <Play size={16} />}
-                            {isRoutineRunning ? "Iniciando..." : "Regerar Research Agora"}
-                        </button>
-                    </div>
-
-                    <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-8">
-                        <div className="flex items-center gap-2 mb-6">
-                            <CalendarCheck size={20} className="text-slate-400" />
-                            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Status das Categorias (Hoje)</h3>
-                        </div>
-
-                        <div className="space-y-4">
-                            {['BRASIL_10', 'STOCK', 'FII', 'CRYPTO', 'STOCK_US'].map(asset => {
-                                const today = new Date().toISOString().split('T')[0];
-                                const isDone = history.some(h => h.assetClass === asset && h.date.startsWith(today));
+                {/* Tabela de Comando Central */}
+                <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl mb-10">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-[#0B101A] border-b border-slate-800 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                <th className="px-6 py-4">Classe de Ativo</th>
+                                <th className="px-6 py-4">Auditoria Matemática</th>
+                                <th className="px-6 py-4">Status IA Narrativa</th>
+                                <th className="px-6 py-4 text-right">Ações de Controle</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/50">
+                            {ASSET_CLASSES.map((asset) => {
+                                const latest = getLatestForClass(asset.id);
 
                                 return (
-                                    <div key={asset} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-800 transition-colors hover:bg-slate-900">
-                                        <span className="text-sm font-medium text-slate-300">{asset}</span>
-                                        {isDone ? (
-                                            <span className="text-[10px] font-black text-emerald-500 flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">
-                                                ATUALIZADO
-                                            </span>
-                                        ) : (
-                                            <span className="text-[10px] font-black text-slate-500 bg-slate-800 px-2 py-1 rounded border border-slate-700">PENDENTE</span>
-                                        )}
-                                    </div>
+                                    <tr key={asset.id} className="hover:bg-slate-900/30 transition-colors group">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-800 group-hover:border-slate-700">
+                                                    {asset.icon}
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-black text-white">{asset.label}</p>
+                                                    {latest && (
+                                                        <p className="text-[9px] text-slate-500 font-mono mt-0.5">
+                                                            {new Date(latest.date).toLocaleString('pt-BR', {
+                                                                day: '2-digit', month: '2-digit', year: '2-digit',
+                                                                hour: '2-digit', minute: '2-digit'
+                                                            })}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        
+                                        <td className="px-6 py-4">
+                                            {latest ? (
+                                                <button 
+                                                    onClick={() => openAudit(latest._id)}
+                                                    className="flex items-center gap-2 group/btn"
+                                                >
+                                                    <div className="w-7 h-7 bg-emerald-900/20 rounded-lg flex items-center justify-center border border-emerald-900/30 group-hover/btn:border-emerald-500 transition-all">
+                                                        <Search size={12} className="text-emerald-500" />
+                                                    </div>
+                                                    <span className="text-[10px] font-bold text-slate-300 underline decoration-slate-700 underline-offset-4 group-hover/btn:text-white">Ver Detalhes do Estudo</span>
+                                                </button>
+                                            ) : (
+                                                <span className="text-[10px] font-bold text-slate-600 italic">Pendente...</span>
+                                            )}
+                                        </td>
+
+                                        <td className="px-6 py-4">
+                                            {latest?.content.morningCall ? (
+                                                <div className="flex items-center gap-2">
+                                                    <CheckCircle2 size={14} className="text-emerald-500" />
+                                                    <span className="text-[10px] font-bold text-slate-300">Redigido</span>
+                                                </div>
+                                            ) : latest ? (
+                                                <button 
+                                                    onClick={() => handleAction(latest._id, 'IA')}
+                                                    disabled={!!loading}
+                                                    className="text-[10px] font-black text-blue-400 hover:text-blue-300 flex items-center gap-1.5 px-2 py-1 bg-blue-900/20 rounded border border-blue-900/30 transition-all"
+                                                >
+                                                    {loading === `${latest._id}-IA` ? <Bot size={12} className="animate-spin" /> : <Bot size={12} />}
+                                                    Gerar Texto IA
+                                                </button>
+                                            ) : <span className="text-[10px] text-slate-700">-</span>}
+                                        </td>
+
+                                        <td className="px-6 py-4 text-right">
+                                            {latest && (
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <QuickActionBtn 
+                                                        active={latest.isRankingPublished} 
+                                                        label="Ranking" 
+                                                        onClick={() => handleAction(latest._id, 'PUB_RANK')}
+                                                        isLoading={loading === `${latest._id}-PUB_RANK`}
+                                                    />
+                                                    <QuickActionBtn 
+                                                        active={latest.isMorningCallPublished} 
+                                                        label="Call" 
+                                                        disabled={!latest.content.morningCall}
+                                                        onClick={() => handleAction(latest._id, 'PUB_MC')}
+                                                        isLoading={loading === `${latest._id}-PUB_MC`}
+                                                    />
+                                                    <div className="w-px h-4 bg-slate-800 mx-1"></div>
+                                                    <button 
+                                                        onClick={() => handleAction(latest._id, 'PUB_BOTH')}
+                                                        className="text-[9px] font-black text-slate-400 hover:text-white uppercase tracking-tighter"
+                                                    >
+                                                        Publicar Tudo
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
                                 );
                             })}
-                        </div>
-                    </div>
+                        </tbody>
+                    </table>
                 </div>
 
-                <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-                    <div className="p-4 border-b border-slate-800 bg-[#0B101A] flex justify-between items-center">
-                        <h3 className="font-bold text-white text-sm flex items-center gap-2 uppercase tracking-widest">
-                            <History size={16} className="text-slate-500" />
-                            Histórico de Inteligência
-                        </h3>
-                        <button onClick={loadHistory} className="p-2 hover:bg-slate-800 rounded-lg transition-colors" title="Sincronizar">
-                            <RefreshCw size={14} className="text-slate-500" />
-                        </button>
+                {/* Logs de Processamento */}
+                <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Clock size={16} className="text-slate-500" />
+                        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Logs de Processamento (Últimos 30 dias)</h3>
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs">
-                            <thead className="bg-[#0B101A] text-slate-500">
-                                <tr className="uppercase tracking-tighter">
-                                    <th className="p-4 border-r border-slate-800">Timestamp</th>
-                                    <th className="p-4 border-r border-slate-800">Classe Ativo</th>
-                                    <th className="p-4 border-r border-slate-800">Estratégia</th>
-                                    <th className="p-4">Operador</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800">
-                                {history.length === 0 ? (
-                                    <tr><td colSpan={4} className="p-10 text-center text-slate-600 font-bold">NENHUMA ANÁLISE NO REGISTRO</td></tr>
-                                ) : (
-                                    history.slice(0, 20).map((h, i) => (
-                                        <tr key={i} className="hover:bg-slate-900/30 transition-colors">
-                                            <td className="p-4 text-slate-300 font-mono">{new Date(h.date || h.createdAt).toLocaleString()}</td>
-                                            <td className="p-4">
-                                                <span className="bg-blue-600/10 text-blue-400 px-2 py-0.5 rounded border border-blue-600/20 font-bold">
-                                                    {h.assetClass}
-                                                </span>
-                                            </td>
-                                            <td className="p-4 text-slate-400 font-medium">{h.strategy}</td>
-                                            <td className="p-4 text-slate-500 font-mono text-[10px]">{h.generatedBy || 'Neural Engine (Auto)'}</td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {history.slice(0, 12).map((log) => (
+                            <div 
+                                key={log._id} 
+                                onClick={() => openAudit(log._id)}
+                                className="bg-[#0B101A] border border-slate-800/50 rounded-xl p-3 flex items-center justify-between hover:border-slate-700 transition-all group cursor-pointer"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="text-[10px] font-black text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-800 group-hover:text-blue-400 group-hover:border-blue-500/50 transition-colors">
+                                        {log.assetClass}
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] text-slate-500 font-mono">
+                                            {new Date(log.date).toLocaleString('pt-BR', { 
+                                                day: '2-digit', month: '2-digit', 
+                                                hour: '2-digit', minute: '2-digit' 
+                                            })}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-1">
+                                    {log.isRankingPublished && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Ranking Online"></div>}
+                                    {log.isMorningCallPublished && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" title="MC Online"></div>}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
 
             </main>
+
+            {/* Modal de Auditoria */}
+            <AuditDetailModal 
+                isOpen={auditModalOpen} 
+                onClose={() => setAuditModalOpen(false)} 
+                report={selectedAuditReport} 
+            />
         </div>
     );
 };
+
+const QuickActionBtn = ({ active, label, onClick, disabled, isLoading }: any) => (
+    <button 
+        onClick={onClick}
+        disabled={disabled || isLoading}
+        className={`
+            px-2 py-1 rounded text-[9px] font-black uppercase transition-all border
+            ${active 
+                ? 'bg-emerald-900/20 text-emerald-400 border-emerald-900/50 cursor-default' 
+                : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-blue-500 hover:text-white'}
+            ${disabled ? 'opacity-30 cursor-not-allowed grayscale' : ''}
+            ${isLoading ? 'animate-pulse' : ''}
+        `}
+    >
+        {isLoading ? '...' : active ? `${label} OK` : `Publ. ${label}`}
+    </button>
+);
