@@ -1,50 +1,83 @@
 
-import yahooFinance from 'yahoo-finance2';
+import { createRequire } from 'module';
 import logger from '../config/logger.js';
 
-// Configuração da Biblioteca
-yahooFinance.suppressWarnings = true;
-yahooFinance.suppressNotices(['yahooSurvey']);
+const require = createRequire(import.meta.url);
 
-// Helper de Validação Numérica Estrita
+// --- CONFIGURAÇÃO ROBUSTA YAHOO FINANCE ---
+let yf;
+
+try {
+    const pkg = require('yahoo-finance2');
+    
+    // Tenta obter a instância correta (commonjs vs esm vs default export)
+    // Em versões recentes, pkg.default costuma ser a instância principal configurada
+    if (pkg.default) {
+        yf = pkg.default;
+    } else {
+        yf = pkg;
+    }
+
+    // Configuração Defensiva
+    if (yf) {
+        // Tenta suprimir validação apenas se o método existir (evita crash)
+        if (typeof yf.setGlobalConfig === 'function') {
+            try {
+                yf.setGlobalConfig({ 
+                    validation: { logErrors: false }, // Desliga logs de erro de schema
+                    queue: { concurrency: 2, timeout: 60000 } // Aumenta um pouco a concorrência
+                });
+            } catch (configErr) {
+                logger.debug("YahooFinance: setGlobalConfig falhou, usando padrão.");
+            }
+        }
+        
+        // Propriedade comum para suprimir avisos
+        if ('suppressWarnings' in yf) {
+            yf.suppressWarnings = true;
+        }
+        
+        logger.info("✅ YahooFinance: Driver de dados inicializado.");
+    } else {
+        throw new Error("Módulo yahoo-finance2 não carregou corretamente.");
+    }
+
+} catch (e) {
+    logger.error(`❌ [DATA SYSTEM] Erro fatal no MarketData: ${e.message}`);
+}
+
 const validateNumber = (val) => {
     if (val === null || val === undefined) return 0;
     const num = Number(val);
     return isNaN(num) ? 0 : num;
 };
 
-// --- WATCHLIST EXPANDIDA (Top Liquidez + Relevância) ---
+// --- WATCHLIST (Curadoria de Ativos) ---
 const WATCHLIST = {
     'STOCK': [
-        'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'PRIO3.SA', 'RENT3.SA', 'BBDC4.SA', 'ELET3.SA', 'GGBR4.SA',
-        'SUZB3.SA', 'HAPV3.SA', 'BPAC11.SA', 'JBSS3.SA', 'RAIL3.SA', 'VIVT3.SA', 'CMIG4.SA', 'RDOR3.SA', 'EQTL3.SA', 'RADL3.SA',
-        'SBSP3.SA', 'CSAN3.SA', 'CPLE6.SA', 'TIMS3.SA', 'B3SA3.SA', 'ABEV3.SA', 'TOTS3.SA', 'EMBR3.SA', 'CMIN3.SA', 'CSNA3.SA',
-        'LREN3.SA', 'MGLU3.SA', 'ASAI3.SA', 'VBBR3.SA', 'CCRO3.SA', 'UGPA3.SA', 'KLBN11.SA', 'TAEE11.SA', 'ALUP11.SA', 'BBSE3.SA',
-        'SANB11.SA', 'VAMO3.SA', 'RECV3.SA', 'GOAU4.SA', 'ENEV3.SA', 'CRFB3.SA', 'AZUL4.SA', 'NTCO3.SA'
+        'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'WEGE3.SA', 'BBAS3.SA', 'PRIO3.SA', 'RENT3.SA', 'BBDC4.SA',
+        'SUZB3.SA', 'HAPV3.SA', 'BPAC11.SA', 'JBSS3.SA', 'VIVT3.SA', 'CMIG4.SA', 'RDOR3.SA', 'EQTL3.SA',
+        'SBSP3.SA', 'CSAN3.SA', 'B3SA3.SA', 'ABEV3.SA', 'TOTS3.SA', 'EMBR3.SA', 'CSNA3.SA', 'LREN3.SA',
+        'MGLU3.SA', 'ASAI3.SA', 'VBBR3.SA', 'CCRO3.SA', 'KLBN11.SA', 'TAEE11.SA', 'ALUP11.SA', 'BBSE3.SA'
     ],
     'FII': [
-        'HGLG11.SA', 'KNRI11.SA', 'MXRF11.SA', 'XPML11.SA', 'VISC11.SA', 'BTLG11.SA', 'XPLG11.SA', 'HGRU11.SA', 'KNCR11.SA', 'IRDM11.SA',
-        'CPTS11.SA', 'TRXF11.SA', 'ALZR11.SA', 'BRCO11.SA', 'HGBS11.SA', 'KNIP11.SA', 'VGHF11.SA', 'RECR11.SA', 'TGAR11.SA', 'XPCI11.SA',
-        'BCFF11.SA', 'HFOF11.SA', 'PVBI11.SA', 'JSRE11.SA', 'RBRR11.SA', 'MALL11.SA', 'VILG11.SA', 'LVBI11.SA', 'RBRP11.SA', 'XPIN11.SA',
-        'VRTA11.SA', 'RBRF11.SA', 'HCTR11.SA', 'DEVA11.SA', 'RECT11.SA', 'BRCR11.SA', 'KNHY11.SA', 'CVBI11.SA', 'MCCI11.SA', 'VGIP11.SA'
+        'HGLG11.SA', 'KNRI11.SA', 'MXRF11.SA', 'XPML11.SA', 'VISC11.SA', 'BTLG11.SA', 'XPLG11.SA',
+        'HGRU11.SA', 'KNCR11.SA', 'IRDM11.SA', 'CPTS11.SA', 'TRXF11.SA', 'ALZR11.SA', 'BRCO11.SA',
+        'HGBS11.SA', 'KNIP11.SA', 'VGHF11.SA', 'RECR11.SA', 'TGAR11.SA', 'XPCI11.SA', 'BCFF11.SA'
     ],
     'STOCK_US': [
-        'NVDA', 'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AMD', 'JPM', 'V', 'NFLX', 'KO', 'PEP', 'DIS', 'BRK-B',
-        'JNJ', 'PG', 'XOM', 'CVX', 'LLY', 'AVGO', 'COST', 'HD', 'WMT', 'MA', 'MRK', 'ABBV', 'CRM', 'ORCL', 'ACN',
-        'MCD', 'LIN', 'ADBE', 'IBM', 'QCOM', 'TXN', 'GE', 'CAT', 'UBER', 'INTC', 'VZ', 'T', 'NKE', 'BA'
+        'NVDA', 'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AMD', 'JPM', 'V', 'NFLX', 'KO',
+        'PEP', 'DIS', 'BRK-B', 'JNJ', 'PG', 'XOM', 'LLY', 'AVGO', 'COST', 'HD', 'WMT'
     ],
     'CRYPTO': [
-        'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD', 'ADA-USD', 'DOGE-USD', 'LINK-USD', 'AVAX-USD', 'DOT-USD',
-        'MATIC-USD', 'UNI-USD', 'LTC-USD', 'BCH-USD', 'ATOM-USD', 'XLM-USD', 'ICP-USD', 'NEAR-USD', 'APT-USD', 'FIL-USD'
+        'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'XRP-USD', 'ADA-USD', 'DOGE-USD', 'LINK-USD'
     ]
 };
 
 const MACRO_INDICES = [
     { symbol: '^BVSP', name: 'IBOVESPA' },
     { symbol: '^GSPC', name: 'S&P 500' },
-    { symbol: 'BRL=X', name: 'USD/BRL' },
-    { symbol: 'CL=F', name: 'Petróleo WTI' },
-    { symbol: '^TNX', name: 'Treasury 10Y' }
+    { symbol: 'BRL=X', name: 'USD/BRL' }
 ];
 
 const calculateGrahamPrice = (eps, bvps) => {
@@ -54,54 +87,51 @@ const calculateGrahamPrice = (eps, bvps) => {
 
 export const marketDataService = {
     async getMacroContext() {
+        if (!yf) return [];
         try {
-            logger.info("🌍 [MACRO] Coletando indicadores globais...");
             const promises = MACRO_INDICES.map(async (idx) => {
                 try {
-                    const q = await yahooFinance.quote(idx.symbol);
+                    const q = await yf.quote(idx.symbol);
                     return { 
                         name: idx.name, 
                         price: validateNumber(q.regularMarketPrice), 
                         change: validateNumber(q.regularMarketChangePercent) 
                     };
-                } catch (e) { return null; }
+                } catch { return null; }
             });
-            const results = await Promise.all(promises);
-            return results.filter(r => r !== null);
-        } catch (e) { return []; }
+            return (await Promise.all(promises)).filter(r => r !== null);
+        } catch { return []; }
     },
 
     async getMarketData(assetClass) {
+        if (!yf) throw new Error("YahooFinance indisponível.");
+
         const symbols = WATCHLIST[assetClass];
         if (!symbols || symbols.length === 0) return [];
 
-        const startTime = Date.now();
         let fallbackCount = 0;
-        let failCount = 0;
 
         try {
-            logger.info(`🔎 [DATA] Iniciando coleta para ${assetClass} (${symbols.length} ativos)...`);
+            logger.info(`🔎 [DATA] Coletando ${assetClass} (${symbols.length} ativos)...`);
             
-            // Passo 1: Tentar pegar dados ricos (quoteSummary) em batch
             const dataPromises = symbols.map(async (symbol) => {
                 try {
-                    // Tenta pegar dados profundos primeiro
-                    const summary = await yahooFinance.quoteSummary(symbol, {
+                    // 1. Tenta dados completos (modules)
+                    // Usamos apenas modulos essenciais para reduzir chance de erro
+                    const summary = await yf.quoteSummary(symbol, {
                         modules: ['price', 'financialData', 'defaultKeyStatistics', 'summaryDetail']
                     });
                     
-                    // Validação preliminar: Se não tem preço, o dado é inútil
-                    if (!summary.price || !summary.price.regularMarketPrice) {
-                        throw new Error("Dados de preço ausentes");
-                    }
+                    if (!summary.price?.regularMarketPrice) throw new Error("Preço ausente");
                     
                     return { symbol, ...summary, source: 'deep' };
+
                 } catch (deepError) {
-                    // FALLBACK: Se falhar (comum em ativos BR), pega dados básicos (quote)
                     fallbackCount++;
                     try {
-                        const basic = await yahooFinance.quote(symbol);
-                        if (!basic || !basic.regularMarketPrice) throw new Error("Price not found");
+                        // 2. Fallback para cotação simples (quote)
+                        const basic = await yf.quote(symbol);
+                        if (!basic?.regularMarketPrice) return null;
                         
                         return { 
                             symbol, 
@@ -111,50 +141,37 @@ export const marketDataService = {
                             summaryDetail: {},
                             source: 'basic' 
                         };
-                    } catch (basicError) {
-                        failCount++;
-                        return null; // Ativo morto
+                    } catch {
+                        return null; // Falha silenciosa no ativo individual
                     }
                 }
             });
 
             const results = (await Promise.all(dataPromises)).filter(r => r !== null);
             
-            const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-            
-            if (failCount > 0 || fallbackCount > 0) {
-                logger.warn(`⚠️ [DATA] ${assetClass} finalizado em ${duration}s | ✅ ${results.length} | 🟡 Fallback: ${fallbackCount} | ❌ Falhas: ${failCount}`);
-            } else {
-                logger.info(`✅ [DATA] ${assetClass} coletado 100% perfeito em ${duration}s.`);
-            }
+            if (results.length === 0) throw new Error(`Falha total de coleta em ${assetClass}`);
 
-            // Passo 2: Normalização e Validação dos Dados
-            const cleanData = results.map(data => {
+            logger.info(`✅ [DATA] ${assetClass}: ${results.length}/${symbols.length} coletados (Basic: ${fallbackCount})`);
+
+            // Normalização e Limpeza
+            return results.map(data => {
                 const price = data.price || {};
                 const financial = data.financialData || {};
                 const stats = data.defaultKeyStatistics || {};
                 const detail = data.summaryDetail || {};
 
-                // Validação de Campos Críticos
                 const currentPrice = validateNumber(price.regularMarketPrice);
                 const eps = validateNumber(stats.trailingEps);
                 const bvps = validateNumber(stats.bookValue);
                 const roe = validateNumber(financial.returnOnEquity);
                 const grossMargins = validateNumber(financial.grossMargins);
                 
-                // Se preço for zero, ignora (será filtrado depois)
-                if (currentPrice === 0) return null;
-
-                // Cálculos Auxiliares
                 let grahamPrice = 0;
                 let upsideGraham = 0;
                 if ((assetClass === 'STOCK' || assetClass === 'STOCK_US') && eps > 0 && bvps > 0) {
                     grahamPrice = calculateGrahamPrice(eps, bvps);
                     if (grahamPrice > 0) upsideGraham = ((grahamPrice - currentPrice) / currentPrice) * 100;
                 }
-
-                // Cálculo Simplificado de Quality (0-200)
-                const qualityScore = (roe * 100) + (grossMargins * 100);
 
                 return {
                     ticker: data.symbol.replace('.SA', ''),
@@ -171,18 +188,15 @@ export const marketDataService = {
                     analysis: {
                         grahamPrice: grahamPrice.toFixed(2),
                         upsideGraham: upsideGraham.toFixed(1),
-                        qualityScore: qualityScore.toFixed(0),
+                        qualityScore: ((roe * 100) + (grossMargins * 100)).toFixed(0),
                         isDeepData: data.source === 'deep'
                     }
                 };
-            }).filter(item => item !== null); // Remove itens nulos
-
-            // Ordenar por liquidez (MarketCap)
-            return cleanData.sort((a, b) => b.metrics.mktCap - a.metrics.mktCap);
+            }).sort((a, b) => b.metrics.mktCap - a.metrics.mktCap);
 
         } catch (error) {
-            logger.error(`🔥 [DATA FATAL] Erro crítico em ${assetClass}: ${error.message}`);
-            return [];
+            logger.error(`❌ [DATA ERROR] ${error.message}`);
+            throw error;
         }
     }
 };
