@@ -1,11 +1,14 @@
+
 import mongoose from 'mongoose';
 
 const RankingItemSchema = new mongoose.Schema({
   position: Number,
   ticker: String,
   name: String,
-  sector: String, // Novo: Para diversificação
+  sector: String,
+  type: String, // Novo campo para identificar classe (STOCK, FII, CRYPTO)
   action: { type: String, enum: ['BUY', 'WAIT', 'SELL'] },
+  currentPrice: Number, 
   targetPrice: Number,
   score: Number,       
   probability: Number, 
@@ -20,11 +23,17 @@ const RankingItemSchema = new mongoose.Schema({
     pvp: Number,
     earningsYield: Number,
     
+    // Dados Brutos
+    eps: Number,
+    bvps: Number,
+    divPerShare: Number,
+    avgLiquidity: Number,
+
     // Qualidade & Crescimento
     roe: Number,
-    roa: Number, // Novo
-    revenueGrowth: Number, // Novo
-    netMargin: Number, // Novo
+    roa: Number,
+    revenueGrowth: Number,
+    netMargin: Number,
     debtToEquity: Number,
     currentRatio: Number,
     altmanZScore: Number,
@@ -35,8 +44,15 @@ const RankingItemSchema = new mongoose.Schema({
     // Risco & Técnico
     sharpeRatio: Number,
     volatility: Number,
-    rsi: Number, // Novo
-    priceVsSMA200: Number // Novo (% acima/abaixo da média de 200)
+    rsi: Number,
+    priceVsSMA200: Number,
+
+    // --- NOVO: Scores Estruturais ---
+    structural: {
+        quality: { type: Number, default: 50 },
+        valuation: { type: Number, default: 50 },
+        risk: { type: Number, default: 50 }
+    }
   }
 });
 

@@ -1,10 +1,14 @@
+
 import { authService } from './auth';
 
 export interface RankingItem {
     position: number;
     ticker: string;
     name: string;
+    sector?: string;
+    type?: string; // Novo campo
     action: 'BUY' | 'SELL' | 'WAIT';
+    currentPrice: number; 
     targetPrice: number;
     score: number;
     probability: number;
@@ -24,6 +28,17 @@ export interface RankingItem {
         pvp: number;
         debtToEquity?: number;
         currentRatio?: number;
+        netMargin?: number;
+        grossMargin?: number;
+        revenueGrowth?: number;
+        avgLiquidity?: number;
+        bvps?: number;
+        // Estrutural (Novo)
+        structural?: {
+            quality: number;
+            valuation: number;
+            risk: number;
+        };
     };
 }
 
@@ -38,7 +53,7 @@ export interface ResearchReport {
     content: {
         morningCall: string;
         ranking: RankingItem[];
-        fullAuditLog?: RankingItem[]; // Opcional, vem apenas no details
+        fullAuditLog?: RankingItem[];
     };
 }
 
@@ -73,7 +88,6 @@ export const researchService = {
         return await response.json();
     },
 
-    // Busca detalhes completos para auditoria
     async getReportDetails(id: string) {
         const response = await authService.api(`/api/research/details/${id}`);
         if (!response.ok) throw new Error("Erro ao buscar detalhes");
