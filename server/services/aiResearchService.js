@@ -1,94 +1,151 @@
+
 import { GoogleGenAI } from "@google/genai";
 import logger from '../config/logger.js';
 import { marketDataService } from './marketDataService.js';
 
-const MACRO = {
-    RISK_FREE_BR: 0.1075, // Selic atual
-    BRAZIL_RISK: 0.02,    // Risco país
-    INFLATION_TARGET: 0.045
-};
-
-const sN = (val) => val === null || val === undefined ? 0 : Number(val);
+const sN = (val) => val === null || val === undefined || isNaN(val) ? 0 : Number(val);
 const safeVal = (val) => {
-    if (val === Infinity || val === -Infinity || isNaN(val) || val === null || val === undefined) return null;
+    if (val === Infinity || val === -Infinity || isNaN(val) || val === null || val === undefined) return 0;
     return Number(val.toFixed(2));
 };
 
-// --- ESTRUTURAL: CRIAÇÃO DE VALOR ---
-
-const calculateROIC = (m) => {
-    if (!m.netMargin || !m.totalAssets) return null;
-    // Proxied ROIC: (Net Profit / Invested Capital)
-    // IC = Equity + Debt - Cash
-    const investedCapital = sN(m.mktCap) / sN(m.pvp) + sN(m.totalDebt) - sN(m.totalCash);
-    const netProfit = (sN(m.netMargin) / 100) * (sN(m.mktCap) / sN(m.pl));
-    return (netProfit / investedCapital) * 100;
+const MACRO = {
+    SELIC: 11.25,
+    IPCA: 4.50,
+    CDI: 11.15
 };
 
-const calculateQualityScore = (m, type, sector) => {
-    let score = 50; 
-
-    if (type === 'STOCK' || type === 'STOCK_US') {
-        // Spread ROIC vs WACC (WACC BR ~14%)
-        const roic = calculateROIC(m) || m.roe;
-        const waccBenchmark = type === 'STOCK' ? 14 : 9;
-        
-        if (roic > waccBenchmark + 10) score += 30; // Excelente criador de valor
-        else if (roic > waccBenchmark) score += 15;
-        else if (roic < waccBenchmark) score -= 20;
-
-        // Dívida Líquida / Patrimônio (Cuidado com alavancagem no Longo Prazo)
-        const debtToEquity = (sN(m.totalDebt) - sN(m.totalCash)) / (sN(m.mktCap) / sN(m.pvp));
-        if (debtToEquity < 0.5) score += 10;
-        if (debtToEquity > 2.0) score -= 25;
-
-        // Margem de Segurança Fundamentalista
-        if (sN(m.netMargin) > 15) score += 10;
-    } 
-    else if (type === 'FII') {
-        // FIIs: Estabilidade de Renda e Alavancagem
-        const ltv = sN(m.totalDebt) / sN(m.totalAssets); // Alavancagem do Fundo
-        if (ltv > 0.30) score -= 30; // FII muito alavancado é risco no BR
-        else score += 10;
-
-        if (sN(m.dy) > MACRO.RISK_FREE_BR * 100) score += 20;
-        
-        // Desconto Patrimonial Saudável (não muito baixo que indique quebra)
-        if (sN(m.pvp) < 0.98 && sN(m.pvp) > 0.85) score += 20;
-        else if (sN(m.pvp) < 0.70) score -= 20; // Sinal de problema nos ativos
-    }
-    else if (type === 'CRYPTO') {
-        // Crypto: Adoção e Tokenomics
-        if (sN(m.mktCap) > 10000000000) score += 20; // "Blue chips" crypto
-        if (sN(m.avgLiquidity) > 100000000) score += 15;
-        // Volatilidade punitiva para B&H
-        if (sN(m.volatility) > 80) score -= 20;
-    }
-
-    return Math.min(100, Math.max(0, score));
+const SECTOR_BETA = {
+    'Energia (Transmissão)': 0.4, 'Saneamento Básico': 0.5, 'Seguradora': 0.6,
+    'Bancos': 0.9, 'Energia (Geração)': 0.7, 'Telecomunicações': 0.6,
+    'Alimentos Processados': 0.7, 'Varejo Alimentar': 0.6, 
+    'Mineração': 1.1, 'Petróleo e Gás': 1.3, 'Siderurgia': 1.4,
+    'Varejo Eletro': 1.8, 'E-commerce': 2.0, 'Construção Civil': 1.6, 
+    'Tecnologia': 1.5, 'Companhia Aérea': 1.9, 'Educação': 1.4,
+    'FII Galpão Logístico': 0.4, 'FII Shopping Center': 0.6, 
+    'FII Papel (High Grade)': 0.2, 'FII Papel (High Yield)': 0.8,
+    'FII Laje Corporativa': 0.7
 };
 
-const calculateValuationScore = (m, price, type) => {
+const calculateRiskProfile = (m, type, sector) => {
+    let riskPoints = 0; 
+    
+    const sec = sector ? sector.trim() : 'Outros';
+    const impliedBeta = SECTOR_BETA[sec] || (type === 'FII' ? 0.5 : 1.0); 
+
+    if (MACRO.SELIC > 10) {
+        if (impliedBeta > 1.2) riskPoints += 15; 
+        if (sec.includes('Seguradora') || sec.includes('Papel')) riskPoints -= 10; 
+    }
+
+    if (type === 'FII') {
+        riskPoints = 20; 
+        if (sec.includes('Papel') || sec.includes('Recebíveis')) {
+            if (m.pvp < 0.80) riskPoints += 50; 
+            if (m.pvp < 0.90) riskPoints += 20; 
+            if (m.dy > (MACRO.CDI + 4)) riskPoints += 15; 
+        }
+        if (!sec.includes('Papel')) {
+            if (sN(m.vacancy) > 15) riskPoints += 40; 
+            else if (sN(m.vacancy) > 8) riskPoints += 15;
+        }
+        if (sN(m.qtdImoveis) === 1) riskPoints += 20;
+
+    } else if (type === 'STOCK' || type === 'STOCK_US') {
+        riskPoints = 40; 
+        if (impliedBeta < 0.6) riskPoints -= 20; 
+        if (impliedBeta > 1.3) riskPoints += 25; 
+
+        const divLiqPL = sN(m.debtToEquity);
+        if (divLiqPL > 2.5) riskPoints += 40; 
+        else if (divLiqPL > 1.5) riskPoints += 20;
+        else if (divLiqPL < 0.5) riskPoints -= 10;
+
+        if (sN(m.netMargin) < 3) riskPoints += 30; 
+        if (sN(m.netMargin) > 20) riskPoints -= 15; 
+        
+        if (m.pl <= 0) riskPoints += 50; 
+    } else {
+        riskPoints = 90;
+    }
+
+    const thresholdTrap = MACRO.SELIC + 8; 
+    if (m.dy > thresholdTrap) riskPoints += 30;
+
+    riskPoints = Math.min(100, Math.max(0, riskPoints));
+
+    if (riskPoints <= 35) return 'DEFENSIVE'; 
+    if (riskPoints <= 65) return 'MODERATE';
+    return 'BOLD';
+};
+
+const getQualityScore = (m, type) => {
     let score = 50;
 
     if (type === 'STOCK' || type === 'STOCK_US') {
-        const grahamPrice = (sN(m.eps) > 0 && sN(m.bvps) > 0) ? Math.sqrt(22.5 * m.eps * m.bvps) : 0;
-        if (grahamPrice > 0) {
-            const upside = (grahamPrice / price) - 1;
-            if (upside > 0.3) score += 30;
-            else if (upside < 0) score -= 30;
-        }
-        
-        // Bazin (Foco Dividendos)
-        const bazinPrice = (sN(m.dy)/100 * price) / 0.06;
-        if (price < bazinPrice) score += 10;
-    }
-    else if (type === 'FII') {
-        const yieldTarget = (MACRO.RISK_FREE_BR * 100) + 2; // Selic + 2%
-        if (sN(m.dy) > yieldTarget) score += 30;
-        if (sN(m.pvp) > 1.1) score -= 40;
-    }
+        // --- 1. RENTABILIDADE (ROIC & ROE) ---
+        // A chave do Buy & Hold é o retorno sobre capital investido
+        if (sN(m.roic) > 15) score += 20; 
+        else if (sN(m.roic) > 10) score += 10;
+        else if (sN(m.roic) < 5) score -= 10;
 
+        if (sN(m.roe) > 20) score += 10;
+
+        // --- 2. CRESCIMENTO (COMPOUNDERS) ---
+        // Empresas que crescem receita acima da inflação ganham premium
+        if (sN(m.revenueGrowth) > 10) score += 15;
+        else if (sN(m.revenueGrowth) > 5) score += 5;
+        else if (sN(m.revenueGrowth) < 0) score -= 15; // Empresa encolhendo é perigoso
+
+        // --- 3. MARGEM (FOSSO ECONÔMICO) ---
+        if (sN(m.netMargin) > 15) score += 10;
+        
+        // Liquidez (Filtro Anti-Mico)
+        if (sN(m.avgLiquidity) > 5000000) score += 5;
+        else score -= 20;
+    } 
+    else if (type === 'FII') {
+        if (sN(m.vacancy) === 0) score += 20;
+        if (sN(m.qtdImoveis) > 5) score += 15;
+        if (sN(m.avgLiquidity) > 3000000) score += 10;
+    }
+    
+    return Math.min(100, Math.max(0, score));
+};
+
+const getValuationScore = (m, price, type) => {
+    let score = 50;
+
+    if (type === 'STOCK' || type === 'STOCK_US') {
+        // Graham Upside
+        if (m.grahamPrice > 0 && price > 0) {
+            const upside = (m.grahamPrice / price) - 1;
+            if (upside > 0.4) score += 30;
+            else if (upside > 0.15) score += 15;
+            else if (upside < -0.1) score -= 15;
+        }
+
+        // Bazin Yield
+        if (m.dy > 6) score += 20;
+        else if (m.dy < 3) score -= 10;
+
+        // EV/EBITDA (Melhor que P/L para comparar indústrias)
+        if (m.evEbitda > 0 && m.evEbitda < 6) score += 15;
+        if (m.evEbitda > 12) score -= 10;
+
+        // P/L Aceitável
+        if (m.pl > 0 && m.pl < 10) score += 10; 
+        if (m.pl > 25) score -= 20;
+    } 
+    else if (type === 'FII') {
+        const pvp = sN(m.pvp);
+        if (pvp >= 0.85 && pvp <= 1.05) score += 40; 
+        else if (pvp < 0.80) score -= 10; 
+        else if (pvp > 1.10) score -= 20; 
+        
+        if (m.dy > MACRO.IPCA + 6) score += 15;
+    }
+    
     return Math.min(100, Math.max(0, score));
 };
 
@@ -96,24 +153,38 @@ export const aiResearchService = {
     async calculateRanking(assetClass, strategy = 'BUY_HOLD') {
         try {
             const rawData = await marketDataService.getMarketData(assetClass);
-            if (!rawData || rawData.length === 0) return [];
+            if (!rawData || rawData.length === 0) return { ranking: [], fullList: [] };
 
             const analyzedAssets = rawData.map(asset => {
                 const m = asset.metrics;
-                const qScore = calculateQualityScore(m, asset.type, asset.sector);
-                const vScore = calculateValuationScore(m, asset.price, asset.type);
                 
-                // Metodologia Buy & Hold: 60% Qualidade, 40% Preço
-                let finalScore = (qScore * 0.60) + (vScore * 0.40);
+                const qScore = getQualityScore(m, asset.type);
+                const vScore = getValuationScore(m, asset.price, asset.type);
+                const riskProfile = calculateRiskProfile(m, asset.type, asset.sector);
                 
-                // Penalidade por baixa liquidez (Não queremos ficar presos em B&H)
-                if (asset.type !== 'CRYPTO' && m.avgLiquidity < 500000) finalScore *= 0.7;
+                let rScore = 0; 
+                if (riskProfile === 'DEFENSIVE') rScore = 100;
+                if (riskProfile === 'MODERATE') rScore = 65;
+                if (riskProfile === 'BOLD') rScore = 30;
 
-                finalScore = Math.floor(Math.min(99, Math.max(1, finalScore)));
+                let finalScore = (qScore * 0.40) + (vScore * 0.25) + (rScore * 0.35);
+                
+                // FATALITIES
+                if (m.dy > 25) finalScore = 20; 
+                if (m.avgLiquidity < 200000) finalScore = 0; 
+                if (asset.type === 'STOCK' && m.pl < 0) finalScore = 15; 
+
+                finalScore = Math.round(Math.min(99, Math.max(1, finalScore)));
 
                 let action = 'WAIT';
-                if (finalScore >= 80) action = 'BUY';
+                if (finalScore >= 70) action = 'BUY'; 
                 else if (finalScore <= 40) action = 'SELL';
+
+                let targetPrice = 0;
+                if (m.bazinPrice > 0 && m.grahamPrice > 0) {
+                    targetPrice = Math.min(m.bazinPrice, m.grahamPrice);
+                } else if (m.bazinPrice > 0) targetPrice = m.bazinPrice;
+                else targetPrice = asset.price;
 
                 return {
                     ticker: asset.ticker,
@@ -122,46 +193,73 @@ export const aiResearchService = {
                     type: asset.type,
                     action,
                     currentPrice: asset.price,
-                    targetPrice: safeVal((sN(m.eps) > 0 && sN(m.bvps) > 0) ? Math.sqrt(22.5 * m.eps * m.bvps) : asset.price * 1.2),
+                    targetPrice: safeVal(targetPrice),
                     score: finalScore,
-                    probability: Math.floor(finalScore * 0.8) + 10,
-                    thesis: finalScore > 75 ? "Oportunidade Longo Prazo" : "Manutenção",
-                    reason: `${asset.sector}: ROE ${sN(m.roe).toFixed(1)}% • DY ${sN(m.dy).toFixed(1)}% • Score Estrutural ${finalScore}`,
+                    probability: Math.floor(finalScore * 0.85) + 5,
+                    thesis: `Perfil ${riskProfile}. Beta: ${SECTOR_BETA[asset.sector] || '-'}`,
+                    riskProfile: riskProfile,
+                    reason: `Q:${qScore} V:${vScore} R:${rScore}`,
                     metrics: {
                         ...m,
-                        structural: {
-                            quality: qScore,
-                            valuation: vScore,
-                            risk: 100 - qScore 
-                        }
+                        structural: { quality: qScore, valuation: vScore, risk: rScore }
                     }
                 };
             }).filter(Boolean);
 
-            return analyzedAssets.sort((a, b) => b.score - a.score);
+            const sortedList = analyzedAssets.sort((a, b) => b.score - a.score);
+
+            return {
+                ranking: sortedList, 
+                fullList: sortedList
+            };
+
         } catch (error) {
             logger.error(`Erro cálculo ranking: ${error.message}`);
-            return [];
+            return { ranking: [], fullList: [] };
         }
     },
 
     async generateNarrative(ranking, assetClass) {
-        if (!process.env.API_KEY || !ranking || ranking.length === 0) return "Relatório indisponível.";
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const top3 = ranking.slice(0, 3).map(a => `${a.ticker} (Score ${a.score})`).join('; ');
+        if (!process.env.API_KEY) {
+            logger.warn("Narrativa pulada: API_KEY não configurada.");
+            return "Análise indisponível (Chave de API ausente).";
+        }
         
-        const prompt = `Aja como Senior Portfolio Manager especialista em Buy & Hold. 
-        Analise esta seleção de ${assetClass}: ${top3}. 
-        Escreva um Morning Call focado em fundamentos e geração de valor de longo prazo. 
-        Mencione o spread ROIC/WACC se for ações ou Yield Real se for FIIs. Seja conciso e profissional.`;
+        if (!ranking || ranking.length === 0) return "Dados insuficientes para análise.";
+
+        const top5 = ranking.slice(0, 5).map(a => 
+            `- ${a.ticker} (${a.sector}): Score ${a.score}, Ação ${a.action}, Perfil ${a.riskProfile}, Yield ${a.metrics.dy?.toFixed(1)}%`
+        ).join('\n');
+
+        const context = `
+        Você é um Analista Chefe de Equity Research focado em Value Investing e Aposentadoria (Buy & Hold).
+        Cenário Atual: Selic ${MACRO.SELIC}%, IPCA ${MACRO.IPCA}%.
+        Classe de Ativo: ${assetClass}.
+        
+        Escreva um "Morning Call" curto e direto (máximo 2 parágrafos) em Markdown.
+        
+        Destaques analisados pelo algoritmo:
+        ${top5}
+        
+        1. Comente brevemente sobre o melhor ativo da lista.
+        2. Dê um aviso de risco geral baseado no cenário macro (Selic alta).
+        3. Use tom profissional e sóbrio.
+        `;
 
         try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-3-flash-preview',
-                contents: prompt,
-                config: { temperature: 0.3 }
+                contents: context,
+                config: { 
+                    temperature: 0.4,
+                    maxOutputTokens: 600
+                }
             });
-            return response.text;
-        } catch (e) { return "Erro ao gerar narrativa via IA."; }
+            return response.text || "Sem análise gerada.";
+        } catch (e) { 
+            logger.error(`Erro IA Narrativa: ${e.message}`);
+            return "Análise automática indisponível no momento."; 
+        }
     }
 };

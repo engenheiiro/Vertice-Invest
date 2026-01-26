@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Calculator, Target, CheckCircle2 } from 'lucide-react';
@@ -116,12 +117,12 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
 
             {/* Container Centralizado */}
             <div className="fixed inset-0 z-10 overflow-y-auto">
-                <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+                <div className="flex min-h-full items-center justify-center p-4 text-center">
                     
-                    {/* Modal Panel */}
-                    <div className="relative transform overflow-hidden rounded-2xl bg-[#080C14] border border-slate-800 text-left shadow-2xl transition-all w-full max-w-md animate-fade-in my-8">
+                    {/* Modal Panel - Centralizado Verticalmente com my-auto */}
+                    <div className="relative transform overflow-hidden rounded-2xl bg-[#080C14] border border-slate-800 text-left shadow-2xl transition-all w-full max-w-md animate-fade-in my-auto max-h-[90vh] flex flex-col">
                         
-                        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-[#0B101A]">
+                        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-[#0B101A] shrink-0">
                             <h2 className="text-lg font-bold text-white flex items-center gap-2">
                                 <Calculator size={18} className="text-[#D4AF37]" />
                                 <span className="bg-gradient-to-r from-[#D4AF37] to-[#F2D06B] bg-clip-text text-transparent">
@@ -133,7 +134,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                             </button>
                         </div>
 
-                        <div className="p-6">
+                        <div className="p-6 overflow-y-auto custom-scrollbar">
                             <div className="mb-6 space-y-4">
                                 <Input 
                                     label="Valor do Aporte (R$)" type="number" placeholder="0,00"
@@ -194,7 +195,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                             )}
                         </div>
                         
-                        <div className="p-5 border-t border-slate-800 bg-[#0B101A] flex justify-end rounded-b-2xl">
+                        <div className="p-5 border-t border-slate-800 bg-[#0B101A] flex justify-end rounded-b-2xl shrink-0">
                             <Button onClick={onClose} variant="outline" className="w-auto px-6">Fechar</Button>
                         </div>
                     </div>

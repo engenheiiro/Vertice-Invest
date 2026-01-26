@@ -22,8 +22,11 @@ export interface AiSignal {
     message: string;
     time: string;
     impact: 'HIGH' | 'MEDIUM' | 'LOW';
-    probability?: number; // Novo campo vindo do Research
-    thesis?: string;      // Novo campo vindo do Research
+    probability?: number; 
+    thesis?: string;      
+    // Novos Campos
+    score?: number;
+    riskProfile?: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
 }
 
 export interface MarketIndex {
@@ -94,7 +97,9 @@ export const useDashboardData = () => {
                                 time: new Date(report.date || report.createdAt).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'}),
                                 impact: impact,
                                 probability: item.probability,
-                                thesis: item.thesis
+                                thesis: item.thesis,
+                                score: item.score, // Mapeado
+                                riskProfile: item.riskProfile // Mapeado
                             };
                         });
 

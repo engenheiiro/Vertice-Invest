@@ -81,6 +81,7 @@ export const Research = () => {
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-center">
+                        {/* Container de Botões com Scroll Oculto (no-scrollbar) */}
                         <div className="flex bg-[#080C14] border border-slate-800 p-1.5 rounded-2xl overflow-x-auto no-scrollbar gap-1 shadow-inner w-full sm:w-auto">
                             {ASSETS.map(asset => {
                                 const allowed = checkAccess(asset.id);
@@ -117,7 +118,7 @@ export const Research = () => {
                                         viewMode === 'ANALYSIS' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500'
                                     }`}
                                 >
-                                    <Newspaper size={16} /> Morning Call
+                                    <Newspaper size={16} /> Relatório Semanal
                                 </button>
                             </div>
 

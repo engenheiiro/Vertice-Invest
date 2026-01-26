@@ -1,168 +1,194 @@
+
 import MarketAnalysis from '../models/MarketAnalysis.js';
 import { aiResearchService } from '../services/aiResearchService.js';
+import { marketDataService } from '../services/marketDataService.js';
 import logger from '../config/logger.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const getDiversifiedTop10 = (allAssets) => {
-    const finalRanking = [];
-    const sectorCount = {};
-    const MAX_PER_SECTOR = 6; 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-    const candidates = [...allAssets].sort((a, b) => b.score - a.score);
-    const addedTickers = new Set();
+// Função auxiliar para gerar TXT físico (Databump)
+const generateDataBump = (assetClass, dataList) => {
+    try {
+        const dumpDir = path.resolve(__dirname, '../data_dump');
+        if (!fs.existsSync(dumpDir)) {
+            fs.mkdirSync(dumpDir, { recursive: true });
+        }
 
-    for (const asset of candidates) {
-        if (finalRanking.length >= 10) break;
+        const dateStr = new Date().toISOString().split('T')[0];
+        const fileName = `RANKING_${assetClass}_${dateStr}.txt`;
+        const filePath = path.join(dumpDir, fileName);
+
+        let content = `VÉRTICE RESEARCH - RELATÓRIO ALGORÍTMICO\n`;
+        content += `Data: ${new Date().toLocaleString('pt-BR')}\n`;
+        content += `Classe: ${assetClass}\n`;
+        content += `Ativos Analisados: ${dataList.length}\n`;
+        content += `--------------------------------------------------------\n`;
+        content += `POS | TICKER | SCORE | AÇÃO | PREÇO ATUAL | PREÇO JUSTO | YIELD\n`;
+        content += `--------------------------------------------------------\n`;
+
+        dataList.forEach((item, idx) => {
+            const line = `${(idx + 1).toString().padEnd(3)} | ${item.ticker.padEnd(6)} | ${item.score.toString().padEnd(5)} | ${item.action.padEnd(6)} | ${item.currentPrice.toFixed(2).padEnd(11)} | ${item.targetPrice.toFixed(2).padEnd(11)} | ${item.metrics.dy.toFixed(1)}%\n`;
+            content += line;
+        });
+
+        fs.writeFileSync(filePath, content, 'utf-8');
+        logger.info(`💾 Databump gerado: ${fileName}`);
+    } catch (e) {
+        logger.error(`Erro ao gerar Databump TXT: ${e.message}`);
+    }
+};
+
+const selectDiversifiedPortfolio = (candidates, targetSize = 10, maxPercentPerSector = 0.20) => {
+    if (!candidates || candidates.length === 0) return [];
+
+    const portfolio = [];
+    const sectorCounts = {};
+    const maxPerSector = Math.ceil(targetSize * maxPercentPerSector); 
+
+    const eligible = candidates
+        .filter(a => a.action !== 'SELL' && a.score > 50)
+        .sort((a, b) => b.score - a.score);
+
+    for (const asset of eligible) {
+        if (portfolio.length >= targetSize) break;
 
         const sector = asset.sector || 'Outros';
-        const currentCount = sectorCount[sector] || 0;
+        const currentSectorCount = sectorCounts[sector] || 0;
 
-        if (currentCount < MAX_PER_SECTOR) {
-            finalRanking.push(asset);
-            addedTickers.add(asset.ticker);
-            sectorCount[sector] = currentCount + 1;
+        if (currentSectorCount < maxPerSector) {
+            portfolio.push(asset);
+            sectorCounts[sector] = currentSectorCount + 1;
         }
     }
 
-    if (finalRanking.length < 10) {
-        for (const asset of candidates) {
-            if (finalRanking.length >= 10) break;
-            
-            if (!addedTickers.has(asset.ticker)) {
-                finalRanking.push(asset);
-                addedTickers.add(asset.ticker);
-            }
-        }
+    return portfolio;
+};
+
+const generateMasterRanking = (fullList) => {
+    const defensive = fullList.filter(a => a.riskProfile === 'DEFENSIVE');
+    const moderate = fullList.filter(a => a.riskProfile === 'MODERATE');
+    const bold = fullList.filter(a => a.riskProfile === 'BOLD');
+
+    const topDefensive = selectDiversifiedPortfolio(defensive, 10, 0.20);
+    const topModerate = selectDiversifiedPortfolio(moderate, 10, 0.20);
+    const topBold = selectDiversifiedPortfolio(bold, 10, 0.20);
+
+    return [...topDefensive, ...topModerate, ...topBold];
+};
+
+// --- NOVO: ENDPOINT DE MACROECONOMIA ---
+export const getMacroData = async (req, res, next) => {
+    try {
+        const data = await marketDataService.getMacroIndicators();
+        res.json(data);
+    } catch (error) {
+        logger.error(`Erro ao buscar dados macro: ${error.message}`);
+        res.status(500).json({ message: "Erro ao carregar indicadores" });
     }
-    
-    return finalRanking
-        .sort((a, b) => b.score - a.score)
-        .map((item, idx) => ({ ...item, position: idx + 1 }));
 };
 
 export const crunchNumbers = async (req, res, next) => {
     try {
         const { assetClass, strategy, isBulk } = req.body;
+        const strat = 'BUY_HOLD';
+        const adminId = req.user?.id;
         
         if (isBulk) {
-            logger.info("🚀 [ASYNC] Iniciando processamento em lote ordenado...");
-            
-            if (res) res.status(202).json({ message: "Processamento iniciado. Acompanhe pelo painel." });
+            logger.info("🚀 [MASTER] Iniciando Protocolo de Análise Global V3 (Previdenciária)...");
+            const createdReports = [];
 
-            (async () => {
-                const strat = 'BUY_HOLD';
-                const baseClasses = ['STOCK', 'FII', 'STOCK_US', 'CRYPTO'];
+            // ETAPA 1: AÇÕES
+            logger.info("1️⃣ Processando Ações Brasil (STOCK)...");
+            const stockData = await aiResearchService.calculateRanking('STOCK', strat);
+            if (stockData.fullList.length > 0) {
+                const stockRanking = generateMasterRanking(stockData.fullList);
+                await MarketAnalysis.create({
+                    assetClass: 'STOCK',
+                    strategy: strat,
+                    isRankingPublished: false,
+                    isMorningCallPublished: false,
+                    content: { ranking: stockRanking, fullAuditLog: stockData.fullList },
+                    generatedBy: adminId
+                });
+                generateDataBump('STOCK', stockData.fullList); // Gera TXT
+                createdReports.push('STOCK');
+            }
+
+            // ETAPA 2: FIIs
+            logger.info("2️⃣ Processando Fundos Imobiliários (FII)...");
+            const fiiData = await aiResearchService.calculateRanking('FII', strat);
+            if (fiiData.fullList.length > 0) {
+                const fiiRanking = generateMasterRanking(fiiData.fullList);
+                await MarketAnalysis.create({
+                    assetClass: 'FII',
+                    strategy: strat,
+                    isRankingPublished: false,
+                    isMorningCallPublished: false,
+                    content: { ranking: fiiRanking, fullAuditLog: fiiData.fullList },
+                    generatedBy: adminId
+                });
+                generateDataBump('FII', fiiData.fullList); // Gera TXT
+                createdReports.push('FII');
+            }
+
+            // ETAPA 3: BRASIL 10 (A Nata da Aposentadoria)
+            if (createdReports.includes('STOCK') && createdReports.includes('FII')) {
+                logger.info("3️⃣ Gerando Carteira Brasil 10 (Aposentadoria)...");
                 
-                logger.info("Phase 1: Processando Ativos Base...");
-                
-                for (const aClass of baseClasses) {
-                    try {
-                        const allScoredAssets = await aiResearchService.calculateRanking(aClass, strat);
-                        
-                        if (allScoredAssets && allScoredAssets.length > 0) {
-                            const ranking = getDiversifiedTop10(allScoredAssets);
-                            const fullAuditLog = allScoredAssets;
+                const allStocks = stockData.fullList.filter(a => a.riskProfile === 'DEFENSIVE' && a.action === 'BUY');
+                const allFIIs = fiiData.fullList.filter(a => a.riskProfile === 'DEFENSIVE' && a.action === 'BUY');
 
-                            await MarketAnalysis.create({
-                                assetClass: aClass,
-                                strategy: strat,
-                                isRankingPublished: false,
-                                isMorningCallPublished: false,
-                                content: { ranking, fullAuditLog },
-                                generatedBy: req.user?.id
-                            });
-                            logger.info(`💾 [DB] ${aClass} salvo: ${fullAuditLog.length} analisados.`);
-                        } else {
-                            logger.warn(`⚠️ [DB] ${aClass} retornou 0 ativos. Nada foi salvo.`);
-                        }
-                    } catch (err) {
-                        logger.error(`Erro Phase 1 (${aClass}): ${err.message}`);
-                    }
+                const top5Stocks = selectDiversifiedPortfolio(allStocks, 5, 0.20); 
+                const top5FIIs = selectDiversifiedPortfolio(allFIIs, 5, 0.20);
+
+                let brasil10List = [...top5Stocks, ...top5FIIs]
+                    .sort((a, b) => b.score - a.score)
+                    .map((item, idx) => ({ ...item, position: idx + 1, riskProfile: 'DEFENSIVE' })); 
+
+                if (brasil10List.length > 0) {
+                    // Geração Automática de Narrativa para Brasil 10
+                    const narrative = await aiResearchService.generateNarrative(brasil10List, 'BRASIL_10');
+                    
+                    await MarketAnalysis.create({
+                        assetClass: 'BRASIL_10',
+                        strategy: strat,
+                        isRankingPublished: false, // Alterado para FALSE: Admin deve publicar manualmente
+                        isMorningCallPublished: false, // Alterado para FALSE
+                        content: { ranking: brasil10List, fullAuditLog: brasil10List, morningCall: narrative },
+                        generatedBy: adminId
+                    });
+                    generateDataBump('BRASIL_10', brasil10List); // Gera TXT
                 }
+            }
 
-                logger.info("Phase 2: Agregando Carteira BRASIL_10 (Top 5 Ações + Top 5 FIIs)...");
-                try {
-                    // Busca os relatórios recém-criados na Fase 1
-                    const stockReport = await MarketAnalysis.findOne({ assetClass: 'STOCK', strategy: strat }).sort({ createdAt: -1 });
-                    const fiiReport = await MarketAnalysis.findOne({ assetClass: 'FII', strategy: strat }).sort({ createdAt: -1 });
-
-                    if (stockReport && fiiReport) {
-                        // Pega os melhores de cada categoria (usando fullAuditLog para ter o universo completo e reordenar)
-                        const stocksSource = stockReport.content.fullAuditLog.length > 0 ? stockReport.content.fullAuditLog : stockReport.content.ranking;
-                        const fiisSource = fiiReport.content.fullAuditLog.length > 0 ? fiiReport.content.fullAuditLog : fiiReport.content.ranking;
-
-                        // Top 5 Ações
-                        const top5Stocks = stocksSource
-                            .sort((a, b) => b.score - a.score)
-                            .slice(0, 5);
-
-                        // Top 5 FIIs
-                        const top5FIIs = fiisSource
-                            .sort((a, b) => b.score - a.score)
-                            .slice(0, 5);
-
-                        // Combina e Reordena por Score Global
-                        let mixedList = [...top5Stocks, ...top5FIIs].sort((a, b) => b.score - a.score);
-
-                        // Sanitiza e Renumera Posições
-                        mixedList = mixedList.map((item, idx) => {
-                            const cleanItem = item.toObject ? item.toObject() : item;
-                            return {
-                                ...cleanItem,
-                                _id: undefined, // Remove ID antigo para criar novo subdocumento
-                                position: idx + 1
-                            };
-                        });
-                        
-                        await MarketAnalysis.create({
-                            assetClass: 'BRASIL_10',
-                            strategy: strat,
-                            isRankingPublished: false,
-                            isMorningCallPublished: false,
-                            content: { 
-                                ranking: mixedList, 
-                                fullAuditLog: mixedList // Para Brasil 10, o log é a própria seleção curada
-                            }, 
-                            generatedBy: req.user?.id
-                        });
-                        logger.info(`💾 [DB] BRASIL_10 salvo com sucesso (Composição 50/50).`);
-                    } else {
-                        logger.warn("⚠️ Relatórios base (STOCK/FII) não encontrados para compor BRASIL_10.");
-                    }
-                } catch (err) {
-                    logger.error(`Erro Phase 2 (BRASIL_10): ${err.message}`);
-                }
-
-                logger.info("🏁 [ASYNC] Processamento em lote finalizado.");
-            })();
-            return;
+            logger.info("🏁 [MASTER] Finalizado.");
+            return res.json({ message: "Ciclo concluído.", details: `Gerados: ${createdReports.join(', ')}` });
         }
 
-        // ... (Lógica Single permanece igual) ...
-        logger.info(`🚀 Iniciando Análise Síncrona: ${assetClass}`);
-        const strat = 'BUY_HOLD';
-        const allScoredAssets = await aiResearchService.calculateRanking(assetClass, strat);
+        // Single Request
+        const { fullList } = await aiResearchService.calculateRanking(assetClass, strat);
+        const rankingDiversified = generateMasterRanking(fullList);
         
-        const results = [];
-        if (allScoredAssets && allScoredAssets.length > 0) {
-            const ranking = getDiversifiedTop10(allScoredAssets);
-            const fullAuditLog = allScoredAssets;
+        await MarketAnalysis.create({
+            assetClass: assetClass,
+            strategy: strat,
+            isRankingPublished: false,
+            isMorningCallPublished: false,
+            content: { ranking: rankingDiversified, fullAuditLog: fullList },
+            generatedBy: adminId
+        });
+        
+        generateDataBump(assetClass, fullList); // Gera TXT
 
-            const analysis = await MarketAnalysis.create({
-                assetClass: assetClass,
-                strategy: strat,
-                isRankingPublished: false,
-                isMorningCallPublished: false,
-                content: { ranking, fullAuditLog },
-                generatedBy: req.user?.id
-            });
-            results.push(analysis);
-        }
-
-        if (res) res.status(201).json(results);
+        return res.status(201).json({ message: "Análise single gerada." });
 
     } catch (error) { 
+        logger.error(`FATAL ERROR: ${error.message}`);
         if (next) next(error);
-        else throw error;
     }
 };
 
@@ -170,25 +196,16 @@ export const generateNarrative = async (req, res, next) => {
     try {
         const { analysisId } = req.body;
         const analysis = await MarketAnalysis.findById(analysisId);
-        if (!analysis) {
-            if (res) return res.status(404).json({ message: "Análise não encontrada." });
-            return null;
-        }
+        if (!analysis) return res.status(404).json({ message: "Not found" });
 
-        const narrative = await aiResearchService.generateNarrative(
-            analysis.content.ranking, 
-            analysis.assetClass
-        );
-
+        // Passa o ranking correto para a IA
+        const narrative = await aiResearchService.generateNarrative(analysis.content.ranking, analysis.assetClass);
+        
         analysis.content.morningCall = narrative;
         await analysis.save();
 
         if (res) res.json({ morningCall: narrative });
-        return narrative;
-    } catch (error) { 
-        if (next) next(error);
-        else throw error;
-    }
+    } catch (error) { next(error); }
 };
 
 export const publishContent = async (req, res, next) => {
@@ -197,12 +214,8 @@ export const publishContent = async (req, res, next) => {
         const analysis = await MarketAnalysis.findById(analysisId);
         if (!analysis) return res.status(404).json({ message: "Not found" });
         
-        if (type === 'RANKING') analysis.isRankingPublished = true;
-        if (type === 'MORNING_CALL') analysis.isMorningCallPublished = true;
-        if (type === 'BOTH') {
-            analysis.isRankingPublished = true;
-            analysis.isMorningCallPublished = true;
-        }
+        if (type === 'RANKING' || type === 'BOTH') analysis.isRankingPublished = true;
+        if (type === 'MORNING_CALL' || type === 'BOTH') analysis.isMorningCallPublished = true;
         
         await analysis.save();
         if (res) res.json({ message: "Sucesso" });
@@ -211,11 +224,38 @@ export const publishContent = async (req, res, next) => {
 
 export const listReports = async (req, res, next) => {
     try {
-        const reports = await MarketAnalysis.find()
-            .select('date assetClass strategy isRankingPublished isMorningCallPublished content.morningCall') 
-            .sort({ createdAt: -1 })
-            .limit(50);
-        res.json(reports);
+        const reports = await MarketAnalysis.aggregate([
+            { $sort: { createdAt: -1 } },
+            { $limit: 50 },
+            {
+                $project: {
+                    date: 1,
+                    assetClass: 1,
+                    strategy: 1,
+                    isRankingPublished: 1,
+                    isMorningCallPublished: 1,
+                    generatedBy: 1,
+                    morningCallPresent: { $cond: [{ $ifNull: ["$content.morningCall", false] }, true, false] },
+                    rankingCount: { $size: { $ifNull: ["$content.ranking", []] } } 
+                }
+            }
+        ]);
+        
+        const mappedReports = reports.map(r => ({
+            _id: r._id,
+            date: r.date,
+            assetClass: r.assetClass,
+            strategy: r.strategy,
+            isRankingPublished: r.isRankingPublished,
+            isMorningCallPublished: r.isMorningCallPublished,
+            generatedBy: r.generatedBy,
+            content: {
+                morningCall: r.morningCallPresent ? "YES" : null, 
+                ranking: new Array(r.rankingCount).fill({}) 
+            }
+        }));
+
+        res.json(mappedReports);
     } catch (error) { next(error); }
 };
 
@@ -245,7 +285,7 @@ export const getLatestReport = async (req, res, next) => {
 };
 
 export const triggerDailyRoutine = async (req, res, isInternal = false) => {
-    logger.info("Executando rotina diária automática via trigger.");
+    logger.info("Executando rotina automática via trigger.");
     const result = await crunchNumbers({ body: { isBulk: true } }, null, null);
-    if (res) res.json({ message: "Batch process started", count: result ? result.length : 0 });
+    if (res) res.json({ message: "Batch process finished" });
 };

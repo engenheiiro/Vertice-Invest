@@ -84,7 +84,7 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view }) 
                             </span>
                         </div>
                         <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
-                            Morning Call
+                            Relatório de Mercado
                         </h1>
                     </div>
                 </div>
