@@ -1,4 +1,6 @@
 
+console.log("⚡ [Boot] Iniciando processo Node.js...");
+
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -8,6 +10,8 @@ import fs from 'fs';
   try {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
+
+    console.log("📂 [Boot] Carregando variáveis de ambiente...");
 
     // 1. Carrega Variáveis de Ambiente
     const dotenv = (await import('dotenv')).default;
@@ -24,6 +28,7 @@ import fs from 'fs';
         if (fs.existsSync(p)) {
             dotenv.config({ path: p });
             envLoaded = true;
+            console.log(`✅ [Boot] .env carregado de: ${p}`);
             break;
         }
     }
@@ -31,12 +36,18 @@ import fs from 'fs';
     if (!envLoaded) {
         // Tenta carregar sem caminho específico (pega do ambiente real do Render/Vercel)
         dotenv.config();
+        console.log("⚠️ [Boot] .env local não encontrado (usando variáveis de sistema).");
     }
 
     // 2. Carrega Instrumentação (Sentry)
-    await import('./instrument.js');
+    try {
+        await import('./instrument.js');
+    } catch (e) {
+        console.warn("⚠️ [Boot] Falha ao carregar instrumentação (ignorado):", e.message);
+    }
 
     // 3. Importa Módulos Core
+    console.log("🔄 [Boot] Importando módulos da aplicação...");
     const { default: app } = await import('./app.js');
     const { default: connectDB } = await import('./config/db.js');
     const { default: logger } = await import('./config/logger.js');
@@ -61,9 +72,22 @@ import fs from 'fs';
         logger.info(`🔑 API Key detectada (${API_KEY.substring(0, 4)}...${API_KEY.substring(API_KEY.length - 4)})`);
     }
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       logger.info(`🚀 Servidor Vértice Invest rodando na porta ${PORT}`);
       logger.info(`📡 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+    });
+
+    server.on('error', (e) => {
+        if (e.code === 'EADDRINUSE') {
+            logger.error(`❌ Porta ${PORT} já está em uso!`);
+            logger.info(`👉 Tentando iniciar na porta ${Number(PORT) + 1}...`);
+            setTimeout(() => {
+                server.close();
+                app.listen(Number(PORT) + 1);
+            }, 1000);
+        } else {
+            logger.error(`❌ Erro no servidor: ${e.message}`);
+        }
     });
 
   } catch (error) {

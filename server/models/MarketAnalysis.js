@@ -6,48 +6,77 @@ const RankingItemSchema = new mongoose.Schema({
   ticker: String,
   name: String,
   sector: String,
-  type: String, // Novo campo para identificar classe (STOCK, FII, CRYPTO)
+  type: String, 
   action: { type: String, enum: ['BUY', 'WAIT', 'SELL'] },
   currentPrice: Number, 
   targetPrice: Number,
   score: Number,       
   probability: Number, 
-  thesis: String,      
+  
+  // Campo Essencial para as Abas
+  riskProfile: { type: String, enum: ['DEFENSIVE', 'MODERATE', 'BOLD'], default: 'MODERATE' },
+
+  // Teses Estruturadas
+  thesis: String, // Resumo curto
+  bullThesis: [String], // Pontos positivos detalhados
+  bearThesis: [String], // Riscos detalhados
+  
   reason: String,
   metrics: {
-    // Valuation
+    // Valuation Clássico
     grahamPrice: Number,
     bazinPrice: Number,
     pegRatio: Number,
     pl: Number,
     pvp: Number,
+    evEbitda: Number, 
+    psr: Number,
     earningsYield: Number,
     
-    // Dados Brutos
-    eps: Number,
-    bvps: Number,
-    divPerShare: Number,
-    avgLiquidity: Number,
+    // Valuation Avançado (Novos)
+    pEbit: Number,
+    pAtivos: Number,
+    pCapGiro: Number,
+    pAtivCircLiq: Number,
+    evEbit: Number,
 
-    // Qualidade & Crescimento
+    // Rentabilidade e Eficiência
     roe: Number,
-    roa: Number,
-    revenueGrowth: Number,
+    roic: Number, 
     netMargin: Number,
+    ebitMargin: Number, 
+    
+    // Saúde Financeira
     debtToEquity: Number,
     currentRatio: Number,
-    altmanZScore: Number,
+    
+    // Dados de Balanço (Disponíveis no Bulk)
+    patrimLiq: Number, 
+    
+    // Dados Calculados (Engenharia Reversa)
+    marketCap: Number,    // Valor de Mercado
+    netDebt: Number,      // Dívida Líquida
+    netRevenue: Number,   // Receita Líquida
+    netIncome: Number,    // Lucro Líquido
+    totalAssets: Number,  // Ativos Totais
     
     // Dividendos
     dy: Number,
     
-    // Risco & Técnico
-    sharpeRatio: Number,
-    volatility: Number,
-    rsi: Number,
-    priceVsSMA200: Number,
+    // FIIs Específico Detalhado
+    vacancy: Number, 
+    qtdImoveis: Number,
+    capRate: Number, 
+    ffoYield: Number, 
+    vpCota: Number, 
+    ffoCota: Number, 
+    priceM2: Number, 
+    rentM2: Number,  
+    
+    // Dados Brutos
+    avgLiquidity: Number,
+    revenueGrowth: Number,
 
-    // --- NOVO: Scores Estruturais ---
     structural: {
         quality: { type: Number, default: 50 },
         valuation: { type: Number, default: 50 },

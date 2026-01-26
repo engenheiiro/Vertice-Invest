@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, PlusCircle, DollarSign, BarChart2, Tag } from 'lucide-react';
@@ -13,6 +14,7 @@ interface AddAssetModalProps {
 export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose }) => {
     const { addAsset } = useWallet();
     const [status, setStatus] = useState<'idle' | 'loading' | 'success'>('idle');
+    const [validationError, setValidationError] = useState('');
 
     const [form, setForm] = useState({
         ticker: '',
@@ -28,6 +30,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         if (isOpen) {
             document.body.style.overflow = 'hidden';
             setStatus('idle');
+            setValidationError('');
         } else {
             document.body.style.overflow = 'unset';
             setForm({ ticker: '', name: '', type: 'STOCK', quantity: '', price: '', date: new Date().toISOString().split('T')[0] });
@@ -64,18 +67,31 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setValidationError('');
+        
+        let finalQty = Number(form.quantity.replace(',', '.'));
+        let finalPrice = Number(form.price.replace(/\./g, '').replace(',', '.'));
+
+        // Validação Numérica Rigorosa
+        if (isNaN(finalQty) || finalQty <= 0) {
+            setValidationError('A quantidade deve ser um número maior que zero.');
+            return;
+        }
+        if (isNaN(finalPrice) || finalPrice <= 0) {
+            setValidationError('O preço deve ser um valor positivo.');
+            return;
+        }
+
         setStatus('loading');
 
         try {
             await new Promise(resolve => setTimeout(resolve, 800));
 
             let finalTicker = form.ticker.toUpperCase();
-            let finalQty = Number(form.quantity.replace(',', '.'));
-            let finalPrice = Number(form.price.replace(/\./g, '').replace(',', '.'));
 
             if (form.type === 'CASH') {
                 finalQty = 1;
-                finalPrice = Number(form.price.replace(/\./g, '').replace(',', '.'));
+                // Para CASH, o "preço" inserido é o valor total do aporte
             }
 
             addAsset({
@@ -185,12 +201,13 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
             {/* Container Centralizado */}
             <div className="fixed inset-0 z-10 overflow-y-auto">
-                <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+                {/* Ajuste de Layout: flex e items-center garantem centralização vertical real */}
+                <div className="flex min-h-full items-center justify-center p-4 text-center">
                     
-                    {/* Modal Panel */}
-                    <div className="relative transform overflow-hidden rounded-2xl bg-[#080C14] border border-slate-800 text-left shadow-2xl transition-all w-full max-w-lg animate-fade-in my-8">
+                    {/* Modal Panel - Com max-h para evitar scroll da página em telas pequenas */}
+                    <div className="relative transform overflow-hidden rounded-2xl bg-[#080C14] border border-slate-800 text-left shadow-2xl transition-all w-full max-w-lg animate-fade-in my-auto max-h-[90vh] flex flex-col">
                         
-                        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-[#0B101A]">
+                        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-[#0B101A] shrink-0">
                             <h2 className="text-lg font-bold text-white flex items-center gap-2">
                                 <PlusCircle size={18} className="text-blue-500" />
                                 Adicionar Transação
@@ -200,7 +217,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                             </button>
                         </div>
 
-                        <div className="p-6">
+                        <div className="p-6 overflow-y-auto custom-scrollbar">
                             <form onSubmit={handleSubmit} className="space-y-5">
                                 <div className="grid grid-cols-3 gap-4">
                                     <div className="col-span-2">
@@ -240,6 +257,12 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                         value={form.name} onChange={(e) => setForm({...form, name: e.target.value})}
                                         containerClassName="mb-0"
                                     />
+                                )}
+
+                                {validationError && (
+                                    <p className="text-xs text-red-500 font-bold text-center animate-shake bg-red-900/10 p-2 rounded-lg border border-red-900/20">
+                                        {validationError}
+                                    </p>
                                 )}
 
                                 <div className="pt-4 flex gap-3">

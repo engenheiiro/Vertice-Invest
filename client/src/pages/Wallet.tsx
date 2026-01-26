@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Header } from '../components/dashboard/Header';
 import { WalletSummary } from '../components/wallet/WalletSummary';
@@ -9,19 +10,18 @@ import { SmartContributionModal } from '../components/wallet/SmartContributionMo
 import { Button } from '../components/ui/Button';
 import { Plus, Download, Lock, Crown } from 'lucide-react';
 import { useAuth, UserPlan } from '../contexts/AuthContext';
+import { useWallet } from '../contexts/WalletContext';
 import { useNavigate } from 'react-router-dom';
 
 export const Wallet = () => {
     const { user } = useAuth();
+    const { assets, kpis } = useWallet();
     const navigate = useNavigate();
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
 
     /**
      * MOCK: Verificação de Limites de Uso Genérica
-     * 
-     * Backend Endpoint Sugerido: GET /api/subscription/usage?feature={feature_name}
-     * Retorno: { allowed: boolean, currentUsage: number, limit: number, plan: string }
      */
     const checkFeatureAccess = async (feature: 'smart_contribution' | 'report') => {
         if (!user) return false;
@@ -39,19 +39,16 @@ export const Wallet = () => {
             'report': {
                 'GUEST': 0,
                 'ESSENTIAL': 1,
-                'PRO': 9999, // Ilimitado
-                'BLACK': 9999 // Ilimitado
+                'PRO': 9999, 
+                'BLACK': 9999 
             }
         };
 
         const limit = limitsConfig[feature][plan];
-        
-        // Storage Key única por usuário/mês/feature
         const storageKey = `mock_db_usage_${user.id}_${feature}_${new Date().getMonth()}`; 
         const currentUsage = parseInt(localStorage.getItem(storageKey) || '0');
 
         if (currentUsage >= limit) {
-            // Mensagem personalizada dependendo do limite ser 0 ou atingido
             const msg = limit === 0 
                 ? `O recurso "${feature === 'report' ? 'Relatórios' : 'Aporte Inteligente'}" não está disponível no plano ${plan}.`
                 : `Limite mensal do plano ${plan} atingido (${currentUsage}/${limit}).`;
@@ -62,7 +59,6 @@ export const Wallet = () => {
             return false;
         }
 
-        // MOCK: Incremento
         localStorage.setItem(storageKey, (currentUsage + 1).toString());
         return true;
     };
@@ -76,13 +72,39 @@ export const Wallet = () => {
 
     const handleGenerateReport = async () => {
         const hasAccess = await checkFeatureAccess('report');
-        if (hasAccess) {
-            // Lógica de geração de relatório (mock)
-            alert("Gerando PDF Institucional... (Simulação de Download)");
-        }
+        if (!hasAccess) return;
+
+        // LÓGICA DE DATABUMP (Exportação)
+        const date = new Date().toLocaleDateString('pt-BR');
+        let content = `VÉRTICE INVEST - RELATÓRIO PATRIMONIAL\n`;
+        content += `Gerado em: ${date}\n`;
+        content += `Investidor: ${user?.name || 'Cliente Vértice'}\n\n`;
+        
+        content += `--- RESUMO ---\n`;
+        content += `Patrimônio Total: R$ ${kpis.totalEquity.toFixed(2)}\n`;
+        content += `Total Investido:  R$ ${kpis.totalInvested.toFixed(2)}\n`;
+        content += `Resultado:        R$ ${kpis.totalResult.toFixed(2)} (${kpis.totalResultPercent.toFixed(2)}%)\n`;
+        content += `Dividendos Totais: R$ ${kpis.totalDividends.toFixed(2)}\n\n`;
+        
+        content += `--- DETALHAMENTO DE ATIVOS ---\n`;
+        content += `TICKER  | TIPO      | QTD      | PREÇO MÉDIO | PREÇO ATUAL | TOTAL\n`;
+        
+        assets.forEach(a => {
+            const line = `${a.ticker.padEnd(7)} | ${a.type.padEnd(9)} | ${a.quantity.toString().padEnd(8)} | ${a.averagePrice.toFixed(2).padEnd(11)} | ${a.currentPrice.toFixed(2).padEnd(11)} | ${a.totalValue.toFixed(2)}`;
+            content += line + '\n';
+        });
+
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `vertice_wallet_${new Date().toISOString().split('T')[0]}.txt`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
-    const isReportLocked = user?.plan === 'GUEST'; // Apenas Guest bloqueado visualmente, Essential clica e conta
+    const isReportLocked = user?.plan === 'GUEST'; 
 
     return (
         <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">

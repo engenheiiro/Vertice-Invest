@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Calculator, Search, List, Activity, DollarSign, BarChart2 } from 'lucide-react';
+import { X, Calculator, Search, List, Activity, DollarSign, BarChart2, Shield, Target, Zap } from 'lucide-react';
 import { ResearchReport } from '../../services/research';
 
 interface AuditDetailModalProps {
@@ -22,6 +23,18 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
     const itemsToShow = viewMode === 'FULL' 
         ? (report.content.fullAuditLog || report.content.ranking) 
         : report.content.ranking;
+
+    const getRiskColor = (profile: string) => {
+        if (profile === 'DEFENSIVE') return 'text-emerald-400';
+        if (profile === 'MODERATE') return 'text-blue-400';
+        return 'text-purple-400';
+    };
+
+    const getRiskIcon = (profile: string) => {
+        if (profile === 'DEFENSIVE') return <Shield size={10} />;
+        if (profile === 'MODERATE') return <Target size={10} />;
+        return <Zap size={10} />;
+    };
 
     return createPortal(
         <div className="relative z-[100]" role="dialog" aria-modal="true">
@@ -59,6 +72,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                                     <tr>
                                         <th className="p-4 w-12 text-center">#</th>
                                         <th className="p-4">Ativo</th>
+                                        <th className="p-4 text-center">Risco</th> {/* Nova Coluna */}
                                         <th className="p-4 text-center">Score</th>
                                         <th className="p-4 text-right">Preço Atual</th>
                                         <th className="p-4 text-right">Graham (VI)</th>
@@ -76,6 +90,13 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                                             <td className="p-4">
                                                 <div className="font-black text-white">{item.ticker}</div>
                                                 <div className="text-[9px] text-slate-500 truncate max-w-[80px]">{item.name}</div>
+                                            </td>
+                                            {/* Coluna Risco Visual */}
+                                            <td className="p-4 text-center">
+                                                <div className={`flex items-center justify-center gap-1 font-bold ${getRiskColor(item.riskProfile || 'MODERATE')}`}>
+                                                    {getRiskIcon(item.riskProfile || 'MODERATE')}
+                                                    {item.riskProfile || '-'}
+                                                </div>
                                             </td>
                                             <td className="p-4 text-center">
                                                 <span className={`px-1.5 py-0.5 rounded font-black ${item.score > 70 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>

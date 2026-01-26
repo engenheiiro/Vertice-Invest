@@ -14,7 +14,7 @@ Create a detailed modal for displaying individual asset information when a user 
 
 Enhance the logging within the AI research service (aiResearchService.js) to provide more granular detail on the steps being taken, the models being used (including fallbacks), and any errors encountered during data fetching or analysis. Use distinct log levels (e.g., INFO, WARN, ERROR) and colors for better readability.
 
-Move the calculation of quantitative metrics (Graham Price, PEG Ratio, Altman Z-Score, Sharpe Ratio) from the aiResearchService to the backend. This will centralize business logic and improve security.
+
 
 Implement logic in the AI service to dynamically select the best available Gemini model based on quota availability and the specific task (e.g., prioritize Gemini 3 Pro for complex analysis, fallback to Gemini 3 Flash or Gemini 2.5 Pro for simpler tasks). Log the model switching behavior.
 

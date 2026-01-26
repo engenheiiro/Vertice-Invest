@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Check, X, ArrowLeft, Zap, Shield, Crown } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -96,10 +97,10 @@ export const Pricing = () => {
                             features={[
                                 { text: "Todas as Carteiras (Global + Fixa)", available: true },
                                 { text: "Aporte Inteligente (2x/mês)", available: true },
-                                { text: "Relatórios Ilimitados", available: true, highlight: "Sem Limites" },
+                                { text: "Análise de Carteira (Consultoria IA)", available: true, highlight: "Novo" },
                                 { text: "Neural Engine Tempo Real", available: true },
                                 { text: "Valuation Automático", available: true },
-                                { text: "Morning Call Exclusivo (Semanal)", available: true },
+                                { text: "Relatório Semanal Exclusivo", available: true },
                                 { text: "Carteira Private & Estruturadas", available: false },
                             ]}
                             isPopular
@@ -120,9 +121,8 @@ export const Pricing = () => {
                         features={[
                             { text: "Tudo do plano Pro", available: true },
                             { text: "Aporte Inteligente Ilimitado", available: true, highlight: "VIP" },
-                            { text: "Relatórios Ilimitados", available: true },
+                            { text: "Consultoria Humana Trimestral", available: true },
                             { text: "Carteira Private & Estruturadas", available: true },
-                            { text: "Consultoria Trimestral (Humana)", available: true },
                             { text: "Automação Completa de IR", available: true },
                             { text: "Concierge WhatsApp 24/7", available: true },
                         ]}

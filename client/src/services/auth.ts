@@ -9,7 +9,6 @@ interface AuthResponse {
 }
 
 export const authService = {
-  // Wrapper para chamadas autenticadas
   async api(endpoint: string, options: RequestInit = {}) {
     let token = localStorage.getItem('accessToken');
     
@@ -19,18 +18,21 @@ export const authService = {
     }
     headers.set('Content-Type', 'application/json');
 
-    let response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers,
-      credentials: 'include'
-    });
+    let response;
+    try {
+        response = await fetch(`${API_URL}${endpoint}`, {
+          ...options,
+          headers,
+          credentials: 'include'
+        });
+    } catch (networkError) {
+        throw new Error("Erro de conexão. Verifique se o servidor está rodando.");
+    }
 
-    // Se o token expirou (401) ou é inválido (403), tenta o refresh
     if (response.status === 401 || response.status === 403) {
       const newToken = await this.refreshToken();
       
       if (newToken) {
-        // Tenta a requisição original novamente com o novo token
         headers.set('Authorization', `Bearer ${newToken}`);
         response = await fetch(`${API_URL}${endpoint}`, {
           ...options,
@@ -38,7 +40,6 @@ export const authService = {
           credentials: 'include'
         });
       } else {
-        // Se o refresh falhar, a sessão realmente expirou
         this.clearSession();
         if (!endpoint.includes('/subscription/status')) {
            window.location.hash = '/login';
@@ -50,21 +51,34 @@ export const authService = {
   },
 
   async login(credentials: any): Promise<AuthResponse> {
-    const response = await fetch(`${API_URL}/api/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials),
-      credentials: 'include' 
-    });
+    try {
+        const response = await fetch(`${API_URL}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credentials),
+          credentials: 'include' 
+        });
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || 'Erro no login');
+        // Verificação de Content-Type para evitar "Unexpected end of JSON"
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            const text = await response.text();
+            console.error("Resposta não-JSON do servidor:", text);
+            throw new Error(`Erro do Servidor (${response.status}): O backend pode estar offline ou com erros.`);
+        }
 
-    if (data.accessToken && data.user) {
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('user', JSON.stringify(data.user));
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Erro no login');
+
+        if (data.accessToken && data.user) {
+          localStorage.setItem('accessToken', data.accessToken);
+          localStorage.setItem('user', JSON.stringify(data.user));
+        }
+        return data;
+    } catch (error: any) {
+        console.error("Login Falhou:", error);
+        throw error;
     }
-    return data;
   },
 
   async refreshToken(): Promise<string | null> {
@@ -88,7 +102,8 @@ export const authService = {
   async logout() {
     try {
       await fetch(`${API_URL}/api/logout`, { method: 'POST', credentials: 'include' });
-    } finally {
+    } catch(e) { /* ignore */ }
+    finally {
       this.clearSession();
     }
   },
@@ -119,9 +134,7 @@ export const authService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
     });
-    if (response.status >= 500) {
-        throw new Error("Erro no servidor");
-    }
+    if (response.status >= 500) throw new Error("Erro no servidor");
   },
 
   async resetPassword(token: string, newPassword: string): Promise<void> {

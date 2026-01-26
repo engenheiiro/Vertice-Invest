@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Radar, Zap, Clock, Lock, TrendingUp, AlertTriangle, Target } from 'lucide-react';
+import { Radar, Zap, Clock, Lock, TrendingUp, AlertTriangle, Target, Shield, Activity } from 'lucide-react';
 import { AiSignal } from '../../hooks/useDashboardData';
 import { useNavigate } from 'react-router-dom';
 
@@ -13,12 +13,22 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals }) => {
     
     // Verifica se há sinais com delay para mostrar o aviso
     const hasDelayedSignals = signals.some(s => s.type === 'DELAYED');
-    const isEmpty = signals.length === 0;
+    
+    // Filtra para exibir apenas sinais reais (ou nada, se todos forem delayed)
+    const validSignals = signals.filter(s => s.type !== 'DELAYED');
+    const isEmpty = validSignals.length === 0 && !hasDelayedSignals;
 
-    const getImpactColor = (impact: string) => {
-        if (impact === 'HIGH') return 'text-purple-400 border-purple-500/30 bg-purple-500/10';
-        if (impact === 'MEDIUM') return 'text-blue-400 border-blue-500/30 bg-blue-500/10';
-        return 'text-slate-400 border-slate-600/30 bg-slate-600/10';
+    const getScoreColor = (score: number) => {
+        if (score >= 80) return 'bg-emerald-500';
+        if (score >= 60) return 'bg-yellow-500';
+        return 'bg-red-500';
+    };
+
+    const getRiskProfileBadge = (profile?: string) => {
+        if (!profile) return null;
+        if (profile === 'DEFENSIVE') return <span className="text-[8px] font-bold text-emerald-400 bg-emerald-900/30 px-1.5 py-0.5 rounded border border-emerald-900/50 flex items-center gap-1 uppercase"><Shield size={8} /> Defensivo</span>;
+        if (profile === 'MODERATE') return <span className="text-[8px] font-bold text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded border border-blue-900/50 flex items-center gap-1 uppercase"><Activity size={8} /> Moderado</span>;
+        return <span className="text-[8px] font-bold text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded border border-purple-900/50 flex items-center gap-1 uppercase"><Zap size={8} /> Arrojado</span>;
     };
 
     return (
@@ -30,7 +40,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals }) => {
                 </h3>
                 {hasDelayedSignals ? (
                     <span className="text-[9px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1">
-                        <Clock size={10} /> Delay 7 Dias
+                        <Lock size={10} /> Conteúdo Protegido
                     </span>
                 ) : (
                     <span className="flex items-center gap-1.5">
@@ -41,72 +51,66 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals }) => {
             </div>
             
             <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar bg-gradient-to-b from-[#080C14] to-[#05070a]">
-                {isEmpty && (
-                    <div className="h-full flex flex-col items-center justify-center text-center opacity-50">
-                        <Radar size={40} className="text-slate-700 mb-3" />
-                        <p className="text-sm font-bold text-slate-500">Aguardando Sinais...</p>
-                        <p className="text-xs text-slate-600 max-w-[200px] mt-1">O Neural Engine está compilando dados. Tente novamente em breve.</p>
-                    </div>
-                )}
-
-                {signals.map((signal) => {
-                    const isDelayed = signal.type === 'DELAYED';
+                
+                {/* Caso 1: Sinais Reais (Pro/Black) */}
+                {validSignals.map((signal) => {
                     const isOpportunity = signal.type === 'OPPORTUNITY';
+                    const score = signal.score || 0;
                     
                     return (
                         <div 
                             key={signal.id} 
-                            onClick={() => !isDelayed && navigate('/research')}
-                            className={`p-4 rounded-xl border transition-all cursor-pointer group relative overflow-hidden ${
-                            isDelayed 
-                                ? 'bg-slate-900/30 border-slate-800/60 opacity-80 hover:opacity-100' 
-                                : 'bg-[#0F131E] border-slate-800 hover:border-slate-600 hover:shadow-lg hover:shadow-purple-900/10'
-                        }`}>
+                            onClick={() => navigate('/research')}
+                            className="p-4 rounded-xl border transition-all cursor-pointer group relative overflow-hidden bg-[#0F131E] border-slate-800 hover:border-slate-600 hover:shadow-lg hover:shadow-purple-900/10"
+                        >
                             {/* Header do Card */}
                             <div className="flex justify-between items-start mb-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="font-black text-sm text-white tracking-wide">{signal.ticker}</span>
-                                    {signal.thesis && !isDelayed && (
-                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-bold uppercase">
+                                <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-black text-sm text-white tracking-wide">{signal.ticker}</span>
+                                        {getRiskProfileBadge(signal.riskProfile)}
+                                    </div>
+                                    {signal.thesis && (
+                                        <span className="text-[9px] text-slate-500 font-medium uppercase">
                                             {signal.thesis}
                                         </span>
                                     )}
                                 </div>
-                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase flex items-center gap-1 ${getImpactColor(signal.impact)}`}>
-                                    <Zap size={8} fill="currentColor" /> {signal.impact}
-                                </span>
+                                
+                                {/* Score Badge Visual */}
+                                <div className="flex flex-col items-end">
+                                    <div className="flex items-center gap-1 mb-1">
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase">Score</span>
+                                        <span className="text-xs font-black text-white">{score}</span>
+                                    </div>
+                                    <div className="w-12 h-1 bg-slate-800 rounded-full overflow-hidden">
+                                        <div className={`h-full ${getScoreColor(score)}`} style={{ width: `${score}%` }}></div>
+                                    </div>
+                                </div>
                             </div>
                             
                             {/* Conteúdo Principal */}
-                            <p className={`text-xs leading-relaxed mb-3 ${isDelayed ? 'text-slate-500 blur-[0.5px]' : 'text-slate-300'}`}>
+                            <p className="text-xs leading-relaxed mb-3 text-slate-300 border-t border-slate-800/50 pt-2 mt-2">
                                 {signal.message}
                             </p>
                             
                             {/* Footer do Card */}
-                            <div className="flex items-center justify-between pt-2 border-t border-slate-800/50">
+                            <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                    {isDelayed ? (
-                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 border border-slate-700 flex items-center gap-1">
-                                            <Lock size={8} /> BLOQUEADO
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 ${
+                                        isOpportunity 
+                                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                            : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                    }`}>
+                                        {isOpportunity ? <TrendingUp size={10} /> : <AlertTriangle size={10} />}
+                                        {isOpportunity ? 'COMPRA' : 'RISCO'}
+                                    </span>
+                                    
+                                    {signal.probability && (
+                                        <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1 ml-1">
+                                            <Target size={10} />
+                                            Prob: <span className="text-white">{signal.probability}%</span>
                                         </span>
-                                    ) : (
-                                        <>
-                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 ${
-                                                isOpportunity 
-                                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                                                    : 'bg-red-500/10 text-red-400 border-red-500/20'
-                                            }`}>
-                                                {isOpportunity ? <TrendingUp size={10} /> : <AlertTriangle size={10} />}
-                                                {isOpportunity ? 'COMPRA' : 'RISCO'}
-                                            </span>
-                                            
-                                            {signal.probability && (
-                                                <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
-                                                    <Target size={10} />
-                                                    Prob: <span className="text-white">{signal.probability}%</span>
-                                                </span>
-                                            )}
-                                        </>
                                     )}
                                 </div>
                                 <span className="text-[9px] text-slate-600 font-mono">{signal.time}</span>
@@ -115,18 +119,31 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals }) => {
                     );
                 })}
                 
+                {/* Caso 2: Delayed Signals (Mostrar Card de Upgrade Único) */}
                 {hasDelayedSignals && (
-                    <div className="p-4 text-center bg-gradient-to-b from-blue-900/10 to-blue-900/5 border border-blue-900/30 rounded-xl mt-4 mx-1">
-                        <Lock size={16} className="text-blue-400 mx-auto mb-2" />
-                        <p className="text-[10px] text-blue-200 mb-3 font-medium leading-relaxed">
-                            Membros Essential visualizam sinais com 7 dias de atraso. Obtenha Alpha em tempo real.
+                    <div className="h-full flex flex-col items-center justify-center p-6 text-center border border-dashed border-slate-800 rounded-xl bg-slate-900/20">
+                        <div className="w-12 h-12 bg-blue-900/20 rounded-full flex items-center justify-center mb-4 border border-blue-900/40">
+                            <Lock size={20} className="text-blue-400" />
+                        </div>
+                        <h4 className="text-sm font-bold text-white mb-2">Sinais de Alpha Bloqueados</h4>
+                        <p className="text-xs text-slate-400 leading-relaxed mb-6 max-w-[200px]">
+                            O Neural Engine detectou {signals.length} oportunidades de mercado hoje. Atualize seu plano para visualizar em tempo real.
                         </p>
                         <button 
                             onClick={() => navigate('/pricing')}
-                            className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
+                            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
                         >
-                            <Zap size={10} fill="currentColor" /> Desbloquear Agora
+                            <Zap size={12} fill="currentColor" /> Desbloquear Acesso Pro
                         </button>
+                    </div>
+                )}
+
+                {/* Caso 3: Vazio Total */}
+                {isEmpty && (
+                    <div className="h-full flex flex-col items-center justify-center text-center opacity-50">
+                        <Radar size={40} className="text-slate-700 mb-3" />
+                        <p className="text-sm font-bold text-slate-500">Aguardando Sinais...</p>
+                        <p className="text-xs text-slate-600 max-w-[200px] mt-1">O Neural Engine está compilando dados. Tente novamente em breve.</p>
                     </div>
                 )}
             </div>
