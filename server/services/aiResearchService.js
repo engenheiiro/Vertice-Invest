@@ -1,250 +1,159 @@
 import { GoogleGenAI } from "@google/genai";
 import logger from '../config/logger.js';
 import { marketDataService } from './marketDataService.js';
-import MarketAnalysis from '../models/MarketAnalysis.js'; 
 
-/**
- * MOTOR QUANTITATIVO - VÉRTICE INVEST (PHASE 2.2 - FIX)
- * Adicionado: Proteções contra NaN e Infinity em Valuation
- */
+const MACRO = {
+    RISK_FREE_BR: 0.1075, // Selic atual
+    BRAZIL_RISK: 0.02,    // Risco país
+    INFLATION_TARGET: 0.045
+};
 
-const RISK_FREE_BR = 0.105; 
-const RISK_FREE_US = 0.045; 
+const sN = (val) => val === null || val === undefined ? 0 : Number(val);
+const safeVal = (val) => {
+    if (val === Infinity || val === -Infinity || isNaN(val) || val === null || val === undefined) return null;
+    return Number(val.toFixed(2));
+};
 
-// Helper seguro para números
-const safeNum = (val) => {
-    if (val === Infinity || val === -Infinity || isNaN(val)) return 0;
-    return val;
-}
+// --- ESTRUTURAL: CRIAÇÃO DE VALOR ---
 
-// --- Technical & Valuation Engines ---
-const calculateTechnicals = (history, currentPrice) => {
-    if (!history || history.length < 30 || currentPrice <= 0) return { volatility: 0, sharpe: 0, rsi: 50, priceVsSMA200: 0 };
-    const closes = history.map(h => h.close).filter(p => p > 0);
-    if (closes.length < 14) return { volatility: 0, sharpe: 0, rsi: 50, priceVsSMA200: 0 };
+const calculateROIC = (m) => {
+    if (!m.netMargin || !m.totalAssets) return null;
+    // Proxied ROIC: (Net Profit / Invested Capital)
+    // IC = Equity + Debt - Cash
+    const investedCapital = sN(m.mktCap) / sN(m.pvp) + sN(m.totalDebt) - sN(m.totalCash);
+    const netProfit = (sN(m.netMargin) / 100) * (sN(m.mktCap) / sN(m.pl));
+    return (netProfit / investedCapital) * 100;
+};
 
-    let gains = 0, losses = 0;
-    for (let i = 1; i < closes.length; i++) {
-        const diff = closes[i] - closes[i-1];
-        if (diff >= 0) gains += diff; else losses -= diff;
+const calculateQualityScore = (m, type, sector) => {
+    let score = 50; 
+
+    if (type === 'STOCK' || type === 'STOCK_US') {
+        // Spread ROIC vs WACC (WACC BR ~14%)
+        const roic = calculateROIC(m) || m.roe;
+        const waccBenchmark = type === 'STOCK' ? 14 : 9;
+        
+        if (roic > waccBenchmark + 10) score += 30; // Excelente criador de valor
+        else if (roic > waccBenchmark) score += 15;
+        else if (roic < waccBenchmark) score -= 20;
+
+        // Dívida Líquida / Patrimônio (Cuidado com alavancagem no Longo Prazo)
+        const debtToEquity = (sN(m.totalDebt) - sN(m.totalCash)) / (sN(m.mktCap) / sN(m.pvp));
+        if (debtToEquity < 0.5) score += 10;
+        if (debtToEquity > 2.0) score -= 25;
+
+        // Margem de Segurança Fundamentalista
+        if (sN(m.netMargin) > 15) score += 10;
+    } 
+    else if (type === 'FII') {
+        // FIIs: Estabilidade de Renda e Alavancagem
+        const ltv = sN(m.totalDebt) / sN(m.totalAssets); // Alavancagem do Fundo
+        if (ltv > 0.30) score -= 30; // FII muito alavancado é risco no BR
+        else score += 10;
+
+        if (sN(m.dy) > MACRO.RISK_FREE_BR * 100) score += 20;
+        
+        // Desconto Patrimonial Saudável (não muito baixo que indique quebra)
+        if (sN(m.pvp) < 0.98 && sN(m.pvp) > 0.85) score += 20;
+        else if (sN(m.pvp) < 0.70) score -= 20; // Sinal de problema nos ativos
     }
-    const avgGain = gains / closes.length;
-    const avgLoss = losses / closes.length;
-    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    const rsi = 100 - (100 / (1 + rs));
+    else if (type === 'CRYPTO') {
+        // Crypto: Adoção e Tokenomics
+        if (sN(m.mktCap) > 10000000000) score += 20; // "Blue chips" crypto
+        if (sN(m.avgLiquidity) > 100000000) score += 15;
+        // Volatilidade punitiva para B&H
+        if (sN(m.volatility) > 80) score -= 20;
+    }
 
-    const returns = [];
-    for (let i = 1; i < closes.length; i++) returns.push(Math.log(closes[i] / closes[i - 1]));
-    
-    const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
-    const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / returns.length;
-    const annualizedVol = Math.sqrt(variance) * Math.sqrt(12);
-
-    const totalReturn = (closes[closes.length - 1] - closes[0]) / closes[0];
-    const annualizedReturn = Math.pow(1 + totalReturn, 12 / closes.length) - 1;
-    const sharpe = annualizedVol > 0 ? (annualizedReturn - RISK_FREE_BR) / annualizedVol : 0;
-
-    const sma = closes.reduce((a,b) => a+b, 0) / closes.length;
-    const priceVsSMA = sma > 0 ? ((currentPrice - sma) / sma) * 100 : 0;
-
-    return { 
-        volatility: safeNum(annualizedVol * 100), 
-        sharpe: safeNum(sharpe), 
-        rsi: safeNum(rsi), 
-        priceVsSMA200: safeNum(priceVsSMA) 
-    };
+    return Math.min(100, Math.max(0, score));
 };
 
-const calculateValuation = (metrics, price, type) => {
-    const m = { ...metrics };
-    
-    // Graham (Apenas se EPS e BVPS positivos)
-    m.grahamPrice = (m.eps > 0 && m.bvps > 0) ? Math.sqrt(22.5 * m.eps * m.bvps) : 0;
-    
-    // Bazin (Dividendos)
-    // Preço Teto = Div Pago / 6%
-    // Usamos DY para estimar o Div Pago em R$
-    const dividendVal = (m.dy / 100) * price;
-    m.bazinPrice = dividendVal > 0 ? dividendVal / 0.06 : 0;
-    
-    // Altman Z-Score
-    let z = 1.0;
-    if (m.currentRatio > 1.5) z += 1.0;
-    if (m.debtToEquity < 100) z += 1.0;
-    if (m.debtToEquity > 200) z -= 1.5;
-    if (m.netMargin > 10) z += 1.0;
-    if (type === 'FII' && m.pvp > 0.8 && m.pvp < 1.15) z = 3.5; 
-    m.altmanZScore = parseFloat(z.toFixed(2));
-
-    const growth = m.revenueGrowth > 0 ? m.revenueGrowth : (m.roe > 0 ? m.roe : 1);
-    m.pegRatio = (m.pl > 0 && growth > 0) ? parseFloat((m.pl / growth).toFixed(2)) : 0;
-    m.earningsYield = m.pl > 0 ? parseFloat((100 / m.pl).toFixed(2)) : 0;
-    
-    return m;
-};
-
-const calculateScore = (asset, m, tech) => {
-    if (asset.price <= 0) return 0; // Preço inválido zera score
-
+const calculateValuationScore = (m, price, type) => {
     let score = 50;
-    if (asset.type === 'STOCK' || asset.type === 'STOCK_US') {
-        if (m.grahamPrice > asset.price) score += 10;
-        if (m.bazinPrice > asset.price) score += 5;
-        if (m.pegRatio > 0 && m.pegRatio < 1.5) score += 5;
-        if (m.pl > 0 && m.pl < 15) score += 5;
-        if (m.roe > 15) score += 10;
-        if (m.netMargin > 10) score += 5;
-        if (m.debtToEquity < 80) score += 5;
-        if (m.revenueGrowth > 10) score += 5;
-        if (m.altmanZScore > 2.5) score += 5;
-        if (tech.rsi < 30) score += 5;
-        if (tech.priceVsSMA200 > 0) score += 5;
-        if (tech.sharpe > 1) score += 5;
-        if (m.dy > 6) score += 10;
-        if (m.dy > 0) score += 5;
-    } else if (asset.type === 'FII') {
-        if (m.dy > 12) score += 25;
-        else if (m.dy > 9) score += 15;
-        else if (m.dy > 6) score += 5;
-        if (m.bazinPrice > asset.price) score += 15;
-        if (m.pvp >= 0.85 && m.pvp <= 1.05) score += 15;
-        else if (m.pvp < 0.85) score += 10;
-        else if (m.pvp > 1.2) score -= 15;
-        if (tech.volatility < 15) score += 10;
-        if (tech.priceVsSMA200 > -5) score += 5;
-    } else if (asset.type === 'CRYPTO') {
-        if (tech.rsi > 70) score -= 10;
-        if (tech.rsi < 40) score += 15;
-        if (tech.priceVsSMA200 > 0) score += 15;
-        if (tech.volatility < 80) score += 10;
-        if (m.mktCap > 10000000000) score += 15;
-    }
-    if (m.pl < 0) score -= 25;
-    if (m.dy === 0 && asset.type === 'FII') score -= 50;
-    return Math.min(99, Math.max(1, Math.floor(score)));
-};
 
-const getLatestAuditFromDB = async (assetClass) => {
-    const report = await MarketAnalysis.findOne({ assetClass }).sort({ createdAt: -1 });
-    return report?.content?.fullAuditLog || [];
+    if (type === 'STOCK' || type === 'STOCK_US') {
+        const grahamPrice = (sN(m.eps) > 0 && sN(m.bvps) > 0) ? Math.sqrt(22.5 * m.eps * m.bvps) : 0;
+        if (grahamPrice > 0) {
+            const upside = (grahamPrice / price) - 1;
+            if (upside > 0.3) score += 30;
+            else if (upside < 0) score -= 30;
+        }
+        
+        // Bazin (Foco Dividendos)
+        const bazinPrice = (sN(m.dy)/100 * price) / 0.06;
+        if (price < bazinPrice) score += 10;
+    }
+    else if (type === 'FII') {
+        const yieldTarget = (MACRO.RISK_FREE_BR * 100) + 2; // Selic + 2%
+        if (sN(m.dy) > yieldTarget) score += 30;
+        if (sN(m.pvp) > 1.1) score -= 40;
+    }
+
+    return Math.min(100, Math.max(0, score));
 };
 
 export const aiResearchService = {
-    async calculateRanking(assetClass, strategy) {
+    async calculateRanking(assetClass, strategy = 'BUY_HOLD') {
         try {
-            // --- BRASIL 10 ---
-            if (assetClass === 'BRASIL_10') {
-                logger.info("🧪 [QUANT] Compondo Carteira Brasil 10...");
-                
-                const [stocks, fiis, cryptos] = await Promise.all([
-                    getLatestAuditFromDB('STOCK'),
-                    getLatestAuditFromDB('FII'),
-                    getLatestAuditFromDB('CRYPTO')
-                ]);
-
-                if (!stocks.length || !fiis.length || !cryptos.length) {
-                    logger.warn("⚠️ Dados insuficientes no DB para Brasil 10.");
-                    return [];
-                }
-
-                const sortedStocks = stocks.sort((a, b) => b.score - a.score);
-                const sortedFiis = fiis.sort((a, b) => b.score - a.score);
-                const sortedCryptos = cryptos.sort((a, b) => b.score - a.score);
-
-                const topStocks = sortedStocks.slice(0, 5);
-                const topFiis = sortedFiis.slice(0, 4);
-                const topCrypto = sortedCryptos.slice(0, 1);
-
-                const combined = [...topStocks, ...topFiis, ...topCrypto];
-                combined.sort((a, b) => b.score - a.score);
-
-                logger.info(`✅ [QUANT] Brasil 10 composto.`);
-                return combined;
-            }
-
-            // --- LÓGICA PADRÃO ---
-            logger.info(`🧪 [QUANT] Coletando dados para ${assetClass}...`);
             const rawData = await marketDataService.getMarketData(assetClass);
-            
             if (!rawData || rawData.length === 0) return [];
 
             const analyzedAssets = rawData.map(asset => {
-                const tech = calculateTechnicals(asset.history, asset.price);
-                let metrics = calculateValuation(asset.metrics, asset.price, asset.type);
-                metrics = { 
-                    ...metrics, 
-                    volatility: parseFloat(tech.volatility.toFixed(2)), 
-                    sharpeRatio: parseFloat(tech.sharpe.toFixed(2)),
-                    rsi: parseFloat(tech.rsi.toFixed(2)),
-                    priceVsSMA200: parseFloat(tech.priceVsSMA200.toFixed(2))
-                };
+                const m = asset.metrics;
+                const qScore = calculateQualityScore(m, asset.type, asset.sector);
+                const vScore = calculateValuationScore(m, asset.price, asset.type);
+                
+                // Metodologia Buy & Hold: 60% Qualidade, 40% Preço
+                let finalScore = (qScore * 0.60) + (vScore * 0.40);
+                
+                // Penalidade por baixa liquidez (Não queremos ficar presos em B&H)
+                if (asset.type !== 'CRYPTO' && m.avgLiquidity < 500000) finalScore *= 0.7;
 
-                const score = calculateScore(asset, metrics, tech);
+                finalScore = Math.floor(Math.min(99, Math.max(1, finalScore)));
 
                 let action = 'WAIT';
-                if (score >= 75) action = 'BUY';
-                else if (score <= 40) action = 'SELL';
-
-                let targetPrice = asset.price;
-                if (metrics.grahamPrice > 0 && asset.type === 'STOCK') {
-                    targetPrice = (metrics.grahamPrice + metrics.bazinPrice + asset.price) / 3;
-                } else if (asset.type === 'FII') {
-                    targetPrice = metrics.bazinPrice > 0 ? metrics.bazinPrice : asset.price;
-                } else if (asset.type === 'CRYPTO') {
-                    targetPrice = asset.price * (1 + (metrics.volatility / 100));
-                }
+                if (finalScore >= 80) action = 'BUY';
+                else if (finalScore <= 40) action = 'SELL';
 
                 return {
                     ticker: asset.ticker,
                     name: asset.name,
                     sector: asset.sector,
+                    type: asset.type,
                     action,
-                    targetPrice: safeNum(parseFloat(targetPrice.toFixed(2))),
-                    score,
-                    probability: Math.floor(score * 0.9),
-                    thesis: score > 70 ? 'STRONG BUY' : 'NEUTRAL',
-                    reason: `Score ${score}. DY: ${metrics.dy.toFixed(1)}%. Vol: ${metrics.volatility}%`,
-                    metrics
+                    currentPrice: asset.price,
+                    targetPrice: safeVal((sN(m.eps) > 0 && sN(m.bvps) > 0) ? Math.sqrt(22.5 * m.eps * m.bvps) : asset.price * 1.2),
+                    score: finalScore,
+                    probability: Math.floor(finalScore * 0.8) + 10,
+                    thesis: finalScore > 75 ? "Oportunidade Longo Prazo" : "Manutenção",
+                    reason: `${asset.sector}: ROE ${sN(m.roe).toFixed(1)}% • DY ${sN(m.dy).toFixed(1)}% • Score Estrutural ${finalScore}`,
+                    metrics: {
+                        ...m,
+                        structural: {
+                            quality: qScore,
+                            valuation: vScore,
+                            risk: 100 - qScore 
+                        }
+                    }
                 };
-            });
+            }).filter(Boolean);
 
-            // Filtra ativos com preço zerado ou erro grave
-            const sorted = analyzedAssets
-                .filter(a => a.metrics && a.targetPrice > 0 && a.score > 0)
-                .sort((a, b) => b.score - a.score);
-
-            logger.info(`✅ [QUANT] Ranking ${assetClass} calculado: ${sorted.length} ativos válidos.`);
-            return sorted;
-
+            return analyzedAssets.sort((a, b) => b.score - a.score);
         } catch (error) {
-            logger.error(`❌ [QUANT FAIL] ${error.message}`);
-            return null;
+            logger.error(`Erro cálculo ranking: ${error.message}`);
+            return [];
         }
     },
 
     async generateNarrative(ranking, assetClass) {
         if (!process.env.API_KEY || !ranking || ranking.length === 0) return "Relatório indisponível.";
-        
-        const top3 = ranking.slice(0, 3);
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const top3 = ranking.slice(0, 3).map(a => `${a.ticker} (Score ${a.score})`).join('; ');
         
-        const summary = top3.map(a => 
-            `> ${a.ticker} (${a.sector}): Score ${a.score}. DY ${a.metrics.dy.toFixed(1)}%. Graham R$${a.metrics.grahamPrice.toFixed(2)}. RSI ${a.metrics.rsi}.`
-        ).join("\n");
-        
-        const prompt = `
-        Analista Sênior Vértice Invest.
-        Gere um 'Morning Call' executivo sobre o ranking de ${assetClass}.
-        
-        Destaques do Top 3:
-        ${summary}
-        
-        Estrutura:
-        1. **Resumo do Mercado**: Visão macro rápida.
-        2. **Top Picks**: Por que esses 3 ativos venceram o algoritmo (cite fundamentos e técnico)?
-        3. **Aviso de Risco**: Cite volatilidade ou cenário político.
-        
-        Tom: Profissional, direto, institucional. Use Markdown.`;
+        const prompt = `Aja como Senior Portfolio Manager especialista em Buy & Hold. 
+        Analise esta seleção de ${assetClass}: ${top3}. 
+        Escreva um Morning Call focado em fundamentos e geração de valor de longo prazo. 
+        Mencione o spread ROIC/WACC se for ações ou Yield Real se for FIIs. Seja conciso e profissional.`;
 
         try {
             const response = await ai.models.generateContent({
@@ -253,8 +162,6 @@ export const aiResearchService = {
                 config: { temperature: 0.3 }
             });
             return response.text;
-        } catch (e) {
-            return "Narrativa indisponível no momento.";
-        }
+        } catch (e) { return "Erro ao gerar narrativa via IA."; }
     }
 };

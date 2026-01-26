@@ -2,37 +2,47 @@ import MarketAnalysis from '../models/MarketAnalysis.js';
 import { aiResearchService } from '../services/aiResearchService.js';
 import logger from '../config/logger.js';
 
-// Helper para aplicar diversificação apenas no recorte do Top 10
 const getDiversifiedTop10 = (allAssets) => {
     const finalRanking = [];
     const sectorCount = {};
-    const MAX_PER_SECTOR = 3; 
+    const MAX_PER_SECTOR = 6; 
 
-    // Copia para não mutar o original
-    const candidates = [...allAssets];
+    const candidates = [...allAssets].sort((a, b) => b.score - a.score);
+    const addedTickers = new Set();
 
     for (const asset of candidates) {
+        if (finalRanking.length >= 10) break;
+
         const sector = asset.sector || 'Outros';
         const currentCount = sectorCount[sector] || 0;
 
-        // Se já temos 10, paramos
-        if (finalRanking.length >= 10) break;
-
         if (currentCount < MAX_PER_SECTOR) {
             finalRanking.push(asset);
+            addedTickers.add(asset.ticker);
             sectorCount[sector] = currentCount + 1;
         }
     }
+
+    if (finalRanking.length < 10) {
+        for (const asset of candidates) {
+            if (finalRanking.length >= 10) break;
+            
+            if (!addedTickers.has(asset.ticker)) {
+                finalRanking.push(asset);
+                addedTickers.add(asset.ticker);
+            }
+        }
+    }
     
-    // Reindexar posições visualmente para 1..10
-    return finalRanking.map((item, idx) => ({ ...item, position: idx + 1 }));
+    return finalRanking
+        .sort((a, b) => b.score - a.score)
+        .map((item, idx) => ({ ...item, position: idx + 1 }));
 };
 
 export const crunchNumbers = async (req, res, next) => {
     try {
         const { assetClass, strategy, isBulk } = req.body;
         
-        // --- MODO BACKGROUND (Para Bulk) ---
         if (isBulk) {
             logger.info("🚀 [ASYNC] Iniciando processamento em lote ordenado...");
             
@@ -40,22 +50,16 @@ export const crunchNumbers = async (req, res, next) => {
 
             (async () => {
                 const strat = 'BUY_HOLD';
-                
-                // FASE 1: Ativos Base (Independentes)
                 const baseClasses = ['STOCK', 'FII', 'STOCK_US', 'CRYPTO'];
                 
                 logger.info("Phase 1: Processando Ativos Base...");
                 
-                // Executa sequencialmente para não sobrecarregar API e garantir ordem de log
                 for (const aClass of baseClasses) {
                     try {
                         const allScoredAssets = await aiResearchService.calculateRanking(aClass, strat);
                         
                         if (allScoredAssets && allScoredAssets.length > 0) {
-                            // Top 10 Diversificado para exibição rápida
                             const ranking = getDiversifiedTop10(allScoredAssets);
-                            
-                            // Auditoria mantém TUDO (ex: 50 ativos)
                             const fullAuditLog = allScoredAssets;
 
                             await MarketAnalysis.create({
@@ -66,42 +70,76 @@ export const crunchNumbers = async (req, res, next) => {
                                 content: { ranking, fullAuditLog },
                                 generatedBy: req.user?.id
                             });
-                            logger.info(`💾 [DB] ${aClass} salvo: ${fullAuditLog.length} analisados, ${ranking.length} no Top 10.`);
+                            logger.info(`💾 [DB] ${aClass} salvo: ${fullAuditLog.length} analisados.`);
+                        } else {
+                            logger.warn(`⚠️ [DB] ${aClass} retornou 0 ativos. Nada foi salvo.`);
                         }
                     } catch (err) {
                         logger.error(`Erro Phase 1 (${aClass}): ${err.message}`);
                     }
                 }
 
-                // FASE 2: Derivativos (Brasil 10 depende dos anteriores salvos no DB)
-                logger.info("Phase 2: Processando Carteiras Compostas (Brasil 10)...");
+                logger.info("Phase 2: Agregando Carteira BRASIL_10 (Top 5 Ações + Top 5 FIIs)...");
                 try {
-                    const br10Assets = await aiResearchService.calculateRanking('BRASIL_10', strat);
-                    if (br10Assets && br10Assets.length > 0) {
-                        const ranking = br10Assets.slice(0, 10).map((a, i) => ({...a, position: i+1}));
+                    // Busca os relatórios recém-criados na Fase 1
+                    const stockReport = await MarketAnalysis.findOne({ assetClass: 'STOCK', strategy: strat }).sort({ createdAt: -1 });
+                    const fiiReport = await MarketAnalysis.findOne({ assetClass: 'FII', strategy: strat }).sort({ createdAt: -1 });
+
+                    if (stockReport && fiiReport) {
+                        // Pega os melhores de cada categoria (usando fullAuditLog para ter o universo completo e reordenar)
+                        const stocksSource = stockReport.content.fullAuditLog.length > 0 ? stockReport.content.fullAuditLog : stockReport.content.ranking;
+                        const fiisSource = fiiReport.content.fullAuditLog.length > 0 ? fiiReport.content.fullAuditLog : fiiReport.content.ranking;
+
+                        // Top 5 Ações
+                        const top5Stocks = stocksSource
+                            .sort((a, b) => b.score - a.score)
+                            .slice(0, 5);
+
+                        // Top 5 FIIs
+                        const top5FIIs = fiisSource
+                            .sort((a, b) => b.score - a.score)
+                            .slice(0, 5);
+
+                        // Combina e Reordena por Score Global
+                        let mixedList = [...top5Stocks, ...top5FIIs].sort((a, b) => b.score - a.score);
+
+                        // Sanitiza e Renumera Posições
+                        mixedList = mixedList.map((item, idx) => {
+                            const cleanItem = item.toObject ? item.toObject() : item;
+                            return {
+                                ...cleanItem,
+                                _id: undefined, // Remove ID antigo para criar novo subdocumento
+                                position: idx + 1
+                            };
+                        });
                         
                         await MarketAnalysis.create({
                             assetClass: 'BRASIL_10',
                             strategy: strat,
                             isRankingPublished: false,
                             isMorningCallPublished: false,
-                            content: { ranking, fullAuditLog: br10Assets }, // No BR10, audit é igual ao ranking pois é composto
+                            content: { 
+                                ranking: mixedList, 
+                                fullAuditLog: mixedList // Para Brasil 10, o log é a própria seleção curada
+                            }, 
                             generatedBy: req.user?.id
                         });
-                        logger.info(`💾 [DB] BRASIL_10 salvo.`);
+                        logger.info(`💾 [DB] BRASIL_10 salvo com sucesso (Composição 50/50).`);
+                    } else {
+                        logger.warn("⚠️ Relatórios base (STOCK/FII) não encontrados para compor BRASIL_10.");
                     }
                 } catch (err) {
                     logger.error(`Erro Phase 2 (BRASIL_10): ${err.message}`);
                 }
 
-                logger.info("🏁 [ASYNC] Processamento em lote finalizado com sucesso.");
+                logger.info("🏁 [ASYNC] Processamento em lote finalizado.");
             })();
             return;
         }
 
-        // --- MODO SÍNCRONO (Single) ---
+        // ... (Lógica Single permanece igual) ...
         logger.info(`🚀 Iniciando Análise Síncrona: ${assetClass}`);
-        const strat = 'BUY_HOLD'; // Default
+        const strat = 'BUY_HOLD';
         const allScoredAssets = await aiResearchService.calculateRanking(assetClass, strat);
         
         const results = [];
@@ -209,5 +247,5 @@ export const getLatestReport = async (req, res, next) => {
 export const triggerDailyRoutine = async (req, res, isInternal = false) => {
     logger.info("Executando rotina diária automática via trigger.");
     const result = await crunchNumbers({ body: { isBulk: true } }, null, null);
-    if (res) res.json({ message: "Batch process started", count: result.length });
+    if (res) res.json({ message: "Batch process started", count: result ? result.length : 0 });
 };
