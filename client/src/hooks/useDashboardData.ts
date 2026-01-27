@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { researchService, RankingItem } from '../services/research';
 
-// Interfaces
 export interface PortfolioItem {
     ticker: string;
     name: string;
@@ -24,7 +23,6 @@ export interface AiSignal {
     impact: 'HIGH' | 'MEDIUM' | 'LOW';
     probability?: number; 
     thesis?: string;      
-    // Novos Campos
     score?: number;
     riskProfile?: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
 }
@@ -44,18 +42,109 @@ export const useDashboardData = () => {
     const [equity, setEquity] = useState({ total: 0, dayChange: 0, dayPercent: 0 });
     const [marketIndices, setMarketIndices] = useState<MarketIndex[]>([]);
     const [isLoadingResearch, setIsLoadingResearch] = useState(true);
+    
+    // Cache local de scores para evitar fetch excessivo
+    const [scoreMap, setScoreMap] = useState<Map<string, { score: number, action: string }>>(new Map());
 
-    // 1. Carrega Dados da Carteira (WalletContext)
+    // 1. Fetch Research Data & Build Score Map
     useEffect(() => {
-        const mappedPortfolio: PortfolioItem[] = assets.map(asset => ({
-            ticker: asset.ticker,
-            name: asset.name,
-            shares: asset.quantity,
-            avgPrice: asset.averagePrice,
-            currentPrice: asset.currentPrice,
-            aiScore: Math.floor(Math.random() * (99 - 40) + 40), // Ainda mockado até termos endpoint de score individual
-            aiSentiment: Math.random() > 0.5 ? 'BULLISH' : (Math.random() > 0.5 ? 'NEUTRAL' : 'BEARISH')
-        }));
+        const fetchResearch = async () => {
+            setIsLoadingResearch(true);
+            try {
+                // Busca os relatórios principais para cruzar dados
+                const [stockReport, fiiReport, brasil10Report] = await Promise.all([
+                    researchService.getLatest('STOCK', 'BUY_HOLD'),
+                    researchService.getLatest('FII', 'BUY_HOLD'),
+                    researchService.getLatest('BRASIL_10', 'BUY_HOLD')
+                ]);
+
+                const newMap = new Map();
+                
+                // Helper para popular o mapa
+                const processReport = (rep: any) => {
+                    if (rep?.content?.ranking) {
+                        rep.content.ranking.forEach((item: RankingItem) => {
+                            newMap.set(item.ticker, { score: item.score, action: item.action });
+                        });
+                    }
+                };
+
+                processReport(stockReport);
+                processReport(fiiReport);
+                
+                setScoreMap(newMap);
+
+                // --- POPULAR RADAR (Signals) ---
+                if (brasil10Report?.content?.ranking) {
+                    const mappedSignals: AiSignal[] = brasil10Report.content.ranking
+                        .slice(0, 5)
+                        .map((item: RankingItem) => {
+                            let type: AiSignal['type'] = 'NEUTRAL';
+                            if (item.action === 'BUY') type = 'OPPORTUNITY';
+                            if (item.action === 'SELL') type = 'RISK';
+
+                            let impact: AiSignal['impact'] = 'LOW';
+                            if (item.score >= 80) impact = 'HIGH';
+                            else if (item.score >= 60) impact = 'MEDIUM';
+
+                            return {
+                                id: item.ticker + brasil10Report._id,
+                                ticker: item.ticker,
+                                type: type,
+                                message: item.reason || item.bullThesis?.[0] || 'Fundamentos sólidos.',
+                                time: new Date(brasil10Report.date || brasil10Report.createdAt!).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'}),
+                                impact: impact,
+                                probability: item.probability,
+                                thesis: item.thesis,
+                                score: item.score,
+                                riskProfile: item.riskProfile
+                            };
+                        });
+
+                    if (user?.plan === 'ESSENTIAL' || user?.plan === 'GUEST') {
+                        setSignals(mappedSignals.map(s => ({
+                            ...s,
+                            type: 'DELAYED',
+                            message: `[CONTEÚDO PRO] ${s.message.substring(0, 15)}...`
+                        })));
+                    } else {
+                        setSignals(mappedSignals);
+                    }
+                }
+
+            } catch (err) {
+                console.error("Erro ao carregar research:", err);
+            } finally {
+                setIsLoadingResearch(false);
+            }
+        };
+
+        fetchResearch();
+    }, [user?.plan]);
+
+    // 2. Mapeia Carteira com Scores Reais
+    useEffect(() => {
+        const mappedPortfolio: PortfolioItem[] = assets.map(asset => {
+            const researchData = scoreMap.get(asset.ticker);
+            
+            // Determina sentimento baseado na ação da IA
+            let sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
+            if (researchData) {
+                if (researchData.action === 'BUY') sentiment = 'BULLISH';
+                else if (researchData.action === 'SELL') sentiment = 'BEARISH';
+            }
+
+            return {
+                ticker: asset.ticker,
+                name: asset.name,
+                shares: asset.quantity,
+                avgPrice: asset.averagePrice,
+                currentPrice: asset.currentPrice,
+                // Usa o score real se existir, senão usa 50 (Neutro)
+                aiScore: researchData ? researchData.score : 50, 
+                aiSentiment: sentiment
+            };
+        });
 
         setPortfolio(mappedPortfolio);
 
@@ -64,78 +153,15 @@ export const useDashboardData = () => {
             dayChange: kpis.dayVariation,
             dayPercent: parseFloat(kpis.dayVariationPercent.toFixed(2))
         });
-    }, [assets, kpis]);
+    }, [assets, kpis, scoreMap]);
 
-    // 2. Carrega Dados de Research Reais (Neural Engine)
-    useEffect(() => {
-        const fetchAiSignals = async () => {
-            setIsLoadingResearch(true);
-            try {
-                // Busca o relatório principal (Brasil 10) para popular o Radar
-                const report = await researchService.getLatest('BRASIL_10', 'BUY_HOLD');
-                
-                if (report && report.content && report.content.ranking) {
-                    const mappedSignals: AiSignal[] = report.content.ranking
-                        .slice(0, 5) // Pega apenas o Top 5 para o Radar
-                        .map((item: RankingItem) => {
-                            
-                            // Mapeia Ação para Tipo de Sinal
-                            let type: AiSignal['type'] = 'NEUTRAL';
-                            if (item.action === 'BUY') type = 'OPPORTUNITY';
-                            if (item.action === 'SELL') type = 'RISK';
-
-                            // Mapeia Score para Impacto
-                            let impact: AiSignal['impact'] = 'LOW';
-                            if (item.score >= 80) impact = 'HIGH';
-                            else if (item.score >= 60) impact = 'MEDIUM';
-
-                            return {
-                                id: item.ticker + report._id,
-                                ticker: item.ticker,
-                                type: type,
-                                message: item.reason,
-                                time: new Date(report.date || report.createdAt).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'}),
-                                impact: impact,
-                                probability: item.probability,
-                                thesis: item.thesis,
-                                score: item.score, // Mapeado
-                                riskProfile: item.riskProfile // Mapeado
-                            };
-                        });
-
-                    // Aplica lógica de Delay para planos inferiores
-                    if (user?.plan === 'ESSENTIAL' || user?.plan === 'GUEST') {
-                        const delayedSignals = mappedSignals.map(signal => ({
-                            ...signal,
-                            type: 'DELAYED' as const,
-                            message: `[CONTEÚDO PRO BLOQUEADO] ${signal.message.substring(0, 20)}...`
-                        }));
-                        setSignals(delayedSignals);
-                    } else {
-                        setSignals(mappedSignals);
-                    }
-                } else {
-                    // Fallback se não houver relatório gerado ainda
-                    setSignals([]); 
-                }
-            } catch (error) {
-                console.error("Falha ao carregar sinais do radar:", error);
-            } finally {
-                setIsLoadingResearch(false);
-            }
-        };
-
-        fetchAiSignals();
-    }, [user?.plan]);
-
-    // 3. Dados de Mercado (Mockados por enquanto, idealmente viriam de uma API de cotação externa)
+    // 3. Dados Macro (Mockados/Placeholder)
     useEffect(() => {
         setMarketIndices([
             { ticker: "IBOV", value: 128500, changePercent: 0.45 },
-            { ticker: "S&P 500", value: 5200, changePercent: -0.12 },
-            { ticker: "NASDAQ", value: 16400, changePercent: 0.85 },
-            { ticker: "USD/BRL", value: 4.98, changePercent: -0.50 },
-            { ticker: "BTC/USD", value: 64500, changePercent: 1.25 },
+            { ticker: "CDI", value: 11.15, changePercent: 0.00 },
+            { ticker: "USD", value: 5.65, changePercent: -0.50 },
+            { ticker: "BTC", value: 64500, changePercent: 1.25 },
         ]);
     }, []);
 
