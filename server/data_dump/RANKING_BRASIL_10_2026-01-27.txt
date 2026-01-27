@@ -1,0 +1,8 @@
+VÉRTICE RESEARCH - RELATÓRIO ALGORÍTMICO
+Data: 27/01/2026, 00:26:15
+Classe: BRASIL_10
+Ativos Analisados: 1
+--------------------------------------------------------
+POS | TICKER | SCORE | AÇÃO | PREÇO ATUAL | PREÇO JUSTO | YIELD
+--------------------------------------------------------
+1   | RZAT11 | 99    | BUY    | 90.64       | 112.60      | 13.2%

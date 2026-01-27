@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { X, Shield, Activity, Target, Zap, TrendingUp, AlertTriangle, AlertOctagon, ThumbsUp, ThumbsDown, BarChart2, DollarSign } from 'lucide-react';
+import { X, Shield, Activity, Target, Zap, TrendingUp, AlertTriangle, AlertOctagon, ThumbsUp, ThumbsDown, BarChart2, DollarSign, Database } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 
 interface AssetDetailModalProps {
@@ -28,11 +28,11 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
         if (!val && val !== 0) return '-';
         if (Math.abs(val) >= 1_000_000_000) return `R$ ${(val / 1_000_000_000).toFixed(1)}B`;
         if (Math.abs(val) >= 1_000_000) return `R$ ${(val / 1_000_000).toFixed(1)}M`;
-        return `R$ ${val.toLocaleString('pt-BR')}`;
+        return `R$ ${val.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
     };
 
     const formatPercent = (val: number | undefined | null) => {
-        if (val === undefined || val === null || val === 0) return '-';
+        if (val === undefined || val === null) return '-';
         return `${val.toFixed(2)}%`;
     };
 
@@ -105,16 +105,16 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
         if (type !== 'STOCK' && type !== 'STOCK_US') return null;
         
         return (
-            <div className="mb-8">
+            <div className="mb-8 bg-[#0B101A] p-4 rounded-xl border border-slate-800/50">
                 <div className="flex items-center gap-2 mb-5 pb-2 border-b border-slate-800">
-                    <DollarSign size={18} className="text-emerald-500" />
-                    <h4 className="text-sm font-bold text-white uppercase tracking-wide">Dados Financeiros (Calculados)</h4>
+                    <Database size={16} className="text-blue-500" />
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wide">Financials (LTM)</h4>
                 </div>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                     <DetailRow label="Valor de Mercado" value={formatMoneyShort(m.marketCap)} status='info' />
                     <DetailRow label="Dívida Líquida" value={formatMoneyShort(m.netDebt)} status={m.netDebt && m.netDebt > (m.marketCap || 0) ? 'warning' : 'neutral'} />
-                    <DetailRow label="Receita Líquida (12m)" value={formatMoneyShort(m.netRevenue)} status='neutral' />
-                    <DetailRow label="Lucro Líquido (12m)" value={formatMoneyShort(m.netIncome)} status={m.netIncome && m.netIncome > 0 ? 'good' : 'bad'} />
+                    <DetailRow label="Receita Líquida" value={formatMoneyShort(m.netRevenue)} status='neutral' />
+                    <DetailRow label="Lucro Líquido" value={formatMoneyShort(m.netIncome)} status={m.netIncome && m.netIncome > 0 ? 'good' : 'bad'} />
                     <DetailRow label="Patrimônio Líquido" value={formatMoneyShort(m.patrimLiq)} status='neutral' />
                     <DetailRow label="Ativos Totais" value={formatMoneyShort(m.totalAssets)} status='neutral' />
                 </div>
@@ -197,42 +197,48 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                 {/* TESE DE INVESTIMENTO (BULL/BEAR) */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
                                     {/* BULL CASE */}
-                                    <div className="bg-emerald-900/10 border border-emerald-900/30 rounded-2xl p-5">
-                                        <div className="flex items-center gap-2 mb-4 text-emerald-400">
+                                    <div className="bg-emerald-900/10 border border-emerald-900/30 rounded-2xl p-5 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                                            <ThumbsUp size={60} className="text-emerald-500" />
+                                        </div>
+                                        <div className="flex items-center gap-2 mb-4 text-emerald-400 relative z-10">
                                             <ThumbsUp size={18} />
                                             <h4 className="text-sm font-black uppercase tracking-wide">Por que Investir?</h4>
                                         </div>
                                         {hasBullThesis ? (
-                                            <ul className="space-y-2.5">
+                                            <ul className="space-y-2.5 relative z-10">
                                                 {asset.bullThesis!.map((point, i) => (
                                                     <li key={i} className="text-xs text-slate-300 leading-relaxed flex items-start gap-2">
-                                                        <span className="mt-1.5 w-1 h-1 rounded-full bg-emerald-500 shrink-0"></span>
+                                                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
                                                         {point}
                                                     </li>
                                                 ))}
                                             </ul>
                                         ) : (
-                                            <p className="text-xs text-slate-500 italic">Sem pontos de destaque positivo.</p>
+                                            <p className="text-xs text-slate-500 italic relative z-10">Aguardando geração de tese positiva pelo algoritmo.</p>
                                         )}
                                     </div>
 
                                     {/* BEAR CASE */}
-                                    <div className="bg-red-900/10 border border-red-900/30 rounded-2xl p-5">
-                                        <div className="flex items-center gap-2 mb-4 text-red-400">
+                                    <div className="bg-red-900/10 border border-red-900/30 rounded-2xl p-5 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                                            <AlertTriangle size={60} className="text-red-500" />
+                                        </div>
+                                        <div className="flex items-center gap-2 mb-4 text-red-400 relative z-10">
                                             <AlertTriangle size={18} />
                                             <h4 className="text-sm font-black uppercase tracking-wide">Riscos & Atenção</h4>
                                         </div>
                                         {hasBearThesis ? (
-                                            <ul className="space-y-2.5">
+                                            <ul className="space-y-2.5 relative z-10">
                                                 {asset.bearThesis!.map((point, i) => (
                                                     <li key={i} className="text-xs text-slate-300 leading-relaxed flex items-start gap-2">
-                                                        <span className="mt-1.5 w-1 h-1 rounded-full bg-red-500 shrink-0"></span>
+                                                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
                                                         {point}
                                                     </li>
                                                 ))}
                                             </ul>
                                         ) : (
-                                            <p className="text-xs text-slate-500 italic">Nenhum risco crítico detectado.</p>
+                                            <p className="text-xs text-slate-500 italic relative z-10">Nenhum risco crítico detectado automaticamente.</p>
                                         )}
                                     </div>
                                 </div>
