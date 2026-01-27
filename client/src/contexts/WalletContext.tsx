@@ -16,6 +16,7 @@ export interface Asset {
     profitPercent: number;
     currency: 'BRL' | 'USD';
     name?: string;
+    sector?: string; // Campo opcional para classificação setorial
 }
 
 export interface WalletKPIs {
@@ -39,6 +40,7 @@ interface WalletContextType {
     refreshWallet: () => Promise<void>;
     addAsset: (asset: any) => Promise<void>;
     removeAsset: (id: string) => Promise<void>;
+    updateTargets: (newTargets: AllocationMap, newReserveTarget: number) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -51,44 +53,34 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     });
     const [isLoading, setIsLoading] = useState(true);
 
-    const [targetAllocation] = useState<AllocationMap>({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10 });
-    const [targetReserve] = useState(10000);
+    const [targetAllocation, setTargetAllocation] = useState<AllocationMap>({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10 });
+    const [targetReserve, setTargetReserve] = useState(10000);
 
     const refreshWallet = async () => {
         try {
             const data = await walletService.getWallet();
             
-            // Filtro de Segurança: Remove ativos corrompidos ou sem preço da lista visual principal se necessário,
-            // ou apenas garante que eles não quebrem a UI.
-            // Aqui optamos por filtrar ativos com preço zerado apenas dos cálculos de KPI para não "sujar" o dashboard,
-            // mas mantemos na lista (assets) para que o usuário possa remover/editar.
             const rawAssets: Asset[] = data.assets || [];
             
-            // Recálculo Local de KPIs para garantir consistência com o filtro de preço > 0
             let totalEquity = 0;
             let totalInvested = 0;
-            let dayVariation = 0;
 
             const validAssets = rawAssets.map(asset => {
-                // Se preço for inválido, forçamos 0 para não quebrar a UI
                 const safePrice = asset.currentPrice > 0 ? asset.currentPrice : 0;
-                const safeTotal = asset.quantity * safePrice * (asset.currency === 'USD' ? 5.65 : 1); // Mock USD Rate fallback
+                const safeTotal = asset.quantity * safePrice * (asset.currency === 'USD' ? 5.65 : 1);
                 const safeInvested = asset.quantity * asset.averagePrice * (asset.currency === 'USD' ? 5.65 : 1);
                 
                 if (safePrice > 0) {
                     totalEquity += safeTotal;
                     totalInvested += safeInvested;
-                    // dayVariation viria do backend, aqui assumimos que o backend mandou calculado ou 0
                 }
 
                 return { ...asset, currentPrice: safePrice, totalValue: safeTotal };
             });
 
-            // Recalcula KPIs baseados apenas em ativos válidos
             const totalResult = totalEquity - totalInvested;
             const totalResultPercent = totalInvested > 0 ? (totalResult / totalInvested) * 100 : 0;
             
-            // Mantemos dayVariation do backend se disponível, senão 0
             const backendKpis = data.kpis || {};
 
             setAssets(validAssets);
@@ -137,10 +129,16 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }
     };
 
+    const updateTargets = (newTargets: AllocationMap, newReserveTarget: number) => {
+        setTargetAllocation(newTargets);
+        setTargetReserve(newReserveTarget);
+    };
+
     return (
         <WalletContext.Provider value={{ 
             assets, kpis, targetAllocation, targetReserve, 
-            isLoading, refreshWallet, addAsset, removeAsset 
+            isLoading, refreshWallet, addAsset, removeAsset,
+            updateTargets
         }}>
             {children}
         </WalletContext.Provider>

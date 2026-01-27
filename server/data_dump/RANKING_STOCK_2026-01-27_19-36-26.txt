@@ -1,0 +1,40 @@
+VÉRTICE RESEARCH - PROTOCOLO FORTRESS v6.0
+Data: 27/01/2026, 19:36:26
+Classe: STOCK
+------------------------------------------------------------------------------------------------
+POS | TICKER | SETOR          | PERFIL    | SCORE | AÇÃO   | PREÇO   | TETO (VI) | YIELD | TESE
+------------------------------------------------------------------------------------------------
+1   | PETR4  | Petróleo       | DEFENSIVE | 95    | BUY    | 35.36   | 60.24     | 9.2   | DEFENSIVE: Score 95 - Pagadora consisten
+2   | ITSA4  | Bancos         | DEFENSIVE | 95    | BUY    | 13.49   | 19.34     | 12.5  | DEFENSIVE: Score 95 - Geradora de caixa 
+3   | ENGI11 | Elétricas      | DEFENSIVE | 90    | BUY    | 51.55   | 64.11     | 6.3   | DEFENSIVE: Score 90 - Pagadora consisten
+4   | TAEE11 | Elétricas      | DEFENSIVE | 90    | BUY    | 43.28   | 51.90     | 7.5   | DEFENSIVE: Score 90 - Pagadora consisten
+5   | PSSA3  | Seguros        | DEFENSIVE | 85    | BUY    | 48.52   | 42.00     | 4.1   | DEFENSIVE: Score 85 - Rentabilidade sobr
+6   | VALE3  | Mineração      | DEFENSIVE | 85    | BUY    | 83.07   | 105.86    | 9.2   | DEFENSIVE: Score 85 - Pagadora consisten
+7   | CMIN3  | Mineração      | DEFENSIVE | 85    | BUY    | 5.95    | 6.19      | 8.1   | DEFENSIVE: Score 85 - Pagadora consisten
+8   | SBSP3  | Saneamento     | DEFENSIVE | 85    | BUY    | 138.90  | 110.63    | 4.5   | DEFENSIVE: Score 85 - Alta eficiência op
+9   | SCAR3  | Indústria      | BOLD      | 85    | BUY    | 14.57   | 24.28     | 48.7  | BOLD: Score 85 - Geradora de caixa robus
+10  | TPIS3  | Logística      | BOLD      | 85    | BUY    | 5.27    | 8.78      | 10.4  | BOLD: Score 85 - Geradora de caixa robus
+11  | ALLD3  | Varejo         | BOLD      | 85    | BUY    | 8.58    | 21.45     | 30.6  | BOLD: Score 85 - Geradora de caixa robus
+12  | BAZA3  | Bancos         | BOLD      | 85    | BUY    | 80.57   | 184.81    | 9.9   | BOLD: Score 85 - Pagadora consistente de
+13  | ETER3  | Materiais Bási | BOLD      | 85    | BUY    | 4.11    | 7.97      | 0.9   | BOLD: Score 85 - Desconto patrimonial se
+14  | DEXP3  | Materiais Bási | BOLD      | 85    | BUY    | 7.31    | 13.88     | 11.4  | BOLD: Score 85 - Geradora de caixa robus
+15  | BRSR6  | Bancos         | BOLD      | 85    | BUY    | 17.81   | 34.57     | 9.0   | BOLD: Score 85 - Pagadora consistente de
+16  | CAMB3  | Varejo         | BOLD      | 85    | BUY    | 9.55    | 15.99     | 11.1  | BOLD: Score 85 - Geradora de caixa robus
+17  | LOGG3  | Logística      | BOLD      | 85    | BUY    | 26.90   | 55.06     | 14.7  | BOLD: Score 85 - Geradora de caixa robus
+18  | TASA4  | Indústria      | BOLD      | 85    | BUY    | 5.51    | 8.37      | 3.3   | BOLD: Score 85 - Desconto patrimonial se
+19  | SAPR11 | Saneamento     | DEFENSIVE | 80    | BUY    | 46.71   | 56.15     | 4.2   | DEFENSIVE: Score 80 - Alta eficiência op
+20  | PRIO3  | Petróleo       | MODERATE  | 80    | BUY    | 48.50   | 87.82     | 0.0   | MODERATE: Score 80 - Múltiplo de lucros 
+21  | VTRU3  | Educação       | MODERATE  | 80    | BUY    | 15.85   | 20.58     | 0.1   | MODERATE: Score 80 - Desconto patrimonia
+22  | VULC3  | Varejo         | MODERATE  | 80    | BUY    | 17.69   | 27.59     | 26.7  | MODERATE: Score 80 - Geradora de caixa r
+23  | JHSF3  | Construção Civ | MODERATE  | 80    | BUY    | 9.65    | 13.56     | 4.6   | MODERATE: Score 80 - Múltiplo de lucros 
+24  | RECV3  | Petróleo       | MODERATE  | 80    | BUY    | 11.09   | 22.87     | 17.4  | MODERATE: Score 80 - Geradora de caixa r
+25  | RANI3  | Papel e Celulo | MODERATE  | 80    | BUY    | 9.22    | 14.05     | 8.3   | MODERATE: Score 80 - Pagadora consistent
+26  | GMAT3  | Varejo         | MODERATE  | 80    | BUY    | 4.86    | 6.55      | 5.0   | MODERATE: Score 80 - Múltiplo de lucros 
+27  | POMO4  | Indústria      | MODERATE  | 80    | BUY    | 6.42    | 9.68      | 17.8  | MODERATE: Score 80 - Geradora de caixa r
+28  | CYRE3  | Construção Civ | MODERATE  | 80    | BUY    | 28.06   | 46.00     | 11.4  | MODERATE: Score 80 - Geradora de caixa r
+29  | CMIG4  | Elétricas      | DEFENSIVE | 75    | BUY    | 11.42   | 16.39     | 7.9   | DEFENSIVE: Score 85 - Pagadora consisten
+30  | CSMG3  | Saneamento     | DEFENSIVE | 70    | BUY    | 50.12   | 40.33     | 4.6   | DEFENSIVE: Score 80 - Alta eficiência op
+31  | GRND3  | Varejo         | MODERATE  | 70    | BUY    | 4.86    | 8.56      | 35.0  | MODERATE: Score 80 - Geradora de caixa r
+32  | NEOE3  | Elétricas      | DEFENSIVE | 55    | BUY    | 32.29   | 36.88     | 4.5   | DEFENSIVE: Score 75 - Alta liquidez favo
+33  | CPFE3  | Elétricas      | DEFENSIVE | 45    | BUY    | 54.86   | 46.14     | 5.1   | DEFENSIVE: Score 75 - Rentabilidade sobr
+34  | EQTL3  | Elétricas      | DEFENSIVE | 35    | BUY    | 40.72   | 37.40     | 5.6   | DEFENSIVE: Score 75 - Alta liquidez favo

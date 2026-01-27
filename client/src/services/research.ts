@@ -13,7 +13,6 @@ export interface RankingItem {
     score: number;
     probability: number;
     
-    // Novo Campo de Perfil de Risco
     riskProfile?: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
 
     thesis: string;
@@ -40,7 +39,6 @@ export interface RankingItem {
         pAtivos?: number;
         pCapGiro?: number;
         
-        // FII Específico
         vacancy?: number;
         capRate?: number;
         ffoYield?: number;
@@ -56,7 +54,6 @@ export interface RankingItem {
         patrimLiq?: number;
         revenueGrowth?: number;
         
-        // Novos Campos Calculados
         marketCap?: number;
         netDebt?: number;
         netRevenue?: number;
@@ -93,6 +90,20 @@ export const researchService = {
             method: 'POST',
             body: JSON.stringify({ assetClass, isBulk })
         });
+        return await response.json();
+    },
+
+    // Nova função para chamar a IA
+    async enhanceReport(assetClass: string, strategy: string = 'BUY_HOLD') {
+        const response = await authService.api('/api/research/enhance', {
+            method: 'POST',
+            body: JSON.stringify({ assetClass, strategy })
+        });
+        
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || "Erro ao refinar com IA");
+        }
         return await response.json();
     },
 

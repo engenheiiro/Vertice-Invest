@@ -23,5 +23,11 @@ export const walletService = {
         });
         if (!response.ok) throw new Error("Falha ao remover ativo");
         return await response.json();
+    },
+
+    async searchAsset(query: string) {
+        const response = await authService.api(`/api/wallet/search?q=${query}`);
+        if (!response.ok) return null;
+        return await response.json();
     }
 };
