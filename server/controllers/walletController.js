@@ -1,3 +1,4 @@
+
 import UserAsset from '../models/UserAsset.js';
 import MarketAsset from '../models/MarketAsset.js';
 import { marketDataService } from '../services/marketDataService.js';
@@ -17,6 +18,13 @@ export const getWalletData = async (req, res, next) => {
             });
         }
 
+        // Busca dados estáticos (Setor) do MarketAsset
+        const tickers = userAssets.map(a => a.ticker);
+        const marketAssets = await MarketAsset.find({ ticker: { $in: tickers } }).select('ticker sector');
+        const staticInfoMap = new Map();
+        marketAssets.forEach(ma => staticInfoMap.set(ma.ticker, ma.sector));
+
+        // Busca cotações atuais
         const uniqueTickers = [...new Set(userAssets.map(a => marketDataService.normalizeSymbol(a.ticker, a.type)))];
         const priceMap = new Map();
 
@@ -49,6 +57,16 @@ export const getWalletData = async (req, res, next) => {
             const profit = equity - invested;
             const profitPercent = invested > 0 ? (profit / invested) * 100 : 0;
 
+            // Determina setor com fallback
+            let sector = staticInfoMap.get(asset.ticker);
+            if (!sector) {
+                if (asset.type === 'FII') sector = 'FII Genérico';
+                else if (asset.type === 'STOCK') sector = 'Ações Diversas';
+                else if (asset.type === 'CRYPTO') sector = 'Criptoativos';
+                else if (asset.type === 'CASH') sector = 'Caixa';
+                else sector = 'Outros';
+            }
+
             return {
                 id: asset._id,
                 ticker: asset.ticker,
@@ -60,7 +78,8 @@ export const getWalletData = async (req, res, next) => {
                 currency: asset.currency,
                 totalValue: equity,
                 profit: profit,
-                profitPercent: profitPercent
+                profitPercent: profitPercent,
+                sector: sector // Novo campo adicionado
             };
         });
 
@@ -84,38 +103,92 @@ export const getWalletData = async (req, res, next) => {
     }
 };
 
+export const searchAssets = async (req, res, next) => {
+    try {
+        const query = req.query.q?.toUpperCase();
+        if (!query || query.length < 3) return res.json(null);
+
+        // Tenta encontrar no banco de dados local primeiro (que foi populado via Seed)
+        const localAsset = await MarketAsset.findOne({ ticker: { $regex: `^${query}` } }).select('ticker name lastPrice');
+        
+        if (localAsset) {
+            return res.json({
+                ticker: localAsset.ticker,
+                name: localAsset.name,
+                price: localAsset.lastPrice
+            });
+        }
+
+        // Se não encontrar, retorna null (Front vai deixar digitar manual)
+        return res.json(null);
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const addAssetTransaction = async (req, res, next) => {
     try {
         const { ticker, type, quantity, price, currency } = req.body;
         const userId = req.user.id;
         const cleanTicker = ticker.toUpperCase().trim();
+        const numQty = Number(quantity);
+        const numPrice = Number(price);
 
         let asset = await UserAsset.findOne({ user: userId, ticker: cleanTicker });
 
         if (asset) {
-            asset.quantity += Number(quantity);
-            asset.totalCost += (Number(quantity) * Number(price));
+            // Se for venda (quantidade negativa), reduz o custo total proporcionalmente
+            if (numQty < 0) {
+                // Preço Médio Antigo
+                const oldAvgPrice = asset.totalCost / asset.quantity;
+                
+                // Reduz quantidade
+                const newQuantity = asset.quantity + numQty;
+                
+                // Reduz Custo Total proporcionalmente à quantidade vendida (Mantém PM igual na venda)
+                // Custo Total Novo = Quantidade Nova * Preço Médio Antigo
+                // Venda não altera preço médio, apenas realiza lucro/prejuizo (que é calculado na hora da exibição)
+                if (newQuantity <= 0) {
+                    // Zerou posição
+                    await UserAsset.findByIdAndDelete(asset._id);
+                    return res.status(200).json({ message: "Posição zerada." });
+                } else {
+                    asset.quantity = newQuantity;
+                    asset.totalCost = newQuantity * oldAvgPrice;
+                }
+            } else {
+                // Compra: Aumenta quantidade e Custo Total (Preço Médio muda)
+                asset.quantity += numQty;
+                asset.totalCost += (numQty * numPrice);
+            }
+            
             asset.updatedAt = Date.now();
             await asset.save();
         } else {
+            // Nova posição (apenas compra permitida para iniciar)
+            if (numQty < 0) return res.status(400).json({ message: "Não é possível vender ativo que não possui." });
+
             asset = new UserAsset({
                 user: userId,
                 ticker: cleanTicker,
                 type,
-                quantity: Number(quantity),
-                totalCost: (Number(quantity) * Number(price)),
+                quantity: numQty,
+                totalCost: (numQty * numPrice),
                 currency: currency || (type === 'STOCK_US' ? 'USD' : 'BRL')
             });
             await asset.save();
         }
 
+        // Atualiza base global se não existir
         const existingInGlobal = await MarketAsset.findOne({ ticker: cleanTicker });
         if (!existingInGlobal) {
             await MarketAsset.create({
                 ticker: cleanTicker,
                 name: cleanTicker,
                 type: type,
-                currency: currency || (type === 'STOCK_US' ? 'USD' : 'BRL')
+                currency: currency || (type === 'STOCK_US' ? 'USD' : 'BRL'),
+                sector: 'Outros',
+                lastPrice: numPrice // Salva o preço da transação como referência inicial
             });
         }
 

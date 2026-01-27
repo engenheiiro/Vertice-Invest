@@ -147,13 +147,13 @@ export const Wallet = () => {
                             Aporte Inteligente
                         </button>
 
-                        {/* Botão Novo Ativo */}
+                        {/* Botão Nova Transação */}
                         <button 
                             className="flex items-center gap-2 px-5 py-2 h-10 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20 border border-transparent whitespace-nowrap shrink-0 transition-colors"
                             onClick={() => setIsAddModalOpen(true)}
                         >
                             <Plus size={16} /> 
-                            Novo Ativo
+                            Nova Transação
                         </button>
                     </div>
                 </div>
@@ -184,5 +184,3 @@ export const Wallet = () => {
         </div>
     );
 };
-
-export default Wallet;

@@ -1,15 +1,16 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Trophy, BadgeAlert, BarChart2, PieChart, Layers, Info, Shield, Target, Zap, AlertTriangle } from 'lucide-react';
+import { Trophy, BadgeAlert, BarChart2, PieChart, Layers, Shield, Target, Zap, AlertTriangle, Briefcase, PlusCircle, Wallet } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 import { AssetDetailModal } from './AssetDetailModal';
+import { useWallet } from '../../contexts/WalletContext';
+import { useNavigate } from 'react-router-dom';
 
 interface TopPicksCardProps {
     picks: RankingItem[];
     assetClass: string;
 }
 
-// Simplificação: Apenas 3 Perfis
 type RiskFilter = 'DEFENSIVE' | 'MODERATE' | 'BOLD';
 
 const RISK_LABELS: Record<RiskFilter, string> = {
@@ -29,18 +30,15 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
 
     const isBrasil10 = assetClass === 'BRASIL_10';
 
-    // Se a classe for BRASIL_10, força sempre Defensiva e reseta se o usuário trocar de aba
     useEffect(() => {
         if (isBrasil10) {
             setRiskFilter('DEFENSIVE');
         }
     }, [assetClass, isBrasil10]);
 
-    // Lógica de Filtragem por Perfil Simplificada
     const filteredPicks = useMemo(() => {
         let filtered = picks;
 
-        // Filtro exato baseada no perfil salvo no banco
         if (riskFilter === 'DEFENSIVE') {
             filtered = picks.filter(p => p.riskProfile === 'DEFENSIVE');
         } else if (riskFilter === 'MODERATE') {
@@ -49,13 +47,12 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
             filtered = picks.filter(p => p.riskProfile === 'BOLD');
         }
 
-        // Reordena e pega o Top 10 da categoria selecionada
         return filtered
             .sort((a, b) => b.score - a.score)
             .slice(0, 10)
             .map((item, idx) => ({
                 ...item,
-                position: idx + 1 // Recalcula posição visual
+                position: idx + 1
             }));
     }, [picks, riskFilter]);
 
@@ -94,10 +91,10 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
     };
 
     const getRankStyle = (pos: number) => {
-        if (pos === 1) return 'bg-[#D4AF37]/20 text-[#D4AF37] border-[#D4AF37]/50 shadow-[0_0_10px_rgba(212,175,55,0.2)]'; // Ouro
-        if (pos === 2) return 'bg-slate-300/20 text-slate-300 border-slate-400/50'; // Prata
-        if (pos === 3) return 'bg-amber-700/20 text-amber-600 border-amber-700/50'; // Bronze
-        return 'bg-slate-900 text-slate-600 border-slate-800'; // Padrão
+        if (pos === 1) return 'bg-[#D4AF37]/20 text-[#D4AF37] border-[#D4AF37]/50 shadow-[0_0_10px_rgba(212,175,55,0.2)]';
+        if (pos === 2) return 'bg-slate-300/20 text-slate-300 border-slate-400/50';
+        if (pos === 3) return 'bg-amber-700/20 text-amber-600 border-amber-700/50';
+        return 'bg-slate-900 text-slate-600 border-slate-800';
     };
 
     const formatCurrency = (val: number) => {
@@ -122,14 +119,13 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                 
                 <div className="flex overflow-x-auto gap-2 no-scrollbar w-full md:w-auto pb-2 md:pb-0">
                     {Object.entries(RISK_LABELS).map(([key, label]) => {
-                        // BLOQUEIO: Se for Brasil 10, só renderiza o botão Defensiva
                         if (isBrasil10 && key !== 'DEFENSIVE') return null;
 
                         return (
                             <button
                                 key={key}
                                 onClick={() => setRiskFilter(key as RiskFilter)}
-                                disabled={isBrasil10} // Desabilita clique se for Brasil 10 (já está selecionado)
+                                disabled={isBrasil10}
                                 className={`
                                     whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition-all border
                                     ${riskFilter === key 
@@ -146,11 +142,13 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                 </div>
             </div>
 
+            {/* --- GRID TRIPLO (LAYOUT EQUILIBRADO 4-4-4) --- */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Resumo da Carteira */}
-                <div className="lg:col-span-8 bg-[#080C14] border border-slate-800 rounded-3xl p-6 relative overflow-hidden flex flex-col justify-between shadow-2xl min-h-[220px]">
-                    <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
-                        <Trophy size={100} className="text-white" />
+                
+                {/* 1. RESUMO DA CARTEIRA (4 COLUNAS) */}
+                <div className="lg:col-span-4 bg-[#080C14] border border-slate-800 rounded-3xl p-6 relative overflow-hidden flex flex-col justify-between shadow-2xl min-h-[240px]">
+                    <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
+                        <Trophy size={120} className="text-white" />
                     </div>
                     
                     <div>
@@ -162,39 +160,45 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                                 Vértice Quant 2.0
                             </span>
                         </div>
-                        <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight uppercase">
+                        <h2 className="text-xl font-black text-white tracking-tight uppercase leading-none truncate" title={isBrasil10 ? 'TOP 10 BRASIL' : assetClass.replace('_', ' ')}>
                             {isBrasil10 ? 'TOP 10 BRASIL' : assetClass.replace('_', ' ')}
-                            <span className="ml-3 text-lg text-slate-500 font-medium normal-case">({RISK_LABELS[riskFilter]})</span>
                         </h2>
+                        <span className="text-sm text-slate-500 font-medium normal-case block mt-1">{RISK_LABELS[riskFilter]} Selection</span>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
-                        <div className="bg-[#0B101A] border border-slate-800 p-3 rounded-2xl">
-                            <p className="text-[9px] text-slate-500 font-bold uppercase mb-0.5">Score Médio</p>
-                            <p className={`text-xl font-black ${getScoreTextColor(stats.avgScore)}`}>{stats.avgScore}<span className="text-xs text-slate-600">/100</span></p>
+                    <div className="grid grid-cols-3 gap-2 mt-4">
+                        <div className="bg-[#0B101A] border border-slate-800 p-2.5 rounded-xl text-center">
+                            <p className="text-[8px] text-slate-500 font-bold uppercase mb-0.5">Score</p>
+                            <p className={`text-sm font-black ${getScoreTextColor(stats.avgScore)}`}>{stats.avgScore}</p>
                         </div>
-                        <div className="bg-[#0B101A] border border-slate-800 p-3 rounded-2xl">
-                            <p className="text-[9px] text-slate-500 font-bold uppercase mb-0.5">Yield 12m</p>
-                            <p className="text-xl font-black text-emerald-400">{stats.avgDy}%</p>
+                        <div className="bg-[#0B101A] border border-slate-800 p-2.5 rounded-xl text-center">
+                            <p className="text-[8px] text-slate-500 font-bold uppercase mb-0.5">Yield 12m</p>
+                            <p className="text-sm font-black text-emerald-400">{stats.avgDy}%</p>
                         </div>
-                        <div className="bg-[#0B101A] border border-slate-800 p-3 rounded-2xl">
-                            <p className="text-[9px] text-slate-500 font-bold uppercase mb-0.5">Ativos</p>
-                            <p className="text-xl font-black text-white">{stats.count}</p>
-                        </div>
-                         <div className="bg-blue-600/10 border border-blue-500/20 p-3 rounded-2xl flex items-center justify-center text-center">
-                            <p className="text-[9px] text-blue-400 font-bold leading-tight">
-                                <Info size={10} className="inline mr-1" />
-                                Atualizado Semanalmente
-                            </p>
+                        <div className="bg-[#0B101A] border border-slate-800 p-2.5 rounded-xl text-center">
+                            <p className="text-[8px] text-slate-500 font-bold uppercase mb-0.5">Ativos</p>
+                            <p className="text-sm font-black text-white">{stats.count}</p>
                         </div>
                     </div>
                 </div>
 
-                {/* Diversificação */}
-                <div className="lg:col-span-4 bg-[#080C14] border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden h-auto min-h-[220px]">
-                    <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0">
+                {/* 2. MINHA CARTEIRA (4 COLUNAS) */}
+                <div className="lg:col-span-4 bg-[#080C14] border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
+                    <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0 border-b border-slate-800/50 pb-2">
+                        <Wallet size={14} className="text-emerald-500" />
+                        <h3 className="text-[10px] font-black text-white uppercase tracking-widest">Minha Alocação</h3>
+                    </div>
+                    
+                    <div className="flex-1 flex flex-col justify-center relative z-10">
+                        <UserWalletSectorChart assetClass={assetClass} />
+                    </div>
+                </div>
+
+                {/* 3. ALOCAÇÃO SETORIAL RECOMENDADA (4 COLUNAS) */}
+                <div className="lg:col-span-4 bg-[#080C14] border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
+                    <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0 border-b border-slate-800/50 pb-2">
                         <PieChart size={14} className="text-purple-500" />
-                        <h3 className="text-[10px] font-black text-white uppercase tracking-widest">Alocação Setorial</h3>
+                        <h3 className="text-[10px] font-black text-white uppercase tracking-widest">Exposição Ideal</h3>
                     </div>
                     
                     <div className="flex-1 flex flex-col justify-center relative z-10">
@@ -209,7 +213,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
             <div className="space-y-3">
                 <div className="flex items-center justify-between px-2">
                     <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                        <Layers size={12} /> Composição da Carteira
+                        <Layers size={12} /> Composição Detalhada
                     </h3>
                 </div>
 
@@ -220,15 +224,9 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                         </div>
                         <p className="text-slate-300 font-bold text-sm">Sem ativos para o perfil <span className="text-blue-400 uppercase">{RISK_LABELS[riskFilter]}</span></p>
                         
-                        {isBrasil10 ? (
-                            <p className="text-slate-500 text-xs mt-2 max-w-sm mx-auto">
-                                A Carteira Brasil 10 é estritamente <strong>Defensiva</strong>. Se a lista está vazia, é necessário aguardar a próxima atualização do algoritmo (Segunda-feira 08h).
-                            </p>
-                        ) : (
-                            <p className="text-slate-500 text-xs mt-2 max-w-sm mx-auto">
-                                Nenhum ativo atingiu o score mínimo de qualidade para este perfil de risco nesta rodada de análise.
-                            </p>
-                        )}
+                        <p className="text-slate-500 text-xs mt-2 max-w-sm mx-auto">
+                            Nenhum ativo atingiu o score mínimo de qualidade para este perfil de risco nesta rodada de análise.
+                        </p>
                     </div>
                 ) : (
                     filteredPicks.map((pick, idx) => {
@@ -323,6 +321,104 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
     );
 };
 
+const UserWalletSectorChart = ({ assetClass }: { assetClass: string }) => {
+    const { assets } = useWallet();
+    const navigate = useNavigate();
+
+    const stats = useMemo(() => {
+        const allowedTypes = assetClass === 'BRASIL_10' 
+            ? ['STOCK', 'FII'] 
+            : assetClass === 'STOCK_US' ? ['STOCK_US'] : [assetClass];
+
+        const filteredAssets = assets.filter(a => allowedTypes.includes(a.type));
+        
+        if (filteredAssets.length === 0) return { sectors: [], hasData: false };
+
+        const counts: Record<string, number> = {};
+        let totalValue = 0;
+
+        filteredAssets.forEach(a => {
+            const sector = a.sector || 'Outros';
+            const val = a.totalValue || (a.quantity * a.currentPrice);
+            counts[sector] = (counts[sector] || 0) + val;
+            totalValue += val;
+        });
+
+        const sectors = Object.entries(counts)
+            .map(([name, value]) => ({ 
+                name, 
+                value, 
+                percent: totalValue > 0 ? (value / totalValue) * 100 : 0 
+            }))
+            .sort((a, b) => b.value - a.value);
+
+        return { sectors, hasData: true };
+    }, [assets, assetClass]);
+
+    if (!stats.hasData) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                <div className="w-10 h-10 bg-slate-900 rounded-full flex items-center justify-center mb-2 border border-slate-800">
+                    <Wallet size={16} className="text-slate-500" />
+                </div>
+                <p className="text-[10px] text-slate-500 font-bold mb-3">Sem ativos nesta categoria.</p>
+                <button 
+                    onClick={() => navigate('/wallet')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded-lg transition-colors"
+                >
+                    <PlusCircle size={12} /> Adicionar
+                </button>
+            </div>
+        );
+    }
+
+    let cumulativePercent = 0;
+
+    return (
+        <div className="flex flex-row items-center gap-4 w-full h-full px-2">
+            <div className="relative w-24 h-24 shrink-0">
+                <svg viewBox="0 0 42 42" className="w-full h-full transform -rotate-90">
+                    <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#1e293b" strokeWidth="6"></circle>
+                    {stats.sectors.map((sector, i) => {
+                        const dash = `${sector.percent} ${100 - sector.percent}`;
+                        const offset = 100 - cumulativePercent + 25;
+                        cumulativePercent += sector.percent;
+                        return (
+                            <circle 
+                                key={sector.name}
+                                cx="21" cy="21" r="15.91549430918954" 
+                                fill="transparent" 
+                                stroke={COLORS[i % COLORS.length]} 
+                                strokeWidth="6"
+                                strokeDasharray={dash}
+                                strokeDashoffset={offset}
+                                className="transition-all duration-1000 ease-out hover:stroke-[8] cursor-pointer"
+                            >
+                                <title>{sector.name}: {Math.round(sector.percent)}%</title>
+                            </circle>
+                        );
+                    })}
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-[9px] text-slate-500 uppercase font-bold">Você</span>
+                </div>
+            </div>
+
+            <div className="flex-1 grid grid-cols-1 gap-y-1 content-center overflow-y-auto max-h-[140px] custom-scrollbar pr-1">
+                {stats.sectors.map((sector, i) => (
+                    <div key={sector.name} className="flex items-center justify-between text-[9px] group w-full">
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                            <div className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
+                            <span className="text-slate-400 truncate max-w-[80px] group-hover:text-slate-200 transition-colors" title={sector.name}>{sector.name}</span>
+                        </div>
+                        <span className="font-bold text-slate-300 font-mono ml-1">{Math.round(sector.percent)}%</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const SectorDistribution = ({ picks }: { picks: RankingItem[] }) => {
     const sectors = useMemo(() => {
         const counts: Record<string, number> = {};
@@ -330,18 +426,17 @@ const SectorDistribution = ({ picks }: { picks: RankingItem[] }) => {
             const s = p.sector || 'Outros';
             counts[s] = (counts[s] || 0) + 1;
         });
-        
         return Object.entries(counts)
             .map(([name, count]) => ({ name, count, percent: (count / picks.length) * 100 }))
             .sort((a, b) => b.count - a.count);
     }, [picks]);
 
     let cumulativePercent = 0;
-    if (sectors.length === 0) return <p className="text-[10px] text-slate-500">Sem dados.</p>;
+    if (sectors.length === 0) return <p className="text-[10px] text-slate-500 text-center mt-10">Sem dados.</p>;
 
     return (
-        <div className="flex flex-row items-start gap-4 w-full h-full">
-            <div className="relative w-24 h-24 shrink-0 my-auto">
+        <div className="flex flex-row items-center gap-4 w-full h-full">
+            <div className="relative w-20 h-20 shrink-0 ml-2">
                 <svg viewBox="0 0 42 42" className="w-full h-full transform -rotate-90">
                     <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#1e293b" strokeWidth="8"></circle>
                     {sectors.map((sector, i) => {
@@ -364,16 +459,15 @@ const SectorDistribution = ({ picks }: { picks: RankingItem[] }) => {
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <span className="text-xs font-black text-white">{picks.length}</span>
-                    <span className="text-[8px] text-slate-500 uppercase font-bold">Total</span>
                 </div>
             </div>
 
-            <div className="flex-1 grid grid-cols-1 gap-y-1 content-center">
+            <div className="flex-1 grid grid-cols-1 gap-y-1 content-center overflow-y-auto max-h-[140px] custom-scrollbar pr-1">
                 {sectors.map((sector, i) => (
                     <div key={sector.name} className="flex items-center justify-between text-[9px] group w-full">
                         <div className="flex items-center gap-1.5 overflow-hidden">
                             <div className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
-                            <span className="text-slate-400 truncate max-w-[100px] group-hover:text-slate-200 transition-colors" title={sector.name}>{sector.name}</span>
+                            <span className="text-slate-400 truncate max-w-[90px] group-hover:text-slate-200 transition-colors" title={sector.name}>{sector.name}</span>
                         </div>
                         <span className="font-bold text-slate-300 font-mono ml-1">{Math.round(sector.percent)}%</span>
                     </div>

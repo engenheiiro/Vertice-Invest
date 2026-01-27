@@ -3,42 +3,100 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import iconv from 'iconv-lite';
 import logger from '../config/logger.js';
-import MarketAsset from '../models/MarketAsset.js';
 
 const HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Cache-Control': 'no-cache',
-    'Pragma': 'no-cache'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
 };
 
-const IGNORED_TICKERS = [
-    'ISAE4', 'PLAG11', 'FIGS11', 'FIIB11', 'OSXB3', 'MNPR3', 'JFEN3', 'PPAR3', 'MERC4'
-];
+const IGNORED_TICKERS = ['ISAE4', 'PLAG11', 'FIGS11', 'MOTV3', 'AUAU3', 'OBTC3', 'AZTE3', 'AXIA3', 'AMOB3', 'TOKY3'];
 
-// Mapeamento Setorial para cálculo de Beta/Risco
-const SECTOR_MAP = {
-    'Bancos': ['ITUB', 'BBDC', 'BBAS', 'SANB', 'BPAC', 'ABCB', 'BRSR', 'BNBR', 'BPAN', 'BAZA', 'BMEB', 'PINE', 'BRBI'],
-    'Elétricas': ['ELET', 'EGIE', 'TAEE', 'TRPL', 'ALUP', 'CPFE', 'CMIG', 'EQTL', 'NEOE', 'ENGI', 'ENEV', 'LIGT', 'CPLE', 'CLSC', 'AURE', 'MEGA'],
-    'Saneamento': ['SBSP', 'SAPR', 'CSMG', 'AMBP', 'ORVR'],
-    'Seguros': ['BBSE', 'CXSE', 'PSSA', 'IRBR', 'WIZC', 'CSUD'],
-    'Telecom': ['VIVT', 'TIMS', 'FIQE', 'OIBR', 'DESK', 'BRST'],
-    'Mineração': ['VALE', 'CMIN', 'BRAP', 'AURA', 'CBAV'],
-    'Petróleo': ['PETR', 'PRIO', 'RECV', 'UGPA', 'VBBR', 'CSAN', 'RRRP', 'ENAT', 'BRAV'],
-    'Papel e Celulose': ['SUZB', 'KLBN', 'RANI'],
-    'Construção': ['CYRE', 'EZTC', 'MRVE', 'CURY', 'DIRR', 'TEND', 'JHSF', 'LAVV', 'TRIS', 'EVEN', 'MTRE', 'HBOR', 'MELK', 'GFSA', 'PLPL'],
-    'Varejo': ['MGLU', 'LREN', 'ARZZ', 'SOMA', 'ALPA', 'ASAI', 'CRFB', 'GMAT', 'PCAR', 'PETZ', 'RADL', 'PGMN', 'PNVL', 'CEAB', 'CAMB', 'AMER', 'BHIA', 'LJQQ', 'GUAR'],
-    'Logística': ['RAIL', 'STBP', 'HBSA', 'LOGG', 'TGMA', 'PORT', 'LOGN', 'TPIS', 'SIMH', 'JSLG', 'VAMO']
-};
+// --- MAPEAMENTO SETORIAL DEFINITIVO (CORREÇÃO MANUAL) ---
+const SECTOR_OVERRIDES = {
+    // FIIs
+    'CPSH11': 'Shoppings', 'GGRC11': 'Logística', 'TRXF11': 'Renda Urbana', 'VISC11': 'Shoppings', 'HTMX11': 'Hotéis',
+    'PLAG11': 'Fiagro', 'RZAT11': 'Híbrido', 'TJKB11': 'Híbrido', 'ALZR11': 'Híbrido', 'BTHF11': 'Papel',
+    'GARE11': 'Híbrido', 'HGCR11': 'Papel', 'KNCR11': 'Papel', 'KNHY11': 'Papel', 'KNIP11': 'Infraestrutura',
+    'KNSC11': 'Papel', 'KNUQ11': 'Papel', 'MCCI11': 'Papel', 'MXRF11': 'Híbrido', 'PCIP11': 'Papel',
+    'PSEC11': 'Papel', 'RBRR11': 'Papel', 'RBRY11': 'Papel', 'TGAR11': 'Desenvolvimento', 'VGIR11': 'Papel',
+    'KNCA11': 'Papel', 'KNHF11': 'Híbrido', 'AFHI11': 'Papel', 'AZPL11': 'Logística', 'BBFO11': 'Fundo de Fundos',
+    'BCIA11': 'Fundo de Fundos', 'BRCO11': 'Logística', 'BTCI11': 'Papel', 'BTLG11': 'Logística', 'CLIN11': 'Papel',
+    'FGAA11': 'Fiagro', 'GAME11': 'Papel', 'GRUL11': 'Logística', 'HGBS11': 'Shoppings', 'HGLG11': 'Logística',
+    'HGRU11': 'Renda Urbana', 'HSAF11': 'Papel', 'HSML11': 'Shoppings', 'ICRI11': 'Papel', 'ITRI11': 'Papel',
+    'JSAF11': 'Fundo de Fundos', 'JSCR11': 'Papel', 'KCRE11': 'Papel', 'KFOF11': 'Fundo de Fundos', 'KISU11': 'Fundo de Fundos',
+    'KNRI11': 'Híbrido', 'LIFE11': 'Fundo de Fundos', 'LVBI11': 'Logística', 'MANA11': 'Papel', 'PMIS11': 'Papel',
+    'PORD11': 'Papel', 'RINV11': 'Híbrido', 'RPRI11': 'Papel', 'RRCI11': 'Papel', 'RZAK11': 'Papel',
+    'RZLC11': 'Logística', 'SAPI11': 'Papel', 'SNFF11': 'Fundo de Fundos', 'SNME11': 'Multiestratégia', 'SPXS11': 'Papel',
+    'TEPP11': 'Lajes Corporativas', 'TMPS11': 'Fundo de Fundos', 'VCJR11': 'Papel', 'VGIP11': 'Papel', 'VGRI11': 'Papel',
+    'VILG11': 'Logística', 'VRTA11': 'Papel', 'XPCI11': 'Papel', 'XPLG11': 'Logística', 'XPML11': 'Shoppings',
+    'AAZQ11': 'Fiagro', 'CPTR11': 'Fiagro', 'CRAA11': 'Fiagro', 'EGAF11': 'Fiagro', 'LSOP11': 'Hotéis',
+    'NEWL11': 'Híbrido', 'RBRL11': 'Logística', 'RBVA11': 'Renda Urbana', 'RURA11': 'Fiagro', 'RZAG11': 'Fiagro',
+    'SNFZ11': 'Fiagro', 'TVRI11': 'Papel', 'VGIA11': 'Fiagro', 'XPCA11': 'Fiagro', 'FATN11': 'Papel',
+    'BTAL11': 'Fiagro', 'CXCO11': 'Lajes Corporativas', 'FIIP11': 'Logística', 'LASC11': 'Shoppings', 'VRTM11': 'Papel',
+    'CPOF11': 'Lajes Corporativas', 'FIIB11': 'Logística', 'HSLG11': 'Logística', 'HSRE11': 'Híbrido', 'CPTS11': 'Papel',
+    'CVBI11': 'Papel', 'GSFI11': 'Shoppings', 'RBRX11': 'Híbrido', 'TRXB11': 'Renda Urbana', 'ALZC11': 'Papel',
+    'BBGO11': 'Fiagro', 'BCRI11': 'Papel', 'GTWR11': 'Lajes Corporativas', 'MFII11': 'Desenvolvimento', 'OUJP11': 'Papel',
+    'RVBI11': 'Fundo de Fundos', 'XPSF11': 'Fundo de Fundos', 'RZTR11': 'Fiagro', 'ARRI11': 'Papel', 'CXRI11': 'Fundo de Fundos',
+    'KIVO11': 'Papel', 'KOPA11': 'Híbrido', 'MCLO11': 'Lajes Corporativas', 'RBFF11': 'Fundo de Fundos', 'RBHG11': 'Híbrido',
+    'RELG11': 'Logística', 'SMRE11': 'Multiestratégia', 'AGRX11': 'Fiagro', 'BICE11': 'Papel', 'PQAG11': 'Fiagro',
+    'RBIR11': 'Papel', 'SNAG11': 'Fiagro', 'SNCI11': 'Papel', 'SNEL11': 'Infraestrutura', 'WHGR11': 'Híbrido',
+    'BRCR11': 'Lajes Corporativas', 'JSRE11': 'Lajes Corporativas', 'RECT11': 'Lajes Corporativas', 'VINO11': 'Lajes Corporativas', 'VIUR11': 'Renda Urbana',
+    'XPIN11': 'Logística', 'CACR11': 'Papel', 'HBCR11': 'Papel', 'MALL11': 'Shoppings', 'TRBL11': 'Logística',
+    'AIEC11': 'Lajes Corporativas', 'CPUR11': 'Desenvolvimento', 'HGBL11': 'Logística', 'JGPX11': 'Papel', 'MGHT11': 'Hotéis',
+    'VCRA11': 'Papel', 'AJFI11': 'Lajes Corporativas', 'HGRE11': 'Lajes Corporativas', 'ICNE11': 'Lajes Corporativas', 'IRIM11': 'Papel',
+    'NEXG11': 'Papel', 'PNDL11': 'Papel', 'RCRB11': 'Lajes Corporativas', 'BBIG11': 'Lajes Corporativas', 'BPML11': 'Shoppings',
+    'FIGS11': 'Shoppings', 'INLG11': 'Híbrido', 'TOPP11': 'Papel', 'RECR11': 'Papel', 'HABT11': 'Papel',
+    'VGHF11': 'Híbrido', 'BTRA11': 'Fiagro', 'HPDP11': 'Shoppings', 'PATL11': 'Logística', 'GZIT11': 'Shoppings',
+    'OULG11': 'Lajes Corporativas', 'PATC11': 'Lajes Corporativas', 'PVBI11': 'Lajes Corporativas', 'CPLG11': 'Logística', 'NSLU11': 'Saúde',
+    'BLCA11': 'Lajes Corporativas', 'MCRE11': 'Papel', 'RBRP11': 'Lajes Corporativas', 'BROF11': 'Lajes Corporativas', 'KORE11': 'Papel',
+    'CCME11': 'Lajes Corporativas', 'HOFC11': 'Lajes Corporativas', 'VCRR11': 'Papel', 'DEVA11': 'Papel', 'HCTR11': 'Papel',
+    'URPR11': 'Papel', 'PQDP11': 'Shoppings', 'CNES11': 'Lajes Corporativas', 'VXXV11': 'Papel',
 
-const getSector = (ticker, type) => {
-    if (type === 'FII') return 'FII'; 
-    const root = ticker.substring(0, 4);
-    for (const [sector, prefixes] of Object.entries(SECTOR_MAP)) {
-        if (prefixes.includes(root)) return sector;
-    }
-    return 'Outros';
+    // AÇÕES
+    'RANI3': 'Papel e Celulose', 'CEAB3': 'Varejo', 'COGN3': 'Educação', 'VTRU3': 'Educação', 'LAVV3': 'Construção Civil',
+    'TAEE11': 'Elétricas', 'TGMA3': 'Logística', 'CAMB3': 'Varejo', 'PSSA3': 'Seguros', 'GMAT3': 'Varejo',
+    'SAPR11': 'Saneamento', 'ISAE4': 'Elétricas', 'BLAU3': 'Saúde', 'EZTC3': 'Construção Civil', 'MDNE3': 'Construção Civil',
+    'INTB3': 'Tecnologia', 'PRIO3': 'Petróleo', 'CASH3': 'Tecnologia', 'DIRR3': 'Construção Civil', 'LREN3': 'Varejo',
+    'VIVA3': 'Varejo', 'ODPV3': 'Saúde', 'LOGG3': 'Logística', 'POMO4': 'Indústria', 'AZZA3': 'Varejo',
+    'WIZC3': 'Seguros', 'ALOS3': 'Shoppings', 'TECN3': 'Tecnologia', 'VLID3': 'Tecnologia', 'FIQE3': 'Telecom',
+    'ABEV3': 'Bebidas', 'CSUD3': 'Tecnologia', 'MULT3': 'Shoppings', 'PLPL3': 'Construção Civil', 'MDIA3': 'Alimentos',
+    'PETR4': 'Petróleo', 'KEPL3': 'Indústria', 'IGTI11': 'Shoppings', 'BMOB3': 'Tecnologia', 'TFCO4': 'Varejo',
+    'RECV3': 'Petróleo', 'CYRE3': 'Construção Civil', 'VALE3': 'Mineração', 'SBSP3': 'Saneamento', 'JHSF3': 'Construção Civil',
+    'LEVE3': 'Indústria', 'CEBR6': 'Elétricas', 'MILS3': 'Indústria', 'B3SA3': 'Financeiro', 'DEXP3': 'Materiais Básicos',
+    'EUCA4': 'Materiais Básicos', 'TEND3': 'Construção Civil', 'ITSA4': 'Bancos', 'ALUP11': 'Elétricas', 'EMAE4': 'Elétricas',
+    'IRBR3': 'Seguros', 'CURY3': 'Construção Civil', 'CMIG4': 'Elétricas', 'FESA4': 'Siderurgia', 'ANIM3': 'Educação',
+    'CSMG3': 'Saneamento', 'FLRY3': 'Saúde', 'WEGE3': 'Indústria', 'BRAV3': 'Petróleo', 'ALPA4': 'Varejo',
+    'LPSB3': 'Imobiliário', 'PORT3': 'Logística', 'CMIN3': 'Mineração', 'NEOE3': 'Elétricas', 'ABCB4': 'Bancos',
+    'ENGI11': 'Elétricas', 'SEER3': 'Educação', 'SLCE3': 'Agro', 'YDUQ3': 'Educação', 'VIVT3': 'Telecom',
+    'TOTS3': 'Tecnologia', 'LIGT3': 'Elétricas', 'TTEN3': 'Agro', 'SBFG3': 'Varejo', 'SOJA3': 'Agro',
+    'TRIS3': 'Construção Civil', 'CSED3': 'Educação', 'RDOR3': 'Saúde', 'TIMS3': 'Telecom', 'BRSR6': 'Bancos',
+    'ITUB4': 'Bancos', 'SMTO3': 'Agro', 'VITT3': 'Agro', 'MOVI3': 'Logística', 'RADL3': 'Varejo',
+    'ETER3': 'Materiais Básicos', 'SMFT3': 'Saúde', 'BRAP4': 'Mineração', 'CPFE3': 'Elétricas', 'AZUL4': 'Transporte',
+    'EVEN3': 'Construção Civil', 'MBRF3': 'Alimentos', 'GGPS3': 'Serviços', 'BBAS3': 'Bancos', 'ECOR3': 'Infraestrutura',
+    'EQTL3': 'Elétricas', 'BAZA3': 'Bancos', 'CGRA4': 'Varejo', 'MTRE3': 'Construção Civil', 'UGPA3': 'Petróleo',
+    'BBSE3': 'Seguros', 'SUZB3': 'Papel e Celulose', 'FRAS3': 'Indústria', 'SHUL4': 'Indústria', 'CLSC4': 'Elétricas',
+    'COCE5': 'Elétricas', 'ASAI3': 'Varejo', 'EGIE3': 'Elétricas', 'GOAU4': 'Siderurgia', 'DESK3': 'Telecom',
+    'BBDC4': 'Bancos', 'SANB11': 'Bancos', 'UNIP6': 'Química', 'CXSE3': 'Seguros', 'CPLE3': 'Elétricas',
+    'RENT3': 'Logística', 'MYPK3': 'Indústria', 'HBOR3': 'Construção Civil', 'PFRM3': 'Varejo', 'DMVF3': 'Varejo',
+    'BPAC11': 'Bancos', 'HYPE3': 'Saúde', 'BMGB4': 'Bancos', 'GGBR4': 'Siderurgia', 'KLBN11': 'Papel e Celulose',
+    'PETZ3': 'Varejo', 'CAML3': 'Alimentos', 'PGMN3': 'Varejo', 'VAMO3': 'Logística', 'BMEB4': 'Bancos',
+    'PINE4': 'Bancos', 'MGLU3': 'Varejo', 'MATD3': 'Saúde', 'RAPT4': 'Indústria', 'ENEV3': 'Elétricas',
+    'EMBJ3': 'Indústria', 'ORVR3': 'Saneamento', 'ROMI3': 'Indústria', 'RAIL3': 'Logística', 'PNVL3': 'Varejo',
+    'JPSA3': 'Shoppings', 'BRST3': 'Telecom', 'TASA4': 'Indústria', 'ARML3': 'Serviços', 'BRBI11': 'Bancos',
+    'PRNR3': 'Indústria', 'VBBR3': 'Petróleo', 'ESPA3': 'Varejo', 'LOGN3': 'Logística', 'ALPK3': 'Infraestrutura',
+    'BPAN4': 'Bancos', 'QUAL3': 'Saúde', 'OPCT3': 'Logística', 'CBAV3': 'Mineração', 'DXCO3': 'Materiais Básicos',
+    'ALLD3': 'Varejo', 'VULC3': 'Varejo', 'GRND3': 'Varejo', 'SYNE3': 'Construção Civil', 'MELK3': 'Construção Civil',
+    'GUAR3': 'Varejo', 'JSLG3': 'Logística', 'HBRE3': 'Construção Civil', 'POSI3': 'Tecnologia', 'AURA33': 'Mineração',
+    'AGRO3': 'Agro', 'LAND3': 'Agro', 'HBSA3': 'Logística', 'MLAS3': 'Tecnologia', 'HAPV3': 'Saúde',
+    'CVCB3': 'Varejo', 'SCAR3': 'Indústria', 'BIOM3': 'Saúde', 'TUPY3': 'Indústria', 'NGRD3': 'Tecnologia',
+    'JALL3': 'Agro', 'ENJU3': 'Varejo', 'LWSA3': 'Tecnologia', 'AURE3': 'Elétricas', 'CSNA3': 'Siderurgia',
+    'RCSL4': 'Indústria', 'AALR3': 'Saúde', 'SIMH3': 'Logística', 'NATU3': 'Varejo', 'BEEF3': 'Alimentos',
+    'LUPA3': 'Indústria', 'DASA3': 'Saúde', 'LJQQ3': 'Varejo', 'MRVE3': 'Construção Civil', 'TPIS3': 'Logística',
+    'PTBL3': 'Materiais Básicos', 'USIM5': 'Siderurgia', 'MEAL3': 'Alimentos', 'AMBP3': 'Saneamento', 'CSAN3': 'Petróleo',
+    'GFSA3': 'Construção Civil', 'BRKM5': 'Química', 'BHIA3': 'Varejo', 'PCAR3': 'Varejo', 'AMER3': 'Varejo',
+    'ONCO3': 'Saúde', 'RAIZ4': 'Petróleo', 'SHOW3': 'Varejo', 'VVEO3': 'Logística', 'IFCM3': 'Tecnologia',
+    'AZEV4': 'Construção Civil', 'AERI3': 'Indústria', 'PMAM3': 'Indústria', 'PDGR3': 'Construção Civil', 'OIBR3': 'Telecom',
+    'SEQL3': 'Logística'
 };
 
 const parseBrFloat = (str) => {
@@ -46,6 +104,35 @@ const parseBrFloat = (str) => {
     const cleanStr = str.replace(/\./g, '').replace(',', '.').replace('%', '').trim();
     const num = parseFloat(cleanStr);
     return isNaN(num) ? 0 : num;
+};
+
+// --- NOVA FUNÇÃO: DEDUPLICAÇÃO POR LIQUIDEZ ---
+const deduplicateAssets = (assets) => {
+    const grouped = {};
+
+    assets.forEach(asset => {
+        // Pega a raiz do ticker (Ex: PETR de PETR4, BBDC de BBDC3)
+        // Regra: 4 primeiras letras para ações BR padrão
+        let root = asset.ticker.substring(0, 4);
+        
+        // Se for UNIT (final 11) de ação, tratamos com carinho
+        if (asset.type === 'STOCK' && asset.ticker.endsWith('11')) {
+            // Units geralmente têm mais liquidez, então se já existe 3 ou 4, a 11 costuma ganhar
+            // Mas usamos a mesma raiz
+        }
+
+        if (!grouped[root]) {
+            grouped[root] = asset;
+        } else {
+            // Conflito encontrado (Ex: PETR3 vs PETR4)
+            // Mantém o que tiver MAIOR liquidez
+            if (asset.metrics.avgLiquidity > grouped[root].metrics.avgLiquidity) {
+                grouped[root] = asset;
+            }
+        }
+    });
+
+    return Object.values(grouped);
 };
 
 export const marketDataService = {
@@ -56,22 +143,19 @@ export const marketDataService = {
     },
 
     async getMarketDataByTicker(ticker) {
-        // Mock simples para garantir funcionalidade sem API externa pesada no momento
         return { price: 0, change: 0, name: ticker };
     },
 
     async getMacroIndicators() {
-        const indicators = {
-            selic: { value: 11.25, name: 'Selic Meta', source: 'BCB' },
-            cdi: { value: 11.15, name: 'CDI', source: 'Cetip' },
-            ipca: { value: 4.50, name: 'IPCA (12m)', source: 'BCB' },
-            ibov: { value: 128000, change: 0.5, name: 'Ibovespa', source: 'B3' },
-            usd: { value: 5.75, change: -0.2, name: 'Dólar (PTAX)', source: 'B3' },
-            spx: { value: 5200, change: 0.1, name: 'S&P 500', source: 'NYSE' },
-            btc: { value: 65000, change: 1.5, name: 'Bitcoin', source: 'Global' }
+        return {
+            selic: { value: 11.25 },
+            cdi: { value: 11.15 },
+            ipca: { value: 4.50 },
+            ibov: { value: 128000, change: 0.5 },
+            usd: { value: 5.75, change: -0.2 },
+            spx: { value: 5200, change: 0.1 },
+            btc: { value: 65000, change: 1.5 }
         };
-        // Aqui poderíamos conectar com API do BCB real se necessário
-        return indicators;
     },
 
     async getMarketData(assetClass) {
@@ -79,132 +163,56 @@ export const marketDataService = {
             const isBrasil = assetClass === 'STOCK' || assetClass === 'FII' || assetClass === 'BRASIL_10';
             const results = [];
             
-            const dbAssets = await MarketAsset.find({ 
-                isActive: true,
-                type: isBrasil ? { $in: ['STOCK', 'FII'] } : assetClass 
-            }).lean();
-            
-            const dbMap = new Map(dbAssets.map(a => [a.ticker, a]));
-
             if (isBrasil) {
                 let fundDataMap = new Map();
 
-                // STOCK DATA
                 if (assetClass === 'STOCK' || assetClass === 'BRASIL_10') {
                     const stockMap = await fundamentusService.getStocksMap();
                     if (stockMap) stockMap.forEach((v, k) => fundDataMap.set(k, { ...v, type: 'STOCK' }));
                 }
                 
-                // FII DATA
                 if (assetClass === 'FII' || assetClass === 'BRASIL_10') {
                     const fiiMap = await fundamentusService.getFIIsMap();
                     if (fiiMap) fiiMap.forEach((v, k) => fundDataMap.set(k, { ...v, type: 'FII' }));
                 }
 
-                logger.info(`🔄 Normalizando ${fundDataMap.size} ativos BR...`);
-
-                // Filtragem e Deduplicação
-                const uniqueAssets = new Map();
                 for (const [ticker, fundData] of fundDataMap) {
                     if (IGNORED_TICKERS.includes(ticker)) continue;
                     
                     const liquidity = fundData.liq2m || fundData.liquidity || 0;
-                    if (liquidity < 250000) continue; // Liquidez mínima R$ 250k/dia
+                    if (liquidity < 200000) continue; 
 
-                    const rootTicker = ticker.substring(0, 4); 
-                    
-                    // Preferência por ON (3) ou PN (4) com maior liquidez
-                    if (fundData.type === 'STOCK') {
-                        if (uniqueAssets.has(rootTicker)) {
-                            const existing = uniqueAssets.get(rootTicker);
-                            if (liquidity > existing.liquidity) {
-                                uniqueAssets.set(rootTicker, { ...fundData, liquidity });
-                            }
-                        } else {
-                            uniqueAssets.set(rootTicker, { ...fundData, liquidity });
-                        }
-                    } else {
-                        uniqueAssets.set(ticker, { ...fundData, liquidity });
+                    // --- LÓGICA DE SETOR (OVERRIDE) ---
+                    let sector = SECTOR_OVERRIDES[ticker] || fundData.sector;
+                    if (!sector || sector === 'Ações' || sector === 'FII' || sector === 'Outros') {
+                        sector = 'Geral'; 
                     }
-                }
-
-                const bulkOps = [];
-
-                for (const fundData of uniqueAssets.values()) {
-                    const ticker = fundData.ticker;
-                    const dbInfo = dbMap.get(ticker);
-                    const sector = getSector(ticker, fundData.type);
-                    const name = dbInfo?.name || ticker;
-
-                    // Persistência
-                    bulkOps.push({
-                        updateOne: {
-                            filter: { ticker: ticker },
-                            update: { 
-                                $set: {
-                                    lastPrice: fundData.price,
-                                    netDebt: fundData.netDebt || 0,
-                                    marketCap: fundData.marketCap || 0,
-                                    vacancy: fundData.vacancy || 0,
-                                    p_vp: fundData.pvp || 0,
-                                    dy: fundData.dy || 0,
-                                    sector: sector,
-                                    updatedAt: new Date()
-                                }
-                            },
-                            upsert: true
-                        }
-                    });
 
                     results.push({
                         ticker: ticker,
                         type: fundData.type,
-                        name: name,
-                        sector: sector, 
+                        name: ticker, 
+                        sector: sector,
                         price: fundData.price,
-                        change: 0, 
                         metrics: {
-                            // Valuation
-                            pl: fundData.pl,
-                            pvp: fundData.pvp,
-                            evEbitda: fundData.evEbitda,
-                            psr: fundData.psr,
-                            earningsYield: fundData.pl > 0 ? (1 / fundData.pl) * 100 : 0,
-                            
-                            // Efficiency
-                            roe: fundData.roe,
-                            roic: fundData.roic,
-                            netMargin: fundData.netMargin,
-                            
-                            // Financial Health
-                            dy: fundData.dy,
-                            currentRatio: fundData.currentRatio,
-                            debtToEquity: fundData.divBrutaPatrim || 0, // Dívida Bruta/PL
-                            netDebt: fundData.netDebt || 0,
-                            
-                            // Growth & Size
-                            revenueGrowth: fundData.cresRec5a || 0,
+                            ...fundData,
                             marketCap: fundData.marketCap || 0,
-                            avgLiquidity: fundData.liquidity,
-                            
-                            // FII Specifics
-                            vacancy: fundData.vacancy || 0,
-                            capRate: fundData.capRate || 0,
-                            ffoYield: fundData.ffoYield || 0,
-                            qtdImoveis: fundData.qtdImoveis || 0,
-                            vpCota: fundData.vpCota || 0,
-                            
-                            dataSource: 'Fundamentus'
+                            avgLiquidity: liquidity,
+                            roe: fundData.roe || 0,
+                            dy: fundData.dy || 0,
+                            pvp: fundData.pvp || 0,
+                            pl: fundData.pl || 0
                         }
                     });
                 }
-
-                if (bulkOps.length > 0) {
-                    await MarketAsset.bulkWrite(bulkOps, { ordered: false });
-                }
-
             } else {
                 return [];
+            }
+
+            // APLICAÇÃO DO FILTRO DE DEDUPLICAÇÃO
+            // Apenas para ações, pois FIIs raramente têm duplicidade de ticker base relevante dessa forma
+            if (assetClass === 'STOCK' || assetClass === 'BRASIL_10') {
+                return deduplicateAssets(results);
             }
 
             return results;
@@ -232,44 +240,23 @@ export const fundamentusService = {
                 const pl = parseBrFloat($(tds[2]).text());
                 const pvp = parseBrFloat($(tds[3]).text());
                 const patrimLiq = parseBrFloat($(tds[18]).text());
-                
-                // Engenharia Reversa para MarketCap e Dívida Líquida (Estimativa)
-                const marketCap = (patrimLiq && pvp) ? patrimLiq * pvp : 0;
-                
-                // Tentativa de extrair Dívida Líquida via EV/EBIT (Aprox)
-                // EV = MktCap + NetDebt => NetDebt = EV - MktCap
-                // EV = EBIT * (EV/EBIT)
-                const pEbit = parseBrFloat($(tds[8]).text());
-                const evEbit = parseBrFloat($(tds[10]).text());
-                let netDebt = 0;
-                if (marketCap > 0 && pEbit > 0 && evEbit > 0) {
-                    const ebit = marketCap / pEbit;
-                    const ev = ebit * evEbit;
-                    netDebt = ev - marketCap;
-                }
+                let marketCap = (patrimLiq && pvp) ? patrimLiq * pvp : 0;
 
                 dataMap.set(ticker, {
                     ticker, price, pl, pvp,
-                    psr: parseBrFloat($(tds[4]).text()),
                     dy: parseBrFloat($(tds[5]).text()),
-                    pEbit, evEbit,
                     evEbitda: parseBrFloat($(tds[11]).text()),
                     netMargin: parseBrFloat($(tds[13]).text()),
-                    currentRatio: parseBrFloat($(tds[14]).text()),
-                    roic: parseBrFloat($(tds[15]).text()),
                     roe: parseBrFloat($(tds[16]).text()),
                     liq2m: parseBrFloat($(tds[17]).text()),
-                    patrimLiq,
-                    divBrutaPatrim: parseBrFloat($(tds[19]).text()), // Proxies
+                    divBrutaPatrim: parseBrFloat($(tds[19]).text()), 
                     cresRec5a: parseBrFloat($(tds[20]).text()),
-                    marketCap, netDebt
+                    marketCap,
+                    type: 'STOCK'
                 });
             });
             return dataMap;
-        } catch (e) {
-            console.error(e);
-            return new Map();
-        }
+        } catch (e) { return new Map(); }
     },
 
     async getFIIsMap() {
@@ -286,23 +273,19 @@ export const fundamentusService = {
                 const ticker = $(tds[0]).text().trim().toUpperCase();
                 const price = parseBrFloat($(tds[2]).text());
                 const pvp = parseBrFloat($(tds[5]).text());
-                const dy = parseBrFloat($(tds[4]).text());
-                const ffoYield = parseBrFloat($(tds[3]).text());
                 
-                const marketCap = parseBrFloat($(tds[6]).text()); // Valor de Mercado
-                const vacancy = parseBrFloat($(tds[12]).text());
-                
-                const vpCota = (price > 0 && pvp > 0) ? price / pvp : 0;
-
                 dataMap.set(ticker, {
                     ticker, 
                     sector: $(tds[1]).text().trim(),
-                    price, dy, pvp, ffoYield,
-                    marketCap, 
+                    price, 
+                    dy: parseBrFloat($(tds[4]).text()), 
+                    pvp, 
+                    marketCap: parseBrFloat($(tds[6]).text()),
                     liquidity: parseBrFloat($(tds[7]).text()),
                     qtdImoveis: parseBrFloat($(tds[8]).text()),
                     capRate: parseBrFloat($(tds[11]).text()),
-                    vacancy, vpCota
+                    vacancy: parseBrFloat($(tds[12]).text()),
+                    type: 'FII'
                 });
             });
             return dataMap;

@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 
@@ -5,7 +6,6 @@ export const EvolutionChart = () => {
     const { kpis } = useWallet();
 
     // Gera dados históricos fictícios baseados no patrimônio atual
-    // (Em um app real, isso viria de uma API de histórico)
     const historyData = useMemo(() => {
         const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         const dataPoints = [];
@@ -25,7 +25,7 @@ export const EvolutionChart = () => {
         return dataPoints;
     }, [kpis.totalEquity]);
 
-    // Lógica SVG
+    // Lógica SVG simples para não depender de libs externas
     const width = 1000;
     const height = 300;
     const padding = 40;

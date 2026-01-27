@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useWallet, AssetType, AllocationMap } from '../../contexts/WalletContext';
 import { Settings, Check, X, DollarSign } from 'lucide-react';
@@ -40,7 +41,7 @@ export const AllocationChart = () => {
     };
 
     assets.forEach(asset => {
-        const val = asset.quantity * asset.currentPrice * (asset.currency === 'USD' ? 5 : 1);
+        const val = asset.quantity * asset.currentPrice * (asset.currency === 'USD' ? 5.65 : 1);
         currentValues[asset.type] = (currentValues[asset.type] || 0) + val;
     });
 
@@ -107,7 +108,7 @@ export const AllocationChart = () => {
     return (
         <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[380px] flex flex-col relative">
             
-            {/* Header Flex com Botões Alinhados (Correção de Sobreposição) */}
+            {/* Header Flex com Botões Alinhados */}
             <div className="flex justify-between items-start mb-4">
                 <div>
                     <h3 className="text-base font-bold text-white">Distribuição</h3>
@@ -190,7 +191,7 @@ export const AllocationChart = () => {
                                 const diff = currentR - targetR;
                                 if (Math.abs(diff) > 100) {
                                      divergenceNode = (
-                                        <span className={`text-[9px] block leading-none ${diff > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                        <span className={`text-[9px] block leading-none ${diff > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                             {diff > 0 ? '+' : '-'}{formatCurrency(Math.abs(diff))}
                                         </span>
                                      );
@@ -207,7 +208,7 @@ export const AllocationChart = () => {
                                 const diff = currentPct - targetPct;
                                 if (Math.abs(diff) > 1) {
                                     divergenceNode = (
-                                        <span className={`text-[9px] block leading-none ${diff > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                        <span className={`text-[9px] block leading-none ${diff > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                             {diff > 0 ? '+' : '-'}{Math.abs(diff).toFixed(0)}%
                                         </span>
                                     );

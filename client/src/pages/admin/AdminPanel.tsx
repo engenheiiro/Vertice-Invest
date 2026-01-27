@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Header } from '../../components/dashboard/Header';
 import { researchService, ResearchReport } from '../../services/research';
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown } from 'lucide-react';
+import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 
 // Constantes de Configuração
@@ -15,7 +15,7 @@ const ASSET_CLASSES = [
 ];
 
 export const AdminPanel = () => {
-    const [history, setHistory] = useState<any[]>([]); // Tipagem any flexível para o count
+    const [history, setHistory] = useState<any[]>([]); 
     const [loadingKey, setLoadingKey] = useState<string | null>(null); 
     const [statusMsg, setStatusMsg] = useState<{type: 'success' | 'error', text: string} | null>(null);
     const [auditModalOpen, setAuditModalOpen] = useState(false);
@@ -58,7 +58,7 @@ export const AdminPanel = () => {
 
         try {
             await researchService.crunchNumbers(undefined, true);
-            setStatusMsg({ type: 'success', text: "Ciclo de Análise Global Finalizado com Sucesso!" });
+            setStatusMsg({ type: 'success', text: "Ciclo de Análise Quantitativa Finalizado!" });
             await loadHistory(); 
         } catch (error: any) {
             setStatusMsg({ type: 'error', text: error.message || "Erro durante o processamento global." });
@@ -68,10 +68,25 @@ export const AdminPanel = () => {
         }
     };
 
-    const handleAction = async (id: string, action: 'IA' | 'PUB_RANK' | 'PUB_MC' | 'PUB_BOTH') => {
+    const handleEnhanceWithAI = async (assetId: string) => {
+        setLoadingKey(`${assetId}-AI_ENHANCE`);
+        setStatusMsg(null);
+        try {
+            await researchService.enhanceReport(assetId);
+            setStatusMsg({ type: 'success', text: `Refinamento IA aplicado em ${assetId}. Dados qualitativos integrados.` });
+            await loadHistory();
+        } catch (error: any) {
+            setStatusMsg({ type: 'error', text: error.message || "Erro na IA." });
+        } finally {
+            setLoadingKey(null);
+            setTimeout(() => setStatusMsg(null), 6000);
+        }
+    };
+
+    const handleAction = async (id: string, action: 'IA_NARRATIVE' | 'PUB_RANK' | 'PUB_MC' | 'PUB_BOTH') => {
         setLoadingKey(`${id}-${action}`);
         try {
-            if (action === 'IA') await researchService.generateNarrative(id);
+            if (action === 'IA_NARRATIVE') await researchService.generateNarrative(id);
             if (action === 'PUB_RANK') await researchService.publish(id, 'RANKING');
             if (action === 'PUB_MC') await researchService.publish(id, 'MORNING_CALL');
             if (action === 'PUB_BOTH') await researchService.publish(id, 'BOTH');
@@ -157,14 +172,13 @@ export const AdminPanel = () => {
                     )}
                 </div>
 
-                {/* --- ÁREA DE COMANDO CENTRAL --- */}
+                {/* --- ÁREA DE COMANDO CENTRAL (ETAPA 1) --- */}
                 <div className="bg-[#080C14] border border-blue-900/30 rounded-2xl p-8 mb-10 text-center relative overflow-hidden shadow-2xl">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600"></div>
-                    <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-600/10 rounded-full blur-[80px] pointer-events-none"></div>
                     
-                    <h2 className="text-xl font-bold text-white mb-2">Protocolo de Análise V3</h2>
+                    <h2 className="text-xl font-bold text-white mb-2">Protocolo de Análise V3 (Matemático)</h2>
                     <p className="text-slate-400 text-sm mb-6 max-w-xl mx-auto">
-                        Execute a rotina completa: Coleta de dados (B3/Fundamentus), Cálculo de Valuation (Graham/Bazin), Classificação de Risco e Geração da Carteira Brasil 10.
+                        Etapa 1: Coleta de dados (B3/Fundamentus), Cálculo de Valuation (Graham/Bazin) e Classificação de Risco inicial.
                     </p>
 
                     <button
@@ -182,21 +196,15 @@ export const AdminPanel = () => {
                         {isGlobalRunning ? (
                             <>
                                 <RefreshCw size={20} className="animate-spin" />
-                                Processando Dados do Mercado...
+                                Calculando Dados...
                             </>
                         ) : (
                             <>
                                 <Play size={20} fill="currentColor" />
-                                INICIAR PROCESSAMENTO GLOBAL
+                                INICIAR CÁLCULO QUANTITATIVO
                             </>
                         )}
                     </button>
-
-                    {isGlobalRunning && (
-                        <p className="text-xs text-blue-400 mt-4 animate-pulse">
-                            Isso pode levar alguns minutos. Não feche a página.
-                        </p>
-                    )}
                 </div>
 
                 {/* Feedback Message */}
@@ -209,73 +217,28 @@ export const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* CARDS DE STATUS */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
-                    {ASSET_CLASSES.map(asset => {
-                        const latest = getLatestForClass(asset.id);
-                        const updatedToday = isUpdatedToday(latest?.date);
-                        // O truque aqui: 'ranking' agora é um array vazio do tamanho certo vindo do backend, ou usamos o itemCount se disponível
-                        const count = latest?.content?.ranking?.length || 0; 
-
-                        return (
-                            <div key={asset.id} className="bg-[#080C14] border border-slate-800 rounded-2xl p-5 hover:border-slate-700 transition-all group relative overflow-hidden">
-                                <div className={`absolute top-4 right-4 w-2 h-2 rounded-full ${updatedToday ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`}></div>
-
-                                <div className="flex items-center gap-4 mb-4">
-                                    <div className="w-12 h-12 bg-[#0B101A] rounded-xl flex items-center justify-center border border-slate-800 group-hover:border-slate-600 transition-colors">
-                                        {asset.icon}
-                                    </div>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-white">{asset.label}</h3>
-                                        <p className="text-[10px] text-slate-500">{asset.desc}</p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <div className="flex justify-between items-center text-xs bg-slate-900/50 p-2 rounded-lg border border-slate-800/50">
-                                        <span className="text-slate-500 font-medium flex items-center gap-1"><Clock size={10}/> Atualização</span>
-                                        <span className={`font-mono font-bold ${updatedToday ? 'text-emerald-400' : 'text-slate-400'}`}>
-                                            {latest ? new Date(latest.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit' }) : 'Pendente'}
-                                        </span>
-                                    </div>
-                                    
-                                    {latest ? (
-                                        <button 
-                                            onClick={() => openAudit(latest._id)}
-                                            className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-xs font-bold rounded-lg border border-slate-800 transition-colors flex items-center justify-center gap-2"
-                                        >
-                                            <Search size={12} /> Ver Resultado ({count})
-                                        </button>
-                                    ) : (
-                                        <div className="w-full py-2 text-center text-xs text-slate-600 italic bg-slate-900/30 rounded-lg border border-slate-800/50">
-                                            Aguardando Processamento
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-
-                {/* PAINEL DE PUBLICAÇÃO */}
+                {/* PAINEL DE CONTROLE POR ATIVO (ETAPA 2) */}
                 <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl mb-10">
                     <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-[#0B101A]">
                         <div className="flex items-center gap-2">
                             <Server size={18} className="text-slate-400" />
-                            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Publicação de Conteúdo</h3>
+                            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Refinamento & Publicação</h3>
                         </div>
                     </div>
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-[#0B101A] border-b border-slate-800 text-[10px] font-black text-slate-500 uppercase tracking-widest">
                                 <th className="px-6 py-4">Ativo</th>
-                                <th className="px-6 py-4">Narrativa IA</th>
-                                <th className="px-6 py-4 text-right">Ações</th>
+                                <th className="px-6 py-4">Status Quant</th>
+                                <th className="px-6 py-4 text-center">Refinamento (IA)</th>
+                                <th className="px-6 py-4 text-right">Ações Finais</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/50">
                             {ASSET_CLASSES.map((asset) => {
                                 const latest = getLatestForClass(asset.id);
+                                const updatedToday = isUpdatedToday(latest?.date);
+                                const isLoadingEnhance = loadingKey === `${asset.id}-AI_ENHANCE`;
 
                                 return (
                                     <tr key={asset.id} className="hover:bg-slate-900/30 transition-colors group">
@@ -287,46 +250,77 @@ export const AdminPanel = () => {
                                         </td>
 
                                         <td className="px-6 py-4">
-                                            {latest?.content.morningCall ? (
+                                            {updatedToday ? (
                                                 <div className="flex items-center gap-2 text-emerald-500 text-[10px] font-bold">
-                                                    <CheckCircle2 size={12} /> Gerado
+                                                    <CheckCircle2 size={12} /> Atualizado Hoje
                                                 </div>
-                                            ) : latest ? (
-                                                <button 
-                                                    onClick={() => handleAction(latest._id, 'IA')}
-                                                    disabled={!!loadingKey}
-                                                    className="text-[10px] font-bold text-blue-400 hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded hover:bg-blue-900/20 transition-colors"
-                                                >
-                                                    {loadingKey === `${latest._id}-IA` ? <RefreshCw size={12} className="animate-spin" /> : <Bot size={12} />}
-                                                    Gerar Texto IA
-                                                </button>
-                                            ) : <span className="text-slate-700">-</span>}
+                                            ) : (
+                                                <div className="flex items-center gap-2 text-red-500 text-[10px] font-bold opacity-70">
+                                                    <AlertCircle size={12} /> Pendente
+                                                </div>
+                                            )}
+                                        </td>
+
+                                        <td className="px-6 py-4 text-center">
+                                            {/* BOTÃO DE REFINAMENTO IA */}
+                                            <button 
+                                                onClick={() => handleEnhanceWithAI(asset.id)}
+                                                disabled={!updatedToday || isLoadingEnhance}
+                                                className={`
+                                                    mx-auto flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border
+                                                    ${!updatedToday 
+                                                        ? 'bg-slate-800/50 border-slate-800 text-slate-600 cursor-not-allowed'
+                                                        : 'bg-purple-900/20 border-purple-500/30 text-purple-400 hover:bg-purple-900/40 hover:text-white hover:border-purple-500'
+                                                    }
+                                                `}
+                                                title="Busca notícias no Google e reajusta o ranking matemático"
+                                            >
+                                                {isLoadingEnhance ? (
+                                                    <RefreshCw size={12} className="animate-spin" />
+                                                ) : (
+                                                    <Sparkles size={12} fill="currentColor" />
+                                                )}
+                                                Refinar com IA
+                                            </button>
                                         </td>
 
                                         <td className="px-6 py-4 text-right">
                                             {latest && (
                                                 <div className="flex items-center justify-end gap-2">
+                                                    {/* Botão Ver Resultado (Audit) */}
+                                                    <button 
+                                                        onClick={() => openAudit(latest._id)}
+                                                        className="text-[10px] font-bold text-slate-400 hover:text-white bg-slate-800 px-2 py-1 rounded hover:bg-slate-700"
+                                                    >
+                                                        <Search size={12} />
+                                                    </button>
+
+                                                    <div className="w-px h-3 bg-slate-800 mx-1"></div>
+
                                                     <QuickActionBtn 
                                                         active={latest.isRankingPublished} 
                                                         label="Rank" 
                                                         onClick={() => handleAction(latest._id, 'PUB_RANK')}
                                                         isLoading={loadingKey === `${latest._id}-PUB_RANK`}
                                                     />
+                                                    
+                                                    {/* Botão Gerar Texto descritivo (Morning Call) */}
+                                                    <button 
+                                                        onClick={() => handleAction(latest._id, 'IA_NARRATIVE')}
+                                                        disabled={loadingKey === `${latest._id}-IA_NARRATIVE`}
+                                                        className={`p-1.5 rounded hover:bg-slate-800 ${latest.content.morningCall ? 'text-emerald-500' : 'text-slate-500'}`}
+                                                        title="Gerar Texto Explicativo"
+                                                    >
+                                                        <Bot size={14} />
+                                                    </button>
+
                                                     <QuickActionBtn 
                                                         active={latest.isMorningCallPublished} 
-                                                        label="Call" 
+                                                        label="Pub. Call" 
                                                         disabled={!latest.content.morningCall}
                                                         onClick={() => handleAction(latest._id, 'PUB_MC')}
                                                         isLoading={loadingKey === `${latest._id}-PUB_MC`}
                                                     />
-                                                    <div className="w-px h-3 bg-slate-800 mx-1"></div>
-                                                    <button 
-                                                        onClick={() => handleAction(latest._id, 'PUB_BOTH')}
-                                                        disabled={loadingKey === `${latest._id}-PUB_BOTH`}
-                                                        className="text-[9px] font-black text-slate-500 hover:text-white uppercase tracking-tighter disabled:opacity-30"
-                                                    >
-                                                        Publicar Tudo
-                                                    </button>
                                                 </div>
                                             )}
                                         </td>
@@ -337,49 +331,37 @@ export const AdminPanel = () => {
                     </table>
                 </div>
 
-                {/* HISTÓRICO RECENTE */}
+                {/* HISTÓRICO DE LOGS */}
                 <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                            <History size={18} className="text-slate-500" />
-                            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Log do Sistema</h3>
-                        </div>
-                        <button onClick={loadHistory} className="text-xs font-bold text-blue-500 hover:text-blue-400 flex items-center gap-1">
-                            <RefreshCw size={12} /> Atualizar
-                        </button>
+                    <div className="flex items-center gap-2 mb-4">
+                        <History size={18} className="text-slate-500" />
+                        <h3 className="font-bold text-white text-sm uppercase tracking-wider">Log de Execução</h3>
                     </div>
-
                     <div className="overflow-hidden rounded-xl border border-slate-800">
                         <table className="w-full text-left text-xs">
                             <thead className="bg-[#0B101A]">
                                 <tr>
                                     <th className="p-3 font-bold text-slate-500">Data</th>
                                     <th className="p-3 font-bold text-slate-500">Ativo</th>
-                                    <th className="p-3 font-bold text-slate-500">Responsável</th>
+                                    <th className="p-3 font-bold text-slate-500">Estratégia</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800">
-                                {history.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={3} className="p-4 text-center text-slate-500">Nenhum log encontrado.</td>
+                                {history.slice(0, 8).map((h, idx) => (
+                                    <tr key={idx} className="hover:bg-slate-900/50">
+                                        <td className="p-3 text-slate-300 font-mono">
+                                            {new Date(h.date).toLocaleString()}
+                                        </td>
+                                        <td className="p-3 text-slate-300">
+                                            <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 font-bold text-[10px]">
+                                                {h.assetClass}
+                                            </span>
+                                        </td>
+                                        <td className="p-3 text-slate-500 font-mono text-[10px]">
+                                            {h.strategy}
+                                        </td>
                                     </tr>
-                                ) : (
-                                    history.slice(0, 5).map((h, idx) => (
-                                        <tr key={idx} className="hover:bg-slate-900/50">
-                                            <td className="p-3 text-slate-300 font-mono">
-                                                {new Date(h.date).toLocaleString()}
-                                            </td>
-                                            <td className="p-3 text-slate-300">
-                                                <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 font-bold text-[10px]">
-                                                    {h.assetClass}
-                                                </span>
-                                            </td>
-                                            <td className="p-3 text-slate-500 font-mono text-[10px]">
-                                                {h.generatedBy || 'System'}
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
+                                ))}
                             </tbody>
                         </table>
                     </div>
@@ -414,7 +396,6 @@ const QuickActionBtn = ({ active, label, onClick, disabled, isLoading }: any) =>
     </button>
 );
 
-// Componente Cartão Macro
 const MacroCard = ({ label, value, change, sub, color }: any) => (
     <div className="bg-[#0F131E] border border-slate-800 p-3 rounded-xl flex flex-col justify-between h-full">
         <div>

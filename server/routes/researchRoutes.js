@@ -7,7 +7,8 @@ import {
     getLatestReport, 
     listReports,
     getReportDetails,
-    getMacroData 
+    getMacroData,
+    enhanceWithAI // Nova Controller
 } from '../controllers/researchController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -16,10 +17,11 @@ const router = express.Router();
 router.use(authenticateToken);
 
 router.get('/latest', getLatestReport);
-router.get('/macro', getMacroData); // Nova rota de indicadores
+router.get('/macro', getMacroData);
 
 // Fluxo Granular Admin
 router.post('/crunch', requireAdmin, crunchNumbers);
+router.post('/enhance', requireAdmin, enhanceWithAI); // Nova Rota
 router.post('/narrative', requireAdmin, generateNarrative);
 router.post('/publish', requireAdmin, publishContent);
 router.get('/history', requireAdmin, listReports);
