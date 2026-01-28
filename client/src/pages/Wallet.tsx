@@ -9,9 +9,10 @@ import { AllocationChart } from '../components/wallet/AllocationChart';
 import { SmartContributionModal } from '../components/wallet/SmartContributionModal';
 import { Button } from '../components/ui/Button';
 import { Plus, Download, Lock, Crown } from 'lucide-react';
-import { useAuth, UserPlan } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useNavigate } from 'react-router-dom';
+import { authService } from '../services/auth';
 
 export const Wallet = () => {
     const { user } = useAuth();
@@ -21,46 +22,34 @@ export const Wallet = () => {
     const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
 
     /**
-     * MOCK: Verificação de Limites de Uso Genérica
+     * Verificação de Limites via Backend Seguro
      */
     const checkFeatureAccess = async (feature: 'smart_contribution' | 'report') => {
-        if (!user) return false;
-        
-        const plan = user.plan || 'GUEST';
-        
-        // Definição de limites por feature e plano
-        const limitsConfig: Record<string, Record<UserPlan, number>> = {
-            'smart_contribution': {
-                'GUEST': 0,
-                'ESSENTIAL': 1,
-                'PRO': 2,
-                'BLACK': 9999 
-            },
-            'report': {
-                'GUEST': 0,
-                'ESSENTIAL': 1,
-                'PRO': 9999, 
-                'BLACK': 9999 
+        try {
+            // 1. Verifica Acesso
+            const response = await authService.api(`/api/subscription/check-access?feature=${feature}`);
+            const data = await response.json();
+
+            if (!data.allowed) {
+                if (confirm(`${data.message}\n\nDeseja fazer upgrade para ter acesso liberado?`)) {
+                    navigate('/pricing');
+                }
+                return false;
             }
-        };
 
-        const limit = limitsConfig[feature][plan];
-        const storageKey = `mock_db_usage_${user.id}_${feature}_${new Date().getMonth()}`; 
-        const currentUsage = parseInt(localStorage.getItem(storageKey) || '0');
+            // 2. Registra Uso (Só se o usuário realmente for usar a feature)
+            // O registro real deve acontecer no sucesso da ação, mas para simplificar UI aqui
+            // vamos considerar "abrir modal" ou "gerar relatório" como uso.
+            await authService.api('/api/subscription/register-usage', {
+                method: 'POST',
+                body: JSON.stringify({ feature })
+            });
 
-        if (currentUsage >= limit) {
-            const msg = limit === 0 
-                ? `O recurso "${feature === 'report' ? 'Relatórios' : 'Aporte Inteligente'}" não está disponível no plano ${plan}.`
-                : `Limite mensal do plano ${plan} atingido (${currentUsage}/${limit}).`;
-
-            if (confirm(`${msg}\n\nDeseja fazer upgrade para ter acesso liberado?`)) {
-                navigate('/pricing');
-            }
+            return true;
+        } catch (e) {
+            console.error("Erro de validação:", e);
             return false;
         }
-
-        localStorage.setItem(storageKey, (currentUsage + 1).toString());
-        return true;
     };
 
     const handleOpenSmartContribution = async () => {

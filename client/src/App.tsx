@@ -27,6 +27,7 @@ const Pricing = lazy(() => import('./pages/Pricing').then(module => ({ default: 
 const Wallet = lazy(() => import('./pages/Wallet').then(module => ({ default: module.Wallet })));
 const Research = lazy(() => import('./pages/Research').then(module => ({ default: module.Research })));
 const Courses = lazy(() => import('./pages/Courses').then(module => ({ default: module.Courses })));
+const Indicators = lazy(() => import('./pages/Indicators').then(module => ({ default: module.Indicators }))); // Nova Página
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel').then(module => ({ default: module.AdminPanel }))); 
 
 // New Premium Page Loader
@@ -114,6 +115,7 @@ export default function App() {
             {/* Rotas Protegidas - Módulos */}
             <Route path="/wallet" element={<ProtectedWalletRoute><Wallet /></ProtectedWalletRoute>} />
             <Route path="/research" element={<ProtectedWalletRoute><Research /></ProtectedWalletRoute>} />
+            <Route path="/indicators" element={<ProtectedWalletRoute><Indicators /></ProtectedWalletRoute>} /> {/* Nova Rota */}
             <Route path="/courses" element={<ProtectedWalletRoute><Courses /></ProtectedWalletRoute>} />
 
             {/* Rota ADMIN */}

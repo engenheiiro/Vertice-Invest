@@ -1,3 +1,4 @@
+
 import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
@@ -10,6 +11,82 @@ const PLANS = {
     'BLACK': { price: 349.90, days: 30 }
 };
 
+// Definição de limites por feature e plano (Backend Truth)
+const LIMITS_CONFIG = {
+    'smart_contribution': {
+        'GUEST': 0,
+        'ESSENTIAL': 1,
+        'PRO': 2,
+        'BLACK': 9999 
+    },
+    'report': {
+        'GUEST': 0,
+        'ESSENTIAL': 1,
+        'PRO': 9999,
+        'BLACK': 9999 
+    }
+};
+
+// Mock de armazenamento de uso (Em produção seria Redis ou tabela no Mongo)
+// Estrutura: { userId_feature_month: count }
+const USAGE_CACHE = {}; 
+
+export const checkAccess = async (req, res, next) => {
+    try {
+        const { feature } = req.query;
+        const user = req.user; // Obtido do authMiddleware
+        const plan = user.plan || 'GUEST';
+
+        if (!LIMITS_CONFIG[feature]) {
+            return res.status(400).json({ message: "Feature desconhecida." });
+        }
+
+        const limit = LIMITS_CONFIG[feature][plan];
+        const key = `${user.id}_${feature}_${new Date().getMonth()}`;
+        const currentUsage = USAGE_CACHE[key] || 0;
+
+        if (currentUsage >= limit) {
+            return res.status(403).json({ 
+                allowed: false, 
+                currentUsage, 
+                limit, 
+                plan,
+                message: limit === 0 
+                    ? `Recurso indisponível no plano ${plan}.` 
+                    : `Limite mensal atingido (${currentUsage}/${limit}).`
+            });
+        }
+
+        return res.json({ allowed: true, currentUsage, limit, plan });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const registerUsage = async (req, res, next) => {
+    try {
+        const { feature } = req.body;
+        const user = req.user;
+        const plan = user.plan || 'GUEST';
+        
+        // Revalida antes de incrementar
+        const limit = LIMITS_CONFIG[feature]?.[plan] || 0;
+        const key = `${user.id}_${feature}_${new Date().getMonth()}`;
+        const currentUsage = USAGE_CACHE[key] || 0;
+
+        if (currentUsage >= limit) {
+            return res.status(403).json({ message: "Limite atingido." });
+        }
+
+        USAGE_CACHE[key] = currentUsage + 1;
+        res.json({ success: true, newUsage: USAGE_CACHE[key] });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const createCheckoutSession = async (req, res, next) => {
     try {
         const { planId } = req.body;
@@ -19,10 +96,7 @@ export const createCheckoutSession = async (req, res, next) => {
             return res.status(400).json({ message: "Plano inválido." });
         }
 
-        // Em um cenário real, aqui chamaríamos o Stripe.session.create
-        // Aqui, geramos um ID de sessão interno para nosso gateway simulado
         const sessionId = `sess_${new Date().getTime()}_${Math.random().toString(36).substring(7)}`;
-
         logger.info(`Checkout iniciado: User ${userId} -> Plan ${planId}`);
 
         res.status(200).json({
@@ -47,7 +121,6 @@ export const confirmPayment = async (req, res, next) => {
 
         if (!PLANS[planId]) throw new Error("Plano inválido");
 
-        // 1. Registrar Transação
         const transaction = new Transaction({
             user: userId,
             plan: planId,
@@ -58,11 +131,9 @@ export const confirmPayment = async (req, res, next) => {
         });
         await transaction.save({ session });
 
-        // 2. Calcular nova validade
         const now = new Date();
         const validUntil = new Date(now.setDate(now.getDate() + PLANS[planId].days));
 
-        // 3. Atualizar Usuário
         const updatedUser = await User.findByIdAndUpdate(userId, {
             plan: planId,
             subscriptionStatus: 'ACTIVE',
@@ -94,8 +165,6 @@ export const confirmPayment = async (req, res, next) => {
 export const getSubscriptionStatus = async (req, res, next) => {
     try {
         const user = await User.findById(req.user.id).select('plan subscriptionStatus validUntil');
-        
-        // Verifica histórico recente
         const lastTransaction = await Transaction.findOne({ user: req.user.id }).sort({ createdAt: -1 });
 
         res.json({

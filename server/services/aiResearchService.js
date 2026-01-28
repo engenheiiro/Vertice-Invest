@@ -4,11 +4,14 @@ import logger from '../config/logger.js';
 import { marketDataService } from './marketDataService.js';
 import { scoringEngine } from './engines/scoringEngine.js';
 import { portfolioEngine } from './engines/portfolioEngine.js';
+import SystemConfig from '../models/SystemConfig.js';
 
 export const aiResearchService = {
     async calculateRanking(assetClass, strategy = 'BUY_HOLD') {
         try {
             logger.info(`📥 [ORCHESTRATOR] Coletando dados para ${assetClass}...`);
+            
+            // 1. Coleta Dados de Mercado (Já vem com flags DB e Setores DB)
             const rawData = await marketDataService.getMarketData(assetClass);
             
             if (!rawData || rawData.length === 0) {
@@ -16,21 +19,33 @@ export const aiResearchService = {
                 return { ranking: [], fullList: [] };
             }
 
-            // 1. Scoring Engine: Processa cada ativo individualmente
-            // (Valuation, Scores, Teses, Filtros de Integridade)
-            const processedAssets = rawData
-                .map(asset => scoringEngine.processAsset(asset))
-                .filter(Boolean); // Remove nulos (Penny stocks, Blacklist, etc)
+            // 2. Coleta Configuração Macro do Banco (Contexto)
+            const macroConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
+            
+            // Contexto padrão caso o banco esteja vazio na primeira execução
+            const context = {
+                MACRO: macroConfig ? {
+                    SELIC: macroConfig.selic,
+                    IPCA: macroConfig.ipca,
+                    RISK_FREE: macroConfig.riskFree,
+                    NTNB_LONG: macroConfig.ntnbLong
+                } : {
+                    SELIC: 11.25, IPCA: 4.50, RISK_FREE: 11.25, NTNB_LONG: 6.30
+                }
+            };
 
-            // 2. Portfolio Engine: Realiza o Draft Competitivo
-            // (Seleção dos melhores, Regra dos 25%, Diversificação)
+            // 3. Scoring Engine: Processa cada ativo individualmente com o Contexto
+            const processedAssets = rawData
+                .map(asset => scoringEngine.processAsset(asset, context))
+                .filter(Boolean); 
+
+            // 4. Portfolio Engine: Realiza o Draft Competitivo
             let ranking = portfolioEngine.performCompetitiveDraft(processedAssets);
             
-            // 3. Portfolio Engine: Aplica penalidades finais de concentração
+            // 5. Portfolio Engine: Aplica penalidades finais de concentração
             ranking = portfolioEngine.applyConcentrationPenalty(ranking);
 
-            // 4. Gera Lista Completa para Auditoria (Full List)
-            // (Mapeia o melhor perfil de cada ativo não selecionado para visualização no admin)
+            // 6. Gera Lista Completa para Auditoria
             const fullList = processedAssets.map(asset => {
                 const entries = Object.entries(asset.scores);
                 const [bestProfile, bestScore] = entries.reduce((a, b) => a[1] > b[1] ? a : b);
@@ -55,7 +70,6 @@ export const aiResearchService = {
         }
     },
 
-    // Função mantida aqui pois usa a IA Generativa diretamente
     async generateNarrative(ranking, assetClass) {
         if (!process.env.API_KEY || ranking.length === 0) return "Análise indisponível.";
         const highlights = ranking.filter(r => r.action === 'BUY').slice(0, 5);

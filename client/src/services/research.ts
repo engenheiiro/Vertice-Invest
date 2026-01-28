@@ -93,7 +93,6 @@ export const researchService = {
         return await response.json();
     },
 
-    // Nova função para chamar a IA
     async enhanceReport(assetClass: string, strategy: string = 'BUY_HOLD') {
         const response = await authService.api('/api/research/enhance', {
             method: 'POST',
@@ -103,6 +102,19 @@ export const researchService = {
         if (!response.ok) {
             const data = await response.json();
             throw new Error(data.message || "Erro ao refinar com IA");
+        }
+        return await response.json();
+    },
+
+    // Novo Método
+    async syncMarketData() {
+        const response = await authService.api('/api/research/sync-market', {
+            method: 'POST'
+        });
+        
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || "Erro na sincronização de dados.");
         }
         return await response.json();
     },
