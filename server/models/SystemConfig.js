@@ -9,6 +9,15 @@ const SystemConfigSchema = new mongoose.Schema({
   riskFree: { type: Number, required: true, default: 11.25 },
   ntnbLong: { type: Number, required: true, default: 6.30 },
   dollar: { type: Number, default: 5.75 },
+  
+  // Cache de Índices (Para Performance)
+  ibov: { type: Number, default: 128000 },
+  ibovChange: { type: Number, default: 0 },
+  spx: { type: Number, default: 5800 },
+  spxChange: { type: Number, default: 0 },
+  btc: { type: Number, default: 90000 },
+  btcChange: { type: Number, default: 0 },
+
   lastUpdated: { type: Date, default: Date.now }
 });
 

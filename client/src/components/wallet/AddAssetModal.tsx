@@ -28,16 +28,14 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         date: new Date().toISOString().split('T')[0]
     });
 
-    // Refs para controle de debounce
-    const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Reset e Bloqueio de Scroll
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
             setStatus('idle');
             setValidationError('');
-            setTransactionType('BUY'); // Padrão Compra
+            setTransactionType('BUY'); 
         } else {
             document.body.style.overflow = 'unset';
             setForm({ ticker: '', name: '', type: 'STOCK', quantity: '', price: '', date: new Date().toISOString().split('T')[0] });
@@ -51,12 +49,10 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         } else if (form.type === 'CRYPTO') {
             setForm(prev => ({ ...prev, ticker: '', quantity: '', price: '' }));
         } else {
-             // Mantém ticker se já existir, senão limpa
              setForm(prev => ({ ...prev, quantity: '', price: prev.price }));
         }
     }, [form.type]);
 
-    // Função de Busca de Ativo (Auto-fill)
     const handleTickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value.toUpperCase();
         setForm(prev => ({ ...prev, ticker: val }));
@@ -86,7 +82,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         }
     };
 
-    // Handler para Seleção de Ativo na Venda
     const handleSellAssetSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const selectedTicker = e.target.value;
         const asset = assets.find(a => a.ticker === selectedTicker);
@@ -104,17 +99,29 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         }
     };
 
+    const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let val = e.target.value;
+        if (val.includes('-')) return;
+        setForm({ ...form, quantity: val });
+    };
+
     const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value;
-        if(val === '') { setForm({...form, price: ''}); return; }
+        let val = e.target.value;
+        if (val.includes('-')) return;
         setForm({...form, price: val});
     };
     
+    const parseCurrencyToFloat = (value: string) => {
+        if (!value) return NaN;
+        let clean = value.replace(/\./g, '').replace(',', '.');
+        return parseFloat(clean);
+    };
+
     const handlePriceBlur = () => {
         if (!form.price) return;
-        let val = form.price.replace(',', '.');
-        let num = parseFloat(val);
-        if (!isNaN(num)) {
+        let num = parseCurrencyToFloat(form.price);
+        
+        if (!isNaN(num) && num >= 0) {
             setForm(prev => ({...prev, price: num.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}));
         }
     };
@@ -123,27 +130,24 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         e.preventDefault();
         setValidationError('');
         
-        let finalQty = Number(form.quantity.replace(',', '.'));
-        let finalPrice = Number(form.price.replace(/\./g, '').replace(',', '.'));
+        let finalQty = parseFloat(form.quantity.replace(',', '.')); 
+        let finalPrice = parseCurrencyToFloat(form.price);
 
-        // Validação Numérica Rigorosa
         if (isNaN(finalQty) || finalQty <= 0) {
-            setValidationError('A quantidade deve ser um número maior que zero.');
+            setValidationError('A quantidade deve ser um número válido maior que zero.');
             return;
         }
-        if (isNaN(finalPrice) || finalPrice <= 0) {
-            setValidationError('O preço deve ser um valor positivo.');
+        if (isNaN(finalPrice) || finalPrice < 0) { 
+            setValidationError('O preço deve ser um valor válido.');
             return;
         }
 
-        // Validação de Venda (Saldo Insuficiente)
         if (transactionType === 'SELL' && form.type !== 'CASH') {
             const owned = assets.find(a => a.ticker === form.ticker);
             if (!owned || owned.quantity < finalQty) {
                 setValidationError(`Saldo insuficiente. Você possui ${owned ? owned.quantity : 0} unid.`);
                 return;
             }
-            // Negativa a quantidade para venda
             finalQty = -finalQty;
         }
 
@@ -153,17 +157,19 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             let finalTicker = form.ticker.toUpperCase();
 
             if (form.type === 'CASH') {
-                if (transactionType === 'SELL') finalQty = -1; // Saque
-                else finalQty = 1; // Aporte
-                // Para CASH, o "preço" inserido é o valor total do aporte
+                if (transactionType === 'SELL') finalQty = -1; 
+                else finalQty = 1; 
             }
 
+            // CORREÇÃO AQUI: Enviando 'price' em vez de 'averagePrice'
+            // O backend espera 'price' para calcular o custo da transação
             await addAsset({
                 ticker: finalTicker,
                 name: form.name || finalTicker,
                 type: form.type,
                 quantity: finalQty,
-                averagePrice: finalPrice,
+                price: finalPrice, // Mudado de averagePrice para price
+                averagePrice: finalPrice, // Mantendo averagePrice para compatibilidade com contexto local se necessário
                 currency: form.type === 'STOCK_US' ? 'USD' : 'BRL',
                 sector: 'General'
             });
@@ -177,7 +183,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         } catch (error) {
             console.error(error);
             setStatus('idle');
-            setValidationError("Erro ao processar transação.");
+            setValidationError("Erro ao processar transação. Verifique os dados.");
         }
     };
 
@@ -190,10 +196,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             );
         }
 
-        // Se for VENDA, mostra Select com ativos possuídos do tipo selecionado
         if (transactionType === 'SELL') {
             const availableAssets = assets.filter(a => a.type === form.type);
-            
             return (
                 <div className="flex flex-col gap-1.5 mb-4">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">Ativo para Venda</label>
@@ -219,7 +223,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             );
         }
 
-        // MODO COMPRA (Input com Auto-Search)
         let placeholder = "Ex: PETR4";
         if (form.type === 'CRYPTO') placeholder = "Ex: BTC, ETH, SOL";
         if (form.type === 'STOCK_US') placeholder = "Ex: AAPL, NVDA";
@@ -257,6 +260,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                             onBlur={handlePriceBlur}
                             containerClassName="mb-0"
                             className={`pl-4 text-lg font-bold ${transactionType === 'BUY' ? 'text-emerald-400' : 'text-red-400'}`}
+                            min="0"
                         />
                          <DollarSign className="absolute right-4 top-9 text-slate-500 pointer-events-none" size={20} />
                     </div>
@@ -276,8 +280,9 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         step={form.type === 'CRYPTO' ? "0.00000001" : "1"}
                         placeholder={form.type === 'CRYPTO' ? "0.005" : "100"}
                         value={form.quantity}
-                        onChange={(e) => setForm({...form, quantity: e.target.value})}
+                        onChange={handleQuantityChange}
                         containerClassName="mb-0"
+                        min="0"
                     />
                     <BarChart2 className="absolute right-3 top-9 text-slate-600 pointer-events-none" size={16} />
                 </div>
@@ -290,6 +295,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         onChange={handlePriceChange}
                         onBlur={handlePriceBlur}
                         containerClassName="mb-0"
+                        min="0"
                     />
                     <DollarSign className="absolute right-3 top-9 text-slate-600 pointer-events-none" size={16} />
                 </div>
@@ -299,18 +305,13 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
     if (!isOpen) return null;
 
-    // --- USO DE PORTAL: Renderiza diretamente no body ---
     return createPortal(
         <div className="relative z-[100]" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-            
-            {/* Backdrop */}
             <div className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
 
-            {/* Container Centralizado */}
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4 text-center">
                     
-                    {/* Modal Panel - Com max-h para evitar scroll da página em telas pequenas */}
                     <div className="relative transform overflow-hidden rounded-2xl bg-[#080C14] border border-slate-800 text-left shadow-2xl transition-all w-full max-w-lg animate-fade-in my-auto max-h-[90vh] flex flex-col">
                         
                         <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-[#0B101A] shrink-0">
@@ -323,7 +324,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                             </button>
                         </div>
 
-                        {/* TABS DE TIPO DE TRANSAÇÃO */}
                         <div className="grid grid-cols-2 p-1 bg-[#0F131E] border-b border-slate-800">
                             <button
                                 onClick={() => setTransactionType('BUY')}
@@ -355,7 +355,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                         <div className="relative">
                                             <select 
                                                 value={form.type}
-                                                onChange={(e) => setForm({...form, type: e.target.value as AssetType, ticker: ''})} // Limpa ticker ao mudar tipo
+                                                onChange={(e) => setForm({...form, type: e.target.value as AssetType, ticker: ''})} 
                                                 className="w-full bg-[#0B101A] text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-[#0F1729] transition-all duration-300 shadow-sm"
                                             >
                                                 <option value="STOCK">Ações BR</option>

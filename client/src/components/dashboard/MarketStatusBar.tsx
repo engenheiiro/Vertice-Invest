@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { MarketIndex } from '../../hooks/useDashboardData';
 
 interface MarketStatusBarProps {
@@ -15,18 +16,41 @@ export const MarketStatusBar: React.FC<MarketStatusBarProps> = ({ indices }) => 
                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Mercado Aberto</span>
                 </div>
                 
-                {indices.map((idx) => (
-                    <div key={idx.ticker} className="flex items-center gap-2 shrink-0 group cursor-default">
-                        <span className="text-[10px] font-bold text-slate-300 font-mono group-hover:text-blue-400 transition-colors">{idx.ticker}</span>
-                        <div className={`flex items-center gap-1 text-[10px] font-mono ${idx.changePercent >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                            {idx.changePercent >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                            <span>{idx.value.toLocaleString()}</span>
-                            <span className={`px-1 rounded ${idx.changePercent >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
-                                {idx.changePercent > 0 ? '+' : ''}{idx.changePercent}%
-                            </span>
+                {indices.map((idx) => {
+                    const change = idx.changePercent || 0;
+                    const val = idx.value || 0;
+                    
+                    let Icon = Minus;
+                    let colorClass = 'text-slate-400';
+                    let bgClass = 'bg-slate-800/50';
+
+                    if (change > 0) {
+                        Icon = TrendingUp;
+                        colorClass = 'text-emerald-500';
+                        bgClass = 'bg-emerald-500/10';
+                    } else if (change < 0) {
+                        Icon = TrendingDown;
+                        colorClass = 'text-red-500';
+                        bgClass = 'bg-red-500/10';
+                    }
+
+                    const displayValue = val < 100 
+                        ? val.toFixed(2) 
+                        : val.toLocaleString('pt-BR', { maximumFractionDigits: 0 }); 
+
+                    return (
+                        <div key={idx.ticker} className="flex items-center gap-2 shrink-0 group cursor-default">
+                            <span className="text-[10px] font-bold text-slate-300 font-mono group-hover:text-blue-400 transition-colors">{idx.ticker}</span>
+                            <div className={`flex items-center gap-1 text-[10px] font-mono ${colorClass}`}>
+                                <Icon size={10} />
+                                <span>{displayValue}</span>
+                                <span className={`px-1 rounded ${bgClass}`}>
+                                    {change > 0 ? '+' : ''}{change.toFixed(2)}%
+                                </span>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

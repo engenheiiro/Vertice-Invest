@@ -36,12 +36,6 @@ const calculateIntrinsicValue = (m, type, price, context) => {
     let fairPrice = price;
     let method = "Mercado";
 
-    // Usa RiskFree dinâmico (ex: 11.25%) convertido para decimal (0.1125) se necessário,
-    // mas a fórmula de Bazin clássica usa 6% (0.06).
-    // Podemos criar um "Bazin Dinâmico" usando MACRO.RISK_FREE * 0.6 ou algo assim.
-    // Por enquanto, vamos manter 6% como "Dividend Yield Mínimo Aceitável" para valuation teto clássico,
-    // mas penalizar no score se o DY for menor que a Selic.
-
     if (type === 'STOCK' || type === 'STOCK_US') {
         let graham = 0;
         if (m.pl > 0 && m.pvp > 0) {
@@ -54,7 +48,6 @@ const calculateIntrinsicValue = (m, type, price, context) => {
         if (m.dy > 0) {
             const adjustedDy = Math.min(m.dy, 10) / 100; 
             const dividendPerShare = price * adjustedDy;
-            // Bazin Clássico usa 6%. Podemos ajustar se quisermos ser mais exigentes.
             bazin = dividendPerShare / 0.06; 
         }
 
@@ -77,11 +70,8 @@ const calculateIntrinsicValue = (m, type, price, context) => {
             fairPrice = vp; 
             method = "VP (Papel)";
         } else {
-            // Valuation Relativo ao Tesouro Direto (NTNB_LONG)
-            // Se o DY do fundo é maior que NTNB, ele merece prêmio.
             const ntnb = MACRO.NTNB_LONG || 6.0;
             const yieldPremium = Math.max(0, m.dy - ntnb);
-            // Cada 1% de prêmio acima da NTNB justifica 15% de ágio (heurística)
             const valuationPremium = yieldPremium * 1.5; 
             fairPrice = vp * (1 + (valuationPremium / 100));
             method = "VP Ajustado (Spread NTNB)";
@@ -107,7 +97,6 @@ const calculateProfileScores = (asset, fairPrice, context) => {
     if (type === 'STOCK' || type === 'STOCK_US') {
         if (isEligibleForDefensive(asset, context)) {
             defScore = 70;
-            // Bonus se DY for competitivo com Renda Fixa (difícil, mas valorizado)
             if (m.dy > (RISK_FREE * 0.6)) defScore += 10; 
             if (m.roe > 15) defScore += 10;
             if (m.marketCap > 30000000000) defScore += 5;
@@ -132,10 +121,8 @@ const calculateProfileScores = (asset, fairPrice, context) => {
         const isBrick = !isPaper;
         const isTier1 = asset.dbFlags?.isTier1 || false;
 
-        // DEFENSIVO
         if (isEligibleForDefensive(asset, context)) {
             defScore = 60;
-            // Yield Premium REAL
             if (m.dy > NTNB + 2.5) defScore += 10;
             else if (m.dy > NTNB + 1) defScore += 5;
             
@@ -153,7 +140,7 @@ const calculateProfileScores = (asset, fairPrice, context) => {
                 if (m.marketCap > 1000000000) defScore += 5;
             } else { 
                 if (isTier1) defScore += 10;
-                if (m.dy < (RISK_FREE + 2)) defScore -= 5; // Papel tem que render bem acima da Selic
+                if (m.dy < (RISK_FREE + 2)) defScore -= 5;
             }
         }
 
@@ -174,13 +161,95 @@ const calculateProfileScores = (asset, fairPrice, context) => {
     };
 };
 
-// ... Resto das funções auxiliares (calculateStructuralScores, generateDynamicTheses) mantidas iguais ...
-// Elas não dependem diretamente do Macro Context, exceto generateDynamicTheses que já recebe context.
-
 const calculateStructuralScores = (m, type) => {
-    // (Lógica inalterada para brevidade, mas deve ser incluída no arquivo final)
-    let quality = 50; let valuation = 50; let risk = 50;
-    // ... Implementação padrão ...
+    let quality = 50;
+    let valuation = 50;
+    let risk = 50;
+
+    if (type === 'STOCK') {
+        // QUALIDADE (Max 100)
+        let qScore = 40;
+        if (m.roe > 15) qScore += 15;
+        else if (m.roe > 10) qScore += 10;
+        
+        if (m.netMargin > 15) qScore += 15;
+        else if (m.netMargin > 8) qScore += 10;
+        
+        if (m.marketCap > 10000000000) qScore += 15;
+        else if (m.marketCap > 2000000000) qScore += 10;
+        
+        if (m.debtToEquity < 1.0) qScore += 15;
+        
+        quality = Math.min(100, qScore);
+
+        // VALUATION (Max 100)
+        let vScore = 40;
+        if (m.pl > 0 && m.pl < 8) vScore += 20;
+        else if (m.pl < 15) vScore += 10;
+        
+        if (m.pvp > 0 && m.pvp < 1.0) vScore += 20;
+        else if (m.pvp < 1.5) vScore += 10;
+        
+        if (m.dy > 6) vScore += 20;
+        
+        valuation = Math.min(100, vScore);
+
+        // RISCO (Inverso - Quanto maior a nota, MAIS SEGURO)
+        let rScore = 40;
+        if (m.avgLiquidity > 50000000) rScore += 20;
+        else if (m.avgLiquidity > 5000000) rScore += 10;
+        
+        if (m.currentRatio > 1.5) rScore += 10;
+        if (m.debtToEquity > 3) rScore -= 20; // Dívida alta penaliza segurança
+        else if (m.debtToEquity < 0.5) rScore += 20;
+        
+        // Estabilidade de Margens (Simulado)
+        if (m.netMargin > 5) rScore += 10;
+
+        risk = Math.min(100, Math.max(10, rScore));
+    }
+    else if (type === 'FII') {
+        // QUALIDADE
+        let qScore = 40;
+        if (m.qtdImoveis > 10) qScore += 20;
+        else if (m.qtdImoveis > 5) qScore += 10;
+        
+        if (m.vacancy < 5) qScore += 20;
+        else if (m.vacancy < 10) qScore += 5;
+        else qScore -= 10;
+        
+        if (m.marketCap > 2000000000) qScore += 20;
+        
+        quality = Math.min(100, Math.max(10, qScore));
+
+        // VALUATION
+        let vScore = 40;
+        // P/VP Ideal é próximo de 1.0
+        if (m.pvp >= 0.90 && m.pvp <= 1.05) vScore += 30;
+        else if (m.pvp >= 0.80 && m.pvp <= 1.10) vScore += 15;
+        
+        // Yield alto ajuda valuation
+        if (m.dy > 10) vScore += 20;
+        else if (m.dy > 8) vScore += 10;
+        
+        valuation = Math.min(100, vScore);
+
+        // RISCO (Segurança)
+        let rScore = 40;
+        if (m.avgLiquidity > 5000000) rScore += 20;
+        // P/VP muito baixo em FIIs de papel é risco de calote
+        if (m.sector?.includes('Papel') && m.pvp < 0.85) rScore -= 20;
+        
+        // Diversificação geográfica (não temos esse dado, usamos qtd imoveis como proxy)
+        if (m.qtdImoveis > 5) rScore += 10;
+        
+        // Vacância alta é risco
+        if (m.vacancy > 15) rScore -= 20;
+        else if (m.vacancy < 2) rScore += 10;
+
+        risk = Math.min(100, Math.max(10, rScore));
+    }
+
     return { quality, valuation, risk };
 };
 
@@ -188,9 +257,18 @@ const generateDynamicTheses = (m, type, ticker, context) => {
     const { MACRO } = context;
     const bull = [];
     const bear = [];
-    // ... Implementação padrão, usando MACRO.NTNB_LONG ...
-    if (type === 'FII' && m.dy > MACRO.NTNB_LONG) bull.push(`Dividendos superam NTN-B (${MACRO.NTNB_LONG}%) + Spread.`);
     
+    // Análise Automatizada
+    if (m.dy > MACRO.SELIC) bull.push(`Yield (${m.dy.toFixed(1)}%) superior à Selic (${MACRO.SELIC}%).`);
+    if (m.pvp < 0.8 && m.dy > 0) bull.push(`Desconto patrimonial excessivo (P/VP ${m.pvp.toFixed(2)}).`);
+    if (m.roe > 20) bull.push(`Rentabilidade sobre PL excepcional (ROE ${m.roe.toFixed(1)}%).`);
+    if (m.revenueGrowth > 15) bull.push("Crescimento acelerado de receita (CAGR 5a > 15%).");
+    
+    if (m.debtToEquity > 4 && type === 'STOCK' && m.sector !== 'Bancos') bear.push("Alavancagem financeira elevada.");
+    if (m.avgLiquidity < 500000) bear.push("Liquidez reduzida pode dificultar saída.");
+    if (m.pl > 30) bear.push("Múltiplos esticados (P/L > 30).");
+    if (m.vacancy > 15 && type === 'FII') bear.push(`Vacância física alta (${m.vacancy.toFixed(1)}%).`);
+
     return { bull, bear };
 };
 
