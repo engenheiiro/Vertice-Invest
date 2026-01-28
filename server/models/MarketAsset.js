@@ -10,14 +10,19 @@ const MarketAssetSchema = new mongoose.Schema({
     required: true 
   },
   currency: { type: String, enum: ['BRL', 'USD'], default: 'BRL' },
-  sector: { type: String, default: 'Geral' },
   
-  // Dados Financeiros Persistidos
+  // --- Metadados de Análise (Substitui Hardcoding) ---
+  sector: { type: String, default: 'Geral' }, // O setor aqui terá prioridade sobre o scraper
+  isIgnored: { type: Boolean, default: false }, // Substitui IGNORED_TICKERS
+  isBlacklisted: { type: Boolean, default: false }, // Substitui BLACKLIST
+  isTier1: { type: Boolean, default: false }, // Substitui FII_TIER_1 (Qualidade Premium)
+  
+  // Dados Financeiros Persistidos (Cache)
   lastPrice: { type: Number, default: 0 },
-  netDebt: { type: Number, default: 0 }, // Dívida Líquida Persistida
-  marketCap: { type: Number, default: 0 }, // Valor de Mercado Persistido
+  netDebt: { type: Number, default: 0 },
+  marketCap: { type: Number, default: 0 },
   
-  // Dados Específicos FII (Cache Persistido)
+  // Dados Específicos FII (Cache)
   vacancy: { type: Number, default: 0 },
   p_vp: { type: Number, default: 0 },
   dy: { type: Number, default: 0 },
@@ -27,7 +32,6 @@ const MarketAssetSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-// Removemos index: true do campo ticker e mantemos apenas aqui para evitar duplicidade
 MarketAssetSchema.index({ type: 1, isActive: 1 });
 MarketAssetSchema.index({ ticker: 1 });
 

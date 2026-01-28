@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Header } from '../../components/dashboard/Header';
 import { researchService, ResearchReport } from '../../services/research';
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles } from 'lucide-react';
+import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles, Database } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 
 // Constantes de Configuração
@@ -21,6 +21,7 @@ export const AdminPanel = () => {
     const [auditModalOpen, setAuditModalOpen] = useState(false);
     const [selectedAuditReport, setSelectedAuditReport] = useState<ResearchReport | null>(null);
     const [isGlobalRunning, setIsGlobalRunning] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
     
     // Novos Estados Macro
     const [macroData, setMacroData] = useState<any>(null);
@@ -39,9 +40,10 @@ export const AdminPanel = () => {
         setIsLoadingMacro(true);
         try {
             const data = await researchService.getMacroData();
-            setMacroData(data);
+            setMacroData(data && Object.keys(data).length > 0 ? data : null);
         } catch (e) {
             console.error("Erro macro", e);
+            setMacroData(null);
         } finally {
             setIsLoadingMacro(false);
         }
@@ -51,6 +53,21 @@ export const AdminPanel = () => {
         loadHistory();
         loadMacro();
     }, []);
+
+    // Handler para o novo botão de Sync
+    const handleSyncData = async () => {
+        setIsSyncing(true);
+        setStatusMsg(null);
+        try {
+            await researchService.syncMarketData();
+            setStatusMsg({ type: 'success', text: "Banco de Dados atualizado com sucesso! Cotações sincronizadas." });
+        } catch (e: any) {
+            setStatusMsg({ type: 'error', text: e.message || "Erro na sincronização." });
+        } finally {
+            setIsSyncing(false);
+            setTimeout(() => setStatusMsg(null), 5000);
+        }
+    };
 
     const handleGlobalRun = async () => {
         setIsGlobalRunning(true);
@@ -121,6 +138,8 @@ export const AdminPanel = () => {
         return dateString.startsWith(today);
     };
 
+    const isMacroDataValid = macroData && macroData.selic && macroData.ibov;
+
     return (
         <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
             <Header />
@@ -154,21 +173,46 @@ export const AdminPanel = () => {
                             <Globe size={14} className="text-blue-500" />
                             Ambiente Macroeconômico (Ao Vivo)
                         </h3>
-                        {isLoadingMacro && <RefreshCw size={12} className="text-slate-500 animate-spin" />}
+                        
+                        <div className="flex items-center gap-2">
+                            {/* Botão Manual de Sync de Dados */}
+                            <button 
+                                onClick={handleSyncData}
+                                disabled={isSyncing}
+                                className={`
+                                    flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border
+                                    ${isSyncing 
+                                        ? 'bg-blue-900/20 text-blue-400 border-blue-900/50 cursor-wait' 
+                                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-blue-500'
+                                    }
+                                `}
+                                title="Forçar atualização de preços e indicadores no banco de dados"
+                            >
+                                <Database size={12} className={isSyncing ? 'animate-pulse' : ''} />
+                                {isSyncing ? 'Sincronizando...' : 'Atualizar Dados'}
+                            </button>
+                            
+                            {isLoadingMacro && <RefreshCw size={12} className="text-slate-500 animate-spin" />}
+                        </div>
                     </div>
                     
-                    {macroData ? (
+                    {isMacroDataValid ? (
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                            <MacroCard label="Selic" value={`${macroData.selic.value}%`} sub="BCB Meta" color="text-yellow-400" />
-                            <MacroCard label="CDI" value={`${macroData.cdi.value.toFixed(2)}%`} sub="Est. Cetip" color="text-yellow-400" />
-                            <MacroCard label="IPCA (12m)" value={`${macroData.ipca.value}%`} sub="Inflação" color="text-red-400" />
-                            <MacroCard label="Ibovespa" value={Math.round(macroData.ibov.value).toLocaleString()} change={macroData.ibov.change} sub="B3 Pts" />
-                            <MacroCard label="Dólar" value={`R$ ${macroData.usd.value.toFixed(3)}`} change={macroData.usd.change} sub="PTAX" />
-                            <MacroCard label="S&P 500" value={Math.round(macroData.spx.value).toLocaleString()} change={macroData.spx.change} sub="US Pts" />
-                            <MacroCard label="Bitcoin" value={`$${Math.round(macroData.btc.value).toLocaleString()}`} change={macroData.btc.change} sub="USD" color="text-purple-400" />
+                            <MacroCard label="Selic" value={`${macroData?.selic?.value}%`} sub="BCB Meta" color="text-yellow-400" />
+                            <MacroCard label="CDI" value={`${macroData?.cdi?.value?.toFixed(2)}%`} sub="Est. Cetip" color="text-yellow-400" />
+                            <MacroCard label="IPCA (12m)" value={`${macroData?.ipca?.value}%`} sub="Inflação" color="text-red-400" />
+                            <MacroCard label="Ibovespa" value={Math.round(macroData?.ibov?.value || 0).toLocaleString()} change={macroData?.ibov?.change} sub="B3 Pts" />
+                            <MacroCard label="Dólar" value={`R$ ${macroData?.usd?.value?.toFixed(3) || '0.000'}`} change={macroData?.usd?.change} sub="PTAX" />
+                            <MacroCard label="S&P 500" value={Math.round(macroData?.spx?.value || 0).toLocaleString()} change={macroData?.spx?.change} sub="US Pts" />
+                            <MacroCard label="Bitcoin" value={`$${Math.round(macroData?.btc?.value || 0).toLocaleString()}`} change={macroData?.btc?.change} sub="USD" color="text-purple-400" />
                         </div>
                     ) : (
-                        <div className="text-center text-xs text-slate-500 py-4">Carregando dados globais...</div>
+                        <div className="text-center text-xs text-slate-500 py-4 flex flex-col items-center">
+                            <p>Carregando dados globais ou serviço indisponível...</p>
+                            {!isLoadingMacro && (
+                                <button onClick={loadMacro} className="mt-2 text-blue-500 hover:underline">Tentar Novamente</button>
+                            )}
+                        </div>
                     )}
                 </div>
 

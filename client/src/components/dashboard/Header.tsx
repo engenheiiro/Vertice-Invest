@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, LayoutGrid, PieChart, BrainCircuit, 
-  GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings
+  GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3
 } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -30,6 +31,7 @@ export const Header: React.FC = () => {
       if (path.includes('/dashboard')) return 'terminal';
       if (path.includes('/wallet')) return 'wallet';
       if (path.includes('/research')) return 'research';
+      if (path.includes('/indicators')) return 'indicators';
       if (path.includes('/courses')) return 'courses';
       if (path.includes('/pricing')) return 'pricing';
       if (path.includes('/admin')) return 'admin';
@@ -61,6 +63,9 @@ export const Header: React.FC = () => {
               </Link>
               <Link to="/research">
                  <NavLink icon={<BrainCircuit size={14} />} label="Research" active={activeTab === 'research'} />
+              </Link>
+              <Link to="/indicators">
+                 <NavLink icon={<BarChart3 size={14} />} label="Indicadores" active={activeTab === 'indicators'} />
               </Link>
               <Link to="/courses">
                  <NavLink icon={<GraduationCap size={14} />} label="Cursos" active={activeTab === 'courses'} />
