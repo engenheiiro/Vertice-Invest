@@ -4,230 +4,23 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import MarketAsset from '../models/MarketAsset.js';
+import { SECTOR_OVERRIDES } from '../config/sectorOverrides.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-// Lista Completa Unificada (A mesma do Migration)
-const ASSETS_FULL_LIST = [
-    // --- FIIs ---
-    { ticker: 'CPSH11', sector: 'Shoppings', type: 'FII' }, { ticker: 'GGRC11', sector: 'Logística', type: 'FII' },
-    { ticker: 'TRXF11', sector: 'Renda Urbana', type: 'FII' }, { ticker: 'VISC11', sector: 'Shoppings', type: 'FII' },
-    { ticker: 'HTMX11', sector: 'Hotéis', type: 'FII' }, { ticker: 'PLAG11', sector: 'Fiagro', type: 'FII' },
-    { ticker: 'RZAT11', sector: 'Híbrido', type: 'FII' }, { ticker: 'TJKB11', sector: 'Híbrido', type: 'FII' },
-    { ticker: 'ALZR11', sector: 'Híbrido', type: 'FII' }, { ticker: 'BTHF11', sector: 'Papel', type: 'FII' },
-    { ticker: 'GARE11', sector: 'Híbrido', type: 'FII' }, { ticker: 'HGCR11', sector: 'Papel', type: 'FII' },
-    { ticker: 'KNCR11', sector: 'Papel', type: 'FII' }, { ticker: 'KNHY11', sector: 'Papel', type: 'FII' },
-    { ticker: 'KNIP11', sector: 'Infraestrutura', type: 'FII' }, { ticker: 'KNSC11', sector: 'Papel', type: 'FII' },
-    { ticker: 'KNUQ11', sector: 'Papel', type: 'FII' }, { ticker: 'MCCI11', sector: 'Papel', type: 'FII' },
-    { ticker: 'MXRF11', sector: 'Híbrido', type: 'FII' }, { ticker: 'PCIP11', sector: 'Papel', type: 'FII' },
-    { ticker: 'PSEC11', sector: 'Papel', type: 'FII' }, { ticker: 'RBRR11', sector: 'Papel', type: 'FII' },
-    { ticker: 'RBRY11', sector: 'Papel', type: 'FII' }, { ticker: 'TGAR11', sector: 'Desenvolvimento', type: 'FII' },
-    { ticker: 'VGIR11', sector: 'Papel', type: 'FII' }, { ticker: 'KNCA11', sector: 'Papel', type: 'FII' },
-    { ticker: 'KNHF11', sector: 'Híbrido', type: 'FII' }, { ticker: 'AFHI11', sector: 'Papel', type: 'FII' },
-    { ticker: 'AZPL11', sector: 'Logística', type: 'FII' }, { ticker: 'BBFO11', sector: 'Fundo de Fundos', type: 'FII' },
-    { ticker: 'BCIA11', sector: 'Fundo de Fundos', type: 'FII' }, { ticker: 'BRCO11', sector: 'Logística', type: 'FII' },
-    { ticker: 'BTCI11', sector: 'Papel', type: 'FII' }, { ticker: 'BTLG11', sector: 'Logística', type: 'FII' },
-    { ticker: 'CLIN11', sector: 'Papel', type: 'FII' }, { ticker: 'FGAA11', sector: 'Fiagro', type: 'FII' },
-    { ticker: 'GAME11', sector: 'Papel', type: 'FII' }, { ticker: 'GRUL11', sector: 'Logística', type: 'FII' },
-    { ticker: 'HGBS11', sector: 'Shoppings', type: 'FII' }, { ticker: 'HGLG11', sector: 'Logística', type: 'FII' },
-    { ticker: 'HGRU11', sector: 'Renda Urbana', type: 'FII' }, { ticker: 'HSAF11', sector: 'Papel', type: 'FII' },
-    { ticker: 'HSML11', sector: 'Shoppings', type: 'FII' }, { ticker: 'ICRI11', sector: 'Papel', type: 'FII' },
-    { ticker: 'ITRI11', sector: 'Papel', type: 'FII' }, { ticker: 'JSAF11', sector: 'Fundo de Fundos', type: 'FII' },
-    { ticker: 'JSCR11', sector: 'Papel', type: 'FII' }, { ticker: 'KCRE11', sector: 'Papel', type: 'FII' },
-    { ticker: 'KFOF11', sector: 'Fundo de Fundos', type: 'FII' }, { ticker: 'KISU11', sector: 'Fundo de Fundos', type: 'FII' },
-    { ticker: 'KNRI11', sector: 'Híbrido', type: 'FII' }, { ticker: 'LIFE11', sector: 'Fundo de Fundos', type: 'FII' },
-    { ticker: 'LVBI11', sector: 'Logística', type: 'FII' }, { ticker: 'MANA11', sector: 'Papel', type: 'FII' },
-    { ticker: 'PMIS11', sector: 'Papel', type: 'FII' }, { ticker: 'PORD11', sector: 'Papel', type: 'FII' },
-    { ticker: 'RINV11', sector: 'Híbrido', type: 'FII' }, { ticker: 'RPRI11', sector: 'Papel', type: 'FII' },
-    { ticker: 'RRCI11', sector: 'Papel', type: 'FII' }, { ticker: 'RZAK11', sector: 'Papel', type: 'FII' },
-    { ticker: 'RZLC11', sector: 'Logística', type: 'FII' }, { ticker: 'SAPI11', sector: 'Papel', type: 'FII' },
-    { ticker: 'SNFF11', sector: 'Fundo de Fundos', type: 'FII' }, { ticker: 'SNME11', sector: 'Multiestratégia', type: 'FII' },
-    { ticker: 'SPXS11', sector: 'Papel', type: 'FII' }, { ticker: 'TEPP11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'TMPS11', sector: 'Fundo de Fundos', type: 'FII' }, { ticker: 'VCJR11', sector: 'Papel', type: 'FII' },
-    { ticker: 'VGIP11', sector: 'Papel', type: 'FII' }, { ticker: 'VGRI11', sector: 'Papel', type: 'FII' },
-    { ticker: 'VILG11', sector: 'Logística', type: 'FII' }, { ticker: 'VRTA11', sector: 'Papel', type: 'FII' },
-    { ticker: 'XPCI11', sector: 'Papel', type: 'FII' }, { ticker: 'XPLG11', sector: 'Logística', type: 'FII' },
-    { ticker: 'XPML11', sector: 'Shoppings', type: 'FII' }, { ticker: 'AAZQ11', sector: 'Fiagro', type: 'FII' },
-    { ticker: 'CPTR11', sector: 'Fiagro', type: 'FII' }, { ticker: 'CRAA11', sector: 'Fiagro', type: 'FII' },
-    { ticker: 'EGAF11', sector: 'Fiagro', type: 'FII' }, { ticker: 'LSOP11', sector: 'Hotéis', type: 'FII' },
-    { ticker: 'NEWL11', sector: 'Híbrido', type: 'FII' }, { ticker: 'RBRL11', sector: 'Logística', type: 'FII' },
-    { ticker: 'RBVA11', sector: 'Renda Urbana', type: 'FII' }, { ticker: 'RURA11', sector: 'Fiagro', type: 'FII' },
-    { ticker: 'RZAG11', sector: 'Fiagro', type: 'FII' }, { ticker: 'SNFZ11', sector: 'Fiagro', type: 'FII' },
-    { ticker: 'TVRI11', sector: 'Papel', type: 'FII' }, { ticker: 'VGIA11', sector: 'Fiagro', type: 'FII' },
-    { ticker: 'XPCA11', sector: 'Fiagro', type: 'FII' }, { ticker: 'FATN11', sector: 'Papel', type: 'FII' },
-    { ticker: 'BTAL11', sector: 'Fiagro', type: 'FII' }, { ticker: 'CXCO11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'FIIP11', sector: 'Logística', type: 'FII' }, { ticker: 'LASC11', sector: 'Shoppings', type: 'FII' },
-    { ticker: 'VRTM11', sector: 'Papel', type: 'FII' }, { ticker: 'CPOF11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'FIIB11', sector: 'Logística', type: 'FII' }, { ticker: 'HSLG11', sector: 'Logística', type: 'FII' },
-    { ticker: 'HSRE11', sector: 'Híbrido', type: 'FII' }, { ticker: 'CPTS11', sector: 'Papel', type: 'FII' },
-    { ticker: 'CVBI11', sector: 'Papel', type: 'FII' }, { ticker: 'GSFI11', sector: 'Shoppings', type: 'FII' },
-    { ticker: 'RBRX11', sector: 'Híbrido', type: 'FII' }, { ticker: 'TRXB11', sector: 'Renda Urbana', type: 'FII' },
-    { ticker: 'ALZC11', sector: 'Papel', type: 'FII' }, { ticker: 'BBGO11', sector: 'Fiagro', type: 'FII' },
-    { ticker: 'BCRI11', sector: 'Papel', type: 'FII' }, { ticker: 'GTWR11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'MFII11', sector: 'Desenvolvimento', type: 'FII' }, { ticker: 'OUJP11', sector: 'Papel', type: 'FII' },
-    { ticker: 'RVBI11', sector: 'Fundo de Fundos', type: 'FII' }, { ticker: 'XPSF11', sector: 'Fundo de Fundos', type: 'FII' },
-    { ticker: 'RZTR11', sector: 'Fiagro', type: 'FII' }, { ticker: 'ARRI11', sector: 'Papel', type: 'FII' },
-    { ticker: 'CXRI11', sector: 'Fundo de Fundos', type: 'FII' }, { ticker: 'KIVO11', sector: 'Papel', type: 'FII' },
-    { ticker: 'KOPA11', sector: 'Híbrido', type: 'FII' }, { ticker: 'MCLO11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'RBFF11', sector: 'Fundo de Fundos', type: 'FII' }, { ticker: 'RBHG11', sector: 'Híbrido', type: 'FII' },
-    { ticker: 'RELG11', sector: 'Logística', type: 'FII' }, { ticker: 'SMRE11', sector: 'Multiestratégia', type: 'FII' },
-    { ticker: 'AGRX11', sector: 'Fiagro', type: 'FII' }, { ticker: 'BICE11', sector: 'Papel', type: 'FII' },
-    { ticker: 'PQAG11', sector: 'Fiagro', type: 'FII' }, { ticker: 'RBIR11', sector: 'Papel', type: 'FII' },
-    { ticker: 'SNAG11', sector: 'Fiagro', type: 'FII' }, { ticker: 'SNCI11', sector: 'Papel', type: 'FII' },
-    { ticker: 'SNEL11', sector: 'Infraestrutura', type: 'FII' }, { ticker: 'WHGR11', sector: 'Híbrido', type: 'FII' },
-    { ticker: 'BRCR11', sector: 'Lajes Corporativas', type: 'FII' }, { ticker: 'JSRE11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'RECT11', sector: 'Lajes Corporativas', type: 'FII' }, { ticker: 'VINO11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'VIUR11', sector: 'Renda Urbana', type: 'FII' }, { ticker: 'XPIN11', sector: 'Logística', type: 'FII' },
-    { ticker: 'CACR11', sector: 'Papel', type: 'FII' }, { ticker: 'HBCR11', sector: 'Papel', type: 'FII' },
-    { ticker: 'MALL11', sector: 'Shoppings', type: 'FII' }, { ticker: 'TRBL11', sector: 'Logística', type: 'FII' },
-    { ticker: 'AIEC11', sector: 'Lajes Corporativas', type: 'FII' }, { ticker: 'CPUR11', sector: 'Desenvolvimento', type: 'FII' },
-    { ticker: 'HGBL11', sector: 'Logística', type: 'FII' }, { ticker: 'JGPX11', sector: 'Papel', type: 'FII' },
-    { ticker: 'MGHT11', sector: 'Hotéis', type: 'FII' }, { ticker: 'VCRA11', sector: 'Papel', type: 'FII' },
-    { ticker: 'AJFI11', sector: 'Lajes Corporativas', type: 'FII' }, { ticker: 'HGRE11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'ICNE11', sector: 'Lajes Corporativas', type: 'FII' }, { ticker: 'IRIM11', sector: 'Papel', type: 'FII' },
-    { ticker: 'NEXG11', sector: 'Papel', type: 'FII' }, { ticker: 'PNDL11', sector: 'Papel', type: 'FII' },
-    { ticker: 'RCRB11', sector: 'Lajes Corporativas', type: 'FII' }, { ticker: 'BBIG11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'BPML11', sector: 'Shoppings', type: 'FII' }, { ticker: 'FIGS11', sector: 'Shoppings', type: 'FII' },
-    { ticker: 'INLG11', sector: 'Híbrido', type: 'FII' }, { ticker: 'TOPP11', sector: 'Papel', type: 'FII' },
-    { ticker: 'RECR11', sector: 'Papel', type: 'FII' }, { ticker: 'HABT11', sector: 'Papel', type: 'FII' },
-    { ticker: 'VGHF11', sector: 'Híbrido', type: 'FII' }, { ticker: 'BTRA11', sector: 'Fiagro', type: 'FII' },
-    { ticker: 'HPDP11', sector: 'Shoppings', type: 'FII' }, { ticker: 'PATL11', sector: 'Logística', type: 'FII' },
-    { ticker: 'GZIT11', sector: 'Shoppings', type: 'FII' }, { ticker: 'OULG11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'PATC11', sector: 'Lajes Corporativas', type: 'FII' }, { ticker: 'PVBI11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'CPLG11', sector: 'Logística', type: 'FII' }, { ticker: 'NSLU11', sector: 'Saúde', type: 'FII' },
-    { ticker: 'BLCA11', sector: 'Lajes Corporativas', type: 'FII' }, { ticker: 'MCRE11', sector: 'Papel', type: 'FII' },
-    { ticker: 'RBRP11', sector: 'Lajes Corporativas', type: 'FII' }, { ticker: 'BROF11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'KORE11', sector: 'Papel', type: 'FII' }, { ticker: 'CCME11', sector: 'Lajes Corporativas', type: 'FII' },
-    { ticker: 'HOFC11', sector: 'Lajes Corporativas', type: 'FII' }, { ticker: 'VCRR11', sector: 'Papel', type: 'FII' },
-    { ticker: 'DEVA11', sector: 'Papel', type: 'FII' }, { ticker: 'HCTR11', sector: 'Papel', type: 'FII' },
-    { ticker: 'URPR11', sector: 'Papel', type: 'FII' }, { ticker: 'PQDP11', sector: 'Shoppings', type: 'FII' },
-    { ticker: 'CNES11', sector: 'Lajes Corporativas', type: 'FII' }, { ticker: 'VXXV11', sector: 'Papel', type: 'FII' },
-
-    // --- AÇÕES ---
-    { ticker: 'RANI3', sector: 'Papel e Celulose', type: 'STOCK' }, { ticker: 'CEAB3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'COGN3', sector: 'Educação', type: 'STOCK' }, { ticker: 'VTRU3', sector: 'Educação', type: 'STOCK' },
-    { ticker: 'LAVV3', sector: 'Construção Civil', type: 'STOCK' }, { ticker: 'TAEE11', sector: 'Elétricas', type: 'STOCK' },
-    { ticker: 'TGMA3', sector: 'Logística', type: 'STOCK' }, { ticker: 'CAMB3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'PSSA3', sector: 'Seguros', type: 'STOCK' }, { ticker: 'GMAT3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'SAPR11', sector: 'Saneamento', type: 'STOCK' }, { ticker: 'ISAE4', sector: 'Elétricas', type: 'STOCK' },
-    { ticker: 'BLAU3', sector: 'Saúde', type: 'STOCK' }, { ticker: 'EZTC3', sector: 'Construção Civil', type: 'STOCK' },
-    { ticker: 'MDNE3', sector: 'Construção Civil', type: 'STOCK' }, { ticker: 'INTB3', sector: 'Tecnologia', type: 'STOCK' },
-    { ticker: 'PRIO3', sector: 'Petróleo', type: 'STOCK' }, { ticker: 'CASH3', sector: 'Tecnologia', type: 'STOCK' },
-    { ticker: 'DIRR3', sector: 'Construção Civil', type: 'STOCK' }, { ticker: 'LREN3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'VIVA3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'ODPV3', sector: 'Saúde', type: 'STOCK' },
-    { ticker: 'LOGG3', sector: 'Logística', type: 'STOCK' }, { ticker: 'POMO4', sector: 'Indústria', type: 'STOCK' },
-    { ticker: 'AZZA3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'WIZC3', sector: 'Seguros', type: 'STOCK' },
-    { ticker: 'ALOS3', sector: 'Shoppings', type: 'STOCK' }, { ticker: 'TECN3', sector: 'Tecnologia', type: 'STOCK' },
-    { ticker: 'VLID3', sector: 'Tecnologia', type: 'STOCK' }, { ticker: 'FIQE3', sector: 'Telecom', type: 'STOCK' },
-    { ticker: 'ABEV3', sector: 'Bebidas', type: 'STOCK' }, { ticker: 'CSUD3', sector: 'Tecnologia', type: 'STOCK' },
-    { ticker: 'MULT3', sector: 'Shoppings', type: 'STOCK' }, { ticker: 'PLPL3', sector: 'Construção Civil', type: 'STOCK' },
-    { ticker: 'MDIA3', sector: 'Alimentos', type: 'STOCK' }, { ticker: 'PETR4', sector: 'Petróleo', type: 'STOCK' },
-    { ticker: 'KEPL3', sector: 'Indústria', type: 'STOCK' }, { ticker: 'IGTI11', sector: 'Shoppings', type: 'STOCK' },
-    { ticker: 'BMOB3', sector: 'Tecnologia', type: 'STOCK' }, { ticker: 'TFCO4', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'RECV3', sector: 'Petróleo', type: 'STOCK' }, { ticker: 'CYRE3', sector: 'Construção Civil', type: 'STOCK' },
-    { ticker: 'VALE3', sector: 'Mineração', type: 'STOCK' }, { ticker: 'SBSP3', sector: 'Saneamento', type: 'STOCK' },
-    { ticker: 'JHSF3', sector: 'Construção Civil', type: 'STOCK' }, { ticker: 'LEVE3', sector: 'Indústria', type: 'STOCK' },
-    { ticker: 'CEBR6', sector: 'Elétricas', type: 'STOCK' }, { ticker: 'MILS3', sector: 'Indústria', type: 'STOCK' },
-    { ticker: 'B3SA3', sector: 'Financeiro', type: 'STOCK' }, { ticker: 'DEXP3', sector: 'Materiais Básicos', type: 'STOCK' },
-    { ticker: 'EUCA4', sector: 'Materiais Básicos', type: 'STOCK' }, { ticker: 'TEND3', sector: 'Construção Civil', type: 'STOCK' },
-    { ticker: 'ITSA4', sector: 'Bancos', type: 'STOCK' }, { ticker: 'ALUP11', sector: 'Elétricas', type: 'STOCK' },
-    { ticker: 'EMAE4', sector: 'Elétricas', type: 'STOCK' }, { ticker: 'IRBR3', sector: 'Seguros', type: 'STOCK' },
-    { ticker: 'CURY3', sector: 'Construção Civil', type: 'STOCK' }, { ticker: 'CMIG4', sector: 'Elétricas', type: 'STOCK' },
-    { ticker: 'FESA4', sector: 'Siderurgia', type: 'STOCK' }, { ticker: 'ANIM3', sector: 'Educação', type: 'STOCK' },
-    { ticker: 'CSMG3', sector: 'Saneamento', type: 'STOCK' }, { ticker: 'FLRY3', sector: 'Saúde', type: 'STOCK' },
-    { ticker: 'WEGE3', sector: 'Indústria', type: 'STOCK' }, { ticker: 'BRAV3', sector: 'Petróleo', type: 'STOCK' },
-    { ticker: 'ALPA4', sector: 'Varejo', type: 'STOCK' }, { ticker: 'LPSB3', sector: 'Imobiliário', type: 'STOCK' },
-    { ticker: 'PORT3', sector: 'Logística', type: 'STOCK' }, { ticker: 'CMIN3', sector: 'Mineração', type: 'STOCK' },
-    { ticker: 'NEOE3', sector: 'Elétricas', type: 'STOCK' }, { ticker: 'ABCB4', sector: 'Bancos', type: 'STOCK' },
-    { ticker: 'ENGI11', sector: 'Elétricas', type: 'STOCK' }, { ticker: 'SEER3', sector: 'Educação', type: 'STOCK' },
-    { ticker: 'SLCE3', sector: 'Agro', type: 'STOCK' }, { ticker: 'YDUQ3', sector: 'Educação', type: 'STOCK' },
-    { ticker: 'VIVT3', sector: 'Telecom', type: 'STOCK' }, { ticker: 'TOTS3', sector: 'Tecnologia', type: 'STOCK' },
-    { ticker: 'LIGT3', sector: 'Elétricas', type: 'STOCK' }, { ticker: 'TTEN3', sector: 'Agro', type: 'STOCK' },
-    { ticker: 'SBFG3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'SOJA3', sector: 'Agro', type: 'STOCK' },
-    { ticker: 'TRIS3', sector: 'Construção Civil', type: 'STOCK' }, { ticker: 'CSED3', sector: 'Educação', type: 'STOCK' },
-    { ticker: 'RDOR3', sector: 'Saúde', type: 'STOCK' }, { ticker: 'TIMS3', sector: 'Telecom', type: 'STOCK' },
-    { ticker: 'BRSR6', sector: 'Bancos', type: 'STOCK' }, { ticker: 'ITUB4', sector: 'Bancos', type: 'STOCK' },
-    { ticker: 'SMTO3', sector: 'Agro', type: 'STOCK' }, { ticker: 'VITT3', sector: 'Agro', type: 'STOCK' },
-    { ticker: 'MOVI3', sector: 'Logística', type: 'STOCK' }, { ticker: 'RADL3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'ETER3', sector: 'Materiais Básicos', type: 'STOCK' }, { ticker: 'SMFT3', sector: 'Saúde', type: 'STOCK' },
-    { ticker: 'BRAP4', sector: 'Mineração', type: 'STOCK' }, { ticker: 'CPFE3', sector: 'Elétricas', type: 'STOCK' },
-    { ticker: 'AZUL4', sector: 'Transporte', type: 'STOCK' }, { ticker: 'EVEN3', sector: 'Construção Civil', type: 'STOCK' },
-    { ticker: 'MBRF3', sector: 'Alimentos', type: 'STOCK' }, { ticker: 'GGPS3', sector: 'Serviços', type: 'STOCK' },
-    { ticker: 'BBAS3', sector: 'Bancos', type: 'STOCK' }, { ticker: 'ECOR3', sector: 'Infraestrutura', type: 'STOCK' },
-    { ticker: 'EQTL3', sector: 'Elétricas', type: 'STOCK' }, { ticker: 'BAZA3', sector: 'Bancos', type: 'STOCK' },
-    { ticker: 'CGRA4', sector: 'Varejo', type: 'STOCK' }, { ticker: 'MTRE3', sector: 'Construção Civil', type: 'STOCK' },
-    { ticker: 'UGPA3', sector: 'Petróleo', type: 'STOCK' }, { ticker: 'BBSE3', sector: 'Seguros', type: 'STOCK' },
-    { ticker: 'SUZB3', sector: 'Papel e Celulose', type: 'STOCK' }, { ticker: 'FRAS3', sector: 'Indústria', type: 'STOCK' },
-    { ticker: 'SHUL4', sector: 'Indústria', type: 'STOCK' }, { ticker: 'CLSC4', sector: 'Elétricas', type: 'STOCK' },
-    { ticker: 'COCE5', sector: 'Elétricas', type: 'STOCK' }, { ticker: 'ASAI3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'EGIE3', sector: 'Elétricas', type: 'STOCK' }, { ticker: 'GOAU4', sector: 'Siderurgia', type: 'STOCK' },
-    { ticker: 'DESK3', sector: 'Telecom', type: 'STOCK' }, { ticker: 'BBDC4', sector: 'Bancos', type: 'STOCK' },
-    { ticker: 'SANB11', sector: 'Bancos', type: 'STOCK' }, { ticker: 'UNIP6', sector: 'Química', type: 'STOCK' },
-    { ticker: 'CXSE3', sector: 'Seguros', type: 'STOCK' }, { ticker: 'CPLE3', sector: 'Elétricas', type: 'STOCK' },
-    { ticker: 'RENT3', sector: 'Logística', type: 'STOCK' }, { ticker: 'MYPK3', sector: 'Indústria', type: 'STOCK' },
-    { ticker: 'HBOR3', sector: 'Construção Civil', type: 'STOCK' }, { ticker: 'PFRM3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'DMVF3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'BPAC11', sector: 'Bancos', type: 'STOCK' },
-    { ticker: 'HYPE3', sector: 'Saúde', type: 'STOCK' }, { ticker: 'BMGB4', sector: 'Bancos', type: 'STOCK' },
-    { ticker: 'GGBR4', sector: 'Siderurgia', type: 'STOCK' }, { ticker: 'KLBN11', sector: 'Papel e Celulose', type: 'STOCK' },
-    { ticker: 'PETZ3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'CAML3', sector: 'Alimentos', type: 'STOCK' },
-    { ticker: 'PGMN3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'VAMO3', sector: 'Logística', type: 'STOCK' },
-    { ticker: 'BMEB4', sector: 'Bancos', type: 'STOCK' }, { ticker: 'PINE4', sector: 'Bancos', type: 'STOCK' },
-    { ticker: 'MGLU3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'MATD3', sector: 'Saúde', type: 'STOCK' },
-    { ticker: 'RAPT4', sector: 'Indústria', type: 'STOCK' }, { ticker: 'ENEV3', sector: 'Elétricas', type: 'STOCK' },
-    { ticker: 'EMBJ3', sector: 'Indústria', type: 'STOCK' }, { ticker: 'ORVR3', sector: 'Saneamento', type: 'STOCK' },
-    { ticker: 'ROMI3', sector: 'Indústria', type: 'STOCK' }, { ticker: 'RAIL3', sector: 'Logística', type: 'STOCK' },
-    { ticker: 'PNVL3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'JPSA3', sector: 'Shoppings', type: 'STOCK' },
-    { ticker: 'BRST3', sector: 'Telecom', type: 'STOCK' }, { ticker: 'TASA4', sector: 'Indústria', type: 'STOCK' },
-    { ticker: 'ARML3', sector: 'Serviços', type: 'STOCK' }, { ticker: 'BRBI11', sector: 'Bancos', type: 'STOCK' },
-    { ticker: 'PRNR3', sector: 'Indústria', type: 'STOCK' }, { ticker: 'VBBR3', sector: 'Petróleo', type: 'STOCK' },
-    { ticker: 'ESPA3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'LOGN3', sector: 'Logística', type: 'STOCK' },
-    { ticker: 'ALPK3', sector: 'Infraestrutura', type: 'STOCK' }, { ticker: 'BPAN4', sector: 'Bancos', type: 'STOCK' },
-    { ticker: 'QUAL3', sector: 'Saúde', type: 'STOCK' }, { ticker: 'OPCT3', sector: 'Logística', type: 'STOCK' },
-    { ticker: 'CBAV3', sector: 'Mineração', type: 'STOCK' }, { ticker: 'DXCO3', sector: 'Materiais Básicos', type: 'STOCK' },
-    { ticker: 'ALLD3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'VULC3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'GRND3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'SYNE3', sector: 'Construção Civil', type: 'STOCK' },
-    { ticker: 'MELK3', sector: 'Construção Civil', type: 'STOCK' }, { ticker: 'GUAR3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'JSLG3', sector: 'Logística', type: 'STOCK' }, { ticker: 'HBRE3', sector: 'Construção Civil', type: 'STOCK' },
-    { ticker: 'POSI3', sector: 'Tecnologia', type: 'STOCK' }, { ticker: 'AURA33', sector: 'Mineração', type: 'STOCK' },
-    { ticker: 'AGRO3', sector: 'Agro', type: 'STOCK' }, { ticker: 'LAND3', sector: 'Agro', type: 'STOCK' },
-    { ticker: 'HBSA3', sector: 'Logística', type: 'STOCK' }, { ticker: 'MLAS3', sector: 'Tecnologia', type: 'STOCK' },
-    { ticker: 'HAPV3', sector: 'Saúde', type: 'STOCK' }, { ticker: 'CVCB3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'SCAR3', sector: 'Indústria', type: 'STOCK' }, { ticker: 'BIOM3', sector: 'Saúde', type: 'STOCK' },
-    { ticker: 'TUPY3', sector: 'Indústria', type: 'STOCK' }, { ticker: 'NGRD3', sector: 'Tecnologia', type: 'STOCK' },
-    { ticker: 'JALL3', sector: 'Agro', type: 'STOCK' }, { ticker: 'ENJU3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'LWSA3', sector: 'Tecnologia', type: 'STOCK' }, { ticker: 'AURE3', sector: 'Elétricas', type: 'STOCK' },
-    { ticker: 'CSNA3', sector: 'Siderurgia', type: 'STOCK' }, { ticker: 'RCSL4', sector: 'Indústria', type: 'STOCK' },
-    { ticker: 'AALR3', sector: 'Saúde', type: 'STOCK' }, { ticker: 'SIMH3', sector: 'Logística', type: 'STOCK' },
-    { ticker: 'NATU3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'BEEF3', sector: 'Alimentos', type: 'STOCK' },
-    { ticker: 'LUPA3', sector: 'Indústria', type: 'STOCK' }, { ticker: 'DASA3', sector: 'Saúde', type: 'STOCK' },
-    { ticker: 'LJQQ3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'MRVE3', sector: 'Construção Civil', type: 'STOCK' },
-    { ticker: 'TPIS3', sector: 'Logística', type: 'STOCK' }, { ticker: 'PTBL3', sector: 'Materiais Básicos', type: 'STOCK' },
-    { ticker: 'USIM5', sector: 'Siderurgia', type: 'STOCK' }, { ticker: 'MEAL3', sector: 'Alimentos', type: 'STOCK' },
-    { ticker: 'AMBP3', sector: 'Saneamento', type: 'STOCK' }, { ticker: 'CSAN3', sector: 'Petróleo', type: 'STOCK' },
-    { ticker: 'GFSA3', sector: 'Construção Civil', type: 'STOCK' }, { ticker: 'BRKM5', sector: 'Química', type: 'STOCK' },
-    { ticker: 'BHIA3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'PCAR3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'AMER3', sector: 'Varejo', type: 'STOCK' }, { ticker: 'ONCO3', sector: 'Saúde', type: 'STOCK' },
-    { ticker: 'RAIZ4', sector: 'Petróleo', type: 'STOCK' }, { ticker: 'SHOW3', sector: 'Varejo', type: 'STOCK' },
-    { ticker: 'VVEO3', sector: 'Logística', type: 'STOCK' }, { ticker: 'IFCM3', sector: 'Tecnologia', type: 'STOCK' },
-    { ticker: 'AZEV4', sector: 'Construção Civil', type: 'STOCK' }, { ticker: 'AERI3', sector: 'Indústria', type: 'STOCK' },
-    { ticker: 'PMAM3', sector: 'Indústria', type: 'STOCK' }, { ticker: 'PDGR3', sector: 'Construção Civil', type: 'STOCK' },
-    { ticker: 'OIBR3', sector: 'Telecom', type: 'STOCK' }, { ticker: 'SEQL3', sector: 'Logística', type: 'STOCK' },
-
-    // --- CRYPTO (Top 10) ---
-    { ticker: 'BTC', name: 'Bitcoin', type: 'CRYPTO', currency: 'USD', sector: 'Blockchain' },
-    { ticker: 'ETH', name: 'Ethereum', type: 'CRYPTO', currency: 'USD', sector: 'Smart Contracts' },
-    { ticker: 'SOL', name: 'Solana', type: 'CRYPTO', currency: 'USD', sector: 'Smart Contracts' },
-    { ticker: 'BNB', name: 'Binance Coin', type: 'CRYPTO', currency: 'USD', sector: 'Exchange' },
-    { ticker: 'USDT', name: 'Tether', type: 'CRYPTO', currency: 'USD', sector: 'Stablecoin' },
+// Esta lista base serve apenas para criar os documentos iniciais.
+// O setor será "corrigido" em tempo de execução pelo SECTOR_OVERRIDES.
+const ASSETS_BASE_LIST = [
+    // EXEMPLOS CRÍTICOS (FIIs)
+    { ticker: 'HGLG11', type: 'FII' }, { ticker: 'KNRI11', type: 'FII' },
+    { ticker: 'MXRF11', type: 'FII' }, { ticker: 'HGRU11', type: 'FII' },
+    { ticker: 'RBHG11', type: 'FII' }, // <--- Seu ativo problemático
     
-    // --- STOCKS US (Top 10) ---
-    { ticker: 'AAPL', name: 'Apple Inc.', type: 'STOCK_US', currency: 'USD', sector: 'Tecnologia' },
-    { ticker: 'MSFT', name: 'Microsoft', type: 'STOCK_US', currency: 'USD', sector: 'Tecnologia' },
-    { ticker: 'NVDA', name: 'NVIDIA', type: 'STOCK_US', currency: 'USD', sector: 'Tecnologia' },
-    { ticker: 'AMZN', name: 'Amazon', type: 'STOCK_US', currency: 'USD', sector: 'Varejo' },
-    { ticker: 'GOOGL', name: 'Alphabet', type: 'STOCK_US', currency: 'USD', sector: 'Tecnologia' }
+    // A lista completa seria enorme, então no SEED vamos confiar que o sistema 
+    // vai criar os ativos automaticamente via Sync ou Migration.
+    // Mas para garantir os principais, vamos iterar sobre o SECTOR_OVERRIDES.
 ];
 
 const seed = async () => {
@@ -239,19 +32,43 @@ const seed = async () => {
         await MarketAsset.deleteMany({});
         console.log("✅ Coleção limpa.");
 
-        let count = 0;
-        // Inserção em batch para performance
-        await MarketAsset.insertMany(ASSETS_FULL_LIST.map(a => ({
-            ...a,
-            name: a.ticker, // Fallback para nome = ticker se não especificado
-            currency: a.type === 'STOCK_US' || a.type === 'CRYPTO' ? 'USD' : 'BRL',
-            sector: a.sector || 'Outros'
-        })));
+        // Construir lista de ativos baseada no SECTOR_OVERRIDES
+        const assetsToCreate = [];
         
-        count = ASSETS_FULL_LIST.length;
+        // 1. Adicionar ativos do Overrides (Garante que tudo que configuramos existe)
+        Object.entries(SECTOR_OVERRIDES).forEach(([ticker, sector]) => {
+            let type = 'STOCK';
+            // Lógica simples para inferir tipo baseada no ticker (pode refinar se quiser)
+            if (ticker.endsWith('11') || ticker.endsWith('11B')) type = 'FII'; 
+            // Exceções conhecidas de Ações com final 11
+            if (['TAEE11', 'ALUP11', 'KLBN11', 'SANB11', 'SAPR11', 'ENGI11', 'BPAC11'].includes(ticker)) type = 'STOCK';
 
-        console.log(`\n✅ Base de dados recriada com ${count} ativos.`);
-        console.log("👉 Setores unificados com o script de Migração.");
+            assetsToCreate.push({
+                ticker,
+                name: ticker,
+                type,
+                sector: sector, // Já insere com o setor correto
+                currency: 'BRL'
+            });
+        });
+
+        // 2. Adicionar Crypto e US Stocks (que não estão no Overrides geralmente)
+        const extras = [
+            { ticker: 'BTC', name: 'Bitcoin', type: 'CRYPTO', currency: 'USD', sector: 'Blockchain' },
+            { ticker: 'ETH', name: 'Ethereum', type: 'CRYPTO', currency: 'USD', sector: 'Smart Contracts' },
+            { ticker: 'AAPL', name: 'Apple', type: 'STOCK_US', currency: 'USD', sector: 'Tecnologia' },
+            { ticker: 'NVDA', name: 'NVIDIA', type: 'STOCK_US', currency: 'USD', sector: 'Tecnologia' }
+        ];
+        assetsToCreate.push(...extras);
+
+        // Remove duplicatas (caso haja overlap)
+        const uniqueAssets = Array.from(new Map(assetsToCreate.map(item => [item.ticker, item])).values());
+
+        // Inserção em batch
+        await MarketAsset.insertMany(uniqueAssets);
+        
+        console.log(`\n✅ Base de dados recriada com ${uniqueAssets.length} ativos.`);
+        console.log("👉 Setores sincronizados com server/config/sectorOverrides.js");
         process.exit(0);
     } catch (e) {
         console.error("Erro no seed:", e);

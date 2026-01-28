@@ -1,12 +1,17 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Header } from '../components/dashboard/Header';
 import { researchService } from '../services/research';
-import { Activity, TrendingUp, TrendingDown, RefreshCw, Layers, Calendar, DollarSign, Percent, ShieldCheck } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, RefreshCw, Layers, Calendar, ShieldCheck, Database, ArrowUpDown, Target, Info, Filter, Percent } from 'lucide-react';
+
+type SortKey = 'title' | 'type' | 'rate' | 'minInvestment' | 'maturityDate';
+type FilterType = 'ALL' | 'IPCA' | 'PREFIXADO' | 'SELIC' | 'OUTROS';
 
 export const Indicators = () => {
     const [data, setData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({ key: 'type', direction: 'asc' });
+    const [filterType, setFilterType] = useState<FilterType>('ALL');
 
     const loadData = async () => {
         setIsLoading(true);
@@ -24,8 +29,33 @@ export const Indicators = () => {
         loadData();
     }, []);
 
-    // Formatações
-    const fmtPct = (val: number) => val ? `${val.toFixed(2)}%` : '-';
+    const handleSort = (key: SortKey) => {
+        let direction: 'asc' | 'desc' = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const sortedBonds = useMemo(() => {
+        if (!data?.bonds) return [];
+        
+        let filtered = data.bonds;
+        if (filterType !== 'ALL') {
+            if (filterType === 'OUTROS') {
+                filtered = filtered.filter((b: any) => !['IPCA', 'PREFIXADO', 'SELIC'].includes(b.type));
+            } else {
+                filtered = filtered.filter((b: any) => b.type === filterType);
+            }
+        }
+
+        return [...filtered].sort((a, b) => {
+            if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }, [data?.bonds, sortConfig, filterType]);
+
     const fmtCurrency = (val: number) => val ? `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-';
 
     return (
@@ -34,7 +64,6 @@ export const Indicators = () => {
 
             <main className="max-w-[1600px] mx-auto p-6 animate-fade-in">
                 
-                {/* Header Section */}
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -49,81 +78,50 @@ export const Indicators = () => {
                         className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold rounded-xl transition-all border border-slate-700"
                     >
                         <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-                        Atualizar
+                        {isLoading ? 'Atualizando...' : 'Atualizar Dados'}
                     </button>
                 </div>
 
-                {/* --- GRID INDICADORES MACRO --- */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 mb-10">
-                    <IndicatorCard 
-                        label="SELIC" 
-                        value={data?.selic?.value} 
-                        suffix="%" 
-                        desc="Meta BCB" 
-                        color="text-emerald-400" 
-                        icon={<TargetIcon />} 
-                    />
-                    <IndicatorCard 
-                        label="CDI" 
-                        value={data?.cdi?.value} 
-                        suffix="%" 
-                        desc="Taxa DI" 
-                        color="text-emerald-400" 
-                        icon={<TrendingUp size={16} />} 
-                    />
-                    <IndicatorCard 
-                        label="IPCA (12m)" 
-                        value={data?.ipca?.value} 
-                        suffix="%" 
-                        desc="Inflação" 
-                        color="text-yellow-400" 
-                        icon={<Percent size={16} />} 
-                    />
-                    <IndicatorCard 
-                        label="Ibovespa" 
-                        value={data?.ibov?.value} 
-                        isCurrency={false} 
-                        desc="Pts" 
-                        change={data?.ibov?.change} 
-                    />
-                    <IndicatorCard 
-                        label="Dólar PTAX" 
-                        value={data?.usd?.value} 
-                        isCurrency={true} 
-                        desc="BRL/USD" 
-                        change={data?.usd?.change} 
-                    />
-                    <IndicatorCard 
-                        label="S&P 500" 
-                        value={data?.spx?.value} 
-                        isCurrency={false} 
-                        desc="US Pts" 
-                        change={data?.spx?.change} 
-                    />
-                    <IndicatorCard 
-                        label="Bitcoin" 
-                        value={data?.btc?.value} 
-                        isCurrency={true} 
-                        currencyPrefix="$"
-                        desc="USD" 
-                        color="text-purple-400" 
-                        change={data?.btc?.change} 
-                    />
+                    <IndicatorCard label="SELIC" value={data?.selic?.value} suffix="%" desc="Meta BCB" color="text-emerald-400" icon={<Target size={16} />} />
+                    <IndicatorCard label="CDI" value={data?.cdi?.value} suffix="%" desc="Taxa DI" color="text-emerald-400" icon={<TrendingUp size={16} />} />
+                    <IndicatorCard label="IPCA (12m)" value={data?.ipca?.value} suffix="%" desc="Inflação" color="text-yellow-400" icon={<Percent size={16} />} />
+                    
+                    <IndicatorCard label="Ibovespa" value={data?.ibov?.value} isCurrency={false} desc="Pts" change={data?.ibov?.change} />
+                    <IndicatorCard label="Dólar PTAX" value={data?.usd?.value} isCurrency={true} desc="BRL/USD" change={data?.usd?.change} />
+                    <IndicatorCard label="S&P 500" value={data?.spx?.value} isCurrency={false} desc="US Pts" change={data?.spx?.change} />
+                    <IndicatorCard label="Bitcoin" value={data?.btc?.value} isCurrency={true} currencyPrefix="$" desc="USD" color="text-purple-400" change={data?.btc?.change} />
                 </div>
 
-                {/* --- MESA DE RENDA FIXA (TESOURO DIRETO) --- */}
                 <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-                    <div className="p-6 border-b border-slate-800 bg-[#0B101A] flex items-center justify-between">
+                    <div className="p-6 border-b border-slate-800 bg-[#0B101A] flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
                                 <ShieldCheck size={20} className="text-emerald-500" />
                             </div>
                             <div>
                                 <h2 className="text-lg font-bold text-white uppercase tracking-wide">Mesa de Renda Fixa</h2>
-                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                                    Títulos do Tesouro Nacional
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
+                                    <Database size={10} /> Base de Dados: {data?.bonds?.length || 0} Títulos
                                 </p>
                             </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-800">
+                            <Filter size={14} className="text-slate-500 ml-2" />
+                            {['ALL', 'IPCA', 'PREFIXADO', 'SELIC'].map((ft) => (
+                                <button
+                                    key={ft}
+                                    onClick={() => setFilterType(ft as FilterType)}
+                                    className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
+                                        filterType === ft 
+                                        ? 'bg-blue-600 text-white shadow-lg' 
+                                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                    }`}
+                                >
+                                    {ft === 'ALL' ? 'Todos' : ft}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
@@ -131,16 +129,34 @@ export const Indicators = () => {
                         <table className="w-full text-left border-collapse min-w-[800px]">
                             <thead className="bg-[#0F131E] text-[10px] font-black text-slate-500 uppercase tracking-widest">
                                 <tr>
-                                    <th className="px-6 py-4">Título</th>
-                                    <th className="px-6 py-4">Tipo</th>
-                                    <th className="px-6 py-4 text-right">Rentabilidade Anual</th>
-                                    <th className="px-6 py-4 text-right">Investimento Mín.</th>
-                                    <th className="px-6 py-4 text-right">Vencimento</th>
+                                    <SortableHeader label="Título" sortKey="title" currentSort={sortConfig} onSort={handleSort} align="left" />
+                                    
+                                    {/* Header com Tooltip Explicativo */}
+                                    <th className="px-6 py-4">
+                                        <div className="flex items-center gap-2">
+                                            Tipo
+                                            <div className="group relative">
+                                                <Info size={12} className="text-slate-600 cursor-help" />
+                                                <div className="absolute left-0 bottom-full mb-2 w-64 bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl hidden group-hover:block z-50">
+                                                    <p className="text-[10px] text-white font-bold mb-2">Classificação de Risco/Retorno:</p>
+                                                    <ul className="space-y-1 text-[9px] text-slate-400">
+                                                        <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-purple-500"></span> IPCA: Proteção contra inflação. Longo prazo.</li>
+                                                        <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> PRE: Taxa fixa. Risco de mercado médio.</li>
+                                                        <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"></span> SELIC: Pós-fixado. Baixo risco e liquidez.</li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </th>
+
+                                    <SortableHeader label="Rentabilidade Anual" sortKey="rate" currentSort={sortConfig} onSort={handleSort} align="right" />
+                                    <SortableHeader label="Investimento Mín." sortKey="minInvestment" currentSort={sortConfig} onSort={handleSort} align="right" />
+                                    <SortableHeader label="Vencimento" sortKey="maturityDate" currentSort={sortConfig} onSort={handleSort} align="right" />
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/50 text-sm">
-                                {data?.bonds?.length > 0 ? (
-                                    data.bonds.map((bond: any) => (
+                                {sortedBonds.length > 0 ? (
+                                    sortedBonds.map((bond: any) => (
                                         <tr key={bond._id} className="hover:bg-slate-900/40 transition-colors group">
                                             <td className="px-6 py-4 font-bold text-slate-200 group-hover:text-white">
                                                 {bond.title}
@@ -166,8 +182,10 @@ export const Indicators = () => {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={5} className="p-8 text-center text-slate-500">
-                                            {isLoading ? 'Carregando títulos...' : 'Nenhum título disponível no momento.'}
+                                        <td colSpan={5} className="p-12 text-center text-slate-500 flex flex-col items-center justify-center">
+                                            <Database size={32} className="mb-2 opacity-50" />
+                                            <p className="font-bold">Base de dados sincronizando...</p>
+                                            <p className="text-xs mt-1">Aguarde a atualização automática do servidor.</p>
                                         </td>
                                     </tr>
                                 )}
@@ -181,47 +199,60 @@ export const Indicators = () => {
     );
 };
 
-// Componentes Auxiliares
-
-const IndicatorCard = ({ label, value, suffix = '', desc, color = 'text-white', icon, isCurrency, currencyPrefix = 'R$', change }: any) => (
-    <div className="bg-[#080C14] border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition-colors relative overflow-hidden group">
-        <div className="flex justify-between items-start mb-2 relative z-10">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
-            {icon && <div className="text-slate-600">{icon}</div>}
+const SortableHeader = ({ label, sortKey, currentSort, onSort, align }: any) => (
+    <th 
+        className={`px-6 py-4 cursor-pointer hover:text-white transition-colors text-${align}`}
+        onClick={() => onSort(sortKey)}
+    >
+        <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
+            {label}
+            <ArrowUpDown size={10} className={currentSort.key === sortKey ? 'text-blue-500' : 'text-slate-700'} />
         </div>
-        
-        <div className="relative z-10">
-            <h3 className={`text-xl font-black ${color} tracking-tight`}>
-                {isCurrency 
-                    ? `${currencyPrefix} ${value?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) || '0,00'}` 
-                    : value?.toLocaleString('pt-BR') || '0.00'
-                }
-                {suffix}
-            </h3>
-            
-            <div className="flex items-center justify-between mt-1">
-                <span className="text-[10px] text-slate-600 font-medium">{desc}</span>
-                {change !== undefined && (
-                    <span className={`text-[10px] font-bold flex items-center ${change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                        {change >= 0 ? <TrendingUp size={10} className="mr-1" /> : <TrendingDown size={10} className="mr-1" />}
-                        {Math.abs(change).toFixed(2)}%
-                    </span>
-                )}
+    </th>
+);
+
+const IndicatorCard = ({ label, value, suffix = '', desc, color = 'text-white', icon, isCurrency, currencyPrefix = 'R$', change }: any) => {
+    let ChangeIcon = null;
+    let changeColor = 'text-slate-500';
+    
+    if (change > 0) {
+        ChangeIcon = TrendingUp;
+        changeColor = 'text-emerald-500';
+    } else if (change < 0) {
+        ChangeIcon = TrendingDown;
+        changeColor = 'text-red-500';
+    }
+
+    return (
+        <div className="bg-[#080C14] border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition-colors relative overflow-hidden group">
+            <div className="flex justify-between items-start mb-2 relative z-10">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+                {icon && <div className="text-slate-600">{icon}</div>}
             </div>
+            
+            <div className="relative z-10">
+                <h3 className={`text-xl font-black ${color} tracking-tight`}>
+                    {isCurrency 
+                        ? `${currencyPrefix} ${value?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) || '0,00'}` 
+                        : value?.toLocaleString('pt-BR') || '0.00'
+                    }
+                    {suffix}
+                </h3>
+                
+                <div className="flex items-center justify-between mt-1">
+                    <span className="text-[10px] text-slate-600 font-medium">{desc}</span>
+                    {change !== undefined && ChangeIcon && (
+                        <span className={`text-[10px] font-bold flex items-center ${changeColor}`}>
+                            <ChangeIcon size={10} className="mr-1" />
+                            {Math.abs(change).toFixed(2)}%
+                        </span>
+                    )}
+                </div>
+            </div>
+            <div className="absolute -bottom-10 -right-10 w-24 h-24 bg-slate-800/50 rounded-full blur-[40px] group-hover:bg-slate-700/50 transition-colors"></div>
         </div>
-
-        {/* Background Glow */}
-        <div className="absolute -bottom-10 -right-10 w-24 h-24 bg-slate-800/50 rounded-full blur-[40px] group-hover:bg-slate-700/50 transition-colors"></div>
-    </div>
-);
-
-const TargetIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10"></circle>
-        <circle cx="12" cy="12" r="6"></circle>
-        <circle cx="12" cy="12" r="2"></circle>
-    </svg>
-);
+    );
+};
 
 const getBondTypeStyle = (type: string) => {
     switch(type) {

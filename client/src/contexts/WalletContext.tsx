@@ -16,7 +16,7 @@ export interface Asset {
     profitPercent: number;
     currency: 'BRL' | 'USD';
     name?: string;
-    sector?: string; // Campo opcional para classificação setorial
+    sector?: string; 
 }
 
 export interface WalletKPIs {
@@ -29,11 +29,18 @@ export interface WalletKPIs {
     totalDividends: number;
 }
 
+export interface HistoryPoint {
+    date: string;
+    totalEquity: number;
+    profit: number;
+}
+
 export type AllocationMap = Partial<Record<AssetType, number>>;
 
 interface WalletContextType {
     assets: Asset[];
     kpis: WalletKPIs;
+    history: HistoryPoint[];
     targetAllocation: AllocationMap;
     targetReserve: number;
     isLoading: boolean;
@@ -47,6 +54,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [assets, setAssets] = useState<Asset[]>([]);
+    const [history, setHistory] = useState<HistoryPoint[]>([]);
     const [kpis, setKpis] = useState<WalletKPIs>({
         totalEquity: 0, totalInvested: 0, totalResult: 0, 
         totalResultPercent: 0, dayVariation: 0, dayVariationPercent: 0, totalDividends: 0
@@ -58,7 +66,10 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     const refreshWallet = async () => {
         try {
-            const data = await walletService.getWallet();
+            const [data, historyData] = await Promise.all([
+                walletService.getWallet(),
+                walletService.getHistory()
+            ]);
             
             const rawAssets: Asset[] = data.assets || [];
             
@@ -84,6 +95,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             const backendKpis = data.kpis || {};
 
             setAssets(validAssets);
+            setHistory(historyData || []);
             setKpis({
                 totalEquity,
                 totalInvested,
@@ -136,7 +148,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     return (
         <WalletContext.Provider value={{ 
-            assets, kpis, targetAllocation, targetReserve, 
+            assets, kpis, history, targetAllocation, targetReserve, 
             isLoading, refreshWallet, addAsset, removeAsset,
             updateTargets
         }}>

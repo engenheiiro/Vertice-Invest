@@ -8,12 +8,25 @@ export const walletService = {
         return await response.json();
     },
 
+    async getHistory() {
+        const response = await authService.api('/api/wallet/history');
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
     async addAsset(data: any) {
+        console.log("📤 [Client] Enviando ativo para API:", data); // LOG ADICIONADO
+        
         const response = await authService.api('/api/wallet/add', {
             method: 'POST',
             body: JSON.stringify(data)
         });
-        if (!response.ok) throw new Error("Falha ao adicionar ativo");
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error("❌ [Client] Erro da API:", errorData); // LOG DE ERRO DETALHADO
+            throw new Error(errorData.message || "Falha ao adicionar ativo");
+        }
         return await response.json();
     },
 

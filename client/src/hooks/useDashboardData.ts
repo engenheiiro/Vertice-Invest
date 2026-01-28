@@ -43,24 +43,24 @@ export const useDashboardData = () => {
     const [marketIndices, setMarketIndices] = useState<MarketIndex[]>([]);
     const [isLoadingResearch, setIsLoadingResearch] = useState(true);
     
-    // Cache local de scores para evitar fetch excessivo
+    // Cache local de scores
     const [scoreMap, setScoreMap] = useState<Map<string, { score: number, action: string }>>(new Map());
 
-    // 1. Fetch Research Data & Build Score Map
+    // 1. Fetch Research Data, Radar & Market Indices (Real)
     useEffect(() => {
         const fetchResearch = async () => {
             setIsLoadingResearch(true);
             try {
-                // Busca os relatórios principais para cruzar dados
-                const [stockReport, fiiReport, brasil10Report] = await Promise.all([
+                // Busca Reports + Macro Data em paralelo
+                const [stockReport, fiiReport, brasil10Report, macroData] = await Promise.all([
                     researchService.getLatest('STOCK', 'BUY_HOLD'),
                     researchService.getLatest('FII', 'BUY_HOLD'),
-                    researchService.getLatest('BRASIL_10', 'BUY_HOLD')
+                    researchService.getLatest('BRASIL_10', 'BUY_HOLD'),
+                    researchService.getMacroData()
                 ]);
 
+                // --- MAPA DE SCORES ---
                 const newMap = new Map();
-                
-                // Helper para popular o mapa
                 const processReport = (rep: any) => {
                     if (rep?.content?.ranking) {
                         rep.content.ranking.forEach((item: RankingItem) => {
@@ -68,13 +68,11 @@ export const useDashboardData = () => {
                         });
                     }
                 };
-
                 processReport(stockReport);
                 processReport(fiiReport);
-                
                 setScoreMap(newMap);
 
-                // --- POPULAR RADAR (Signals) ---
+                // --- RADAR SINAIS ---
                 if (brasil10Report?.content?.ranking) {
                     const mappedSignals: AiSignal[] = brasil10Report.content.ranking
                         .slice(0, 5)
@@ -112,8 +110,39 @@ export const useDashboardData = () => {
                     }
                 }
 
+                // --- TERMINAL INDICATORS (REAL) ---
+                if (macroData) {
+                    setMarketIndices([
+                        { 
+                            ticker: "IBOV", 
+                            value: macroData.ibov?.value || 0, 
+                            changePercent: macroData.ibov?.change || 0 
+                        },
+                        { 
+                            ticker: "CDI", 
+                            value: macroData.cdi?.value || 0, 
+                            changePercent: 0 
+                        },
+                        { 
+                            ticker: "USD", 
+                            value: macroData.usd?.value || 0, 
+                            changePercent: macroData.usd?.change || 0 
+                        },
+                        { 
+                            ticker: "BTC", 
+                            value: macroData.btc?.value || 0, 
+                            changePercent: macroData.btc?.change || 0 
+                        },
+                        { 
+                            ticker: "S&P", 
+                            value: macroData.spx?.value || 0, 
+                            changePercent: macroData.spx?.change || 0 
+                        }
+                    ]);
+                }
+
             } catch (err) {
-                console.error("Erro ao carregar research:", err);
+                console.error("Erro ao carregar research/macro:", err);
             } finally {
                 setIsLoadingResearch(false);
             }
@@ -122,12 +151,10 @@ export const useDashboardData = () => {
         fetchResearch();
     }, [user?.plan]);
 
-    // 2. Mapeia Carteira com Scores Reais
+    // 2. Mapeia Carteira com Scores
     useEffect(() => {
         const mappedPortfolio: PortfolioItem[] = assets.map(asset => {
             const researchData = scoreMap.get(asset.ticker);
-            
-            // Determina sentimento baseado na ação da IA
             let sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
             if (researchData) {
                 if (researchData.action === 'BUY') sentiment = 'BULLISH';
@@ -140,7 +167,6 @@ export const useDashboardData = () => {
                 shares: asset.quantity,
                 avgPrice: asset.averagePrice,
                 currentPrice: asset.currentPrice,
-                // Usa o score real se existir, senão usa 50 (Neutro)
                 aiScore: researchData ? researchData.score : 50, 
                 aiSentiment: sentiment
             };
@@ -154,16 +180,6 @@ export const useDashboardData = () => {
             dayPercent: parseFloat(kpis.dayVariationPercent.toFixed(2))
         });
     }, [assets, kpis, scoreMap]);
-
-    // 3. Dados Macro (Mockados/Placeholder)
-    useEffect(() => {
-        setMarketIndices([
-            { ticker: "IBOV", value: 128500, changePercent: 0.45 },
-            { ticker: "CDI", value: 11.15, changePercent: 0.00 },
-            { ticker: "USD", value: 5.65, changePercent: -0.50 },
-            { ticker: "BTC", value: 64500, changePercent: 1.25 },
-        ]);
-    }, []);
 
     return {
         portfolio,

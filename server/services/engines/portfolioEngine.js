@@ -9,9 +9,10 @@ export const portfolioEngine = {
         const usedTickers = new Set();
 
         const draft = (profile, scoreKey, count) => {
-            // --- TRAVA DE SEGURANÇA SETORIAL ---
-            // Limita cada setor a no MÁXIMO 25% das vagas disponíveis neste perfil.
-            const MAX_PER_SECTOR_PROFILE = Math.ceil(count * 0.25); 
+            // --- TRAVA DE SEGURANÇA SETORIAL (HARD CAP) ---
+            // Atualizado: Limita cada setor a no MÁXIMO 20% das vagas disponíveis.
+            // Ex: Em um Top 10, no máximo 2 ativos do mesmo setor.
+            const MAX_PER_SECTOR_PROFILE = Math.ceil(count * 0.20); 
             const sectorCounts = {};
             
             // Filtra candidatos elegíveis (Score > 50) e ordena por maior nota
@@ -28,7 +29,7 @@ export const portfolioEngine = {
                 const sector = asset.sector || 'Outros';
                 const currentSectorCount = sectorCounts[sector] || 0;
 
-                // Verifica se o setor já estourou a cota de 25%
+                // Verifica se o setor já estourou a cota de 20%
                 if (currentSectorCount < MAX_PER_SECTOR_PROFILE) {
                     finalPortfolio.push({
                         ...asset,

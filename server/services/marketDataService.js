@@ -5,6 +5,7 @@ import SystemConfig from '../models/SystemConfig.js';
 import { fundamentusService } from './fundamentusService.js';
 import { macroDataService } from './macroDataService.js';
 import { externalMarketService } from './externalMarketService.js';
+import { SECTOR_OVERRIDES } from '../config/sectorOverrides.js';
 
 const FALLBACK_MACRO = {
     selic: { value: 11.25 },
@@ -45,12 +46,12 @@ export const marketDataService = {
 
     async getMacroIndicators() {
         try {
-            // Busca do banco (Fonte da Verdade)
+            // PERFORMANCE FIX: Lê APENAS do Banco de Dados.
+            // A atualização real acontece via CronJob (schedulerService) a cada 30min.
+            // Isso remove o delay de 3-5 segundos ao carregar o Dashboard.
+            
             const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
             
-            // Busca índices de mercado ao vivo (Yahoo) para complementar (Ibov/SPX)
-            const liveIndices = await externalMarketService.getGlobalIndices();
-
             if (config) {
                 return {
                     selic: { value: config.selic },
@@ -58,14 +59,15 @@ export const marketDataService = {
                     ipca: { value: config.ipca },
                     riskFree: { value: config.riskFree },
                     ntnbLong: { value: config.ntnbLong },
-                    usd: { value: config.dollar, change: 0 },
                     
-                    // Mescla dados do banco com dados live do Yahoo
-                    ibov: liveIndices.ibov || { value: 128000, change: 0 },
-                    spx: liveIndices.spx || { value: 5200, change: 0 },
-                    
-                    // BTC geralmente vem do Yahoo/AwesomeAPI, mas podemos ter um fallback
-                    btc: { value: 0, change: 0 } 
+                    // Dados persistidos pelo CronJob
+                    usd: { 
+                        value: config.dollar || 5.75, 
+                        change: 0 // Variação diária complexa de persistir, mantendo 0 ou implementando histórico futuro
+                    },
+                    ibov: { value: config.ibov || 128000, change: config.ibovChange || 0 },
+                    spx: { value: config.spx || 5800, change: config.spxChange || 0 },
+                    btc: { value: config.btc || 90000, change: config.btcChange || 0 }
                 };
             }
             return FALLBACK_MACRO;
@@ -79,8 +81,7 @@ export const marketDataService = {
         try {
             logger.info("🔄 [SYNC] Iniciando sincronização TOTAL de dados...");
             
-            // 1. Atualiza Macro (BCB, Tesouro, Moedas)
-            // Isso garante que o valuation use taxas atualizadas
+            // 1. Atualiza Macro (BCB, Tesouro, Moedas e Índices Globais)
             await macroDataService.performMacroSync();
 
             const operations = [];
@@ -91,6 +92,13 @@ export const marketDataService = {
             const fiiMap = await fundamentusService.getFIIsMap();
 
             const pushOp = (ticker, data, type) => {
+                // LÓGICA DE PROTEÇÃO DE SETOR
+                let finalSector = SECTOR_OVERRIDES[ticker];
+                
+                if (!finalSector) {
+                    finalSector = data.sector || 'Outros';
+                }
+
                 operations.push({
                     updateOne: {
                         filter: { ticker: ticker },
@@ -101,7 +109,7 @@ export const marketDataService = {
                                 p_vp: Number(data.pvp) || 0,
                                 marketCap: Number(data.marketCap) || 0,
                                 vacancy: Number(data.vacancy) || 0,
-                                sector: data.sector || undefined,
+                                sector: finalSector, 
                                 lastAnalysisDate: timestamp,
                                 updatedAt: timestamp
                             },
@@ -119,7 +127,6 @@ export const marketDataService = {
             if (fiiMap) fiiMap.forEach((v, k) => pushOp(k, v, 'FII'));
 
             // 3. External (Crypto e Stocks US)
-            // Busca todos os ativos desses tipos já cadastrados no banco para atualizar preço
             const externalAssets = await MarketAsset.find({ 
                 type: { $in: ['CRYPTO', 'STOCK_US'] } 
             }).select('ticker type');
@@ -161,28 +168,20 @@ export const marketDataService = {
         }
     },
 
-    // Mantido para compatibilidade com o ResearchController antigo
     async getMarketData(assetClass) {
-        // ... (Mesma lógica anterior de getMarketData, mas pode ser otimizada para ler do banco)
-        // Por brevidade e segurança, mantemos a lógica híbrida existente aqui, 
-        // mas agora ela se beneficia do performFullSync rodando em background.
-        
-        // Reutilizar lógica existente do arquivo original para getMarketData...
-        // (Vou reescrever a parte essencial para garantir que funcione com o novo structure)
-        
         const isBrasil = assetClass === 'STOCK' || assetClass === 'FII' || assetClass === 'BRASIL_10';
         const results = [];
         
         if (isBrasil) {
-            const allDbAssets = await MarketAsset.find({ 
-                $or: [{ type: 'STOCK' }, { type: 'FII' }] 
-            }).select('ticker sector isIgnored isBlacklisted isTier1');
+            const queryType = assetClass === 'BRASIL_10' ? { $in: ['STOCK', 'FII'] } : { $in: [assetClass] };
             
-            const dbAssetMap = new Map();
-            allDbAssets.forEach(a => dbAssetMap.set(a.ticker, a));
+            const dbAssets = await MarketAsset.find({ 
+                type: queryType,
+                isIgnored: false,
+                isBlacklisted: false
+            });
 
             let fundDataMap = new Map();
-
             if (assetClass === 'STOCK' || assetClass === 'BRASIL_10') {
                 const stockMap = await fundamentusService.getStocksMap();
                 if (stockMap) stockMap.forEach((v, k) => fundDataMap.set(k, { ...v, type: 'STOCK' }));
@@ -192,34 +191,26 @@ export const marketDataService = {
                 if (fiiMap) fiiMap.forEach((v, k) => fundDataMap.set(k, { ...v, type: 'FII' }));
             }
 
-            for (const [ticker, fundData] of fundDataMap) {
-                const dbInfo = dbAssetMap.get(ticker);
-                if (dbInfo && dbInfo.isIgnored) continue;
-                
+            for (const asset of dbAssets) {
+                const fundData = fundDataMap.get(asset.ticker);
+                if (!fundData) continue;
+
                 const liquidity = fundData.liq2m || fundData.liquidity || 0;
                 if (liquidity < 200000) continue; 
 
-                let sector = fundData.sector;
-                if (dbInfo && dbInfo.sector && dbInfo.sector !== 'Geral' && dbInfo.sector !== 'Outros') {
-                    sector = dbInfo.sector;
-                }
-                if (!sector) sector = 'Geral';
-
                 results.push({
-                    ticker: ticker,
-                    type: fundData.type,
-                    name: ticker, 
-                    sector: sector,
-                    price: fundData.price,
-                    dbFlags: { isBlacklisted: dbInfo?.isBlacklisted, isTier1: dbInfo?.isTier1 }, 
+                    ticker: asset.ticker,
+                    type: asset.type,
+                    name: asset.name || asset.ticker, 
+                    sector: asset.sector, 
+                    price: asset.lastPrice || fundData.price,
+                    dbFlags: { isBlacklisted: asset.isBlacklisted, isTier1: asset.isTier1 }, 
                     metrics: {
                         ...fundData,
-                        marketCap: fundData.marketCap || 0,
+                        marketCap: asset.marketCap || fundData.marketCap || 0,
                         avgLiquidity: liquidity,
-                        roe: fundData.roe || 0,
-                        dy: fundData.dy || 0,
-                        pvp: fundData.pvp || 0,
-                        pl: fundData.pl || 0
+                        dy: asset.dy || fundData.dy || 0,
+                        pvp: asset.p_vp || fundData.pvp || 0
                     }
                 });
             }

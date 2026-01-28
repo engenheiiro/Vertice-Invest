@@ -11,11 +11,11 @@ const MarketAssetSchema = new mongoose.Schema({
   },
   currency: { type: String, enum: ['BRL', 'USD'], default: 'BRL' },
   
-  // --- Metadados de Análise (Substitui Hardcoding) ---
-  sector: { type: String, default: 'Geral' }, // O setor aqui terá prioridade sobre o scraper
-  isIgnored: { type: Boolean, default: false }, // Substitui IGNORED_TICKERS
-  isBlacklisted: { type: Boolean, default: false }, // Substitui BLACKLIST
-  isTier1: { type: Boolean, default: false }, // Substitui FII_TIER_1 (Qualidade Premium)
+  // --- Metadados de Análise ---
+  sector: { type: String, default: 'Geral' }, 
+  isIgnored: { type: Boolean, default: false }, 
+  isBlacklisted: { type: Boolean, default: false }, 
+  isTier1: { type: Boolean, default: false }, 
   
   // Dados Financeiros Persistidos (Cache)
   lastPrice: { type: Number, default: 0 },
@@ -32,8 +32,9 @@ const MarketAssetSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
+// Apenas índices compostos ou que não sejam 'unique' devem ser definidos aqui
+// Removido ticker: 1 pois unique: true já cria o índice
 MarketAssetSchema.index({ type: 1, isActive: 1 });
-MarketAssetSchema.index({ ticker: 1 });
 
 const MarketAsset = mongoose.models.MarketAsset || mongoose.model('MarketAsset', MarketAssetSchema);
 export default MarketAsset;

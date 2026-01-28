@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Header } from '../../components/dashboard/Header';
 import { researchService, ResearchReport } from '../../services/research';
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles, Database } from 'lucide-react';
+import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles, Database, Minus } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 
 // Constantes de Configuração
@@ -450,7 +450,7 @@ const MacroCard = ({ label, value, change, sub, color }: any) => (
             <span className="text-[9px] text-slate-600">{sub}</span>
             {change !== undefined && (
                 <span className={`text-[9px] font-bold flex items-center ${change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {change >= 0 ? <TrendingUp size={8} className="mr-0.5" /> : <TrendingDown size={8} className="mr-0.5" />}
+                    {change > 0 ? <TrendingUp size={8} className="mr-0.5" /> : change < 0 ? <TrendingDown size={8} className="mr-0.5" /> : <Minus size={8} className="mr-0.5" />}
                     {Math.abs(change).toFixed(2)}%
                 </span>
             )}

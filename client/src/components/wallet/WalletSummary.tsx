@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { useWallet } from '../../contexts/WalletContext';
@@ -41,14 +42,14 @@ export const WalletSummary = () => {
                 subValue={<span className="text-slate-500 text-xs">Custo de Aquisição</span>}
             />
 
-            {/* Rentabilidade (Lucro/Prejuízo) */}
+            {/* Lucro Total (Nome alterado) */}
             <SummaryCard 
                 icon={<TrendingUp className={kpis.totalResult >= 0 ? "text-emerald-400" : "text-red-400"} size={20} />}
-                title="Resultado Aberto"
+                title="Lucro Total"
                 value={formatCurrency(kpis.totalResult)}
                 subValue={
                     <span className={`text-xs font-bold ${kpis.totalResult >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                        {kpis.totalResult >= 0 ? '+' : ''}{kpis.totalResultPercent.toFixed(2)}% (Total)
+                        {kpis.totalResult >= 0 ? '+' : ''}{kpis.totalResultPercent.toFixed(2)}% (Rentabilidade)
                     </span>
                 }
                 glowColor={kpis.totalResult >= 0 ? "emerald" : "red"}
