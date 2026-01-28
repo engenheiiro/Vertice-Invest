@@ -12,6 +12,10 @@ export const getWalletData = async (req, res, next) => {
         const userId = req.user.id;
         const userAssets = await UserAsset.find({ user: userId });
         
+        // Separa ativos ativos (qty > 0) de histórico (qty = 0)
+        const activeAssets = userAssets.filter(a => a.quantity > 0.000001);
+        const closedAssets = userAssets.filter(a => a.quantity <= 0.000001);
+
         if (userAssets.length === 0) {
             return res.json({ 
                 assets: [], 
@@ -19,12 +23,12 @@ export const getWalletData = async (req, res, next) => {
             });
         }
 
-        const tickers = userAssets.map(a => a.ticker);
+        const tickers = activeAssets.map(a => a.ticker);
         const marketAssets = await MarketAsset.find({ ticker: { $in: tickers } }).select('ticker sector');
         const staticInfoMap = new Map();
         marketAssets.forEach(ma => staticInfoMap.set(ma.ticker, ma.sector));
 
-        const uniqueTickers = [...new Set(userAssets.map(a => marketDataService.normalizeSymbol(a.ticker, a.type)))];
+        const uniqueTickers = [...new Set(activeAssets.map(a => marketDataService.normalizeSymbol(a.ticker, a.type)))];
         const priceMap = new Map();
 
         // Busca dados de mercado em paralelo
@@ -36,31 +40,34 @@ export const getWalletData = async (req, res, next) => {
         let totalEquity = 0;
         let totalInvested = 0;
         let totalDayVariation = 0;
+        
+        // Calcula lucro realizado de posições fechadas
+        let totalRealizedProfit = closedAssets.reduce((acc, curr) => acc + (curr.realizedProfit || 0), 0);
 
-        const processedAssets = userAssets.map(asset => {
+        const processedAssets = activeAssets.map(asset => {
             const symbol = marketDataService.normalizeSymbol(asset.ticker, asset.type);
             const marketInfo = priceMap.get(symbol) || { price: 0, change: 0, name: asset.ticker };
             
             const multiplier = asset.currency === 'USD' ? USD_RATE_MOCK : 1;
             
-            // Tratamento especial para CASH (Preço fixo ou unitário 1)
             const currentPrice = asset.type === 'CASH' ? 1 : (marketInfo.price || 0);
             const avgPrice = asset.quantity > 0 ? asset.totalCost / asset.quantity : 0;
             
-            // Para CASH, o valor total é a quantidade (já que preço é 1)
-            // Para outros, é qtd * preço
             const equity = asset.quantity * currentPrice * multiplier;
             const invested = asset.totalCost * multiplier;
             
             totalEquity += equity;
             totalInvested += invested;
 
-            // Variação diária
             const dayChange = equity * (marketInfo.change / 100);
             totalDayVariation += isNaN(dayChange) ? 0 : dayChange;
 
-            const profit = equity - invested;
-            const profitPercent = invested > 0 ? (profit / invested) * 100 : 0;
+            // Lucro não realizado desta posição
+            const unrealizedProfit = equity - invested;
+            
+            // Adiciona o lucro realizado parcial desta posição (se houver vendas parciais anteriores)
+            const positionTotalResult = unrealizedProfit + (asset.realizedProfit || 0);
+            const profitPercent = invested > 0 ? (positionTotalResult / invested) * 100 : 0;
 
             let sector = staticInfoMap.get(asset.ticker);
             if (!sector) {
@@ -68,6 +75,7 @@ export const getWalletData = async (req, res, next) => {
                 else if (asset.type === 'STOCK') sector = 'Ações Diversas';
                 else if (asset.type === 'CRYPTO') sector = 'Criptoativos';
                 else if (asset.type === 'CASH') sector = 'Caixa';
+                else if (asset.type === 'FIXED_INCOME') sector = 'Renda Fixa';
                 else sector = 'Outros';
             }
 
@@ -81,20 +89,26 @@ export const getWalletData = async (req, res, next) => {
                 currentPrice: currentPrice,
                 currency: asset.currency,
                 totalValue: equity,
-                profit: profit,
+                profit: positionTotalResult,
                 profitPercent: profitPercent,
                 sector: sector 
             };
         });
 
-        const totalResult = totalEquity - totalInvested;
+        // Resultado Total = (Equity Atual - Custo Atual) + Lucro Realizado (de vendas totais ou parciais)
+        // Nota: processedAssets já soma realizedProfit parcial. 
+        // Precisamos somar o realizedProfit das posições FECHADAS (totalRealizedProfit).
+        const currentUnrealized = totalEquity - totalInvested;
+        const partialRealized = activeAssets.reduce((acc, curr) => acc + (curr.realizedProfit || 0), 0);
+        
+        const totalResult = currentUnrealized + partialRealized + totalRealizedProfit;
         
         res.json({
             assets: processedAssets,
             kpis: {
                 totalEquity,
                 totalInvested,
-                totalResult,
+                totalResult, // Agora reflete o histórico correto
                 totalResultPercent: totalInvested > 0 ? (totalResult / totalInvested) * 100 : 0,
                 dayVariation: totalDayVariation,
                 dayVariationPercent: totalEquity > 0 ? (totalDayVariation / totalEquity) * 100 : 0
@@ -110,7 +124,6 @@ export const getWalletData = async (req, res, next) => {
 export const getWalletHistory = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        // Busca snapshots dos últimos 12 meses
         const snapshots = await WalletSnapshot.find({ user: userId })
             .sort({ date: 1 })
             .limit(365);
@@ -123,19 +136,30 @@ export const getWalletHistory = async (req, res, next) => {
 
 export const searchAssets = async (req, res, next) => {
     try {
-        const query = req.query.q?.toUpperCase();
-        if (!query || query.length < 3) return res.json(null);
+        const query = req.query.q?.trim();
+        if (!query || query.length < 2) return res.json([]); // Mínimo 2 chars para autocomplete fluido
 
-        const localAsset = await MarketAsset.findOne({ ticker: { $regex: `^${query}` } }).select('ticker name lastPrice');
+        const regex = new RegExp(query, 'i');
+        const tickerRegex = new RegExp(`^${query}`, 'i');
+
+        // Busca LIMIT 5 para autocomplete rápido
+        const assets = await MarketAsset.find({ 
+            $or: [
+                { ticker: tickerRegex },
+                { name: regex }
+            ]
+        })
+        .select('ticker name lastPrice type')
+        .limit(5);
         
-        if (localAsset) {
-            return res.json({
-                ticker: localAsset.ticker,
-                name: localAsset.name,
-                price: localAsset.lastPrice
-            });
-        }
-        return res.json(null);
+        const results = assets.map(a => ({
+            ticker: a.ticker,
+            name: a.name,
+            price: a.lastPrice,
+            type: a.type
+        }));
+
+        return res.json(results);
     } catch (error) {
         next(error);
     }
@@ -144,120 +168,98 @@ export const searchAssets = async (req, res, next) => {
 export const addAssetTransaction = async (req, res, next) => {
     try {
         const { ticker, type, quantity, currency } = req.body;
-        // Resiliência: Aceita 'price' OU 'averagePrice'
         const rawPrice = req.body.price !== undefined ? req.body.price : req.body.averagePrice;
-        
         const userId = req.user.id;
         
-        logger.info(`📝 [ADD_ASSET] Iniciando transação. User: ${userId}, Ticker: ${ticker}, Type: ${type}`);
-        logger.debug(`📦 Payload recebido: ${JSON.stringify(req.body)}`);
-
-        if (!ticker) {
-            logger.warn("⚠️ Ticker não fornecido.");
-            return res.status(400).json({ message: "Ticker obrigatório." });
-        }
+        if (!ticker) return res.status(400).json({ message: "Ticker obrigatório." });
 
         const cleanTicker = ticker.toUpperCase().trim();
-        
-        // --- VALIDAÇÃO DE ENTRADA (Defesa contra NaN) ---
         const numQty = parseFloat(quantity);
         const numPrice = parseFloat(rawPrice);
 
-        logger.debug(`🔢 Valores convertidos: Qty=${numQty}, Price=${numPrice}`);
-
-        if (isNaN(numQty)) {
-            logger.error(`❌ Quantidade inválida recebida: ${quantity}`);
-            return res.status(400).json({ message: "Quantidade inválida." });
-        }
-        if (isNaN(numPrice)) {
-            logger.error(`❌ Preço inválido recebido: ${rawPrice}`);
-            return res.status(400).json({ message: "Preço inválido." });
+        if (isNaN(numQty) || isNaN(numPrice)) {
+            return res.status(400).json({ message: "Valores inválidos." });
         }
 
         let asset = await UserAsset.findOne({ user: userId, ticker: cleanTicker });
 
         if (asset) {
-            logger.info(`🔄 Ativo existente encontrado. Atualizando posição.`);
             if (numQty < 0) {
-                // Venda
-                const oldAvgPrice = asset.totalCost / asset.quantity;
-                const newQuantity = asset.quantity + numQty; // numQty é negativo
+                // --- LÓGICA DE VENDA COM REALIZAÇÃO DE LUCRO ---
+                const sellQty = Math.abs(numQty);
                 
-                if (newQuantity <= 0.000001) { // Margem de erro para float
-                    logger.info(`🗑️ Venda total. Removendo ativo.`);
-                    await UserAsset.findByIdAndDelete(asset._id);
-                    return res.status(200).json({ message: "Posição zerada." });
-                } else {
-                    asset.quantity = newQuantity;
-                    // Ao vender, o custo total diminui proporcionalmente ao preço médio original
-                    const newTotalCost = newQuantity * oldAvgPrice;
-                    
-                    if (isNaN(newTotalCost)) {
-                        logger.error(`❌ Erro matemático na venda. NewQty: ${newQuantity}, OldAvg: ${oldAvgPrice}`);
-                        return res.status(400).json({ message: "Erro matemático ao processar venda." });
-                    }
-                    asset.totalCost = newTotalCost;
+                if (sellQty > asset.quantity + 0.000001) {
+                    return res.status(400).json({ message: "Quantidade insuficiente para venda." });
                 }
+
+                // Cálculo do Preço Médio Atual
+                const currentAvgPrice = asset.totalCost / asset.quantity;
+                
+                // Custo proporcional das ações sendo vendidas
+                const costOfSoldShares = sellQty * currentAvgPrice;
+                
+                // Valor da venda
+                const saleValue = sellQty * numPrice;
+                
+                // Lucro desta transação
+                const profit = saleValue - costOfSoldShares;
+
+                // Atualiza Ativo
+                asset.quantity -= sellQty;
+                asset.totalCost -= costOfSoldShares;
+                asset.realizedProfit = (asset.realizedProfit || 0) + profit;
+
+                // Se quantidade for zero (ou muito próxima), mantemos o registro para histórico de lucro, mas zeramos custo/qty
+                if (asset.quantity <= 0.000001) {
+                    asset.quantity = 0;
+                    asset.totalCost = 0; 
+                    // realizedProfit é mantido!
+                    logger.info(`📉 Posição zerada em ${cleanTicker}. Lucro realizado salvo.`);
+                }
+
             } else {
-                // Compra
+                // --- COMPRA ---
+                // Se o ativo estava zerado, ele "renasce", mantendo o histórico de realizedProfit antigo
                 asset.quantity += numQty;
-                const costAddition = (numQty * numPrice);
-                
-                if (isNaN(costAddition)) {
-                    logger.error(`❌ Erro matemático na compra. Qty: ${numQty}, Price: ${numPrice}`);
-                    return res.status(400).json({ message: "Erro matemático no custo da transação." });
-                }
-                
-                asset.totalCost += costAddition;
+                asset.totalCost += (numQty * numPrice);
             }
+            
             asset.updatedAt = Date.now();
             await asset.save();
-            logger.info(`✅ Ativo atualizado com sucesso.`);
         } else {
-            logger.info(`✨ Novo ativo. Criando registro.`);
-            if (numQty < 0) return res.status(400).json({ message: "Não é possível vender ativo que não possui." });
-
-            // Validação final de custo inicial
-            const initialCost = numQty * numPrice;
-            if (isNaN(initialCost)) {
-                logger.error(`❌ Erro matemático custo inicial. Qty: ${numQty}, Price: ${numPrice}`);
-                return res.status(400).json({ message: "Erro matemático ao criar ativo." });
-            }
+            // --- NOVO ATIVO ---
+            if (numQty < 0) return res.status(400).json({ message: "Não é possível vender ativo inexistente." });
 
             asset = new UserAsset({
                 user: userId,
                 ticker: cleanTicker,
                 type,
                 quantity: numQty,
-                totalCost: initialCost,
-                currency: currency || (type === 'STOCK_US' ? 'USD' : 'BRL')
+                totalCost: numQty * numPrice,
+                currency: currency || (type === 'STOCK_US' ? 'USD' : 'BRL'),
+                realizedProfit: 0
             });
             await asset.save();
-            logger.info(`✅ Ativo criado com sucesso. ID: ${asset._id}`);
         }
 
-        // Garante que o ativo exista na tabela global para cotações futuras
+        // Garante existência na tabela global
         try {
             const existingInGlobal = await MarketAsset.findOne({ ticker: cleanTicker });
             if (!existingInGlobal) {
-                logger.info(`🌐 Criando MarketAsset global para: ${cleanTicker}`);
                 await MarketAsset.create({
                     ticker: cleanTicker,
-                    name: cleanTicker,
+                    name: req.body.name || cleanTicker,
                     type: type,
                     currency: currency || (type === 'STOCK_US' ? 'USD' : 'BRL'),
                     sector: 'Outros',
                     lastPrice: numPrice
                 });
             }
-        } catch (globalErr) {
-            logger.warn(`⚠️ Erro não-bloqueante ao criar MarketAsset: ${globalErr.message}`);
-        }
+        } catch (globalErr) {}
 
         res.status(201).json(asset);
     } catch (error) {
-        logger.error(`❌ Erro FATAL ao adicionar transação: ${error.message}`);
-        logger.error(error.stack);
+        logger.error(`Erro transaction: ${error.message}`);
         next(error);
     }
 };
