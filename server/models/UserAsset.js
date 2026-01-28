@@ -1,3 +1,4 @@
+
 import mongoose from 'mongoose';
 
 const UserAssetSchema = new mongoose.Schema({
@@ -6,6 +7,7 @@ const UserAssetSchema = new mongoose.Schema({
   type: { type: String, required: true },
   quantity: { type: Number, required: true, default: 0 },
   totalCost: { type: Number, required: true, default: 0 },
+  realizedProfit: { type: Number, default: 0 }, // Novo campo: Lucro realizado acumulado
   currency: { type: String, default: 'BRL' },
   updatedAt: { type: Date, default: Date.now }
 });

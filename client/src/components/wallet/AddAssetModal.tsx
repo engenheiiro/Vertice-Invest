@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, PlusCircle, DollarSign, BarChart2, Tag, ArrowUpCircle, ArrowDownCircle, Search, Info } from 'lucide-react';
+import { X, PlusCircle, DollarSign, BarChart2, Tag, ArrowUpCircle, ArrowDownCircle, Search, Info, Loader2 } from 'lucide-react';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { useWallet, AssetType } from '../../contexts/WalletContext';
@@ -18,6 +18,10 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     const [validationError, setValidationError] = useState('');
     const [transactionType, setTransactionType] = useState<'BUY' | 'SELL'>('BUY');
     const [isSearching, setIsSearching] = useState(false);
+    
+    // Estado para resultados da busca
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [showDropdown, setShowDropdown] = useState(false);
 
     const [form, setForm] = useState({
         ticker: '',
@@ -29,13 +33,15 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     });
 
     const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
             setStatus('idle');
             setValidationError('');
-            setTransactionType('BUY'); 
+            setTransactionType('BUY');
+            setSearchResults([]);
         } else {
             document.body.style.overflow = 'unset';
             setForm({ ticker: '', name: '', type: 'STOCK', quantity: '', price: '', date: new Date().toISOString().split('T')[0] });
@@ -43,13 +49,22 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         return () => { document.body.style.overflow = 'unset'; };
     }, [isOpen]);
 
+    // Fecha dropdown ao clicar fora
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+                setShowDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     useEffect(() => {
         if (form.type === 'CASH') {
             setForm(prev => ({ ...prev, ticker: 'RESERVA', quantity: '', price: '1,00' }));
         } else if (form.type === 'CRYPTO') {
             setForm(prev => ({ ...prev, ticker: '', quantity: '', price: '' }));
-        } else {
-             setForm(prev => ({ ...prev, quantity: '', price: prev.price }));
         }
     }, [form.type]);
 
@@ -61,25 +76,40 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
         if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
 
-        if (val.length >= 4) {
+        if (val.length >= 2) { // Gatilho com 2 chars
             setIsSearching(true);
             searchTimeoutRef.current = setTimeout(async () => {
                 try {
-                    const data = await walletService.searchAsset(val);
-                    if (data && data.ticker === val) {
-                        setForm(prev => ({ 
-                            ...prev, 
-                            name: data.name, 
-                            price: data.price ? data.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : prev.price 
-                        }));
+                    const results = await walletService.searchAsset(val);
+                    if (results && Array.isArray(results) && results.length > 0) {
+                        setSearchResults(results);
+                        setShowDropdown(true);
+                    } else {
+                        setSearchResults([]);
+                        setShowDropdown(false);
                     }
                 } catch (error) {
-                    console.error("Ativo não encontrado");
+                    console.error("Erro busca");
                 } finally {
                     setIsSearching(false);
                 }
-            }, 800);
+            }, 300); // Debounce menor para resposta rápida
+        } else {
+            setSearchResults([]);
+            setShowDropdown(false);
         }
+    };
+
+    const handleSelectResult = (result: any) => {
+        setForm(prev => ({ 
+            ...prev, 
+            ticker: result.ticker, 
+            name: result.name, 
+            price: result.price ? result.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : prev.price,
+            type: result.type ? (result.type as AssetType) : prev.type
+        }));
+        setShowDropdown(false);
+        setSearchResults([]);
     };
 
     const handleSellAssetSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -90,7 +120,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             setForm(prev => ({
                 ...prev,
                 ticker: selectedTicker,
-                name: asset.name,
+                name: asset.name || '',
                 type: asset.type,
                 price: asset.currentPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
             }));
@@ -161,15 +191,13 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                 else finalQty = 1; 
             }
 
-            // CORREÇÃO AQUI: Enviando 'price' em vez de 'averagePrice'
-            // O backend espera 'price' para calcular o custo da transação
             await addAsset({
                 ticker: finalTicker,
                 name: form.name || finalTicker,
                 type: form.type,
                 quantity: finalQty,
-                price: finalPrice, // Mudado de averagePrice para price
-                averagePrice: finalPrice, // Mantendo averagePrice para compatibilidade com contexto local se necessário
+                price: finalPrice, 
+                averagePrice: finalPrice, 
                 currency: form.type === 'STOCK_US' ? 'USD' : 'BRL',
                 sector: 'General'
             });
@@ -197,7 +225,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         }
 
         if (transactionType === 'SELL') {
-            const availableAssets = assets.filter(a => a.type === form.type);
+            const availableAssets = assets.filter(a => a.type === form.type && a.quantity > 0); // Filtra apenas com saldo > 0
             return (
                 <div className="flex flex-col gap-1.5 mb-4">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">Ativo para Venda</label>
@@ -217,29 +245,54 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         <Search className="absolute right-3 top-3.5 text-slate-600 pointer-events-none" size={16} />
                     </div>
                     {availableAssets.length === 0 && (
-                        <p className="text-[10px] text-red-500 font-bold ml-1">Você não possui ativos desta categoria.</p>
+                        <p className="text-[10px] text-red-500 font-bold ml-1">Você não possui ativos desta categoria para vender.</p>
                     )}
                 </div>
             );
         }
 
         let placeholder = "Ex: PETR4";
-        if (form.type === 'CRYPTO') placeholder = "Ex: BTC, ETH, SOL";
+        if (form.type === 'CRYPTO') placeholder = "Ex: BTC, ETH";
         if (form.type === 'STOCK_US') placeholder = "Ex: AAPL, NVDA";
+        if (form.type === 'FIXED_INCOME') placeholder = "Ex: Tesouro, CDB...";
 
         return (
-            <div className="relative mb-4">
+            <div className="relative mb-4" ref={modalRef}>
                 <Input 
                     label="Código / Ticker"
                     placeholder={placeholder}
                     value={form.ticker}
                     onChange={handleTickerChange}
+                    onFocus={() => { if(searchResults.length > 0) setShowDropdown(true); }}
                     containerClassName="mb-0"
+                    // ITEM 1: Mantendo classes consistentes
                     className="uppercase font-mono tracking-wider px-4 py-3"
                 />
+                
                 {isSearching && (
                     <div className="absolute right-3 top-9">
-                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                    </div>
+                )}
+
+                {/* ITEM 0: Dropdown de Resultados */}
+                {showDropdown && searchResults.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-[#0F1729] border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar animate-fade-in">
+                        {searchResults.map((result, idx) => (
+                            <div 
+                                key={idx}
+                                onClick={() => handleSelectResult(result)}
+                                className="p-3 hover:bg-slate-800 cursor-pointer border-b border-slate-800/50 last:border-0 flex justify-between items-center transition-colors"
+                            >
+                                <div>
+                                    <p className="text-xs font-bold text-white uppercase">{result.ticker}</p>
+                                    <p className="text-[10px] text-slate-400 truncate max-w-[200px]">{result.name}</p>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-[9px] font-bold bg-slate-700 px-1.5 py-0.5 rounded text-slate-300">{result.type}</span>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>
@@ -259,7 +312,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                             onChange={handlePriceChange}
                             onBlur={handlePriceBlur}
                             containerClassName="mb-0"
-                            className={`pl-4 text-lg font-bold ${transactionType === 'BUY' ? 'text-emerald-400' : 'text-red-400'}`}
+                            className={`px-4 py-3 text-lg font-bold ${transactionType === 'BUY' ? 'text-emerald-400' : 'text-red-400'}`}
                             min="0"
                         />
                          <DollarSign className="absolute right-4 top-9 text-slate-500 pointer-events-none" size={20} />
@@ -377,25 +430,22 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
                                 {renderTickerField()}
 
+                                {/* ITEM 1: Correção Visual - Input do Nome padronizado */}
+                                {form.type !== 'CASH' && (
+                                    <Input 
+                                        label="Nome do Ativo" 
+                                        placeholder="Preenchimento automático..."
+                                        value={form.name} 
+                                        onChange={(e) => setForm({...form, name: e.target.value})}
+                                        containerClassName="mb-0"
+                                        // Padronizado: px-4 py-3
+                                        className="bg-[#0B101A] text-slate-300 border-slate-800 focus:border-slate-600 px-4 py-3"
+                                    />
+                                )}
+
                                 <div className="grid grid-cols-2 gap-4">
                                     {renderQuantityAndPriceFields()}
                                 </div>
-
-                                {form.type !== 'CASH' && (
-                                    <div className="relative">
-                                        <Input 
-                                            label="Descrição (Opcional)" placeholder="Ex: Swing Trade, Longo Prazo..."
-                                            value={form.name} onChange={(e) => setForm({...form, name: e.target.value})}
-                                            containerClassName="mb-0"
-                                        />
-                                        <div className="absolute right-0 top-0 group">
-                                            <Info size={12} className="text-slate-500 cursor-help" />
-                                            <div className="absolute right-0 bottom-full mb-2 w-48 bg-slate-800 text-[10px] text-slate-300 p-2 rounded shadow-xl border border-slate-700 hidden group-hover:block z-20">
-                                                Use para identificar estratégias ou metas específicas para este ativo.
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
 
                                 {validationError && (
                                     <p className="text-xs text-red-500 font-bold text-center animate-shake bg-red-900/10 p-2 rounded-lg border border-red-900/20">

@@ -20,7 +20,7 @@ export const WalletSummary = () => {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             
-            {/* Patrimônio Total */}
+            {/* Patrimônio Total - AZUL */}
             <SummaryCard 
                 icon={<Wallet className="text-blue-400" size={20} />}
                 title="Patrimônio Total"
@@ -34,17 +34,18 @@ export const WalletSummary = () => {
                 glowColor="blue"
             />
 
-            {/* Valor Aplicado (Custo) */}
+            {/* Valor Aplicado (Custo) - VERDE (Item 5) */}
             <SummaryCard 
-                icon={<DollarSign className="text-slate-400" size={20} />}
+                icon={<DollarSign className="text-emerald-400" size={20} />}
                 title="Valor Aplicado"
                 value={formatCurrency(kpis.totalInvested)}
                 subValue={<span className="text-slate-500 text-xs">Custo de Aquisição</span>}
+                glowColor="emerald"
             />
 
-            {/* Lucro Total (Nome alterado) */}
+            {/* Lucro Total - ROXO (Item 5) */}
             <SummaryCard 
-                icon={<TrendingUp className={kpis.totalResult >= 0 ? "text-emerald-400" : "text-red-400"} size={20} />}
+                icon={<TrendingUp className="text-purple-400" size={20} />}
                 title="Lucro Total"
                 value={formatCurrency(kpis.totalResult)}
                 subValue={
@@ -52,16 +53,17 @@ export const WalletSummary = () => {
                         {kpis.totalResult >= 0 ? '+' : ''}{kpis.totalResultPercent.toFixed(2)}% (Rentabilidade)
                     </span>
                 }
-                glowColor={kpis.totalResult >= 0 ? "emerald" : "red"}
+                glowColor="purple"
             />
 
-            {/* Proventos (Dividendos) */}
+            {/* Proventos (Dividendos) - DOURADO */}
             <SummaryCard 
                 icon={<PiggyBank className="text-[#D4AF37]" size={20} />}
                 title="Proventos Acumulados"
                 value={formatCurrency(kpis.totalDividends)}
                 subValue={<span className="text-slate-500 text-xs">Histórico Total</span>}
                 borderColor="border-[#D4AF37]/20"
+                glowColor="gold"
             />
         </div>
     );
@@ -72,7 +74,7 @@ interface SummaryCardProps {
     title: string;
     value: string;
     subValue?: React.ReactNode;
-    glowColor?: 'blue' | 'emerald' | 'red' | 'gold';
+    glowColor?: 'blue' | 'emerald' | 'red' | 'gold' | 'purple';
     borderColor?: string;
 }
 
@@ -84,6 +86,8 @@ const SummaryCard: React.FC<SummaryCardProps> = ({ icon, title, value, subValue,
                     ${glowColor === 'blue' ? 'bg-blue-600' : ''}
                     ${glowColor === 'emerald' ? 'bg-emerald-600' : ''}
                     ${glowColor === 'red' ? 'bg-red-600' : ''}
+                    ${glowColor === 'gold' ? 'bg-[#D4AF37]' : ''}
+                    ${glowColor === 'purple' ? 'bg-purple-600' : ''}
                 `}></div>
             )}
             
