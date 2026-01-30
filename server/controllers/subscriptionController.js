@@ -4,14 +4,14 @@ import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 import logger from '../config/logger.js';
 
-// Preços (Hardcoded por enquanto, idealmente viriam do DB ou Config)
+// Preços
 const PLANS = {
     'ESSENTIAL': { price: 39.90, days: 30 },
     'PRO': { price: 119.90, days: 30 },
     'BLACK': { price: 349.90, days: 30 }
 };
 
-// Definição de limites por feature e plano (Backend Truth)
+// Definição de limites por feature e plano
 const LIMITS_CONFIG = {
     'smart_contribution': {
         'GUEST': 0,
@@ -27,23 +27,31 @@ const LIMITS_CONFIG = {
     }
 };
 
-// Mock de armazenamento de uso (Em produção seria Redis ou tabela no Mongo)
-// Estrutura: { userId_feature_month: count }
+// Mock de armazenamento de uso
 const USAGE_CACHE = {}; 
 
 export const checkAccess = async (req, res, next) => {
     try {
         const { feature } = req.query;
-        const user = req.user; // Obtido do authMiddleware
+        const user = req.user;
+        
+        if (!user) {
+            logger.warn("⚠️ [Subscription] checkAccess chamado sem usuário autenticado.");
+            return res.status(401).json({ message: "Não autorizado." });
+        }
+
         const plan = user.plan || 'GUEST';
 
         if (!LIMITS_CONFIG[feature]) {
+            logger.warn(`⚠️ [Subscription] Feature desconhecida solicitada: ${feature}`);
             return res.status(400).json({ message: "Feature desconhecida." });
         }
 
         const limit = LIMITS_CONFIG[feature][plan];
         const key = `${user.id}_${feature}_${new Date().getMonth()}`;
         const currentUsage = USAGE_CACHE[key] || 0;
+
+        logger.debug(`🔐 [Access] User: ${user.id} | Plan: ${plan} | Feature: ${feature} | Usage: ${currentUsage}/${limit}`);
 
         if (currentUsage >= limit) {
             return res.status(403).json({ 
@@ -60,6 +68,7 @@ export const checkAccess = async (req, res, next) => {
         return res.json({ allowed: true, currentUsage, limit, plan });
 
     } catch (error) {
+        logger.error(`🔥 [Subscription] Erro em checkAccess: ${error.message}`);
         next(error);
     }
 };
@@ -70,19 +79,26 @@ export const registerUsage = async (req, res, next) => {
         const user = req.user;
         const plan = user.plan || 'GUEST';
         
-        // Revalida antes de incrementar
+        if (!LIMITS_CONFIG[feature]) {
+             return res.status(400).json({ message: "Feature inválida" });
+        }
+
         const limit = LIMITS_CONFIG[feature]?.[plan] || 0;
         const key = `${user.id}_${feature}_${new Date().getMonth()}`;
         const currentUsage = USAGE_CACHE[key] || 0;
 
         if (currentUsage >= limit) {
+            logger.warn(`⛔ [Usage] Tentativa de uso excedente bloqueada. User: ${user.id}, Feature: ${feature}`);
             return res.status(403).json({ message: "Limite atingido." });
         }
 
         USAGE_CACHE[key] = currentUsage + 1;
+        logger.info(`✅ [Usage] Uso registrado. User: ${user.id}, Feature: ${feature}, Novo Total: ${USAGE_CACHE[key]}`);
+        
         res.json({ success: true, newUsage: USAGE_CACHE[key] });
 
     } catch (error) {
+        logger.error(`🔥 [Subscription] Erro em registerUsage: ${error.message}`);
         next(error);
     }
 };
@@ -97,7 +113,7 @@ export const createCheckoutSession = async (req, res, next) => {
         }
 
         const sessionId = `sess_${new Date().getTime()}_${Math.random().toString(36).substring(7)}`;
-        logger.info(`Checkout iniciado: User ${userId} -> Plan ${planId}`);
+        logger.info(`💳 [Checkout] Iniciado: User ${userId} -> Plan ${planId}`);
 
         res.status(200).json({
             sessionId,
@@ -143,7 +159,7 @@ export const confirmPayment = async (req, res, next) => {
         await session.commitTransaction();
         session.endSession();
 
-        logger.info(`Pagamento confirmado: User ${userId} atualizado para ${planId}`);
+        logger.info(`💰 [Pagamento] Confirmado: User ${userId} atualizado para ${planId}`);
 
         res.status(200).json({
             success: true,
@@ -157,7 +173,7 @@ export const confirmPayment = async (req, res, next) => {
     } catch (error) {
         await session.abortTransaction();
         session.endSession();
-        logger.error(`Erro no pagamento: ${error.message}`);
+        logger.error(`❌ [Pagamento] Erro: ${error.message}`);
         next(error);
     }
 };

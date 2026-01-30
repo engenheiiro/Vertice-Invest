@@ -47,6 +47,7 @@ interface WalletContextType {
     refreshWallet: () => Promise<void>;
     addAsset: (asset: any) => Promise<void>;
     removeAsset: (id: string) => Promise<void>;
+    resetWallet: () => Promise<void>;
     updateTargets: (newTargets: AllocationMap, newReserveTarget: number) => void;
 }
 
@@ -141,6 +142,25 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }
     };
 
+    const resetWallet = async () => {
+        setIsLoading(true);
+        try {
+            await walletService.resetWallet();
+            // Limpa estado local imediatamente
+            setAssets([]);
+            setHistory([]);
+            setKpis({
+                totalEquity: 0, totalInvested: 0, totalResult: 0, 
+                totalResultPercent: 0, dayVariation: 0, dayVariationPercent: 0, totalDividends: 0
+            });
+        } catch (e) {
+            alert("Erro ao resetar carteira.");
+            await refreshWallet(); // Tenta recuperar estado em caso de erro
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const updateTargets = (newTargets: AllocationMap, newReserveTarget: number) => {
         setTargetAllocation(newTargets);
         setTargetReserve(newReserveTarget);
@@ -149,7 +169,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return (
         <WalletContext.Provider value={{ 
             assets, kpis, history, targetAllocation, targetReserve, 
-            isLoading, refreshWallet, addAsset, removeAsset,
+            isLoading, refreshWallet, addAsset, removeAsset, resetWallet,
             updateTargets
         }}>
             {children}

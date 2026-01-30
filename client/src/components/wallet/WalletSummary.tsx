@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Percent } from 'lucide-react';
 import { useWallet } from '../../contexts/WalletContext';
 
 export const WalletSummary = () => {
@@ -17,10 +17,13 @@ export const WalletSummary = () => {
         </div>;
     }
 
+    // Calcula se a carteira está positiva ou negativa
+    const isProfitable = kpis.totalResult >= 0;
+
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             
-            {/* Patrimônio Total - AZUL */}
+            {/* Patrimônio Total */}
             <SummaryCard 
                 icon={<Wallet className="text-blue-400" size={20} />}
                 title="Patrimônio Total"
@@ -32,31 +35,34 @@ export const WalletSummary = () => {
                     </span>
                 }
                 glowColor="blue"
+                borderColor="border-blue-500/20"
             />
 
-            {/* Valor Aplicado (Custo) - VERDE (Item 5) */}
+            {/* Valor Aplicado (Custo) */}
             <SummaryCard 
                 icon={<DollarSign className="text-emerald-400" size={20} />}
                 title="Valor Aplicado"
                 value={formatCurrency(kpis.totalInvested)}
                 subValue={<span className="text-slate-500 text-xs">Custo de Aquisição</span>}
                 glowColor="emerald"
+                borderColor="border-emerald-500/20"
             />
 
-            {/* Lucro Total - ROXO (Item 5) */}
+            {/* Rentabilidade Geral (Substitui Lucro Total antigo para focar em %) */}
             <SummaryCard 
-                icon={<TrendingUp className="text-purple-400" size={20} />}
-                title="Lucro Total"
-                value={formatCurrency(kpis.totalResult)}
+                icon={<Percent className={isProfitable ? "text-purple-400" : "text-red-400"} size={20} />}
+                title="Rentabilidade Geral"
+                value={`${isProfitable ? '+' : ''}${kpis.totalResultPercent.toFixed(2)}%`}
                 subValue={
-                    <span className={`text-xs font-bold ${kpis.totalResult >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                        {kpis.totalResult >= 0 ? '+' : ''}{kpis.totalResultPercent.toFixed(2)}% (Rentabilidade)
+                    <span className={`text-xs font-bold ${isProfitable ? 'text-purple-400' : 'text-red-500'}`}>
+                        {isProfitable ? '+' : ''}{formatCurrency(kpis.totalResult)}
                     </span>
                 }
                 glowColor="purple"
+                borderColor="border-purple-500/20"
             />
 
-            {/* Proventos (Dividendos) - DOURADO */}
+            {/* Proventos (Dividendos) */}
             <SummaryCard 
                 icon={<PiggyBank className="text-[#D4AF37]" size={20} />}
                 title="Proventos Acumulados"

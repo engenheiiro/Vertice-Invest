@@ -1,9 +1,13 @@
 
+// ... (Imports e States mantidos) ...
 import React, { useEffect, useState } from 'react';
 import { Header } from '../../components/dashboard/Header';
 import { researchService, ResearchReport } from '../../services/research';
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles, Database, Minus } from 'lucide-react';
+import { marketService } from '../../services/market';
+import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles, Database, Minus, HardDrive, Terminal } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
+import { Input } from '../../components/ui/Input';
+import { Button } from '../../components/ui/Button';
 
 // Constantes de Configuração
 const ASSET_CLASSES = [
@@ -15,6 +19,7 @@ const ASSET_CLASSES = [
 ];
 
 export const AdminPanel = () => {
+    // ... (Hooks e funções mantidos) ...
     const [history, setHistory] = useState<any[]>([]); 
     const [loadingKey, setLoadingKey] = useState<string | null>(null); 
     const [statusMsg, setStatusMsg] = useState<{type: 'success' | 'error', text: string} | null>(null);
@@ -27,6 +32,12 @@ export const AdminPanel = () => {
     const [macroData, setMacroData] = useState<any>(null);
     const [isLoadingMacro, setIsLoadingMacro] = useState(true);
 
+    // Estados Inspector de Cache
+    const [cacheSearchTicker, setCacheSearchTicker] = useState('');
+    const [cacheData, setCacheData] = useState<any>(null);
+    const [isSearchingCache, setIsSearchingCache] = useState(false);
+
+    // ... (Funções loadHistory, loadMacro, handleSyncData, handleGlobalRun, handleEnhanceWithAI, handleAction, handleCacheSearch, openAudit, getLatestForClass, isUpdatedToday, isMacroDataValid mantidas) ...
     const loadHistory = async () => {
         try {
             const data = await researchService.getHistory();
@@ -54,7 +65,6 @@ export const AdminPanel = () => {
         loadMacro();
     }, []);
 
-    // Handler para o novo botão de Sync
     const handleSyncData = async () => {
         setIsSyncing(true);
         setStatusMsg(null);
@@ -118,6 +128,21 @@ export const AdminPanel = () => {
         }
     };
 
+    const handleCacheSearch = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!cacheSearchTicker) return;
+        setIsSearchingCache(true);
+        setCacheData(null);
+        try {
+            const data = await marketService.getAssetCacheStatus(cacheSearchTicker);
+            setCacheData(data);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsSearchingCache(false);
+        }
+    };
+
     const openAudit = async (reportId: string) => {
         try {
             const fullReport = await researchService.getReportDetails(reportId);
@@ -145,8 +170,7 @@ export const AdminPanel = () => {
             <Header />
 
             <main className="max-w-[1400px] mx-auto p-6 animate-fade-in">
-                
-                {/* Header da Página Admin */}
+                {/* Header da Página Admin (Mantido) */}
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -166,100 +190,149 @@ export const AdminPanel = () => {
                     </div>
                 </div>
 
-                {/* --- DASHBOARD MACROECONÔMICO --- */}
-                <div className="bg-[#0B101A] border border-slate-800 rounded-2xl p-4 mb-8">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                            <Globe size={14} className="text-blue-500" />
-                            Ambiente Macroeconômico (Ao Vivo)
-                        </h3>
-                        
-                        <div className="flex items-center gap-2">
-                            {/* Botão Manual de Sync de Dados */}
-                            <button 
-                                onClick={handleSyncData}
-                                disabled={isSyncing}
-                                className={`
-                                    flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border
-                                    ${isSyncing 
-                                        ? 'bg-blue-900/20 text-blue-400 border-blue-900/50 cursor-wait' 
-                                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-blue-500'
-                                    }
-                                `}
-                                title="Forçar atualização de preços e indicadores no banco de dados"
-                            >
-                                <Database size={12} className={isSyncing ? 'animate-pulse' : ''} />
-                                {isSyncing ? 'Sincronizando...' : 'Atualizar Dados'}
-                            </button>
+                {/* === ÁREA SUPERIOR (Mantido) === */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                    <div className="lg:col-span-2 bg-[#0B101A] border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                <Globe size={14} className="text-blue-500" />
+                                Ambiente Macroeconômico
+                            </h3>
                             
-                            {isLoadingMacro && <RefreshCw size={12} className="text-slate-500 animate-spin" />}
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={handleSyncData}
+                                    disabled={isSyncing}
+                                    className={`
+                                        flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border
+                                        ${isSyncing 
+                                            ? 'bg-blue-900/20 text-blue-400 border-blue-900/50 cursor-wait' 
+                                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-blue-500'
+                                        }
+                                    `}
+                                    title="Forçar atualização de preços e indicadores no banco de dados"
+                                >
+                                    <Database size={12} className={isSyncing ? 'animate-pulse' : ''} />
+                                    {isSyncing ? 'Sincronizando...' : 'Sync Preços'}
+                                </button>
+                                {isLoadingMacro && <RefreshCw size={12} className="text-slate-500 animate-spin" />}
+                            </div>
                         </div>
+                        
+                        {isMacroDataValid ? (
+                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+                                <MacroCard label="Selic" value={`${macroData?.selic?.value}%`} sub="BCB Meta" color="text-yellow-400" />
+                                <MacroCard label="CDI" value={`${macroData?.cdi?.value?.toFixed(2)}%`} sub="Est. Cetip" color="text-yellow-400" />
+                                <MacroCard label="IPCA" value={`${macroData?.ipca?.value}%`} sub="12 meses" color="text-red-400" />
+                                <MacroCard label="Ibovespa" value={Math.round(macroData?.ibov?.value || 0).toLocaleString()} change={macroData?.ibov?.change} sub="Pts" />
+                                <MacroCard label="Dólar" value={`R$ ${macroData?.usd?.value?.toFixed(3) || '0.000'}`} change={macroData?.usd?.change} sub="PTAX" />
+                                <MacroCard label="S&P 500" value={Math.round(macroData?.spx?.value || 0).toLocaleString()} change={macroData?.spx?.change} sub="US Pts" />
+                                <MacroCard label="Bitcoin" value={`$${Math.round(macroData?.btc?.value || 0).toLocaleString()}`} change={macroData?.btc?.change} sub="USD" color="text-purple-400" />
+                            </div>
+                        ) : (
+                            <div className="text-center text-xs text-slate-500 py-4 flex flex-col items-center flex-1 justify-center">
+                                <p>Carregando dados globais ou serviço indisponível...</p>
+                                {!isLoadingMacro && (
+                                    <button onClick={loadMacro} className="mt-2 text-blue-500 hover:underline">Tentar Novamente</button>
+                                )}
+                            </div>
+                        )}
                     </div>
-                    
-                    {isMacroDataValid ? (
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                            <MacroCard label="Selic" value={`${macroData?.selic?.value}%`} sub="BCB Meta" color="text-yellow-400" />
-                            <MacroCard label="CDI" value={`${macroData?.cdi?.value?.toFixed(2)}%`} sub="Est. Cetip" color="text-yellow-400" />
-                            <MacroCard label="IPCA (12m)" value={`${macroData?.ipca?.value}%`} sub="Inflação" color="text-red-400" />
-                            <MacroCard label="Ibovespa" value={Math.round(macroData?.ibov?.value || 0).toLocaleString()} change={macroData?.ibov?.change} sub="B3 Pts" />
-                            <MacroCard label="Dólar" value={`R$ ${macroData?.usd?.value?.toFixed(3) || '0.000'}`} change={macroData?.usd?.change} sub="PTAX" />
-                            <MacroCard label="S&P 500" value={Math.round(macroData?.spx?.value || 0).toLocaleString()} change={macroData?.spx?.change} sub="US Pts" />
-                            <MacroCard label="Bitcoin" value={`$${Math.round(macroData?.btc?.value || 0).toLocaleString()}`} change={macroData?.btc?.change} sub="USD" color="text-purple-400" />
+
+                    <div className="lg:col-span-1 bg-[#080C14] border border-blue-900/30 rounded-2xl p-6 text-center relative overflow-hidden shadow-lg flex flex-col justify-center items-center">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600"></div>
+                        <div className="mb-4">
+                            <h2 className="text-lg font-bold text-white leading-tight">Protocolo V3</h2>
+                            <p className="text-slate-400 text-[10px] mt-1 px-4 leading-relaxed">
+                                Coleta B3, Valuation e Risk Scoring em massa.
+                            </p>
                         </div>
-                    ) : (
-                        <div className="text-center text-xs text-slate-500 py-4 flex flex-col items-center">
-                            <p>Carregando dados globais ou serviço indisponível...</p>
-                            {!isLoadingMacro && (
-                                <button onClick={loadMacro} className="mt-2 text-blue-500 hover:underline">Tentar Novamente</button>
+                        <button
+                            onClick={handleGlobalRun}
+                            disabled={isGlobalRunning}
+                            className={`w-full max-w-[200px] px-4 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl ${isGlobalRunning ? 'bg-slate-800 text-slate-400 cursor-wait border border-slate-700' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30 hover:shadow-blue-600/50 hover:scale-105'}`}
+                        >
+                            {isGlobalRunning ? <><RefreshCw size={16} className="animate-spin" /> Processando...</> : <><Play size={16} fill="currentColor" /> Executar</>}
+                        </button>
+                    </div>
+                </div>
+
+                {/* === ÁREA INFERIOR: Inspector de Cache (Mantido) === */}
+                <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 mb-10 shadow-lg">
+                    <div className="flex items-center gap-2 mb-4">
+                        <HardDrive size={18} className="text-emerald-500" />
+                        <h3 className="text-sm font-bold text-white uppercase tracking-wider">Inspector de Cache</h3>
+                        <div className="h-px bg-slate-800 flex-1 ml-4"></div>
+                    </div>
+                    <div className="flex flex-col md:flex-row gap-6">
+                        <div className="w-full md:w-1/3 flex flex-col justify-center">
+                            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+                                Consulte o estado do cache de dados históricos e cotações. Digite o ticker para verificar se os dados estão consistentes.
+                            </p>
+                            <form onSubmit={handleCacheSearch} className="flex gap-0 relative">
+                                <div className="relative flex-1">
+                                    <input placeholder="Ex: PETR4..." value={cacheSearchTicker} onChange={(e) => setCacheSearchTicker(e.target.value.toUpperCase())} className="w-full bg-[#0B101A] border border-slate-700 border-r-0 rounded-l-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500/50 font-mono uppercase" />
+                                </div>
+                                <button type="submit" disabled={isSearchingCache} className="px-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 border-l-0 rounded-r-xl text-slate-300 hover:text-white transition-colors disabled:opacity-50">
+                                    {isSearchingCache ? <RefreshCw size={18} className="animate-spin"/> : <Search size={18} />}
+                                </button>
+                            </form>
+                        </div>
+                        <div className="w-full md:w-2/3 bg-[#0B101A] border border-slate-800 rounded-xl min-h-[140px] relative overflow-hidden flex items-center justify-center">
+                            {!cacheData ? (
+                                <div className="text-center opacity-40">
+                                    <Terminal size={40} className="mx-auto mb-2 text-slate-600" />
+                                    <p className="text-xs font-mono text-slate-500">Aguardando comando...</p>
+                                </div>
+                            ) : cacheData.status === 'NOT_CACHED' ? (
+                                <div className="text-center">
+                                    <div className="w-12 h-12 bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-3 border border-red-900/40">
+                                        <AlertCircle size={24} className="text-red-500" />
+                                    </div>
+                                    <h4 className="text-white font-bold mb-1">Cache Miss</h4>
+                                    <p className="text-xs text-slate-400">O ativo <strong className="text-red-400">{cacheData.ticker}</strong> não está no banco.</p>
+                                </div>
+                            ) : (
+                                <div className="w-full h-full p-6">
+                                    <div className="flex justify-between items-center border-b border-slate-800 pb-3 mb-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-2xl font-black text-white tracking-tighter">{cacheData.ticker}</div>
+                                            <span className="px-2 py-0.5 rounded bg-emerald-900/30 text-emerald-400 border border-emerald-900/50 text-[10px] font-bold uppercase">Cached</span>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] text-slate-500 uppercase font-bold">Data Points</p>
+                                            <p className="text-lg font-mono text-white">{cacheData.dataPoints}</p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Range de Dados</p>
+                                            <p className="text-xs text-slate-300 font-mono">
+                                                {new Date(cacheData.firstDate).toLocaleDateString()} {'->'} {new Date(cacheData.lastDate).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Última Sync</p>
+                                            <p className="text-xs text-slate-300 font-mono">
+                                                {new Date(cacheData.lastUpdated).toLocaleString()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="mt-4 pt-3 border-t border-slate-800">
+                                        <p className="text-[9px] text-slate-500 uppercase font-bold mb-2">Amostra Recente (Close)</p>
+                                        <div className="flex gap-2 overflow-hidden">
+                                            {cacheData.sample.map((s: any, idx: number) => (
+                                                <div key={idx} className="bg-slate-900 px-2 py-1 rounded border border-slate-800 text-[10px] font-mono text-slate-300">
+                                                    {s.close.toFixed(2)}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
                             )}
                         </div>
-                    )}
-                </div>
-
-                {/* --- ÁREA DE COMANDO CENTRAL (ETAPA 1) --- */}
-                <div className="bg-[#080C14] border border-blue-900/30 rounded-2xl p-8 mb-10 text-center relative overflow-hidden shadow-2xl">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600"></div>
-                    
-                    <h2 className="text-xl font-bold text-white mb-2">Protocolo de Análise V3 (Matemático)</h2>
-                    <p className="text-slate-400 text-sm mb-6 max-w-xl mx-auto">
-                        Etapa 1: Coleta de dados (B3/Fundamentus), Cálculo de Valuation (Graham/Bazin) e Classificação de Risco inicial.
-                    </p>
-
-                    <button
-                        onClick={handleGlobalRun}
-                        disabled={isGlobalRunning}
-                        className={`
-                            relative px-8 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all
-                            flex items-center justify-center gap-3 mx-auto shadow-xl
-                            ${isGlobalRunning 
-                                ? 'bg-slate-800 text-slate-400 cursor-wait border border-slate-700' 
-                                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30 hover:shadow-blue-600/50 hover:scale-105'
-                            }
-                        `}
-                    >
-                        {isGlobalRunning ? (
-                            <>
-                                <RefreshCw size={20} className="animate-spin" />
-                                Calculando Dados...
-                            </>
-                        ) : (
-                            <>
-                                <Play size={20} fill="currentColor" />
-                                INICIAR CÁLCULO QUANTITATIVO
-                            </>
-                        )}
-                    </button>
-                </div>
-
-                {/* Feedback Message */}
-                {statusMsg && (
-                    <div className={`mb-6 p-4 rounded-xl border flex items-center gap-3 animate-fade-in shadow-lg ${
-                        statusMsg.type === 'success' ? 'bg-emerald-900/20 border-emerald-900/50 text-emerald-400' : 'bg-red-900/20 border-red-900/50 text-red-400'
-                    }`}>
-                        {statusMsg.type === 'success' ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
-                        <span className="text-base font-bold">{statusMsg.text}</span>
                     </div>
-                )}
+                </div>
 
                 {/* PAINEL DE CONTROLE POR ATIVO (ETAPA 2) */}
                 <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl mb-10">
@@ -283,6 +356,9 @@ export const AdminPanel = () => {
                                 const latest = getLatestForClass(asset.id);
                                 const updatedToday = isUpdatedToday(latest?.date);
                                 const isLoadingEnhance = loadingKey === `${asset.id}-AI_ENHANCE`;
+                                
+                                // Bloqueio para STOCK_US e CRYPTO
+                                const isRestricted = asset.id === 'CRYPTO' || asset.id === 'STOCK_US';
 
                                 return (
                                     <tr key={asset.id} className="hover:bg-slate-900/30 transition-colors group">
@@ -309,15 +385,17 @@ export const AdminPanel = () => {
                                             {/* BOTÃO DE REFINAMENTO IA */}
                                             <button 
                                                 onClick={() => handleEnhanceWithAI(asset.id)}
-                                                disabled={!updatedToday || isLoadingEnhance}
+                                                disabled={!updatedToday || isLoadingEnhance || isRestricted}
                                                 className={`
                                                     mx-auto flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border
-                                                    ${!updatedToday 
-                                                        ? 'bg-slate-800/50 border-slate-800 text-slate-600 cursor-not-allowed'
-                                                        : 'bg-purple-900/20 border-purple-500/30 text-purple-400 hover:bg-purple-900/40 hover:text-white hover:border-purple-500'
+                                                    ${isRestricted 
+                                                        ? 'opacity-30 cursor-not-allowed bg-slate-800 border-slate-700 text-slate-500' 
+                                                        : (!updatedToday 
+                                                            ? 'bg-slate-800/50 border-slate-800 text-slate-600 cursor-not-allowed'
+                                                            : 'bg-purple-900/20 border-purple-500/30 text-purple-400 hover:bg-purple-900/40 hover:text-white hover:border-purple-500')
                                                     }
                                                 `}
-                                                title="Busca notícias no Google e reajusta o ranking matemático"
+                                                title={isRestricted ? "Indisponível para esta classe" : "Busca notícias no Google e reajusta o ranking matemático"}
                                             >
                                                 {isLoadingEnhance ? (
                                                     <RefreshCw size={12} className="animate-spin" />
@@ -329,7 +407,7 @@ export const AdminPanel = () => {
                                         </td>
 
                                         <td className="px-6 py-4 text-right">
-                                            {latest && (
+                                            {latest && !isRestricted && (
                                                 <div className="flex items-center justify-end gap-2">
                                                     {/* Botão Ver Resultado (Audit) */}
                                                     <button 
@@ -367,6 +445,9 @@ export const AdminPanel = () => {
                                                     />
                                                 </div>
                                             )}
+                                            {isRestricted && (
+                                                <span className="text-[10px] text-slate-600 font-mono opacity-50">-- RESTRICTED --</span>
+                                            )}
                                         </td>
                                     </tr>
                                 );
@@ -375,7 +456,7 @@ export const AdminPanel = () => {
                     </table>
                 </div>
 
-                {/* HISTÓRICO DE LOGS */}
+                {/* HISTÓRICO DE LOGS (Mantido) */}
                 <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6">
                     <div className="flex items-center gap-2 mb-4">
                         <History size={18} className="text-slate-500" />

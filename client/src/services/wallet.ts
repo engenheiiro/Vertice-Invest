@@ -15,8 +15,6 @@ export const walletService = {
     },
 
     async addAsset(data: any) {
-        console.log("📤 [Client] Enviando ativo para API:", data); // LOG ADICIONADO
-        
         const response = await authService.api('/api/wallet/add', {
             method: 'POST',
             body: JSON.stringify(data)
@@ -24,7 +22,6 @@ export const walletService = {
         
         if (!response.ok) {
             const errorData = await response.json();
-            console.error("❌ [Client] Erro da API:", errorData); // LOG DE ERRO DETALHADO
             throw new Error(errorData.message || "Falha ao adicionar ativo");
         }
         return await response.json();
@@ -35,6 +32,14 @@ export const walletService = {
             method: 'DELETE'
         });
         if (!response.ok) throw new Error("Falha ao remover ativo");
+        return await response.json();
+    },
+
+    async resetWallet() {
+        const response = await authService.api('/api/wallet/reset', {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error("Falha ao resetar carteira");
         return await response.json();
     },
 

@@ -31,6 +31,7 @@ export interface MarketIndex {
     ticker: string;
     value: number;
     changePercent: number;
+    type?: 'INDEX' | 'RATE' | 'CURRENCY'; // Novo campo para ajudar na renderização
 }
 
 export const useDashboardData = () => {
@@ -116,27 +117,32 @@ export const useDashboardData = () => {
                         { 
                             ticker: "IBOV", 
                             value: macroData.ibov?.value || 0, 
-                            changePercent: macroData.ibov?.change || 0 
+                            changePercent: macroData.ibov?.change || 0,
+                            type: 'INDEX'
                         },
                         { 
                             ticker: "CDI", 
                             value: macroData.cdi?.value || 0, 
-                            changePercent: 0 
+                            changePercent: 0, // Taxas geralmente não mostram variação diária no header
+                            type: 'RATE'
                         },
                         { 
                             ticker: "USD", 
                             value: macroData.usd?.value || 0, 
-                            changePercent: macroData.usd?.change || 0 
+                            changePercent: macroData.usd?.change || 0, // Garante que a variação passe
+                            type: 'CURRENCY'
                         },
                         { 
                             ticker: "BTC", 
                             value: macroData.btc?.value || 0, 
-                            changePercent: macroData.btc?.change || 0 
+                            changePercent: macroData.btc?.change || 0,
+                            type: 'CURRENCY'
                         },
                         { 
                             ticker: "S&P", 
                             value: macroData.spx?.value || 0, 
-                            changePercent: macroData.spx?.change || 0 
+                            changePercent: macroData.spx?.change || 0,
+                            type: 'INDEX'
                         }
                     ]);
                 }
