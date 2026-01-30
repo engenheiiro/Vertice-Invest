@@ -1,8 +1,9 @@
+
 import React, { useState, useId } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label: string;
+  label?: string;
   error?: string;
   containerClassName?: string;
 }
@@ -27,19 +28,21 @@ export const Input: React.FC<InputProps> = ({ label, error, id, onFocus, onBlur,
 
   return (
     <div className={`flex flex-col gap-1.5 relative ${containerClassName || 'mb-4'}`}>
-      <label 
-        id={labelId}
-        htmlFor={inputId}
-        className={`text-[10px] font-bold uppercase tracking-wider ml-1 transition-colors duration-200 ${getLabelColor()}`}
-      >
-        {label}
-      </label>
+      {label && (
+        <label 
+          id={labelId}
+          htmlFor={inputId}
+          className={`text-[10px] font-bold uppercase tracking-wider ml-1 transition-colors duration-200 ${getLabelColor()}`}
+        >
+          {label}
+        </label>
+      )}
       
       <div className="relative group">
         <input
           id={inputId}
           type={inputType}
-          aria-labelledby={labelId}
+          aria-labelledby={label ? labelId : undefined}
           aria-invalid={!!error}
           aria-errormessage={error ? errorId : undefined}
           onFocus={(e) => {

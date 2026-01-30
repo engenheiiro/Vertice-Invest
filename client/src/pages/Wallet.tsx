@@ -7,8 +7,8 @@ import { AddAssetModal } from '../components/wallet/AddAssetModal';
 import { EvolutionChart } from '../components/wallet/EvolutionChart';
 import { AllocationChart } from '../components/wallet/AllocationChart';
 import { SmartContributionModal } from '../components/wallet/SmartContributionModal';
-import { Button } from '../components/ui/Button';
-import { Plus, Download, Lock, Crown } from 'lucide-react';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useNavigate } from 'react-router-dom';
@@ -16,17 +16,17 @@ import { authService } from '../services/auth';
 
 export const Wallet = () => {
     const { user } = useAuth();
-    const { assets, kpis } = useWallet();
+    const { assets, kpis, resetWallet } = useWallet();
     const navigate = useNavigate();
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
+    const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
     /**
      * Verificação de Limites via Backend Seguro
      */
     const checkFeatureAccess = async (feature: 'smart_contribution' | 'report') => {
         try {
-            // 1. Verifica Acesso
             const response = await authService.api(`/api/subscription/check-access?feature=${feature}`);
             const data = await response.json();
 
@@ -37,9 +37,6 @@ export const Wallet = () => {
                 return false;
             }
 
-            // 2. Registra Uso (Só se o usuário realmente for usar a feature)
-            // O registro real deve acontecer no sucesso da ação, mas para simplificar UI aqui
-            // vamos considerar "abrir modal" ou "gerar relatório" como uso.
             await authService.api('/api/subscription/register-usage', {
                 method: 'POST',
                 body: JSON.stringify({ feature })
@@ -59,11 +56,20 @@ export const Wallet = () => {
         }
     };
 
+    const handleRebalance = () => {
+        if (user?.plan !== 'BLACK') {
+            if (confirm("Rebalanceamento Automático é exclusivo do plano Black Elite. Deseja conhecer?")) {
+                navigate('/pricing');
+            }
+            return;
+        }
+        alert("Iniciando motor de rebalanceamento... (Mock)");
+    };
+
     const handleGenerateReport = async () => {
         const hasAccess = await checkFeatureAccess('report');
         if (!hasAccess) return;
 
-        // LÓGICA DE DATABUMP (Exportação)
         const date = new Date().toLocaleDateString('pt-BR');
         let content = `VÉRTICE INVEST - RELATÓRIO PATRIMONIAL\n`;
         content += `Gerado em: ${date}\n`;
@@ -101,21 +107,50 @@ export const Wallet = () => {
             
             <main className="max-w-[1600px] mx-auto p-6 animate-fade-in">
                 {/* Header da Página */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-white">Minha Carteira</h1>
                         <p className="text-slate-400 text-sm">Gerencie seus ativos e acompanhe a evolução patrimonial.</p>
                     </div>
                     
-                    {/* Botões de Ação - Layout Horizontal Fixo */}
-                    <div className="flex items-center gap-3 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
+                    {/* Botões de Ação - Cores Personalizadas */}
+                    <div className="flex flex-wrap items-center gap-3">
                         
-                        {/* Botão Relatório */}
+                        {/* 1. Nova Transação - Verde (Essential) */}
+                        <button 
+                            className="flex items-center gap-2 px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95"
+                            onClick={() => setIsAddModalOpen(true)}
+                        >
+                            <PlusCircle size={16} /> 
+                            Nova Transação
+                        </button>
+
+                        {/* 2. Aporte Inteligente - Azul (Pro) */}
+                        <button 
+                            className="flex items-center gap-2 px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95"
+                            onClick={handleOpenSmartContribution}
+                        >
+                            <TrendingUp size={16} /> 
+                            Aporte Inteligente
+                        </button>
+
+                        {/* 3. Rebalanceamento IA - Dourado (Black) */}
+                        <button 
+                            className="flex items-center gap-2 px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-gradient-to-r from-[#D4AF37] via-[#F2D06B] to-[#D4AF37] text-black hover:brightness-110 shadow-lg shadow-[#D4AF37]/20 border-none whitespace-nowrap transition-all active:scale-95"
+                            onClick={handleRebalance}
+                        >
+                            <RefreshCw size={16} className="text-black/80" /> 
+                            Rebalanceamento IA
+                        </button>
+
+                        <div className="w-px h-8 bg-slate-800 hidden lg:block mx-1"></div>
+
+                        {/* Botão Relatório (Secundário) */}
                         <button 
                             disabled={isReportLocked}
                             onClick={handleGenerateReport}
                             className={`
-                                flex items-center gap-2 px-4 py-2 h-10 rounded-xl text-xs font-bold transition-all border whitespace-nowrap shrink-0
+                                flex items-center gap-2 px-4 py-2 h-10 rounded-xl text-xs font-bold transition-all border whitespace-nowrap
                                 ${isReportLocked 
                                     ? 'bg-slate-900/50 border-slate-800 text-slate-600 cursor-not-allowed' 
                                     : 'bg-[#0B101A] border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -126,23 +161,19 @@ export const Wallet = () => {
                             {isReportLocked ? <Lock size={14} /> : <Download size={14} />}
                             Relatório
                         </button>
-                        
-                        {/* Botão Aporte Inteligente - Premium */}
-                        <button 
-                            className="flex items-center gap-2 px-5 py-2 h-10 rounded-xl text-xs font-bold bg-gradient-to-r from-[#D4AF37] via-[#F2D06B] to-[#D4AF37] text-black hover:brightness-110 shadow-lg shadow-[#D4AF37]/20 border-none whitespace-nowrap shrink-0 transition-transform active:scale-95"
-                            onClick={handleOpenSmartContribution}
-                        >
-                            <Crown size={14} className="text-black/80" fill="currentColor" /> 
-                            Aporte Inteligente
-                        </button>
 
-                        {/* Botão Nova Transação */}
+                        {/* Botão Excluir Carteira (Danger) */}
                         <button 
-                            className="flex items-center gap-2 px-5 py-2 h-10 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20 border border-transparent whitespace-nowrap shrink-0 transition-colors"
-                            onClick={() => setIsAddModalOpen(true)}
+                            onClick={() => assets.length > 0 && setIsResetModalOpen(true)}
+                            className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all border 
+                                ${assets.length === 0 
+                                    ? 'opacity-50 cursor-not-allowed border-slate-800 text-slate-600' 
+                                    : 'bg-red-900/10 border-red-900/30 text-red-500 hover:bg-red-900/30 hover:text-red-400 hover:border-red-800'
+                                }`}
+                            title="Resetar Carteira (Excluir Tudo)"
+                            disabled={assets.length === 0}
                         >
-                            <Plus size={16} /> 
-                            Nova Transação
+                            <Trash2 size={16} />
                         </button>
                     </div>
                 </div>
@@ -168,6 +199,16 @@ export const Wallet = () => {
                 {/* Modais */}
                 <AddAssetModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
                 <SmartContributionModal isOpen={isSmartModalOpen} onClose={() => setIsSmartModalOpen(false)} />
+                
+                <ConfirmModal 
+                    isOpen={isResetModalOpen}
+                    onClose={() => setIsResetModalOpen(false)}
+                    onConfirm={resetWallet}
+                    title="Excluir Carteira Definitivamente"
+                    message="Tem certeza que deseja apagar TODOS os ativos e histórico? Esta ação não pode ser desfeita e você perderá todo o acompanhamento de rentabilidade."
+                    confirmText="Sim, apagar tudo"
+                    isDestructive={true}
+                />
 
             </main>
         </div>

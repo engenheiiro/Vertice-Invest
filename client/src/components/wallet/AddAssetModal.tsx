@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, PlusCircle, DollarSign, BarChart2, Tag, ArrowUpCircle, ArrowDownCircle, Search, Info, Loader2 } from 'lucide-react';
+import { X, PlusCircle, DollarSign, BarChart2, Tag, ArrowUpCircle, ArrowDownCircle, Search, Loader2, Clock, CheckCircle2, TrendingUp, Percent } from 'lucide-react';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { useWallet, AssetType } from '../../contexts/WalletContext';
 import { walletService } from '../../services/wallet';
+import { marketService } from '../../services/market';
 
 interface AddAssetModalProps {
     isOpen: boolean;
@@ -19,7 +20,13 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     const [transactionType, setTransactionType] = useState<'BUY' | 'SELL'>('BUY');
     const [isSearching, setIsSearching] = useState(false);
     
-    // Estado para resultados da busca
+    // Estados para Preço Histórico e Lógica Visual
+    const [isFetchingPrice, setIsFetchingPrice] = useState(false);
+    const [priceSource, setPriceSource] = useState<'manual' | 'historical'>('manual');
+    const [historicalDateFound, setHistoricalDateFound] = useState<string | null>(null);
+    const [isCurrentPrice, setIsCurrentPrice] = useState(false); 
+    
+    // Estado para resultados da busca de ticker
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [showDropdown, setShowDropdown] = useState(false);
 
@@ -29,12 +36,15 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         type: 'STOCK' as AssetType,
         quantity: '',
         price: '',
+        rate: '', // Campo para Renda Fixa (Taxa a.a.)
         date: new Date().toISOString().split('T')[0]
     });
 
     const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const priceFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const modalRef = useRef<HTMLDivElement>(null);
 
+    // Reset ao abrir
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
@@ -42,12 +52,56 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             setValidationError('');
             setTransactionType('BUY');
             setSearchResults([]);
+            setPriceSource('manual');
+            setHistoricalDateFound(null);
+            setIsCurrentPrice(false);
+            setForm(prev => ({...prev, date: new Date().toISOString().split('T')[0], rate: '', quantity: '', price: ''})); 
         } else {
             document.body.style.overflow = 'unset';
-            setForm({ ticker: '', name: '', type: 'STOCK', quantity: '', price: '', date: new Date().toISOString().split('T')[0] });
+            setForm({ ticker: '', name: '', type: 'STOCK', quantity: '', price: '', rate: '', date: new Date().toISOString().split('T')[0] });
         }
         return () => { document.body.style.overflow = 'unset'; };
     }, [isOpen]);
+
+    // Lógica de Busca de Preço (Histórico ou Atual)
+    useEffect(() => {
+        if (!isOpen || form.type === 'CASH' || form.type === 'FIXED_INCOME' || !form.ticker || form.ticker.length < 3 || !form.date) {
+            return;
+        }
+        
+        if (priceFetchTimeoutRef.current) clearTimeout(priceFetchTimeoutRef.current);
+
+        setIsFetchingPrice(true);
+        setHistoricalDateFound(null);
+        setIsCurrentPrice(false);
+
+        priceFetchTimeoutRef.current = setTimeout(async () => {
+            try {
+                const data = await marketService.getHistoricalPrice(form.ticker, form.date, form.type);
+                
+                if (data && data.price) {
+                    const fmtPrice = data.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    
+                    setForm(prev => ({ ...prev, price: fmtPrice }));
+                    setPriceSource('historical');
+                    
+                    const today = new Date().toISOString().split('T')[0];
+                    if (form.date === today) {
+                        setIsCurrentPrice(true);
+                    } else if (data.foundDate && data.foundDate !== form.date) {
+                        setHistoricalDateFound(data.foundDate); 
+                    }
+                } else {
+                    setPriceSource('manual');
+                }
+            } catch (err) {
+                console.error("Erro ao buscar preço", err);
+            } finally {
+                setIsFetchingPrice(false);
+            }
+        }, 800);
+
+    }, [form.date, form.ticker, form.type, isOpen]);
 
     // Fecha dropdown ao clicar fora
     useEffect(() => {
@@ -62,11 +116,26 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
     useEffect(() => {
         if (form.type === 'CASH') {
-            setForm(prev => ({ ...prev, ticker: 'RESERVA', quantity: '', price: '1,00' }));
+            setForm(prev => ({ ...prev, ticker: 'RESERVA', quantity: '', price: '1,00', rate: '' }));
         } else if (form.type === 'CRYPTO') {
-            setForm(prev => ({ ...prev, ticker: '', quantity: '', price: '' }));
+            setForm(prev => ({ ...prev, ticker: '', quantity: '', price: '', rate: '' }));
+        } else if (form.type === 'FIXED_INCOME') {
+            // Em Renda Fixa, a "Quantidade" é fixa em 1 (para o modelo mental do usuário comum que aporta valor financeiro)
+            // O valor é inserido no campo preço (Total Investido).
+            setForm(prev => ({ ...prev, ticker: '', quantity: '1', price: '', rate: '10,00' }));
         }
     }, [form.type]);
+
+    const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const selectedDate = e.target.value;
+        const today = new Date().toISOString().split('T')[0];
+
+        if (selectedDate > today) {
+            setForm(prev => ({ ...prev, date: today }));
+        } else {
+            setForm(prev => ({ ...prev, date: selectedDate }));
+        }
+    };
 
     const handleTickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value.toUpperCase();
@@ -76,7 +145,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
         if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
 
-        if (val.length >= 2) { // Gatilho com 2 chars
+        if (val.length >= 2) {
             setIsSearching(true);
             searchTimeoutRef.current = setTimeout(async () => {
                 try {
@@ -93,7 +162,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                 } finally {
                     setIsSearching(false);
                 }
-            }, 300); // Debounce menor para resposta rápida
+            }, 300);
         } else {
             setSearchResults([]);
             setShowDropdown(false);
@@ -101,12 +170,15 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     };
 
     const handleSelectResult = (result: any) => {
+        // Se a busca retornou taxa (para Renda Fixa), usamos ela
+        const rateVal = result.rate ? result.rate.toString().replace('.', ',') : '';
+        
         setForm(prev => ({ 
             ...prev, 
             ticker: result.ticker, 
             name: result.name, 
-            price: result.price ? result.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : prev.price,
-            type: result.type ? (result.type as AssetType) : prev.type
+            type: result.type ? (result.type as AssetType) : prev.type,
+            rate: rateVal || prev.rate
         }));
         setShowDropdown(false);
         setSearchResults([]);
@@ -139,6 +211,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         let val = e.target.value;
         if (val.includes('-')) return;
         setForm({...form, price: val});
+        setPriceSource('manual'); 
+        setIsCurrentPrice(false);
     };
     
     const parseCurrencyToFloat = (value: string) => {
@@ -150,7 +224,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     const handlePriceBlur = () => {
         if (!form.price) return;
         let num = parseCurrencyToFloat(form.price);
-        
         if (!isNaN(num) && num >= 0) {
             setForm(prev => ({...prev, price: num.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}));
         }
@@ -162,6 +235,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         
         let finalQty = parseFloat(form.quantity.replace(',', '.')); 
         let finalPrice = parseCurrencyToFloat(form.price);
+        let finalRate = form.rate ? parseFloat(form.rate.replace(',', '.')) : 0;
 
         if (isNaN(finalQty) || finalQty <= 0) {
             setValidationError('A quantidade deve ser um número válido maior que zero.');
@@ -186,6 +260,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         try {
             let finalTicker = form.ticker.toUpperCase();
 
+            // Lógica para Caixa/Reserva ou Renda Fixa simplificada
             if (form.type === 'CASH') {
                 if (transactionType === 'SELL') finalQty = -1; 
                 else finalQty = 1; 
@@ -199,7 +274,9 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                 price: finalPrice, 
                 averagePrice: finalPrice, 
                 currency: form.type === 'STOCK_US' ? 'USD' : 'BRL',
-                sector: 'General'
+                sector: 'General',
+                date: form.date,
+                fixedIncomeRate: finalRate
             });
 
             setStatus('success');
@@ -225,7 +302,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         }
 
         if (transactionType === 'SELL') {
-            const availableAssets = assets.filter(a => a.type === form.type && a.quantity > 0); // Filtra apenas com saldo > 0
+            const availableAssets = assets.filter(a => a.type === form.type && a.quantity > 0);
             return (
                 <div className="flex flex-col gap-1.5 mb-4">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">Ativo para Venda</label>
@@ -254,7 +331,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         let placeholder = "Ex: PETR4";
         if (form.type === 'CRYPTO') placeholder = "Ex: BTC, ETH";
         if (form.type === 'STOCK_US') placeholder = "Ex: AAPL, NVDA";
-        if (form.type === 'FIXED_INCOME') placeholder = "Ex: Tesouro, CDB...";
+        if (form.type === 'FIXED_INCOME') placeholder = "Ex: Tesouro, CDB, Cofrinho...";
 
         return (
             <div className="relative mb-4" ref={modalRef}>
@@ -265,7 +342,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                     onChange={handleTickerChange}
                     onFocus={() => { if(searchResults.length > 0) setShowDropdown(true); }}
                     containerClassName="mb-0"
-                    // ITEM 1: Mantendo classes consistentes
                     className="uppercase font-mono tracking-wider px-4 py-3"
                 />
                 
@@ -275,7 +351,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                     </div>
                 )}
 
-                {/* ITEM 0: Dropdown de Resultados */}
                 {showDropdown && searchResults.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-[#0F1729] border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar animate-fade-in">
                         {searchResults.map((result, idx) => (
@@ -289,7 +364,14 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                     <p className="text-[10px] text-slate-400 truncate max-w-[200px]">{result.name}</p>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-[9px] font-bold bg-slate-700 px-1.5 py-0.5 rounded text-slate-300">{result.type}</span>
+                                    <span className="text-[9px] font-bold bg-slate-700 px-1.5 py-0.5 rounded text-slate-300">
+                                        {result.type === 'STOCK' ? 'AÇÃO' : 
+                                         result.type === 'FIXED_INCOME' ? 'RENDA FIXA' : 
+                                         result.type}
+                                    </span>
+                                    {result.rate && (
+                                        <p className="text-[9px] text-emerald-400 font-mono mt-0.5">{result.rate}% a.a.</p>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -324,6 +406,36 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             );
         }
 
+        if (form.type === 'FIXED_INCOME') {
+            return (
+                <>
+                    <div className="relative">
+                        <Input 
+                            label="Valor Total Investido (R$)"
+                            placeholder="0,00"
+                            value={form.price}
+                            onChange={handlePriceChange}
+                            onBlur={handlePriceBlur}
+                            containerClassName="mb-0"
+                            className="px-4 py-3 text-emerald-400 font-bold"
+                        />
+                        <DollarSign className="absolute right-3 top-9 text-slate-600 pointer-events-none" size={16} />
+                    </div>
+                    
+                    <div className="relative">
+                        <Input 
+                            label="Rentabilidade (% a.a.)"
+                            placeholder="Ex: 11,50"
+                            value={form.rate}
+                            onChange={(e) => setForm({...form, rate: e.target.value})}
+                            containerClassName="mb-0"
+                        />
+                        <Percent className="absolute right-3 top-9 text-slate-600 pointer-events-none" size={16} />
+                    </div>
+                </>
+            );
+        }
+
         return (
             <>
                 <div className="relative">
@@ -349,8 +461,45 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         onBlur={handlePriceBlur}
                         containerClassName="mb-0"
                         min="0"
+                        className={priceSource === 'historical' ? 'px-4 py-3 border-blue-500/50 text-blue-100 bg-blue-900/10' : ''}
                     />
-                    <DollarSign className="absolute right-3 top-9 text-slate-600 pointer-events-none" size={16} />
+                    
+                    {/* Ícone de Status do Preço */}
+                    <div className="absolute right-3 top-9 pointer-events-none">
+                        {isFetchingPrice ? (
+                            <Loader2 className="animate-spin text-blue-500" size={16} />
+                        ) : priceSource === 'historical' ? (
+                            <div className="group relative">
+                                {isCurrentPrice ? (
+                                    <TrendingUp className="text-emerald-400 animate-fade-in" size={16} />
+                                ) : (
+                                    <Clock className="text-blue-400 animate-fade-in" size={16} />
+                                )}
+                            </div>
+                        ) : (
+                            <DollarSign className="text-slate-600" size={16} />
+                        )}
+                    </div>
+
+                    {/* Tooltip/Aviso de Preço */}
+                    {priceSource === 'historical' && !isFetchingPrice && (
+                        <div className={`absolute -bottom-5 left-1 flex items-center gap-1 text-[9px] font-medium animate-fade-in ${isCurrentPrice ? 'text-emerald-400' : 'text-blue-400'}`}>
+                            {isCurrentPrice ? (
+                                <>
+                                    <CheckCircle2 size={10} />
+                                    Preço Atual de Mercado
+                                </>
+                            ) : (
+                                <>
+                                    <Clock size={10} />
+                                    {historicalDateFound 
+                                        ? `Preço aprox. de ${new Date(historicalDateFound).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'})}`
+                                        : 'Preço histórico sugerido'
+                                    }
+                                </>
+                            )}
+                        </div>
+                    )}
                 </div>
             </>
         );
@@ -411,7 +560,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                                 onChange={(e) => setForm({...form, type: e.target.value as AssetType, ticker: ''})} 
                                                 className="w-full bg-[#0B101A] text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-[#0F1729] transition-all duration-300 shadow-sm"
                                             >
-                                                <option value="STOCK">Ações BR</option>
+                                                <option value="STOCK">Ações Brasil</option>
                                                 <option value="FII">Fundos Imobiliários</option>
                                                 <option value="STOCK_US">Ações Exterior</option>
                                                 <option value="CRYPTO">Criptomoedas</option>
@@ -422,15 +571,15 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                         </div>
                                     </div>
                                     <Input 
-                                        label="Data" type="date" value={form.date}
-                                        onChange={(e) => setForm({...form, date: e.target.value})}
+                                        label="Data do Aporte" type="date" value={form.date}
+                                        onChange={handleDateChange}
+                                        max={new Date().toISOString().split('T')[0]} // Prop nativa HTML5
                                         containerClassName="mb-0 col-span-1"
                                     />
                                 </div>
 
                                 {renderTickerField()}
 
-                                {/* ITEM 1: Correção Visual - Input do Nome padronizado */}
                                 {form.type !== 'CASH' && (
                                     <Input 
                                         label="Nome do Ativo" 
@@ -438,7 +587,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                         value={form.name} 
                                         onChange={(e) => setForm({...form, name: e.target.value})}
                                         containerClassName="mb-0"
-                                        // Padronizado: px-4 py-3
                                         className="bg-[#0B101A] text-slate-300 border-slate-800 focus:border-slate-600 px-4 py-3"
                                     />
                                 )}

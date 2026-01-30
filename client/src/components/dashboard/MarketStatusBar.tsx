@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Percent } from 'lucide-react';
 import { MarketIndex } from '../../hooks/useDashboardData';
 
 interface MarketStatusBarProps {
@@ -19,6 +19,7 @@ export const MarketStatusBar: React.FC<MarketStatusBarProps> = ({ indices }) => 
                 {indices.map((idx) => {
                     const change = idx.changePercent || 0;
                     const val = idx.value || 0;
+                    const isRate = idx.type === 'RATE'; // CDI, SELIC
                     
                     let Icon = Minus;
                     let colorClass = 'text-slate-400';
@@ -32,21 +33,30 @@ export const MarketStatusBar: React.FC<MarketStatusBarProps> = ({ indices }) => 
                         Icon = TrendingDown;
                         colorClass = 'text-red-500';
                         bgClass = 'bg-red-500/10';
+                    } else if (isRate) {
+                        // Estilo neutro/destacado para taxas que não oscilam no dia
+                        colorClass = 'text-slate-300'; 
+                        Icon = Percent;
                     }
 
                     const displayValue = val < 100 
                         ? val.toFixed(2) 
-                        : val.toLocaleString('pt-BR', { maximumFractionDigits: 0 }); 
+                        : val.toLocaleString('pt-BR', { maximumFractionDigits: 3 }); 
 
                     return (
                         <div key={idx.ticker} className="flex items-center gap-2 shrink-0 group cursor-default">
                             <span className="text-[10px] font-bold text-slate-300 font-mono group-hover:text-blue-400 transition-colors">{idx.ticker}</span>
                             <div className={`flex items-center gap-1 text-[10px] font-mono ${colorClass}`}>
-                                <Icon size={10} />
+                                {!isRate && <Icon size={10} />}
                                 <span>{displayValue}</span>
-                                <span className={`px-1 rounded ${bgClass}`}>
-                                    {change > 0 ? '+' : ''}{change.toFixed(2)}%
-                                </span>
+                                
+                                {isRate ? (
+                                    <span className="px-1 text-[9px] text-slate-500 font-bold uppercase">a.a.</span>
+                                ) : (
+                                    <span className={`px-1 rounded ${bgClass}`}>
+                                        {change > 0 ? '+' : ''}{change.toFixed(2)}%
+                                    </span>
+                                )}
                             </div>
                         </div>
                     );

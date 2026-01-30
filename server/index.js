@@ -5,7 +5,27 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 
-// Função auto-executável para inicialização segura
+// Função auxiliar para log de pânico (escreve direto no disco sem depender de bibliotecas)
+const panicLog = (message) => {
+    try {
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = path.dirname(__filename);
+        const logPath = path.join(__dirname, 'logs', 'crash-report.txt');
+        const timestamp = new Date().toISOString();
+        const logMsg = `\n[${timestamp}] CRITICAL CRASH:\n${message}\n--------------------------\n`;
+        
+        // Garante que a pasta existe (redundância)
+        if (!fs.existsSync(path.join(__dirname, 'logs'))) {
+            fs.mkdirSync(path.join(__dirname, 'logs'));
+        }
+        
+        fs.appendFileSync(logPath, logMsg);
+        console.error("🔥 ERRO GRAVADO EM: " + logPath);
+    } catch (e) {
+        console.error("ERRO AO GRAVAR LOG DE PÂNICO:", e);
+    }
+};
+
 (async () => {
   try {
     const __filename = fileURLToPath(import.meta.url);
@@ -13,10 +33,8 @@ import fs from 'fs';
 
     console.log("📂 [Boot] Carregando variáveis de ambiente...");
 
-    // 1. Carrega Variáveis de Ambiente
     const dotenv = (await import('dotenv')).default;
     
-    // Procura o .env na raiz do projeto ou no diretório atual
     const envPaths = [
         path.resolve(__dirname, '../.env'),
         path.resolve(__dirname, '../../.env'),
@@ -34,25 +52,46 @@ import fs from 'fs';
     }
 
     if (!envLoaded) {
-        // Tenta carregar sem caminho específico (pega do ambiente real do Render/Vercel)
         dotenv.config();
         console.log("⚠️ [Boot] .env local não encontrado (usando variáveis de sistema).");
     }
 
-    // 2. Carrega Instrumentação (Sentry)
     try {
         await import('./instrument.js');
     } catch (e) {
         console.warn("⚠️ [Boot] Falha ao carregar instrumentação (ignorado):", e.message);
     }
 
-    // 3. Importa Módulos Core
     console.log("🔄 [Boot] Importando módulos da aplicação...");
     const { default: app } = await import('./app.js');
     const { default: connectDB } = await import('./config/db.js');
     const { default: logger } = await import('./config/logger.js');
 
-    // 4. Inicializa Banco e Servidor
+    // --- TRATAMENTO DE ERROS GLOBAIS ---
+    process.on('uncaughtException', (error) => {
+        const msg = `🔥 UNCAUGHT EXCEPTION!\nErro: ${error.message}\nStack: ${error.stack}`;
+        console.error(msg);
+        
+        // Tenta usar o logger padrão
+        if (logger) logger.error(msg);
+        
+        // Log de Pânico (Garante escrita em arquivo txt simples)
+        panicLog(msg);
+
+        process.exit(1); 
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+        const msg = `🔥 UNHANDLED REJECTION! Promessa sem catch.\nMotivo: ${reason instanceof Error ? reason.stack : reason}`;
+        console.error(msg);
+        if (logger) logger.error(msg);
+        
+        // Em casos severos, unhandledRejection pode deixar o app instável
+        // Vamos logar no pânico também por segurança
+        panicLog(msg);
+    });
+    // ----------------------------------------------------------
+
     await connectDB();
 
     const PORT = process.env.PORT || 5000;
@@ -60,16 +99,15 @@ import fs from 'fs';
     const API_KEY = process.env.API_KEY;
 
     if (!JWT_SECRET) {
-      logger.error("❌ ERRO FATAL: JWT_SECRET não definido.");
-      if (process.env.NODE_ENV === 'production') {
-          console.error("Aplicação não pode iniciar sem JWT_SECRET em produção.");
-      }
+      const msg = "❌ ERRO FATAL: JWT_SECRET não definido.";
+      logger.error(msg);
+      panicLog(msg);
     }
 
     if (!API_KEY) {
-        logger.warn("⚠️ AVISO: API_KEY do Google Gemini não encontrada. A IA não funcionará.");
+        logger.warn("⚠️ AVISO: API_KEY do Google Gemini não encontrada.");
     } else {
-        logger.info(`🔑 API Key detectada (${API_KEY.substring(0, 4)}...${API_KEY.substring(API_KEY.length - 4)})`);
+        logger.info(`🔑 API Key detectada (${API_KEY.substring(0, 4)}...)`);
     }
 
     const server = app.listen(PORT, () => {
@@ -80,7 +118,6 @@ import fs from 'fs';
     server.on('error', (e) => {
         if (e.code === 'EADDRINUSE') {
             logger.error(`❌ Porta ${PORT} já está em uso!`);
-            logger.info(`👉 Tentando iniciar na porta ${Number(PORT) + 1}...`);
             setTimeout(() => {
                 server.close();
                 app.listen(Number(PORT) + 1);
@@ -93,6 +130,7 @@ import fs from 'fs';
   } catch (error) {
     console.error("\n❌ FALHA CRÍTICA NA INICIALIZAÇÃO:");
     console.error(error);
+    panicLog(`FALHA DE INICIALIZAÇÃO: ${error.message}\n${error.stack}`);
     process.exit(1);
   }
 })();

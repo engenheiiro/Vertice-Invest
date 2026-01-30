@@ -35,30 +35,32 @@ const calculateIntrinsicValue = (m, type, price, context) => {
     const { MACRO } = context;
     let fairPrice = price;
     let method = "Mercado";
+    let grahamPrice = 0;
+    let bazinPrice = 0;
 
     if (type === 'STOCK' || type === 'STOCK_US') {
-        let graham = 0;
+        // Graham
         if (m.pl > 0 && m.pvp > 0) {
             const lpa = price / m.pl;
             const vpa = price / m.pvp;
-            graham = Math.sqrt(22.5 * lpa * vpa);
+            grahamPrice = Math.sqrt(22.5 * lpa * vpa);
         }
 
-        let bazin = 0;
+        // Bazin
         if (m.dy > 0) {
-            const adjustedDy = Math.min(m.dy, 10) / 100; 
+            const adjustedDy = Math.min(m.dy, 10) / 100; // Cap no DY para evitar distorções de dividendos não recorrentes
             const dividendPerShare = price * adjustedDy;
-            bazin = dividendPerShare / 0.06; 
+            bazinPrice = dividendPerShare / 0.06; 
         }
 
-        if (graham > 0 && bazin > 0) {
-            fairPrice = (graham * 0.5) + (bazin * 0.5);
+        if (grahamPrice > 0 && bazinPrice > 0) {
+            fairPrice = (grahamPrice * 0.5) + (bazinPrice * 0.5);
             method = "Híbrido";
-        } else if (graham > 0) {
-            fairPrice = graham;
+        } else if (grahamPrice > 0) {
+            fairPrice = grahamPrice;
             method = "Graham";
-        } else if (bazin > 0) {
-            fairPrice = bazin;
+        } else if (bazinPrice > 0) {
+            fairPrice = bazinPrice;
             method = "Bazin";
         }
         
@@ -76,9 +78,20 @@ const calculateIntrinsicValue = (m, type, price, context) => {
             fairPrice = vp * (1 + (valuationPremium / 100));
             method = "VP Ajustado (Spread NTNB)";
         }
+        // FIIs geralmente usam VP ou fluxo de caixa, Bazin/Graham não se aplicam diretamente da mesma forma,
+        // mas podemos preencher Bazin com a lógica de dividendos para referência.
+        if (m.dy > 0) {
+             const dividendPerShare = price * (m.dy / 100);
+             bazinPrice = dividendPerShare / 0.06;
+        }
     }
 
-    return { fairPrice: safeVal(fairPrice), method };
+    return { 
+        fairPrice: safeVal(fairPrice), 
+        method,
+        grahamPrice: safeVal(grahamPrice),
+        bazinPrice: safeVal(bazinPrice)
+    };
 };
 
 // --- 2. SCORING ENGINE ---
@@ -279,7 +292,7 @@ export const scoringEngine = {
         if (asset.dbFlags && asset.dbFlags.isBlacklisted) return null; 
         if (asset.metrics.pl < -20 && asset.type === 'STOCK') return null;
 
-        const { fairPrice } = calculateIntrinsicValue(asset.metrics, asset.type, asset.price, context);
+        const { fairPrice, grahamPrice, bazinPrice } = calculateIntrinsicValue(asset.metrics, asset.type, asset.price, context);
         const scores = calculateProfileScores(asset, fairPrice, context);
         const structural = calculateStructuralScores(asset.metrics, asset.type);
         const thesisData = generateDynamicTheses(asset.metrics, asset.type, asset.ticker, context);
@@ -291,7 +304,8 @@ export const scoringEngine = {
             type: asset.type,
             currentPrice: asset.price,
             targetPrice: fairPrice,
-            metrics: { ...asset.metrics, structural }, 
+            // Importante: Passando Graham e Bazin para o objeto final
+            metrics: { ...asset.metrics, structural, grahamPrice, bazinPrice }, 
             scores: scores, 
             riskProfile: '', 
             score: 0, 

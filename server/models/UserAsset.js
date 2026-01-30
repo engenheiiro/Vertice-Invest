@@ -7,8 +7,13 @@ const UserAssetSchema = new mongoose.Schema({
   type: { type: String, required: true },
   quantity: { type: Number, required: true, default: 0 },
   totalCost: { type: Number, required: true, default: 0 },
-  realizedProfit: { type: Number, default: 0 }, // Novo campo: Lucro realizado acumulado
+  realizedProfit: { type: Number, default: 0 }, 
   currency: { type: String, default: 'BRL' },
+  
+  // Campos para Renda Fixa
+  startDate: { type: Date }, // Data do aporte inicial para cálculo de juros
+  fixedIncomeRate: { type: Number, default: 0 }, // Taxa anual contratada (ex: 11.5 para 11.5%)
+  
   updatedAt: { type: Date, default: Date.now }
 });
 

@@ -8,13 +8,18 @@ const SystemConfigSchema = new mongoose.Schema({
   cdi: { type: Number, required: true, default: 11.15 },
   riskFree: { type: Number, required: true, default: 11.25 },
   ntnbLong: { type: Number, required: true, default: 6.30 },
+  
   dollar: { type: Number, default: 5.75 },
+  dollarChange: { type: Number, default: 0 },
   
   // Cache de Índices (Para Performance)
   ibov: { type: Number, default: 128000 },
   ibovChange: { type: Number, default: 0 },
+  
   spx: { type: Number, default: 5800 },
   spxChange: { type: Number, default: 0 },
+  spxReturn12m: { type: Number, default: 25.0 }, // Novo: Retorno anual acumulado
+  
   btc: { type: Number, default: 90000 },
   btcChange: { type: Number, default: 0 },
 

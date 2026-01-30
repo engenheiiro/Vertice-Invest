@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -16,6 +17,7 @@ import authRoutes from './routes/authRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import researchRoutes from './routes/researchRoutes.js';
 import walletRoutes from './routes/walletRoutes.js';
+import marketRoutes from './routes/marketRoutes.js'; // Nova Rota
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,10 +66,14 @@ app.use(cors({
   credentials: true 
 }));
 
+// --- LOGS DE ACESSO (HTTP) ---
+// Comentado para reduzir poluição no console. Descomente para debugar requisições.
+/*
 app.use((req, res, next) => {
     logger.http(`${req.method} ${req.url} - IP: ${req.ip}`);
     next();
 });
+*/
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
@@ -81,6 +87,7 @@ app.use('/api', authRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/research', researchRoutes);
 app.use('/api/wallet', walletRoutes);
+app.use('/api/market', marketRoutes); // Registrando nova rota
 
 const distPath = path.resolve(__dirname, '../client/dist');
 if (fs.existsSync(distPath)) {

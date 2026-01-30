@@ -41,14 +41,15 @@ const getDiverseCandidates = (list, count, maxPerSector = 2) => {
     const usedTickers = new Set();
 
     // Ordena por Score decrescente e prioriza Defensivos/Moderados
+    // Prioridade: Perfil > Score > Liquidez (desempate)
     const sortedList = list.sort((a, b) => {
-        // Prioridade de Perfil: DEFENSIVE > MODERATE > BOLD
         const profileScore = { 'DEFENSIVE': 3, 'MODERATE': 2, 'BOLD': 1 };
         const pA = profileScore[a.riskProfile] || 0;
         const pB = profileScore[b.riskProfile] || 0;
         
-        if (pA !== pB) return pB - pA; // Maior perfil primeiro
-        return b.score - a.score; // Maior score depois
+        if (pA !== pB) return pB - pA;
+        if (b.score !== a.score) return b.score - a.score;
+        return (b.metrics?.avgLiquidity || 0) - (a.metrics?.avgLiquidity || 0);
     });
 
     // PASSAGEM 1: Tenta preencher respeitando o limite estrito (ex: 2)
@@ -66,9 +67,12 @@ const getDiverseCandidates = (list, count, maxPerSector = 2) => {
         }
     }
 
-    // PASSAGEM 2 (Fallback Suave): Se não preencheu, relaxa o limite para +1 (ex: 3)
+    // PASSAGEM 2 (Fallback): Relaxa limite para setor 'Outros' ou 'Geral' se necessário, ou aumenta limite global
     if (selected.length < count) {
+        // Tenta preencher com qualquer ativo válido que ainda não esteja na lista,
+        // mas ainda tentando respeitar um limite levemente maior (+1) antes de liberar geral
         const relaxedLimit = maxPerSector + 1;
+        
         for (const asset of sortedList) {
             if (selected.length >= count) break;
             if (usedTickers.has(asset.ticker)) continue;
@@ -84,9 +88,7 @@ const getDiverseCandidates = (list, count, maxPerSector = 2) => {
         }
     }
 
-    // PASSAGEM 3 (Fallback Final): Preenche com o que tiver de melhor, ignorando setor
-    // Isso é necessário para nunca entregar uma lista menor que 'count' (ex: 10),
-    // mesmo que viole a diversificação (culpa do banco de dados pequeno).
+    // PASSAGEM 3 (Fallback Final): Preenche com o que tiver, para não entregar lista vazia
     if (selected.length < count) {
         for (const asset of sortedList) {
             if (selected.length >= count) break;
@@ -107,6 +109,7 @@ export const crunchNumbers = async (req, res, next) => {
         const adminId = req.user?.id;
         
         if (isBulk) {
+            // ... (Lógica Bulk mantida igual) ...
             logger.info("🚀 [FORTRESS] Iniciando Bulk Run (Processamento em Massa)...");
             
             const stockData = await aiResearchService.calculateRanking('STOCK', strat);
@@ -115,19 +118,17 @@ export const crunchNumbers = async (req, res, next) => {
             const fiiData = await aiResearchService.calculateRanking('FII', strat);
             await MarketAnalysis.create({ assetClass: 'FII', strategy: strat, content: { ranking: fiiData.ranking, fullAuditLog: fiiData.fullList }, generatedBy: adminId });
 
-            // GERAÇÃO DO BRASIL 10 (MIX)
-            // Seleciona 5 Ações e 5 FIIs respeitando limite de 2 por setor EM CADA CLASSE
-            const top5Stocks = getDiverseCandidates(stockData.fullList, 5, 2); 
-            const top5FIIs = getDiverseCandidates(fiiData.fullList, 5, 2);
+            const defStocks = stockData.fullList.filter(a => a.riskProfile === 'DEFENSIVE');
+            const defFIIs = fiiData.fullList.filter(a => a.riskProfile === 'DEFENSIVE');
+            const poolStocks = defStocks.length >= 5 ? defStocks : stockData.fullList;
+            const poolFIIs = defFIIs.length >= 5 ? defFIIs : fiiData.fullList;
+
+            const top5Stocks = getDiverseCandidates(poolStocks, 5, 2); 
+            const top5FIIs = getDiverseCandidates(poolFIIs, 5, 2);
             
             let brasil10List = [...top5Stocks, ...top5FIIs]
                 .sort((a, b) => b.score - a.score)
-                .map((item, idx) => ({ 
-                    ...item, 
-                    position: idx + 1,
-                    // Força perfil visual adequado no Top 10 consolidado
-                    riskProfile: item.score >= 80 ? 'DEFENSIVE' : 'MODERATE' 
-                })); 
+                .map((item, idx) => ({ ...item, position: idx + 1 })); 
             
             await MarketAnalysis.create({ assetClass: 'BRASIL_10', strategy: strat, content: { ranking: brasil10List, fullAuditLog: brasil10List }, generatedBy: adminId });
 
@@ -142,19 +143,31 @@ export const crunchNumbers = async (req, res, next) => {
              const stockData = await aiResearchService.calculateRanking('STOCK', strat);
              const fiiData = await aiResearchService.calculateRanking('FII', strat);
              
-             // Aplica a mesma lógica de diversificação estrita
-             const top5Stocks = getDiverseCandidates(stockData.fullList, 5, 2);
-             const top5FIIs = getDiverseCandidates(fiiData.fullList, 5, 2);
+             const defStocks = stockData.fullList.filter(a => a.riskProfile === 'DEFENSIVE');
+             const defFIIs = fiiData.fullList.filter(a => a.riskProfile === 'DEFENSIVE');
+
+             const poolStocks = defStocks.length >= 5 ? defStocks : stockData.fullList;
+             const poolFIIs = defFIIs.length >= 5 ? defFIIs : fiiData.fullList;
              
-             const ranking = [...top5Stocks, ...top5FIIs].sort((a, b) => b.score - a.score);
+             const top5Stocks = getDiverseCandidates(poolStocks, 5, 2);
+             const top5FIIs = getDiverseCandidates(poolFIIs, 5, 2);
+             
+             const ranking = [...top5Stocks, ...top5FIIs].sort((a, b) => b.score - a.score).map((item, idx) => ({ 
+                ...item, 
+                position: idx + 1
+            }));
             
             await MarketAnalysis.create({ assetClass, strategy: strat, content: { ranking, fullAuditLog: ranking }, generatedBy: adminId });
-            return res.status(201).json({ message: "Brasil 10 Gerado com Diversificação." });
+            return res.status(201).json({ message: "Brasil 10 (Defensivo) Gerado." });
         }
 
         const { ranking, fullList } = await aiResearchService.calculateRanking(assetClass, strat);
-        // Aplica diversificação também nos rankings individuais (Top 10 Ações, Top 10 FIIs)
-        const diverseRanking = getDiverseCandidates(fullList, 10, 2); // Top 10, máx 2 por setor
+        
+        // Aplica diversificação rigorosa: Top 10, máximo 2 por setor
+        // O array 'fullList' contém todos os processados. Usamos ele para selecionar os 10 melhores DIVERSIFICADOS.
+        const diverseRanking = getDiverseCandidates(fullList, 10, 2)
+            .sort((a, b) => b.score - a.score)
+            .map((item, idx) => ({ ...item, position: idx + 1 }));
 
         await MarketAnalysis.create({ assetClass, strategy: strat, content: { ranking: diverseRanking, fullAuditLog: fullList }, generatedBy: adminId });
 

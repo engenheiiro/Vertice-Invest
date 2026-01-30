@@ -2,16 +2,18 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Header } from '../components/dashboard/Header';
 import { researchService } from '../services/research';
-import { Activity, TrendingUp, TrendingDown, RefreshCw, Layers, Calendar, ShieldCheck, Database, ArrowUpDown, Target, Info, Filter, Percent } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, RefreshCw, ShieldCheck, Database, ArrowUpDown, Target, Info, Filter, Percent, ChevronUp, ChevronDown } from 'lucide-react';
 
 type SortKey = 'title' | 'type' | 'rate' | 'minInvestment' | 'maturityDate';
 type FilterType = 'ALL' | 'IPCA' | 'PREFIXADO' | 'SELIC' | 'OUTROS';
 
 export const Indicators = () => {
+    // ... (States e LoadData mantidos)
     const [data, setData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({ key: 'type', direction: 'asc' });
     const [filterType, setFilterType] = useState<FilterType>('ALL');
+    const [isTableExpanded, setIsTableExpanded] = useState(true); // Novo Estado
 
     const loadData = async () => {
         setIsLoading(true);
@@ -63,7 +65,7 @@ export const Indicators = () => {
             <Header />
 
             <main className="max-w-[1600px] mx-auto p-6 animate-fade-in">
-                
+                {/* Header e Grid de Indicadores (Mantidos) */}
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -93,8 +95,8 @@ export const Indicators = () => {
                     <IndicatorCard label="Bitcoin" value={data?.btc?.value} isCurrency={true} currencyPrefix="$" desc="USD" color="text-purple-400" change={data?.btc?.change} />
                 </div>
 
-                <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-                    <div className="p-6 border-b border-slate-800 bg-[#0B101A] flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative z-0">
+                    <div className="p-6 border-b border-slate-800 bg-[#0B101A] flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-20">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
                                 <ShieldCheck size={20} className="text-emerald-500" />
@@ -107,91 +109,81 @@ export const Indicators = () => {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-800">
-                            <Filter size={14} className="text-slate-500 ml-2" />
-                            {['ALL', 'IPCA', 'PREFIXADO', 'SELIC'].map((ft) => (
-                                <button
-                                    key={ft}
-                                    onClick={() => setFilterType(ft as FilterType)}
-                                    className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
-                                        filterType === ft 
-                                        ? 'bg-blue-600 text-white shadow-lg' 
-                                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                                    }`}
-                                >
-                                    {ft === 'ALL' ? 'Todos' : ft}
-                                </button>
-                            ))}
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-800">
+                                <Filter size={14} className="text-slate-500 ml-2" />
+                                {['ALL', 'IPCA', 'PREFIXADO', 'SELIC'].map((ft) => (
+                                    <button
+                                        key={ft}
+                                        onClick={() => setFilterType(ft as FilterType)}
+                                        className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
+                                            filterType === ft 
+                                            ? 'bg-blue-600 text-white shadow-lg' 
+                                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                        }`}
+                                    >
+                                        {ft === 'ALL' ? 'Todos' : ft}
+                                    </button>
+                                ))}
+                            </div>
+                            <button 
+                                onClick={() => setIsTableExpanded(!isTableExpanded)}
+                                className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors border border-slate-700"
+                                title={isTableExpanded ? "Comprimir" : "Expandir"}
+                            >
+                                {isTableExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </button>
                         </div>
                     </div>
 
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse min-w-[800px]">
-                            <thead className="bg-[#0F131E] text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                                <tr>
-                                    <SortableHeader label="Título" sortKey="title" currentSort={sortConfig} onSort={handleSort} align="left" />
-                                    
-                                    {/* Header com Tooltip Explicativo */}
-                                    <th className="px-6 py-4">
-                                        <div className="flex items-center gap-2">
-                                            Tipo
-                                            <div className="group relative">
-                                                <Info size={12} className="text-slate-600 cursor-help" />
-                                                <div className="absolute left-0 bottom-full mb-2 w-64 bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl hidden group-hover:block z-50">
-                                                    <p className="text-[10px] text-white font-bold mb-2">Classificação de Risco/Retorno:</p>
-                                                    <ul className="space-y-1 text-[9px] text-slate-400">
-                                                        <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-purple-500"></span> IPCA: Proteção contra inflação. Longo prazo.</li>
-                                                        <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> PRE: Taxa fixa. Risco de mercado médio.</li>
-                                                        <li className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"></span> SELIC: Pós-fixado. Baixo risco e liquidez.</li>
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </th>
-
-                                    <SortableHeader label="Rentabilidade Anual" sortKey="rate" currentSort={sortConfig} onSort={handleSort} align="right" />
-                                    <SortableHeader label="Investimento Mín." sortKey="minInvestment" currentSort={sortConfig} onSort={handleSort} align="right" />
-                                    <SortableHeader label="Vencimento" sortKey="maturityDate" currentSort={sortConfig} onSort={handleSort} align="right" />
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800/50 text-sm">
-                                {sortedBonds.length > 0 ? (
-                                    sortedBonds.map((bond: any) => (
-                                        <tr key={bond._id} className="hover:bg-slate-900/40 transition-colors group">
-                                            <td className="px-6 py-4 font-bold text-slate-200 group-hover:text-white">
-                                                {bond.title}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${getBondTypeStyle(bond.type)}`}>
-                                                    {bond.type}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right font-mono font-bold text-emerald-400">
-                                                {bond.index === 'PRE' ? '' : bond.index + ' + '}{bond.rate.toFixed(2)}%
-                                            </td>
-                                            <td className="px-6 py-4 text-right text-slate-300">
-                                                {fmtCurrency(bond.minInvestment)}
-                                            </td>
-                                            <td className="px-6 py-4 text-right text-slate-400 font-medium">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <Calendar size={14} />
+                    {isTableExpanded && (
+                        <div className="overflow-x-auto relative z-10 animate-fade-in">
+                            <table className="w-full text-left border-collapse min-w-[800px]">
+                                <thead className="bg-[#0F131E] text-[10px] font-black text-slate-500 uppercase tracking-widest sticky top-0 z-30 shadow-sm">
+                                    <tr>
+                                        <SortableHeader label="Título" sortKey="title" currentSort={sortConfig} onSort={handleSort} align="left" />
+                                        <SortableHeader label="Tipo" sortKey="type" currentSort={sortConfig} onSort={handleSort} align="left" />
+                                        <SortableHeader label="Rentabilidade Anual" sortKey="rate" currentSort={sortConfig} onSort={handleSort} align="right" />
+                                        <SortableHeader label="Investimento Mín." sortKey="minInvestment" currentSort={sortConfig} onSort={handleSort} align="right" />
+                                        <SortableHeader label="Vencimento" sortKey="maturityDate" currentSort={sortConfig} onSort={handleSort} align="right" />
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/50 text-sm">
+                                    {sortedBonds.length > 0 ? (
+                                        sortedBonds.map((bond: any) => (
+                                            <tr key={bond._id} className="hover:bg-slate-900/40 transition-colors group">
+                                                <td className="px-6 py-4 font-bold text-slate-200 group-hover:text-white">
+                                                    {bond.title}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${getBondTypeStyle(bond.type)}`}>
+                                                        {bond.type}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-mono font-bold text-emerald-400">
+                                                    {bond.index === 'PRE' ? '' : bond.index + ' + '}{bond.rate.toFixed(2)}%
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-slate-300">
+                                                    {fmtCurrency(bond.minInvestment)}
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-slate-400 font-medium">
                                                     {bond.maturityDate}
-                                                </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={5} className="p-12 text-center text-slate-500 flex flex-col items-center justify-center">
+                                                <Database size={32} className="mb-2 opacity-50" />
+                                                <p className="font-bold">Base de dados sincronizando...</p>
+                                                <p className="text-xs mt-1">Aguarde a atualização automática do servidor.</p>
                                             </td>
                                         </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={5} className="p-12 text-center text-slate-500 flex flex-col items-center justify-center">
-                                            <Database size={32} className="mb-2 opacity-50" />
-                                            <p className="font-bold">Base de dados sincronizando...</p>
-                                            <p className="text-xs mt-1">Aguarde a atualização automática do servidor.</p>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
 
             </main>
@@ -199,13 +191,15 @@ export const Indicators = () => {
     );
 };
 
-const SortableHeader = ({ label, sortKey, currentSort, onSort, align }: any) => (
+// ... (SortableHeader, IndicatorCard, getBondTypeStyle mantidos) ...
+const SortableHeader = ({ label, sortKey, currentSort, onSort, align, icon }: any) => (
     <th 
-        className={`px-6 py-4 cursor-pointer hover:text-white transition-colors text-${align}`}
+        className={`px-6 py-4 cursor-pointer hover:text-white transition-colors text-${align} bg-[#0F131E]`}
         onClick={() => onSort(sortKey)}
     >
         <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
             {label}
+            {icon}
             <ArrowUpDown size={10} className={currentSort.key === sortKey ? 'text-blue-500' : 'text-slate-700'} />
         </div>
     </th>
