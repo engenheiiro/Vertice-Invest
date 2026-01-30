@@ -77,19 +77,35 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
         priceFetchTimeoutRef.current = setTimeout(async () => {
             try {
-                const data = await marketService.getHistoricalPrice(form.ticker, form.date, form.type);
+                const today = new Date().toISOString().split('T')[0];
+                let priceData = null;
+                let isLive = false;
+
+                // CORREÇÃO CRÍTICA: Se a data for HOJE, busca a cotação LIVE (Quote)
+                // Se for PASSADO, busca a cotação HISTÓRICA (Close)
+                if (form.date === today) {
+                    const quote = await marketService.getCurrentQuote(form.ticker);
+                    if (quote && quote.price > 0) {
+                        priceData = { price: quote.price };
+                        isLive = true;
+                    }
+                } else {
+                    const history = await marketService.getHistoricalPrice(form.ticker, form.date, form.type);
+                    if (history && history.price > 0) {
+                        priceData = history;
+                    }
+                }
                 
-                if (data && data.price) {
-                    const fmtPrice = data.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                if (priceData && priceData.price) {
+                    const fmtPrice = priceData.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     
                     setForm(prev => ({ ...prev, price: fmtPrice }));
-                    setPriceSource('historical');
+                    setPriceSource('historical'); // Mantém nome interno 'historical' para estilo visual (azul)
                     
-                    const today = new Date().toISOString().split('T')[0];
-                    if (form.date === today) {
+                    if (isLive) {
                         setIsCurrentPrice(true);
-                    } else if (data.foundDate && data.foundDate !== form.date) {
-                        setHistoricalDateFound(data.foundDate); 
+                    } else if (priceData.foundDate && priceData.foundDate !== form.date) {
+                        setHistoricalDateFound(priceData.foundDate); 
                     }
                 } else {
                     setPriceSource('manual');

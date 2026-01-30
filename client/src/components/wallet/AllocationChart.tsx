@@ -23,7 +23,6 @@ const LABELS: Record<AssetType, string> = {
     CASH: 'Reserva de Emergência'
 };
 
-// Ordem de exibição
 const ORDERED_TYPES: AssetType[] = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
 
 export const AllocationChart = () => {
@@ -34,14 +33,13 @@ export const AllocationChart = () => {
     const [tempTargets, setTempTargets] = useState<AllocationMap>(targetAllocation);
     const [tempReserve, setTempReserve] = useState<string>(targetReserve.toString());
 
-    // 1. Calcular Valores Atuais
+    // 1. Calcular Valores Atuais usando dados já consolidados em BRL
     const currentValues: Record<AssetType, number> = {
         STOCK: 0, FII: 0, STOCK_US: 0, CRYPTO: 0, FIXED_INCOME: 0, CASH: 0
     };
 
     assets.forEach(asset => {
-        const val = asset.quantity * asset.currentPrice * (asset.currency === 'USD' ? 5.65 : 1);
-        currentValues[asset.type] = (currentValues[asset.type] || 0) + val;
+        currentValues[asset.type] = (currentValues[asset.type] || 0) + asset.totalValue;
     });
 
     const reserveValue = currentValues['CASH'];
@@ -54,7 +52,6 @@ export const AllocationChart = () => {
     if (viewMode === 'CURRENT') {
         ORDERED_TYPES.forEach(type => {
             if (type === 'CASH') {
-                // Item 3: Só mostra CASH se > 0 no gráfico principal (para não poluir se zerado)
                 if (reserveValue > 0) {
                     activeDataForChart[type] = (reserveValue / kpis.totalEquity) * 100;
                 }
@@ -71,7 +68,7 @@ export const AllocationChart = () => {
     const slices = Object.entries(activeDataForChart).map(([key, percent]) => {
         const type = key as AssetType;
         const p = percent || 0;
-        if (p <= 0.1) return null; // Não desenha fatias minúsculas
+        if (p <= 0.1) return null;
 
         const startPercent = cumulativePercent;
         cumulativePercent += p;
@@ -85,7 +82,7 @@ export const AllocationChart = () => {
         };
     }).filter(Boolean);
 
-    // Handlers e Utilitários (Mesmos de antes)
+    // Handlers
     const handleTargetChange = (type: AssetType, val: string) => {
         const num = parseFloat(val) || 0;
         setTempTargets(prev => ({ ...prev, [type]: num }));
@@ -151,7 +148,6 @@ export const AllocationChart = () => {
                         let divergenceNode = null;
 
                         if (isCash) {
-                            // Item 3: Ocultar Reserva da lista se zerada e modo Atual
                             if (viewMode === 'CURRENT' && reserveValue <= 0) return null;
 
                             const currentR = reserveValue;
@@ -170,7 +166,6 @@ export const AllocationChart = () => {
                             const currentPct = (currentValues[type] / safeInvestmentTotal) * 100;
                             const targetPct = targetAllocation[type] || 0;
                             
-                            // Se modo atual e valor zerado, oculta
                             if (viewMode === 'CURRENT' && currentValues[type] <= 0) return null;
 
                             const valToShow = viewMode === 'CURRENT' ? currentPct : targetPct;
@@ -200,7 +195,7 @@ export const AllocationChart = () => {
                 </div>
             </div>
 
-            {/* Modal de Edição (Mantido similar, apenas ocultando) */}
+            {/* Modal de Edição */}
             {isEditing && (
                 <div className="absolute inset-0 bg-[#080C14] z-20 flex flex-col p-6 animate-fade-in rounded-2xl">
                     <div className="flex justify-between items-center mb-4">

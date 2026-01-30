@@ -3,10 +3,9 @@ import UserAsset from '../models/UserAsset.js';
 import MarketAsset from '../models/MarketAsset.js';
 import TreasuryBond from '../models/TreasuryBond.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
+import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import logger from '../config/logger.js';
-
-const USD_RATE_MOCK = 5.75;
 
 export const getWalletData = async (req, res, next) => {
     try {
@@ -19,25 +18,38 @@ export const getWalletData = async (req, res, next) => {
         if (userAssets.length === 0) {
             return res.json({ 
                 assets: [], 
-                kpis: { totalEquity: 0, totalInvested: 0, totalResult: 0, totalResultPercent: 0, dayVariation: 0, dayVariationPercent: 0, totalDividends: 0 } 
+                kpis: { totalEquity: 0, totalInvested: 0, totalResult: 0, totalResultPercent: 0, dayVariation: 0, dayVariationPercent: 0, totalDividends: 0 },
+                meta: { usdRate: 5.75 }
             });
         }
 
+        // --- SMART SYNC ---
+        const liveTickers = activeAssets
+            .filter(a => a.type !== 'FIXED_INCOME' && a.type !== 'CASH')
+            .map(a => a.ticker);
+
+        if (liveTickers.length > 0) {
+            await marketDataService.refreshQuotesBatch(liveTickers);
+        }
+
+        // --- DADOS GLOBAIS ---
+        const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
+        const usdRate = config?.dollar || 5.75;
+
+        // --- CACHE DE PREÇOS ---
         const tickers = activeAssets.map(a => a.ticker);
-        const marketAssets = await MarketAsset.find({ ticker: { $in: tickers } }).select('ticker sector');
-        const staticInfoMap = new Map();
-        marketAssets.forEach(ma => staticInfoMap.set(ma.ticker, ma.sector));
-
-        // Filtra tickers que precisam de cotação externa (exclui Renda Fixa e Caixa)
-        const activeMarketAssets = activeAssets.filter(a => a.type !== 'FIXED_INCOME' && a.type !== 'CASH');
-        const uniqueTickers = [...new Set(activeMarketAssets.map(a => marketDataService.normalizeSymbol(a.ticker, a.type)))];
+        const marketAssets = await MarketAsset.find({ ticker: { $in: tickers } }).select('ticker sector lastPrice name');
         
+        // Mapas para acesso O(1)
         const priceMap = new Map();
-        await Promise.all(uniqueTickers.map(async (symbol) => {
-            const data = await marketDataService.getMarketDataByTicker(symbol);
-            priceMap.set(symbol, data);
-        }));
+        const infoMap = new Map();
+        
+        marketAssets.forEach(ma => {
+            priceMap.set(ma.ticker, ma.lastPrice);
+            infoMap.set(ma.ticker, { sector: ma.sector, name: ma.name });
+        });
 
+        // --- PROCESSAMENTO PRINCIPAL ---
         let totalEquity = 0;
         let totalInvested = 0;
         let totalDayVariation = 0;
@@ -45,87 +57,76 @@ export const getWalletData = async (req, res, next) => {
 
         const processedAssets = activeAssets.map(asset => {
             let currentPrice = 0;
-            let dayChange = 0;
-            const multiplier = asset.currency === 'USD' ? USD_RATE_MOCK : 1;
+            let dayChangePct = 0;
+            
+            // Define multiplicador cambial
+            const isDollarized = asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO';
+            const currencyMultiplier = isDollarized ? usdRate : 1;
 
-            // LÓGICA DE PRECIFICAÇÃO
+            // Lógica de Preço por Tipo
             if (asset.type === 'CASH') {
                 currentPrice = 1;
-                dayChange = 0;
+                dayChangePct = 0;
             } 
             else if (asset.type === 'FIXED_INCOME') {
-                // Cálculo de Rentabilidade Automática (Juros Compostos Pro-Rata)
-                const investedAmount = asset.totalCost; // Valor aplicado
-                // Se a taxa não foi informada, usa 10% como fallback razoável
+                const investedAmount = asset.totalCost; 
                 const rate = asset.fixedIncomeRate || 10.0; 
                 const startDate = new Date(asset.startDate || asset.createdAt || new Date());
                 const now = new Date();
                 
-                // Diferença em dias corridos
                 const diffTime = Math.max(0, now.getTime() - startDate.getTime());
                 const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)); 
                 
-                // Montante = Capital * (1 + taxa)^(dias/365)
+                // Cálculo Curva Juros Compostos
                 const factor = Math.pow(1 + (rate / 100), diffDays / 365);
-                const currentTotalValue = investedAmount * factor;
+                const currentTotalValueMath = investedAmount * factor;
                 
-                // Em Renda Fixa, se quantidade é 1 (padrão), preço = valor total. Se não, divide.
-                currentPrice = asset.quantity > 0 ? currentTotalValue / asset.quantity : 0;
+                currentPrice = asset.quantity > 0 ? currentTotalValueMath / asset.quantity : 0;
                 
-                // Variação do Dia: Aproximação (Taxa Diária * Valor Ontem)
-                // Taxa Diária = (1 + TaxaAnual)^(1/365) - 1
-                const dailyRate = Math.pow(1 + (rate/100), 1/365) - 1;
-                dayChange = currentTotalValue * dailyRate; 
+                // Variação diária teórica
+                dayChangePct = (Math.pow(1 + (rate/100), 1/365) - 1) * 100;
             } 
             else {
-                // Ativos de Mercado (Ações, FIIs, Crypto)
-                const symbol = marketDataService.normalizeSymbol(asset.ticker, asset.type);
-                const marketInfo = priceMap.get(symbol) || { price: 0, change: 0, name: asset.ticker };
-                currentPrice = marketInfo.price || 0;
+                // Renda Variável
+                const dbPrice = priceMap.get(asset.ticker);
+                currentPrice = (dbPrice !== undefined && dbPrice !== 0) ? dbPrice : (asset.averagePrice || 0);
                 
-                // Se preço vier 0 da API, usa o preço médio para não zerar a carteira visualmente
-                if (currentPrice === 0 && asset.averagePrice > 0) currentPrice = asset.averagePrice;
-
-                const equity = asset.quantity * currentPrice * multiplier;
-                dayChange = equity * (marketInfo.change / 100);
+                // Se não tem variação real, assume 0 (ou buscaria do histórico anterior)
+                dayChangePct = 0; // TODO: Implementar variação diária real no MarketAsset
             }
             
-            // Cálculo de Posição
-            const equity = asset.quantity * currentPrice * multiplier;
-            const invested = asset.totalCost * multiplier;
-            
-            totalEquity += equity;
-            totalInvested += invested;
-            totalDayVariation += isNaN(dayChange) ? 0 : dayChange;
+            // Cálculos Consolidados (EM REAIS)
+            const totalValueBr = asset.quantity * currentPrice * currencyMultiplier;
+            const totalCostBr = asset.totalCost * currencyMultiplier;
+            const dayChangeValueBr = totalValueBr * (dayChangePct / 100);
 
-            const unrealizedProfit = equity - invested;
+            totalEquity += totalValueBr;
+            totalInvested += totalCostBr;
+            totalDayVariation += dayChangeValueBr;
+
+            const unrealizedProfit = totalValueBr - totalCostBr;
             const positionTotalResult = unrealizedProfit + (asset.realizedProfit || 0);
-            const profitPercent = invested > 0 ? (positionTotalResult / invested) * 100 : 0;
+            const profitPercent = totalCostBr > 0 ? (positionTotalResult / totalCostBr) * 100 : 0;
 
-            let sector = staticInfoMap.get(asset.ticker);
-            if (!sector) {
-                if (asset.type === 'FII') sector = 'FII Genérico';
-                else if (asset.type === 'STOCK') sector = 'Ações Diversas';
-                else if (asset.type === 'CRYPTO') sector = 'Criptoativos';
-                else if (asset.type === 'CASH') sector = 'Caixa';
-                else if (asset.type === 'FIXED_INCOME') sector = 'Renda Fixa';
-                else sector = 'Outros';
-            }
+            const info = infoMap.get(asset.ticker) || {};
 
             return {
                 id: asset._id,
                 ticker: asset.ticker,
-                name: asset.type === 'FIXED_INCOME' ? asset.ticker : (priceMap.get(asset.ticker)?.name || asset.ticker),
+                name: info.name || asset.ticker,
                 type: asset.type,
                 quantity: asset.quantity,
                 averagePrice: asset.quantity > 0 ? asset.totalCost / asset.quantity : 0,
-                currentPrice: currentPrice,
+                currentPrice: currentPrice, // Preço na moeda original
                 currency: asset.currency,
-                totalValue: equity,
+                
+                // Campos Calculados (Source of Truth para o Frontend)
+                totalValue: totalValueBr, 
+                totalCost: totalCostBr,
                 profit: positionTotalResult,
                 profitPercent: profitPercent,
-                sector: sector,
-                // Passa a taxa para o front saber se está rendendo
+                
+                sector: info.sector || 'Outros',
                 fixedIncomeRate: asset.fixedIncomeRate 
             };
         });
@@ -142,7 +143,11 @@ export const getWalletData = async (req, res, next) => {
                 totalResultPercent: totalInvested > 0 ? (totalResult / totalInvested) * 100 : 0,
                 dayVariation: totalDayVariation,
                 dayVariationPercent: totalEquity > 0 ? (totalDayVariation / totalEquity) * 100 : 0,
-                totalDividends: 0 // Placeholder por enquanto
+                totalDividends: 0 
+            },
+            meta: {
+                usdRate,
+                lastUpdate: new Date()
             }
         });
 
@@ -161,7 +166,6 @@ export const searchAssets = async (req, res, next) => {
         const tickerRegex = new RegExp(`^${query}`, 'i');
         let results = [];
 
-        // 1. Busca em MarketAssets (Ações, FIIs, Crypto)
         const marketAssets = await MarketAsset.find({ 
             $or: [
                 { ticker: tickerRegex },
@@ -178,7 +182,6 @@ export const searchAssets = async (req, res, next) => {
             type: a.type
         }));
 
-        // 2. Busca em TreasuryBonds (Tesouro Direto)
         if (/tesouro|ipca|selic|prefixado|renda|bonds/i.test(query)) {
             const bonds = await TreasuryBond.find({
                 title: regex
@@ -194,7 +197,6 @@ export const searchAssets = async (req, res, next) => {
             results = [...results, ...bondResults];
         }
 
-        // 3. Injeção de Produtos Populares (CDBs, Cofrinhos)
         const popularFixed = [
             { ticker: "CDB BANCO INTER", name: "CDB Liquidez Diária", type: 'FIXED_INCOME', rate: 11.15 },
             { ticker: "COFRINHO NUBANK", name: "RDB Resgate Imediato", type: 'FIXED_INCOME', rate: 11.15 },
@@ -244,7 +246,6 @@ export const addAssetTransaction = async (req, res, next) => {
 
         if (asset) {
             if (numQty < 0) {
-                // Venda
                 const sellQty = Math.abs(numQty);
                 if (sellQty > asset.quantity + 0.000001) {
                     return res.status(400).json({ message: "Quantidade insuficiente para venda." });
@@ -264,11 +265,9 @@ export const addAssetTransaction = async (req, res, next) => {
                     asset.totalCost = 0; 
                 }
             } else {
-                // Compra / Aporte
                 asset.quantity += numQty;
                 asset.totalCost += (numQty * numPrice);
                 
-                // Se for Renda Fixa, atualiza a taxa
                 if (type === 'FIXED_INCOME' && fixedIncomeRate) {
                     asset.fixedIncomeRate = fixedIncomeRate; 
                 }
@@ -286,14 +285,12 @@ export const addAssetTransaction = async (req, res, next) => {
                 totalCost: numQty * numPrice,
                 currency: currency || (type === 'STOCK_US' ? 'USD' : 'BRL'),
                 realizedProfit: 0,
-                // Dados Específicos RF
                 startDate: transactionDate,
                 fixedIncomeRate: fixedIncomeRate || 0
             });
             await asset.save();
         }
 
-        // Se não for RF nem Caixa, cria MarketAsset se não existir
         if (type !== 'FIXED_INCOME' && type !== 'CASH') {
             try {
                 const existingInGlobal = await MarketAsset.findOne({ ticker: cleanTicker });

@@ -24,6 +24,16 @@ export const marketService = {
     },
 
     /**
+     * Busca a cotação atual (Live/Cache) do sistema.
+     * Usado quando a data da transação é "Hoje".
+     */
+    async getCurrentQuote(ticker: string) {
+        const response = await authService.api(`/api/market/quote?ticker=${ticker}`);
+        if (!response.ok) return null;
+        return await response.json();
+    },
+
+    /**
      * Inspeciona se um ativo tem cache de histórico e retorna metadados.
      */
     async getAssetCacheStatus(ticker: string) {

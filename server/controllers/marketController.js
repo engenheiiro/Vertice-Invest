@@ -25,6 +25,19 @@ export const getHistoricalPrice = async (req, res, next) => {
     }
 };
 
+// NOVO: Busca cotação atual simples (mesma fonte da Dashboard)
+export const getCurrentQuote = async (req, res, next) => {
+    try {
+        const { ticker } = req.query;
+        if (!ticker) return res.status(400).json({ message: "Ticker obrigatório" });
+
+        const data = await marketDataService.getMarketDataByTicker(ticker);
+        res.json(data);
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const getAssetStatus = async (req, res, next) => {
     try {
         const { ticker } = req.params;

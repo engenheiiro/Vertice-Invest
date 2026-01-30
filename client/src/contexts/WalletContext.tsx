@@ -11,7 +11,8 @@ export interface Asset {
     quantity: number;
     averagePrice: number;
     currentPrice: number;
-    totalValue: number;
+    totalValue: number; // Agora vem do backend em BRL
+    totalCost: number;  // Agora vem do backend em BRL
     profit: number;
     profitPercent: number;
     currency: 'BRL' | 'USD';
@@ -43,6 +44,7 @@ interface WalletContextType {
     history: HistoryPoint[];
     targetAllocation: AllocationMap;
     targetReserve: number;
+    usdRate: number; // Taxa de câmbio oficial
     isLoading: boolean;
     refreshWallet: () => Promise<void>;
     addAsset: (asset: any) => Promise<void>;
@@ -56,6 +58,8 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [assets, setAssets] = useState<Asset[]>([]);
     const [history, setHistory] = useState<HistoryPoint[]>([]);
+    const [usdRate, setUsdRate] = useState(5.75); // Fallback inicial
+    
     const [kpis, setKpis] = useState<WalletKPIs>({
         totalEquity: 0, totalInvested: 0, totalResult: 0, 
         totalResultPercent: 0, dayVariation: 0, dayVariationPercent: 0, totalDividends: 0
@@ -72,39 +76,16 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 walletService.getHistory()
             ]);
             
-            const rawAssets: Asset[] = data.assets || [];
-            
-            let totalEquity = 0;
-            let totalInvested = 0;
+            // O Backend agora retorna os dados calculados e o câmbio usado
+            if (data.meta?.usdRate) setUsdRate(data.meta.usdRate);
 
-            const validAssets = rawAssets.map(asset => {
-                const safePrice = asset.currentPrice > 0 ? asset.currentPrice : 0;
-                const safeTotal = asset.quantity * safePrice * (asset.currency === 'USD' ? 5.65 : 1);
-                const safeInvested = asset.quantity * asset.averagePrice * (asset.currency === 'USD' ? 5.65 : 1);
-                
-                if (safePrice > 0) {
-                    totalEquity += safeTotal;
-                    totalInvested += safeInvested;
-                }
-
-                return { ...asset, currentPrice: safePrice, totalValue: safeTotal };
-            });
-
-            const totalResult = totalEquity - totalInvested;
-            const totalResultPercent = totalInvested > 0 ? (totalResult / totalInvested) * 100 : 0;
-            
-            const backendKpis = data.kpis || {};
-
-            setAssets(validAssets);
+            setAssets(data.assets || []);
             setHistory(historyData || []);
-            setKpis({
-                totalEquity,
-                totalInvested,
-                totalResult,
-                totalResultPercent,
-                dayVariation: backendKpis.dayVariation || 0,
-                dayVariationPercent: backendKpis.dayVariationPercent || 0,
-                totalDividends: backendKpis.totalDividends || 0
+            
+            // KPIs vêm prontos do backend
+            setKpis(data.kpis || {
+                totalEquity: 0, totalInvested: 0, totalResult: 0, 
+                totalResultPercent: 0, dayVariation: 0, dayVariationPercent: 0, totalDividends: 0
             });
 
         } catch (e) {
@@ -146,7 +127,6 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setIsLoading(true);
         try {
             await walletService.resetWallet();
-            // Limpa estado local imediatamente
             setAssets([]);
             setHistory([]);
             setKpis({
@@ -155,7 +135,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             });
         } catch (e) {
             alert("Erro ao resetar carteira.");
-            await refreshWallet(); // Tenta recuperar estado em caso de erro
+            await refreshWallet();
         } finally {
             setIsLoading(false);
         }
@@ -168,7 +148,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     return (
         <WalletContext.Provider value={{ 
-            assets, kpis, history, targetAllocation, targetReserve, 
+            assets, kpis, history, targetAllocation, targetReserve, usdRate,
             isLoading, refreshWallet, addAsset, removeAsset, resetWallet,
             updateTargets
         }}>
