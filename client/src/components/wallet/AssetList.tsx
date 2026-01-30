@@ -3,7 +3,6 @@ import React from 'react';
 import { useWallet, AssetType, Asset } from '../../contexts/WalletContext';
 import { TrendingUp, TrendingDown, Trash2, Folder, PieChart } from 'lucide-react';
 
-// Mapeamento para nomes amigáveis
 const TYPE_LABELS: Record<string, string> = {
     STOCK: 'Ações Brasil',
     FII: 'Fundos Imobiliários',
@@ -21,17 +20,13 @@ export const AssetList = () => {
 
     const formatPercent = (val: number) => `${val > 0 ? '+' : ''}${val.toFixed(2)}%`;
 
-    // 1. Agrupamento dos ativos
     const groupedAssets = assets.reduce((acc, asset) => {
         if (!acc[asset.type]) acc[asset.type] = [];
         acc[asset.type].push(asset);
         return acc;
     }, {} as Record<string, Asset[]>);
 
-    // Ordem de exibição desejada
     const typeOrder = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
-
-    // Filtra apenas os tipos que possuem ativos
     const visibleTypes = typeOrder.filter(type => groupedAssets[type] && groupedAssets[type].length > 0);
 
     return (
@@ -50,7 +45,7 @@ export const AssetList = () => {
                             <th className="p-4 font-bold">Ativo</th>
                             <th className="p-4 font-bold text-right">Preço Médio</th>
                             <th className="p-4 font-bold text-right">Preço Atual</th>
-                            <th className="p-4 font-bold text-right">Saldo Atual</th>
+                            <th className="p-4 font-bold text-right">Saldo Atual (R$)</th>
                             <th className="p-4 font-bold text-right">Rentabilidade</th>
                             <th className="p-4 font-bold text-center">Ações</th>
                         </tr>
@@ -59,9 +54,10 @@ export const AssetList = () => {
                         {visibleTypes.map(type => {
                             const groupItems = groupedAssets[type];
                             
-                            // Cálculos do Grupo
+                            // Cálculos do Grupo usando valores já processados em BRL pelo Backend
                             const totalValueGroup = groupItems.reduce((acc, item) => acc + item.totalValue, 0);
-                            const totalCostGroup = groupItems.reduce((acc, item) => acc + (item.quantity * item.averagePrice * (item.currency === 'USD' ? 5.75 : 1)), 0);
+                            const totalCostGroup = groupItems.reduce((acc, item) => acc + item.totalCost, 0);
+                            
                             const profitGroup = totalValueGroup - totalCostGroup;
                             const profitPercentGroup = totalCostGroup > 0 ? (profitGroup / totalCostGroup) * 100 : 0;
                             
@@ -70,7 +66,6 @@ export const AssetList = () => {
 
                             return (
                                 <React.Fragment key={type}>
-                                    {/* CABEÇALHO DO GRUPO */}
                                     <tr className="bg-[#0F131E] border-y border-slate-800/50">
                                         <td colSpan={6} className="px-4 py-3">
                                             <div className="flex items-center justify-between">
@@ -110,16 +105,10 @@ export const AssetList = () => {
                                         </td>
                                     </tr>
 
-                                    {/* ITENS DO GRUPO */}
                                     {groupItems.map((asset) => {
-                                        const totalValue = asset.quantity * asset.currentPrice;
-                                        const costValue = asset.quantity * asset.averagePrice;
-                                        const profit = totalValue - costValue;
-                                        const profitPercent = asset.averagePrice > 0 ? (profit / costValue) * 100 : 0;
-
                                         return (
                                             <tr key={asset.id} className="hover:bg-slate-800/30 transition-colors border-b border-slate-800/30 last:border-0 group">
-                                                <td className="p-4 pl-8"> {/* Indentação visual */}
+                                                <td className="p-4 pl-8">
                                                     <div className="flex items-center gap-3">
                                                         <div className={`w-8 h-8 rounded bg-slate-800 flex items-center justify-center font-bold text-xs border border-slate-700 ${
                                                             asset.type === 'CRYPTO' ? 'text-purple-400' :
@@ -140,22 +129,22 @@ export const AssetList = () => {
                                                     {formatCurrency(asset.currentPrice, asset.currency)}
                                                 </td>
                                                 <td className="p-4 text-right">
+                                                    {/* Total em BRL (Consolidado) */}
                                                     <p className="font-bold text-white">
                                                         {formatCurrency(asset.totalValue, 'BRL')} 
-                                                        {/* Sempre mostra total em BRL no grid para consistência */}
                                                     </p>
                                                     <p className="text-[10px] text-slate-500">
                                                         {asset.quantity} un
                                                     </p>
                                                 </td>
                                                 <td className="p-4 text-right">
-                                                    <div className={`flex flex-col items-end ${profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                    <div className={`flex flex-col items-end ${asset.profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                                                         <span className="font-bold flex items-center gap-1">
-                                                            {profit >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                                                            {formatPercent(profitPercent)}
+                                                            {asset.profit >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                                                            {formatPercent(asset.profitPercent)}
                                                         </span>
                                                         <span className="text-[10px] opacity-80">
-                                                            {profit >= 0 ? '+' : ''}{formatCurrency(profit, asset.currency)}
+                                                            {asset.profit >= 0 ? '+' : ''}{formatCurrency(asset.profit, 'BRL')}
                                                         </span>
                                                     </div>
                                                 </td>

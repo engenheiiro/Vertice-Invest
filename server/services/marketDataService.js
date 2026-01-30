@@ -1,12 +1,14 @@
 
 import logger from '../config/logger.js';
 import MarketAsset from '../models/MarketAsset.js';
-import AssetHistory from '../models/AssetHistory.js'; // Novo Model
+import AssetHistory from '../models/AssetHistory.js'; 
 import SystemConfig from '../models/SystemConfig.js';
 import { fundamentusService } from './fundamentusService.js';
 import { macroDataService } from './macroDataService.js';
 import { externalMarketService } from './externalMarketService.js';
 import { SECTOR_OVERRIDES } from '../config/sectorOverrides.js';
+
+const CACHE_DURATION_MINUTES = 20; // Tempo de validade do preço no banco
 
 const FALLBACK_MACRO = {
     selic: { value: 11.25 },
@@ -45,36 +47,92 @@ export const marketDataService = {
         }
     },
 
-    // --- NOVA FUNÇÃO: Preço Histórico Inteligente ---
+    /**
+     * SMART SYNC: Atualiza preços sob demanda se estiverem velhos.
+     * Otimizado para Batch Request.
+     */
+    async refreshQuotesBatch(tickers) {
+        if (!tickers || tickers.length === 0) return;
+
+        const cleanTickers = [...new Set(tickers.map(t => this.normalizeSymbol(t)))];
+        const now = new Date();
+        const threshold = new Date(now.getTime() - CACHE_DURATION_MINUTES * 60 * 1000);
+
+        try {
+            // 1. Identificar quais precisam de update
+            // Busca no banco ativos que: (Existem E (lastUpdated < threshold OU lastPrice é 0))
+            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker lastAnalysisDate updatedAt lastPrice type');
+            
+            const toUpdate = [];
+            const assetMap = new Map();
+            
+            dbAssets.forEach(a => assetMap.set(a.ticker, a));
+
+            // Filtra quem precisa de update
+            cleanTickers.forEach(ticker => {
+                const asset = assetMap.get(ticker);
+                // Se não existe no banco, ou se está velho, ou se preço é zero
+                if (!asset || !asset.updatedAt || asset.updatedAt < threshold || asset.lastPrice === 0) {
+                    toUpdate.push(ticker);
+                }
+            });
+
+            if (toUpdate.length === 0) {
+                // logger.debug("⚡ [SmartSync] Cache hit. Nenhum ativo precisa de atualização.");
+                return;
+            }
+
+            logger.info(`⚡ [SmartSync] Atualizando ${toUpdate.length} ativos: ${toUpdate.join(', ')}`);
+
+            // 2. Busca externa em Batch (Yahoo Finance)
+            const quotes = await externalMarketService.getQuotes(toUpdate);
+
+            if (!quotes || quotes.length === 0) return;
+
+            // 3. Persistência em Bulk (Performance)
+            const operations = quotes.map(quote => ({
+                updateOne: {
+                    filter: { ticker: this.normalizeSymbol(quote.ticker) },
+                    update: {
+                        $set: {
+                            lastPrice: quote.price,
+                            updatedAt: now
+                        }
+                    }
+                }
+            }));
+
+            if (operations.length > 0) {
+                await MarketAsset.bulkWrite(operations);
+                logger.info(`✅ [SmartSync] ${operations.length} preços atualizados no banco.`);
+            }
+
+        } catch (error) {
+            logger.error(`❌ [SmartSync] Falha: ${error.message}`);
+            // Não relança erro para não travar a carteira do usuário. Segue com dados antigos.
+        }
+    },
+
     async getPriceAtDate(ticker, dateStr, type) {
         const cleanTicker = this.normalizeSymbol(ticker);
         
         try {
-            // 1. Tenta buscar no Cache Local
             let historyEntry = await AssetHistory.findOne({ ticker: cleanTicker });
             
-            // Verifica se precisamos atualizar o cache (se não existe ou se é muito antigo - ex: > 7 dias)
-            // Para simplicidade, se não existir, buscamos.
             if (!historyEntry) {
-                logger.info(`📅 [History] Cache miss para ${cleanTicker}. Buscando na API externa...`);
-                
                 const externalHistory = await externalMarketService.getFullHistory(cleanTicker, type);
-                
                 if (externalHistory && externalHistory.length > 0) {
                     historyEntry = await AssetHistory.create({
                         ticker: cleanTicker,
                         history: externalHistory,
                         lastUpdated: new Date()
                     });
-                    logger.info(`💾 [History] Cache criado para ${cleanTicker} com ${externalHistory.length} dias.`);
                 } else {
-                    return null; // Ativo não encontrado ou erro na API
+                    return null;
                 }
             }
 
-            // 2. Busca o preço na data específica dentro do array
             const dayData = historyEntry.history.find(h => h.date === dateStr);
-            
             if (dayData) {
                 return {
                     price: dayData.close,
@@ -83,14 +141,10 @@ export const marketDataService = {
                 };
             }
 
-            // Se não achou a data exata (ex: feriado/fim de semana), busca o dia anterior mais próximo
-            // Ordena reverso para achar o mais recente <= data
-            // Nota: O array do Yahoo vem ordenado por data crescente geralmente.
-            // Vamos fazer uma busca simples reversa.
             const targetDate = new Date(dateStr);
             const closest = historyEntry.history
                 .filter(h => new Date(h.date) <= targetDate)
-                .pop(); // Pega o último (mais recente antes da data)
+                .pop();
 
             if (closest) {
                 return {
@@ -101,7 +155,7 @@ export const marketDataService = {
                 };
             }
 
-            return null; // Data muito antiga (antes do IPO/Dados)
+            return null;
 
         } catch (error) {
             logger.error(`Erro ao buscar histórico ${cleanTicker}: ${error.message}`);
@@ -119,7 +173,7 @@ export const marketDataService = {
                     ipca: { value: config.ipca },
                     riskFree: { value: config.riskFree },
                     ntnbLong: { value: config.ntnbLong },
-                    usd: { value: config.dollar || 5.75, change: config.dollarChange || 0 }, // Correção: Lendo variação
+                    usd: { value: config.dollar || 5.75, change: config.dollarChange || 0 }, 
                     ibov: { value: config.ibov || 128000, change: config.ibovChange || 0 },
                     spx: { value: config.spx || 5800, change: config.spxChange || 0 },
                     btc: { value: config.btc || 90000, change: config.btcChange || 0 }
@@ -176,6 +230,7 @@ export const marketDataService = {
             if (stocksMap) stocksMap.forEach((v, k) => pushOp(k, v, 'STOCK'));
             if (fiiMap) fiiMap.forEach((v, k) => pushOp(k, v, 'FII'));
 
+            // Atualiza preços de Crypto/US Assets também no full sync
             const externalAssets = await MarketAsset.find({ 
                 type: { $in: ['CRYPTO', 'STOCK_US'] } 
             }).select('ticker type');

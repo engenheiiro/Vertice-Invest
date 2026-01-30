@@ -2,18 +2,32 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Header } from '../components/dashboard/Header';
 import { researchService } from '../services/research';
-import { Activity, TrendingUp, TrendingDown, RefreshCw, ShieldCheck, Database, ArrowUpDown, Target, Info, Filter, Percent, ChevronUp, ChevronDown } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, RefreshCw, ShieldCheck, Database, ArrowUpDown, Target, Percent, ChevronUp, ChevronDown, Landmark, Filter } from 'lucide-react';
 
 type SortKey = 'title' | 'type' | 'rate' | 'minInvestment' | 'maturityDate';
 type FilterType = 'ALL' | 'IPCA' | 'PREFIXADO' | 'SELIC' | 'OUTROS';
 
+// Mock de dados para CDBs e Cofrinhos
+const POPULAR_CDB_LCI = [
+    { _id: 'cdb1', title: 'CDB Banco Inter (Liquidez Diária)', type: 'CDB', rate: 100, index: 'CDI', minInvestment: 1.00, issuer: 'Banco Inter', maturity: 'N/A' },
+    { _id: 'cdb2', title: 'Caixinha Nubank (Reserva)', type: 'RDB', rate: 100, index: 'CDI', minInvestment: 1.00, issuer: 'Nubank', maturity: 'Imediato' },
+    { _id: 'lci1', title: 'LCI Itaú (Isento IR)', type: 'LCI', rate: 93, index: 'CDI', minInvestment: 1000.00, issuer: 'Itaú', maturity: '90 dias' },
+    { _id: 'cdb3', title: 'CDB C6 Bank', type: 'CDB', rate: 102, index: 'CDI', minInvestment: 50.00, issuer: 'C6 Bank', maturity: '2 Anos' },
+    { _id: 'lca1', title: 'LCA Banco do Brasil', type: 'LCA', rate: 88, index: 'CDI', minInvestment: 500.00, issuer: 'Banco do Brasil', maturity: '9 meses' },
+    { _id: 'cdb4', title: 'CDB XP Investimentos', type: 'CDB', rate: 110, index: 'CDI', minInvestment: 5000.00, issuer: 'XP', maturity: '3 Anos' },
+    { _id: 'cdb5', title: 'Sofisa Direto', type: 'CDB', rate: 110, index: 'CDI', minInvestment: 1.00, issuer: 'Sofisa', maturity: 'Liquidez Diária' },
+    { _id: 'lci2', title: 'LCI ABC Brasil', type: 'LCI', rate: 96, index: 'CDI', minInvestment: 1000.00, issuer: 'Banco ABC', maturity: '1 Ano' },
+];
+
 export const Indicators = () => {
-    // ... (States e LoadData mantidos)
     const [data, setData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({ key: 'type', direction: 'asc' });
     const [filterType, setFilterType] = useState<FilterType>('ALL');
-    const [isTableExpanded, setIsTableExpanded] = useState(true); // Novo Estado
+    
+    // Estados de Colapso (Padrão Fechado = false)
+    const [isTreasuryOpen, setIsTreasuryOpen] = useState(false);
+    const [isPrivateFixedOpen, setIsPrivateFixedOpen] = useState(false);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -51,7 +65,7 @@ export const Indicators = () => {
             }
         }
 
-        return [...filtered].sort((a, b) => {
+        return [...filtered].sort((a: any, b: any) => {
             if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
             if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
             return 0;
@@ -65,7 +79,7 @@ export const Indicators = () => {
             <Header />
 
             <main className="max-w-[1600px] mx-auto p-6 animate-fade-in">
-                {/* Header e Grid de Indicadores (Mantidos) */}
+                {/* Header e Grid de Indicadores */}
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -95,53 +109,56 @@ export const Indicators = () => {
                     <IndicatorCard label="Bitcoin" value={data?.btc?.value} isCurrency={true} currencyPrefix="$" desc="USD" color="text-purple-400" change={data?.btc?.change} />
                 </div>
 
-                <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative z-0">
-                    <div className="p-6 border-b border-slate-800 bg-[#0B101A] flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-20">
+                {/* --- CONTÊINER 1: TESOURO DIRETO --- */}
+                <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative z-0 mb-6">
+                    <div 
+                        className="p-6 border-b border-slate-800 bg-[#0B101A] flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-[#0F131E] transition-colors"
+                        onClick={() => setIsTreasuryOpen(!isTreasuryOpen)}
+                    >
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
                                 <ShieldCheck size={20} className="text-emerald-500" />
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold text-white uppercase tracking-wide">Mesa de Renda Fixa</h2>
+                                <h2 className="text-lg font-bold text-white uppercase tracking-wide">Tesouro Direto</h2>
                                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
-                                    <Database size={10} /> Base de Dados: {data?.bonds?.length || 0} Títulos
+                                    <Database size={10} /> Base Oficial: {data?.bonds?.length || 0} Títulos
                                 </p>
                             </div>
                         </div>
 
                         <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-800">
-                                <Filter size={14} className="text-slate-500 ml-2" />
-                                {['ALL', 'IPCA', 'PREFIXADO', 'SELIC'].map((ft) => (
-                                    <button
-                                        key={ft}
-                                        onClick={() => setFilterType(ft as FilterType)}
-                                        className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
-                                            filterType === ft 
-                                            ? 'bg-blue-600 text-white shadow-lg' 
-                                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                                        }`}
-                                    >
-                                        {ft === 'ALL' ? 'Todos' : ft}
-                                    </button>
-                                ))}
+                            {/* Filtros só aparecem se aberto */}
+                            {isTreasuryOpen && (
+                                <div className="hidden md:flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-800 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                                    <Filter size={14} className="text-slate-500 ml-2" />
+                                    {['ALL', 'IPCA', 'PREFIXADO', 'SELIC'].map((ft) => (
+                                        <button
+                                            key={ft}
+                                            onClick={() => setFilterType(ft as FilterType)}
+                                            className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
+                                                filterType === ft 
+                                                ? 'bg-blue-600 text-white shadow-lg' 
+                                                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            {ft === 'ALL' ? 'Todos' : ft}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            <div className="p-2 bg-slate-800 rounded-lg text-slate-400">
+                                {isTreasuryOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </div>
-                            <button 
-                                onClick={() => setIsTableExpanded(!isTableExpanded)}
-                                className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors border border-slate-700"
-                                title={isTableExpanded ? "Comprimir" : "Expandir"}
-                            >
-                                {isTableExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                            </button>
                         </div>
                     </div>
 
-                    {isTableExpanded && (
+                    {isTreasuryOpen && (
                         <div className="overflow-x-auto relative z-10 animate-fade-in">
                             <table className="w-full text-left border-collapse min-w-[800px]">
                                 <thead className="bg-[#0F131E] text-[10px] font-black text-slate-500 uppercase tracking-widest sticky top-0 z-30 shadow-sm">
                                     <tr>
-                                        <SortableHeader label="Título" sortKey="title" currentSort={sortConfig} onSort={handleSort} align="left" />
+                                        <SortableHeader label="Título Público" sortKey="title" currentSort={sortConfig} onSort={handleSort} align="left" />
                                         <SortableHeader label="Tipo" sortKey="type" currentSort={sortConfig} onSort={handleSort} align="left" />
                                         <SortableHeader label="Rentabilidade Anual" sortKey="rate" currentSort={sortConfig} onSort={handleSort} align="right" />
                                         <SortableHeader label="Investimento Mín." sortKey="minInvestment" currentSort={sortConfig} onSort={handleSort} align="right" />
@@ -176,10 +193,72 @@ export const Indicators = () => {
                                             <td colSpan={5} className="p-12 text-center text-slate-500 flex flex-col items-center justify-center">
                                                 <Database size={32} className="mb-2 opacity-50" />
                                                 <p className="font-bold">Base de dados sincronizando...</p>
-                                                <p className="text-xs mt-1">Aguarde a atualização automática do servidor.</p>
                                             </td>
                                         </tr>
                                     )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+
+                {/* --- CONTÊINER 2: CDBS & COFRINHOS --- */}
+                <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative z-0">
+                    <div 
+                        className="p-6 border-b border-slate-800 bg-[#0B101A] flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-[#0F131E] transition-colors"
+                        onClick={() => setIsPrivateFixedOpen(!isPrivateFixedOpen)}
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
+                                <Landmark size={20} className="text-blue-500" />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-white uppercase tracking-wide">CDBs, LCIs & Cofrinhos</h2>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
+                                    <Database size={10} /> Mercado Bancário (Principais)
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                            <div className="p-2 bg-slate-800 rounded-lg text-slate-400">
+                                {isPrivateFixedOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </div>
+                        </div>
+                    </div>
+
+                    {isPrivateFixedOpen && (
+                        <div className="overflow-x-auto relative z-10 animate-fade-in">
+                            <table className="w-full text-left border-collapse min-w-[800px]">
+                                <thead className="bg-[#0F131E] text-[10px] font-black text-slate-500 uppercase tracking-widest sticky top-0 z-30 shadow-sm">
+                                    <tr>
+                                        <th className="px-6 py-4">Produto</th>
+                                        <th className="px-6 py-4">Emissor</th>
+                                        <th className="px-6 py-4 text-right">Rentabilidade</th>
+                                        <th className="px-6 py-4 text-right">Mínimo</th>
+                                        <th className="px-6 py-4 text-right">Vencimento / Liquidez</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/50 text-sm">
+                                    {POPULAR_CDB_LCI.map((item) => (
+                                        <tr key={item._id} className="hover:bg-slate-900/40 transition-colors group">
+                                            <td className="px-6 py-4 font-bold text-slate-200 group-hover:text-white">
+                                                {item.title}
+                                            </td>
+                                            <td className="px-6 py-4 text-slate-400">
+                                                {item.issuer}
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-mono font-bold text-blue-400">
+                                                {item.rate}% do {item.index}
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-slate-300">
+                                                {fmtCurrency(item.minInvestment)}
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-slate-400 font-medium">
+                                                {item.maturity}
+                                            </td>
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
                         </div>
@@ -191,7 +270,6 @@ export const Indicators = () => {
     );
 };
 
-// ... (SortableHeader, IndicatorCard, getBondTypeStyle mantidos) ...
 const SortableHeader = ({ label, sortKey, currentSort, onSort, align, icon }: any) => (
     <th 
         className={`px-6 py-4 cursor-pointer hover:text-white transition-colors text-${align} bg-[#0F131E]`}
