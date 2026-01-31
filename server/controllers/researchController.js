@@ -6,12 +6,6 @@ import { aiEnhancementService } from '../services/aiEnhancementService.js';
 import { marketDataService } from '../services/marketDataService.js';
 import logger from '../config/logger.js';
 
-// Função de dump em arquivo removida para evitar conflitos com Nodemon
-const generateDataBump = (assetClass, dataList) => {
-    // Log apenas no console
-    logger.info(`📊 [DUMP VIRTUAL] Análise ${assetClass} gerada com ${dataList.length} itens.`);
-};
-
 export const getMacroData = async (req, res, next) => {
     try {
         const indicators = await marketDataService.getMacroIndicators();
@@ -34,14 +28,11 @@ export const triggerMarketSync = async (req, res, next) => {
     }
 };
 
-// --- HELPER DE DIVERSIFICAÇÃO ROBUSTO ---
 const getDiverseCandidates = (list, count, maxPerSector = 2) => {
     const selected = [];
     const sectorCounts = {};
     const usedTickers = new Set();
 
-    // Ordena por Score decrescente e prioriza Defensivos/Moderados
-    // Prioridade: Perfil > Score > Liquidez (desempate)
     const sortedList = list.sort((a, b) => {
         const profileScore = { 'DEFENSIVE': 3, 'MODERATE': 2, 'BOLD': 1 };
         const pA = profileScore[a.riskProfile] || 0;
@@ -52,7 +43,6 @@ const getDiverseCandidates = (list, count, maxPerSector = 2) => {
         return (b.metrics?.avgLiquidity || 0) - (a.metrics?.avgLiquidity || 0);
     });
 
-    // PASSAGEM 1: Tenta preencher respeitando o limite estrito (ex: 2)
     for (const asset of sortedList) {
         if (selected.length >= count) break;
         if (usedTickers.has(asset.ticker)) continue;
@@ -67,12 +57,8 @@ const getDiverseCandidates = (list, count, maxPerSector = 2) => {
         }
     }
 
-    // PASSAGEM 2 (Fallback): Relaxa limite para setor 'Outros' ou 'Geral' se necessário, ou aumenta limite global
     if (selected.length < count) {
-        // Tenta preencher com qualquer ativo válido que ainda não esteja na lista,
-        // mas ainda tentando respeitar um limite levemente maior (+1) antes de liberar geral
         const relaxedLimit = maxPerSector + 1;
-        
         for (const asset of sortedList) {
             if (selected.length >= count) break;
             if (usedTickers.has(asset.ticker)) continue;
@@ -88,7 +74,6 @@ const getDiverseCandidates = (list, count, maxPerSector = 2) => {
         }
     }
 
-    // PASSAGEM 3 (Fallback Final): Preenche com o que tiver, para não entregar lista vazia
     if (selected.length < count) {
         for (const asset of sortedList) {
             if (selected.length >= count) break;
@@ -109,7 +94,6 @@ export const crunchNumbers = async (req, res, next) => {
         const adminId = req.user?.id;
         
         if (isBulk) {
-            // ... (Lógica Bulk mantida igual) ...
             logger.info("🚀 [FORTRESS] Iniciando Bulk Run (Processamento em Massa)...");
             
             const stockData = await aiResearchService.calculateRanking('STOCK', strat);
@@ -136,7 +120,6 @@ export const crunchNumbers = async (req, res, next) => {
             return;
         }
 
-        // Single Request Logic
         logger.info(`🚀 [FORTRESS] Calculando Single: ${assetClass}...`);
         
         if (assetClass === 'BRASIL_10') {
@@ -163,8 +146,6 @@ export const crunchNumbers = async (req, res, next) => {
 
         const { ranking, fullList } = await aiResearchService.calculateRanking(assetClass, strat);
         
-        // Aplica diversificação rigorosa: Top 10, máximo 2 por setor
-        // O array 'fullList' contém todos os processados. Usamos ele para selecionar os 10 melhores DIVERSIFICADOS.
         const diverseRanking = getDiverseCandidates(fullList, 10, 2)
             .sort((a, b) => b.score - a.score)
             .map((item, idx) => ({ ...item, position: idx + 1 }));

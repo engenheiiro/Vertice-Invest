@@ -12,8 +12,8 @@ const AssetHistorySchema = new mongoose.Schema({
   }]
 });
 
-// Índice para busca rápida por Ticker
-AssetHistorySchema.index({ ticker: 1 });
+// A definição `unique: true` no schema acima já cria o índice automaticamente.
+// Removemos a linha AssetHistorySchema.index({ ticker: 1 }) para evitar o aviso de duplicidade.
 
 const AssetHistory = mongoose.models.AssetHistory || mongoose.model('AssetHistory', AssetHistorySchema);
 export default AssetHistory;

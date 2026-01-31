@@ -2,10 +2,10 @@
 import YahooFinance from 'yahoo-finance2';
 import logger from '../config/logger.js';
 
-// Instancia a classe conforme exigido na versão 3.x
-// Nota: Em algumas versões, o default export já é a instância. 
-// Se der erro de construtor, mudar para: import yahooFinance from 'yahoo-finance2';
-const yahooFinance = new YahooFinance();
+// Instancia a classe com supressão de avisos
+const yahooFinance = new YahooFinance({ 
+    suppressNotices: ['yahooSurvey'] 
+});
 
 export const externalMarketService = {
     
@@ -14,31 +14,72 @@ export const externalMarketService = {
         if (!tickers || tickers.length === 0) return [];
         
         const yahooTickers = tickers.map(t => {
-            if (t === 'BTC') return 'BTC-USD';
-            if (t === 'ETH') return 'ETH-USD';
-            if (t === 'SOL') return 'SOL-USD';
-            if (t === 'USDT') return 'USDT-USD';
-            return t; 
+            const cleanT = t.trim().toUpperCase();
+            
+            // Mapeamento Cripto
+            if (cleanT === 'BTC') return 'BTC-USD';
+            if (cleanT === 'ETH') return 'ETH-USD';
+            if (cleanT === 'SOL') return 'SOL-USD';
+            if (cleanT === 'USDT') return 'USDT-USD';
+            if (['BTC-USD', 'ETH-USD', 'SOL-USD'].includes(cleanT)) return cleanT;
+
+            // Heurística para B3 (Brasil): 
+            // Se tem 4 letras + números (ex: PETR4, HGLG11) e não tem .SA, adiciona.
+            const isB3Format = /^[A-Z]{4}\d{1,2}$/.test(cleanT);
+            
+            if (isB3Format && !cleanT.endsWith('.SA')) {
+                return `${cleanT}.SA`;
+            }
+
+            return cleanT; 
         });
 
         try {
             const results = await yahooFinance.quote(yahooTickers);
-            const normalized = Array.isArray(results) ? results : [results];
             
-            return normalized.map(item => {
+            const validResults = Array.isArray(results) ? results : [results];
+            
+            return validResults.map(item => {
                 let symbol = item.symbol;
+                // Normaliza de volta para o padrão interno (remove sufixos)
+                if (symbol.endsWith('.SA')) symbol = symbol.replace('.SA', '');
                 if (symbol.endsWith('-USD')) symbol = symbol.replace('-USD', '');
                 
                 return {
                     ticker: symbol,
-                    price: item.regularMarketPrice,
-                    change: item.regularMarketChangePercent,
-                    name: item.longName || item.shortName
+                    price: item.regularMarketPrice || item.price || 0,
+                    change: item.regularMarketChangePercent || 0,
+                    name: item.longName || item.shortName || symbol
                 };
             });
 
         } catch (error) {
             logger.error(`❌ Erro Yahoo Finance (Batch): ${error.message}`);
+            
+            // Fallback: Se o batch falhar (ex: um ticker inválido derruba tudo), tenta um por um
+            if (yahooTickers.length > 1) {
+                logger.info("⚠️ Tentando fallback sequencial para tickers...");
+                const fallbackResults = [];
+                for (const t of yahooTickers) {
+                    try {
+                        const singleRes = await yahooFinance.quote(t);
+                        let symbol = singleRes.symbol;
+                        if (symbol.endsWith('.SA')) symbol = symbol.replace('.SA', '');
+                        if (symbol.endsWith('-USD')) symbol = symbol.replace('-USD', '');
+                        
+                        fallbackResults.push({
+                            ticker: symbol,
+                            price: singleRes.regularMarketPrice || singleRes.price || 0,
+                            change: singleRes.regularMarketChangePercent || 0,
+                            name: singleRes.longName || singleRes.shortName || symbol
+                        });
+                    } catch (e) {
+                        logger.warn(`Ticker inválido ou falha no fallback: ${t}`);
+                    }
+                }
+                return fallbackResults;
+            }
+            
             return [];
         }
     },
@@ -62,23 +103,26 @@ export const externalMarketService = {
         }
     },
 
-    // --- NOVA FUNÇÃO: Busca Histórico Completo ---
+    // Busca Histórico Completo
     async getFullHistory(ticker, type) {
-        let symbol = ticker;
+        let symbol = ticker.trim().toUpperCase();
         
-        // Adaptação de sufixos para o Yahoo Finance
-        if (type === 'STOCK' || type === 'FII') symbol = `${ticker}.SA`;
-        else if (type === 'CRYPTO') symbol = `${ticker}-USD`;
-        // STOCK_US assume ticker direto (ex: AAPL, NVDA)
+        if (type === 'STOCK' || type === 'FII' || type === 'INDEX') {
+            if (!symbol.startsWith('^') && !symbol.endsWith('.SA')) {
+                if (/^[A-Z]{4}\d{1,2}$/.test(symbol)) {
+                    symbol = `${symbol}.SA`;
+                }
+            }
+        } else if (type === 'CRYPTO' && !symbol.includes('-')) {
+            symbol = `${symbol}-USD`;
+        }
 
         try {
-            // period1: '2000-01-01' garante histórico longo suficiente para qualquer usuário.
-            // Definimos explicitamente period2 e interval para evitar erros de validação de schema da lib.
             const today = new Date();
-            const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+            const todayStr = today.toISOString().split('T')[0]; 
 
             const queryOptions = { 
-                period1: '2000-01-01',
+                period1: '2020-01-01', 
                 period2: todayStr,
                 interval: '1d'
             };
@@ -87,16 +131,46 @@ export const externalMarketService = {
 
             if (!result || !Array.isArray(result)) return null;
 
-            // Mapeia para formato leve
             return result.map(day => ({
-                date: day.date.toISOString().split('T')[0], // YYYY-MM-DD
+                date: day.date.toISOString().split('T')[0], 
                 close: day.close,
                 adjClose: day.adjClose || day.close
             }));
 
         } catch (error) {
-            logger.warn(`⚠️ Falha ao buscar histórico de ${symbol}: ${error.message}`);
             return null;
+        }
+    },
+
+    async getDividendsHistory(ticker, type) {
+        let symbol = ticker.trim().toUpperCase();
+        if ((type === 'STOCK' || type === 'FII') && !symbol.endsWith('.SA') && !symbol.startsWith('^')) {
+             if (/^[A-Z]{4}\d{1,2}$/.test(symbol)) {
+                symbol = `${symbol}.SA`;
+            }
+        }
+        
+        try {
+            const queryOptions = { 
+                period1: '2020-01-01', 
+                period2: new Date().toISOString().split('T')[0],
+                interval: '1d',
+                events: 'dividends'
+            };
+
+            const result = await yahooFinance.historical(symbol, queryOptions);
+            
+            if (!result || !Array.isArray(result)) return [];
+
+            return result
+                .filter(item => item.dividends)
+                .map(item => ({
+                    date: item.date, 
+                    amount: item.dividends
+                }));
+
+        } catch (error) {
+            return [];
         }
     }
 };

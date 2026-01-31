@@ -4,10 +4,16 @@ import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight
 import { useWallet } from '../../contexts/WalletContext';
 
 export const WalletSummary = () => {
-    const { kpis, isLoading } = useWallet();
+    const { kpis, isLoading, isPrivacyMode } = useWallet();
 
-    const formatCurrency = (val: number) => 
-        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    const formatCurrency = (val: number | null | undefined) => {
+        if (isPrivacyMode) return '••••••';
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+    };
+
+    const safeFixed = (val: number | null | undefined, digits = 2) => {
+        return (val || 0).toFixed(digits);
+    };
 
     if (isLoading) {
         return <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-pulse">
@@ -17,8 +23,12 @@ export const WalletSummary = () => {
         </div>;
     }
 
-    // Calcula se a carteira está positiva ou negativa
-    const isProfitable = kpis.totalResult >= 0;
+    const safeKpis = kpis || {
+        totalEquity: 0, totalInvested: 0, totalResult: 0, 
+        totalResultPercent: 0, dayVariation: 0, dayVariationPercent: 0, totalDividends: 0
+    };
+
+    const isProfitable = (safeKpis.totalResult || 0) >= 0;
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -27,46 +37,47 @@ export const WalletSummary = () => {
             <SummaryCard 
                 icon={<Wallet className="text-blue-400" size={20} />}
                 title="Patrimônio Total"
-                value={formatCurrency(kpis.totalEquity)}
+                value={formatCurrency(safeKpis.totalEquity)}
                 subValue={
-                    <span className={`flex items-center text-xs font-bold ${kpis.dayVariation >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                        {kpis.dayVariation >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                        {kpis.dayVariationPercent.toFixed(2)}% (Hoje)
+                    <span className={`flex items-center text-xs font-bold ${safeKpis.dayVariation >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {(safeKpis.dayVariation || 0) >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                        {safeFixed(safeKpis.dayVariationPercent)}% (Hoje)
                     </span>
                 }
                 glowColor="blue"
                 borderColor="border-blue-500/20"
             />
 
-            {/* Valor Aplicado (Custo) */}
+            {/* Valor Aplicado (Custo) - MUDANÇA: Roxo para representar base/investimento */}
             <SummaryCard 
-                icon={<DollarSign className="text-emerald-400" size={20} />}
+                icon={<DollarSign className="text-purple-400" size={20} />}
                 title="Valor Aplicado"
-                value={formatCurrency(kpis.totalInvested)}
+                value={formatCurrency(safeKpis.totalInvested)}
                 subValue={<span className="text-slate-500 text-xs">Custo de Aquisição</span>}
-                glowColor="emerald"
-                borderColor="border-emerald-500/20"
-            />
-
-            {/* Rentabilidade Geral (Substitui Lucro Total antigo para focar em %) */}
-            <SummaryCard 
-                icon={<Percent className={isProfitable ? "text-purple-400" : "text-red-400"} size={20} />}
-                title="Rentabilidade Geral"
-                value={`${isProfitable ? '+' : ''}${kpis.totalResultPercent.toFixed(2)}%`}
-                subValue={
-                    <span className={`text-xs font-bold ${isProfitable ? 'text-purple-400' : 'text-red-500'}`}>
-                        {isProfitable ? '+' : ''}{formatCurrency(kpis.totalResult)}
-                    </span>
-                }
                 glowColor="purple"
                 borderColor="border-purple-500/20"
             />
 
-            {/* Proventos (Dividendos) */}
+            {/* Rentabilidade Geral - MUDANÇA: Verde para representar Dinheiro/Lucro */}
+            <SummaryCard 
+                icon={<TrendingUp className={isProfitable ? "text-emerald-400" : "text-red-400"} size={20} />}
+                title="Resultado Aberto"
+                value={`${isProfitable ? '+' : ''}${formatCurrency(safeKpis.totalResult)}`}
+                subValue={
+                    <span className={`text-xs font-bold ${isProfitable ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {isProfitable ? <ArrowUpRight size={12} className="inline mr-1" /> : <ArrowDownRight size={12} className="inline mr-1" />}
+                        {safeFixed(safeKpis.totalResultPercent)}% (Total)
+                    </span>
+                }
+                glowColor={isProfitable ? "emerald" : "red"}
+                borderColor={isProfitable ? "border-emerald-500/20" : "border-red-500/20"}
+            />
+
+            {/* Proventos */}
             <SummaryCard 
                 icon={<PiggyBank className="text-[#D4AF37]" size={20} />}
                 title="Proventos Acumulados"
-                value={formatCurrency(kpis.totalDividends)}
+                value={formatCurrency(safeKpis.totalDividends)}
                 subValue={<span className="text-slate-500 text-xs">Histórico Total</span>}
                 borderColor="border-[#D4AF37]/20"
                 glowColor="gold"

@@ -7,7 +7,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { subscriptionService } from '../services/subscription';
 import { Header } from '../components/dashboard/Header';
 
-export const Pricing = () => {
+// Alterado para export default para compatibilidade com React.lazy simples
+const Pricing = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
@@ -68,6 +69,8 @@ export const Pricing = () => {
                         ]}
                         current={user?.plan === 'ESSENTIAL'}
                         buttonVariant="outline"
+                        borderColor="border-emerald-500/30"
+                        hoverColor="hover:border-emerald-500/50"
                         onSelect={handleSelectPlan}
                         isLoading={loadingPlan === 'ESSENTIAL'}
                     />
@@ -92,6 +95,8 @@ export const Pricing = () => {
                             isPopular
                             current={user?.plan === 'PRO'}
                             buttonVariant="primary"
+                            borderColor="border-blue-500/30"
+                            hoverColor="hover:border-blue-500/60"
                             onSelect={handleSelectPlan}
                             isLoading={loadingPlan === 'PRO'}
                         />
@@ -115,6 +120,7 @@ export const Pricing = () => {
                         current={user?.plan === 'BLACK'}
                         buttonVariant="outline"
                         borderColor="border-[#D4AF37]/30"
+                        hoverColor="hover:border-[#D4AF37]/60"
                         onSelect={handleSelectPlan}
                         isLoading={loadingPlan === 'BLACK'}
                     />
@@ -130,8 +136,8 @@ export const Pricing = () => {
     );
 };
 
-const PricingCard = ({ id, title, price, description, icon, features, isPopular, current, buttonVariant, borderColor = "border-slate-800", onSelect, isLoading }: any) => (
-    <div className={`bg-[#080C14] border ${borderColor} rounded-2xl p-8 relative overflow-hidden flex flex-col h-full transition-all duration-300 ${isPopular ? 'shadow-2xl shadow-blue-900/10 ring-1 ring-blue-500/30 bg-[#0B101A]' : 'hover:border-slate-700'}`}>
+const PricingCard = ({ id, title, price, description, icon, features, isPopular, current, buttonVariant, borderColor = "border-slate-800", hoverColor = "hover:border-slate-700", onSelect, isLoading }: any) => (
+    <div className={`bg-[#080C14] border ${borderColor} rounded-2xl p-8 relative overflow-hidden flex flex-col h-full transition-all duration-300 ${isPopular ? 'shadow-2xl shadow-blue-900/10 ring-1 ring-blue-500/30 bg-[#0B101A]' : hoverColor}`}>
         {isPopular && <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-500"></div>}
         <div className="mb-6 relative z-10">
             <div className="flex items-center justify-between mb-4">
@@ -172,3 +178,5 @@ const PricingCard = ({ id, title, price, description, icon, features, isPopular,
         </div>
     </div>
 );
+
+export default Pricing;

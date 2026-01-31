@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Lock, Construction, ArrowRight, ShieldAlert } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -82,13 +83,13 @@ export const ModulePlaceholder: React.FC<ModulePlaceholderProps> = ({
                 {description}
                 <br/>
                 <span className="text-sm text-slate-500 mt-2 block">
-                    Status: <span className="text-emerald-500 font-mono font-bold">DESENVOLVIMENTO_FINAL</span>
+                    Previsão de Lançamento: <span className="text-emerald-500 font-mono font-bold">Em Breve: Masterclasses Exclusivas</span>
                 </span>
             </p>
 
             <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 rounded-full border border-slate-800 text-xs font-mono text-slate-400">
                 <Construction size={12} className="text-yellow-500" />
-                <span>Módulo disponível na próxima atualização</span>
+                <span>Conteúdo em produção final</span>
             </div>
         </div>
     );

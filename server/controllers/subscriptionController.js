@@ -2,6 +2,7 @@
 import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
+import UsageLog from '../models/UsageLog.js';
 import logger from '../config/logger.js';
 
 // Preços
@@ -27,8 +28,10 @@ const LIMITS_CONFIG = {
     }
 };
 
-// Mock de armazenamento de uso
-const USAGE_CACHE = {}; 
+const getMonthKey = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${now.getMonth() + 1}`;
+};
 
 export const checkAccess = async (req, res, next) => {
     try {
@@ -36,20 +39,21 @@ export const checkAccess = async (req, res, next) => {
         const user = req.user;
         
         if (!user) {
-            logger.warn("⚠️ [Subscription] checkAccess chamado sem usuário autenticado.");
             return res.status(401).json({ message: "Não autorizado." });
         }
 
         const plan = user.plan || 'GUEST';
 
         if (!LIMITS_CONFIG[feature]) {
-            logger.warn(`⚠️ [Subscription] Feature desconhecida solicitada: ${feature}`);
             return res.status(400).json({ message: "Feature desconhecida." });
         }
 
         const limit = LIMITS_CONFIG[feature][plan];
-        const key = `${user.id}_${feature}_${new Date().getMonth()}`;
-        const currentUsage = USAGE_CACHE[key] || 0;
+        const monthKey = getMonthKey();
+
+        // Busca uso persistido no banco
+        const usageLog = await UsageLog.findOne({ user: user.id, feature, monthKey });
+        const currentUsage = usageLog ? usageLog.count : 0;
 
         logger.debug(`🔐 [Access] User: ${user.id} | Plan: ${plan} | Feature: ${feature} | Usage: ${currentUsage}/${limit}`);
 
@@ -84,18 +88,27 @@ export const registerUsage = async (req, res, next) => {
         }
 
         const limit = LIMITS_CONFIG[feature]?.[plan] || 0;
-        const key = `${user.id}_${feature}_${new Date().getMonth()}`;
-        const currentUsage = USAGE_CACHE[key] || 0;
+        const monthKey = getMonthKey();
 
-        if (currentUsage >= limit) {
+        // Operação atômica para incrementar e checar limite (previne race conditions simples)
+        const usageLog = await UsageLog.findOneAndUpdate(
+            { user: user.id, feature, monthKey },
+            { $setOnInsert: { count: 0 } },
+            { upsert: true, new: true }
+        );
+
+        if (usageLog.count >= limit) {
             logger.warn(`⛔ [Usage] Tentativa de uso excedente bloqueada. User: ${user.id}, Feature: ${feature}`);
             return res.status(403).json({ message: "Limite atingido." });
         }
 
-        USAGE_CACHE[key] = currentUsage + 1;
-        logger.info(`✅ [Usage] Uso registrado. User: ${user.id}, Feature: ${feature}, Novo Total: ${USAGE_CACHE[key]}`);
+        usageLog.count += 1;
+        usageLog.lastUsed = new Date();
+        await usageLog.save();
+
+        logger.info(`✅ [Usage] Uso registrado. User: ${user.id}, Feature: ${feature}, Novo Total: ${usageLog.count}`);
         
-        res.json({ success: true, newUsage: USAGE_CACHE[key] });
+        res.json({ success: true, newUsage: usageLog.count });
 
     } catch (error) {
         logger.error(`🔥 [Subscription] Erro em registerUsage: ${error.message}`);
