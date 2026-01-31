@@ -59,8 +59,6 @@ export const marketDataService = {
         const threshold = new Date(now.getTime() - CACHE_DURATION_MINUTES * 60 * 1000);
 
         try {
-            // 1. Identificar quais precisam de update
-            // Busca no banco ativos que: (Existem E (lastUpdated < threshold OU lastPrice é 0))
             const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker lastAnalysisDate updatedAt lastPrice type');
             
             const toUpdate = [];
@@ -68,28 +66,21 @@ export const marketDataService = {
             
             dbAssets.forEach(a => assetMap.set(a.ticker, a));
 
-            // Filtra quem precisa de update
             cleanTickers.forEach(ticker => {
                 const asset = assetMap.get(ticker);
-                // Se não existe no banco, ou se está velho, ou se preço é zero
                 if (!asset || !asset.updatedAt || asset.updatedAt < threshold || asset.lastPrice === 0) {
                     toUpdate.push(ticker);
                 }
             });
 
-            if (toUpdate.length === 0) {
-                // logger.debug("⚡ [SmartSync] Cache hit. Nenhum ativo precisa de atualização.");
-                return;
-            }
+            if (toUpdate.length === 0) return;
 
             logger.info(`⚡ [SmartSync] Atualizando ${toUpdate.length} ativos: ${toUpdate.join(', ')}`);
 
-            // 2. Busca externa em Batch (Yahoo Finance)
             const quotes = await externalMarketService.getQuotes(toUpdate);
 
             if (!quotes || quotes.length === 0) return;
 
-            // 3. Persistência em Bulk (Performance)
             const operations = quotes.map(quote => ({
                 updateOne: {
                     filter: { ticker: this.normalizeSymbol(quote.ticker) },
@@ -109,7 +100,39 @@ export const marketDataService = {
 
         } catch (error) {
             logger.error(`❌ [SmartSync] Falha: ${error.message}`);
-            // Não relança erro para não travar a carteira do usuário. Segue com dados antigos.
+        }
+    },
+
+    // Otimização: Cache de Benchmark (IBOV) para não bater na API a cada request de performance
+    async getBenchmarkHistory(ticker = '^BVSP') {
+        try {
+            let historyEntry = await AssetHistory.findOne({ ticker });
+            const now = new Date();
+            // Cache de 12 horas para histórico de benchmark
+            const cacheLimit = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+
+            if (!historyEntry || historyEntry.lastUpdated < cacheLimit) {
+                logger.info(`📊 [Benchmark] Atualizando histórico cacheado de ${ticker}...`);
+                const externalHistory = await externalMarketService.getFullHistory(ticker, 'INDEX');
+                
+                if (externalHistory && externalHistory.length > 0) {
+                    if (historyEntry) {
+                        historyEntry.history = externalHistory;
+                        historyEntry.lastUpdated = now;
+                        await historyEntry.save();
+                    } else {
+                        historyEntry = await AssetHistory.create({
+                            ticker,
+                            history: externalHistory,
+                            lastUpdated: now
+                        });
+                    }
+                }
+            }
+            return historyEntry ? historyEntry.history : null;
+        } catch (error) {
+            logger.error(`Erro ao buscar benchmark ${ticker}: ${error.message}`);
+            return null;
         }
     },
 
@@ -230,7 +253,6 @@ export const marketDataService = {
             if (stocksMap) stocksMap.forEach((v, k) => pushOp(k, v, 'STOCK'));
             if (fiiMap) fiiMap.forEach((v, k) => pushOp(k, v, 'FII'));
 
-            // Atualiza preços de Crypto/US Assets também no full sync
             const externalAssets = await MarketAsset.find({ 
                 type: { $in: ['CRYPTO', 'STOCK_US'] } 
             }).select('ticker type');

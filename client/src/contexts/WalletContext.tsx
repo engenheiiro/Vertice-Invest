@@ -1,5 +1,6 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { walletService } from '../services/wallet';
 
 export type AssetType = 'STOCK' | 'FII' | 'CRYPTO' | 'STOCK_US' | 'FIXED_INCOME' | 'CASH';
@@ -11,8 +12,8 @@ export interface Asset {
     quantity: number;
     averagePrice: number;
     currentPrice: number;
-    totalValue: number; // Agora vem do backend em BRL
-    totalCost: number;  // Agora vem do backend em BRL
+    totalValue: number;
+    totalCost: number;
     profit: number;
     profitPercent: number;
     currency: 'BRL' | 'USD';
@@ -44,9 +45,11 @@ interface WalletContextType {
     history: HistoryPoint[];
     targetAllocation: AllocationMap;
     targetReserve: number;
-    usdRate: number; // Taxa de câmbio oficial
+    usdRate: number;
     isLoading: boolean;
-    refreshWallet: () => Promise<void>;
+    isPrivacyMode: boolean; 
+    togglePrivacyMode: () => void;
+    refreshWallet: () => void; // Mantido para compatibilidade, agora chama refetch
     addAsset: (asset: any) => Promise<void>;
     removeAsset: (id: string) => Promise<void>;
     resetWallet: () => Promise<void>;
@@ -56,89 +59,75 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [assets, setAssets] = useState<Asset[]>([]);
-    const [history, setHistory] = useState<HistoryPoint[]>([]);
-    const [usdRate, setUsdRate] = useState(5.75); // Fallback inicial
+    const queryClient = useQueryClient();
     
-    const [kpis, setKpis] = useState<WalletKPIs>({
-        totalEquity: 0, totalInvested: 0, totalResult: 0, 
-        totalResultPercent: 0, dayVariation: 0, dayVariationPercent: 0, totalDividends: 0
-    });
-    const [isLoading, setIsLoading] = useState(true);
-
     const [targetAllocation, setTargetAllocation] = useState<AllocationMap>({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10 });
     const [targetReserve, setTargetReserve] = useState(10000);
 
-    const refreshWallet = async () => {
-        try {
-            const [data, historyData] = await Promise.all([
-                walletService.getWallet(),
-                walletService.getHistory()
-            ]);
-            
-            // O Backend agora retorna os dados calculados e o câmbio usado
-            if (data.meta?.usdRate) setUsdRate(data.meta.usdRate);
+    // Estado de Privacidade
+    const [isPrivacyMode, setIsPrivacyMode] = useState(() => {
+        const saved = localStorage.getItem('isPrivacyMode');
+        return saved === 'true';
+    });
 
-            setAssets(data.assets || []);
-            setHistory(historyData || []);
-            
-            // KPIs vêm prontos do backend
-            setKpis(data.kpis || {
-                totalEquity: 0, totalInvested: 0, totalResult: 0, 
-                totalResultPercent: 0, dayVariation: 0, dayVariationPercent: 0, totalDividends: 0
-            });
-
-        } catch (e) {
-            console.error("Erro ao sincronizar carteira", e);
-        } finally {
-            setIsLoading(false);
-        }
+    const togglePrivacyMode = () => {
+        setIsPrivacyMode(prev => {
+            const newValue = !prev;
+            localStorage.setItem('isPrivacyMode', String(newValue));
+            return newValue;
+        });
     };
 
-    useEffect(() => {
-        refreshWallet();
-    }, []);
+    // --- QUERIES ---
+    const walletQuery = useQuery({
+        queryKey: ['wallet'],
+        queryFn: walletService.getWallet,
+        staleTime: 1000 * 60 * 5, // 5 min cache
+    });
+
+    const historyQuery = useQuery({
+        queryKey: ['walletHistory'],
+        queryFn: walletService.getHistory,
+        staleTime: 1000 * 60 * 10, // 10 min cache
+    });
+
+    // --- MUTATIONS ---
+    const addAssetMutation = useMutation({
+        mutationFn: walletService.addAsset,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['wallet'] });
+            queryClient.invalidateQueries({ queryKey: ['walletHistory'] });
+            queryClient.invalidateQueries({ queryKey: ['dividends'] }); // Invalida dividendos também
+        }
+    });
+
+    const removeAssetMutation = useMutation({
+        mutationFn: walletService.removeAsset,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['wallet'] });
+            queryClient.invalidateQueries({ queryKey: ['walletHistory'] });
+        }
+    });
+
+    const resetWalletMutation = useMutation({
+        mutationFn: walletService.resetWallet,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['wallet'] });
+            queryClient.invalidateQueries({ queryKey: ['walletHistory'] });
+            queryClient.invalidateQueries({ queryKey: ['dividends'] });
+        }
+    });
 
     const addAsset = async (newAsset: any) => {
-        setIsLoading(true);
-        try {
-            await walletService.addAsset(newAsset);
-            await refreshWallet();
-        } catch (e) {
-            alert("Erro ao adicionar ativo.");
-        } finally {
-            setIsLoading(false);
-        }
+        await addAssetMutation.mutateAsync(newAsset);
     };
 
     const removeAsset = async (id: string) => {
-        setIsLoading(true);
-        try {
-            await walletService.removeAsset(id);
-            await refreshWallet();
-        } catch (e) {
-            alert("Erro ao remover ativo.");
-        } finally {
-            setIsLoading(false);
-        }
+        await removeAssetMutation.mutateAsync(id);
     };
 
     const resetWallet = async () => {
-        setIsLoading(true);
-        try {
-            await walletService.resetWallet();
-            setAssets([]);
-            setHistory([]);
-            setKpis({
-                totalEquity: 0, totalInvested: 0, totalResult: 0, 
-                totalResultPercent: 0, dayVariation: 0, dayVariationPercent: 0, totalDividends: 0
-            });
-        } catch (e) {
-            alert("Erro ao resetar carteira.");
-            await refreshWallet();
-        } finally {
-            setIsLoading(false);
-        }
+        await resetWalletMutation.mutateAsync();
     };
 
     const updateTargets = (newTargets: AllocationMap, newReserveTarget: number) => {
@@ -146,10 +135,23 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setTargetReserve(newReserveTarget);
     };
 
+    // Dados Derivados
+    const assets = walletQuery.data?.assets || [];
+    const kpis = walletQuery.data?.kpis || {
+        totalEquity: 0, totalInvested: 0, totalResult: 0, 
+        totalResultPercent: 0, dayVariation: 0, dayVariationPercent: 0, totalDividends: 0
+    };
+    const usdRate = walletQuery.data?.meta?.usdRate || 5.75;
+    const history = historyQuery.data || [];
+
+    const isLoading = walletQuery.isLoading || historyQuery.isLoading || addAssetMutation.isPending || removeAssetMutation.isPending;
+
     return (
         <WalletContext.Provider value={{ 
             assets, kpis, history, targetAllocation, targetReserve, usdRate,
-            isLoading, refreshWallet, addAsset, removeAsset, resetWallet,
+            isLoading, isPrivacyMode, togglePrivacyMode,
+            refreshWallet: () => queryClient.invalidateQueries({ queryKey: ['wallet'] }),
+            addAsset, removeAsset, resetWallet,
             updateTargets
         }}>
             {children}

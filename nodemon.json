@@ -4,6 +4,8 @@
   "ext": "js,json",
   "ignore": [
     "server/logs/*",
+    "server/logs/*.log",
+    "logs/*",
     "*.test.js",
     "client/*",
     "node_modules"

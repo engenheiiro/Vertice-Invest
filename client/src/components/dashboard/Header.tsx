@@ -2,14 +2,17 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, LayoutGrid, PieChart, BrainCircuit, 
-  GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3
+  GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
+  Eye, EyeOff
 } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useWallet } from '../../contexts/WalletContext';
 import { PlanBadge } from '../ui/PlanBadge';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuth();
+  const { isPrivacyMode, togglePrivacyMode } = useWallet(); // Contexto de Wallet para o botão
   const navigate = useNavigate();
   const location = useLocation();
   const [time, setTime] = useState(new Date());
@@ -25,7 +28,6 @@ export const Header: React.FC = () => {
     navigate('/login');
   };
 
-  // Determina a aba ativa baseada na URL
   const getActiveTab = () => {
       const path = location.pathname;
       if (path.includes('/dashboard')) return 'terminal';
@@ -74,7 +76,6 @@ export const Header: React.FC = () => {
                  <NavLink icon={<Crown size={14} />} label="Planos" active={activeTab === 'pricing'} />
               </Link>
               
-              {/* ADMIN LINK (Visível apenas para admins) */}
               {isAdmin && (
                   <Link to="/admin">
                      <div className={`
@@ -92,6 +93,17 @@ export const Header: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-4">
+           {/* Privacy Toggle Button */}
+           <button 
+             onClick={togglePrivacyMode}
+             className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+             title={isPrivacyMode ? "Mostrar Valores" : "Ocultar Valores"}
+           >
+             {isPrivacyMode ? <EyeOff size={16} /> : <Eye size={16} />}
+           </button>
+
+           <div className="h-4 w-px bg-slate-800 hidden sm:block"></div>
+
            {/* Relógio & User Info */}
            <div className="flex items-center gap-3">
               <div className="hidden xl:flex items-center gap-2 text-slate-400 bg-slate-900/50 px-2 py-1 rounded border border-slate-800/50">
@@ -101,7 +113,6 @@ export const Header: React.FC = () => {
                 </span>
               </div>
 
-              {/* Área do Usuário Clicável */}
               <Link to="/profile" className="hidden sm:block text-right group cursor-pointer">
                   <p className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors flex items-center justify-end gap-1.5 whitespace-nowrap">
                       {user?.name}

@@ -47,5 +47,32 @@ export const walletService = {
         const response = await authService.api(`/api/wallet/search?q=${query}`);
         if (!response.ok) return null;
         return await response.json();
+    },
+
+    // PAGINAÇÃO ADICIONADA
+    async getTransactions(ticker: string, page: number = 1, limit: number = 10) {
+        const response = await authService.api(`/api/wallet/transactions/${ticker}?page=${page}&limit=${limit}`);
+        if (!response.ok) throw new Error("Falha ao buscar histórico");
+        return await response.json();
+    },
+
+    async deleteTransaction(id: string) {
+        const response = await authService.api(`/api/wallet/transactions/${id}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) throw new Error("Falha ao deletar transação");
+        return await response.json();
+    },
+
+    async getPerformance() {
+        const response = await authService.api('/api/wallet/performance');
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
+    async getDividends() {
+        const response = await authService.api('/api/wallet/dividends');
+        if (!response.ok) return { history: [], provisioned: [] };
+        return await response.json();
     }
 };

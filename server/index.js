@@ -1,6 +1,4 @@
 
-console.log("⚡ [Boot] Iniciando processo Node.js...");
-
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -31,8 +29,6 @@ const panicLog = (message) => {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
 
-    console.log("📂 [Boot] Carregando variáveis de ambiente...");
-
     const dotenv = (await import('dotenv')).default;
     
     const envPaths = [
@@ -46,23 +42,20 @@ const panicLog = (message) => {
         if (fs.existsSync(p)) {
             dotenv.config({ path: p });
             envLoaded = true;
-            console.log(`✅ [Boot] .env carregado de: ${p}`);
             break;
         }
     }
 
     if (!envLoaded) {
         dotenv.config();
-        console.log("⚠️ [Boot] .env local não encontrado (usando variáveis de sistema).");
     }
 
     try {
         await import('./instrument.js');
     } catch (e) {
-        console.warn("⚠️ [Boot] Falha ao carregar instrumentação (ignorado):", e.message);
+        // Ignora falha de instrumentação
     }
 
-    console.log("🔄 [Boot] Importando módulos da aplicação...");
     const { default: app } = await import('./app.js');
     const { default: connectDB } = await import('./config/db.js');
     const { default: logger } = await import('./config/logger.js');
@@ -70,27 +63,19 @@ const panicLog = (message) => {
     // --- TRATAMENTO DE ERROS GLOBAIS ---
     process.on('uncaughtException', (error) => {
         const msg = `🔥 UNCAUGHT EXCEPTION!\nErro: ${error.message}\nStack: ${error.stack}`;
-        console.error(msg);
-        
-        // Tenta usar o logger padrão
         if (logger) logger.error(msg);
-        
-        // Log de Pânico (Garante escrita em arquivo txt simples)
         panicLog(msg);
-
         process.exit(1); 
     });
 
     process.on('unhandledRejection', (reason, promise) => {
         const msg = `🔥 UNHANDLED REJECTION! Promessa sem catch.\nMotivo: ${reason instanceof Error ? reason.stack : reason}`;
-        console.error(msg);
         if (logger) logger.error(msg);
-        
-        // Em casos severos, unhandledRejection pode deixar o app instável
-        // Vamos logar no pânico também por segurança
         panicLog(msg);
     });
     // ----------------------------------------------------------
+
+    logger.info("⚡ [Boot] Inicializando servidor...");
 
     await connectDB();
 

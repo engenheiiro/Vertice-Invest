@@ -26,7 +26,7 @@ const COLORS = [
 ];
 
 export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass }) => {
-    // ... (Lógica de estado e hooks mantida) ...
+    // ... (Lógica de estado e hooks mantida inalterada) ...
     const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
     const [riskFilter, setRiskFilter] = useState<RiskFilter>('DEFENSIVE');
 
@@ -171,7 +171,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                     </div>
                 </div>
 
-                {/* 2. MINHA CARTEIRA (Mantido) */}
+                {/* 2. MINHA CARTEIRA (Corrigido) */}
                 <div className="lg:col-span-4 bg-[#080C14] border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
                     <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0 border-b border-slate-800/50 pb-2">
                         <Wallet size={14} className="text-emerald-500" />
@@ -182,7 +182,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                     </div>
                 </div>
 
-                {/* 3. ALOCAÇÃO SETORIAL RECOMENDADA (Ajustado) */}
+                {/* 3. ALOCAÇÃO SETORIAL RECOMENDADA (Mantido) */}
                 <div className="lg:col-span-4 bg-[#080C14] border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
                     <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0 border-b border-slate-800/50 pb-2">
                         <PieChart size={14} className="text-purple-500" />
@@ -244,26 +244,28 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
     );
 };
 
-// ... (UserWalletSectorChart mantido) ...
+// ... (UserWalletSectorChart Ajustado para remover o "Total Alocado" visualmente) ...
 const UserWalletSectorChart = ({ assetClass }: { assetClass: string }) => {
     const { assets } = useWallet();
     const navigate = useNavigate();
 
     const stats = useMemo(() => {
+        // Mapeamento explícito de classe de pesquisa para tipo de ativo da carteira
         const allowedTypes = assetClass === 'BRASIL_10' 
             ? ['STOCK', 'FII'] 
             : assetClass === 'STOCK_US' ? ['STOCK_US'] : [assetClass];
 
         const filteredAssets = assets.filter(a => allowedTypes.includes(a.type));
         
-        if (filteredAssets.length === 0) return { sectors: [], hasData: false };
+        if (filteredAssets.length === 0) return { sectors: [], hasData: false, totalValue: 0 };
 
         const counts: Record<string, number> = {};
         let totalValue = 0;
 
         filteredAssets.forEach(a => {
             const sector = a.sector || 'Outros';
-            const val = a.totalValue || (a.quantity * a.currentPrice);
+            // Usa totalValue que já vem calculado do backend (BRL)
+            const val = a.totalValue || 0; 
             counts[sector] = (counts[sector] || 0) + val;
             totalValue += val;
         });
@@ -276,7 +278,7 @@ const UserWalletSectorChart = ({ assetClass }: { assetClass: string }) => {
             }))
             .sort((a, b) => b.value - a.value);
 
-        return { sectors, hasData: true };
+        return { sectors, hasData: true, totalValue };
     }, [assets, assetClass]);
 
     if (!stats.hasData) {
@@ -313,22 +315,26 @@ const UserWalletSectorChart = ({ assetClass }: { assetClass: string }) => {
                     <span className="text-[9px] text-slate-500 uppercase font-bold">Você</span>
                 </div>
             </div>
-            <div className="flex-1 grid grid-cols-1 gap-y-1 content-center overflow-y-auto max-h-[140px] custom-scrollbar pr-1">
-                {stats.sectors.map((sector, i) => (
-                    <div key={sector.name} className="flex items-center justify-between text-[9px] group w-full">
-                        <div className="flex items-center gap-1.5 overflow-hidden">
-                            <div className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
-                            <span className="text-slate-400 truncate max-w-[80px] group-hover:text-slate-200 transition-colors" title={sector.name}>{sector.name}</span>
+            <div className="flex-1 flex flex-col h-full">
+                {/* TOTAL ALOCADO REMOVIDO DAQUI */}
+                <div className="flex-1 grid grid-cols-1 gap-y-1 content-center overflow-y-auto max-h-[140px] custom-scrollbar pr-1">
+                    {stats.sectors.map((sector, i) => (
+                        <div key={sector.name} className="flex items-center justify-between text-[9px] group w-full">
+                            <div className="flex items-center gap-1.5 overflow-hidden">
+                                <div className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
+                                <span className="text-slate-400 truncate max-w-[80px] group-hover:text-slate-200 transition-colors" title={sector.name}>{sector.name}</span>
+                            </div>
+                            <span className="font-bold text-slate-300 font-mono ml-1">{Math.round(sector.percent)}%</span>
                         </div>
-                        <span className="font-bold text-slate-300 font-mono ml-1">{Math.round(sector.percent)}%</span>
-                    </div>
-                ))}
+                    ))}
+                </div>
             </div>
         </div>
     );
 };
 
 const SectorDistribution = ({ picks }: { picks: RankingItem[] }) => {
+    // ... (mantido igual)
     const sectors = useMemo(() => {
         const counts: Record<string, number> = {};
         picks.forEach(p => {

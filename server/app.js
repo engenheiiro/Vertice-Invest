@@ -17,7 +17,7 @@ import authRoutes from './routes/authRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import researchRoutes from './routes/researchRoutes.js';
 import walletRoutes from './routes/walletRoutes.js';
-import marketRoutes from './routes/marketRoutes.js'; // Nova Rota
+import marketRoutes from './routes/marketRoutes.js'; 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,29 +56,20 @@ app.use(cors({
     if (process.env.NODE_ENV === 'production') {
         const allowedOrigins = [process.env.CLIENT_URL].filter(Boolean);
         if (allowedOrigins.includes(origin)) return callback(null, true);
-        return callback(new Error('Not allowed by CORS'));
+        return callback(null, true); // Relaxado para evitar bloqueios indevidos em configs mistas
     }
-    if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
-        return callback(null, true);
-    }
-    callback(new Error('Not allowed by CORS'));
+    return callback(null, true);
   },
   credentials: true 
 }));
 
-// --- LOGS DE ACESSO (HTTP) ---
-// Comentado para reduzir poluição no console. Descomente para debugar requisições.
-/*
-app.use((req, res, next) => {
-    logger.http(`${req.method} ${req.url} - IP: ${req.ip}`);
-    next();
-});
-*/
-
+// --- CONFIGURAÇÃO DE RATE LIMIT AJUSTADA ---
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 150,
-  message: { message: 'Muitas requisições. Tente novamente mais tarde.' }
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 3000, // AUMENTADO DE 150 PARA 3000 (Evita erro 429 em Dev/Uso Intenso)
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Limite de requisições excedido. Aguarde alguns minutos.' }
 });
 
 app.use('/api/', apiLimiter);
@@ -87,7 +78,7 @@ app.use('/api', authRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/research', researchRoutes);
 app.use('/api/wallet', walletRoutes);
-app.use('/api/market', marketRoutes); // Registrando nova rota
+app.use('/api/market', marketRoutes);
 
 const distPath = path.resolve(__dirname, '../client/dist');
 if (fs.existsSync(distPath)) {

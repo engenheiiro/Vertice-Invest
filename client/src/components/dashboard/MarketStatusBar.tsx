@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { TrendingUp, TrendingDown, Minus, Percent } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { TrendingUp, TrendingDown, Minus, Percent, Clock } from 'lucide-react';
 import { MarketIndex } from '../../hooks/useDashboardData';
 
 interface MarketStatusBarProps {
@@ -8,12 +8,31 @@ interface MarketStatusBarProps {
 }
 
 export const MarketStatusBar: React.FC<MarketStatusBarProps> = ({ indices }) => {
+    
+    const marketStatus = useMemo(() => {
+        const now = new Date();
+        const day = now.getDay(); // 0 = Domingo, 6 = Sábado
+        const hour = now.getHours();
+        
+        // Lógica B3 Básica: Seg-Sex, 10:00 - 18:00
+        const isWeekday = day > 0 && day < 6;
+        const isOpenHours = hour >= 10 && hour < 18;
+        
+        if (isWeekday && isOpenHours) {
+            return { label: 'Mercado Aberto', color: 'text-emerald-500', dot: 'bg-emerald-500 animate-pulse' };
+        } else {
+            return { label: 'Mercado Fechado', color: 'text-slate-500', dot: 'bg-slate-600' };
+        }
+    }, []);
+
     return (
         <div className="w-full bg-[#02040a] border-b border-slate-800/60 py-1.5 overflow-hidden">
             <div className="max-w-[1600px] mx-auto px-6 flex items-center gap-6 overflow-x-auto no-scrollbar">
                 <div className="flex items-center gap-2 pr-4 border-r border-slate-800/60 shrink-0">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Mercado Aberto</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${marketStatus.dot}`}></span>
+                    <span className={`text-[9px] font-bold uppercase tracking-widest ${marketStatus.color}`}>
+                        {marketStatus.label}
+                    </span>
                 </div>
                 
                 {indices.map((idx) => {
@@ -34,14 +53,13 @@ export const MarketStatusBar: React.FC<MarketStatusBarProps> = ({ indices }) => 
                         colorClass = 'text-red-500';
                         bgClass = 'bg-red-500/10';
                     } else if (isRate) {
-                        // Estilo neutro/destacado para taxas que não oscilam no dia
                         colorClass = 'text-slate-300'; 
                         Icon = Percent;
                     }
 
                     const displayValue = val < 100 
                         ? val.toFixed(2) 
-                        : val.toLocaleString('pt-BR', { maximumFractionDigits: 3 }); 
+                        : val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 }); 
 
                     return (
                         <div key={idx.ticker} className="flex items-center gap-2 shrink-0 group cursor-default">

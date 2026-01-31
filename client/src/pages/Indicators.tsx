@@ -7,16 +7,18 @@ import { Activity, TrendingUp, TrendingDown, RefreshCw, ShieldCheck, Database, A
 type SortKey = 'title' | 'type' | 'rate' | 'minInvestment' | 'maturityDate';
 type FilterType = 'ALL' | 'IPCA' | 'PREFIXADO' | 'SELIC' | 'OUTROS';
 
-// Mock de dados para CDBs e Cofrinhos
+// LISTA ATUALIZADA - DAY AFTER
 const POPULAR_CDB_LCI = [
-    { _id: 'cdb1', title: 'CDB Banco Inter (Liquidez Diária)', type: 'CDB', rate: 100, index: 'CDI', minInvestment: 1.00, issuer: 'Banco Inter', maturity: 'N/A' },
-    { _id: 'cdb2', title: 'Caixinha Nubank (Reserva)', type: 'RDB', rate: 100, index: 'CDI', minInvestment: 1.00, issuer: 'Nubank', maturity: 'Imediato' },
-    { _id: 'lci1', title: 'LCI Itaú (Isento IR)', type: 'LCI', rate: 93, index: 'CDI', minInvestment: 1000.00, issuer: 'Itaú', maturity: '90 dias' },
-    { _id: 'cdb3', title: 'CDB C6 Bank', type: 'CDB', rate: 102, index: 'CDI', minInvestment: 50.00, issuer: 'C6 Bank', maturity: '2 Anos' },
-    { _id: 'lca1', title: 'LCA Banco do Brasil', type: 'LCA', rate: 88, index: 'CDI', minInvestment: 500.00, issuer: 'Banco do Brasil', maturity: '9 meses' },
-    { _id: 'cdb4', title: 'CDB XP Investimentos', type: 'CDB', rate: 110, index: 'CDI', minInvestment: 5000.00, issuer: 'XP', maturity: '3 Anos' },
-    { _id: 'cdb5', title: 'Sofisa Direto', type: 'CDB', rate: 110, index: 'CDI', minInvestment: 1.00, issuer: 'Sofisa', maturity: 'Liquidez Diária' },
-    { _id: 'lci2', title: 'LCI ABC Brasil', type: 'LCI', rate: 96, index: 'CDI', minInvestment: 1000.00, issuer: 'Banco ABC', maturity: '1 Ano' },
+    { _id: 'sofisa', title: 'Sofisa Direto', type: 'CDB', rate: 110, index: 'CDI', minInvestment: 1.00, issuer: 'Sofisa', maturity: 'Imediata' },
+    { _id: 'nu_reserva', title: 'Nubank (Caixinha Reserva)', type: 'RDB', rate: 100, index: 'CDI', minInvestment: 1.00, issuer: 'Nubank', maturity: 'Imediata' },
+    { _id: 'nu_turbo', title: 'Nubank (Caixinha Turbo)', type: 'RDB', rate: 115, index: 'CDI', minInvestment: 1.00, issuer: 'Nubank', maturity: 'Imediata (Max 5k)' },
+    { _id: 'inter', title: 'Banco Inter (Meu Porquinho)', type: 'CDB', rate: 100, index: 'CDI', minInvestment: 1.00, issuer: 'Banco Inter', maturity: 'Imediata' },
+    { _id: 'mp', title: 'Mercado Pago (Conta)', type: 'CDB', rate: 100, index: 'CDI', minInvestment: 1.00, issuer: 'Mercado Pago', maturity: 'Imediata' },
+    { _id: 'picpay', title: 'PicPay (Cofrinhos)', type: 'CDB', rate: 102, index: 'CDI', minInvestment: 1.00, issuer: 'PicPay', maturity: 'Imediata' },
+    { _id: 'pagbank', title: 'PagBank (Conta Rendeira)', type: 'CDB', rate: 100, index: 'CDI', minInvestment: 1.00, issuer: 'PagBank', maturity: 'Imediata' },
+    { _id: 'itau', title: 'Itaú (Iti)', type: 'CDB', rate: 100, index: 'CDI', minInvestment: 1.00, issuer: 'Itaú', maturity: 'Imediata' },
+    { _id: '99pay', title: '99Pay (Lucrativa)', type: 'CDB', rate: 110, index: 'CDI', minInvestment: 1.00, issuer: '99Pay', maturity: 'Imediata (Limitada)' },
+    { _id: 'c6', title: 'C6 Bank (CDB Cartão)', type: 'CDB', rate: 100, index: 'CDI', minInvestment: 100.00, issuer: 'C6 Bank', maturity: 'Imediata' }
 ];
 
 export const Indicators = () => {
@@ -25,9 +27,8 @@ export const Indicators = () => {
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({ key: 'type', direction: 'asc' });
     const [filterType, setFilterType] = useState<FilterType>('ALL');
     
-    // Estados de Colapso (Padrão Fechado = false)
     const [isTreasuryOpen, setIsTreasuryOpen] = useState(false);
-    const [isPrivateFixedOpen, setIsPrivateFixedOpen] = useState(false);
+    const [isPrivateFixedOpen, setIsPrivateFixedOpen] = useState(false); // ALTERAÇÃO: Inicia fechado (collapsed)
 
     const loadData = async () => {
         setIsLoading(true);
@@ -87,6 +88,7 @@ export const Indicators = () => {
                             Painel de Indicadores
                         </h1>
                         <p className="text-slate-400 text-sm mt-1">Monitoramento em tempo real dos principais índices e taxas.</p>
+                        <p className="text-slate-600 text-[10px] mt-0.5">* Atualização automática a cada 15 minutos.</p>
                     </div>
                     <button 
                         onClick={loadData}
@@ -98,6 +100,7 @@ export const Indicators = () => {
                     </button>
                 </div>
 
+                {/* Resto do componente mantido... */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 mb-10">
                     <IndicatorCard label="SELIC" value={data?.selic?.value} suffix="%" desc="Meta BCB" color="text-emerald-400" icon={<Target size={16} />} />
                     <IndicatorCard label="CDI" value={data?.cdi?.value} suffix="%" desc="Taxa DI" color="text-emerald-400" icon={<TrendingUp size={16} />} />
@@ -128,7 +131,6 @@ export const Indicators = () => {
                         </div>
 
                         <div className="flex items-center gap-4">
-                            {/* Filtros só aparecem se aberto */}
                             {isTreasuryOpen && (
                                 <div className="hidden md:flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-800 animate-fade-in" onClick={(e) => e.stopPropagation()}>
                                     <Filter size={14} className="text-slate-500 ml-2" />
@@ -213,9 +215,9 @@ export const Indicators = () => {
                                 <Landmark size={20} className="text-blue-500" />
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold text-white uppercase tracking-wide">CDBs, LCIs & Cofrinhos</h2>
+                                <h2 className="text-lg font-bold text-white uppercase tracking-wide">CDBs, Caixinhas & Cofrinhos</h2>
                                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
-                                    <Database size={10} /> Mercado Bancário (Principais)
+                                    <Database size={10} /> Bancos Digitais & Corretoras
                                 </p>
                             </div>
                         </div>
@@ -270,6 +272,7 @@ export const Indicators = () => {
     );
 };
 
+// ... (Subcomponentes mantidos inalterados) ...
 const SortableHeader = ({ label, sortKey, currentSort, onSort, align, icon }: any) => (
     <th 
         className={`px-6 py-4 cursor-pointer hover:text-white transition-colors text-${align} bg-[#0F131E]`}

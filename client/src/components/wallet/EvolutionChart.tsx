@@ -1,98 +1,53 @@
 
 import React, { useMemo } from 'react';
 import { useWallet } from '../../contexts/WalletContext';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 export const EvolutionChart = () => {
     const { kpis, history } = useWallet();
 
     const chartData = useMemo(() => {
-        // Se temos histórico real, usamos ele
         if (history && history.length > 0) {
             const mapped = history.map(h => {
                 const dateObj = new Date(h.date);
-                // Validação de data segura e formatação curta (ex: Jan, Fev)
-                const dateStr = isNaN(dateObj.getTime()) 
-                    ? 'Data' 
-                    : dateObj.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
-                
+                const isValidDate = !isNaN(dateObj.getTime());
                 return {
-                    date: dateStr,
-                    fullDate: dateObj.toLocaleDateString('pt-BR'),
+                    date: isValidDate ? dateObj.getTime() : 0, 
+                    dateLabel: isValidDate ? dateObj.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }) : 'N/A',
                     value: Number(h.totalEquity) || 0
                 };
-            });
+            }).filter(item => item.date > 0).sort((a,b) => a.date - b.date);
 
-            // Adiciona o ponto atual
-            mapped.push({
-                date: 'Atual',
-                fullDate: 'Hoje',
-                value: kpis.totalEquity
-            });
-
-            // Se tiver apenas 1 ponto, cria um ponto zero anterior para dar a sensação de linha
-            if (mapped.length < 2) {
-                return [
-                    { date: 'Início', fullDate: 'Início', value: 0 },
-                    ...mapped
-                ];
+            // Garante ao menos 2 pontos para renderizar area
+            if (mapped.length > 0) {
+               // Adiciona ponto atual se for mais recente que o último histórico
+               if (kpis.totalEquity > 0) {
+                   mapped.push({
+                        date: new Date().getTime(),
+                        dateLabel: 'Atual',
+                        value: kpis.totalEquity
+                   });
+               }
+               return mapped;
             }
-            
-            // Pega os últimos 6 a 12 meses para melhor visualização
-            return mapped.slice(-12);
         }
 
-        // Simulação inicial se não houver histórico
+        // Mock para Empty State
         if (kpis.totalEquity > 0) {
+            const now = new Date();
             return [
-                { date: 'Início', value: 0 },
-                { date: 'Agora', value: kpis.totalEquity }
+                { date: now.setMonth(now.getMonth() - 1), dateLabel: 'Início', value: 0 },
+                { date: new Date().getTime(), dateLabel: 'Atual', value: kpis.totalEquity }
             ];
         }
 
         return [];
     }, [history, kpis.totalEquity]);
 
-    // Lógica SVG
-    const width = 1000;
-    const height = 300;
-    const padding = 50; // Aumentado para caber o texto embaixo
-    const graphWidth = width - padding * 2;
-    const graphHeight = height - padding * 2;
-
-    const hasData = chartData.length > 0;
-    
-    let minVal = hasData ? Math.min(...chartData.map(d => d.value)) : 0;
-    let maxVal = hasData ? Math.max(...chartData.map(d => d.value)) : 100;
-
-    if (minVal === maxVal) {
-        minVal = minVal * 0.9; 
-        maxVal = maxVal * 1.1; 
-    }
-    if (maxVal === 0) maxVal = 100;
-
-    const range = maxVal - minVal;
-
-    const getX = (index: number) => {
-        const count = chartData.length;
-        if (count <= 1) return padding;
-        return padding + (index / (count - 1)) * graphWidth;
-    };
-
-    const getY = (value: number) => {
-        const ratio = (value - minVal) / range;
-        return height - padding - (ratio * graphHeight);
-    };
-
-    const points = chartData.map((d, i) => `${getX(i)},${getY(d.value)}`).join(' ');
-    
-    const areaPoints = hasData 
-        ? `${points} ${getX(chartData.length - 1)},${height - padding} ${getX(0)},${height - padding}`
-        : '';
-
-    const formatCurrency = (val: number) => {
-        if (val >= 1000000) return `R$ ${(val/1000000).toFixed(1)}M`;
-        if (val >= 1000) return `R$ ${(val/1000).toFixed(0)}k`;
-        return `R$ ${val.toFixed(0)}`;
+    const formatYAxis = (val: number) => {
+        if (val >= 1000000) return `${(val/1000000).toFixed(1)}M`;
+        if (val >= 1000) return `${(val/1000).toFixed(0)}k`;
+        return val.toString();
     };
 
     if (kpis.totalEquity === 0) {
@@ -105,10 +60,10 @@ export const EvolutionChart = () => {
 
     return (
         <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[380px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
-            <div className="flex justify-between items-start mb-2 z-10">
+            <div className="flex justify-between items-start mb-2 z-10 pointer-events-none">
                 <div>
                     <h3 className="text-base font-bold text-white">Evolução Patrimonial</h3>
-                    <p className="text-xs text-slate-500">Crescimento mês a mês</p>
+                    <p className="text-xs text-slate-500">Histórico acumulado</p>
                 </div>
                 <div className="text-right">
                      <span className={`text-xs font-bold px-2 py-0.5 rounded border ${kpis.totalResult >= 0 ? 'text-emerald-500 bg-emerald-900/20 border-emerald-900/50' : 'text-red-500 bg-red-900/20 border-red-900/50'}`}>
@@ -117,57 +72,57 @@ export const EvolutionChart = () => {
                 </div>
             </div>
 
-            <div className="flex-1 w-full relative">
-                <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
-                    <defs>
-                        <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.3" />
-                            <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
-                        </linearGradient>
-                    </defs>
-
-                    {/* Linhas de Grade e Valores Y */}
-                    {[0, 0.25, 0.5, 0.75, 1].map((p, i) => {
-                        const val = minVal + p * range;
-                        const y = getY(val);
-                        return (
-                            <g key={i}>
-                                <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4" />
-                                <text x={padding - 10} y={y + 4} textAnchor="end" className="fill-slate-500 text-[10px] font-mono font-medium">
-                                    {formatCurrency(val)}
-                                </text>
-                            </g>
-                        );
-                    })}
-
-                    {/* Área e Linha */}
-                    {hasData && <polygon points={areaPoints} fill="url(#chartGradient)" />}
-                    {hasData && <polyline points={points} fill="none" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
-
-                    {/* Pontos e Rótulos X (Meses) */}
-                    {chartData.map((d, i) => (
-                        <g key={i}>
-                            <circle 
-                                cx={getX(i)} 
-                                cy={getY(d.value)} 
-                                r={i === chartData.length - 1 ? 5 : 3} 
-                                className="fill-blue-500 stroke-[#080C14] stroke-2 hover:r-6 transition-all cursor-pointer"
-                            >
-                                <title>{d.fullDate}: {formatCurrency(d.value)}</title>
-                            </circle>
-                            
-                            {/* Rótulo do Mês - Renderizado abaixo do gráfico */}
-                            <text 
-                                x={getX(i)} 
-                                y={height - 15} 
-                                textAnchor="middle" 
-                                className="fill-slate-400 text-[11px] font-bold uppercase tracking-wider"
-                            >
-                                {d.date}
-                            </text>
-                        </g>
-                    ))}
-                </svg>
+            <div className="flex-1 w-full relative min-h-0 text-xs">
+                <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <defs>
+                            <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
+                                <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                            </linearGradient>
+                        </defs>
+                        
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                        
+                        <XAxis 
+                            dataKey="date" 
+                            type="number"
+                            domain={['dataMin', 'dataMax']}
+                            tickFormatter={(unixTime) => new Date(unixTime).toLocaleDateString('pt-BR', { month: 'short' })}
+                            tick={{fill: '#64748b', fontSize: 10}} 
+                            axisLine={false} 
+                            tickLine={false}
+                            minTickGap={40}
+                        />
+                        
+                        <YAxis 
+                            tickFormatter={formatYAxis}
+                            tick={{fill: '#64748b', fontSize: 10}}
+                            axisLine={false}
+                            tickLine={false}
+                            domain={['auto', 'auto']}
+                            width={45} 
+                        />
+                        
+                        <Tooltip 
+                            contentStyle={{ backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px' }}
+                            itemStyle={{ color: '#fff' }}
+                            labelStyle={{ color: '#94a3b8', marginBottom: '5px' }}
+                            labelFormatter={(label) => new Date(label).toLocaleDateString('pt-BR')}
+                            formatter={(value: number) => [new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value), 'Patrimônio']}
+                            cursor={{ stroke: '#3B82F6', strokeWidth: 1 }}
+                        />
+                        
+                        <Area 
+                            type="monotone" 
+                            dataKey="value" 
+                            stroke="#3B82F6" 
+                            strokeWidth={3} 
+                            fill="url(#chartGradient)" 
+                            activeDot={{ r: 5, fill: '#60A5FA', strokeWidth: 0 }}
+                        />
+                    </AreaChart>
+                </ResponsiveContainer>
             </div>
         </div>
     );

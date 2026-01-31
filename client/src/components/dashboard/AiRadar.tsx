@@ -6,9 +6,10 @@ import { useNavigate } from 'react-router-dom';
 
 interface AiRadarProps {
     signals: AiSignal[];
+    isLoading?: boolean; // Nova prop
 }
 
-export const AiRadar: React.FC<AiRadarProps> = ({ signals }) => {
+export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false }) => {
     const navigate = useNavigate();
     
     // Verifica se há sinais com delay para mostrar o aviso
@@ -30,6 +31,42 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals }) => {
         if (profile === 'MODERATE') return <span className="text-[8px] font-bold text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded border border-blue-900/50 flex items-center gap-1 uppercase"><Activity size={8} /> Moderado</span>;
         return <span className="text-[8px] font-bold text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded border border-purple-900/50 flex items-center gap-1 uppercase"><Zap size={8} /> Arrojado</span>;
     };
+
+    // --- SKELETON UI ---
+    if (isLoading) {
+        return (
+            <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-[450px]">
+                <div className="p-4 border-b border-slate-800 bg-[#0B101A] flex items-center justify-between">
+                    <h3 className="font-bold text-slate-200 text-xs uppercase tracking-wider flex items-center gap-2">
+                        <Radar size={14} className="text-purple-500 animate-spin-slow" />
+                        Radar Alpha (Brasil 10)
+                    </h3>
+                    <span className="text-[9px] font-bold text-slate-500 animate-pulse">BUSCANDO...</span>
+                </div>
+                <div className="flex-1 p-3 space-y-3 custom-scrollbar bg-gradient-to-b from-[#080C14] to-[#05070a]">
+                    {[...Array(3)].map((_, i) => (
+                        <div key={i} className="p-4 rounded-xl border border-slate-800 bg-[#0F131E] animate-pulse">
+                            <div className="flex justify-between items-start mb-3">
+                                <div className="space-y-2">
+                                    <div className="h-4 w-16 bg-slate-800 rounded"></div>
+                                    <div className="h-3 w-24 bg-slate-800 rounded"></div>
+                                </div>
+                                <div className="h-8 w-8 bg-slate-800 rounded-full"></div>
+                            </div>
+                            <div className="space-y-2 mb-4">
+                                <div className="h-2 w-full bg-slate-800 rounded"></div>
+                                <div className="h-2 w-2/3 bg-slate-800 rounded"></div>
+                            </div>
+                            <div className="flex justify-between">
+                                <div className="h-4 w-12 bg-slate-800 rounded"></div>
+                                <div className="h-4 w-10 bg-slate-800 rounded"></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-[450px]">
