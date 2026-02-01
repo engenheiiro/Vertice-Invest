@@ -24,6 +24,11 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// --- CORREÇÃO RENDER / PROXY ---
+// Necessário para apps rodando atrás de Load Balancers (Render, Heroku, AWS, Nginx)
+// Isso resolve o erro ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+app.set('trust proxy', 1);
+
 initScheduler();
 
 if (process.env.SENTRY_DSN) {
