@@ -131,7 +131,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                     <Folder size={12} /> {group}
                                                 </span>
                                                 <span className="text-[9px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                                                    {groupItems.length} Ativos
+                                                    {(groupItems as PortfolioItem[]).length} Ativos
                                                 </span>
                                             </div>
                                         </td>
