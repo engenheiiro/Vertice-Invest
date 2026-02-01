@@ -9,7 +9,7 @@ import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 
-// Constantes de Configuração
+// ... (Constantes mantidas) ...
 const ASSET_CLASSES = [
     { id: 'BRASIL_10', label: 'Brasil 10 (Mix)', icon: <ShieldCheck size={18} className="text-emerald-500" />, desc: 'Carteira Defensiva Top Picks' },
     { id: 'STOCK', label: 'Ações Brasil', icon: <BarChart3 size={18} className="text-blue-500" />, desc: 'B3: Ibovespa & Small Caps' },
@@ -71,6 +71,7 @@ export const AdminPanel = () => {
         try {
             await researchService.syncMarketData();
             setStatusMsg({ type: 'success', text: "Banco de Dados atualizado com sucesso! Cotações sincronizadas." });
+            await loadMacro(); // Recarrega macro para ver o timestamp novo
         } catch (e: any) {
             setStatusMsg({ type: 'error', text: e.message || "Erro na sincronização." });
         } finally {
@@ -194,10 +195,19 @@ export const AdminPanel = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
                     <div className="lg:col-span-2 bg-[#0B101A] border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                                <Globe size={14} className="text-blue-500" />
-                                Ambiente Macroeconômico
-                            </h3>
+                            <div className="flex flex-col">
+                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                    <Globe size={14} className="text-blue-500" />
+                                    Ambiente Macroeconômico
+                                </h3>
+                                {/* TIMESTAMP DE ATUALIZAÇÃO */}
+                                {macroData?.lastUpdated && (
+                                    <span className="text-[10px] text-slate-500 font-mono mt-1 ml-6 flex items-center gap-1">
+                                        <Clock size={10} />
+                                        Última Sync: {new Date(macroData.lastUpdated).toLocaleString()}
+                                    </span>
+                                )}
+                            </div>
                             
                             <div className="flex items-center gap-2">
                                 <button 
@@ -334,7 +344,7 @@ export const AdminPanel = () => {
                     </div>
                 </div>
 
-                {/* PAINEL DE CONTROLE POR ATIVO (ETAPA 2) */}
+                {/* PAINEL DE CONTROLE POR ATIVO (ETAPA 2) - Mantido igual */}
                 <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl mb-10">
                     <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-[#0B101A]">
                         <div className="flex items-center gap-2">

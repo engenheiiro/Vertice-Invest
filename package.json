@@ -1,3 +1,4 @@
+
 {
   "name": "vertice-invest-root",
   "version": "1.0.0",
@@ -11,15 +12,13 @@
     "build:client": "npm install --prefix client --include=dev && npm run build --prefix client",
     "start": "node server/index.js",
     "seed:admin": "node server/scripts/seedAdmin.js",
-    "seed:market": "node server/scripts/seedMarketData.js"
+    "seed:market": "node server/scripts/seedMarketData.js",
+    "sync:prod": "node server/scripts/syncProdData.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
   },
   "engines": {
     "node": ">=22.0.0"
-  },
-  "dependencies": {
-    "recharts": "^3.7.0"
   }
 }

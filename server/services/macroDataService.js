@@ -47,7 +47,7 @@ export const macroDataService = {
 
     async updateCurrencies() {
         try {
-            const res = await axios.get('https://economia.awesomeapi.com.br/last/USD-BRL,BTC-USD');
+            const res = await axios.get('https://economia.awesomeapi.com.br/last/USD-BRL,BTC-USD', { timeout: 5000 });
             
             const usd = parseFloat(res.data.USDBRL.bid);
             const usdChange = parseFloat(res.data.USDBRL.pctChange);
@@ -58,8 +58,12 @@ export const macroDataService = {
             logger.info(`✅ [MACRO] Moedas atualizadas - USD: R$${usd} (${usdChange}%), BTC: $${btcUsd}`);
             return { usd, usdChange, btcUsd, btcChange };
         } catch (error) {
-            logger.error("Erro ao buscar moedas (AwesomeAPI): " + error.message);
-            return null;
+            if (error.response && error.response.status === 429) {
+                logger.warn("⚠️ Rate Limit (429) na AwesomeAPI. Mantendo valores anteriores.");
+            } else {
+                logger.error("Erro ao buscar moedas (AwesomeAPI): " + error.message);
+            }
+            return null; // Retorna null para manter dados do banco
         }
     },
 
@@ -190,18 +194,15 @@ export const macroDataService = {
         const globalIndices = await externalMarketService.getGlobalIndices(); 
         const treasury = await this.updateTreasuryRates(); 
 
-        // BUSCA SPX 12 MESES - Lógica Corrigida
+        // BUSCA SPX 12 MESES
         let spx12mReturn = 0; 
         try {
-            // Pede um histórico longo para garantir
             const historySPX = await externalMarketService.getFullHistory('^GSPC', 'INDEX'); 
             
             if (historySPX && historySPX.length > 200) {
-                // Yahoo Finance retorna array. Assume-se ordenado (mais antigo primeiro).
                 historySPX.sort((a, b) => new Date(a.date) - new Date(b.date));
 
                 const current = historySPX[historySPX.length - 1].close;
-                // Pega ~252 dias úteis atrás (1 ano). Se não tiver, pega o mais antigo disponível.
                 const indexOneYearAgo = Math.max(0, historySPX.length - 253);
                 const past = historySPX[indexOneYearAgo].close;
                 
@@ -241,11 +242,10 @@ export const macroDataService = {
             if (globalIndices.spx) {
                 config.spx = globalIndices.spx.value;
                 config.spxChange = globalIndices.spx.change;
-                // Só atualiza se o cálculo foi bem sucedido (evita zerar se a API falhar)
                 if (spx12mReturn !== 0) {
                     config.spxReturn12m = spx12mReturn;
                 } else if (!config.spxReturn12m) {
-                    config.spxReturn12m = 25.0; // Fallback inicial
+                    config.spxReturn12m = 25.0; 
                 }
             }
         }
