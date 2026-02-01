@@ -19,7 +19,8 @@ const FALLBACK_MACRO = {
     ibov: { value: 128000, change: 0 },
     usd: { value: 5.75, change: 0 },
     spx: { value: 5200, change: 0 },
-    btc: { value: 65000, change: 0 }
+    btc: { value: 65000, change: 0 },
+    lastUpdated: new Date()
 };
 
 export const marketDataService = {
@@ -193,7 +194,8 @@ export const marketDataService = {
                     usd: { value: config.dollar || 5.75, change: config.dollarChange || 0 }, 
                     ibov: { value: config.ibov || 128000, change: config.ibovChange || 0 },
                     spx: { value: config.spx || 5800, change: config.spxChange || 0 },
-                    btc: { value: config.btc || 90000, change: config.btcChange || 0 }
+                    btc: { value: config.btc || 90000, change: config.btcChange || 0 },
+                    lastUpdated: config.lastUpdated // Adicionado para verificação no Admin
                 };
             }
             return FALLBACK_MACRO;
@@ -220,7 +222,8 @@ export const marketDataService = {
             const isScrapingFailed = stocksMap.size === 0 && fiiMap.size === 0;
 
             if (isScrapingFailed) {
-                logger.warn("⚠️ ALERTA: Scraping principal falhou (possível bloqueio 403). Iniciando Fallback via Yahoo...");
+                logger.error("❌ ERRO CRÍTICO: Scraping falhou totalmente. Abortando atualização de Ações/FIIs para proteger a integridade dos dados.");
+                return { success: false, error: "Scraping blocked (403). Aborted to prevent data corruption." };
             }
 
             const pushOp = (ticker, data, type) => {
@@ -257,15 +260,9 @@ export const marketDataService = {
             if (stocksMap.size > 0) stocksMap.forEach((v, k) => pushOp(k, v, 'STOCK'));
             if (fiiMap.size > 0) fiiMap.forEach((v, k) => pushOp(k, v, 'FII'));
 
-            // 3. Busca Ativos que não vieram no Scraping (Fallback ou Ativos Internacionais)
-            // Inclui STOCK e FII se o scraping falhou para tentar pegar pelo menos o preço
-            const typesToFetchExternal = ['CRYPTO', 'STOCK_US'];
-            if (isScrapingFailed) {
-                typesToFetchExternal.push('STOCK', 'FII');
-            }
-
+            // 3. Busca Ativos Internacionais (CRYPTO, STOCK_US)
             const assetsForExternal = await MarketAsset.find({ 
-                type: { $in: typesToFetchExternal } 
+                type: { $in: ['CRYPTO', 'STOCK_US'] } 
             }).select('ticker type');
 
             if (assetsForExternal.length > 0) {
@@ -273,7 +270,6 @@ export const marketDataService = {
                 const quotes = await externalMarketService.getQuotes(tickersToFetch);
                 
                 quotes.forEach(quote => {
-                    // Update simples apenas de preço e data
                     operations.push({
                         updateOne: {
                             filter: { ticker: quote.ticker },
@@ -299,7 +295,6 @@ export const marketDataService = {
 
         } catch (error) {
             logger.error(`❌ [SYNC] Falha fatal: ${error.message}`);
-            // Não relança o erro para não derrubar o cron job
             return { success: false, error: error.message };
         }
     },
@@ -317,34 +312,30 @@ export const marketDataService = {
                 isBlacklisted: false
             });
 
-            // Tenta obter dados detalhados para calcular métricas
             let fundDataMap = new Map();
             try {
                 if (assetClass === 'STOCK' || assetClass === 'BRASIL_10') {
                     const stockMap = await fundamentusService.getStocksMap();
-                    if (stockMap) stockMap.forEach((v, k) => fundDataMap.set(k, { ...v, type: 'STOCK' }));
+                    if (stockMap.size > 0) stockMap.forEach((v, k) => fundDataMap.set(k, { ...v, type: 'STOCK' }));
                 }
                 if (assetClass === 'FII' || assetClass === 'BRASIL_10') {
                     const fiiMap = await fundamentusService.getFIIsMap();
-                    if (fiiMap) fiiMap.forEach((v, k) => fundDataMap.set(k, { ...v, type: 'FII' }));
+                    if (fiiMap.size > 0) fiiMap.forEach((v, k) => fundDataMap.set(k, { ...v, type: 'FII' }));
                 }
             } catch (e) {
-                logger.warn("Falha ao obter dados fundamentais para ranking. Usando dados do banco.");
+                logger.warn("Scraping falhou no getMarketData. Usando apenas dados do banco (Cache).");
             }
 
             for (const asset of dbAssets) {
-                // Se o scraping falhou, tenta usar dados do banco (cache)
-                // Se não tiver dados no banco, usa um objeto "mock" seguro para não quebrar a UI
                 const fundData = fundDataMap.get(asset.ticker) || {
                     ticker: asset.ticker,
                     price: asset.lastPrice || 0,
                     dy: asset.dy || 0,
                     pvp: asset.p_vp || 0,
                     marketCap: asset.marketCap || 0,
-                    liquidity: 1000000 // Fallback para não ser filtrado se faltar dados
+                    liquidity: 1000000 
                 };
 
-                // Filtro de liquidez (exceto se for fallback forçado)
                 const liquidity = fundData.liq2m || fundData.liquidity || 0;
                 if (fundDataMap.size > 0 && liquidity < 200000) continue; 
 
@@ -380,7 +371,6 @@ const deduplicateAssets = (assets) => {
         if (!grouped[root]) {
             grouped[root] = asset;
         } else {
-            // Mantém o de maior liquidez
             if (asset.metrics.avgLiquidity > grouped[root].metrics.avgLiquidity) {
                 grouped[root] = asset;
             }

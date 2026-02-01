@@ -4,7 +4,7 @@ import logger from '../config/logger.js';
 
 // Instancia a classe com supressão de avisos
 const yahooFinance = new YahooFinance({ 
-    suppressNotices: ['yahooSurvey'] 
+    suppressNotices: ['yahooSurvey', 'ripHistorical'] 
 });
 
 export const externalMarketService = {
@@ -127,14 +127,15 @@ export const externalMarketService = {
                 interval: '1d'
             };
             
-            const result = await yahooFinance.historical(symbol, queryOptions);
+            // Usando chart() em vez de historical() devido à depreciação
+            const result = await yahooFinance.chart(symbol, queryOptions);
 
-            if (!result || !Array.isArray(result)) return null;
+            if (!result || !result.quotes || !Array.isArray(result.quotes)) return null;
 
-            return result.map(day => ({
+            return result.quotes.map(day => ({
                 date: day.date.toISOString().split('T')[0], 
                 close: day.close,
-                adjClose: day.adjClose || day.close
+                adjClose: day.adjclose || day.close
             }));
 
         } catch (error) {
@@ -158,6 +159,10 @@ export const externalMarketService = {
                 events: 'dividends'
             };
 
+            // chart() também suporta eventos, mas a estrutura muda. 
+            // Mantemos historical se chart não retornar events facilmente, 
+            // ou adaptamos. O warning é apenas um aviso, historical ainda funciona por enquanto.
+            // Para garantir estabilidade agora, mantemos historical mas suprimimos o aviso acima.
             const result = await yahooFinance.historical(symbol, queryOptions);
             
             if (!result || !Array.isArray(result)) return [];
