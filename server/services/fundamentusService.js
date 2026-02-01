@@ -4,11 +4,20 @@ import * as cheerio from 'cheerio';
 import iconv from 'iconv-lite';
 import logger from '../config/logger.js';
 
+// Headers completos mimetizando um navegador Chrome Desktop Real
 const HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
     'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Cache-Control': 'no-cache',
+    'Accept-Encoding': 'gzip, deflate, br', // Importante para WAFs
+    'Cache-Control': 'max-age=0',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Referer': 'https://www.google.com/', // Engana verificações de origem simples
     'Pragma': 'no-cache'
 };
 
@@ -28,7 +37,8 @@ export const fundamentusService = {
             const response = await axios.get('https://www.fundamentus.com.br/resultado.php', {
                 headers: HEADERS,
                 responseType: 'arraybuffer',
-                timeout: 20000 
+                timeout: 25000, // Timeout aumentado para evitar falhas em redes lentas
+                decompress: true // Garante descompressão do gzip
             });
 
             const decodedData = iconv.decode(response.data, 'iso-8859-1');
@@ -39,6 +49,9 @@ export const fundamentusService = {
                 const tds = $(el).find('td');
                 const ticker = $(tds[0]).text().trim().toUpperCase();
                 
+                // Validação básica para ignorar linhas quebradas
+                if (!ticker || ticker.length < 4) return;
+
                 // Extração Básica
                 const price = parseBrFloat($(tds[1]).text());
                 const pl = parseBrFloat($(tds[2]).text());
@@ -77,10 +90,6 @@ export const fundamentusService = {
                 }
 
                 // 5. Dívida Líquida (Net Debt)
-                // EV = Market Cap + Net Debt
-                // EV = EBIT * (EV/EBIT)
-                // EBIT = Market Cap / (P/EBIT)
-                // Logo: Net Debt = (Market Cap / P_EBIT * EV_EBIT) - Market Cap
                 let netDebt = 0;
                 if (marketCap > 0 && pEbit > 0 && evEbit > 0) {
                     const ebit = marketCap / pEbit;
@@ -124,7 +133,12 @@ export const fundamentusService = {
             return dataMap;
 
         } catch (error) {
-            logger.error(`❌ Erro Scraping Ações: ${error.message}`);
+            // Log mais detalhado do erro
+            if (error.response) {
+                logger.error(`❌ Erro Scraping Ações: ${error.message} | Status: ${error.response.status}`);
+            } else {
+                logger.error(`❌ Erro Scraping Ações: ${error.message}`);
+            }
             return new Map();
         }
     },
@@ -136,7 +150,8 @@ export const fundamentusService = {
             const response = await axios.get('https://www.fundamentus.com.br/fii_resultado.php', {
                 headers: HEADERS,
                 responseType: 'arraybuffer',
-                timeout: 20000
+                timeout: 25000,
+                decompress: true
             });
 
             const decodedData = iconv.decode(response.data, 'iso-8859-1');
@@ -146,6 +161,8 @@ export const fundamentusService = {
             $('table#tabelaResultado tbody tr').each((i, el) => {
                 const tds = $(el).find('td');
                 const ticker = $(tds[0]).text().trim().toUpperCase();
+
+                if (!ticker || ticker.length < 4) return;
 
                 const price = parseBrFloat($(tds[2]).text());
                 const pvp = parseBrFloat($(tds[5]).text());
@@ -179,7 +196,11 @@ export const fundamentusService = {
             return dataMap;
 
         } catch (error) {
-            logger.error(`❌ Erro Scraping FIIs: ${error.message}`);
+            if (error.response) {
+                logger.error(`❌ Erro Scraping FIIs: ${error.message} | Status: ${error.response.status}`);
+            } else {
+                logger.error(`❌ Erro Scraping FIIs: ${error.message}`);
+            }
             return new Map();
         }
     }
