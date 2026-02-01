@@ -5,6 +5,7 @@ import { researchService, ResearchReport } from '../services/research';
 import { ResearchViewer } from '../components/research/ResearchViewer';
 import { Bot, Newspaper, Trophy, Loader2, Lock, Crown, Info, RefreshCcw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+// @ts-ignore
 import { useNavigate } from 'react-router-dom';
 
 const ASSETS = [

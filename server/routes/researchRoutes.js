@@ -9,7 +9,8 @@ import {
     getReportDetails,
     getMacroData,
     enhanceWithAI,
-    triggerMarketSync // Nova controller importada
+    triggerMarketSync,
+    runFullPipeline // Nova importação
 } from '../controllers/researchController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -22,13 +23,13 @@ router.get('/macro', getMacroData);
 
 // Fluxo Granular Admin
 router.post('/crunch', requireAdmin, crunchNumbers);
+router.post('/full-pipeline', requireAdmin, runFullPipeline); // Nova rota (Sync + Calc)
 router.post('/enhance', requireAdmin, enhanceWithAI); 
 router.post('/narrative', requireAdmin, generateNarrative);
 router.post('/publish', requireAdmin, publishContent);
 router.get('/history', requireAdmin, listReports);
 router.get('/details/:id', requireAdmin, getReportDetails);
 
-// Nova rota para botão de atualizar dados
 router.post('/sync-market', requireAdmin, triggerMarketSync);
 
 export default router;

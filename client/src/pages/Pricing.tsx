@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Check, X, ArrowLeft, Zap, Shield, Crown } from 'lucide-react';
+// @ts-ignore
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';

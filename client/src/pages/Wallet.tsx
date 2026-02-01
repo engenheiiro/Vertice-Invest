@@ -13,6 +13,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
+// @ts-ignore
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth';
 
@@ -26,6 +27,10 @@ export const Wallet = () => {
     const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
     
+    // State Modal Limites
+    const [limitModalOpen, setLimitModalOpen] = useState(false);
+    const [limitMessage, setLimitMessage] = useState('');
+
     // State Tabs
     const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PERFORMANCE' | 'DIVIDENDS'>('OVERVIEW');
 
@@ -35,9 +40,8 @@ export const Wallet = () => {
             const data = await response.json();
 
             if (!data.allowed) {
-                if (confirm(`${data.message}\n\nDeseja fazer upgrade para ter acesso liberado?`)) {
-                    navigate('/pricing');
-                }
+                setLimitMessage(data.message);
+                setLimitModalOpen(true);
                 return false;
             }
 
@@ -62,9 +66,8 @@ export const Wallet = () => {
 
     const handleRebalance = () => {
         if (user?.plan !== 'BLACK') {
-            if (confirm("Rebalanceamento Automático é exclusivo do plano Black Elite. Deseja conhecer?")) {
-                navigate('/pricing');
-            }
+            setLimitMessage("O Rebalanceamento Automático com IA é um recurso exclusivo do plano Black Elite.");
+            setLimitModalOpen(true);
             return;
         }
         alert("Iniciando motor de rebalanceamento... (Mock)");
@@ -163,7 +166,18 @@ export const Wallet = () => {
                 <AddAssetModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
                 <SmartContributionModal isOpen={isSmartModalOpen} onClose={() => setIsSmartModalOpen(false)} />
                 
-                {/* MUDANÇA: Mensagem de confirmação reforçada */}
+                {/* Modal de Limite (Upgrade) */}
+                <ConfirmModal 
+                    isOpen={limitModalOpen} 
+                    onClose={() => setLimitModalOpen(false)} 
+                    onConfirm={() => navigate('/pricing')}
+                    title="Limite do Plano Atingido" 
+                    message={`${limitMessage}\n\nDeseja fazer um upgrade para desbloquear acesso ilimitado a todas as ferramentas de IA?`}
+                    confirmText="Fazer Upgrade"
+                    isDestructive={false}
+                />
+
+                {/* Modal de Reset */}
                 <ConfirmModal 
                     isOpen={isResetModalOpen} 
                     onClose={() => setIsResetModalOpen(false)} 

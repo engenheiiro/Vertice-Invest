@@ -1,6 +1,6 @@
-
 import React from 'react';
 import { Lock, Construction, ArrowRight, ShieldAlert } from 'lucide-react';
+// @ts-ignore
 import { useNavigate } from 'react-router-dom';
 import { useAuth, UserPlan } from '../../contexts/AuthContext';
 import { Button } from '../ui/Button';

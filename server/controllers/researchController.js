@@ -4,6 +4,7 @@ import TreasuryBond from '../models/TreasuryBond.js';
 import { aiResearchService } from '../services/aiResearchService.js';
 import { aiEnhancementService } from '../services/aiEnhancementService.js';
 import { marketDataService } from '../services/marketDataService.js';
+import { syncService } from '../services/syncService.js'; 
 import logger from '../config/logger.js';
 
 export const getMacroData = async (req, res, next) => {
@@ -21,70 +22,35 @@ export const getMacroData = async (req, res, next) => {
 export const triggerMarketSync = async (req, res, next) => {
     try {
         logger.info("👆 Admin disparou Sincronização Manual de Dados.");
-        const result = await marketDataService.performFullSync();
+        const result = await syncService.performFullSync();
         res.json({ message: "Sincronização iniciada com sucesso.", details: result });
     } catch (error) {
         next(error);
     }
 };
 
-const getDiverseCandidates = (list, count, maxPerSector = 2) => {
-    const selected = [];
-    const sectorCounts = {};
-    const usedTickers = new Set();
+// Nova Função: Executa Sync COMPLETO seguido de Cálculo (Igual ao CLI sync:prod)
+export const runFullPipeline = async (req, res, next) => {
+    try {
+        const adminId = req.user?.id;
+        logger.info(`🚀 [PIPELINE] Admin iniciou Ciclo Completo (Sync + Calc)...`);
 
-    const sortedList = list.sort((a, b) => {
-        const profileScore = { 'DEFENSIVE': 3, 'MODERATE': 2, 'BOLD': 1 };
-        const pA = profileScore[a.riskProfile] || 0;
-        const pB = profileScore[b.riskProfile] || 0;
-        
-        if (pA !== pB) return pB - pA;
-        if (b.score !== a.score) return b.score - a.score;
-        return (b.metrics?.avgLiquidity || 0) - (a.metrics?.avgLiquidity || 0);
-    });
-
-    for (const asset of sortedList) {
-        if (selected.length >= count) break;
-        if (usedTickers.has(asset.ticker)) continue;
-
-        const sector = asset.sector || 'Outros';
-        const currentCount = sectorCounts[sector] || 0;
-
-        if (currentCount < maxPerSector) {
-            selected.push(asset);
-            sectorCounts[sector] = currentCount + 1;
-            usedTickers.add(asset.ticker);
+        // 1. Sync
+        const syncResult = await syncService.performFullSync();
+        if (!syncResult.success) {
+            return res.status(500).json({ message: "Falha no Sync de Dados. Cálculo abortado.", error: syncResult.error });
         }
+
+        // 2. Calc
+        await aiResearchService.runBatchAnalysis(adminId);
+
+        logger.info(`✅ [PIPELINE] Ciclo Completo Finalizado com Sucesso.`);
+        res.json({ message: "Protocolo V3 (Sync + Análise) concluído com sucesso!" });
+
+    } catch (error) {
+        logger.error(`FATAL PIPELINE: ${error.message}`);
+        next(error);
     }
-
-    if (selected.length < count) {
-        const relaxedLimit = maxPerSector + 1;
-        for (const asset of sortedList) {
-            if (selected.length >= count) break;
-            if (usedTickers.has(asset.ticker)) continue;
-
-            const sector = asset.sector || 'Outros';
-            const currentCount = sectorCounts[sector] || 0;
-
-            if (currentCount < relaxedLimit) {
-                selected.push(asset);
-                sectorCounts[sector] = currentCount + 1;
-                usedTickers.add(asset.ticker);
-            }
-        }
-    }
-
-    if (selected.length < count) {
-        for (const asset of sortedList) {
-            if (selected.length >= count) break;
-            if (!usedTickers.has(asset.ticker)) {
-                selected.push(asset);
-                usedTickers.add(asset.ticker);
-            }
-        }
-    }
-
-    return selected;
 };
 
 export const crunchNumbers = async (req, res, next) => {
@@ -94,63 +60,21 @@ export const crunchNumbers = async (req, res, next) => {
         const adminId = req.user?.id;
         
         if (isBulk) {
-            logger.info("🚀 [FORTRESS] Iniciando Bulk Run (Processamento em Massa)...");
-            
-            const stockData = await aiResearchService.calculateRanking('STOCK', strat);
-            await MarketAnalysis.create({ assetClass: 'STOCK', strategy: strat, content: { ranking: stockData.ranking, fullAuditLog: stockData.fullList }, generatedBy: adminId });
-            
-            const fiiData = await aiResearchService.calculateRanking('FII', strat);
-            await MarketAnalysis.create({ assetClass: 'FII', strategy: strat, content: { ranking: fiiData.ranking, fullAuditLog: fiiData.fullList }, generatedBy: adminId });
-
-            const defStocks = stockData.fullList.filter(a => a.riskProfile === 'DEFENSIVE');
-            const defFIIs = fiiData.fullList.filter(a => a.riskProfile === 'DEFENSIVE');
-            const poolStocks = defStocks.length >= 5 ? defStocks : stockData.fullList;
-            const poolFIIs = defFIIs.length >= 5 ? defFIIs : fiiData.fullList;
-
-            const top5Stocks = getDiverseCandidates(poolStocks, 5, 2); 
-            const top5FIIs = getDiverseCandidates(poolFIIs, 5, 2);
-            
-            let brasil10List = [...top5Stocks, ...top5FIIs]
-                .sort((a, b) => b.score - a.score)
-                .map((item, idx) => ({ ...item, position: idx + 1 })); 
-            
-            await MarketAnalysis.create({ assetClass: 'BRASIL_10', strategy: strat, content: { ranking: brasil10List, fullAuditLog: brasil10List }, generatedBy: adminId });
-
-            if (res) return res.json({ message: "Cálculo Matemático Finalizado." });
+            await aiResearchService.runBatchAnalysis(adminId);
+            if (res) return res.json({ message: "Cálculo Matemático Finalizado (Bulk)." });
             return;
         }
 
         logger.info(`🚀 [FORTRESS] Calculando Single: ${assetClass}...`);
         
-        if (assetClass === 'BRASIL_10') {
-             const stockData = await aiResearchService.calculateRanking('STOCK', strat);
-             const fiiData = await aiResearchService.calculateRanking('FII', strat);
-             
-             const defStocks = stockData.fullList.filter(a => a.riskProfile === 'DEFENSIVE');
-             const defFIIs = fiiData.fullList.filter(a => a.riskProfile === 'DEFENSIVE');
-
-             const poolStocks = defStocks.length >= 5 ? defStocks : stockData.fullList;
-             const poolFIIs = defFIIs.length >= 5 ? defFIIs : fiiData.fullList;
-             
-             const top5Stocks = getDiverseCandidates(poolStocks, 5, 2);
-             const top5FIIs = getDiverseCandidates(poolFIIs, 5, 2);
-             
-             const ranking = [...top5Stocks, ...top5FIIs].sort((a, b) => b.score - a.score).map((item, idx) => ({ 
-                ...item, 
-                position: idx + 1
-            }));
-            
-            await MarketAnalysis.create({ assetClass, strategy: strat, content: { ranking, fullAuditLog: ranking }, generatedBy: adminId });
-            return res.status(201).json({ message: "Brasil 10 (Defensivo) Gerado." });
-        }
-
         const { ranking, fullList } = await aiResearchService.calculateRanking(assetClass, strat);
         
-        const diverseRanking = getDiverseCandidates(fullList, 10, 2)
-            .sort((a, b) => b.score - a.score)
-            .map((item, idx) => ({ ...item, position: idx + 1 }));
-
-        await MarketAnalysis.create({ assetClass, strategy: strat, content: { ranking: diverseRanking, fullAuditLog: fullList }, generatedBy: adminId });
+        await MarketAnalysis.create({ 
+            assetClass, 
+            strategy: strat, 
+            content: { ranking, fullAuditLog: fullList }, 
+            generatedBy: adminId 
+        });
 
         return res.status(201).json({ message: "Análise Quantitativa Gerada." });
 
@@ -226,6 +150,6 @@ export const getLatestReport = async (req, res, next) => {
 };
 
 export const triggerDailyRoutine = async (req, res) => {
-    await crunchNumbers({ body: { isBulk: true } }, null, null);
+    await aiResearchService.runBatchAnalysis(null);
     if (res) res.json({ message: "Batch process finished" });
 };

@@ -5,6 +5,7 @@ import {
   GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
   Eye, EyeOff
 } from 'lucide-react';
+// @ts-ignore
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';

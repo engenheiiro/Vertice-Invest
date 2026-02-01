@@ -1,9 +1,11 @@
 
 import cron from 'node-cron';
 import logger from '../config/logger.js';
-import { triggerDailyRoutine } from '../controllers/researchController.js';
+import { aiResearchService } from './aiResearchService.js'; 
+import { macroDataService } from './macroDataService.js';
 import { marketDataService } from './marketDataService.js';
-import { macroDataService } from './macroDataService.js'; // Import explícito
+import { syncService } from './syncService.js';
+import MarketAsset from '../models/MarketAsset.js';
 import User from '../models/User.js';
 import UserAsset from '../models/UserAsset.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
@@ -11,29 +13,57 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 export const initScheduler = () => {
     logger.info("⏰ Scheduler Service Inicializado");
 
-    // 1. Sync Leve: Macroeconomia + Moedas (A cada 30 minutos)
-    // ALTERAÇÃO: Não rodamos mais o performFullSync() completo aqui para evitar
-    // bloqueio de IP no Render ao tentar scrapear o Fundamentus.
-    // O Sync Pesado (Scraping) agora é responsabilidade do "Local Worker" (sync:prod).
+    // 1. Sync Leve: Macroeconomia (A cada 30 minutos)
     cron.schedule('*/30 * * * *', async () => {
-        logger.info("⏰ Rotina: Sync Leve (Macro + Moedas)");
+        logger.info("⏰ Rotina: Sync Leve (Macro)");
         try {
-            // Atualiza apenas indicadores macro (Selic, IPCA, Dólar, Bitcoin)
-            // APIs do BCB e AwesomeAPI geralmente não bloqueiam Cloud IPs
             await macroDataService.performMacroSync();
         } catch (error) {
-            logger.error(`Erro Sync Leve 30m: ${error.message}`);
+            logger.error(`Erro Sync Macro: ${error.message}`);
         }
     });
 
-    // 2. Relatório Semanal IA (Segunda 08:00)
-    // Este processo depende apenas de dados já no banco, seguro para rodar no Cloud.
-    cron.schedule('0 8 * * 1', async () => {
-        logger.info("⏰ Rotina: Relatório Semanal IA");
-        try { await triggerDailyRoutine(null, null, true); } catch (e) {}
+    // 2. Sync Preços (Yahoo Finance - Seguro) - A cada 1 Hora
+    // Mantém cotações atualizadas sem fazer scraping pesado
+    cron.schedule('0 * * * *', async () => {
+        logger.info("⏰ Rotina: Atualização de Preços (Yahoo)...");
+        try {
+            // Busca todos os ativos monitorados
+            const assets = await MarketAsset.find({ isActive: true }).select('ticker');
+            const tickers = assets.map(a => a.ticker);
+            
+            // Atualiza em lotes
+            const BATCH_SIZE = 50;
+            for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+                const batch = tickers.slice(i, i + BATCH_SIZE);
+                await marketDataService.refreshQuotesBatch(batch);
+                await new Promise(r => setTimeout(r, 2000)); // Delay suave
+            }
+            logger.info("✅ Preços atualizados.");
+        } catch (e) {
+            logger.error(`Erro Sync Preços: ${e.message}`);
+        }
     });
 
-    // 3. Snapshot Patrimonial Diário (23:59)
+    // 3. Sync Pesado (Fundamentus) + Cálculo - DIÁRIO (08:00 AM)
+    // Reduzido de 4h para 24h para evitar Bloqueio 403
+    cron.schedule('0 8 * * *', async () => {
+        logger.info("⏰ Rotina DIÁRIA: Protocolo V3 Completo (Sync + Calc)...");
+        try {
+            const syncResult = await syncService.performFullSync();
+            
+            if (syncResult.success) {
+                await aiResearchService.runBatchAnalysis(null); 
+                logger.info("✅ Rotina Diária V3 finalizada com sucesso.");
+            } else {
+                logger.warn("⚠️ Rotina V3: Sync falhou, pulando cálculo.");
+            }
+        } catch (e) {
+            logger.error(`Erro Rotina V3 Diária: ${e.message}`);
+        }
+    });
+
+    // 4. Snapshot Patrimonial Diário (23:59)
     cron.schedule('59 23 * * *', async () => {
         logger.info("📸 Rotina: Snapshot Patrimonial Diário");
         try {
@@ -41,15 +71,10 @@ export const initScheduler = () => {
             const today = new Date();
             
             for (const user of users) {
-                // Calcula Patrimônio
                 const assets = await UserAsset.find({ user: user._id });
                 let totalEquity = 0;
                 let totalInvested = 0;
                 
-                // Precisamos do preço atual.
-                // IMPORTANTE: Aqui confiamos que o preço no MarketAsset está "fresco o suficiente"
-                // ou que o usuário rodou o Sync Local recentemente.
-                // Como fallback, poderíamos tentar Yahoo aqui, mas seria lento para muitos usuários.
                 for (const asset of assets) {
                     const marketData = await marketDataService.getMarketDataByTicker(asset.ticker);
                     const price = marketData.price;

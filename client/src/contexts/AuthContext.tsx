@@ -1,4 +1,6 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { authService } from '../services/auth';
 
 export type UserPlan = 'GUEST' | 'ESSENTIAL' | 'PRO' | 'BLACK';
@@ -28,6 +30,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient(); // Hook para manipular o cache
 
   const refreshProfile = async () => {
     try {
@@ -52,17 +55,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (token && storedUser) {
         try {
-          // Valida o token com o servidor na inicialização
           const response = await authService.api('/api/subscription/status');
           if (response.ok) {
             setUser(JSON.parse(storedUser));
           } else {
-            // Se o status falhou (401/403), o wrapper já tentou refresh.
-            // Se ainda não temos user, limpa tudo.
-            authService.clearSession();
+            await logout(); // Logout seguro se token inválido
           }
         } catch (e) {
-          authService.clearSession();
+          await logout();
         }
       }
       setIsLoading(false);
@@ -78,8 +78,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    await authService.logout();
-    setUser(null);
+    try {
+        await authService.logout();
+    } catch (e) {
+        console.error("Erro no logout API", e);
+    } finally {
+        setUser(null);
+        localStorage.removeItem('user');
+        localStorage.removeItem('accessToken');
+        
+        // FIX CRÍTICO: Limpa todo o cache do React Query ao deslogar.
+        // Isso garante que o próximo usuário não veja dados "stale" do anterior.
+        queryClient.removeQueries();
+        queryClient.clear();
+    }
   };
 
   return (

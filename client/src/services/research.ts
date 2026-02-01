@@ -85,11 +85,25 @@ export interface ResearchReport {
 }
 
 export const researchService = {
+    // Apenas cálculo (rápido, se já tiver dados)
     async crunchNumbers(assetClass?: string, isBulk: boolean = false) {
         const response = await authService.api('/api/research/crunch', {
             method: 'POST',
             body: JSON.stringify({ assetClass, isBulk })
         });
+        return await response.json();
+    },
+
+    // Sync + Cálculo (Lento, mas garante dados novos)
+    async runFullPipeline() {
+        const response = await authService.api('/api/research/full-pipeline', {
+            method: 'POST'
+        });
+        
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || "Erro no pipeline completo.");
+        }
         return await response.json();
     },
 
@@ -106,7 +120,7 @@ export const researchService = {
         return await response.json();
     },
 
-    // Novo Método
+    // Apenas Sync
     async syncMarketData() {
         const response = await authService.api('/api/research/sync-market', {
             method: 'POST'

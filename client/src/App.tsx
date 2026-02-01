@@ -1,5 +1,6 @@
 
 import React, { Suspense, lazy, PropsWithChildren } from 'react';
+// @ts-ignore
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 
