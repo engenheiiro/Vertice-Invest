@@ -91,7 +91,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         priceData = history;
                     }
                 }
-                // Se a data for futuro, não busca nada (mantém manual)
                 
                 if (priceData && priceData.price) {
                     const fmtPrice = priceData.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -111,7 +110,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
     }, [form.date, form.ticker, form.type, isOpen]);
 
-    // ... (restante dos useEffects mantidos) ...
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
@@ -122,19 +120,20 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // FIX: Removida a limpeza do 'ticker' para FIXED_INCOME e CRYPTO.
+    // Isso evita que o ticker seja apagado logo após ser selecionado da lista.
+    // A limpeza manual do ticker ao mudar o <select> já é tratada no onChange dele.
     useEffect(() => {
         if (form.type === 'CASH') {
             setForm(prev => ({ ...prev, ticker: 'RESERVA', quantity: '', price: '1,00', rate: '' }));
-        } else if (form.type === 'CRYPTO') {
-            setForm(prev => ({ ...prev, ticker: '', quantity: '', price: '', rate: '' }));
         } else if (form.type === 'FIXED_INCOME') {
-            setForm(prev => ({ ...prev, ticker: '', quantity: '1', price: '', rate: '10,00' }));
+            setForm(prev => ({ ...prev, quantity: '1', rate: '10,00' }));
         }
+        // Para outros tipos, mantemos o estado atual ou defaults específicos se necessário
     }, [form.type]);
 
     const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedDate = e.target.value;
-        // Permite selecionar futuro, mas a lógica de preço tratará como manual
         setForm(prev => ({ ...prev, date: selectedDate }));
     };
 
@@ -184,13 +183,19 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
     const handleSelectResult = (result: any) => {
         const rateVal = result.rate ? result.rate.toString().replace('.', ',') : '';
+        // Para Renda Fixa e Cripto, se o usuário seleciona da lista, queremos que o Ticker e o Nome sejam preenchidos
+        // O ticker muitas vezes é o nome do produto (ex: "Nubank...")
+        const finalTicker = result.isManual ? result.ticker : (result.ticker || result.name);
+        const finalName = result.name || result.ticker;
+        
         setForm(prev => ({ 
             ...prev, 
-            ticker: result.ticker, 
-            name: result.isManual ? result.ticker : result.name, 
+            ticker: finalTicker, 
+            name: finalName, 
             type: result.type ? (result.type as AssetType) : prev.type,
             rate: rateVal || prev.rate
         }));
+        
         setShowDropdown(false);
         setSearchResults([]);
     };
@@ -365,7 +370,11 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         {searchResults.map((result, idx) => (
                             <div 
                                 key={idx}
-                                onClick={() => handleSelectResult(result)}
+                                // FIX: onMouseDown dispara antes do blur do input, garantindo que a seleção funcione.
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    handleSelectResult(result);
+                                }}
                                 className="p-3 hover:bg-slate-800 cursor-pointer border-b border-slate-800/50 last:border-0 flex justify-between items-center transition-colors"
                             >
                                 <div>
@@ -565,6 +574,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                         <div className="relative">
                                             <select 
                                                 value={form.type}
+                                                // Ao mudar manualmente, limpamos o ticker. 
+                                                // Isso é intencional para evitar dados misturados.
                                                 onChange={(e) => setForm({...form, type: e.target.value as AssetType, ticker: ''})} 
                                                 className="w-full bg-[#0B101A] text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-[#0F1729] transition-all duration-300 shadow-sm"
                                             >

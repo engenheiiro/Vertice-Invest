@@ -4,6 +4,7 @@ import { PieChart, MoreHorizontal, TrendingUp, TrendingDown, Minus, RefreshCw, C
 import { PortfolioItem } from '../../hooks/useDashboardData';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
+// @ts-ignore
 import { useNavigate } from 'react-router-dom';
 
 interface AssetTableProps {

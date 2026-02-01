@@ -3,12 +3,12 @@ import logger from '../config/logger.js';
 import MarketAsset from '../models/MarketAsset.js';
 import AssetHistory from '../models/AssetHistory.js'; 
 import SystemConfig from '../models/SystemConfig.js';
-import { fundamentusService } from './fundamentusService.js';
-import { macroDataService } from './macroDataService.js';
 import { externalMarketService } from './externalMarketService.js';
-import { SECTOR_OVERRIDES } from '../config/sectorOverrides.js';
 
-const CACHE_DURATION_MINUTES = 20; // Tempo de validade do preço no banco
+// Não importa mais fundamentusService aqui para evitar conflitos e uso misto.
+// A fonte da verdade agora é o MongoDB populado pelo syncService.
+
+const CACHE_DURATION_MINUTES = 20; 
 
 const FALLBACK_MACRO = {
     selic: { value: 11.25 },
@@ -72,8 +72,7 @@ export const marketDataService = {
 
             if (toUpdate.length === 0) return;
 
-            logger.info(`⚡ [SmartSync] Atualizando ${toUpdate.length} ativos: ${toUpdate.join(', ')}`);
-
+            // SmartSync só atualiza preço (cotação rápida) via External (Yahoo)
             const quotes = await externalMarketService.getQuotes(toUpdate);
 
             if (!quotes || quotes.length === 0) return;
@@ -92,7 +91,6 @@ export const marketDataService = {
 
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
-                logger.info(`✅ [SmartSync] ${operations.length} preços atualizados no banco.`);
             }
 
         } catch (error) {
@@ -107,7 +105,6 @@ export const marketDataService = {
             const cacheLimit = new Date(now.getTime() - 12 * 60 * 60 * 1000);
 
             if (!historyEntry || historyEntry.lastUpdated < cacheLimit) {
-                logger.info(`📊 [Benchmark] Atualizando histórico cacheado de ${ticker}...`);
                 const externalHistory = await externalMarketService.getFullHistory(ticker, 'INDEX');
                 
                 if (externalHistory && externalHistory.length > 0) {
@@ -195,7 +192,7 @@ export const marketDataService = {
                     ibov: { value: config.ibov || 128000, change: config.ibovChange || 0 },
                     spx: { value: config.spx || 5800, change: config.spxChange || 0 },
                     btc: { value: config.btc || 90000, change: config.btcChange || 0 },
-                    lastUpdated: config.lastUpdated // Adicionado para verificação no Admin
+                    lastUpdated: config.lastUpdated
                 };
             }
             return FALLBACK_MACRO;
@@ -205,100 +202,8 @@ export const marketDataService = {
         }
     },
 
-    async performFullSync() {
-        try {
-            logger.info("🔄 [SYNC] Iniciando sincronização TOTAL de dados...");
-            
-            // 1. Atualiza dados Macro
-            await macroDataService.performMacroSync();
-
-            const operations = [];
-            const timestamp = new Date();
-
-            // 2. Tenta Scraping Principal (Fundamentus)
-            const stocksMap = await fundamentusService.getStocksMap();
-            const fiiMap = await fundamentusService.getFIIsMap();
-            
-            const isScrapingFailed = stocksMap.size === 0 && fiiMap.size === 0;
-
-            if (isScrapingFailed) {
-                logger.error("❌ ERRO CRÍTICO: Scraping falhou totalmente. Abortando atualização de Ações/FIIs para proteger a integridade dos dados.");
-                return { success: false, error: "Scraping blocked (403). Aborted to prevent data corruption." };
-            }
-
-            const pushOp = (ticker, data, type) => {
-                let finalSector = SECTOR_OVERRIDES[ticker];
-                if (!finalSector) {
-                    finalSector = data.sector || 'Outros';
-                }
-
-                operations.push({
-                    updateOne: {
-                        filter: { ticker: ticker },
-                        update: {
-                            $set: {
-                                lastPrice: Number(data.price) || 0,
-                                dy: Number(data.dy) || 0,
-                                p_vp: Number(data.pvp) || 0,
-                                marketCap: Number(data.marketCap) || 0,
-                                vacancy: Number(data.vacancy) || 0,
-                                sector: finalSector, 
-                                lastAnalysisDate: timestamp,
-                                updatedAt: timestamp
-                            },
-                            $setOnInsert: {
-                                name: ticker, type, currency: 'BRL',
-                                isIgnored: false, isBlacklisted: false
-                            }
-                        },
-                        upsert: true
-                    }
-                });
-            };
-
-            // Se o scraping funcionou, usa os dados ricos
-            if (stocksMap.size > 0) stocksMap.forEach((v, k) => pushOp(k, v, 'STOCK'));
-            if (fiiMap.size > 0) fiiMap.forEach((v, k) => pushOp(k, v, 'FII'));
-
-            // 3. Busca Ativos Internacionais (CRYPTO, STOCK_US)
-            const assetsForExternal = await MarketAsset.find({ 
-                type: { $in: ['CRYPTO', 'STOCK_US'] } 
-            }).select('ticker type');
-
-            if (assetsForExternal.length > 0) {
-                const tickersToFetch = assetsForExternal.map(a => a.ticker);
-                const quotes = await externalMarketService.getQuotes(tickersToFetch);
-                
-                quotes.forEach(quote => {
-                    operations.push({
-                        updateOne: {
-                            filter: { ticker: quote.ticker },
-                            update: {
-                                $set: {
-                                    lastPrice: quote.price,
-                                    updatedAt: timestamp
-                                }
-                            }
-                        }
-                    });
-                });
-            }
-
-            if (operations.length > 0) {
-                await MarketAsset.bulkWrite(operations);
-                logger.info(`✅ [SYNC] Sincronização concluída! ${operations.length} ativos atualizados.`);
-                return { success: true, count: operations.length };
-            } else {
-                logger.warn("⚠️ [SYNC] Nenhum ativo atualizado.");
-                return { success: false, count: 0 };
-            }
-
-        } catch (error) {
-            logger.error(`❌ [SYNC] Falha fatal: ${error.message}`);
-            return { success: false, error: error.message };
-        }
-    },
-
+    // --- MUDANÇA CRÍTICA: LÊ APENAS DO BANCO ---
+    // Isso garante que a UI use os dados ricos populados pelo syncService
     async getMarketData(assetClass) {
         const isBrasil = assetClass === 'STOCK' || assetClass === 'FII' || assetClass === 'BRASIL_10';
         const results = [];
@@ -312,46 +217,41 @@ export const marketDataService = {
                 isBlacklisted: false
             });
 
-            let fundDataMap = new Map();
-            try {
-                if (assetClass === 'STOCK' || assetClass === 'BRASIL_10') {
-                    const stockMap = await fundamentusService.getStocksMap();
-                    if (stockMap.size > 0) stockMap.forEach((v, k) => fundDataMap.set(k, { ...v, type: 'STOCK' }));
-                }
-                if (assetClass === 'FII' || assetClass === 'BRASIL_10') {
-                    const fiiMap = await fundamentusService.getFIIsMap();
-                    if (fiiMap.size > 0) fiiMap.forEach((v, k) => fundDataMap.set(k, { ...v, type: 'FII' }));
-                }
-            } catch (e) {
-                logger.warn("Scraping falhou no getMarketData. Usando apenas dados do banco (Cache).");
-            }
-
             for (const asset of dbAssets) {
-                const fundData = fundDataMap.get(asset.ticker) || {
-                    ticker: asset.ticker,
-                    price: asset.lastPrice || 0,
-                    dy: asset.dy || 0,
-                    pvp: asset.p_vp || 0,
-                    marketCap: asset.marketCap || 0,
-                    liquidity: 1000000 
-                };
-
-                const liquidity = fundData.liq2m || fundData.liquidity || 0;
-                if (fundDataMap.size > 0 && liquidity < 200000) continue; 
+                // Filtro de liquidez básico (já salvo no banco pelo sync)
+                if ((asset.liquidity || 0) < 200000) continue; 
 
                 results.push({
                     ticker: asset.ticker,
                     type: asset.type,
                     name: asset.name || asset.ticker, 
                     sector: asset.sector, 
-                    price: asset.lastPrice || fundData.price,
+                    price: asset.lastPrice || 0,
                     dbFlags: { isBlacklisted: asset.isBlacklisted, isTier1: asset.isTier1 }, 
+                    
+                    // Mapeia todos os campos salvos no MarketAssetSchema para o objeto de metrics esperado
                     metrics: {
-                        ...fundData,
-                        marketCap: asset.marketCap || fundData.marketCap || 0,
-                        avgLiquidity: liquidity,
-                        dy: asset.dy || fundData.dy || 0,
-                        pvp: asset.p_vp || fundData.pvp || 0
+                        ticker: asset.ticker,
+                        price: asset.lastPrice,
+                        dy: asset.dy || 0,
+                        pvp: asset.p_vp || 0,
+                        marketCap: asset.marketCap || 0,
+                        avgLiquidity: asset.liquidity || 0,
+                        
+                        // Stocks
+                        pl: asset.pl || 0,
+                        roe: asset.roe || 0,
+                        roic: asset.roic || 0,
+                        netMargin: asset.netMargin || 0,
+                        evEbitda: asset.evEbitda || 0,
+                        revenueGrowth: asset.revenueGrowth || 0,
+                        debtToEquity: asset.debtToEquity || 0,
+                        netDebt: asset.netDebt || 0,
+
+                        // FIIs
+                        vacancy: asset.vacancy || 0,
+                        capRate: asset.capRate || 0,
+                        qtdImoveis: asset.qtdImoveis || 0
                     }
                 });
             }

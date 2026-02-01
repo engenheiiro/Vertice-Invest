@@ -17,23 +17,33 @@ const MarketAssetSchema = new mongoose.Schema({
   isBlacklisted: { type: Boolean, default: false }, 
   isTier1: { type: Boolean, default: false }, 
   
-  // Dados Financeiros Persistidos (Cache)
+  // --- Dados Financeiros Persistidos (Cache Avançado) ---
   lastPrice: { type: Number, default: 0 },
-  netDebt: { type: Number, default: 0 },
   marketCap: { type: Number, default: 0 },
+  liquidity: { type: Number, default: 0 }, // Liq. Diária
   
-  // Dados Específicos FII (Cache)
+  // Indicadores de Valuation & Eficiência (Stocks)
+  pl: { type: Number, default: 0 },
+  roe: { type: Number, default: 0 },
+  roic: { type: Number, default: 0 },
+  netMargin: { type: Number, default: 0 },
+  evEbitda: { type: Number, default: 0 },
+  revenueGrowth: { type: Number, default: 0 }, // Crescimento 5a
+  debtToEquity: { type: Number, default: 0 },
+  netDebt: { type: Number, default: 0 },
+  
+  // Indicadores FIIs
   vacancy: { type: Number, default: 0 },
   p_vp: { type: Number, default: 0 },
   dy: { type: Number, default: 0 },
+  capRate: { type: Number, default: 0 }, // Novo
+  qtdImoveis: { type: Number, default: 0 }, // Novo
   
   isActive: { type: Boolean, default: true },
   lastAnalysisDate: { type: Date },
   updatedAt: { type: Date, default: Date.now }
 });
 
-// Apenas índices compostos ou que não sejam 'unique' devem ser definidos aqui
-// Removido ticker: 1 pois unique: true já cria o índice
 MarketAssetSchema.index({ type: 1, isActive: 1 });
 
 const MarketAsset = mongoose.models.MarketAsset || mongoose.model('MarketAsset', MarketAssetSchema);

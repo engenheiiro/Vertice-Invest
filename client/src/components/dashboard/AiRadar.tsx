@@ -2,6 +2,7 @@
 import React from 'react';
 import { Radar, Zap, Clock, Lock, TrendingUp, AlertTriangle, Target, Shield, Activity } from 'lucide-react';
 import { AiSignal } from '../../hooks/useDashboardData';
+// @ts-ignore
 import { useNavigate } from 'react-router-dom';
 
 interface AiRadarProps {

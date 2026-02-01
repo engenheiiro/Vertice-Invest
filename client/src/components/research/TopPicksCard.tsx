@@ -5,6 +5,7 @@ import { Trophy, BadgeAlert, BarChart2, PieChart, Layers, Shield, Target, Zap, A
 import { RankingItem } from '../../services/research';
 import { AssetDetailModal } from './AssetDetailModal';
 import { useWallet } from '../../contexts/WalletContext';
+// @ts-ignore
 import { useNavigate } from 'react-router-dom';
 
 interface TopPicksCardProps {

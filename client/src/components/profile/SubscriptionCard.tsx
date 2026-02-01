@@ -1,6 +1,7 @@
 import React from 'react';
 import { CreditCard, CheckCircle2, ArrowRight } from 'lucide-react';
 import { useAuth, UserPlan } from '../../contexts/AuthContext';
+// @ts-ignore
 import { useNavigate } from 'react-router-dom';
 
 export const SubscriptionCard = () => {

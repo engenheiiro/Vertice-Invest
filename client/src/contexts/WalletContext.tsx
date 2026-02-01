@@ -1,7 +1,8 @@
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { walletService } from '../services/wallet';
+import { useAuth } from './AuthContext';
 
 export type AssetType = 'STOCK' | 'FII' | 'CRYPTO' | 'STOCK_US' | 'FIXED_INCOME' | 'CASH';
 
@@ -49,7 +50,7 @@ interface WalletContextType {
     isLoading: boolean;
     isPrivacyMode: boolean; 
     togglePrivacyMode: () => void;
-    refreshWallet: () => void; // Mantido para compatibilidade, agora chama refetch
+    refreshWallet: () => void;
     addAsset: (asset: any) => Promise<void>;
     removeAsset: (id: string) => Promise<void>;
     resetWallet: () => Promise<void>;
@@ -59,12 +60,12 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const { user } = useAuth(); // Importante: Pegar o user para usar o ID na chave
     const queryClient = useQueryClient();
     
     const [targetAllocation, setTargetAllocation] = useState<AllocationMap>({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10 });
     const [targetReserve, setTargetReserve] = useState(10000);
 
-    // Estado de Privacidade
     const [isPrivacyMode, setIsPrivacyMode] = useState(() => {
         const saved = localStorage.getItem('isPrivacyMode');
         return saved === 'true';
@@ -79,41 +80,44 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     // --- QUERIES ---
+    // FIX: queryKey inclui user.id para garantir que o cache seja único por usuário
     const walletQuery = useQuery({
-        queryKey: ['wallet'],
+        queryKey: ['wallet', user?.id],
         queryFn: walletService.getWallet,
-        staleTime: 1000 * 60 * 5, // 5 min cache
+        enabled: !!user?.id, // Só busca se tiver usuário logado
+        staleTime: 1000 * 60 * 5,
     });
 
     const historyQuery = useQuery({
-        queryKey: ['walletHistory'],
+        queryKey: ['walletHistory', user?.id],
         queryFn: walletService.getHistory,
-        staleTime: 1000 * 60 * 10, // 10 min cache
+        enabled: !!user?.id,
+        staleTime: 1000 * 60 * 10,
     });
 
     // --- MUTATIONS ---
     const addAssetMutation = useMutation({
         mutationFn: walletService.addAsset,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['wallet'] });
-            queryClient.invalidateQueries({ queryKey: ['walletHistory'] });
-            queryClient.invalidateQueries({ queryKey: ['dividends'] }); // Invalida dividendos também
+            queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
+            queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
+            queryClient.invalidateQueries({ queryKey: ['dividends'] });
         }
     });
 
     const removeAssetMutation = useMutation({
         mutationFn: walletService.removeAsset,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['wallet'] });
-            queryClient.invalidateQueries({ queryKey: ['walletHistory'] });
+            queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
+            queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
         }
     });
 
     const resetWalletMutation = useMutation({
         mutationFn: walletService.resetWallet,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['wallet'] });
-            queryClient.invalidateQueries({ queryKey: ['walletHistory'] });
+            queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
+            queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['dividends'] });
         }
     });
@@ -135,7 +139,6 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setTargetReserve(newReserveTarget);
     };
 
-    // Dados Derivados
     const assets = walletQuery.data?.assets || [];
     const kpis = walletQuery.data?.kpis || {
         totalEquity: 0, totalInvested: 0, totalResult: 0, 
@@ -150,7 +153,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         <WalletContext.Provider value={{ 
             assets, kpis, history, targetAllocation, targetReserve, usdRate,
             isLoading, isPrivacyMode, togglePrivacyMode,
-            refreshWallet: () => queryClient.invalidateQueries({ queryKey: ['wallet'] }),
+            refreshWallet: () => queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] }),
             addAsset, removeAsset, resetWallet,
             updateTargets
         }}>

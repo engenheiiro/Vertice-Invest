@@ -1,5 +1,4 @@
 
-// ... (Imports e States mantidos) ...
 import React, { useEffect, useState } from 'react';
 import { Header } from '../../components/dashboard/Header';
 import { researchService, ResearchReport } from '../../services/research';
@@ -9,7 +8,6 @@ import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 
-// ... (Constantes mantidas) ...
 const ASSET_CLASSES = [
     { id: 'BRASIL_10', label: 'Brasil 10 (Mix)', icon: <ShieldCheck size={18} className="text-emerald-500" />, desc: 'Carteira Defensiva Top Picks' },
     { id: 'STOCK', label: 'Ações Brasil', icon: <BarChart3 size={18} className="text-blue-500" />, desc: 'B3: Ibovespa & Small Caps' },
@@ -19,7 +17,6 @@ const ASSET_CLASSES = [
 ];
 
 export const AdminPanel = () => {
-    // ... (Hooks e funções mantidos) ...
     const [history, setHistory] = useState<any[]>([]); 
     const [loadingKey, setLoadingKey] = useState<string | null>(null); 
     const [statusMsg, setStatusMsg] = useState<{type: 'success' | 'error', text: string} | null>(null);
@@ -28,16 +25,13 @@ export const AdminPanel = () => {
     const [isGlobalRunning, setIsGlobalRunning] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     
-    // Novos Estados Macro
     const [macroData, setMacroData] = useState<any>(null);
     const [isLoadingMacro, setIsLoadingMacro] = useState(true);
 
-    // Estados Inspector de Cache
     const [cacheSearchTicker, setCacheSearchTicker] = useState('');
     const [cacheData, setCacheData] = useState<any>(null);
     const [isSearchingCache, setIsSearchingCache] = useState(false);
 
-    // ... (Funções loadHistory, loadMacro, handleSyncData, handleGlobalRun, handleEnhanceWithAI, handleAction, handleCacheSearch, openAudit, getLatestForClass, isUpdatedToday, isMacroDataValid mantidas) ...
     const loadHistory = async () => {
         try {
             const data = await researchService.getHistory();
@@ -71,7 +65,7 @@ export const AdminPanel = () => {
         try {
             await researchService.syncMarketData();
             setStatusMsg({ type: 'success', text: "Banco de Dados atualizado com sucesso! Cotações sincronizadas." });
-            await loadMacro(); // Recarrega macro para ver o timestamp novo
+            await loadMacro(); 
         } catch (e: any) {
             setStatusMsg({ type: 'error', text: e.message || "Erro na sincronização." });
         } finally {
@@ -85,9 +79,10 @@ export const AdminPanel = () => {
         setStatusMsg(null);
 
         try {
-            await researchService.crunchNumbers(undefined, true);
-            setStatusMsg({ type: 'success', text: "Ciclo de Análise Quantitativa Finalizado!" });
-            await loadHistory(); 
+            await researchService.runFullPipeline();
+            setStatusMsg({ type: 'success', text: "Protocolo V3 Completo (Sync + Análise) finalizado com sucesso!" });
+            await loadHistory();
+            await loadMacro();
         } catch (error: any) {
             setStatusMsg({ type: 'error', text: error.message || "Erro durante o processamento global." });
         } finally {
@@ -171,7 +166,7 @@ export const AdminPanel = () => {
             <Header />
 
             <main className="max-w-[1400px] mx-auto p-6 animate-fade-in">
-                {/* Header da Página Admin (Mantido) */}
+                {/* Header da Página Admin */}
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -191,7 +186,17 @@ export const AdminPanel = () => {
                     </div>
                 </div>
 
-                {/* === ÁREA SUPERIOR (Mantido) === */}
+                {/* Feedback Message */}
+                {statusMsg && (
+                    <div className={`mb-6 p-4 rounded-xl border flex items-center gap-3 animate-fade-in ${
+                        statusMsg.type === 'success' ? 'bg-emerald-900/10 border-emerald-900/30 text-emerald-400' : 'bg-red-900/10 border-red-900/30 text-red-400'
+                    }`}>
+                        {statusMsg.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+                        <span className="text-sm font-bold">{statusMsg.text}</span>
+                    </div>
+                )}
+
+                {/* === ÁREA SUPERIOR === */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
                     <div className="lg:col-span-2 bg-[#0B101A] border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
                         <div className="flex items-center justify-between mb-4">
@@ -212,7 +217,7 @@ export const AdminPanel = () => {
                             <div className="flex items-center gap-2">
                                 <button 
                                     onClick={handleSyncData}
-                                    disabled={isSyncing}
+                                    disabled={isSyncing || isGlobalRunning}
                                     className={`
                                         flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border
                                         ${isSyncing 
@@ -220,10 +225,10 @@ export const AdminPanel = () => {
                                             : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-blue-500'
                                         }
                                     `}
-                                    title="Forçar atualização de preços e indicadores no banco de dados"
+                                    title="Apenas atualiza cotações sem rodar IA"
                                 >
                                     <Database size={12} className={isSyncing ? 'animate-pulse' : ''} />
-                                    {isSyncing ? 'Sincronizando...' : 'Sync Preços'}
+                                    {isSyncing ? 'Sincronizando...' : 'Sync Preços (Leve)'}
                                 </button>
                                 {isLoadingMacro && <RefreshCw size={12} className="text-slate-500 animate-spin" />}
                             </div>
@@ -254,20 +259,20 @@ export const AdminPanel = () => {
                         <div className="mb-4">
                             <h2 className="text-lg font-bold text-white leading-tight">Protocolo V3</h2>
                             <p className="text-slate-400 text-[10px] mt-1 px-4 leading-relaxed">
-                                Coleta B3, Valuation e Risk Scoring em massa.
+                                Coleta B3 + Valuation + Risk Scoring em massa.
+                                <br/><span className="text-blue-400 font-bold">1. Sync {'->'} 2. Crunch</span>
                             </p>
                         </div>
                         <button
                             onClick={handleGlobalRun}
-                            disabled={isGlobalRunning}
+                            disabled={isGlobalRunning || isSyncing}
                             className={`w-full max-w-[200px] px-4 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl ${isGlobalRunning ? 'bg-slate-800 text-slate-400 cursor-wait border border-slate-700' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30 hover:shadow-blue-600/50 hover:scale-105'}`}
                         >
-                            {isGlobalRunning ? <><RefreshCw size={16} className="animate-spin" /> Processando...</> : <><Play size={16} fill="currentColor" /> Executar</>}
+                            {isGlobalRunning ? <><RefreshCw size={16} className="animate-spin" /> Rodando Full...</> : <><Play size={16} fill="currentColor" /> Executar Tudo</>}
                         </button>
                     </div>
                 </div>
 
-                {/* === ÁREA INFERIOR: Inspector de Cache (Mantido) === */}
                 <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 mb-10 shadow-lg">
                     <div className="flex items-center gap-2 mb-4">
                         <HardDrive size={18} className="text-emerald-500" />
@@ -277,7 +282,7 @@ export const AdminPanel = () => {
                     <div className="flex flex-col md:flex-row gap-6">
                         <div className="w-full md:w-1/3 flex flex-col justify-center">
                             <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-                                Consulte o estado do cache de dados históricos e cotações. Digite o ticker para verificar se os dados estão consistentes.
+                                Consulte o estado do cache de dados históricos e cotações.
                             </p>
                             <form onSubmit={handleCacheSearch} className="flex gap-0 relative">
                                 <div className="relative flex-1">
@@ -328,23 +333,12 @@ export const AdminPanel = () => {
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="mt-4 pt-3 border-t border-slate-800">
-                                        <p className="text-[9px] text-slate-500 uppercase font-bold mb-2">Amostra Recente (Close)</p>
-                                        <div className="flex gap-2 overflow-hidden">
-                                            {cacheData.sample.map((s: any, idx: number) => (
-                                                <div key={idx} className="bg-slate-900 px-2 py-1 rounded border border-slate-800 text-[10px] font-mono text-slate-300">
-                                                    {s.close.toFixed(2)}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
                                 </div>
                             )}
                         </div>
                     </div>
                 </div>
 
-                {/* PAINEL DE CONTROLE POR ATIVO (ETAPA 2) - Mantido igual */}
                 <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl mb-10">
                     <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-[#0B101A]">
                         <div className="flex items-center gap-2">
@@ -366,8 +360,6 @@ export const AdminPanel = () => {
                                 const latest = getLatestForClass(asset.id);
                                 const updatedToday = isUpdatedToday(latest?.date);
                                 const isLoadingEnhance = loadingKey === `${asset.id}-AI_ENHANCE`;
-                                
-                                // Bloqueio para STOCK_US e CRYPTO
                                 const isRestricted = asset.id === 'CRYPTO' || asset.id === 'STOCK_US';
 
                                 return (
@@ -392,26 +384,12 @@ export const AdminPanel = () => {
                                         </td>
 
                                         <td className="px-6 py-4 text-center">
-                                            {/* BOTÃO DE REFINAMENTO IA */}
                                             <button 
                                                 onClick={() => handleEnhanceWithAI(asset.id)}
                                                 disabled={!updatedToday || isLoadingEnhance || isRestricted}
-                                                className={`
-                                                    mx-auto flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border
-                                                    ${isRestricted 
-                                                        ? 'opacity-30 cursor-not-allowed bg-slate-800 border-slate-700 text-slate-500' 
-                                                        : (!updatedToday 
-                                                            ? 'bg-slate-800/50 border-slate-800 text-slate-600 cursor-not-allowed'
-                                                            : 'bg-purple-900/20 border-purple-500/30 text-purple-400 hover:bg-purple-900/40 hover:text-white hover:border-purple-500')
-                                                    }
-                                                `}
-                                                title={isRestricted ? "Indisponível para esta classe" : "Busca notícias no Google e reajusta o ranking matemático"}
+                                                className={`mx-auto flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${isRestricted ? 'opacity-30 cursor-not-allowed bg-slate-800 border-slate-700 text-slate-500' : (!updatedToday ? 'bg-slate-800/50 border-slate-800 text-slate-600 cursor-not-allowed' : 'bg-purple-900/20 border-purple-500/30 text-purple-400 hover:bg-purple-900/40 hover:text-white hover:border-purple-500')}`}
                                             >
-                                                {isLoadingEnhance ? (
-                                                    <RefreshCw size={12} className="animate-spin" />
-                                                ) : (
-                                                    <Sparkles size={12} fill="currentColor" />
-                                                )}
+                                                {isLoadingEnhance ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} fill="currentColor" />}
                                                 Refinar com IA
                                             </button>
                                         </td>
@@ -419,45 +397,14 @@ export const AdminPanel = () => {
                                         <td className="px-6 py-4 text-right">
                                             {latest && !isRestricted && (
                                                 <div className="flex items-center justify-end gap-2">
-                                                    {/* Botão Ver Resultado (Audit) */}
-                                                    <button 
-                                                        onClick={() => openAudit(latest._id)}
-                                                        className="text-[10px] font-bold text-slate-400 hover:text-white bg-slate-800 px-2 py-1 rounded hover:bg-slate-700"
-                                                    >
-                                                        <Search size={12} />
-                                                    </button>
-
+                                                    <button onClick={() => openAudit(latest._id)} className="text-[10px] font-bold text-slate-400 hover:text-white bg-slate-800 px-2 py-1 rounded hover:bg-slate-700"><Search size={12} /></button>
                                                     <div className="w-px h-3 bg-slate-800 mx-1"></div>
-
-                                                    <QuickActionBtn 
-                                                        active={latest.isRankingPublished} 
-                                                        label="Rank" 
-                                                        onClick={() => handleAction(latest._id, 'PUB_RANK')}
-                                                        isLoading={loadingKey === `${latest._id}-PUB_RANK`}
-                                                    />
-                                                    
-                                                    {/* Botão Gerar Texto descritivo (Morning Call) */}
-                                                    <button 
-                                                        onClick={() => handleAction(latest._id, 'IA_NARRATIVE')}
-                                                        disabled={loadingKey === `${latest._id}-IA_NARRATIVE`}
-                                                        className={`p-1.5 rounded hover:bg-slate-800 ${latest.content.morningCall ? 'text-emerald-500' : 'text-slate-500'}`}
-                                                        title="Gerar Texto Explicativo"
-                                                    >
-                                                        <Bot size={14} />
-                                                    </button>
-
-                                                    <QuickActionBtn 
-                                                        active={latest.isMorningCallPublished} 
-                                                        label="Pub. Call" 
-                                                        disabled={!latest.content.morningCall}
-                                                        onClick={() => handleAction(latest._id, 'PUB_MC')}
-                                                        isLoading={loadingKey === `${latest._id}-PUB_MC`}
-                                                    />
+                                                    <QuickActionBtn active={latest.isRankingPublished} label="Rank" onClick={() => handleAction(latest._id, 'PUB_RANK')} isLoading={loadingKey === `${latest._id}-PUB_RANK`}/>
+                                                    <button onClick={() => handleAction(latest._id, 'IA_NARRATIVE')} disabled={loadingKey === `${latest._id}-IA_NARRATIVE`} className={`p-1.5 rounded hover:bg-slate-800 ${latest.content.morningCall ? 'text-emerald-500' : 'text-slate-500'}`}><Bot size={14} /></button>
+                                                    <QuickActionBtn active={latest.isMorningCallPublished} label="Pub. Call" disabled={!latest.content.morningCall} onClick={() => handleAction(latest._id, 'PUB_MC')} isLoading={loadingKey === `${latest._id}-PUB_MC`}/>
                                                 </div>
                                             )}
-                                            {isRestricted && (
-                                                <span className="text-[10px] text-slate-600 font-mono opacity-50">-- RESTRICTED --</span>
-                                            )}
+                                            {isRestricted && <span className="text-[10px] text-slate-600 font-mono opacity-50">-- RESTRICTED --</span>}
                                         </td>
                                     </tr>
                                 );
@@ -466,50 +413,9 @@ export const AdminPanel = () => {
                     </table>
                 </div>
 
-                {/* HISTÓRICO DE LOGS (Mantido) */}
-                <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <History size={18} className="text-slate-500" />
-                        <h3 className="font-bold text-white text-sm uppercase tracking-wider">Log de Execução</h3>
-                    </div>
-                    <div className="overflow-hidden rounded-xl border border-slate-800">
-                        <table className="w-full text-left text-xs">
-                            <thead className="bg-[#0B101A]">
-                                <tr>
-                                    <th className="p-3 font-bold text-slate-500">Data</th>
-                                    <th className="p-3 font-bold text-slate-500">Ativo</th>
-                                    <th className="p-3 font-bold text-slate-500">Estratégia</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800">
-                                {history.slice(0, 8).map((h, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-900/50">
-                                        <td className="p-3 text-slate-300 font-mono">
-                                            {new Date(h.date).toLocaleString()}
-                                        </td>
-                                        <td className="p-3 text-slate-300">
-                                            <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 font-bold text-[10px]">
-                                                {h.assetClass}
-                                            </span>
-                                        </td>
-                                        <td className="p-3 text-slate-500 font-mono text-[10px]">
-                                            {h.strategy}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
             </main>
 
-            {/* Modal de Auditoria */}
-            <AuditDetailModal 
-                isOpen={auditModalOpen} 
-                onClose={() => setAuditModalOpen(false)} 
-                report={selectedAuditReport} 
-            />
+            <AuditDetailModal isOpen={auditModalOpen} onClose={() => setAuditModalOpen(false)} report={selectedAuditReport} />
         </div>
     );
 };
@@ -518,14 +424,7 @@ const QuickActionBtn = ({ active, label, onClick, disabled, isLoading }: any) =>
     <button 
         onClick={onClick}
         disabled={disabled || isLoading}
-        className={`
-            px-2 py-1 rounded text-[9px] font-black uppercase transition-all border
-            ${active 
-                ? 'bg-emerald-900/20 text-emerald-400 border-emerald-900/50 cursor-default' 
-                : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-blue-500 hover:text-white'}
-            ${disabled ? 'opacity-30 cursor-not-allowed grayscale' : ''}
-            ${isLoading ? 'animate-pulse' : ''}
-        `}
+        className={`px-2 py-1 rounded text-[9px] font-black uppercase transition-all border ${active ? 'bg-emerald-900/20 text-emerald-400 border-emerald-900/50 cursor-default' : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-blue-500 hover:text-white'} ${disabled ? 'opacity-30 cursor-not-allowed grayscale' : ''} ${isLoading ? 'animate-pulse' : ''}`}
     >
         {isLoading ? '...' : active ? label : label}
     </button>
