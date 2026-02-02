@@ -9,8 +9,9 @@ import {
     resetWallet,
     getAssetTransactions,
     deleteTransaction,
-    getWalletPerformance, // Novo
-    getWalletDividends    // Novo
+    getWalletPerformance, 
+    getWalletDividends,
+    getCashFlow // Nova Importação
 } from '../controllers/walletController.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 
@@ -29,8 +30,11 @@ router.delete('/:id', removeAsset);
 router.get('/transactions/:ticker', getAssetTransactions);
 router.delete('/transactions/:id', deleteTransaction);
 
-// Rotas de Inteligência (Fase B)
+// Rotas de Inteligência
 router.get('/performance', getWalletPerformance);
 router.get('/dividends', getWalletDividends);
+
+// Nova Rota: Extrato de Conta Corrente (Cash Flow)
+router.get('/cashflow', getCashFlow);
 
 export default router;

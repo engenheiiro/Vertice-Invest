@@ -80,11 +80,11 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     // --- QUERIES ---
-    // FIX: queryKey inclui user.id para garantir que o cache seja único por usuário
+    // Single Source of Truth: Backend
     const walletQuery = useQuery({
         queryKey: ['wallet', user?.id],
         queryFn: walletService.getWallet,
-        enabled: !!user?.id, // Só busca se tiver usuário logado
+        enabled: !!user?.id, 
         staleTime: 1000 * 60 * 5,
     });
 
@@ -139,6 +139,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setTargetReserve(newReserveTarget);
     };
 
+    // Dados Expostos (SSOT)
     const assets = walletQuery.data?.assets || [];
     const kpis = walletQuery.data?.kpis || {
         totalEquity: 0, totalInvested: 0, totalResult: 0, 
