@@ -12,20 +12,6 @@ import { externalMarketService } from '../services/externalMarketService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent } from '../utils/mathUtils.js';
 import logger from '../config/logger.js';
 
-// --- LISTA DE PRODUTOS POPULARES ---
-const POPULAR_FIXED_INCOME = [
-    { name: 'Sofisa Direto (CDB 110% CDI)', type: 'FIXED_INCOME', rate: 110, index: 'CDI', liquidity: 'Imediata' },
-    { name: 'Nubank (Caixinha Reserva 100% CDI)', type: 'FIXED_INCOME', rate: 100, index: 'CDI', liquidity: 'Imediata' },
-    { name: 'Nubank (Caixinha Turbo 115% CDI)', type: 'FIXED_INCOME', rate: 115, index: 'CDI', liquidity: 'Imediata' },
-    { name: 'Banco Inter (Meu Porquinho 100% CDI)', type: 'FIXED_INCOME', rate: 100, index: 'CDI', liquidity: 'Imediata' },
-    { name: 'Mercado Pago (Conta 100% CDI)', type: 'FIXED_INCOME', rate: 100, index: 'CDI', liquidity: 'Imediata' },
-    { name: 'PicPay (Cofrinho 102% CDI)', type: 'FIXED_INCOME', rate: 102, index: 'CDI', liquidity: 'Imediata' },
-    { name: 'PagBank (Conta 100% CDI)', type: 'FIXED_INCOME', rate: 100, index: 'CDI', liquidity: 'Imediata' },
-    { name: 'Itaú (Iti 100% CDI)', type: 'FIXED_INCOME', rate: 100, index: 'CDI', liquidity: 'Imediata' },
-    { name: '99Pay (Lucrativa 110% CDI)', type: 'FIXED_INCOME', rate: 110, index: 'CDI', liquidity: 'Imediata' },
-    { name: 'C6 Bank (CDB Cartão de Crédito)', type: 'FIXED_INCOME', rate: 100, index: 'CDI', liquidity: 'Imediata' }
-];
-
 // --- HELPER: Busca data mais próxima no histórico ---
 const findClosestValue = (history, targetDateStr) => {
     if (!history || history.length === 0) return null;
@@ -41,18 +27,89 @@ const findClosestValue = (history, targetDateStr) => {
     return closest ? closest.close : null;
 };
 
-// OTIMIZAÇÃO: Bulk Fetching
+// --- HELPER: Reconciliação de Histórico (Snapshot Replay) ---
+const reconcileSnapshotHistory = async (userId, ticker, type, quantityDelta, costDelta, txDate) => {
+    try {
+        const snapshots = await WalletSnapshot.find({ 
+            user: userId, 
+            date: { $gte: txDate } 
+        }).sort({ date: 1 });
+
+        if (snapshots.length === 0) return;
+
+        logger.info(`🔄 [Replay] Reconciliando ${snapshots.length} snapshots para ${ticker}`);
+
+        let priceHistory = [];
+        if (type !== 'FIXED_INCOME' && type !== 'CASH') {
+            priceHistory = await marketDataService.getBenchmarkHistory(ticker); 
+        }
+
+        const bulkOps = [];
+
+        for (const snap of snapshots) {
+            let assetPriceAtSnap = 0;
+            const snapDateStr = snap.date.toISOString().split('T')[0];
+
+            if (type === 'CASH') {
+                assetPriceAtSnap = 1;
+            } else if (type === 'FIXED_INCOME') {
+                assetPriceAtSnap = 0; 
+            } else {
+                const histVal = findClosestValue(priceHistory, snapDateStr);
+                if (histVal) {
+                    assetPriceAtSnap = histVal;
+                } else {
+                    assetPriceAtSnap = safeDiv(costDelta, quantityDelta); 
+                }
+            }
+
+            const deltaInvested = costDelta;
+            let deltaEquity = 0;
+            if (type === 'FIXED_INCOME') {
+                deltaEquity = costDelta; 
+            } else {
+                deltaEquity = safeMult(quantityDelta, assetPriceAtSnap);
+            }
+
+            const newTotalInvested = safeAdd(snap.totalInvested, deltaInvested);
+            const newTotalEquity = safeAdd(snap.totalEquity, deltaEquity);
+            
+            const newProfit = safeSub(newTotalEquity, newTotalInvested);
+            let newProfitPercent = 0;
+            if (newTotalInvested > 0) {
+                newProfitPercent = safeMult(safeDiv(newProfit, newTotalInvested), 100);
+            }
+
+            bulkOps.push({
+                updateOne: {
+                    filter: { _id: snap._id },
+                    update: { 
+                        $set: { 
+                            totalInvested: Math.max(0, newTotalInvested),
+                            totalEquity: Math.max(0, newTotalEquity),
+                            profit: newProfit,
+                            profitPercent: newProfitPercent
+                        } 
+                    }
+                }
+            });
+        }
+
+        if (bulkOps.length > 0) {
+            await WalletSnapshot.bulkWrite(bulkOps);
+        }
+
+    } catch (e) {
+        logger.error(`❌ [Replay] Falha ao reconciliar histórico: ${e.message}`);
+    }
+};
+
 const calculateUserDividendsInternal = async (userId) => {
     const assets = await UserAsset.find({ user: userId });
     const dividendMap = new Map();
     const provisioned = [];
     let totalAllTime = 0;
     
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const recentCutoff = new Date();
-    recentCutoff.setDate(recentCutoff.getDate() - 30);
-
     const relevantAssets = assets.filter(a => !['CRYPTO', 'CASH', 'FIXED_INCOME'].includes(a.type));
     const tickers = relevantAssets.map(a => a.ticker);
 
@@ -111,6 +168,8 @@ const calculateUserDividendsInternal = async (userId) => {
             if (totalValue > 0) {
                 const monthKey = event.date.toISOString().substring(0, 7); 
                 const pDate = event.paymentDate || new Date(new Date(event.date).setDate(event.date.getDate() + 15));
+                const recentCutoff = new Date();
+                recentCutoff.setDate(recentCutoff.getDate() - 30);
                 
                 if (pDate >= recentCutoff) {
                     provisioned.push({
@@ -131,20 +190,43 @@ const calculateUserDividendsInternal = async (userId) => {
     return { dividendMap, provisioned, totalAllTime };
 };
 
+// --- CORE LOGIC: RECALCULATE POSITION (PM + FIFO) ---
 const recalculatePosition = async (userId, ticker, forcedType = null) => {
     const transactions = await AssetTransaction.find({ user: userId, ticker }).sort({ date: 1, createdAt: 1 });
+    
+    // --- Variáveis de Estado (Preço Médio Ponderado) ---
     let quantity = 0;
     let totalCost = 0; 
     let realizedProfit = 0;
+    
+    // --- Variáveis de Estado (FIFO - Tax Lots) ---
+    // Estrutura do Lote: { quantity: number, price: number, date: Date }
+    let taxLots = []; 
+    let fifoRealizedProfit = 0;
+
+    let firstBuyDate = null;
 
     for (const tx of transactions) {
         const txQty = safeFloat(tx.quantity);
         const txTotal = safeFloat(tx.totalValue);
+        const txPrice = safeFloat(tx.price);
 
         if (tx.type === 'BUY') {
+            // Lógica PM
             quantity = safeAdd(quantity, txQty);
             totalCost = safeAdd(totalCost, txTotal);
+            
+            // Lógica FIFO (Cria novo lote)
+            taxLots.push({
+                quantity: txQty,
+                price: txPrice,
+                date: tx.date
+            });
+
+            if (!firstBuyDate) firstBuyDate = tx.date; 
+
         } else if (tx.type === 'SELL') {
+            // Lógica PM (Lucro baseado no preço médio ATUAL)
             const currentAvgPrice = quantity > 0 ? safeDiv(totalCost, quantity) : 0;
             const costOfSoldShares = safeMult(txQty, currentAvgPrice);
             const profit = safeSub(txTotal, costOfSoldShares);
@@ -152,15 +234,42 @@ const recalculatePosition = async (userId, ticker, forcedType = null) => {
             realizedProfit = safeAdd(realizedProfit, profit);
             quantity = safeSub(quantity, txQty);
             totalCost = safeSub(totalCost, costOfSoldShares);
+
+            // Lógica FIFO (Consome lotes mais antigos)
+            let remainingToSell = txQty;
+            
+            // Processa a venda contra os lotes na fila
+            while (remainingToSell > 0.000001 && taxLots.length > 0) {
+                const oldestLot = taxLots[0]; // Peek
+                
+                if (oldestLot.quantity > remainingToSell) {
+                    // Lote é maior que a venda: consome parcialmente o lote
+                    const partialProfit = safeMult(remainingToSell, safeSub(txPrice, oldestLot.price));
+                    fifoRealizedProfit = safeAdd(fifoRealizedProfit, partialProfit);
+                    
+                    oldestLot.quantity = safeSub(oldestLot.quantity, remainingToSell);
+                    remainingToSell = 0;
+                } else {
+                    // Venda consome todo o lote: remove o lote e continua
+                    const lotProfit = safeMult(oldestLot.quantity, safeSub(txPrice, oldestLot.price));
+                    fifoRealizedProfit = safeAdd(fifoRealizedProfit, lotProfit);
+                    
+                    remainingToSell = safeSub(remainingToSell, oldestLot.quantity);
+                    taxLots.shift(); // Dequeue
+                }
+            }
         }
         
-        // Correção de resíduos
+        // Zera tudo se posição for fechada (evita resíduos de float)
         if (quantity <= 0.000001) {
             quantity = 0;
             totalCost = 0;
+            firstBuyDate = null;
+            taxLots = []; // Limpa lotes
         }
     }
 
+    // Persistência
     let asset = await UserAsset.findOne({ user: userId, ticker });
     if (!asset) {
         if (transactions.length > 0) {
@@ -181,7 +290,16 @@ const recalculatePosition = async (userId, ticker, forcedType = null) => {
     asset.quantity = quantity;
     asset.totalCost = safeCurrency(totalCost); 
     asset.realizedProfit = safeCurrency(realizedProfit);
+    
+    // Novo Campo: Lucro FIFO
+    asset.fifoRealizedProfit = safeCurrency(fifoRealizedProfit);
+
     asset.updatedAt = new Date();
+    
+    if (firstBuyDate && (asset.type === 'FIXED_INCOME' || asset.type === 'CASH')) {
+        asset.startDate = firstBuyDate;
+    }
+
     await asset.save();
     return asset;
 };
@@ -226,7 +344,13 @@ export const getWalletData = async (req, res, next) => {
         let totalEquity = 0;
         let totalInvested = 0;
         let totalDayVariation = 0;
-        let totalRealizedProfit = closedAssets.reduce((acc, curr) => safeAdd(acc, (curr.realizedProfit || 0)), 0);
+        
+        let totalRealizedProfit = closedAssets.reduce((acc, curr) => {
+            const isDollarized = curr.currency === 'USD' || curr.type === 'STOCK_US' || curr.type === 'CRYPTO';
+            const mult = isDollarized ? usdRate : 1;
+            const profitInBrl = safeMult((curr.realizedProfit || 0), mult);
+            return safeAdd(acc, profitInBrl);
+        }, 0);
 
         const processedAssets = activeAssets.map(asset => {
             let currentPrice = 0;
@@ -235,8 +359,20 @@ export const getWalletData = async (req, res, next) => {
             const currencyMultiplier = isDollarized ? usdRate : 1;
 
             if (asset.type === 'CASH') {
-                currentPrice = 1;
-                dayChangePct = 0;
+                // RENTABILIDADE DE CAIXA (CDI)
+                const effectiveRate = asset.fixedIncomeRate > 0 ? asset.fixedIncomeRate : 100;
+                let cdiFactor = 1;
+                if (effectiveRate > 30) {
+                    cdiFactor = safeDiv(effectiveRate, 100); 
+                }
+                
+                // Taxa diária do CDI (aprox)
+                const dailyCdi = Math.pow(1 + (currentCdi / 100), 1 / 252) - 1;
+                const dailyRate = dailyCdi * cdiFactor;
+
+                currentPrice = 1; // Preço base da moeda é 1
+                dayChangePct = dailyRate * 100; // Variação do dia em %
+
             } else if (asset.type === 'FIXED_INCOME') {
                 const investedAmount = asset.totalCost; 
                 let rawRate = safeFloat(asset.fixedIncomeRate || 10.0);
@@ -246,31 +382,20 @@ export const getWalletData = async (req, res, next) => {
                     effectiveRate = safeMult(safeDiv(rawRate, 100), currentCdi);
                 }
 
-                // FIX: Cálculo de Renda Fixa rigoroso (Data sem hora)
-                // Removemos o componente de hora para evitar distorções no D+0
                 const startDate = new Date(asset.startDate || asset.createdAt || new Date());
                 const now = new Date();
-                
-                // Normaliza para meia-noite UTC para calcular dias inteiros corridos
-                const utcStart = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-                const utcNow = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-                
-                const diffTime = utcNow - utcStart;
+                const diffTime = now - startDate;
                 const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)); 
                 
-                // Se diffDays <= 0 (mesmo dia), retorno zero para evitar confusão no D+0
                 if (diffDays <= 0) {
                     currentPrice = asset.quantity > 0 ? safeDiv(investedAmount, asset.quantity) : 0;
                     dayChangePct = 0;
                 } else {
-                    // M = C * (1 + i)^(t/365)
-                    const factor = Math.pow(1 + (effectiveRate / 100), diffDays / 365);
+                    const estimatedBusinessDays = Math.floor(diffDays * 5 / 7);
+                    const factor = Math.pow(1 + (effectiveRate / 100), estimatedBusinessDays / 252);
                     const currentTotalValueMath = safeMult(investedAmount, factor);
-                    
                     currentPrice = asset.quantity > 0 ? safeDiv(currentTotalValueMath, asset.quantity) : 0;
-                    
-                    // Variação Diária Teórica
-                    dayChangePct = (Math.pow(1 + (effectiveRate/100), 1/365) - 1) * 100;
+                    dayChangePct = (Math.pow(1 + (effectiveRate/100), 1/252) - 1) * 100;
                 }
             } else {
                 const cachedData = assetMap.get(asset.ticker);
@@ -289,8 +414,9 @@ export const getWalletData = async (req, res, next) => {
             totalInvested = safeAdd(totalInvested, totalCostBr);
             totalDayVariation = safeAdd(totalDayVariation, dayChangeValueBr);
 
-            const unrealizedProfit = safeSub(totalValueBr, totalCostBr);
-            const positionTotalResult = safeAdd(unrealizedProfit, (asset.realizedProfit || 0));
+            const unrealizedProfitBr = safeSub(totalValueBr, totalCostBr);
+            const realizedProfitBr = safeMult((asset.realizedProfit || 0), currencyMultiplier);
+            const positionTotalResult = safeAdd(unrealizedProfitBr, realizedProfitBr);
             
             let profitPercent = 0;
             if (totalCostBr > 0) {
@@ -324,7 +450,8 @@ export const getWalletData = async (req, res, next) => {
                 profit: safeCurrency(positionTotalResult),
                 profitPercent: safeFloat(profitPercent),
                 sector: sector,
-                fixedIncomeRate: asset.fixedIncomeRate 
+                fixedIncomeRate: asset.fixedIncomeRate,
+                fifoProfit: asset.fifoRealizedProfit || 0
             };
         });
 
@@ -348,9 +475,6 @@ export const getWalletData = async (req, res, next) => {
         if (safeTotalEquity > 0) {
             dayVariationPercent = safeMult(safeDiv(safeTotalDayVariation, safeTotalEquity), 100);
         }
-
-        const end = performance.now();
-        logger.debug(`⏱️ [Wallet] Response Time: ${(end - start).toFixed(2)}ms`);
 
         res.json({
             assets: processedAssets,
@@ -383,11 +507,8 @@ export const addAssetTransaction = async (req, res, next) => {
         const numQty = safeFloat(parseFloat(quantity));
         const numPrice = safeFloat(parseFloat(rawPrice));
         
-        // FIX: Data sem hora para consistência com o cálculo de rentabilidade
         const transactionDate = date ? new Date(date) : new Date();
         if (date) {
-            // Garante que a data inserida pelo usuário (YYYY-MM-DD) seja interpretada no fuso local corretamente
-            // Mas para o banco, salvamos com hora zerada para facilitar comparações
             const parts = date.split('-');
             transactionDate.setFullYear(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
             transactionDate.setHours(0, 0, 0, 0);
@@ -397,6 +518,7 @@ export const addAssetTransaction = async (req, res, next) => {
 
         const txType = numQty >= 0 ? 'BUY' : 'SELL';
         const absQty = Math.abs(numQty);
+        const txTotalValue = safeMult(absQty, numPrice);
         
         const newTx = new AssetTransaction({
             user: userId,
@@ -404,7 +526,7 @@ export const addAssetTransaction = async (req, res, next) => {
             type: txType,
             quantity: absQty,
             price: numPrice,
-            totalValue: safeMult(absQty, numPrice),
+            totalValue: txTotalValue,
             date: transactionDate,
             notes: 'Inserção Manual'
         });
@@ -431,20 +553,47 @@ export const addAssetTransaction = async (req, res, next) => {
         
         if (updatedAsset && type === 'FIXED_INCOME') {
             updatedAsset.fixedIncomeRate = fixedIncomeRate || updatedAsset.fixedIncomeRate || 10.0;
-            
-            // Se for a primeira compra ou reinício de posição, define a data de início para o cálculo
-            // IMPORTANTE: Reseta a data de início se a posição estava zerada antes
             if (!updatedAsset.startDate || (updatedAsset.quantity === absQty)) { 
                 updatedAsset.startDate = transactionDate;
             }
             await updatedAsset.save();
         }
+
+        const qtyDelta = numQty; 
+        const costDelta = txType === 'BUY' ? txTotalValue : -txTotalValue;
+        
+        reconcileSnapshotHistory(userId, cleanTicker, type, qtyDelta, costDelta, transactionDate)
+            .catch(err => logger.error(`Erro no replay async: ${err.message}`));
         
         res.status(201).json(updatedAsset || { message: "Transação registrada." });
     } catch (error) { next(error); }
 };
 
-// ... (Restante das funções mantidas)
+export const deleteTransaction = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const tx = await AssetTransaction.findOne({ _id: id, user: req.user.id });
+        if (!tx) return res.status(404).json({ message: "Transação não encontrada." });
+        
+        const ticker = tx.ticker;
+        const txDate = tx.date;
+        const txType = tx.type;
+        const txQty = tx.quantity;
+        const txValue = tx.totalValue;
+
+        const reverseQty = txType === 'BUY' ? -txQty : txQty;
+        const reverseCost = txType === 'BUY' ? -txValue : txValue;
+
+        await AssetTransaction.deleteOne({ _id: id });
+        const updatedAsset = await recalculatePosition(req.user.id, ticker);
+        
+        reconcileSnapshotHistory(req.user.id, ticker, updatedAsset?.type || 'STOCK', reverseQty, reverseCost, txDate)
+            .catch(err => logger.error(`Erro no replay delete: ${err.message}`));
+
+        res.json({ message: "Transação removida." });
+    } catch (error) { next(error); }
+};
+
 export const getAssetTransactions = async (req, res, next) => {
     try {
         const { ticker } = req.params;
@@ -474,18 +623,6 @@ export const getAssetTransactions = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
-export const deleteTransaction = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const tx = await AssetTransaction.findOne({ _id: id, user: req.user.id });
-        if (!tx) return res.status(404).json({ message: "Transação não encontrada." });
-        const ticker = tx.ticker;
-        await AssetTransaction.deleteOne({ _id: id });
-        await recalculatePosition(req.user.id, ticker);
-        res.json({ message: "Transação removida." });
-    } catch (error) { next(error); }
-};
-
 export const searchAssets = async (req, res, next) => {
     try {
         const query = req.query.q?.trim();
@@ -496,7 +633,6 @@ export const searchAssets = async (req, res, next) => {
         
         let results = [];
 
-        // 1. Busca Mercado (Stocks/FIIs)
         const marketAssets = await MarketAsset.find({ 
             $or: [{ ticker: tickerRegex }, { name: regex }] 
         }).select('ticker name lastPrice type').limit(5);
@@ -508,21 +644,18 @@ export const searchAssets = async (req, res, next) => {
             type: a.type 
         }));
 
-        // 2. Busca Tesouro Direto
         const treasuryBonds = await TreasuryBond.find({ title: regex }).limit(5);
         const treasuryResults = treasuryBonds.map(b => ({
             ticker: b.title, name: b.title, price: b.minInvestment, type: 'FIXED_INCOME', rate: b.rate 
         }));
         results = [...results, ...treasuryResults];
 
-        // 3. PRODUTOS POPULARES
         const fixedMatches = POPULAR_FIXED_INCOME.filter(p => p.name.match(regex)).slice(0, 5);
         const fixedResults = fixedMatches.map(p => ({
             ticker: p.name, name: p.name, price: 0, type: 'FIXED_INCOME', rate: p.rate, isManual: true
         }));
         results = [...results, ...fixedResults];
 
-        // 4. Fallback Genérico
         const upperQ = query.toUpperCase();
         if (results.length === 0 && (upperQ.includes('CDB') || upperQ.includes('LCI') || upperQ.includes('LCA'))) {
             results.push({
@@ -574,6 +707,8 @@ export const getWalletPerformance = async (req, res, next) => {
         const userAssets = await UserAsset.find({ user: userId });
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
         const usdRate = safeFloat(config?.dollar || 5.75);
+        const currentCdi = safeFloat(config?.cdi || 11.15); 
+
         let currentEquity = 0;
         let currentInvested = 0; 
 
@@ -592,7 +727,9 @@ export const getWalletPerformance = async (req, res, next) => {
                         const rate = asset.fixedIncomeRate || 10.0;
                         const diffTime = Math.max(0, new Date().getTime() - new Date(asset.startDate || new Date()).getTime());
                         const diffDays = diffTime / (1000 * 3600 * 24);
-                        const factor = Math.pow(1 + (rate/100), diffDays/365);
+                        // Base 252 (Estimatada) para Performance também
+                        const businessDays = Math.floor(diffDays * 5 / 7);
+                        const factor = Math.pow(1 + (rate/100), businessDays/252);
                         price = (invested * factor) / asset.quantity;
                     }
                     const mult = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1;
@@ -636,8 +773,10 @@ export const getWalletPerformance = async (req, res, next) => {
                 const equity = snap.totalEquity || 0;
                 const walletRentability = invested > 0 ? ((equity - invested) / invested) * 100 : 0;
                 
+                // Base 252 para CDI
                 const daysDiff = Math.floor((new Date(snap.date) - startDate) / (1000 * 60 * 60 * 24));
-                const cdiValue = (Math.pow(1 + cdiDaily, Math.max(0, daysDiff)) - 1) * 100;
+                const businessDays = Math.floor(daysDiff * 5 / 7);
+                const cdiValue = (Math.pow(1 + cdiDaily, Math.max(0, businessDays)) - 1) * 100;
 
                 const currentIbovVal = findClosestValue(ibovHistory, dateStr);
                 const ibovValue = currentIbovVal ? ((currentIbovVal - startIbov) / startIbov) * 100 : 0;
@@ -656,7 +795,8 @@ export const getWalletPerformance = async (req, res, next) => {
             if (currentEquity > 0 && lastResultDate !== todayStr) {
                 const walletNow = currentInvested > 0 ? ((currentEquity - currentInvested) / currentInvested) * 100 : 0;
                 const daysDiff = Math.floor((new Date() - startDate) / (1000 * 60 * 60 * 24));
-                const cdiNow = (Math.pow(1 + cdiDaily, daysDiff) - 1) * 100;
+                const businessDays = Math.floor(daysDiff * 5 / 7);
+                const cdiNow = (Math.pow(1 + cdiDaily, businessDays) - 1) * 100;
                 
                 const currentIbovVal = findClosestValue(ibovHistory, todayStr);
                 const lastKnownIbov = currentIbovVal || (ibovHistory ? ibovHistory[ibovHistory.length - 1].close : startIbov);
@@ -697,6 +837,60 @@ export const getWalletDividends = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Erro Dividendos: ${error.message}`);
+        next(error);
+    }
+};
+
+// --- NOVO: EXTRATO DE CONTA (UNIFICADO) ---
+export const getCashFlow = async (req, res, next) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const filterType = req.query.filterType; // 'ALL', 'CASH', 'TRADE'
+        const skip = (page - 1) * limit;
+        const userId = req.user.id;
+
+        // 1. Identificar tickers de Caixa para diferenciar e filtrar
+        const cashAssets = await UserAsset.find({ user: userId, type: 'CASH' }).select('ticker');
+        const cashTickers = cashAssets.map(a => a.ticker);
+        
+        // Garante que 'RESERVA' sempre esteja na lista de caixa
+        if (!cashTickers.includes('RESERVA')) {
+            cashTickers.push('RESERVA');
+        }
+
+        let query = { user: userId };
+
+        // 2. Aplicar Filtros Dinâmicos
+        if (filterType === 'CASH') {
+            query.ticker = { $in: cashTickers };
+        } else if (filterType === 'TRADE') {
+            query.ticker = { $nin: cashTickers };
+        }
+        // Se filterType === 'ALL' ou undefined, retorna tudo
+
+        const totalItems = await AssetTransaction.countDocuments(query);
+        const totalPages = Math.ceil(totalItems / limit);
+
+        const transactions = await AssetTransaction.find(query)
+            .sort({ date: -1, createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
+
+        res.json({
+            transactions: transactions.map(tx => ({
+                ...tx.toObject(),
+                isCashOp: cashTickers.includes(tx.ticker) // Flag para o frontend pintar diferente
+            })),
+            pagination: {
+                currentPage: page,
+                totalPages,
+                totalItems,
+                hasMore: page < totalPages
+            }
+        });
+    } catch (error) {
+        logger.error(`Erro CashFlow: ${error.message}`);
         next(error);
     }
 };

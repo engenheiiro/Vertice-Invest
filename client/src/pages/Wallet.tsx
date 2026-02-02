@@ -7,10 +7,11 @@ import { AddAssetModal } from '../components/wallet/AddAssetModal';
 import { EvolutionChart } from '../components/wallet/EvolutionChart';
 import { PerformanceChart } from '../components/wallet/PerformanceChart'; 
 import { DividendDashboard } from '../components/wallet/DividendDashboard'; 
+import { CashFlowHistory } from '../components/wallet/CashFlowHistory'; 
 import { AllocationChart } from '../components/wallet/AllocationChart';
 import { SmartContributionModal } from '../components/wallet/SmartContributionModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins } from 'lucide-react';
+import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 // @ts-ignore
@@ -22,17 +23,13 @@ export const Wallet = () => {
     const { assets, kpis, resetWallet, isLoading } = useWallet();
     const navigate = useNavigate();
     
-    // States Modais
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
-    
-    // State Modal Limites
     const [limitModalOpen, setLimitModalOpen] = useState(false);
     const [limitMessage, setLimitMessage] = useState('');
 
-    // State Tabs
-    const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PERFORMANCE' | 'DIVIDENDS'>('OVERVIEW');
+    const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PERFORMANCE' | 'DIVIDENDS' | 'STATEMENT'>('OVERVIEW');
 
     const checkFeatureAccess = async (feature: 'smart_contribution' | 'report') => {
         try {
@@ -73,12 +70,6 @@ export const Wallet = () => {
         alert("Iniciando motor de rebalanceamento... (Mock)");
     };
 
-    const handleGenerateReport = async () => {
-        const hasAccess = await checkFeatureAccess('report');
-        if (!hasAccess) return;
-        alert("Gerando relatório... (Mock)");
-    };
-
     return (
         <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
             <Header />
@@ -109,17 +100,15 @@ export const Wallet = () => {
                     </div>
                 </div>
 
-                {/* KPI Summary (Sempre Visível) */}
                 <WalletSummary />
 
-                {/* Tabs de Navegação */}
                 <div className="flex gap-2 mb-6 border-b border-slate-800/60 pb-1 overflow-x-auto no-scrollbar">
                     <TabButton active={activeTab === 'OVERVIEW'} onClick={() => setActiveTab('OVERVIEW')} icon={<PieChart size={14} />} label="Visão Geral" />
                     <TabButton active={activeTab === 'PERFORMANCE'} onClick={() => setActiveTab('PERFORMANCE')} icon={<BarChart2 size={14} />} label="Rentabilidade" />
                     <TabButton active={activeTab === 'DIVIDENDS'} onClick={() => setActiveTab('DIVIDENDS')} icon={<Coins size={14} />} label="Proventos" />
+                    <TabButton active={activeTab === 'STATEMENT'} onClick={() => setActiveTab('STATEMENT')} icon={<FileText size={14} />} label="Extrato" />
                 </div>
 
-                {/* CONTEÚDO DAS TABS - Loading State */}
                 {isLoading ? (
                     <div className="animate-pulse space-y-6">
                         <div className="h-64 bg-slate-800/30 rounded-2xl"></div>
@@ -159,14 +148,18 @@ export const Wallet = () => {
                                 <DividendDashboard />
                             </div>
                         )}
+
+                        {activeTab === 'STATEMENT' && (
+                            <div className="animate-fade-in max-w-4xl mx-auto">
+                                <CashFlowHistory />
+                            </div>
+                        )}
                     </>
                 )}
                 
-                {/* Modais */}
                 <AddAssetModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
                 <SmartContributionModal isOpen={isSmartModalOpen} onClose={() => setIsSmartModalOpen(false)} />
                 
-                {/* Modal de Limite (Upgrade) */}
                 <ConfirmModal 
                     isOpen={limitModalOpen} 
                     onClose={() => setLimitModalOpen(false)} 
@@ -177,7 +170,6 @@ export const Wallet = () => {
                     isDestructive={false}
                 />
 
-                {/* Modal de Reset */}
                 <ConfirmModal 
                     isOpen={isResetModalOpen} 
                     onClose={() => setIsResetModalOpen(false)} 

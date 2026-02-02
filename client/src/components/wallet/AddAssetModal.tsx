@@ -42,6 +42,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     const priceFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const modalRef = useRef<HTMLDivElement>(null);
 
+    // Reset ao abrir o modal
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
@@ -52,14 +53,23 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             setPriceSource('manual');
             setHistoricalDateFound(null);
             setIsCurrentPrice(false);
-            setForm(prev => ({...prev, date: new Date().toISOString().split('T')[0], rate: '', quantity: '', price: ''})); 
+            // Default inicial limpo
+            setForm({ 
+                ticker: '', 
+                name: '', 
+                type: 'STOCK', 
+                quantity: '', 
+                price: '', 
+                rate: '', 
+                date: new Date().toISOString().split('T')[0] 
+            }); 
         } else {
             document.body.style.overflow = 'unset';
-            setForm({ ticker: '', name: '', type: 'STOCK', quantity: '', price: '', rate: '', date: new Date().toISOString().split('T')[0] });
         }
         return () => { document.body.style.overflow = 'unset'; };
     }, [isOpen]);
 
+    // Busca de Preço Automático
     useEffect(() => {
         if (!isOpen || form.type === 'CASH' || form.type === 'FIXED_INCOME' || !form.ticker || form.ticker.length < 3 || !form.date) {
             return;
@@ -77,7 +87,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                 let priceData = null;
                 let isLive = false;
 
-                // Se a data for hoje, busca preço atual
                 if (form.date === today) {
                     const quote = await marketService.getCurrentQuote(form.ticker);
                     if (quote && quote.price > 0) {
@@ -85,7 +94,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         isLive = true;
                     }
                 } else if (form.date < today) {
-                    // Se a data for passado, busca histórico
                     const history = await marketService.getHistoricalPrice(form.ticker, form.date, form.type);
                     if (history && history.price > 0) {
                         priceData = history;
@@ -110,6 +118,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
     }, [form.date, form.ticker, form.type, isOpen]);
 
+    // Fechar dropdown ao clicar fora
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
@@ -120,21 +129,34 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // FIX: Removida a limpeza do 'ticker' para FIXED_INCOME e CRYPTO.
-    // Isso evita que o ticker seja apagado logo após ser selecionado da lista.
-    // A limpeza manual do ticker ao mudar o <select> já é tratada no onChange dele.
-    useEffect(() => {
-        if (form.type === 'CASH') {
-            setForm(prev => ({ ...prev, ticker: 'RESERVA', quantity: '', price: '1,00', rate: '' }));
-        } else if (form.type === 'FIXED_INCOME') {
-            setForm(prev => ({ ...prev, quantity: '1', rate: '10,00' }));
-        }
-        // Para outros tipos, mantemos o estado atual ou defaults específicos se necessário
-    }, [form.type]);
-
     const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedDate = e.target.value;
         setForm(prev => ({ ...prev, date: selectedDate }));
+    };
+
+    const handleTypeSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newType = e.target.value as AssetType;
+        
+        let defaultRate = '';
+        let defaultQty = '';
+        let defaultTicker = ''; 
+
+        if (newType === 'FIXED_INCOME') {
+            defaultRate = '10,00';
+            defaultQty = '1';
+        } else if (newType === 'CASH') {
+            defaultTicker = 'RESERVA';
+            defaultQty = ''; // Valor monetário vai no price, mas será tratado no submit
+        }
+
+        setForm(prev => ({
+            ...prev,
+            type: newType,
+            ticker: defaultTicker,
+            rate: defaultRate,
+            quantity: defaultQty,
+            price: '' 
+        }));
     };
 
     const handleTickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -182,18 +204,25 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     };
 
     const handleSelectResult = (result: any) => {
-        const rateVal = result.rate ? result.rate.toString().replace('.', ',') : '';
-        // Para Renda Fixa e Cripto, se o usuário seleciona da lista, queremos que o Ticker e o Nome sejam preenchidos
-        // O ticker muitas vezes é o nome do produto (ex: "Nubank...")
+        let rateVal = '';
+        if (result.rate) {
+            rateVal = result.rate.toString().replace('.', ',');
+            if (!rateVal.includes(',')) rateVal += ',00';
+        }
+
         const finalTicker = result.isManual ? result.ticker : (result.ticker || result.name);
         const finalName = result.name || result.ticker;
+        const finalType = result.type ? (result.type as AssetType) : form.type;
         
+        const finalQty = finalType === 'FIXED_INCOME' ? '1' : form.quantity;
+
         setForm(prev => ({ 
             ...prev, 
             ticker: finalTicker, 
             name: finalName, 
-            type: result.type ? (result.type as AssetType) : prev.type,
-            rate: rateVal || prev.rate
+            type: finalType,
+            rate: rateVal, 
+            quantity: finalQty
         }));
         
         setShowDropdown(false);
@@ -248,37 +277,65 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         e.preventDefault();
         setValidationError('');
         
-        let finalQty = parseFloat(form.quantity.replace(',', '.')); 
-        let finalPrice = parseCurrencyToFloat(form.price);
-        let finalRate = form.rate ? parseFloat(form.rate.replace(',', '.')) : 0;
+        // CORREÇÃO CRÍTICA PARA CASH:
+        // Se for CASH, o usuário digita o valor monetário no campo "Preço/Valor".
+        // Mas para a lógica do sistema funcionar (Qty * Price), definimos:
+        // Quantidade = Valor Monetário
+        // Preço Unitário = 1.00
+        
+        let finalQty = 0;
+        let finalPrice = 0;
 
-        if (isNaN(finalQty) || finalQty <= 0) {
-            setValidationError('A quantidade deve ser um número válido maior que zero.');
-            return;
-        }
-        if (isNaN(finalPrice) || finalPrice < 0) { 
-            setValidationError('O preço deve ser um valor válido.');
-            return;
-        }
-
-        if (transactionType === 'SELL' && form.type !== 'CASH') {
-            const owned = assets.find(a => a.ticker === form.ticker);
-            if (!owned || owned.quantity < finalQty) {
-                setValidationError(`Saldo insuficiente. Você possui ${owned ? owned.quantity : 0} unid.`);
+        if (form.type === 'CASH') {
+            const rawAmount = parseCurrencyToFloat(form.price);
+            if (isNaN(rawAmount) || rawAmount <= 0) {
+                setValidationError('O valor deve ser válido.');
                 return;
             }
-            finalQty = -finalQty;
+            finalQty = rawAmount;
+            finalPrice = 1;
+            
+            // Ajuste para Saque (Venda)
+            if (transactionType === 'SELL') {
+                const owned = assets.find(a => a.ticker === 'RESERVA');
+                // No backend, quantidade de cash é o valor total.
+                if (!owned || owned.quantity < finalQty) {
+                    setValidationError(`Saldo insuficiente. Disponível: ${owned ? owned.quantity.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}) : 'R$ 0,00'}`);
+                    return;
+                }
+                finalQty = -finalQty; // Inverte para subtrair
+            }
+
+        } else {
+            // Lógica Padrão para outros ativos
+            finalQty = parseFloat(form.quantity.replace(',', '.')); 
+            finalPrice = parseCurrencyToFloat(form.price);
+
+            if (isNaN(finalQty) || finalQty <= 0) {
+                setValidationError('A quantidade deve ser um número válido maior que zero.');
+                return;
+            }
+            if (isNaN(finalPrice) || finalPrice < 0) { 
+                setValidationError('O preço deve ser um valor válido.');
+                return;
+            }
+
+            if (transactionType === 'SELL') {
+                const owned = assets.find(a => a.ticker === form.ticker);
+                if (!owned || owned.quantity < finalQty) {
+                    setValidationError(`Saldo insuficiente. Você possui ${owned ? owned.quantity : 0} unid.`);
+                    return;
+                }
+                finalQty = -finalQty;
+            }
         }
+
+        let finalRate = form.rate ? parseFloat(form.rate.replace(',', '.')) : 0;
 
         setStatus('loading');
 
         try {
             let finalTicker = form.ticker.toUpperCase();
-
-            if (form.type === 'CASH') {
-                if (transactionType === 'SELL') finalQty = -1; 
-                else finalQty = 1; 
-            }
 
             await addAsset({
                 ticker: finalTicker,
@@ -370,7 +427,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         {searchResults.map((result, idx) => (
                             <div 
                                 key={idx}
-                                // FIX: onMouseDown dispara antes do blur do input, garantindo que a seleção funcione.
                                 onMouseDown={(e) => {
                                     e.preventDefault();
                                     handleSelectResult(result);
@@ -445,8 +501,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                     
                     <div className="relative">
                         <Input 
-                            label="Rentabilidade (% a.a.)"
-                            placeholder="Ex: 11,50"
+                            label="Rentabilidade"
+                            placeholder="Ex: 11,50 ou 115"
                             value={form.rate}
                             onChange={(e) => setForm({...form, rate: e.target.value})}
                             containerClassName="mb-0"
@@ -574,9 +630,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                         <div className="relative">
                                             <select 
                                                 value={form.type}
-                                                // Ao mudar manualmente, limpamos o ticker. 
-                                                // Isso é intencional para evitar dados misturados.
-                                                onChange={(e) => setForm({...form, type: e.target.value as AssetType, ticker: ''})} 
+                                                // Chamamos handleTypeSelectChange para resetar APENAS se for seleção manual
+                                                onChange={handleTypeSelectChange} 
                                                 className="w-full bg-[#0B101A] text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-[#0F1729] transition-all duration-300 shadow-sm"
                                             >
                                                 <option value="STOCK">Ações Brasil</option>

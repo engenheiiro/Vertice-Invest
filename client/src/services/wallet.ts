@@ -49,7 +49,6 @@ export const walletService = {
         return await response.json();
     },
 
-    // PAGINAÇÃO ADICIONADA
     async getTransactions(ticker: string, page: number = 1, limit: number = 10) {
         const response = await authService.api(`/api/wallet/transactions/${ticker}?page=${page}&limit=${limit}`);
         if (!response.ok) throw new Error("Falha ao buscar histórico");
@@ -73,6 +72,13 @@ export const walletService = {
     async getDividends() {
         const response = await authService.api('/api/wallet/dividends');
         if (!response.ok) return { history: [], provisioned: [] };
+        return await response.json();
+    },
+
+    // Atualizado: Suporte a filtros
+    async getCashFlow(page: number = 1, limit: number = 20, filterType: string = 'ALL') {
+        const response = await authService.api(`/api/wallet/cashflow?page=${page}&limit=${limit}&filterType=${filterType}`);
+        if (!response.ok) throw new Error("Falha ao buscar extrato");
         return await response.json();
     }
 };
