@@ -14,10 +14,18 @@ const UserAssetSchema = new mongoose.Schema({
   // Lucro Realizado (Base: FIFO - First-In, First-Out - Padrão Internacional/Gerencial)
   fifoRealizedProfit: { type: Number, default: 0 },
 
+  // --- NOVO: Lotes Fiscais Ativos (Para Renda Fixa Multi-Aporte e IR Futuro) ---
+  taxLots: [{
+    date: { type: Date, required: true },
+    quantity: { type: Number, required: true },
+    price: { type: Number, required: true }, // Preço unitário na compra
+    _id: false // Não precisa de ID próprio
+  }],
+
   currency: { type: String, default: 'BRL' },
   
-  // Campos para Renda Fixa
-  startDate: { type: Date }, // Data do aporte inicial para cálculo de juros
+  // Campos para Renda Fixa (Mantidos para Fallback)
+  startDate: { type: Date }, 
   fixedIncomeRate: { type: Number, default: 0 }, // Taxa anual contratada
   
   updatedAt: { type: Date, default: Date.now }
