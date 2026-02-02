@@ -293,6 +293,9 @@ const recalculatePosition = async (userId, ticker, forcedType = null) => {
     
     // Novo Campo: Lucro FIFO
     asset.fifoRealizedProfit = safeCurrency(fifoRealizedProfit);
+    
+    // Novo Campo: Persistência dos Lotes (Crucial para Renda Fixa Multi-Aporte)
+    asset.taxLots = taxLots;
 
     asset.updatedAt = new Date();
     
@@ -358,46 +361,72 @@ export const getWalletData = async (req, res, next) => {
             const isDollarized = asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO';
             const currencyMultiplier = isDollarized ? usdRate : 1;
 
-            if (asset.type === 'CASH') {
-                // RENTABILIDADE DE CAIXA (CDI)
-                const effectiveRate = asset.fixedIncomeRate > 0 ? asset.fixedIncomeRate : 100;
-                let cdiFactor = 1;
-                if (effectiveRate > 30) {
-                    cdiFactor = safeDiv(effectiveRate, 100); 
-                }
+            if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
+                // RENTABILIDADE DE CAIXA/RENDA FIXA (MULTI-APORTE)
                 
-                // Taxa diária do CDI (aprox)
-                const dailyCdi = Math.pow(1 + (currentCdi / 100), 1 / 252) - 1;
-                const dailyRate = dailyCdi * cdiFactor;
+                const rawRate = asset.fixedIncomeRate > 0 ? asset.fixedIncomeRate : (asset.type === 'CASH' ? 100 : 10.0);
+                let dailyRate = 0;
 
-                currentPrice = 1; // Preço base da moeda é 1
-                dayChangePct = dailyRate * 100; // Variação do dia em %
-
-            } else if (asset.type === 'FIXED_INCOME') {
-                const investedAmount = asset.totalCost; 
-                let rawRate = safeFloat(asset.fixedIncomeRate || 10.0);
-                let effectiveRate = rawRate;
-                
-                if (rawRate > 30) {
-                    effectiveRate = safeMult(safeDiv(rawRate, 100), currentCdi);
-                }
-
-                const startDate = new Date(asset.startDate || asset.createdAt || new Date());
-                const now = new Date();
-                const diffTime = now - startDate;
-                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)); 
-                
-                if (diffDays <= 0) {
-                    currentPrice = asset.quantity > 0 ? safeDiv(investedAmount, asset.quantity) : 0;
-                    dayChangePct = 0;
+                // Define taxa diária baseada no tipo de rentabilidade (CDI ou Pré)
+                if (rawRate > 30) { 
+                    // Assume % do CDI (ex: 100, 110)
+                    const cdiFactor = safeDiv(rawRate, 100); 
+                    const dailyCdi = Math.pow(1 + (currentCdi / 100), 1 / 252) - 1;
+                    dailyRate = dailyCdi * cdiFactor;
                 } else {
-                    const estimatedBusinessDays = Math.floor(diffDays * 5 / 7);
-                    const factor = Math.pow(1 + (effectiveRate / 100), estimatedBusinessDays / 252);
-                    const currentTotalValueMath = safeMult(investedAmount, factor);
-                    currentPrice = asset.quantity > 0 ? safeDiv(currentTotalValueMath, asset.quantity) : 0;
-                    dayChangePct = (Math.pow(1 + (effectiveRate/100), 1/252) - 1) * 100;
+                    // Assume Pré-fixado anual (ex: 12%)
+                    dailyRate = Math.pow(1 + (rawRate / 100), 1 / 252) - 1;
                 }
+
+                dayChangePct = dailyRate * 100;
+
+                // CÁLCULO PONDERADO (Juros compostos para CADA lote individual)
+                if (asset.taxLots && asset.taxLots.length > 0) {
+                    let totalAccumulatedEquity = 0;
+                    const now = new Date();
+
+                    for (const lot of asset.taxLots) {
+                        const lotDate = new Date(lot.date);
+                        const diffTime = Math.max(0, now - lotDate);
+                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                        const businessDays = Math.floor(diffDays * 5 / 7); // Aprox dias úteis
+
+                        // Valor Futuro do Lote = Valor Investido * (1 + taxa)^tempo
+                        // Para CASH, quantity = valor monetário e price = 1.
+                        // Para FIXED_INCOME, quantity = 1 e price = valor monetário.
+                        // Em ambos os casos, (quantity * price) dá o valor base do aporte.
+                        const baseValue = safeMult(lot.quantity, lot.price);
+                        const compoundFactor = Math.pow(1 + dailyRate, businessDays);
+                        const lotCurrentValue = safeMult(baseValue, compoundFactor);
+                        
+                        totalAccumulatedEquity = safeAdd(totalAccumulatedEquity, lotCurrentValue);
+                    }
+
+                    // Preço Atual = Valor Total Acumulado / Quantidade Total
+                    // Isso reflete a valorização média ponderada da cota
+                    currentPrice = asset.quantity > 0 ? safeDiv(totalAccumulatedEquity, asset.quantity) : 0;
+
+                } else {
+                    // FALLBACK LEGADO: Se não houver taxLots (ativos antigos), usa lógica de Data Única
+                    const startDate = new Date(asset.startDate || asset.createdAt || new Date());
+                    const now = new Date();
+                    const diffTime = Math.max(0, now - startDate);
+                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                    const businessDays = Math.floor(diffDays * 5 / 7);
+                    
+                    const compoundFactor = Math.pow(1 + dailyRate, businessDays);
+                    
+                    if (asset.type === 'CASH') {
+                        currentPrice = safeFloat(compoundFactor);
+                    } else {
+                        // Para Fixed Income legado, o preço é calculado sobre o custo total
+                        const totalProjected = safeMult(asset.totalCost, compoundFactor);
+                        currentPrice = asset.quantity > 0 ? safeDiv(totalProjected, asset.quantity) : 0;
+                    }
+                }
+
             } else {
+                // Renda Variável (Stocks/FIIs/Crypto)
                 const cachedData = assetMap.get(asset.ticker);
                 if (cachedData) {
                     currentPrice = safeFloat(Number(cachedData.price)) || safeFloat(asset.averagePrice);

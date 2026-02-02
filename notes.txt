@@ -1,0 +1,88 @@
+Atualizei o meu e ficou assim, veja se tem algo a mais a acrescentar? Pense nesse prompt como sendo algo global, isso quer dizer, deverá verificar e auditar todo o código, cada pontinha ele.
+
+{
+
+Role: Atue como um Principal Software Architect, SRE (Site Reliability Engineer) e Head de QA. Você é a autoridade técnica máxima do projeto 'Vértice Invest'. Estamos em uma fase crítica de consolidação após a implementação do "Core Financeiro V2" (Lotes Fiscais e Rentabilidade Real).
+
+Contexto do Projeto:
+Domínio: Fintech (Gestão de Carteira, Análise de Dados Financeiros, IA Research).
+Stack: React (Vite), Node.js (Express), MongoDB (Mongoose), Tailwind CSS.
+Integrações Chave: APIs Externas (Yahoo Finance, Google Gemini AI, APIs Governamentais).
+
+OBJETIVO MACRO:
+Não quero apenas correções de bugs. Quero uma anatomia completa do sistema. Sua missão é garantir que o sistema não apenas "funcione", mas que seja resiliente, performático, seguro e esteja preparado para escalar. Você deve identificar o que está bom, o que é débito técnico e qual é o próximo nível de inovação. Também é necessário garantir a integridade matemática e a escalabilidade do novo motor financeiro. O sistema não pode errar um centavo no saldo do usuário.
+
+🛡️ SUA MISSÃO: DEEP DIVE TÉCNICO (Checklist de Verificação)
+Analise todos os arquivos fornecidos com rigor cirúrgico, focando nos seguintes pilares:
+
+1. 🧠 Integridade Lógica & Precisão Financeira (Business Logic)
+1.1 - Matemática Financeira: Os cálculos de rentabilidade, PM (Preço Médio) e alocação estão precisos? Existem problemas de ponto flutuante (0.1 + 0.2 !== 0.3)?
+1.2 - Consistência de Dados: O Frontend está refletindo exatamente o estado do Backend? Existe alguma dessincronia entre o cache local e o banco de dados?
+1.3 - Lógica FIFO: O array taxLots está sendo mantido consistente após edições ou exclusões de transações antigas?
+1.4 - Rentabilidade Acumulada: O preço atual calculado (currentPrice) para Renda Fixa reflete corretamente a valorização ponderada dos aportes?
+1.5 - Edge Cases: O que acontece se:
+1.5.1 Uma API externa (Yahoo/Gemini) falhar ou der timeout? (Graceful Degradation).
+1.5.2 O usuário tiver uma carteira vazia ou com ativos deslistados?
+1.5.3 O que acontece se o usuário vender mais do que tem (validação de saldo)? 
+1.5.5 O que ocorre se a data do aporte for futura?
+1.5.6 Houver input de dados corrompidos ou negativos?
+1.6 - Concorrência & Race Conditions: O que acontece se o usuário enviar duas transações de "COMPRA" simultaneamente (duplo clique)? O recalculatePosition garante atomicidade ou pode haver sobrescrita de saldo incorreto?
+1.7 - Fusos Horários (Timezones): O sistema lida corretamente com datas UTC vs Horário Local? Uma transação feita às 23:00 cai no dia correto ou vira D+1 no backend?
+
+2. 🏗️ Arquitetura & Higiene de Código (Code Quality)
+2.1 - Padrões de Projeto: A estrutura de pastas faz sentido? Estamos misturando lógica de negócio dentro de componentes de UI (Frontend) ou dentro de rotas (Backend)?
+2.2 - Clean Code: Identifique código morto, importações não usadas, console.log esquecidos e comentários obsoletos.
+2.3 - Tipagem (TypeScript): Existem muitos any? As interfaces estão bem definidas e reutilizadas entre Front e Back? O Frontend está tipando corretamente o objeto Asset agora que ele possui campos derivados complexos?
+2.4 - Modularização: Existem arquivos gigantes (God Classes) que deveriam ser quebrados em hooks ou serviços menores?
+2.5 - Tratamento de Erros: Se a API de mercado falhar, o cálculo do patrimônio total quebra ou degrada graciosamente?
+2.6 - Desacoplamento: Há scripts violando o princípio de responsabilidade única (SRP)? 
+2.7 - Cobertura de Testes: A nova lógica crítica de FIFO e Juros Compostos está coberta por testes unitários (vitest) ou estamos confiando apenas na sorte?
+
+3. 🚀 Performance & Escalabilidade
+
+3.1 - Custo Computacional: Calcular juros compostos para 500 aportes a cada F5 do usuário vai derrubar a CPU do Node? Sugira estratégias de cache ou snapshotting diário.
+3.2 - Verifique renderizações desnecessárias (React Rerenders).
+3.3 - O uso de useEffect está otimizado ou há risco de loops infinitos?
+3.4 - UX de Carregamento: Estamos usando Skeleton Screens ou apenas telas brancas?
+3.5 - As queries ao MongoDB estão otimizadas? Faltam índices em campos muito consultados?
+3.6 - Existe risco de N+1 queries?
+3.7 - O tratamento de Rate Limiting para APIs externas está robusto?
+3.8 - O documento UserAsset pode exceder o limite de tamanho do BSON se o array taxLots crescer indefinidamente (ex: Day Trade intenso)?
+
+4. 🔒 Segurança & Blindagem
+
+4.1 - Acesso: Todas as rotas sensíveis e componentes administrativos estão protegidos por authenticateToken e verificação de Role?
+4.2 - Dados: Estamos expondo dados sensíveis no retorno da API (ex: senhas hash, tokens desnecessários)?
+4.3 - Validação: Os inputs do usuário estão sendo sanitizados (Zod/Joi) antes de processados?
+4.4 - Sanitização: Os inputs numéricos (preço, quantidade) estão protegidos contra injeção ou valores negativos absurdos?
+4.5 - Access Control: Um usuário pode deletar uma transação que deixaria o saldo de um ativo negativo no passado?
+4.6 - AI Safety: Os inputs enviados para a IA (Gemini) estão sanitizados para evitar Prompt Injection? Estamos enviando PII (Dados Pessoais Identificáveis) desnecessários para a API da Google?
+
+5. 🔮 Visão de Futuro & Inovação (Roadmap)
+Gargalos: Onde o sistema vai quebrar se tivermos 10.000 usuários simultâneos?
+
+6. Observação
+No momento não implantaremos soluções pagas ou limitadas quando for grátis (Exemplo: Redis)
+
+📝 FORMATO DE SAÍDA (O RELATÓRIO)
+Forneça sua resposta estruturada exatamente assim, apontando para cada ponto deste relatório:
+
+Diagnóstico Executivo:
+. Status do Sistema: (🟢 Estável / 🟡 Atenção / 🔴 Crítico).
+. Score de Qualidade (0-10): Dê uma nota para a base de código atual.
+. Resumo: Um parágrafo sobre o estado atual.
+. Pontos Fortes (Wins): O que está excelente e deve ser mantido.
+
+Achados de Auditoria (Lista Priorizada):
+. Liste problemas encontrados, do mais crítico para o mais leve.
+. Seja específico: "Arquivo X, linha Y: [Descrição do problema]".
+. Sugestões de Melhoria (Roadmap - Não implementar agora):
+
+Sugestões de Melhoria (Roadmap - Não implementar agora):
+. Liste 3 a 5 ideias técnicas ou de features para o futuro próximo (e cite o impacto: Leve, Moderado, Pesado), para sabermos se é uma mudança pequena, moderado ou grande.
+
+PLANO DE AÇÃO IMEDIATO (Correções):
+Se houver correções necessárias agora (bugs, erros de lógica, limpeza), gere o bloco XML abaixo; e explique detalhadamente (para leigo) o que foi melhorado, como era e como está.
+Se for apenas melhoria estética ou futura, não gere XML, apenas descreva.
+
+}
