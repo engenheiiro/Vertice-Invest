@@ -5,7 +5,11 @@ import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'rechar
 import { Coins, CalendarCheck, TrendingUp, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 
 interface DividendData {
-    history: { month: string; value: number }[];
+    history: { 
+        month: string; 
+        value: number;
+        breakdown?: { ticker: string; amount: number }[];
+    }[];
     provisioned: { ticker: string; date: string; amount: number }[];
     totalAllTime?: number; 
 }
@@ -18,14 +22,21 @@ export const DividendDashboard = () => {
         const load = async () => {
             try {
                 const res = await walletService.getDividends();
+                
+                // Filtra meses vazios no início (caso o backend tenha retornado lixo de 2020 zerado)
+                let cleanHistory = Array.isArray(res?.history) ? res.history : [];
+                // Remove zeros iniciais
+                while(cleanHistory.length > 0 && cleanHistory[0].value === 0) {
+                    cleanHistory.shift();
+                }
+
                 setData({
-                    history: Array.isArray(res?.history) ? res.history : [],
+                    history: cleanHistory,
                     provisioned: Array.isArray(res?.provisioned) ? res.provisioned : [],
                     totalAllTime: res?.totalAllTime || 0
                 });
             } catch (e) {
                 console.error("Erro ao carregar dividendos", e);
-                setData({ history: [], provisioned: [], totalAllTime: 0 });
             } finally {
                 setIsLoading(false);
             }
@@ -49,13 +60,51 @@ export const DividendDashboard = () => {
         return target <= today;
     };
 
+    // Componente de Tooltip Customizado
+    const CustomTooltip = ({ active, payload, label }: any) => {
+        if (active && payload && payload.length) {
+            const dataPoint = payload[0].payload;
+            const breakdown = dataPoint.breakdown || [];
+            
+            // Data Formatação para Tooltip (Ex: Fevereiro 2024)
+            const parts = label.split('-'); // YYYY-MM
+            let formattedLabel = label;
+            if (parts.length === 2) {
+                const d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, 1);
+                formattedLabel = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                formattedLabel = formattedLabel.charAt(0).toUpperCase() + formattedLabel.slice(1);
+            }
+
+            return (
+                <div className="bg-[#0F1729] border border-[#D4AF37] rounded-lg p-3 shadow-xl min-w-[180px] z-50">
+                    <p className="text-xs text-[#D4AF37] font-bold uppercase mb-2 border-b border-[#D4AF37]/30 pb-1">
+                        {formattedLabel}
+                    </p>
+                    <div className="space-y-1 mb-2">
+                        {breakdown.map((item: any, idx: number) => (
+                            <div key={idx} className="flex justify-between text-[10px] text-slate-300">
+                                <span>{item.ticker}</span>
+                                <span className="font-mono">{formatCurrency(item.amount)}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex justify-between border-t border-[#D4AF37]/30 pt-1">
+                        <span className="text-xs text-white font-bold">Total</span>
+                        <span className="text-xs text-[#D4AF37] font-mono font-bold">{formatCurrency(dataPoint.value)}</span>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
+
     if (isLoading) {
         return (
             <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[300px] animate-pulse"></div>
         );
     }
 
-    const contentWidth = Math.max(100, data.history.length * 50); 
+    const contentWidth = Math.max(100, data.history.length * 60); 
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
@@ -68,7 +117,7 @@ export const DividendDashboard = () => {
                             <Coins size={16} className="text-[#D4AF37]" />
                             Evolução de Proventos
                         </h3>
-                        <p className="text-xs text-slate-500">Histórico Completo</p>
+                        <p className="text-xs text-slate-500">Histórico de Pagamentos</p>
                     </div>
                     <div className="text-right">
                         <p className="text-[10px] uppercase font-bold text-slate-500">Total Acumulado</p>
@@ -91,17 +140,15 @@ export const DividendDashboard = () => {
                                             const parts = val.split('-');
                                             if (parts.length < 2) return val;
                                             const date = new Date(parseInt(parts[0]), parseInt(parts[1])-1, 1);
-                                            return date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace('.', '');
+                                            // Correção de Formato: fev/24
+                                            const m = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+                                            const y = date.toLocaleDateString('pt-BR', { year: '2-digit' });
+                                            return `${m}/${y}`;
                                         }}
                                         minTickGap={10}
                                         interval={0} 
                                     />
-                                    <Tooltip 
-                                        cursor={{fill: '#1e293b', opacity: 0.4}}
-                                        contentStyle={{ backgroundColor: '#0F1729', borderColor: '#D4AF37', borderRadius: '8px' }}
-                                        itemStyle={{ color: '#D4AF37' }}
-                                        formatter={(value: number) => [formatCurrency(value), 'Recebido']}
-                                    />
+                                    <Tooltip content={<CustomTooltip />} cursor={{fill: '#1e293b', opacity: 0.4}} />
                                     <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                                         {data.history.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={index === data.history.length - 1 ? '#D4AF37' : '#334155'} />
@@ -124,7 +171,7 @@ export const DividendDashboard = () => {
                     <div>
                         <h3 className="text-sm font-bold text-white flex items-center gap-2">
                             <CalendarCheck size={16} className="text-emerald-500" />
-                            Provisões
+                            Provisões Futuras
                         </h3>
                     </div>
                     <span className="text-xs font-bold text-emerald-500 bg-emerald-900/20 px-2 py-0.5 rounded border border-emerald-900/50">

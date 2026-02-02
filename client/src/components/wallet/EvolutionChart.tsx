@@ -2,46 +2,60 @@
 import React, { useMemo } from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart3 } from 'lucide-react';
 
 export const EvolutionChart = () => {
     const { kpis, history } = useWallet();
 
     const chartData = useMemo(() => {
+        let mapped = [];
+        
         if (history && history.length > 0) {
-            const mapped = history.map(h => {
-                const dateObj = new Date(h.date);
-                const isValidDate = !isNaN(dateObj.getTime());
-                return {
-                    date: isValidDate ? dateObj.getTime() : 0, 
-                    dateLabel: isValidDate ? dateObj.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }) : 'N/A',
-                    value: Number(h.totalEquity) || 0
-                };
-            }).filter(item => item.date > 0).sort((a,b) => a.date - b.date);
+            mapped = history.map(h => {
+                // MANIPULAÇÃO DE DATA ROBUSTA (Sem conversão UTC->Local indesejada)
+                // O backend envia YYYY-MM-DD. O browser pode interpretar como UTC-3 e subtrair um dia.
+                // Solução: Split na string e criar data com hora fixa meio-dia.
+                const dateParts = typeof h.date === 'string' 
+                    ? h.date.split('T')[0].split('-') 
+                    : new Date(h.date).toISOString().split('T')[0].split('-');
+                
+                const year = parseInt(dateParts[0]);
+                const month = parseInt(dateParts[1]) - 1; // Mês 0-indexado
+                const day = parseInt(dateParts[2]);
+                
+                const dateObj = new Date(year, month, day, 12, 0, 0);
 
-            // Garante ao menos 2 pontos para renderizar area
-            if (mapped.length > 0) {
-               // Adiciona ponto atual se for mais recente que o último histórico
-               if (kpis.totalEquity > 0) {
-                   mapped.push({
-                        date: new Date().getTime(),
-                        dateLabel: 'Atual',
-                        value: kpis.totalEquity
-                   });
-               }
-               return mapped;
+                return {
+                    dateStr: `${day}/${month + 1}`, // Label pronto para exibição
+                    fullDate: dateObj.toLocaleDateString('pt-BR'),
+                    value: Number(h.totalEquity) || 0,
+                    // Timestamp apenas para ordenação
+                    timestamp: dateObj.getTime()
+                };
+            })
+            // Filtra dias sem valor (falhas residuais)
+            .filter(item => item.value > 0)
+            .sort((a,b) => a.timestamp - b.timestamp);
+        }
+
+        // Adiciona ponto "Hoje" se o último histórico não for hoje
+        if (kpis.totalEquity > 0) {
+            const today = new Date();
+            const lastPoint = mapped.length > 0 ? mapped[mapped.length - 1] : null;
+            
+            const isSameDay = lastPoint && lastPoint.fullDate === today.toLocaleDateString('pt-BR');
+
+            if (!isSameDay) {
+                mapped.push({
+                    dateStr: 'Hoje',
+                    fullDate: today.toLocaleDateString('pt-BR'),
+                    value: kpis.totalEquity,
+                    timestamp: today.getTime()
+                });
             }
         }
 
-        // Mock para Empty State
-        if (kpis.totalEquity > 0) {
-            const now = new Date();
-            return [
-                { date: now.setMonth(now.getMonth() - 1), dateLabel: 'Início', value: 0 },
-                { date: new Date().getTime(), dateLabel: 'Atual', value: kpis.totalEquity }
-            ];
-        }
-
-        return [];
+        return mapped;
     }, [history, kpis.totalEquity]);
 
     const formatYAxis = (val: number) => {
@@ -50,10 +64,17 @@ export const EvolutionChart = () => {
         return val.toString();
     };
 
-    if (kpis.totalEquity === 0) {
+    if (kpis.totalEquity === 0 || chartData.length === 0) {
         return (
-            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[380px] flex items-center justify-center">
-                <p className="text-slate-500 text-sm">Adicione ativos para ver a evolução patrimonial.</p>
+            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[380px] flex flex-col items-center justify-center text-center relative overflow-hidden group">
+                <div className="absolute inset-0 bg-blue-900/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="w-16 h-16 bg-slate-900 rounded-full flex items-center justify-center mb-4 border border-slate-800 shadow-xl">
+                    <BarChart3 className="text-slate-600" size={32} />
+                </div>
+                <h3 className="text-white font-bold mb-1">Evolução Patrimonial</h3>
+                <p className="text-slate-500 text-xs max-w-[200px]">
+                    Adicione ativos para visualizar a evolução do seu patrimônio.
+                </p>
             </div>
         );
     }
@@ -85,14 +106,11 @@ export const EvolutionChart = () => {
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                         
                         <XAxis 
-                            dataKey="date" 
-                            type="number"
-                            domain={['dataMin', 'dataMax']}
-                            tickFormatter={(unixTime) => new Date(unixTime).toLocaleDateString('pt-BR', { month: 'short' })}
+                            dataKey="dateStr" 
                             tick={{fill: '#64748b', fontSize: 10}} 
                             axisLine={false} 
                             tickLine={false}
-                            minTickGap={40}
+                            minTickGap={30}
                         />
                         
                         <YAxis 
@@ -105,11 +123,14 @@ export const EvolutionChart = () => {
                         />
                         
                         <Tooltip 
-                            contentStyle={{ backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px' }}
+                            contentStyle={{ backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px', zIndex: 100 }}
                             itemStyle={{ color: '#fff' }}
                             labelStyle={{ color: '#94a3b8', marginBottom: '5px' }}
-                            labelFormatter={(label) => new Date(label).toLocaleDateString('pt-BR')}
                             formatter={(value: number) => [new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value), 'Patrimônio']}
+                            labelFormatter={(label, payload) => {
+                                if (payload && payload.length > 0) return payload[0].payload.fullDate;
+                                return label;
+                            }}
                             cursor={{ stroke: '#3B82F6', strokeWidth: 1 }}
                         />
                         
@@ -120,6 +141,7 @@ export const EvolutionChart = () => {
                             strokeWidth={3} 
                             fill="url(#chartGradient)" 
                             activeDot={{ r: 5, fill: '#60A5FA', strokeWidth: 0 }}
+                            isAnimationActive={true}
                         />
                     </AreaChart>
                 </ResponsiveContainer>

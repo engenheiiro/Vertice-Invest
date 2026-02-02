@@ -11,7 +11,7 @@ import { CashFlowHistory } from '../components/wallet/CashFlowHistory';
 import { AllocationChart } from '../components/wallet/AllocationChart';
 import { SmartContributionModal } from '../components/wallet/SmartContributionModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText } from 'lucide-react';
+import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 // @ts-ignore
@@ -20,7 +20,8 @@ import { authService } from '../services/auth';
 
 export const Wallet = () => {
     const { user } = useAuth();
-    const { assets, kpis, resetWallet, isLoading } = useWallet();
+    // Consumimos isRefreshing do contexto agora
+    const { assets, kpis, resetWallet, isLoading, isRefreshing } = useWallet();
     const navigate = useNavigate();
     
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -79,7 +80,16 @@ export const Wallet = () => {
                 {/* Header Actions */}
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
                     <div>
-                        <h1 className="text-2xl font-bold text-white">Minha Carteira</h1>
+                        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+                            Minha Carteira
+                            {/* Indicador Sutil de Atualização */}
+                            {isRefreshing && (
+                                <div className="flex items-center gap-2 px-2 py-1 bg-blue-900/20 rounded-full border border-blue-900/50 animate-fade-in">
+                                    <Loader2 size={14} className="text-blue-400 animate-spin" />
+                                    <span className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Atualizando...</span>
+                                </div>
+                            )}
+                        </h1>
                         <p className="text-slate-400 text-sm">Gerencie seus ativos e acompanhe a evolução patrimonial.</p>
                     </div>
                     

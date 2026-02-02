@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { walletService } from '../services/wallet';
 import { useAuth } from './AuthContext';
@@ -19,7 +19,8 @@ export interface Asset {
     profitPercent: number;
     currency: 'BRL' | 'USD';
     name?: string;
-    sector?: string; 
+    sector?: string;
+    fixedIncomeRate?: number;
 }
 
 export interface WalletKPIs {
@@ -48,6 +49,7 @@ interface WalletContextType {
     targetReserve: number;
     usdRate: number;
     isLoading: boolean;
+    isRefreshing: boolean;
     isPrivacyMode: boolean; 
     togglePrivacyMode: () => void;
     refreshWallet: () => void;
@@ -60,7 +62,7 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const { user } = useAuth(); // Importante: Pegar o user para usar o ID na chave
+    const { user } = useAuth();
     const queryClient = useQueryClient();
     
     const [targetAllocation, setTargetAllocation] = useState<AllocationMap>({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10 });
@@ -80,12 +82,11 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     // --- QUERIES ---
-    // Single Source of Truth: Backend
     const walletQuery = useQuery({
         queryKey: ['wallet', user?.id],
         queryFn: walletService.getWallet,
         enabled: !!user?.id, 
-        staleTime: 1000 * 60 * 5,
+        staleTime: 1000 * 60 * 2,
     });
 
     const historyQuery = useQuery({
@@ -95,6 +96,16 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         staleTime: 1000 * 60 * 10,
     });
 
+    // --- FORCE REFRESH ON MOUNT ---
+    // Garante que, ao abrir o app, se o usuário tem saldo mas o histórico está vazio/inconsistente,
+    // forçamos um refetch. Isso resolve o problema de precisar "adicionar algo" para destravar.
+    useEffect(() => {
+        if (user?.id) {
+            queryClient.invalidateQueries({ queryKey: ['wallet', user.id] });
+            queryClient.invalidateQueries({ queryKey: ['walletHistory', user.id] });
+        }
+    }, [user?.id, queryClient]);
+
     // --- MUTATIONS ---
     const addAssetMutation = useMutation({
         mutationFn: walletService.addAsset,
@@ -102,6 +113,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['dividends'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboardResearch'] });
         }
     });
 
@@ -122,6 +134,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }
     });
 
+    // --- ACTIONS ---
     const addAsset = async (newAsset: any) => {
         await addAssetMutation.mutateAsync(newAsset);
     };
@@ -139,23 +152,45 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setTargetReserve(newReserveTarget);
     };
 
-    // Dados Expostos (SSOT)
+    // --- STATES ---
     const assets = walletQuery.data?.assets || [];
+    
     const kpis = walletQuery.data?.kpis || {
-        totalEquity: 0, totalInvested: 0, totalResult: 0, 
-        totalResultPercent: 0, dayVariation: 0, dayVariationPercent: 0, totalDividends: 0
+        totalEquity: 0, 
+        totalInvested: 0, 
+        totalResult: 0, 
+        totalResultPercent: 0, 
+        dayVariation: 0, 
+        dayVariationPercent: 0, 
+        totalDividends: 0
     };
+    
     const usdRate = walletQuery.data?.meta?.usdRate || 5.75;
     const history = historyQuery.data || [];
 
-    const isLoading = walletQuery.isLoading || historyQuery.isLoading || addAssetMutation.isPending || removeAssetMutation.isPending;
+    const isLoading = walletQuery.isLoading || historyQuery.isLoading;
+
+    const isRefreshing = (walletQuery.isFetching && !walletQuery.isLoading) || 
+                         (historyQuery.isFetching && !historyQuery.isLoading) ||
+                         addAssetMutation.isPending || 
+                         removeAssetMutation.isPending;
 
     return (
         <WalletContext.Provider value={{ 
-            assets, kpis, history, targetAllocation, targetReserve, usdRate,
-            isLoading, isPrivacyMode, togglePrivacyMode,
+            assets, 
+            kpis, 
+            history, 
+            targetAllocation, 
+            targetReserve, 
+            usdRate,
+            isLoading, 
+            isRefreshing,
+            isPrivacyMode, 
+            togglePrivacyMode,
             refreshWallet: () => queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] }),
-            addAsset, removeAsset, resetWallet,
+            addAsset, 
+            removeAsset, 
+            resetWallet,
             updateTargets
         }}>
             {children}
