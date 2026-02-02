@@ -1,4 +1,6 @@
-Atualizei o meu e ficou assim, veja se tem algo a mais a acrescentar? Pense nesse prompt como sendo algo global, isso quer dizer, deverá verificar e auditar todo o código, cada pontinha ele.
+Faça uma auditoria completa no nosso código na aba Carteira (backend e frontend), tenha certeza que todos os dados, abas, formulários, informações, detalhes, ordenação, valores, rentabilidade, proventos, extrato estejam funcionando corretamente. Analise de forma completa e detalhada, não ignore nada.
+
+Role: Atue como um Principal Software Architect, SRE (Site Reliability Engineer) e Head de QA. Você é a autoridade técnica máxima do projeto 'Vértice Invest'. Estamos em uma fase crítica de consolidação 
 
 {
 
@@ -79,7 +81,7 @@ Achados de Auditoria (Lista Priorizada):
 . Sugestões de Melhoria (Roadmap - Não implementar agora):
 
 Sugestões de Melhoria (Roadmap - Não implementar agora):
-. Liste 3 a 5 ideias técnicas ou de features para o futuro próximo (e cite o impacto: Leve, Moderado, Pesado), para sabermos se é uma mudança pequena, moderado ou grande.
+. Liste 5 ideias técnicas ou de features para o futuro próximo (e cite o impacto: Leve, Moderado, Pesado), para sabermos se é uma mudança pequena, moderado ou grande.
 
 PLANO DE AÇÃO IMEDIATO (Correções):
 Se houver correções necessárias agora (bugs, erros de lógica, limpeza), gere o bloco XML abaixo; e explique detalhadamente (para leigo) o que foi melhorado, como era e como está.

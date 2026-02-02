@@ -5,9 +5,6 @@ import AssetHistory from '../models/AssetHistory.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { externalMarketService } from './externalMarketService.js';
 
-// Não importa mais fundamentusService aqui para evitar conflitos e uso misto.
-// A fonte da verdade agora é o MongoDB populado pelo syncService.
-
 const CACHE_DURATION_MINUTES = 20; 
 
 const FALLBACK_MACRO = {
@@ -65,6 +62,7 @@ export const marketDataService = {
 
             cleanTickers.forEach(ticker => {
                 const asset = assetMap.get(ticker);
+                // Atualiza se estiver velho OU se o preço for zero (tentativa de corrigir dados falhos)
                 if (!asset || !asset.updatedAt || asset.updatedAt < threshold || asset.lastPrice === 0) {
                     toUpdate.push(ticker);
                 }
@@ -77,20 +75,29 @@ export const marketDataService = {
 
             if (!quotes || quotes.length === 0) return;
 
-            const operations = quotes.map(quote => ({
-                updateOne: {
-                    filter: { ticker: this.normalizeSymbol(quote.ticker) },
-                    update: {
-                        $set: {
-                            lastPrice: quote.price,
-                            updatedAt: now
+            const operations = quotes
+                .filter(quote => {
+                    // CIRCUIT BREAKER: Ignora preços zerados ou negativos vindo da API
+                    // Isso previne que o patrimônio do usuário desabe para 0 se o Yahoo falhar
+                    return quote.price && quote.price > 0;
+                })
+                .map(quote => ({
+                    updateOne: {
+                        filter: { ticker: this.normalizeSymbol(quote.ticker) },
+                        update: {
+                            $set: {
+                                lastPrice: quote.price,
+                                updatedAt: now
+                            }
                         }
                     }
-                }
-            }));
+                }));
 
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
+                logger.info(`✅ [SmartSync] ${operations.length} cotações atualizadas.`);
+            } else {
+                logger.warn(`⚠️ [SmartSync] API retornou dados, mas todos eram inválidos (preço 0). Mantendo cache anterior.`);
             }
 
         } catch (error) {
@@ -147,8 +154,9 @@ export const marketDataService = {
                 }
             }
 
+            // Tenta match exato
             const dayData = historyEntry.history.find(h => h.date === dateStr);
-            if (dayData) {
+            if (dayData && dayData.close > 0) {
                 return {
                     price: dayData.close,
                     adjustedPrice: dayData.adjClose,
@@ -156,12 +164,14 @@ export const marketDataService = {
                 };
             }
 
+            // Fallback: Busca o dia útil ANTERIOR mais próximo (ex: se pediu Domingo, pega Sexta)
             const targetDate = new Date(dateStr);
-            const closest = historyEntry.history
-                .filter(h => new Date(h.date) <= targetDate)
-                .pop();
+            // Ordena decrescente para pegar o mais recente anterior
+            const sortedHistory = [...historyEntry.history].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            
+            const closest = sortedHistory.find(h => new Date(h.date) <= targetDate);
 
-            if (closest) {
+            if (closest && closest.close > 0) {
                 return {
                     price: closest.close,
                     adjustedPrice: closest.adjClose,
@@ -202,8 +212,7 @@ export const marketDataService = {
         }
     },
 
-    // --- MUDANÇA CRÍTICA: LÊ APENAS DO BANCO ---
-    // Isso garante que a UI use os dados ricos populados pelo syncService
+    // Lê dados do Banco (UI Only)
     async getMarketData(assetClass) {
         const isBrasil = assetClass === 'STOCK' || assetClass === 'FII' || assetClass === 'BRASIL_10';
         const results = [];
@@ -218,7 +227,6 @@ export const marketDataService = {
             });
 
             for (const asset of dbAssets) {
-                // Filtro de liquidez básico (já salvo no banco pelo sync)
                 if ((asset.liquidity || 0) < 200000) continue; 
 
                 results.push({
@@ -228,8 +236,6 @@ export const marketDataService = {
                     sector: asset.sector, 
                     price: asset.lastPrice || 0,
                     dbFlags: { isBlacklisted: asset.isBlacklisted, isTier1: asset.isTier1 }, 
-                    
-                    // Mapeia todos os campos salvos no MarketAssetSchema para o objeto de metrics esperado
                     metrics: {
                         ticker: asset.ticker,
                         price: asset.lastPrice,
@@ -237,8 +243,6 @@ export const marketDataService = {
                         pvp: asset.p_vp || 0,
                         marketCap: asset.marketCap || 0,
                         avgLiquidity: asset.liquidity || 0,
-                        
-                        // Stocks
                         pl: asset.pl || 0,
                         roe: asset.roe || 0,
                         roic: asset.roic || 0,
@@ -247,8 +251,6 @@ export const marketDataService = {
                         revenueGrowth: asset.revenueGrowth || 0,
                         debtToEquity: asset.debtToEquity || 0,
                         netDebt: asset.netDebt || 0,
-
-                        // FIIs
                         vacancy: asset.vacancy || 0,
                         capRate: asset.capRate || 0,
                         qtdImoveis: asset.qtdImoveis || 0
