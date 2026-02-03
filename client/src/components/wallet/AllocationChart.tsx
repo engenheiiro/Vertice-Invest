@@ -108,7 +108,7 @@ export const AllocationChart = () => {
         new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(val);
 
     return (
-        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[380px] flex flex-col relative">
+        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative">
             
             <div className="flex justify-between items-start mb-4">
                 <div>

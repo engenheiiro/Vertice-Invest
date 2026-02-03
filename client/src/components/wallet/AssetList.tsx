@@ -26,7 +26,7 @@ export const AssetList = () => {
     const formatPercent = (val: number | null | undefined) => {
         const v = val || 0;
         if (!isFinite(v) || isNaN(v)) return '0.00%';
-        return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+        return `${Math.abs(v).toFixed(2)}%`;
     };
 
     const toggleGroup = (type: string) => {
@@ -112,7 +112,7 @@ export const AssetList = () => {
                                                         <div className="flex flex-col items-end">
                                                             <span className="text-slate-500 font-bold uppercase text-[9px]">Resultado</span>
                                                             <span className={`font-bold ${profitGroup >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                                                {formatPercent(profitPercentGroup)}
+                                                                {profitGroup >= 0 ? '+' : '-'}{formatPercent(profitPercentGroup)}
                                                             </span>
                                                         </div>
 
@@ -131,7 +131,20 @@ export const AssetList = () => {
                                         </tr>
 
                                         {!isCollapsed && groupItems.map((asset) => {
-                                            const profit = asset.profit || 0;
+                                            // Lógica de Rentabilidade BLINDADA no Frontend
+                                            // Ignoramos percentuais prontos do backend se houver suspeita de erro.
+                                            // Calculamos direto: (Preço Atual - Preço Médio) / Preço Médio
+                                            const unitProfit = asset.currentPrice - asset.averagePrice;
+                                            
+                                            let profitPercent = 0;
+                                            if (asset.averagePrice > 0) {
+                                                profitPercent = (unitProfit / asset.averagePrice) * 100;
+                                            }
+                                            
+                                            // Lucro Total Nominal
+                                            const totalProfit = unitProfit * asset.quantity;
+                                            const isProfitable = unitProfit >= 0;
+
                                             return (
                                                 <tr key={asset.id} className="hover:bg-slate-800/30 transition-colors border-b border-slate-800/30 last:border-0 group animate-fade-in">
                                                     <td className="p-4 pl-8">
@@ -163,13 +176,13 @@ export const AssetList = () => {
                                                         </p>
                                                     </td>
                                                     <td className="p-4 text-right">
-                                                        <div className={`flex flex-col items-end ${profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                        <div className={`flex flex-col items-end ${isProfitable ? 'text-emerald-500' : 'text-red-500'}`}>
                                                             <span className="font-bold flex items-center gap-1">
-                                                                {profit >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                                                                {formatPercent(asset.profitPercent)}
+                                                                {isProfitable ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                                                                {isProfitable ? '+' : '-'}{formatPercent(profitPercent)}
                                                             </span>
                                                             <span className="text-[10px] opacity-80">
-                                                                {profit >= 0 ? '+' : ''}{formatCurrency(profit, 'BRL')}
+                                                                {isProfitable ? '+' : ''}{formatCurrency(totalProfit, 'BRL')}
                                                             </span>
                                                         </div>
                                                     </td>

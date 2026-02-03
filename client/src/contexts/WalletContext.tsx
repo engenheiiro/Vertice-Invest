@@ -21,6 +21,7 @@ export interface Asset {
     name?: string;
     sector?: string;
     fixedIncomeRate?: number;
+    dayChangePct?: number; // Adicionado para suporte explícito
 }
 
 export interface WalletKPIs {
@@ -36,6 +37,7 @@ export interface WalletKPIs {
 export interface HistoryPoint {
     date: string;
     totalEquity: number;
+    totalInvested: number;
     profit: number;
 }
 
@@ -97,8 +99,6 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     });
 
     // --- FORCE REFRESH ON MOUNT ---
-    // Garante que, ao abrir o app, se o usuário tem saldo mas o histórico está vazio/inconsistente,
-    // forçamos um refetch. Isso resolve o problema de precisar "adicionar algo" para destravar.
     useEffect(() => {
         if (user?.id) {
             queryClient.invalidateQueries({ queryKey: ['wallet', user.id] });
@@ -110,9 +110,11 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const addAssetMutation = useMutation({
         mutationFn: walletService.addAsset,
         onSuccess: () => {
+            // Invalida carteira, histórico E EXTRATO (cashFlow)
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['dividends'] });
+            queryClient.invalidateQueries({ queryKey: ['cashFlow'] }); // CRÍTICO: Atualiza Extrato
             queryClient.invalidateQueries({ queryKey: ['dashboardResearch'] });
         }
     });
@@ -122,6 +124,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
+            queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
         }
     });
 
@@ -131,6 +134,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['dividends'] });
+            queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
         }
     });
 
