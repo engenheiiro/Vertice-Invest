@@ -2,6 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { walletService } from '../../services/wallet';
 import { ArrowUpCircle, ArrowDownCircle, Calendar, Loader2, FileText } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Transaction {
     _id: string;
@@ -11,48 +13,53 @@ interface Transaction {
     price: number;
     totalValue: number;
     date: string;
-    isCashOp: boolean; // Flag helper vinda do backend
+    isCashOp: boolean;
 }
 
 type FilterType = 'ALL' | 'CASH' | 'TRADE';
 
 export const CashFlowHistory = () => {
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [hasMore, setHasMore] = useState(false);
+    const { user } = useAuth();
     const [page, setPage] = useState(1);
     const [activeFilter, setActiveFilter] = useState<FilterType>('ALL');
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-    const loadData = async (p = 1, filter = activeFilter, reset = false) => {
-        if (p === 1) setIsLoading(true);
-        try {
-            // Agora usa o serviço oficial que já suporta filterType no backend atualizado
-            const data = await walletService.getCashFlow(p, 15, filter);
-            
-            if (reset) {
+    // React Query para buscar transações
+    // Dependências: page, activeFilter e user.id
+    // A chave ['cashFlow'] é invalidada globalmente quando uma transação é adicionada
+    const { data, isLoading, isFetching } = useQuery({
+        queryKey: ['cashFlow', user?.id, page, activeFilter],
+        queryFn: () => walletService.getCashFlow(page, 15, activeFilter),
+        staleTime: 1000 * 60 * 2, // 2 minutos
+        enabled: !!user?.id
+    });
+
+    // Atualiza lista acumulativa quando novos dados chegam
+    useEffect(() => {
+        if (data?.transactions) {
+            if (page === 1) {
                 setTransactions(data.transactions);
             } else {
-                setTransactions(prev => [...prev, ...data.transactions]);
+                setTransactions(prev => {
+                    // Evita duplicatas ao concatenar (segurança extra)
+                    const newIds = new Set(data.transactions.map((t: Transaction) => t._id));
+                    return [...prev.filter(t => !newIds.has(t._id)), ...data.transactions];
+                });
             }
-            setHasMore(data.pagination.hasMore);
-            setPage(p);
-        } catch (e) {
-            console.error("Erro ao carregar extrato", e);
-        } finally {
-            setIsLoading(false);
         }
-    };
-
-    useEffect(() => {
-        loadData(1, activeFilter, true);
-    }, [activeFilter]);
+    }, [data, page]);
 
     const handleFilterChange = (newFilter: FilterType) => {
         if (newFilter === activeFilter) return;
         setActiveFilter(newFilter);
         setPage(1);
-        setTransactions([]);
-        // O useEffect vai disparar
+        setTransactions([]); // Limpa visualmente para dar feedback de troca
+    };
+
+    const loadMore = () => {
+        if (data?.pagination?.hasMore) {
+            setPage(prev => prev + 1);
+        }
     };
 
     const formatCurrency = (val: number) => 
@@ -94,18 +101,13 @@ export const CashFlowHistory = () => {
                             <FileText className="text-slate-600" size={24} />
                         </div>
                         <p className="text-slate-400 text-sm font-medium">Nenhum registro encontrado.</p>
-                        <p className="text-slate-600 text-xs mt-1">
-                            Suas movimentações aparecerão aqui.
-                        </p>
                     </div>
                 ) : (
                     <div className="divide-y divide-slate-800/50">
                         {transactions.map((tx) => {
                             const isBuy = tx.type === 'BUY';
-                            // Garante detecção visual mesmo se o backend falhar na flag
                             const isCash = tx.isCashOp || tx.ticker === 'RESERVA'; 
                             
-                            // Definição de Labels
                             let title = '';
                             let subtitle = '';
                             
@@ -159,14 +161,14 @@ export const CashFlowHistory = () => {
                     </div>
                 )}
 
-                {hasMore && (
+                {data?.pagination?.hasMore && (
                     <div className="p-4 border-t border-slate-800 bg-[#0B101A] text-center">
                         <button 
-                            onClick={() => loadData(page + 1)}
-                            disabled={isLoading}
+                            onClick={loadMore}
+                            disabled={isFetching}
                             className="text-xs font-bold text-blue-500 hover:text-blue-400 transition-colors flex items-center justify-center gap-2 w-full"
                         >
-                            {isLoading ? <Loader2 size={12} className="animate-spin" /> : 'Carregar Mais Histórico'}
+                            {isFetching ? <Loader2 size={12} className="animate-spin" /> : 'Carregar Mais Histórico'}
                         </button>
                     </div>
                 )}
