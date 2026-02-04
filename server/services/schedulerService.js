@@ -5,6 +5,7 @@ import { aiResearchService } from './aiResearchService.js';
 import { macroDataService } from './macroDataService.js';
 import { marketDataService } from './marketDataService.js';
 import { syncService } from './syncService.js';
+import { holidayService } from './holidayService.js'; // Nova Importação
 import MarketAsset from '../models/MarketAsset.js';
 import User from '../models/User.js';
 import UserAsset from '../models/UserAsset.js';
@@ -87,6 +88,9 @@ export const initScheduler = () => {
                 }
 
                 if (totalEquity > 0) {
+                    // Nota: O quotaPrice será calculado retroativamente pelo rebuildUserHistory na próxima requisição,
+                    // ou podemos implementar aqui se quisermos consistência imediata. 
+                    // Como o rebuildUserHistory é auto-curativo, vamos confiar nele para alinhar os dados históricos.
                     await WalletSnapshot.create({
                         user: user._id,
                         date: today,
@@ -100,6 +104,16 @@ export const initScheduler = () => {
             logger.info(`📸 Snapshots gerados para ${users.length} usuários.`);
         } catch (error) {
             logger.error(`Erro Snapshot: ${error.message}`);
+        }
+    });
+
+    // 5. Sync Feriados (Anual - 1 de Janeiro 06:00)
+    cron.schedule('0 6 1 1 *', async () => {
+        logger.info("📅 Rotina: Sync Feriados Anual");
+        try {
+            await holidayService.sync();
+        } catch (e) {
+            logger.error(`Erro Sync Feriados: ${e.message}`);
         }
     });
 };

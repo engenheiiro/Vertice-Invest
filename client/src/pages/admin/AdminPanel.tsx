@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { Header } from '../../components/dashboard/Header';
 import { researchService, ResearchReport } from '../../services/research';
 import { marketService } from '../../services/market';
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles, Database, Minus, HardDrive, Terminal } from 'lucide-react';
+import { authService } from '../../services/auth'; // Importado para chamada direta da API de Splits
+import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles, Database, Minus, HardDrive, Terminal, Scissors, Tag } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -31,6 +32,10 @@ export const AdminPanel = () => {
     const [cacheSearchTicker, setCacheSearchTicker] = useState('');
     const [cacheData, setCacheData] = useState<any>(null);
     const [isSearchingCache, setIsSearchingCache] = useState(false);
+
+    // Estados para ferramenta de Split
+    const [splitTicker, setSplitTicker] = useState('');
+    const [isFixingSplit, setIsFixingSplit] = useState(false);
 
     const loadHistory = async () => {
         try {
@@ -139,6 +144,34 @@ export const AdminPanel = () => {
         }
     };
 
+    const handleFixSplit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!splitTicker) return;
+        
+        if (!confirm(`ATENÇÃO: Isso alterará o histórico de transações de TODOS os usuários que possuem ${splitTicker.toUpperCase()}. Confirma?`)) return;
+
+        setIsFixingSplit(true);
+        setStatusMsg(null);
+        try {
+            const response = await authService.api('/api/wallet/fix-splits', {
+                method: 'POST',
+                body: JSON.stringify({ ticker: splitTicker, type: 'STOCK' }) // Default STOCK, API detecta se é FII pelo ticker se necessário
+            });
+            const data = await response.json();
+            
+            if (response.ok) {
+                setStatusMsg({ type: 'success', text: `${data.message} (${data.details?.updates || 0} afetados)` });
+            } else {
+                throw new Error(data.message);
+            }
+        } catch (e: any) {
+            setStatusMsg({ type: 'error', text: e.message || "Erro ao aplicar split." });
+        } finally {
+            setIsFixingSplit(false);
+            setTimeout(() => setStatusMsg(null), 5000);
+        }
+    };
+
     const openAudit = async (reportId: string) => {
         try {
             const fullReport = await researchService.getReportDetails(reportId);
@@ -196,7 +229,7 @@ export const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* === ÁREA SUPERIOR === */}
+                {/* === ÁREA SUPERIOR: MACRO & CONTROLES === */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
                     <div className="lg:col-span-2 bg-[#0B101A] border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
                         <div className="flex items-center justify-between mb-4">
@@ -205,7 +238,6 @@ export const AdminPanel = () => {
                                     <Globe size={14} className="text-blue-500" />
                                     Ambiente Macroeconômico
                                 </h3>
-                                {/* TIMESTAMP DE ATUALIZAÇÃO */}
                                 {macroData?.lastUpdated && (
                                     <span className="text-[10px] text-slate-500 font-mono mt-1 ml-6 flex items-center gap-1">
                                         <Clock size={10} />
@@ -273,69 +305,88 @@ export const AdminPanel = () => {
                     </div>
                 </div>
 
-                <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 mb-10 shadow-lg">
-                    <div className="flex items-center gap-2 mb-4">
-                        <HardDrive size={18} className="text-emerald-500" />
-                        <h3 className="text-sm font-bold text-white uppercase tracking-wider">Inspector de Cache</h3>
-                        <div className="h-px bg-slate-800 flex-1 ml-4"></div>
+                {/* === CACHE & SPLIT TOOLS === */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+                    
+                    {/* CACHE INSPECTOR */}
+                    <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
+                        <div className="flex items-center gap-2 mb-4">
+                            <HardDrive size={18} className="text-emerald-500" />
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Inspector de Cache</h3>
+                        </div>
+                        <div className="flex flex-col md:flex-row gap-6">
+                            <div className="w-full flex flex-col justify-center">
+                                <form onSubmit={handleCacheSearch} className="flex gap-0 relative">
+                                    <div className="relative flex-1">
+                                        <input placeholder="Ex: PETR4..." value={cacheSearchTicker} onChange={(e) => setCacheSearchTicker(e.target.value.toUpperCase())} className="w-full bg-[#0B101A] border border-slate-700 border-r-0 rounded-l-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500/50 font-mono uppercase" />
+                                    </div>
+                                    <button type="submit" disabled={isSearchingCache} className="px-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 border-l-0 rounded-r-xl text-slate-300 hover:text-white transition-colors disabled:opacity-50">
+                                        {isSearchingCache ? <RefreshCw size={18} className="animate-spin"/> : <Search size={18} />}
+                                    </button>
+                                </form>
+                                {cacheData && (
+                                    <div className="mt-4 p-4 bg-[#0F131E] rounded-xl border border-slate-800 space-y-3">
+                                        <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                                            <span className="font-black text-lg text-white">{cacheData.ticker}</span>
+                                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${cacheData.status === 'CACHED' || cacheData.status === 'LIVE_ONLY' ? 'bg-emerald-900/20 text-emerald-500' : 'bg-red-900/20 text-red-500'}`}>
+                                                {cacheData.status}
+                                            </span>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[9px] text-slate-500 font-bold uppercase mb-1">Preço Atual (Live)</p>
+                                                <p className="text-sm font-mono text-white font-bold flex items-center gap-1">
+                                                    R$ {cacheData.currentPrice?.toFixed(2) || '0.00'}
+                                                    <Tag size={10} className="text-blue-500" />
+                                                </p>
+                                                <p className="text-[9px] text-slate-600 mt-0.5">
+                                                    Sync: {cacheData.lastSync ? new Date(cacheData.lastSync).toLocaleString() : '-'}
+                                                </p>
+                                            </div>
+                                            
+                                            <div>
+                                                <p className="text-[9px] text-slate-500 font-bold uppercase mb-1">Histórico (Cache)</p>
+                                                <p className="text-sm font-mono text-slate-300 flex items-center gap-1">
+                                                    {cacheData.dataPoints} pontos
+                                                    <History size={10} className="text-purple-500" />
+                                                </p>
+                                                <p className="text-[9px] text-slate-600 mt-0.5">
+                                                    Update: {cacheData.historyLastUpdated ? new Date(cacheData.historyLastUpdated).toLocaleString() : '-'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
-                    <div className="flex flex-col md:flex-row gap-6">
-                        <div className="w-full md:w-1/3 flex flex-col justify-center">
-                            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-                                Consulte o estado do cache de dados históricos e cotações.
-                            </p>
-                            <form onSubmit={handleCacheSearch} className="flex gap-0 relative">
-                                <div className="relative flex-1">
-                                    <input placeholder="Ex: PETR4..." value={cacheSearchTicker} onChange={(e) => setCacheSearchTicker(e.target.value.toUpperCase())} className="w-full bg-[#0B101A] border border-slate-700 border-r-0 rounded-l-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500/50 font-mono uppercase" />
-                                </div>
-                                <button type="submit" disabled={isSearchingCache} className="px-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 border-l-0 rounded-r-xl text-slate-300 hover:text-white transition-colors disabled:opacity-50">
-                                    {isSearchingCache ? <RefreshCw size={18} className="animate-spin"/> : <Search size={18} />}
-                                </button>
-                            </form>
+
+                    {/* SPLIT FIXER */}
+                    <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Scissors size={18} className="text-yellow-500" />
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Reparar Splits (Desdobramentos)</h3>
                         </div>
-                        <div className="w-full md:w-2/3 bg-[#0B101A] border border-slate-800 rounded-xl min-h-[140px] relative overflow-hidden flex items-center justify-center">
-                            {!cacheData ? (
-                                <div className="text-center opacity-40">
-                                    <Terminal size={40} className="mx-auto mb-2 text-slate-600" />
-                                    <p className="text-xs font-mono text-slate-500">Aguardando comando...</p>
-                                </div>
-                            ) : cacheData.status === 'NOT_CACHED' ? (
-                                <div className="text-center">
-                                    <div className="w-12 h-12 bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-3 border border-red-900/40">
-                                        <AlertCircle size={24} className="text-red-500" />
-                                    </div>
-                                    <h4 className="text-white font-bold mb-1">Cache Miss</h4>
-                                    <p className="text-xs text-slate-400">O ativo <strong className="text-red-400">{cacheData.ticker}</strong> não está no banco.</p>
-                                </div>
-                            ) : (
-                                <div className="w-full h-full p-6">
-                                    <div className="flex justify-between items-center border-b border-slate-800 pb-3 mb-3">
-                                        <div className="flex items-center gap-3">
-                                            <div className="text-2xl font-black text-white tracking-tighter">{cacheData.ticker}</div>
-                                            <span className="px-2 py-0.5 rounded bg-emerald-900/30 text-emerald-400 border border-emerald-900/50 text-[10px] font-bold uppercase">Cached</span>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-[10px] text-slate-500 uppercase font-bold">Data Points</p>
-                                            <p className="text-lg font-mono text-white">{cacheData.dataPoints}</p>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Range de Dados</p>
-                                            <p className="text-xs text-slate-300 font-mono">
-                                                {new Date(cacheData.firstDate).toLocaleDateString()} {'->'} {new Date(cacheData.lastDate).toLocaleDateString()}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Última Sync</p>
-                                            <p className="text-xs text-slate-300 font-mono">
-                                                {new Date(cacheData.lastUpdated).toLocaleString()}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        <p className="text-[10px] text-slate-400 mb-4 leading-relaxed">
+                            Corrige histórico de usuários caso um ativo tenha sofrido split (ex: 1:10) e a carteira esteja distorcida. Busca eventos no Yahoo e aplica retroativamente.
+                        </p>
+                        <form onSubmit={handleFixSplit} className="flex gap-2">
+                            <input 
+                                placeholder="Ticker (Ex: MGLU3)" 
+                                value={splitTicker} 
+                                onChange={(e) => setSplitTicker(e.target.value.toUpperCase())} 
+                                className="flex-1 bg-[#0B101A] border border-slate-700 rounded-xl px-4 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-yellow-500/50 font-mono uppercase"
+                            />
+                            <button 
+                                type="submit" 
+                                disabled={isFixingSplit || !splitTicker} 
+                                className="px-4 py-2 bg-yellow-600/20 text-yellow-500 hover:bg-yellow-600/30 hover:text-white border border-yellow-600/30 rounded-xl font-bold text-xs transition-colors flex items-center gap-2 disabled:opacity-50"
+                            >
+                                {isFixingSplit ? <RefreshCw size={14} className="animate-spin" /> : <Zap size={14} />}
+                                Corrigir
+                            </button>
+                        </form>
                     </div>
                 </div>
 

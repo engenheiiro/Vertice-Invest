@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { X, Shield, Activity, Target, Zap, TrendingUp, AlertTriangle, AlertOctagon, ThumbsUp, ThumbsDown, BarChart2, DollarSign, Database } from 'lucide-react';
+import { X, Shield, Activity, Target, Zap, TrendingUp, AlertTriangle, AlertOctagon, ThumbsUp, ThumbsDown, BarChart2, DollarSign, Database, ArrowUpCircle } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 
 interface AssetDetailModalProps {
@@ -39,6 +39,14 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
     const formatNumber = (val: number | undefined | null) => {
         if (val === undefined || val === null) return '-';
         return val.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+    };
+
+    // Lógica de cores do Yield (Visualização 3.0)
+    // Verde > 6%, Amarelo > 0%, Cinza = 0%
+    const getYieldColor = (dy: number) => {
+        if (!dy || dy <= 0) return 'text-slate-500';
+        if (dy >= 6) return 'text-emerald-400';
+        return 'text-yellow-400';
     };
 
     const getMetricStatus = (key: string, value: number | null | undefined): MetricStatus => {
@@ -85,7 +93,6 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                 </div>
             );
         } else {
-            // AÇÕES BR e US
             return (
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                     <DetailRow label="P/L" value={formatNumber(m.pl)} status='neutral' />
@@ -103,7 +110,6 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
 
     const renderFinancialData = () => {
         if (type !== 'STOCK' && type !== 'STOCK_US') return null;
-        
         return (
             <div className="mb-8 bg-[#0B101A] p-4 rounded-xl border border-slate-800/50">
                 <div className="flex items-center gap-2 mb-5 pb-2 border-b border-slate-800">
@@ -124,6 +130,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
 
     const hasBullThesis = asset.bullThesis && asset.bullThesis.length > 0;
     const hasBearThesis = asset.bearThesis && asset.bearThesis.length > 0;
+    const upside = asset.currentPrice > 0 ? ((asset.targetPrice / asset.currentPrice) - 1) * 100 : 0;
 
     return createPortal(
         <div className="relative z-[100]" role="dialog" aria-modal="true">
@@ -163,19 +170,37 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                 <ScoreBar label="Segurança" value={s.risk} color="bg-purple-500" icon={<Shield size={14} />} />
                             </div>
 
+                            {/* VALUATION SIDEBAR REORGANIZADA (Preço -> Teto -> Upside -> Yield) */}
                             <div className="mt-6 pt-6 border-t border-slate-800">
-                                <p className="text-[10px] text-slate-500 uppercase font-bold mb-3 flex items-center gap-1"><Target size={12}/> Preço Justo (Estimado)</p>
+                                <p className="text-[10px] text-slate-500 uppercase font-bold mb-3 flex items-center gap-1"><Target size={12}/> Valuation (Estimado)</p>
                                 <div className="space-y-3">
+                                    
+                                    {/* 1. Preço Atual */}
                                     <div className="flex justify-between items-center">
-                                        <span className="text-xs text-slate-400">Atual</span>
+                                        <span className="text-xs text-slate-400">Preço Atual</span>
                                         <span className="text-sm font-mono text-white font-bold">{formatCurrency(asset.currentPrice, type === 'CRYPTO' || type === 'STOCK_US' ? 'USD' : 'BRL')}</span>
                                     </div>
+
+                                    {/* 2. Preço Teto */}
                                     <div className="flex justify-between items-center">
-                                        <span className="text-xs text-slate-400">Teto (Graham/Bazin)</span>
-                                        <span className="text-sm font-mono text-emerald-400 font-bold">{formatCurrency(asset.targetPrice, type === 'CRYPTO' || type === 'STOCK_US' ? 'USD' : 'BRL')}</span>
+                                        <span className="text-xs text-slate-400">Preço Teto</span>
+                                        <span className="text-sm font-mono text-blue-400 font-bold">{formatCurrency(asset.targetPrice, type === 'CRYPTO' || type === 'STOCK_US' ? 'USD' : 'BRL')}</span>
                                     </div>
-                                    <div className={`text-right text-xs font-bold ${((asset.targetPrice / asset.currentPrice) - 1) > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                        Upside: {asset.currentPrice > 0 ? (((asset.targetPrice / asset.currentPrice) - 1) * 100).toFixed(1) : '-'}%
+
+                                    {/* 3. Upside */}
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs text-slate-400">Upside Potencial</span>
+                                        <span className={`text-xs font-bold font-mono px-1.5 py-0.5 rounded ${upside > 0 ? 'bg-emerald-900/20 text-emerald-400' : 'bg-red-900/20 text-red-400'}`}>
+                                            {upside > 0 ? '+' : ''}{upside.toFixed(1)}%
+                                        </span>
+                                    </div>
+
+                                    {/* 4. Dividend Yield (Dynamic Colors) */}
+                                    <div className="flex justify-between items-center pt-2 border-t border-slate-800/50">
+                                        <span className="text-xs text-slate-400 font-bold flex items-center gap-1"><DollarSign size={10}/> Yield (12m)</span>
+                                        <span className={`text-sm font-mono font-black ${getYieldColor(asset.metrics.dy)}`}>
+                                            {asset.metrics.dy ? asset.metrics.dy.toFixed(1) : 0}%
+                                        </span>
                                     </div>
                                 </div>
                             </div>

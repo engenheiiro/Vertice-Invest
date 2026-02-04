@@ -11,7 +11,8 @@ import {
     deleteTransaction,
     getWalletPerformance, 
     getWalletDividends,
-    getCashFlow // Nova Importação
+    getCashFlow,
+    runCorporateAction // Nova Importação
 } from '../controllers/walletController.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 
@@ -34,7 +35,10 @@ router.delete('/transactions/:id', deleteTransaction);
 router.get('/performance', getWalletPerformance);
 router.get('/dividends', getWalletDividends);
 
-// Nova Rota: Extrato de Conta Corrente (Cash Flow)
+// Extrato de Conta Corrente (Cash Flow)
 router.get('/cashflow', getCashFlow);
+
+// Nova Rota: Correção de Splits (Admin / Manutenção)
+router.post('/fix-splits', runCorporateAction);
 
 export default router;

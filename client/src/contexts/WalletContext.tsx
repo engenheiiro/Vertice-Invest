@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { walletService } from '../services/wallet';
 import { useAuth } from './AuthContext';
@@ -21,7 +21,7 @@ export interface Asset {
     name?: string;
     sector?: string;
     fixedIncomeRate?: number;
-    dayChangePct?: number; // Adicionado para suporte explícito
+    dayChangePct?: number; 
 }
 
 export interface WalletKPIs {
@@ -32,6 +32,8 @@ export interface WalletKPIs {
     dayVariation: number;
     dayVariationPercent: number;
     totalDividends: number;
+    projectedDividends: number;
+    weightedRentability: number; // TWRR Real (Novo)
 }
 
 export interface HistoryPoint {
@@ -110,11 +112,10 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const addAssetMutation = useMutation({
         mutationFn: walletService.addAsset,
         onSuccess: () => {
-            // Invalida carteira, histórico E EXTRATO (cashFlow)
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['dividends'] });
-            queryClient.invalidateQueries({ queryKey: ['cashFlow'] }); // CRÍTICO: Atualiza Extrato
+            queryClient.invalidateQueries({ queryKey: ['cashFlow'] }); 
             queryClient.invalidateQueries({ queryKey: ['dashboardResearch'] });
         }
     });
@@ -156,18 +157,51 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setTargetReserve(newReserveTarget);
     };
 
-    // --- STATES ---
+    // --- STATES & MEMOIZED CALCULATIONS ---
     const assets = walletQuery.data?.assets || [];
+    const serverKpis = walletQuery.data?.kpis;
     
-    const kpis = walletQuery.data?.kpis || {
-        totalEquity: 0, 
-        totalInvested: 0, 
-        totalResult: 0, 
-        totalResultPercent: 0, 
-        dayVariation: 0, 
-        dayVariationPercent: 0, 
-        totalDividends: 0
-    };
+    // KPIs híbridos: Valores em tempo real (preço) + Valores históricos (TWRR/Dividendos) do servidor
+    const kpis = useMemo(() => {
+        if (assets.length === 0) {
+            return {
+                totalEquity: 0, totalInvested: 0, totalResult: 0, totalResultPercent: 0,
+                dayVariation: 0, dayVariationPercent: 0, 
+                totalDividends: serverKpis?.totalDividends || 0,
+                projectedDividends: serverKpis?.projectedDividends || 0,
+                weightedRentability: 0
+            };
+        }
+
+        let equity = 0;
+        let invested = 0;
+        let dayVar = 0;
+
+        assets.forEach((asset: Asset) => {
+            equity += asset.totalValue;
+            invested += asset.totalCost;
+            
+            const changePct = asset.dayChangePct || 0;
+            const changeValue = asset.totalValue * (changePct / 100);
+            dayVar += changeValue;
+        });
+
+        const result = equity - invested;
+        const resultPercent = invested > 0 ? (result / invested) * 100 : 0;
+        const dayVarPercent = equity > 0 ? (dayVar / equity) * 100 : 0;
+
+        return {
+            totalEquity: equity,
+            totalInvested: invested,
+            totalResult: result,
+            totalResultPercent: resultPercent, // ROI Simples (Variação)
+            dayVariation: dayVar,
+            dayVariationPercent: dayVarPercent,
+            totalDividends: serverKpis?.totalDividends || 0,
+            projectedDividends: serverKpis?.projectedDividends || 0,
+            weightedRentability: serverKpis?.weightedRentability || resultPercent // TWRR Real (Prioriza Server)
+        };
+    }, [assets, serverKpis]);
     
     const usdRate = walletQuery.data?.meta?.usdRate || 5.75;
     const history = historyQuery.data || [];
@@ -194,7 +228,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             refreshWallet: () => queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] }),
             addAsset, 
             removeAsset, 
-            resetWallet,
+            resetWallet, 
             updateTargets
         }}>
             {children}

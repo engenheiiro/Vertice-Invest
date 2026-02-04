@@ -19,6 +19,7 @@ const MarketAssetSchema = new mongoose.Schema({
   
   // --- Dados Financeiros Persistidos (Cache Avançado) ---
   lastPrice: { type: Number, default: 0 },
+  change: { type: Number, default: 0 }, // <--- CAMPO FALTANTE ADICIONADO
   marketCap: { type: Number, default: 0 },
   liquidity: { type: Number, default: 0 }, // Liq. Diária
   
@@ -36,8 +37,8 @@ const MarketAssetSchema = new mongoose.Schema({
   vacancy: { type: Number, default: 0 },
   p_vp: { type: Number, default: 0 },
   dy: { type: Number, default: 0 },
-  capRate: { type: Number, default: 0 }, // Novo
-  qtdImoveis: { type: Number, default: 0 }, // Novo
+  capRate: { type: Number, default: 0 },
+  qtdImoveis: { type: Number, default: 0 },
   
   isActive: { type: Boolean, default: true },
   lastAnalysisDate: { type: Date },

@@ -12,6 +12,7 @@ export interface PortfolioItem {
     shares: number;
     avgPrice: number;
     currentPrice: number;
+    type: string; // Campo Adicionado: Garante a categoria correta vinda do Backend
     aiScore: number; 
     aiSentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
 }
@@ -182,6 +183,7 @@ export const useDashboardData = () => {
                 shares: asset.quantity,
                 avgPrice: asset.averagePrice,
                 currentPrice: asset.currentPrice,
+                type: asset.type, // Passando o tipo real do contexto
                 aiScore: researchData ? researchData.score : 0, 
                 aiSentiment: sentiment
             };

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Input } from '../components/ui/Input';
 import { Button, ButtonStatus } from '../components/ui/Button';
@@ -20,19 +21,37 @@ export const Register = () => {
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.name) newErrors.name = "Obrigatório";
-    if (!formData.email) newErrors.email = "Obrigatório";
-    else if (!formData.email.includes('@')) newErrors.email = "Inválido";
     
-    if (!formData.password) newErrors.password = "Obrigatório";
-    if (formData.password.length < 6) newErrors.password = "Mín. 6 chars";
+    // Validação de Nome (Mínimo 2 nomes ou 3 chars)
+    if (!formData.name.trim()) {
+        newErrors.name = "Nome é obrigatório";
+    } else if (formData.name.trim().length < 3) {
+        newErrors.name = "Nome muito curto";
+    } else if (!/^[a-zA-ZÀ-ÿ\s]+$/.test(formData.name)) {
+        newErrors.name = "Nome contém caracteres inválidos";
+    }
+
+    // Validação de Email (Regex Estrito)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!formData.email) {
+        newErrors.email = "Email é obrigatório";
+    } else if (!emailRegex.test(formData.email)) {
+        newErrors.email = "Formato de email inválido";
+    }
+    
+    // Validação de Senha
+    if (!formData.password) {
+        newErrors.password = "Senha é obrigatória";
+    } else if (formData.password.length < 6) {
+        newErrors.password = "A senha deve ter no mínimo 6 caracteres";
+    }
     
     if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = "Não confere";
+      newErrors.confirmPassword = "As senhas não coincidem";
     }
 
     if (!acceptedTerms) {
-        newErrors.terms = "Aceite os termos";
+        newErrors.terms = "Você deve aceitar os termos";
     }
 
     setErrors(newErrors);
@@ -90,7 +109,7 @@ export const Register = () => {
       <form onSubmit={handleSubmit} className="w-full">
         <div>
             <Input 
-              label="Nome" 
+              label="Nome Completo" 
               name="name"
               value={formData.name}
               onChange={handleChange}
@@ -98,10 +117,11 @@ export const Register = () => {
               disabled={status === 'loading' || status === 'success'}
               containerClassName="mb-2"
               className="px-3 py-2.5 text-sm"
+              placeholder="Ex: João Silva"
             />
 
             <Input 
-              label="Email" 
+              label="Email Corporativo ou Pessoal" 
               name="email"
               type="email" 
               value={formData.email}
@@ -110,6 +130,7 @@ export const Register = () => {
               disabled={status === 'loading' || status === 'success'}
               containerClassName="mb-2"
               className="px-3 py-2.5 text-sm"
+              placeholder="Ex: joao@email.com"
             />
             
             <div className="grid grid-cols-2 gap-2 mt-1">

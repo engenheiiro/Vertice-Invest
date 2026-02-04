@@ -15,15 +15,14 @@ export const Dashboard = () => {
   const { 
       portfolio, 
       signals, 
-      equity, 
+      // equity, // Removido, pois EquitySummary agora lê do contexto direto
       dividends, 
       marketIndices, 
-      isLoading, // Carregamento rápido (Wallet/Macro)
-      isResearchLoading, // Carregamento lento (IA/Pesquisa)
-      systemHealth 
+      isLoading, 
+      isResearchLoading
   } = useDashboardData();
   
-  const { isPrivacyMode } = useWallet();
+  const { isPrivacyMode, kpis } = useWallet();
 
   // Estados do Modal de Relatório
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -40,7 +39,6 @@ export const Dashboard = () => {
       setIsReportModalOpen(true);
       setIsReportLoading(true);
       try {
-          // Busca o relatório mais recente do tipo "BRASIL_10" (mix geral) ou "STOCK"
           const report = await researchService.getLatest('BRASIL_10', 'BUY_HOLD');
           
           if (report && report.content?.morningCall) {
@@ -57,31 +55,25 @@ export const Dashboard = () => {
       }
   };
 
+  const displayDividends = dividends > 0 ? dividends : (kpis.projectedDividends || 0);
+  const isProjected = dividends === 0 && kpis.projectedDividends > 0;
+
   return (
     <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
       
-      {/* Componente Header */}
       <Header />
-
-      {/* Barra de Mercado (Novo Elemento Pro) */}
       <MarketStatusBar indices={marketIndices} />
 
-      {/* --- MAIN TERMINAL GRID --- */}
       <main className="max-w-[1600px] mx-auto p-6 animate-fade-in">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             
             {/* AREA 1: EQUITY & SUMMARY (Col-span-3) */}
             <div className="lg:col-span-3 space-y-6 flex flex-col">
                 
-                {/* Widgets de Patrimônio - Agora com SystemHealth Real e Handler de Relatório */}
-                <EquitySummary 
-                    data={equity} 
-                    isLoading={isLoading} 
-                    systemHealth={systemHealth} 
-                    onGenerateReport={handleGenerateReport} 
-                />
+                {/* Widgets de Patrimônio (Refatorado - Lê direto do Contexto) */}
+                <EquitySummary onGenerateReport={handleGenerateReport} />
 
-                {/* Tabela de Ativos Inteligente - Com Loading Híbrido */}
+                {/* Tabela de Ativos Inteligente */}
                 <div className="flex-1">
                     <AssetTable items={portfolio} isLoading={isLoading} isResearchLoading={isResearchLoading} />
                 </div>
@@ -90,22 +82,29 @@ export const Dashboard = () => {
             {/* AREA 2: SIDEBAR WIDGETS (Col-span-1) */}
             <div className="space-y-6">
                 
-                {/* Widget Radar IA - Usa isResearchLoading independente */}
+                {/* Widget Radar IA */}
                 <AiRadar signals={signals} isLoading={isResearchLoading} />
 
                 {/* Widget Cofre de Dividendos */}
                 <div className="bg-gradient-to-b from-[#0F1729] to-[#080C14] border border-slate-800 rounded-2xl p-5 relative overflow-hidden group">
                     <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                     <div className="relative z-10">
-                        <div className="w-8 h-8 bg-blue-900/30 rounded-lg flex items-center justify-center text-blue-400 mb-3 border border-blue-500/20">
-                            <Lock size={16} />
+                        <div className="flex justify-between items-start mb-3">
+                            <div className="w-8 h-8 bg-blue-900/30 rounded-lg flex items-center justify-center text-blue-400 border border-blue-500/20">
+                                <Lock size={16} />
+                            </div>
+                            {isProjected && (
+                                <span className="text-[9px] font-bold bg-slate-800 px-2 py-0.5 rounded text-slate-400 border border-slate-700">ESTIMATIVA MENSAL</span>
+                            )}
                         </div>
+                        
                         <h4 className="font-bold text-slate-200 text-sm mb-1">Cofre de Dividendos</h4>
                         {isLoading ? (
                             <div className="h-4 w-32 bg-slate-800 rounded animate-pulse mt-1 mb-4"></div>
                         ) : (
-                            <p className="text-xs text-slate-500 mb-4">
-                                Você tem <span className="text-white font-bold">{formatCurrency(dividends)}</span> em provisões no mês atual.
+                            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                                {isProjected ? 'Fluxo mensal estimado:' : 'Provisões confirmadas:'} <br/>
+                                <span className="text-white font-bold text-lg block mt-1">{formatCurrency(displayDividends)}</span>
                             </p>
                         )}
                         <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
@@ -118,7 +117,6 @@ export const Dashboard = () => {
         </div>
       </main>
 
-      {/* Modal de Relatório Instantâneo */}
       <InstantReportModal 
           isOpen={isReportModalOpen} 
           onClose={() => setIsReportModalOpen(false)} 

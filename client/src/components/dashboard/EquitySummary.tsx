@@ -1,163 +1,149 @@
 
 import React from 'react';
-import { TrendingUp, TrendingDown, Zap, Activity, Wifi, WifiOff, Target } from 'lucide-react';
-import { SystemHealth } from '../../hooks/useDashboardData';
 import { useWallet } from '../../contexts/WalletContext';
-
-interface EquityData {
-    total: number;
-    dayChange: number;
-    dayPercent: number;
-    alpha?: number; // Diferença contra IBOV
-}
+import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Activity, Layers, Target, Zap } from 'lucide-react';
 
 interface EquitySummaryProps {
-    data: EquityData;
-    systemHealth?: SystemHealth;
-    isLoading?: boolean;
-    onGenerateReport?: () => void;
+    onGenerateReport?: () => void; // Mantido para compatibilidade
 }
 
-export const EquitySummary: React.FC<EquitySummaryProps> = ({ data, systemHealth, isLoading = false, onGenerateReport }) => {
-    const { isPrivacyMode } = useWallet();
+export const EquitySummary: React.FC<EquitySummaryProps> = () => {
+    const { kpis, isPrivacyMode, isLoading } = useWallet();
 
-    const formatCurrency = (val: number) => {
-        if (isPrivacyMode) return 'R$ ••••••••';
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    const formatCurrency = (val: number | null | undefined) => {
+        if (isLoading) return <div className="h-6 w-24 bg-slate-800 rounded animate-pulse"></div>;
+        if (isPrivacyMode) return '••••••';
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
     };
 
-    const alpha = data.alpha || 0;
-    const alphaPositive = alpha >= 0;
+    const safeFixed = (val: number | null | undefined) => {
+        if (isLoading) return '...';
+        if (isPrivacyMode) return '•••';
+        return (val || 0).toFixed(2);
+    };
+
+    const isDayPositive = (kpis?.dayVariation || 0) >= 0;
+    const isTotalPositive = (kpis?.totalResult || 0) >= 0;
+    const isRentabilityPositive = (kpis?.weightedRentability || 0) >= 0;
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            
-            {/* CARD 1: PERFORMANCE TÁTICA */}
-            <div className="md:col-span-2 bg-[#080C14] border border-slate-800 rounded-2xl p-6 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
-                    <Activity size={100} />
-                </div>
+        <div className="col-span-1 md:col-span-3">
+            {/* Container Principal: Grid 4 Colunas (XL) ou 2 Colunas (MD) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 
-                <div className="flex flex-col h-full justify-between relative z-10">
-                    <div>
-                        <div className="flex items-center justify-between mb-2">
-                            <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Performance Hoje</p>
-                            
-                            {/* Alpha Badge Skeleton vs Real */}
-                            {isLoading ? (
-                                <div className="h-5 w-24 bg-slate-800 rounded animate-pulse"></div>
-                            ) : (
-                                <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-black uppercase border ${alphaPositive ? 'bg-emerald-900/20 text-emerald-400 border-emerald-900/50' : 'bg-red-900/20 text-red-400 border-red-900/50'}`}>
-                                    <Target size={12} />
-                                    Alpha: {alpha > 0 ? '+' : ''}{alpha}% vs IBOV
-                                </div>
-                            )}
+                {/* 1. PATRIMÔNIO (Destaque) */}
+                <DashboardCard 
+                    label="Patrimônio Líquido"
+                    value={formatCurrency(kpis.totalEquity)}
+                    icon={<Wallet size={18} className="text-blue-500" />}
+                    subLabel="Variação Hoje"
+                    subContent={
+                        <div className={`flex items-center gap-1 font-bold ${isDayPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}
                         </div>
+                    }
+                    badge={
+                        <Badge value={`${safeFixed(kpis.dayVariationPercent)}%`} isPositive={isDayPositive} />
+                    }
+                    glow="blue"
+                />
 
-                        {isLoading ? (
-                            <div className="space-y-3 mt-2">
-                                <div className="h-10 w-48 bg-slate-800 rounded animate-pulse"></div>
-                                <div className="h-4 w-32 bg-slate-800 rounded animate-pulse"></div>
-                            </div>
-                        ) : (
-                            <div className="flex items-baseline gap-3">
-                                <h2 className={`text-4xl font-bold tracking-tight ${data.dayChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                    {isPrivacyMode ? '••••••••' : (data.dayChange > 0 ? '+' : '') + new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(data.dayChange)}
-                                </h2>
-                                <span className={`text-lg font-medium ${data.dayPercent >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                    ({data.dayPercent > 0 ? '+' : ''}{data.dayPercent}%)
-                                </span>
-                            </div>
-                        )}
-                    </div>
+                {/* 2. VALOR APLICADO (Padronizado) */}
+                <DashboardCard 
+                    label="Valor Aplicado"
+                    value={formatCurrency(kpis.totalInvested)}
+                    icon={<DollarSign size={18} className="text-purple-500" />}
+                    subLabel="Base de Custo"
+                    subContent={
+                        <span className="text-slate-300 font-medium">Aportes Totais</span>
+                    }
+                    badge={
+                        <div className="text-[10px] font-bold px-2 py-0.5 rounded border bg-slate-800 text-slate-400 border-slate-700 flex items-center gap-1">
+                            <Activity size={10} /> Acumulado
+                        </div>
+                    }
+                />
 
-                    <div className="mt-4 pt-4 border-t border-slate-800/50 flex items-center justify-between">
-                        <div>
-                            <p className="text-[10px] text-slate-500 uppercase font-bold">Patrimônio Total</p>
-                            {isLoading ? (
-                                <div className="h-4 w-24 bg-slate-800 rounded mt-1 animate-pulse"></div>
-                            ) : (
-                                <p className="text-sm text-slate-300 font-mono">{formatCurrency(data.total)}</p>
-                            )}
+                {/* 3. RENTABILIDADE (Com ROI e Resultado) */}
+                <DashboardCard 
+                    label="Rentabilidade"
+                    value={
+                        <span className={isRentabilityPositive ? "text-emerald-400" : "text-red-400"}>
+                            {isRentabilityPositive ? '+' : ''}{safeFixed(kpis.weightedRentability)}%
+                        </span>
+                    }
+                    icon={<TrendingUp size={18} className={isRentabilityPositive ? "text-emerald-500" : "text-red-500"} />}
+                    subLabel="Resultado Nominal"
+                    subContent={
+                        <div className={`flex items-center gap-1 font-bold ${isTotalPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {isTotalPositive ? '+' : ''}{formatCurrency(kpis.totalResult)}
                         </div>
-                        
-                        <div className="hidden sm:block w-32">
-                            <div className="flex justify-between text-[9px] text-slate-600 mb-1">
-                                <span>Min</span>
-                                <span>Max (Dia)</span>
-                            </div>
-                            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                {isLoading ? (
-                                    <div className="h-full bg-slate-700 animate-pulse w-full"></div>
-                                ) : (
-                                    <div className={`h-full w-[60%] rounded-full ${data.dayChange >= 0 ? 'bg-emerald-600' : 'bg-red-600'}`}></div>
-                                )}
-                            </div>
+                    }
+                    badge={
+                        <div className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${isTotalPositive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                            ROI {safeFixed(kpis.totalResultPercent)}%
                         </div>
-                    </div>
-                </div>
-            </div>
+                    }
+                />
 
-            {/* CARD 2: SYSTEM HEALTH */}
-            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:border-slate-700 transition-colors">
-                <div>
-                    <div className="flex items-center justify-between mb-4">
-                        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Neural Engine</p>
-                        {/* SeisLoading só afeta dados financeiros, SystemHealth pode estar vindo... */}
-                        <div className="flex items-center gap-2">
-                             {!systemHealth || isLoading ? (
-                                <div className="w-16 h-4 bg-slate-800 rounded animate-pulse"></div>
-                             ) : (
-                                 <>
-                                    {systemHealth?.status === 'ONLINE' ? (
-                                        <Wifi size={14} className="text-emerald-500" />
-                                    ) : (
-                                        <WifiOff size={14} className="text-red-500" />
-                                    )}
-                                    <span className={`text-[9px] font-bold ${
-                                        systemHealth?.status === 'ONLINE' ? 'text-emerald-500' : 
-                                        systemHealth?.status === 'STALE' ? 'text-yellow-500' : 'text-red-500'
-                                    }`}>
-                                        {systemHealth?.status || 'CHECKING'}
-                                    </span>
-                                 </>
-                             )}
+                {/* 4. PROVENTOS (Label Abreviada) */}
+                <DashboardCard 
+                    label="Prov. Acumulados"
+                    value={formatCurrency(kpis.totalDividends)}
+                    icon={<PiggyBank size={18} className="text-[#D4AF37]" />}
+                    subLabel="Média Mensal"
+                    subContent={
+                        <span className="text-[#D4AF37] font-bold">{formatCurrency(kpis.projectedDividends)}</span>
+                    }
+                    badge={
+                        <div className="text-[10px] font-bold px-2 py-0.5 rounded border bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/20 flex items-center gap-1">
+                            <Layers size={10} /> Passivo
                         </div>
-                    </div>
-                    
-                    {!systemHealth || isLoading ? (
-                        <div className="space-y-2">
-                            <div className="h-6 w-3/4 bg-slate-800 rounded animate-pulse"></div>
-                            <div className="h-4 w-1/2 bg-slate-800 rounded animate-pulse"></div>
-                        </div>
-                    ) : (
-                        <>
-                            <h3 className="text-lg font-bold text-white mb-1">
-                                {systemHealth?.message || 'Conectando ao Satellite...'}
-                            </h3>
-                            
-                            <p className="text-xs text-slate-400 font-mono flex items-center gap-2">
-                                <Activity size={12} className="text-blue-500" />
-                                Latência: {systemHealth?.latencyMs || 0}ms
-                            </p>
-                            
-                            {systemHealth?.lastSync && (
-                                <p className="text-[10px] text-slate-600 mt-1">
-                                    Último Sync: {new Date(systemHealth.lastSync).toLocaleTimeString()}
-                                </p>
-                            )}
-                        </>
-                    )}
-                </div>
-                
-                <button 
-                    onClick={onGenerateReport}
-                    className="w-full mt-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2 hover:text-white group"
-                >
-                    <Zap size={14} className="text-yellow-400 group-hover:animate-pulse" />
-                    Gerar Relatório Instantâneo
-                </button>
+                    }
+                    glow="gold"
+                />
+
             </div>
         </div>
     );
 };
+
+// Componente Visual Interno (Dashboard Specific)
+const DashboardCard = ({ label, value, icon, subLabel, subContent, badge, glow }: any) => (
+    <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-5 relative overflow-hidden group hover:border-slate-700 transition-colors">
+        {glow === 'blue' && <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/5 rounded-full blur-[60px] pointer-events-none"></div>}
+        {glow === 'gold' && <div className="absolute top-0 right-0 w-32 h-32 bg-[#D4AF37]/5 rounded-full blur-[60px] pointer-events-none"></div>}
+        
+        <div className="relative z-10">
+            <div className="flex justify-between items-start mb-2">
+                <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 group-hover:border-slate-600 transition-colors">
+                        {icon}
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
+                </div>
+            </div>
+
+            <div className="mt-2 mb-4">
+                <h3 className="text-2xl font-bold text-white tracking-tight">{value}</h3>
+            </div>
+
+            <div className="w-full h-px bg-slate-800/80 mb-3"></div>
+
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className="text-[9px] text-slate-500 uppercase font-bold mb-0.5">{subLabel}</p>
+                    <div className="text-xs">{subContent}</div>
+                </div>
+                <div>{badge}</div>
+            </div>
+        </div>
+    </div>
+);
+
+const Badge = ({ value, isPositive }: { value: string, isPositive: boolean }) => (
+    <div className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${isPositive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+        {isPositive ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+        {value}
+    </div>
+);

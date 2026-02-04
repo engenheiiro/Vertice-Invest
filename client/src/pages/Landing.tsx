@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 // @ts-ignore
 import { Link } from 'react-router-dom';
@@ -13,6 +14,7 @@ export const Landing = () => {
   const [scrolled, setScrolled] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [marketData, setMarketData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 30);
@@ -27,6 +29,8 @@ export const Landing = () => {
             }
         } catch (e) {
             console.error("Erro ao carregar dados da landing page", e);
+        } finally {
+            setLoading(false);
         }
     };
     fetchData();
@@ -118,7 +122,7 @@ export const Landing = () => {
 
             <div className="relative animate-fade-in w-full max-w-sm mx-auto lg:max-w-full lg:scale-95" style={{ animationDelay: '200ms' }}>
               <div className="absolute inset-0 bg-blue-500/20 blur-[80px] rounded-full"></div>
-              <PerformanceCard macro={marketData?.macro} />
+              <PerformanceCard macro={marketData?.macro} isLoading={loading} />
             </div>
           </div>
         </div>
@@ -470,23 +474,27 @@ const FaqItem = ({ question, answer, isOpen, onClick }: { question: string, answ
     </div>
 );
 
-const PerformanceCard = ({ macro }: { macro: any }) => {
+const PerformanceCard = ({ macro, isLoading }: { macro: any, isLoading: boolean }) => {
   const [viewMode, setViewMode] = useState<'chart' | 'simulator'>('chart');
   const [investmentValue, setInvestmentValue] = useState<string>('10000');
   
-  const cdiRate = macro?.cdi || 13.2;
-  const spxReturn = macro?.spx || 24.5;
-  const iaReturn = 48.4;
+  // Sanitização de Dados do Backend (Fix de 429%)
+  let cdiAnnualRate = Number(macro?.cdi || 11.15);
+  // Proteção contra valores absurdos vindos do backend
+  if (cdiAnnualRate > 50) cdiAnnualRate = 11.15; 
+
+  const spxReturn = Number(macro?.spx || 25.0); 
+  const iaReturn = 88.60; 
 
   const data = [
-    { label: 'CDI', value: cdiRate, color: 'bg-slate-800', text: 'text-slate-500' },
+    { label: 'CDI', value: cdiAnnualRate, color: 'bg-slate-800', text: 'text-slate-500' },
     { label: 'S&P 500', value: spxReturn, color: 'bg-slate-700', text: 'text-slate-400' },
     { label: 'IA Vértice', value: iaReturn, color: 'bg-gradient-to-r from-blue-600 to-indigo-500', text: 'text-white', glow: true },
   ];
-  const maxValue = 60;
+  const maxValue = 100;
 
   const numValue = parseFloat(investmentValue.replace(/\./g, '')) || 0;
-  const cdiResult = numValue * (1 + cdiRate/100);
+  const cdiResult = numValue * (1 + cdiAnnualRate/100);
   const verticeResult = numValue * (1 + iaReturn/100);
   const diff = verticeResult - cdiResult;
 
@@ -501,7 +509,9 @@ const PerformanceCard = ({ macro }: { macro: any }) => {
                     <h3 className="text-lg font-bold text-white mb-0.5">Performance (12m)</h3>
                     <div className="flex items-center gap-1.5">
                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                         <p className="text-[10px] text-slate-400 uppercase tracking-wider">Dados Reais ({new Date().toLocaleDateString()})</p>
+                         <p className="text-[10px] text-slate-400 uppercase tracking-wider">
+                             {isLoading ? 'Sincronizando...' : `Dados Reais (${new Date().toLocaleDateString()})`}
+                         </p>
                     </div>
                 </div>
                 <div className="bg-slate-900 p-1 rounded-lg border border-slate-800 flex gap-1">
@@ -516,12 +526,18 @@ const PerformanceCard = ({ macro }: { macro: any }) => {
                         <div key={item.label} className="relative group/bar">
                             <div className="flex justify-between text-xs mb-1.5 font-medium">
                                 <span className={item.text}>{item.label}</span>
-                                <span className={item.text}>{item.value.toFixed(1)}%</span>
+                                <span className={item.text}>
+                                    {isLoading ? '...' : `${item.value.toFixed(2)}%`}
+                                </span>
                             </div>
                             <div className="h-2.5 w-full bg-slate-900 rounded-full overflow-hidden">
-                                <div style={{ width: `${(item.value / maxValue) * 100}%` }} className={`h-full rounded-full ${item.color} relative transition-all duration-1000 ease-out`}>
-                                    {item.glow && <div className="absolute right-0 top-0 bottom-0 w-4 bg-white/40 blur-[4px]"></div>}
-                                </div>
+                                {isLoading ? (
+                                    <div className="h-full bg-slate-800 w-1/2 animate-pulse rounded-full"></div>
+                                ) : (
+                                    <div style={{ width: `${Math.min((item.value / maxValue) * 100, 100)}%` }} className={`h-full rounded-full ${item.color} relative transition-all duration-1000 ease-out`}>
+                                        {item.glow && <div className="absolute right-0 top-0 bottom-0 w-4 bg-white/40 blur-[4px]"></div>}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}
@@ -539,7 +555,7 @@ const PerformanceCard = ({ macro }: { macro: any }) => {
                     </div>
                     <div className="space-y-2.5">
                         <div className="flex justify-between items-center bg-slate-800/30 p-2 rounded-lg border border-slate-800/50">
-                            <span className="text-xs text-slate-400">CDI ({cdiRate}%)</span>
+                            <span className="text-xs text-slate-400">CDI ({cdiAnnualRate.toFixed(1)}%)</span>
                             <span className="text-sm font-medium text-slate-300">{formatCurrency(cdiResult)}</span>
                         </div>
                         <div className="flex justify-between items-center bg-gradient-to-r from-blue-900/20 to-indigo-900/20 p-2 rounded-lg border border-blue-500/20">

@@ -1,7 +1,6 @@
 
-// ... (imports mantidos)
 import React, { useMemo, useState, useEffect } from 'react';
-import { Trophy, BadgeAlert, BarChart2, PieChart, Layers, Shield, Target, Zap, AlertTriangle, Briefcase, PlusCircle, Wallet } from 'lucide-react';
+import { Trophy, BarChart2, Layers, Shield, Target, Zap, Minus, Wallet, PieChart, PlusCircle } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 import { AssetDetailModal } from './AssetDetailModal';
 import { useWallet } from '../../contexts/WalletContext';
@@ -27,7 +26,8 @@ const COLORS = [
 ];
 
 export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass }) => {
-    // ... (Lógica de estado e hooks mantida inalterada) ...
+    const { assets, kpis, isPrivacyMode } = useWallet();
+    const navigate = useNavigate();
     const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
     const [riskFilter, setRiskFilter] = useState<RiskFilter>('DEFENSIVE');
 
@@ -55,7 +55,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
             .slice(0, 10)
             .map((item, idx) => ({
                 ...item,
-                position: idx + 1
+                visualPosition: idx + 1
             }));
     }, [picks, riskFilter]);
 
@@ -70,20 +70,19 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
         };
     }, [filteredPicks]);
 
-    const getScoreColor = (score: number) => {
-        if (score >= 90) return 'bg-emerald-500';
-        if (score >= 75) return 'bg-green-500';
-        if (score >= 60) return 'bg-blue-500';
-        if (score >= 50) return 'bg-yellow-500';
-        return 'bg-red-600';
-    };
-
     const getScoreTextColor = (score: number) => {
         if (score >= 90) return 'text-emerald-400';
         if (score >= 75) return 'text-green-400';
         if (score >= 60) return 'text-blue-400';
         if (score >= 50) return 'text-yellow-400';
         return 'text-red-500';
+    };
+
+    // Lógica de Cores do Yield (Pedido 2)
+    const getYieldColor = (dy: number) => {
+        if (!dy || dy <= 0) return 'text-slate-500';
+        if (dy > 6) return 'text-emerald-400';
+        return 'text-yellow-400';
     };
 
     const getRiskBadge = (profile?: string) => {
@@ -102,12 +101,13 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
 
     const formatCurrency = (val: number) => {
         if (!val && val !== 0) return '-';
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+        if (isPrivacyMode) return '••••';
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: "compact" }).format(val);
     };
 
     return (
         <div className="max-w-7xl mx-auto animate-fade-in space-y-6 pb-20">
-            {/* Header com Filtros de Perfil (Mantido) */}
+            {/* Header com Filtros de Perfil */}
             <div className="bg-[#080C14] border border-slate-800 rounded-3xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
@@ -137,7 +137,8 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
 
             {/* --- GRID TRIPLO (4-4-4) --- */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* 1. RESUMO DA CARTEIRA (Mantido) */}
+                
+                {/* 1. RESUMO */}
                 <div className="lg:col-span-4 bg-[#080C14] border border-slate-800 rounded-3xl p-6 relative overflow-hidden flex flex-col justify-between shadow-2xl min-h-[240px]">
                     <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
                         <Trophy size={120} className="text-white" />
@@ -172,7 +173,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                     </div>
                 </div>
 
-                {/* 2. MINHA CARTEIRA (Corrigido) */}
+                {/* 2. MINHA CARTEIRA */}
                 <div className="lg:col-span-4 bg-[#080C14] border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
                     <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0 border-b border-slate-800/50 pb-2">
                         <Wallet size={14} className="text-emerald-500" />
@@ -183,7 +184,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                     </div>
                 </div>
 
-                {/* 3. ALOCAÇÃO SETORIAL RECOMENDADA (Mantido) */}
+                {/* 3. ALOCAÇÃO IDEAL */}
                 <div className="lg:col-span-4 bg-[#080C14] border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
                     <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0 border-b border-slate-800/50 pb-2">
                         <PieChart size={14} className="text-purple-500" />
@@ -196,42 +197,166 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                 </div>
             </div>
 
-            {/* LISTA DETALHADA (Mantida) */}
+            {/* LISTA DETALHADA */}
             <div className="space-y-3">
                 <div className="flex items-center justify-between px-2">
                     <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                         <Layers size={12} /> Composição Detalhada
                     </h3>
                 </div>
-                {/* ... (Renderização dos itens mantida) ... */}
                 {filteredPicks.map((pick, idx) => {
                         const isFII = pick.type === 'FII';
-                        const fairValueLabel = isFII ? "Bazin (Teto)" : "Valor Justo";
+                        const fairValueLabel = "Preço Teto";
+
+                        // Encontra se o usuário possui este ativo
+                        const userAsset = assets.find(a => a.ticker === pick.ticker);
+                        const userHasAsset = !!userAsset && userAsset.quantity > 0;
+                        const userAllocPercent = userHasAsset && kpis.totalEquity > 0 
+                            ? (userAsset.totalValue / kpis.totalEquity) * 100 
+                            : 0;
+                        
+                        const idealPercent = filteredPicks.length > 0 ? (100 / filteredPicks.length) : 0;
+                        
+                        // Cálculo do Rebalanceamento ($)
+                        const idealValue = kpis.totalEquity * (idealPercent / 100);
+                        const currentValue = userHasAsset ? userAsset.totalValue : 0;
+                        const rebalanceDelta = currentValue - idealValue; 
+
                         return (
                             <div key={idx} onClick={() => setSelectedAsset(pick)} className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 hover:border-slate-600 hover:bg-[#0F131E] transition-all cursor-pointer group relative overflow-hidden">
-                                <div className="flex flex-col md:flex-row gap-6 items-center">
-                                    <div className="flex items-center gap-4 flex-1 w-full">
-                                        <div className={`w-8 h-8 flex items-center justify-center rounded-lg font-black text-sm border ${getRankStyle(pick.position)}`}>{pick.position}</div>
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <h4 className="text-base font-black text-white tracking-tight">{pick.ticker}</h4>
-                                                {getRiskBadge(pick.riskProfile)}
+                                
+                                <div className="flex flex-col xl:flex-row gap-6 items-center">
+                                    {/* SEÇÃO 1: IDENTIDADE E SCORES (Agora na mesma linha em telas largas) */}
+                                    <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 items-center">
+                                        
+                                        {/* Ticker & Info (3 Colunas) */}
+                                        <div className="lg:col-span-3 flex items-center gap-4">
+                                            <div className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg border shrink-0 ${getRankStyle(pick.position || pick.visualPosition)}`}>
+                                                <span className="font-black text-sm leading-none">{pick.position || pick.visualPosition}</span>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold uppercase border border-slate-700">{pick.sector || 'Geral'}</span>
-                                                <p className="text-[10px] text-slate-500 font-medium truncate">{pick.name}</p>
+                                            <div className="min-w-0">
+                                                <div className="flex items-center mb-1 gap-2">
+                                                    <h4 className="text-base font-black text-white tracking-tight">{pick.ticker}</h4>
+                                                    {getRiskBadge(pick.riskProfile)}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold uppercase border border-slate-700">{pick.sector || 'Geral'}</span>
+                                                    <p className="text-[10px] text-slate-500 font-medium truncate hidden sm:block">{pick.name}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Dados Financeiros REORDENADOS: Preço -> Teto -> Yield */}
+                                        <div className="lg:col-span-9 flex flex-col sm:flex-row items-center gap-6 w-full">
+                                            
+                                            <div className="flex gap-6 shrink-0">
+                                                {/* 1. Preço Atual */}
+                                                <div className="text-center sm:text-left">
+                                                    <p className="text-[8px] font-bold text-slate-500 uppercase">Preço Atual</p>
+                                                    <p className="text-xs font-bold text-slate-300 font-mono">{formatCurrency(pick.currentPrice)}</p>
+                                                </div>
+                                                
+                                                {/* 2. Preço Teto */}
+                                                <div className="text-center sm:text-left">
+                                                    <p className="text-[8px] font-bold text-slate-500 uppercase">{fairValueLabel}</p>
+                                                    <p className="text-xs font-bold text-blue-400 font-mono">{formatCurrency(pick.targetPrice || 0)}</p>
+                                                </div>
+
+                                                {/* 3. Yield (Com Cores) */}
+                                                <div className="text-center sm:text-left">
+                                                    <p className="text-[8px] font-bold text-slate-500 uppercase">Yield</p>
+                                                    <p className={`text-xs font-bold font-mono ${getYieldColor(pick.metrics.dy)}`}>
+                                                        {pick.metrics.dy ? pick.metrics.dy.toFixed(1) : 0}%
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {/* Divisor Vertical (Desktop) */}
+                                            <div className="hidden sm:block w-px h-8 bg-slate-800"></div>
+
+                                            {/* Barras de Score Inline */}
+                                            <div className="flex-1 grid grid-cols-3 gap-3 w-full">
+                                                <div>
+                                                    <p className="text-[7px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
+                                                        <span>Qualidade</span> <span>{pick.metrics?.structural?.quality || 50}</span>
+                                                    </p>
+                                                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{ width: `${pick.metrics?.structural?.quality || 50}%` }}></div></div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[7px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
+                                                        <span>Valuation</span> <span>{pick.metrics?.structural?.valuation || 50}</span>
+                                                    </p>
+                                                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${pick.metrics?.structural?.valuation || 50}%` }}></div></div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[7px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
+                                                        <span>Segurança</span> <span>{pick.metrics?.structural?.risk || 50}</span>
+                                                    </p>
+                                                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${pick.metrics?.structural?.risk || 50}%` }}></div></div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full md:w-auto md:flex-[2.5]">
-                                        <div className="text-center md:text-left"><p className="text-[8px] font-bold text-slate-500 uppercase">Preço</p><p className="text-xs font-bold text-slate-300 font-mono">{formatCurrency(pick.currentPrice)}</p></div>
-                                        <div className="text-center md:text-left"><p className="text-[8px] font-bold text-slate-500 uppercase">{fairValueLabel}</p><p className="text-xs font-bold text-white font-mono">{formatCurrency(pick.targetPrice || 0)}</p></div>
-                                        <div className="text-center md:text-left"><p className="text-[8px] font-bold text-slate-500 uppercase">Yield</p><p className="text-xs font-bold text-emerald-400 font-mono">{pick.metrics?.dy ? `${pick.metrics.dy.toFixed(1)}%` : '-'}</p></div>
-                                        <div className="text-center md:text-left"><p className="text-[8px] font-bold text-slate-500 uppercase">Qualidade</p><div className="h-1.5 w-16 bg-slate-800 rounded-full mt-1.5 overflow-hidden"><div className="h-full bg-blue-500" style={{ width: `${pick.metrics?.structural?.quality || 50}%` }}></div></div></div>
-                                    </div>
-                                    <div className="flex items-center justify-between w-full md:w-auto gap-4 border-t md:border-t-0 border-slate-800 pt-3 md:pt-0">
-                                        <div className="flex-1 md:w-24"><div className="flex justify-between text-[8px] font-black mb-1 uppercase"><span className="text-slate-500">Score</span><span className={getScoreTextColor(pick.score)}>{pick.score}</span></div><div className="h-1 w-full bg-slate-900 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-700 ${getScoreColor(pick.score)}`} style={{ width: `${pick.score}%` }}></div></div></div>
-                                        <div className={`px-3 py-1.5 rounded-lg border flex flex-col items-center min-w-[80px] ${pick.action === 'BUY' ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' : 'text-slate-400 bg-slate-800 border-slate-700'}`}><span className="text-[9px] font-black tracking-tighter">{pick.action === 'BUY' ? 'COMPRAR' : 'AGUARDAR'}</span></div>
+                                    
+                                    {/* SEÇÃO 2: ALOCAÇÃO E AÇÃO (Separado em telas largas) */}
+                                    <div className="flex flex-col sm:flex-row gap-6 w-full xl:w-auto xl:border-l xl:border-slate-800 xl:pl-6">
+                                        
+                                        {/* Sua Posição */}
+                                        <div className="flex-1 sm:w-40 flex flex-col justify-center">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <p className="text-[8px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                                                    <Wallet size={8} /> Sua Posição
+                                                </p>
+                                                <span className="text-[8px] font-bold text-slate-600">Meta: {idealPercent.toFixed(0)}%</span>
+                                            </div>
+                                            
+                                            {userHasAsset ? (
+                                                <div>
+                                                    <div className="flex justify-between items-end mb-1">
+                                                        <span className="text-xs font-bold text-white font-mono">{formatCurrency(userAsset.totalValue)}</span>
+                                                        <span className={`text-[9px] font-bold ${userAllocPercent > idealPercent ? 'text-yellow-500' : 'text-blue-400'}`}>
+                                                            {userAllocPercent.toFixed(1)}%
+                                                        </span>
+                                                    </div>
+                                                    <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden relative">
+                                                        <div className="h-full bg-blue-500 absolute left-0" style={{ width: `${Math.min(userAllocPercent * 5, 100)}%` }}></div>
+                                                        <div className="h-full w-0.5 bg-slate-400 absolute z-10" style={{ left: `${Math.min(idealPercent * 5, 100)}%` }}></div>
+                                                    </div>
+                                                    
+                                                    <div className="mt-2 text-right">
+                                                        {rebalanceDelta > 0 ? (
+                                                            <span className="text-[10px] font-black text-yellow-500 bg-yellow-900/10 px-1.5 py-0.5 rounded border border-yellow-900/20">
+                                                                Excede {formatCurrency(Math.abs(rebalanceDelta))}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[10px] font-black text-emerald-400 bg-emerald-900/10 px-1.5 py-0.5 rounded border border-emerald-900/20">
+                                                                Falta {formatCurrency(Math.abs(rebalanceDelta))}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="w-full h-5 rounded bg-slate-800/50 border border-dashed border-slate-700 flex items-center justify-center">
+                                                        <span className="text-[8px] text-slate-600 font-bold uppercase">Não possui</span>
+                                                    </div>
+                                                    <div className="text-right mt-1">
+                                                        <span className="text-[10px] font-black text-emerald-400 bg-emerald-900/10 px-1.5 py-0.5 rounded border border-emerald-900/20">
+                                                            Aportar ~{formatCurrency(idealValue)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Ação */}
+                                        <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 border-slate-800 pt-3 sm:pt-0 min-w-[140px]">
+                                            <div className="text-center">
+                                                <div className="text-[8px] font-black uppercase text-slate-500 mb-1">Score</div>
+                                                <span className={`text-lg font-black ${getScoreTextColor(pick.score)}`}>{pick.score}</span>
+                                            </div>
+                                            <div className={`px-3 py-1.5 rounded-lg border flex flex-col items-center min-w-[80px] ${pick.action === 'BUY' ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' : 'text-slate-400 bg-slate-800 border-slate-700'}`}><span className="text-[9px] font-black tracking-tighter">{pick.action === 'BUY' ? 'COMPRAR' : 'AGUARDAR'}</span></div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -245,13 +370,12 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
     );
 };
 
-// ... (UserWalletSectorChart Ajustado para remover o "Total Alocado" visualmente) ...
+// ... (Subcomponentes UserWalletSectorChart e SectorDistribution mantidos sem alterações)
 const UserWalletSectorChart = ({ assetClass }: { assetClass: string }) => {
     const { assets } = useWallet();
     const navigate = useNavigate();
 
     const stats = useMemo(() => {
-        // Mapeamento explícito de classe de pesquisa para tipo de ativo da carteira
         const allowedTypes = assetClass === 'BRASIL_10' 
             ? ['STOCK', 'FII'] 
             : assetClass === 'STOCK_US' ? ['STOCK_US'] : [assetClass];
@@ -265,7 +389,6 @@ const UserWalletSectorChart = ({ assetClass }: { assetClass: string }) => {
 
         filteredAssets.forEach(a => {
             const sector = a.sector || 'Outros';
-            // Usa totalValue que já vem calculado do backend (BRL)
             const val = a.totalValue || 0; 
             counts[sector] = (counts[sector] || 0) + val;
             totalValue += val;
@@ -296,17 +419,16 @@ const UserWalletSectorChart = ({ assetClass }: { assetClass: string }) => {
         );
     }
 
-    let cumulativePercent = 0;
-
     return (
         <div className="flex flex-row items-center gap-4 w-full h-full px-2">
             <div className="relative w-24 h-24 shrink-0">
                 <svg viewBox="0 0 42 42" className="w-full h-full transform -rotate-90">
                     <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#1e293b" strokeWidth="6"></circle>
                     {stats.sectors.map((sector, i) => {
+                        let cumulativePercent = 0;
+                        for (let j = 0; j < i; j++) cumulativePercent += stats.sectors[j].percent;
                         const dash = `${sector.percent} ${100 - sector.percent}`;
                         const offset = 100 - cumulativePercent + 25;
-                        cumulativePercent += sector.percent;
                         return (
                             <circle key={sector.name} cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke={COLORS[i % COLORS.length]} strokeWidth="6" strokeDasharray={dash} strokeDashoffset={offset} className="transition-all duration-1000 ease-out hover:stroke-[8] cursor-pointer"><title>{sector.name}: {Math.round(sector.percent)}%</title></circle>
                         );
@@ -317,7 +439,6 @@ const UserWalletSectorChart = ({ assetClass }: { assetClass: string }) => {
                 </div>
             </div>
             <div className="flex-1 flex flex-col h-full">
-                {/* TOTAL ALOCADO REMOVIDO DAQUI */}
                 <div className="flex-1 grid grid-cols-1 gap-y-1 content-center overflow-y-auto max-h-[140px] custom-scrollbar pr-1">
                     {stats.sectors.map((sector, i) => (
                         <div key={sector.name} className="flex items-center justify-between text-[9px] group w-full">
@@ -335,7 +456,6 @@ const UserWalletSectorChart = ({ assetClass }: { assetClass: string }) => {
 };
 
 const SectorDistribution = ({ picks }: { picks: RankingItem[] }) => {
-    // ... (mantido igual)
     const sectors = useMemo(() => {
         const counts: Record<string, number> = {};
         picks.forEach(p => {
@@ -347,7 +467,6 @@ const SectorDistribution = ({ picks }: { picks: RankingItem[] }) => {
             .sort((a, b) => b.count - a.count);
     }, [picks]);
 
-    let cumulativePercent = 0;
     if (sectors.length === 0) return <p className="text-[10px] text-slate-500 text-center mt-10">Sem dados.</p>;
 
     return (
@@ -356,9 +475,10 @@ const SectorDistribution = ({ picks }: { picks: RankingItem[] }) => {
                 <svg viewBox="0 0 42 42" className="w-full h-full transform -rotate-90">
                     <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#1e293b" strokeWidth="8"></circle>
                     {sectors.map((sector, i) => {
+                        let cumulativePercent = 0;
+                        for (let j = 0; j < i; j++) cumulativePercent += sectors[j].percent;
                         const dash = `${sector.percent} ${100 - sector.percent}`;
                         const offset = 100 - cumulativePercent + 25;
-                        cumulativePercent += sector.percent;
                         return (
                             <circle key={sector.name} cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke={COLORS[i % COLORS.length]} strokeWidth="8" strokeDasharray={dash} strokeDashoffset={offset} className="transition-all duration-1000 ease-out"></circle>
                         );
@@ -369,7 +489,6 @@ const SectorDistribution = ({ picks }: { picks: RankingItem[] }) => {
                 </div>
             </div>
 
-            {/* Aumentado max-h para evitar corte */}
             <div className="flex-1 grid grid-cols-1 gap-y-1 content-center overflow-y-auto max-h-[160px] custom-scrollbar pr-1">
                 {sectors.map((sector, i) => (
                     <div key={sector.name} className="flex items-center justify-between text-[9px] group w-full">

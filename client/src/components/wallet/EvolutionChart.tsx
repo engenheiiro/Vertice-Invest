@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useWallet } from '../../contexts/WalletContext';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Legend } from 'recharts';
 import { BarChart3 } from 'lucide-react';
 
 export const EvolutionChart = () => {
@@ -20,27 +20,20 @@ export const EvolutionChart = () => {
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
     };
 
-    // --- ALGORITMO DE PREENCHIMENTO TEMPORAL (TIME-FILLING) ---
-    // Garante que não haja buracos no gráfico entre a primeira compra e hoje.
     const chartData = useMemo(() => {
         if (!history || history.length === 0) return [];
 
-        // 1. Encontrar data inicial e final
-        // Se a data inicial for muito antiga, respeita o filtro, senão pega a primeira transação
         const rawDates = history.map(h => new Date(h.date).getTime());
         const minDate = new Date(Math.min(...rawDates));
-        const maxDate = new Date(); // Sempre vai até hoje
+        const maxDate = new Date(); 
 
-        // Ajuste para o início do mês para normalização
         minDate.setDate(1);
         minDate.setHours(0,0,0,0);
         
-        // 2. Mapear dados existentes para busca rápida O(1)
         const historyMap = new Map();
         history.forEach(point => {
             const d = new Date(point.date);
-            const key = `${d.getFullYear()}-${d.getMonth()}`; // Chave única por mês
-            // Mantemos o último registro de cada mês (sobrescreve se houver múltiplos)
+            const key = `${d.getFullYear()}-${d.getMonth()}`; 
             historyMap.set(key, {
                 invested: point.totalInvested || 0,
                 equity: point.totalEquity || 0
@@ -50,17 +43,12 @@ export const EvolutionChart = () => {
         const filledData = [];
         let cursor = new Date(minDate);
         
-        // Estado anterior para "Carry Over" (preencher meses vazios com valor anterior)
         let lastInvested = 0;
         let lastEquity = 0;
 
-        // Se o histórico começar "do nada" com valor alto, tentamos pegar o primeiro valor real
-        // Mas a lógica de carry over cuida disso na iteração.
-
-        // 3. Loop Mês a Mês
         while (cursor <= maxDate) {
             const key = `${cursor.getFullYear()}-${cursor.getMonth()}`;
-            const monthLabel = cursor.toLocaleDateString('pt-BR', { month: '2-digit', year: '2-digit' }); // 01/24
+            const monthLabel = cursor.toLocaleDateString('pt-BR', { month: '2-digit', year: '2-digit' }); 
             
             const existingData = historyMap.get(key);
 
@@ -69,65 +57,50 @@ export const EvolutionChart = () => {
                 lastEquity = existingData.equity;
             }
 
-            // Lógica Visual de Barras Empilhadas:
-            // A altura total da barra deve ser SEMPRE igual ao Patrimônio (lastEquity).
-            // - Base (Verde Escuro): Valor Investido (Limitado ao Equity se houver prejuízo)
-            // - Topo (Verde Claro): Lucro (Equity - Investido)
-            // Se houver prejuízo (Equity < Invested), a barra será menor que o investido, mas correta visualmente.
-            
-            const baseValue = Math.min(lastInvested, lastEquity); // A parte "Sólida"
-            const profitValue = Math.max(0, lastEquity - lastInvested); // A parte "Lucro"
-            
-            // Só adiciona se houver algum valor (evita meses zerados antes do primeiro aporte se a lógica de data falhar)
+            const profit = lastEquity - lastInvested;
+            const stackBase = Math.min(lastEquity, lastInvested); 
+            const stackProfit = Math.max(0, profit);
+
             if (lastEquity > 0 || lastInvested > 0) {
                 filledData.push({
                     label: monthLabel,
-                    sortDate: new Date(cursor), // Para filtro
-                    investedDisplay: baseValue,
-                    profitDisplay: profitValue,
-                    
-                    // Dados reais para Tooltip
+                    sortDate: new Date(cursor),
+                    baseBar: stackBase,
+                    profitBar: stackProfit,
                     realInvested: lastInvested,
                     realEquity: lastEquity,
-                    realProfit: lastEquity - lastInvested
+                    realProfit: profit
                 });
             }
 
-            // Avança 1 mês
             cursor.setMonth(cursor.getMonth() + 1);
         }
 
-        // 4. Adiciona o estado "Agora" (Live) se ainda não estiver incluso no mês atual
-        // Isso garante que o usuário veja a rentabilidade do segundo atual
         const currentKey = `${new Date().getFullYear()}-${new Date().getMonth()}`;
-        if (!historyMap.has(currentKey)) {
-             const baseValue = Math.min(kpis.totalInvested, kpis.totalEquity);
-             const profitValue = Math.max(0, kpis.totalEquity - kpis.totalInvested);
-             
-             // Remove o último se for do mesmo mês (para atualizar com dados live)
+        if (!historyMap.has(currentKey) && kpis.totalEquity > 0) {
+             const profit = kpis.totalEquity - kpis.totalInvested;
+             const stackBase = Math.min(kpis.totalEquity, kpis.totalInvested);
+             const stackProfit = Math.max(0, profit);
+
              if (filledData.length > 0 && filledData[filledData.length - 1].label === new Date().toLocaleDateString('pt-BR', { month: '2-digit', year: '2-digit' })) {
                  filledData.pop();
              }
 
-             if (kpis.totalEquity > 0) {
-                filledData.push({
-                    label: new Date().toLocaleDateString('pt-BR', { month: '2-digit', year: '2-digit' }),
-                    sortDate: new Date(),
-                    investedDisplay: baseValue,
-                    profitDisplay: profitValue,
-                    realInvested: kpis.totalInvested,
-                    realEquity: kpis.totalEquity,
-                    realProfit: kpis.totalResult
-                });
-             }
+             filledData.push({
+                label: new Date().toLocaleDateString('pt-BR', { month: '2-digit', year: '2-digit' }),
+                sortDate: new Date(),
+                baseBar: stackBase,
+                profitBar: stackProfit,
+                realInvested: kpis.totalInvested,
+                realEquity: kpis.totalEquity,
+                realProfit: kpis.totalResult
+            });
         }
 
-        // 5. Filtragem de Tempo (Fatiamento do Array já preenchido)
         let finalData = filledData;
         const now = new Date();
 
         if (timeRange === '12M') {
-            // Pega os últimos 12 meses
             finalData = filledData.slice(-12);
         } else if (timeRange === 'YTD') {
             finalData = filledData.filter(d => d.sortDate.getFullYear() === now.getFullYear());
@@ -136,19 +109,14 @@ export const EvolutionChart = () => {
         return finalData;
     }, [history, kpis, timeRange]);
 
-    // Cálculo dinâmico da largura da barra para evitar sobreposição
     const barSize = chartData.length > 24 ? 12 : (chartData.length > 12 ? 20 : 35);
 
     if (kpis.totalEquity === 0 && chartData.length === 0) {
         return (
             <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col items-center justify-center text-center relative overflow-hidden group">
-                <div className="w-16 h-16 bg-slate-900 rounded-full flex items-center justify-center mb-4 border border-slate-800 shadow-xl">
-                    <BarChart3 className="text-slate-600" size={32} />
-                </div>
-                <h3 className="text-white font-bold mb-1">Evolução do Patrimônio</h3>
-                <p className="text-slate-500 text-xs max-w-[200px]">
-                    Adicione ativos para visualizar o gráfico de barras mensais.
-                </p>
+                <BarChart3 className="text-slate-700 mb-4" size={48} />
+                <h3 className="text-slate-300 font-bold text-sm">Sem dados históricos</h3>
+                <p className="text-slate-600 text-xs">O gráfico será gerado após o primeiro aporte.</p>
             </div>
         );
     }
@@ -156,15 +124,18 @@ export const EvolutionChart = () => {
     return (
         <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
             
-            {/* Header com Filtros */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 z-10 relative">
                 <div>
                     <h3 className="text-base font-bold text-white">Evolução do Patrimônio</h3>
-                    <div className="flex items-center gap-2 mt-1">
-                        <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                        <p className="text-xs text-slate-400">Valor aplicado</p>
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 ml-2"></span>
-                        <p className="text-xs text-slate-400">Ganho capital</p>
+                    <div className="flex items-center gap-3 mt-1">
+                        <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-700"></span>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">Valor Aplicado</p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">Resultado</p>
+                        </div>
                     </div>
                 </div>
                 
@@ -185,10 +156,9 @@ export const EvolutionChart = () => {
                 </div>
             </div>
 
-            {/* Gráfico */}
             <div className="flex-1 w-full relative min-h-0 text-xs">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }} barGap={2}>
+                    <BarChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }} barGap={0}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                         
                         <XAxis 
@@ -196,7 +166,7 @@ export const EvolutionChart = () => {
                             tick={{fill: '#64748b', fontSize: 10, fontWeight: 500}} 
                             axisLine={false} 
                             tickLine={false}
-                            minTickGap={30} // Evita sobreposição de datas
+                            minTickGap={20}
                             dy={10}
                         />
                         
@@ -208,7 +178,7 @@ export const EvolutionChart = () => {
                         />
                         
                         <Tooltip 
-                            cursor={{ fill: '#1e293b', opacity: 0.4 }}
+                            cursor={{ fill: '#1e293b', opacity: 0.3 }}
                             content={({ active, payload, label }) => {
                                 if (active && payload && payload.length) {
                                     const data = payload[0].payload;
@@ -218,17 +188,17 @@ export const EvolutionChart = () => {
                                             
                                             <div className="space-y-1.5">
                                                 <div className="flex justify-between items-center text-xs">
-                                                    <span className="text-emerald-600 font-medium">Aplicado</span>
+                                                    <span className="text-emerald-600 font-bold">Aplicado</span>
                                                     <span className="text-slate-200 font-mono">{formatTooltipCurrency(data.realInvested)}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center text-xs">
-                                                    <span className="text-emerald-400 font-medium">Rentabilidade</span>
-                                                    <span className={`font-mono ${data.realProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                    <span className="text-emerald-400 font-bold">Resultado</span>
+                                                    <span className={`font-mono font-bold ${data.realProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
                                                         {data.realProfit >= 0 ? '+' : ''}{formatTooltipCurrency(data.realProfit)}
                                                     </span>
                                                 </div>
                                                 <div className="border-t border-slate-800 pt-1.5 mt-1 flex justify-between items-center">
-                                                    <span className="text-white font-bold text-xs">Patrimônio</span>
+                                                    <span className="text-white font-bold text-xs uppercase">Saldo Final</span>
                                                     <span className="text-white font-bold font-mono text-sm">{formatTooltipCurrency(data.realEquity)}</span>
                                                 </div>
                                             </div>
@@ -239,29 +209,26 @@ export const EvolutionChart = () => {
                             }}
                         />
                         
-                        {/* Barra Base: Investido (Visualmente ajustado para nunca exceder Equity se prejuízo) */}
                         <Bar 
-                            dataKey="investedDisplay" 
+                            dataKey="baseBar" 
                             stackId="a" 
-                            fill="#059669" // Emerald 600 (Mais escuro)
-                            radius={[0, 0, 4, 4]} // Arredonda embaixo
+                            fill="#047857" // Emerald 700
+                            radius={[0, 0, 4, 4]} 
                             maxBarSize={50}
                             barSize={barSize}
-                            animationDuration={1500}
+                            animationDuration={1000}
                         />
                         
-                        {/* Barra Topo: Lucro (Só existe se Equity > Investido) */}
                         <Bar 
-                            dataKey="profitDisplay" 
+                            dataKey="profitBar" 
                             stackId="a" 
-                            fill="#34D399" // Emerald 400 (Mais claro)
-                            radius={[4, 4, 0, 0]} // Arredonda topo
+                            fill="#34D399" // Emerald 400
+                            radius={[4, 4, 0, 0]} 
                             maxBarSize={50}
                             barSize={barSize}
-                            animationDuration={1500}
+                            animationDuration={1000}
                         />
                         
-                        {/* Linha de Referência Zero */}
                         <ReferenceLine y={0} stroke="#334155" />
                     </BarChart>
                 </ResponsiveContainer>

@@ -45,10 +45,13 @@ export const externalMarketService = {
                 if (symbol.endsWith('.SA')) symbol = symbol.replace('.SA', '');
                 if (symbol.endsWith('-USD')) symbol = symbol.replace('-USD', '');
                 
+                // Tenta pegar a variação de várias propriedades possíveis
+                const changePct = item.regularMarketChangePercent || item.changePercent || 0;
+
                 return {
                     ticker: symbol,
                     price: item.regularMarketPrice || item.price || 0,
-                    change: item.regularMarketChangePercent || 0,
+                    change: changePct, // Mapeamento robusto
                     name: item.longName || item.shortName || symbol
                 };
             });
@@ -67,10 +70,12 @@ export const externalMarketService = {
                         if (symbol.endsWith('.SA')) symbol = symbol.replace('.SA', '');
                         if (symbol.endsWith('-USD')) symbol = symbol.replace('-USD', '');
                         
+                        const changePct = singleRes.regularMarketChangePercent || singleRes.changePercent || 0;
+
                         fallbackResults.push({
                             ticker: symbol,
                             price: singleRes.regularMarketPrice || singleRes.price || 0,
-                            change: singleRes.regularMarketChangePercent || 0,
+                            change: changePct,
                             name: singleRes.longName || singleRes.shortName || symbol
                         });
                     } catch (e) {
@@ -159,10 +164,6 @@ export const externalMarketService = {
                 events: 'dividends'
             };
 
-            // chart() também suporta eventos, mas a estrutura muda. 
-            // Mantemos historical se chart não retornar events facilmente, 
-            // ou adaptamos. O warning é apenas um aviso, historical ainda funciona por enquanto.
-            // Para garantir estabilidade agora, mantemos historical mas suprimimos o aviso acima.
             const result = await yahooFinance.historical(symbol, queryOptions);
             
             if (!result || !Array.isArray(result)) return [];
@@ -175,6 +176,61 @@ export const externalMarketService = {
                 }));
 
         } catch (error) {
+            return [];
+        }
+    },
+
+    // --- NOVO: BUSCA DE SPLITS COM SUPORTE A FRACIONÁRIO ---
+    async getSplitsHistory(ticker, type) {
+        let symbol = ticker.trim().toUpperCase();
+        
+        // Tratamento de Fracionário (ex: PETR4F -> PETR4)
+        if (symbol.length >= 5 && symbol.endsWith('F') && !isNaN(symbol[symbol.length - 2])) {
+            symbol = symbol.slice(0, -1);
+        }
+
+        if ((type === 'STOCK' || type === 'FII') && !symbol.endsWith('.SA') && !symbol.startsWith('^')) {
+             if (/^[A-Z]{4}\d{1,2}$/.test(symbol)) {
+                symbol = `${symbol}.SA`;
+            }
+        } else if (type === 'STOCK_US') {
+            // US Stocks não tem sufixo no Yahoo
+        }
+
+        try {
+            const queryOptions = { 
+                period1: '2010-01-01', 
+                period2: new Date().toISOString().split('T')[0],
+                interval: '1d',
+                events: 'split'
+            };
+
+            const result = await yahooFinance.historical(symbol, queryOptions);
+            
+            if (!result || !Array.isArray(result)) return [];
+
+            return result
+                .filter(item => item.splitRatio)
+                .map(item => {
+                    // splitRatio vem como string "10:1" ou "1:10"
+                    const parts = item.splitRatio.split(':');
+                    const numerator = parseFloat(parts[0]);
+                    const denominator = parseFloat(parts[1]);
+                    
+                    // Fator multiplicador da quantidade
+                    // Ex: Split 10:1 (10 ações novas para 1 velha). Fator = 10.
+                    // Inplit 1:10 (1 ação nova para 10 velhas). Fator = 0.1.
+                    const factor = numerator / denominator;
+
+                    return {
+                        date: item.date,
+                        factor: factor,
+                        ratio: item.splitRatio
+                    };
+                });
+
+        } catch (error) {
+            logger.warn(`Erro ao buscar splits para ${ticker}: ${error.message}`);
             return [];
         }
     }

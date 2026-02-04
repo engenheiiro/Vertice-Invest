@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 
 const RankingItemSchema = new mongoose.Schema({
   position: Number,
+  previousPosition: Number, // Novo campo para delta
   ticker: String,
   name: String,
   sector: String,
@@ -13,17 +14,14 @@ const RankingItemSchema = new mongoose.Schema({
   score: Number,       
   probability: Number, 
   
-  // Campo Essencial para as Abas
   riskProfile: { type: String, enum: ['DEFENSIVE', 'MODERATE', 'BOLD'], default: 'MODERATE' },
 
-  // Teses Estruturadas
-  thesis: String, // Resumo curto
-  bullThesis: [String], // Pontos positivos detalhados
-  bearThesis: [String], // Riscos detalhados
+  thesis: String, 
+  bullThesis: [String], 
+  bearThesis: [String], 
   
   reason: String,
   metrics: {
-    // Valuation Clássico
     grahamPrice: Number,
     bazinPrice: Number,
     pegRatio: Number,
@@ -32,38 +30,24 @@ const RankingItemSchema = new mongoose.Schema({
     evEbitda: Number, 
     psr: Number,
     earningsYield: Number,
-    
-    // Valuation Avançado (Novos)
     pEbit: Number,
     pAtivos: Number,
     pCapGiro: Number,
     pAtivCircLiq: Number,
     evEbit: Number,
-
-    // Rentabilidade e Eficiência
     roe: Number,
     roic: Number, 
     netMargin: Number,
     ebitMargin: Number, 
-    
-    // Saúde Financeira
     debtToEquity: Number,
     currentRatio: Number,
-    
-    // Dados de Balanço (Disponíveis no Bulk)
     patrimLiq: Number, 
-    
-    // Dados Calculados (Engenharia Reversa)
-    marketCap: Number,    // Valor de Mercado
-    netDebt: Number,      // Dívida Líquida
-    netRevenue: Number,   // Receita Líquida
-    netIncome: Number,    // Lucro Líquido
-    totalAssets: Number,  // Ativos Totais
-    
-    // Dividendos
+    marketCap: Number,    
+    netDebt: Number,      
+    netRevenue: Number,   
+    netIncome: Number,    
+    totalAssets: Number,  
     dy: Number,
-    
-    // FIIs Específico Detalhado
     vacancy: Number, 
     qtdImoveis: Number,
     capRate: Number, 
@@ -72,11 +56,8 @@ const RankingItemSchema = new mongoose.Schema({
     ffoCota: Number, 
     priceM2: Number, 
     rentM2: Number,  
-    
-    // Dados Brutos
     avgLiquidity: Number,
     revenueGrowth: Number,
-
     structural: {
         quality: { type: Number, default: 50 },
         valuation: { type: Number, default: 50 },

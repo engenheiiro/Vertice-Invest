@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { PieChart, MoreHorizontal, TrendingUp, TrendingDown, Minus, RefreshCw, Crown, Folder, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { PieChart, TrendingUp, RefreshCw, Folder, ChevronDown, ChevronRight } from 'lucide-react';
 import { PortfolioItem } from '../../hooks/useDashboardData';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
@@ -9,8 +9,8 @@ import { useNavigate } from 'react-router-dom';
 
 interface AssetTableProps {
     items: PortfolioItem[];
-    isLoading?: boolean; // Carregamento estrutural (Carteira vazia/sync inicial)
-    isResearchLoading?: boolean; // Carregamento de dados de IA (Scores)
+    isLoading?: boolean;
+    isResearchLoading?: boolean;
 }
 
 const GROUP_NAMES: Record<string, string> = {
@@ -46,11 +46,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
     };
 
     const groupedItems = items.reduce((acc, item) => {
-        let type = 'OUTROS';
-        if (item.ticker.endsWith('11') || item.ticker.endsWith('11B')) type = 'FII'; 
-        else if (item.ticker.length <= 6 && !item.ticker.includes('-')) type = 'STOCK';
-        else if (item.ticker.includes('-') || item.ticker === 'BTC' || item.ticker === 'ETH') type = 'CRYPTO';
-
+        const type = item.type || 'OUTROS';
         const groupName = GROUP_NAMES[type] || 'Outros';
 
         if (!acc[groupName]) acc[groupName] = [];
@@ -102,7 +98,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                             <th className="p-4 font-bold text-right">Posição</th>
                             <th className="p-4 font-bold w-48">Performance</th>
                             <th className="p-4 font-bold text-right">IA Score</th>
-                            <th className="p-4 font-bold text-center">Ação</th>
+                            <th className="p-4 font-bold text-center">Recomendação</th>
                         </tr>
                     </thead>
                     <tbody className="text-sm divide-y divide-slate-800/50">
@@ -115,7 +111,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                     <td className="p-4 text-right"><div className="h-3 w-20 bg-slate-800 rounded ml-auto"></div></td>
                                     <td className="p-4"><div className="h-2 w-full bg-slate-800 rounded"></div></td>
                                     <td className="p-4 text-right"><div className="h-3 w-8 bg-slate-800 rounded ml-auto"></div></td>
-                                    <td className="p-4 text-center"><div className="h-6 w-6 bg-slate-800 rounded mx-auto"></div></td>
+                                    <td className="p-4 text-center"><div className="h-6 w-16 bg-slate-800 rounded mx-auto"></div></td>
                                 </tr>
                             ))
                         ) : (
@@ -186,32 +182,34 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                     </div>
                                                 </td>
 
-                                                {/* COLUNA IA SCORE - Skeleton Híbrido */}
+                                                {/* COLUNA IA SCORE */}
                                                 <td className="p-4 text-right">
                                                     {isResearchLoading && item.aiScore === 0 ? (
                                                         <div className="flex flex-col items-end gap-1 opacity-60">
                                                             <div className="h-3 w-8 bg-slate-700 rounded animate-pulse"></div>
-                                                            <div className="h-2 w-12 bg-slate-700 rounded animate-pulse"></div>
                                                         </div>
                                                     ) : item.aiScore > 0 ? (
-                                                        <div className="flex flex-col items-end gap-0.5 animate-fade-in">
-                                                            <div className="font-black text-xs text-white">{item.aiScore}</div>
-                                                            <div className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border ${
-                                                                item.aiSentiment === 'BULLISH' ? 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10' :
-                                                                item.aiSentiment === 'BEARISH' ? 'text-red-500 border-red-500/30 bg-red-500/10' :
-                                                                'text-slate-500 border-slate-700 bg-slate-800'
-                                                            }`}>
-                                                                {item.aiSentiment === 'BULLISH' ? 'Compra' : item.aiSentiment === 'BEARISH' ? 'Venda' : 'Manter'}
-                                                            </div>
-                                                        </div>
+                                                        <span className="font-black text-xs text-white">{item.aiScore}</span>
                                                     ) : (
                                                         <span className="text-[10px] text-slate-600 italic">--</span>
                                                     )}
                                                 </td>
+
+                                                {/* COLUNA AÇÃO (RECOMENDAÇÃO) */}
                                                 <td className="p-4 text-center">
-                                                    <button className="text-slate-500 hover:text-blue-400 transition-colors p-1 hover:bg-slate-800 rounded">
-                                                        <MoreHorizontal size={16} />
-                                                    </button>
+                                                    {isResearchLoading && item.aiScore === 0 ? (
+                                                        <div className="h-5 w-16 bg-slate-700 rounded animate-pulse mx-auto"></div>
+                                                    ) : item.aiScore > 0 ? (
+                                                        <span className={`inline-block text-[9px] font-black uppercase px-2 py-1 rounded border min-w-[70px] text-center ${
+                                                            item.aiSentiment === 'BULLISH' ? 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10' :
+                                                            item.aiSentiment === 'BEARISH' ? 'text-red-500 border-red-500/30 bg-red-500/10' :
+                                                            'text-slate-400 border-slate-700 bg-slate-800'
+                                                        }`}>
+                                                            {item.aiSentiment === 'BULLISH' ? 'COMPRA' : item.aiSentiment === 'BEARISH' ? 'VENDA' : 'MANTER'}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] text-slate-600">--</span>
+                                                    )}
                                                 </td>
                                             </tr>
                                         );

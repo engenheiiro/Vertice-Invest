@@ -34,7 +34,7 @@ export const marketDataService = {
             if (asset) {
                 return { 
                     price: asset.lastPrice || 0, 
-                    change: 0, 
+                    change: asset.change || 0, 
                     name: asset.name 
                 };
             }
@@ -45,7 +45,7 @@ export const marketDataService = {
         }
     },
 
-    async refreshQuotesBatch(tickers) {
+    async refreshQuotesBatch(tickers, force = false) {
         if (!tickers || tickers.length === 0) return;
 
         const cleanTickers = [...new Set(tickers.map(t => this.normalizeSymbol(t)))];
@@ -53,7 +53,7 @@ export const marketDataService = {
         const threshold = new Date(now.getTime() - CACHE_DURATION_MINUTES * 60 * 1000);
 
         try {
-            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker lastAnalysisDate updatedAt lastPrice type');
+            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker updatedAt lastPrice change');
             
             const toUpdate = [];
             const assetMap = new Map();
@@ -62,23 +62,30 @@ export const marketDataService = {
 
             cleanTickers.forEach(ticker => {
                 const asset = assetMap.get(ticker);
-                // Atualiza se estiver velho OU se o preço for zero (tentativa de corrigir dados falhos)
-                if (!asset || !asset.updatedAt || asset.updatedAt < threshold || asset.lastPrice === 0) {
+                
+                // LÓGICA DE CACHE APERFEIÇOADA:
+                // Se force == true, ignora verificação de tempo.
+                if (force) {
                     toUpdate.push(ticker);
+                } else {
+                    const isStale = !asset || !asset.updatedAt || asset.updatedAt < threshold;
+                    const isDataMissing = !asset || asset.lastPrice === 0 || asset.change === 0;
+
+                    if (isStale || isDataMissing) {
+                        toUpdate.push(ticker);
+                    }
                 }
             });
 
             if (toUpdate.length === 0) return;
 
-            // SmartSync só atualiza preço (cotação rápida) via External (Yahoo)
+            // Busca cotações externas (Yahoo)
             const quotes = await externalMarketService.getQuotes(toUpdate);
 
             if (!quotes || quotes.length === 0) return;
 
             const operations = quotes
                 .filter(quote => {
-                    // CIRCUIT BREAKER: Ignora preços zerados ou negativos vindo da API
-                    // Isso previne que o patrimônio do usuário desabe para 0 se o Yahoo falhar
                     return quote.price && quote.price > 0;
                 })
                 .map(quote => ({
@@ -87,6 +94,7 @@ export const marketDataService = {
                         update: {
                             $set: {
                                 lastPrice: quote.price,
+                                change: quote.change || 0, 
                                 updatedAt: now
                             }
                         }
@@ -97,7 +105,7 @@ export const marketDataService = {
                 await MarketAsset.bulkWrite(operations);
                 logger.info(`✅ [SmartSync] ${operations.length} cotações atualizadas.`);
             } else {
-                logger.warn(`⚠️ [SmartSync] API retornou dados, mas todos eram inválidos (preço 0). Mantendo cache anterior.`);
+                logger.warn(`⚠️ [SmartSync] Falha no lote: Yahoo não retornou dados válidos para ${toUpdate.length} ativos.`);
             }
 
         } catch (error) {
@@ -154,7 +162,6 @@ export const marketDataService = {
                 }
             }
 
-            // Tenta match exato
             const dayData = historyEntry.history.find(h => h.date === dateStr);
             if (dayData && dayData.close > 0) {
                 return {
@@ -164,9 +171,7 @@ export const marketDataService = {
                 };
             }
 
-            // Fallback: Busca o dia útil ANTERIOR mais próximo (ex: se pediu Domingo, pega Sexta)
             const targetDate = new Date(dateStr);
-            // Ordena decrescente para pegar o mais recente anterior
             const sortedHistory = [...historyEntry.history].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
             
             const closest = sortedHistory.find(h => new Date(h.date) <= targetDate);
@@ -212,7 +217,6 @@ export const marketDataService = {
         }
     },
 
-    // Lê dados do Banco (UI Only)
     async getMarketData(assetClass) {
         const isBrasil = assetClass === 'STOCK' || assetClass === 'FII' || assetClass === 'BRASIL_10';
         const results = [];
@@ -253,7 +257,12 @@ export const marketDataService = {
                         netDebt: asset.netDebt || 0,
                         vacancy: asset.vacancy || 0,
                         capRate: asset.capRate || 0,
-                        qtdImoveis: asset.qtdImoveis || 0
+                        qtdImoveis: asset.qtdImoveis || 0,
+                        structural: {
+                            quality: 50,
+                            valuation: 50,
+                            risk: 50
+                        }
                     }
                 });
             }
