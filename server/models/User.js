@@ -1,3 +1,4 @@
+
 import mongoose from 'mongoose';
 
 const UserSchema = new mongoose.Schema({
@@ -9,6 +10,15 @@ const UserSchema = new mongoose.Schema({
     lowercase: true, 
     trim: true,
     match: [/^\S+@\S+\.\S+$/, 'Formato de email inválido']
+  },
+  // CPF: Armazenar apenas números (11 dígitos). Sparse permite que usuários antigos fiquem sem CPF temporariamente.
+  cpf: { 
+    type: String, 
+    unique: true, 
+    sparse: true,
+    trim: true,
+    minlength: 11,
+    maxlength: 14 
   },
   password: { type: String, required: true },
   

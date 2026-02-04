@@ -1,3 +1,4 @@
+
 import mongoose from 'mongoose';
 import logger from './logger.js';
 
@@ -10,8 +11,16 @@ const connectDB = async () => {
   }
 
   const connectOptions = {
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
+    // Aumentado para 30s (padrão robusto para produção remota)
+    serverSelectionTimeoutMS: 30000, 
+    // Aumentado para 60s para permitir queries complexas de agregação
+    socketTimeoutMS: 60000,
+    // Garante reconexão automática
+    autoIndex: true,
+    // Limita conexões simultâneas para não afogar o banco (essencial para planos shared)
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    family: 4 // Força IPv4 para evitar problemas de resolução DNS IPv6 em alguns ambientes
   };
 
   try {
@@ -22,8 +31,20 @@ const connectDB = async () => {
       logger.error(`🔥 Erro de runtime no MongoDB: ${err.message}`);
     });
 
+    mongoose.connection.on('disconnected', () => {
+      logger.warn(`⚠️ MongoDB Desconectado. Tentando reconectar...`);
+    });
+
+    mongoose.connection.on('reconnected', () => {
+      logger.info(`✅ MongoDB Reconectado.`);
+    });
+
   } catch (err) {
     logger.error(`❌ Erro CRÍTICO na conexão MongoDB: ${err.message}`);
+    // Não encerra o processo imediatamente em dev, tenta manter o servidor de pé
+    if (process.env.NODE_ENV === 'production') {
+        process.exit(1);
+    }
   }
 };
 

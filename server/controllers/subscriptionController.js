@@ -13,12 +13,13 @@ const PLANS = {
 };
 
 // Definição de limites por feature e plano
+// 9999 = Ilimitado
 const LIMITS_CONFIG = {
     'smart_contribution': {
         'GUEST': 0,
-        'ESSENTIAL': 1,
-        'PRO': 2,
-        'BLACK': 9999 
+        'ESSENTIAL': 1, // Estrito: 1x por mês
+        'PRO': 9999,    // Ilimitado
+        'BLACK': 9999   // Ilimitado
     },
     'report': {
         'GUEST': 0,
@@ -55,17 +56,16 @@ export const checkAccess = async (req, res, next) => {
         const usageLog = await UsageLog.findOne({ user: user.id, feature, monthKey });
         const currentUsage = usageLog ? usageLog.count : 0;
 
-        logger.debug(`🔐 [Access] User: ${user.id} | Plan: ${plan} | Feature: ${feature} | Usage: ${currentUsage}/${limit}`);
-
-        if (currentUsage >= limit) {
+        // Se o limite for atingido E não for ilimitado (9999)
+        if (currentUsage >= limit && limit !== 9999) {
             return res.status(403).json({ 
                 allowed: false, 
                 currentUsage, 
                 limit, 
                 plan,
                 message: limit === 0 
-                    ? `Recurso indisponível no plano ${plan}.` 
-                    : `Limite mensal atingido (${currentUsage}/${limit}).`
+                    ? `Recurso exclusivo para assinantes PRO ou BLACK.` 
+                    : `Você atingiu seu limite mensal (${currentUsage}/${limit}) para o plano ${plan}.`
             });
         }
 
@@ -90,23 +90,25 @@ export const registerUsage = async (req, res, next) => {
         const limit = LIMITS_CONFIG[feature]?.[plan] || 0;
         const monthKey = getMonthKey();
 
-        // Operação atômica para incrementar e checar limite (previne race conditions simples)
+        // Operação atômica para incrementar e checar limite
         const usageLog = await UsageLog.findOneAndUpdate(
             { user: user.id, feature, monthKey },
             { $setOnInsert: { count: 0 } },
             { upsert: true, new: true }
         );
 
-        if (usageLog.count >= limit) {
-            logger.warn(`⛔ [Usage] Tentativa de uso excedente bloqueada. User: ${user.id}, Feature: ${feature}`);
-            return res.status(403).json({ message: "Limite atingido." });
+        // Bloqueio Hard no Backend
+        if (usageLog.count >= limit && limit !== 9999) {
+            logger.warn(`⛔ [Usage] Tentativa de burlar limite bloqueada. User: ${user.id}, Plan: ${plan}`);
+            return res.status(403).json({ message: "Limite mensal atingido. Faça upgrade para continuar." });
         }
 
+        // Incrementa
         usageLog.count += 1;
         usageLog.lastUsed = new Date();
         await usageLog.save();
 
-        logger.info(`✅ [Usage] Uso registrado. User: ${user.id}, Feature: ${feature}, Novo Total: ${usageLog.count}`);
+        logger.info(`✅ [Usage] Uso registrado. User: ${user.id} (${plan}), Feature: ${feature}, Novo Total: ${usageLog.count}`);
         
         res.json({ success: true, newUsage: usageLog.count });
 
@@ -126,8 +128,7 @@ export const createCheckoutSession = async (req, res, next) => {
         }
 
         const sessionId = `sess_${new Date().getTime()}_${Math.random().toString(36).substring(7)}`;
-        logger.info(`💳 [Checkout] Iniciado: User ${userId} -> Plan ${planId}`);
-
+        
         res.status(200).json({
             sessionId,
             plan: planId,
@@ -172,8 +173,6 @@ export const confirmPayment = async (req, res, next) => {
         await session.commitTransaction();
         session.endSession();
 
-        logger.info(`💰 [Pagamento] Confirmado: User ${userId} atualizado para ${planId}`);
-
         res.status(200).json({
             success: true,
             user: {
@@ -186,7 +185,6 @@ export const confirmPayment = async (req, res, next) => {
     } catch (error) {
         await session.abortTransaction();
         session.endSession();
-        logger.error(`❌ [Pagamento] Erro: ${error.message}`);
         next(error);
     }
 };

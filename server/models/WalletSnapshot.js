@@ -12,6 +12,10 @@ const WalletSnapshotSchema = new mongoose.Schema({
   profit: { type: Number, default: 0 },
   profitPercent: { type: Number, default: 0 },
   
+  // CORE V3: Sistema de Cotas
+  // Permite calcular rentabilidade TWRR real, imune a aportes/resgates
+  quotaPrice: { type: Number, default: 100 }, 
+
   // Opcional: Breakdown por classe para gráficos de alocação histórica
   allocation: {
     stock: Number,

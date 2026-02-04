@@ -7,7 +7,10 @@ import TreasuryBond from '../models/TreasuryBond.js';
 import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
 
-const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522 };
+// 432 = Selic Meta AA
+// 13522 = IPCA 12m
+// 4389 = CDI Mensal % (Para cálculo preciso do acumulado)
+const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4389 };
 
 const BROWSER_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -21,27 +24,55 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false, keepAlive: true 
 
 export const macroDataService = {
     
-    // --- 1. INDICADORES MACRO ---
+    // --- 1. INDICADORES MACRO (OFICIAIS) ---
     async updateOfficialRates() {
         try {
+            // 1. Selic Meta (Atual)
             const selicRes = await axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.SELIC_META}/dados/ultimos/1?formato=json`);
             const selicVal = selicRes.data[0]?.valor ? parseFloat(selicRes.data[0].valor) : 11.25;
-            logger.info(`✅ [MACRO] Selic Meta atualizada: ${selicVal}%`);
-
+            
+            // 2. IPCA 12 Meses
             let ipcaVal = 4.50;
             try {
                 const ipcaRes = await axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.IPCA_12M}/dados/ultimos/1?formato=json`);
                 if (ipcaRes.data[0]?.valor) {
                     ipcaVal = parseFloat(ipcaRes.data[0].valor);
-                    logger.info(`✅ [MACRO] IPCA (12m) atualizado: ${ipcaVal}%`);
                 }
             } catch (e) { logger.warn("⚠️ Falha ao buscar IPCA (Usando fallback)"); }
 
-            const cdiVal = Math.max(0, selicVal - 0.10);
-            return { selic: selicVal, ipca: ipcaVal, cdi: cdiVal };
+            // 3. CDI Acumulado 12 Meses (Cálculo Real)
+            let cdiAccumulated12m = 11.20; // Fallback realista
+            try {
+                // Busca últimos 12 meses de CDI Mensal
+                const cdiRes = await axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.CDI_MONTHLY}/dados/ultimos/12?formato=json`);
+                if (cdiRes.data && cdiRes.data.length > 0) {
+                    let accFactor = 1.0;
+                    cdiRes.data.forEach(month => {
+                        const val = parseFloat(month.valor);
+                        if (!isNaN(val)) {
+                            accFactor *= (1 + (val / 100));
+                        }
+                    });
+                    cdiAccumulated12m = (accFactor - 1) * 100;
+                    logger.info(`✅ [MACRO] CDI 12m Calculado: ${cdiAccumulated12m.toFixed(2)}% (Baseado em ${cdiRes.data.length} meses)`);
+                }
+            } catch (e) {
+                logger.warn(`⚠️ Falha ao calcular CDI 12m: ${e.message}`);
+            }
+
+            // Taxa DI diária projetada (aprox Selic - 0.10)
+            const cdiDailyRate = Math.max(0, selicVal - 0.10);
+
+            return { 
+                selic: selicVal, 
+                ipca: ipcaVal, 
+                cdi: cdiDailyRate,
+                cdi12m: cdiAccumulated12m 
+            };
+
         } catch (error) {
             logger.error(`❌ Erro BCB API: ${error.message}`);
-            return { selic: 11.25, ipca: 4.50, cdi: 11.15 }; 
+            return { selic: 11.25, ipca: 4.50, cdi: 11.15, cdi12m: 11.20 }; 
         }
     },
 
@@ -55,7 +86,6 @@ export const macroDataService = {
             const btcUsd = parseFloat(res.data.BTCUSD.bid);
             const btcChange = parseFloat(res.data.BTCUSD.pctChange);
 
-            logger.info(`✅ [MACRO] Moedas atualizadas - USD: R$${usd} (${usdChange}%), BTC: $${btcUsd}`);
             return { usd, usdChange, btcUsd, btcChange };
         } catch (error) {
             if (error.response && error.response.status === 429) {
@@ -194,7 +224,7 @@ export const macroDataService = {
         const globalIndices = await externalMarketService.getGlobalIndices(); 
         const treasury = await this.updateTreasuryRates(); 
 
-        // BUSCA SPX 12 MESES
+        // --- CÁLCULO PRECISO: SPX 12 MESES (Date-Based) ---
         let spx12mReturn = 0; 
         try {
             const historySPX = await externalMarketService.getFullHistory('^GSPC', 'INDEX'); 
@@ -203,12 +233,27 @@ export const macroDataService = {
                 historySPX.sort((a, b) => new Date(a.date) - new Date(b.date));
 
                 const current = historySPX[historySPX.length - 1].close;
-                const indexOneYearAgo = Math.max(0, historySPX.length - 253);
-                const past = historySPX[indexOneYearAgo].close;
+                
+                // Busca a data exata de 1 ano atrás (ou a mais próxima anterior)
+                const today = new Date();
+                const oneYearAgo = new Date();
+                oneYearAgo.setFullYear(today.getFullYear() - 1);
+                
+                // Encontra o ponto mais próximo <= data alvo
+                let pastPoint = null;
+                for (let i = historySPX.length - 1; i >= 0; i--) {
+                    const d = new Date(historySPX[i].date);
+                    if (d <= oneYearAgo) {
+                        pastPoint = historySPX[i];
+                        break;
+                    }
+                }
+
+                const past = pastPoint ? pastPoint.close : historySPX[0].close;
                 
                 if (past > 0) {
                     spx12mReturn = ((current - past) / past) * 100;
-                    logger.info(`📈 S&P 500 (12m Calculado): ${spx12mReturn.toFixed(2)}% (Preço Atual: ${current}, Preço Ano Passado: ${past})`);
+                    logger.info(`📈 S&P 500 (12m Real): ${spx12mReturn.toFixed(2)}% (Atual: ${current}, Base: ${past} em ${pastPoint ? pastPoint.date : 'N/A'})`);
                 }
             } else {
                 logger.warn("Histórico S&P curto demais para calc 12m.");
@@ -223,7 +268,7 @@ export const macroDataService = {
         if (official) {
             config.selic = official.selic;
             config.ipca = official.ipca;
-            config.cdi = official.cdi;
+            config.cdi = official.cdi12m || official.cdi; // Salva o acumulado 12m na propriedade principal para exibição
             config.riskFree = official.selic; 
         }
         
@@ -242,10 +287,13 @@ export const macroDataService = {
             if (globalIndices.spx) {
                 config.spx = globalIndices.spx.value;
                 config.spxChange = globalIndices.spx.change;
+                
+                // Atualiza o retorno 12m calculado com precisão
                 if (spx12mReturn !== 0) {
                     config.spxReturn12m = spx12mReturn;
                 } else if (!config.spxReturn12m) {
-                    config.spxReturn12m = 25.0; 
+                    // Se não tivermos dados, usa um valor aproximado de mercado
+                    config.spxReturn12m = 22.5; 
                 }
             }
         }

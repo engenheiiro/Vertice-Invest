@@ -7,45 +7,54 @@ import { portfolioEngine } from './engines/portfolioEngine.js';
 import SystemConfig from '../models/SystemConfig.js';
 import MarketAnalysis from '../models/MarketAnalysis.js'; 
 
-const getDiverseCandidates = (list, count, maxPerSector = 2) => {
-    const selected = [];
-    const sectorCounts = {};
-    const usedTickers = new Set();
+// Normalizador Helper AGRESSIVO (Sanitizer)
+const normalize = (ticker) => {
+    if (!ticker) return '';
+    // Remove .SA, espaços, quebras de linha e caracteres não-alfanuméricos (exceto dígitos se houver)
+    return ticker.toUpperCase().replace('.SA', '').replace(/[^A-Z0-9]/g, '').trim();
+};
 
-    // 1. Força a ordenação pelo Score Defensivo (que foi passado no objeto)
-    // Se for Brasil 10, queremos segurança e dividendos.
-    const sortedList = list.sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return (b.metrics?.avgLiquidity || 0) - (a.metrics?.avgLiquidity || 0);
-    });
+// Função auxiliar para calcular Delta de Posição
+const calculateRankingDelta = async (currentList, assetClass, strategy) => {
+    try {
+        // CORREÇÃO: Removido isRankingPublished: true
+        // Agora busca o último relatório GERADO, permitindo comparação entre rascunhos consecutivos.
+        const lastReport = await MarketAnalysis.findOne({ 
+            assetClass, 
+            strategy
+        }).sort({ createdAt: -1 });
 
-    for (const asset of sortedList) {
-        if (selected.length >= count) break;
-        if (usedTickers.has(asset.ticker)) continue;
+        // Cria mapa de posições anteriores com normalização
+        const prevPosMap = new Map();
         
-        const sector = asset.sector || 'Outros';
-        const currentCount = sectorCounts[sector] || 0;
-        
-        // Só adiciona se não estourar o limite do setor
-        if (currentCount < maxPerSector) {
-            selected.push(asset);
-            sectorCounts[sector] = currentCount + 1;
-            usedTickers.add(asset.ticker);
+        if (lastReport && lastReport.content && lastReport.content.ranking) {
+            lastReport.content.ranking.forEach(r => {
+                const t = normalize(r.ticker);
+                if (t) prevPosMap.set(t, r.position);
+            });
+            logger.info(`🔍 [Delta] Comparando com relatório anterior (${lastReport._id}) de ${lastReport.date}. ${prevPosMap.size} ativos mapeados.`);
+        } else {
+            logger.info(`🔍 [Delta] Nenhum relatório anterior encontrado para ${assetClass}. Todos serão NOVO.`);
         }
+
+        // Aplica o delta
+        return currentList.map(item => {
+            const t = normalize(item.ticker);
+            const prev = prevPosMap.get(t);
+            
+            // Se prev for undefined, é null (Novo). Se for número, mantém.
+            const previousPosition = prev !== undefined ? prev : null;
+
+            return {
+                ...item,
+                previousPosition: previousPosition
+            };
+        });
+
+    } catch (e) {
+        logger.error(`Erro ao calcular delta de ranking: ${e.message}`);
+        return currentList;
     }
-    
-    // Fallback: Se não preencheu devido a travas setoriais, preenche com o que tiver de melhor
-    // para garantir que a lista sempre tenha o tamanho solicitado (ex: 5).
-    if (selected.length < count) {
-        for (const asset of sortedList) {
-            if (selected.length >= count) break;
-            if (!usedTickers.has(asset.ticker)) {
-                selected.push(asset);
-                usedTickers.add(asset.ticker);
-            }
-        }
-    }
-    return selected;
 };
 
 export const aiResearchService = {
@@ -81,7 +90,10 @@ export const aiResearchService = {
             let ranking = portfolioEngine.performCompetitiveDraft(processedAssets);
             ranking = portfolioEngine.applyConcentrationPenalty(ranking);
 
-            // Full List com melhor perfil selecionado
+            // Calcula Deltas antes de retornar
+            ranking = await calculateRankingDelta(ranking, assetClass, strategy);
+
+            // Full List com melhor perfil selecionado (Audit Log)
             const fullList = processedAssets.map(asset => {
                 const entries = Object.entries(asset.scores);
                 const [bestProfile, bestScore] = entries.reduce((a, b) => a[1] > b[1] ? a : b);
@@ -118,41 +130,49 @@ export const aiResearchService = {
         const fiiData = await this.calculateRanking('FII', strat);
         await MarketAnalysis.create({ assetClass: 'FII', strategy: strat, content: { ranking: fiiData.ranking, fullAuditLog: fiiData.fullList }, generatedBy: adminId });
 
-        // 3. Brasil 10 (SMART MIX DEFENSIVO)
-        logger.info("   ➤ Gerando Brasil 10 (Smart Mix Defensivo)...");
+        // 3. Brasil 10 (LÓGICA RÍGIDA CORRIGIDA)
+        logger.info("   ➤ Gerando Brasil 10 (Strict Merge: 5 Stocks + 5 FIIs)...");
         
-        // REGRA: Pegar os melhores Scores Defensivos, independente do perfil principal.
-        // Removemos o filtro de corte (>= 60) para garantir que sempre tenhamos candidatos para o Top 5.
-        const mapToDefensiveContext = (list) => {
-            return list
+        // Função auxiliar para extrair Top 5 Defensivo
+        const getTop5Defensive = (fullList) => {
+            return fullList
                 .map(a => ({
                     ...a,
-                    score: a.scores['DEFENSIVE'], // Força o uso do score defensivo
-                    riskProfile: 'DEFENSIVE',     // Força o label para consistência visual no Top 10
-                    action: a.scores['DEFENSIVE'] >= 70 ? 'BUY' : 'WAIT',
-                    thesis: `Brasil 10 (Defensivo): Score ${a.scores['DEFENSIVE']}`
+                    score: a.scores['DEFENSIVE'], // Força Score Defensivo
+                    riskProfile: 'DEFENSIVE',     // Força Perfil Defensivo
+                    action: a.scores['DEFENSIVE'] >= 60 ? 'BUY' : 'WAIT',
+                    thesis: `Brasil 10: Score Defensivo ${a.scores['DEFENSIVE']}`
                 }))
-                .filter(a => a.score > 0); // Remove apenas zerados/inválidos
+                .sort((a, b) => b.score - a.score) // Ordena pelo Score Defensivo
+                .slice(0, 5); // Pega Top 5 estrito
         };
 
-        const defStocksCandidates = mapToDefensiveContext(stockData.processedAssets);
-        const defFIIsCandidates = mapToDefensiveContext(fiiData.processedAssets);
+        const top5Stocks = getTop5Defensive(stockData.processedAssets);
+        const top5FIIs = getTop5Defensive(fiiData.processedAssets);
         
-        // Seleciona Top 5 de cada usando a lógica de diversificação (Max 2 por setor)
-        const top5Stocks = getDiverseCandidates(defStocksCandidates, 5, 2); 
-        const top5FIIs = getDiverseCandidates(defFIIsCandidates, 5, 2);
+        // Junta as duas listas (5 + 5 = 10)
+        let brasil10List = [...top5Stocks, ...top5FIIs];
+
+        // Ordena a lista final de 10 pelo Score para apresentação (quem tem maior score fica em cima)
+        brasil10List.sort((a, b) => b.score - a.score);
+
+        // Atribui Posições (1 a 10)
+        brasil10List = brasil10List.map((item, idx) => ({
+            ...item,
+            position: idx + 1
+        }));
+
+        // Calcula Delta para o Brasil 10
+        brasil10List = await calculateRankingDelta(brasil10List, 'BRASIL_10', strat);
         
-        // Junta e ordena pelo Score Defensivo final
-        let brasil10List = [...top5Stocks, ...top5FIIs]
-            .sort((a, b) => b.score - a.score)
-            .map((item, idx) => ({ 
-                ...item, 
-                position: idx + 1 
-            })); 
+        await MarketAnalysis.create({ 
+            assetClass: 'BRASIL_10', 
+            strategy: strat, 
+            content: { ranking: brasil10List, fullAuditLog: brasil10List }, 
+            generatedBy: adminId 
+        });
         
-        await MarketAnalysis.create({ assetClass: 'BRASIL_10', strategy: strat, content: { ranking: brasil10List, fullAuditLog: brasil10List }, generatedBy: adminId });
-        
-        logger.info(`✅ [AI SERVICE] Batch Analysis Concluído. Brasil 10 gerado com ${brasil10List.length} ativos.`);
+        logger.info(`✅ [AI SERVICE] Batch Analysis Concluído.`);
         return true;
     },
 

@@ -44,19 +44,24 @@ export const getAssetStatus = async (req, res, next) => {
         const cleanTicker = ticker.toUpperCase().trim();
         
         const history = await AssetHistory.findOne({ ticker: cleanTicker });
+        const marketAsset = await MarketAsset.findOne({ ticker: cleanTicker });
         
-        if (!history) {
-            return res.json({ status: 'NOT_CACHED', ticker: cleanTicker });
-        }
-
         res.json({
-            status: 'CACHED',
-            ticker: history.ticker,
-            lastUpdated: history.lastUpdated,
-            dataPoints: history.history.length,
-            firstDate: history.history[0]?.date,
-            lastDate: history.history[history.history.length - 1]?.date,
-            sample: history.history.slice(-5).reverse() 
+            ticker: cleanTicker,
+            
+            // Real-time / Current Data (MarketAsset)
+            currentPrice: marketAsset?.lastPrice || 0,
+            lastSync: marketAsset?.updatedAt || null,
+            source: 'MarketAsset',
+
+            // Historical Data (AssetHistory)
+            historyStatus: history ? 'CACHED' : 'NOT_CACHED',
+            historyLastUpdated: history?.lastUpdated || null,
+            dataPoints: history?.history?.length || 0,
+            
+            // Backward compatibility / UI Helper
+            status: history ? 'CACHED' : (marketAsset ? 'LIVE_ONLY' : 'NOT_FOUND'),
+            lastUpdated: marketAsset?.updatedAt || history?.lastUpdated // Prioritize live sync date for general display
         });
     } catch (error) {
         next(error);

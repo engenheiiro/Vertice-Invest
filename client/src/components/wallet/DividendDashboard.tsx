@@ -1,8 +1,8 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { walletService } from '../../services/wallet';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Coins, CalendarCheck, TrendingUp, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
+import { Coins, CalendarCheck, TrendingUp, AlertCircle, CheckCircle2, Clock, Calculator } from 'lucide-react';
 
 interface DividendData {
     history: { 
@@ -12,20 +12,21 @@ interface DividendData {
     }[];
     provisioned: { ticker: string; date: string; amount: number }[];
     totalAllTime?: number; 
+    projectedMonthly?: number; 
 }
 
 export const DividendDashboard = () => {
-    const [data, setData] = useState<DividendData>({ history: [], provisioned: [], totalAllTime: 0 });
+    const [data, setData] = useState<DividendData>({ history: [], provisioned: [], totalAllTime: 0, projectedMonthly: 0 });
     const [isLoading, setIsLoading] = useState(true);
+    const [timeRange, setTimeRange] = useState<'12M' | 'ALL'>('12M'); // Filtro Temporal
 
     useEffect(() => {
         const load = async () => {
             try {
                 const res = await walletService.getDividends();
                 
-                // Filtra meses vazios no início (caso o backend tenha retornado lixo de 2020 zerado)
                 let cleanHistory = Array.isArray(res?.history) ? res.history : [];
-                // Remove zeros iniciais
+                // Remove meses zerados iniciais para limpar o gráfico
                 while(cleanHistory.length > 0 && cleanHistory[0].value === 0) {
                     cleanHistory.shift();
                 }
@@ -33,7 +34,8 @@ export const DividendDashboard = () => {
                 setData({
                     history: cleanHistory,
                     provisioned: Array.isArray(res?.provisioned) ? res.provisioned : [],
-                    totalAllTime: res?.totalAllTime || 0
+                    totalAllTime: res?.totalAllTime || 0,
+                    projectedMonthly: res?.projectedMonthly || 0
                 });
             } catch (e) {
                 console.error("Erro ao carregar dividendos", e);
@@ -43,6 +45,14 @@ export const DividendDashboard = () => {
         };
         load();
     }, []);
+
+    // Lógica de Filtragem dos Dados do Gráfico
+    const filteredHistory = useMemo(() => {
+        if (timeRange === '12M') {
+            return data.history.slice(-12);
+        }
+        return data.history;
+    }, [data.history, timeRange]);
 
     const formatCurrency = (val: number) => 
         new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -60,13 +70,11 @@ export const DividendDashboard = () => {
         return target <= today;
     };
 
-    // Componente de Tooltip Customizado
     const CustomTooltip = ({ active, payload, label }: any) => {
         if (active && payload && payload.length) {
             const dataPoint = payload[0].payload;
             const breakdown = dataPoint.breakdown || [];
             
-            // Data Formatação para Tooltip (Ex: Fevereiro 2024)
             const parts = label.split('-'); // YYYY-MM
             let formattedLabel = label;
             if (parts.length === 2) {
@@ -104,14 +112,15 @@ export const DividendDashboard = () => {
         );
     }
 
-    const contentWidth = Math.max(100, data.history.length * 60); 
+    // Ajuste da largura do gráfico para scroll horizontal se muitos dados
+    const contentWidth = Math.max(100, filteredHistory.length * 60); 
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             
             {/* COLUNA 1: Gráfico de Barras */}
             <div className="lg:col-span-2 bg-[#080C14] border border-slate-800 rounded-2xl p-6 relative overflow-hidden flex flex-col">
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <div>
                         <h3 className="text-base font-bold text-white flex items-center gap-2">
                             <Coins size={16} className="text-[#D4AF37]" />
@@ -119,17 +128,37 @@ export const DividendDashboard = () => {
                         </h3>
                         <p className="text-xs text-slate-500">Histórico de Pagamentos</p>
                     </div>
-                    <div className="text-right">
-                        <p className="text-[10px] uppercase font-bold text-slate-500">Total Acumulado</p>
-                        <p className="text-lg font-mono font-bold text-[#D4AF37]">{formatCurrency(totalReceived)}</p>
+                    
+                    {/* Filtro Temporal */}
+                    <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+                        <button
+                            onClick={() => setTimeRange('12M')}
+                            className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                                timeRange === '12M' 
+                                ? 'bg-[#D4AF37]/20 text-[#D4AF37] shadow-sm border border-[#D4AF37]/50' 
+                                : 'text-slate-500 hover:text-slate-300'
+                            }`}
+                        >
+                            12 Meses
+                        </button>
+                        <button
+                            onClick={() => setTimeRange('ALL')}
+                            className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                                timeRange === 'ALL' 
+                                ? 'bg-[#D4AF37]/20 text-[#D4AF37] shadow-sm border border-[#D4AF37]/50' 
+                                : 'text-slate-500 hover:text-slate-300'
+                            }`}
+                        >
+                            Desde o Início
+                        </button>
                     </div>
                 </div>
 
                 <div className="flex-1 w-full text-xs min-h-[200px] overflow-x-auto custom-scrollbar">
-                    {data.history.length > 0 ? (
+                    {filteredHistory.length > 0 ? (
                         <div style={{ width: `${contentWidth}px`, minWidth: '100%', height: '100%' }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={data.history} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                <BarChart data={filteredHistory} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                                     <XAxis 
                                         dataKey="month" 
                                         tick={{fill: '#64748b', fontSize: 10}} 
@@ -140,7 +169,6 @@ export const DividendDashboard = () => {
                                             const parts = val.split('-');
                                             if (parts.length < 2) return val;
                                             const date = new Date(parseInt(parts[0]), parseInt(parts[1])-1, 1);
-                                            // Correção de Formato: fev/24
                                             const m = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
                                             const y = date.toLocaleDateString('pt-BR', { year: '2-digit' });
                                             return `${m}/${y}`;
@@ -150,8 +178,8 @@ export const DividendDashboard = () => {
                                     />
                                     <Tooltip content={<CustomTooltip />} cursor={{fill: '#1e293b', opacity: 0.4}} />
                                     <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                                        {data.history.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={index === data.history.length - 1 ? '#D4AF37' : '#334155'} />
+                                        {filteredHistory.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={index === filteredHistory.length - 1 ? '#D4AF37' : '#334155'} />
                                         ))}
                                     </Bar>
                                 </BarChart>
@@ -159,13 +187,13 @@ export const DividendDashboard = () => {
                         </div>
                     ) : (
                         <div className="h-full flex items-center justify-center text-slate-600 text-xs">
-                            Sem histórico de dividendos ainda.
+                            Sem histórico de dividendos para este período.
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* COLUNA 2: Lista de Provisões */}
+            {/* COLUNA 2: Lista de Provisões ou Estimativa */}
             <div className="lg:col-span-1 bg-[#080C14] border border-slate-800 rounded-2xl p-6 flex flex-col">
                 <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-800">
                     <div>
@@ -174,6 +202,7 @@ export const DividendDashboard = () => {
                             Provisões Futuras
                         </h3>
                     </div>
+                    {/* Se tiver provisão real, mostra ela. Se não, mostra 0 ou estimativa */}
                     <span className="text-xs font-bold text-emerald-500 bg-emerald-900/20 px-2 py-0.5 rounded border border-emerald-900/50">
                         {formatCurrency(totalProvisioned)}
                     </span>
@@ -183,7 +212,6 @@ export const DividendDashboard = () => {
                     {data.provisioned.length > 0 ? (
                         data.provisioned.map((item, idx) => {
                             const received = isDatePassed(item.date);
-                            
                             return (
                                 <div key={idx} className="flex items-center justify-between p-3 bg-[#0F131E] rounded-xl border border-slate-800/50">
                                     <div className="flex items-center gap-3">
@@ -214,9 +242,23 @@ export const DividendDashboard = () => {
                             );
                         })
                     ) : (
-                        <div className="text-center py-10 opacity-50">
-                            <AlertCircle size={24} className="mx-auto mb-2 text-slate-600" />
-                            <p className="text-xs text-slate-500">Nenhuma provisão encontrada.</p>
+                        <div className="flex flex-col items-center justify-center h-full text-center space-y-4 py-6">
+                            <div className="p-3 bg-slate-900 rounded-full border border-slate-800">
+                                <Calculator size={24} className="text-slate-500" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-400 mb-1">Nenhuma provisão confirmada.</p>
+                                {data.projectedMonthly && data.projectedMonthly > 0 ? (
+                                    <>
+                                        <p className="text-[10px] text-slate-500 mb-2">Baseado no Yield do seu portfólio, estimamos:</p>
+                                        <p className="text-sm font-bold text-white bg-slate-800 px-3 py-1 rounded-lg border border-slate-700 inline-block">
+                                            ~ {formatCurrency(data.projectedMonthly)} / mês
+                                        </p>
+                                    </>
+                                ) : (
+                                    <p className="text-[10px] text-slate-600">Adicione ativos pagadores de dividendos.</p>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>

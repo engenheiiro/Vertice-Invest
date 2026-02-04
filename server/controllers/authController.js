@@ -1,3 +1,4 @@
+
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
@@ -36,6 +37,10 @@ export const register = async (req, res, next) => {
     session.startTransaction();
 
     const { name, email, password } = req.body;
+
+    // Validação extra no backend
+    if (!name || name.length < 2) throw new Error("Nome muito curto.");
+    if (!password || password.length < 6) throw new Error("Senha deve ter no mínimo 6 caracteres.");
 
     const userExists = await User.findOne({ email }).session(session);
     
@@ -148,8 +153,9 @@ export const login = async (req, res, next) => {
         name: user.name, 
         email: user.email, 
         plan: user.plan,
-        role: user.role, // Enviando role para o front
-        subscriptionStatus: user.subscriptionStatus
+        role: user.role, 
+        subscriptionStatus: user.subscriptionStatus,
+        cpf: user.cpf // Retorna CPF se existir
       }
     });
 
@@ -181,7 +187,6 @@ export const refreshToken = async (req, res, next) => {
     const user = await User.findById(tokenInDb.user);
     if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
 
-    // Atualizando Access Token com Role atualizada
     const newAccessToken = jwt.sign(
       { id: user._id, email: user.email, plan: user.plan, role: user.role },
       JWT_SECRET,
@@ -200,7 +205,6 @@ export const logout = async (req, res, next) => {
     const cookies = req.cookies;
     if (cookies?.jwt) {
        await RefreshToken.findOneAndDelete({ token: cookies.jwt });
-       
        try {
          const decoded = jwt.decode(cookies.jwt);
          if (decoded?.id) {
@@ -273,4 +277,80 @@ export const resetPassword = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+// --- NOVAS FUNÇÕES (PERFIL) ---
+
+export const updateProfile = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { name, cpf, phone, occupation } = req.body;
+
+        // Limpeza básica do CPF (apenas números)
+        const cleanCpf = cpf ? cpf.replace(/\D/g, '') : null;
+
+        // Validação de CPF único (se fornecido)
+        if (cleanCpf) {
+            const existingUser = await User.findOne({ cpf: cleanCpf });
+            if (existingUser && existingUser._id.toString() !== userId) {
+                return res.status(409).json({ message: "Este CPF já está associado a outra conta." });
+            }
+        }
+
+        const updates = {};
+        if (name) updates.name = name;
+        if (cleanCpf) updates.cpf = cleanCpf;
+        // Campos extras não mapeados no Schema principal podem ser ignorados ou adicionados se o schema permitir
+        // Como o schema atual não tem phone/occupation, vamos atualizar apenas o que temos ou considerar extensão futura
+        
+        const updatedUser = await User.findByIdAndUpdate(userId, updates, { new: true });
+        
+        logAudit(req, 'PROFILE_UPDATE', 'Perfil atualizado', userId, updatedUser.email);
+
+        res.json({ 
+            message: "Perfil atualizado com sucesso.", 
+            user: {
+                id: updatedUser._id,
+                name: updatedUser.name,
+                email: updatedUser.email,
+                role: updatedUser.role,
+                plan: updatedUser.plan,
+                cpf: updatedUser.cpf
+            } 
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const changePassword = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { oldPassword, newPassword } = req.body;
+
+        if (!newPassword || newPassword.length < 6) {
+            return res.status(400).json({ message: "A nova senha deve ter no mínimo 6 caracteres." });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
+
+        const isMatch = await bcrypt.compare(oldPassword, user.password);
+        if (!isMatch) {
+            logAudit(req, 'PASSWORD_CHANGE_FAIL', 'Senha antiga incorreta', userId, user.email);
+            return res.status(401).json({ message: "A senha atual está incorreta." });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(newPassword, salt);
+        await user.save();
+
+        logAudit(req, 'PASSWORD_CHANGE_SUCCESS', 'Senha alterada manualmente', userId, user.email);
+
+        res.json({ message: "Senha alterada com sucesso." });
+
+    } catch (error) {
+        next(error);
+    }
 };

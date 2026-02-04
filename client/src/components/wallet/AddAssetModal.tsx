@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, PlusCircle, DollarSign, BarChart2, Tag, ArrowUpCircle, ArrowDownCircle, Search, Loader2, Clock, CheckCircle2, TrendingUp, Percent, Edit3 } from 'lucide-react';
+import { X, PlusCircle, DollarSign, BarChart2, Tag, ArrowUpCircle, ArrowDownCircle, Search, Loader2, Clock, CheckCircle2, TrendingUp, Percent, Edit3, ShieldCheck } from 'lucide-react';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { useWallet, AssetType } from '../../contexts/WalletContext';
@@ -146,7 +146,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             defaultQty = '1';
         } else if (newType === 'CASH') {
             defaultTicker = 'RESERVA';
-            defaultQty = ''; // Valor monetário vai no price, mas será tratado no submit
+            defaultQty = ''; // Valor monetário vai no price
         }
 
         setForm(prev => ({
@@ -204,8 +204,9 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     };
 
     const handleSelectResult = (result: any) => {
-        let rateVal = '';
-        if (result.rate) {
+        let rateVal = form.rate;
+        // Auto-preenche a taxa se disponível e válida no resultado da busca
+        if (result.rate !== undefined && result.rate !== null) {
             rateVal = result.rate.toString().replace('.', ',');
             if (!rateVal.includes(',')) rateVal += ',00';
         }
@@ -277,12 +278,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         e.preventDefault();
         setValidationError('');
         
-        // CORREÇÃO CRÍTICA PARA CASH:
-        // Se for CASH, o usuário digita o valor monetário no campo "Preço/Valor".
-        // Mas para a lógica do sistema funcionar (Qty * Price), definimos:
-        // Quantidade = Valor Monetário
-        // Preço Unitário = 1.00
-        
         let finalQty = 0;
         let finalPrice = 0;
 
@@ -295,19 +290,16 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             finalQty = rawAmount;
             finalPrice = 1;
             
-            // Ajuste para Saque (Venda)
             if (transactionType === 'SELL') {
                 const owned = assets.find(a => a.ticker === 'RESERVA');
-                // No backend, quantidade de cash é o valor total.
                 if (!owned || owned.quantity < finalQty) {
                     setValidationError(`Saldo insuficiente. Disponível: ${owned ? owned.quantity.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}) : 'R$ 0,00'}`);
                     return;
                 }
-                finalQty = -finalQty; // Inverte para subtrair
+                finalQty = -finalQty;
             }
 
         } else {
-            // Lógica Padrão para outros ativos
             finalQty = parseFloat(form.quantity.replace(',', '.')); 
             finalPrice = parseCurrencyToFloat(form.price);
 
@@ -366,8 +358,15 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     const renderTickerField = () => {
         if (form.type === 'CASH') {
             return (
-                <div className="opacity-50 pointer-events-none">
+                <div className="opacity-80 pointer-events-none">
                      <Input label="Ativo (Automático)" value="RESERVA / CAIXA" readOnly containerClassName="mb-0" />
+                     {/* INDICADOR VISUAL REFORÇADO */}
+                     <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-emerald-900/20 border border-emerald-900/50 rounded-lg">
+                        <ShieldCheck size={14} className="text-emerald-500" />
+                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">
+                            Rentabilidade: 100% do CDI (Padrão)
+                        </span>
+                     </div>
                 </div>
             );
         }
@@ -402,7 +401,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         let placeholder = "Ex: PETR4";
         if (form.type === 'CRYPTO') placeholder = "Ex: BTC, ETH";
         if (form.type === 'STOCK_US') placeholder = "Ex: AAPL, NVDA";
-        if (form.type === 'FIXED_INCOME') placeholder = "Busque: Tesouro, CDB, Banco...";
+        if (form.type === 'FIXED_INCOME') placeholder = "Busque: Tesouro, Nubank, CDB...";
 
         return (
             <div className="relative mb-4" ref={modalRef}>
@@ -446,8 +445,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                          result.type === 'FIXED_INCOME' ? 'RENDA FIXA' : 
                                          result.type}
                                     </span>
-                                    {result.rate && (
-                                        <p className="text-[9px] text-emerald-400 font-mono mt-0.5">{result.rate}% a.a.</p>
+                                    {(result.rate !== undefined) && (
+                                        <p className="text-[9px] text-emerald-400 font-mono mt-0.5">{result.rate}% do {result.index || 'CDI'}</p>
                                     )}
                                 </div>
                             </div>
@@ -630,7 +629,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                         <div className="relative">
                                             <select 
                                                 value={form.type}
-                                                // Chamamos handleTypeSelectChange para resetar APENAS se for seleção manual
                                                 onChange={handleTypeSelectChange} 
                                                 className="w-full bg-[#0B101A] text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-[#0F1729] transition-all duration-300 shadow-sm"
                                             >

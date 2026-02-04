@@ -6,6 +6,7 @@ import { AssetList } from '../components/wallet/AssetList';
 import { AddAssetModal } from '../components/wallet/AddAssetModal';
 import { EvolutionChart } from '../components/wallet/EvolutionChart';
 import { PerformanceChart } from '../components/wallet/PerformanceChart'; 
+import { MonthlyReturnsTable } from '../components/wallet/MonthlyReturnsTable'; // Importação Nova
 import { DividendDashboard } from '../components/wallet/DividendDashboard'; 
 import { CashFlowHistory } from '../components/wallet/CashFlowHistory'; 
 import { AllocationChart } from '../components/wallet/AllocationChart';
@@ -146,9 +147,11 @@ export const Wallet = () => {
                             <div className="animate-fade-in">
                                 <div className="grid grid-cols-1 gap-6 mb-8">
                                     <PerformanceChart />
+                                    {/* Matriz de Rentabilidade Adicionada Aqui */}
+                                    <MonthlyReturnsTable />
                                 </div>
                                 <div className="p-6 bg-slate-900/30 border border-slate-800 rounded-xl text-center text-slate-500 text-xs">
-                                    * O benchmark comparativo considera a data do primeiro aporte como base 100.
+                                    * O benchmark comparativo considera a data do primeiro aporte como base 100. A tabela exibe a rentabilidade mensal da cota.
                                 </div>
                             </div>
                         )}

@@ -2,6 +2,17 @@
 import { API_URL } from '../config';
 import { User } from '../contexts/AuthContext';
 
+interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+interface RegisterData {
+  name: string;
+  email: string;
+  password: string;
+}
+
 interface AuthResponse {
   user?: User;
   accessToken?: string;
@@ -9,6 +20,7 @@ interface AuthResponse {
 }
 
 export const authService = {
+  // Wrapper para chamadas autenticadas
   async api(endpoint: string, options: RequestInit = {}) {
     let token = localStorage.getItem('accessToken');
     
@@ -29,6 +41,7 @@ export const authService = {
         throw new Error("Erro de conexão. Verifique se o servidor está rodando.");
     }
 
+    // Lógica de Refresh Token Automático (Simplificada)
     if (response.status === 401 || response.status === 403) {
       const newToken = await this.refreshToken();
       
@@ -50,7 +63,7 @@ export const authService = {
     return response;
   },
 
-  async login(credentials: any): Promise<AuthResponse> {
+  async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
         const response = await fetch(`${API_URL}/api/login`, {
           method: 'POST',
@@ -59,12 +72,9 @@ export const authService = {
           credentials: 'include' 
         });
 
-        // Verificação de Content-Type para evitar "Unexpected end of JSON"
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
-            const text = await response.text();
-            console.error("Resposta não-JSON do servidor:", text);
-            throw new Error(`Erro do Servidor (${response.status}): O backend pode estar offline ou com erros.`);
+            throw new Error(`Erro do Servidor (${response.status}): O backend pode estar offline.`);
         }
 
         const data = await response.json();
@@ -81,31 +91,50 @@ export const authService = {
     }
   },
 
+  async register(data: RegisterData): Promise<AuthResponse> {
+    const response = await fetch(`${API_URL}/api/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    const responseData = await response.json();
+
+    if (!response.ok) {
+      throw new Error(responseData.message || 'Erro ao criar conta');
+    }
+
+    return responseData;
+  },
+
   async refreshToken(): Promise<string | null> {
     try {
-      const response = await fetch(`${API_URL}/api/refresh`, {
-        method: 'POST',
-        credentials: 'include' 
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        localStorage.setItem('accessToken', data.accessToken);
-        return data.accessToken;
-      }
-      return null;
+        const response = await fetch(`${API_URL}/api/refresh`, {
+            method: 'POST',
+            credentials: 'include' 
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem('accessToken', data.accessToken);
+            return data.accessToken;
+        }
+        return null;
     } catch (e) {
-      return null;
+        return null;
     }
   },
 
   async logout() {
     try {
-      await fetch(`${API_URL}/api/logout`, { method: 'POST', credentials: 'include' });
-    } catch(e) { /* ignore */ }
-    finally {
-      this.clearSession();
+        await fetch(`${API_URL}/api/logout`, { 
+            method: 'POST',
+            credentials: 'include' 
+        });
+    } catch (e) {
+        console.error("Erro ao notificar logout ao servidor", e);
     }
+    this.clearSession();
   },
 
   clearSession() {
@@ -114,19 +143,38 @@ export const authService = {
   },
 
   isAuthenticated(): boolean {
-    return !!localStorage.getItem('accessToken');
+    const token = localStorage.getItem('accessToken');
+    return !!token;
   },
 
-  async register(data: any) {
-    const response = await fetch(`${API_URL}/api/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    const resData = await response.json();
-    if (!response.ok) throw new Error(resData.message || 'Erro ao registrar');
-    return resData;
+  // --- MÉTODOS DE PERFIL ---
+
+  async updateProfile(data: any) {
+      const response = await this.api('/api/me', {
+          method: 'PUT',
+          body: JSON.stringify(data)
+      });
+      const resData = await response.json();
+      if (!response.ok) throw new Error(resData.message || "Erro ao atualizar perfil");
+      
+      // Atualiza local storage se o usuário mudar
+      if (resData.user) {
+          localStorage.setItem('user', JSON.stringify(resData.user));
+      }
+      return resData;
   },
+
+  async changePassword(data: any) {
+      const response = await this.api('/api/change-password', {
+          method: 'POST',
+          body: JSON.stringify(data)
+      });
+      const resData = await response.json();
+      if (!response.ok) throw new Error(resData.message || "Erro ao alterar senha");
+      return resData;
+  },
+
+  // --- MÉTODOS DE RECUPERAÇÃO ---
 
   async forgotPassword(email: string): Promise<void> {
     const response = await fetch(`${API_URL}/api/forgot-password`, {
@@ -134,7 +182,9 @@ export const authService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
     });
-    if (response.status >= 500) throw new Error("Erro no servidor");
+    if (response.status >= 500) {
+        throw new Error("Erro no servidor");
+    }
   },
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
