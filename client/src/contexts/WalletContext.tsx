@@ -3,6 +3,8 @@ import React, { createContext, useContext, useState, useEffect, useMemo, ReactNo
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { walletService } from '../services/wallet';
 import { useAuth } from './AuthContext';
+import { useDemo } from './DemoContext'; // Importar DemoContext
+import { DEMO_ASSETS, DEMO_KPIS, DEMO_HISTORY } from '../data/DEMO_DATA'; // Importar Dados Mock
 
 export type AssetType = 'STOCK' | 'FII' | 'CRYPTO' | 'STOCK_US' | 'FIXED_INCOME' | 'CASH';
 
@@ -33,7 +35,7 @@ export interface WalletKPIs {
     dayVariationPercent: number;
     totalDividends: number;
     projectedDividends: number;
-    weightedRentability: number; // TWRR Real (Novo)
+    weightedRentability: number; 
 }
 
 export interface HistoryPoint {
@@ -67,6 +69,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const { user } = useAuth();
+    const { isDemoMode } = useDemo(); // Hook do Modo Demo
     const queryClient = useQueryClient();
     
     const [targetAllocation, setTargetAllocation] = useState<AllocationMap>({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10 });
@@ -89,14 +92,14 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const walletQuery = useQuery({
         queryKey: ['wallet', user?.id],
         queryFn: walletService.getWallet,
-        enabled: !!user?.id, 
+        enabled: !!user?.id && !isDemoMode, // Não busca se estiver em Demo
         staleTime: 1000 * 60 * 2,
     });
 
     const historyQuery = useQuery({
         queryKey: ['walletHistory', user?.id],
         queryFn: walletService.getHistory,
-        enabled: !!user?.id,
+        enabled: !!user?.id && !isDemoMode,
         staleTime: 1000 * 60 * 10,
     });
 
@@ -141,14 +144,17 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     // --- ACTIONS ---
     const addAsset = async (newAsset: any) => {
+        if (isDemoMode) return; // Bloqueia ações no demo
         await addAssetMutation.mutateAsync(newAsset);
     };
 
     const removeAsset = async (id: string) => {
+        if (isDemoMode) return;
         await removeAssetMutation.mutateAsync(id);
     };
 
     const resetWallet = async () => {
+        if (isDemoMode) return;
         await resetWalletMutation.mutateAsync();
     };
 
@@ -158,11 +164,17 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     // --- STATES & MEMOIZED CALCULATIONS ---
-    const assets = walletQuery.data?.assets || [];
-    const serverKpis = walletQuery.data?.kpis;
     
-    // KPIs híbridos: Valores em tempo real (preço) + Valores históricos (TWRR/Dividendos) do servidor
+    // LÓGICA DE INJEÇÃO DO MODO DEMO
+    const assets = isDemoMode ? DEMO_ASSETS : (walletQuery.data?.assets || []);
+    const history = isDemoMode ? DEMO_HISTORY : (historyQuery.data || []);
+    const serverKpis = isDemoMode ? DEMO_KPIS : walletQuery.data?.kpis;
+    
+    // KPIs híbridos
     const kpis = useMemo(() => {
+        // Se estiver em demo, retorna os KPIs fixos do demo
+        if (isDemoMode) return DEMO_KPIS;
+
         if (assets.length === 0) {
             return {
                 totalEquity: 0, totalInvested: 0, totalResult: 0, totalResultPercent: 0,
@@ -194,24 +206,23 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             totalEquity: equity,
             totalInvested: invested,
             totalResult: result,
-            totalResultPercent: resultPercent, // ROI Simples (Variação)
+            totalResultPercent: resultPercent, 
             dayVariation: dayVar,
             dayVariationPercent: dayVarPercent,
             totalDividends: serverKpis?.totalDividends || 0,
             projectedDividends: serverKpis?.projectedDividends || 0,
-            weightedRentability: serverKpis?.weightedRentability || resultPercent // TWRR Real (Prioriza Server)
+            weightedRentability: serverKpis?.weightedRentability || resultPercent 
         };
-    }, [assets, serverKpis]);
+    }, [assets, serverKpis, isDemoMode]);
     
     const usdRate = walletQuery.data?.meta?.usdRate || 5.75;
-    const history = historyQuery.data || [];
+    const isLoading = !isDemoMode && (walletQuery.isLoading || historyQuery.isLoading);
 
-    const isLoading = walletQuery.isLoading || historyQuery.isLoading;
-
-    const isRefreshing = (walletQuery.isFetching && !walletQuery.isLoading) || 
+    const isRefreshing = !isDemoMode && (
+                         (walletQuery.isFetching && !walletQuery.isLoading) || 
                          (historyQuery.isFetching && !historyQuery.isLoading) ||
                          addAssetMutation.isPending || 
-                         removeAssetMutation.isPending;
+                         removeAssetMutation.isPending);
 
     return (
         <WalletContext.Provider value={{ 
@@ -223,7 +234,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             usdRate,
             isLoading, 
             isRefreshing,
-            isPrivacyMode, 
+            isPrivacyMode: isDemoMode ? false : isPrivacyMode, // Demo sempre visível
             togglePrivacyMode,
             refreshWallet: () => queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] }),
             addAsset, 

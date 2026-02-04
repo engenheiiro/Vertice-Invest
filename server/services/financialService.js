@@ -161,6 +161,7 @@ export const financialService = {
             let txIndex = 0;
             let daysProcessed = 0;
 
+            // OTIMIZAÇÃO: Busca única de dividendos
             const allDividends = await DividendEvent.find({ ticker: { $in: uniqueTickers } }).sort({ date: 1 });
             let accumulatedDividends = 0;
 
@@ -391,10 +392,12 @@ export const financialService = {
 
         if (tickers.length === 0) return { dividendMap: new Map(), provisioned: [], totalAllTime: 0, projectedMonthly: 0 };
 
+        // 1. Batch Fetch Market Data (DY) - Otimização de I/O
         const marketInfos = await MarketAsset.find({ ticker: { $in: tickers } }).select('ticker dy lastPrice');
         const marketMap = new Map();
         marketInfos.forEach(m => marketMap.set(m.ticker, m));
 
+        // 2. Calculate Projected Monthly
         let projectedMonthly = 0;
         relevantAssets.forEach(asset => {
             const mInfo = marketMap.get(asset.ticker);
@@ -404,6 +407,18 @@ export const financialService = {
             }
         });
 
+        // 3. Batch Fetch Dividends (CORREÇÃO CRÍTICA N+1)
+        // Busca TODOS os dividendos de UMA vez
+        const allEvents = await DividendEvent.find({ ticker: { $in: tickers } }).sort({ date: 1 });
+        const eventsMap = new Map();
+        
+        // Agrupa eventos em memória
+        allEvents.forEach(e => {
+            if (!eventsMap.has(e.ticker)) eventsMap.set(e.ticker, []);
+            eventsMap.get(e.ticker).push(e);
+        });
+
+        // 4. Batch Fetch First Transactions (Acquisition Date)
         const firstTransactions = await AssetTransaction.aggregate([
             { $match: { user: new mongoose.Types.ObjectId(userId), ticker: { $in: tickers }, type: 'BUY' } },
             { $sort: { date: 1 } },
@@ -417,29 +432,15 @@ export const financialService = {
         const provisioned = [];
         let totalAllTime = 0;
 
+        // 5. Processamento em Memória (Sem chamadas ao DB dentro do loop)
         for (const asset of relevantAssets) {
             const firstBuyDate = acquisitionMap.get(asset.ticker);
-            let assetEvents = await DividendEvent.find({ ticker: asset.ticker }).sort({ date: -1 });
-
-            if (assetEvents.length === 0) {
-                try {
-                    const yahooDivs = await externalMarketService.getDividendsHistory(asset.ticker, asset.type);
-                    if (yahooDivs && yahooDivs.length > 0) {
-                        const ops = yahooDivs.map(d => ({
-                            updateOne: {
-                                filter: { ticker: asset.ticker, date: new Date(d.date), amount: d.amount },
-                                update: { $setOnInsert: { ticker: asset.ticker, date: new Date(d.date), amount: d.amount }},
-                                upsert: true
-                            }
-                        }));
-                        await DividendEvent.bulkWrite(ops);
-                        assetEvents = await DividendEvent.find({ ticker: asset.ticker }).sort({ date: -1 });
-                    }
-                } catch(e) {}
-            }
+            const assetEvents = eventsMap.get(asset.ticker) || []; // Pega da memória
 
             for (const event of assetEvents) {
                 const eventDateNormalized = this.normalizeDate(event.date);
+                
+                // Só conta dividendos cuja Data COM é posterior à data da primeira compra
                 if (!firstBuyDate || eventDateNormalized < firstBuyDate) continue;
 
                 const totalValue = safeMult(asset.quantity, event.amount);

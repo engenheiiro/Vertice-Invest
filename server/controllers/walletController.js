@@ -37,8 +37,7 @@ export const getWalletData = async (req, res, next) => {
         const closedAssets = userAssets.filter(a => a.quantity <= 0.000001);
 
         // --- SELF-HEALING CHECK ---
-        // Se a lista de ativos está vazia, mas o usuário tem transações, algo está errado (bug do "recalculatePosition" ausente).
-        // Forçamos uma reparação imediata.
+        // Se a lista de ativos está vazia, mas o usuário tem transações, algo está errado.
         if (activeAssets.length === 0) {
             const txCount = await AssetTransaction.countDocuments({ user: userId });
             if (txCount > 0) {
@@ -92,7 +91,6 @@ export const getWalletData = async (req, res, next) => {
         const usdRate = safeFloat(config?.dollar || 5.75);
         const usdChange = safeFloat(config?.dollarChange || 0);
         
-        // SANITY CHECK: CDI não pode ser absurdo (ex: > 50%). Se for, usa fallback.
         let currentCdi = (config?.cdi && config.cdi > 0) ? safeFloat(config.cdi) : 11.15;
         if (currentCdi > 50) currentCdi = 11.15; // Proteção contra dados corrompidos no DB
 
@@ -116,54 +114,43 @@ export const getWalletData = async (req, res, next) => {
             if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
                 const rawRate = asset.fixedIncomeRate > 0 ? asset.fixedIncomeRate : (asset.type === 'CASH' ? 100 : 10.0);
                 
-                // Cálculo da taxa diária efetiva
                 const cdiDaily = Math.pow(1 + (currentCdi / 100), 1 / 252) - 1;
                 let effectiveDailyRate = 0;
 
                 if (rawRate > 30) { 
-                    // Pós-fixado (% do CDI) - Ex: 100% do CDI
+                    // Pós-fixado (% do CDI)
                     const cdiFactor = safeDiv(rawRate, 100); 
                     effectiveDailyRate = cdiDaily * cdiFactor;
                 } else { 
-                    // Pré-fixado (Taxa anual direta) - Ex: 12% a.a
+                    // Pré-fixado
                     effectiveDailyRate = Math.pow(1 + (rawRate / 100), 1 / 252) - 1;
                 }
 
                 dayChangePct = effectiveDailyRate * 100;
 
-                // --- DATA VALIDATION ENGINE ---
                 let startDate = new Date(asset.startDate || asset.createdAt || new Date());
-                
-                // Se a data for inválida ou muito antiga (1970), força para createdAt ou hoje
                 if (isNaN(startDate.getTime()) || startDate.getFullYear() < 2000) {
                     startDate = new Date(asset.createdAt || new Date());
                 }
                 
-                // Normalização de Horas (zera horas para cálculo de dias inteiros)
                 startDate.setHours(0,0,0,0);
                 const now = new Date();
                 now.setHours(0,0,0,0);
                 
                 const businessDays = countBusinessDays(startDate, now);
-                
-                // Proteção contra dias negativos (data futura)
                 const safeDays = Math.max(0, businessDays);
 
                 let compoundFactor = Math.pow(1 + effectiveDailyRate, safeDays);
 
-                // --- CIRCUIT BREAKER: Proteção contra explosão exponencial ---
-                // Se o fator for > 5 (500% de retorno), algo está errado com a data ou taxa.
                 if (compoundFactor > 5 && safeDays < 3000) {
-                    logger.warn(`⚠️ Anomalia Financeira Detectada: ${asset.ticker} Factor=${compoundFactor}, Days=${safeDays}, Rate=${rawRate}`);
-                    compoundFactor = 1 + (safeDays * effectiveDailyRate); // Fallback para juros simples
+                    logger.warn(`⚠️ Anomalia Financeira: ${asset.ticker} Factor=${compoundFactor}, Days=${safeDays}, Rate=${rawRate}`);
+                    compoundFactor = 1 + (safeDays * effectiveDailyRate); // Fallback
                 }
 
                 if (asset.type === 'CASH') {
-                    // Caixa: Quantidade varia, Preço é unitário ~1.
                     const totalVal = safeMult(asset.totalCost, compoundFactor);
                     currentPrice = asset.quantity > 0 ? safeDiv(totalVal, asset.quantity) : 1;
                 } else {
-                    // Renda Fixa: Quantidade 1, Preço valoriza.
                     const totalProjected = safeMult(asset.totalCost, compoundFactor);
                     currentPrice = asset.quantity > 0 ? safeDiv(totalProjected, asset.quantity) : 0;
                 }
@@ -255,6 +242,7 @@ export const getWalletData = async (req, res, next) => {
             weightedRentability = totalResultPercent;
         }
 
+        // AutoRepair se o snapshot divergir muito do real
         const lastSnapshot = history.length > 0 ? history[history.length - 1] : null;
         if (totalEquity > 1000) {
             if (!lastSnapshot || Math.abs(lastSnapshot.totalEquity - totalEquity) > (totalEquity * 0.5)) {
@@ -367,12 +355,24 @@ export const addAssetTransaction = async (req, res, next) => {
         const numQty = safeFloat(parseFloat(quantity));
         const numPrice = safeFloat(parseFloat(rawPrice));
         
+        // --- CORREÇÃO: VALIDAÇÃO DE DATA FUTURA ---
         const transactionDate = date ? new Date(date) : new Date();
-        if (date) {
+        
+        // Parsing seguro de string YYYY-MM-DD para evitar UTC shift
+        if (date && typeof date === 'string' && date.includes('-')) {
             const parts = date.split('-');
             transactionDate.setFullYear(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
             transactionDate.setHours(12, 0, 0, 0); 
         }
+
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const txDateCheck = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), transactionDate.getDate());
+
+        if (txDateCheck > startOfToday) {
+            throw new Error("Não é possível registrar transações com data futura.");
+        }
+        // ---------------------------------------------
 
         if (isNaN(numQty) || isNaN(numPrice)) throw new Error("Valores inválidos.");
 
@@ -432,11 +432,10 @@ export const addAssetTransaction = async (req, res, next) => {
         await session.commitTransaction();
         session.endSession();
 
-        try {
-            await financialService.rebuildUserHistory(userId);
-        } catch(e) {
+        // Dispara reconstrução assíncrona
+        financialService.rebuildUserHistory(userId).catch(e => {
             logger.error(`Erro ao reconstruir histórico: ${e.message}`);
-        }
+        });
         
         res.status(201).json(updatedAsset || { message: "Transação registrada." });
 
@@ -444,7 +443,7 @@ export const addAssetTransaction = async (req, res, next) => {
         await session.abortTransaction();
         session.endSession();
         logger.error(`Erro Transaction Add: ${error.message}`);
-        if (error.message.includes('Saldo insuficiente')) {
+        if (error.message.includes('Saldo insuficiente') || error.message.includes('data futura')) {
             return res.status(400).json({ message: error.message });
         }
         next(error);
