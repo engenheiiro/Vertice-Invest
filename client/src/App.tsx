@@ -10,6 +10,9 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AdminRoute } from './components/auth/AdminRoute'; 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WalletProvider } from './contexts/WalletContext';
+import { ToastProvider } from './contexts/ToastContext';
+import { DemoProvider } from './contexts/DemoContext'; // Import Demo
+import { TutorialOverlay } from './components/tutorial/TutorialOverlay'; // Import Overlay
 
 // Pages - Eager Loading
 import { Login } from './pages/Login';
@@ -58,61 +61,67 @@ const PublicOnlyRoute: React.FC<PropsWithChildren> = ({ children }) => {
 
 // Layout Persistente para Rotas Protegidas
 // O WalletProvider envolve o Outlet, garantindo que ele não seja desmontado na navegação
+// DemoProvider adicionado aqui
 const ProtectedAppLayout = () => {
   return (
     <ProtectedRoute>
-      <WalletProvider>
-        <Suspense fallback={<PageLoader />}>
-          <Outlet />
-        </Suspense>
-      </WalletProvider>
+      <DemoProvider>
+        <WalletProvider>
+          <TutorialOverlay />
+          <Suspense fallback={<PageLoader />}>
+            <Outlet />
+          </Suspense>
+        </WalletProvider>
+      </DemoProvider>
     </ProtectedRoute>
   );
 };
 
 export default function App() {
   return (
-    <AuthProvider>
-      <HashRouter>
-        <Routes>
-          {/* Landing Page */}
-          <Route path="/" element={<Landing />} />
+    <ToastProvider>
+      <AuthProvider>
+        <HashRouter>
+          <Routes>
+            {/* Landing Page */}
+            <Route path="/" element={<Landing />} />
 
-          {/* Rotas de Autenticação */}
-          <Route element={<AuthLayout />}>
-            <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
-            <Route path="/register" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-          </Route>
+            {/* Rotas de Autenticação */}
+            <Route element={<AuthLayout />}>
+              <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+              <Route path="/register" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+            </Route>
 
-          {/* APP PRINCIPAL - O Provider Persiste Aqui */}
-          <Route element={<ProtectedAppLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/wallet" element={<Wallet />} />
-            <Route path="/research" element={<Research />} />
-            <Route path="/indicators" element={<Indicators />} />
-            <Route path="/courses" element={<Courses />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/pricing" element={<Pricing />} />
+            {/* APP PRINCIPAL - O Provider Persiste Aqui */}
+            <Route element={<ProtectedAppLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/wallet" element={<Wallet />} />
+              <Route path="/research" element={<Research />} />
+              <Route path="/indicators" element={<Indicators />} />
+              <Route path="/courses" element={<Courses />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/pricing" element={<Pricing />} />
+              
+              {/* Admin aninhado mas com proteção extra */}
+              <Route path="/admin" element={
+                  <AdminRoute>
+                      <AdminPanel />
+                  </AdminRoute>
+              } />
+            </Route>
+
+            {/* Rotas de Checkout (Fora do Layout Principal se necessário, ou dentro) */}
+            <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+            <Route path="/checkout/success" element={<ProtectedRoute><CheckoutSuccess /></ProtectedRoute>} />
             
-            {/* Admin aninhado mas com proteção extra */}
-            <Route path="/admin" element={
-                <AdminRoute>
-                    <AdminPanel />
-                </AdminRoute>
-            } />
-          </Route>
-
-          {/* Rotas de Checkout (Fora do Layout Principal se necessário, ou dentro) */}
-          <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
-          <Route path="/checkout/success" element={<ProtectedRoute><CheckoutSuccess /></ProtectedRoute>} />
-          
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </HashRouter>
-    </AuthProvider>
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </HashRouter>
+      </AuthProvider>
+    </ToastProvider>
   );
 }

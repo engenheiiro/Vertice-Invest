@@ -1,9 +1,10 @@
 
 import React, { useState } from 'react';
-import { PieChart, TrendingUp, RefreshCw, Folder, ChevronDown, ChevronRight } from 'lucide-react';
+import { PieChart, TrendingUp, RefreshCw, Folder, ChevronDown, ChevronRight, Lock } from 'lucide-react';
 import { PortfolioItem } from '../../hooks/useDashboardData';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
+import { useDemo } from '../../contexts/DemoContext';
 // @ts-ignore
 import { useNavigate } from 'react-router-dom';
 
@@ -26,6 +27,7 @@ const GROUP_NAMES: Record<string, string> = {
 export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false, isResearchLoading = false }) => {
     const { user } = useAuth();
     const { isPrivacyMode } = useWallet(); 
+    const { isDemoMode } = useDemo();
     const navigate = useNavigate();
     
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -142,15 +144,29 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                         return (
                                             <tr key={item.ticker} className="hover:bg-slate-800/30 transition-colors group">
                                                 <td className="p-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300 border border-slate-700">
-                                                            {item.ticker.substring(0,2)}
+                                                    {isDemoMode ? (
+                                                        // Visual de Ativo "Censurado" para o Demo
+                                                        <div className="flex items-center gap-3 opacity-60">
+                                                            <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center border border-slate-700 text-slate-500">
+                                                                <Lock size={12} />
+                                                            </div>
+                                                            <div>
+                                                                <div className="h-4 w-16 bg-slate-700/50 rounded blur-[3px] mb-1"></div>
+                                                                <div className="h-2 w-24 bg-slate-800/50 rounded blur-[3px]"></div>
+                                                            </div>
                                                         </div>
-                                                        <div>
-                                                            <p className="font-bold text-slate-200">{item.ticker}</p>
-                                                            <p className="text-[10px] text-slate-500">{item.name}</p>
+                                                    ) : (
+                                                        // Visual Normal
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300 border border-slate-700">
+                                                                {item.ticker.substring(0,2)}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-bold text-slate-200">{item.ticker}</p>
+                                                                <p className="text-[10px] text-slate-500">{item.name}</p>
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    )}
                                                 </td>
                                                 <td className="p-4 text-right font-mono text-slate-300">
                                                     {formatCurrency(item.currentPrice)}

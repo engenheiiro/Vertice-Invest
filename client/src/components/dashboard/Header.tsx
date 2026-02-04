@@ -3,17 +3,19 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, LayoutGrid, PieChart, BrainCircuit, 
   GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
-  Eye, EyeOff
+  Eye, EyeOff, Play
 } from 'lucide-react';
 // @ts-ignore
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
+import { useDemo } from '../../contexts/DemoContext'; // Importar DemoContext
 import { PlanBadge } from '../ui/PlanBadge';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuth();
-  const { isPrivacyMode, togglePrivacyMode } = useWallet(); // Contexto de Wallet para o botão
+  const { isPrivacyMode, togglePrivacyMode } = useWallet();
+  const { startDemo } = useDemo(); // Hook do Demo
   const navigate = useNavigate();
   const location = useLocation();
   const [time, setTime] = useState(new Date());
@@ -56,8 +58,8 @@ export const Header: React.FC = () => {
               {user && <PlanBadge plan={user.plan} className="ml-1" showIcon={false} />}
            </div>
            
-           {/* Main Links */}
-           <div className="hidden md:flex items-center gap-1">
+           {/* Main Links com ID para o Tutorial */}
+           <div id="tour-nav-links" className="hidden md:flex items-center gap-1">
               <Link to="/dashboard">
                 <NavLink icon={<LayoutGrid size={14} />} label="Terminal" active={activeTab === 'terminal'} />
               </Link>
@@ -94,6 +96,21 @@ export const Header: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-4">
+           
+           {/* Botão de Teste de Tutorial (Apenas Admin) */}
+           {isAdmin && (
+               <button 
+                   onClick={() => {
+                       navigate('/dashboard'); // Garante que está no dashboard
+                       setTimeout(startDemo, 100);
+                   }}
+                   className="hidden md:flex items-center gap-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors"
+                   title="Iniciar Modo Demonstração (Admin)"
+               >
+                   <Play size={10} fill="currentColor" /> Simular Tutorial
+               </button>
+           )}
+
            {/* Privacy Toggle Button */}
            <button 
              onClick={togglePrivacyMode}
