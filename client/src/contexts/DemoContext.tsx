@@ -8,6 +8,7 @@ interface DemoContextType {
     currentStep: number;
     nextStep: () => void;
     prevStep: () => void;
+    resetStep: () => void; // Novo método
     skipTutorial: () => void;
 }
 
@@ -51,6 +52,10 @@ export const DemoProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCurrentStep(prev => Math.max(0, prev - 1));
     };
 
+    const resetStep = () => {
+        setCurrentStep(0);
+    };
+
     const skipTutorial = () => {
         stopDemo();
     };
@@ -62,7 +67,8 @@ export const DemoProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             stopDemo, 
             currentStep, 
             nextStep, 
-            prevStep, 
+            prevStep,
+            resetStep,
             skipTutorial 
         }}>
             {children}

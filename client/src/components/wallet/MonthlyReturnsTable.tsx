@@ -4,115 +4,85 @@ import { useQuery } from '@tanstack/react-query';
 import { walletService } from '../../services/wallet';
 import { Loader2, Calendar, AlertCircle } from 'lucide-react';
 import { useWallet } from '../../contexts/WalletContext';
-
-interface PerformancePoint {
-    date: string;
-    wallet: number; // TWRR Acumulado em %
-}
+import { useDemo } from '../../contexts/DemoContext';
+import { DEMO_PERFORMANCE } from '../../data/DEMO_DATA';
 
 interface MonthData {
-    value: number | null; // Null se não houver dados (ex: futuro)
+    value: number | null; 
 }
 
 interface YearRow {
     year: number;
-    months: MonthData[]; // Índices 0 (Jan) a 11 (Dez)
-    ytd: number; // Year to Date
-    accumulated: number; // Acumulado Total até o fim deste ano
+    months: MonthData[]; 
+    ytd: number; 
+    accumulated: number;
 }
 
 export const MonthlyReturnsTable = () => {
     const { isPrivacyMode } = useWallet();
+    const { isDemoMode } = useDemo();
 
-    // Reutiliza o cache do React Query se o gráfico já tiver carregado os dados
     const { data: rawData, isLoading } = useQuery({
-        queryKey: ['walletPerformance'], // Mesma key usada (se implementada no chart) ou nova
+        queryKey: ['walletPerformance'], 
         queryFn: walletService.getPerformance,
-        staleTime: 1000 * 60 * 10, // 10 minutos de cache
+        staleTime: 1000 * 60 * 10,
+        enabled: !isDemoMode // Desativa query real se for Demo
     });
 
     const tableData = useMemo(() => {
-        if (!rawData || !Array.isArray(rawData) || rawData.length === 0) return [];
+        // Seleciona a fonte de dados (Real ou Demo)
+        const sourceData = isDemoMode ? DEMO_PERFORMANCE : rawData;
 
-        // 1. Ordenar cronologicamente
-        const sortedData = [...rawData].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        if (!sourceData || !Array.isArray(sourceData) || sourceData.length === 0) return [];
 
-        // Mapa auxiliar: 'YYYY-MM' -> Último valor acumulado do mês
+        const sortedData = [...sourceData].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
         const monthEndValues = new Map<string, number>();
         const yearsSet = new Set<number>();
 
-        sortedData.forEach(point => {
-            const date = new Date(point.date);
-            // Ajuste de fuso horário simples (pegar a parte da data YYYY-MM-DD)
+        sortedData.forEach((point: any) => {
             const dateStr = point.date.split('T')[0]; 
             const [y, m] = dateStr.split('-'); 
-            const key = `${y}-${m}`; // Ex: "2024-01"
+            const key = `${y}-${m}`; 
             
             yearsSet.add(parseInt(y));
-            
-            // Sobrescreve sempre, garantindo que o último dia do mês fique salvo
             monthEndValues.set(key, point.wallet);
         });
 
-        const years = Array.from(yearsSet).sort((a, b) => b - a); // Decrescente (2025, 2024...)
+        const years = Array.from(yearsSet).sort((a, b) => b - a); 
         const rows: YearRow[] = [];
 
-        // Valor inicial da carteira (base 0%)
         let lastYearCloseValue = 0; 
 
-        // Encontrar o valor "Zero" real (o dia anterior ao primeiro registro, ou assumir 0)
-        // O backend TWRR começa em 0 no dia 1.
-
-        years.reverse().forEach(year => { // Processa do mais antigo para o mais novo para calcular acumulado corretamente
+        years.reverse().forEach(year => { 
             const months: MonthData[] = [];
-            let yearStartValue = lastYearCloseValue;
             
-            // Se for o primeiro ano, precisamos ver se começou no meio do ano
-            // A lógica abaixo calcula mês a mês geometricamente
-            
-            let currentAccumulatedInYear = 0; // Acumulado do ano (YTD)
-
             for (let m = 1; m <= 12; m++) {
                 const monthKey = `${year}-${String(m).padStart(2, '0')}`;
                 const prevMonthKey = `${m === 1 ? year - 1 : year}-${String(m === 1 ? 12 : m - 1).padStart(2, '0')}`;
                 
                 const currentValue = monthEndValues.get(monthKey);
-                
-                // Busca o valor do mês anterior. 
-                // Se não existir mês anterior no mapa (ex: começou em Março), tentamos buscar o último dia disponível antes disso.
-                // Simplificação: Se não tem mês anterior e é o primeiro mês de dados, a base é 0.
                 let prevValue = monthEndValues.get(prevMonthKey);
                 
                 if (prevValue === undefined) {
-                    // Caso especial: Início do histórico no meio do ano ou ano anterior sem dados
-                    if (m === 1) {
-                        prevValue = lastYearCloseValue;
-                    } else {
-                        // Se não tem mês anterior (ex: buraco), assume o último valor conhecido ou null
-                        // Aqui assumimos null para não inventar rentabilidade
-                        prevValue = undefined; 
-                    }
+                    if (m === 1) prevValue = lastYearCloseValue;
+                    else prevValue = undefined; 
                 }
 
-                // Se temos valor atual, calculamos. 
-                // Nota: O primeiro mês de dados deve ser comparado com 0 (base inicial).
                 if (currentValue !== undefined) {
-                    // Se prevValue for undefined (ex: antes do início da carteira), usamos 0 se for o primeiro registro global
                     if (prevValue === undefined) {
-                        // Verifica se este é o primeiro mês absoluto de dados
-                        const firstDataPoint = sortedData[0];
+                        const firstDataPoint: any = sortedData[0];
                         const firstDate = new Date(firstDataPoint.date);
+                        // Ajuste para pegar mês correto (getMonth é 0-index)
                         if (firstDate.getFullYear() === year && (firstDate.getMonth() + 1) === m) {
-                            prevValue = 0; // Base inicial
+                            prevValue = 0; 
                         }
                     }
 
                     if (prevValue !== undefined) {
-                        // Cálculo Geométrico: (1 + Atual%) / (1 + Anterior%) - 1
                         const factorCurrent = 1 + (currentValue / 100);
                         const factorPrev = 1 + (prevValue / 100);
                         const monthlyReturn = ((factorCurrent / factorPrev) - 1) * 100;
-                        
                         months.push({ value: monthlyReturn });
                     } else {
                         months.push({ value: null });
@@ -122,16 +92,10 @@ export const MonthlyReturnsTable = () => {
                 }
             }
 
-            // Fechamento do ano
-            // Replacement for findLast to fix TS error
             const lastMonthWithData = [...months].reverse().find(m => m.value !== null);
-            const yearEndValue = monthEndValues.get(`${year}-12`) ?? monthEndValues.get(`${year}-${new Date().getMonth() + 1}`) ?? (lastMonthWithData ? sortedData[sortedData.length-1].wallet : null);
-            
-            // YTD: (1 + FinalAno) / (1 + InicioAnoReal) - 1
-            // Precisamos pegar o valor exato do final do ano anterior (ou 0 se for o primeiro)
-            let ytd = 0;
             const lastVal = monthEndValues.get(`${year}-12`) || Array.from(monthEndValues.entries()).filter(([k]) => k.startsWith(`${year}-`)).pop()?.[1];
             
+            let ytd = 0;
             if (lastVal !== undefined) {
                 const startVal = lastYearCloseValue;
                 const factorEnd = 1 + (lastVal / 100);
@@ -139,17 +103,10 @@ export const MonthlyReturnsTable = () => {
                 ytd = ((factorEnd / factorStart) - 1) * 100;
             }
 
-            // Atualiza base para o próximo ano (Valor de Dezembro deste ano)
             const decValue = monthEndValues.get(`${year}-12`);
-            if (decValue !== undefined) {
-                lastYearCloseValue = decValue;
-            } else {
-                // Se o ano não acabou, o "fechamento" para cálculo do próximo ano (que não existe) seria o atual
-                // Mas para a variável de loop, mantemos o último conhecido se for o último ano
-                lastYearCloseValue = lastVal || 0;
-            }
+            if (decValue !== undefined) lastYearCloseValue = decValue;
+            else lastYearCloseValue = lastVal || 0;
 
-            // Acumulado Total (Simplesmente o valor da cota no final do ano)
             const accumulatedTotal = lastVal !== undefined ? lastVal : 0;
 
             rows.push({
@@ -160,12 +117,12 @@ export const MonthlyReturnsTable = () => {
             });
         });
 
-        return rows.reverse(); // Volta para ordem decrescente (2025 no topo)
-    }, [rawData]);
+        return rows.reverse(); 
+    }, [rawData, isDemoMode]);
 
     const formatPercent = (val: number | null) => {
         if (val === null) return '-';
-        if (isPrivacyMode) return '•••';
+        if (isPrivacyMode && !isDemoMode) return '•••';
         return `${val > 0 ? '+' : ''}${val.toFixed(2)}%`;
     };
 
@@ -173,10 +130,10 @@ export const MonthlyReturnsTable = () => {
         if (val === null) return 'text-slate-600';
         if (val > 0) return 'text-emerald-400';
         if (val < 0) return 'text-red-400';
-        return 'text-slate-400'; // Zero
+        return 'text-slate-400'; 
     };
 
-    if (isLoading) {
+    if (isLoading && !isDemoMode) {
         return (
             <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[200px] flex items-center justify-center">
                 <Loader2 className="animate-spin text-blue-500" />
@@ -185,7 +142,7 @@ export const MonthlyReturnsTable = () => {
     }
 
     if (tableData.length === 0) {
-        return null; // Não mostra nada se não tiver dados
+        return null; 
     }
 
     return (

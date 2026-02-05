@@ -1,11 +1,12 @@
 
 import React, { useEffect, useState, useLayoutEffect } from 'react';
 import { useDemo } from '../../contexts/DemoContext';
-import { X, ChevronRight, Check, Zap, TrendingUp, Shield, BarChart3, Lock, Navigation, MousePointerClick, Eye, Trophy, Radar } from 'lucide-react';
+import { X, ChevronRight, Check, Zap, TrendingUp, Shield, BarChart3, Lock, Navigation, MousePointerClick, Eye, Trophy, Radar, PieChart, Layout, Coins, FileText, Settings } from 'lucide-react';
 // @ts-ignore
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
-const STEPS = [
+// --- PASSOS DO DASHBOARD ---
+const DASHBOARD_STEPS = [
     {
         title: "Bem-vindo à Elite",
         content: (
@@ -21,7 +22,7 @@ const STEPS = [
                 </p>
             </>
         ),
-        highlightId: null, // Centro da tela
+        highlightId: null, 
         icon: <Zap className="text-blue-500" size={24} />,
         badge: "VÉRTICE INVEST"
     },
@@ -40,7 +41,7 @@ const STEPS = [
                 </p>
             </>
         ),
-        highlightId: null, // Centro da tela
+        highlightId: null, 
         icon: <Eye className="text-emerald-400" size={24} />,
         badge: "DEMO MODE"
     },
@@ -84,7 +85,7 @@ const STEPS = [
                 </p>
             </>
         ),
-        highlightId: 'tour-equity', // Foca nos painéis de KPIs para mostrar os números
+        highlightId: 'tour-equity', 
         icon: <Trophy className="text-yellow-400" size={24} />,
         badge: "CASE DE SUCESSO"
     },
@@ -155,26 +156,167 @@ const STEPS = [
     }
 ];
 
+// --- PASSOS DA CARTEIRA ---
+const WALLET_STEPS = [
+    {
+        title: "Módulo de Gestão",
+        content: (
+            <>
+                <p className="mb-3">
+                    Bem-vindo à sua <strong>Carteira</strong>.
+                </p>
+                <p>
+                    Diferente do <span className="text-emerald-400 font-bold">Terminal</span> (focado em dados de mercado), aqui é onde você <strong>age</strong>. É o seu centro de controle operacional para aportes, rebalanceamento e controle tributário.
+                </p>
+            </>
+        ),
+        highlightId: 'tour-wallet-intro',
+        icon: <Layout className="text-emerald-500" size={24} />,
+        badge: "VISÃO GERAL"
+    },
+    {
+        title: "Dados Unificados",
+        content: (
+            <>
+                Os mesmos indicadores essenciais que você vê no Terminal aparecem aqui, mas consolidados para auditoria.
+                <br/><br/>
+                Acompanhe <span className="text-emerald-400 font-bold">Patrimônio</span>, <span className="text-purple-400 font-bold">Custo</span> e <span className="text-yellow-400 font-bold">Resultado</span> em um único bloco.
+            </>
+        ),
+        highlightId: 'tour-wallet-kpis',
+        icon: <TrendingUp className="text-blue-500" size={24} />,
+        badge: "AUDITORIA"
+    },
+    {
+        title: "Ferramentas de Ação",
+        content: (
+            <>
+                Aqui você opera sua estratégia:
+                <ul className="list-disc pl-4 mt-3 space-y-2 text-xs">
+                    <li><strong className="text-emerald-400">Nova Transação:</strong> Registro manual rápido.</li>
+                    <li><strong className="text-blue-400">Aporte Inteligente:</strong> Algoritmo que diz onde investir dinheiro novo para manter o equilíbrio.</li>
+                    <li><strong className="text-[#D4AF37]">Rebalanceamento IA:</strong> (Black) Automação de venda e compra.</li>
+                </ul>
+            </>
+        ),
+        highlightId: 'tour-wallet-actions',
+        icon: <Zap className="text-yellow-400" size={24} />,
+        badge: "EXECUÇÃO"
+    },
+    {
+        title: "Estratégia e Alocação",
+        content: (
+            <>
+                <p className="mb-3">
+                    À esquerda, veja sua <strong>Evolução Patrimonial</strong>. À direita, o gráfico de <strong>Distribuição</strong>.
+                </p>
+                <p className="flex items-center gap-2 p-2 bg-slate-800 rounded border border-slate-700">
+                    <Settings size={14} className="text-slate-400" />
+                    <span className="text-[10px]">
+                        Você pode clicar na engrenagem do gráfico de Distribuição para definir manualmente a <strong className="text-white">% Ideal</strong> que deseja para cada classe de ativo.
+                    </span>
+                </p>
+            </>
+        ),
+        highlightId: 'tour-wallet-charts',
+        icon: <PieChart className="text-indigo-500" size={24} />,
+        badge: "ESTRATÉGIA"
+    },
+    {
+        title: "Rentabilidade Detalhada",
+        content: (
+            <>
+                Na aba <strong>Rentabilidade</strong>, você encontra um gráfico comparativo avançado.
+                <br/><br/>
+                Ele mostra o retorno real da sua carteira (cotas) comparado contra o <span className="text-yellow-400 font-bold">CDI</span> e o <span className="text-slate-400 font-bold">Ibovespa</span>, além de uma tabela mês a mês.
+            </>
+        ),
+        highlightId: 'tour-wallet-content',
+        icon: <BarChart3 className="text-emerald-500" size={24} />,
+        badge: "PERFORMANCE"
+    },
+    {
+        title: "Controle de Proventos",
+        content: (
+            <>
+                A aba <strong>Proventos</strong> organiza todos os dividendos recebidos e provisionados.
+                <br/><br/>
+                Veja o histórico mensal em barras e a lista futura de pagamentos confirmados.
+            </>
+        ),
+        highlightId: 'tour-wallet-content',
+        icon: <Coins className="text-[#D4AF37]" size={24} />,
+        badge: "RENDA PASSIVA"
+    },
+    {
+        title: "Extrato Completo",
+        content: (
+            <>
+                Por fim, a aba <strong>Extrato</strong> funciona como sua conta corrente de investimentos.
+                <br/><br/>
+                Cada compra, venda, aporte ou recebimento de dividendo fica registrado aqui de forma imutável para sua conferência.
+            </>
+        ),
+        highlightId: 'tour-wallet-content',
+        icon: <FileText className="text-blue-400" size={24} />,
+        badge: "HISTÓRICO"
+    },
+    {
+        title: "Detalhamento de Ativos",
+        content: (
+            <>
+                Abaixo dos gráficos, você tem a lista completa dos seus ativos, separados por classe (Ações, FIIs, etc).
+                <br/><br/>
+                Você pode expandir cada grupo para ver preço médio, cotação atual e o <strong>IA Score</strong> individual.
+            </>
+        ),
+        highlightId: 'tour-wallet-list',
+        icon: <Layout className="text-slate-400" size={24} />,
+        badge: "INVENTÁRIO"
+    },
+    {
+        title: "Tour Concluído",
+        content: (
+            <>
+                Você agora domina as principais ferramentas da plataforma Vértice Invest.
+                <br/><br/>
+                O <strong>Modo Demonstração</strong> será encerrado para que você possa começar a construir seu próprio legado.
+            </>
+        ),
+        highlightId: null,
+        isFinal: true,
+        icon: <Check className="text-white" size={24} />,
+        badge: "PRONTO PARA AÇÃO"
+    }
+];
+
 export const TutorialOverlay: React.FC = () => {
-    const { isDemoMode, currentStep, nextStep, skipTutorial } = useDemo();
+    const { isDemoMode, currentStep, nextStep, skipTutorial, resetStep } = useDemo();
     const navigate = useNavigate();
+    const location = useLocation();
+    
+    // Seleciona os passos baseados na rota atual
+    const steps = location.pathname === '/wallet' ? WALLET_STEPS : DASHBOARD_STEPS;
+    
+    // Proteção contra índice inválido ao trocar de rota
+    const safeStepIndex = Math.min(currentStep, steps.length - 1);
+    const step = steps[safeStepIndex];
+
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
     const [cardPosition, setCardPosition] = useState<{ top: number, left: number, placement: 'bottom' | 'top' | 'center' | 'left-side' }>({ top: 0, left: 0, placement: 'center' });
-    
-    const step = STEPS[currentStep];
 
     useLayoutEffect(() => {
         if (!isDemoMode) return;
 
         const updatePosition = () => {
-            if (step.highlightId) {
+            if (step && step.highlightId) {
                 const element = document.getElementById(step.highlightId);
                 if (element) {
                     const rect = element.getBoundingClientRect();
                     setTargetRect(rect);
 
-                    const cardWidth = 420; // Largura máx do card
-                    const cardHeight = 250; // Altura estimada
+                    const cardWidth = 420; 
+                    const cardHeight = 250; 
                     const spaceBelow = window.innerHeight - rect.bottom;
                     const spaceRight = window.innerWidth - rect.right;
                     
@@ -182,34 +324,41 @@ export const TutorialOverlay: React.FC = () => {
                     let left = rect.left;
                     let placement: 'bottom' | 'top' | 'center' | 'left-side' = 'bottom';
 
-                    // Lógica de posicionamento horizontal
-                    // Se o elemento estiver muito à direita (ex: sidebar), alinhar o card à esquerda do elemento ou alinhar pela direita
-                    if (rect.left > window.innerWidth / 2) {
-                        // Tenta alinhar a direita do card com a direita do elemento
-                        left = rect.right - cardWidth;
+                    // Lógica Especial para Radar Alpha (Forçar Esquerda)
+                    if (step.highlightId === 'tour-radar') {
+                        left = rect.left - cardWidth - 24;
+                        top = rect.top; 
+                        placement = 'left-side';
                         
-                        // Se mesmo assim vazar para a esquerda (tela pequena), ajusta
-                        if (left < 20) left = 20;
-                        
-                        // Se o elemento for uma sidebar estreita, talvez seja melhor jogar o card para a esquerda do elemento
-                        // Exemplo: Tour de dividendos ou Radar
-                        if (rect.width < 350 && rect.left > cardWidth) {
-                             left = rect.left - cardWidth - 24;
-                             top = rect.top; // Alinha topo
-                             placement = 'left-side';
+                        // Fallback se não couber na esquerda (mobile)
+                        if (left < 10) {
+                            left = rect.left; // Volta pro alinhamento padrão
+                            top = rect.bottom + 24;
+                            placement = 'bottom';
                         }
                     } else {
-                        // Lógica padrão para elementos à esquerda ou centro
-                        if (left + cardWidth > window.innerWidth) {
-                            left = window.innerWidth - cardWidth - 20;
+                        // Lógica Padrão Inteligente
+                        if (rect.left > window.innerWidth / 2) {
+                            left = rect.right - cardWidth;
+                            if (left < 20) left = 20;
+                            
+                            // Sidebar estreita à direita -> Card à esquerda
+                            if (rect.width < 350 && rect.left > cardWidth) {
+                                 left = rect.left - cardWidth - 24;
+                                 top = rect.top; 
+                                 placement = 'left-side';
+                            }
+                        } else {
+                            if (left + cardWidth > window.innerWidth) {
+                                left = window.innerWidth - cardWidth - 20;
+                            }
                         }
-                    }
 
-                    // Lógica de posicionamento vertical (se não for lateral)
-                    if (placement !== 'left-side') {
-                        if (spaceBelow < cardHeight + 40) {
-                            top = rect.top - cardHeight - 24;
-                            placement = 'top';
+                        if (placement !== 'left-side') {
+                            if (spaceBelow < cardHeight + 40) {
+                                top = rect.top - cardHeight - 24;
+                                placement = 'top';
+                            }
                         }
                     }
 
@@ -224,7 +373,10 @@ export const TutorialOverlay: React.FC = () => {
             }
         };
 
+        // Força atualização imediata e com delay para garantir renderização do DOM
+        updatePosition();
         const timer = setTimeout(updatePosition, 100);
+        
         window.addEventListener('resize', updatePosition);
         window.addEventListener('scroll', updatePosition, true);
 
@@ -233,27 +385,31 @@ export const TutorialOverlay: React.FC = () => {
             window.removeEventListener('resize', updatePosition);
             window.removeEventListener('scroll', updatePosition, true);
         };
-    }, [currentStep, isDemoMode, step.highlightId]);
+    }, [safeStepIndex, isDemoMode, step?.highlightId, location.pathname]);
 
     const handleNext = () => {
         if (step.isFinal) {
-            // "Sim, continuar" -> Vai para a carteira e encerra o tutorial do terminal
-            skipTutorial();
-            navigate('/wallet');
+            if (location.pathname === '/wallet') {
+                // Fim do tour da carteira -> Encerra Demo
+                skipTutorial();
+                navigate('/dashboard');
+            } else {
+                // Fim do tour do dashboard -> Vai para Carteira
+                resetStep(); // Reseta contador para 0
+                navigate('/wallet');
+            }
         } else {
             nextStep();
         }
     };
 
-    if (!isDemoMode) return null;
+    if (!isDemoMode || !step) return null;
 
     return (
         <div className="fixed inset-0 z-[9999] overflow-hidden pointer-events-none font-sans">
             
             {/* BACKDROP INTELIGENTE */}
             {targetRect ? (
-                // Modo Spotlight (Elemento Focado)
-                // Ajustado para usar BOX SHADOW com a mesma opacidade do modo fullscreen (0.45)
                 <div 
                     className="absolute transition-all duration-700 ease-[cubic-bezier(0.25,0.1,0.25,1)] border border-blue-500/30 rounded-xl shadow-[0_0_40px_rgba(59,130,246,0.2)] animate-pulse bg-transparent"
                     style={{
@@ -261,14 +417,10 @@ export const TutorialOverlay: React.FC = () => {
                         left: targetRect.left - 4,
                         width: targetRect.width + 8,
                         height: targetRect.height + 8,
-                        // Aqui está o truque: A sombra gigante cria o overlay escuro ao redor do elemento focado.
-                        // Ajustado alpha para 0.45 para igualar ao modo fullscreen.
                         boxShadow: '0 0 0 9999px rgba(2, 4, 10, 0.45)' 
                     }}
                 />
             ) : (
-                // Modo Fullscreen (Passos Iniciais)
-                // Opacidade ajustada para 0.45 (45%)
                 <div className="absolute inset-0 bg-[#02040a]/45 backdrop-blur-sm transition-opacity duration-700"></div>
             )}
 
@@ -283,7 +435,7 @@ export const TutorialOverlay: React.FC = () => {
                     <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
                         <div 
                             className="h-full bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 transition-all duration-500"
-                            style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
+                            style={{ width: `${((safeStepIndex + 1) / steps.length) * 100}%` }}
                         ></div>
                     </div>
 
@@ -321,10 +473,10 @@ export const TutorialOverlay: React.FC = () => {
                         {/* Footer / Ações */}
                         <div className="flex items-center justify-between pt-4 border-t border-slate-800/50">
                             <div className="flex gap-1.5">
-                                {STEPS.map((_, i) => (
+                                {steps.map((_, i) => (
                                     <div 
                                         key={i} 
-                                        className={`h-1.5 rounded-full transition-all duration-300 ${i === currentStep ? 'w-6 bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'w-1.5 bg-slate-700'}`} 
+                                        className={`h-1.5 rounded-full transition-all duration-300 ${i === safeStepIndex ? 'w-6 bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'w-1.5 bg-slate-700'}`} 
                                     />
                                 ))}
                             </div>
@@ -339,14 +491,14 @@ export const TutorialOverlay: React.FC = () => {
                                     }
                                 `}
                             >
-                                {step.isFinal ? 'Sim, continuar' : 'Próximo'}
+                                {step.isFinal ? (location.pathname === '/wallet' ? 'Concluir Demo' : 'Sim, continuar') : 'Próximo'}
                                 {step.isFinal ? <Check size={14} /> : <ChevronRight size={14} />}
                             </button>
                         </div>
                     </div>
                 </div>
                 
-                {/* Seta Indicativa (Renderiza apenas se não for centro e não for lateral) */}
+                {/* Seta Indicativa */}
                 {cardPosition.placement !== 'center' && cardPosition.placement !== 'left-side' && (
                     <div 
                         className={`absolute w-4 h-4 bg-[#0F1729] border-l border-t border-slate-700/60 transform rotate-45 left-8
@@ -355,7 +507,7 @@ export const TutorialOverlay: React.FC = () => {
                     ></div>
                 )}
                 
-                {/* Seta Indicativa Lateral (Direita do card, apontando para o elemento à direita) */}
+                {/* Seta Indicativa Lateral (Direita do card) */}
                 {cardPosition.placement === 'left-side' && (
                     <div 
                         className="absolute top-8 -right-2 w-4 h-4 bg-[#0F1729] border-t border-r border-slate-700/60 transform rotate-45"

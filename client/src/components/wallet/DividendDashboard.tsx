@@ -2,7 +2,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { walletService } from '../../services/wallet';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Coins, CalendarCheck, TrendingUp, AlertCircle, CheckCircle2, Clock, Calculator } from 'lucide-react';
+import { Coins, CalendarCheck, TrendingUp, CheckCircle2, Clock, Calculator } from 'lucide-react';
+import { useDemo } from '../../contexts/DemoContext';
+import { DEMO_DIVIDENDS } from '../../data/DEMO_DATA';
 
 interface DividendData {
     history: { 
@@ -18,15 +20,24 @@ interface DividendData {
 export const DividendDashboard = () => {
     const [data, setData] = useState<DividendData>({ history: [], provisioned: [], totalAllTime: 0, projectedMonthly: 0 });
     const [isLoading, setIsLoading] = useState(true);
-    const [timeRange, setTimeRange] = useState<'12M' | 'ALL'>('12M'); // Filtro Temporal
+    const [timeRange, setTimeRange] = useState<'12M' | 'ALL'>('12M'); 
+    
+    const { isDemoMode } = useDemo();
 
     useEffect(() => {
         const load = async () => {
+            if (isDemoMode) {
+                // Simula delay e carrega dados estáticos
+                setTimeout(() => {
+                    setData(DEMO_DIVIDENDS);
+                    setIsLoading(false);
+                }, 600);
+                return;
+            }
+
             try {
                 const res = await walletService.getDividends();
-                
                 let cleanHistory = Array.isArray(res?.history) ? res.history : [];
-                // Remove meses zerados iniciais para limpar o gráfico
                 while(cleanHistory.length > 0 && cleanHistory[0].value === 0) {
                     cleanHistory.shift();
                 }
@@ -44,9 +55,8 @@ export const DividendDashboard = () => {
             }
         };
         load();
-    }, []);
+    }, [isDemoMode]);
 
-    // Lógica de Filtragem dos Dados do Gráfico
     const filteredHistory = useMemo(() => {
         if (timeRange === '12M') {
             return data.history.slice(-12);
@@ -57,10 +67,6 @@ export const DividendDashboard = () => {
     const formatCurrency = (val: number) => 
         new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-    const totalReceived = data.totalAllTime !== undefined 
-        ? data.totalAllTime 
-        : data.history.reduce((acc, curr) => acc + (curr.value || 0), 0);
-        
     const totalProvisioned = data.provisioned.reduce((acc, curr) => acc + (curr.amount || 0), 0);
 
     const isDatePassed = (dateStr: string) => {
@@ -75,7 +81,7 @@ export const DividendDashboard = () => {
             const dataPoint = payload[0].payload;
             const breakdown = dataPoint.breakdown || [];
             
-            const parts = label.split('-'); // YYYY-MM
+            const parts = label.split('-'); 
             let formattedLabel = label;
             if (parts.length === 2) {
                 const d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, 1);
@@ -112,13 +118,11 @@ export const DividendDashboard = () => {
         );
     }
 
-    // Ajuste da largura do gráfico para scroll horizontal se muitos dados
     const contentWidth = Math.max(100, filteredHistory.length * 60); 
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             
-            {/* COLUNA 1: Gráfico de Barras */}
             <div className="lg:col-span-2 bg-[#080C14] border border-slate-800 rounded-2xl p-6 relative overflow-hidden flex flex-col">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <div>
@@ -129,7 +133,6 @@ export const DividendDashboard = () => {
                         <p className="text-xs text-slate-500">Histórico de Pagamentos</p>
                     </div>
                     
-                    {/* Filtro Temporal */}
                     <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
                         <button
                             onClick={() => setTimeRange('12M')}
@@ -193,7 +196,6 @@ export const DividendDashboard = () => {
                 </div>
             </div>
 
-            {/* COLUNA 2: Lista de Provisões ou Estimativa */}
             <div className="lg:col-span-1 bg-[#080C14] border border-slate-800 rounded-2xl p-6 flex flex-col">
                 <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-800">
                     <div>
@@ -202,7 +204,6 @@ export const DividendDashboard = () => {
                             Provisões Futuras
                         </h3>
                     </div>
-                    {/* Se tiver provisão real, mostra ela. Se não, mostra 0 ou estimativa */}
                     <span className="text-xs font-bold text-emerald-500 bg-emerald-900/20 px-2 py-0.5 rounded border border-emerald-900/50">
                         {formatCurrency(totalProvisioned)}
                     </span>

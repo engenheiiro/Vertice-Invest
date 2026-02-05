@@ -2,7 +2,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { walletService } from '../../services/wallet';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import { TrendingUp, RefreshCw, Layers } from 'lucide-react';
+import { TrendingUp, RefreshCw } from 'lucide-react';
+import { useDemo } from '../../contexts/DemoContext';
+import { DEMO_PERFORMANCE } from '../../data/DEMO_DATA';
 
 interface PerformancePoint {
     date: string;
@@ -15,13 +17,25 @@ interface PerformancePoint {
 export const PerformanceChart = () => {
     const [data, setData] = useState<PerformancePoint[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [metricMode, setMetricMode] = useState<'TWRR' | 'ROI'>('TWRR'); // Estado para alternar métricas
+    const [metricMode, setMetricMode] = useState<'TWRR' | 'ROI'>('TWRR'); 
+    
+    const { isDemoMode } = useDemo();
 
     const loadPerformance = async () => {
         setIsLoading(true);
+        
+        if (isDemoMode) {
+            // Simula delay de rede para realismo
+            setTimeout(() => {
+                setData(DEMO_PERFORMANCE);
+                setIsLoading(false);
+            }, 600);
+            return;
+        }
+
         try {
             const res = await walletService.getPerformance();
-            const sorted = Array.isArray(res) ? res.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()) : [];
+            const sorted = Array.isArray(res) ? res.sort((a: any,b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()) : [];
             setData(sorted);
         } catch (e) {
             console.error("Erro carregando performance:", e);
@@ -33,11 +47,11 @@ export const PerformanceChart = () => {
 
     useEffect(() => {
         loadPerformance();
-    }, []);
+    }, [isDemoMode]); // Recarrega se o modo mudar
 
     const xAxisTicks = useMemo(() => {
         if (data.length === 0) return [];
-        const ticks = [];
+        const ticks: string[] = [];
         const seenMonths = new Set();
         
         data.forEach(point => {
@@ -71,8 +85,6 @@ export const PerformanceChart = () => {
     }
 
     const lastPoint = data[data.length - 1];
-    
-    // Seleciona qual dado mostrar baseado no modo
     const currentWalletValue = metricMode === 'TWRR' ? lastPoint.wallet : lastPoint.walletRoi;
     const walletWin = lastPoint && (currentWalletValue > lastPoint.cdi && currentWalletValue > (lastPoint.ibov || 0));
 
@@ -92,7 +104,6 @@ export const PerformanceChart = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {/* Toggle Switch */}
                     <div className="bg-slate-900 p-1 rounded-lg border border-slate-800 flex gap-1">
                         <button 
                             onClick={() => setMetricMode('TWRR')}
@@ -101,7 +112,7 @@ export const PerformanceChart = () => {
                                 ? 'bg-slate-700 text-white shadow-sm' 
                                 : 'text-slate-500 hover:text-slate-300'
                             }`}
-                            title="Time-Weighted Rate of Return (Ideal para comparar com índices)"
+                            title="Time-Weighted Rate of Return"
                         >
                             Rentabilidade (Gestão)
                         </button>
@@ -112,7 +123,7 @@ export const PerformanceChart = () => {
                                 ? 'bg-slate-700 text-white shadow-sm' 
                                 : 'text-slate-500 hover:text-slate-300'
                             }`}
-                            title="Return on Investment (Quanto dinheiro você ganhou)"
+                            title="Return on Investment"
                         >
                             Retorno (Bolso)
                         </button>
@@ -200,7 +211,6 @@ export const PerformanceChart = () => {
                             activeDot={false}
                         />
 
-                        {/* A Linha da Carteira muda dinamicamente conforme o modo */}
                         <Area 
                             type="monotone" 
                             dataKey={metricMode === 'TWRR' ? 'wallet' : 'walletRoi'} 
