@@ -4,6 +4,8 @@ import { walletService } from '../../services/wallet';
 import { ArrowUpCircle, ArrowDownCircle, Calendar, Loader2, FileText } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDemo } from '../../contexts/DemoContext';
+import { DEMO_TRANSACTIONS } from '../../data/DEMO_DATA';
 
 interface Transaction {
     _id: string;
@@ -20,44 +22,46 @@ type FilterType = 'ALL' | 'CASH' | 'TRADE';
 
 export const CashFlowHistory = () => {
     const { user } = useAuth();
+    const { isDemoMode } = useDemo();
     const [page, setPage] = useState(1);
     const [activeFilter, setActiveFilter] = useState<FilterType>('ALL');
     const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-    // React Query para buscar transações
-    // Dependências: page, activeFilter e user.id
-    // A chave ['cashFlow'] é invalidada globalmente quando uma transação é adicionada
     const { data, isLoading, isFetching } = useQuery({
         queryKey: ['cashFlow', user?.id, page, activeFilter],
         queryFn: () => walletService.getCashFlow(page, 15, activeFilter),
-        staleTime: 1000 * 60 * 2, // 2 minutos
-        enabled: !!user?.id
+        staleTime: 1000 * 60 * 2,
+        enabled: !!user?.id && !isDemoMode // Desativa query real no demo
     });
 
-    // Atualiza lista acumulativa quando novos dados chegam
     useEffect(() => {
+        if (isDemoMode) {
+            // Em modo demo, carrega dados estáticos
+            setTransactions(DEMO_TRANSACTIONS.transactions as Transaction[]);
+            return;
+        }
+
         if (data?.transactions) {
             if (page === 1) {
                 setTransactions(data.transactions);
             } else {
                 setTransactions(prev => {
-                    // Evita duplicatas ao concatenar (segurança extra)
                     const newIds = new Set(data.transactions.map((t: Transaction) => t._id));
                     return [...prev.filter(t => !newIds.has(t._id)), ...data.transactions];
                 });
             }
         }
-    }, [data, page]);
+    }, [data, page, isDemoMode]);
 
     const handleFilterChange = (newFilter: FilterType) => {
         if (newFilter === activeFilter) return;
         setActiveFilter(newFilter);
         setPage(1);
-        setTransactions([]); // Limpa visualmente para dar feedback de troca
+        if (!isDemoMode) setTransactions([]); 
     };
 
     const loadMore = () => {
-        if (data?.pagination?.hasMore) {
+        if (!isDemoMode && data?.pagination?.hasMore) {
             setPage(prev => prev + 1);
         }
     };
@@ -91,7 +95,7 @@ export const CashFlowHistory = () => {
             </div>
             
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-                {isLoading && page === 1 ? (
+                {(isLoading && page === 1 && !isDemoMode) ? (
                     <div className="h-64 flex items-center justify-center">
                         <Loader2 className="animate-spin text-slate-600" />
                     </div>
@@ -161,7 +165,7 @@ export const CashFlowHistory = () => {
                     </div>
                 )}
 
-                {data?.pagination?.hasMore && (
+                {data?.pagination?.hasMore && !isDemoMode && (
                     <div className="p-4 border-t border-slate-800 bg-[#0B101A] text-center">
                         <button 
                             onClick={loadMore}

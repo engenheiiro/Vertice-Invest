@@ -3,7 +3,6 @@ import { Asset } from '../contexts/WalletContext';
 
 // Simulação: Aporte Único em 01/01/2024 (1 Cota de cada ativo)
 // Objetivo: Total Equity ~517.24, Total Invested ~369.06
-// Ativos baseados na carteira Vértice recomendada.
 
 export const DEMO_ASSETS: Asset[] = [
     // 1. SABESP
@@ -62,7 +61,7 @@ export const DEMO_ASSETS: Asset[] = [
         totalValue: 37.30, totalCost: 38.72, profit: -1.42, profitPercent: -3.67, 
         currency: 'BRL', sector: 'Petróleo', dayChangePct: 1.2
     },
-    // 9. ITAÚSA (Ajustado para fechar a conta exata)
+    // 9. ITAÚSA
     {
         id: 'demo-itsa4', ticker: 'ITSA4', name: 'Itaúsa', type: 'STOCK',
         quantity: 1, averagePrice: 17.37, currentPrice: 19.69, 
@@ -70,14 +69,6 @@ export const DEMO_ASSETS: Asset[] = [
         currency: 'BRL', sector: 'Bancos', dayChangePct: -0.3
     }
 ];
-
-// CÁLCULOS EXATOS SOLICITADOS
-// Total Invested: 369.06
-// Total Equity (Ativos): 517.24
-// Resultado Nominal (Equity - Invested): 148.18
-// ROI (Resultado / Invested): 40.15%
-// Dividendos: 46.71
-// Rentabilidade Ponderada (Inclui reinvestimento teórico/tempo): 96.44%
 
 export const DEMO_KPIS = {
     totalEquity: 517.24, 
@@ -87,8 +78,8 @@ export const DEMO_KPIS = {
     dayVariation: 4.12, 
     dayVariationPercent: 0.80,
     totalDividends: 46.71, 
-    projectedDividends: 3.00, // Média mensal solicitada
-    weightedRentability: 96.44 
+    projectedDividends: 3.00,
+    weightedRentability: 40.15 
 };
 
 export const DEMO_HISTORY = [
@@ -105,3 +96,58 @@ export const DEMO_HISTORY = [
     { date: '2024-11-01', totalEquity: 498.50, totalInvested: 369.06, profit: 129.44 },
     { date: '2024-12-01', totalEquity: 517.24, totalInvested: 369.06, profit: 148.18 },
 ];
+
+// Dados para Gráfico de Rentabilidade (vs CDI/Ibov)
+export const DEMO_PERFORMANCE = [
+    { date: '2024-01-01', wallet: 0, walletRoi: 0, cdi: 0.8, ibov: -4.8 },
+    { date: '2024-02-01', wallet: 1.6, walletRoi: 1.6, cdi: 1.6, ibov: -1.0 },
+    { date: '2024-03-01', wallet: 3.6, walletRoi: 3.6, cdi: 2.5, ibov: -1.9 },
+    { date: '2024-04-01', wallet: 7.0, walletRoi: 7.0, cdi: 3.4, ibov: -3.6 },
+    { date: '2024-05-01', wallet: 11.3, walletRoi: 11.3, cdi: 4.3, ibov: -6.0 },
+    { date: '2024-06-01', wallet: 9.8, walletRoi: 9.8, cdi: 5.2, ibov: -4.5 },
+    { date: '2024-07-01', wallet: 14.4, walletRoi: 14.4, cdi: 6.1, ibov: -1.5 },
+    { date: '2024-08-01', wallet: 20.7, walletRoi: 20.7, cdi: 7.0, ibov: 5.0 },
+    { date: '2024-09-01', wallet: 27.0, walletRoi: 27.0, cdi: 7.9, ibov: 4.0 },
+    { date: '2024-10-01', wallet: 30.1, walletRoi: 30.1, cdi: 8.8, ibov: 3.5 },
+    { date: '2024-11-01', wallet: 35.0, walletRoi: 35.0, cdi: 9.7, ibov: 1.5 },
+    { date: '2024-12-01', wallet: 40.15, walletRoi: 40.15, cdi: 10.8, ibov: -2.0 },
+];
+
+// Dados para Dividendos (Histórico + Provisões)
+export const DEMO_DIVIDENDS = {
+    history: [
+        { month: '2024-02', value: 2.15, breakdown: [{ ticker: 'SBSP3', amount: 1.15 }, { ticker: 'TAEE11', amount: 1.00 }] },
+        { month: '2024-03', value: 3.40, breakdown: [{ ticker: 'VALE3', amount: 2.40 }, { ticker: 'ITSA4', amount: 1.00 }] },
+        { month: '2024-04', value: 1.80, breakdown: [{ ticker: 'PETR4', amount: 1.80 }] },
+        { month: '2024-05', value: 4.20, breakdown: [{ ticker: 'SAPR11', amount: 4.20 }] },
+        { month: '2024-06', value: 2.50, breakdown: [{ ticker: 'ENGI11', amount: 2.50 }] },
+        { month: '2024-07', value: 3.10, breakdown: [{ ticker: 'TAEE11', amount: 3.10 }] },
+        { month: '2024-08', value: 5.50, breakdown: [{ ticker: 'PETR4', amount: 5.50 }] },
+        { month: '2024-09', value: 2.90, breakdown: [{ ticker: 'CSMG3', amount: 2.90 }] },
+        { month: '2024-10', value: 4.10, breakdown: [{ ticker: 'VALE3', amount: 4.10 }] },
+        { month: '2024-11', value: 3.80, breakdown: [{ ticker: 'EQTL3', amount: 3.80 }] },
+        { month: '2024-12', value: 13.26, breakdown: [{ ticker: 'SBSP3', amount: 13.26 }] },
+    ],
+    provisioned: [
+        { ticker: 'PETR4', date: '2025-01-20', amount: 4.50 },
+        { ticker: 'VALE3', date: '2025-02-15', amount: 3.20 },
+        { ticker: 'TAEE11', date: '2025-02-28', amount: 1.80 }
+    ],
+    totalAllTime: 46.71,
+    projectedMonthly: 3.89
+};
+
+// Dados para Extrato (Transações)
+export const DEMO_TRANSACTIONS = {
+    transactions: DEMO_ASSETS.map((asset, index) => ({
+        _id: `tx-${index}`,
+        type: 'BUY',
+        ticker: asset.ticker,
+        quantity: asset.quantity,
+        price: asset.averagePrice,
+        totalValue: asset.totalCost,
+        date: '2024-01-05', // Data de compra simulada
+        isCashOp: false
+    })),
+    pagination: { hasMore: false, currentPage: 1, totalPages: 1, totalItems: DEMO_ASSETS.length }
+};

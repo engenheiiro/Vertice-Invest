@@ -1,12 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from '../components/dashboard/Header';
 import { WalletSummary } from '../components/wallet/WalletSummary';
 import { AssetList } from '../components/wallet/AssetList';
 import { AddAssetModal } from '../components/wallet/AddAssetModal';
 import { EvolutionChart } from '../components/wallet/EvolutionChart';
 import { PerformanceChart } from '../components/wallet/PerformanceChart'; 
-import { MonthlyReturnsTable } from '../components/wallet/MonthlyReturnsTable'; // Importação Nova
+import { MonthlyReturnsTable } from '../components/wallet/MonthlyReturnsTable'; 
 import { DividendDashboard } from '../components/wallet/DividendDashboard'; 
 import { CashFlowHistory } from '../components/wallet/CashFlowHistory'; 
 import { AllocationChart } from '../components/wallet/AllocationChart';
@@ -15,14 +15,15 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
+import { useDemo } from '../contexts/DemoContext'; // Import Demo
 // @ts-ignore
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth';
 
 export const Wallet = () => {
     const { user } = useAuth();
-    // Consumimos isRefreshing do contexto agora
     const { assets, kpis, resetWallet, isLoading, isRefreshing } = useWallet();
+    const { isDemoMode, currentStep } = useDemo();
     const navigate = useNavigate();
     
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -32,6 +33,25 @@ export const Wallet = () => {
     const [limitMessage, setLimitMessage] = useState('');
 
     const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PERFORMANCE' | 'DIVIDENDS' | 'STATEMENT'>('OVERVIEW');
+
+    // --- AUTOMAÇÃO DO TUTORIAL ---
+    useEffect(() => {
+        if (!isDemoMode) return;
+
+        // Mapeamento dos passos do tutorial da Wallet para as Abas
+        // 0: Intro, 1: KPIs, 2: Actions, 3: Charts (Overview)
+        // 4: Performance Tab
+        // 5: Dividends Tab
+        // 6: Statement Tab
+        // 7: List (Back to Overview)
+        
+        if (currentStep <= 3) setActiveTab('OVERVIEW');
+        else if (currentStep === 4) setActiveTab('PERFORMANCE');
+        else if (currentStep === 5) setActiveTab('DIVIDENDS');
+        else if (currentStep === 6) setActiveTab('STATEMENT');
+        else if (currentStep >= 7) setActiveTab('OVERVIEW');
+
+    }, [isDemoMode, currentStep]);
 
     const checkFeatureAccess = async (feature: 'smart_contribution' | 'report') => {
         try {
@@ -76,10 +96,10 @@ export const Wallet = () => {
         <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
             <Header />
             
-            <main className="max-w-[1600px] mx-auto p-6 animate-fade-in">
+            <main className="max-w-[1600px] mx-auto p-6 animate-fade-in relative">
                 
                 {/* Header Actions */}
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
+                <div id="tour-wallet-intro" className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-3">
                             Minha Carteira
@@ -94,7 +114,7 @@ export const Wallet = () => {
                         <p className="text-slate-400 text-sm">Gerencie seus ativos e acompanhe a evolução patrimonial.</p>
                     </div>
                     
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div id="tour-wallet-actions" className={`flex flex-wrap items-center gap-3 transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
                         <button className="flex items-center gap-2 px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95" onClick={() => setIsAddModalOpen(true)}>
                             <PlusCircle size={16} /> Nova Transação
                         </button>
@@ -111,9 +131,11 @@ export const Wallet = () => {
                     </div>
                 </div>
 
-                <WalletSummary />
+                <div id="tour-wallet-kpis" className={`transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
+                    <WalletSummary />
+                </div>
 
-                <div className="flex gap-2 mb-6 border-b border-slate-800/60 pb-1 overflow-x-auto no-scrollbar">
+                <div className={`flex gap-2 mb-6 border-b border-slate-800/60 pb-1 overflow-x-auto no-scrollbar transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
                     <TabButton active={activeTab === 'OVERVIEW'} onClick={() => setActiveTab('OVERVIEW')} icon={<PieChart size={14} />} label="Visão Geral" />
                     <TabButton active={activeTab === 'PERFORMANCE'} onClick={() => setActiveTab('PERFORMANCE')} icon={<BarChart2 size={14} />} label="Rentabilidade" />
                     <TabButton active={activeTab === 'DIVIDENDS'} onClick={() => setActiveTab('DIVIDENDS')} icon={<Coins size={14} />} label="Proventos" />
@@ -126,10 +148,10 @@ export const Wallet = () => {
                         <div className="h-40 bg-slate-800/30 rounded-2xl"></div>
                     </div>
                 ) : (
-                    <>
+                    <div id="tour-wallet-content" className={`transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
                         {activeTab === 'OVERVIEW' && (
                             <>
-                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 animate-fade-in">
+                                <div id="tour-wallet-charts" className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 animate-fade-in">
                                     <div className="lg:col-span-2">
                                         <EvolutionChart />
                                     </div>
@@ -137,7 +159,7 @@ export const Wallet = () => {
                                         <AllocationChart />
                                     </div>
                                 </div>
-                                <div className="mb-8 animate-fade-in">
+                                <div id="tour-wallet-list" className="mb-8 animate-fade-in">
                                     <AssetList />
                                 </div>
                             </>
@@ -147,7 +169,6 @@ export const Wallet = () => {
                             <div className="animate-fade-in">
                                 <div className="grid grid-cols-1 gap-6 mb-8">
                                     <PerformanceChart />
-                                    {/* Matriz de Rentabilidade Adicionada Aqui */}
                                     <MonthlyReturnsTable />
                                 </div>
                                 <div className="p-6 bg-slate-900/30 border border-slate-800 rounded-xl text-center text-slate-500 text-xs">
@@ -167,7 +188,7 @@ export const Wallet = () => {
                                 <CashFlowHistory />
                             </div>
                         )}
-                    </>
+                    </div>
                 )}
                 
                 <AddAssetModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
