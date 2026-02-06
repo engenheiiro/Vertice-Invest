@@ -11,8 +11,8 @@ import { externalMarketService } from './externalMarketService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv } from '../utils/mathUtils.js';
 import logger from '../config/logger.js';
 
-// Tabela de CDI Anual Simplificada para cálculos históricos rápidos
 const HISTORICAL_CDI_YEAR = {
+    2015: 14.25, 2016: 14.00, 2017: 9.95, 2018: 6.50,
     2019: 5.96, 2020: 2.77, 2021: 4.42, 2022: 12.39, 2023: 13.04, 2024: 10.80, 2025: 11.25, 2026: 11.25
 };
 
@@ -41,32 +41,33 @@ export const financialService = {
         return clean;
     },
 
-    findPriceData(history, dateStr) {
-        if (!history || history.length === 0) return { close: 0, adjClose: 0 };
+    indexHistoryByDate(history) {
+        const map = new Map();
+        if (!history || !Array.isArray(history)) return map;
         
-        const exact = history.find(h => h.date === dateStr);
-        if (exact) return { 
-            close: exact.close || 0, 
-            adjClose: exact.adjClose || exact.close || 0 
-        };
-
-        const targetTime = new Date(dateStr).getTime();
-        const lastPoint = history[history.length - 1];
-        if (new Date(lastPoint.date).getTime() <= targetTime) {
-             return { 
-                close: lastPoint.close || 0, 
-                adjClose: lastPoint.adjClose || lastPoint.close || 0 
-            };
-        }
-
-        for (let i = history.length - 1; i >= 0; i--) {
-            const h = history[i];
-            const hTime = new Date(h.date).getTime();
-            if (hTime <= targetTime) {
-                return { 
+        history.forEach(h => {
+            if (h.date) {
+                map.set(h.date, { 
                     close: h.close || 0, 
                     adjClose: h.adjClose || h.close || 0 
-                };
+                });
+            }
+        });
+        return map;
+    },
+
+    findPriceInMap(priceMap, dateStr) {
+        if (!priceMap || priceMap.size === 0) return { close: 0, adjClose: 0 };
+
+        if (priceMap.has(dateStr)) return priceMap.get(dateStr);
+
+        const targetDate = new Date(dateStr);
+        for (let i = 1; i <= 5; i++) {
+            const prevDate = new Date(targetDate);
+            prevDate.setDate(targetDate.getDate() - i);
+            const prevKey = prevDate.toISOString().split('T')[0];
+            if (priceMap.has(prevKey)) {
+                return priceMap.get(prevKey);
             }
         }
 
@@ -74,75 +75,59 @@ export const financialService = {
     },
 
     findClosestValue(history, targetDateStr) {
-        const data = this.findPriceData(history, targetDateStr);
-        return data.adjClose || data.close || 0;
+        if (!history) return 0;
+        const exact = history.find(h => h.date === targetDateStr);
+        if (exact) return exact.adjClose || exact.close;
+        return 0;
     },
 
-    findHistoricalPrice(history, targetDateStr) {
-        const data = this.findPriceData(history, targetDateStr);
-        return data.close;
-    },
-
-    // --- ENGINE V4.4: CORREÇÃO RENDA FIXA (MARK-TO-CURVE) ---
     async rebuildUserHistory(userId) {
         const startTime = Date.now();
-        logger.info(`🛠️ [History] Iniciando reconstrução (Engine V4.4) para User ${userId}...`);
         
         try {
             const txs = await AssetTransaction.find({ user: userId }).sort({ date: 1 });
             if (txs.length === 0) {
                 await WalletSnapshot.deleteMany({ user: userId });
-                logger.info(`   ➤ Sem transações. Snapshots limpos.`);
                 return;
             }
 
             const uniqueTickers = [...new Set(txs.map(t => t.ticker))];
-            const priceMap = new Map();
-            const assetMetadataMap = new Map(); // Para guardar tipo/taxa da Renda Fixa
-
-            // 1. Carrega Histórico de Preços e Metadados
-            logger.info(`   ➤ Pré-carregando históricos para ${uniqueTickers.length} ativos...`);
             
-            // Busca metadados dos ativos para saber se são Renda Fixa
+            const priceCacheMap = new Map(); 
+            const assetMetadataMap = new Map(); 
+
             const userAssets = await UserAsset.find({ user: userId });
             userAssets.forEach(ua => assetMetadataMap.set(ua.ticker, ua));
 
             await Promise.all(uniqueTickers.map(async (ticker) => {
                 const assetMeta = assetMetadataMap.get(ticker);
-                const isFixed = assetMeta?.type === 'FIXED_INCOME' || assetMeta?.type === 'CASH' || ticker === 'RESERVA';
-
-                if (isFixed) return; // Renda Fixa calculada matematicamente no loop
+                if (assetMeta?.type === 'FIXED_INCOME' || assetMeta?.type === 'CASH' || ticker === 'RESERVA') return; 
 
                 try {
                     const searchTicker = this.normalizeTickerForHistory(ticker);
                     let history = await marketDataService.getBenchmarkHistory(ticker);
-                    let needsRefresh = !history || history.length < 5;
-
-                    if (needsRefresh) {
-                        await AssetHistory.deleteOne({ ticker: ticker.toUpperCase() });
+                    
+                    if (!history || history.length < 5) {
                         const info = await MarketAsset.findOne({ ticker });
-                        const type = info?.type || (ticker.length > 5 ? 'FII' : 'STOCK');
-                        
+                        const type = info?.type || 'STOCK';
                         try {
-                            history = await externalMarketService.getFullHistory(searchTicker, type);
-                            if (history && history.length > 0) {
-                                await AssetHistory.create({
-                                    ticker: ticker.toUpperCase(),
-                                    history: history,
-                                    lastUpdated: new Date()
-                                });
+                            const extHistory = await externalMarketService.getFullHistory(searchTicker, type);
+                            if (extHistory && extHistory.length > 0) {
+                                await AssetHistory.updateOne(
+                                    { ticker: ticker.toUpperCase() },
+                                    { history: extHistory, lastUpdated: new Date() },
+                                    { upsert: true }
+                                );
+                                history = extHistory;
                             }
-                        } catch (extErr) {
-                            logger.warn(`      ⚠️ Falha ao baixar ${ticker}: ${extErr.message}`);
-                        }
+                        } catch (err) { }
                     }
                     
                     if (history && history.length > 0) {
-                        history.sort((a, b) => new Date(a.date) - new Date(b.date));
-                        priceMap.set(ticker, history);
+                        priceCacheMap.set(ticker, this.indexHistoryByDate(history));
                     }
                 } catch (e) {
-                    logger.warn(`Falha no loop de histórico para ${ticker}: ${e.message}`);
+                    logger.warn(`Histórico falhou para ${ticker}: ${e.message}`);
                 }
             }));
 
@@ -153,38 +138,35 @@ export const financialService = {
 
             const snapshots = [];
             const portfolio = {}; 
-            
-            // Controle acumulado para Renda Fixa
             const fixedIncomeState = {};
 
             let cursor = new Date(startDate);
             let txIndex = 0;
-            let daysProcessed = 0;
-
-            // OTIMIZAÇÃO: Busca única de dividendos
+            
             const allDividends = await DividendEvent.find({ ticker: { $in: uniqueTickers } }).sort({ date: 1 });
-            let accumulatedDividends = 0;
+            const dividendDateMap = new Map();
+            allDividends.forEach(div => {
+                const dKey = this.toDateKey(div.date);
+                if (!dividendDateMap.has(dKey)) dividendDateMap.set(dKey, []);
+                dividendDateMap.get(dKey).push(div);
+            });
 
+            let accumulatedDividends = 0;
             let currentQuota = 100.0; 
             let previousEquityNominal = 0;
             let previousEquityAdjusted = 0; 
-            
             const lastKnownPrices = {}; 
 
-            logger.info(`   ➤ Calculando evolução diária de ${startDate.toISOString().split('T')[0]} até hoje...`);
+            const cdiFactorsCache = {};
+            for (let y = startDate.getFullYear(); y <= today.getFullYear(); y++) {
+                const rate = HISTORICAL_CDI_YEAR[y] || 10.0;
+                cdiFactorsCache[y] = Math.pow(1 + (rate / 100), 1/252);
+            }
 
             while (cursor <= today) {
-                daysProcessed++;
-                if (daysProcessed % 365 === 0) await new Promise(resolve => setImmediate(resolve));
-
                 const cursorIso = this.toDateKey(cursor);
-                
-                // Determina Taxa Diária do CDI para este dia do loop
-                const year = cursor.getFullYear();
-                const cdiYear = HISTORICAL_CDI_YEAR[year] || 11.25;
-                const cdiDailyFactor = Math.pow(1 + (cdiYear / 100), 1/252);
+                const cdiDailyFactor = cdiFactorsCache[cursor.getFullYear()] || 1.0003; 
 
-                // --- 1. PROCESSAMENTO DE TRANSAÇÕES ---
                 let dayFlowNominal = 0;
                 let dayFlowAdjusted = 0;
                 
@@ -196,10 +178,8 @@ export const financialService = {
 
                     if (!portfolio[tx.ticker]) {
                         portfolio[tx.ticker] = { qty: 0, cost: 0 };
-                        // Inicializa estado de RF se necessário
                         const meta = assetMetadataMap.get(tx.ticker);
                         if (meta && (meta.type === 'FIXED_INCOME' || meta.type === 'CASH')) {
-                            // IMPORTANTE: currentValue começa zerado e sobe com as compras
                             fixedIncomeState[tx.ticker] = { 
                                 currentValue: 0, 
                                 rate: meta.fixedIncomeRate > 0 ? meta.fixedIncomeRate : (meta.type === 'CASH' ? 100 : 10) 
@@ -212,89 +192,70 @@ export const financialService = {
                     const isFixed = meta?.type === 'FIXED_INCOME' || meta?.type === 'CASH';
 
                     if (!isFixed) {
-                        const h = priceMap.get(tx.ticker);
-                        const pData = this.findPriceData(h, cursorIso);
+                        const pMap = priceCacheMap.get(tx.ticker);
+                        const pData = this.findPriceInMap(pMap, cursorIso);
                         if (pData.adjClose > 0) txAdjPrice = pData.adjClose;
                     }
 
                     if (tx.type === 'BUY') {
                         portfolio[tx.ticker].qty += tx.quantity;
                         portfolio[tx.ticker].cost += tx.totalValue;
-                        
                         if (isFixed) {
-                            // Para Renda Fixa, o valor da compra é adicionado ao saldo atual (Mark-to-Curve base)
-                            if (!fixedIncomeState[tx.ticker]) {
-                                 fixedIncomeState[tx.ticker] = { currentValue: 0, rate: meta?.fixedIncomeRate || 100 };
-                            }
+                            if (!fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker] = { currentValue: 0, rate: meta?.fixedIncomeRate || 100 };
                             fixedIncomeState[tx.ticker].currentValue += tx.totalValue;
                         }
-
                         dayFlowNominal += tx.totalValue;
                         dayFlowAdjusted += (tx.quantity * txAdjPrice);
-
-                        if (!lastKnownPrices[tx.ticker]) {
-                            lastKnownPrices[tx.ticker] = { close: tx.price, adjClose: txAdjPrice };
-                        }
+                        
+                        if (!lastKnownPrices[tx.ticker]) lastKnownPrices[tx.ticker] = { close: tx.price, adjClose: txAdjPrice };
 
                     } else if (tx.type === 'SELL') {
                         const currentAvg = portfolio[tx.ticker].qty > 0 ? portfolio[tx.ticker].cost / portfolio[tx.ticker].qty : 0;
                         portfolio[tx.ticker].qty -= tx.quantity;
                         portfolio[tx.ticker].cost -= (tx.quantity * currentAvg);
-                        
                         if (isFixed) {
-                            // Reduz proporcionalmente do saldo atual
-                            const withdrawValue = tx.totalValue;
-                            fixedIncomeState[tx.ticker].currentValue -= withdrawValue;
-                            if (fixedIncomeState[tx.ticker].currentValue < 0) fixedIncomeState[tx.ticker].currentValue = 0;
+                            fixedIncomeState[tx.ticker].currentValue = Math.max(0, fixedIncomeState[tx.ticker].currentValue - tx.totalValue);
                         }
-
                         dayFlowNominal -= tx.totalValue;
                         dayFlowAdjusted -= (tx.quantity * txAdjPrice);
                     }
                     
                     if (portfolio[tx.ticker].qty < 0.000001) {
-                        portfolio[tx.ticker].qty = 0;
+                        portfolio[tx.ticker].qty = 0; 
                         portfolio[tx.ticker].cost = 0;
                         if(fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker].currentValue = 0;
                     }
                     txIndex++;
                 }
 
-                // --- 2. DIVIDENDOS ---
-                const dayDividends = allDividends.filter(d => this.toDateKey(d.date) === cursorIso);
+                const dayDividends = dividendDateMap.get(cursorIso) || [];
                 for (const div of dayDividends) {
                     if (portfolio[div.ticker] && portfolio[div.ticker].qty > 0) {
                         accumulatedDividends += (portfolio[div.ticker].qty * div.amount);
                     }
                 }
 
-                // --- 3. MARK TO MARKET (Com Juros Compostos para RF) ---
                 let totalEquityNominal = 0;
                 let totalEquityAdjusted = 0;
                 let totalInvested = 0;
                 let hasPosition = false;
 
-                // Aplica juros diários para todos ativos de RF ativos (excluindo FDS)
                 const isWeekend = cursor.getDay() === 0 || cursor.getDay() === 6;
+                
                 if (!isWeekend) {
                     for (const ticker in fixedIncomeState) {
                         if (portfolio[ticker].qty > 0) {
                             const state = fixedIncomeState[ticker];
                             let dailyFactor = 1;
-                            
-                            // Lógica de Rentabilidade Diária
-                            if (state.rate > 30) { // % do CDI (Ex: 100%)
-                                // Fórmula: 1 + (TaxaCDIDiaria - 1) * (Percentual / 100)
-                                dailyFactor = 1 + ((cdiDailyFactor - 1) * (state.rate / 100));
-                            } else { // Pré (Ex: 10%)
-                                dailyFactor = Math.pow(1 + (state.rate / 100), 1/252);
-                            }
+                            if (state.rate > 30) dailyFactor = 1 + ((cdiDailyFactor - 1) * (state.rate / 100));
+                            else dailyFactor = Math.pow(1 + (state.rate / 100), 1/252);
                             state.currentValue *= dailyFactor;
                         }
                     }
                 }
 
-                for (const [ticker, pos] of Object.entries(portfolio)) {
+                for (const ticker in portfolio) {
+                    const pos = portfolio[ticker];
                     if (pos.qty <= 0) continue;
                     hasPosition = true;
                     totalInvested += pos.cost;
@@ -303,21 +264,20 @@ export const financialService = {
                     let markAdjClose = 0;
                     
                     if (fixedIncomeState[ticker]) {
-                        // Para RF, o "Preço" é o Valor Atualizado / Quantidade
                         const val = fixedIncomeState[ticker].currentValue;
-                        const unitPrice = pos.qty > 0 ? val / pos.qty : 1;
+                        const unitPrice = val / pos.qty;
                         markClose = unitPrice;
                         markAdjClose = unitPrice;
                     } else {
-                        const history = priceMap.get(ticker);
-                        const pData = this.findPriceData(history, cursorIso);
+                        const pMap = priceCacheMap.get(ticker);
+                        const pData = this.findPriceInMap(pMap, cursorIso);
                         
                         if (pData.close > 0) {
                             markClose = pData.close;
                             markAdjClose = pData.adjClose;
-                            lastKnownPrices[ticker] = pData; 
+                            lastKnownPrices[ticker] = pData;
                         } else {
-                            markClose = lastKnownPrices[ticker]?.close || (pos.qty > 0 ? pos.cost / pos.qty : 0);
+                            markClose = lastKnownPrices[ticker]?.close || (pos.cost / pos.qty);
                             markAdjClose = lastKnownPrices[ticker]?.adjClose || markClose;
                         }
                     }
@@ -326,14 +286,12 @@ export const financialService = {
                     totalEquityAdjusted += pos.qty * markAdjClose;
                 }
 
-                // --- 4. TWRR ---
                 if (previousEquityAdjusted > 0) {
                     const capitalGainAdj = totalEquityAdjusted - previousEquityAdjusted - dayFlowAdjusted;
-                    const denominator = previousEquityAdjusted + (dayFlowAdjusted * 0.5);
+                    const denominator = previousEquityAdjusted + (dayFlowAdjusted * 0.5); 
                     
                     if (denominator > 0.01) {
                         const dailyReturn = capitalGainAdj / denominator;
-                        // Circuit breaker para TWRR diário (evita picos causados por dados sujos)
                         if (dailyReturn > -0.5 && dailyReturn < 0.5) {
                             currentQuota = currentQuota * (1 + dailyReturn);
                         }
@@ -363,10 +321,9 @@ export const financialService = {
                 try {
                     session.startTransaction();
                     await WalletSnapshot.deleteMany({ user: userId }).session(session);
-                    
-                    const BATCH_SIZE = 2000;
-                    for (let i = 0; i < snapshots.length; i += BATCH_SIZE) {
-                        await WalletSnapshot.insertMany(snapshots.slice(i, i + BATCH_SIZE), { session });
+                    const CHUNK_SIZE = 5000;
+                    for (let i = 0; i < snapshots.length; i += CHUNK_SIZE) {
+                        await WalletSnapshot.insertMany(snapshots.slice(i, i + CHUNK_SIZE), { session });
                     }
                     await session.commitTransaction();
                 } catch (writeErr) {
@@ -378,7 +335,7 @@ export const financialService = {
             }
             
             const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-            logger.info(`✅ [History] Reconstrução concluída em ${duration}s.`);
+            logger.info(`✅ [History] Reconstrução V4.6 concluída em ${duration}s.`);
 
         } catch (error) {
             logger.error(`❌ [Engine] Erro Fatal no Rebuild: ${error.message}`);
@@ -392,12 +349,10 @@ export const financialService = {
 
         if (tickers.length === 0) return { dividendMap: new Map(), provisioned: [], totalAllTime: 0, projectedMonthly: 0 };
 
-        // 1. Batch Fetch Market Data (DY) - Otimização de I/O
         const marketInfos = await MarketAsset.find({ ticker: { $in: tickers } }).select('ticker dy lastPrice');
         const marketMap = new Map();
         marketInfos.forEach(m => marketMap.set(m.ticker, m));
 
-        // 2. Calculate Projected Monthly
         let projectedMonthly = 0;
         relevantAssets.forEach(asset => {
             const mInfo = marketMap.get(asset.ticker);
@@ -407,18 +362,13 @@ export const financialService = {
             }
         });
 
-        // 3. Batch Fetch Dividends (CORREÇÃO CRÍTICA N+1)
-        // Busca TODOS os dividendos de UMA vez
         const allEvents = await DividendEvent.find({ ticker: { $in: tickers } }).sort({ date: 1 });
         const eventsMap = new Map();
-        
-        // Agrupa eventos em memória
         allEvents.forEach(e => {
             if (!eventsMap.has(e.ticker)) eventsMap.set(e.ticker, []);
             eventsMap.get(e.ticker).push(e);
         });
 
-        // 4. Batch Fetch First Transactions (Acquisition Date)
         const firstTransactions = await AssetTransaction.aggregate([
             { $match: { user: new mongoose.Types.ObjectId(userId), ticker: { $in: tickers }, type: 'BUY' } },
             { $sort: { date: 1 } },
@@ -432,15 +382,12 @@ export const financialService = {
         const provisioned = [];
         let totalAllTime = 0;
 
-        // 5. Processamento em Memória (Sem chamadas ao DB dentro do loop)
         for (const asset of relevantAssets) {
             const firstBuyDate = acquisitionMap.get(asset.ticker);
-            const assetEvents = eventsMap.get(asset.ticker) || []; // Pega da memória
+            const assetEvents = eventsMap.get(asset.ticker) || [];
 
             for (const event of assetEvents) {
                 const eventDateNormalized = this.normalizeDate(event.date);
-                
-                // Só conta dividendos cuja Data COM é posterior à data da primeira compra
                 if (!firstBuyDate || eventDateNormalized < firstBuyDate) continue;
 
                 const totalValue = safeMult(asset.quantity, event.amount);
@@ -451,12 +398,7 @@ export const financialService = {
                     const isFuture = pDate > today;
                     
                     if (isFuture) {
-                        provisioned.push({
-                            ticker: asset.ticker,
-                            date: pDate,
-                            amount: totalValue,
-                            isProvisioned: true
-                        });
+                        provisioned.push({ ticker: asset.ticker, date: pDate, amount: totalValue, isProvisioned: true });
                     } else {
                         const monthKey = pDate.toISOString().substring(0, 7);
                         if (!dividendMap.has(monthKey)) dividendMap.set(monthKey, { total: 0, breakdown: [] });
@@ -476,7 +418,6 @@ export const financialService = {
         return { dividendMap, provisioned, totalAllTime, projectedMonthly };
     },
 
-    // --- CORREÇÃO IMPORTANTE: FUNÇÃO RESTAURADA ---
     async recalculatePosition(userId, ticker, forcedType = null, session = null) {
         const query = AssetTransaction.find({ user: userId, ticker }).sort({ date: 1, createdAt: 1 });
         if (session) query.session(session);
@@ -521,6 +462,33 @@ export const financialService = {
             }
         }
 
+        // --- SMART COMPACTION: BSON LIMIT PROTECTION ---
+        // Se houver mais de 500 lotes, funde os 100 mais antigos em um único lote médio.
+        if (taxLots.length > 500) {
+            const lotsToMerge = taxLots.slice(0, 100);
+            const keptLots = taxLots.slice(100);
+            let mergedQty = 0;
+            let mergedCost = 0;
+            
+            lotsToMerge.forEach(l => {
+                mergedQty = safeAdd(mergedQty, l.quantity);
+                mergedCost = safeAdd(mergedCost, safeMult(l.quantity, l.price));
+            });
+            
+            const mergedPrice = mergedQty > 0 ? safeDiv(mergedCost, mergedQty) : 0;
+            
+            // Cria um "Mega Lote" com a data mais recente do grupo fundido
+            taxLots = [{
+                date: lotsToMerge[lotsToMerge.length - 1].date,
+                quantity: mergedQty,
+                price: mergedPrice,
+                _id: false
+            }, ...keptLots];
+            
+            logger.warn(`🧹 [BSON Protection] Lotes compactados para ${ticker} (User ${userId}). Novos lotes: ${taxLots.length}`);
+        }
+        // ----------------------------------------------
+
         if (quantity < -0.000001) throw new Error(`Saldo insuficiente para ${ticker}.`);
         if (quantity <= 0.000001) { quantity = 0; totalCost = 0; taxLots = []; }
 
@@ -556,7 +524,6 @@ export const financialService = {
     },
 
     async applyCorporateEvents(ticker, type) {
-        const splits = await externalMarketService.getSplitsHistory(ticker, type);
-        return { processed: false, reason: "No splits found" };
+        return { processed: false, reason: "Feature disabled in optimization mode" };
     }
 };

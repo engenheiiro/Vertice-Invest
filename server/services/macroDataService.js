@@ -31,6 +31,9 @@ export const macroDataService = {
             const selicRes = await axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.SELIC_META}/dados/ultimos/1?formato=json`);
             const selicVal = selicRes.data[0]?.valor ? parseFloat(selicRes.data[0].valor) : 11.25;
             
+            // Fallback seguro para CDI (Selic - 0.10)
+            let cdiAccumulated12m = Math.max(0, selicVal - 0.10);
+
             // 2. IPCA 12 Meses
             let ipcaVal = 4.50;
             try {
@@ -38,41 +41,49 @@ export const macroDataService = {
                 if (ipcaRes.data[0]?.valor) {
                     ipcaVal = parseFloat(ipcaRes.data[0].valor);
                 }
-            } catch (e) { logger.warn("⚠️ Falha ao buscar IPCA (Usando fallback)"); }
+            } catch (e) { /* Fallback IPCA */ }
 
-            // 3. CDI Acumulado 12 Meses (Cálculo Real)
-            let cdiAccumulated12m = 11.20; // Fallback realista
+            // 3. Tentativa de Cálculo Real do CDI 12m
             try {
-                // Busca últimos 12 meses de CDI Mensal
-                const cdiRes = await axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.CDI_MONTHLY}/dados/ultimos/12?formato=json`);
+                const cdiRes = await axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.CDI_MONTHLY}/dados/ultimos/15?formato=json`);
+                
                 if (cdiRes.data && cdiRes.data.length > 0) {
+                    const last12Months = cdiRes.data.slice(-12);
                     let accFactor = 1.0;
-                    cdiRes.data.forEach(month => {
-                        const val = parseFloat(month.valor);
-                        if (!isNaN(val)) {
-                            accFactor *= (1 + (val / 100));
+                    
+                    last12Months.forEach(month => {
+                        const valStr = month.valor;
+                        if (valStr) {
+                            // Tenta parsear float. Se vier "1.05", é 1.05%. Se vier "1,05", parseFloat lê 1.
+                            // Mas a API do BCB JSON padrão retorna ponto.
+                            const val = parseFloat(valStr);
+                            if (!isNaN(val)) {
+                                accFactor *= (1 + (val / 100));
+                            }
                         }
                     });
-                    cdiAccumulated12m = (accFactor - 1) * 100;
-                    logger.info(`✅ [MACRO] CDI 12m Calculado: ${cdiAccumulated12m.toFixed(2)}% (Baseado em ${cdiRes.data.length} meses)`);
+                    
+                    const calculatedCDI = (accFactor - 1) * 100;
+
+                    // Validação de Sanidade: CDI deve estar próximo da Selic (entre 0.5x e 1.5x)
+                    if (calculatedCDI > (selicVal * 0.5) && calculatedCDI < (selicVal * 1.5)) {
+                        cdiAccumulated12m = calculatedCDI;
+                    } 
                 }
             } catch (e) {
-                logger.warn(`⚠️ Falha ao calcular CDI 12m: ${e.message}`);
+                // Silencioso: Se falhar, usa o fallback definido no início (Selic - 0.10)
             }
-
-            // Taxa DI diária projetada (aprox Selic - 0.10)
-            const cdiDailyRate = Math.max(0, selicVal - 0.10);
 
             return { 
                 selic: selicVal, 
                 ipca: ipcaVal, 
-                cdi: cdiDailyRate,
-                cdi12m: cdiAccumulated12m 
+                cdi: Math.max(0, selicVal - 0.10), // CDI Diário/Meta
+                cdi12m: cdiAccumulated12m // CDI Acumulado Real
             };
 
         } catch (error) {
-            logger.error(`❌ Erro BCB API: ${error.message}`);
-            return { selic: 11.25, ipca: 4.50, cdi: 11.15, cdi12m: 11.20 }; 
+            logger.error(`❌ Erro BCB API Crítico: ${error.message}`);
+            return { selic: 11.25, ipca: 4.50, cdi: 11.15, cdi12m: 11.15 }; 
         }
     },
 
@@ -88,23 +99,17 @@ export const macroDataService = {
 
             return { usd, usdChange, btcUsd, btcChange };
         } catch (error) {
-            if (error.response && error.response.status === 429) {
-                logger.warn("⚠️ Rate Limit (429) na AwesomeAPI. Mantendo valores anteriores.");
-            } else {
-                logger.error("Erro ao buscar moedas (AwesomeAPI): " + error.message);
-            }
-            return null; // Retorna null para manter dados do banco
+            // Silencia erro de rate limit para não poluir logs
+            return null;
         }
     },
 
-    // --- HELPER DE LIMPEZA ---
     cleanNumber(str) {
         if (!str) return 0;
         const cleanStr = str.replace(/[^0-9,.-]/g, '').replace(/\./g, '').replace(',', '.');
         return parseFloat(cleanStr) || 0;
     },
 
-    // --- 2. PARSER GENÉRICO (REGEX) ---
     parseGenericRow($, tr) {
         const cols = $(tr).find('td');
         if (cols.length < 3) return null;
@@ -117,21 +122,14 @@ export const macroDataService = {
         cols.each((i, td) => {
             const text = $(td).text().trim().replace(/\s+/g, ' '); 
             
-            // 1. Título
             if (!title && text.length > 5 && (text.includes('Tesouro') || text.includes('IPCA') || text.includes('Prefixado') || text.includes('Selic') || text.includes('Renda+'))) {
                 title = text;
-            }
-            // 2. Data
-            else if (text.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+            } else if (text.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
                 maturity = text;
-            }
-            // 3. Taxa
-            else if (text.includes('%')) {
+            } else if (text.includes('%')) {
                 const val = this.cleanNumber(text);
                 if (val > 0 && val < 25) rate = val;
-            }
-            // 4. Preço
-            else if (text.includes('R$') || (this.cleanNumber(text) > 30)) {
+            } else if (text.includes('R$') || (this.cleanNumber(text) > 30)) {
                 const val = this.cleanNumber(text);
                 if (val > 0) price = val;
             }
@@ -143,11 +141,9 @@ export const macroDataService = {
         return null;
     },
 
-    // --- 3. SCRAPER INVESTIDOR 10 ---
     async scrapeInvestidor10() {
         const bonds = [];
         try {
-            logger.info("🔍 [Tesouro] Lendo Investidor10...");
             const url = 'https://investidor10.com.br/tesouro-direto/';
             const res = await axios.get(url, { headers: BROWSER_HEADERS, httpsAgent, timeout: 15000 });
             const $ = cheerio.load(res.data);
@@ -159,19 +155,15 @@ export const macroDataService = {
                     bonds.push(data);
                 }
             });
-            logger.info(`✅ Investidor10: ${bonds.length} títulos encontrados.`);
         } catch (error) {
             logger.error(`❌ Investidor10 Falhou: ${error.message}`);
         }
         return bonds;
     },
 
-    // --- ORQUESTRADOR ---
     async updateTreasuryRates() {
         let ntnbLongRate = 6.00;
-        
         const list = await this.scrapeInvestidor10();
-
         const uniqueBonds = [];
         const seenTitles = new Set();
 
@@ -209,58 +201,14 @@ export const macroDataService = {
             await TreasuryBond.insertMany(uniqueBonds);
         }
 
-        return { 
-            ntnbLong: ntnbLongRate, 
-            list: uniqueBonds,
-            count: uniqueBonds.length
-        };
+        return { ntnbLong: ntnbLongRate };
     },
 
     async performMacroSync() {
-        logger.info("🌍 [MACRO] Iniciando atualização completa...");
-        
         const official = await this.updateOfficialRates();
         const currencies = await this.updateCurrencies();
         const globalIndices = await externalMarketService.getGlobalIndices(); 
         const treasury = await this.updateTreasuryRates(); 
-
-        // --- CÁLCULO PRECISO: SPX 12 MESES (Date-Based) ---
-        let spx12mReturn = 0; 
-        try {
-            const historySPX = await externalMarketService.getFullHistory('^GSPC', 'INDEX'); 
-            
-            if (historySPX && historySPX.length > 200) {
-                historySPX.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-                const current = historySPX[historySPX.length - 1].close;
-                
-                // Busca a data exata de 1 ano atrás (ou a mais próxima anterior)
-                const today = new Date();
-                const oneYearAgo = new Date();
-                oneYearAgo.setFullYear(today.getFullYear() - 1);
-                
-                // Encontra o ponto mais próximo <= data alvo
-                let pastPoint = null;
-                for (let i = historySPX.length - 1; i >= 0; i--) {
-                    const d = new Date(historySPX[i].date);
-                    if (d <= oneYearAgo) {
-                        pastPoint = historySPX[i];
-                        break;
-                    }
-                }
-
-                const past = pastPoint ? pastPoint.close : historySPX[0].close;
-                
-                if (past > 0) {
-                    spx12mReturn = ((current - past) / past) * 100;
-                    logger.info(`📈 S&P 500 (12m Real): ${spx12mReturn.toFixed(2)}% (Atual: ${current}, Base: ${past} em ${pastPoint ? pastPoint.date : 'N/A'})`);
-                }
-            } else {
-                logger.warn("Histórico S&P curto demais para calc 12m.");
-            }
-        } catch(e) {
-            logger.warn("Falha ao calcular S&P 12m: " + e.message);
-        }
 
         let config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
         if (!config) config = new SystemConfig({ key: 'MACRO_INDICATORS' });
@@ -268,7 +216,7 @@ export const macroDataService = {
         if (official) {
             config.selic = official.selic;
             config.ipca = official.ipca;
-            config.cdi = official.cdi12m || official.cdi; // Salva o acumulado 12m na propriedade principal para exibição
+            config.cdi = official.cdi12m || official.cdi; 
             config.riskFree = official.selic; 
         }
         
@@ -287,14 +235,6 @@ export const macroDataService = {
             if (globalIndices.spx) {
                 config.spx = globalIndices.spx.value;
                 config.spxChange = globalIndices.spx.change;
-                
-                // Atualiza o retorno 12m calculado com precisão
-                if (spx12mReturn !== 0) {
-                    config.spxReturn12m = spx12mReturn;
-                } else if (!config.spxReturn12m) {
-                    // Se não tivermos dados, usa um valor aproximado de mercado
-                    config.spxReturn12m = 22.5; 
-                }
             }
         }
 
@@ -303,7 +243,6 @@ export const macroDataService = {
         config.lastUpdated = new Date();
         await config.save();
         
-        logger.info(`✅ [MACRO] Sync Finalizado. Dados persistidos.`);
         return config;
     }
 };

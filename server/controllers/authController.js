@@ -53,13 +53,14 @@ export const register = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Criação do usuário (Padrão: USER e ESSENTIAL)
+    // Criação do usuário (Padrão: USER e GUEST)
+    // Alterado de ESSENTIAL para GUEST conforme regra de negócio
     const newUser = new User({ 
       name, 
       email, 
       password: hashedPassword,
       role: 'USER', 
-      plan: 'ESSENTIAL',
+      plan: 'GUEST', 
       subscriptionStatus: 'ACTIVE',
       validUntil: null
     });

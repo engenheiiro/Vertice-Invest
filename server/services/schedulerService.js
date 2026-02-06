@@ -5,7 +5,7 @@ import { aiResearchService } from './aiResearchService.js';
 import { macroDataService } from './macroDataService.js';
 import { marketDataService } from './marketDataService.js';
 import { syncService } from './syncService.js';
-import { holidayService } from './holidayService.js'; // Nova Importação
+import { holidayService } from './holidayService.js'; 
 import MarketAsset from '../models/MarketAsset.js';
 import User from '../models/User.js';
 import UserAsset from '../models/UserAsset.js';
@@ -16,7 +16,7 @@ export const initScheduler = () => {
 
     // 1. Sync Leve: Macroeconomia (A cada 30 minutos)
     cron.schedule('*/30 * * * *', async () => {
-        logger.info("⏰ Rotina: Sync Leve (Macro)");
+        // logger.info("⏰ Rotina: Sync Leve (Macro)");
         try {
             await macroDataService.performMacroSync();
         } catch (error) {
@@ -24,30 +24,43 @@ export const initScheduler = () => {
         }
     });
 
-    // 2. Sync Preços (Yahoo Finance - Seguro) - A cada 1 Hora
-    // Mantém cotações atualizadas sem fazer scraping pesado
-    cron.schedule('0 * * * *', async () => {
-        logger.info("⏰ Rotina: Atualização de Preços (Yahoo)...");
+    // 2. Sync Preços (Yahoo Finance - Seguro) - A cada 15 Minutos
+    // OTIMIZAÇÃO: Filtra apenas ativos com liquidez relevante (> 10k/dia) para poupar API
+    cron.schedule('*/15 * * * *', async () => {
+        logger.info("⏰ Rotina: Atualização de Preços (Yahoo 15min)...");
         try {
-            // Busca todos os ativos monitorados
-            const assets = await MarketAsset.find({ isActive: true }).select('ticker');
+            // Busca apenas ativos ativos E líquidos OU Criptos/US
+            const assets = await MarketAsset.find({ 
+                isActive: true,
+                $or: [
+                    { liquidity: { $gt: 10000 } }, // Filtra "micos" ilíquidos
+                    { type: { $in: ['CRYPTO', 'STOCK_US'] } } // Sempre atualiza crypto/us
+                ]
+            }).select('ticker');
+            
             const tickers = assets.map(a => a.ticker);
             
+            if (tickers.length === 0) {
+                logger.info("ℹ️ Nenhum ativo líquido para atualizar.");
+                return;
+            }
+
             // Atualiza em lotes
             const BATCH_SIZE = 50;
+            let updatedCount = 0;
             for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
                 const batch = tickers.slice(i, i + BATCH_SIZE);
                 await marketDataService.refreshQuotesBatch(batch);
+                updatedCount += batch.length;
                 await new Promise(r => setTimeout(r, 2000)); // Delay suave
             }
-            logger.info("✅ Preços atualizados.");
+            logger.info(`✅ [Scheduler] Preços atualizados para ${updatedCount} ativos líquidos.`);
         } catch (e) {
             logger.error(`Erro Sync Preços: ${e.message}`);
         }
     });
 
     // 3. Sync Pesado (Fundamentus) + Cálculo - DIÁRIO (08:00 AM)
-    // Reduzido de 4h para 24h para evitar Bloqueio 403
     cron.schedule('0 8 * * *', async () => {
         logger.info("⏰ Rotina DIÁRIA: Protocolo V3 Completo (Sync + Calc)...");
         try {
@@ -88,9 +101,6 @@ export const initScheduler = () => {
                 }
 
                 if (totalEquity > 0) {
-                    // Nota: O quotaPrice será calculado retroativamente pelo rebuildUserHistory na próxima requisição,
-                    // ou podemos implementar aqui se quisermos consistência imediata. 
-                    // Como o rebuildUserHistory é auto-curativo, vamos confiar nele para alinhar os dados históricos.
                     await WalletSnapshot.create({
                         user: user._id,
                         date: today,

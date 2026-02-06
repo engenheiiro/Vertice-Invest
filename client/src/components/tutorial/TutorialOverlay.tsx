@@ -54,6 +54,7 @@ const DASHBOARD_STEPS = [
                     <li><strong className="text-emerald-400">Terminal:</strong> Seu cockpit de comando geral (onde estamos).</li>
                     <li><strong className="text-blue-400">Carteira:</strong> Gestão profunda de ativos e rebalanceamento.</li>
                     <li><strong className="text-purple-400">Research:</strong> Relatórios detalhados da nossa IA.</li>
+                    <li><strong className="text-pink-400">Indicadores:</strong> Monitoramento Macro (Selic, IPCA, Bonds).</li>
                     <li><strong className="text-[#D4AF37]">Cursos:</strong> Acesso à Vértice Academy.</li>
                 </ul>
             </>
@@ -78,7 +79,7 @@ const DASHBOARD_STEPS = [
         content: (
             <>
                 <p className="mb-4">
-                    Veja nos painéis destacados o poder da tecnologia: nossa IA entregou uma rentabilidade superior a <span className="text-emerald-400 font-black text-lg">+90%</span>.
+                    Veja nos painéis destacados o poder da tecnologia: nossa IA entregou uma rentabilidade superior a <span className="text-emerald-400 font-black text-lg">+88%</span>.
                 </p>
                 <p>
                     Isso foi feito comprando ativos que nossa IA classifica como <span className="text-blue-400 font-bold">ultra seguros</span>, eliminando o risco de perda a longo prazo. É a inteligência artificial trabalhando pela sua aposentadoria.
@@ -231,7 +232,7 @@ const WALLET_STEPS = [
                 Ele mostra o retorno real da sua carteira (cotas) comparado contra o <span className="text-yellow-400 font-bold">CDI</span> e o <span className="text-slate-400 font-bold">Ibovespa</span>, além de uma tabela mês a mês.
             </>
         ),
-        highlightId: 'tour-wallet-content',
+        highlightId: 'tour-tab-performance',
         icon: <BarChart3 className="text-emerald-500" size={24} />,
         badge: "PERFORMANCE"
     },
@@ -244,7 +245,7 @@ const WALLET_STEPS = [
                 Veja o histórico mensal em barras e a lista futura de pagamentos confirmados.
             </>
         ),
-        highlightId: 'tour-wallet-content',
+        highlightId: 'tour-tab-dividends',
         icon: <Coins className="text-[#D4AF37]" size={24} />,
         badge: "RENDA PASSIVA"
     },
@@ -257,7 +258,7 @@ const WALLET_STEPS = [
                 Cada compra, venda, aporte ou recebimento de dividendo fica registrado aqui de forma imutável para sua conferência.
             </>
         ),
-        highlightId: 'tour-wallet-content',
+        highlightId: 'tour-tab-statement',
         icon: <FileText className="text-blue-400" size={24} />,
         badge: "HISTÓRICO"
     },
@@ -303,7 +304,7 @@ export const TutorialOverlay: React.FC = () => {
     const step = steps[safeStepIndex];
 
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
-    const [cardPosition, setCardPosition] = useState<{ top: number, left: number, placement: 'bottom' | 'top' | 'center' | 'left-side' }>({ top: 0, left: 0, placement: 'center' });
+    const [cardPosition, setCardPosition] = useState<{ top: number, left: number, placement: 'bottom' | 'top' | 'center' | 'left-side' | 'right-side' }>({ top: 0, left: 0, placement: 'center' });
 
     useLayoutEffect(() => {
         if (!isDemoMode) return;
@@ -322,7 +323,7 @@ export const TutorialOverlay: React.FC = () => {
                     
                     let top = rect.bottom + 24;
                     let left = rect.left;
-                    let placement: 'bottom' | 'top' | 'center' | 'left-side' = 'bottom';
+                    let placement: 'bottom' | 'top' | 'center' | 'left-side' | 'right-side' = 'bottom';
 
                     // Lógica Especial para Radar Alpha (Forçar Esquerda)
                     if (step.highlightId === 'tour-radar') {
@@ -330,13 +331,30 @@ export const TutorialOverlay: React.FC = () => {
                         top = rect.top; 
                         placement = 'left-side';
                         
-                        // Fallback se não couber na esquerda (mobile)
                         if (left < 10) {
-                            left = rect.left; // Volta pro alinhamento padrão
+                            left = rect.left;
                             top = rect.bottom + 24;
                             placement = 'bottom';
                         }
-                    } else {
+                    } 
+                    // Lógica Especial para Abas da Carteira (Forçar Ao Lado/Direita se possível)
+                    else if (step.highlightId?.startsWith('tour-tab-')) {
+                        // Tenta posicionar à direita primeiro
+                        if (spaceRight > cardWidth + 20) {
+                            left = rect.left; // Alinha com o início, mas joga pra baixo se não der
+                            // Se for mobile/tablet, prefere bottom
+                            if (window.innerWidth < 1024) {
+                                placement = 'bottom';
+                            } else {
+                                // Desktop: Tenta posicionar levemente deslocado para não cobrir
+                                top = rect.bottom + 12; 
+                                placement = 'bottom';
+                            }
+                        } else {
+                            placement = 'bottom';
+                        }
+                    }
+                    else {
                         // Lógica Padrão Inteligente
                         if (rect.left > window.innerWidth / 2) {
                             left = rect.right - cardWidth;

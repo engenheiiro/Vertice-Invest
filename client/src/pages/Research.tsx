@@ -8,12 +8,13 @@ import { useAuth } from '../contexts/AuthContext';
 // @ts-ignore
 import { useNavigate } from 'react-router-dom';
 
+// Configuração de Níveis de Acesso por Categoria
 const ASSETS = [
     { id: 'BRASIL_10', label: 'Brasil 10 (Mix)', color: 'bg-emerald-600', minPlan: 'ESSENTIAL' },
     { id: 'STOCK', label: 'Ações BR', color: 'bg-blue-600', minPlan: 'PRO' },
     { id: 'FII', label: 'FIIs', color: 'bg-indigo-600', minPlan: 'PRO' },
-    { id: 'STOCK_US', label: 'Exterior', color: 'bg-slate-700', minPlan: 'PRO' },
     { id: 'CRYPTO', label: 'Cripto', color: 'bg-purple-600', minPlan: 'PRO' },
+    { id: 'STOCK_US', label: 'Exterior', color: 'bg-slate-700', minPlan: 'BLACK' }, // Exterior agora é Black
 ];
 
 export const Research = () => {
@@ -31,7 +32,7 @@ export const Research = () => {
         const asset = ASSETS.find(a => a.id === assetId);
         if (!asset || !user) return false;
         const planLevels: Record<string, number> = { 'GUEST': 0, 'ESSENTIAL': 1, 'PRO': 2, 'BLACK': 3 };
-        const userLevel = planLevels[user.plan] || 0;
+        const userLevel = planLevels[user.plan || 'GUEST'] || 0;
         const requiredLevel = planLevels[asset.minPlan];
         return userLevel >= requiredLevel;
     };
@@ -61,6 +62,7 @@ export const Research = () => {
     }, [selectedAsset]);
 
     const hasAccessToSelected = checkAccess(selectedAsset);
+    const requiredPlanLabel = ASSETS.find(a => a.id === selectedAsset)?.minPlan || 'PRO';
 
     return (
         <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
@@ -77,7 +79,7 @@ export const Research = () => {
                             RESEARCH CENTER
                         </h1>
                         <p className="text-slate-500 text-sm font-medium mt-2">
-                            {isAdmin ? 'ADMIN ACCESS: Todas as categorias liberadas' : `Plano Ativo: ${user?.plan}`}
+                            {isAdmin ? 'ADMIN ACCESS: Todas as categorias liberadas' : `Plano Ativo: ${user?.plan || 'INICIANTE'}`}
                         </p>
                     </div>
 
@@ -126,7 +128,7 @@ export const Research = () => {
                             {/* Botão de Refresh Manual */}
                             <button 
                                 onClick={fetchReport}
-                                disabled={isLoading}
+                                disabled={isLoading || !hasAccessToSelected}
                                 className="bg-[#080C14] border border-slate-800 p-3 rounded-2xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
                                 title="Atualizar Dados"
                             >
@@ -145,9 +147,13 @@ export const Research = () => {
                     ) : !hasAccessToSelected ? (
                         <div className="flex flex-col items-center justify-center py-20 bg-[#080C14] border border-slate-800 rounded-3xl p-10 text-center">
                             <Crown size={40} className="text-blue-500 mb-6" />
-                            <h2 className="text-2xl font-black text-white mb-3">Conteúdo Exclusivo Pro</h2>
-                            <p className="text-slate-400 max-w-sm mb-8">A análise estratégica de {selectedAsset} é reservada para assinantes do plano Pro.</p>
-                            <button onClick={() => navigate('/pricing')} className="px-8 py-3 bg-blue-600 text-white font-black rounded-xl">Fazer Upgrade</button>
+                            <h2 className="text-2xl font-black text-white mb-3">Conteúdo Exclusivo {requiredPlanLabel}</h2>
+                            <p className="text-slate-400 max-w-sm mb-8">
+                                A análise estratégica de {ASSETS.find(a => a.id === selectedAsset)?.label} é reservada para assinantes do plano {requiredPlanLabel} ou superior.
+                            </p>
+                            <button onClick={() => navigate('/pricing')} className="px-8 py-3 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20">
+                                Fazer Upgrade
+                            </button>
                         </div>
                     ) : !report ? (
                         <div className="flex flex-col items-center justify-center py-20 bg-[#080C14] border border-dashed border-slate-800 rounded-3xl text-center">

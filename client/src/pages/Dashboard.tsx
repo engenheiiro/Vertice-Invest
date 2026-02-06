@@ -1,6 +1,5 @@
 
 import React, { useState } from 'react';
-import { Lock, PlayCircle } from 'lucide-react';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { researchService } from '../services/research';
 import { Header } from '../components/dashboard/Header';
@@ -11,6 +10,7 @@ import { AiRadar } from '../components/dashboard/AiRadar';
 import { InstantReportModal } from '../components/dashboard/InstantReportModal';
 import { useWallet } from '../contexts/WalletContext';
 import { useDemo } from '../contexts/DemoContext';
+import { Lock } from 'lucide-react';
 
 export const Dashboard = () => {
   const { 
@@ -22,8 +22,8 @@ export const Dashboard = () => {
       isResearchLoading
   } = useDashboardData();
   
-  const { isPrivacyMode, kpis, assets } = useWallet();
-  const { startDemo, isDemoMode } = useDemo();
+  const { isPrivacyMode, kpis } = useWallet();
+  const { isDemoMode } = useDemo();
 
   // Estados do Modal de Relatório
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -59,9 +59,6 @@ export const Dashboard = () => {
   const displayDividends = dividends > 0 ? dividends : (kpis.projectedDividends || 0);
   const isProjected = dividends === 0 && kpis.projectedDividends > 0;
 
-  // Renderização Condicional de "Estado Vazio" para usuários novos (não-demo)
-  const isEmptyState = !isLoading && assets.length === 0 && !isDemoMode;
-
   return (
     <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
       
@@ -70,27 +67,6 @@ export const Dashboard = () => {
 
       <main className="max-w-[1600px] mx-auto p-6 animate-fade-in relative">
         
-        {/* Empty State Call to Action - Só aparece se estiver vazio e não for demo */}
-        {isEmptyState && (
-            <div className="mb-6 p-4 bg-blue-900/10 border border-blue-900/30 rounded-2xl flex items-center justify-between animate-fade-in">
-                <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center animate-pulse">
-                        <PlayCircle className="text-white" size={20} />
-                    </div>
-                    <div>
-                        <h3 className="font-bold text-white text-sm">Seu terminal está pronto.</h3>
-                        <p className="text-xs text-blue-200">Gostaria de ver uma simulação com dados reais de 2024?</p>
-                    </div>
-                </div>
-                <button 
-                    onClick={startDemo}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-all shadow-lg"
-                >
-                    Iniciar Demo
-                </button>
-            </div>
-        )}
-
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             
             {/* AREA 1: EQUITY & SUMMARY (Col-span-3) */}
@@ -98,7 +74,7 @@ export const Dashboard = () => {
                 
                 {/* ID para o Tutorial: tour-equity */}
                 <div id="tour-equity" className={`transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
-                    <EquitySummary onGenerateReport={handleGenerateReport} />
+                    <EquitySummary />
                 </div>
 
                 {/* ID para o Tutorial: tour-allocation (A tabela contém info de alocação implícita) */}
