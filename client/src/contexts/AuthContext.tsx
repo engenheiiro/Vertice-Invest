@@ -14,6 +14,7 @@ export interface User {
   plan: UserPlan;
   subscriptionStatus: SubscriptionStatus;
   role: UserRole;
+  hasSeenTutorial?: boolean; // Campo Adicionado
 }
 
 interface AuthContextType {
@@ -23,6 +24,7 @@ interface AuthContextType {
   login: (userData: User, token: string) => void;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateUserTutorialStatus: () => void; // Nova função para atualizar o contexto localmente
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,7 +32,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const queryClient = useQueryClient(); // Hook para manipular o cache
+  const queryClient = useQueryClient();
 
   const refreshProfile = async () => {
     try {
@@ -38,7 +40,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (response.ok) {
             const data = await response.json();
             if (data.current) {
-                const updatedUser = { ...JSON.parse(localStorage.getItem('user') || '{}'), ...data.current };
+                const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+                // Preserva o hasSeenTutorial se o endpoint de status não retornar ele (geralmente status retorna apenas dados de plano)
+                // Mas idealmente o endpoint de 'me' ou login retorna tudo.
+                // Vamos assumir que data.current tem o que precisamos ou fazemos merge.
+                const updatedUser = { ...storedUser, ...data.current };
                 setUser(updatedUser);
                 localStorage.setItem('user', JSON.stringify(updatedUser));
             }
@@ -48,6 +54,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateUserTutorialStatus = () => {
+      if (user) {
+          const updatedUser = { ...user, hasSeenTutorial: true };
+          setUser(updatedUser);
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+      }
+  };
+
   useEffect(() => {
     const initializeAuth = async () => {
       const token = localStorage.getItem('accessToken');
@@ -55,12 +69,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (token && storedUser) {
         try {
-          const response = await authService.api('/api/subscription/status');
-          if (response.ok) {
-            setUser(JSON.parse(storedUser));
-          } else {
-            await logout(); // Logout seguro se token inválido
-          }
+          // Validação rápida: se tiver user, seta. Se o token for inválido, o refreshProfile ou a próxima chamada de API vai falhar e deslogar.
+          setUser(JSON.parse(storedUser));
         } catch (e) {
           await logout();
         }
@@ -87,8 +97,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('user');
         localStorage.removeItem('accessToken');
         
-        // FIX CRÍTICO: Limpa todo o cache do React Query ao deslogar.
-        // Isso garante que o próximo usuário não veja dados "stale" do anterior.
         queryClient.removeQueries();
         queryClient.clear();
     }
@@ -101,7 +109,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isLoading,
       login, 
       logout,
-      refreshProfile
+      refreshProfile,
+      updateUserTutorialStatus
     }}>
       {children}
     </AuthContext.Provider>

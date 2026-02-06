@@ -42,6 +42,9 @@ const UserSchema = new mongoose.Schema({
   },
   validUntil: { type: Date },
   
+  // --- Onboarding ---
+  hasSeenTutorial: { type: Boolean, default: false },
+
   // --- Integração Mercado Pago ---
   mpCustomerId: { type: String },      // ID do cliente no MP
   mpSubscriptionId: { type: String },  // ID da assinatura recorrente (preapproval_id)

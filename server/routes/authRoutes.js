@@ -1,6 +1,6 @@
 
 import express from 'express';
-import { register, login, refreshToken, logout, forgotPassword, resetPassword, updateProfile, changePassword } from '../controllers/authController.js';
+import { register, login, refreshToken, logout, forgotPassword, resetPassword, updateProfile, changePassword, markTutorialSeen } from '../controllers/authController.js';
 import validate from '../middleware/validateResource.js';
 import { registerSchema, loginSchema } from '../schemas/authSchemas.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
@@ -18,5 +18,6 @@ router.post('/reset-password', resetPassword);
 // Rotas Protegidas (Perfil)
 router.put('/me', authenticateToken, updateProfile);
 router.post('/change-password', authenticateToken, changePassword);
+router.post('/tutorial-seen', authenticateToken, markTutorialSeen); // Nova rota
 
 export default router;

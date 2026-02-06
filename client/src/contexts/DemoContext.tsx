@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { useAuth } from './AuthContext';
 // @ts-ignore
 import { useLocation } from 'react-router-dom';
+import { authService } from '../services/auth';
 
 interface DemoContextType {
     isDemoMode: boolean;
@@ -18,7 +19,7 @@ interface DemoContextType {
 const DemoContext = createContext<DemoContextType | undefined>(undefined);
 
 export const DemoProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const { user } = useAuth();
+    const { user, updateUserTutorialStatus } = useAuth();
     const location = useLocation();
     const [isDemoMode, setIsDemoMode] = useState(false);
     const [currentStep, setCurrentStep] = useState(0);
@@ -28,14 +29,10 @@ export const DemoProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Só executa se tiver usuário logado e estiver na rota do Dashboard
         if (user?.id && location.pathname.includes('/dashboard')) {
             
-            // CHAVE ÚNICA POR USUÁRIO: Garante que contas novas vejam o tutorial
-            const storageKey = `tutorial_seen_v4_${user.id}`;
-            const hasSeen = localStorage.getItem(storageKey);
-            
-            if (!hasSeen) {
+            // LÓGICA V5: Verifica a flag persistida no banco, não no localStorage.
+            if (user.hasSeenTutorial === false) {
                 console.log(`✨ Novo usuário detectado (${user.name}): Agendando Tutorial...`);
                 
-                // Delay de 1.2s para garantir que a UI carregou e animações iniciais terminaram
                 const timer = setTimeout(() => {
                     startDemo(); 
                 }, 1200);
@@ -43,12 +40,12 @@ export const DemoProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 return () => clearTimeout(timer);
             }
         }
-    }, [user?.id, location.pathname]); 
+    }, [user?.id, user?.hasSeenTutorial, location.pathname]); 
 
     const startDemo = () => {
         setIsDemoMode(true);
         setCurrentStep(0);
-        document.body.style.overflow = 'hidden'; // Bloqueia scroll do body durante o tour
+        document.body.style.overflow = 'hidden'; 
     };
 
     const stopDemo = () => {
@@ -56,10 +53,10 @@ export const DemoProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCurrentStep(0);
         document.body.style.overflow = 'unset';
         
-        // Marca como visto apenas para este usuário específico
-        if (user?.id) {
-            const storageKey = `tutorial_seen_v4_${user.id}`;
-            localStorage.setItem(storageKey, 'true');
+        // Marca como visto no BANCO DE DADOS
+        if (user?.id && !user.hasSeenTutorial) {
+            authService.markTutorialSeen().catch(err => console.error("Falha ao salvar status do tutorial:", err));
+            updateUserTutorialStatus(); // Atualiza contexto local imediatamente
         }
     };
 
