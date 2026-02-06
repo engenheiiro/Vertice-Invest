@@ -12,9 +12,9 @@ export const PLAN_HIERARCHY: Record<UserPlan, number> = {
 // Detalhes de Exibição e Preços (TEST MODE)
 export const PLAN_DETAILS: Record<UserPlan, { label: string; price: string; color: string }> = {
     'GUEST': { label: 'Visitante', price: '0,00', color: 'slate' },
-    'ESSENTIAL': { label: 'Essential', price: '0,50', color: 'emerald' },
-    'PRO': { label: 'Vértice Pro', price: '0,60', color: 'blue' },
-    'BLACK': { label: 'Black Elite', price: '0,70', color: 'gold' }
+    'ESSENTIAL': { label: 'Essential', price: '1,00', color: 'emerald' },
+    'PRO': { label: 'Vértice Pro', price: '2,00', color: 'blue' },
+    'BLACK': { label: 'Black Elite', price: '3,00', color: 'gold' }
 };
 
 // Controle de Acesso a Features (Quais planos têm quais chaves)

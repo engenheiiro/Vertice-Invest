@@ -7,19 +7,20 @@ const accessToken = process.env.MP_ACCESS_TOKEN;
 const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
 
 // --- PREÇOS DE TESTE (PRODUÇÃO) ---
+// Mínimo de R$ 1,00 exigido para Assinaturas
 const PLANS_CONFIG = {
     'ESSENTIAL': { 
-        price: 0.50, 
+        price: 1.00, 
         title: 'Vértice Essential - Assinatura Mensal',
         description: 'Acesso básico ao Terminal e Carteira.'
     },
     'PRO': { 
-        price: 0.60, 
+        price: 2.00, 
         title: 'Vértice Pro - Assinatura Mensal',
         description: 'Acesso completo ao Research e Sinais em Tempo Real.'
     },
     'BLACK': { 
-        price: 0.70, 
+        price: 3.00, 
         title: 'Vértice Black - Assinatura Mensal',
         description: 'Gestão Private, Consultoria e Automação Fiscal.'
     }

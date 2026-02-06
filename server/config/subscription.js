@@ -1,9 +1,9 @@
 
 // --- PREÇOS DE TESTE ---
 export const PLANS = {
-    'ESSENTIAL': { price: 0.50, days: 30 },
-    'PRO': { price: 0.60, days: 30 },
-    'BLACK': { price: 0.70, days: 30 }
+    'ESSENTIAL': { price: 1.00, days: 30 },
+    'PRO': { price: 2.00, days: 30 },
+    'BLACK': { price: 3.00, days: 30 }
 };
 
 // Definição de limites por feature e plano
