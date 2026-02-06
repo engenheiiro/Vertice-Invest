@@ -6,19 +6,20 @@ import logger from '../config/logger.js';
 const accessToken = process.env.MP_ACCESS_TOKEN;
 const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
 
+// --- PREÇOS DE TESTE (PRODUÇÃO) ---
 const PLANS_CONFIG = {
     'ESSENTIAL': { 
-        price: 39.90, 
+        price: 0.01, 
         title: 'Vértice Essential - Assinatura Mensal',
         description: 'Acesso básico ao Terminal e Carteira.'
     },
     'PRO': { 
-        price: 119.90, 
+        price: 0.02, 
         title: 'Vértice Pro - Assinatura Mensal',
         description: 'Acesso completo ao Research e Sinais em Tempo Real.'
     },
     'BLACK': { 
-        price: 349.90, 
+        price: 0.03, 
         title: 'Vértice Black - Assinatura Mensal',
         description: 'Gestão Private, Consultoria e Automação Fiscal.'
     }
@@ -46,9 +47,10 @@ export const paymentService = {
         const preApproval = new PreApproval(client);
 
         try {
-            // URL de retorno (Frontend) - Tratamento de barra final
-            const baseUrl = (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-            const backUrl = `${baseUrl}/#/checkout/success?plan=${planKey}`;
+            // FIX: back_url não pode conter '#' (Hash).
+            // Solução: Apontamos para uma rota de API no backend que redireciona para o frontend.
+            const apiUrl = (process.env.API_URL || 'http://localhost:5000').replace(/\/$/, '');
+            const backUrl = `${apiUrl}/api/subscription/return?plan=${planKey}`;
             
             const body = {
                 reason: planConfig.title,
@@ -75,6 +77,8 @@ export const paymentService = {
 
         } catch (error) {
             logger.error(`❌ Erro Mercado Pago: ${error.message}`);
+            // Log detalhado para debug se disponível
+            if (error.cause) logger.error(JSON.stringify(error.cause));
             throw new Error("Falha ao comunicar com gateway de pagamento.");
         }
     },
