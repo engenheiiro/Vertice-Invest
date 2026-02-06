@@ -53,10 +53,19 @@ export const paymentService = {
             const apiUrl = (process.env.API_URL || 'http://localhost:5000').replace(/\/$/, '');
             const backUrl = `${apiUrl}/api/subscription/return?plan=${planKey}`;
             
+            // --- CORREÇÃO PARA MODO TESTE ---
+            // Se estivermos usando credenciais de teste (TEST-...), não podemos usar o email real do admin
+            // como pagador, pois o MP bloqueia "auto-pagamento". Usamos um email fake aleatório.
+            let payerEmail = user.email;
+            if (accessToken && accessToken.startsWith('TEST-')) {
+                payerEmail = `test_user_${Math.floor(Math.random() * 10000)}@test.com`;
+                logger.info(`🧪 Modo Teste Detectado: Usando email fictício ${payerEmail} para evitar bloqueio.`);
+            }
+
             const body = {
                 reason: planConfig.title,
                 external_reference: userId.toString(), // VITAL: Vincula o pagamento ao usuário no Webhook
-                payer_email: user.email,
+                payer_email: payerEmail,
                 auto_recurring: {
                     frequency: 1,
                     frequency_type: 'months',
