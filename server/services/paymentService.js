@@ -35,6 +35,14 @@ export const paymentService = {
             throw new Error("Plano inválido.");
         }
 
+        // FIX: O objeto user vindo do JWT (req.user) tem a propriedade .id, 
+        // enquanto o objeto do banco tem ._id. Verificamos ambos.
+        const userId = user.id || user._id;
+
+        if (!userId) {
+            throw new Error("ID do usuário não identificado para criar assinatura.");
+        }
+
         const preApproval = new PreApproval(client);
 
         try {
@@ -44,7 +52,7 @@ export const paymentService = {
             
             const body = {
                 reason: planConfig.title,
-                external_reference: user._id.toString(), // VITAL: Vincula o pagamento ao usuário no Webhook
+                external_reference: userId.toString(), // VITAL: Vincula o pagamento ao usuário no Webhook
                 payer_email: user.email,
                 auto_recurring: {
                     frequency: 1,

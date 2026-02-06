@@ -62,7 +62,8 @@ export const register = async (req, res, next) => {
       role: 'USER', 
       plan: 'GUEST', 
       subscriptionStatus: 'ACTIVE',
-      validUntil: null
+      validUntil: null,
+      hasSeenTutorial: false // Padrão false para novos usuários
     });
     
     await newUser.save({ session });
@@ -156,7 +157,8 @@ export const login = async (req, res, next) => {
         plan: user.plan,
         role: user.role, 
         subscriptionStatus: user.subscriptionStatus,
-        cpf: user.cpf // Retorna CPF se existir
+        hasSeenTutorial: user.hasSeenTutorial, // CRÍTICO: Retorna o estado do tutorial
+        cpf: user.cpf 
       }
     });
 
@@ -287,10 +289,8 @@ export const updateProfile = async (req, res, next) => {
         const userId = req.user.id;
         const { name, cpf, phone, occupation } = req.body;
 
-        // Limpeza básica do CPF (apenas números)
         const cleanCpf = cpf ? cpf.replace(/\D/g, '') : null;
 
-        // Validação de CPF único (se fornecido)
         if (cleanCpf) {
             const existingUser = await User.findOne({ cpf: cleanCpf });
             if (existingUser && existingUser._id.toString() !== userId) {
@@ -301,8 +301,6 @@ export const updateProfile = async (req, res, next) => {
         const updates = {};
         if (name) updates.name = name;
         if (cleanCpf) updates.cpf = cleanCpf;
-        // Campos extras não mapeados no Schema principal podem ser ignorados ou adicionados se o schema permitir
-        // Como o schema atual não tem phone/occupation, vamos atualizar apenas o que temos ou considerar extensão futura
         
         const updatedUser = await User.findByIdAndUpdate(userId, updates, { new: true });
         
@@ -316,6 +314,7 @@ export const updateProfile = async (req, res, next) => {
                 email: updatedUser.email,
                 role: updatedUser.role,
                 plan: updatedUser.plan,
+                hasSeenTutorial: updatedUser.hasSeenTutorial,
                 cpf: updatedUser.cpf
             } 
         });
@@ -351,6 +350,17 @@ export const changePassword = async (req, res, next) => {
 
         res.json({ message: "Senha alterada com sucesso." });
 
+    } catch (error) {
+        next(error);
+    }
+};
+
+// --- NOVO: MARCAR TUTORIAL COMO VISTO ---
+export const markTutorialSeen = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        await User.findByIdAndUpdate(userId, { hasSeenTutorial: true });
+        res.status(200).json({ success: true });
     } catch (error) {
         next(error);
     }

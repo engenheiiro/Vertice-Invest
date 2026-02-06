@@ -147,7 +147,7 @@ export const authService = {
     return !!token;
   },
 
-  // --- MÉTODOS DE PERFIL ---
+  // --- MÉTODOS DE PERFIL E TUTORIAL ---
 
   async updateProfile(data: any) {
       const response = await this.api('/api/me', {
@@ -157,11 +157,14 @@ export const authService = {
       const resData = await response.json();
       if (!response.ok) throw new Error(resData.message || "Erro ao atualizar perfil");
       
-      // Atualiza local storage se o usuário mudar
       if (resData.user) {
           localStorage.setItem('user', JSON.stringify(resData.user));
       }
       return resData;
+  },
+
+  async markTutorialSeen() {
+      await this.api('/api/tutorial-seen', { method: 'POST' });
   },
 
   async changePassword(data: any) {
