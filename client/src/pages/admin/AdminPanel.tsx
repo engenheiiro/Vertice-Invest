@@ -3,13 +3,45 @@ import React, { useEffect, useState } from 'react';
 import { Header } from '../../components/dashboard/Header';
 import { researchService, ResearchReport } from '../../services/research';
 import { marketService } from '../../services/market';
-import { authService } from '../../services/auth'; // Importado para chamada direta da API de Splits
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles, Database, Minus, HardDrive, Terminal, Scissors, Tag } from 'lucide-react';
+import { authService } from '../../services/auth'; 
+import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles, Database, Minus, HardDrive, Scissors, Tag } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
-import { Input } from '../../components/ui/Input';
-import { Button } from '../../components/ui/Button';
 
-const ASSET_CLASSES = [
+// --- INTERFACES PARA TIPAGEM FORTE ---
+interface AssetClassOption {
+    id: string;
+    label: string;
+    icon: React.ReactNode;
+    desc: string;
+}
+
+interface MacroIndicator {
+    value: number;
+    change?: number;
+}
+
+interface MacroData {
+    selic?: MacroIndicator;
+    cdi?: MacroIndicator;
+    ipca?: MacroIndicator;
+    ibov?: MacroIndicator;
+    usd?: MacroIndicator;
+    spx?: MacroIndicator;
+    btc?: MacroIndicator;
+    lastUpdated?: string;
+}
+
+interface CacheData {
+    ticker: string;
+    status: 'CACHED' | 'LIVE_ONLY' | 'NOT_FOUND';
+    currentPrice?: number;
+    lastSync?: string;
+    historyStatus: string;
+    dataPoints?: number;
+    historyLastUpdated?: string;
+}
+
+const ASSET_CLASSES: AssetClassOption[] = [
     { id: 'BRASIL_10', label: 'Brasil 10 (Mix)', icon: <ShieldCheck size={18} className="text-emerald-500" />, desc: 'Carteira Defensiva Top Picks' },
     { id: 'STOCK', label: 'Ações Brasil', icon: <BarChart3 size={18} className="text-blue-500" />, desc: 'B3: Ibovespa & Small Caps' },
     { id: 'FII', label: 'Fundos Imobiliários', icon: <Layers size={18} className="text-indigo-500" />, desc: 'IFIX: Tijolo, Papel & Fiagros' },
@@ -18,7 +50,7 @@ const ASSET_CLASSES = [
 ];
 
 export const AdminPanel = () => {
-    const [history, setHistory] = useState<any[]>([]); 
+    const [history, setHistory] = useState<ResearchReport[]>([]); 
     const [loadingKey, setLoadingKey] = useState<string | null>(null); 
     const [statusMsg, setStatusMsg] = useState<{type: 'success' | 'error', text: string} | null>(null);
     const [auditModalOpen, setAuditModalOpen] = useState(false);
@@ -26,11 +58,11 @@ export const AdminPanel = () => {
     const [isGlobalRunning, setIsGlobalRunning] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     
-    const [macroData, setMacroData] = useState<any>(null);
+    const [macroData, setMacroData] = useState<MacroData | null>(null);
     const [isLoadingMacro, setIsLoadingMacro] = useState(true);
 
     const [cacheSearchTicker, setCacheSearchTicker] = useState('');
-    const [cacheData, setCacheData] = useState<any>(null);
+    const [cacheData, setCacheData] = useState<CacheData | null>(null);
     const [isSearchingCache, setIsSearchingCache] = useState(false);
 
     // Estados para ferramenta de Split
@@ -155,7 +187,7 @@ export const AdminPanel = () => {
         try {
             const response = await authService.api('/api/wallet/fix-splits', {
                 method: 'POST',
-                body: JSON.stringify({ ticker: splitTicker, type: 'STOCK' }) // Default STOCK, API detecta se é FII pelo ticker se necessário
+                body: JSON.stringify({ ticker: splitTicker, type: 'STOCK' }) 
             });
             const data = await response.json();
             
@@ -451,7 +483,7 @@ export const AdminPanel = () => {
                                                     <button onClick={() => openAudit(latest._id)} className="text-[10px] font-bold text-slate-400 hover:text-white bg-slate-800 px-2 py-1 rounded hover:bg-slate-700"><Search size={12} /></button>
                                                     <div className="w-px h-3 bg-slate-800 mx-1"></div>
                                                     <QuickActionBtn active={latest.isRankingPublished} label="Rank" onClick={() => handleAction(latest._id, 'PUB_RANK')} isLoading={loadingKey === `${latest._id}-PUB_RANK`}/>
-                                                    <button onClick={() => handleAction(latest._id, 'IA_NARRATIVE')} disabled={loadingKey === `${latest._id}-IA_NARRATIVE`} className={`p-1.5 rounded hover:bg-slate-800 ${latest.content.morningCall ? 'text-emerald-500' : 'text-slate-500'}`}><Bot size={14} /></button>
+                                                    <button onClick={() => handleAction(latest._id, 'IA_NARRATIVE')} disabled={loadingKey === `${latest._id}-IA_NARRATIVE` || !loadingKey} className={`p-1.5 rounded hover:bg-slate-800 ${latest.content.morningCall ? 'text-emerald-500' : 'text-slate-500'}`}><Bot size={14} /></button>
                                                     <QuickActionBtn active={latest.isMorningCallPublished} label="Pub. Call" disabled={!latest.content.morningCall} onClick={() => handleAction(latest._id, 'PUB_MC')} isLoading={loadingKey === `${latest._id}-PUB_MC`}/>
                                                 </div>
                                             )}
@@ -471,7 +503,7 @@ export const AdminPanel = () => {
     );
 };
 
-const QuickActionBtn = ({ active, label, onClick, disabled, isLoading }: any) => (
+const QuickActionBtn = ({ active, label, onClick, disabled, isLoading }: { active: boolean, label: string, onClick: () => void, disabled?: boolean, isLoading?: boolean }) => (
     <button 
         onClick={onClick}
         disabled={disabled || isLoading}
@@ -481,7 +513,7 @@ const QuickActionBtn = ({ active, label, onClick, disabled, isLoading }: any) =>
     </button>
 );
 
-const MacroCard = ({ label, value, change, sub, color }: any) => (
+const MacroCard = ({ label, value, change, sub, color }: { label: string, value: string, change?: number, sub: string, color?: string }) => (
     <div className="bg-[#0F131E] border border-slate-800 p-3 rounded-xl flex flex-col justify-between h-full">
         <div>
             <p className="text-[9px] text-slate-500 font-bold uppercase mb-1">{label}</p>

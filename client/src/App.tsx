@@ -1,6 +1,5 @@
 
 import React, { Suspense, lazy, PropsWithChildren } from 'react';
-// @ts-ignore
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 
@@ -27,7 +26,7 @@ import { CheckoutSuccess } from './pages/CheckoutSuccess';
 // Lazy Loading
 const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
 const Profile = lazy(() => import('./pages/Profile').then(module => ({ default: module.Profile })));
-const Pricing = lazy(() => import('./pages/Pricing')); 
+const Pricing = lazy(() => import('./pages/Pricing').then(module => ({ default: module.Pricing }))); 
 const Wallet = lazy(() => import('./pages/Wallet').then(module => ({ default: module.Wallet })));
 const Research = lazy(() => import('./pages/Research').then(module => ({ default: module.Research })));
 const Courses = lazy(() => import('./pages/Courses').then(module => ({ default: module.Courses })));

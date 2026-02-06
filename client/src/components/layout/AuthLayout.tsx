@@ -1,5 +1,5 @@
+
 import React, { useState, useEffect } from 'react';
-// @ts-ignore
 import { Outlet, useLocation } from 'react-router-dom';
 import { ShieldCheck, Sparkles, GraduationCap, Lock, PieChart, BrainCircuit, Layers, Activity } from 'lucide-react';
 

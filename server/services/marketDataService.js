@@ -31,13 +31,29 @@ export const marketDataService = {
             const cleanTicker = this.normalizeSymbol(ticker);
             const asset = await MarketAsset.findOne({ ticker: cleanTicker });
 
-            if (asset) {
+            if (asset && asset.lastPrice > 0) {
                 return { 
-                    price: asset.lastPrice || 0, 
+                    price: asset.lastPrice, 
                     change: asset.change || 0, 
                     name: asset.name 
                 };
             }
+
+            const history = await AssetHistory.findOne({ ticker: cleanTicker });
+            if (history && history.history && history.history.length > 0) {
+                const sorted = history.history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                const lastClose = sorted[0].close || sorted[0].adjClose;
+                
+                if (lastClose > 0) {
+                    return {
+                        price: lastClose,
+                        change: 0, 
+                        name: ticker,
+                        isFallback: true
+                    };
+                }
+            }
+
             return { price: 0, change: 0, name: ticker };
         } catch (error) {
             logger.error(`Erro ao ler ticker ${ticker}: ${error.message}`);
@@ -53,7 +69,7 @@ export const marketDataService = {
         const threshold = new Date(now.getTime() - CACHE_DURATION_MINUTES * 60 * 1000);
 
         try {
-            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker updatedAt lastPrice change');
+            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker updatedAt lastPrice change isActive');
             
             const toUpdate = [];
             const assetMap = new Map();
@@ -62,14 +78,13 @@ export const marketDataService = {
 
             cleanTickers.forEach(ticker => {
                 const asset = assetMap.get(ticker);
-                
-                // LÓGICA DE CACHE APERFEIÇOADA:
-                // Se force == true, ignora verificação de tempo.
+                if (asset && !asset.isActive && !force) return;
+
                 if (force) {
                     toUpdate.push(ticker);
                 } else {
                     const isStale = !asset || !asset.updatedAt || asset.updatedAt < threshold;
-                    const isDataMissing = !asset || asset.lastPrice === 0 || asset.change === 0;
+                    const isDataMissing = !asset || asset.lastPrice === 0;
 
                     if (isStale || isDataMissing) {
                         toUpdate.push(ticker);
@@ -79,15 +94,27 @@ export const marketDataService = {
 
             if (toUpdate.length === 0) return;
 
-            // Busca cotações externas (Yahoo)
             const quotes = await externalMarketService.getQuotes(toUpdate);
+
+            // --- ZOMBIE KILLER (Log Suavizado) ---
+            const returnedTickers = new Set(quotes.map(q => this.normalizeSymbol(q.ticker)));
+            const failedTickers = toUpdate.filter(t => !returnedTickers.has(t));
+
+            if (failedTickers.length > 0) {
+                if (!force) {
+                    await MarketAsset.updateMany(
+                        { ticker: { $in: failedTickers } },
+                        { $set: { isActive: false, updatedAt: now } }
+                    );
+                    // Mudado para DEBUG/INFO para não poluir como erro
+                    logger.info(`🧹 [Cleaner] ${failedTickers.length} ativos sem cotação foram marcados como inativos.`);
+                }
+            }
 
             if (!quotes || quotes.length === 0) return;
 
             const operations = quotes
-                .filter(quote => {
-                    return quote.price && quote.price > 0;
-                })
+                .filter(quote => quote.price && quote.price > 0)
                 .map(quote => ({
                     updateOne: {
                         filter: { ticker: this.normalizeSymbol(quote.ticker) },
@@ -95,7 +122,8 @@ export const marketDataService = {
                             $set: {
                                 lastPrice: quote.price,
                                 change: quote.change || 0, 
-                                updatedAt: now
+                                updatedAt: now,
+                                isActive: true 
                             }
                         }
                     }
@@ -104,12 +132,10 @@ export const marketDataService = {
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
                 logger.info(`✅ [SmartSync] ${operations.length} cotações atualizadas.`);
-            } else {
-                logger.warn(`⚠️ [SmartSync] Falha no lote: Yahoo não retornou dados válidos para ${toUpdate.length} ativos.`);
             }
 
         } catch (error) {
-            logger.error(`❌ [SmartSync] Falha: ${error.message}`);
+            logger.error(`❌ [SmartSync] Falha Crítica: ${error.message}`);
         }
     },
 
@@ -227,7 +253,8 @@ export const marketDataService = {
             const dbAssets = await MarketAsset.find({ 
                 type: queryType,
                 isIgnored: false,
-                isBlacklisted: false
+                isBlacklisted: false,
+                isActive: true // Só pega ativos vivos para análise
             });
 
             for (const asset of dbAssets) {

@@ -37,7 +37,6 @@ export const getWalletData = async (req, res, next) => {
         const closedAssets = userAssets.filter(a => a.quantity <= 0.000001);
 
         // --- SELF-HEALING CHECK ---
-        // Se a lista de ativos está vazia, mas o usuário tem transações, algo está errado.
         if (activeAssets.length === 0) {
             const txCount = await AssetTransaction.countDocuments({ user: userId });
             if (txCount > 0) {
@@ -50,10 +49,9 @@ export const getWalletData = async (req, res, next) => {
                     await financialService.recalculatePosition(userId, ticker);
                 }
                 
-                // Recarrega ativos após o fix
                 const healedAssets = await UserAsset.find({ user: userId });
                 if (healedAssets.length > 0) {
-                    return getWalletData(req, res, next); // Recomeça a função com dados limpos
+                    return getWalletData(req, res, next);
                 }
             }
         }
@@ -76,23 +74,22 @@ export const getWalletData = async (req, res, next) => {
             marketDataService.refreshQuotesBatch(liveTickers).catch(() => {});
         }
 
-        const dbAssets = await MarketAsset.find({ ticker: { $in: liveTickers } }).select('ticker sector name lastPrice change');
         const assetMap = new Map();
-        dbAssets.forEach(a => {
-            assetMap.set(a.ticker, {
-                price: a.lastPrice,
-                change: a.change || 0,
-                sector: a.sector,
-                name: a.name
+        await Promise.all(liveTickers.map(async (ticker) => {
+            const data = await marketDataService.getMarketDataByTicker(ticker);
+            assetMap.set(ticker, {
+                price: data.price,
+                change: data.change || 0,
+                name: data.name
             });
-        });
+        }));
 
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
         const usdRate = safeFloat(config?.dollar || 5.75);
         const usdChange = safeFloat(config?.dollarChange || 0);
         
         let currentCdi = (config?.cdi && config.cdi > 0) ? safeFloat(config.cdi) : 11.15;
-        if (currentCdi > 50) currentCdi = 11.15; // Proteção contra dados corrompidos no DB
+        if (currentCdi > 50) currentCdi = 11.15;
 
         let totalEquity = 0;
         let totalInvested = 0;
@@ -118,11 +115,9 @@ export const getWalletData = async (req, res, next) => {
                 let effectiveDailyRate = 0;
 
                 if (rawRate > 30) { 
-                    // Pós-fixado (% do CDI)
                     const cdiFactor = safeDiv(rawRate, 100); 
                     effectiveDailyRate = cdiDaily * cdiFactor;
                 } else { 
-                    // Pré-fixado
                     effectiveDailyRate = Math.pow(1 + (rawRate / 100), 1 / 252) - 1;
                 }
 
@@ -143,8 +138,7 @@ export const getWalletData = async (req, res, next) => {
                 let compoundFactor = Math.pow(1 + effectiveDailyRate, safeDays);
 
                 if (compoundFactor > 5 && safeDays < 3000) {
-                    logger.warn(`⚠️ Anomalia Financeira: ${asset.ticker} Factor=${compoundFactor}, Days=${safeDays}, Rate=${rawRate}`);
-                    compoundFactor = 1 + (safeDays * effectiveDailyRate); // Fallback
+                    compoundFactor = 1 + (safeDays * effectiveDailyRate); 
                 }
 
                 if (asset.type === 'CASH') {
@@ -161,7 +155,7 @@ export const getWalletData = async (req, res, next) => {
                     currentPrice = safeFloat(Number(cached.price));
                     dayChangePct = safeFloat(Number(cached.change)); 
                 } else {
-                    currentPrice = safeFloat(asset.averagePrice); 
+                    currentPrice = 0; 
                     dayChangePct = 0;
                 }
             }
@@ -242,7 +236,6 @@ export const getWalletData = async (req, res, next) => {
             weightedRentability = totalResultPercent;
         }
 
-        // AutoRepair se o snapshot divergir muito do real
         const lastSnapshot = history.length > 0 ? history[history.length - 1] : null;
         if (totalEquity > 1000) {
             if (!lastSnapshot || Math.abs(lastSnapshot.totalEquity - totalEquity) > (totalEquity * 0.5)) {
@@ -352,13 +345,21 @@ export const addAssetTransaction = async (req, res, next) => {
         if (!ticker) throw new Error("Ticker obrigatório.");
 
         const cleanTicker = ticker.toUpperCase().trim();
-        const numQty = safeFloat(parseFloat(quantity));
-        const numPrice = safeFloat(parseFloat(rawPrice));
         
-        // --- CORREÇÃO: VALIDAÇÃO DE DATA FUTURA ---
+        // --- INPUT VALIDATION (SANITIZAÇÃO ESTRITA) ---
+        const numQty = parseFloat(quantity);
+        const numPrice = parseFloat(rawPrice);
+
+        if (isNaN(numQty) || isNaN(numPrice)) throw new Error("Valores numéricos inválidos.");
+        if (!isFinite(numQty) || !isFinite(numPrice)) throw new Error("Valores infinitos não permitidos.");
+        
+        if (numPrice < 0) throw new Error("O preço unitário não pode ser negativo.");
+        if (Math.abs(numQty) > 1000000000) throw new Error("Quantidade excede o limite permitido.");
+        if (numPrice > 1000000000) throw new Error("Preço excede o limite permitido.");
+        // ----------------------------------------------
+        
         const transactionDate = date ? new Date(date) : new Date();
         
-        // Parsing seguro de string YYYY-MM-DD para evitar UTC shift
         if (date && typeof date === 'string' && date.includes('-')) {
             const parts = date.split('-');
             transactionDate.setFullYear(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
@@ -372,9 +373,6 @@ export const addAssetTransaction = async (req, res, next) => {
         if (txDateCheck > startOfToday) {
             throw new Error("Não é possível registrar transações com data futura.");
         }
-        // ---------------------------------------------
-
-        if (isNaN(numQty) || isNaN(numPrice)) throw new Error("Valores inválidos.");
 
         if (numQty < 0) {
             const currentAsset = await UserAsset.findOne({ user: userId, ticker: cleanTicker }).session(session);
@@ -432,7 +430,6 @@ export const addAssetTransaction = async (req, res, next) => {
         await session.commitTransaction();
         session.endSession();
 
-        // Dispara reconstrução assíncrona
         financialService.rebuildUserHistory(userId).catch(e => {
             logger.error(`Erro ao reconstruir histórico: ${e.message}`);
         });
@@ -443,7 +440,7 @@ export const addAssetTransaction = async (req, res, next) => {
         await session.abortTransaction();
         session.endSession();
         logger.error(`Erro Transaction Add: ${error.message}`);
-        if (error.message.includes('Saldo insuficiente') || error.message.includes('data futura')) {
+        if (error.message.includes('Saldo insuficiente') || error.message.includes('data futura') || error.message.includes('preço unitário') || error.message.includes('Valores')) {
             return res.status(400).json({ message: error.message });
         }
         next(error);

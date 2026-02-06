@@ -4,7 +4,7 @@ import MarketAsset from '../models/MarketAsset.js';
 import { fundamentusService } from './fundamentusService.js';
 import { macroDataService } from './macroDataService.js';
 import { externalMarketService } from './externalMarketService.js';
-import { marketDataService } from './marketDataService.js'; // Importado para refreshQuotesBatch
+import { marketDataService } from './marketDataService.js'; 
 import { SECTOR_OVERRIDES } from '../config/sectorOverrides.js';
 
 export const syncService = {
@@ -15,41 +15,42 @@ export const syncService = {
         try {
             logger.info("🔄 [SYNC-ENGINE] Iniciando rotina de atualização massiva...");
             
-            // 1. Atualiza dados Macro
             await macroDataService.performMacroSync();
 
             const operations = [];
             const timestamp = new Date();
 
-            // 2. Scraping Principal (Fundamentos)
             const stocksMap = await fundamentusService.getStocksMap();
             const fiiMap = await fundamentusService.getFIIsMap();
             
             const isScrapingFailed = stocksMap.size === 0 && fiiMap.size === 0;
 
             if (isScrapingFailed) {
-                logger.error("❌ ERRO CRÍTICO: Scraping falhou totalmente (Bloqueio ou Site Offline). Abortando atualização de Ações/FIIs.");
-                return { success: false, error: "Scraping blocked (403/Timeout)." };
+                logger.error("❌ ERRO CRÍTICO: Scraping falhou totalmente. Abortando atualização.");
+                return { success: false, error: "Scraping blocked." };
             }
 
             const pushOp = (ticker, data, type) => {
+                // IGNORAR ATIVOS MORTOS (ZOMBIE FILTER)
+                // Se o ativo tem liquidez média zerada ou muito baixa, é lixo. Não salvamos.
+                const liquidity = Number(data.liq2m) || Number(data.liquidity) || 0;
+                
+                // Mínimo de R$ 5.000,00 de negociação média para ser considerado no banco.
+                // Isso elimina recibos de subscrição antigos (finais 12, 13, 14, 15) e empresas falidas.
+                if (liquidity < 5000) return;
+
                 let finalSector = SECTOR_OVERRIDES[ticker];
                 if (!finalSector) {
                     finalSector = data.sector || 'Outros';
                 }
 
-                // Mapeamento Seguro de Dados (Garante persistência de todos os campos)
                 const updateFields = {
-                    // Preço base do Fundamentus (D-1 ou D-0 atrasado)
                     lastPrice: Number(data.price) || 0,
-                    
-                    // Indicadores
                     dy: Number(data.dy) || 0,
                     p_vp: Number(data.pvp) || 0,
                     marketCap: Number(data.marketCap) || 0,
-                    liquidity: Number(data.liq2m) || Number(data.liquidity) || 0,
+                    liquidity: liquidity,
                     
-                    // Stocks
                     pl: Number(data.pl) || 0,
                     roe: Number(data.roe) || 0,
                     roic: Number(data.roic) || 0,
@@ -59,7 +60,6 @@ export const syncService = {
                     debtToEquity: Number(data.divBrutaPatrim) || 0, 
                     netDebt: Number(data.netDebt) || 0,
 
-                    // FIIs
                     vacancy: Number(data.vacancy) || 0,
                     capRate: Number(data.capRate) || 0,
                     qtdImoveis: Number(data.qtdImoveis) || 0,
@@ -87,7 +87,7 @@ export const syncService = {
             if (stocksMap.size > 0) stocksMap.forEach((v, k) => pushOp(k, v, 'STOCK'));
             if (fiiMap.size > 0) fiiMap.forEach((v, k) => pushOp(k, v, 'FII'));
 
-            // 3. Atualiza Ativos Internacionais e Cripto (Já inclui preço atualizado)
+            // 3. Atualiza Ativos Internacionais e Cripto
             const assetsForExternal = await MarketAsset.find({ 
                 type: { $in: ['CRYPTO', 'STOCK_US'] } 
             }).select('ticker type');
@@ -103,7 +103,7 @@ export const syncService = {
                             update: {
                                 $set: {
                                     lastPrice: quote.price,
-                                    change: quote.change, // Importante: Salva variação
+                                    change: quote.change,
                                     updatedAt: timestamp
                                 }
                             }
@@ -112,47 +112,44 @@ export const syncService = {
                 });
             }
 
-            // Executa o Bulk Write Principal (Fundamentos)
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
                 logger.info(`✅ [SYNC-ENGINE] Fundamentos atualizados para ${operations.length} ativos.`);
                 
-                // --- CORREÇÃO DE INTEGRIDADE E PERFORMANCE ---
-                logger.info("📡 [SYNC-ENGINE] Iniciando 'Paint Job': Atualizando cotações e variação % via Yahoo...");
+                logger.info("📡 [SYNC-ENGINE] Iniciando 'Paint Job': Atualizando cotações...");
                 
-                // Coleta apenas ativos COM LIQUIDEZ para evitar buscar lixo no Yahoo
                 const validTickers = [];
-                const MIN_LIQUIDITY = 1000; // R$ 1.000,00 de negociação média (filtra micos mortos)
+                // FILTRO DE ATUALIZAÇÃO REAL-TIME AINDA MAIS RÍGIDO
+                // Só gasta cota de API (Brapi/Yahoo) com ativos que negociam > R$ 100k/dia
+                const MIN_LIQUIDITY_FOR_LIVE_QUOTE = 100000; 
 
                 stocksMap.forEach((v, k) => {
                     const liq = Number(v.liq2m) || 0;
-                    if (liq > MIN_LIQUIDITY) validTickers.push(k);
+                    if (liq > MIN_LIQUIDITY_FOR_LIVE_QUOTE) validTickers.push(k);
                 });
                 
                 fiiMap.forEach((v, k) => {
                     const liq = Number(v.liquidity) || 0;
-                    if (liq > MIN_LIQUIDITY) validTickers.push(k);
+                    if (liq > MIN_LIQUIDITY_FOR_LIVE_QUOTE) validTickers.push(k);
                 });
                 
                 logger.info(`   ➤ Filtrados ${validTickers.length} ativos líquidos para atualização real-time (de ${stocksMap.size + fiiMap.size} totais).`);
 
-                // Atualiza em lotes para não estourar rate limit
+                // Batch
                 const BATCH_SIZE = 50;
                 let updatedQuotesCount = 0;
                 for (let i = 0; i < validTickers.length; i += BATCH_SIZE) {
                     const batch = validTickers.slice(i, i + BATCH_SIZE);
-                    // FORCE = TRUE para ignorar o timestamp recente do Fundamentus e pegar preço real
                     await marketDataService.refreshQuotesBatch(batch, true);
                     updatedQuotesCount += batch.length;
-                    // Pequena pausa para ser gentil com a API
                     await new Promise(r => setTimeout(r, 200)); 
                 }
                 
-                logger.info(`✅ [SYNC-ENGINE] Cotações 'Paint Job' finalizado. ${updatedQuotesCount} ativos com preço/variação real-time.`);
+                logger.info(`✅ [SYNC-ENGINE] Cotações finalizadas. ${updatedQuotesCount} ativos atualizados.`);
 
                 return { success: true, count: operations.length };
             } else {
-                logger.warn("⚠️ [SYNC-ENGINE] Nenhum ativo para atualizar.");
+                logger.warn("⚠️ [SYNC-ENGINE] Nenhum ativo válido para atualizar.");
                 return { success: false, count: 0 };
             }
 

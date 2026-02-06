@@ -1,5 +1,5 @@
+
 import React from 'react';
-// @ts-ignore
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Loader2 } from 'lucide-react';

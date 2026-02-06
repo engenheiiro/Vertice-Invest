@@ -1,9 +1,11 @@
+
 import React from 'react';
 import { Lock, Construction, ArrowRight, ShieldAlert } from 'lucide-react';
 // @ts-ignore
 import { useNavigate } from 'react-router-dom';
 import { useAuth, UserPlan } from '../../contexts/AuthContext';
 import { Button } from '../ui/Button';
+import { PLAN_HIERARCHY } from '../../constants/subscription';
 
 interface ModulePlaceholderProps {
     title: string;
@@ -11,13 +13,6 @@ interface ModulePlaceholderProps {
     minPlan: UserPlan; // Plano mínimo para acessar
     icon: React.ReactNode;
 }
-
-const PLAN_LEVELS: Record<UserPlan, number> = {
-    'GUEST': 0,
-    'ESSENTIAL': 1,
-    'PRO': 2,
-    'BLACK': 3
-};
 
 export const ModulePlaceholder: React.FC<ModulePlaceholderProps> = ({ 
     title, 
@@ -28,8 +23,8 @@ export const ModulePlaceholder: React.FC<ModulePlaceholderProps> = ({
     const { user } = useAuth();
     const navigate = useNavigate();
 
-    const userLevel = PLAN_LEVELS[user?.plan || 'GUEST'];
-    const requiredLevel = PLAN_LEVELS[minPlan];
+    const userLevel = PLAN_HIERARCHY[user?.plan || 'GUEST'];
+    const requiredLevel = PLAN_HIERARCHY[minPlan];
     const hasAccess = userLevel >= requiredLevel;
 
     // --- TELA DE BLOQUEIO (UPSELL) ---

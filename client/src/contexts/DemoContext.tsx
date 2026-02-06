@@ -1,5 +1,8 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useAuth } from './AuthContext';
+// @ts-ignore
+import { useLocation } from 'react-router-dom';
 
 interface DemoContextType {
     isDemoMode: boolean;
@@ -8,40 +11,56 @@ interface DemoContextType {
     currentStep: number;
     nextStep: () => void;
     prevStep: () => void;
-    resetStep: () => void; // Novo método
+    resetStep: () => void;
     skipTutorial: () => void;
 }
 
 const DemoContext = createContext<DemoContextType | undefined>(undefined);
 
 export const DemoProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const { user } = useAuth();
+    const location = useLocation();
     const [isDemoMode, setIsDemoMode] = useState(false);
     const [currentStep, setCurrentStep] = useState(0);
 
-    // Verifica se é a primeira vez do usuário
+    // Verifica se é a primeira vez do usuário ao carregar a aplicação
     useEffect(() => {
-        const hasSeenTutorial = localStorage.getItem('hasSeenTutorial_v2');
-        const user = localStorage.getItem('user'); // Só mostra se estiver logado
-        
-        if (!hasSeenTutorial && user) {
-            // Pequeno delay para não assustar o usuário assim que entra
-            setTimeout(() => {
-                // startDemo(); // Auto-start desativado para evitar conflito com login
-            }, 1000);
+        // Só executa se tiver usuário logado e estiver na rota do Dashboard
+        if (user?.id && location.pathname.includes('/dashboard')) {
+            
+            // CHAVE ÚNICA POR USUÁRIO: Garante que contas novas vejam o tutorial
+            const storageKey = `tutorial_seen_v4_${user.id}`;
+            const hasSeen = localStorage.getItem(storageKey);
+            
+            if (!hasSeen) {
+                console.log(`✨ Novo usuário detectado (${user.name}): Agendando Tutorial...`);
+                
+                // Delay de 1.2s para garantir que a UI carregou e animações iniciais terminaram
+                const timer = setTimeout(() => {
+                    startDemo(); 
+                }, 1200);
+                
+                return () => clearTimeout(timer);
+            }
         }
-    }, []);
+    }, [user?.id, location.pathname]); 
 
     const startDemo = () => {
         setIsDemoMode(true);
         setCurrentStep(0);
-        document.body.style.overflow = 'hidden'; // Bloqueia scroll durante tutorial
+        document.body.style.overflow = 'hidden'; // Bloqueia scroll do body durante o tour
     };
 
     const stopDemo = () => {
         setIsDemoMode(false);
         setCurrentStep(0);
         document.body.style.overflow = 'unset';
-        localStorage.setItem('hasSeenTutorial_v2', 'true');
+        
+        // Marca como visto apenas para este usuário específico
+        if (user?.id) {
+            const storageKey = `tutorial_seen_v4_${user.id}`;
+            localStorage.setItem(storageKey, 'true');
+        }
     };
 
     const nextStep = () => {
