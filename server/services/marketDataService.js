@@ -56,7 +56,7 @@ export const marketDataService = {
 
             return { price: 0, change: 0, name: ticker };
         } catch (error) {
-            logger.error(`Erro ao ler ticker ${ticker}: ${error.message}`);
+            // logger.error(`Erro ao ler ticker ${ticker}: ${error.message}`); // Silent fail for cleaner logs
             return { price: 0, change: 0, name: ticker };
         }
     },
@@ -96,7 +96,7 @@ export const marketDataService = {
 
             const quotes = await externalMarketService.getQuotes(toUpdate);
 
-            // --- ZOMBIE KILLER (Log Suavizado) ---
+            // --- ZOMBIE KILLER ---
             const returnedTickers = new Set(quotes.map(q => this.normalizeSymbol(q.ticker)));
             const failedTickers = toUpdate.filter(t => !returnedTickers.has(t));
 
@@ -106,8 +106,7 @@ export const marketDataService = {
                         { ticker: { $in: failedTickers } },
                         { $set: { isActive: false, updatedAt: now } }
                     );
-                    // Mudado para DEBUG/INFO para não poluir como erro
-                    logger.info(`🧹 [Cleaner] ${failedTickers.length} ativos sem cotação foram marcados como inativos.`);
+                    logger.info(`ℹ️ [MarketData] Limpeza: ${failedTickers.length} inativos.`);
                 }
             }
 
@@ -131,11 +130,11 @@ export const marketDataService = {
 
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
-                logger.info(`✅ [SmartSync] ${operations.length} cotações atualizadas.`);
+                // logger.info(`ℹ️ [MarketData] Atualizados: ${operations.length} cotações.`); // Opcional, o scheduler já loga o total
             }
 
         } catch (error) {
-            logger.error(`❌ [SmartSync] Falha Crítica: ${error.message}`);
+            logger.error(`❌ [MarketData] Falha: ${error.message}`);
         }
     },
 
@@ -164,17 +163,15 @@ export const marketDataService = {
             }
             return historyEntry ? historyEntry.history : null;
         } catch (error) {
-            logger.error(`Erro ao buscar benchmark ${ticker}: ${error.message}`);
+            // logger.error(`Erro ao buscar benchmark ${ticker}: ${error.message}`);
             return null;
         }
     },
 
     async getPriceAtDate(ticker, dateStr, type) {
         const cleanTicker = this.normalizeSymbol(ticker);
-        
         try {
             let historyEntry = await AssetHistory.findOne({ ticker: cleanTicker });
-            
             if (!historyEntry) {
                 const externalHistory = await externalMarketService.getFullHistory(cleanTicker, type);
                 if (externalHistory && externalHistory.length > 0) {
@@ -187,7 +184,6 @@ export const marketDataService = {
                     return null;
                 }
             }
-
             const dayData = historyEntry.history.find(h => h.date === dateStr);
             if (dayData && dayData.close > 0) {
                 return {
@@ -196,12 +192,9 @@ export const marketDataService = {
                     source: 'history_cache'
                 };
             }
-
             const targetDate = new Date(dateStr);
             const sortedHistory = [...historyEntry.history].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            
             const closest = sortedHistory.find(h => new Date(h.date) <= targetDate);
-
             if (closest && closest.close > 0) {
                 return {
                     price: closest.close,
@@ -210,11 +203,8 @@ export const marketDataService = {
                     foundDate: closest.date
                 };
             }
-
             return null;
-
         } catch (error) {
-            logger.error(`Erro ao buscar histórico ${cleanTicker}: ${error.message}`);
             return null;
         }
     },
@@ -238,7 +228,6 @@ export const marketDataService = {
             }
             return FALLBACK_MACRO;
         } catch (e) {
-            logger.error(`Erro Macro: ${e.message}`);
             return FALLBACK_MACRO;
         }
     },

@@ -1,3 +1,4 @@
+
 import * as Sentry from "@sentry/node";
 
 if (process.env.SENTRY_DSN) {
@@ -8,5 +9,5 @@ if (process.env.SENTRY_DSN) {
     ],
     tracesSampleRate: 1.0,
   });
-  console.log("✅ Sentry Instrumentado");
+  console.log("🛡️ [Observability] Sentry Instrumentado");
 }

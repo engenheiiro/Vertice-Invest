@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { Check, X, ArrowLeft, Zap, Shield, Crown } from 'lucide-react';
+import { Check, X, ArrowLeft, Zap, Shield, Crown, ExternalLink } from 'lucide-react';
 // @ts-ignore
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { useAuth, UserPlan } from '../contexts/AuthContext';
 import { subscriptionService } from '../services/subscription';
@@ -11,18 +11,23 @@ import { PLAN_ACCESS, PLAN_DETAILS } from '../constants/subscription';
 
 export const Pricing = () => {
     const { user } = useAuth();
-    const navigate = useNavigate();
     const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
     const handleSelectPlan = async (planId: string) => {
         setLoadingPlan(planId);
         try {
+            // Inicia o checkout no backend, que chama o Mercado Pago
             const response = await subscriptionService.initCheckout(planId);
-            navigate(response.redirectUrl); 
+            
+            if (response.redirectUrl) {
+                // REDIRECIONAMENTO EXTERNO PARA O MERCADO PAGO
+                window.location.href = response.redirectUrl;
+            } else {
+                throw new Error("URL de pagamento não gerada.");
+            }
         } catch (error) {
             console.error("Erro ao iniciar checkout", error);
-            alert("Não foi possível iniciar o pagamento. Tente novamente.");
-        } finally {
+            alert("Não foi possível conectar ao Mercado Pago. Tente novamente.");
             setLoadingPlan(null);
         }
     };
@@ -82,7 +87,6 @@ export const Pricing = () => {
                         </span>
                     </p>
                     
-                    {/* Mobile Back Button */}
                     <div className="mt-6 lg:hidden text-left">
                         <Link to="/dashboard" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white">
                             <ArrowLeft size={14} /> Voltar ao Terminal
@@ -143,10 +147,15 @@ export const Pricing = () => {
                     />
                 </div>
                 
-                <div className="mt-12 text-center border-t border-slate-800 pt-8">
+                <div className="mt-12 text-center border-t border-slate-800 pt-8 flex flex-col items-center gap-2">
                     <p className="text-[10px] text-slate-600 max-w-2xl mx-auto">
-                        * A assinatura é renovada automaticamente. O pagamento será cobrado em sua conta na confirmação da compra.
+                        * A assinatura é renovada automaticamente. O pagamento é processado de forma segura pelo <strong>Mercado Pago</strong>.
                     </p>
+                    <div className="flex gap-2 opacity-50">
+                        <img src="https://img.icons8.com/color/48/visa.png" alt="Visa" className="h-6" />
+                        <img src="https://img.icons8.com/color/48/mastercard.png" alt="Mastercard" className="h-6" />
+                        <img src="https://img.icons8.com/color/48/pix.png" alt="Pix" className="h-6" />
+                    </div>
                 </div>
             </div>
         </div>
@@ -217,7 +226,11 @@ const PricingCard = ({ id, title, price, description, icon, features, isPopular,
                     onClick={() => onSelect(id)}
                     status={isLoading ? 'loading' : 'idle'}
                 >
-                    {title === "Black Elite" ? "Aplicar para Black" : "Fazer Upgrade"}
+                    {isLoading ? 'Redirecionando...' : (
+                        <span className="flex items-center gap-2">
+                            Assinar com Mercado Pago <ExternalLink size={12} />
+                        </span>
+                    )}
                 </Button>
             )}
         </div>

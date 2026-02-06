@@ -6,6 +6,8 @@
     "server/logs/*",
     "server/logs/*.log",
     "logs/*",
+    "*.log",
+    "crash-report.txt",
     "*.test.js",
     "client/*",
     "node_modules"

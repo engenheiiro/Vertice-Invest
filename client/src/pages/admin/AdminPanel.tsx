@@ -57,6 +57,7 @@ export const AdminPanel = () => {
     const [selectedAuditReport, setSelectedAuditReport] = useState<ResearchReport | null>(null);
     const [isGlobalRunning, setIsGlobalRunning] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [isMacroSyncing, setIsMacroSyncing] = useState(false); // Novo Estado
     
     const [macroData, setMacroData] = useState<MacroData | null>(null);
     const [isLoadingMacro, setIsLoadingMacro] = useState(true);
@@ -107,6 +108,21 @@ export const AdminPanel = () => {
             setStatusMsg({ type: 'error', text: e.message || "Erro na sincronização." });
         } finally {
             setIsSyncing(false);
+            setTimeout(() => setStatusMsg(null), 5000);
+        }
+    };
+
+    const handleMacroSync = async () => {
+        setIsMacroSyncing(true);
+        setStatusMsg(null);
+        try {
+            await researchService.syncMacro();
+            setStatusMsg({ type: 'success', text: "Indicadores e S&P 500 atualizados com sucesso." });
+            await loadMacro();
+        } catch (e: any) {
+            setStatusMsg({ type: 'error', text: e.message || "Erro na sync macro." });
+        } finally {
+            setIsMacroSyncing(false);
             setTimeout(() => setStatusMsg(null), 5000);
         }
     };
@@ -280,6 +296,21 @@ export const AdminPanel = () => {
                             
                             <div className="flex items-center gap-2">
                                 <button 
+                                    onClick={handleMacroSync}
+                                    disabled={isMacroSyncing}
+                                    className={`
+                                        flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border
+                                        ${isMacroSyncing 
+                                            ? 'bg-purple-900/20 text-purple-400 border-purple-900/50 cursor-wait' 
+                                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-purple-500'
+                                        }
+                                    `}
+                                >
+                                    <Globe size={12} className={isMacroSyncing ? 'animate-pulse' : ''} />
+                                    {isMacroSyncing ? 'Atualizando...' : 'Sync Macro'}
+                                </button>
+
+                                <button 
                                     onClick={handleSyncData}
                                     disabled={isSyncing || isGlobalRunning}
                                     className={`
@@ -292,9 +323,8 @@ export const AdminPanel = () => {
                                     title="Apenas atualiza cotações sem rodar IA"
                                 >
                                     <Database size={12} className={isSyncing ? 'animate-pulse' : ''} />
-                                    {isSyncing ? 'Sincronizando...' : 'Sync Preços (Leve)'}
+                                    {isSyncing ? 'Sincronizando...' : 'Sync Preços'}
                                 </button>
-                                {isLoadingMacro && <RefreshCw size={12} className="text-slate-500 animate-spin" />}
                             </div>
                         </div>
                         

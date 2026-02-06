@@ -4,6 +4,7 @@ import TreasuryBond from '../models/TreasuryBond.js';
 import { aiResearchService } from '../services/aiResearchService.js';
 import { aiEnhancementService } from '../services/aiEnhancementService.js';
 import { marketDataService } from '../services/marketDataService.js';
+import { macroDataService } from '../services/macroDataService.js'; // Nova Importação
 import { syncService } from '../services/syncService.js'; 
 import logger from '../config/logger.js';
 
@@ -21,10 +22,22 @@ export const getMacroData = async (req, res, next) => {
 
 export const triggerMarketSync = async (req, res, next) => {
     try {
-        logger.info("👆 Admin disparou Sincronização Manual de Dados.");
+        logger.info("👆 Admin disparou Sincronização Manual de Dados (Preços/Fundamentos).");
         const result = await syncService.performFullSync();
         res.json({ message: "Sincronização iniciada com sucesso.", details: result });
     } catch (error) {
+        next(error);
+    }
+};
+
+// Nova Função: Dispara apenas o Sync Macro (Rápido)
+export const triggerMacroSync = async (req, res, next) => {
+    try {
+        logger.info("👆 Admin disparou Sincronização Manual de Macroeconomia.");
+        const result = await macroDataService.performMacroSync();
+        res.json({ message: "Indicadores Macro e S&P 500 atualizados.", data: result });
+    } catch (error) {
+        logger.error(`Erro Macro Sync Manual: ${error.message}`);
         next(error);
     }
 };

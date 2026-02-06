@@ -14,20 +14,20 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 export const initScheduler = () => {
     logger.info("⏰ Scheduler Service Inicializado");
 
-    // 1. Sync Leve: Macroeconomia (A cada 30 minutos)
-    cron.schedule('*/30 * * * *', async () => {
-        // logger.info("⏰ Rotina: Sync Leve (Macro)");
+    // 1. Sync Leve: Macroeconomia (A cada 15 minutos com Offset)
+    cron.schedule('5,20,35,50 * * * *', async () => {
+        logger.info("⏰ Rotina: Sync Macroeconomia - Iniciada");
         try {
             await macroDataService.performMacroSync();
+            logger.info("⏰ Rotina: Sync Macroeconomia - Finalizada");
         } catch (error) {
-            logger.error(`Erro Sync Macro: ${error.message}`);
+            logger.error(`❌ Rotina: Sync Macroeconomia - Erro: ${error.message}`);
         }
     });
 
-    // 2. Sync Preços (Yahoo Finance - Seguro) - A cada 15 Minutos
-    // OTIMIZAÇÃO: Filtra apenas ativos com liquidez relevante (> 10k/dia) para poupar API
+    // 2. Sync Preços (Yahoo Finance - Seguro) - A cada 15 Minutos (0, 15, 30, 45)
     cron.schedule('*/15 * * * *', async () => {
-        logger.info("⏰ Rotina: Atualização de Preços (Yahoo 15min)...");
+        logger.info("⏰ Rotina: Atualização de Preços (Yahoo 15min) - Iniciada");
         try {
             // Busca apenas ativos ativos E líquidos OU Criptos/US
             const assets = await MarketAsset.find({ 
@@ -41,7 +41,8 @@ export const initScheduler = () => {
             const tickers = assets.map(a => a.ticker);
             
             if (tickers.length === 0) {
-                logger.info("ℹ️ Nenhum ativo líquido para atualizar.");
+                logger.info("ℹ️ Detalhe: Nenhum ativo para atualizar.");
+                logger.info("⏰ Rotina: Atualização de Preços (Yahoo 15min) - Finalizada");
                 return;
             }
 
@@ -54,35 +55,37 @@ export const initScheduler = () => {
                 updatedCount += batch.length;
                 await new Promise(r => setTimeout(r, 2000)); // Delay suave
             }
-            logger.info(`✅ [Scheduler] Preços atualizados para ${updatedCount} ativos líquidos.`);
+            logger.info(`ℹ️ Detalhe: ${updatedCount} ativos processados.`);
+            logger.info("⏰ Rotina: Atualização de Preços (Yahoo 15min) - Finalizada");
         } catch (e) {
-            logger.error(`Erro Sync Preços: ${e.message}`);
+            logger.error(`❌ Rotina: Atualização de Preços (Yahoo 15min) - Erro: ${e.message}`);
         }
     });
 
     // 3. Sync Pesado (Fundamentus) + Cálculo - DIÁRIO (08:00 AM)
     cron.schedule('0 8 * * *', async () => {
-        logger.info("⏰ Rotina DIÁRIA: Protocolo V3 Completo (Sync + Calc)...");
+        logger.info("⏰ Rotina: Protocolo V3 Completo (Diário) - Iniciada");
         try {
             const syncResult = await syncService.performFullSync();
             
             if (syncResult.success) {
                 await aiResearchService.runBatchAnalysis(null); 
-                logger.info("✅ Rotina Diária V3 finalizada com sucesso.");
+                logger.info("⏰ Rotina: Protocolo V3 Completo (Diário) - Finalizada");
             } else {
-                logger.warn("⚠️ Rotina V3: Sync falhou, pulando cálculo.");
+                logger.error(`❌ Rotina: Protocolo V3 Completo (Diário) - Falha no Sync: ${syncResult.error}`);
             }
         } catch (e) {
-            logger.error(`Erro Rotina V3 Diária: ${e.message}`);
+            logger.error(`❌ Rotina: Protocolo V3 Completo (Diário) - Erro Crítico: ${e.message}`);
         }
     });
 
     // 4. Snapshot Patrimonial Diário (23:59)
     cron.schedule('59 23 * * *', async () => {
-        logger.info("📸 Rotina: Snapshot Patrimonial Diário");
+        logger.info("⏰ Rotina: Snapshot Patrimonial Diário - Iniciada");
         try {
             const users = await User.find({}).select('_id');
             const today = new Date();
+            let snapshotCount = 0;
             
             for (const user of users) {
                 const assets = await UserAsset.find({ user: user._id });
@@ -109,21 +112,24 @@ export const initScheduler = () => {
                         profit: totalEquity - totalInvested,
                         profitPercent: totalInvested > 0 ? ((totalEquity - totalInvested) / totalInvested) * 100 : 0
                     });
+                    snapshotCount++;
                 }
             }
-            logger.info(`📸 Snapshots gerados para ${users.length} usuários.`);
+            logger.info(`ℹ️ Detalhe: ${snapshotCount} snapshots gerados.`);
+            logger.info("⏰ Rotina: Snapshot Patrimonial Diário - Finalizada");
         } catch (error) {
-            logger.error(`Erro Snapshot: ${error.message}`);
+            logger.error(`❌ Rotina: Snapshot Patrimonial Diário - Erro: ${error.message}`);
         }
     });
 
     // 5. Sync Feriados (Anual - 1 de Janeiro 06:00)
     cron.schedule('0 6 1 1 *', async () => {
-        logger.info("📅 Rotina: Sync Feriados Anual");
+        logger.info("⏰ Rotina: Sync Feriados Anual - Iniciada");
         try {
             await holidayService.sync();
+            logger.info("⏰ Rotina: Sync Feriados Anual - Finalizada");
         } catch (e) {
-            logger.error(`Erro Sync Feriados: ${e.message}`);
+            logger.error(`❌ Rotina: Sync Feriados Anual - Erro: ${e.message}`);
         }
     });
 };

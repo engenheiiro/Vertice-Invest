@@ -1,0 +1,85 @@
+
+import { MercadoPagoConfig, PreApproval } from 'mercadopago';
+import logger from '../config/logger.js';
+
+// Inicializa o cliente MP apenas se o token existir
+const accessToken = process.env.MP_ACCESS_TOKEN;
+const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
+
+const PLANS_CONFIG = {
+    'ESSENTIAL': { 
+        price: 39.90, 
+        title: 'Vértice Essential - Assinatura Mensal',
+        description: 'Acesso básico ao Terminal e Carteira.'
+    },
+    'PRO': { 
+        price: 119.90, 
+        title: 'Vértice Pro - Assinatura Mensal',
+        description: 'Acesso completo ao Research e Sinais em Tempo Real.'
+    },
+    'BLACK': { 
+        price: 349.90, 
+        title: 'Vértice Black - Assinatura Mensal',
+        description: 'Gestão Private, Consultoria e Automação Fiscal.'
+    }
+};
+
+export const paymentService = {
+    async createSubscription(user, planKey) {
+        if (!client) {
+            throw new Error("Mercado Pago Access Token não configurado no servidor.");
+        }
+
+        const planConfig = PLANS_CONFIG[planKey];
+        if (!planConfig) {
+            throw new Error("Plano inválido.");
+        }
+
+        const preApproval = new PreApproval(client);
+
+        try {
+            // URL de retorno (Frontend) - Tratamento de barra final
+            const baseUrl = (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
+            const backUrl = `${baseUrl}/#/checkout/success?plan=${planKey}`;
+            
+            const body = {
+                reason: planConfig.title,
+                external_reference: user._id.toString(), // VITAL: Vincula o pagamento ao usuário no Webhook
+                payer_email: user.email,
+                auto_recurring: {
+                    frequency: 1,
+                    frequency_type: 'months',
+                    transaction_amount: planConfig.price,
+                    currency_id: 'BRL'
+                },
+                back_url: backUrl,
+                status: 'pending'
+            };
+
+            const response = await preApproval.create({ body });
+            
+            logger.info(`💳 Assinatura MP criada para ${user.email} - Init Point: ${response.init_point}`);
+            
+            return {
+                init_point: response.init_point, // URL para redirecionar o usuário
+                id: response.id
+            };
+
+        } catch (error) {
+            logger.error(`❌ Erro Mercado Pago: ${error.message}`);
+            throw new Error("Falha ao comunicar com gateway de pagamento.");
+        }
+    },
+
+    async getSubscriptionStatus(preApprovalId) {
+        if (!client) return null;
+        try {
+            const preApproval = new PreApproval(client);
+            const response = await preApproval.get({ id: preApprovalId });
+            return response;
+        } catch (error) {
+            logger.error(`Erro ao buscar status da assinatura ${preApprovalId}: ${error.message}`);
+            return null;
+        }
+    }
+};

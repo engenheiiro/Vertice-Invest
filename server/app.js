@@ -18,6 +18,7 @@ import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import researchRoutes from './routes/researchRoutes.js';
 import walletRoutes from './routes/walletRoutes.js';
 import marketRoutes from './routes/marketRoutes.js'; 
+import webhookRoutes from './routes/webhookRoutes.js'; // Nova Rota
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,8 +26,6 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // --- CORREÇÃO RENDER / PROXY ---
-// Necessário para apps rodando atrás de Load Balancers (Render, Heroku, AWS, Nginx)
-// Isso resolve o erro ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
 app.set('trust proxy', 1);
 
 initScheduler();
@@ -39,11 +38,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"], 
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://www.mercadopago.com.br"], 
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https://images.unsplash.com", "https://*.unsplash.com"],
-      connectSrc: ["'self'", process.env.SENTRY_DSN ? "https://*.sentry.io" : ""],
+      imgSrc: ["'self'", "data:", "https://images.unsplash.com", "https://*.unsplash.com", "https://http2.mlstatic.com"],
+      connectSrc: ["'self'", process.env.SENTRY_DSN ? "https://*.sentry.io" : "", "https://api.mercadopago.com"],
       objectSrc: ["'none'"],
       upgradeInsecureRequests: [],
     },
@@ -58,23 +57,17 @@ app.use(express.json({ limit: '10kb' }));
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (process.env.NODE_ENV === 'production') {
-        const allowedOrigins = [process.env.CLIENT_URL].filter(Boolean);
-        if (allowedOrigins.includes(origin)) return callback(null, true);
-        return callback(null, true); // Relaxado para evitar bloqueios indevidos em configs mistas
-    }
+    // Permite origem do Mercado Pago se necessário, mas geralmente webhook é server-to-server sem CORS
     return callback(null, true);
   },
   credentials: true 
 }));
 
-// --- CONFIGURAÇÃO DE RATE LIMIT AJUSTADA ---
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 3000, // AUMENTADO DE 150 PARA 3000 (Evita erro 429 em Dev/Uso Intenso)
+  windowMs: 15 * 60 * 1000, 
+  max: 3000, 
   standardHeaders: true,
   legacyHeaders: false,
-  message: { message: 'Limite de requisições excedido. Aguarde alguns minutos.' }
 });
 
 app.use('/api/', apiLimiter);
@@ -84,6 +77,7 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/research', researchRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/market', marketRoutes);
+app.use('/api/webhooks', webhookRoutes); // Registro dos Webhooks
 
 const distPath = path.resolve(__dirname, '../client/dist');
 if (fs.existsSync(distPath)) {

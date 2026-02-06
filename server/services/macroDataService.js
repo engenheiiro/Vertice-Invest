@@ -9,8 +9,8 @@ import { externalMarketService } from './externalMarketService.js';
 
 // 432 = Selic Meta AA
 // 13522 = IPCA 12m
-// 4389 = CDI Mensal % (Para cálculo preciso do acumulado)
-const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4389 };
+// 4391 = CDI Mensal % (CORREÇÃO: 4389 era anual, 4391 é mensal acumulado)
+const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391 };
 
 const BROWSER_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -43,21 +43,21 @@ export const macroDataService = {
                 }
             } catch (e) { /* Fallback IPCA */ }
 
-            // 3. Tentativa de Cálculo Real do CDI 12m
+            // 3. Cálculo Real do CDI 12m (Série 4391 - Mensal)
             try {
                 const cdiRes = await axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.CDI_MONTHLY}/dados/ultimos/15?formato=json`);
                 
                 if (cdiRes.data && cdiRes.data.length > 0) {
+                    // Pega os últimos 12 meses disponíveis
                     const last12Months = cdiRes.data.slice(-12);
                     let accFactor = 1.0;
                     
                     last12Months.forEach(month => {
                         const valStr = month.valor;
                         if (valStr) {
-                            // Tenta parsear float. Se vier "1.05", é 1.05%. Se vier "1,05", parseFloat lê 1.
-                            // Mas a API do BCB JSON padrão retorna ponto.
                             const val = parseFloat(valStr);
                             if (!isNaN(val)) {
+                                // Série 4391 retorna ex: 0.89 (que é 0.89%). Dividimos por 100.
                                 accFactor *= (1 + (val / 100));
                             }
                         }
@@ -65,13 +65,17 @@ export const macroDataService = {
                     
                     const calculatedCDI = (accFactor - 1) * 100;
 
-                    // Validação de Sanidade: CDI deve estar próximo da Selic (entre 0.5x e 1.5x)
+                    // Validação de Sanidade (CDI 12m deve estar próximo da Selic anual, ex: entre 50% e 150% da Selic)
+                    // Isso evita o erro de 429% se a API mudar o formato
                     if (calculatedCDI > (selicVal * 0.5) && calculatedCDI < (selicVal * 1.5)) {
                         cdiAccumulated12m = calculatedCDI;
-                    } 
+                        logger.info(`📈 CDI 12m Calculado (Série 4391): ${calculatedCDI.toFixed(2)}%`);
+                    } else {
+                        logger.warn(`⚠️ CDI Calculado anômalo (${calculatedCDI.toFixed(2)}%). Usando fallback Selic (${selicVal}%).`);
+                    }
                 }
             } catch (e) {
-                // Silencioso: Se falhar, usa o fallback definido no início (Selic - 0.10)
+                logger.warn(`⚠️ Erro ao calcular CDI 12m: ${e.message}. Usando fallback.`);
             }
 
             return { 
@@ -90,16 +94,12 @@ export const macroDataService = {
     async updateCurrencies() {
         try {
             const res = await axios.get('https://economia.awesomeapi.com.br/last/USD-BRL,BTC-USD', { timeout: 5000 });
-            
             const usd = parseFloat(res.data.USDBRL.bid);
             const usdChange = parseFloat(res.data.USDBRL.pctChange);
-            
             const btcUsd = parseFloat(res.data.BTCUSD.bid);
             const btcChange = parseFloat(res.data.BTCUSD.pctChange);
-
             return { usd, usdChange, btcUsd, btcChange };
         } catch (error) {
-            // Silencia erro de rate limit para não poluir logs
             return null;
         }
     },
@@ -113,15 +113,12 @@ export const macroDataService = {
     parseGenericRow($, tr) {
         const cols = $(tr).find('td');
         if (cols.length < 3) return null;
-
         let title = '';
         let rate = 0;
         let price = 0;
         let maturity = '-';
-
         cols.each((i, td) => {
             const text = $(td).text().trim().replace(/\s+/g, ' '); 
-            
             if (!title && text.length > 5 && (text.includes('Tesouro') || text.includes('IPCA') || text.includes('Prefixado') || text.includes('Selic') || text.includes('Renda+'))) {
                 title = text;
             } else if (text.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
@@ -134,10 +131,7 @@ export const macroDataService = {
                 if (val > 0) price = val;
             }
         });
-
-        if (title && rate > 0) {
-            return { title, rate, price, maturity };
-        }
+        if (title && rate > 0) return { title, rate, price, maturity };
         return null;
     },
 
@@ -147,7 +141,6 @@ export const macroDataService = {
             const url = 'https://investidor10.com.br/tesouro-direto/';
             const res = await axios.get(url, { headers: BROWSER_HEADERS, httpsAgent, timeout: 15000 });
             const $ = cheerio.load(res.data);
-
             $('tr').each((i, tr) => {
                 const data = this.parseGenericRow($, tr);
                 if (data) {
@@ -166,11 +159,9 @@ export const macroDataService = {
         const list = await this.scrapeInvestidor10();
         const uniqueBonds = [];
         const seenTitles = new Set();
-
         list.forEach(bond => {
             const cleanTitle = bond.title.replace(/\s+/g, ' ').trim();
             const key = cleanTitle.toLowerCase().replace(/\s+/g, '').replace('jurossemestrais', '');
-            
             if (!seenTitles.has(key)) {
                 let type = 'IPCA';
                 let index = 'IPCA';
@@ -178,11 +169,9 @@ export const macroDataService = {
                 else if (cleanTitle.includes('Selic') || cleanTitle.includes('LFT')) { type = 'SELIC'; index = 'SELIC'; }
                 else if (cleanTitle.includes('Renda+')) { type = 'RENDAMAIS'; }
                 else if (cleanTitle.includes('Educa+')) { type = 'EDUCA'; }
-
                 if (type === 'IPCA' && (cleanTitle.includes('2035') || cleanTitle.includes('2045'))) {
                     if (bond.rate > 4) ntnbLongRate = bond.rate;
                 }
-
                 uniqueBonds.push({
                     title: cleanTitle,
                     type,
@@ -195,12 +184,10 @@ export const macroDataService = {
                 seenTitles.add(key);
             }
         });
-
         if (uniqueBonds.length >= 5) {
             await TreasuryBond.deleteMany({});
             await TreasuryBond.insertMany(uniqueBonds);
         }
-
         return { ntnbLong: ntnbLongRate };
     },
 
@@ -208,6 +195,8 @@ export const macroDataService = {
         const official = await this.updateOfficialRates();
         const currencies = await this.updateCurrencies();
         const globalIndices = await externalMarketService.getGlobalIndices(); 
+        const spxReturn12m = await externalMarketService.getSpx12mReturn(); 
+        const ibovReturn12m = await externalMarketService.getIbov12mReturn(); 
         const treasury = await this.updateTreasuryRates(); 
 
         let config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
@@ -216,7 +205,10 @@ export const macroDataService = {
         if (official) {
             config.selic = official.selic;
             config.ipca = official.ipca;
-            config.cdi = official.cdi12m || official.cdi; 
+            config.cdi = official.cdi; // Taxa Meta
+            if (official.cdi12m) {
+                config.cdiReturn12m = official.cdi12m; // Taxa Acumulada
+            }
             config.riskFree = official.selic; 
         }
         
@@ -237,6 +229,10 @@ export const macroDataService = {
                 config.spxChange = globalIndices.spx.change;
             }
         }
+
+        // Salva os retornos de 12m
+        if (spxReturn12m) config.spxReturn12m = spxReturn12m;
+        if (ibovReturn12m) config.ibovReturn12m = ibovReturn12m;
 
         if (treasury && treasury.ntnbLong) config.ntnbLong = treasury.ntnbLong;
 

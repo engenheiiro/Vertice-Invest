@@ -5,6 +5,7 @@ import Transaction from '../models/Transaction.js';
 import UsageLog from '../models/UsageLog.js';
 import logger from '../config/logger.js';
 import { PLANS, LIMITS_CONFIG } from '../config/subscription.js';
+import { paymentService } from '../services/paymentService.js';
 
 const getMonthKey = () => {
     const now = new Date();
@@ -46,7 +47,6 @@ export const checkAccess = async (req, res, next) => {
         const usageLog = await UsageLog.findOne({ user: user.id, feature, monthKey });
         const currentUsage = usageLog ? usageLog.count : 0;
 
-        // Lógica para features consumíveis
         if (['report'].includes(feature) && currentUsage >= limit) {
              return res.status(403).json({ 
                 allowed: false, 
@@ -102,30 +102,34 @@ export const registerUsage = async (req, res, next) => {
     }
 };
 
+// --- ALTERAÇÃO PRINCIPAL: CHECKOUT REAL ---
 export const createCheckoutSession = async (req, res, next) => {
     try {
         const { planId } = req.body;
-        const userId = req.user.id;
+        const user = req.user; // Obtido do middleware authenticateToken
 
         if (!PLANS[planId]) {
             return res.status(400).json({ message: "Plano inválido." });
         }
 
-        const sessionId = `sess_${new Date().getTime()}_${Math.random().toString(36).substring(7)}`;
+        // Chama o serviço do Mercado Pago
+        const subscription = await paymentService.createSubscription(user, planId);
         
         res.status(200).json({
-            sessionId,
-            plan: planId,
-            amount: PLANS[planId].price,
-            redirectUrl: `/checkout?session_id=${sessionId}&plan=${planId}`
+            redirectUrl: subscription.init_point, // URL para o frontend redirecionar
+            subscriptionId: subscription.id
         });
 
     } catch (error) {
+        logger.error(`Erro ao criar sessão de checkout: ${error.message}`);
         next(error);
     }
 };
 
+// --- MANTIDO APENAS PARA COMPATIBILIDADE OU TESTES MANUAIS DE ADMIN ---
 export const confirmPayment = async (req, res, next) => {
+    // Esta rota agora é secundária, pois o Webhook deve confirmar o pagamento.
+    // Pode ser mantida para forçar ativação manual se necessário.
     const session = await mongoose.startSession();
     try {
         session.startTransaction();
@@ -140,8 +144,8 @@ export const confirmPayment = async (req, res, next) => {
             plan: planId,
             amount: PLANS[planId].price,
             status: 'PAID',
-            method: paymentMethod || 'CREDIT_CARD',
-            gatewayId: `tx_${Math.random().toString(36).substring(2, 15)}`
+            method: paymentMethod || 'MANUAL_CONFIRM',
+            gatewayId: `manual_${Math.random().toString(36).substring(2, 15)}`
         });
         await transaction.save({ session });
 
@@ -175,7 +179,7 @@ export const confirmPayment = async (req, res, next) => {
 
 export const getSubscriptionStatus = async (req, res, next) => {
     try {
-        const user = await User.findById(req.user.id).select('plan subscriptionStatus validUntil');
+        const user = await User.findById(req.user.id).select('plan subscriptionStatus validUntil mpSubscriptionId');
         const lastTransaction = await Transaction.findOne({ user: req.user.id }).sort({ createdAt: -1 });
 
         res.json({
