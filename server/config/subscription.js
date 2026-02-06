@@ -1,9 +1,9 @@
 
-// --- PREÇOS DE PRODUÇÃO ---
+// --- PREÇOS DE TESTE ---
 export const PLANS = {
-    'ESSENTIAL': { price: 39.90, days: 30 },
-    'PRO': { price: 119.90, days: 30 },
-    'BLACK': { price: 349.90, days: 30 }
+    'ESSENTIAL': { price: 1.00, days: 30 },
+    'PRO': { price: 1.50, days: 30 },
+    'BLACK': { price: 2.00, days: 30 }
 };
 
 // Definição de limites por feature e plano

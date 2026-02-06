@@ -113,25 +113,57 @@ export const macroDataService = {
     parseGenericRow($, tr) {
         const cols = $(tr).find('td');
         if (cols.length < 3) return null;
+        
         let title = '';
         let rate = 0;
-        let price = 0;
         let maturity = '-';
+        let foundPrices = []; // Armazena todos os valores monetários encontrados na linha
+
         cols.each((i, td) => {
             const text = $(td).text().trim().replace(/\s+/g, ' '); 
+            
+            // Título
             if (!title && text.length > 5 && (text.includes('Tesouro') || text.includes('IPCA') || text.includes('Prefixado') || text.includes('Selic') || text.includes('Renda+'))) {
                 title = text;
-            } else if (text.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+            } 
+            // Data
+            else if (text.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
                 maturity = text;
-            } else if (text.includes('%')) {
+            } 
+            // Taxa
+            else if (text.includes('%')) {
                 const val = this.cleanNumber(text);
                 if (val > 0 && val < 25) rate = val;
-            } else if (text.includes('R$') || (this.cleanNumber(text) > 30)) {
+            } 
+            // Preços (Pode ter unitário e mínimo)
+            else if (text.includes('R$') || (this.cleanNumber(text) > 30)) {
                 const val = this.cleanNumber(text);
-                if (val > 0) price = val;
+                if (val > 0) foundPrices.push(val);
             }
         });
-        if (title && rate > 0) return { title, rate, price, maturity };
+
+        // Lógica para diferenciar Preço Unitário e Investimento Mínimo
+        let minInvestment = 0;
+        let unitPrice = 0;
+
+        if (foundPrices.length > 0) {
+            // Ordena os preços encontrados. Geralmente o menor é o mínimo, o maior é o unitário.
+            foundPrices.sort((a, b) => a - b);
+            
+            minInvestment = foundPrices[0];
+            
+            if (foundPrices.length > 1) {
+                unitPrice = foundPrices[foundPrices.length - 1];
+            } else {
+                // Se só achou um preço, e for alto (> 1000), provavelmente é unitário, mas assumimos minInvestment por segurança no display
+                // Ou se for baixo (< 200), é minInvestment
+                unitPrice = minInvestment; 
+            }
+        }
+
+        if (title && rate > 0) {
+            return { title, rate, minInvestment, unitPrice, maturity };
+        }
         return null;
     },
 
@@ -157,37 +189,61 @@ export const macroDataService = {
     async updateTreasuryRates() {
         let ntnbLongRate = 6.00;
         const list = await this.scrapeInvestidor10();
-        const uniqueBonds = [];
-        const seenTitles = new Set();
+        
+        // Uso de Map para garantir unicidade absoluta pelo Título (Chave do Banco)
+        // Isso previne o erro E11000 duplicate key
+        const uniqueBondsMap = new Map();
+
         list.forEach(bond => {
             const cleanTitle = bond.title.replace(/\s+/g, ' ').trim();
-            const key = cleanTitle.toLowerCase().replace(/\s+/g, '').replace('jurossemestrais', '');
-            if (!seenTitles.has(key)) {
-                let type = 'IPCA';
-                let index = 'IPCA';
-                if (cleanTitle.includes('Prefixado') || cleanTitle.includes('LTN')) { type = 'PREFIXADO'; index = 'PRE'; }
-                else if (cleanTitle.includes('Selic') || cleanTitle.includes('LFT')) { type = 'SELIC'; index = 'SELIC'; }
-                else if (cleanTitle.includes('Renda+')) { type = 'RENDAMAIS'; }
-                else if (cleanTitle.includes('Educa+')) { type = 'EDUCA'; }
-                if (type === 'IPCA' && (cleanTitle.includes('2035') || cleanTitle.includes('2045'))) {
-                    if (bond.rate > 4) ntnbLongRate = bond.rate;
-                }
-                uniqueBonds.push({
+            
+            // Lógica de classificação
+            let type = 'IPCA';
+            let index = 'IPCA';
+            if (cleanTitle.includes('Prefixado') || cleanTitle.includes('LTN')) { type = 'PREFIXADO'; index = 'PRE'; }
+            else if (cleanTitle.includes('Selic') || cleanTitle.includes('LFT')) { type = 'SELIC'; index = 'SELIC'; }
+            else if (cleanTitle.includes('Renda+')) { type = 'RENDAMAIS'; }
+            else if (cleanTitle.includes('Educa+')) { type = 'EDUCA'; }
+            
+            // Captura NTNB Longa para Valuation
+            if (type === 'IPCA' && (cleanTitle.includes('2035') || cleanTitle.includes('2045'))) {
+                if (bond.rate > 4) ntnbLongRate = bond.rate;
+            }
+
+            // Adiciona ao Map (sobrescreve se houver duplicata no scraper)
+            if (!uniqueBondsMap.has(cleanTitle)) {
+                uniqueBondsMap.set(cleanTitle, {
                     title: cleanTitle,
                     type,
                     index,
                     rate: bond.rate,
-                    minInvestment: bond.price, 
+                    minInvestment: bond.minInvestment, 
+                    unitPrice: bond.unitPrice, // Novo Campo
                     maturityDate: bond.maturity,
                     updatedAt: new Date()
                 });
-                seenTitles.add(key);
             }
         });
+        
+        const uniqueBonds = Array.from(uniqueBondsMap.values());
+
         if (uniqueBonds.length >= 5) {
-            await TreasuryBond.deleteMany({});
-            await TreasuryBond.insertMany(uniqueBonds);
+            // BulkWrite com Upsert é mais seguro que deleteMany + insertMany
+            // Ele atualiza se existir, cria se não existir, evitando conflitos de chave única.
+            const operations = uniqueBonds.map(bond => ({
+                updateOne: {
+                    filter: { title: bond.title },
+                    update: { $set: bond },
+                    upsert: true
+                }
+            }));
+
+            await TreasuryBond.bulkWrite(operations);
+            logger.info(`🏛️ [Tesouro Direto] Atualizado com sucesso: ${uniqueBonds.length} títulos.`);
+        } else {
+            logger.warn(`⚠️ [Tesouro Direto] Falha na coleta: Apenas ${uniqueBonds.length} encontrados. Cache mantido.`);
         }
+        
         return { ntnbLong: ntnbLongRate };
     },
 

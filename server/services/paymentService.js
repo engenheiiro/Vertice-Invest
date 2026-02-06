@@ -6,20 +6,20 @@ import logger from '../config/logger.js';
 const accessToken = process.env.MP_ACCESS_TOKEN;
 const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
 
-// --- PREÇOS DE PRODUÇÃO ---
+// --- PREÇOS DE TESTE ---
 const PLANS_CONFIG = {
     'ESSENTIAL': { 
-        price: 39.90, 
+        price: 1.00, 
         title: 'Vértice Essential - Assinatura Mensal',
         description: 'Acesso básico ao Terminal e Carteira.'
     },
     'PRO': { 
-        price: 119.90, 
+        price: 1.50, 
         title: 'Vértice Pro - Assinatura Mensal',
         description: 'Acesso completo ao Research e Sinais em Tempo Real.'
     },
     'BLACK': { 
-        price: 349.90, 
+        price: 2.00, 
         title: 'Vértice Black - Assinatura Mensal',
         description: 'Gestão Private, Consultoria e Automação Fiscal.'
     }
