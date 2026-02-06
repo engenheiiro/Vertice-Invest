@@ -32,9 +32,9 @@ class HolidayService {
             }
             
             this.lastSync = new Date();
-            logger.info(`📅 [HolidayService] Sincronizado com sucesso via API. ${this.holidays.size} feriados em cache.`);
+            logger.info(`📅 [HolidayService] Sincronizado via BrasilAPI (${this.holidays.size} datas).`);
         } catch (error) {
-            logger.warn(`⚠️ [HolidayService] Falha ao buscar API externa: ${error.message}. Usando fallback local.`);
+            logger.warn(`⚠️ [HolidayService] Falha ao buscar BrasilAPI: ${error.message}. Usando fallback local.`);
         }
     }
 

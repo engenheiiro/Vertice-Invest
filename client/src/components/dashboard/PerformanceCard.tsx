@@ -6,19 +6,22 @@ const PerformanceCard = ({ macro, isLoading }: { macro: any, isLoading: boolean 
   const [viewMode, setViewMode] = useState<'chart' | 'simulator'>('chart');
   const [investmentValue, setInvestmentValue] = useState<string>('10000');
   
-  // Sanitização de Dados do Backend (Fix de 429% e outros valores anômalos)
+  // Sanitização
   let cdiAnnualRate = Number(macro?.cdi || 11.15);
-  // Proteção contra valores absurdos vindos do backend (ex: erro de cálculo cumulativo)
   if (cdiAnnualRate > 50) cdiAnnualRate = 11.15; 
 
   const spxReturn = Number(macro?.spx || 25.0); 
+  const ibovReturn = Number(macro?.ibov || 15.5);
   const iaReturn = 88.60; 
 
+  // ESTRATÉGIA VISUAL: Competidores uniformizados em cinza (bg-slate-700) para destacar o produto (IA Vértice)
   const data = [
-    { label: 'CDI', value: cdiAnnualRate, color: 'bg-slate-800', text: 'text-slate-500' },
-    { label: 'S&P 500', value: spxReturn, color: 'bg-slate-700', text: 'text-slate-400' },
+    { label: 'CDI', value: cdiAnnualRate, color: 'bg-slate-700', text: 'text-slate-500' },
+    { label: 'S&P 500', value: spxReturn, color: 'bg-slate-700', text: 'text-slate-500' },
+    { label: 'Ibovespa', value: ibovReturn, color: 'bg-slate-700', text: 'text-slate-500' },
     { label: 'IA Vértice', value: iaReturn, color: 'bg-gradient-to-r from-blue-600 to-indigo-500', text: 'text-white', glow: true },
-  ];
+  ].sort((a, b) => a.value - b.value); // Mantém a ordenação do menor para o maior
+
   const maxValue = 100;
 
   const numValue = parseFloat(investmentValue.replace(/\./g, '')) || 0;
@@ -34,7 +37,7 @@ const PerformanceCard = ({ macro, isLoading }: { macro: any, isLoading: boolean 
         <div className="relative z-10">
             <div className="flex justify-between items-start mb-6">
                 <div>
-                    <h3 className="text-lg font-bold text-white mb-0.5">Performance (12m)</h3>
+                    <h3 className="text-lg font-bold text-white mb-0.5">Performance (Acumulado 12m)</h3>
                     <div className="flex items-center gap-1.5">
                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
                          <p className="text-[10px] text-slate-400 uppercase tracking-wider">

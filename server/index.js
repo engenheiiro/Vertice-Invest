@@ -92,7 +92,7 @@ const panicLog = (message) => {
     if (!API_KEY) {
         logger.warn("⚠️ AVISO: API_KEY do Google Gemini não encontrada.");
     } else {
-        logger.info(`🔑 API Key detectada (${API_KEY.substring(0, 4)}...)`);
+        logger.info(`🧠 [AI] Google Gemini: Conectado (Key: ${API_KEY.substring(0, 4)}...)`);
     }
 
     const server = app.listen(PORT, () => {

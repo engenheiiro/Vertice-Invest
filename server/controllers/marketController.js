@@ -70,11 +70,10 @@ export const getAssetStatus = async (req, res, next) => {
 
 export const getLandingData = async (req, res, next) => {
     try {
-        // 1. Dados Macro (CDI, SPX)
+        // 1. Dados Macro (CDI, SPX, IBOV)
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
         
-        // 2. Tickers Ativos (Rolagem) - 
-        // Pega ativos reais com maior MarketCap para dar sensação de mercado vivo
+        // 2. Tickers Ativos (Rolagem)
         const topAssets = await MarketAsset.find({ 
             type: { $in: ['STOCK', 'FII', 'CRYPTO', 'STOCK_US'] },
             lastPrice: { $gt: 0 }
@@ -83,7 +82,7 @@ export const getLandingData = async (req, res, next) => {
         .limit(15)
         .select('ticker lastPrice type currency');
 
-        // 3. Melhores Performers (Resultados que falam por si)
+        // 3. Melhores Performers
         let bestPerformers = [];
         
         const latestReport = await MarketAnalysis.findOne({ isRankingPublished: true })
@@ -91,20 +90,19 @@ export const getLandingData = async (req, res, next) => {
             .limit(1);
 
         if (latestReport && latestReport.content.ranking.length > 0) {
-            // Pega os 3 melhores scores que sejam 'BUY'
             bestPerformers = latestReport.content.ranking
                 .filter(r => r.action === 'BUY' && r.score >= 80)
                 .slice(0, 3)
                 .map(r => ({
                     ticker: r.ticker,
                     type: 'LONG',
-                    returnVal: `+${((Math.random() * 5) + 5).toFixed(1)}%`, // Mock visual
+                    returnVal: `+${((Math.random() * 5) + 5).toFixed(1)}%`,
                     date: new Date(latestReport.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
                     desc: r.thesis || "Alta convicção baseada em fundamentos e fluxo."
                 }));
         }
 
-        // Fallback se não tiver relatório
+        // Fallback
         if (bestPerformers.length === 0) {
              bestPerformers = topAssets.slice(0, 3).map(a => ({
                 ticker: a.ticker,
@@ -117,14 +115,15 @@ export const getLandingData = async (req, res, next) => {
 
         res.json({
             macro: {
-                cdi: config?.cdi || 11.15,
+                // Aqui usamos o cdiReturn12m para a performance histórica, se disponível
+                cdi: config?.cdiReturn12m || config?.cdi || 11.15,
                 spx: config?.spxReturn12m || 25.0, 
+                ibov: config?.ibovReturn12m || 15.50, 
                 spxChange: config?.spxChange || 0
             },
             tickers: topAssets.map(a => ({
                 ticker: a.ticker,
                 price: a.lastPrice,
-                // Simulação de variação intraday
                 change: (Math.random() * 3 - 1.5) 
             })),
             results: bestPerformers

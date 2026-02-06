@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js",
+    "dev": "npx nodemon index.js --ignore logs/ --ignore **/*.log --ignore crash-report.txt",
     "test": "vitest",
     "sync:prod": "node server/scripts/syncProdData.js"
   },
@@ -31,9 +31,11 @@
     "yahoo-finance2": "^3.11.3",
     "axios": "^1.6.0",
     "cheerio": "^1.0.0-rc.12",
-    "iconv-lite": "^0.6.3"
+    "iconv-lite": "^0.6.3",
+    "mercadopago": "^2.0.8"
   },
   "devDependencies": {
-    "vitest": "^1.0.0"
+    "vitest": "^1.0.0",
+    "nodemon": "^3.0.0"
   }
 }

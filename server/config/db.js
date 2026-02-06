@@ -25,7 +25,7 @@ const connectDB = async () => {
 
   try {
     const conn = await mongoose.connect(MONGO_URI, connectOptions);
-    logger.info(`✅ MongoDB Conectado: ${conn.connection.host}`);
+    logger.info(`🗄️ [Database] MongoDB Conectado: ${conn.connection.host}`);
     
     mongoose.connection.on('error', err => {
       logger.error(`🔥 Erro de runtime no MongoDB: ${err.message}`);

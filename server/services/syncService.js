@@ -13,10 +13,10 @@ export const syncService = {
      */
     async performFullSync() {
         try {
-            logger.info("🔄 [SYNC-ENGINE] Iniciando rotina de atualização massiva...");
-            
+            logger.info("ℹ️ [Sync] Etapa 1: Macroeconomia");
             await macroDataService.performMacroSync();
 
+            logger.info("ℹ️ [Sync] Etapa 2: Fundamentos (Scraping)");
             const operations = [];
             const timestamp = new Date();
 
@@ -26,17 +26,11 @@ export const syncService = {
             const isScrapingFailed = stocksMap.size === 0 && fiiMap.size === 0;
 
             if (isScrapingFailed) {
-                logger.error("❌ ERRO CRÍTICO: Scraping falhou totalmente. Abortando atualização.");
                 return { success: false, error: "Scraping blocked." };
             }
 
             const pushOp = (ticker, data, type) => {
-                // IGNORAR ATIVOS MORTOS (ZOMBIE FILTER)
-                // Se o ativo tem liquidez média zerada ou muito baixa, é lixo. Não salvamos.
                 const liquidity = Number(data.liq2m) || Number(data.liquidity) || 0;
-                
-                // Mínimo de R$ 5.000,00 de negociação média para ser considerado no banco.
-                // Isso elimina recibos de subscrição antigos (finais 12, 13, 14, 15) e empresas falidas.
                 if (liquidity < 5000) return;
 
                 let finalSector = SECTOR_OVERRIDES[ticker];
@@ -114,13 +108,11 @@ export const syncService = {
 
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
-                logger.info(`✅ [SYNC-ENGINE] Fundamentos atualizados para ${operations.length} ativos.`);
+                logger.info(`ℹ️ [Sync] Etapa 2: ${operations.length} ativos fundamentados.`);
                 
-                logger.info("📡 [SYNC-ENGINE] Iniciando 'Paint Job': Atualizando cotações...");
+                logger.info("ℹ️ [Sync] Etapa 3: Cotações em tempo real");
                 
                 const validTickers = [];
-                // FILTRO DE ATUALIZAÇÃO REAL-TIME AINDA MAIS RÍGIDO
-                // Só gasta cota de API (Brapi/Yahoo) com ativos que negociam > R$ 100k/dia
                 const MIN_LIQUIDITY_FOR_LIVE_QUOTE = 100000; 
 
                 stocksMap.forEach((v, k) => {
@@ -133,8 +125,6 @@ export const syncService = {
                     if (liq > MIN_LIQUIDITY_FOR_LIVE_QUOTE) validTickers.push(k);
                 });
                 
-                logger.info(`   ➤ Filtrados ${validTickers.length} ativos líquidos para atualização real-time (de ${stocksMap.size + fiiMap.size} totais).`);
-
                 // Batch
                 const BATCH_SIZE = 50;
                 let updatedQuotesCount = 0;
@@ -145,16 +135,13 @@ export const syncService = {
                     await new Promise(r => setTimeout(r, 200)); 
                 }
                 
-                logger.info(`✅ [SYNC-ENGINE] Cotações finalizadas. ${updatedQuotesCount} ativos atualizados.`);
-
                 return { success: true, count: operations.length };
             } else {
-                logger.warn("⚠️ [SYNC-ENGINE] Nenhum ativo válido para atualizar.");
-                return { success: false, count: 0 };
+                return { success: false, count: 0, error: "Nenhum ativo válido encontrado." };
             }
 
         } catch (error) {
-            logger.error(`❌ [SYNC-ENGINE] Falha fatal: ${error.message}`);
+            logger.error(`❌ [Sync Interno] Falha: ${error.message}`);
             return { success: false, error: error.message };
         }
     }
