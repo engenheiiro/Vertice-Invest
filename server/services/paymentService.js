@@ -6,21 +6,20 @@ import logger from '../config/logger.js';
 const accessToken = process.env.MP_ACCESS_TOKEN;
 const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
 
-// --- PREÇOS DE TESTE (PRODUÇÃO) ---
-// Mínimo de R$ 1,00 exigido para Assinaturas
+// --- PREÇOS DE PRODUÇÃO ---
 const PLANS_CONFIG = {
     'ESSENTIAL': { 
-        price: 1.00, 
+        price: 39.90, 
         title: 'Vértice Essential - Assinatura Mensal',
         description: 'Acesso básico ao Terminal e Carteira.'
     },
     'PRO': { 
-        price: 2.00, 
+        price: 119.90, 
         title: 'Vértice Pro - Assinatura Mensal',
         description: 'Acesso completo ao Research e Sinais em Tempo Real.'
     },
     'BLACK': { 
-        price: 3.00, 
+        price: 349.90, 
         title: 'Vértice Black - Assinatura Mensal',
         description: 'Gestão Private, Consultoria e Automação Fiscal.'
     }
@@ -37,8 +36,6 @@ export const paymentService = {
             throw new Error("Plano inválido.");
         }
 
-        // FIX: O objeto user vindo do JWT (req.user) tem a propriedade .id, 
-        // enquanto o objeto do banco tem ._id. Verificamos ambos.
         const userId = user.id || user._id;
 
         if (!userId) {
@@ -48,29 +45,32 @@ export const paymentService = {
         const preApproval = new PreApproval(client);
 
         try {
-            // FIX: back_url não pode conter '#' (Hash).
-            // Solução: Apontamos para uma rota de API no backend que redireciona para o frontend.
+            // URL de retorno (Backend que redireciona para Frontend)
             const apiUrl = (process.env.API_URL || 'http://localhost:5000').replace(/\/$/, '');
             const backUrl = `${apiUrl}/api/subscription/return?plan=${planKey}`;
             
-            // --- CORREÇÃO PARA MODO TESTE ---
-            // Se estivermos usando credenciais de teste (TEST-...), não podemos usar o email real do admin
-            // como pagador, pois o MP bloqueia "auto-pagamento". Usamos um email fake aleatório.
+            // --- LÓGICA ANTI-TRAVA SANDBOX (Mantida por segurança, só ativa se detectar TEST-) ---
             let payerEmail = user.email;
+            
             if (accessToken && accessToken.startsWith('TEST-')) {
-                payerEmail = `test_user_${Math.floor(Math.random() * 10000)}@test.com`;
-                logger.info(`🧪 Modo Teste Detectado: Usando email fictício ${payerEmail} para evitar bloqueio.`);
+                const randomId = Math.floor(Math.random() * 1000000);
+                payerEmail = `test_user_${randomId}@test.com`;
+                logger.info(`🧪 [MP Sandbox] Email substituído por '${payerEmail}' para evitar conflito.`);
             }
+
+            // Data de início ISO
+            const startDate = new Date().toISOString();
 
             const body = {
                 reason: planConfig.title,
-                external_reference: userId.toString(), // VITAL: Vincula o pagamento ao usuário no Webhook
+                external_reference: userId.toString(),
                 payer_email: payerEmail,
                 auto_recurring: {
                     frequency: 1,
                     frequency_type: 'months',
                     transaction_amount: planConfig.price,
-                    currency_id: 'BRL'
+                    currency_id: 'BRL',
+                    start_date: startDate
                 },
                 back_url: backUrl,
                 status: 'pending'
@@ -78,16 +78,15 @@ export const paymentService = {
 
             const response = await preApproval.create({ body });
             
-            logger.info(`💳 Assinatura MP criada para ${user.email} - Init Point: ${response.init_point}`);
+            logger.info(`💳 Assinatura MP Criada (${planKey} - R$ ${planConfig.price}): ${response.init_point}`);
             
             return {
-                init_point: response.init_point, // URL para redirecionar o usuário
+                init_point: response.init_point,
                 id: response.id
             };
 
         } catch (error) {
             logger.error(`❌ Erro Mercado Pago: ${error.message}`);
-            // Log detalhado para debug se disponível
             if (error.cause) logger.error(JSON.stringify(error.cause));
             throw new Error("Falha ao comunicar com gateway de pagamento.");
         }
