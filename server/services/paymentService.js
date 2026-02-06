@@ -58,8 +58,13 @@ export const paymentService = {
                 logger.info(`🧪 [MP Sandbox] Email substituído por '${payerEmail}' para evitar conflito.`);
             }
 
-            // Data de início ISO
-            const startDate = new Date().toISOString();
+            // --- CORREÇÃO DE DATA (BUFFER DE SEGURANÇA) ---
+            // Adiciona 1 hora ao tempo atual.
+            // Motivo: Se houver latência de rede ou diferença de relógio entre servidor (Render) e MP,
+            // enviar "agora" exato causa erro "cannot be a past date".
+            const futureDate = new Date();
+            futureDate.setHours(futureDate.getHours() + 1);
+            const startDate = futureDate.toISOString();
 
             const body = {
                 reason: planConfig.title,
@@ -70,7 +75,7 @@ export const paymentService = {
                     frequency_type: 'months',
                     transaction_amount: planConfig.price,
                     currency_id: 'BRL',
-                    start_date: startDate
+                    start_date: startDate // Data segura no futuro
                 },
                 back_url: backUrl,
                 status: 'pending'
