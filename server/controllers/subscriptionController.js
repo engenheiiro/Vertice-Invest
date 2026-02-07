@@ -165,15 +165,15 @@ export const syncPayment = async (req, res, next) => {
         if (payment.status === 'approved') {
             const user = await User.findById(userId);
             
-            // Lógica de Preço (Igual ao Webhook)
+            // Lógica de Preço (Atualizada para Produção)
             const amount = payment.transaction_amount;
             let plan = 'ESSENTIAL';
-            if (amount >= 1.5 && amount < 2.5) plan = 'PRO';
-            if (amount >= 2.5) plan = 'BLACK';
+            if (amount >= 340) plan = 'BLACK';      // R$ 349,90
+            else if (amount >= 110) plan = 'PRO';   // R$ 119,90
+            else if (amount >= 30) plan = 'ESSENTIAL'; // R$ 39,90
 
             // Verifica se já não foi processado (Idempotência básica)
             if (user.plan === plan && user.validUntil && new Date(user.validUntil) > new Date()) {
-                // Já está ativo, não precisa fazer nada
                 return res.json({ success: true, message: "Plano já estava ativo." });
             }
 
@@ -216,18 +216,13 @@ export const syncPayment = async (req, res, next) => {
     }
 };
 
-// Mantido apenas para compatibilidade legada
 export const confirmPayment = async (req, res, next) => {
+    // Mock legacy - mantido para não quebrar testes
     const session = await mongoose.startSession();
     try {
         session.startTransaction();
-        const { planId, paymentMethod } = req.body;
-        const userId = req.user.id;
+        const { planId } = req.body;
         if (!PLANS[planId]) throw new Error("Plano inválido");
-        
-        // ... lógica antiga de mock ...
-        // (Mantida para não quebrar testes unitários antigos se existirem)
-        
         await session.commitTransaction();
         session.endSession();
         res.status(200).json({ success: true });

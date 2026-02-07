@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ShieldCheck, Lock, CreditCard, ChevronLeft } from 'lucide-react';
@@ -26,6 +27,7 @@ export const Checkout = () => {
         }
     }, [plan, sessionId, navigate]);
 
+    // PREÇOS REAIS DE PRODUÇÃO
     const getPlanDetails = () => {
         switch(plan) {
             case 'ESSENTIAL': return { name: 'Essential', price: '39,90' };
@@ -42,7 +44,6 @@ export const Checkout = () => {
         setStatus('loading');
 
         try {
-            // Simulação de delay de rede
             await new Promise(resolve => setTimeout(resolve, 2000));
             
             await subscriptionService.confirmPayment(plan!, 'CREDIT_CARD');
