@@ -37,12 +37,11 @@ export const paymentService = {
             const isSandbox = accessToken.startsWith('TEST-');
             
             // Em Sandbox, não podemos usar o mesmo e-mail do vendedor (Seller) como comprador (Buyer).
-            // Geramos um e-mail fictício para o comprador se estivermos testando.
             let payerEmail = user.email;
             if (isSandbox) {
                 const randomId = Math.floor(Math.random() * 1000000);
                 payerEmail = `test_user_${randomId}@test.com`;
-                logger.info(`🧪 [MP Sandbox] Email fake gerado para evitar conflito Seller-Buyer: ${payerEmail}`);
+                logger.info(`🧪 [MP Sandbox] Email fake gerado para evitar conflito: ${payerEmail}`);
             }
 
             // --- CRIAÇÃO DA PREFERÊNCIA (CHECKOUT API) ---
@@ -50,11 +49,13 @@ export const paymentService = {
                 items: [
                     {
                         id: planKey,
-                        title: planConfig.title || `Plano ${planKey}`,
-                        description: `Acesso mensal à plataforma Vértice Invest (${planKey})`,
+                        // TÍTULO EXPLÍCITO: Substitui qualquer padrão do painel
+                        title: `Vértice Invest - ${planConfig.title || planKey}`,
+                        description: `Acesso Premium à plataforma Vértice Invest (${planKey})`,
                         quantity: 1,
                         unit_price: Number(planConfig.price),
-                        currency_id: 'BRL'
+                        currency_id: 'BRL',
+                        category_id: 'services' // Categoria correta para evitar confusão
                     }
                 ],
                 external_reference: userId.toString(),
@@ -68,7 +69,7 @@ export const paymentService = {
                 
                 payer: {
                     name: user.name,
-                    email: payerEmail // Email seguro (Real ou Fake dependendo do env)
+                    email: payerEmail
                 },
                 
                 payment_methods: {
@@ -76,10 +77,11 @@ export const paymentService = {
                     installments: 1 // Assinatura mensal = 1x
                 },
                 
+                // NOME NA FATURA DO CARTÃO (Máx 22 chars)
                 statement_descriptor: "VERTICE INVEST"
             };
 
-            logger.info(`💳 Criando Checkout (Preference) para User ${userId} | Plano: ${planKey} | Valor: ${planConfig.price}`);
+            logger.info(`💳 Criando Checkout para User ${userId} | Plano: ${planKey} | Valor: ${planConfig.price}`);
 
             const response = await preference.create({ body });
             
