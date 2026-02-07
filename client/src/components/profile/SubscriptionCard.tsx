@@ -8,12 +8,12 @@ export const SubscriptionCard = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
 
-    // Configurações de exibição baseadas no plano
+    // Configurações de exibição baseadas no plano (PREÇOS REAIS)
     const planDetails: Record<UserPlan, { name: string; price: string; features: string[] }> = {
         GUEST: { name: 'Visitante', price: '0,00', features: ['Acesso Limitado', 'Cotações com Delay', 'Comunidade (Leitura)'] },
-        ESSENTIAL: { name: 'Essential', price: '1,00', features: ['Carteira Brasil 10', 'Cursos Básicos', 'Sinais com Delay'] },
-        PRO: { name: 'Vértice Pro', price: '2,00', features: ['Neural Engine Tempo Real', 'Todas as Carteiras', 'Morning Call Exclusivo'] },
-        BLACK: { name: 'Black Elite', price: '3,00', features: ['Concierge 24/7', 'Carteira Private', 'Gestão Tributária'] }
+        ESSENTIAL: { name: 'Essential', price: '39,90', features: ['Carteira Brasil 10', 'Cursos Básicos', 'Sinais com Delay'] },
+        PRO: { name: 'Vértice Pro', price: '119,90', features: ['Neural Engine Tempo Real', 'Todas as Carteiras', 'Morning Call Exclusivo'] },
+        BLACK: { name: 'Black Elite', price: '349,90', features: ['Concierge 24/7', 'Carteira Private', 'Gestão Tributária'] }
     };
 
     const userPlan = user?.plan && planDetails[user.plan] ? user.plan : 'GUEST';

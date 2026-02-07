@@ -30,15 +30,17 @@ export const handleMercadoPagoWebhook = async (req, res) => {
             const userId = payment.external_reference; // Recuperamos o ID do usuário daqui
             
             // Descobre qual plano foi comprado baseado no valor
-            // Lógica ajustada para preços de teste (1, 2, 3)
+            // Lógica ajustada para PREÇOS DE PRODUÇÃO
             const amount = payment.transaction_amount;
-            let plan = 'ESSENTIAL'; // Default (R$ 1.00)
+            let plan = 'ESSENTIAL'; // Default
             
-            if (amount >= 1.5 && amount < 2.5) plan = 'PRO'; // R$ 2.00
-            if (amount >= 2.5) plan = 'BLACK'; // R$ 3.00
+            // Faixas de segurança para evitar erro de float ou pequenas taxas
+            if (amount >= 340) plan = 'BLACK';      // R$ 349,90
+            else if (amount >= 110) plan = 'PRO';   // R$ 119,90
+            else if (amount >= 30) plan = 'ESSENTIAL'; // R$ 39,90
 
             // Logs de Diagnóstico
-            logger.info(`💰 Pagamento ${resourceId}: Status=${status} | User=${userId} | Valor=${amount} | Plano=${plan}`);
+            logger.info(`💰 Pagamento ${resourceId}: Status=${status} | User=${userId} | Valor=${amount} | Plano Detectado=${plan}`);
 
             if (status === 'approved' && userId) {
                 const user = await User.findById(userId);
