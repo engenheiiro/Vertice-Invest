@@ -1,3 +1,4 @@
+
 import { authService } from './auth';
 
 export const subscriptionService = {
@@ -18,6 +19,17 @@ export const subscriptionService = {
         });
         
         if (!response.ok) throw new Error("Falha no pagamento");
+        return await response.json();
+    },
+
+    // Novo método para forçar a verificação do pagamento
+    async syncPayment(paymentId: string) {
+        const response = await authService.api('/api/subscription/sync-payment', {
+            method: 'POST',
+            body: JSON.stringify({ paymentId })
+        });
+        
+        if (!response.ok) throw new Error("Não foi possível verificar o pagamento.");
         return await response.json();
     },
 
