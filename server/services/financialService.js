@@ -316,18 +316,37 @@ export const financialService = {
                 cursor.setDate(cursor.getDate() + 1);
             }
 
+            // --- LÓGICA DE RETRY PARA TRANSAÇÃO ---
             if (snapshots.length > 0) {
                 const session = await mongoose.startSession();
+                let retries = 3;
+                
                 try {
-                    session.startTransaction();
-                    await WalletSnapshot.deleteMany({ user: userId }).session(session);
-                    const CHUNK_SIZE = 5000;
-                    for (let i = 0; i < snapshots.length; i += CHUNK_SIZE) {
-                        await WalletSnapshot.insertMany(snapshots.slice(i, i + CHUNK_SIZE), { session });
+                    while (retries > 0) {
+                        try {
+                            session.startTransaction();
+                            await WalletSnapshot.deleteMany({ user: userId }).session(session);
+                            const CHUNK_SIZE = 5000;
+                            for (let i = 0; i < snapshots.length; i += CHUNK_SIZE) {
+                                await WalletSnapshot.insertMany(snapshots.slice(i, i + CHUNK_SIZE), { session });
+                            }
+                            await session.commitTransaction();
+                            break; // Sucesso
+                        } catch (err) {
+                            await session.abortTransaction();
+                            // Verifica se é conflito de escrita
+                            if (err.message.includes('Write conflict') || err.hasErrorLabel?.('TransientTransactionError')) {
+                                if (retries > 1) {
+                                    retries--;
+                                    logger.warn(`⚠️ [Engine] WriteConflict detectado. Retentando rebuild (${3 - retries}/3)...`);
+                                    await new Promise(r => setTimeout(r, 250)); // Backoff
+                                    continue;
+                                }
+                            }
+                            throw err; // Se não for retry ou acabou tentativas
+                        }
                     }
-                    await session.commitTransaction();
                 } catch (writeErr) {
-                    await session.abortTransaction();
                     throw writeErr;
                 } finally {
                     session.endSession();
