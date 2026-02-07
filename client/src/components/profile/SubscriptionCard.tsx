@@ -1,7 +1,7 @@
+
 import React from 'react';
-import { CreditCard, CheckCircle2, ArrowRight } from 'lucide-react';
+import { CreditCard, CheckCircle2, ArrowRight, CalendarClock } from 'lucide-react';
 import { useAuth, UserPlan } from '../../contexts/AuthContext';
-// @ts-ignore
 import { useNavigate } from 'react-router-dom';
 
 export const SubscriptionCard = () => {
@@ -20,6 +20,12 @@ export const SubscriptionCard = () => {
     const userPlan = user?.plan && planDetails[user.plan] ? user.plan : 'GUEST';
     const currentPlan = planDetails[userPlan];
     const isMaxTier = userPlan === 'BLACK';
+    const isPaidPlan = userPlan !== 'GUEST';
+
+    const formatDate = (dateStr?: string) => {
+        if (!dateStr) return 'Vitalício';
+        return new Date(dateStr).toLocaleDateString('pt-BR');
+    };
 
     return (
         <div className="bg-gradient-to-br from-[#080C14] to-[#0A101F] border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
@@ -40,6 +46,11 @@ export const SubscriptionCard = () => {
                 </div>
                 <div className="text-right">
                     <p className="text-2xl font-mono text-white">R$ {currentPlan.price}<span className="text-sm text-slate-500">/mês</span></p>
+                    {isPaidPlan && user?.validUntil && (
+                        <p className="text-[10px] text-emerald-400 font-bold mt-1 flex items-center justify-end gap-1">
+                            <CalendarClock size={10} /> Vence em: {formatDate(user.validUntil)}
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -62,7 +73,7 @@ export const SubscriptionCard = () => {
                             Método de Pagamento
                         </p>
                         <p className="text-[10px] text-slate-500">
-                            {user?.subscriptionStatus === 'TRIAL' ? 'Período de Testes' : 'Gerenciar no Portal'}
+                            {user?.subscriptionStatus === 'TRIAL' ? 'Período de Testes' : 'Mercado Pago (Pré-pago)'}
                         </p>
                     </div>
                 </div>
@@ -72,7 +83,7 @@ export const SubscriptionCard = () => {
                         onClick={() => navigate('/pricing')}
                         className="text-xs font-bold text-blue-400 hover:text-white hover:bg-blue-600 px-3 py-1.5 rounded transition-all flex items-center gap-1"
                     >
-                        Fazer Upgrade <ArrowRight size={12} />
+                        {isPaidPlan ? 'Renovar / Upgrade' : 'Fazer Upgrade'} <ArrowRight size={12} />
                     </button>
                 )}
             </div>

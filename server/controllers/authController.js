@@ -13,7 +13,7 @@ import logger from '../config/logger.js';
 const ACCESS_TOKEN_EXPIRATION = '15m';
 const REFRESH_TOKEN_EXPIRATION_DAYS = 7;
 
-// Helper para Log de Auditoria
+// Helper para Log
 const logAudit = async (req, action, details, userId = null, email = null) => {
     try {
         const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -24,10 +24,8 @@ const logAudit = async (req, action, details, userId = null, email = null) => {
             details,
             ipAddress: Array.isArray(ip) ? ip[0] : ip,
             userAgent: req.headers['user-agent']
-        }).catch(err => logger.error(`Erro ao salvar log de auditoria: ${err.message}`));
-    } catch (e) {
-        logger.error(`Falha na chamada de log: ${e.message}`);
-    }
+        }).catch(err => logger.error(`Erro log: ${err.message}`));
+    } catch (e) {}
 };
 
 export const register = async (req, res, next) => {
@@ -38,7 +36,6 @@ export const register = async (req, res, next) => {
 
     const { name, email, password } = req.body;
 
-    // Validação extra no backend
     if (!name || name.length < 2) throw new Error("Nome muito curto.");
     if (!password || password.length < 6) throw new Error("Senha deve ter no mínimo 6 caracteres.");
 
@@ -53,8 +50,6 @@ export const register = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Criação do usuário (Padrão: USER e GUEST)
-    // Alterado de ESSENTIAL para GUEST conforme regra de negócio
     const newUser = new User({ 
       name, 
       email, 
@@ -63,31 +58,19 @@ export const register = async (req, res, next) => {
       plan: 'GUEST', 
       subscriptionStatus: 'ACTIVE',
       validUntil: null,
-      hasSeenTutorial: false // Padrão false para novos usuários
+      hasSeenTutorial: false 
     });
     
     await newUser.save({ session });
     
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    await AuditLog.create([{
-        user: newUser._id,
-        email: email,
-        action: 'REGISTER_SUCCESS',
-        details: 'Novo usuário registrado',
-        ipAddress: Array.isArray(ip) ? ip[0] : ip,
-        userAgent: req.headers['user-agent']
-    }], { session });
-
     await session.commitTransaction();
     session.endSession();
     
-    logger.info(`Novo usuário registrado: ${email}`);
     res.status(201).json({ message: "Conta criada com sucesso!" });
 
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    logger.error(`Erro na transação de registro: ${error.message}`);
     next(error);
   }
 };
@@ -97,26 +80,24 @@ export const login = async (req, res, next) => {
     const JWT_SECRET = process.env.JWT_SECRET;
     const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "fallback_refresh_secret";
 
-    if (!JWT_SECRET) throw new Error("JWT_SECRET não configurado no servidor.");
+    if (!JWT_SECRET) throw new Error("JWT_SECRET não configurado.");
 
     const { email, password } = req.body;
     
     const user = await User.findOne({ email });
-    const invalidCredentialsMsg = "Credenciais inválidas.";
+    const invalidMsg = "Credenciais inválidas.";
 
     if (!user) {
-        logAudit(req, 'LOGIN_FAIL', 'Usuário inexistente', null, email);
-        return res.status(401).json({ message: invalidCredentialsMsg });
+        return res.status(401).json({ message: invalidMsg });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     
     if (!isMatch) {
-        logAudit(req, 'LOGIN_FAIL', 'Senha incorreta', user._id, email);
-        return res.status(401).json({ message: invalidCredentialsMsg });
+        return res.status(401).json({ message: invalidMsg });
     }
 
-    // Incluindo ROLE no Payload do Token
+    // Geração de Tokens
     const accessToken = jwt.sign(
       { id: user._id, email: user.email, plan: user.plan, role: user.role }, 
       JWT_SECRET,
@@ -148,7 +129,7 @@ export const login = async (req, res, next) => {
     logAudit(req, 'LOGIN_SUCCESS', 'Login via Senha', user._id, email);
     
     res.status(200).json({ 
-      message: "Login realizado com sucesso.",
+      message: "Login realizado.",
       accessToken,
       user: { 
         id: user._id, 
@@ -157,7 +138,8 @@ export const login = async (req, res, next) => {
         plan: user.plan,
         role: user.role, 
         subscriptionStatus: user.subscriptionStatus,
-        hasSeenTutorial: user.hasSeenTutorial, // CRÍTICO: Retorna o estado do tutorial
+        validUntil: user.validUntil, // Envia data de validade para o frontend
+        hasSeenTutorial: user.hasSeenTutorial,
         cpf: user.cpf 
       }
     });
@@ -170,21 +152,15 @@ export const login = async (req, res, next) => {
 export const refreshToken = async (req, res, next) => {
   try {
     const JWT_SECRET = process.env.JWT_SECRET;
-    if (!JWT_SECRET) throw new Error("JWT_SECRET não configurado.");
-
     const cookies = req.cookies;
     if (!cookies?.jwt) return res.status(401).json({ message: "Sessão inválida." });
     
     const requestToken = cookies.jwt;
-
     const tokenInDb = await RefreshToken.findOne({ token: requestToken });
-    if (!tokenInDb) {
-      return res.status(403).json({ message: "Token inválido." });
-    }
-
-    if (RefreshToken.verifyExpiration(tokenInDb)) {
-      await RefreshToken.findByIdAndDelete(tokenInDb._id);
-      return res.status(403).json({ message: "Sessão expirada. Faça login novamente." });
+    
+    if (!tokenInDb || RefreshToken.verifyExpiration(tokenInDb)) {
+      if (tokenInDb) await RefreshToken.findByIdAndDelete(tokenInDb._id);
+      return res.status(403).json({ message: "Sessão expirada." });
     }
 
     const user = await User.findById(tokenInDb.user);
@@ -208,18 +184,7 @@ export const logout = async (req, res, next) => {
     const cookies = req.cookies;
     if (cookies?.jwt) {
        await RefreshToken.findOneAndDelete({ token: cookies.jwt });
-       try {
-         const decoded = jwt.decode(cookies.jwt);
-         if (decoded?.id) {
-            logAudit(req, 'LOGOUT', 'Logout realizado', decoded.id);
-         }
-       } catch (e) {}
-
-       res.clearCookie('jwt', { 
-           httpOnly: true, 
-           sameSite: 'strict', 
-           secure: process.env.NODE_ENV === 'production' 
-       });
+       res.clearCookie('jwt', { httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production' });
     }
     res.status(200).json({ message: "Logout realizado." });
   } catch (error) {
@@ -232,22 +197,17 @@ export const forgotPassword = async (req, res, next) => {
     const { email } = req.body;
     const user = await User.findOne({ email });
 
-    if (!user) {
-      return res.status(200).json({ message: "Se o email estiver cadastrado, as instruções foram enviadas." });
-    }
+    if (!user) return res.status(200).json({ message: "Se o email existir, instruções foram enviadas." });
 
     const token = crypto.randomBytes(20).toString('hex');
-    
     user.resetPasswordToken = token;
     user.resetPasswordExpires = Date.now() + 3600000;
     await user.save();
 
-    logAudit(req, 'FORGOT_PASSWORD_REQUEST', 'Solicitação de reset', user._id, email);
-
     const origin = req.get('origin') || 'http://localhost:5173';
     await sendResetPasswordEmail(user.email, token, origin);
 
-    res.status(200).json({ message: "Se o email estiver cadastrado, as instruções foram enviadas." });
+    res.status(200).json({ message: "Se o email existir, instruções foram enviadas." });
   } catch (error) {
     next(error);
   }
@@ -256,69 +216,48 @@ export const forgotPassword = async (req, res, next) => {
 export const resetPassword = async (req, res, next) => {
   try {
     const { token, newPassword } = req.body;
+    const user = await User.findOne({ resetPasswordToken: token, resetPasswordExpires: { $gt: Date.now() } });
 
-    const user = await User.findOne({ 
-      resetPasswordToken: token,
-      resetPasswordExpires: { $gt: Date.now() }
-    });
-
-    if (!user) {
-      return res.status(400).json({ message: "Link de redefinição inválido ou expirado." });
-    }
+    if (!user) return res.status(400).json({ message: "Token inválido ou expirado." });
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
-    
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
-
     await user.save();
-    
-    logAudit(req, 'PASSWORD_RESET_SUCCESS', 'Senha alterada com sucesso', user._id, user.email);
 
-    res.status(200).json({ message: "Senha atualizada com sucesso." });
+    res.status(200).json({ message: "Senha atualizada." });
   } catch (error) {
     next(error);
   }
 };
 
-// --- NOVAS FUNÇÕES (PERFIL) ---
-
 export const updateProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const { name, cpf, phone, occupation } = req.body;
-
+        const { name, cpf } = req.body;
         const cleanCpf = cpf ? cpf.replace(/\D/g, '') : null;
 
         if (cleanCpf) {
-            const existingUser = await User.findOne({ cpf: cleanCpf });
-            if (existingUser && existingUser._id.toString() !== userId) {
-                return res.status(409).json({ message: "Este CPF já está associado a outra conta." });
-            }
+            const existing = await User.findOne({ cpf: cleanCpf });
+            if (existing && existing._id.toString() !== userId) return res.status(409).json({ message: "CPF já utilizado." });
         }
 
-        const updates = {};
-        if (name) updates.name = name;
-        if (cleanCpf) updates.cpf = cleanCpf;
+        const updatedUser = await User.findByIdAndUpdate(userId, { name, cpf: cleanCpf }, { new: true });
         
-        const updatedUser = await User.findByIdAndUpdate(userId, updates, { new: true });
-        
-        logAudit(req, 'PROFILE_UPDATE', 'Perfil atualizado', userId, updatedUser.email);
-
         res.json({ 
-            message: "Perfil atualizado com sucesso.", 
+            message: "Perfil atualizado.", 
             user: {
                 id: updatedUser._id,
                 name: updatedUser.name,
                 email: updatedUser.email,
                 role: updatedUser.role,
                 plan: updatedUser.plan,
+                validUntil: updatedUser.validUntil,
                 hasSeenTutorial: updatedUser.hasSeenTutorial,
                 cpf: updatedUser.cpf
             } 
         });
-
     } catch (error) {
         next(error);
     }
@@ -329,37 +268,23 @@ export const changePassword = async (req, res, next) => {
         const userId = req.user.id;
         const { oldPassword, newPassword } = req.body;
 
-        if (!newPassword || newPassword.length < 6) {
-            return res.status(400).json({ message: "A nova senha deve ter no mínimo 6 caracteres." });
-        }
-
         const user = await User.findById(userId);
-        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-
         const isMatch = await bcrypt.compare(oldPassword, user.password);
-        if (!isMatch) {
-            logAudit(req, 'PASSWORD_CHANGE_FAIL', 'Senha antiga incorreta', userId, user.email);
-            return res.status(401).json({ message: "A senha atual está incorreta." });
-        }
+        if (!isMatch) return res.status(401).json({ message: "Senha atual incorreta." });
 
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(newPassword, salt);
         await user.save();
 
-        logAudit(req, 'PASSWORD_CHANGE_SUCCESS', 'Senha alterada manualmente', userId, user.email);
-
-        res.json({ message: "Senha alterada com sucesso." });
-
+        res.json({ message: "Senha alterada." });
     } catch (error) {
         next(error);
     }
 };
 
-// --- NOVO: MARCAR TUTORIAL COMO VISTO ---
 export const markTutorialSeen = async (req, res, next) => {
     try {
-        const userId = req.user.id;
-        await User.findByIdAndUpdate(userId, { hasSeenTutorial: true });
+        await User.findByIdAndUpdate(req.user.id, { hasSeenTutorial: true });
         res.status(200).json({ success: true });
     } catch (error) {
         next(error);
