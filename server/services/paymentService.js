@@ -46,31 +46,45 @@ export const paymentService = {
 
         try {
             // URL de retorno
-            // Tenta pegar URL do Render ou fallback para localhost
             const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.API_URL || 'http://localhost:5000';
             const apiUrl = baseUrl.replace(/\/$/, '');
             const backUrl = `${apiUrl}/api/subscription/return?plan=${planKey}`;
             
-            // --- PAYLOAD LIMPO (AGNOSTIC) ---
-            // Removemos payer_email e start_date propositalmente.
-            // Isso transfere toda a responsabilidade de identificação para a tela de checkout do MP.
-            // Evita erros de "Seller cannot be Buyer" ou "Email mismatch".
+            // --- DETECÇÃO DE AMBIENTE ---
+            const isSandbox = accessToken.startsWith('TEST-');
             
+            // --- DEFINIÇÃO DO E-MAIL DO PAGADOR ---
+            // O campo payer_email é OBRIGATÓRIO na API de Assinaturas (PreApproval).
+            // No entanto, em Sandbox, não podemos usar emails de contas reais (Produção), pois gera o erro:
+            // "Uma das partes com as quais você está tentando efetuar o pagamento é de teste."
+            // Solução: Em Sandbox, geramos um email aleatório. Em Produção, usamos o email real.
+            
+            let payerEmail = user.email;
+            
+            if (isSandbox) {
+                const randomId = Math.floor(Math.random() * 1000000);
+                payerEmail = `test_user_${randomId}@test.com`;
+                logger.info(`🧪 [MP Sandbox] Email fake gerado para evitar conflito: ${payerEmail}`);
+            } else {
+                logger.info(`💳 [MP Production] Usando email real: ${payerEmail}`);
+            }
+
             const body = {
                 reason: planConfig.title,
                 external_reference: userId.toString(),
+                payer_email: payerEmail, // Campo Obrigatório Restaurado
                 auto_recurring: {
                     frequency: 1,
                     frequency_type: 'months',
                     transaction_amount: planConfig.price,
                     currency_id: 'BRL'
-                    // start_date removido: Começa imediatamente
+                    // start_date removido para início imediato
                 },
                 back_url: backUrl,
                 status: 'pending'
             };
 
-            logger.info(`💳 Criando Link Genérico (Sem E-mail) para User ${userId} | Plano: ${planKey}`);
+            logger.info(`💳 Iniciando assinatura ${planKey} para ${userId}...`);
 
             const response = await preApproval.create({ body });
             
@@ -78,7 +92,7 @@ export const paymentService = {
                 throw new Error("Mercado Pago não retornou link de pagamento.");
             }
 
-            logger.info(`✅ Link Gerado com Sucesso: ${response.init_point}`);
+            logger.info(`✅ Link Gerado: ${response.init_point}`);
             
             return {
                 init_point: response.init_point,
