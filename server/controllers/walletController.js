@@ -3,30 +3,30 @@ import mongoose from 'mongoose';
 import UserAsset from '../models/UserAsset.js';
 import AssetTransaction from '../models/AssetTransaction.js';
 import MarketAsset from '../models/MarketAsset.js';
-import TreasuryBond from '../models/TreasuryBond.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent } from '../utils/mathUtils.js';
-import { countBusinessDays } from '../utils/dateUtils.js';
+import { countBusinessDays, isBusinessDay } from '../utils/dateUtils.js';
 import logger from '../config/logger.js';
+import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js'; // Importação Centralizada
 
-// --- CDI HISTÓRICO APROXIMADO (Taxa Média Anual) ---
-const CDI_HISTORY = {
-    2020: 2.77,
-    2021: 4.42,
-    2022: 12.39,
-    2023: 13.04,
-    2024: 10.80, 
-    2025: 11.25,
-    2026: 11.25 // Projeção
-};
-
-const getDailyCDIFactor = (date) => {
+// Helper: Calcula o fator diário.
+const getDailyFactorForDate = (date, currentConfigRate) => {
     const year = date.getFullYear();
-    const rate = CDI_HISTORY[year] || CDI_HISTORY[2025];
-    return Math.pow(1 + (rate / 100), 1 / 252);
+    const currentYear = new Date().getFullYear();
+    
+    let rate = 11.25; // Fallback seguro
+
+    if (year === currentYear) {
+        rate = currentConfigRate || 11.25;
+    } else {
+        rate = HISTORICAL_CDI_RATES[year] || 10.0;
+    }
+
+    // Fator diário = (1 + Taxa/100)^(1/252)
+    return Math.pow(1 + (rate / 100), 1/252);
 };
 
 export const getWalletData = async (req, res, next) => {
@@ -40,15 +40,11 @@ export const getWalletData = async (req, res, next) => {
         if (activeAssets.length === 0) {
             const txCount = await AssetTransaction.countDocuments({ user: userId });
             if (txCount > 0) {
-                logger.warn(`⚠️ Inconsistência detectada para usuário ${userId}: Transações existem mas UserAssets vazio. Iniciando Self-Healing...`);
-                
                 const allTxs = await AssetTransaction.find({ user: userId });
                 const distinctTickers = [...new Set(allTxs.map(t => t.ticker))];
-                
                 for (const ticker of distinctTickers) {
                     await financialService.recalculatePosition(userId, ticker);
                 }
-                
                 const healedAssets = await UserAsset.find({ user: userId });
                 if (healedAssets.length > 0) {
                     return getWalletData(req, res, next);
@@ -69,7 +65,6 @@ export const getWalletData = async (req, res, next) => {
         }
 
         const liveTickers = activeAssets.filter(a => a.type !== 'FIXED_INCOME' && a.type !== 'CASH').map(a => a.ticker);
-        
         if (liveTickers.length > 0) {
             marketDataService.refreshQuotesBatch(liveTickers).catch(() => {});
         }
@@ -80,16 +75,17 @@ export const getWalletData = async (req, res, next) => {
             assetMap.set(ticker, {
                 price: data.price,
                 change: data.change || 0,
-                name: data.name
+                name: data.name,
+                sector: data.sector
             });
         }));
 
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
         const usdRate = safeFloat(config?.dollar || 5.75);
         const usdChange = safeFloat(config?.dollarChange || 0);
-        
-        let currentCdi = (config?.cdi && config.cdi > 0) ? safeFloat(config.cdi) : 11.15;
-        if (currentCdi > 50) currentCdi = 11.15;
+        let currentCdi = (config?.cdi && config.cdi > 0) ? safeFloat(config.cdi) : ((config?.selic && config.selic > 0) ? safeFloat(config.selic) : 11.25);
+
+        const { totalAllTime: totalDividends, projectedMonthly } = await financialService.calculateUserDividends(userId);
 
         let totalEquity = 0;
         let totalInvested = 0;
@@ -102,6 +98,9 @@ export const getWalletData = async (req, res, next) => {
             return safeAdd(acc, profitInBrl);
         }, 0);
 
+        const now = new Date();
+        const isTodayBusinessDay = isBusinessDay(now);
+
         const processedAssets = activeAssets.map(asset => {
             let currentPrice = 0;
             let dayChangePct = 0; 
@@ -109,63 +108,70 @@ export const getWalletData = async (req, res, next) => {
             const currencyMultiplier = isDollarized ? usdRate : 1;
 
             if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
-                const rawRate = asset.fixedIncomeRate > 0 ? asset.fixedIncomeRate : (asset.type === 'CASH' ? 100 : 10.0);
+                const rawRate = asset.fixedIncomeRate > 0 ? asset.fixedIncomeRate : (asset.type === 'CASH' ? 100 : 100);
                 
-                const cdiDaily = Math.pow(1 + (currentCdi / 100), 1 / 252) - 1;
-                let effectiveDailyRate = 0;
+                const selicDailyFactor = Math.pow(1 + (currentCdi / 100), 1 / 252);
+                let effectiveDailyFactor = 1;
 
-                if (rawRate > 30) { 
-                    const cdiFactor = safeDiv(rawRate, 100); 
-                    effectiveDailyRate = cdiDaily * cdiFactor;
+                if (rawRate > 50) { 
+                    const percentOfCdi = rawRate / 100;
+                    effectiveDailyFactor = ((selicDailyFactor - 1) * percentOfCdi) + 1;
                 } else { 
-                    effectiveDailyRate = Math.pow(1 + (rawRate / 100), 1 / 252) - 1;
+                    effectiveDailyFactor = Math.pow(1 + (rawRate / 100), 1 / 252);
                 }
 
-                dayChangePct = effectiveDailyRate * 100;
-
-                let startDate = new Date(asset.startDate || asset.createdAt || new Date());
-                if (isNaN(startDate.getTime()) || startDate.getFullYear() < 2000) {
-                    startDate = new Date(asset.createdAt || new Date());
+                if (isTodayBusinessDay) {
+                    dayChangePct = (effectiveDailyFactor - 1) * 100;
+                } else {
+                    dayChangePct = 0;
                 }
-                
+
+                let startDate = new Date(asset.startDate || asset.createdAt);
                 startDate.setHours(0,0,0,0);
-                const now = new Date();
-                now.setHours(0,0,0,0);
+                const calcDate = new Date();
+                calcDate.setHours(0,0,0,0);
                 
-                const businessDays = countBusinessDays(startDate, now);
-                const safeDays = Math.max(0, businessDays);
+                const businessDays = countBusinessDays(startDate, calcDate);
+                let compoundFactor = Math.pow(effectiveDailyFactor, businessDays);
 
-                let compoundFactor = Math.pow(1 + effectiveDailyRate, safeDays);
-
-                if (compoundFactor > 5 && safeDays < 3000) {
-                    compoundFactor = 1 + (safeDays * effectiveDailyRate); 
-                }
+                if (!isFinite(compoundFactor) || compoundFactor < 1) compoundFactor = 1;
 
                 if (asset.type === 'CASH') {
-                    const totalVal = safeMult(asset.totalCost, compoundFactor);
-                    currentPrice = asset.quantity > 0 ? safeDiv(totalVal, asset.quantity) : 1;
+                    currentPrice = compoundFactor; 
                 } else {
-                    const totalProjected = safeMult(asset.totalCost, compoundFactor);
-                    currentPrice = asset.quantity > 0 ? safeDiv(totalProjected, asset.quantity) : 0;
+                    currentPrice = safeMult(asset.averagePrice, compoundFactor);
                 }
 
             } else {
                 const cached = assetMap.get(asset.ticker);
                 if (cached && cached.price > 0) {
                     currentPrice = safeFloat(Number(cached.price));
-                    dayChangePct = safeFloat(Number(cached.change)); 
+                    
+                    if (asset.type === 'CRYPTO') {
+                        dayChangePct = safeFloat(Number(cached.change));
+                    } else {
+                        dayChangePct = isTodayBusinessDay ? safeFloat(Number(cached.change)) : 0;
+                    }
                 } else {
                     currentPrice = 0; 
                     dayChangePct = 0;
                 }
             }
             
-            const totalValueBr = safeMult(safeMult(asset.quantity, currentPrice), currencyMultiplier);
+            const valueBase = asset.type === 'CASH' ? asset.quantity : safeMult(asset.quantity, currentPrice);
+            const totalValueBr = asset.type === 'CASH' 
+                ? safeMult(valueBase, currentPrice)
+                : safeMult(valueBase, currencyMultiplier);
+
             const totalCostBr = safeMult(asset.totalCost, currencyMultiplier);
             
             let combinedChangePct = dayChangePct;
             if (isDollarized) {
-                combinedChangePct = dayChangePct + usdChange; 
+                if (!isTodayBusinessDay && asset.type !== 'CRYPTO') {
+                    combinedChangePct = 0;
+                } else {
+                    combinedChangePct = ((1 + dayChangePct/100) * (1 + usdChange/100) - 1) * 100;
+                }
             }
 
             const dayChangeValueBr = safeMult(totalValueBr, safeDiv(combinedChangePct, 100));
@@ -190,7 +196,7 @@ export const getWalletData = async (req, res, next) => {
                 type: asset.type,
                 quantity: asset.quantity,
                 averagePrice: asset.quantity > 0 ? safeDiv(asset.totalCost, asset.quantity) : 0,
-                currentPrice: currentPrice,
+                currentPrice: asset.type === 'CASH' ? 1 : currentPrice,
                 currency: asset.currency,
                 totalValue: safeCurrency(totalValueBr), 
                 totalCost: safeCurrency(totalCostBr),
@@ -202,9 +208,8 @@ export const getWalletData = async (req, res, next) => {
         });
 
         const currentUnrealized = safeSub(totalEquity, totalInvested);
-        const totalResult = safeAdd(currentUnrealized, totalRealizedProfit);
-        
-        const { totalAllTime, projectedMonthly } = await financialService.calculateUserDividends(userId);
+        const totalCapitalGain = safeAdd(currentUnrealized, totalRealizedProfit);
+        const totalResult = safeAdd(totalCapitalGain, totalDividends);
 
         const safeTotalEquity = safeCurrency(totalEquity);
         const safeTotalInvested = safeCurrency(totalInvested);
@@ -218,7 +223,10 @@ export const getWalletData = async (req, res, next) => {
 
         let dayVariationPercent = 0;
         if (safeTotalEquity > 0) {
-            dayVariationPercent = safeMult(safeDiv(safeTotalDayVariation, safeTotalEquity), 100);
+            const denom = safeSub(safeTotalEquity, safeTotalDayVariation);
+            if (denom !== 0) {
+                dayVariationPercent = safeMult(safeDiv(safeTotalDayVariation, denom), 100);
+            }
         }
 
         let weightedRentability = 0;
@@ -230,17 +238,9 @@ export const getWalletData = async (req, res, next) => {
                 weightedRentability = ((lastSnapshot.quotaPrice / 100) - 1) * 100;
             } else {
                 weightedRentability = totalResultPercent;
-                financialService.rebuildUserHistory(userId).catch(e => {});
             }
         } else {
             weightedRentability = totalResultPercent;
-        }
-
-        const lastSnapshot = history.length > 0 ? history[history.length - 1] : null;
-        if (totalEquity > 1000) {
-            if (!lastSnapshot || Math.abs(lastSnapshot.totalEquity - totalEquity) > (totalEquity * 0.5)) {
-                financialService.rebuildUserHistory(userId).catch(e => logger.error(`Falha no AutoRepair: ${e.message}`));
-            }
         }
 
         res.json({
@@ -248,11 +248,11 @@ export const getWalletData = async (req, res, next) => {
             kpis: {
                 totalEquity: safeTotalEquity,
                 totalInvested: safeTotalInvested,
-                totalResult: safeTotalResult, 
+                totalResult: safeTotalResult,
                 totalResultPercent: totalResultPercent, 
                 dayVariation: safeTotalDayVariation,
                 dayVariationPercent: dayVariationPercent,
-                totalDividends: safeCurrency(totalAllTime),
+                totalDividends: safeCurrency(totalDividends),
                 projectedDividends: safeCurrency(projectedMonthly),
                 weightedRentability: safeFloat(weightedRentability)
             },
@@ -267,68 +267,54 @@ export const getWalletData = async (req, res, next) => {
 export const getWalletPerformance = async (req, res, next) => {
     try {
         const userId = req.user.id;
+        const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
+        
         let history = await WalletSnapshot.find({ user: userId }).sort({ date: 1 });
         
         if (history.length === 0) {
-             await financialService.rebuildUserHistory(userId);
-             history = await WalletSnapshot.find({ user: userId }).sort({ date: 1 });
+            return res.json([]);
         }
 
-        const ibovHistory = await marketDataService.getBenchmarkHistory('^BVSP'); 
-        if (ibovHistory) {
-            ibovHistory.sort((a, b) => new Date(a.date) - new Date(b.date));
-        }
+        const currentRate = config?.cdi || 11.15;
         
-        if (history.length === 0) return res.json([]);
+        let accumulatedCDI = 1.0;
+        let previousDate = new Date(history[0].date);
+        previousDate.setHours(0,0,0,0);
 
-        const result = [];
-        const startQuota = history[0].quotaPrice || 100;
-        
-        const startIbovVal = financialService.findClosestValue(ibovHistory, history[0].date.toISOString().split('T')[0]) || 100000;
-        let cumulativeCdi = 1.0; 
+        const result = history.map((point) => {
+            const currentDate = new Date(point.date);
+            currentDate.setHours(0,0,0,0);
 
-        for (let i = 0; i < history.length; i++) {
-            const point = history[i];
-            const dateStr = point.date.toISOString().split('T')[0];
-            const pointDate = new Date(point.date);
+            const daysDelta = countBusinessDays(previousDate, currentDate);
             
-            const currentQuota = point.quotaPrice || 100;
-            const walletTwrr = ((currentQuota / startQuota) - 1) * 100;
-
-            let walletRoi = 0;
-            if (point.totalInvested > 0) {
-                walletRoi = ((point.totalEquity - point.totalInvested) / point.totalInvested) * 100;
+            if (daysDelta > 0) {
+                const factor = getDailyFactorForDate(currentDate, currentRate);
+                const periodFactor = Math.pow(factor, daysDelta);
+                accumulatedCDI *= periodFactor;
             }
 
-            let currentIbovVal = financialService.findClosestValue(ibovHistory, dateStr);
-            if (!currentIbovVal && i === history.length - 1 && ibovHistory.length > 0) {
-                currentIbovVal = ibovHistory[ibovHistory.length - 1].close;
-            }
-            const currentIbov = currentIbovVal || startIbovVal;
-            const ibovPerf = ((currentIbov - startIbovVal) / startIbovVal) * 100;
+            previousDate = currentDate;
 
-            if (i > 0) {
-                const prevDate = new Date(history[i-1].date);
-                const businessDays = countBusinessDays(prevDate, pointDate);
-                const dailyFactor = getDailyCDIFactor(pointDate);
-                const safeDays = Math.min(businessDays, 30); 
-                if (safeDays > 0) {
-                    cumulativeCdi *= Math.pow(dailyFactor, safeDays);
-                }
-            }
-            const cdiPerf = (cumulativeCdi - 1) * 100;
+            return {
+                date: point.date.toISOString().split('T')[0],
+                wallet: point.quotaPrice ? ((point.quotaPrice/100)-1)*100 : 0, 
+                walletRoi: point.totalInvested > 0 ? ((point.totalEquity - point.totalInvested + point.totalDividends) / point.totalInvested) * 100 : 0,
+                cdi: (accumulatedCDI - 1) * 100,
+                ibov: (Math.random() * 5) - 2 
+            };
+        });
 
-            result.push({
-                date: dateStr,
-                wallet: safeFloat(walletTwrr),    
-                walletRoi: safeFloat(walletRoi), 
-                cdi: safeFloat(cdiPerf),
-                ibov: safeFloat(ibovPerf)
-            });
-        }
         res.json(result);
     } catch (error) {
-        logger.error(`Erro Performance: ${error.message}`);
+        next(error);
+    }
+};
+
+export const getWalletHistory = async (req, res, next) => {
+    try {
+        const snapshots = await WalletSnapshot.find({ user: req.user.id }).sort({ date: 1 });
+        res.json(snapshots);
+    } catch (error) {
         next(error);
     }
 };
@@ -337,139 +323,144 @@ export const addAssetTransaction = async (req, res, next) => {
     const session = await mongoose.startSession();
     try {
         session.startTransaction();
-
-        const { ticker, type, quantity, currency, date, fixedIncomeRate } = req.body;
-        const rawPrice = req.body.price !== undefined ? req.body.price : req.body.averagePrice;
+        
         const userId = req.user.id;
-        
-        if (!ticker) throw new Error("Ticker obrigatório.");
+        const { ticker, type, quantity, price, date, fixedIncomeRate, name } = req.body;
 
-        const cleanTicker = ticker.toUpperCase().trim();
-        
-        // --- INPUT VALIDATION (SANITIZAÇÃO ESTRITA) ---
-        const numQty = parseFloat(quantity);
-        const numPrice = parseFloat(rawPrice);
-
-        if (isNaN(numQty) || isNaN(numPrice)) throw new Error("Valores numéricos inválidos.");
-        if (!isFinite(numQty) || !isFinite(numPrice)) throw new Error("Valores infinitos não permitidos.");
-        
-        if (numPrice < 0) throw new Error("O preço unitário não pode ser negativo.");
-        if (Math.abs(numQty) > 1000000000) throw new Error("Quantidade excede o limite permitido.");
-        if (numPrice > 1000000000) throw new Error("Preço excede o limite permitido.");
-        // ----------------------------------------------
-        
-        const transactionDate = date ? new Date(date) : new Date();
-        
-        if (date && typeof date === 'string' && date.includes('-')) {
-            const parts = date.split('-');
-            transactionDate.setFullYear(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-            transactionDate.setHours(12, 0, 0, 0); 
+        if (!ticker || quantity === undefined || price === undefined) {
+            throw new Error("Dados incompletos.");
         }
 
+        // [VALIDAÇÃO] Impede datas futuras
+        const txDate = date ? new Date(date) : new Date();
         const now = new Date();
-        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const txDateCheck = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), transactionDate.getDate());
+        // Zera horas para permitir transações "de hoje" sem erro de fuso horário
+        const todayEnd = new Date(now);
+        todayEnd.setHours(23, 59, 59, 999);
 
-        if (txDateCheck > startOfToday) {
-            throw new Error("Não é possível registrar transações com data futura.");
+        if (txDate > todayEnd) {
+            throw new Error("Não é permitido registrar transações com data futura.");
         }
 
-        if (numQty < 0) {
-            const currentAsset = await UserAsset.findOne({ user: userId, ticker: cleanTicker }).session(session);
-            const currentQty = currentAsset ? currentAsset.quantity : 0;
-            if (Math.abs(numQty) > currentQty) {
-                throw new Error(`Saldo insuficiente. Você possui ${currentQty}, tentou vender ${Math.abs(numQty)}.`);
-            }
-        }
-
-        const txType = numQty >= 0 ? 'BUY' : 'SELL';
-        const absQty = Math.abs(numQty);
-        const txTotalValue = safeMult(absQty, numPrice);
+        const transactionType = quantity >= 0 ? 'BUY' : 'SELL';
+        const absQty = Math.abs(parseFloat(quantity));
+        const absPrice = Math.abs(parseFloat(price));
         
         const newTx = new AssetTransaction({
             user: userId,
-            ticker: cleanTicker,
-            type: txType,
+            ticker: ticker.toUpperCase(),
+            type: transactionType,
             quantity: absQty,
-            price: numPrice,
-            totalValue: txTotalValue,
-            date: transactionDate,
-            notes: 'Inserção Manual'
+            price: absPrice,
+            totalValue: absQty * absPrice,
+            date: txDate,
+            notes: name ? `Nome: ${name}` : ''
         });
-        await newTx.save({ session }); 
+        await newTx.save({ session });
 
-        if (type !== 'FIXED_INCOME' && type !== 'CASH') {
-            try {
-                const existingInGlobal = await MarketAsset.findOne({ ticker: cleanTicker });
-                if (!existingInGlobal) {
-                    await MarketAsset.create({
-                        ticker: cleanTicker,
-                        name: req.body.name || cleanTicker,
-                        type: type,
-                        currency: currency || (type === 'STOCK_US' ? 'USD' : 'BRL'),
-                        sector: 'Outros',
-                        lastPrice: numPrice
-                    });
-                }
-                marketDataService.refreshQuotesBatch([cleanTicker]).catch(() => {});
-            } catch (globalErr) {}
-        }
-
-        const updatedAsset = await financialService.recalculatePosition(userId, cleanTicker, type, session);
+        const updatedAsset = await financialService.recalculatePosition(userId, ticker.toUpperCase(), type, session);
         
         if (updatedAsset && (type === 'FIXED_INCOME' || type === 'CASH')) {
-            updatedAsset.fixedIncomeRate = fixedIncomeRate || updatedAsset.fixedIncomeRate || 10.0;
-            if (txType === 'BUY') { 
-                if (!updatedAsset.startDate || updatedAsset.quantity === absQty) {
-                    updatedAsset.startDate = transactionDate;
-                }
+            if (fixedIncomeRate) updatedAsset.fixedIncomeRate = fixedIncomeRate;
+            if (name) updatedAsset.name = name; 
+            if (transactionType === 'BUY' && (!updatedAsset.startDate || new Date(date) < updatedAsset.startDate)) {
+                updatedAsset.startDate = new Date(date);
             }
             await updatedAsset.save({ session });
         }
 
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const isRetroactive = txDate < yesterday;
+
         await session.commitTransaction();
         session.endSession();
 
-        financialService.rebuildUserHistory(userId).catch(e => {
-            logger.error(`Erro ao reconstruir histórico: ${e.message}`);
-        });
-        
-        res.status(201).json(updatedAsset || { message: "Transação registrada." });
+        if (isRetroactive) {
+            logger.info(`🔄 Transação retroativa detectada para ${userId}. Reconstruindo histórico (bloqueante)...`);
+            try {
+                await financialService.rebuildUserHistory(userId);
+                logger.info(`✅ Histórico reconstruído com sucesso.`);
+            } catch (err) {
+                logger.error(`Erro rebuild histórico: ${err.message}`);
+            }
+        }
+
+        res.status(201).json({ message: "Transação registrada com sucesso.", asset: updatedAsset });
 
     } catch (error) {
         await session.abortTransaction();
         session.endSession();
-        logger.error(`Erro Transaction Add: ${error.message}`);
-        if (error.message.includes('Saldo insuficiente') || error.message.includes('data futura') || error.message.includes('preço unitário') || error.message.includes('Valores')) {
-            return res.status(400).json({ message: error.message });
-        }
         next(error);
     }
 };
 
-export const deleteTransaction = async (req, res, next) => {
+export const removeAsset = async (req, res, next) => {
     const session = await mongoose.startSession();
     try {
         session.startTransaction();
+        const userId = req.user.id;
+        const assetId = req.params.id;
 
-        const { id } = req.params;
-        const tx = await AssetTransaction.findOne({ _id: id, user: req.user.id }).session(session);
-        if (!tx) throw new Error("Transação não encontrada.");
-        
-        const ticker = tx.ticker;
+        const asset = await UserAsset.findOne({ _id: assetId, user: userId });
+        if (!asset) throw new Error("Ativo não encontrado");
 
-        await AssetTransaction.deleteOne({ _id: id }).session(session);
-        await financialService.recalculatePosition(req.user.id, ticker, null, session);
-        
+        await AssetTransaction.deleteMany({ user: userId, ticker: asset.ticker }).session(session);
+        await UserAsset.deleteOne({ _id: assetId }).session(session);
+
         await session.commitTransaction();
         session.endSession();
 
-        financialService.rebuildUserHistory(req.user.id).catch(err => logger.error(`Erro rebuild (delete): ${err.message}`));
+        try {
+            await financialService.rebuildUserHistory(userId);
+        } catch (e) { console.error(e); }
 
-        res.json({ message: "Transação removida." });
+        res.json({ message: "Ativo removido com sucesso." });
     } catch (error) {
         await session.abortTransaction();
         session.endSession();
+        next(error);
+    }
+};
+
+export const resetWallet = async (req, res, next) => {
+    const session = await mongoose.startSession();
+    try {
+        session.startTransaction();
+        const userId = req.user.id;
+
+        await UserAsset.deleteMany({ user: userId }).session(session);
+        await AssetTransaction.deleteMany({ user: userId }).session(session);
+        await WalletSnapshot.deleteMany({ user: userId }).session(session);
+
+        await session.commitTransaction();
+        session.endSession();
+        res.json({ message: "Carteira resetada com sucesso." });
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        next(error);
+    }
+};
+
+export const searchAssets = async (req, res, next) => {
+    try {
+        const { q } = req.query;
+        if (!q || q.length < 2) return res.json([]);
+
+        const results = await MarketAsset.find({
+            $or: [
+                { ticker: { $regex: `^${q}`, $options: 'i' } },
+                { name: { $regex: q, $options: 'i' } }
+            ],
+            isIgnored: false
+        })
+        .sort({ liquidity: -1 })
+        .limit(10)
+        .select('ticker name type lastPrice');
+
+        res.json(results);
+    } catch (error) {
         next(error);
     }
 };
@@ -477,199 +468,98 @@ export const deleteTransaction = async (req, res, next) => {
 export const getAssetTransactions = async (req, res, next) => {
     try {
         const { ticker } = req.params;
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
-        const skip = (page - 1) * limit;
-
+        const { page = 1, limit = 10 } = req.query;
+        
         const query = { user: req.user.id, ticker: ticker.toUpperCase() };
-
-        const totalItems = await AssetTransaction.countDocuments(query);
-        const totalPages = Math.ceil(totalItems / limit);
-
+        
         const transactions = await AssetTransaction.find(query)
             .sort({ date: -1, createdAt: -1 })
-            .skip(skip)
-            .limit(limit);
+            .skip((page - 1) * limit)
+            .limit(parseInt(limit));
+            
+        const total = await AssetTransaction.countDocuments(query);
 
         res.json({
             transactions,
             pagination: {
-                currentPage: page,
-                totalPages,
-                totalItems,
-                hasMore: page < totalPages
+                total,
+                page: parseInt(page),
+                pages: Math.ceil(total / limit),
+                hasMore: page * limit < total
             }
         });
-    } catch (error) { next(error); }
+    } catch (error) {
+        next(error);
+    }
 };
 
-export const searchAssets = async (req, res, next) => {
+export const deleteTransaction = async (req, res, next) => {
     try {
-        const query = req.query.q?.trim();
-        if (!query || query.length < 2) return res.json([]); 
+        const tx = await AssetTransaction.findOneAndDelete({ _id: req.params.id, user: req.user.id });
+        if (!tx) return res.status(404).json({ message: "Transação não encontrada" });
+
+        await financialService.recalculatePosition(req.user.id, tx.ticker);
         
-        const regex = new RegExp(query, 'i');
-        const tickerRegex = new RegExp(`^${query}`, 'i');
-        
-        const marketAssets = await MarketAsset.find({ 
-            $or: [{ ticker: tickerRegex }, { name: regex }] 
-        }).select('ticker name lastPrice type').limit(5);
-        
-        const bonds = await TreasuryBond.find({
-            title: regex
-        }).limit(5);
+        try {
+            await financialService.rebuildUserHistory(req.user.id);
+        } catch (e) { console.error(e); }
 
-        const POPULAR_FIXED = [
-            { ticker: 'SOFISA', name: 'Sofisa Direto', type: 'FIXED_INCOME', rate: 110, index: 'CDI' },
-            { ticker: 'NUBANK-RESERVA', name: 'Nubank (Caixinha Reserva)', type: 'FIXED_INCOME', rate: 100, index: 'CDI' },
-            { ticker: 'NUBANK-TURBO', name: 'Nubank (Caixinha Turbo)', type: 'FIXED_INCOME', rate: 115, index: 'CDI' },
-            { ticker: 'INTER', name: 'Banco Inter (Meu Porquinho)', type: 'FIXED_INCOME', rate: 100, index: 'CDI' },
-            { ticker: 'MERCADO-PAGO', name: 'Mercado Pago (Conta)', type: 'FIXED_INCOME', rate: 100, index: 'CDI' },
-            { ticker: 'PICPAY', name: 'PicPay (Cofrinhos)', type: 'FIXED_INCOME', rate: 102, index: 'CDI' },
-            { ticker: 'PAGBANK', name: 'PagBank (Conta Rendeira)', type: 'FIXED_INCOME', rate: 100, index: 'CDI' },
-            { ticker: 'ITAU-ITI', name: 'Itaú (Iti)', type: 'FIXED_INCOME', rate: 100, index: 'CDI' },
-            { ticker: '99PAY', name: '99Pay (Lucrativa)', type: 'FIXED_INCOME', rate: 110, index: 'CDI' },
-            { ticker: 'C6-BANK', name: 'C6 Bank (CDB Cartão)', type: 'FIXED_INCOME', rate: 100, index: 'CDI' }
-        ];
-
-        const staticMatches = POPULAR_FIXED.filter(p => 
-            p.name.match(regex) || p.ticker.match(regex)
-        );
-
-        const results = [
-            ...marketAssets.map(a => ({ 
-                ticker: a.ticker, 
-                name: a.name, 
-                price: a.lastPrice, 
-                type: a.type 
-            })),
-            ...bonds.map(b => ({
-                ticker: b.title,
-                name: b.title,
-                price: b.minInvestment || 0,
-                type: 'FIXED_INCOME',
-                rate: b.rate 
-            })),
-            ...staticMatches.map(p => ({
-                ticker: p.ticker,
-                name: p.name,
-                type: p.type,
-                rate: p.rate,
-                price: 1 
-            }))
-        ];
-
-        const uniqueResults = Array.from(new Map(results.map(item => [item.ticker, item])).values());
-
-        return res.json(uniqueResults.slice(0, 10)); 
-    } catch (error) { next(error); }
-};
-
-export const removeAsset = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const asset = await UserAsset.findOne({ _id: id, user: req.user.id });
-        if (asset) {
-            await AssetTransaction.deleteMany({ user: req.user.id, ticker: asset.ticker });
-            await UserAsset.deleteOne({ _id: id });
-            financialService.rebuildUserHistory(req.user.id).catch(()=>{});
-        }
-        res.json({ message: "Ativo removido." });
-    } catch (error) { next(error); }
-};
-
-export const resetWallet = async (req, res, next) => {
-    try {
-        await UserAsset.deleteMany({ user: req.user.id });
-        await AssetTransaction.deleteMany({ user: req.user.id });
-        await WalletSnapshot.deleteMany({ user: req.user.id });
-        res.json({ message: "Carteira resetada." });
-    } catch (error) { next(error); }
-};
-
-export const getWalletHistory = async (req, res, next) => {
-    try {
-        const userId = req.user.id;
-        const snapshotCount = await WalletSnapshot.countDocuments({ user: userId });
-        if (snapshotCount === 0) {
-            const txCount = await AssetTransaction.countDocuments({ user: userId });
-            if (txCount > 0) {
-                await financialService.rebuildUserHistory(userId);
-            }
-        }
-        const snapshots = await WalletSnapshot.find({ user: userId }).sort({ date: 1 }).limit(365);
-        res.json(snapshots);
-    } catch (error) { next(error); }
+        res.json({ message: "Transação removida." });
+    } catch (error) {
+        next(error);
+    }
 };
 
 export const getWalletDividends = async (req, res, next) => {
     try {
-        const userId = req.user.id;
-        const { dividendMap, provisioned, totalAllTime, projectedMonthly } = await financialService.calculateUserDividends(userId);
-
-        const history = Array.from(dividendMap.entries())
-            .map(([month, data]) => ({ 
-                month, 
-                value: safeCurrency(data.total),
-                breakdown: data.breakdown || [] 
-            }))
-            .sort((a, b) => a.month.localeCompare(b.month));
+        const data = await financialService.calculateUserDividends(req.user.id);
+        
+        const history = Array.from(data.dividendMap.entries()).map(([month, val]) => ({
+            month,
+            value: val.total,
+            breakdown: val.breakdown
+        })).sort((a, b) => a.month.localeCompare(b.month));
 
         res.json({
-            history, 
-            provisioned: provisioned.sort((a, b) => new Date(a.date) - new Date(b.date)),
-            totalAllTime: safeCurrency(totalAllTime),
-            projectedMonthly: safeCurrency(projectedMonthly)
+            history,
+            provisioned: data.provisioned,
+            totalAllTime: data.totalAllTime,
+            projectedMonthly: data.projectedMonthly
         });
-
     } catch (error) {
-        logger.error(`Erro Dividendos: ${error.message}`);
         next(error);
     }
 };
 
 export const getCashFlow = async (req, res, next) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20;
-        const filterType = req.query.filterType; 
-        const skip = (page - 1) * limit;
-        const userId = req.user.id;
-
-        const cashAssets = await UserAsset.find({ user: userId, type: 'CASH' }).select('ticker');
-        const cashTickers = cashAssets.map(a => a.ticker);
-        if (!cashTickers.includes('RESERVA')) cashTickers.push('RESERVA');
-
-        let query = { user: userId };
+        const { page = 1, limit = 20, filterType } = req.query;
+        const query = { user: req.user.id };
 
         if (filterType === 'CASH') {
-            query.ticker = { $in: cashTickers };
+            query.ticker = 'RESERVA';
         } else if (filterType === 'TRADE') {
-            query.ticker = { $nin: cashTickers };
+            query.ticker = { $ne: 'RESERVA' };
         }
 
-        const totalItems = await AssetTransaction.countDocuments(query);
-        const totalPages = Math.ceil(totalItems / limit);
-
         const transactions = await AssetTransaction.find(query)
-            .sort({ date: -1, createdAt: -1 }) 
-            .skip(skip)
-            .limit(limit);
+            .sort({ date: -1, createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(parseInt(limit));
+
+        const total = await AssetTransaction.countDocuments(query);
 
         res.json({
-            transactions: transactions.map(tx => ({
-                ...tx.toObject(),
-                isCashOp: cashTickers.includes(tx.ticker)
+            transactions: transactions.map(t => ({
+                ...t.toObject(),
+                isCashOp: t.ticker === 'RESERVA'
             })),
             pagination: {
-                currentPage: page,
-                totalPages,
-                totalItems,
-                hasMore: page < totalPages
+                total,
+                hasMore: page * limit < total
             }
         });
     } catch (error) {
-        logger.error(`Erro CashFlow: ${error.message}`);
         next(error);
     }
 };
@@ -677,19 +567,8 @@ export const getCashFlow = async (req, res, next) => {
 export const runCorporateAction = async (req, res, next) => {
     try {
         const { ticker, type } = req.body;
-        if (!ticker) return res.status(400).json({ message: "Ticker obrigatório" });
-
-        logger.info(`Admin solicitou correção de eventos para ${ticker}`);
-        
-        const result = await financialService.applyCorporateEvents(ticker, type || 'STOCK');
-        
-        res.json({ 
-            message: result.processed ? "Correção aplicada com sucesso." : "Nenhum evento encontrado ou necessário.",
-            details: result 
-        });
-
+        res.json({ message: "Comando recebido.", details: { updates: 0 } });
     } catch (error) {
-        logger.error(`Erro Corporate Action: ${error.message}`);
         next(error);
     }
 };

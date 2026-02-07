@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Layers, Activity } from 'lucide-react';
+import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Activity, Layers, BarChart2, Info } from 'lucide-react';
 import { useWallet } from '../../contexts/WalletContext';
 
 export const WalletSummary = () => {
@@ -21,6 +21,11 @@ export const WalletSummary = () => {
     const isDayPositive = (kpis?.dayVariation || 0) >= 0;
     const isTotalPositive = (kpis?.totalResult || 0) >= 0;
     const isRentabilityPositive = (kpis?.weightedRentability || 0) >= 0;
+    const isEquityProfitable = (kpis?.totalEquity || 0) > (kpis?.totalInvested || 0);
+
+    // Cálculo do Retorno Total Bruto (Patrimônio Atual + Proventos Recebidos)
+    const totalGross = (kpis?.totalEquity || 0) + (kpis?.totalDividends || 0);
+    const grossMultiple = (kpis?.totalInvested || 0) > 0 ? totalGross / kpis.totalInvested : 0;
 
     if (isLoading) {
         return (
@@ -35,14 +40,18 @@ export const WalletSummary = () => {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             
-            {/* 1. PATRIMÔNIO TOTAL */}
+            {/* 1. PATRIMÔNIO LÍQUIDO */}
             <StatCard 
-                title="PATRIMÔNIO TOTAL"
+                title="PATRIMÔNIO LÍQUIDO"
                 icon={<Wallet size={16} className="text-blue-400" />}
-                mainValue={formatCurrency(kpis.totalEquity)}
-                footerLabel="Variação (Hoje)"
+                mainValue={
+                    <span className={isEquityProfitable ? "text-emerald-400" : "text-white"}>
+                        {formatCurrency(kpis.totalEquity)}
+                    </span>
+                }
+                footerLabel="VARIAÇÃO HOJE"
                 footerValue={
-                    <div className={`flex items-center gap-1.5 font-bold text-xs ${isDayPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <div className={`text-sm font-bold ${isDayPositive ? 'text-emerald-400' : 'text-red-400'}`}>
                         {isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}
                     </div>
                 }
@@ -55,46 +64,51 @@ export const WalletSummary = () => {
                 borderColor="group-hover:border-blue-500/30"
             />
 
-            {/* 2. VALOR APLICADO (Limpo) */}
+            {/* 2. VALOR APLICADO */}
             <StatCard 
                 title="VALOR APLICADO"
                 icon={<DollarSign size={16} className="text-purple-500" />}
                 mainValue={formatCurrency(kpis.totalInvested)}
-                footerLabel="Base de Custo"
+                footerLabel="Patrimônio + Proventos"
                 footerValue={
-                    <div className="text-xs text-slate-400 font-medium">Aportes Totais</div>
+                    <div className="text-xs text-slate-200 font-bold">
+                        {formatCurrency(totalGross)}
+                    </div>
                 }
+                tooltipText="Este múltiplo (ex: 1.28x) representa quantas vezes o seu dinheiro 'retornou'. Cálculo: (Patrimônio Atual + Proventos) ÷ Valor Aplicado."
                 footerBadge={
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-slate-800 text-slate-400 border-slate-700 flex items-center gap-1">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-purple-500/10 text-purple-400 border-purple-500/20 flex items-center gap-1" title="Múltiplo do Capital Investido">
                         <Activity size={10} />
-                        Acumulado
+                        {grossMultiple.toFixed(2)}x
                     </span>
                 }
                 borderColor="group-hover:border-purple-500/30"
             />
 
-            {/* 3. RENTABILIDADE (Enriquecido com ROI e Resultado) */}
+            {/* 3. LUCRO TOTAL */}
             <StatCard 
-                title="RENTABILIDADE"
-                icon={<TrendingUp size={16} className={isRentabilityPositive ? "text-emerald-400" : "text-red-400"} />}
+                title="LUCRO TOTAL"
+                icon={<TrendingUp size={16} className={isTotalPositive ? "text-emerald-400" : "text-red-400"} />}
+                tooltipText="Este valor refere-se apenas à valorização dos ativos (ganho de capital). Proventos são exibidos separadamente."
                 mainValue={
-                    <span className={isRentabilityPositive ? "text-emerald-400" : "text-red-400"}>
-                        {isRentabilityPositive ? '+' : ''}{safeFixed(kpis.weightedRentability)}%
+                    <span className={isTotalPositive ? "text-emerald-400" : "text-red-400"}>
+                        {isTotalPositive ? '+' : ''}{formatCurrency(kpis.totalResult)}
                     </span>
                 }
-                footerLabel="Resultado Nominal"
+                footerLabel="Rentabilidade Real (TWRR)"
                 footerValue={
-                    <div className={`flex items-center gap-1.5 font-bold text-xs ${isTotalPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {isTotalPositive ? '+' : ''}{formatCurrency(kpis.totalResult)}
+                    <div className={`flex items-center gap-1.5 font-bold text-xs ${isRentabilityPositive ? 'text-emerald-400' : 'text-slate-400'}`}>
+                        {isRentabilityPositive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                        {safeFixed(kpis.weightedRentability)}%
                     </div>
                 }
                 footerBadge={
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 ${isTotalPositive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-                        {isRentabilityPositive ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
-                        ROI {safeFixed(kpis.totalResultPercent)}%
+                        <BarChart2 size={10} />
+                        Var. {safeFixed(kpis.totalResultPercent)}%
                     </span>
                 }
-                borderColor={isRentabilityPositive ? "group-hover:border-emerald-500/30" : "group-hover:border-red-500/30"}
+                borderColor={isTotalPositive ? "group-hover:border-emerald-500/30" : "group-hover:border-red-500/30"}
             />
 
             {/* 4. PROVENTOS */}
@@ -121,45 +135,67 @@ export const WalletSummary = () => {
     );
 };
 
-// Componente Visual Reutilizável e Estrito
+// Componente Visual Reutilizável
 interface StatCardProps {
     title: string;
     icon: React.ReactNode;
     mainValue: React.ReactNode;
     footerLabel: string;
     footerValue: React.ReactNode;
-    footerBadge: React.ReactNode;
+    footerBadge?: React.ReactNode;
     borderColor?: string;
+    tooltipText?: string;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, icon, mainValue, footerLabel, footerValue, footerBadge, borderColor }) => {
+const StatCard: React.FC<StatCardProps> = ({ title, icon, mainValue, footerLabel, footerValue, footerBadge, borderColor, tooltipText }) => {
     return (
-        <div className={`bg-[#080C14] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between group transition-all duration-300 hover:bg-[#0B101A] ${borderColor || 'group-hover:border-slate-700'}`}>
-            
-            {/* Header */}
-            <div className="flex items-center justify-between mb-3">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{title}</span>
-                <div className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 group-hover:border-slate-700 transition-colors">
-                    {icon}
-                </div>
+        <div className={`relative group transition-all duration-300 ${borderColor || 'hover:border-slate-700'}`}>
+            {/* Background com Overflow Hidden (Corta o Glow, mas não o Tooltip) */}
+            <div className="absolute inset-0 bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden group-hover:bg-[#0B101A] transition-colors">
+                {/* Glow Effects (se necessário) poderiam vir aqui */}
             </div>
 
-            {/* Main Value */}
-            <div className="mb-4">
-                <h3 className="text-2xl font-bold text-white tracking-tight leading-none">{mainValue}</h3>
-            </div>
-
-            {/* Separator */}
-            <div className="w-full h-px bg-slate-800 group-hover:bg-slate-700 transition-colors mb-3"></div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                    <span className="text-[9px] font-bold text-slate-500 uppercase mb-0.5">{footerLabel}</span>
-                    {footerValue}
+            {/* Content Container (z-10) - Permite que o tooltip saia pra fora */}
+            <div className="relative z-10 p-5 flex flex-col justify-between h-full min-h-[140px]">
+                
+                {/* Header */}
+                <div className="flex items-center justify-between mb-3 relative">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{title}</span>
+                        {tooltipText && (
+                            <div className="group/info relative flex items-center">
+                                <Info size={12} className="text-slate-600 cursor-help hover:text-blue-400 transition-colors" />
+                                {/* Tooltip com z-index alto e posicionamento absoluto */}
+                                <div className="absolute left-0 top-6 w-48 p-3 bg-[#0F1729] border border-slate-700 rounded-lg shadow-xl z-50 opacity-0 group-hover/info:opacity-100 transition-opacity pointer-events-none">
+                                    <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
+                                        {tooltipText}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 group-hover:border-slate-700 transition-colors">
+                        {icon}
+                    </div>
                 </div>
-                <div>
-                    {footerBadge}
+
+                {/* Main Value */}
+                <div className="mb-4">
+                    <h3 className="text-2xl font-bold text-white tracking-tight leading-none truncate">{mainValue}</h3>
+                </div>
+
+                {/* Separator */}
+                <div className="w-full h-px bg-slate-800 group-hover:bg-slate-700 transition-colors mb-3"></div>
+
+                {/* Footer */}
+                <div className="flex items-end justify-between">
+                    <div className="flex flex-col">
+                        <span className="text-[9px] font-bold text-slate-500 uppercase mb-0.5">{footerLabel}</span>
+                        {footerValue}
+                    </div>
+                    <div>
+                        {footerBadge}
+                    </div>
                 </div>
             </div>
         </div>

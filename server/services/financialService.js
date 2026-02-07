@@ -6,15 +6,13 @@ import UserAsset from '../models/UserAsset.js';
 import DividendEvent from '../models/DividendEvent.js';
 import MarketAsset from '../models/MarketAsset.js';
 import AssetHistory from '../models/AssetHistory.js';
+import SystemConfig from '../models/SystemConfig.js';
+import EconomicIndex from '../models/EconomicIndex.js'; // Novo
 import { marketDataService } from './marketDataService.js';
 import { externalMarketService } from './externalMarketService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv } from '../utils/mathUtils.js';
+import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js'; 
 import logger from '../config/logger.js';
-
-const HISTORICAL_CDI_YEAR = {
-    2015: 14.25, 2016: 14.00, 2017: 9.95, 2018: 6.50,
-    2019: 5.96, 2020: 2.77, 2021: 4.42, 2022: 12.39, 2023: 13.04, 2024: 10.80, 2025: 11.25, 2026: 11.25
-};
 
 export const financialService = {
     
@@ -91,6 +89,9 @@ export const financialService = {
                 return;
             }
 
+            const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
+            const currentCdiRate = sysConfig?.cdi || 11.25;
+
             const uniqueTickers = [...new Set(txs.map(t => t.ticker))];
             
             const priceCacheMap = new Map(); 
@@ -157,15 +158,38 @@ export const financialService = {
             let previousEquityAdjusted = 0; 
             const lastKnownPrices = {}; 
 
-            const cdiFactorsCache = {};
-            for (let y = startDate.getFullYear(); y <= today.getFullYear(); y++) {
-                const rate = HISTORICAL_CDI_YEAR[y] || 10.0;
-                cdiFactorsCache[y] = Math.pow(1 + (rate / 100), 1/252);
+            // --- MELHORIA 1: CARREGAR INDICES DIÁRIOS REAIS ---
+            const dbIndices = await EconomicIndex.find({ 
+                series: 'SELIC', 
+                date: { $gte: startDate } 
+            }).lean();
+            
+            const dailyFactorsMap = new Map();
+            dbIndices.forEach(idx => {
+                const key = this.toDateKey(idx.date);
+                if (key) dailyFactorsMap.set(key, idx.accumulatedFactor);
+            });
+
+            const cdiFactorsCacheFallback = {};
+            const currentYear = today.getFullYear();
+            
+            for (let y = startDate.getFullYear(); y <= currentYear; y++) {
+                let rate = HISTORICAL_CDI_RATES[y] || 10.0; 
+                if (y === currentYear) rate = currentCdiRate;
+                cdiFactorsCacheFallback[y] = Math.pow(1 + (rate / 100), 1/252);
             }
+            // --------------------------------------------------
 
             while (cursor <= today) {
                 const cursorIso = this.toDateKey(cursor);
-                const cdiDailyFactor = cdiFactorsCache[cursor.getFullYear()] || 1.0003; 
+                
+                // Prioriza o fator real do dia (Série 11 BCB)
+                let cdiDailyFactor = dailyFactorsMap.get(cursorIso);
+                
+                // Se não existir (feriado ou gap), usa a constante anual aproximada
+                if (!cdiDailyFactor) {
+                    cdiDailyFactor = cdiFactorsCacheFallback[cursor.getFullYear()] || 1.0003;
+                }
 
                 let dayFlowNominal = 0;
                 let dayFlowAdjusted = 0;
@@ -240,15 +264,22 @@ export const financialService = {
                 let totalInvested = 0;
                 let hasPosition = false;
 
+                // Em dias úteis (ou dias onde temos fator BCB), aplica a correção
+                // Se cdiDailyFactor veio do mapa, é dia útil. Se veio do fallback, checamos fim de semana.
+                const isMapFactor = dailyFactorsMap.has(cursorIso);
                 const isWeekend = cursor.getDay() === 0 || cursor.getDay() === 6;
+                const shouldApplyRates = isMapFactor || !isWeekend;
                 
-                if (!isWeekend) {
+                if (shouldApplyRates) {
                     for (const ticker in fixedIncomeState) {
                         if (portfolio[ticker].qty > 0) {
                             const state = fixedIncomeState[ticker];
                             let dailyFactor = 1;
+                            // Se taxa > 30% a.a., assume que é % do CDI (ex: 110% do CDI)
                             if (state.rate > 30) dailyFactor = 1 + ((cdiDailyFactor - 1) * (state.rate / 100));
+                            // Se taxa < 30%, assume que é Pré-fixada a.a. (ex: 12% a.a.)
                             else dailyFactor = Math.pow(1 + (state.rate / 100), 1/252);
+                            
                             state.currentValue *= dailyFactor;
                         }
                     }
@@ -316,7 +347,6 @@ export const financialService = {
                 cursor.setDate(cursor.getDate() + 1);
             }
 
-            // --- LÓGICA DE RETRY PARA TRANSAÇÃO ---
             if (snapshots.length > 0) {
                 const session = await mongoose.startSession();
                 let retries = 3;
@@ -331,19 +361,17 @@ export const financialService = {
                                 await WalletSnapshot.insertMany(snapshots.slice(i, i + CHUNK_SIZE), { session });
                             }
                             await session.commitTransaction();
-                            break; // Sucesso
+                            break; 
                         } catch (err) {
                             await session.abortTransaction();
-                            // Verifica se é conflito de escrita
                             if (err.message.includes('Write conflict') || err.hasErrorLabel?.('TransientTransactionError')) {
                                 if (retries > 1) {
                                     retries--;
-                                    logger.warn(`⚠️ [Engine] WriteConflict detectado. Retentando rebuild (${3 - retries}/3)...`);
-                                    await new Promise(r => setTimeout(r, 250)); // Backoff
+                                    await new Promise(r => setTimeout(r, 250)); 
                                     continue;
                                 }
                             }
-                            throw err; // Se não for retry ou acabou tentativas
+                            throw err; 
                         }
                     }
                 } catch (writeErr) {
@@ -354,7 +382,7 @@ export const financialService = {
             }
             
             const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-            logger.info(`✅ [History] Reconstrução V4.6 concluída em ${duration}s.`);
+            logger.info(`✅ [History] Reconstrução V4.7 (Precision) concluída em ${duration}s.`);
 
         } catch (error) {
             logger.error(`❌ [Engine] Erro Fatal no Rebuild: ${error.message}`);
@@ -362,6 +390,7 @@ export const financialService = {
     },
 
     async calculateUserDividends(userId) {
+        // ... (Mantido código original de dividendos para brevidade)
         const assets = await UserAsset.find({ user: userId });
         const relevantAssets = assets.filter(a => !['CRYPTO', 'CASH', 'FIXED_INCOME'].includes(a.type));
         const tickers = relevantAssets.map(a => a.ticker);
@@ -438,6 +467,7 @@ export const financialService = {
     },
 
     async recalculatePosition(userId, ticker, forcedType = null, session = null) {
+        // ... (Mantido código original de recalculatePosition para brevidade)
         const query = AssetTransaction.find({ user: userId, ticker }).sort({ date: 1, createdAt: 1 });
         if (session) query.session(session);
         const transactions = await query;
@@ -481,8 +511,6 @@ export const financialService = {
             }
         }
 
-        // --- SMART COMPACTION: BSON LIMIT PROTECTION ---
-        // Se houver mais de 500 lotes, funde os 100 mais antigos em um único lote médio.
         if (taxLots.length > 500) {
             const lotsToMerge = taxLots.slice(0, 100);
             const keptLots = taxLots.slice(100);
@@ -496,17 +524,13 @@ export const financialService = {
             
             const mergedPrice = mergedQty > 0 ? safeDiv(mergedCost, mergedQty) : 0;
             
-            // Cria um "Mega Lote" com a data mais recente do grupo fundido
             taxLots = [{
                 date: lotsToMerge[lotsToMerge.length - 1].date,
                 quantity: mergedQty,
                 price: mergedPrice,
                 _id: false
             }, ...keptLots];
-            
-            logger.warn(`🧹 [BSON Protection] Lotes compactados para ${ticker} (User ${userId}). Novos lotes: ${taxLots.length}`);
         }
-        // ----------------------------------------------
 
         if (quantity < -0.000001) throw new Error(`Saldo insuficiente para ${ticker}.`);
         if (quantity <= 0.000001) { quantity = 0; totalCost = 0; taxLots = []; }

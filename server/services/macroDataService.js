@@ -4,13 +4,15 @@ import * as cheerio from 'cheerio';
 import https from 'https';
 import SystemConfig from '../models/SystemConfig.js';
 import TreasuryBond from '../models/TreasuryBond.js';
+import EconomicIndex from '../models/EconomicIndex.js'; // Importação do Model
 import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
 
 // 432 = Selic Meta AA
 // 13522 = IPCA 12m
-// 4391 = CDI Mensal % (CORREÇÃO: 4389 era anual, 4391 é mensal acumulado)
-const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391 };
+// 4391 = CDI Mensal %
+// 11 = Selic Diária (% a.d.) -> Usada para cálculo exato de fator
+const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391, SELIC_DAILY: 11 };
 
 const BROWSER_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -43,41 +45,6 @@ export const macroDataService = {
                 }
             } catch (e) { /* Fallback IPCA */ }
 
-            // 3. Cálculo Real do CDI 12m (Série 4391 - Mensal)
-            try {
-                const cdiRes = await axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.CDI_MONTHLY}/dados/ultimos/15?formato=json`);
-                
-                if (cdiRes.data && cdiRes.data.length > 0) {
-                    // Pega os últimos 12 meses disponíveis
-                    const last12Months = cdiRes.data.slice(-12);
-                    let accFactor = 1.0;
-                    
-                    last12Months.forEach(month => {
-                        const valStr = month.valor;
-                        if (valStr) {
-                            const val = parseFloat(valStr);
-                            if (!isNaN(val)) {
-                                // Série 4391 retorna ex: 0.89 (que é 0.89%). Dividimos por 100.
-                                accFactor *= (1 + (val / 100));
-                            }
-                        }
-                    });
-                    
-                    const calculatedCDI = (accFactor - 1) * 100;
-
-                    // Validação de Sanidade (CDI 12m deve estar próximo da Selic anual, ex: entre 50% e 150% da Selic)
-                    // Isso evita o erro de 429% se a API mudar o formato
-                    if (calculatedCDI > (selicVal * 0.5) && calculatedCDI < (selicVal * 1.5)) {
-                        cdiAccumulated12m = calculatedCDI;
-                        logger.info(`📈 CDI 12m Calculado (Série 4391): ${calculatedCDI.toFixed(2)}%`);
-                    } else {
-                        logger.warn(`⚠️ CDI Calculado anômalo (${calculatedCDI.toFixed(2)}%). Usando fallback Selic (${selicVal}%).`);
-                    }
-                }
-            } catch (e) {
-                logger.warn(`⚠️ Erro ao calcular CDI 12m: ${e.message}. Usando fallback.`);
-            }
-
             return { 
                 selic: selicVal, 
                 ipca: ipcaVal, 
@@ -88,6 +55,62 @@ export const macroDataService = {
         } catch (error) {
             logger.error(`❌ Erro BCB API Crítico: ${error.message}`);
             return { selic: 11.25, ipca: 4.50, cdi: 11.15, cdi12m: 11.15 }; 
+        }
+    },
+
+    // --- NOVO: Sync Diário de Alta Precisão (Série 11) ---
+    async syncDailyEconomicIndexes() {
+        try {
+            // Define janela de tempo: Últimos 10 anos se banco vazio, ou últimos 15 dias se atualização
+            const lastEntry = await EconomicIndex.findOne({ series: 'SELIC' }).sort({ date: -1 });
+            let startDate = '01/01/2015';
+            
+            if (lastEntry) {
+                const d = new Date(lastEntry.date);
+                d.setDate(d.getDate() + 1); // Dia seguinte ao último registro
+                startDate = d.toLocaleDateString('pt-BR');
+            }
+
+            const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.SELIC_DAILY}/dados?formato=json&dataInicial=${startDate}`;
+            logger.info(`📊 [Macro] Buscando histórico diário Selic desde ${startDate}...`);
+
+            const res = await axios.get(url);
+            if (!res.data || res.data.length === 0) {
+                logger.info("📊 [Macro] Nenhum dado novo da Selic/CDI para importar.");
+                return;
+            }
+
+            const operations = res.data.map(item => {
+                // BCB retorna DD/MM/AAAA e valor percentual a.d. (ex: 0.042533)
+                const [d, m, y] = item.data.split('/');
+                const dateIso = new Date(`${y}-${m}-${d}`);
+                const val = parseFloat(item.valor);
+                
+                // O fator diário é (1 + taxa/100). Ex: 0.04% -> 1.0004
+                // Usamos a Selic Diária como proxy do CDI para alta precisão
+                const dailyFactor = 1 + (val / 100);
+
+                return {
+                    updateOne: {
+                        filter: { series: 'SELIC', date: dateIso },
+                        update: { 
+                            $set: { 
+                                value: val, // % a.d.
+                                accumulatedFactor: dailyFactor 
+                            } 
+                        },
+                        upsert: true
+                    }
+                };
+            });
+
+            if (operations.length > 0) {
+                await EconomicIndex.bulkWrite(operations);
+                logger.info(`✅ [Macro] ${operations.length} dias de Selic importados para EconomicIndex.`);
+            }
+
+        } catch (error) {
+            logger.error(`❌ [Macro] Erro ao sincronizar índices diários: ${error.message}`);
         }
     },
 
@@ -117,46 +140,36 @@ export const macroDataService = {
         let title = '';
         let rate = 0;
         let maturity = '-';
-        let foundPrices = []; // Armazena todos os valores monetários encontrados na linha
+        let foundPrices = [];
 
         cols.each((i, td) => {
             const text = $(td).text().trim().replace(/\s+/g, ' '); 
             
-            // Título
             if (!title && text.length > 5 && (text.includes('Tesouro') || text.includes('IPCA') || text.includes('Prefixado') || text.includes('Selic') || text.includes('Renda+'))) {
                 title = text;
             } 
-            // Data
             else if (text.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
                 maturity = text;
             } 
-            // Taxa
             else if (text.includes('%')) {
                 const val = this.cleanNumber(text);
                 if (val > 0 && val < 25) rate = val;
             } 
-            // Preços (Pode ter unitário e mínimo)
             else if (text.includes('R$') || (this.cleanNumber(text) > 30)) {
                 const val = this.cleanNumber(text);
                 if (val > 0) foundPrices.push(val);
             }
         });
 
-        // Lógica para diferenciar Preço Unitário e Investimento Mínimo
         let minInvestment = 0;
         let unitPrice = 0;
 
         if (foundPrices.length > 0) {
-            // Ordena os preços encontrados. Geralmente o menor é o mínimo, o maior é o unitário.
             foundPrices.sort((a, b) => a - b);
-            
             minInvestment = foundPrices[0];
-            
             if (foundPrices.length > 1) {
                 unitPrice = foundPrices[foundPrices.length - 1];
             } else {
-                // Se só achou um preço, e for alto (> 1000), provavelmente é unitário, mas assumimos minInvestment por segurança no display
-                // Ou se for baixo (< 200), é minInvestment
                 unitPrice = minInvestment; 
             }
         }
@@ -190,14 +203,11 @@ export const macroDataService = {
         let ntnbLongRate = 6.00;
         const list = await this.scrapeInvestidor10();
         
-        // Uso de Map para garantir unicidade absoluta pelo Título (Chave do Banco)
-        // Isso previne o erro E11000 duplicate key
         const uniqueBondsMap = new Map();
 
         list.forEach(bond => {
             const cleanTitle = bond.title.replace(/\s+/g, ' ').trim();
             
-            // Lógica de classificação
             let type = 'IPCA';
             let index = 'IPCA';
             if (cleanTitle.includes('Prefixado') || cleanTitle.includes('LTN')) { type = 'PREFIXADO'; index = 'PRE'; }
@@ -205,12 +215,10 @@ export const macroDataService = {
             else if (cleanTitle.includes('Renda+')) { type = 'RENDAMAIS'; }
             else if (cleanTitle.includes('Educa+')) { type = 'EDUCA'; }
             
-            // Captura NTNB Longa para Valuation
             if (type === 'IPCA' && (cleanTitle.includes('2035') || cleanTitle.includes('2045'))) {
                 if (bond.rate > 4) ntnbLongRate = bond.rate;
             }
 
-            // Adiciona ao Map (sobrescreve se houver duplicata no scraper)
             if (!uniqueBondsMap.has(cleanTitle)) {
                 uniqueBondsMap.set(cleanTitle, {
                     title: cleanTitle,
@@ -218,7 +226,7 @@ export const macroDataService = {
                     index,
                     rate: bond.rate,
                     minInvestment: bond.minInvestment, 
-                    unitPrice: bond.unitPrice, // Novo Campo
+                    unitPrice: bond.unitPrice, 
                     maturityDate: bond.maturity,
                     updatedAt: new Date()
                 });
@@ -228,8 +236,6 @@ export const macroDataService = {
         const uniqueBonds = Array.from(uniqueBondsMap.values());
 
         if (uniqueBonds.length >= 5) {
-            // BulkWrite com Upsert é mais seguro que deleteMany + insertMany
-            // Ele atualiza se existir, cria se não existir, evitando conflitos de chave única.
             const operations = uniqueBonds.map(bond => ({
                 updateOne: {
                     filter: { title: bond.title },
@@ -240,15 +246,17 @@ export const macroDataService = {
 
             await TreasuryBond.bulkWrite(operations);
             logger.info(`🏛️ [Tesouro Direto] Atualizado com sucesso: ${uniqueBonds.length} títulos.`);
-        } else {
-            logger.warn(`⚠️ [Tesouro Direto] Falha na coleta: Apenas ${uniqueBonds.length} encontrados. Cache mantido.`);
-        }
+        } 
         
         return { ntnbLong: ntnbLongRate };
     },
 
     async performMacroSync() {
         const official = await this.updateOfficialRates();
+        
+        // --- CHAMA O SYNC DE ÍNDICES DIÁRIOS AQUI ---
+        await this.syncDailyEconomicIndexes(); 
+
         const currencies = await this.updateCurrencies();
         const globalIndices = await externalMarketService.getGlobalIndices(); 
         const spxReturn12m = await externalMarketService.getSpx12mReturn(); 
@@ -261,9 +269,9 @@ export const macroDataService = {
         if (official) {
             config.selic = official.selic;
             config.ipca = official.ipca;
-            config.cdi = official.cdi; // Taxa Meta
+            config.cdi = official.cdi; 
             if (official.cdi12m) {
-                config.cdiReturn12m = official.cdi12m; // Taxa Acumulada
+                config.cdiReturn12m = official.cdi12m; 
             }
             config.riskFree = official.selic; 
         }
@@ -286,7 +294,6 @@ export const macroDataService = {
             }
         }
 
-        // Salva os retornos de 12m
         if (spxReturn12m) config.spxReturn12m = spxReturn12m;
         if (ibovReturn12m) config.ibovReturn12m = ibovReturn12m;
 
