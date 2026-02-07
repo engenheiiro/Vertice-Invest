@@ -102,7 +102,6 @@ export const registerUsage = async (req, res, next) => {
     }
 };
 
-// --- ALTERAÇÃO PRINCIPAL: CHECKOUT REAL ---
 export const createCheckoutSession = async (req, res, next) => {
     try {
         const { planId } = req.body;
@@ -126,10 +125,40 @@ export const createCheckoutSession = async (req, res, next) => {
     }
 };
 
+// --- HANDLER DE RETORNO DO MERCADO PAGO ---
+export const handlePaymentReturn = async (req, res) => {
+    try {
+        const { plan, ...query } = req.query;
+        
+        // 1. Determina a URL base do Frontend
+        // Em produção, CLIENT_URL deve ser 'https://verticeinvest.com.br'
+        // Em desenvolvimento, fallback para localhost
+        let clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        
+        // Remove barra final se existir para evitar duplicação
+        clientUrl = clientUrl.replace(/\/$/, '');
+        
+        // 2. Reconstrói a query string (payment_id, status, etc) que o MP enviou
+        const queryString = new URLSearchParams(query).toString();
+        
+        // 3. Monta a URL final com o Hash Router do React (#)
+        // Ex: https://verticeinvest.com.br/#/checkout/success?plan=PRO&status=approved&payment_id=123
+        const target = `${clientUrl}/#/checkout/success?plan=${plan}&${queryString}`;
+        
+        logger.info(`🔄 Redirecionando usuário do MP para: ${target}`);
+        
+        // 4. Redirecionamento HTTP 302
+        res.redirect(target);
+
+    } catch (error) {
+        logger.error(`Erro no redirect de retorno: ${error.message}`);
+        // Em caso de erro grave, manda pra home
+        res.redirect('/');
+    }
+};
+
 // --- MANTIDO APENAS PARA COMPATIBILIDADE OU TESTES MANUAIS DE ADMIN ---
 export const confirmPayment = async (req, res, next) => {
-    // Esta rota agora é secundária, pois o Webhook deve confirmar o pagamento.
-    // Pode ser mantida para forçar ativação manual se necessário.
     const session = await mongoose.startSession();
     try {
         session.startTransaction();
