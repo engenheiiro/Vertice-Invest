@@ -1,13 +1,12 @@
 
-// --- PREÇOS DE TESTE/PROD (Seguros) ---
+// --- PREÇOS REAIS (Produção) ---
 export const PLANS = {
-    'ESSENTIAL': { price: 5.00, days: 30 },
-    'PRO': { price: 10.00, days: 30 },
-    'BLACK': { price: 15.00, days: 30 }
+    'ESSENTIAL': { price: 39.90, days: 30, title: 'Vértice Essential' },
+    'PRO': { price: 119.90, days: 30, title: 'Vértice Pro' },
+    'BLACK': { price: 349.90, days: 30, title: 'Vértice Black' }
 };
 
 // Definição de limites por feature e plano
-// 0 = Bloqueado, 1+ = Quantidade, 9999 = Ilimitado
 export const LIMITS_CONFIG = {
     // Carteira
     'smart_contribution': {
