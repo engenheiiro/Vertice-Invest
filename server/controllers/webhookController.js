@@ -29,15 +29,16 @@ export const handleMercadoPagoWebhook = async (req, res) => {
             const status = payment.status; // approved, pending, rejected
             const userId = payment.external_reference; // Recuperamos o ID do usuário daqui
             
-            // Descobre qual plano foi comprado baseado no valor ou na descrição
-            // (Melhor seria passar no metadata, mas inferência por valor funciona para MVP)
+            // Descobre qual plano foi comprado baseado no valor
+            // Lógica ajustada para preços de teste (1, 2, 3)
             const amount = payment.transaction_amount;
-            let plan = 'ESSENTIAL';
-            if (amount >= 9 && amount < 14) plan = 'PRO';
-            if (amount >= 14) plan = 'BLACK';
+            let plan = 'ESSENTIAL'; // Default (R$ 1.00)
+            
+            if (amount >= 1.5 && amount < 2.5) plan = 'PRO'; // R$ 2.00
+            if (amount >= 2.5) plan = 'BLACK'; // R$ 3.00
 
             // Logs de Diagnóstico
-            logger.info(`💰 Pagamento ${resourceId}: Status=${status} | User=${userId} | Valor=${amount}`);
+            logger.info(`💰 Pagamento ${resourceId}: Status=${status} | User=${userId} | Valor=${amount} | Plano=${plan}`);
 
             if (status === 'approved' && userId) {
                 const user = await User.findById(userId);

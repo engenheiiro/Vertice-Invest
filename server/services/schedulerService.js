@@ -14,78 +14,58 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 export const initScheduler = () => {
     logger.info("⏰ Scheduler Service Inicializado");
 
-    // 1. Sync Leve: Macroeconomia (A cada 15 minutos com Offset)
+    // 1. Sync Leve: Macroeconomia (A cada 15 minutos)
     cron.schedule('5,20,35,50 * * * *', async () => {
-        logger.info("⏰ Rotina: Sync Macroeconomia - Iniciada");
         try {
             await macroDataService.performMacroSync();
-            logger.info("⏰ Rotina: Sync Macroeconomia - Finalizada");
         } catch (error) {
-            logger.error(`❌ Rotina: Sync Macroeconomia - Erro: ${error.message}`);
+            logger.error(`❌ Rotina Macro: ${error.message}`);
         }
     });
 
-    // 2. Sync Preços (Yahoo Finance - Seguro) - A cada 15 Minutos (0, 15, 30, 45)
+    // 2. Sync Preços (Yahoo 15min)
     cron.schedule('*/15 * * * *', async () => {
-        logger.info("⏰ Rotina: Atualização de Preços (Yahoo 15min) - Iniciada");
         try {
-            // Busca apenas ativos ativos E líquidos OU Criptos/US
             const assets = await MarketAsset.find({ 
                 isActive: true,
                 $or: [
-                    { liquidity: { $gt: 10000 } }, // Filtra "micos" ilíquidos
-                    { type: { $in: ['CRYPTO', 'STOCK_US'] } } // Sempre atualiza crypto/us
+                    { liquidity: { $gt: 10000 } },
+                    { type: { $in: ['CRYPTO', 'STOCK_US'] } }
                 ]
             }).select('ticker');
             
             const tickers = assets.map(a => a.ticker);
-            
-            if (tickers.length === 0) {
-                logger.info("ℹ️ Detalhe: Nenhum ativo para atualizar.");
-                logger.info("⏰ Rotina: Atualização de Preços (Yahoo 15min) - Finalizada");
-                return;
-            }
+            if (tickers.length === 0) return;
 
-            // Atualiza em lotes
             const BATCH_SIZE = 50;
-            let updatedCount = 0;
             for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
                 const batch = tickers.slice(i, i + BATCH_SIZE);
                 await marketDataService.refreshQuotesBatch(batch);
-                updatedCount += batch.length;
-                await new Promise(r => setTimeout(r, 2000)); // Delay suave
+                await new Promise(r => setTimeout(r, 2000));
             }
-            logger.info(`ℹ️ Detalhe: ${updatedCount} ativos processados.`);
-            logger.info("⏰ Rotina: Atualização de Preços (Yahoo 15min) - Finalizada");
         } catch (e) {
-            logger.error(`❌ Rotina: Atualização de Preços (Yahoo 15min) - Erro: ${e.message}`);
+            logger.error(`❌ Rotina Preços: ${e.message}`);
         }
     });
 
-    // 3. Sync Pesado (Fundamentus) + Cálculo - DIÁRIO (08:00 AM)
+    // 3. Sync Pesado + Cálculo (Diário 08:00)
     cron.schedule('0 8 * * *', async () => {
-        logger.info("⏰ Rotina: Protocolo V3 Completo (Diário) - Iniciada");
+        logger.info("⏰ Rotina Diária V3 Iniciada");
         try {
             const syncResult = await syncService.performFullSync();
-            
             if (syncResult.success) {
                 await aiResearchService.runBatchAnalysis(null); 
-                logger.info("⏰ Rotina: Protocolo V3 Completo (Diário) - Finalizada");
-            } else {
-                logger.error(`❌ Rotina: Protocolo V3 Completo (Diário) - Falha no Sync: ${syncResult.error}`);
             }
         } catch (e) {
-            logger.error(`❌ Rotina: Protocolo V3 Completo (Diário) - Erro Crítico: ${e.message}`);
+            logger.error(`❌ Rotina Diária V3: ${e.message}`);
         }
     });
 
-    // 4. Snapshot Patrimonial Diário (23:59)
+    // 4. Snapshot Patrimonial (23:59)
     cron.schedule('59 23 * * *', async () => {
-        logger.info("⏰ Rotina: Snapshot Patrimonial Diário - Iniciada");
         try {
             const users = await User.find({}).select('_id');
             const today = new Date();
-            let snapshotCount = 0;
             
             for (const user of users) {
                 const assets = await UserAsset.find({ user: user._id });
@@ -112,24 +92,43 @@ export const initScheduler = () => {
                         profit: totalEquity - totalInvested,
                         profitPercent: totalInvested > 0 ? ((totalEquity - totalInvested) / totalInvested) * 100 : 0
                     });
-                    snapshotCount++;
                 }
             }
-            logger.info(`ℹ️ Detalhe: ${snapshotCount} snapshots gerados.`);
-            logger.info("⏰ Rotina: Snapshot Patrimonial Diário - Finalizada");
         } catch (error) {
-            logger.error(`❌ Rotina: Snapshot Patrimonial Diário - Erro: ${error.message}`);
+            logger.error(`❌ Snapshot Erro: ${error.message}`);
         }
     });
 
-    // 5. Sync Feriados (Anual - 1 de Janeiro 06:00)
-    cron.schedule('0 6 1 1 *', async () => {
-        logger.info("⏰ Rotina: Sync Feriados Anual - Iniciada");
+    // 5. Verificação de Assinaturas Vencidas (Diário 03:00 AM)
+    cron.schedule('0 3 * * *', async () => {
+        logger.info("⏰ Rotina: Check Expiração de Assinaturas");
         try {
-            await holidayService.sync();
-            logger.info("⏰ Rotina: Sync Feriados Anual - Finalizada");
-        } catch (e) {
-            logger.error(`❌ Rotina: Sync Feriados Anual - Erro: ${e.message}`);
+            const now = new Date();
+            // Busca usuários PRO/BLACK cuja data de validade já passou
+            const result = await User.updateMany(
+                { 
+                    plan: { $ne: 'GUEST' },
+                    role: { $ne: 'ADMIN' }, // Admins nunca expiram
+                    validUntil: { $lt: now } 
+                },
+                { 
+                    $set: { 
+                        plan: 'GUEST', 
+                        subscriptionStatus: 'PAST_DUE' 
+                    } 
+                }
+            );
+            
+            if (result.modifiedCount > 0) {
+                logger.info(`📉 ${result.modifiedCount} usuários tiveram o plano rebaixado para GUEST por vencimento.`);
+            }
+        } catch (error) {
+            logger.error(`❌ Erro Check Expiração: ${error.message}`);
         }
+    });
+
+    // 6. Sync Feriados (Anual)
+    cron.schedule('0 6 1 1 *', async () => {
+        await holidayService.sync();
     });
 };
