@@ -10,7 +10,7 @@ const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
 const PLANS_CONFIG = {
     'ESSENTIAL': { 
         price: 5.00, 
-        title: 'Vértice Essential', // Título mais curto para evitar problemas de char limit
+        title: 'Vértice Essential', 
         description: 'Acesso básico ao Terminal e Carteira.'
     },
     'PRO': { 
@@ -46,20 +46,16 @@ export const paymentService = {
 
         try {
             // URL de retorno
+            // Tenta pegar URL do Render ou fallback para localhost
             const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.API_URL || 'http://localhost:5000';
             const apiUrl = baseUrl.replace(/\/$/, '');
             const backUrl = `${apiUrl}/api/subscription/return?plan=${planKey}`;
             
-            // --- CORREÇÃO DE DATA ---
-            const futureDate = new Date();
-            futureDate.setHours(futureDate.getHours() + 1);
-            const startDate = futureDate.toISOString();
-
-            // Verificar Ambiente
-            const isSandbox = accessToken.startsWith('TEST-');
-
-            // --- CONSTRUÇÃO DO BODY ---
-            // IMPORTANTE: NÃO INCLUIR payer_email AQUI INICIALMENTE
+            // --- PAYLOAD LIMPO (AGNOSTIC) ---
+            // Removemos payer_email e start_date propositalmente.
+            // Isso transfere toda a responsabilidade de identificação para a tela de checkout do MP.
+            // Evita erros de "Seller cannot be Buyer" ou "Email mismatch".
+            
             const body = {
                 reason: planConfig.title,
                 external_reference: userId.toString(),
@@ -67,27 +63,14 @@ export const paymentService = {
                     frequency: 1,
                     frequency_type: 'months',
                     transaction_amount: planConfig.price,
-                    currency_id: 'BRL',
-                    start_date: startDate
+                    currency_id: 'BRL'
+                    // start_date removido: Começa imediatamente
                 },
                 back_url: backUrl,
                 status: 'pending'
             };
 
-            // --- LÓGICA CRÍTICA DE E-MAIL ---
-            if (isSandbox) {
-                // Em Sandbox, OBRIGATÓRIO enviar e-mail diferente do dono da conta MP
-                const randomId = Math.floor(Math.random() * 1000000);
-                body.payer_email = `test_user_${randomId}@test.com`;
-                logger.info(`🧪 [MP Sandbox] Email fake injetado: ${body.payer_email}`);
-            } else {
-                // Em PRODUÇÃO, NÃO enviamos payer_email.
-                // Isso permite que o link seja "aberto": qualquer pessoa (amigo, parente)
-                // pode preencher o e-mail no checkout do Mercado Pago e pagar.
-                logger.info(`💳 [MP Production] Link genérico gerado (sem restrição de e-mail).`);
-            }
-
-            logger.info(`💳 Criando assinatura ${planKey} (R$ ${planConfig.price}) para User ${userId}...`);
+            logger.info(`💳 Criando Link Genérico (Sem E-mail) para User ${userId} | Plano: ${planKey}`);
 
             const response = await preApproval.create({ body });
             
@@ -95,7 +78,7 @@ export const paymentService = {
                 throw new Error("Mercado Pago não retornou link de pagamento.");
             }
 
-            logger.info(`✅ Link Gerado: ${response.init_point}`);
+            logger.info(`✅ Link Gerado com Sucesso: ${response.init_point}`);
             
             return {
                 init_point: response.init_point,
