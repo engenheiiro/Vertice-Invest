@@ -13,7 +13,9 @@ import logger from '../config/logger.js';
 const ACCESS_TOKEN_EXPIRATION = '15m';
 const REFRESH_TOKEN_EXPIRATION_DAYS = 7;
 
-// Helper para Log
+// --- UTILS DE SEGURANÇA ---
+
+// Log de Auditoria
 const logAudit = async (req, action, details, userId = null, email = null) => {
     try {
         const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -26,6 +28,22 @@ const logAudit = async (req, action, details, userId = null, email = null) => {
             userAgent: req.headers['user-agent']
         }).catch(err => logger.error(`Erro log: ${err.message}`));
     } catch (e) {}
+};
+
+// Sanitizador de Usuário (DTO - Data Transfer Object)
+// Remove campos sensíveis como IDs de pagamento, tokens, etc.
+const sanitizeUser = (user) => {
+    return {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        plan: user.plan,
+        role: user.role,
+        subscriptionStatus: user.subscriptionStatus,
+        validUntil: user.validUntil,
+        hasSeenTutorial: user.hasSeenTutorial,
+        cpf: user.cpf
+    };
 };
 
 export const register = async (req, res, next) => {
@@ -128,20 +146,11 @@ export const login = async (req, res, next) => {
 
     logAudit(req, 'LOGIN_SUCCESS', 'Login via Senha', user._id, email);
     
+    // [SEGURANÇA] Retorna apenas dados sanitizados
     res.status(200).json({ 
       message: "Login realizado.",
       accessToken,
-      user: { 
-        id: user._id, 
-        name: user.name, 
-        email: user.email, 
-        plan: user.plan,
-        role: user.role, 
-        subscriptionStatus: user.subscriptionStatus,
-        validUntil: user.validUntil, // Envia data de validade para o frontend
-        hasSeenTutorial: user.hasSeenTutorial,
-        cpf: user.cpf 
-      }
+      user: sanitizeUser(user)
     });
 
   } catch (error) {
@@ -245,18 +254,10 @@ export const updateProfile = async (req, res, next) => {
 
         const updatedUser = await User.findByIdAndUpdate(userId, { name, cpf: cleanCpf }, { new: true });
         
+        // [SEGURANÇA] Usa o sanitizador
         res.json({ 
             message: "Perfil atualizado.", 
-            user: {
-                id: updatedUser._id,
-                name: updatedUser.name,
-                email: updatedUser.email,
-                role: updatedUser.role,
-                plan: updatedUser.plan,
-                validUntil: updatedUser.validUntil,
-                hasSeenTutorial: updatedUser.hasSeenTutorial,
-                cpf: updatedUser.cpf
-            } 
+            user: sanitizeUser(updatedUser)
         });
     } catch (error) {
         next(error);

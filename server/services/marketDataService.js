@@ -56,7 +56,6 @@ export const marketDataService = {
 
             return { price: 0, change: 0, name: ticker };
         } catch (error) {
-            // logger.error(`Erro ao ler ticker ${ticker}: ${error.message}`); // Silent fail for cleaner logs
             return { price: 0, change: 0, name: ticker };
         }
     },
@@ -84,9 +83,8 @@ export const marketDataService = {
                     toUpdate.push(ticker);
                 } else {
                     const isStale = !asset || !asset.updatedAt || asset.updatedAt < threshold;
-                    const isDataMissing = !asset || asset.lastPrice === 0;
-
-                    if (isStale || isDataMissing) {
+                    // Se não tem preço ou o dado é muito velho, atualiza
+                    if (isStale || !asset || asset.lastPrice === 0) {
                         toUpdate.push(ticker);
                     }
                 }
@@ -96,41 +94,49 @@ export const marketDataService = {
 
             const quotes = await externalMarketService.getQuotes(toUpdate);
 
-            // --- ZOMBIE KILLER ---
-            const returnedTickers = new Set(quotes.map(q => this.normalizeSymbol(q.ticker)));
-            const failedTickers = toUpdate.filter(t => !returnedTickers.has(t));
+            // --- MELHORIA 2: FALLBACK INTELIGENTE (NO-ZERO POLICY) ---
+            const operations = [];
+            
+            for (const quote of quotes) {
+                const ticker = this.normalizeSymbol(quote.ticker);
+                const currentAsset = assetMap.get(ticker);
+                
+                // Validação de Preço: Se a API retornou 0 ou null, ou caiu drasticamente (>90%) por erro
+                let newPrice = quote.price;
+                let newChange = quote.change || 0;
+                let shouldUseNewData = true;
 
-            if (failedTickers.length > 0) {
-                if (!force) {
-                    await MarketAsset.updateMany(
-                        { ticker: { $in: failedTickers } },
-                        { $set: { isActive: false, updatedAt: now } }
-                    );
-                    logger.info(`ℹ️ [MarketData] Limpeza: ${failedTickers.length} inativos.`);
+                if (!newPrice || newPrice <= 0) {
+                    shouldUseNewData = false;
+                    logger.warn(`⚠️ [MarketData] API retornou preço inválido para ${ticker}. Mantendo anterior.`);
+                }
+                
+                // Se o ativo já tinha preço e o novo é 0, ignoramos a atualização de preço (Fallback)
+                if (!shouldUseNewData && currentAsset && currentAsset.lastPrice > 0) {
+                    // Mantemos o preço antigo, mas atualizamos o timestamp para não tentar buscar a cada segundo
+                    newPrice = currentAsset.lastPrice;
+                    newChange = 0; // Resetamos variação pois o dado está 'stale'
+                }
+
+                if (newPrice > 0) {
+                    operations.push({
+                        updateOne: {
+                            filter: { ticker: ticker },
+                            update: {
+                                $set: {
+                                    lastPrice: newPrice,
+                                    change: newChange, 
+                                    updatedAt: now,
+                                    isActive: true 
+                                }
+                            }
+                        }
+                    });
                 }
             }
 
-            if (!quotes || quotes.length === 0) return;
-
-            const operations = quotes
-                .filter(quote => quote.price && quote.price > 0)
-                .map(quote => ({
-                    updateOne: {
-                        filter: { ticker: this.normalizeSymbol(quote.ticker) },
-                        update: {
-                            $set: {
-                                lastPrice: quote.price,
-                                change: quote.change || 0, 
-                                updatedAt: now,
-                                isActive: true 
-                            }
-                        }
-                    }
-                }));
-
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
-                // logger.info(`ℹ️ [MarketData] Atualizados: ${operations.length} cotações.`); // Opcional, o scheduler já loga o total
             }
 
         } catch (error) {
@@ -163,7 +169,6 @@ export const marketDataService = {
             }
             return historyEntry ? historyEntry.history : null;
         } catch (error) {
-            // logger.error(`Erro ao buscar benchmark ${ticker}: ${error.message}`);
             return null;
         }
     },

@@ -60,6 +60,9 @@ export const paymentService = {
                 ],
                 external_reference: userId.toString(),
                 
+                // NOTIFICAÇÃO WEBHOOK (Ação Obrigatória do Mercado Pago)
+                notification_url: `${apiUrl}/api/webhooks/mercadopago`,
+
                 back_urls: {
                     success: successUrl,
                     failure: failureUrl,

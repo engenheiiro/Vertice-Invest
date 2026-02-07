@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, PlusCircle, DollarSign, BarChart2, Tag, ArrowUpCircle, ArrowDownCircle, Search, Loader2, Clock, CheckCircle2, TrendingUp, Percent, Edit3, ShieldCheck } from 'lucide-react';
+import { X, PlusCircle, DollarSign, BarChart2, Tag, ArrowUpCircle, ArrowDownCircle, Search, Loader2, Clock, CheckCircle2, TrendingUp, Percent, Edit3, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Input } from '../ui/Input';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { Button } from '../ui/Button';
@@ -26,6 +26,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     
     const [isFetchingPrice, setIsFetchingPrice] = useState(false);
     const [priceSource, setPriceSource] = useState<'manual' | 'historical'>('manual');
+    const [suggestedPrice, setSuggestedPrice] = useState<number | null>(null);
+    const [priceWarning, setPriceWarning] = useState<string | null>(null);
     const [historicalDateFound, setHistoricalDateFound] = useState<string | null>(null);
     const [isCurrentPrice, setIsCurrentPrice] = useState(false); 
     
@@ -55,9 +57,11 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             document.body.style.overflow = 'hidden';
             setStatus('idle');
             setValidationError('');
+            setPriceWarning(null);
             setTransactionType('BUY');
             setSearchResults([]);
             setPriceSource('manual');
+            setSuggestedPrice(null);
             setHistoricalDateFound(null);
             setIsCurrentPrice(false);
             setForm({ 
@@ -74,6 +78,43 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         }
         return () => { document.body.style.overflow = 'unset'; };
     }, [isOpen]);
+
+    // Lógica de Validação de Preço (Warning)
+    useEffect(() => {
+        if (!form.price) {
+            setPriceWarning(null);
+            return;
+        }
+
+        const userPrice = parseCurrencyToFloat(form.price);
+        if (isNaN(userPrice)) return;
+
+        // Caso 1: Preço sugerido (histórico/atual) existe, mas usuário desviou muito (> 10%)
+        if (suggestedPrice && suggestedPrice > 0) {
+            const diff = Math.abs(userPrice - suggestedPrice);
+            const percentDiff = (diff / suggestedPrice) * 100;
+            
+            if (percentDiff > 10) {
+                setPriceWarning(`Atenção: O preço inserido difere ${percentDiff.toFixed(0)}% da cotação de referência (R$ ${suggestedPrice.toFixed(2)}).`);
+                return;
+            }
+        }
+
+        // Caso 2: Sem preço sugerido (manual) e data antiga (> 7 dias atrás)
+        if (!suggestedPrice && form.date) {
+            const txDate = new Date(form.date);
+            const today = new Date();
+            const diffDays = (today.getTime() - txDate.getTime()) / (1000 * 3600 * 24);
+            
+            if (diffDays > 7 && form.type !== 'FIXED_INCOME' && form.type !== 'CASH') {
+                setPriceWarning("Data antiga. Verifique se o preço corresponde à cotação histórica exata para não distorcer a rentabilidade.");
+                return;
+            }
+        }
+
+        setPriceWarning(null);
+
+    }, [form.price, form.date, suggestedPrice]);
 
     // Busca de Preço Automático (Com Cache e Debounce)
     useEffect(() => {
@@ -94,6 +135,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         setIsFetchingPrice(true);
         setHistoricalDateFound(null);
         setIsCurrentPrice(false);
+        setSuggestedPrice(null);
 
         priceFetchTimeoutRef.current = setTimeout(async () => {
             try {
@@ -131,7 +173,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         if (data && data.price) {
             const fmtPrice = data.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             setForm(prev => ({ ...prev, price: fmtPrice }));
-            setPriceSource('historical'); 
+            setPriceSource('historical');
+            setSuggestedPrice(data.price); 
             if (data.isLive) setIsCurrentPrice(true);
             else if (data.foundDate && data.foundDate !== targetDate) setHistoricalDateFound(data.foundDate); 
         }
@@ -291,6 +334,13 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         let finalQty = 0;
         let finalPrice = 0;
 
+        // Validação de Data Futura
+        const today = new Date().toISOString().split('T')[0];
+        if (form.date > today) {
+            setValidationError('Não é permitido lançar transações futuras.');
+            return;
+        }
+
         if (form.type === 'CASH') {
             const rawAmount = parseCurrencyToFloat(form.price);
             if (isNaN(rawAmount) || rawAmount <= 0) {
@@ -358,10 +408,12 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             addToast("Transação registrada com sucesso!", "success");
             
             // Verifica se a data é antiga para mostrar aviso de recálculo
-            const today = new Date().toISOString().split('T')[0];
             if (form.date < today) {
+                // Mensagem de rebuild sutil
                 setTimeout(() => {
-                    addToast("Recalculando evolução patrimonial retroativa...", "info");
+                    // O backend já está aguardando, então quando chegar aqui já recalculou.
+                    // Apenas informamos que o histórico foi ajustado.
+                    addToast("Evolução patrimonial recalculada.", "info");
                 }, 500);
             }
 
@@ -595,6 +647,9 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
     if (!isOpen) return null;
 
+    // Data máxima permitida = Hoje
+    const maxDate = new Date().toISOString().split('T')[0];
+
     return createPortal(
         <div className="relative z-[100]" aria-labelledby="modal-title" role="dialog" aria-modal="true">
             <div className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
@@ -658,6 +713,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                     </div>
                                     <Input 
                                         label="Data do Aporte" type="date" value={form.date}
+                                        max={maxDate}
                                         onChange={handleDateChange}
                                         containerClassName="mb-0 col-span-1"
                                     />
@@ -679,6 +735,16 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                 <div className="grid grid-cols-2 gap-4">
                                     {renderQuantityAndPriceFields()}
                                 </div>
+
+                                {/* WARNINGS DE PREÇO */}
+                                {priceWarning && (
+                                    <div className="bg-yellow-900/20 border border-yellow-700/30 p-3 rounded-lg flex items-start gap-3 animate-fade-in">
+                                        <AlertTriangle size={16} className="text-yellow-500 shrink-0 mt-0.5" />
+                                        <p className="text-[10px] text-yellow-200 leading-relaxed font-medium">
+                                            {priceWarning}
+                                        </p>
+                                    </div>
+                                )}
 
                                 {validationError && (
                                     <p className="text-xs text-red-500 font-bold text-center animate-shake bg-red-900/10 p-2 rounded-lg border border-red-900/20">

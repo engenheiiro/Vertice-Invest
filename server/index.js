@@ -3,24 +3,32 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 
-// Função auxiliar para log de pânico (escreve direto no disco sem depender de bibliotecas)
+// Função auxiliar para log de pânico segura
 const panicLog = (message) => {
-    try {
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = path.dirname(__filename);
-        const logPath = path.join(__dirname, 'logs', 'crash-report.txt');
-        const timestamp = new Date().toISOString();
-        const logMsg = `\n[${timestamp}] CRITICAL CRASH:\n${message}\n--------------------------\n`;
-        
-        // Garante que a pasta existe (redundância)
-        if (!fs.existsSync(path.join(__dirname, 'logs'))) {
-            fs.mkdirSync(path.join(__dirname, 'logs'));
+    const timestamp = new Date().toISOString();
+    const logMsg = `\n[${timestamp}] CRITICAL CRASH:\n${message}\n--------------------------\n`;
+    
+    // Sempre loga no console (stderr) para captura por ferramentas de monitoramento (CloudWatch, Datadog, Render Logs)
+    console.error(logMsg);
+
+    // Tenta gravar em disco apenas se estiver em ambiente local ou explicitamente configurado
+    // Em produção (Render/Vercel/Heroku), o FS pode ser efêmero ou read-only
+    if (process.env.NODE_ENV !== 'production') {
+        try {
+            const __filename = fileURLToPath(import.meta.url);
+            const __dirname = path.dirname(__filename);
+            const logDir = path.join(__dirname, 'logs');
+            const logPath = path.join(logDir, 'crash-report.txt');
+            
+            if (!fs.existsSync(logDir)) {
+                fs.mkdirSync(logDir, { recursive: true });
+            }
+            
+            fs.appendFileSync(logPath, logMsg);
+            console.error("🔥 ERRO GRAVADO LOCALMENTE EM: " + logPath);
+        } catch (e) {
+            console.error("⚠️ Falha ao gravar log em disco (ignorando):", e.message);
         }
-        
-        fs.appendFileSync(logPath, logMsg);
-        console.error("🔥 ERRO GRAVADO EM: " + logPath);
-    } catch (e) {
-        console.error("ERRO AO GRAVAR LOG DE PÂNICO:", e);
     }
 };
 

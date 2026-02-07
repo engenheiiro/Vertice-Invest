@@ -4,6 +4,20 @@ import logger from '../config/logger.js';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+// Helper para limpar markdown de JSON
+const cleanJsonString = (str) => {
+    if (!str) return "{}";
+    // Remove blocos de código markdown ```json ... ```
+    let cleaned = str.replace(/```json/g, "").replace(/```/g, "");
+    // Remove textos antes ou depois do primeiro { e último }
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace >= 0) {
+        cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+    }
+    return cleaned;
+};
+
 export const aiEnhancementService = {
     async enhanceRankingWithNews(currentRanking, assetClass) {
         if (!process.env.API_KEY) throw new Error("API_KEY ausente.");
@@ -66,16 +80,17 @@ export const aiEnhancementService = {
             let aiAnalysis = [];
             
             try {
-                const parsed = JSON.parse(responseText);
+                const cleanedText = cleanJsonString(responseText);
+                const parsed = JSON.parse(cleanedText);
                 aiAnalysis = parsed.analysis || parsed; // Tenta pegar a chave ou o array direto
             } catch (e) {
-                logger.error(`Erro ao parsear JSON da IA: ${e.message}`);
+                logger.error(`Erro ao parsear JSON da IA: ${e.message}. Texto bruto: ${responseText.substring(0, 100)}...`);
                 // Fallback para não quebrar o fluxo
                 return candidates;
             }
             
             const enhancedList = candidates.map(original => {
-                const aiData = aiAnalysis.find(a => a.ticker === original.ticker);
+                const aiData = Array.isArray(aiAnalysis) ? aiAnalysis.find(a => a.ticker === original.ticker) : null;
                 
                 // Se a IA não retornou dado para este ticker, assume neutro
                 const aiScore = aiData ? aiData.aiScore : 50; 

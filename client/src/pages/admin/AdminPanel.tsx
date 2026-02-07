@@ -4,7 +4,8 @@ import { Header } from '../../components/dashboard/Header';
 import { researchService, ResearchReport } from '../../services/research';
 import { marketService } from '../../services/market';
 import { authService } from '../../services/auth'; 
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles, Database, Minus, HardDrive, Scissors, Tag } from 'lucide-react';
+import { subscriptionService } from '../../services/subscription'; // IMPORTADO
+import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles, Database, Minus, HardDrive, Scissors, Tag, CreditCard } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 
 // --- INTERFACES PARA TIPAGEM FORTE ---
@@ -57,7 +58,7 @@ export const AdminPanel = () => {
     const [selectedAuditReport, setSelectedAuditReport] = useState<ResearchReport | null>(null);
     const [isGlobalRunning, setIsGlobalRunning] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
-    const [isMacroSyncing, setIsMacroSyncing] = useState(false); // Novo Estado
+    const [isMacroSyncing, setIsMacroSyncing] = useState(false);
     
     const [macroData, setMacroData] = useState<MacroData | null>(null);
     const [isLoadingMacro, setIsLoadingMacro] = useState(true);
@@ -174,6 +175,24 @@ export const AdminPanel = () => {
         } finally { 
             setLoadingKey(null);
             setTimeout(() => setStatusMsg(null), 5000);
+        }
+    };
+
+    const handleTestPayment = async () => {
+        setLoadingKey('TEST_PAYMENT');
+        try {
+            const response = await subscriptionService.initCheckout('TEST');
+            if (response.redirectUrl) {
+                // Abre em nova aba para não perder o admin
+                window.open(response.redirectUrl, '_blank');
+                setStatusMsg({ type: 'success', text: "Checkout de Teste (R$ 0,50) aberto em nova aba." });
+            } else {
+                throw new Error("Link não gerado");
+            }
+        } catch (e: any) {
+            setStatusMsg({ type: 'error', text: "Erro ao iniciar pagamento de teste." });
+        } finally {
+            setLoadingKey(null);
         }
     };
 
@@ -367,8 +386,8 @@ export const AdminPanel = () => {
                     </div>
                 </div>
 
-                {/* === CACHE & SPLIT TOOLS === */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+                {/* === CACHE, SPLIT & PAYMENTS === */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
                     
                     {/* CACHE INSPECTOR */}
                     <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
@@ -376,79 +395,63 @@ export const AdminPanel = () => {
                             <HardDrive size={18} className="text-emerald-500" />
                             <h3 className="text-sm font-bold text-white uppercase tracking-wider">Inspector de Cache</h3>
                         </div>
-                        <div className="flex flex-col md:flex-row gap-6">
-                            <div className="w-full flex flex-col justify-center">
-                                <form onSubmit={handleCacheSearch} className="flex gap-0 relative">
-                                    <div className="relative flex-1">
-                                        <input placeholder="Ex: PETR4..." value={cacheSearchTicker} onChange={(e) => setCacheSearchTicker(e.target.value.toUpperCase())} className="w-full bg-[#0B101A] border border-slate-700 border-r-0 rounded-l-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500/50 font-mono uppercase" />
-                                    </div>
-                                    <button type="submit" disabled={isSearchingCache} className="px-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 border-l-0 rounded-r-xl text-slate-300 hover:text-white transition-colors disabled:opacity-50">
-                                        {isSearchingCache ? <RefreshCw size={18} className="animate-spin"/> : <Search size={18} />}
-                                    </button>
-                                </form>
-                                {cacheData && (
-                                    <div className="mt-4 p-4 bg-[#0F131E] rounded-xl border border-slate-800 space-y-3">
-                                        <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-                                            <span className="font-black text-lg text-white">{cacheData.ticker}</span>
-                                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${cacheData.status === 'CACHED' || cacheData.status === 'LIVE_ONLY' ? 'bg-emerald-900/20 text-emerald-500' : 'bg-red-900/20 text-red-500'}`}>
-                                                {cacheData.status}
-                                            </span>
-                                        </div>
-                                        
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <p className="text-[9px] text-slate-500 font-bold uppercase mb-1">Preço Atual (Live)</p>
-                                                <p className="text-sm font-mono text-white font-bold flex items-center gap-1">
-                                                    R$ {cacheData.currentPrice?.toFixed(2) || '0.00'}
-                                                    <Tag size={10} className="text-blue-500" />
-                                                </p>
-                                                <p className="text-[9px] text-slate-600 mt-0.5">
-                                                    Sync: {cacheData.lastSync ? new Date(cacheData.lastSync).toLocaleString() : '-'}
-                                                </p>
-                                            </div>
-                                            
-                                            <div>
-                                                <p className="text-[9px] text-slate-500 font-bold uppercase mb-1">Histórico (Cache)</p>
-                                                <p className="text-sm font-mono text-slate-300 flex items-center gap-1">
-                                                    {cacheData.dataPoints} pontos
-                                                    <History size={10} className="text-purple-500" />
-                                                </p>
-                                                <p className="text-[9px] text-slate-600 mt-0.5">
-                                                    Update: {cacheData.historyLastUpdated ? new Date(cacheData.historyLastUpdated).toLocaleString() : '-'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                        <form onSubmit={handleCacheSearch} className="flex gap-0 relative mb-4">
+                            <div className="relative flex-1">
+                                <input placeholder="Ticker..." value={cacheSearchTicker} onChange={(e) => setCacheSearchTicker(e.target.value.toUpperCase())} className="w-full bg-[#0B101A] border border-slate-700 border-r-0 rounded-l-xl px-4 py-2 text-sm text-white focus:outline-none font-mono uppercase" />
                             </div>
-                        </div>
+                            <button type="submit" disabled={isSearchingCache} className="px-3 bg-slate-800 border border-slate-700 border-l-0 rounded-r-xl text-slate-300 hover:text-white">
+                                {isSearchingCache ? <RefreshCw size={16} className="animate-spin"/> : <Search size={16} />}
+                            </button>
+                        </form>
+                        {cacheData && (
+                            <div className="p-3 bg-[#0F131E] rounded-xl border border-slate-800 space-y-1">
+                                <div className="flex justify-between font-bold text-white">
+                                    <span>{cacheData.ticker}</span>
+                                    <span className={`text-[9px] px-1.5 rounded ${cacheData.status === 'CACHED' ? 'bg-green-900 text-green-400' : 'bg-red-900 text-red-400'}`}>{cacheData.status}</span>
+                                </div>
+                                <p className="text-xs text-slate-400">Price: {cacheData.currentPrice?.toFixed(2)}</p>
+                                <p className="text-[10px] text-slate-600">Points: {cacheData.dataPoints}</p>
+                            </div>
+                        )}
                     </div>
 
                     {/* SPLIT FIXER */}
                     <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
                         <div className="flex items-center gap-2 mb-4">
                             <Scissors size={18} className="text-yellow-500" />
-                            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Reparar Splits (Desdobramentos)</h3>
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Reparar Splits</h3>
                         </div>
-                        <p className="text-[10px] text-slate-400 mb-4 leading-relaxed">
-                            Corrige histórico de usuários caso um ativo tenha sofrido split (ex: 1:10) e a carteira esteja distorcida. Busca eventos no Yahoo e aplica retroativamente.
-                        </p>
+                        <p className="text-[10px] text-slate-400 mb-4">Corrige histórico de usuários pós-split.</p>
                         <form onSubmit={handleFixSplit} className="flex gap-2">
                             <input 
-                                placeholder="Ticker (Ex: MGLU3)" 
+                                placeholder="Ticker" 
                                 value={splitTicker} 
                                 onChange={(e) => setSplitTicker(e.target.value.toUpperCase())} 
-                                className="flex-1 bg-[#0B101A] border border-slate-700 rounded-xl px-4 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-yellow-500/50 font-mono uppercase"
+                                className="flex-1 bg-[#0B101A] border border-slate-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none font-mono uppercase"
                             />
-                            <button 
-                                type="submit" 
-                                disabled={isFixingSplit || !splitTicker} 
-                                className="px-4 py-2 bg-yellow-600/20 text-yellow-500 hover:bg-yellow-600/30 hover:text-white border border-yellow-600/30 rounded-xl font-bold text-xs transition-colors flex items-center gap-2 disabled:opacity-50"
-                            >
-                                {isFixingSplit ? <RefreshCw size={14} className="animate-spin" /> : <Zap size={14} />}
-                                Corrigir
+                            <button type="submit" disabled={isFixingSplit || !splitTicker} className="px-3 py-2 bg-yellow-600/20 text-yellow-500 border border-yellow-600/30 rounded-xl hover:text-white hover:bg-yellow-600/40 transition-colors">
+                                <Zap size={16} />
                             </button>
                         </form>
+                    </div>
+
+                    {/* PAYMENT TESTER */}
+                    <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
+                        <div className="flex items-center gap-2 mb-4">
+                            <CreditCard size={18} className="text-blue-500" />
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Testes de Faturamento</h3>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mb-4">
+                            Simula checkout real no Mercado Pago com valor simbólico.
+                        </p>
+                        <button 
+                            onClick={handleTestPayment}
+                            disabled={loadingKey === 'TEST_PAYMENT'}
+                            className="w-full py-2 bg-blue-600/20 text-blue-400 border border-blue-600/40 hover:bg-blue-600/30 hover:text-white rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-2"
+                        >
+                            {loadingKey === 'TEST_PAYMENT' ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} fill="currentColor" />}
+                            Comprar Plano R$ 0,50
+                        </button>
                     </div>
                 </div>
 

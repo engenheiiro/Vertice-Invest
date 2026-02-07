@@ -3,7 +3,8 @@
 export const PLANS = {
     'ESSENTIAL': { price: 39.90, days: 30, title: 'Vértice Essential' },
     'PRO': { price: 119.90, days: 30, title: 'Vértice Pro' },
-    'BLACK': { price: 349.90, days: 30, title: 'Vértice Black Elite' }
+    'BLACK': { price: 349.90, days: 30, title: 'Vértice Black Elite' },
+    'TEST': { price: 0.50, days: 1, title: 'Plano de Teste (Dev)' } // Plano Oculto para Teste
 };
 
 // Definição de limites por feature e plano
