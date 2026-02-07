@@ -10,17 +10,17 @@ const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
 const PLANS_CONFIG = {
     'ESSENTIAL': { 
         price: 5.00, 
-        title: 'Vértice Essential - Assinatura Mensal',
+        title: 'Vértice Essential', // Título mais curto para evitar problemas de char limit
         description: 'Acesso básico ao Terminal e Carteira.'
     },
     'PRO': { 
         price: 10.00, 
-        title: 'Vértice Pro - Assinatura Mensal',
+        title: 'Vértice Pro', 
         description: 'Acesso completo ao Research e Sinais em Tempo Real.'
     },
     'BLACK': { 
         price: 15.00, 
-        title: 'Vértice Black - Assinatura Mensal',
+        title: 'Vértice Black', 
         description: 'Gestão Private, Consultoria e Automação Fiscal.'
     }
 };
@@ -46,18 +46,20 @@ export const paymentService = {
 
         try {
             // URL de retorno
-            // Tenta pegar URL do Render (RENDER_EXTERNAL_URL) ou API_URL configurada, fallback para localhost
             const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.API_URL || 'http://localhost:5000';
             const apiUrl = baseUrl.replace(/\/$/, '');
             const backUrl = `${apiUrl}/api/subscription/return?plan=${planKey}`;
             
             // --- CORREÇÃO DE DATA ---
-            // Adiciona 1 hora para evitar conflito de fuso horário "past date"
             const futureDate = new Date();
             futureDate.setHours(futureDate.getHours() + 1);
             const startDate = futureDate.toISOString();
 
-            // Configuração do Corpo da Requisição
+            // Verificar Ambiente
+            const isSandbox = accessToken.startsWith('TEST-');
+
+            // --- CONSTRUÇÃO DO BODY ---
+            // IMPORTANTE: NÃO INCLUIR payer_email AQUI INICIALMENTE
             const body = {
                 reason: planConfig.title,
                 external_reference: userId.toString(),
@@ -73,21 +75,16 @@ export const paymentService = {
             };
 
             // --- LÓGICA CRÍTICA DE E-MAIL ---
-            // Se for TEST (Sandbox), precisamos enviar um email fake diferente do vendedor.
-            // Se for PROD (APP_USR), NÃO ENVIAMOS payer_email. 
-            // Isso permite que o usuário (ou um amigo) digite qualquer email no checkout do MP.
-            
-            const isSandbox = accessToken.startsWith('TEST-');
-            
             if (isSandbox) {
+                // Em Sandbox, OBRIGATÓRIO enviar e-mail diferente do dono da conta MP
                 const randomId = Math.floor(Math.random() * 1000000);
                 body.payer_email = `test_user_${randomId}@test.com`;
                 logger.info(`🧪 [MP Sandbox] Email fake injetado: ${body.payer_email}`);
             } else {
-                // EM PRODUÇÃO: Deixamos o payer_email undefined/vazio.
-                // O Mercado Pago coletará o email real no checkout.
-                // Isso resolve o problema de "Amigo pagando para Usuário".
-                logger.info(`💳 [MP Production] Payer Email omitido para permitir checkout livre.`);
+                // Em PRODUÇÃO, NÃO enviamos payer_email.
+                // Isso permite que o link seja "aberto": qualquer pessoa (amigo, parente)
+                // pode preencher o e-mail no checkout do Mercado Pago e pagar.
+                logger.info(`💳 [MP Production] Link genérico gerado (sem restrição de e-mail).`);
             }
 
             logger.info(`💳 Criando assinatura ${planKey} (R$ ${planConfig.price}) para User ${userId}...`);
