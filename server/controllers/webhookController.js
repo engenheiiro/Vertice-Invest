@@ -7,71 +7,76 @@ import { paymentService } from '../services/paymentService.js';
 export const handleMercadoPagoWebhook = async (req, res) => {
     try {
         const { type, data } = req.body;
-        // O Mercado Pago envia o ID do recurso no campo 'data.id' ou diretamente no query param em alguns casos
-        // Para preapproval (assinatura), o tópico geralmente é 'subscription_preapproval'
         
-        const topic = req.body.type || req.query.topic;
+        // No Checkout Pro, o tópico principal é 'payment'
+        // O MP pode enviar 'type' no body ou 'topic' na query string
+        const topic = type || req.query.topic;
         const resourceId = (data && data.id) || req.query.id;
 
         logger.info(`🔔 Webhook MP Recebido: Tópico [${topic}] ID [${resourceId}]`);
 
-        if (topic === 'subscription_preapproval') {
-            // Verifica o status real na API do Mercado Pago para evitar fraudes de payload
-            const subscription = await paymentService.getSubscriptionStatus(resourceId);
+        // Ignora tópicos que não sejam pagamento (ex: merchant_order criado)
+        if (topic === 'payment') {
             
-            if (!subscription) {
-                logger.warn(`Webhook: Assinatura ${resourceId} não encontrada na API.`);
-                return res.status(200).send('OK'); // Responde OK para parar de receber retentativas
-            }
-
-            const userId = subscription.external_reference;
-            const status = subscription.status; // authorized, paused, cancelled
+            // Busca detalhes do pagamento na API do MP para garantir segurança
+            const payment = await paymentService.getPaymentStatus(resourceId);
             
-            // Mapeamento de Planos reverso (simples, baseado no valor ou título)
-            // Em produção ideal, teríamos um ID do plano no external_reference composto "USERID|PLANID"
-            // Aqui vamos inferir pelo valor para manter compatibilidade com o código anterior
-            const amount = subscription.auto_recurring.transaction_amount;
-            let plan = 'ESSENTIAL';
-            if (amount > 100 && amount < 300) plan = 'PRO';
-            if (amount > 300) plan = 'BLACK';
-
-            const user = await User.findById(userId);
-            
-            if (!user) {
-                logger.error(`Webhook: Usuário ${userId} não encontrado.`);
+            if (!payment) {
+                logger.warn(`Webhook: Pagamento ${resourceId} não encontrado na API.`);
                 return res.status(200).send('OK');
             }
 
-            if (status === 'authorized') {
-                logger.info(`✅ Assinatura Aprovada para ${user.email}. Plano: ${plan}`);
-                
-                // Atualiza Usuário
-                user.plan = plan;
-                user.subscriptionStatus = 'ACTIVE';
-                user.mpSubscriptionId = resourceId;
-                user.mpCustomerId = subscription.payer_id;
-                
-                // Define validade para +32 dias (margem de segurança)
-                const validUntil = new Date();
-                validUntil.setDate(validUntil.getDate() + 32);
-                user.validUntil = validUntil;
-                
-                await user.save();
+            const status = payment.status; // approved, pending, rejected
+            const userId = payment.external_reference; // Recuperamos o ID do usuário daqui
+            
+            // Descobre qual plano foi comprado baseado no valor ou na descrição
+            // (Melhor seria passar no metadata, mas inferência por valor funciona para MVP)
+            const amount = payment.transaction_amount;
+            let plan = 'ESSENTIAL';
+            if (amount >= 9 && amount < 14) plan = 'PRO';
+            if (amount >= 14) plan = 'BLACK';
 
-                // Registra Transação para Histórico
-                await Transaction.create({
-                    user: user._id,
-                    plan: plan,
-                    amount: amount,
-                    status: 'PAID',
-                    method: 'MERCADO_PAGO_SUB',
-                    gatewayId: resourceId
-                });
+            // Logs de Diagnóstico
+            logger.info(`💰 Pagamento ${resourceId}: Status=${status} | User=${userId} | Valor=${amount}`);
 
-            } else if (status === 'cancelled' || status === 'paused') {
-                logger.warn(`⚠️ Assinatura Cancelada/Pausada para ${user.email}`);
-                user.subscriptionStatus = 'CANCELED'; // Ou PAST_DUE
-                await user.save();
+            if (status === 'approved' && userId) {
+                const user = await User.findById(userId);
+                
+                if (user) {
+                    // --- LÓGICA DE RENOVAÇÃO (MODELO PRÉ-PAGO) ---
+                    // Adiciona 30 dias a partir de HOJE ou a partir do vencimento atual se ainda for válido
+                    const now = new Date();
+                    let newValidUntil = new Date(); // Começa com agora
+
+                    // Se o usuário já tem uma assinatura válida no futuro, estendemos ela
+                    if (user.validUntil && new Date(user.validUntil) > now) {
+                        newValidUntil = new Date(user.validUntil);
+                    }
+
+                    // Adiciona 30 dias
+                    newValidUntil.setDate(newValidUntil.getDate() + 30);
+
+                    user.plan = plan;
+                    user.subscriptionStatus = 'ACTIVE';
+                    user.validUntil = newValidUntil;
+                    user.mpSubscriptionId = resourceId.toString(); // Salva ID do pagamento como ref
+                    
+                    await user.save();
+                    
+                    logger.info(`✅ Acesso liberado para ${user.email} até ${newValidUntil.toISOString()}`);
+
+                    // Registra Transação no Histórico
+                    await Transaction.create({
+                        user: user._id,
+                        plan: plan,
+                        amount: amount,
+                        status: 'PAID',
+                        method: payment.payment_type_id === 'bank_transfer' ? 'PIX' : 'CREDIT_CARD', // Detecta se foi PIX
+                        gatewayId: resourceId.toString()
+                    });
+                } else {
+                    logger.error(`❌ Usuário ${userId} não encontrado para liberar acesso.`);
+                }
             }
         }
 
@@ -80,8 +85,6 @@ export const handleMercadoPagoWebhook = async (req, res) => {
 
     } catch (error) {
         logger.error(`🔥 Erro Webhook MP: ${error.message}`);
-        // Mesmo com erro interno, respondemos 200 ou 500 dependendo da estratégia. 
-        // Se for erro de código nosso, 500 fará o MP tentar de novo.
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
