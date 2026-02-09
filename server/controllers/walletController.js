@@ -275,33 +275,75 @@ export const getWalletPerformance = async (req, res, next) => {
             return res.json([]);
         }
 
-        const currentRate = config?.cdi || 11.15;
+        // --- 1. BUSCAR DADOS REAIS DO IBOVESPA (CORREÇÃO DE BENCHMARK) ---
+        const ibovHistory = await marketDataService.getBenchmarkHistory('^BVSP');
+        const ibovMap = new Map();
+        if (ibovHistory && Array.isArray(ibovHistory)) {
+            ibovHistory.forEach(h => ibovMap.set(h.date, h.close || h.adjClose));
+        }
+
+        // Determina o valor base do Ibov na data de início da carteira
+        const startDateStr = history[0].date.toISOString().split('T')[0];
+        let baseIbov = ibovMap.get(startDateStr);
         
+        // Se não tiver IBOV exato na data de início (feriado), tenta achar o mais próximo
+        if (!baseIbov) {
+             const fallback = ibovHistory?.find(h => h.date >= startDateStr);
+             baseIbov = fallback ? (fallback.close || fallback.adjClose) : 120000;
+        }
+
+        const currentRate = config?.cdi || 11.15;
         let accumulatedCDI = 1.0;
         let previousDate = new Date(history[0].date);
         previousDate.setHours(0,0,0,0);
 
         const result = history.map((point) => {
+            const dateStr = point.date.toISOString().split('T')[0];
             const currentDate = new Date(point.date);
             currentDate.setHours(0,0,0,0);
 
+            // CDI
             const daysDelta = countBusinessDays(previousDate, currentDate);
-            
             if (daysDelta > 0) {
                 const factor = getDailyFactorForDate(currentDate, currentRate);
                 const periodFactor = Math.pow(factor, daysDelta);
                 accumulatedCDI *= periodFactor;
             }
-
             previousDate = currentDate;
 
+            // IBOV
+            let currentIbov = ibovMap.get(dateStr);
+            // Se não tiver cotação do dia, usa a anterior (fallback visual)
+            if (!currentIbov && baseIbov) currentIbov = baseIbov;
+
+            const ibovPercent = baseIbov && currentIbov ? ((currentIbov / baseIbov) - 1) * 100 : 0;
+
             return {
-                date: point.date.toISOString().split('T')[0],
+                date: dateStr,
                 wallet: point.quotaPrice ? ((point.quotaPrice/100)-1)*100 : 0, 
                 walletRoi: point.totalInvested > 0 ? ((point.totalEquity - point.totalInvested + point.totalDividends) / point.totalInvested) * 100 : 0,
                 cdi: (accumulatedCDI - 1) * 100,
-                ibov: (Math.random() * 5) - 2 
+                ibov: ibovPercent
             };
+        });
+
+        // --- 2. CORREÇÃO DE "CLIFF DROP" (QUEDA PARA ZERO) ---
+        // Se o último ponto for 0 (geralmente snapshot incompleto do dia atual) mas o anterior não era, removemos.
+        if (result.length > 1) {
+            const last = result[result.length - 1];
+            const prev = result[result.length - 2];
+            
+            // Verifica se houve uma queda brusca artificial para perto de zero
+            if (Math.abs(last.wallet) < 0.01 && Math.abs(prev.wallet) > 1) {
+                result.pop();
+            }
+        }
+        
+        // Preenchimento de Gaps do IBOV para evitar quebras de linha no gráfico
+        let lastKnownIbov = 0;
+        result.forEach(r => {
+            if (r.ibov !== 0) lastKnownIbov = r.ibov;
+            else r.ibov = lastKnownIbov;
         });
 
         res.json(result);
