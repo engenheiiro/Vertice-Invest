@@ -13,7 +13,8 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 // --- DADOS HARDCODED ORIGINAIS ---
 const BLACKLIST = ['AMER3', 'OIBR3', 'LIGT3', 'RCSL3', 'PCAR3', 'RSID3', 'AZEV4', 'TCNO4', 'DASA3', 'SEQL3'];
-const IGNORED_TICKERS = ['ISAE4', 'PLAG11', 'FIGS11', 'MOTV3', 'AUAU3', 'OBTC3', 'AZTE3', 'AXIA3', 'AMOB3', 'TOKY3'];
+// Adicionado SNLG11 à lista de ignorados
+const IGNORED_TICKERS = ['ISAE4', 'PLAG11', 'FIGS11', 'MOTV3', 'AUAU3', 'OBTC3', 'AZTE3', 'AXIA3', 'AMOB3', 'TOKY3', 'SNLG11'];
 const FII_TIER_1 = ['HGLG11', 'KNRI11', 'BTLG11', 'ALZR11', 'HGBS11', 'XPML11', 'VISC11', 'PVBI11', 'HGRU11', 'TRXF11', 'KNCR11', 'HGCR11', 'KNSC11', 'CPTS11', 'BTHF11'];
 
 const runMigration = async () => {
@@ -26,9 +27,9 @@ const runMigration = async () => {
         await SystemConfig.findOneAndUpdate(
             { key: 'MACRO_INDICATORS' },
             {
-                selic: 10.00,
-                ipca: 1.00,
-                cdi: 10.00,
+                selic: 11.25,
+                ipca: 4.50,
+                cdi: 11.15,
                 riskFree: 11.25,
                 ntnbLong: 6.30,
                 dollar: 5.75

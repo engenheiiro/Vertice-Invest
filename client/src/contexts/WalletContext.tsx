@@ -35,7 +35,10 @@ export interface WalletKPIs {
     dayVariationPercent: number;
     totalDividends: number;
     projectedDividends: number;
-    weightedRentability: number; 
+    weightedRentability: number;
+    dataQuality?: 'AUDITED' | 'ESTIMATED'; 
+    sharpeRatio?: number; // Novo
+    beta?: number; // Novo
 }
 
 export interface HistoryPoint {
@@ -173,7 +176,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // KPIs híbridos
     const kpis = useMemo(() => {
         // Se estiver em demo, retorna os KPIs fixos do demo
-        if (isDemoMode) return DEMO_KPIS;
+        if (isDemoMode) return { ...DEMO_KPIS, dataQuality: 'AUDITED' as const, sharpeRatio: 1.8, beta: 0.85 };
 
         if (assets.length === 0) {
             return {
@@ -181,7 +184,10 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 dayVariation: 0, dayVariationPercent: 0, 
                 totalDividends: serverKpis?.totalDividends || 0,
                 projectedDividends: serverKpis?.projectedDividends || 0,
-                weightedRentability: 0
+                weightedRentability: 0,
+                dataQuality: 'AUDITED' as const,
+                sharpeRatio: 0,
+                beta: 0
             };
         }
 
@@ -211,7 +217,10 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             dayVariationPercent: dayVarPercent,
             totalDividends: serverKpis?.totalDividends || 0,
             projectedDividends: serverKpis?.projectedDividends || 0,
-            weightedRentability: serverKpis?.weightedRentability || resultPercent 
+            weightedRentability: serverKpis?.weightedRentability || resultPercent,
+            dataQuality: serverKpis?.dataQuality || 'ESTIMATED',
+            sharpeRatio: serverKpis?.sharpeRatio || 0,
+            beta: serverKpis?.beta || 0
         };
     }, [assets, serverKpis, isDemoMode]);
     

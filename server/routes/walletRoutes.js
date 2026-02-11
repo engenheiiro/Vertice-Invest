@@ -13,14 +13,15 @@ import {
     getWalletPerformance, 
     getWalletDividends,
     getCashFlow,
-    runCorporateAction
+    runCorporateAction,
+    fixWalletSnapshots,
+    getSnapshotHealth // Nova Importação
 } from '../controllers/walletController.js';
-import { authenticateToken } from '../middleware/authMiddleware.js';
+import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 // --- RATE LIMITER ESTRITO PARA ESCRITA ---
-// Previne ataques de negação de serviço e spam de transações
 const writeLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
     max: 50, // Limite de 50 operações de escrita por IP
@@ -53,5 +54,9 @@ router.get('/cashflow', getCashFlow);
 
 // Nova Rota: Correção de Splits (Admin / Manutenção)
 router.post('/fix-splits', writeLimiter, runCorporateAction);
+
+// Rotas Admin de Saúde
+router.post('/fix-snapshots', requireAdmin, fixWalletSnapshots);
+router.get('/snapshot-health', requireAdmin, getSnapshotHealth);
 
 export default router;

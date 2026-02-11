@@ -19,7 +19,8 @@ export const Dashboard = () => {
       dividends, 
       marketIndices, 
       isLoading, 
-      isResearchLoading
+      isResearchLoading,
+      systemHealth // Pegando systemHealth do hook
   } = useDashboardData();
   
   const { isPrivacyMode, kpis } = useWallet();
@@ -88,7 +89,11 @@ export const Dashboard = () => {
                 
                 {/* ID para o Tutorial: tour-radar */}
                 <div id="tour-radar" className={`transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
-                    <AiRadar signals={signals} isLoading={isResearchLoading} />
+                    <AiRadar 
+                        signals={signals} 
+                        isLoading={isResearchLoading} 
+                        lastUpdated={systemHealth?.lastSync} // Passando data de atualização
+                    />
                 </div>
 
                 {/* ID para o Tutorial: tour-dividends */}

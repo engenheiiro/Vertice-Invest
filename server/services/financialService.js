@@ -7,10 +7,11 @@ import DividendEvent from '../models/DividendEvent.js';
 import MarketAsset from '../models/MarketAsset.js';
 import AssetHistory from '../models/AssetHistory.js';
 import SystemConfig from '../models/SystemConfig.js';
-import EconomicIndex from '../models/EconomicIndex.js'; // Novo
+import EconomicIndex from '../models/EconomicIndex.js'; 
+import AuditLog from '../models/AuditLog.js'; // Novo
 import { marketDataService } from './marketDataService.js';
 import { externalMarketService } from './externalMarketService.js';
-import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv } from '../utils/mathUtils.js';
+import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js'; 
 import logger from '../config/logger.js';
 
@@ -32,17 +33,13 @@ export const financialService = {
     normalizeTickerForHistory(ticker) {
         const clean = ticker.trim().toUpperCase();
         if (clean.endsWith('.SA') || clean.startsWith('^') || clean.includes('-')) return clean;
-        
-        if (/^[A-Z]{4}\d{1,2}B?$/.test(clean)) {
-            return `${clean}.SA`;
-        }
+        if (/^[A-Z]{4}\d{1,2}B?$/.test(clean)) return `${clean}.SA`;
         return clean;
     },
 
     indexHistoryByDate(history) {
         const map = new Map();
         if (!history || !Array.isArray(history)) return map;
-        
         history.forEach(h => {
             if (h.date) {
                 map.set(h.date, { 
@@ -56,33 +53,28 @@ export const financialService = {
 
     findPriceInMap(priceMap, dateStr) {
         if (!priceMap || priceMap.size === 0) return { close: 0, adjClose: 0 };
-
         if (priceMap.has(dateStr)) return priceMap.get(dateStr);
-
         const targetDate = new Date(dateStr);
         for (let i = 1; i <= 5; i++) {
             const prevDate = new Date(targetDate);
             prevDate.setDate(targetDate.getDate() - i);
             const prevKey = prevDate.toISOString().split('T')[0];
-            if (priceMap.has(prevKey)) {
-                return priceMap.get(prevKey);
-            }
+            if (priceMap.has(prevKey)) return priceMap.get(prevKey);
         }
-
         return { close: 0, adjClose: 0 };
-    },
-
-    findClosestValue(history, targetDateStr) {
-        if (!history) return 0;
-        const exact = history.find(h => h.date === targetDateStr);
-        if (exact) return exact.adjClose || exact.close;
-        return 0;
     },
 
     async rebuildUserHistory(userId) {
         const startTime = Date.now();
         
         try {
+            // Log de Auditoria Inicial
+            await AuditLog.create({
+                user: userId,
+                action: 'RECALC_QUOTA',
+                details: 'Início de reconstrução de histórico (Manual/Transaction Trigger)'
+            });
+
             const txs = await AssetTransaction.find({ user: userId }).sort({ date: 1 });
             if (txs.length === 0) {
                 await WalletSnapshot.deleteMany({ user: userId });
@@ -158,7 +150,6 @@ export const financialService = {
             let previousEquityAdjusted = 0; 
             const lastKnownPrices = {}; 
 
-            // --- MELHORIA 1: CARREGAR INDICES DIÁRIOS REAIS ---
             const dbIndices = await EconomicIndex.find({ 
                 series: 'SELIC', 
                 date: { $gte: startDate } 
@@ -178,15 +169,10 @@ export const financialService = {
                 if (y === currentYear) rate = currentCdiRate;
                 cdiFactorsCacheFallback[y] = Math.pow(1 + (rate / 100), 1/252);
             }
-            // --------------------------------------------------
 
             while (cursor <= today) {
                 const cursorIso = this.toDateKey(cursor);
-                
-                // Prioriza o fator real do dia (Série 11 BCB)
                 let cdiDailyFactor = dailyFactorsMap.get(cursorIso);
-                
-                // Se não existir (feriado ou gap), usa a constante anual aproximada
                 if (!cdiDailyFactor) {
                     cdiDailyFactor = cdiFactorsCacheFallback[cursor.getFullYear()] || 1.0003;
                 }
@@ -197,7 +183,6 @@ export const financialService = {
                 while (txIndex < txs.length) {
                     const tx = txs[txIndex];
                     const txDateIso = this.toDateKey(tx.date);
-                    
                     if (txDateIso > cursorIso) break; 
 
                     if (!portfolio[tx.ticker]) {
@@ -264,8 +249,6 @@ export const financialService = {
                 let totalInvested = 0;
                 let hasPosition = false;
 
-                // Em dias úteis (ou dias onde temos fator BCB), aplica a correção
-                // Se cdiDailyFactor veio do mapa, é dia útil. Se veio do fallback, checamos fim de semana.
                 const isMapFactor = dailyFactorsMap.has(cursorIso);
                 const isWeekend = cursor.getDay() === 0 || cursor.getDay() === 6;
                 const shouldApplyRates = isMapFactor || !isWeekend;
@@ -275,9 +258,7 @@ export const financialService = {
                         if (portfolio[ticker].qty > 0) {
                             const state = fixedIncomeState[ticker];
                             let dailyFactor = 1;
-                            // Se taxa > 30% a.a., assume que é % do CDI (ex: 110% do CDI)
                             if (state.rate > 30) dailyFactor = 1 + ((cdiDailyFactor - 1) * (state.rate / 100));
-                            // Se taxa < 30%, assume que é Pré-fixada a.a. (ex: 12% a.a.)
                             else dailyFactor = Math.pow(1 + (state.rate / 100), 1/252);
                             
                             state.currentValue *= dailyFactor;
@@ -317,15 +298,13 @@ export const financialService = {
                     totalEquityAdjusted += pos.qty * markAdjClose;
                 }
 
+                // USO DO HELPER MATHUTILS (Modified Dietz)
                 if (previousEquityAdjusted > 0) {
-                    const capitalGainAdj = totalEquityAdjusted - previousEquityAdjusted - dayFlowAdjusted;
-                    const denominator = previousEquityAdjusted + (dayFlowAdjusted * 0.5); 
+                    const dailyReturn = calculateDailyDietz(previousEquityAdjusted, totalEquityAdjusted, dayFlowAdjusted);
                     
-                    if (denominator > 0.01) {
-                        const dailyReturn = capitalGainAdj / denominator;
-                        if (dailyReturn > -0.5 && dailyReturn < 0.5) {
-                            currentQuota = currentQuota * (1 + dailyReturn);
-                        }
+                    // Proteção contra spikes absurdos (ex: dados sujos)
+                    if (dailyReturn > -0.5 && dailyReturn < 0.5) {
+                        currentQuota = currentQuota * (1 + dailyReturn);
                     }
                 }
                 
@@ -349,32 +328,16 @@ export const financialService = {
 
             if (snapshots.length > 0) {
                 const session = await mongoose.startSession();
-                let retries = 3;
-                
                 try {
-                    while (retries > 0) {
-                        try {
-                            session.startTransaction();
-                            await WalletSnapshot.deleteMany({ user: userId }).session(session);
-                            const CHUNK_SIZE = 5000;
-                            for (let i = 0; i < snapshots.length; i += CHUNK_SIZE) {
-                                await WalletSnapshot.insertMany(snapshots.slice(i, i + CHUNK_SIZE), { session });
-                            }
-                            await session.commitTransaction();
-                            break; 
-                        } catch (err) {
-                            await session.abortTransaction();
-                            if (err.message.includes('Write conflict') || err.hasErrorLabel?.('TransientTransactionError')) {
-                                if (retries > 1) {
-                                    retries--;
-                                    await new Promise(r => setTimeout(r, 250)); 
-                                    continue;
-                                }
-                            }
-                            throw err; 
-                        }
+                    session.startTransaction();
+                    await WalletSnapshot.deleteMany({ user: userId }).session(session);
+                    const CHUNK_SIZE = 5000;
+                    for (let i = 0; i < snapshots.length; i += CHUNK_SIZE) {
+                        await WalletSnapshot.insertMany(snapshots.slice(i, i + CHUNK_SIZE), { session });
                     }
+                    await session.commitTransaction();
                 } catch (writeErr) {
+                    await session.abortTransaction();
                     throw writeErr;
                 } finally {
                     session.endSession();
@@ -389,8 +352,9 @@ export const financialService = {
         }
     },
 
+    // ... (Mantém o restante igual) ...
     async calculateUserDividends(userId) {
-        // ... (Mantido código original de dividendos para brevidade)
+        // ... (Mantém inalterado)
         const assets = await UserAsset.find({ user: userId });
         const relevantAssets = assets.filter(a => !['CRYPTO', 'CASH', 'FIXED_INCOME'].includes(a.type));
         const tickers = relevantAssets.map(a => a.ticker);
@@ -467,7 +431,7 @@ export const financialService = {
     },
 
     async recalculatePosition(userId, ticker, forcedType = null, session = null) {
-        // ... (Mantido código original de recalculatePosition para brevidade)
+        // ... (Mantém inalterado)
         const query = AssetTransaction.find({ user: userId, ticker }).sort({ date: 1, createdAt: 1 });
         if (session) query.session(session);
         const transactions = await query;
