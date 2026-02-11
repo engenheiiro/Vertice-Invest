@@ -3,17 +3,15 @@ import React, { Suspense, lazy, PropsWithChildren } from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 
-// Importações com Caminhos Relativos Explícitos
 import { AuthLayout } from './components/layout/AuthLayout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AdminRoute } from './components/auth/AdminRoute'; 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WalletProvider } from './contexts/WalletContext';
 import { ToastProvider } from './contexts/ToastContext';
-import { DemoProvider } from './contexts/DemoContext'; // Import Demo
-import { TutorialOverlay } from './components/tutorial/TutorialOverlay'; // Import Overlay
+import { DemoProvider } from './contexts/DemoContext'; 
+import { TutorialOverlay } from './components/tutorial/TutorialOverlay'; 
 
-// Pages - Eager Loading
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Terms } from './pages/Terms';
@@ -23,17 +21,16 @@ import { Landing } from './pages/Landing';
 import { Checkout } from './pages/Checkout';
 import { CheckoutSuccess } from './pages/CheckoutSuccess';
 
-// Lazy Loading
 const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
 const Profile = lazy(() => import('./pages/Profile').then(module => ({ default: module.Profile })));
 const Pricing = lazy(() => import('./pages/Pricing').then(module => ({ default: module.Pricing }))); 
 const Wallet = lazy(() => import('./pages/Wallet').then(module => ({ default: module.Wallet })));
 const Research = lazy(() => import('./pages/Research').then(module => ({ default: module.Research })));
+const RadarPage = lazy(() => import('./pages/Radar').then(module => ({ default: module.RadarPage }))); // Nova
 const Courses = lazy(() => import('./pages/Courses').then(module => ({ default: module.Courses })));
 const Indicators = lazy(() => import('./pages/Indicators').then(module => ({ default: module.Indicators }))); 
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel').then(module => ({ default: module.AdminPanel }))); 
 
-// Loader Sofisticado
 const PageLoader = () => (
   <div className="fixed inset-0 bg-[#02040a] flex items-center justify-center z-[9999]">
     <div className="relative flex flex-col items-center">
@@ -58,9 +55,6 @@ const PublicOnlyRoute: React.FC<PropsWithChildren> = ({ children }) => {
   return <>{children}</>;
 };
 
-// Layout Persistente para Rotas Protegidas
-// O WalletProvider envolve o Outlet, garantindo que ele não seja desmontado na navegação
-// DemoProvider adicionado aqui
 const ProtectedAppLayout = () => {
   return (
     <ProtectedRoute>
@@ -82,10 +76,8 @@ export default function App() {
       <AuthProvider>
         <HashRouter>
           <Routes>
-            {/* Landing Page */}
             <Route path="/" element={<Landing />} />
 
-            {/* Rotas de Autenticação */}
             <Route element={<AuthLayout />}>
               <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
               <Route path="/register" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
@@ -94,17 +86,16 @@ export default function App() {
               <Route path="/reset-password" element={<ResetPassword />} />
             </Route>
 
-            {/* APP PRINCIPAL - O Provider Persiste Aqui */}
             <Route element={<ProtectedAppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/wallet" element={<Wallet />} />
               <Route path="/research" element={<Research />} />
+              <Route path="/radar" element={<RadarPage />} /> {/* Rota Nova */}
               <Route path="/indicators" element={<Indicators />} />
               <Route path="/courses" element={<Courses />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/pricing" element={<Pricing />} />
               
-              {/* Admin aninhado mas com proteção extra */}
               <Route path="/admin" element={
                   <AdminRoute>
                       <AdminPanel />
@@ -112,11 +103,9 @@ export default function App() {
               } />
             </Route>
 
-            {/* Rotas de Checkout (Fora do Layout Principal se necessário, ou dentro) */}
             <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
             <Route path="/checkout/success" element={<ProtectedRoute><CheckoutSuccess /></ProtectedRoute>} />
             
-            {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </HashRouter>

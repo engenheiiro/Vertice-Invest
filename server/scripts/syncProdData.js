@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { syncService } from '../services/syncService.js'; 
 import { aiResearchService } from '../services/aiResearchService.js';
+import { signalEngine } from '../services/engines/signalEngine.js'; // Importado
 
 // Configuração de ambiente para rodar via terminal
 const __filename = fileURLToPath(import.meta.url);
@@ -37,6 +38,20 @@ const syncProd = async () => {
             // 2. Processamento de Inteligência (Centralizado)
             await aiResearchService.runBatchAnalysis(null);
             console.log("info: ℹ️ Processamento IA finalizado.");
+
+            // 3. Radar Alpha & Backtest (NOVO)
+            console.log("info: 📡 Rodando Radar Alpha e Auditoria...");
+            const scanResult = await signalEngine.runScanner();
+            
+            // Log de Telemetria Granular
+            if (scanResult.success) {
+                console.log(`info: ✅ [Radar Alpha] Varredura: ${scanResult.analyzed} ativos analisados. ${scanResult.ignored} ignorados (duplicidade). ${scanResult.signals} novos sinais gerados.`);
+            } else {
+                console.log(`info: ⚠️ [Radar Alpha] Aviso: ${scanResult.error}`);
+            }
+            
+            const backtestResult = await signalEngine.runBacktest();
+            console.log(`info: 🕵️ Backtest: ${backtestResult.processed || 0} sinais auditados.`);
 
             console.log("info: ⏰ Script: Sync Prod Data - Finalizado");
             process.exit(0);

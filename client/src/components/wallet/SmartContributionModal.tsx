@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Calculator, Target, CheckCircle2 } from 'lucide-react';
+import { X, Calculator, Target, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { useWallet, AssetType } from '../../contexts/WalletContext';
@@ -108,7 +108,6 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
 
     if (!isOpen) return null;
 
-    // --- USO DE PORTAL: Renderiza diretamente no body ---
     return createPortal(
         <div className="relative z-[100]" aria-labelledby="modal-title" role="dialog" aria-modal="true">
             
@@ -117,24 +116,38 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
 
             {/* Container Centralizado */}
             <div className="fixed inset-0 z-10 overflow-y-auto">
-                <div className="flex min-h-full items-center justify-center p-4 text-center">
+                <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
                     
-                    {/* Modal Panel - Centralizado Verticalmente com my-auto */}
+                    {/* Modal Panel */}
                     <div className="relative transform overflow-hidden rounded-2xl bg-[#080C14] border border-slate-800 text-left shadow-2xl transition-all w-full max-w-md animate-fade-in my-auto max-h-[90vh] flex flex-col">
                         
                         <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-[#0B101A] shrink-0">
-                            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                                <Calculator size={18} className="text-[#D4AF37]" />
-                                <span className="bg-gradient-to-r from-[#D4AF37] to-[#F2D06B] bg-clip-text text-transparent">
-                                    Aporte Inteligente
-                                </span>
-                            </h2>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <Calculator size={18} className="text-[#D4AF37]" />
+                                    <span className="bg-gradient-to-r from-[#D4AF37] to-[#F2D06B] bg-clip-text text-transparent">
+                                        Aporte Inteligente
+                                    </span>
+                                </h2>
+                                
+                                {/* INFO TOOLTIP */}
+                                <div className="group relative flex items-center">
+                                    <Info size={14} className="text-slate-500 cursor-help hover:text-[#D4AF37] transition-colors" />
+                                    <div className="absolute left-1/2 -translate-x-1/2 top-6 w-64 p-3 bg-[#0F1729] border border-slate-700 rounded-xl shadow-2xl z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-left">
+                                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                                            O algoritmo calcula matematicamente onde alocar seu novo dinheiro para aproximar sua carteira atual das suas metas definidas em <strong>Carteira {'>'} Distribuição {'>'} Ideal</strong>.
+                                        </p>
+                                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#0F1729] border-t border-l border-slate-700 transform rotate-45"></div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
                                 <X size={20} />
                             </button>
                         </div>
 
-                        <div className="p-6 overflow-y-auto custom-scrollbar">
+                        <div className="p-6">
                             <div className="mb-6 space-y-4">
                                 <Input 
                                     label="Valor do Aporte (R$)" type="number" placeholder="0,00"
@@ -185,7 +198,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                                             </div>
                                         </div>
                                     ))}
-                                    {suggestions.length === 0 && <p className="text-center text-xs text-slate-500 py-4">Sem sugestões.</p>}
+                                    {suggestions.length === 0 && <p className="text-center text-xs text-slate-500 py-4">Sem sugestões. Sua carteira está equilibrada.</p>}
                                 </div>
                             ) : (
                                 <div className="text-center py-6 opacity-50">
