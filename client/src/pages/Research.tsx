@@ -1,29 +1,34 @@
 
 import React, { useState, useEffect } from 'react';
 import { Header } from '../components/dashboard/Header';
-import { researchService, ResearchReport } from '../services/research';
+import { researchService, ResearchReport, RankingItem } from '../services/research';
 import { ResearchViewer } from '../components/research/ResearchViewer';
+import { AssetDetailModal } from '../components/research/AssetDetailModal'; // Importado
 import { Bot, Newspaper, Trophy, Loader2, Lock, Crown, Info, RefreshCcw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 // @ts-ignore
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
-// Configuração de Níveis de Acesso por Categoria
 const ASSETS = [
     { id: 'BRASIL_10', label: 'Brasil 10 (Mix)', color: 'bg-emerald-600', minPlan: 'ESSENTIAL' },
     { id: 'STOCK', label: 'Ações BR', color: 'bg-blue-600', minPlan: 'PRO' },
     { id: 'FII', label: 'FIIs', color: 'bg-indigo-600', minPlan: 'PRO' },
     { id: 'CRYPTO', label: 'Cripto', color: 'bg-purple-600', minPlan: 'PRO' },
-    { id: 'STOCK_US', label: 'Exterior', color: 'bg-slate-700', minPlan: 'BLACK' }, // Exterior agora é Black
+    { id: 'STOCK_US', label: 'Exterior', color: 'bg-slate-700', minPlan: 'BLACK' },
 ];
 
 export const Research = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation(); // Hook de location para pegar state
+    
     const [selectedAsset, setSelectedAsset] = useState('BRASIL_10');
     const [viewMode, setViewMode] = useState<'ANALYSIS' | 'RANKING'>('RANKING');
     const [report, setReport] = useState<ResearchReport | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    
+    // Estado para controle do modal de asset direto
+    const [directAsset, setDirectAsset] = useState<RankingItem | null>(null);
 
     const isAdmin = user?.role === 'ADMIN';
 
@@ -49,6 +54,21 @@ export const Research = () => {
             const strategy = selectedAsset === 'CRYPTO' ? 'SWING' : 'BUY_HOLD';
             const data = await researchService.getLatest(selectedAsset, strategy);
             setReport(data);
+            
+            // LÓGICA DE LINK DIRETO (DEEP LINKING VIA STATE)
+            if (location.state && location.state.openTicker && data && data.content && data.content.ranking) {
+                const targetTicker = location.state.openTicker;
+                // Procura na classe atual. Se não achar, teria que procurar em outras, 
+                // mas por simplificação o usuário deve selecionar a classe correta ou o sistema poderia inferir.
+                // Aqui tentamos achar no report atual.
+                const found = data.content.ranking.find((item: RankingItem) => item.ticker === targetTicker);
+                if (found) {
+                    setDirectAsset(found);
+                    // Limpa o state para não reabrir ao atualizar
+                    window.history.replaceState({}, document.title);
+                }
+            }
+
         } catch (err: any) {
             console.error("Erro ao buscar análise:", err);
             setReport(null);
@@ -84,7 +104,6 @@ export const Research = () => {
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-center">
-                        {/* Container de Botões com Scroll Oculto (no-scrollbar) */}
                         <div className="flex bg-[#080C14] border border-slate-800 p-1.5 rounded-2xl overflow-x-auto no-scrollbar gap-1 shadow-inner w-full sm:w-auto">
                             {ASSETS.map(asset => {
                                 const allowed = checkAccess(asset.id);
@@ -125,7 +144,6 @@ export const Research = () => {
                                 </button>
                             </div>
 
-                            {/* Botão de Refresh Manual */}
                             <button 
                                 onClick={fetchReport}
                                 disabled={isLoading || !hasAccessToSelected}
@@ -165,6 +183,16 @@ export const Research = () => {
                         <ResearchViewer report={report} view={viewMode} />
                     )}
                 </div>
+                
+                {/* Modal de Link Direto (Renderizado se houver ativo selecionado via state) */}
+                {directAsset && (
+                    <AssetDetailModal 
+                        isOpen={!!directAsset} 
+                        onClose={() => setDirectAsset(null)} 
+                        asset={directAsset} 
+                    />
+                )}
+
             </main>
         </div>
     );

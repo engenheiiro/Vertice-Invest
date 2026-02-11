@@ -10,8 +10,11 @@ import {
     getMacroData,
     enhanceWithAI,
     triggerMarketSync,
-    triggerMacroSync, // Nova importação
-    runFullPipeline
+    triggerMacroSync,
+    runFullPipeline,
+    getQuantSignals,
+    getRadarStats, // Novo
+    updateBacktestConfig // Novo
 } from '../controllers/researchController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -21,6 +24,8 @@ router.use(authenticateToken);
 
 router.get('/latest', getLatestReport);
 router.get('/macro', getMacroData);
+router.get('/signals', getQuantSignals); 
+router.get('/radar-stats', getRadarStats); // Nova Rota
 
 // Fluxo Granular Admin
 router.post('/crunch', requireAdmin, crunchNumbers);
@@ -32,6 +37,7 @@ router.get('/history', requireAdmin, listReports);
 router.get('/details/:id', requireAdmin, getReportDetails);
 
 router.post('/sync-market', requireAdmin, triggerMarketSync);
-router.post('/sync-macro', requireAdmin, triggerMacroSync); // Nova rota
+router.post('/sync-macro', requireAdmin, triggerMacroSync);
+router.post('/config/backtest', requireAdmin, updateBacktestConfig); // Nova Rota Config
 
 export default router;

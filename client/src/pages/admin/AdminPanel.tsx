@@ -4,8 +4,8 @@ import { Header } from '../../components/dashboard/Header';
 import { researchService, ResearchReport } from '../../services/research';
 import { marketService } from '../../services/market';
 import { authService } from '../../services/auth'; 
-import { subscriptionService } from '../../services/subscription'; // IMPORTADO
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, History, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Sparkles, Database, Minus, HardDrive, Scissors, Tag, CreditCard } from 'lucide-react';
+import { subscriptionService } from '../../services/subscription'; 
+import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Minus, HardDrive, Scissors, CreditCard, Settings, Database, Sparkles } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 
 // --- INTERFACES PARA TIPAGEM FORTE ---
@@ -71,6 +71,10 @@ export const AdminPanel = () => {
     const [splitTicker, setSplitTicker] = useState('');
     const [isFixingSplit, setIsFixingSplit] = useState(false);
 
+    // NOVO: Estado para Configuração de Backtest
+    const [backtestDays, setBacktestDays] = useState<number>(7);
+    const [isSavingConfig, setIsSavingConfig] = useState(false);
+
     const loadHistory = async () => {
         try {
             const data = await researchService.getHistory();
@@ -93,9 +97,20 @@ export const AdminPanel = () => {
         }
     };
 
+    // NOVO: Carregar Config Atual do Radar
+    const loadConfig = async () => {
+        try {
+            const stats = await researchService.getRadarStats();
+            if (stats?.backtestHorizon) {
+                setBacktestDays(stats.backtestHorizon);
+            }
+        } catch (e) { console.error("Erro ao carregar config radar", e); }
+    };
+
     useEffect(() => {
         loadHistory();
         loadMacro();
+        loadConfig();
     }, []);
 
     const handleSyncData = async () => {
@@ -183,7 +198,6 @@ export const AdminPanel = () => {
         try {
             const response = await subscriptionService.initCheckout('TEST');
             if (response.redirectUrl) {
-                // Abre em nova aba para não perder o admin
                 window.open(response.redirectUrl, '_blank');
                 setStatusMsg({ type: 'success', text: "Checkout de Teste (R$ 0,50) aberto em nova aba." });
             } else {
@@ -236,6 +250,21 @@ export const AdminPanel = () => {
         } finally {
             setIsFixingSplit(false);
             setTimeout(() => setStatusMsg(null), 5000);
+        }
+    };
+
+    // NOVO: Salvar Configuração de Backtest
+    const handleSaveBacktestConfig = async (days: number) => {
+        setIsSavingConfig(true);
+        try {
+            await researchService.updateBacktestConfig(days);
+            setBacktestDays(days);
+            setStatusMsg({ type: 'success', text: `Horizonte de backtest atualizado para ${days} dias.` });
+        } catch (e: any) {
+            setStatusMsg({ type: 'error', text: "Erro ao salvar configuração." });
+        } finally {
+            setIsSavingConfig(false);
+            setTimeout(() => setStatusMsg(null), 3000);
         }
     };
 
@@ -386,9 +415,35 @@ export const AdminPanel = () => {
                     </div>
                 </div>
 
-                {/* === CACHE, SPLIT & PAYMENTS === */}
+                {/* === RADAR, CACHE, SPLIT & PAYMENTS === */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
                     
+                    {/* RADAR CONFIG (NOVO) */}
+                    <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Settings size={18} className="text-blue-500" />
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Configuração Radar</h3>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mb-4">Horizonte de verificação do Backtest Automático.</p>
+                        
+                        <div className="flex gap-2">
+                            {[3, 7, 15, 30].map(d => (
+                                <button
+                                    key={d}
+                                    onClick={() => handleSaveBacktestConfig(d)}
+                                    disabled={isSavingConfig}
+                                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${
+                                        backtestDays === d 
+                                        ? 'bg-blue-600 text-white border-blue-500' 
+                                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                                    }`}
+                                >
+                                    {d} Dias
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     {/* CACHE INSPECTOR */}
                     <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
                         <div className="flex items-center gap-2 mb-4">
@@ -516,8 +571,8 @@ export const AdminPanel = () => {
                                                     <button onClick={() => openAudit(latest._id)} className="text-[10px] font-bold text-slate-400 hover:text-white bg-slate-800 px-2 py-1 rounded hover:bg-slate-700"><Search size={12} /></button>
                                                     <div className="w-px h-3 bg-slate-800 mx-1"></div>
                                                     <QuickActionBtn active={latest.isRankingPublished} label="Rank" onClick={() => handleAction(latest._id, 'PUB_RANK')} isLoading={loadingKey === `${latest._id}-PUB_RANK`}/>
-                                                    <button onClick={() => handleAction(latest._id, 'IA_NARRATIVE')} disabled={loadingKey === `${latest._id}-IA_NARRATIVE` || !loadingKey} className={`p-1.5 rounded hover:bg-slate-800 ${latest.content.morningCall ? 'text-emerald-500' : 'text-slate-500'}`}><Bot size={14} /></button>
-                                                    <QuickActionBtn active={latest.isMorningCallPublished} label="Pub. Call" disabled={!latest.content.morningCall} onClick={() => handleAction(latest._id, 'PUB_MC')} isLoading={loadingKey === `${latest._id}-PUB_MC`}/>
+                                                    <button onClick={() => handleAction(latest._id, 'IA_NARRATIVE')} disabled={loadingKey === `${latest._id}-IA_NARRATIVE` || !loadingKey} className={`p-1.5 rounded hover:bg-slate-800 ${latest?.content?.morningCall ? 'text-emerald-500' : 'text-slate-500'}`}><Bot size={14} /></button>
+                                                    <QuickActionBtn active={latest.isMorningCallPublished} label="Pub. Call" disabled={!latest?.content?.morningCall} onClick={() => handleAction(latest._id, 'PUB_MC')} isLoading={loadingKey === `${latest._id}-PUB_MC`}/>
                                                 </div>
                                             )}
                                             {isRestricted && <span className="text-[10px] text-slate-600 font-mono opacity-50">-- RESTRICTED --</span>}

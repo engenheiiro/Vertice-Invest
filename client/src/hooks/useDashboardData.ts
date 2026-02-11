@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { researchService, RankingItem } from '../services/research';
 import { walletService } from '../services/wallet';
+import { authService } from '../services/auth';
 
 export interface PortfolioItem {
     ticker: string;
@@ -12,7 +13,7 @@ export interface PortfolioItem {
     shares: number;
     avgPrice: number;
     currentPrice: number;
-    type: string; // Campo Adicionado: Garante a categoria correta vinda do Backend
+    type: string; 
     aiScore: number; 
     aiSentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
 }
@@ -21,6 +22,7 @@ export interface AiSignal {
     id: string;
     ticker: string;
     type: 'OPPORTUNITY' | 'RISK' | 'NEUTRAL' | 'DELAYED';
+    assetType: string;
     message: string;
     time: string;
     impact: 'HIGH' | 'MEDIUM' | 'LOW';
@@ -28,6 +30,7 @@ export interface AiSignal {
     thesis?: string;      
     score?: number;
     riskProfile?: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
+    source: 'ALGO' | 'RESEARCH'; // Nova propriedade para distinção visual
 }
 
 export interface MarketIndex {
@@ -44,27 +47,48 @@ export interface SystemHealth {
     message: string;
 }
 
+// Interface do Sinal do Backend (Atualizada)
+interface QuantSignal {
+    _id: string;
+    ticker: string;
+    assetType: string;
+    riskProfile: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
+    type: 'RSI_OVERSOLD' | 'VOLUME_SPIKE' | 'DEEP_VALUE' | 'SUPPORT_ZONE';
+    value: number;
+    message: string;
+    timestamp: string;
+}
+
 export const useDashboardData = () => {
     const { user } = useAuth();
     const { assets, kpis, isLoading: isWalletLoading } = useWallet();
     
-    // --- QUERIES ---
-    
-    // 1. Dados Macro (Cache Global)
+    // 1. Dados Macro
     const macroQuery = useQuery({
         queryKey: ['macroData'],
         queryFn: researchService.getMacroData,
         staleTime: 1000 * 60 * 15, // 15 min
     });
 
-    // 2. Dividendos (Cache de Usuário)
+    // 2. Dividendos
     const dividendsQuery = useQuery({
         queryKey: ['dividends'],
         queryFn: walletService.getDividends,
         staleTime: 1000 * 60 * 5, // 5 min
     });
 
-    // 3. Research Reports (Cache Pesado)
+    // 3. Sinais Quantitativos (NOVO)
+    const signalsQuery = useQuery({
+        queryKey: ['quantSignals'],
+        queryFn: async () => {
+            const res = await authService.api('/api/research/signals');
+            if (!res.ok) return [];
+            return await res.json();
+        },
+        staleTime: 1000 * 60 * 5, // 5 min
+    });
+
+    // 4. Research Reports (Legacy para Carteiras Recomendadas)
     const researchQuery = useQuery({
         queryKey: ['dashboardResearch'],
         queryFn: async () => {
@@ -113,41 +137,63 @@ export const useDashboardData = () => {
     }, [macroQuery.data, macroQuery.isError, macroQuery.isLoading]);
 
     const signals: AiSignal[] = useMemo(() => {
-        const report = researchQuery.data?.brasil10Report;
-        if (!report?.content?.ranking) return [];
+        // Mapeamento dos Sinais Quantitativos do Backend
+        const rawSignals: QuantSignal[] = signalsQuery.data || [];
+        
+        const mapped = rawSignals.map(sig => {
+            let type: AiSignal['type'] = 'OPPORTUNITY';
+            
+            let impact: AiSignal['impact'] = 'MEDIUM';
+            if (sig.type === 'DEEP_VALUE' || (sig.type === 'RSI_OVERSOLD' && sig.value < 20)) impact = 'HIGH';
 
-        const mapped = report.content.ranking.slice(0, 5).map((item: RankingItem) => {
-            let type: AiSignal['type'] = 'NEUTRAL';
-            if (item.action === 'BUY') type = 'OPPORTUNITY';
-            if (item.action === 'SELL') type = 'RISK';
-
-            let impact: AiSignal['impact'] = 'LOW';
-            if (item.score >= 80) impact = 'HIGH';
-            else if (item.score >= 60) impact = 'MEDIUM';
+            // Simula um score baseado na intensidade do sinal para exibição
+            let score = 75;
+            if (sig.type === 'RSI_OVERSOLD') score = Math.round(100 - sig.value); 
+            if (sig.type === 'DEEP_VALUE') score = 95; // Deep Value é alta convicção
+            if (sig.type === 'SUPPORT_ZONE') score = 80;
 
             return {
-                id: item.ticker + report._id,
-                ticker: item.ticker,
+                id: sig._id,
+                ticker: sig.ticker,
+                assetType: sig.assetType || 'STOCK',
                 type: type,
-                message: item.reason || item.bullThesis?.[0] || 'Fundamentos sólidos.',
-                time: new Date(report.date || report.createdAt!).toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'}),
+                message: sig.message,
+                time: new Date(sig.timestamp).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
                 impact: impact,
-                probability: item.probability,
-                thesis: item.thesis,
-                score: item.score,
-                riskProfile: item.riskProfile
+                score: score,
+                riskProfile: sig.riskProfile || 'MODERATE',
+                source: 'ALGO' as const // Sinal algorítmico real
             };
         });
+
+        // Fallback se não houver sinais reais do Scanner (Para não deixar a UI vazia)
+        if (mapped.length === 0) {
+            const report = researchQuery.data?.brasil10Report;
+            if (report?.content?.ranking) {
+                return report.content.ranking.slice(0, 3).map((item: RankingItem) => ({
+                    id: item.ticker + 'legacy',
+                    ticker: item.ticker,
+                    assetType: item.type || 'STOCK',
+                    type: 'NEUTRAL',
+                    message: `Fundamento Sólido: Score ${item.score} (Carteira Brasil 10)`,
+                    time: 'Daily',
+                    impact: 'LOW',
+                    score: item.score,
+                    riskProfile: item.riskProfile,
+                    source: 'RESEARCH' as const // Sinal de Fallback
+                }));
+            }
+        }
 
         if (user?.plan === 'ESSENTIAL' || user?.plan === 'GUEST') {
             return mapped.map(s => ({
                 ...s,
                 type: 'DELAYED',
-                message: `[CONTEÚDO PRO] ${s.message.substring(0, 15)}...`
+                message: `[SINAL QUANT PRO] ${s.ticker}: Oportunidade Técnica Detectada.`
             }));
         }
         return mapped;
-    }, [researchQuery.data, user?.plan]);
+    }, [signalsQuery.data, researchQuery.data, user?.plan]);
 
     // Score Map para enriquecer Portfolio
     const scoreMap = useMemo(() => {
@@ -183,7 +229,7 @@ export const useDashboardData = () => {
                 shares: asset.quantity,
                 avgPrice: asset.averagePrice,
                 currentPrice: asset.currentPrice,
-                type: asset.type, // Passando o tipo real do contexto
+                type: asset.type, 
                 aiScore: researchData ? researchData.score : 0, 
                 aiSentiment: sentiment
             };

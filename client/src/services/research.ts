@@ -12,14 +12,11 @@ export interface RankingItem {
     targetPrice: number;
     score: number;
     probability: number;
-    
     riskProfile?: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
-
     thesis: string;
     bullThesis?: string[]; 
     bearThesis?: string[]; 
     reason: string;
-    
     metrics: {
         grahamPrice: number;
         bazinPrice: number;
@@ -30,7 +27,6 @@ export interface RankingItem {
         dy: number;
         pl: number;
         pvp: number;
-        
         evEbitda?: number;
         psr?: number;
         roic?: number;
@@ -38,14 +34,12 @@ export interface RankingItem {
         pEbit?: number;
         pAtivos?: number;
         pCapGiro?: number;
-        
         vacancy?: number;
         capRate?: number;
         ffoYield?: number;
         qtdImoveis?: number;
         vpCota?: number;
         ffoCota?: number;
-        
         debtToEquity?: number;
         currentRatio?: number;
         netMargin?: number;
@@ -53,13 +47,11 @@ export interface RankingItem {
         mktCap?: number;
         patrimLiq?: number;
         revenueGrowth?: number;
-        
         marketCap?: number;
         netDebt?: number;
         netRevenue?: number;
         netIncome?: number;
         totalAssets?: number;
-        
         structural?: {
             quality: number;
             valuation: number;
@@ -85,7 +77,6 @@ export interface ResearchReport {
 }
 
 export const researchService = {
-    // Apenas cálculo (rápido, se já tiver dados)
     async crunchNumbers(assetClass?: string, isBulk: boolean = false) {
         const response = await authService.api('/api/research/crunch', {
             method: 'POST',
@@ -94,12 +85,10 @@ export const researchService = {
         return await response.json();
     },
 
-    // Sync + Cálculo (Lento, mas garante dados novos)
     async runFullPipeline() {
         const response = await authService.api('/api/research/full-pipeline', {
             method: 'POST'
         });
-        
         if (!response.ok) {
             const data = await response.json();
             throw new Error(data.message || "Erro no pipeline completo.");
@@ -112,7 +101,6 @@ export const researchService = {
             method: 'POST',
             body: JSON.stringify({ assetClass, strategy })
         });
-        
         if (!response.ok) {
             const data = await response.json();
             throw new Error(data.message || "Erro ao refinar com IA");
@@ -120,12 +108,10 @@ export const researchService = {
         return await response.json();
     },
 
-    // Apenas Sync Preços
     async syncMarketData() {
         const response = await authService.api('/api/research/sync-market', {
             method: 'POST'
         });
-        
         if (!response.ok) {
             const data = await response.json();
             throw new Error(data.message || "Erro na sincronização de dados.");
@@ -133,12 +119,10 @@ export const researchService = {
         return await response.json();
     },
 
-    // Apenas Sync Macro (Novo)
     async syncMacro() {
         const response = await authService.api('/api/research/sync-macro', {
             method: 'POST'
         });
-        
         if (!response.ok) {
             const data = await response.json();
             throw new Error(data.message || "Erro na sincronização macro.");
@@ -183,6 +167,29 @@ export const researchService = {
     async getMacroData() {
         const response = await authService.api('/api/research/macro');
         if (!response.ok) return null;
+        return await response.json();
+    },
+
+    async getSignalsHistory() {
+        const response = await authService.api('/api/research/signals?history=true');
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
+    // Novo: Stats do Radar
+    async getRadarStats() {
+        const response = await authService.api('/api/research/radar-stats');
+        if (!response.ok) return null;
+        return await response.json();
+    },
+
+    // Novo: Configuração de Backtest
+    async updateBacktestConfig(days: number) {
+        const response = await authService.api('/api/research/config/backtest', {
+            method: 'POST',
+            body: JSON.stringify({ days })
+        });
+        if (!response.ok) throw new Error("Falha ao atualizar config.");
         return await response.json();
     }
 };

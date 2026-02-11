@@ -15,7 +15,8 @@
     "seed:market": "node server/scripts/seedMarketData.js",
     "sync:prod": "node server/scripts/syncProdData.js",
     "test:client": "npm run test --prefix client",
-    "test:server": "npm run test --prefix server"
+    "test:server": "npm run test --prefix server",
+    "test:regression": "npm run test:regression --prefix server"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

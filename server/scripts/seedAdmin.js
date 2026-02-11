@@ -1,3 +1,4 @@
+
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -28,13 +29,25 @@ const promoteToAdmin = async () => {
       process.exit(1);
     }
 
+    // --- APLICANDO SUPER PODERES ---
     user.role = 'ADMIN';
-    // Opcional: Dar plano BLACK para admins para testes completos
-    user.plan = 'BLACK'; 
+    user.plan = 'BLACK'; // Acesso total a todas as features
+    user.subscriptionStatus = 'ACTIVE'; // Status ativo para passar em middlewares
+    
+    // Define validade vitalícia (ano 2099) para evitar bloqueios de UI que checam data
+    user.validUntil = new Date('2099-12-31T23:59:59.999Z'); 
+    
+    // Garante que flags de tutorial não bloqueiem
+    user.hasSeenTutorial = true;
+
     await user.save();
 
-    console.log(`\n✅ SUCESSO! O usuário ${user.name} (${email}) agora é um ADMIN.`);
-    console.log("👉 Você precisará fazer Logout e Login novamente para que as permissões tenham efeito.\n");
+    console.log(`\n✅ SUCESSO! O usuário ${user.name} (${email}) foi atualizado:`);
+    console.log(`   - Role: ADMIN`);
+    console.log(`   - Plano: BLACK (Elite)`);
+    console.log(`   - Status: ACTIVE`);
+    console.log(`   - Validade: Vitalícia (2099)`);
+    console.log("\n👉 O usuário tem agora acesso irrestrito a todo o sistema.");
     
     process.exit(0);
 

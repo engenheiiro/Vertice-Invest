@@ -1,13 +1,14 @@
 
 {
   "name": "vertice-invest-server",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "start": "node index.js",
     "dev": "npx nodemon index.js --ignore logs/ --ignore **/*.log --ignore crash-report.txt",
     "test": "vitest",
+    "test:regression": "vitest run tests/quant_regression.spec.js",
     "sync:prod": "node server/scripts/syncProdData.js"
   },
   "dependencies": {
