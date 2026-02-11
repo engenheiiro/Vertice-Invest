@@ -13,8 +13,9 @@ import {
     triggerMacroSync,
     runFullPipeline,
     getQuantSignals,
-    getRadarStats, // Novo
-    updateBacktestConfig // Novo
+    getRadarStats, 
+    updateBacktestConfig,
+    clearRadarHistory // Novo Controller
 } from '../controllers/researchController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -25,7 +26,7 @@ router.use(authenticateToken);
 router.get('/latest', getLatestReport);
 router.get('/macro', getMacroData);
 router.get('/signals', getQuantSignals); 
-router.get('/radar-stats', getRadarStats); // Nova Rota
+router.get('/radar-stats', getRadarStats);
 
 // Fluxo Granular Admin
 router.post('/crunch', requireAdmin, crunchNumbers);
@@ -38,6 +39,7 @@ router.get('/details/:id', requireAdmin, getReportDetails);
 
 router.post('/sync-market', requireAdmin, triggerMarketSync);
 router.post('/sync-macro', requireAdmin, triggerMacroSync);
-router.post('/config/backtest', requireAdmin, updateBacktestConfig); // Nova Rota Config
+router.post('/config/backtest', requireAdmin, updateBacktestConfig);
+router.delete('/signals/history', requireAdmin, clearRadarHistory); // Nova Rota
 
 export default router;

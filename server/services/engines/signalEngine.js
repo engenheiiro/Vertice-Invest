@@ -3,8 +3,9 @@ import logger from '../../config/logger.js';
 import MarketAsset from '../../models/MarketAsset.js';
 import AssetHistory from '../../models/AssetHistory.js';
 import QuantSignal from '../../models/QuantSignal.js';
-import SystemConfig from '../../models/SystemConfig.js'; // Importado
+import SystemConfig from '../../models/SystemConfig.js'; 
 import { marketDataService } from '../marketDataService.js';
+import { externalMarketService } from '../externalMarketService.js';
 
 // Setores Defensivos para alinhar com Research
 const DEFENSIVE_SECTORS = ['Saneamento', 'Elétricas', 'Seguros', 'Bancos', 'Telecom'];
@@ -43,196 +44,333 @@ export const signalEngine = {
         return 'MODERATE';
     },
 
+    // --- ANÁLISE DE CORRELAÇÃO (FILTRO MACRO) ---
+    async getMacroContext() {
+        try {
+            // Busca Petróleo Brent (BZ=F) e Ibovespa (^BVSP) em tempo real
+            const quotes = await externalMarketService.getQuotes(['BZ=F', '^BVSP']);
+            const oil = quotes.find(q => q.ticker === 'BZ=F');
+            const ibov = quotes.find(q => q.ticker === '^BVSP');
+
+            return {
+                oilChange: oil ? oil.change : 0,
+                ibovChange: ibov ? ibov.change : 0,
+                isCrashDay: ibov ? ibov.change < -2.5 : false
+            };
+        } catch (e) {
+            logger.warn("⚠️ [SignalEngine] Falha ao obter contexto macro. Assumindo neutro.");
+            return { oilChange: 0, ibovChange: 0, isCrashDay: false };
+        }
+    },
+
+    isValidCorrelation(ticker, signalType, macroContext) {
+        // Regra 1: Circuit Breaker de Pânico
+        // Se o mercado está derretendo (>2.5% queda), evitamos compras agressivas, exceto Ouro/Dólar
+        if (macroContext.isCrashDay && signalType !== 'RSI_OVERSOLD') {
+            return { valid: false, reason: "Mercado em Pânico (IBOV < -2.5%)" };
+        }
+
+        // Regra 2: Correlação Petróleo (Petrobras, Prio, 3R)
+        const oilTickers = ['PETR4', 'PETR3', 'PRIO3', 'RRRP3', 'RECV3', 'ENAT3'];
+        if (oilTickers.includes(ticker)) {
+            // Se Petróleo cai forte (>1.5%) e temos sinal de compra, vetamos.
+            if (macroContext.oilChange < -1.5) {
+                return { valid: false, reason: `Petróleo em queda livre (${macroContext.oilChange.toFixed(2)}%)` };
+            }
+        }
+
+        // Regra 3: Correlação Vale/Minério (Simplificada via IBOV proxy ou futuro se tivesse)
+        // Se IBOV cai forte, Vale tende a cair. (Pode ser refinado futuramente)
+        if (ticker.startsWith('VALE') && macroContext.ibovChange < -2.0) {
+             return { valid: false, reason: "Tendência macro negativa forte" };
+        }
+
+        return { valid: true };
+    },
+
     // --- SCANNER PRINCIPAL ---
 
     async runScanner() {
-        logger.info("📡 [Radar Alpha] Iniciando varredura quantitativa (v2.4)...");
+        logger.info("📡 [Radar Alpha] Iniciando varredura quantitativa (v3.1 - Correlation Aware)...");
         const startTime = Date.now();
         
-        // Métricas de Telemetria
+        // 0. Obter Contexto Macro para Correlações
+        const macroContext = await this.getMacroContext();
+        if (macroContext.oilChange !== 0) {
+            logger.info(`🌍 [Macro Context] Petróleo: ${macroContext.oilChange.toFixed(2)}% | IBOV: ${macroContext.ibovChange.toFixed(2)}%`);
+        }
+
         let signalsFound = 0;
-        let assetsAnalyzed = 0;
+        let signalsEvolved = 0;
         let assetsIgnored = 0;
+        let correlationBlocks = 0;
+
+        const newSignalsPayload = [];
+        const updateOperations = [];
 
         try {
-            // 0. HEALTH CHECK DE LIQUIDEZ (SRE)
-            // Previne execução em base vazia ou corrompida
-            const validLiquidityCount = await MarketAsset.countDocuments({ liquidity: { $gt: 500000 } });
-            
-            if (validLiquidityCount === 0) {
-                const msg = "⛔ [Radar Alpha] ABORTADO: Base de dados parece vazia ou sem liquidez. Verifique o Sync de Preços.";
-                logger.error(msg);
-                return { success: false, error: msg, signals: 0, analyzed: 0, ignored: 0 };
-            }
-
-            // 1. Carrega ativos
+            // 1. CARREGAR ATIVOS
             const assets = await MarketAsset.find({ 
                 isActive: true, 
                 liquidity: { $gt: 500000 }, 
                 isIgnored: false,
                 isBlacklisted: false,
                 type: { $in: ['STOCK', 'FII'] }
+            }).lean(); 
+
+            if (assets.length === 0) {
+                logger.warn("⛔ [Radar Alpha] Nenhum ativo elegível.");
+                return { success: true, signals: 0, analyzed: 0, ignored: 0 };
+            }
+
+            const tickers = assets.map(a => a.ticker);
+            const cutoffDate = new Date(Date.now() - 48 * 60 * 60 * 1000); 
+
+            // 2. PRE-FETCHING
+            logger.info(`🔄 [Radar Alpha] Carregando histórico para ${tickers.length} ativos...`);
+            const allHistories = await AssetHistory.find({ ticker: { $in: tickers } }).select('ticker history').lean();
+
+            const historyMap = new Map();
+            allHistories.forEach(h => {
+                if(h.history && h.history.length > 50) {
+                    historyMap.set(h.ticker, h.history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+                }
             });
 
-            const cutoffDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24h atrás
+            const activeSignals = await QuantSignal.find({
+                status: 'ACTIVE', 
+                timestamp: { $gte: cutoffDate }
+            }).select('ticker type quality _id').lean();
 
+            const signalCache = new Map();
+            activeSignals.forEach(s => signalCache.set(`${s.ticker}-${s.type}`, { id: s._id, quality: s.quality }));
+
+            // 3. PROCESSAMENTO
             for (const asset of assets) {
-                assetsAnalyzed++;
                 try {
-                    // Evita spam de sinais (Deduplicação)
-                    const exists = await QuantSignal.findOne({
-                        ticker: asset.ticker,
-                        type: { $in: ['RSI_OVERSOLD', 'DEEP_VALUE', 'SUPPORT_ZONE'] },
-                        timestamp: { $gte: cutoffDate }
-                    });
-                    
-                    if (exists) {
-                        assetsIgnored++;
-                        continue;
-                    }
+                    const history = historyMap.get(asset.ticker);
+                    if (!history) continue; 
 
-                    const historyDoc = await AssetHistory.findOne({ ticker: asset.ticker }).lean();
-                    if (!historyDoc || !historyDoc.history || historyDoc.history.length < 50) continue;
-
-                    const history = historyDoc.history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                     const closes = history.map(h => h.adjClose || h.close);
                     const currentPrice = asset.lastPrice;
-                    
                     const riskProfile = this.determineRiskProfile(asset);
 
-                    // --- CHECK 1: SNIPER DE SOBREVENDA (RSI 14 < 30) ---
+                    // --- CHECK 1: RSI OVERSOLD ---
                     if (asset.netMargin > -5) {
-                        const rsi = this.calculateRSI(closes, 14);
-                        if (rsi !== null && rsi < 30) {
-                            await QuantSignal.create({
-                                ticker: asset.ticker,
-                                assetType: asset.type,
-                                riskProfile: riskProfile,
-                                sector: asset.sector || 'Outros', // Salva setor
-                                type: 'RSI_OVERSOLD',
-                                value: rsi,
-                                message: `Sobrevenda Técnica: RSI em ${rsi.toFixed(0)}. Possível repique.`,
-                                priceAtSignal: currentPrice
-                            });
-                            signalsFound++;
+                        const cacheKey = `${asset.ticker}-RSI_OVERSOLD`;
+                        const existing = signalCache.get(cacheKey);
+                        
+                        if (!existing || existing.quality === 'SILVER') {
+                            const rsi = this.calculateRSI(closes, 14);
+                            
+                            if (rsi !== null && rsi < 37) {
+                                // VERIFICAÇÃO DE CORRELAÇÃO
+                                const correlationCheck = this.isValidCorrelation(asset.ticker, 'RSI_OVERSOLD', macroContext);
+                                if (!correlationCheck.valid) {
+                                    correlationBlocks++;
+                                    continue; // Pula este ativo
+                                }
+
+                                const isGold = rsi < 30;
+                                const quality = isGold ? 'GOLD' : 'SILVER';
+                                const message = `${isGold ? 'Sobrevenda Extrema' : 'Sobrevenda'}: RSI em ${rsi.toFixed(0)}. ${isGold ? 'Oportunidade Ouro.' : 'Monitorar repique.'}`;
+
+                                if (existing && existing.quality === 'SILVER' && isGold) {
+                                    updateOperations.push({
+                                        updateOne: {
+                                            filter: { _id: existing.id },
+                                            update: { 
+                                                $set: { 
+                                                    quality: 'GOLD',
+                                                    value: rsi,
+                                                    message: `[UPGRADE] ${message}`, 
+                                                    priceAtSignal: currentPrice, 
+                                                    timestamp: new Date() 
+                                                }
+                                            }
+                                        }
+                                    });
+                                    signalsEvolved++;
+                                } else if (!existing) {
+                                    newSignalsPayload.push({
+                                        ticker: asset.ticker,
+                                        assetType: asset.type,
+                                        riskProfile: riskProfile,
+                                        sector: asset.sector || 'Outros',
+                                        type: 'RSI_OVERSOLD',
+                                        quality: quality,
+                                        value: rsi,
+                                        message: message,
+                                        priceAtSignal: currentPrice
+                                    });
+                                    signalsFound++;
+                                } else {
+                                    assetsIgnored++;
+                                }
+                            }
+                        } else {
+                            assetsIgnored++;
                         }
                     }
 
                     // --- CHECK 2: DEEP VALUE (Graham) ---
                     if (asset.pl > 0 && asset.p_vp > 0 && asset.type === 'STOCK') {
-                        const grahamNumber = Math.sqrt(22.5 * (currentPrice / asset.pl) * (currentPrice / asset.p_vp)); 
-                        if (grahamNumber > 0 && currentPrice < (grahamNumber * 0.7)) { 
-                            await QuantSignal.create({
-                                ticker: asset.ticker,
-                                assetType: asset.type,
-                                riskProfile: 'DEFENSIVE', 
-                                sector: asset.sector || 'Outros',
-                                type: 'DEEP_VALUE',
-                                value: grahamNumber,
-                                message: `Deep Value: Negociando a ~${((currentPrice/grahamNumber)*100).toFixed(0)}% do Valor Intrínseco de Graham.`,
-                                priceAtSignal: currentPrice
-                            });
-                            signalsFound++;
+                        const cacheKey = `${asset.ticker}-DEEP_VALUE`;
+                        const existing = signalCache.get(cacheKey);
+
+                        if (!existing || existing.quality === 'SILVER') {
+                            const grahamNumber = Math.sqrt(22.5 * (currentPrice / asset.pl) * (currentPrice / asset.p_vp)); 
+                            const discount = currentPrice / grahamNumber;
+                            
+                            if (grahamNumber > 0 && discount < 0.80) {
+                                
+                                // Correlação para Value Investing é menos crítica, mas evitamos compra em dia de crash total
+                                if (macroContext.isCrashDay && discount > 0.70) {
+                                    correlationBlocks++;
+                                    continue;
+                                }
+
+                                const isGold = discount < 0.70;
+                                const quality = isGold ? 'GOLD' : 'SILVER';
+                                const message = `Deep Value: Negociando a ${(discount*100).toFixed(0)}% do Valor Intrínseco.`;
+
+                                if (existing && existing.quality === 'SILVER' && isGold) {
+                                    updateOperations.push({
+                                        updateOne: {
+                                            filter: { _id: existing.id },
+                                            update: { 
+                                                $set: { quality: 'GOLD', value: grahamNumber, message: `[UPGRADE] ${message}`, priceAtSignal: currentPrice, timestamp: new Date() }
+                                            }
+                                        }
+                                    });
+                                    signalsEvolved++;
+                                } else if (!existing) {
+                                    newSignalsPayload.push({
+                                        ticker: asset.ticker,
+                                        assetType: asset.type,
+                                        riskProfile: 'DEFENSIVE', 
+                                        sector: asset.sector || 'Outros',
+                                        type: 'DEEP_VALUE',
+                                        quality: quality,
+                                        value: grahamNumber,
+                                        message: message,
+                                        priceAtSignal: currentPrice
+                                    });
+                                    signalsFound++;
+                                } else {
+                                    assetsIgnored++;
+                                }
+                            }
+                        } else {
+                            assetsIgnored++;
                         }
                     }
 
-                    // --- CHECK 3: SUPORTE ANUAL (52-Week Low) ---
-                    if (history.length >= 250 && asset.netMargin > 0) {
-                        const yearPrices = closes.slice(0, 250); 
-                        const low52 = Math.min(...yearPrices);
-                        const distToLow = (currentPrice / low52) - 1;
+                } catch (innerErr) { continue; }
+            }
 
-                        if (distToLow < 0.05 && asset.dy > 4) { 
-                            await QuantSignal.create({
-                                ticker: asset.ticker,
-                                assetType: asset.type,
-                                riskProfile: riskProfile,
-                                sector: asset.sector || 'Outros',
-                                type: 'SUPPORT_ZONE',
-                                value: distToLow * 100,
-                                message: `Zona de Suporte: Próximo à mínima de 52 sem. (${low52.toFixed(2)}) com Yield Sólido.`,
-                                priceAtSignal: currentPrice
-                            });
-                            signalsFound++;
-                        }
-                    }
-
-                } catch (innerErr) {
-                    continue;
-                }
+            // 4. PERSISTÊNCIA
+            if (newSignalsPayload.length > 0) {
+                await QuantSignal.insertMany(newSignalsPayload);
+            }
+            if (updateOperations.length > 0) {
+                await QuantSignal.bulkWrite(updateOperations);
             }
 
             const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-            logger.info(`✅ [Radar Alpha] Varredura concluída em ${duration}s. ${signalsFound} novos sinais.`);
+            logger.info(`✅ [Radar Alpha] Concluído em ${duration}s. Novos: ${signalsFound} | Evoluídos: ${signalsEvolved} | Bloqueados (Macro): ${correlationBlocks}`);
             
+            // CORREÇÃO: Retorna analyzed e ignored para o log do syncProdData.js
             return { 
                 success: true, 
-                signals: signalsFound,
-                analyzed: assetsAnalyzed,
-                ignored: assetsIgnored 
+                signals: signalsFound, 
+                evolved: signalsEvolved, 
+                blocked: correlationBlocks,
+                analyzed: assets.length,
+                ignored: assetsIgnored
             };
 
         } catch (error) {
-            logger.error(`❌ [Radar Alpha] Falha Crítica: ${error.message}`);
-            return { success: false, error: error.message, signals: 0, analyzed: 0, ignored: 0 };
+            logger.error(`❌ [Radar Alpha] Erro: ${error.message}`);
+            return { success: false, error: error.message };
         }
     },
 
-    // --- MOTOR DE AUDITORIA (BACKTEST DINÂMICO) ---
+    // --- MOTOR DE AUDITORIA (EARLY EXIT / TAKE PROFIT) ---
     async runBacktest() {
-        logger.info("🕵️ [Radar Alpha] Iniciando Backtest Automático de Sinais...");
+        logger.info("🕵️ [Backtest] Iniciando Auditoria Dinâmica (Early Exit)...");
         
         try {
-            // Busca Configuração do Admin
             const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-            const horizonDays = config?.backtestHorizon || 7; // Padrão 7 dias se não configurado
-
-            // Busca sinais ATIVOS criados há mais de X dias
-            const horizonDate = new Date();
-            horizonDate.setDate(horizonDate.getDate() - horizonDays);
+            const horizonDays = config?.backtestHorizon || 7; 
             
-            // Margem de segurança (Janela de processamento de 30 dias para trás do horizonte)
-            const cutoffDate = new Date(horizonDate);
-            cutoffDate.setDate(cutoffDate.getDate() - 30);
+            const TAKE_PROFIT_PCT = 3.0; 
+            const STOP_LOSS_PCT = -2.0; 
 
-            const signalsToAudit = await QuantSignal.find({
-                status: 'ACTIVE',
-                timestamp: { $lte: horizonDate, $gte: cutoffDate }
-            });
+            const activeSignals = await QuantSignal.find({ status: 'ACTIVE' });
 
-            if (signalsToAudit.length === 0) {
-                logger.info(`✅ [Backtest] Nenhum sinal pendente de auditoria (Horizonte: ${horizonDays} dias).`);
+            if (activeSignals.length === 0) {
                 return { processed: 0 };
             }
 
+            const tickers = [...new Set(activeSignals.map(s => s.ticker))];
+            const assets = await MarketAsset.find({ ticker: { $in: tickers } }).select('ticker lastPrice');
+            const priceMap = new Map(assets.map(a => [a.ticker, a.lastPrice]));
+
             let processed = 0;
             let hits = 0;
+            let misses = 0;
+            let expired = 0;
+            const updates = [];
+            const now = new Date();
 
-            for (const signal of signalsToAudit) {
-                const marketData = await marketDataService.getMarketDataByTicker(signal.ticker);
-                const currentPrice = marketData.price;
+            for (const signal of activeSignals) {
+                const currentPrice = priceMap.get(signal.ticker);
+                
+                if (!currentPrice || currentPrice <= 0 || !signal.priceAtSignal) continue;
 
-                if (currentPrice > 0 && signal.priceAtSignal > 0) {
-                    const resultPercent = ((currentPrice - signal.priceAtSignal) / signal.priceAtSignal) * 100;
+                const resultPercent = ((currentPrice - signal.priceAtSignal) / signal.priceAtSignal) * 100;
+                const signalAgeDays = (now.getTime() - new Date(signal.timestamp).getTime()) / (1000 * 3600 * 24);
+
+                let newStatus = null;
+
+                if (resultPercent >= TAKE_PROFIT_PCT) {
+                    newStatus = 'HIT';
+                } else if (resultPercent <= STOP_LOSS_PCT) {
+                    newStatus = 'MISS';
+                }
+                else if (signalAgeDays >= horizonDays) {
+                    newStatus = 'NEUTRAL'; 
+                }
+
+                if (newStatus) {
+                    updates.push({
+                        updateOne: {
+                            filter: { _id: signal._id },
+                            update: {
+                                $set: {
+                                    status: newStatus,
+                                    finalPrice: currentPrice,
+                                    resultPercent: resultPercent,
+                                    auditDate: new Date()
+                                }
+                            }
+                        }
+                    });
                     
-                    let status = 'NEUTRAL';
-                    if (resultPercent >= 2.0) status = 'HIT'; 
-                    else if (resultPercent <= -2.0) status = 'MISS'; 
-                    else status = 'NEUTRAL';
-
-                    signal.status = status;
-                    signal.finalPrice = currentPrice;
-                    signal.resultPercent = resultPercent;
-                    signal.auditDate = new Date();
-                    
-                    await signal.save();
                     processed++;
-                    if (status === 'HIT') hits++;
+                    if (newStatus === 'HIT') hits++;
+                    if (newStatus === 'MISS') misses++;
+                    if (newStatus === 'NEUTRAL') expired++;
                 }
             }
 
-            logger.info(`✅ [Backtest] ${processed} sinais auditados (H: ${horizonDays}d). ${hits} Hits.`);
-            return { processed };
+            if (updates.length > 0) {
+                await QuantSignal.bulkWrite(updates);
+            }
+
+            logger.info(`✅ [Backtest] ${processed} sinais encerrados. (Hits: ${hits} | Stops: ${misses} | Expirados: ${expired})`);
+            return { processed, hits, misses };
 
         } catch (error) {
             logger.error(`❌ [Backtest] Erro: ${error.message}`);

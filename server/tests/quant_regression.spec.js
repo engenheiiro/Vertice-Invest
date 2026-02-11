@@ -24,7 +24,7 @@ describe('Quantitative Regression Engine', () => {
     });
 
     it('Should detect RSI Oversold condition (Market Crash Simulation)', async () => {
-        // 1. Cenário: Ativo Líquido e Saudável (Margem > -5)
+        // 1. Cenário: Ativo Líquido e Saudável
         const mockAsset = {
             ticker: 'TEST3',
             type: 'STOCK',
@@ -35,62 +35,87 @@ describe('Quantitative Regression Engine', () => {
             isIgnored: false,
             isBlacklisted: false,
             marketCap: 5000000000,
-            sector: 'Tecnologia'
+            sector: 'Tecnologia',
+            pl: 10,
+            p_vp: 1.5,
+            debtToEquity: 0.5
         };
 
         // 2. Cenário: Queda abrupta de preço (RSI vai pro chão)
-        // Aumentado para 60 dias para passar na validação de liquidez/histórico do engine (>50)
         const mockHistory = {
+            ticker: 'TEST3',
             history: Array.from({ length: 60 }, (_, i) => ({
                 date: new Date(Date.now() - i * 86400000),
-                close: 50 + (i * 2), // Preço era maior no passado e caiu até chegar a 50 hoje
+                close: 50 + (i * 2), // Caiu de ~170 para 50
                 adjClose: 50 + (i * 2)
             }))
         };
 
-        // Mocks de Banco de Dados
-        MarketAsset.countDocuments.mockResolvedValue(1); // Health check pass
-        MarketAsset.find.mockResolvedValue([mockAsset]);
+        // --- MOCKS CORRETOS PARA CADEIA MONGOOSE (.find().lean()) ---
         
-        // CORREÇÃO CRÍTICA: Mockar a cadeia .lean() do Mongoose
-        // O engine chama: AssetHistory.findOne(...).lean()
-        const leanMock = vi.fn().mockResolvedValue(mockHistory);
-        AssetHistory.findOne.mockReturnValue({
-            lean: leanMock
-        });
+        // Mock para MarketAsset.find(...).lean()
+        const marketAssetQuery = {
+            lean: vi.fn().mockResolvedValue([mockAsset]),
+            select: vi.fn().mockReturnThis(),
+            sort: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockReturnThis()
+        };
+        MarketAsset.find.mockReturnValue(marketAssetQuery);
+        
+        // Mock para AssetHistory.find(...).select(...).lean()
+        const assetHistoryQuery = {
+            select: vi.fn().mockReturnThis(),
+            lean: vi.fn().mockResolvedValue([mockHistory])
+        };
+        AssetHistory.find.mockReturnValue(assetHistoryQuery);
 
-        QuantSignal.findOne.mockResolvedValue(null); // Não existe sinal duplicado
+        // Mock para QuantSignal.find(...).select(...).lean() (Sinais Ativos)
+        const quantSignalQuery = {
+            select: vi.fn().mockReturnThis(),
+            lean: vi.fn().mockResolvedValue([]) // Nenhum sinal ativo prévio
+        };
+        QuantSignal.find.mockReturnValue(quantSignalQuery);
         
-        // Espião no Create
-        const createSpy = vi.spyOn(QuantSignal, 'create').mockResolvedValue(true);
+        // Espiões de Escrita
+        const insertSpy = vi.spyOn(QuantSignal, 'insertMany').mockResolvedValue(true);
+        const bulkSpy = vi.spyOn(QuantSignal, 'bulkWrite').mockResolvedValue(true);
 
         // 3. Execução
         const result = await signalEngine.runScanner();
 
         // 4. Asserção
         expect(result.success).toBe(true);
+        // Espera-se 1 sinal novo (RSI Oversold)
         expect(result.signals).toBe(1);
         
-        // Verifica se o sinal gerado foi do tipo correto
-        expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({
-            ticker: 'TEST3',
-            type: 'RSI_OVERSOLD',
-            // RSI deve ser baixo numa queda dessa magnitude
-        }));
+        // Verifica payload
+        expect(insertSpy).toHaveBeenCalledWith(expect.arrayContaining([
+            expect.objectContaining({
+                ticker: 'TEST3',
+                type: 'RSI_OVERSOLD'
+            })
+        ]));
         
-        const callArgs = createSpy.mock.calls[0][0];
-        // console.log(`📊 [Regression Test] RSI Calculado: ${callArgs.value.toFixed(2)}`);
-        expect(callArgs.value).toBeLessThan(30); // Deve ser oversold
+        // Opcional: Verificar valor do RSI no log ou payload
+        const payload = insertSpy.mock.calls[0][0];
+        expect(payload[0].value).toBeLessThan(30); // Deve ser oversold
     });
 
-    it('Should trigger Safety Switch on empty liquidity', async () => {
-        // Mock DB vazio
-        MarketAsset.countDocuments.mockResolvedValue(0);
+    it('Should handle empty database gracefully', async () => {
+        // Mock DB vazio (retorna array vazio no lean)
+        const emptyQuery = {
+            lean: vi.fn().mockResolvedValue([]),
+            select: vi.fn().mockReturnThis(),
+            sort: vi.fn().mockReturnThis()
+        };
+        MarketAsset.find.mockReturnValue(emptyQuery);
 
         const result = await signalEngine.runScanner();
 
-        expect(result.success).toBe(false);
-        expect(result.error).toContain("Base de dados parece vazia");
+        // Comportamento esperado: Sucesso, mas 0 sinais analisados
+        expect(result.success).toBe(true);
+        expect(result.signals).toBe(0);
+        expect(result.analyzed).toBe(0);
     });
 
 });

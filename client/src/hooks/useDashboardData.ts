@@ -30,7 +30,8 @@ export interface AiSignal {
     thesis?: string;      
     score?: number;
     riskProfile?: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
-    source: 'ALGO' | 'RESEARCH'; // Nova propriedade para distinção visual
+    source: 'ALGO' | 'RESEARCH';
+    quality?: 'GOLD' | 'SILVER'; // NOVO CAMPO
 }
 
 export interface MarketIndex {
@@ -54,6 +55,7 @@ interface QuantSignal {
     assetType: string;
     riskProfile: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
     type: 'RSI_OVERSOLD' | 'VOLUME_SPIKE' | 'DEEP_VALUE' | 'SUPPORT_ZONE';
+    quality?: 'GOLD' | 'SILVER';
     value: number;
     message: string;
     timestamp: string;
@@ -144,13 +146,15 @@ export const useDashboardData = () => {
             let type: AiSignal['type'] = 'OPPORTUNITY';
             
             let impact: AiSignal['impact'] = 'MEDIUM';
-            if (sig.type === 'DEEP_VALUE' || (sig.type === 'RSI_OVERSOLD' && sig.value < 20)) impact = 'HIGH';
+            if (sig.quality === 'GOLD') impact = 'HIGH'; // Ouro = High Impact
+            else if (sig.type === 'DEEP_VALUE' || (sig.type === 'RSI_OVERSOLD' && sig.value < 20)) impact = 'HIGH';
 
             // Simula um score baseado na intensidade do sinal para exibição
             let score = 75;
             if (sig.type === 'RSI_OVERSOLD') score = Math.round(100 - sig.value); 
-            if (sig.type === 'DEEP_VALUE') score = 95; // Deep Value é alta convicção
+            if (sig.type === 'DEEP_VALUE') score = 95; 
             if (sig.type === 'SUPPORT_ZONE') score = 80;
+            if (sig.quality === 'SILVER') score -= 10; // Penaliza score visual se for prata
 
             return {
                 id: sig._id,
@@ -162,11 +166,12 @@ export const useDashboardData = () => {
                 impact: impact,
                 score: score,
                 riskProfile: sig.riskProfile || 'MODERATE',
-                source: 'ALGO' as const // Sinal algorítmico real
+                source: 'ALGO' as const,
+                quality: sig.quality || 'GOLD' // Default para compatibilidade
             };
         });
 
-        // Fallback se não houver sinais reais do Scanner (Para não deixar a UI vazia)
+        // Fallback se não houver sinais reais do Scanner
         if (mapped.length === 0) {
             const report = researchQuery.data?.brasil10Report;
             if (report?.content?.ranking) {
@@ -180,7 +185,8 @@ export const useDashboardData = () => {
                     impact: 'LOW',
                     score: item.score,
                     riskProfile: item.riskProfile,
-                    source: 'RESEARCH' as const // Sinal de Fallback
+                    source: 'RESEARCH' as const,
+                    quality: 'SILVER' as const // Fallback é sempre Prata
                 }));
             }
         }

@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { walletService } from '../../services/wallet';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import { TrendingUp, RefreshCw } from 'lucide-react';
+import { TrendingUp, RefreshCw, Calendar } from 'lucide-react';
 import { useDemo } from '../../contexts/DemoContext';
 import { DEMO_PERFORMANCE } from '../../data/DEMO_DATA';
 
@@ -12,12 +12,14 @@ interface PerformancePoint {
     walletRoi: number; // Retorno Simples
     cdi: number;
     ibov: number;
+    ipca?: number; // IPCA + 6%
 }
 
 export const PerformanceChart = () => {
     const [data, setData] = useState<PerformancePoint[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [metricMode, setMetricMode] = useState<'TWRR' | 'ROI'>('TWRR'); 
+    const [timeRange, setTimeRange] = useState<'1M' | '12M' | 'YTD' | 'ALL'>('ALL'); // Adicionado 1M
     
     const { isDemoMode } = useDemo();
 
@@ -35,7 +37,7 @@ export const PerformanceChart = () => {
 
         try {
             const res = await walletService.getPerformance();
-            const sorted = Array.isArray(res) ? res.sort((a: any,b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()) : [];
+            const sorted = Array.isArray(res?.history) ? res.history.sort((a: any,b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()) : [];
             setData(sorted);
         } catch (e) {
             console.error("Erro carregando performance:", e);
@@ -49,21 +51,63 @@ export const PerformanceChart = () => {
         loadPerformance();
     }, [isDemoMode]); // Recarrega se o modo mudar
 
+    // --- FILTRAGEM DE DADOS (TIME RANGE) ---
+    const filteredData = useMemo(() => {
+        if (!data || data.length === 0) return [];
+        if (timeRange === 'ALL') return data;
+
+        const now = new Date();
+        const cutoffDate = new Date();
+
+        if (timeRange === '1M') {
+            // Primeiro dia do mês atual
+            cutoffDate.setDate(1); 
+            cutoffDate.setHours(0,0,0,0);
+        } else if (timeRange === '12M') {
+            cutoffDate.setFullYear(now.getFullYear() - 1);
+        } else if (timeRange === 'YTD') {
+            cutoffDate.setMonth(0, 1); // 1º Jan do ano atual
+            cutoffDate.setHours(0, 0, 0, 0);
+        }
+
+        return data.filter(point => new Date(point.date) >= cutoffDate);
+    }, [data, timeRange]);
+
+    // --- GERAÇÃO DE TICKS DO EIXO X ---
     const xAxisTicks = useMemo(() => {
-        if (data.length === 0) return [];
+        if (filteredData.length === 0) return [];
         const ticks: string[] = [];
-        const seenMonths = new Set();
         
-        data.forEach(point => {
-            const d = new Date(point.date);
-            const key = `${d.getFullYear()}-${d.getMonth()}`;
-            if (!seenMonths.has(key)) {
-                ticks.push(point.date);
-                seenMonths.add(key);
-            }
-        });
+        if (timeRange === '1M') {
+            // Para mês atual, mostra dias intercalados se houver muitos dados, ou todos se poucos
+            filteredData.forEach((point, index) => {
+                // Mostra a cada 2 dias ou se for o último ponto
+                if (index % 2 === 0 || index === filteredData.length - 1) {
+                    ticks.push(point.date);
+                }
+            });
+        } else {
+            // Para períodos longos, mostra mensalmente
+            const seenMonths = new Set();
+            filteredData.forEach(point => {
+                const d = new Date(point.date);
+                // Usa UTC para extração segura de mês/ano
+                const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+                
+                if (!seenMonths.has(key)) {
+                    ticks.push(point.date);
+                    seenMonths.add(key);
+                }
+            });
+        }
         return ticks;
-    }, [data]);
+    }, [filteredData, timeRange]);
+
+    // Lógica de intervalo:
+    // 1M: Intervalo 0 (mostra todos os ticks definidos)
+    // 12M/YTD: Intervalo 0 (mostra todos os meses)
+    // ALL: Deixa o Recharts decidir para não encavalar
+    const tickInterval = (timeRange === '1M' || timeRange === '12M' || timeRange === 'YTD') ? 0 : 'preserveStartEnd';
 
     if (isLoading) {
         return (
@@ -84,8 +128,8 @@ export const PerformanceChart = () => {
         );
     }
 
-    const lastPoint = data[data.length - 1];
-    const currentWalletValue = metricMode === 'TWRR' ? lastPoint.wallet : lastPoint.walletRoi;
+    const lastPoint = filteredData[filteredData.length - 1];
+    const currentWalletValue = lastPoint ? (metricMode === 'TWRR' ? lastPoint.wallet : lastPoint.walletRoi) : 0;
     const walletWin = lastPoint && (currentWalletValue > lastPoint.cdi && currentWalletValue > (lastPoint.ibov || 0));
 
     return (
@@ -103,7 +147,28 @@ export const PerformanceChart = () => {
                     </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    
+                    {/* CONTROLE DE TEMPO */}
+                    <div className="bg-slate-900 p-1 rounded-lg border border-slate-800 flex gap-1">
+                        {(['1M', 'YTD', '12M', 'ALL'] as const).map((t) => (
+                            <button 
+                                key={t}
+                                onClick={() => setTimeRange(t)}
+                                className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                                    timeRange === t 
+                                    ? 'bg-slate-700 text-white shadow-sm' 
+                                    : 'text-slate-500 hover:text-slate-300'
+                                }`}
+                            >
+                                {t === '1M' ? 'Mês' : t === 'ALL' ? 'Tudo' : t}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="w-px h-6 bg-slate-800 hidden sm:block"></div>
+
+                    {/* CONTROLE DE MÉTRICA */}
                     <div className="bg-slate-900 p-1 rounded-lg border border-slate-800 flex gap-1">
                         <button 
                             onClick={() => setMetricMode('TWRR')}
@@ -114,7 +179,7 @@ export const PerformanceChart = () => {
                             }`}
                             title="Time-Weighted Rate of Return"
                         >
-                            Rentabilidade (Gestão)
+                            TWRR
                         </button>
                         <button 
                             onClick={() => setMetricMode('ROI')}
@@ -125,7 +190,7 @@ export const PerformanceChart = () => {
                             }`}
                             title="Return on Investment"
                         >
-                            Retorno (Bolso)
+                            ROI
                         </button>
                     </div>
 
@@ -139,7 +204,7 @@ export const PerformanceChart = () => {
 
             <div className="flex-1 w-full text-xs min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                    <AreaChart data={filteredData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                         <defs>
                             <linearGradient id="colorWallet" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.4}/>
@@ -155,14 +220,23 @@ export const PerformanceChart = () => {
                             axisLine={false} 
                             tickLine={false}
                             ticks={xAxisTicks} 
+                            interval={tickInterval} 
                             tickFormatter={(val) => {
                                 try {
                                     const d = new Date(val);
                                     if (isNaN(d.getTime())) return val;
-                                    return d.toLocaleDateString('pt-BR', { month: '2-digit', year: '2-digit' });
+                                    
+                                    // Formatação dinâmica baseada no range
+                                    if (timeRange === '1M') {
+                                        return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
+                                    }
+                                    
+                                    const m = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+                                    const y = d.toLocaleDateString('pt-BR', { year: '2-digit' });
+                                    return `${m}/${y}`;
                                 } catch { return val; }
                             }}
-                            minTickGap={30}
+                            minTickGap={10} 
                         />
                         <YAxis 
                             axisLine={false}
@@ -177,7 +251,7 @@ export const PerformanceChart = () => {
                             labelStyle={{ color: '#94a3b8', marginBottom: '5px' }}
                             formatter={(value: number, name: string) => [
                                 `${value.toFixed(2)}%`, 
-                                name === 'walletVal' ? 'Minha Carteira' : name === 'ibov' ? 'Ibovespa' : name
+                                name === 'walletVal' ? 'Minha Carteira' : name === 'ibov' ? 'Ibovespa' : name === 'ipca' ? 'IPCA + 6%' : name
                             ]}
                             labelFormatter={(label) => new Date(label).toLocaleDateString('pt-BR')}
                             cursor={{ stroke: '#fff', strokeWidth: 1, strokeDasharray: '4 4' }}
@@ -186,9 +260,20 @@ export const PerformanceChart = () => {
                             verticalAlign="top" 
                             height={36} 
                             iconType="circle"
-                            formatter={(value) => <span className="text-slate-400 font-bold ml-1">{value === 'walletVal' ? 'Minha Carteira' : value === 'ibov' ? 'Ibovespa' : value}</span>}
+                            formatter={(value) => <span className="text-slate-400 font-bold ml-1">{value === 'walletVal' ? 'Minha Carteira' : value === 'ibov' ? 'Ibovespa' : value === 'ipca' ? 'IPCA+6%' : value}</span>}
                         />
                         
+                        <Area 
+                            type="monotone" 
+                            dataKey="ipca" 
+                            name="ipca" 
+                            stroke="#d946ef" // Fuchsia 500
+                            strokeWidth={2} 
+                            strokeDasharray="2 2"
+                            fill="transparent" 
+                            activeDot={false}
+                        />
+
                         <Area 
                             type="monotone" 
                             dataKey="ibov" 

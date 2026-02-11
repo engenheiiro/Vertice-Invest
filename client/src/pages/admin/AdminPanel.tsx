@@ -5,7 +5,7 @@ import { researchService, ResearchReport } from '../../services/research';
 import { marketService } from '../../services/market';
 import { authService } from '../../services/auth'; 
 import { subscriptionService } from '../../services/subscription'; 
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Minus, HardDrive, Scissors, CreditCard, Settings, Database, Sparkles } from 'lucide-react';
+import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Minus, HardDrive, Scissors, CreditCard, Settings, Database, Sparkles, Trash2 } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 
 // --- INTERFACES PARA TIPAGEM FORTE ---
@@ -67,13 +67,12 @@ export const AdminPanel = () => {
     const [cacheData, setCacheData] = useState<CacheData | null>(null);
     const [isSearchingCache, setIsSearchingCache] = useState(false);
 
-    // Estados para ferramenta de Split
     const [splitTicker, setSplitTicker] = useState('');
     const [isFixingSplit, setIsFixingSplit] = useState(false);
 
-    // NOVO: Estado para Configuração de Backtest
     const [backtestDays, setBacktestDays] = useState<number>(7);
     const [isSavingConfig, setIsSavingConfig] = useState(false);
+    const [isClearingRadar, setIsClearingRadar] = useState(false);
 
     const loadHistory = async () => {
         try {
@@ -97,7 +96,6 @@ export const AdminPanel = () => {
         }
     };
 
-    // NOVO: Carregar Config Atual do Radar
     const loadConfig = async () => {
         try {
             const stats = await researchService.getRadarStats();
@@ -253,7 +251,6 @@ export const AdminPanel = () => {
         }
     };
 
-    // NOVO: Salvar Configuração de Backtest
     const handleSaveBacktestConfig = async (days: number) => {
         setIsSavingConfig(true);
         try {
@@ -264,6 +261,21 @@ export const AdminPanel = () => {
             setStatusMsg({ type: 'error', text: "Erro ao salvar configuração." });
         } finally {
             setIsSavingConfig(false);
+            setTimeout(() => setStatusMsg(null), 3000);
+        }
+    };
+
+    const handleClearRadarHistory = async () => {
+        if(!confirm("ATENÇÃO: Isso apagará TODOS os sinais históricos do Radar Alpha. Apenas novos sinais serão gerados a partir do próximo scan. Confirma?")) return;
+        
+        setIsClearingRadar(true);
+        try {
+            await researchService.clearSignalsHistory();
+            setStatusMsg({ type: 'success', text: "Histórico do Radar limpo com sucesso." });
+        } catch (e: any) {
+            setStatusMsg({ type: 'error', text: "Erro ao limpar histórico." });
+        } finally {
+            setIsClearingRadar(false);
             setTimeout(() => setStatusMsg(null), 3000);
         }
     };
@@ -295,7 +307,7 @@ export const AdminPanel = () => {
             <Header />
 
             <main className="max-w-[1400px] mx-auto p-6 animate-fade-in">
-                {/* Header da Página Admin */}
+                {/* ... (Header mantido igual) ... */}
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -315,7 +327,6 @@ export const AdminPanel = () => {
                     </div>
                 </div>
 
-                {/* Feedback Message */}
                 {statusMsg && (
                     <div className={`mb-6 p-4 rounded-xl border flex items-center gap-3 animate-fade-in ${
                         statusMsg.type === 'success' ? 'bg-emerald-900/10 border-emerald-900/30 text-emerald-400' : 'bg-red-900/10 border-red-900/30 text-red-400'
@@ -325,10 +336,12 @@ export const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* === ÁREA SUPERIOR: MACRO & CONTROLES === */}
+                {/* ... (Área Macro Mantida) ... */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                    {/* ... (Macro cards) ... */}
                     <div className="lg:col-span-2 bg-[#0B101A] border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
-                        <div className="flex items-center justify-between mb-4">
+                       {/* ... */}
+                       <div className="flex items-center justify-between mb-4">
                             <div className="flex flex-col">
                                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                                     <Globe size={14} className="text-blue-500" />
@@ -343,33 +356,11 @@ export const AdminPanel = () => {
                             </div>
                             
                             <div className="flex items-center gap-2">
-                                <button 
-                                    onClick={handleMacroSync}
-                                    disabled={isMacroSyncing}
-                                    className={`
-                                        flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border
-                                        ${isMacroSyncing 
-                                            ? 'bg-purple-900/20 text-purple-400 border-purple-900/50 cursor-wait' 
-                                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-purple-500'
-                                        }
-                                    `}
-                                >
+                                <button onClick={handleMacroSync} disabled={isMacroSyncing} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-purple-500">
                                     <Globe size={12} className={isMacroSyncing ? 'animate-pulse' : ''} />
                                     {isMacroSyncing ? 'Atualizando...' : 'Sync Macro'}
                                 </button>
-
-                                <button 
-                                    onClick={handleSyncData}
-                                    disabled={isSyncing || isGlobalRunning}
-                                    className={`
-                                        flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border
-                                        ${isSyncing 
-                                            ? 'bg-blue-900/20 text-blue-400 border-blue-900/50 cursor-wait' 
-                                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-blue-500'
-                                        }
-                                    `}
-                                    title="Apenas atualiza cotações sem rodar IA"
-                                >
+                                <button onClick={handleSyncData} disabled={isSyncing || isGlobalRunning} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-blue-500">
                                     <Database size={12} className={isSyncing ? 'animate-pulse' : ''} />
                                     {isSyncing ? 'Sincronizando...' : 'Sync Preços'}
                                 </button>
@@ -418,33 +409,47 @@ export const AdminPanel = () => {
                 {/* === RADAR, CACHE, SPLIT & PAYMENTS === */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
                     
-                    {/* RADAR CONFIG (NOVO) */}
+                    {/* RADAR CONFIG (ATUALIZADO) */}
                     <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
                         <div className="flex items-center gap-2 mb-4">
                             <Settings size={18} className="text-blue-500" />
                             <h3 className="text-sm font-bold text-white uppercase tracking-wider">Configuração Radar</h3>
                         </div>
-                        <p className="text-[10px] text-slate-400 mb-4">Horizonte de verificação do Backtest Automático.</p>
                         
-                        <div className="flex gap-2">
-                            {[3, 7, 15, 30].map(d => (
-                                <button
-                                    key={d}
-                                    onClick={() => handleSaveBacktestConfig(d)}
-                                    disabled={isSavingConfig}
-                                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${
-                                        backtestDays === d 
-                                        ? 'bg-blue-600 text-white border-blue-500' 
-                                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                                    }`}
-                                >
-                                    {d} Dias
-                                </button>
-                            ))}
+                        <div className="mb-6">
+                            <p className="text-[10px] text-slate-400 mb-2 font-bold uppercase">Horizonte de Backtest (Dias)</p>
+                            <div className="flex gap-2">
+                                {[3, 7, 15, 30].map(d => (
+                                    <button
+                                        key={d}
+                                        onClick={() => handleSaveBacktestConfig(d)}
+                                        disabled={isSavingConfig}
+                                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                            backtestDays === d 
+                                            ? 'bg-blue-600 text-white border-blue-500' 
+                                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                                        }`}
+                                    >
+                                        {d}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="text-[10px] text-slate-400 mb-2 font-bold uppercase">Manutenção</p>
+                            <button 
+                                onClick={handleClearRadarHistory}
+                                disabled={isClearingRadar}
+                                className="w-full py-2 bg-red-900/10 border border-red-900/30 text-red-500 hover:bg-red-900/20 hover:text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                            >
+                                {isClearingRadar ? <RefreshCw size={14} className="animate-spin"/> : <Trash2 size={14} />}
+                                Limpar Histórico do Radar
+                            </button>
                         </div>
                     </div>
 
-                    {/* CACHE INSPECTOR */}
+                    {/* ... (Cache & Split mantidos) ... */}
                     <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
                         <div className="flex items-center gap-2 mb-4">
                             <HardDrive size={18} className="text-emerald-500" />
@@ -470,7 +475,6 @@ export const AdminPanel = () => {
                         )}
                     </div>
 
-                    {/* SPLIT FIXER */}
                     <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
                         <div className="flex items-center gap-2 mb-4">
                             <Scissors size={18} className="text-yellow-500" />
@@ -489,27 +493,9 @@ export const AdminPanel = () => {
                             </button>
                         </form>
                     </div>
-
-                    {/* PAYMENT TESTER */}
-                    <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
-                        <div className="flex items-center gap-2 mb-4">
-                            <CreditCard size={18} className="text-blue-500" />
-                            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Testes de Faturamento</h3>
-                        </div>
-                        <p className="text-[10px] text-slate-400 mb-4">
-                            Simula checkout real no Mercado Pago com valor simbólico.
-                        </p>
-                        <button 
-                            onClick={handleTestPayment}
-                            disabled={loadingKey === 'TEST_PAYMENT'}
-                            className="w-full py-2 bg-blue-600/20 text-blue-400 border border-blue-600/40 hover:bg-blue-600/30 hover:text-white rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-2"
-                        >
-                            {loadingKey === 'TEST_PAYMENT' ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} fill="currentColor" />}
-                            Comprar Plano R$ 0,50
-                        </button>
-                    </div>
                 </div>
 
+                {/* ... (Tabela Refinamento mantida) ... */}
                 <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl mb-10">
                     <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-[#0B101A]">
                         <div className="flex items-center gap-2">

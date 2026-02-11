@@ -176,20 +176,27 @@ export const researchService = {
         return await response.json();
     },
 
-    // Novo: Stats do Radar
     async getRadarStats() {
         const response = await authService.api('/api/research/radar-stats');
         if (!response.ok) return null;
         return await response.json();
     },
 
-    // Novo: Configuração de Backtest
     async updateBacktestConfig(days: number) {
         const response = await authService.api('/api/research/config/backtest', {
             method: 'POST',
             body: JSON.stringify({ days })
         });
         if (!response.ok) throw new Error("Falha ao atualizar config.");
+        return await response.json();
+    },
+
+    // Novo: Limpar Histórico Radar
+    async clearSignalsHistory() {
+        const response = await authService.api('/api/research/signals/history', {
+            method: 'DELETE'
+        });
+        if (!response.ok) throw new Error("Falha ao limpar histórico.");
         return await response.json();
     }
 };

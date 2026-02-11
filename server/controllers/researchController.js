@@ -31,7 +31,7 @@ export const getQuantSignals = async (req, res, next) => {
         
         if (history === 'true') {
             query = {}; 
-            limit = 100;
+            limit = 200; // Aumentado para pegar mais histórico na tabela
         } else {
             query = { status: 'ACTIVE' }; 
         }
@@ -40,10 +40,9 @@ export const getQuantSignals = async (req, res, next) => {
         const signals = await QuantSignal.find(query)
             .sort({ timestamp: -1 })
             .limit(limit)
-            .lean(); // Use lean para permitir modificação do objeto
+            .lean(); 
             
         // 2. Enriquecimento em Tempo Real (Para sinais ativos)
-        // Se o sinal está ativo, ele não tem finalPrice no banco. Vamos pegar do MarketAsset.
         const activeSignals = signals.filter(s => s.status === 'ACTIVE');
         
         if (activeSignals.length > 0) {
@@ -69,16 +68,15 @@ export const getQuantSignals = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
-// NOVO: Estatísticas do Radar (Heatmap e Performance)
+// NOVO: Estatísticas do Radar (Heatmap Separado)
 export const getRadarStats = async (req, res, next) => {
     try {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        // 1. Taxa de Acerto (Últimos 30 dias)
+        // 1. Taxa de Acerto (Geral)
         const hitMissStats = await QuantSignal.aggregate([
             { $match: { 
-                timestamp: { $gte: thirtyDaysAgo },
                 status: { $in: ['HIT', 'MISS'] } 
             }},
             { $group: { 
@@ -92,31 +90,49 @@ export const getRadarStats = async (req, res, next) => {
         const totalClosed = hits + misses;
         const winRate = totalClosed > 0 ? (hits / totalClosed) * 100 : 0;
 
-        // 2. Heatmap por Setor (Sinais Positivos)
-        const sectorHeatmap = await QuantSignal.aggregate([
+        // 2. Setores Quentes (FECHADOS/HITS) - Onde deu lucro?
+        const closedSectors = await QuantSignal.aggregate([
             { $match: { 
-                timestamp: { $gte: thirtyDaysAgo },
                 status: 'HIT'
             }},
             { $group: { 
                 _id: "$sector", 
-                hits: { $sum: 1 },
+                count: { $sum: 1 },
                 avgReturn: { $avg: "$resultPercent" }
             }},
-            { $sort: { hits: -1 } },
-            { $limit: 8 }
+            { $sort: { count: -1 } },
+            { $limit: 6 }
         ]);
 
-        // 3. Config Atual
+        // 3. Setores Quentes (ABERTOS/ACTIVE) - Onde está o risco agora?
+        const openSectors = await QuantSignal.aggregate([
+            { $match: { 
+                status: 'ACTIVE'
+            }},
+            { $group: { 
+                _id: "$sector", 
+                count: { $sum: 1 },
+                avgReturn: { $avg: 0 } // Em aberto não tem retorno consolidado fixo, mas ok
+            }},
+            { $sort: { count: -1 } },
+            { $limit: 6 }
+        ]);
+
+        // Config Atual
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
 
         res.json({
             winRate: parseFloat(winRate.toFixed(1)),
             totalSignals: totalClosed,
-            heatmap: sectorHeatmap.map(s => ({
+            heatmapClosed: closedSectors.map(s => ({
                 sector: s._id || 'Outros',
-                hits: s.hits,
+                value: s.count,
                 avgReturn: parseFloat(s.avgReturn.toFixed(2))
+            })),
+            heatmapOpen: openSectors.map(s => ({
+                sector: s._id || 'Outros',
+                value: s.count,
+                avgReturn: 0
             })),
             backtestHorizon: config?.backtestHorizon || 7
         });
@@ -124,7 +140,15 @@ export const getRadarStats = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
-// NOVO: Atualizar Configuração do Radar (Admin)
+// NOVO: Limpar Histórico do Radar
+export const clearRadarHistory = async (req, res, next) => {
+    try {
+        await QuantSignal.deleteMany({});
+        logger.info(`🗑️ [Admin] Histórico do Radar Alpha limpo por ${req.user.email}`);
+        res.json({ message: "Histórico do Radar limpo com sucesso." });
+    } catch (error) { next(error); }
+};
+
 export const updateBacktestConfig = async (req, res, next) => {
     try {
         const { days } = req.body;

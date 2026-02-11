@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Header } from '../components/dashboard/Header';
 import { researchService } from '../services/research';
-import { Radar, ArrowLeft, CheckCircle2, XCircle, Clock, TrendingUp, TrendingDown, Minus, Target, PieChart, Filter } from 'lucide-react';
+import { Radar, ArrowLeft, CheckCircle2, XCircle, Clock, TrendingUp, TrendingDown, Minus, Target, PieChart, Filter, Info, Layers } from 'lucide-react';
 // @ts-ignore
 import { Link } from 'react-router-dom';
-import { PieChart as RechartsPie, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from 'recharts';
+import { PieChart as RechartsPie, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 interface QuantSignalHistory {
     _id: string;
@@ -24,18 +24,23 @@ interface RadarStats {
     winRate: number;
     totalSignals: number;
     backtestHorizon: number;
-    heatmap: { sector: string; hits: number; avgReturn: number }[];
+    heatmapClosed: { sector: string; value: number; avgReturn: number }[];
+    heatmapOpen: { sector: string; value: number; avgReturn: number }[];
 }
 
 type StatusFilter = 'ALL' | 'ACTIVE' | 'HIT' | 'MISS';
+
+const SECTOR_COLORS = [
+    '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#6366F1', '#D4AF37', '#EF4444'
+];
 
 export const RadarPage = () => {
     const [signals, setSignals] = useState<QuantSignalHistory[]>([]);
     const [stats, setStats] = useState<RadarStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     
-    // Novo Estado de Filtro
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+    const [sectorView, setSectorView] = useState<'OPEN' | 'CLOSED'>('OPEN');
 
     useEffect(() => {
         const fetch = async () => {
@@ -55,17 +60,16 @@ export const RadarPage = () => {
         fetch();
     }, []);
 
-    // Lógica de Filtragem no Cliente
     const filteredSignals = useMemo(() => {
         if (statusFilter === 'ALL') return signals;
         return signals.filter(s => s.status === statusFilter);
     }, [signals, statusFilter]);
 
     const getStatusBadge = (status: string) => {
-        if (status === 'HIT') return <span className="flex items-center gap-1 text-emerald-400 bg-emerald-900/20 px-2 py-1 rounded border border-emerald-900/50 text-[10px] font-bold uppercase"><CheckCircle2 size={12}/> Sucesso</span>;
-        if (status === 'MISS') return <span className="flex items-center gap-1 text-red-400 bg-red-900/20 px-2 py-1 rounded border border-red-900/50 text-[10px] font-bold uppercase"><XCircle size={12}/> Stop</span>;
-        if (status === 'NEUTRAL') return <span className="flex items-center gap-1 text-slate-400 bg-slate-800 px-2 py-1 rounded border border-slate-700 text-[10px] font-bold uppercase"><Minus size={12}/> Lateral</span>;
-        return <span className="flex items-center gap-1 text-blue-400 bg-blue-900/20 px-2 py-1 rounded border border-blue-900/50 text-[10px] font-bold uppercase"><Clock size={12}/> Aberto</span>;
+        if (status === 'HIT') return <span className="flex items-center gap-1 text-emerald-400 bg-emerald-900/20 px-2 py-1 rounded border border-emerald-900/50 text-[10px] font-bold uppercase whitespace-nowrap"><CheckCircle2 size={12}/> Alvo Atingido</span>;
+        if (status === 'MISS') return <span className="flex items-center gap-1 text-red-400 bg-red-900/20 px-2 py-1 rounded border border-red-900/50 text-[10px] font-bold uppercase whitespace-nowrap"><XCircle size={12}/> Stop Loss</span>;
+        if (status === 'NEUTRAL') return <span className="flex items-center gap-1 text-slate-400 bg-slate-800 px-2 py-1 rounded border border-slate-700 text-[10px] font-bold uppercase whitespace-nowrap"><Minus size={12}/> Expirado</span>;
+        return <span className="flex items-center gap-1 text-blue-400 bg-blue-900/20 px-2 py-1 rounded border border-blue-900/50 text-[10px] font-bold uppercase whitespace-nowrap"><Clock size={12}/> Em Andamento</span>;
     };
 
     const formatCurrency = (val?: number) => val ? `R$ ${val.toFixed(2)}` : '-';
@@ -75,6 +79,15 @@ export const RadarPage = () => {
         { name: 'Acertos (Hits)', value: stats.winRate, color: '#34d399' },
         { name: 'Erros/Neutros', value: 100 - stats.winRate, color: '#ef4444' }
     ] : [];
+
+    // Dados do Gráfico de Setores (Pizza)
+    const activeHeatmapData = useMemo(() => {
+        const source = sectorView === 'OPEN' ? (stats?.heatmapOpen || []) : (stats?.heatmapClosed || []);
+        return source.map((item, index) => ({
+            ...item,
+            color: SECTOR_COLORS[index % SECTOR_COLORS.length]
+        }));
+    }, [stats, sectorView]);
 
     return (
         <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
@@ -92,6 +105,21 @@ export const RadarPage = () => {
                         </h1>
                         <p className="text-slate-400 text-sm mt-1">
                             Auditoria Quantitativa. Horizonte de validação: <span className="text-white font-bold">{stats?.backtestHorizon || 7} dias</span>.
+                        </p>
+                    </div>
+                </div>
+
+                {/* --- REGRAS DO MOTOR --- */}
+                <div className="bg-blue-900/10 border border-blue-900/30 rounded-xl p-4 mb-8 flex items-start gap-3">
+                    <Info size={18} className="text-blue-400 mt-0.5 shrink-0" />
+                    <div>
+                        <h4 className="text-xs font-bold text-blue-300 uppercase mb-1">Critérios de Saída Automática (Backtest)</h4>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                            O sistema encerra automaticamente a auditoria de um sinal quando um dos alvos é atingido:
+                            <br/>
+                            <span className="text-emerald-400 font-bold">• Take Profit (Alvo): +3.0%</span> &nbsp;|&nbsp; 
+                            <span className="text-red-400 font-bold">• Stop Loss (Proteção): -2.0%</span> &nbsp;|&nbsp; 
+                            <span className="text-slate-300 font-bold">• Time Stop (Tempo): {stats?.backtestHorizon || 7} dias</span> (Fechamento neutro).
                         </p>
                     </div>
                 </div>
@@ -132,32 +160,75 @@ export const RadarPage = () => {
                         </div>
                     </div>
 
-                    {/* CARD 2: HEATMAP SETORIAL */}
-                    <div className="md:col-span-2 bg-[#080C14] border border-slate-800 rounded-2xl p-5">
+                    {/* CARD 2: HEATMAP SETORIAL (PIE CHART) */}
+                    <div className="md:col-span-2 bg-[#080C14] border border-slate-800 rounded-2xl p-5 flex flex-col">
                         <div className="flex justify-between items-start mb-4">
                             <div>
                                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                                    <PieChart size={16} className="text-blue-500" /> Setores Quentes
+                                    <Layers size={16} className="text-blue-500" /> Concentração Setorial
                                 </h3>
-                                <p className="text-[10px] text-slate-500">Onde o algoritmo está encontrando mais Alpha.</p>
+                                <p className="text-[10px] text-slate-500">Distribuição de sinais por segmento.</p>
+                            </div>
+                            
+                            {/* TOGGLE VIEW */}
+                            <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+                                <button 
+                                    onClick={() => setSectorView('OPEN')}
+                                    className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${sectorView === 'OPEN' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                >
+                                    Em Aberto
+                                </button>
+                                <button 
+                                    onClick={() => setSectorView('CLOSED')}
+                                    className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${sectorView === 'CLOSED' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                >
+                                    Fechados (Hits)
+                                </button>
                             </div>
                         </div>
-                        <div className="h-32 w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={stats?.heatmap || []} layout="vertical" margin={{ top: 0, right: 30, left: 40, bottom: 0 }}>
-                                    <XAxis type="number" hide />
-                                    <YAxis dataKey="sector" type="category" width={80} tick={{fontSize: 10, fill: '#94a3b8'}} axisLine={false} tickLine={false} />
-                                    <Tooltip 
-                                        cursor={{fill: 'transparent'}}
-                                        contentStyle={{ backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '10px' }}
-                                    />
-                                    <Bar dataKey="hits" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={15}>
-                                        {stats?.heatmap.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.avgReturn > 0 ? '#10b981' : '#ef4444'} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                        
+                        <div className="flex-1 w-full min-h-[160px] flex items-center">
+                            {activeHeatmapData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <RechartsPie>
+                                        <Pie
+                                            data={activeHeatmapData}
+                                            dataKey="value"
+                                            nameKey="sector"
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={40}
+                                            outerRadius={60}
+                                            paddingAngle={2}
+                                            stroke="none"
+                                        >
+                                            {activeHeatmapData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip 
+                                            contentStyle={{ backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px', color: '#fff' }}
+                                            itemStyle={{ color: '#fff' }}
+                                            formatter={(value: any, name: any, props: any) => [
+                                                `${value} Sinais ${sectorView === 'CLOSED' ? `(Ret: ${props.payload.avgReturn}%)` : ''}`, 
+                                                name
+                                            ]}
+                                        />
+                                        <Legend 
+                                            layout="vertical" 
+                                            verticalAlign="middle" 
+                                            align="right"
+                                            iconType="circle"
+                                            iconSize={8}
+                                            wrapperStyle={{ fontSize: '10px', color: '#94a3b8' }}
+                                        />
+                                    </RechartsPie>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="w-full text-center text-xs text-slate-600 italic">
+                                    Sem dados suficientes para este filtro.
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -184,15 +255,16 @@ export const RadarPage = () => {
                                     <th className="p-4">Sinal</th>
                                     <th className="p-4 text-right">Entrada</th>
                                     <th className="p-4 text-right">Saída / Atual</th>
-                                    <th className="p-4 text-right">Resultado</th>
+                                    <th className="p-4 text-right">Res. Parcial</th>
+                                    <th className="p-4 text-right">Res. Final</th>
                                     <th className="p-4 text-center">Status</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/50 text-xs text-slate-300 font-medium">
                                 {isLoading ? (
-                                    <tr><td colSpan={8} className="p-8 text-center text-slate-500">Carregando histórico...</td></tr>
+                                    <tr><td colSpan={9} className="p-8 text-center text-slate-500">Carregando histórico...</td></tr>
                                 ) : filteredSignals.length === 0 ? (
-                                    <tr><td colSpan={8} className="p-8 text-center text-slate-500">Nenhum registro encontrado para este filtro.</td></tr>
+                                    <tr><td colSpan={9} className="p-8 text-center text-slate-500">Nenhum registro encontrado para este filtro.</td></tr>
                                 ) : (
                                     filteredSignals.map((signal) => (
                                         <tr key={signal._id} className="hover:bg-slate-900/30 transition-colors">
@@ -207,25 +279,37 @@ export const RadarPage = () => {
                                             <td className="p-4 text-slate-400">
                                                 {(signal as any).sector || '-'}
                                             </td>
-                                            <td className="p-4 max-w-xs truncate" title={signal.message}>
-                                                <span className="block font-bold text-slate-200 mb-0.5">{signal.type.replace('_', ' ')}</span>
-                                                <span className="text-slate-500">{signal.message}</span>
+                                            <td className="p-4">
+                                                <span className="block font-bold text-slate-200">{signal.type.replace(/_/g, ' ')}</span>
                                             </td>
                                             <td className="p-4 text-right font-mono">
                                                 {formatCurrency(signal.priceAtSignal)}
                                             </td>
                                             <td className="p-4 text-right font-mono">
-                                                {/* Preço de fechamento ou preço atual live se estiver ativo */}
                                                 {formatCurrency(signal.finalPrice)}
                                             </td>
+                                            
                                             <td className="p-4 text-right">
-                                                {signal.resultPercent !== undefined ? (
+                                                {signal.status === 'ACTIVE' && signal.resultPercent !== undefined ? (
+                                                    <span className={`font-bold ${
+                                                        signal.resultPercent > 0 ? 'text-emerald-400' : 
+                                                        signal.resultPercent < 0 ? 'text-red-400' : 
+                                                        'text-slate-400'
+                                                    }`}>
+                                                        {signal.resultPercent > 0 ? '+' : ''}{signal.resultPercent.toFixed(2)}%
+                                                    </span>
+                                                ) : <span className="text-slate-700">-</span>}
+                                            </td>
+
+                                            <td className="p-4 text-right">
+                                                {signal.status !== 'ACTIVE' && signal.resultPercent !== undefined ? (
                                                     <span className={`font-bold flex items-center justify-end gap-1 ${signal.resultPercent > 0 ? 'text-emerald-400' : signal.resultPercent < 0 ? 'text-red-400' : 'text-slate-400'}`}>
                                                         {signal.resultPercent > 0 ? <TrendingUp size={12}/> : signal.resultPercent < 0 ? <TrendingDown size={12}/> : <Minus size={12}/>}
                                                         {signal.resultPercent.toFixed(2)}%
                                                     </span>
-                                                ) : <span className="text-slate-600">-</span>}
+                                                ) : <span className="text-slate-700">-</span>}
                                             </td>
+
                                             <td className="p-4 text-center">
                                                 <div className="flex justify-center">
                                                     {getStatusBadge(signal.status)}

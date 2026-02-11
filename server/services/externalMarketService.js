@@ -1,6 +1,7 @@
 
 import YahooFinance from 'yahoo-finance2';
 import axios from 'axios'; 
+import * as cheerio from 'cheerio'; // Necessário para o scraping
 import logger from '../config/logger.js';
 
 // Instancia a classe com supressão de avisos
@@ -8,9 +9,104 @@ const yahooFinance = new YahooFinance({
     suppressNotices: ['yahooSurvey', 'ripHistorical'] 
 });
 
+// Configuração para Scraping Google Finance
+const GOOGLE_FINANCE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
 export const externalMarketService = {
     
-    // Helper: Busca na Brapi (Fallback para B3)
+    // Helper: Scraper do Google Finance (Fallback Secundário)
+    async fetchFromGoogleFinance(ticker) {
+        try {
+            // Mapeamento de Tickers (Yahoo -> Google Finance Format)
+            let googleTicker = ticker;
+            let exchange = '';
+
+            // Lógica B3
+            if (ticker.endsWith('.SA')) {
+                googleTicker = ticker.replace('.SA', '');
+                exchange = ':BVMF';
+            } 
+            // Lógica Crypto
+            else if (ticker.endsWith('-USD')) {
+                googleTicker = ticker.replace('-USD', '-USD'); // Google costuma usar USD
+                exchange = ''; // Crypto geralmente é global no Google
+            } 
+            // Lógica US Stock (Simplificada, assume NASDAQ/NYSE se não tiver sufixo)
+            else if (!ticker.includes('.')) {
+                // Tenta NASDAQ por padrão para tech, mas isso é falível sem saber a bolsa exata.
+                // O Google Finance é inteligente com buscas, mas a URL direta precisa da bolsa.
+                // Fallback genérico: Tenta sem bolsa na URL de busca se falhar
+                exchange = ':NASDAQ'; 
+            }
+
+            const url = `https://www.google.com/finance/quote/${googleTicker}${exchange}`;
+            
+            const response = await axios.get(url, {
+                headers: { 'User-Agent': GOOGLE_FINANCE_UA },
+                timeout: 3000 // Timeout curto para não travar o fluxo
+            });
+
+            const $ = cheerio.load(response.data);
+            
+            // Seletor da classe de preço (Isso muda periodicamente, precisa de manutenção)
+            // Classe comum em 2024/2025: .YMlKec.fxKbKc
+            let priceText = $('.YMlKec.fxKbKc').first().text();
+            
+            // Fallback seletor genérico via atributo data
+            if (!priceText) {
+                priceText = $('[data-last-price]').attr('data-last-price');
+            }
+
+            if (priceText) {
+                // Limpeza: "R$ 34,50" -> 34.50 | "$12,345.00" -> 12345.00
+                const cleanPrice = priceText.replace(/[^\d.,]/g, '');
+                // Detecta formato BR (vírgula decimal) vs US (ponto decimal)
+                let finalPrice = 0;
+                
+                if (cleanPrice.includes(',') && !cleanPrice.includes('.')) {
+                    // Formato BR puro: 34,50
+                    finalPrice = parseFloat(cleanPrice.replace(',', '.'));
+                } else if (cleanPrice.includes('.') && cleanPrice.includes(',')) {
+                    // Formato misto: 1.234,56 (BR) ou 1,234.56 (US)
+                    // Assume BR se a vírgula for o último separador
+                    if (cleanPrice.lastIndexOf(',') > cleanPrice.lastIndexOf('.')) {
+                        finalPrice = parseFloat(cleanPrice.replace(/\./g, '').replace(',', '.'));
+                    } else {
+                        finalPrice = parseFloat(cleanPrice.replace(/,/g, ''));
+                    }
+                } else {
+                    // Formato simples 34.50
+                    finalPrice = parseFloat(cleanPrice);
+                }
+
+                if (!isNaN(finalPrice) && finalPrice > 0) {
+                    // Extrai variação (Opcional, seletor .JwB6zf)
+                    let change = 0;
+                    const changeText = $('.JwB6zf').first().text(); // Ex: 1.25%
+                    if (changeText) {
+                        change = parseFloat(changeText.replace('%', '').replace(',', '.').replace('+', ''));
+                        if (changeText.includes('-') || $('.JwB6zf').hasClass('P2hktc')) { // Classe vermelha do google
+                             // Ajuste de sinal se necessário
+                        }
+                    }
+
+                    return {
+                        ticker: ticker.replace('.SA', ''),
+                        price: finalPrice,
+                        change: change,
+                        name: googleTicker, // Nome provisório
+                        source: 'GOOGLE_FINANCE_FALLBACK'
+                    };
+                }
+            }
+            return null;
+        } catch (error) {
+            // Silencioso no nível de função, quem chama decide o log
+            return null;
+        }
+    },
+
+    // Helper: Busca na Brapi (Fallback Terciário)
     async fetchFromBrapi(ticker) {
         try {
             if (ticker.length <= 4) return null;
@@ -54,6 +150,7 @@ export const externalMarketService = {
         });
 
         try {
+            // TENTATIVA 1: YAHOO FINANCE (Principal)
             const results = await yahooFinance.quote(yahooTickers);
             const validResults = Array.isArray(results) ? results : [results];
             
@@ -67,16 +164,55 @@ export const externalMarketService = {
                     ticker: symbol,
                     price: item.regularMarketPrice || item.price || 0,
                     change: changePct,
-                    name: item.longName || item.shortName || symbol
+                    name: item.longName || item.shortName || symbol,
+                    source: 'YAHOO'
                 };
             });
 
-            // Lógica de Fallback Brapi omitida para brevidade (mantida igual original)
+            // Verifica quais tickers falharam no Yahoo (não retornaram ou preço zero)
+            const successTickers = new Set(mappedResults.filter(r => r.price > 0).map(r => r.ticker));
+            const failedTickers = tickers.filter(t => !successTickers.has(t));
+
+            // TENTATIVA 2: GOOGLE FINANCE (Fallback para falhas)
+            if (failedTickers.length > 0) {
+                logger.warn(`⚠️ [MarketService] Yahoo falhou para ${failedTickers.length} ativos. Tentando Google Finance Fallback...`);
+                
+                // Executa em paralelo mas limitado para não ser bloqueado
+                const fallbackPromises = failedTickers.map(async (ticker) => {
+                    const googleData = await this.fetchFromGoogleFinance(ticker);
+                    if (googleData) {
+                        logger.info(`✅ [Fallback] Google Finance recuperou cotação para ${ticker}: ${googleData.price}`);
+                        return googleData;
+                    } else {
+                        // TENTATIVA 3: BRAPI (Se for B3)
+                        if (/^[A-Z]{4}\d{1,2}$/.test(ticker)) {
+                             const brapiData = await this.fetchFromBrapi(ticker + '.SA');
+                             if (brapiData) {
+                                 logger.info(`✅ [Fallback] Brapi recuperou cotação para ${ticker}: ${brapiData.price}`);
+                                 return brapiData;
+                             }
+                        }
+                    }
+                    return null;
+                });
+
+                const fallbackResults = (await Promise.all(fallbackPromises)).filter(Boolean);
+                return [...mappedResults, ...fallbackResults];
+            }
+
             return mappedResults;
 
         } catch (error) {
-            logger.error(`❌ Erro Yahoo Finance (Batch): ${error.message}`);
-            return [];
+            logger.error(`❌ Erro Crítico Yahoo Finance (Batch): ${error.message}`);
+            // Se o Yahoo caiu completamente, tenta Google um por um (lento mas resiliente)
+            logger.warn("⚠️ Ativando Protocolo de Emergência: Fallback Total Google Finance.");
+            
+            const emergencyResults = [];
+            for (const t of tickers) {
+                const gData = await this.fetchFromGoogleFinance(t);
+                if (gData) emergencyResults.push(gData);
+            }
+            return emergencyResults;
         }
     },
 
