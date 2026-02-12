@@ -1,4 +1,3 @@
-
 {
   "name": "vertice-invest-client",
   "version": "1.4.1",
@@ -10,26 +9,27 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@sentry/react": "^8.0.0",
+    "@tanstack/react-query": "^5.17.19",
+    "autoprefixer": "^10.4.16",
+    "framer-motion": "^10.16.4",
+    "lucide-react": "^0.460.0",
+    "postcss": "^8.4.32",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
-    "lucide-react": "^0.460.0",
-    "@sentry/react": "^8.0.0",
-    "framer-motion": "^10.16.4",
-    "vite": "^5.0.0",
-    "typescript": "^5.2.2",
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.32",
-    "tailwindcss": "^3.3.6",
     "recharts": "^2.12.0",
-    "@tanstack/react-query": "^5.17.19"
+    "tailwindcss": "^3.3.6",
+    "typescript": "^5.2.2",
+    "vertice-invest-root": "file:..",
+    "vite": "^5.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.2.1",
-    "vitest": "^1.0.0",
-    "jsdom": "^24.0.0"
+    "jsdom": "^24.0.0",
+    "vitest": "^1.0.0"
   }
 }

@@ -1,11 +1,24 @@
 
 import logger from '../config/logger.js';
 import MarketAsset from '../models/MarketAsset.js';
+import SystemConfig from '../models/SystemConfig.js';
 import { fundamentusService } from './fundamentusService.js';
 import { macroDataService } from './macroDataService.js';
 import { externalMarketService } from './externalMarketService.js';
 import { marketDataService } from './marketDataService.js'; 
 import { SECTOR_OVERRIDES } from '../config/sectorOverrides.js';
+
+// Mapa de Correção de Erros da Fonte Externa (Fundamentus/Scraping)
+const KNOWN_TYPOS = {
+    'CPLEE5': 'CPLE6',   // Copel PNB
+    'AZULL4': 'AZUL4',   // Azul PN
+    'CVBII11': 'CVBI11', // VBI CRI
+    'MALLL11': 'MALL11', // Malls Brasil
+    'QAGRR11': 'QAGR11', // Quasar Agro
+    'JPSA3': 'IGTI3',    // Jereissati -> Iguatemi (Rebranding antigo não atualizado na fonte)
+    'RBHG11': 'RBRL11',  // Frequente confusão na fonte
+    'BLMO11': 'BLMG11'   // BlueMacaw Log
+};
 
 export const syncService = {
     /**
@@ -29,8 +42,24 @@ export const syncService = {
                 return { success: false, error: "Scraping blocked." };
             }
 
-            const pushOp = (ticker, data, type) => {
+            const processedTickers = new Set();
+            let typosFixedCount = 0; // Contador para Monitor de Qualidade
+
+            const pushOp = (rawTicker, data, type) => {
+                // 1. CAMADA DE SANITIZAÇÃO (CORREÇÃO DE TYPOS)
+                let ticker = rawTicker;
+                if (KNOWN_TYPOS[rawTicker]) {
+                    ticker = KNOWN_TYPOS[rawTicker];
+                    typosFixedCount++;
+                }
+
+                // 2. FILTRO DE DUPLICIDADE PÓS-CORREÇÃO
+                if (processedTickers.has(ticker)) return;
+                processedTickers.add(ticker);
+
                 const liquidity = Number(data.liq2m) || Number(data.liquidity) || 0;
+                
+                // Filtro de liquidez mínima para não sujar o banco com lixo
                 if (liquidity < 5000) return;
 
                 let finalSector = SECTOR_OVERRIDES[ticker];
@@ -69,8 +98,11 @@ export const syncService = {
                         update: {
                             $set: updateFields,
                             $setOnInsert: {
-                                name: ticker, type, currency: 'BRL',
-                                isIgnored: false, isBlacklisted: false
+                                name: ticker, // Usa o ticker como nome se não tiver outro
+                                type, 
+                                currency: 'BRL',
+                                isIgnored: false, 
+                                isBlacklisted: false
                             }
                         },
                         upsert: true
@@ -108,30 +140,46 @@ export const syncService = {
 
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
-                logger.info(`ℹ️ [Sync] Etapa 2: ${operations.length} ativos fundamentados.`);
+                
+                // SALVA ESTATÍSTICAS DE QUALIDADE
+                await SystemConfig.findOneAndUpdate(
+                    { key: 'MACRO_INDICATORS' },
+                    { 
+                        $set: { 
+                            lastSyncStats: {
+                                typosFixed: typosFixedCount,
+                                assetsProcessed: operations.length,
+                                timestamp: new Date()
+                            }
+                        } 
+                    },
+                    { upsert: true }
+                );
+
+                logger.info(`ℹ️ [Sync] Etapa 2: ${operations.length} ativos fundamentados (Typos corrigidos: ${typosFixedCount}).`);
                 
                 logger.info("ℹ️ [Sync] Etapa 3: Cotações em tempo real");
                 
                 const validTickers = [];
                 const MIN_LIQUIDITY_FOR_LIVE_QUOTE = 100000; 
 
-                stocksMap.forEach((v, k) => {
-                    const liq = Number(v.liq2m) || 0;
-                    if (liq > MIN_LIQUIDITY_FOR_LIVE_QUOTE) validTickers.push(k);
-                });
-                
-                fiiMap.forEach((v, k) => {
-                    const liq = Number(v.liquidity) || 0;
-                    if (liq > MIN_LIQUIDITY_FOR_LIVE_QUOTE) validTickers.push(k);
+                // Reconstrói a lista de validTickers baseada nos dados JÁ SANITIZADOS
+                operations.forEach(op => {
+                    const t = op.updateOne.filter.ticker;
+                    const update = op.updateOne.update.$set;
+                    if (update.liquidity > MIN_LIQUIDITY_FOR_LIVE_QUOTE) {
+                        validTickers.push(t);
+                    }
                 });
                 
                 // Batch
                 const BATCH_SIZE = 50;
-                let updatedQuotesCount = 0;
-                for (let i = 0; i < validTickers.length; i += BATCH_SIZE) {
-                    const batch = validTickers.slice(i, i + BATCH_SIZE);
+                // Remove duplicatas de validTickers
+                const uniqueValidTickers = [...new Set(validTickers)];
+
+                for (let i = 0; i < uniqueValidTickers.length; i += BATCH_SIZE) {
+                    const batch = uniqueValidTickers.slice(i, i + BATCH_SIZE);
                     await marketDataService.refreshQuotesBatch(batch, true);
-                    updatedQuotesCount += batch.length;
                     await new Promise(r => setTimeout(r, 200)); 
                 }
                 

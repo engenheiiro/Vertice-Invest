@@ -58,13 +58,14 @@ export const AssetList = () => {
                 </div>
 
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[800px]">
+                    <table className="w-full text-left border-collapse min-w-[900px]">
                         <thead>
                             <tr className="bg-[#0B101A] border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500">
                                 <th className="p-4 font-bold">Ativo</th>
                                 <th className="p-4 font-bold text-right">Preço Médio</th>
                                 <th className="p-4 font-bold text-right">Preço Atual</th>
                                 <th className="p-4 font-bold text-right">Saldo Atual (R$)</th>
+                                <th className="p-4 font-bold text-right">% Classe</th>
                                 <th className="p-4 font-bold text-right">Rentabilidade</th>
                                 <th className="p-4 font-bold text-center">Ações</th>
                             </tr>
@@ -91,7 +92,7 @@ export const AssetList = () => {
                                             className="bg-[#0F131E] border-y border-slate-800/50 cursor-pointer hover:bg-[#161b28] transition-colors"
                                             onClick={() => toggleGroup(type)}
                                         >
-                                            <td colSpan={6} className="px-4 py-3">
+                                            <td colSpan={7} className="px-4 py-3">
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-4">
                                                         <span className="text-xs font-bold text-blue-400 uppercase tracking-widest flex items-center gap-2">
@@ -131,9 +132,6 @@ export const AssetList = () => {
                                         </tr>
 
                                         {!isCollapsed && groupItems.map((asset) => {
-                                            // Lógica de Rentabilidade BLINDADA no Frontend
-                                            // Ignoramos percentuais prontos do backend se houver suspeita de erro.
-                                            // Calculamos direto: (Preço Atual - Preço Médio) / Preço Médio
                                             const unitProfit = asset.currentPrice - asset.averagePrice;
                                             
                                             let profitPercent = 0;
@@ -141,9 +139,11 @@ export const AssetList = () => {
                                                 profitPercent = (unitProfit / asset.averagePrice) * 100;
                                             }
                                             
-                                            // Lucro Total Nominal
                                             const totalProfit = unitProfit * asset.quantity;
                                             const isProfitable = unitProfit >= 0;
+                                            
+                                            // % da Classe
+                                            const percentOfClass = totalValueGroup > 0 ? (asset.totalValue / totalValueGroup) * 100 : 0;
 
                                             return (
                                                 <tr key={asset.id} className="hover:bg-slate-800/30 transition-colors border-b border-slate-800/30 last:border-0 group animate-fade-in">
@@ -174,6 +174,11 @@ export const AssetList = () => {
                                                         <p className="text-[10px] text-slate-500">
                                                             {asset.quantity} un
                                                         </p>
+                                                    </td>
+                                                    <td className="p-4 text-right">
+                                                        <span className="text-xs font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                                                            {percentOfClass.toFixed(1)}%
+                                                        </span>
                                                     </td>
                                                     <td className="p-4 text-right">
                                                         <div className={`flex flex-col items-end ${isProfitable ? 'text-emerald-500' : 'text-red-500'}`}>

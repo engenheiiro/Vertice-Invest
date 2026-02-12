@@ -28,6 +28,9 @@ const UserAssetSchema = new mongoose.Schema({
   startDate: { type: Date }, 
   fixedIncomeRate: { type: Number, default: 0 }, // Taxa anual contratada
   
+  // --- Feature: Tags Personalizadas ---
+  tags: { type: [String], default: [] }, // Ex: ["Aposentadoria", "Viagem", "Risco"]
+
   updatedAt: { type: Date, default: Date.now }
 });
 

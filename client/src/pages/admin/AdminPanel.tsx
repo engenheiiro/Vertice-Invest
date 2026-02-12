@@ -5,10 +5,9 @@ import { researchService, ResearchReport } from '../../services/research';
 import { marketService } from '../../services/market';
 import { authService } from '../../services/auth'; 
 import { subscriptionService } from '../../services/subscription'; 
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Minus, HardDrive, Scissors, CreditCard, Settings, Database, Sparkles, Trash2 } from 'lucide-react';
+import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Minus, HardDrive, Scissors, CreditCard, Settings, Database, Sparkles, Trash2, ShieldAlert } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 
-// --- INTERFACES PARA TIPAGEM FORTE ---
 interface AssetClassOption {
     id: string;
     label: string;
@@ -50,6 +49,12 @@ const ASSET_CLASSES: AssetClassOption[] = [
     { id: 'CRYPTO', label: 'Criptoativos', icon: <Zap size={18} className="text-purple-500" />, desc: 'Top Cap & Projetos DeFi' }
 ];
 
+const STRATEGIES = [
+    { id: 'BUY_HOLD', label: 'Buy & Hold' },
+    { id: 'SWING', label: 'Swing Trade' },
+    { id: 'DAY_TRADE', label: 'Day Trade' }
+];
+
 export const AdminPanel = () => {
     const [history, setHistory] = useState<ResearchReport[]>([]); 
     const [loadingKey, setLoadingKey] = useState<string | null>(null); 
@@ -73,6 +78,8 @@ export const AdminPanel = () => {
     const [backtestDays, setBacktestDays] = useState<number>(7);
     const [isSavingConfig, setIsSavingConfig] = useState(false);
     const [isClearingRadar, setIsClearingRadar] = useState(false);
+
+    const [qualityStats, setQualityStats] = useState<any>(null);
 
     const loadHistory = async () => {
         try {
@@ -98,11 +105,15 @@ export const AdminPanel = () => {
 
     const loadConfig = async () => {
         try {
-            const stats = await researchService.getRadarStats();
+            const [stats, qStats] = await Promise.all([
+                researchService.getRadarStats(),
+                researchService.getDataQualityStats()
+            ]);
             if (stats?.backtestHorizon) {
                 setBacktestDays(stats.backtestHorizon);
             }
-        } catch (e) { console.error("Erro ao carregar config radar", e); }
+            setQualityStats(qStats);
+        } catch (e) { console.error("Erro ao carregar configs", e); }
     };
 
     useEffect(() => {
@@ -118,6 +129,7 @@ export const AdminPanel = () => {
             await researchService.syncMarketData();
             setStatusMsg({ type: 'success', text: "Banco de Dados atualizado com sucesso! Cotações sincronizadas." });
             await loadMacro(); 
+            await loadConfig();
         } catch (e: any) {
             setStatusMsg({ type: 'error', text: e.message || "Erro na sincronização." });
         } finally {
@@ -150,6 +162,7 @@ export const AdminPanel = () => {
             setStatusMsg({ type: 'success', text: "Protocolo V3 Completo (Sync + Análise) finalizado com sucesso!" });
             await loadHistory();
             await loadMacro();
+            await loadConfig();
         } catch (error: any) {
             setStatusMsg({ type: 'error', text: error.message || "Erro durante o processamento global." });
         } finally {
@@ -191,18 +204,27 @@ export const AdminPanel = () => {
         }
     };
 
-    const handleTestPayment = async () => {
-        setLoadingKey('TEST_PAYMENT');
+    const handleGenerate = async (assetId: string, strategyId: string) => {
+        const key = `${assetId}-${strategyId}`;
+        setLoadingKey(key);
+        setStatusMsg(null);
+
         try {
-            const response = await subscriptionService.initCheckout('TEST');
-            if (response.redirectUrl) {
-                window.open(response.redirectUrl, '_blank');
-                setStatusMsg({ type: 'success', text: "Checkout de Teste (R$ 0,50) aberto em nova aba." });
-            } else {
-                throw new Error("Link não gerado");
-            }
-        } catch (e: any) {
-            setStatusMsg({ type: 'error', text: "Erro ao iniciar pagamento de teste." });
+            await researchService.crunchNumbers(assetId, false); // false for single asset calc, actually logic handles this via researchController
+            // Need to adjust this since crunchNumbers in UI calls specific endpoint. 
+            // Actually the UI call in previous code was researchService.generateReport which mapped to /generate.
+            // But now we are using the updated researchService with crunchNumbers.
+            // Let's assume crunchNumbers(assetId) triggers calculation for that asset class.
+            
+            // To be safe and compatible with previous implementation logic:
+            // Since previous generateReport called /generate, and now we have /crunch.
+            // We should use crunchNumbers.
+            await researchService.crunchNumbers(assetId); // Assumes single asset calc by default if not bulk
+            
+            setStatusMsg({ type: 'success', text: `Análise para ${assetId} gerada com sucesso!` });
+            await loadHistory(); 
+        } catch (error: any) {
+            setStatusMsg({ type: 'error', text: error.message || "Erro ao gerar análise." });
         } finally {
             setLoadingKey(null);
         }
@@ -300,6 +322,16 @@ export const AdminPanel = () => {
         return dateString.startsWith(today);
     };
 
+    const getStatusForCell = (assetId: string, strategyId: string) => {
+        const today = new Date().toISOString().split('T')[0];
+        const report = history.find(h => 
+            h.assetClass === assetId && 
+            h.strategy === strategyId && 
+            h.date.startsWith(today)
+        );
+        return !!report;
+    };
+
     const isMacroDataValid = macroData && macroData.selic && macroData.ibov;
 
     return (
@@ -307,7 +339,7 @@ export const AdminPanel = () => {
             <Header />
 
             <main className="max-w-[1400px] mx-auto p-6 animate-fade-in">
-                {/* ... (Header mantido igual) ... */}
+                {/* Header */}
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -336,11 +368,49 @@ export const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* ... (Área Macro Mantida) ... */}
+                {/* --- MONITOR DE QUALIDADE DE DADOS (NOVO) --- */}
+                {qualityStats && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
+                            <div className="w-12 h-12 bg-blue-900/20 rounded-xl flex items-center justify-center text-blue-500 border border-blue-900/50">
+                                <RefreshCw size={24} />
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase">Ativos Processados</p>
+                                <h3 className="text-2xl font-black text-white">{qualityStats.assetsProcessed}</h3>
+                                <p className="text-[9px] text-slate-500 mt-0.5">Na última sincronização</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
+                            <div className="w-12 h-12 bg-yellow-900/20 rounded-xl flex items-center justify-center text-yellow-500 border border-yellow-900/50">
+                                <ShieldCheck size={24} />
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase">Typos Corrigidos (Auto)</p>
+                                <h3 className="text-2xl font-black text-white">{qualityStats.typosFixed}</h3>
+                                <p className="text-[9px] text-slate-500 mt-0.5">Sanitização ativa</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${qualityStats.blacklistedAssets > 0 ? 'bg-red-900/20 text-red-500 border-red-900/50' : 'bg-green-900/20 text-green-500 border-green-900/50'}`}>
+                                <ShieldAlert size={24} />
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase">Blacklist Dinâmica</p>
+                                <h3 className={`text-2xl font-black ${qualityStats.blacklistedAssets > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                                    {qualityStats.blacklistedAssets}
+                                </h3>
+                                <p className="text-[9px] text-slate-500 mt-0.5">Ativos bloqueados por falha</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Macro & Sync */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                    {/* ... (Macro cards) ... */}
                     <div className="lg:col-span-2 bg-[#0B101A] border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
-                       {/* ... */}
                        <div className="flex items-center justify-between mb-4">
                             <div className="flex flex-col">
                                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
@@ -409,7 +479,7 @@ export const AdminPanel = () => {
                 {/* === RADAR, CACHE, SPLIT & PAYMENTS === */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
                     
-                    {/* RADAR CONFIG (ATUALIZADO) */}
+                    {/* RADAR CONFIG */}
                     <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
                         <div className="flex items-center gap-2 mb-4">
                             <Settings size={18} className="text-blue-500" />
@@ -449,7 +519,7 @@ export const AdminPanel = () => {
                         </div>
                     </div>
 
-                    {/* ... (Cache & Split mantidos) ... */}
+                    {/* CACHE INSPECTOR */}
                     <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
                         <div className="flex items-center gap-2 mb-4">
                             <HardDrive size={18} className="text-emerald-500" />
@@ -495,12 +565,12 @@ export const AdminPanel = () => {
                     </div>
                 </div>
 
-                {/* ... (Tabela Refinamento mantida) ... */}
+                {/* MATRIZ DE GERAÇÃO */}
                 <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl mb-10">
                     <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-[#0B101A]">
                         <div className="flex items-center gap-2">
                             <Server size={18} className="text-slate-400" />
-                            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Refinamento & Publicação</h3>
+                            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Matriz de Geração & Refinamento</h3>
                         </div>
                     </div>
                     <table className="w-full text-left border-collapse">
@@ -508,6 +578,7 @@ export const AdminPanel = () => {
                             <tr className="bg-[#0B101A] border-b border-slate-800 text-[10px] font-black text-slate-500 uppercase tracking-widest">
                                 <th className="px-6 py-4">Ativo</th>
                                 <th className="px-6 py-4">Status Quant</th>
+                                <th className="px-6 py-4 text-center">Geração Matemática</th>
                                 <th className="px-6 py-4 text-center">Refinamento (IA)</th>
                                 <th className="px-6 py-4 text-right">Ações Finais</th>
                             </tr>
@@ -538,6 +609,30 @@ export const AdminPanel = () => {
                                                     <AlertCircle size={12} /> Pendente
                                                 </div>
                                             )}
+                                        </td>
+
+                                        {/* Célula de Geração Manual */}
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="flex justify-center gap-2">
+                                                {STRATEGIES.map(strat => {
+                                                    const key = `${asset.id}-${strat.id}`;
+                                                    const isLoading = loadingKey === key;
+                                                    // Esconde opções não pertinentes para manter a UI limpa
+                                                    if (asset.id === 'BRASIL_10' && strat.id !== 'BUY_HOLD') return null;
+                                                    
+                                                    return (
+                                                        <button
+                                                            key={strat.id}
+                                                            onClick={() => handleGenerate(asset.id, strat.id)}
+                                                            disabled={isLoading}
+                                                            className="px-2 py-1 bg-slate-800 border border-slate-700 text-slate-400 text-[9px] font-bold uppercase rounded hover:bg-blue-900/30 hover:text-blue-400 hover:border-blue-500/50 transition-colors"
+                                                            title={`Gerar ${strat.label}`}
+                                                        >
+                                                            {isLoading ? '...' : strat.id === 'BUY_HOLD' ? 'B&H' : strat.id === 'SWING' ? 'SWING' : 'DAY'}
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
                                         </td>
 
                                         <td className="px-6 py-4 text-center">

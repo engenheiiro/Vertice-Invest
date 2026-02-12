@@ -264,7 +264,8 @@ export const getWalletData = async (req, res, next) => {
                 profit: safeCurrency(positionTotalResult),
                 profitPercent: safeFloat(profitPercent),
                 sector: assetMap.get(asset.ticker)?.sector || 'Geral',
-                dayChangePct: safeFloat(combinedChangePct)
+                dayChangePct: safeFloat(combinedChangePct),
+                tags: asset.tags // Return tags
             };
         });
 
@@ -617,6 +618,24 @@ export const addAssetTransaction = async (req, res, next) => {
         res.status(201).json({ message: "Transação registrada.", asset: updatedAsset });
     } catch (error) {
         await session.abortTransaction(); session.endSession(); next(error);
+    }
+};
+
+export const updateAsset = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { tags } = req.body;
+        const userId = req.user.id;
+
+        const asset = await UserAsset.findOne({ _id: id, user: userId });
+        if (!asset) return res.status(404).json({ message: "Ativo não encontrado" });
+
+        if (tags !== undefined) asset.tags = tags;
+
+        await asset.save();
+        res.json({ message: "Ativo atualizado.", asset });
+    } catch (error) {
+        next(error);
     }
 };
 

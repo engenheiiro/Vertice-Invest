@@ -19,7 +19,7 @@ const MarketAssetSchema = new mongoose.Schema({
   
   // --- Dados Financeiros Persistidos (Cache Avançado) ---
   lastPrice: { type: Number, default: 0 },
-  change: { type: Number, default: 0 }, // <--- CAMPO FALTANTE ADICIONADO
+  change: { type: Number, default: 0 },
   marketCap: { type: Number, default: 0 },
   liquidity: { type: Number, default: 0 }, // Liq. Diária
   
@@ -40,7 +40,10 @@ const MarketAssetSchema = new mongoose.Schema({
   capRate: { type: Number, default: 0 },
   qtdImoveis: { type: Number, default: 0 },
   
+  // --- Controle de Saúde do Ativo ---
   isActive: { type: Boolean, default: true },
+  failCount: { type: Number, default: 0 }, // Contador de falhas consecutivas de sync
+
   lastAnalysisDate: { type: Date },
   updatedAt: { type: Date, default: Date.now }
 });

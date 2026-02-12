@@ -15,7 +15,8 @@ import {
     getQuantSignals,
     getRadarStats, 
     updateBacktestConfig,
-    clearRadarHistory // Novo Controller
+    clearRadarHistory,
+    getDataQualityStats // Novo Controller
 } from '../controllers/researchController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -40,6 +41,9 @@ router.get('/details/:id', requireAdmin, getReportDetails);
 router.post('/sync-market', requireAdmin, triggerMarketSync);
 router.post('/sync-macro', requireAdmin, triggerMacroSync);
 router.post('/config/backtest', requireAdmin, updateBacktestConfig);
-router.delete('/signals/history', requireAdmin, clearRadarHistory); // Nova Rota
+router.delete('/signals/history', requireAdmin, clearRadarHistory);
+
+// Monitor de Qualidade
+router.get('/data-quality', requireAdmin, getDataQualityStats);
 
 export default router;

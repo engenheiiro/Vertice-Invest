@@ -6,6 +6,7 @@ import SystemConfig from '../models/SystemConfig.js';
 import { externalMarketService } from './externalMarketService.js';
 
 const CACHE_DURATION_MINUTES = 20; 
+const MAX_FAILURES_BEFORE_BLACKLIST = 10;
 
 const FALLBACK_MACRO = {
     selic: { value: 11.25 },
@@ -68,7 +69,7 @@ export const marketDataService = {
         const threshold = new Date(now.getTime() - CACHE_DURATION_MINUTES * 60 * 1000);
 
         try {
-            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker updatedAt lastPrice change isActive');
+            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker updatedAt lastPrice change isActive failCount');
             
             const toUpdate = [];
             const assetMap = new Map();
@@ -77,13 +78,14 @@ export const marketDataService = {
 
             cleanTickers.forEach(ticker => {
                 const asset = assetMap.get(ticker);
+                
+                // Se já estiver desativado pela blacklist, ignora (a menos que force)
                 if (asset && !asset.isActive && !force) return;
 
                 if (force) {
                     toUpdate.push(ticker);
                 } else {
                     const isStale = !asset || !asset.updatedAt || asset.updatedAt < threshold;
-                    // Se não tem preço ou o dado é muito velho, atualiza
                     if (isStale || !asset || asset.lastPrice === 0) {
                         toUpdate.push(ticker);
                     }
@@ -93,32 +95,23 @@ export const marketDataService = {
             if (toUpdate.length === 0) return;
 
             const quotes = await externalMarketService.getQuotes(toUpdate);
-
-            // --- MELHORIA 2: FALLBACK INTELIGENTE (NO-ZERO POLICY) ---
             const operations = [];
             
+            // Set para controle de sucesso/falha
+            const successfulTickers = new Set();
+
             for (const quote of quotes) {
                 const ticker = this.normalizeSymbol(quote.ticker);
                 const currentAsset = assetMap.get(ticker);
                 
-                // Validação de Preço: Se a API retornou 0 ou null, ou caiu drasticamente (>90%) por erro
                 let newPrice = quote.price;
                 let newChange = quote.change || 0;
-                let shouldUseNewData = true;
+                let isSuccess = false;
 
-                if (!newPrice || newPrice <= 0) {
-                    shouldUseNewData = false;
-                    logger.warn(`⚠️ [MarketData] API retornou preço inválido para ${ticker}. Mantendo anterior.`);
-                }
-                
-                // Se o ativo já tinha preço e o novo é 0, ignoramos a atualização de preço (Fallback)
-                if (!shouldUseNewData && currentAsset && currentAsset.lastPrice > 0) {
-                    // Mantemos o preço antigo, mas atualizamos o timestamp para não tentar buscar a cada segundo
-                    newPrice = currentAsset.lastPrice;
-                    newChange = 0; // Resetamos variação pois o dado está 'stale'
-                }
-
-                if (newPrice > 0) {
+                if (newPrice && newPrice > 0) {
+                    isSuccess = true;
+                    successfulTickers.add(ticker);
+                    
                     operations.push({
                         updateOne: {
                             filter: { ticker: ticker },
@@ -127,13 +120,42 @@ export const marketDataService = {
                                     lastPrice: newPrice,
                                     change: newChange, 
                                     updatedAt: now,
-                                    isActive: true 
+                                    isActive: true,
+                                    failCount: 0 // Reset do contador de falhas em caso de sucesso
                                 }
                             }
                         }
                     });
                 }
             }
+
+            // --- BLACKLIST DINÂMICA (DETECTAR FALHAS) ---
+            // Verifica quais tickers solicitados NÃO retornaram ou retornaram erro
+            toUpdate.forEach(requestedTicker => {
+                if (!successfulTickers.has(requestedTicker)) {
+                    const asset = assetMap.get(requestedTicker);
+                    if (asset) {
+                        const newFailCount = (asset.failCount || 0) + 1;
+                        const shouldDeactivate = newFailCount >= MAX_FAILURES_BEFORE_BLACKLIST;
+                        
+                        const updatePayload = {
+                            failCount: newFailCount
+                        };
+
+                        if (shouldDeactivate) {
+                            updatePayload.isActive = false;
+                            logger.warn(`⛔ [Blacklist] Ativo ${requestedTicker} desativado após ${newFailCount} falhas consecutivas.`);
+                        }
+
+                        operations.push({
+                            updateOne: {
+                                filter: { ticker: requestedTicker },
+                                update: { $set: updatePayload }
+                            }
+                        });
+                    }
+                }
+            });
 
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
