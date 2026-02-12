@@ -175,7 +175,7 @@ export const externalMarketService = {
 
             // TENTATIVA 2: GOOGLE FINANCE (Fallback para falhas)
             if (failedTickers.length > 0) {
-                logger.warn(`⚠️ [MarketService] Yahoo falhou para ${failedTickers.length} ativos. Tentando Google Finance Fallback...`);
+                logger.warn(`⚠️ [MarketService] Yahoo falhou para ${failedTickers.length} ativos: [${failedTickers.join(', ')}]. Tentando Google Finance Fallback...`);
                 
                 // Executa em paralelo mas limitado para não ser bloqueado
                 const fallbackPromises = failedTickers.map(async (ticker) => {

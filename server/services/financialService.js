@@ -369,7 +369,11 @@ export const financialService = {
         relevantAssets.forEach(asset => {
             const mInfo = marketMap.get(asset.ticker);
             if (mInfo && mInfo.dy > 0) {
-                const annualIncome = (asset.quantity * mInfo.lastPrice) * (mInfo.dy / 100);
+                // CORREÇÃO: Cap de Yield para Projeção Mensal
+                // Evita que dividendos extraordinários (ex: > 25% a.a.) distorçam a média mensal projetada.
+                const safeDy = Math.min(mInfo.dy, 25);
+                
+                const annualIncome = (asset.quantity * mInfo.lastPrice) * (safeDy / 100);
                 projectedMonthly += (annualIncome / 12);
             }
         });

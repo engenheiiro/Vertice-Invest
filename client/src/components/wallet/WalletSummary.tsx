@@ -76,6 +76,7 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                 label="VALOR APLICADO"
                 value={formatCurrency(kpis.totalInvested)}
                 icon={<DollarSign size={18} className="text-purple-500" />}
+                tooltipText="Custo Contábil: Soma exata do dinheiro que saiu do seu bolso. Não inclui dividendos reinvestidos (estes aumentam apenas a quantidade de cotas)."
                 subLabel="Patrimônio + Proventos"
                 subContent={
                     <span className="text-slate-200 font-bold text-xs">{formatCurrency(totalGross)}</span>
@@ -160,10 +161,11 @@ const DashboardCard = ({ label, value, icon, subLabel, subContent, badge, glow, 
                         {tooltipText && (
                             <div className="group/info relative flex items-center">
                                 <Info size={10} className="text-slate-600 cursor-help hover:text-blue-400 transition-colors" />
-                                <div className="absolute left-0 top-6 w-48 p-2 bg-[#0F1729] border border-slate-700 rounded-lg shadow-xl z-50 opacity-0 group-hover/info:opacity-100 transition-opacity pointer-events-none">
+                                <div className="absolute left-0 top-6 w-48 p-3 bg-[#0F1729] border border-slate-700 rounded-xl shadow-xl z-50 opacity-0 group-hover/info:opacity-100 transition-opacity pointer-events-none">
                                     <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
                                         {tooltipText}
                                     </p>
+                                    <div className="absolute -top-1.5 left-2 w-3 h-3 bg-[#0F1729] border-t border-l border-slate-700 transform rotate-45"></div>
                                 </div>
                             </div>
                         )}

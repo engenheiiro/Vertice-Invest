@@ -27,8 +27,15 @@ const SystemConfigSchema = new mongoose.Schema({
   btc: { type: Number, default: 90000 },
   btcChange: { type: Number, default: 0 },
 
-  // Configurações do Sistema (Novos)
+  // Configurações do Sistema
   backtestHorizon: { type: Number, default: 7 }, // Dias para auditar o sinal (3, 7, 15, 30)
+
+  // Métricas de Qualidade de Dados (Observabilidade)
+  lastSyncStats: {
+    typosFixed: { type: Number, default: 0 },
+    assetsProcessed: { type: Number, default: 0 },
+    timestamp: { type: Date }
+  },
 
   lastUpdated: { type: Date, default: Date.now }
 });

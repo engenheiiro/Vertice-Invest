@@ -1,4 +1,3 @@
-
 {
   "name": "vertice-invest-server",
   "version": "1.6.2",
@@ -12,31 +11,32 @@
     "sync:prod": "node server/scripts/syncProdData.js"
   },
   "dependencies": {
+    "@google/genai": "*",
+    "@sentry/node": "^8.0.0",
+    "@sentry/profiling-node": "^8.0.0",
+    "axios": "^1.6.0",
     "bcryptjs": "^2.4.3",
-    "cookie-parser": "^1.4.6",
+    "cheerio": "^1.0.0-rc.12",
     "compression": "^1.7.4",
+    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.0.0",
-    "nodemailer": "^6.9.7",
-    "zod": "^3.22.4",
-    "winston": "^3.11.0",
-    "@sentry/node": "^8.0.0",
-    "@sentry/profiling-node": "^8.0.0",
-    "@google/genai": "*",
-    "node-cron": "^3.0.3",
-    "yahoo-finance2": "^3.11.3",
-    "axios": "^1.6.0",
-    "cheerio": "^1.0.0-rc.12",
     "iconv-lite": "^0.6.3",
-    "mercadopago": "^2.0.8"
+    "jsonwebtoken": "^9.0.2",
+    "mercadopago": "^2.0.8",
+    "mongoose": "^8.0.0",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.7",
+    "vertice-invest-root": "file:..",
+    "winston": "^3.11.0",
+    "yahoo-finance2": "^3.11.3",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
-    "vitest": "^1.0.0",
-    "nodemon": "^3.0.0"
+    "nodemon": "^3.0.0",
+    "vitest": "^1.0.0"
   }
 }

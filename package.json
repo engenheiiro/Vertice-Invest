@@ -14,6 +14,7 @@
     "seed:admin": "node server/scripts/seedAdmin.js",
     "seed:market": "node server/scripts/seedMarketData.js",
     "sync:prod": "node server/scripts/syncProdData.js",
+    "migrate:fix": "node server/scripts/migrateHardcodedData.js",
     "test:client": "npm run test --prefix client",
     "test:server": "npm run test --prefix server",
     "test:regression": "npm run test:regression --prefix server"

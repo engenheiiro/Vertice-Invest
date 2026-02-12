@@ -191,12 +191,17 @@ export const researchService = {
         return await response.json();
     },
 
-    // Novo: Limpar Histórico Radar
     async clearSignalsHistory() {
         const response = await authService.api('/api/research/signals/history', {
             method: 'DELETE'
         });
         if (!response.ok) throw new Error("Falha ao limpar histórico.");
+        return await response.json();
+    },
+
+    async getDataQualityStats() {
+        const response = await authService.api('/api/research/data-quality');
+        if (!response.ok) return null;
         return await response.json();
     }
 };

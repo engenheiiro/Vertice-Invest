@@ -2,7 +2,7 @@
 import MarketAnalysis from '../models/MarketAnalysis.js';
 import TreasuryBond from '../models/TreasuryBond.js';
 import QuantSignal from '../models/QuantSignal.js';
-import MarketAsset from '../models/MarketAsset.js'; // Import Necessário para o Enrich
+import MarketAsset from '../models/MarketAsset.js'; 
 import SystemConfig from '../models/SystemConfig.js'; 
 import { aiResearchService } from '../services/aiResearchService.js';
 import { aiEnhancementService } from '../services/aiEnhancementService.js';
@@ -31,18 +31,16 @@ export const getQuantSignals = async (req, res, next) => {
         
         if (history === 'true') {
             query = {}; 
-            limit = 200; // Aumentado para pegar mais histórico na tabela
+            limit = 200; 
         } else {
             query = { status: 'ACTIVE' }; 
         }
 
-        // 1. Busca Sinais
         const signals = await QuantSignal.find(query)
             .sort({ timestamp: -1 })
             .limit(limit)
             .lean(); 
             
-        // 2. Enriquecimento em Tempo Real (Para sinais ativos)
         const activeSignals = signals.filter(s => s.status === 'ACTIVE');
         
         if (activeSignals.length > 0) {
@@ -55,7 +53,7 @@ export const getQuantSignals = async (req, res, next) => {
                 if (signal.status === 'ACTIVE') {
                     const currentPrice = priceMap.get(signal.ticker);
                     if (currentPrice) {
-                        signal.finalPrice = currentPrice; // Preço Atual
+                        signal.finalPrice = currentPrice; 
                         if (signal.priceAtSignal) {
                             signal.resultPercent = ((currentPrice - signal.priceAtSignal) / signal.priceAtSignal) * 100;
                         }
@@ -68,13 +66,11 @@ export const getQuantSignals = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
-// NOVO: Estatísticas do Radar (Heatmap Separado)
 export const getRadarStats = async (req, res, next) => {
     try {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        // 1. Taxa de Acerto (Geral)
         const hitMissStats = await QuantSignal.aggregate([
             { $match: { 
                 status: { $in: ['HIT', 'MISS'] } 
@@ -90,7 +86,6 @@ export const getRadarStats = async (req, res, next) => {
         const totalClosed = hits + misses;
         const winRate = totalClosed > 0 ? (hits / totalClosed) * 100 : 0;
 
-        // 2. Setores Quentes (FECHADOS/HITS) - Onde deu lucro?
         const closedSectors = await QuantSignal.aggregate([
             { $match: { 
                 status: 'HIT'
@@ -104,7 +99,6 @@ export const getRadarStats = async (req, res, next) => {
             { $limit: 6 }
         ]);
 
-        // 3. Setores Quentes (ABERTOS/ACTIVE) - Onde está o risco agora?
         const openSectors = await QuantSignal.aggregate([
             { $match: { 
                 status: 'ACTIVE'
@@ -112,13 +106,12 @@ export const getRadarStats = async (req, res, next) => {
             { $group: { 
                 _id: "$sector", 
                 count: { $sum: 1 },
-                avgReturn: { $avg: 0 } // Em aberto não tem retorno consolidado fixo, mas ok
+                avgReturn: { $avg: 0 } 
             }},
             { $sort: { count: -1 } },
             { $limit: 6 }
         ]);
 
-        // Config Atual
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
 
         res.json({
@@ -140,7 +133,6 @@ export const getRadarStats = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
-// NOVO: Limpar Histórico do Radar
 export const clearRadarHistory = async (req, res, next) => {
     try {
         await QuantSignal.deleteMany({});
@@ -163,6 +155,23 @@ export const updateBacktestConfig = async (req, res, next) => {
         );
 
         res.json({ message: `Horizonte de backtest atualizado para ${days} dias.` });
+    } catch (error) { next(error); }
+};
+
+// NOVO: Retorna estatísticas de qualidade de dados (Monitor)
+export const getDataQualityStats = async (req, res, next) => {
+    try {
+        const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
+        const inactiveCount = await MarketAsset.countDocuments({ isActive: false, failCount: { $gte: 10 } });
+        const totalAssets = await MarketAsset.countDocuments({});
+
+        res.json({
+            typosFixed: config?.lastSyncStats?.typosFixed || 0,
+            assetsProcessed: config?.lastSyncStats?.assetsProcessed || 0,
+            lastSyncDate: config?.lastSyncStats?.timestamp || null,
+            blacklistedAssets: inactiveCount,
+            totalAssets
+        });
     } catch (error) { next(error); }
 };
 

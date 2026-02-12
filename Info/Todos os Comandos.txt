@@ -1,0 +1,59 @@
+📘 Vértice Invest - Cheat Sheet de Comandos (Oficial)
+
+🚀 1. Setup & Inicialização (Ambiente Dev)
+
+# Instala todas as dependências (Raiz, Client e Server) de uma vez:
+npm run setup
+
+# Instala todas as dependências (Raiz, Client e Server) de uma vez
+npm run setup
+
+# Inicia o modo de desenvolvimento (Frontend + Backend + Watchers)
+# Conecta ao MongoDB definido no .env
+npm run dev
+
+⚙️ 2. Operações de Banco de Dados & Manutenção
+
+# [IMPORTANTE] Sanitização e Correção
+# Corrige Tickers errados (Typos) e atualiza metadados (Setores) sem apagar histórico.
+# Use isso se notar ativos duplicados ou nomes errados.
+npm run migrate:fix
+
+# [PERIGO] Reset de Mercado
+# ⚠️ APAGA todos os ativos do banco e recria a lista base limpa.
+# Use apenas se o banco estiver corrompido ou para iniciar do zero.
+npm run seed:market
+
+# Gestão de Acesso
+# Promove um usuário existente para ADMIN (Acesso total + Debug).
+npm run seed:admin seu@email.com
+
+📡 3. Inteligência & Dados (Produção/Rotinas)
+
+# Protocolo V3 Completo (Heavy Sync)
+# 1. Baixa cotações e indicadores macro.
+# 2. Executa Scraper do Fundamentus.
+# 3. Roda IA para gerar Ranking e Valuation.
+# 4. Executa Scanner do Radar Alpha.
+npm run sync:prod
+
+🧪 4. Testes & Qualidade (QA)
+
+# Testes Unitários do Backend (Serviços, Models, Utils)
+npm run test:server
+
+# Testes Unitários do Frontend (Componentes, Hooks)
+npm run test:client
+
+# Teste de Regressão Financeira (Matemática Crítica)
+# Verifica se o cálculo de TWRR, Cotas e Juros Compostos está batendo com o gabarito.
+npm run test:regression
+
+# Teste de Robustez do Scraper (Ingestão)
+# Verifica se o sistema aguenta dados sujos vindos do Fundamentus.
+npm run test server/tests/ingestion.spec.js
+
+📦 5. Build (Deploy)
+
+# Gera os arquivos estáticos otimizados do React para produção
+npm run build

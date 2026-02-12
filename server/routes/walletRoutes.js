@@ -6,6 +6,7 @@ import {
     getWalletHistory, 
     addAssetTransaction, 
     removeAsset, 
+    updateAsset, // Importado
     searchAssets, 
     resetWallet,
     getAssetTransactions,
@@ -15,7 +16,7 @@ import {
     getCashFlow,
     runCorporateAction,
     fixWalletSnapshots,
-    getSnapshotHealth // Nova Importação
+    getSnapshotHealth 
 } from '../controllers/walletController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -40,6 +41,7 @@ router.get('/search', searchAssets);
 router.post('/add', writeLimiter, addAssetTransaction);
 router.post('/reset', writeLimiter, resetWallet);
 router.delete('/:id', writeLimiter, removeAsset);
+router.put('/:id', writeLimiter, updateAsset); // Nova rota de atualização (Tags, etc)
 
 // Rotas de Transações Granulares
 router.get('/transactions/:ticker', getAssetTransactions);
