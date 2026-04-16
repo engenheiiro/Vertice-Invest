@@ -46,88 +46,105 @@ export const fundamentusService = {
             const dataMap = new Map();
 
             $('table#resultado tbody tr').each((i, el) => {
-                const tds = $(el).find('td');
-                const ticker = $(tds[0]).text().trim().toUpperCase();
-                
-                // Validação básica para ignorar linhas quebradas
-                if (!ticker || ticker.length < 4) return;
-
-                // Extração Básica
-                const price = parseBrFloat($(tds[1]).text());
-                const pl = parseBrFloat($(tds[2]).text());
-                const pvp = parseBrFloat($(tds[3]).text());
-                const psr = parseBrFloat($(tds[4]).text());
-                const pAtivo = parseBrFloat($(tds[6]).text());
-                const pEbit = parseBrFloat($(tds[8]).text());
-                const evEbit = parseBrFloat($(tds[10]).text());
-                const patrimLiq = parseBrFloat($(tds[18]).text());
-
-                // --- ENGENHARIA REVERSA DE DADOS FINANCEIROS ---
-                // Cálculos baseados na consistência matemática dos múltiplos
-                
-                // 1. Market Cap (Valor de Mercado) = Patrimônio Líquido * P/VP
-                let marketCap = 0;
-                if (patrimLiq > 0 && pvp > 0) {
-                    marketCap = patrimLiq * pvp;
-                }
-
-                // 2. Lucro Líquido (12m) = Market Cap / PL
-                let netIncome = 0;
-                if (marketCap > 0 && pl > 0) {
-                    netIncome = marketCap / pl;
-                }
-
-                // 3. Receita Líquida (12m) = Market Cap / PSR
-                let netRevenue = 0;
-                if (marketCap > 0 && psr > 0) {
-                    netRevenue = marketCap / psr;
-                }
-
-                // 4. Ativos Totais = Market Cap / (Price/Assets)
-                let totalAssets = 0;
-                if (marketCap > 0 && pAtivo > 0) {
-                    totalAssets = marketCap / pAtivo;
-                }
-
-                // 5. Dívida Líquida (Net Debt)
-                let netDebt = 0;
-                if (marketCap > 0 && pEbit > 0 && evEbit > 0) {
-                    const ebit = marketCap / pEbit;
-                    const ev = ebit * evEbit;
-                    netDebt = ev - marketCap;
-                }
-
-                dataMap.set(ticker, {
-                    ticker,
-                    price: price,
-                    pl: pl,
-                    pvp: pvp,
-                    psr: psr,
-                    dy: parseBrFloat($(tds[5]).text()),
-                    pAtivo: pAtivo,
-                    pCapGiro: parseBrFloat($(tds[7]).text()),
-                    pEbit: pEbit,
-                    pAtivCircLiq: parseBrFloat($(tds[9]).text()),
-                    evEbit: evEbit,
-                    evEbitda: parseBrFloat($(tds[11]).text()),
-                    mrgEbit: parseBrFloat($(tds[12]).text()),
-                    netMargin: parseBrFloat($(tds[13]).text()),
-                    currentRatio: parseBrFloat($(tds[14]).text()),
-                    roic: parseBrFloat($(tds[15]).text()),
-                    roe: parseBrFloat($(tds[16]).text()),
-                    liq2m: parseBrFloat($(tds[17]).text()),
-                    patrimLiq: patrimLiq,
-                    divBrutaPatrim: parseBrFloat($(tds[19]).text()),
-                    cresRec5a: parseBrFloat($(tds[20]).text()),
+                try {
+                    const tds = $(el).find('td');
+                    const ticker = $(tds[0]).text().trim().toUpperCase();
                     
-                    // Dados Enriquecidos Calculados
-                    marketCap,
-                    netIncome,
-                    netRevenue,
-                    totalAssets,
-                    netDebt
-                });
+                    // Validação básica para ignorar linhas quebradas
+                    if (!ticker || ticker.length < 4) return;
+
+                    // Extração Básica
+                    const price = parseBrFloat($(tds[1]).text());
+                    const pl = parseBrFloat($(tds[2]).text());
+                    const pvp = parseBrFloat($(tds[3]).text());
+                    const psr = parseBrFloat($(tds[4]).text());
+                    const pAtivo = parseBrFloat($(tds[6]).text());
+                    const pEbit = parseBrFloat($(tds[8]).text());
+                    const evEbit = parseBrFloat($(tds[10]).text());
+                    const patrimLiq = parseBrFloat($(tds[18]).text());
+
+                    // --- ENGENHARIA REVERSA DE DADOS FINANCEIROS ---
+                    // Cálculos baseados na consistência matemática dos múltiplos
+                    
+                    // 1. Market Cap (Valor de Mercado) = Patrimônio Líquido * P/VP
+                    let marketCap = 0;
+                    if (patrimLiq > 0 && pvp > 0) {
+                        marketCap = patrimLiq * pvp;
+                    }
+
+                    // 2. Lucro Líquido (12m) = Market Cap / PL
+                    let netIncome = 0;
+                    if (marketCap > 0 && pl > 0) {
+                        netIncome = marketCap / pl;
+                    }
+
+                    // 3. Receita Líquida (12m) = Market Cap / PSR
+                    let netRevenue = 0;
+                    if (marketCap > 0 && psr > 0) {
+                        netRevenue = marketCap / psr;
+                    }
+
+                    // 4. Ativos Totais = Market Cap / (Price/Assets)
+                    let totalAssets = 0;
+                    if (marketCap > 0 && pAtivo > 0) {
+                        totalAssets = marketCap / pAtivo;
+                    }
+
+                    // 5. Dívida Líquida (Net Debt)
+                    let netDebt = 0;
+                    if (marketCap > 0 && pEbit > 0 && evEbit > 0) {
+                        const ebit = marketCap / pEbit;
+                        const ev = ebit * evEbit;
+                        netDebt = ev - marketCap;
+                    }
+
+                    // 6. Payout (Dividendos / Lucro Líquido)
+                    // Matematicamente: Payout = DY * PL
+                    const dy = parseBrFloat($(tds[5]).text());
+                    let payout = 0;
+                    if (dy > 0 && pl > 0) {
+                        payout = dy * pl;
+                    }
+
+                    dataMap.set(ticker, {
+                        ticker,
+                        price: price,
+                        pl: pl,
+                        pvp: pvp,
+                        psr: psr,
+                        dy: dy,
+                        pAtivo: pAtivo,
+                        pCapGiro: parseBrFloat($(tds[7]).text()),
+                        pEbit: pEbit,
+                        pAtivCircLiq: parseBrFloat($(tds[9]).text()),
+                        evEbit: evEbit,
+                        evEbitda: parseBrFloat($(tds[11]).text()),
+                        mrgEbit: parseBrFloat($(tds[12]).text()),
+                        netMargin: parseBrFloat($(tds[13]).text()),
+                        currentRatio: parseBrFloat($(tds[14]).text()),
+                        roic: parseBrFloat($(tds[15]).text()),
+                        roe: parseBrFloat($(tds[16]).text()),
+                        liq2m: parseBrFloat($(tds[17]).text()),
+                        patrimLiq: patrimLiq,
+                        divBrutaPatrim: parseBrFloat($(tds[19]).text()),
+                        cresRec5a: parseBrFloat($(tds[20]).text()),
+                        
+                        // Dados Enriquecidos Calculados
+                        marketCap,
+                        netIncome,
+                        netRevenue,
+                        totalAssets,
+                        netDebt,
+                        payout
+                    });
+                } catch (rowError) {
+                    logger.warn(`⚠️ Erro ao processar linha ${i} de ações: ${rowError.message}`);
+                }
             });
+
+            if (dataMap.size < 100 && process.env.NODE_ENV !== 'test') {
+                throw new Error(`Scraping retornou apenas ${dataMap.size} ações. Possível bloqueio ou instabilidade no Fundamentus.`);
+            }
 
             logger.info(`✅ Fundamentus: ${dataMap.size} ações processadas com dados completos.`);
             return dataMap;
@@ -159,38 +176,46 @@ export const fundamentusService = {
             const dataMap = new Map();
 
             $('table#tabelaResultado tbody tr').each((i, el) => {
-                const tds = $(el).find('td');
-                const ticker = $(tds[0]).text().trim().toUpperCase();
+                try {
+                    const tds = $(el).find('td');
+                    const ticker = $(tds[0]).text().trim().toUpperCase();
 
-                if (!ticker || ticker.length < 4) return;
+                    if (!ticker || ticker.length < 4) return;
 
-                const price = parseBrFloat($(tds[2]).text());
-                const pvp = parseBrFloat($(tds[5]).text());
-                const ffoYield = parseBrFloat($(tds[3]).text());
-                const marketCap = parseBrFloat($(tds[6]).text()); // FII já tem market cap direto na tabela (Valor de Mercado)
+                    const price = parseBrFloat($(tds[2]).text());
+                    const pvp = parseBrFloat($(tds[5]).text());
+                    const ffoYield = parseBrFloat($(tds[3]).text());
+                    const marketCap = parseBrFloat($(tds[6]).text()); // FII já tem market cap direto na tabela (Valor de Mercado)
 
-                // Campos Derivados
-                const vpCota = (pvp > 0 && price > 0) ? (price / pvp) : 0;
-                const ffoCota = (price > 0) ? (price * (ffoYield / 100)) : 0;
+                    // Campos Derivados
+                    const vpCota = (pvp > 0 && price > 0) ? (price / pvp) : 0;
+                    const ffoCota = (price > 0) ? (price * (ffoYield / 100)) : 0;
 
-                dataMap.set(ticker, {
-                    ticker,
-                    sector: $(tds[1]).text().trim(),
-                    price: price,
-                    ffoYield: ffoYield,
-                    dy: parseBrFloat($(tds[4]).text()),
-                    pvp: pvp,
-                    marketCap: marketCap,
-                    liquidity: parseBrFloat($(tds[7]).text()),
-                    qtdImoveis: parseBrFloat($(tds[8]).text()),
-                    priceM2: parseBrFloat($(tds[9]).text()),
-                    rentM2: parseBrFloat($(tds[10]).text()),
-                    capRate: parseBrFloat($(tds[11]).text()),
-                    vacancy: parseBrFloat($(tds[12]).text()),
-                    vpCota: parseFloat(vpCota.toFixed(2)),
-                    ffoCota: parseFloat(ffoCota.toFixed(2))
-                });
+                    dataMap.set(ticker, {
+                        ticker,
+                        sector: $(tds[1]).text().trim(),
+                        price: price,
+                        ffoYield: ffoYield,
+                        dy: parseBrFloat($(tds[4]).text()),
+                        pvp: pvp,
+                        marketCap: marketCap,
+                        liquidity: parseBrFloat($(tds[7]).text()),
+                        qtdImoveis: parseBrFloat($(tds[8]).text()),
+                        priceM2: parseBrFloat($(tds[9]).text()),
+                        rentM2: parseBrFloat($(tds[10]).text()),
+                        capRate: parseBrFloat($(tds[11]).text()),
+                        vacancy: parseBrFloat($(tds[12]).text()),
+                        vpCota: parseFloat(vpCota.toFixed(2)),
+                        ffoCota: parseFloat(ffoCota.toFixed(2))
+                    });
+                } catch (rowError) {
+                    logger.warn(`⚠️ Erro ao processar linha ${i} de FIIs: ${rowError.message}`);
+                }
             });
+
+            if (dataMap.size < 100 && process.env.NODE_ENV !== 'test') {
+                throw new Error(`Scraping retornou apenas ${dataMap.size} FIIs. Possível bloqueio ou instabilidade no Fundamentus.`);
+            }
 
             logger.info(`✅ Fundamentus: ${dataMap.size} FIIs processados com dados completos.`);
             return dataMap;

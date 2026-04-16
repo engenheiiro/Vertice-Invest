@@ -138,11 +138,18 @@ export const externalMarketService = {
         
         const yahooTickers = tickers.map(t => {
             const cleanT = t.trim().toUpperCase();
-            if (cleanT === 'BTC') return 'BTC-USD';
-            if (cleanT === 'ETH') return 'ETH-USD';
-            if (cleanT === 'SOL') return 'SOL-USD';
-            if (cleanT === 'USDT') return 'USDT-USD';
-            if (['BTC-USD', 'ETH-USD', 'SOL-USD'].includes(cleanT)) return cleanT;
+            
+            // If it's a known crypto list or looks like a crypto (not B3 format, no dot, length 3-4)
+            // Actually, we don't know the type here. But we can check if it's in our default crypto list
+            const knownCryptos = [
+                'BTC', 'ETH', 'USDT', 'BNB', 'SOL', 'USDC', 'XRP', 'DOGE', 'TON', 'ADA',
+                'SHIB', 'AVAX', 'TRX', 'DOT', 'BCH', 'LINK', 'MATIC', 'NEAR', 'LTC', 'ICP',
+                'LEO', 'DAI', 'UNI', 'APT', 'STX', 'ETC', 'MNT', 'FIL', 'RNDR', 'ARB',
+                'XMR', 'OKB', 'IMX', 'KAS', 'XLM', 'INJ', 'VET', 'FDUSD', 'OP', 'GRT',
+                'TAO', 'THETA', 'MKR', 'CRO', 'FET', 'LDO', 'ALGO', 'RUNE', 'AAVE', 'BSV'
+            ];
+            if (knownCryptos.includes(cleanT)) return `${cleanT}-USD`;
+            if (cleanT.endsWith('-USD')) return cleanT;
 
             const isB3Format = /^[A-Z]{4}\d{1,2}$/.test(cleanT);
             if (isB3Format && !cleanT.endsWith('.SA')) return `${cleanT}.SA`;
@@ -164,6 +171,8 @@ export const externalMarketService = {
                     ticker: symbol,
                     price: item.regularMarketPrice || item.price || 0,
                     change: changePct,
+                    marketCap: item.marketCap || 0,
+                    volume: item.regularMarketVolume || item.volume || 0,
                     name: item.longName || item.shortName || symbol,
                     source: 'YAHOO'
                 };

@@ -6,7 +6,7 @@ import {
     getWalletHistory, 
     addAssetTransaction, 
     removeAsset, 
-    updateAsset, // Importado
+    updateAsset, 
     searchAssets, 
     resetWallet,
     getAssetTransactions,
@@ -16,7 +16,8 @@ import {
     getCashFlow,
     runCorporateAction,
     fixWalletSnapshots,
-    getSnapshotHealth 
+    getSnapshotHealth,
+    forceSnapshot // Importado
 } from '../controllers/walletController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -41,7 +42,7 @@ router.get('/search', searchAssets);
 router.post('/add', writeLimiter, addAssetTransaction);
 router.post('/reset', writeLimiter, resetWallet);
 router.delete('/:id', writeLimiter, removeAsset);
-router.put('/:id', writeLimiter, updateAsset); // Nova rota de atualização (Tags, etc)
+router.put('/:id', writeLimiter, updateAsset); 
 
 // Rotas de Transações Granulares
 router.get('/transactions/:ticker', getAssetTransactions);
@@ -60,5 +61,7 @@ router.post('/fix-splits', writeLimiter, runCorporateAction);
 // Rotas Admin de Saúde
 router.post('/fix-snapshots', requireAdmin, fixWalletSnapshots);
 router.get('/snapshot-health', requireAdmin, getSnapshotHealth);
+// NOVO: Trigger Manual de Snapshot
+router.post('/admin/snapshot/force', requireAdmin, forceSnapshot);
 
 export default router;

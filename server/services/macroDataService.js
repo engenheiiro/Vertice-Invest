@@ -103,7 +103,16 @@ export const macroDataService = {
                 return;
             }
         } catch (error) {
-            // Silêncio, vai para tentativa 2
+            // Tenta o endpoint de últimos se o filtrado por data falhar (Bypass de bugs de range do BCB)
+            try {
+                const urlUltimos = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.SELIC_DAILY}/dados/ultimos/50?formato=json`;
+                const resUlt = await axios.get(urlUltimos, { headers: BASE_HEADERS, httpsAgent: bcbAgent, timeout: 5000 });
+                if (resUlt.data && Array.isArray(resUlt.data) && resUlt.data.length > 0) {
+                    await this.processDailyData(resUlt.data);
+                    logger.info(`✅ [Macro] Sucesso via HTTPS (Últimos 50): ${resUlt.data.length} registros.`);
+                    return;
+                }
+            } catch (e) { }
         }
 
         // TENTATIVA 2: HTTP (SEM SSL - Bypass WAF)
@@ -117,16 +126,30 @@ export const macroDataService = {
                 timeout: 10000 // Timeout maior
             });
 
-            if (resHttp.data && Array.isArray(resHttp.data)) {
-                if (resHttp.data.length > 0) {
-                    await this.processDailyData(resHttp.data);
-                    logger.info(`✅ [Macro] Sucesso via HTTP: ${resHttp.data.length} registros.`);
-                } else {
-                    logger.info(`✅ [Macro] HTTP: Nenhum dado novo.`);
-                }
+            const resData = resHttp.data;
+            const dataArray = Array.isArray(resData) ? resData : (resData && typeof resData === 'object' && resData.data && resData.valor ? [resData] : []);
+
+            if (dataArray.length > 0) {
+                await this.processDailyData(dataArray);
+                logger.info(`✅ [Macro] Sucesso via HTTP: ${dataArray.length} registros.`);
                 return;
             } else {
-                throw new Error(`Resposta HTTP inválida: ${resHttp.status}`);
+                // Se for um array vazio, é sucesso mas sem dados novos
+                if (Array.isArray(resData) && resData.length === 0) {
+                    logger.info(`✅ [Macro] HTTP: Nenhum dado novo.`);
+                    return;
+                }
+
+                const dataType = typeof resData;
+                let dataSnippet = 'N/A';
+                try {
+                    dataSnippet = dataType === 'string' 
+                        ? resData.substring(0, 200) 
+                        : JSON.stringify(resData).substring(0, 200);
+                } catch (e) {
+                    dataSnippet = '[Unserializable Object]';
+                }
+                throw new Error(`Resposta HTTP inválida (Status: ${resHttp.status}, Tipo: ${dataType}). Snippet: ${dataSnippet}`);
             }
         } catch (httpError) {
             logger.error(`❌ [Macro] HTTP também falhou: ${httpError.message}`);

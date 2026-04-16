@@ -2,6 +2,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { X, Shield, Activity, Target, Zap, TrendingUp, AlertTriangle, AlertOctagon, ThumbsUp, ThumbsDown, BarChart2, DollarSign, Database, ArrowUpCircle } from 'lucide-react';
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { RankingItem } from '../../services/research';
 
 interface AssetDetailModalProps {
@@ -78,8 +79,8 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                     <DetailRow label="Vacância Física" value={formatPercent(m.vacancy)} status={getMetricStatus('VACANCY', m.vacancy)} />
                     <DetailRow label="Cap Rate Impl." value={formatPercent(m.capRate)} status={getMetricStatus('CAP_RATE', m.capRate)} />
                     <DetailRow label="FFO Yield" value={formatPercent(m.ffoYield)} status={getMetricStatus('FFO_YIELD', m.ffoYield)} />
-                    <DetailRow label="Qtd. Imóveis" value={formatNumber(m.qtdImoveis)} status='neutral' />
-                    <DetailRow label="Valor Patrimonial" value={formatMoneyShort(m.patrimLiq)} status='neutral' />
+                    <DetailRow label="Beta" value={m.beta ? formatNumber(m.beta) : 'N/A'} status={m.beta && m.beta > 1.2 ? 'warning' : 'neutral'} />
+                    <DetailRow label="Volatilidade" value={m.volatility ? formatPercent(m.volatility) : 'N/A'} status='neutral' />
                     <DetailRow label="Liquidez Diária" value={formatMoneyShort(m.avgLiquidity)} status='neutral' />
                 </div>
             );
@@ -89,6 +90,8 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                     <DetailRow label="Market Cap" value={formatMoneyShort(m.marketCap || m.mktCap)} status='info' />
                     <DetailRow label="Preço Atual" value={formatCurrency(asset.currentPrice, 'USD')} status='neutral' />
                     <DetailRow label="Liquidez Est." value={formatMoneyShort(m.avgLiquidity)} status='neutral' />
+                    <DetailRow label="SMA 200" value={m.sma200 ? formatCurrency(m.sma200, 'USD') : 'N/A'} status={m.sma200 && asset.currentPrice > m.sma200 ? 'good' : 'bad'} />
+                    <DetailRow label="Volatilidade (a.a.)" value={m.volatility ? formatPercent(m.volatility) : 'N/A'} status={m.volatility && m.volatility > 100 ? 'bad' : 'neutral'} />
                     <DetailRow label="Score Estrutural" value={asset.score.toString()} status={asset.score > 70 ? 'good' : 'warning'} />
                 </div>
             );
@@ -101,8 +104,8 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                     <DetailRow label="Margem Líquida" value={formatPercent(m.netMargin)} status={getMetricStatus('NET_MARGIN', m.netMargin)} />
                     <DetailRow label="Dívida Líq/PL" value={formatNumber(m.debtToEquity)} status={getMetricStatus('DEBT_EQUITY', m.debtToEquity)} />
                     <DetailRow label="EV/EBITDA" value={formatNumber(m.evEbitda)} status={getMetricStatus('EV_EBITDA', m.evEbitda)} />
-                    <DetailRow label="Div. Yield" value={formatPercent(m.dy)} status={getMetricStatus('DY', m.dy)} />
-                    <DetailRow label="Cresc. Rec. (5a)" value={formatPercent(m.revenueGrowth || 0)} status={(m.revenueGrowth || 0) > 10 ? 'good' : 'neutral'} />
+                    <DetailRow label="Beta" value={m.beta ? formatNumber(m.beta) : 'N/A'} status={m.beta && m.beta > 1.2 ? 'warning' : 'neutral'} />
+                    <DetailRow label="Volatilidade" value={m.volatility ? formatPercent(m.volatility) : 'N/A'} status='neutral' />
                 </div>
             );
         }
@@ -131,6 +134,12 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
     const hasBullThesis = asset.bullThesis && asset.bullThesis.length > 0;
     const hasBearThesis = asset.bearThesis && asset.bearThesis.length > 0;
     const upside = asset.currentPrice > 0 ? ((asset.targetPrice / asset.currentPrice) - 1) * 100 : 0;
+
+    const radarData = [
+        { subject: 'Qualidade', A: s.quality, fullMark: 100 },
+        { subject: 'Valuation', A: s.valuation, fullMark: 100 },
+        { subject: 'Segurança', A: s.risk, fullMark: 100 },
+    ];
 
     return createPortal(
         <div className="relative z-[100]" role="dialog" aria-modal="true">
@@ -164,10 +173,38 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                 </div>
                             </div>
 
-                            <div className="space-y-5 flex-1">
-                                <ScoreBar label="Qualidade" value={s.quality} color="bg-blue-500" icon={<Zap size={14} />} />
-                                <ScoreBar label="Valuation" value={s.valuation} color="bg-emerald-500" icon={<Target size={14} />} />
-                                <ScoreBar label="Segurança" value={s.risk} color="bg-purple-500" icon={<Shield size={14} />} />
+                            <div className="h-[200px] w-full -ml-4">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                                        <PolarGrid stroke="#334155" />
+                                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 'bold' }} />
+                                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                                        <Radar
+                                            name="Score"
+                                            dataKey="A"
+                                            stroke="#3b82f6"
+                                            strokeWidth={2}
+                                            fill="#3b82f6"
+                                            fillOpacity={0.3}
+                                        />
+                                    </RadarChart>
+                                </ResponsiveContainer>
+                            </div>
+                            
+                            {/* Legenda simples dos valores para não perder a precisão */}
+                            <div className="grid grid-cols-3 gap-2 text-center mb-4">
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase">Qualidade</p>
+                                    <p className="text-sm font-bold text-blue-400">{s.quality}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase">Valuation</p>
+                                    <p className="text-sm font-bold text-emerald-400">{s.valuation}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase">Risco</p>
+                                    <p className="text-sm font-bold text-purple-400">{s.risk}</p>
+                                </div>
                             </div>
 
                             {/* VALUATION SIDEBAR REORGANIZADA (Preço -> Teto -> Upside -> Yield) */}

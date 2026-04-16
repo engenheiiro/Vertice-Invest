@@ -22,16 +22,16 @@ export const aiEnhancementService = {
     async enhanceRankingWithNews(currentRanking, assetClass) {
         if (!process.env.API_KEY) throw new Error("API_KEY ausente.");
 
-        const candidates = currentRanking; // Recebe os 50 do Draft
+        const candidates = currentRanking; // Recebe os ativos do Draft
         if (!candidates || candidates.length === 0) return [];
 
-        logger.info(`🤖 [IA] Iniciando Refinamento do Lote (${candidates.length} ativos)...`);
+        logger.info(`🤖 [IA] Iniciando Auditoria Qualitativa (${candidates.length} ativos)...`);
 
         const candidateListString = candidates.map(c => 
             `- ${c.ticker} (Setor: ${c.sector || 'Geral'})`
         ).join('\n');
 
-        // PROMPT ENGENHEIRADO PARA ALTA PRECISÃO E RETORNO JSON
+        // PROMPT REFINADO: Foco em Risco e Contexto, não em dar nota
         const prompt = `
         Você é um **Senior Risk Officer (SRO)** de um Hedge Fund Global. Sua tarefa é auditar a lista de ativos pré-selecionados pelo nosso algoritmo quantitativo.
 
@@ -41,28 +41,24 @@ export const aiEnhancementService = {
 
         INSTRUÇÕES DE AUDITORIA (SEARCH GROUNDING):
         Para CADA ativo da lista abaixo, utilize o Google Search para verificar:
-        1. **Fatos Relevantes Recentes (30 dias):** Fusões, aquisições, resultados trimestrais muito acima/abaixo do esperado.
-        2. **Risk Flags (Críticos):** Recuperação Judicial, Fraudes Contábeis, Processos CVM, Escândalos de Governança, Risco de Calote (Default) ou Quebra de Covenants.
-        3. **Sentimento de Mercado:** O mercado está comprador ou vendedor neste papel especificamente?
+        1. **Fatos Relevantes Recentes (30 dias):** Fusões, aquisições, resultados trimestrais.
+        2. **Red Flags (Críticos):** Recuperação Judicial, Fraudes Contábeis, Processos CVM, Escândalos de Governança.
+        3. **Sentimento:** O mercado está comprador ou vendedor neste papel?
 
         LISTA DE ATIVOS:
         ${candidateListString}
 
         REGRAS DE OUTPUT (ESTRITO):
-        Você DEVE retornar APENAS um JSON válido. Não adicione markdown (\`\`\`json), não adicione texto introdutório. Apenas o objeto JSON puro.
-        O JSON deve conter um array chamado "analysis" com exatos ${candidates.length} objetos.
+        Retorne APENAS um JSON válido contendo um array "analysis".
+        NÃO altere a ordem.
 
         FORMATO DO OBJETO:
         {
             "ticker": "CÓDIGO",
-            "aiScore": NUMBER, // 0 a 100. (0=Fraude/RJ, 50=Neutro/Sem News, 100=Fato Relevante Extraordinário Positivo)
-            "rationale": "STRING" // Máximo 15 palavras. Ex: "RJ aprovada, risco máximo." ou "Lucro recorde +50% YoY."
+            "riskLevel": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+            "rationale": "Resumo executivo de 15 palavras sobre o momento atual da empresa.",
+            "hasBankruptcyRisk": boolean // True se estiver em RJ ou risco iminente de quebra
         }
-
-        Exemplo de Lógica de Score:
-        - Americanas (AMER3) em fraude -> Score 0
-        - Empresa estável sem notícias -> Score 50
-        - Empresa anunciou dividendos recordes -> Score 80
         `;
 
         try {
@@ -72,7 +68,7 @@ export const aiEnhancementService = {
                 config: {
                     tools: [{ googleSearch: {} }], 
                     responseMimeType: "application/json",
-                    temperature: 0.1, // Temperatura mínima para máxima obediência
+                    temperature: 0.1, 
                 }
             });
 
@@ -82,45 +78,60 @@ export const aiEnhancementService = {
             try {
                 const cleanedText = cleanJsonString(responseText);
                 const parsed = JSON.parse(cleanedText);
-                aiAnalysis = parsed.analysis || parsed; // Tenta pegar a chave ou o array direto
+                aiAnalysis = parsed.analysis || parsed; 
             } catch (e) {
-                logger.error(`Erro ao parsear JSON da IA: ${e.message}. Texto bruto: ${responseText.substring(0, 100)}...`);
-                // Fallback para não quebrar o fluxo
+                logger.error(`Erro ao parsear JSON da IA: ${e.message}`);
                 return candidates;
             }
             
             const enhancedList = candidates.map(original => {
                 const aiData = Array.isArray(aiAnalysis) ? aiAnalysis.find(a => a.ticker === original.ticker) : null;
                 
-                // Se a IA não retornou dado para este ticker, assume neutro
-                const aiScore = aiData ? aiData.aiScore : 50; 
+                // Defaults se a IA falhar para um item específico
                 const rationale = aiData ? aiData.rationale : "Sem fatos relevantes recentes.";
+                const hasRisk = aiData ? aiData.hasBankruptcyRisk : false;
+                const riskLevel = aiData ? aiData.riskLevel : 'LOW';
 
-                // Ponderação Final: Matemática (60%) + IA (40%)
-                const finalScore = Math.round((original.score * 0.6) + (aiScore * 0.4));
+                // --- ALTERAÇÃO CRÍTICA: SCORE DESACOPLADO ---
+                // O score final é 100% o score matemático original.
+                // A IA não soma pontos.
+                const finalScore = original.score;
 
                 let finalAction = original.action;
-                // Kill Switch da IA: Se detectar risco grave (<20), força WAIT/SELL imediatamente
-                if (aiScore < 20) {
-                    finalAction = 'WAIT';
-                    logger.warn(`🚨 IA vetou ${original.ticker}: ${rationale}`);
+                
+                // Kill Switch: A IA tem poder de VETO, mas não de promoção.
+                // Se detectar risco de falência ou risco crítico, força WAIT/SELL.
+                if (hasRisk || riskLevel === 'CRITICAL') {
+                    finalAction = 'WAIT'; // Remove recomendação de compra
+                    logger.warn(`🚨 IA vetou ${original.ticker} por Risco Crítico: ${rationale}`);
                 }
 
                 return {
                     ...original,
-                    score: finalScore,
-                    thesis: `[IA Check]: ${rationale}`,
+                    score: finalScore, // Mantém score quantitativo puro
+                    
+                    // Metadados da IA para exibição no front (Audit Modal)
+                    aiMetadata: {
+                        riskLevel,
+                        rationale,
+                        vetoed: hasRisk || riskLevel === 'CRITICAL'
+                    },
+                    
+                    // Concatena a visão da IA na tese para leitura
+                    thesis: `[Quant]: ${original.thesis}. [IA Audit]: ${rationale}`,
                     bullThesis: [...(original.bullThesis || []), `IA Sentiment: ${rationale}`],
+                    
                     action: finalAction
                 };
             });
 
-            logger.info(`✅ Refinamento IA Concluído. Ranking reordenado.`);
+            logger.info(`✅ Auditoria IA Concluída. Ranking matemático preservado.`);
+            // Reordena pelo score original (Matemático) para garantir integridade
             return enhancedList.sort((a, b) => b.score - a.score);
 
         } catch (error) {
             logger.error(`❌ Erro Fatal IA: ${error.message}`);
-            return candidates; // Fallback: retorna lista original sem IA
+            return candidates; // Fallback seguro
         }
     }
 };

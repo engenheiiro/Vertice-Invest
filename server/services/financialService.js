@@ -197,13 +197,22 @@ export const financialService = {
                     }
                     
                     let txAdjPrice = tx.price;
+                    let trueAdjustedFlow = tx.totalValue; // NOVO: Fluxo ajustado real
                     const meta = assetMetadataMap.get(tx.ticker);
                     const isFixed = meta?.type === 'FIXED_INCOME' || meta?.type === 'CASH';
 
                     if (!isFixed) {
                         const pMap = priceCacheMap.get(tx.ticker);
                         const pData = this.findPriceInMap(pMap, cursorIso);
-                        if (pData.adjClose > 0) txAdjPrice = pData.adjClose;
+                        if (pData.adjClose > 0) {
+                            txAdjPrice = pData.adjClose;
+                            if (pData.close > 0) {
+                                const ratio = pData.adjClose / pData.close;
+                                trueAdjustedFlow = tx.totalValue * ratio;
+                            } else {
+                                trueAdjustedFlow = tx.quantity * txAdjPrice;
+                            }
+                        }
                     }
 
                     if (tx.type === 'BUY') {
@@ -214,7 +223,7 @@ export const financialService = {
                             fixedIncomeState[tx.ticker].currentValue += tx.totalValue;
                         }
                         dayFlowNominal += tx.totalValue;
-                        dayFlowAdjusted += (tx.quantity * txAdjPrice);
+                        dayFlowAdjusted += trueAdjustedFlow; // MODIFICADO
                         
                         if (!lastKnownPrices[tx.ticker]) lastKnownPrices[tx.ticker] = { close: tx.price, adjClose: txAdjPrice };
 
@@ -226,7 +235,7 @@ export const financialService = {
                             fixedIncomeState[tx.ticker].currentValue = Math.max(0, fixedIncomeState[tx.ticker].currentValue - tx.totalValue);
                         }
                         dayFlowNominal -= tx.totalValue;
-                        dayFlowAdjusted -= (tx.quantity * txAdjPrice);
+                        dayFlowAdjusted -= trueAdjustedFlow; // MODIFICADO
                     }
                     
                     if (portfolio[tx.ticker].qty < 0.000001) {
@@ -299,7 +308,7 @@ export const financialService = {
                 }
 
                 // USO DO HELPER MATHUTILS (Modified Dietz)
-                if (previousEquityAdjusted > 0) {
+                if (previousEquityAdjusted > 0 || dayFlowAdjusted > 0) {
                     const dailyReturn = calculateDailyDietz(previousEquityAdjusted, totalEquityAdjusted, dayFlowAdjusted);
                     
                     // Proteção contra spikes absurdos (ex: dados sujos)
@@ -443,6 +452,7 @@ export const financialService = {
         let quantity = 0;
         let totalCost = 0; 
         let realizedProfit = 0;
+        let fifoRealizedProfit = 0; // NOVO: Lucro Realizado FIFO
         let taxLots = []; 
         let firstBuyDate = null;
 
@@ -466,16 +476,23 @@ export const financialService = {
                 totalCost = safeSub(totalCost, costOfSoldShares);
                 
                 let remainingToSell = txQty;
+                let fifoCostOfSoldShares = 0; // NOVO
+
                 while (remainingToSell > 0.000001 && taxLots.length > 0) {
                     const oldestLot = taxLots[0]; 
                     if (oldestLot.quantity > remainingToSell) {
+                        fifoCostOfSoldShares = safeAdd(fifoCostOfSoldShares, safeMult(remainingToSell, oldestLot.price));
                         oldestLot.quantity = safeSub(oldestLot.quantity, remainingToSell);
                         remainingToSell = 0;
                     } else {
+                        fifoCostOfSoldShares = safeAdd(fifoCostOfSoldShares, safeMult(oldestLot.quantity, oldestLot.price));
                         remainingToSell = safeSub(remainingToSell, oldestLot.quantity);
                         taxLots.shift(); 
                     }
                 }
+
+                const fifoProfit = safeSub(txTotal, fifoCostOfSoldShares);
+                fifoRealizedProfit = safeAdd(fifoRealizedProfit, fifoProfit);
             }
         }
 
@@ -523,6 +540,7 @@ export const financialService = {
         asset.quantity = quantity;
         asset.totalCost = safeCurrency(totalCost); 
         asset.realizedProfit = safeCurrency(realizedProfit);
+        asset.fifoRealizedProfit = safeCurrency(fifoRealizedProfit); // NOVO
         asset.taxLots = taxLots;
         asset.updatedAt = new Date();
         

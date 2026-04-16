@@ -14,10 +14,16 @@
     "seed:admin": "node server/scripts/seedAdmin.js",
     "seed:market": "node server/scripts/seedMarketData.js",
     "sync:prod": "node server/scripts/syncProdData.js",
+    "sync:TimeSeriesWorker": "node server/scripts/syncTimeSeries.js",
     "migrate:fix": "node server/scripts/migrateHardcodedData.js",
+    "test": "vitest",
+    "test:backtest": "node server/scripts/runBacktestEngine.js",
     "test:client": "npm run test --prefix client",
     "test:server": "npm run test --prefix server",
-    "test:regression": "npm run test:regression --prefix server"
+    "test:ingestion": "npm run test --prefix server -- tests/ingestion.spec.js",
+    "test:regression": "npm run test:regression --prefix server",
+    "test:fundamentus": "npm run test:fundamentus --prefix server",
+    "lint": "npm run lint --prefix client && npm run lint --prefix server"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

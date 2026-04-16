@@ -15,6 +15,14 @@ interface AddAssetModalProps {
     onClose: () => void;
 }
 
+const getLocalDateString = () => {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose }) => {
     const { addAsset, assets } = useWallet();
     const { addToast } = useToast();
@@ -44,7 +52,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         quantity: '',
         price: '',
         rate: '', 
-        date: new Date().toISOString().split('T')[0]
+        date: getLocalDateString()
     });
 
     const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -71,7 +79,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                 quantity: '', 
                 price: '', 
                 rate: '', 
-                date: new Date().toISOString().split('T')[0] 
+                date: getLocalDateString() 
             }); 
         } else {
             document.body.style.overflow = 'unset';
@@ -139,7 +147,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
         priceFetchTimeoutRef.current = setTimeout(async () => {
             try {
-                const today = new Date().toISOString().split('T')[0];
+                const today = getLocalDateString();
                 let priceData = null;
                 
                 if (form.date === today) {
@@ -335,7 +343,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         let finalPrice = 0;
 
         // Validação de Data Futura
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateString();
         if (form.date > today) {
             setValidationError('Não é permitido lançar transações futuras.');
             return;
@@ -648,7 +656,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     if (!isOpen) return null;
 
     // Data máxima permitida = Hoje
-    const maxDate = new Date().toISOString().split('T')[0];
+    const maxDate = getLocalDateString();
 
     return createPortal(
         <div className="relative z-[100]" aria-labelledby="modal-title" role="dialog" aria-modal="true">

@@ -12,6 +12,7 @@ import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculate
 import { countBusinessDays, isBusinessDay } from '../utils/dateUtils.js';
 import logger from '../config/logger.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js'; 
+import { runDailySnapshot } from '../services/schedulerService.js'; // Importado
 
 const getDailyFactorForDate = (date, currentConfigRate) => {
     const year = date.getFullYear();
@@ -161,14 +162,12 @@ export const getWalletData = async (req, res, next) => {
             return safeAdd(acc, profitInBrl);
         }, 0);
 
-        const now = new Date();
-        const isTodayBusinessDay = isBusinessDay(now);
+        const brazilTodayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+        const isTodayBusinessDay = isBusinessDay(new Date(brazilTodayStr + 'T00:00:00.000Z'));
 
         const processedAssets = activeAssets.map(asset => {
             let currentPrice = 0;
             let dayChangePct = 0; 
-            const isDollarized = asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO';
-            const currencyMultiplier = isDollarized ? usdRate : 1;
 
             if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
                 const rawRate = asset.fixedIncomeRate > 0 ? asset.fixedIncomeRate : (asset.type === 'CASH' ? 100 : 100);
@@ -188,20 +187,62 @@ export const getWalletData = async (req, res, next) => {
                     dayChangePct = 0;
                 }
 
-                let startDate = new Date(asset.startDate || asset.createdAt);
-                startDate.setHours(0,0,0,0);
-                const calcDate = new Date();
-                calcDate.setHours(0,0,0,0);
+                const getBrazilDateString = (d) => {
+                    const dateObj = new Date(d);
+                    // Se a data for exatamente meia-noite UTC, provavelmente é uma data "pura" vinda do input (YYYY-MM-DD)
+                    // Nesses casos, evitamos o shift do fuso horário para não retroceder um dia.
+                    if (dateObj.getUTCHours() === 0 && dateObj.getUTCMinutes() === 0 && dateObj.getUTCSeconds() === 0) {
+                        return dateObj.toISOString().split('T')[0];
+                    }
+                    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(dateObj);
+                };
+                const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+                const calcDate = new Date(todayStr + 'T00:00:00.000Z');
+
+                let totalCurrentValue = 0;
+                let totalQuantity = 0;
                 
-                const businessDays = countBusinessDays(startDate, calcDate);
-                let compoundFactor = Math.pow(effectiveDailyFactor, businessDays);
-
-                if (!isFinite(compoundFactor) || compoundFactor < 1) compoundFactor = 1;
-
-                if (asset.type === 'CASH') {
-                    currentPrice = compoundFactor; 
+                if (asset.taxLots && asset.taxLots.length > 0) {
+                    for (const lot of asset.taxLots) {
+                        const lotDateStr = getBrazilDateString(new Date(lot.date));
+                        const lotStartDate = new Date(lotDateStr + 'T00:00:00.000Z');
+                        const businessDays = countBusinessDays(lotStartDate, calcDate);
+                        let compoundFactor = Math.pow(effectiveDailyFactor, businessDays);
+                        if (!isFinite(compoundFactor) || compoundFactor < 1) compoundFactor = 1;
+                        
+                        if (asset.type === 'CASH') {
+                            totalCurrentValue += lot.quantity * compoundFactor;
+                        } else {
+                            totalCurrentValue += lot.quantity * lot.price * compoundFactor;
+                        }
+                        totalQuantity += lot.quantity;
+                    }
                 } else {
-                    currentPrice = safeMult(asset.averagePrice, compoundFactor);
+                    const startDateStr = getBrazilDateString(new Date(asset.startDate || asset.createdAt));
+                    const startDate = new Date(startDateStr + 'T00:00:00.000Z');
+                    const businessDays = countBusinessDays(startDate, calcDate);
+                    let compoundFactor = Math.pow(effectiveDailyFactor, businessDays);
+                    if (!isFinite(compoundFactor) || compoundFactor < 1) compoundFactor = 1;
+
+                    if (asset.type === 'CASH') {
+                        totalCurrentValue = asset.quantity * compoundFactor;
+                    } else {
+                        totalCurrentValue = asset.quantity * asset.averagePrice * compoundFactor;
+                    }
+                    totalQuantity = asset.quantity;
+                }
+
+                if (totalQuantity > 0) {
+                    currentPrice = totalCurrentValue / totalQuantity;
+                } else {
+                    currentPrice = asset.type === 'CASH' ? 1 : asset.averagePrice;
+                }
+
+                // Ajuste para ativos comprados HOJE (evita variação irreal no dia da compra)
+                const boughtToday = asset.taxLots && asset.taxLots.length > 0 && asset.taxLots.every(lot => getBrazilDateString(new Date(lot.date)) === todayStr);
+                
+                if (boughtToday) {
+                    dayChangePct = 0;
                 }
 
             } else {
@@ -213,36 +254,48 @@ export const getWalletData = async (req, res, next) => {
                     } else {
                         dayChangePct = isTodayBusinessDay ? safeFloat(Number(cached.change)) : 0;
                     }
+                    
+                    // Ajuste para ativos comprados HOJE (evita variação irreal no dia da compra)
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const boughtToday = asset.taxLots && asset.taxLots.length > 0 && asset.taxLots.every(lot => new Date(lot.date).toISOString().split('T')[0] === todayStr);
+                    
+                    if (boughtToday && asset.quantity > 0) {
+                        const averagePrice = safeDiv(asset.totalCost, asset.quantity);
+                        if (averagePrice > 0) {
+                            dayChangePct = ((currentPrice / averagePrice) - 1) * 100;
+                        }
+                    }
                 } else {
                     currentPrice = 0; 
                     dayChangePct = 0;
                 }
             }
             
+            const isDollarized = asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO';
+            const currentMultiplier = isDollarized ? usdRate : 1;
+            const prevMultiplier = isDollarized ? (usdRate / (1 + usdChange/100)) : 1;
+
             const valueBase = asset.type === 'CASH' ? asset.quantity : safeMult(asset.quantity, currentPrice);
             const totalValueBr = asset.type === 'CASH' 
-                ? safeMult(valueBase, currentPrice)
-                : safeMult(valueBase, currencyMultiplier);
+                ? safeMult(safeMult(asset.quantity, currentPrice), currentMultiplier)
+                : safeMult(valueBase, currentMultiplier);
 
-            const totalCostBr = safeMult(asset.totalCost, currencyMultiplier);
+            const totalCostBr = safeMult(asset.totalCost, currentMultiplier);
             
-            let combinedChangePct = dayChangePct;
-            if (isDollarized) {
-                if (!isTodayBusinessDay && asset.type !== 'CRYPTO') {
-                    combinedChangePct = 0;
-                } else {
-                    combinedChangePct = ((1 + dayChangePct/100) * (1 + usdChange/100) - 1) * 100;
-                }
-            }
+            // Cálculo robusto da variação diária em BRL
+            // Considera tanto a variação do ativo quanto a variação cambial
+            const priceStart = currentPrice / (1 + dayChangePct/100);
+            const valueStartBr = safeMult(safeMult(asset.quantity, priceStart), prevMultiplier);
 
-            const dayChangeValueBr = safeMult(totalValueBr, safeDiv(combinedChangePct, 100));
+            const dayChangeValueBr = safeSub(totalValueBr, valueStartBr);
+            const combinedChangePct = valueStartBr > 0 ? ((totalValueBr / valueStartBr) - 1) * 100 : 0;
 
             totalEquity = safeAdd(totalEquity, totalValueBr);
             totalInvested = safeAdd(totalInvested, totalCostBr);
             totalDayVariation = safeAdd(totalDayVariation, dayChangeValueBr);
 
             const unrealizedProfitBr = safeSub(totalValueBr, totalCostBr);
-            const realizedProfitBr = safeMult((asset.realizedProfit || 0), currencyMultiplier);
+            const realizedProfitBr = safeMult((asset.realizedProfit || 0), currentMultiplier);
             const positionTotalResult = safeAdd(unrealizedProfitBr, realizedProfitBr);
             
             let profitPercent = 0;
@@ -263,7 +316,7 @@ export const getWalletData = async (req, res, next) => {
                 totalCost: safeCurrency(totalCostBr),
                 profit: safeCurrency(positionTotalResult),
                 profitPercent: safeFloat(profitPercent),
-                sector: assetMap.get(asset.ticker)?.sector || 'Geral',
+                sector: assetMap.get(asset.ticker)?.sector || (asset.type === 'FIXED_INCOME' ? 'Renda Fixa' : asset.type === 'CASH' ? 'Caixa' : 'Outros'),
                 dayChangePct: safeFloat(combinedChangePct),
                 tags: asset.tags // Return tags
             };
@@ -292,6 +345,7 @@ export const getWalletData = async (req, res, next) => {
         }
 
         // --- CÁLCULO LIVE TWRR (SOURCE OF TRUTH BLINDADA) ---
+        const now = new Date();
         let weightedRentability = 0;
         let dataQuality = 'AUDITED'; // Default Audited
         let sharpeRatio = 0;
@@ -579,7 +633,6 @@ export const getWalletHistory = async (req, res, next) => {
     }
 };
 
-// ... (Restante dos endpoints de transação mantidos) ...
 export const addAssetTransaction = async (req, res, next) => {
     const session = await mongoose.startSession();
     try {
@@ -769,7 +822,6 @@ export const fixWalletSnapshots = async (req, res, next) => {
     }
 };
 
-// NOVO: Endpoint de Saúde dos Dados (Admin)
 export const getSnapshotHealth = async (req, res, next) => {
     try {
         const today = new Date();
@@ -786,6 +838,24 @@ export const getSnapshotHealth = async (req, res, next) => {
             lastRun: lastRun?.createdAt,
             status: snapshotsToday > (totalUsers * 0.9) ? 'HEALTHY' : 'WARNING'
         });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// NOVO: Ação Manual de Snapshot (Admin)
+export const forceSnapshot = async (req, res, next) => {
+    try {
+        const { force } = req.body;
+        // Chama a função isolada do scheduler
+        const result = await runDailySnapshot(!!force);
+        
+        if (result.status === 'ERROR') throw new Error(result.error);
+        if (result.status === 'SKIPPED') {
+            return res.status(200).json({ message: "Snapshot ignorado (Feriado ou Fim de semana). Use force=true para obrigar." });
+        }
+        
+        res.json({ message: "Snapshot executado com sucesso.", stats: result.stats });
     } catch (error) {
         next(error);
     }

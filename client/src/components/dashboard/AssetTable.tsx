@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { PieChart, TrendingUp, RefreshCw, Folder, ChevronDown, ChevronRight, Lock } from 'lucide-react';
+import { PieChart, TrendingUp, RefreshCw, Folder, ChevronDown, ChevronRight, Lock, Medal } from 'lucide-react';
 import { PortfolioItem } from '../../hooks/useDashboardData';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
@@ -140,12 +140,12 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                         const profit = item.currentPrice - item.avgPrice;
                                         const profitPercent = item.avgPrice > 0 ? (profit / item.avgPrice) * 100 : 0;
                                         const maxRange = Math.max(item.currentPrice, item.avgPrice) * 1.2;
+                                        const isChampion = profitPercent > 15; // Regra visual para 'Campeã'
 
                                         return (
                                             <tr key={item.ticker} className="hover:bg-slate-800/30 transition-colors group">
                                                 <td className="p-4">
                                                     {isDemoMode ? (
-                                                        // Visual de Ativo "Censurado" para o Demo
                                                         <div className="flex items-center gap-3 opacity-60">
                                                             <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center border border-slate-700 text-slate-500">
                                                                 <Lock size={12} />
@@ -156,13 +156,19 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        // Visual Normal
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300 border border-slate-700">
                                                                 {item.ticker.substring(0,2)}
                                                             </div>
                                                             <div>
-                                                                <p className="font-bold text-slate-200">{item.ticker}</p>
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <p className="font-bold text-slate-200">{item.ticker}</p>
+                                                                    {isChampion && (
+                                                                        <span title="Campeã: Retorno > 15%" className="text-[#D4AF37] animate-pulse">
+                                                                            <Medal size={12} fill="currentColor" />
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                                 <p className="text-[10px] text-slate-500">{item.name}</p>
                                                             </div>
                                                         </div>
@@ -188,7 +194,6 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                             </span>
                                                         </div>
                                                         <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden relative">
-                                                            {/* Marker do PM */}
                                                             <div className="absolute top-0 bottom-0 w-0.5 bg-slate-400 z-10" style={{ left: `${Math.min((item.avgPrice / maxRange) * 100, 100)}%` }}></div>
                                                             <div 
                                                                 className={`h-full rounded-full transition-all duration-700 ${profit >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
@@ -198,7 +203,6 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                     </div>
                                                 </td>
 
-                                                {/* COLUNA IA SCORE */}
                                                 <td className="p-4 text-right">
                                                     {isResearchLoading && item.aiScore === 0 ? (
                                                         <div className="flex flex-col items-end gap-1 opacity-60">
@@ -211,7 +215,6 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                     )}
                                                 </td>
 
-                                                {/* COLUNA AÇÃO (RECOMENDAÇÃO) */}
                                                 <td className="p-4 text-center">
                                                     {isResearchLoading && item.aiScore === 0 ? (
                                                         <div className="h-5 w-16 bg-slate-700 rounded animate-pulse mx-auto"></div>

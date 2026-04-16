@@ -2,9 +2,6 @@
 
 🚀 1. Setup & Inicialização (Ambiente Dev)
 
-# Instala todas as dependências (Raiz, Client e Server) de uma vez:
-npm run setup
-
 # Instala todas as dependências (Raiz, Client e Server) de uma vez
 npm run setup
 
@@ -37,6 +34,10 @@ npm run seed:admin seu@email.com
 # 4. Executa Scanner do Radar Alpha.
 npm run sync:prod
 
+# Busca o histórico de preços, calcula SMA200, EMA50, Volatilidade (anualizada) e Beta (usando o IBOV como benchmark), e salva.
+# É utilizado pelo comando sync:Prod para montar a análise/ranking.
+npm run sync:TimeSeriesWorker
+
 🧪 4. Testes & Qualidade (QA)
 
 # Testes Unitários do Backend (Serviços, Models, Utils)
@@ -51,7 +52,10 @@ npm run test:regression
 
 # Teste de Robustez do Scraper (Ingestão)
 # Verifica se o sistema aguenta dados sujos vindos do Fundamentus.
-npm run test server/tests/ingestion.spec.js
+npm run test:ingestion
+
+# Teste de Pegar 5 ativos da época e comprar o preço
+npm run test:backtest
 
 📦 5. Build (Deploy)
 

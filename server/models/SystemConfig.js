@@ -37,6 +37,13 @@ const SystemConfigSchema = new mongoose.Schema({
     timestamp: { type: Date }
   },
 
+  // NOVO: Relatório de Saúde dos Snapshots
+  lastSnapshotStats: {
+    created: { type: Number, default: 0 },
+    skipped: { type: Number, default: 0 }, // Anomalias ou erros
+    timestamp: { type: Date }
+  },
+
   lastUpdated: { type: Date, default: Date.now }
 });
 

@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Calculator, Search, List, Activity, DollarSign, BarChart2, Shield, Target, Zap, Filter } from 'lucide-react';
-import { ResearchReport } from '../../services/research';
+import { ResearchReport, RankingItem } from '../../services/research';
 
 interface AuditDetailModalProps {
     isOpen: boolean;
@@ -16,6 +16,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
     // 1. Hooks devem ser chamados incondicionalmente no topo
     const [viewMode, setViewMode] = useState<'TOP10' | 'FULL'>('TOP10');
     const [riskFilter, setRiskFilter] = useState<RiskProfileFilter>('ALL');
+    const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
 
     const itemsToShow = useMemo(() => {
         // Proteção interna
@@ -136,9 +137,13 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                                         </tr>
                                     ) : (
                                         itemsToShow.map((item, idx) => (
-                                            <tr key={idx} className="hover:bg-slate-900/50 transition-colors">
+                                            <tr 
+                                                key={idx} 
+                                                onClick={() => setSelectedAsset(item)}
+                                                className={`hover:bg-slate-900/50 transition-colors cursor-pointer group ${selectedAsset?.ticker === item.ticker ? 'bg-blue-600/10 border-l-2 border-l-blue-500' : ''}`}
+                                            >
                                                 {/* CORREÇÃO: Mostra posição real do objeto se existir, senão usa índice visual */}
-                                                <td className="p-4 text-center font-bold text-slate-600">
+                                                <td className="p-4 text-center font-bold text-slate-600 group-hover:text-blue-400">
                                                     {item.position || idx + 1}
                                                 </td>
                                                 <td className="p-4">
@@ -197,6 +202,107 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                                 <span className="font-bold">BAZIN:</span> <span>Preço Teto (Div / 6%)</span>
                             </div>
                         </div>
+
+                        {/* PANEL DE DETALHES (AUDIT LOG) */}
+                        {selectedAsset && (
+                            <div className="absolute inset-y-0 right-0 w-full md:w-96 bg-[#0B101A] border-l border-slate-700 shadow-2xl animate-slide-in-right z-20 flex flex-col">
+                                <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-[#0F131E]">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-blue-600/20 rounded-xl flex items-center justify-center text-blue-400 border border-blue-500/30 font-black">
+                                            {selectedAsset.ticker.slice(0, 2)}
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-black text-white uppercase">{selectedAsset.ticker}</h3>
+                                            <p className="text-[10px] text-slate-500 font-bold uppercase">Diário de Auditoria</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setSelectedAsset(null)} className="p-2 hover:bg-slate-800 rounded-full text-slate-500">
+                                        <X size={20} />
+                                    </button>
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                                    {/* RESUMO ESTRUTURAL */}
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-center">
+                                            <div className="text-[8px] text-slate-500 font-black uppercase mb-1">Qualidade</div>
+                                            <div className="text-lg font-black text-white">{selectedAsset.metrics?.structural?.quality || 0}</div>
+                                        </div>
+                                        <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-center">
+                                            <div className="text-[8px] text-slate-500 font-black uppercase mb-1">Valuation</div>
+                                            <div className="text-lg font-black text-white">{selectedAsset.metrics?.structural?.valuation || 0}</div>
+                                        </div>
+                                        <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-center">
+                                            <div className="text-[8px] text-slate-500 font-black uppercase mb-1">Risco</div>
+                                            <div className="text-lg font-black text-white">{selectedAsset.metrics?.structural?.risk || 0}</div>
+                                        </div>
+                                    </div>
+
+                                    {/* LOG DE EVENTOS */}
+                                    <div className="space-y-4">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                            <List size={12} className="text-blue-500" /> Eventos de Scoring
+                                        </h4>
+                                        
+                                        <div className="space-y-2">
+                                            {selectedAsset.auditLog && selectedAsset.auditLog.length > 0 ? (
+                                                selectedAsset.auditLog.map((log, i) => (
+                                                    <div key={i} className="bg-slate-900/30 border border-slate-800/50 p-3 rounded-xl flex items-center justify-between group hover:border-slate-700 transition-colors">
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-[8px] font-black text-slate-600 uppercase tracking-tighter">{log.category}</span>
+                                                            <span className="text-[11px] text-slate-300 font-medium">{log.factor}</span>
+                                                        </div>
+                                                        <div className={`text-xs font-black px-2 py-1 rounded-lg ${
+                                                            log.type === 'bonus' ? 'bg-emerald-500/10 text-emerald-400' :
+                                                            log.type === 'penalty' ? 'bg-red-500/10 text-red-400' :
+                                                            'bg-blue-500/10 text-blue-400'
+                                                        }`}>
+                                                            {log.points > 0 ? `+${log.points}` : log.points}
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="text-center py-8 text-slate-600 italic text-xs">
+                                                    Nenhum log detalhado disponível para este ativo.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* TESES DINÂMICAS */}
+                                    <div className="space-y-4">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                            <Activity size={12} className="text-emerald-500" /> Tese de Investimento
+                                        </h4>
+                                        <div className="space-y-2">
+                                            {selectedAsset.bullThesis?.map((t, i) => (
+                                                <div key={i} className="text-[10px] text-emerald-400/80 bg-emerald-500/5 p-2 rounded-lg border border-emerald-500/10">
+                                                    ✓ {t}
+                                                </div>
+                                            ))}
+                                            {selectedAsset.bearThesis?.map((t, i) => (
+                                                <div key={i} className="text-[10px] text-red-400/80 bg-red-500/5 p-2 rounded-lg border border-red-500/10">
+                                                    ⚠ {t}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-6 border-t border-slate-800 bg-[#0F131E]">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-[10px] font-black text-slate-500 uppercase">Score Final</span>
+                                        <span className="text-2xl font-black text-white">{selectedAsset.score}</span>
+                                    </div>
+                                    <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                                        <div 
+                                            className="h-full bg-blue-500 transition-all duration-1000" 
+                                            style={{ width: `${selectedAsset.score}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

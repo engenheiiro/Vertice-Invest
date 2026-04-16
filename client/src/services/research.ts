@@ -1,6 +1,13 @@
 
 import { authService } from './auth';
 
+export interface AuditEntry {
+    factor: string;
+    points: number;
+    type: 'base' | 'bonus' | 'penalty';
+    category: string;
+}
+
 export interface RankingItem {
     position: number;
     ticker: string;
@@ -14,6 +21,7 @@ export interface RankingItem {
     probability: number;
     riskProfile?: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
     thesis: string;
+    auditLog?: AuditEntry[];
     bullThesis?: string[]; 
     bearThesis?: string[]; 
     reason: string;
@@ -52,6 +60,10 @@ export interface RankingItem {
         netRevenue?: number;
         netIncome?: number;
         totalAssets?: number;
+        beta?: number;
+        volatility?: number;
+        sma200?: number;
+        ema50?: number;
         structural?: {
             quality: number;
             valuation: number;
@@ -202,6 +214,39 @@ export const researchService = {
     async getDataQualityStats() {
         const response = await authService.api('/api/research/data-quality');
         if (!response.ok) return null;
+        return await response.json();
+    },
+
+    async resetAssetHealth() {
+        const response = await authService.api('/api/research/reset-health', {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error("Falha ao resetar saúde.");
+        return await response.json();
+    },
+
+    async triggerSnapshot(force: boolean = true) {
+        const response = await authService.api('/api/wallet/admin/snapshot/force', {
+            method: 'POST',
+            body: JSON.stringify({ force })
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || "Falha ao executar snapshot.");
+        }
+        return await response.json();
+    },
+
+    // --- NOVOS MÉTODOS (ACURÁCIA E LOGS) ---
+    async getAlgorithmAccuracy(assetClass?: string, days: number = 30) {
+        const response = await authService.api(`/api/research/accuracy?assetClass=${assetClass || ''}&days=${days}`);
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
+    async getDiscardLogs() {
+        const response = await authService.api('/api/research/discard-logs');
+        if (!response.ok) return [];
         return await response.json();
     }
 };

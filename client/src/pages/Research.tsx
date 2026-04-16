@@ -23,8 +23,9 @@ export const Research = () => {
     const location = useLocation(); // Hook de location para pegar state
     
     const [selectedAsset, setSelectedAsset] = useState('BRASIL_10');
-    const [viewMode, setViewMode] = useState<'ANALYSIS' | 'RANKING'>('RANKING');
+    const [viewMode, setViewMode] = useState<'ANALYSIS' | 'RANKING' | 'EXPLAINABLE_AI'>('RANKING');
     const [report, setReport] = useState<ResearchReport | null>(null);
+    const [discardLogs, setDiscardLogs] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     
     // Estado para controle do modal de asset direto
@@ -51,27 +52,36 @@ export const Research = () => {
 
         setIsLoading(true);
         try {
-            const strategy = selectedAsset === 'CRYPTO' ? 'SWING' : 'BUY_HOLD';
-            const data = await researchService.getLatest(selectedAsset, strategy);
-            setReport(data);
+            const strategy = 'BUY_HOLD';
+            try {
+                const data = await researchService.getLatest(selectedAsset, strategy);
+                setReport(data);
+                
+                // LÓGICA DE LINK DIRETO (DEEP LINKING VIA STATE)
+                if (location.state && location.state.openTicker && data && data.content && data.content.ranking) {
+                    const targetTicker = location.state.openTicker;
+                    const found = data.content.ranking.find((item: RankingItem) => item.ticker === targetTicker);
+                    if (found) {
+                        setDirectAsset(found);
+                        window.history.replaceState({}, document.title);
+                    }
+                }
+            } catch (err: any) {
+                console.error("Erro ao buscar análise:", err);
+                setReport(null);
+            }
             
-            // LÓGICA DE LINK DIRETO (DEEP LINKING VIA STATE)
-            if (location.state && location.state.openTicker && data && data.content && data.content.ranking) {
-                const targetTicker = location.state.openTicker;
-                // Procura na classe atual. Se não achar, teria que procurar em outras, 
-                // mas por simplificação o usuário deve selecionar a classe correta ou o sistema poderia inferir.
-                // Aqui tentamos achar no report atual.
-                const found = data.content.ranking.find((item: RankingItem) => item.ticker === targetTicker);
-                if (found) {
-                    setDirectAsset(found);
-                    // Limpa o state para não reabrir ao atualizar
-                    window.history.replaceState({}, document.title);
+            if (viewMode === 'EXPLAINABLE_AI') {
+                const logs = await researchService.getDiscardLogs();
+                if (selectedAsset !== 'BRASIL_10') {
+                     setDiscardLogs(logs.filter((l: any) => l.assetType === selectedAsset));
+                } else {
+                     setDiscardLogs(logs);
                 }
             }
 
         } catch (err: any) {
-            console.error("Erro ao buscar análise:", err);
-            setReport(null);
+            console.error("Erro geral:", err);
         } finally {
             setIsLoading(false);
         }
@@ -79,7 +89,7 @@ export const Research = () => {
 
     useEffect(() => {
         fetchReport();
-    }, [selectedAsset]);
+    }, [selectedAsset, viewMode]);
 
     const hasAccessToSelected = checkAccess(selectedAsset);
     const requiredPlanLabel = ASSETS.find(a => a.id === selectedAsset)?.minPlan || 'PRO';
@@ -142,6 +152,14 @@ export const Research = () => {
                                 >
                                     <Newspaper size={16} /> Relatório Semanal
                                 </button>
+                                <button 
+                                    onClick={() => setViewMode('EXPLAINABLE_AI')}
+                                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
+                                        viewMode === 'EXPLAINABLE_AI' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500'
+                                    }`}
+                                >
+                                    <Bot size={16} /> Explainable AI
+                                </button>
                             </div>
 
                             <button 
@@ -173,14 +191,55 @@ export const Research = () => {
                                 Fazer Upgrade
                             </button>
                         </div>
-                    ) : !report ? (
+                    ) : !report && viewMode !== 'EXPLAINABLE_AI' ? (
                         <div className="flex flex-col items-center justify-center py-20 bg-[#080C14] border border-dashed border-slate-800 rounded-3xl text-center">
                             <Info size={48} className="text-slate-700 mb-4" />
                             <h3 className="text-xl font-black text-slate-500 uppercase">Análise não encontrada</h3>
                             <p className="text-slate-600 text-sm mt-2 max-w-sm">Use o painel admin para gerar o relatório inaugural desta categoria.</p>
                         </div>
+                    ) : viewMode === 'EXPLAINABLE_AI' ? (
+                        <div className="max-w-4xl mx-auto animate-fade-in pb-20">
+                            <div className="bg-[#080C14] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative p-8">
+                                <div className="flex items-center gap-3 mb-8">
+                                    <div className="w-12 h-12 bg-purple-600/20 rounded-2xl flex items-center justify-center border border-purple-500/30">
+                                        <Bot size={24} className="text-purple-400" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-black text-white tracking-tight">Explainable AI</h2>
+                                        <p className="text-slate-400 text-sm">Transparência algorítmica: entenda por que os ativos foram descartados.</p>
+                                    </div>
+                                </div>
+
+                                {discardLogs.length === 0 ? (
+                                    <div className="text-center py-12 bg-slate-900/30 rounded-2xl border border-slate-800/50">
+                                        <p className="text-slate-500 font-medium">Nenhum descarte recente para esta categoria.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {discardLogs.map((log: any) => (
+                                            <div key={log._id} className="bg-[#0B101A] border border-slate-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-700 transition-colors">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center font-black text-white shrink-0">
+                                                        {log.ticker}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-red-400 font-bold text-sm uppercase tracking-wider">{log.reason}</h4>
+                                                        <p className="text-slate-400 text-xs mt-1">{log.details}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                    <span className="text-[10px] font-bold text-slate-500 uppercase bg-slate-900 px-2 py-1 rounded">
+                                                        {new Date(log.createdAt).toLocaleDateString('pt-BR')}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     ) : (
-                        <ResearchViewer report={report} view={viewMode} />
+                        <ResearchViewer report={report!} view={viewMode as 'ANALYSIS' | 'RANKING'} />
                     )}
                 </div>
                 

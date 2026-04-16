@@ -6,6 +6,7 @@ import { scoringEngine } from './engines/scoringEngine.js';
 import { portfolioEngine } from './engines/portfolioEngine.js';
 import SystemConfig from '../models/SystemConfig.js';
 import MarketAnalysis from '../models/MarketAnalysis.js'; 
+import DiscardLog from '../models/DiscardLog.js'; // Novo Modelo
 
 const normalize = (ticker) => {
     if (!ticker) return '';
@@ -14,31 +15,19 @@ const normalize = (ticker) => {
 
 const calculateRankingDelta = async (currentList, assetClass, strategy) => {
     try {
-        const lastReport = await MarketAnalysis.findOne({ 
-            assetClass, 
-            strategy
-        }).sort({ createdAt: -1 });
-
+        const lastReport = await MarketAnalysis.findOne({ assetClass, strategy }).sort({ createdAt: -1 });
         const prevPosMap = new Map();
-        
         if (lastReport && lastReport.content && lastReport.content.ranking) {
             lastReport.content.ranking.forEach(r => {
                 const t = normalize(r.ticker);
                 if (t) prevPosMap.set(t, r.position);
             });
         }
-
         return currentList.map(item => {
             const t = normalize(item.ticker);
             const prev = prevPosMap.get(t);
-            const previousPosition = prev !== undefined ? prev : null;
-
-            return {
-                ...item,
-                previousPosition: previousPosition
-            };
+            return { ...item, previousPosition: prev !== undefined ? prev : null };
         });
-
     } catch (e) {
         return currentList;
     }
@@ -67,22 +56,50 @@ export const aiResearchService = {
                 }
             };
 
-            const processedAssets = rawData
-                .map(asset => scoringEngine.processAsset(asset, context))
-                .filter(Boolean); 
+            const processedAssets = [];
+            const discardOperations = [];
+            const runId = Date.now().toString();
+
+            rawData.forEach(asset => {
+                const result = scoringEngine.processAsset(asset, context);
+                if (result) {
+                    if (result._discarded) {
+                        // Log de Descarte
+                        discardOperations.push({
+                            runId,
+                            ticker: asset.ticker,
+                            reason: result.reason,
+                            details: result.details,
+                            assetType: assetClass
+                        });
+                    } else {
+                        processedAssets.push(result);
+                    }
+                }
+            });
+
+            // Persiste Logs de Descarte (Async para não travar)
+            if (discardOperations.length > 0) {
+                DiscardLog.insertMany(discardOperations).catch(e => logger.error(`Erro salvando discard logs: ${e.message}`));
+            }
 
             let ranking = portfolioEngine.performCompetitiveDraft(processedAssets);
             ranking = portfolioEngine.applyConcentrationPenalty(ranking);
-
             ranking = await calculateRankingDelta(ranking, assetClass, strategy);
+
+            // Estatísticas de Tier para Monitoramento
+            const tierStats = {
+                GOLD: ranking.filter(r => r.tier === 'GOLD').length,
+                SILVER: ranking.filter(r => r.tier === 'SILVER').length,
+                BRONZE: ranking.filter(r => r.tier === 'BRONZE').length
+            };
+            logger.info(`🏆 [Ranking ${assetClass}] G:${tierStats.GOLD} S:${tierStats.SILVER} B:${tierStats.BRONZE}`);
 
             const fullList = processedAssets.map(asset => {
                 const entries = Object.entries(asset.scores);
                 const [bestProfile, bestScore] = entries.reduce((a, b) => a[1] > b[1] ? a : b);
-                
                 let action = 'WAIT';
                 if (bestScore >= 70) action = 'BUY'; 
-                
                 return {
                     ...asset,
                     riskProfile: bestProfile,
@@ -92,7 +109,7 @@ export const aiResearchService = {
                 };
             }).sort((a, b) => b.score - a.score); 
 
-            return { ranking, fullList, processedAssets }; 
+            return { ranking, fullList, processedAssets, tierStats }; 
 
         } catch (error) {
             logger.error(`Erro ranking: ${error.message}`);
@@ -102,18 +119,19 @@ export const aiResearchService = {
 
     async runBatchAnalysis(adminId = null) {
         const strat = 'BUY_HOLD';
-
-        // 1. Ações
+        
         logger.info("ℹ️ [AI Research] Processando Ações...");
         const stockData = await this.calculateRanking('STOCK', strat);
         await MarketAnalysis.create({ assetClass: 'STOCK', strategy: strat, content: { ranking: stockData.ranking, fullAuditLog: stockData.fullList }, generatedBy: adminId });
 
-        // 2. FIIs
         logger.info("ℹ️ [AI Research] Processando FIIs...");
         const fiiData = await this.calculateRanking('FII', strat);
         await MarketAnalysis.create({ assetClass: 'FII', strategy: strat, content: { ranking: fiiData.ranking, fullAuditLog: fiiData.fullList }, generatedBy: adminId });
 
-        // 3. Brasil 10
+        logger.info("ℹ️ [AI Research] Processando Criptomoedas...");
+        const cryptoData = await this.calculateRanking('CRYPTO', strat);
+        await MarketAnalysis.create({ assetClass: 'CRYPTO', strategy: strat, content: { ranking: cryptoData.ranking, fullAuditLog: cryptoData.fullList }, generatedBy: adminId });
+
         logger.info("ℹ️ [AI Research] Processando Brasil 10...");
         
         const getTop5Defensive = (fullList) => {
@@ -123,6 +141,7 @@ export const aiResearchService = {
                     score: a.scores['DEFENSIVE'], 
                     riskProfile: 'DEFENSIVE',     
                     action: a.scores['DEFENSIVE'] >= 60 ? 'BUY' : 'WAIT',
+                    tier: 'GOLD', // Assume Gold para top selections
                     thesis: `Brasil 10: Score Defensivo ${a.scores['DEFENSIVE']}`
                 }))
                 .sort((a, b) => b.score - a.score)
@@ -135,19 +154,10 @@ export const aiResearchService = {
         let brasil10List = [...top5Stocks, ...top5FIIs];
         brasil10List.sort((a, b) => b.score - a.score);
 
-        brasil10List = brasil10List.map((item, idx) => ({
-            ...item,
-            position: idx + 1
-        }));
-
+        brasil10List = brasil10List.map((item, idx) => ({ ...item, position: idx + 1 }));
         brasil10List = await calculateRankingDelta(brasil10List, 'BRASIL_10', strat);
         
-        await MarketAnalysis.create({ 
-            assetClass: 'BRASIL_10', 
-            strategy: strat, 
-            content: { ranking: brasil10List, fullAuditLog: brasil10List }, 
-            generatedBy: adminId 
-        });
+        await MarketAnalysis.create({ assetClass: 'BRASIL_10', strategy: strat, content: { ranking: brasil10List, fullAuditLog: brasil10List }, generatedBy: adminId });
         
         return true;
     },
@@ -155,9 +165,7 @@ export const aiResearchService = {
     async generateNarrative(ranking, assetClass) {
         if (!process.env.API_KEY || ranking.length === 0) return "Análise indisponível.";
         const highlights = ranking.filter(r => r.action === 'BUY').slice(0, 5);
-        const contextItems = highlights.map(a => 
-            `- ${a.ticker} (${a.riskProfile}): R$ ${a.currentPrice} (Score ${a.score}). ${a.thesis}`
-        ).join('\n');
+        const contextItems = highlights.map(a => `- ${a.ticker} (${a.riskProfile}): R$ ${a.currentPrice} (Score ${a.score}). ${a.thesis}`).join('\n');
         const prompt = `Aja como Head Research. Morning Call curto sobre ${assetClass}.\nDestaques:\n${contextItems}`;
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });

@@ -32,6 +32,7 @@ const MarketAssetSchema = new mongoose.Schema({
   revenueGrowth: { type: Number, default: 0 }, // Crescimento 5a
   debtToEquity: { type: Number, default: 0 },
   netDebt: { type: Number, default: 0 },
+  payout: { type: Number, default: 0 },
   
   // Indicadores FIIs
   vacancy: { type: Number, default: 0 },
@@ -39,6 +40,12 @@ const MarketAssetSchema = new mongoose.Schema({
   dy: { type: Number, default: 0 },
   capRate: { type: Number, default: 0 },
   qtdImoveis: { type: Number, default: 0 },
+  
+  // --- Séries Temporais (Workers) ---
+  volatility: { type: Number, default: 0 },
+  beta: { type: Number, default: 0 },
+  sma200: { type: Number, default: 0 },
+  ema50: { type: Number, default: 0 },
   
   // --- Controle de Saúde do Ativo ---
   isActive: { type: Boolean, default: true },
