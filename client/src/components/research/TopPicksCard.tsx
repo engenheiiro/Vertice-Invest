@@ -1,10 +1,9 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Trophy, BarChart2, Layers, Shield, Target, Zap, Minus, Wallet, PieChart, PlusCircle } from 'lucide-react';
+import { Trophy, BarChart2, Layers, Shield, Target, Zap, Minus, Wallet, PieChart, PlusCircle, Crown, Medal } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 import { AssetDetailModal } from './AssetDetailModal';
 import { useWallet } from '../../contexts/WalletContext';
-// @ts-ignore
 import { useNavigate } from 'react-router-dom';
 
 interface TopPicksCardProps {
@@ -50,8 +49,15 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
             filtered = picks.filter(p => p.riskProfile === 'BOLD');
         }
 
+        const tierOrder: Record<string, number> = { 'GOLD': 0, 'SILVER': 1, 'BRONZE': 2 };
+
         return filtered
-            .sort((a, b) => b.score - a.score)
+            .sort((a, b) => {
+                const tierA = tierOrder[(a as any).tier] ?? 3;
+                const tierB = tierOrder[(b as any).tier] ?? 3;
+                if (tierA !== tierB) return tierA - tierB;
+                return b.score - a.score;
+            })
             .slice(0, 10)
             .map((item, idx) => ({
                 ...item,
@@ -78,7 +84,6 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
         return 'text-red-500';
     };
 
-    // Lógica de Cores do Yield (Pedido 2)
     const getYieldColor = (dy: number) => {
         if (!dy || dy <= 0) return 'text-slate-500';
         if (dy > 6) return 'text-emerald-400';
@@ -89,6 +94,14 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
         if (profile === 'DEFENSIVE') return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-900/30 text-emerald-400 border border-emerald-900/50 flex items-center gap-1"><Shield size={8} /> Defensivo</span>;
         if (profile === 'MODERATE') return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-400 border border-blue-900/50 flex items-center gap-1"><Target size={8} /> Moderado</span>;
         if (profile === 'BOLD') return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-900/30 text-purple-400 border border-purple-900/50 flex items-center gap-1"><Zap size={8} /> Arrojado</span>;
+        return null;
+    };
+
+    const getTierBadge = (tier?: string) => {
+        // Usa tier vindo do backend, ou infere se não existir (compatibilidade)
+        if (tier === 'GOLD') return <span title="Top Tier (Rodada 1)" className="text-[#D4AF37]"><Medal size={12} fill="currentColor" /></span>;
+        if (tier === 'SILVER') return <span title="Mid Tier (Rodada 2)" className="text-slate-300"><Medal size={12} fill="currentColor" /></span>;
+        if (tier === 'BRONZE') return <span title="Backfill (Rodada 3)" className="text-amber-700"><Medal size={12} fill="currentColor" /></span>;
         return null;
     };
 
@@ -118,7 +131,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                         <p className="text-[10px] text-slate-500">Selecione o nível de risco para gerar o Top 10 específico.</p>
                     </div>
                 </div>
-                <div className="flex overflow-x-auto gap-2 no-scrollbar w-full md:w-auto pb-2 md:pb-0">
+                <div className="flex flex-wrap items-center gap-2 no-scrollbar w-full md:w-auto pb-2 md:pb-0">
                     {Object.entries(RISK_LABELS).map(([key, label]) => {
                         if (isBrasil10 && key !== 'DEFENSIVE') return null;
                         return (
@@ -163,8 +176,14 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                             <p className={`text-sm font-black ${getScoreTextColor(stats.avgScore)}`}>{stats.avgScore}</p>
                         </div>
                         <div className="bg-[#0B101A] border border-slate-800 p-2.5 rounded-xl text-center">
-                            <p className="text-[8px] text-slate-500 font-bold uppercase mb-0.5">Yield 12m</p>
-                            <p className="text-sm font-black text-emerald-400">{stats.avgDy}%</p>
+                            <p className="text-[8px] text-slate-500 font-bold uppercase mb-0.5">{assetClass === 'CRYPTO' ? 'Avg Cap' : 'Yield 12m'}</p>
+                            {assetClass === 'CRYPTO' ? (
+                                <p className="text-sm font-black text-emerald-400">
+                                    {filteredPicks.length > 0 ? `$${(filteredPicks.reduce((acc, curr) => acc + (curr.metrics.marketCap || 0), 0) / filteredPicks.length / 1e9).toFixed(1)}B` : '-'}
+                                </p>
+                            ) : (
+                                <p className="text-sm font-black text-emerald-400">{stats.avgDy}%</p>
+                            )}
                         </div>
                         <div className="bg-[#0B101A] border border-slate-800 p-2.5 rounded-xl text-center">
                             <p className="text-[8px] text-slate-500 font-bold uppercase mb-0.5">Ativos</p>
@@ -205,7 +224,6 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                     </h3>
                 </div>
                 {filteredPicks.map((pick, idx) => {
-                        const isFII = pick.type === 'FII';
                         const fairValueLabel = "Preço Teto";
 
                         // Encontra se o usuário possui este ativo
@@ -226,10 +244,10 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                             <div key={idx} onClick={() => setSelectedAsset(pick)} className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 hover:border-slate-600 hover:bg-[#0F131E] transition-all cursor-pointer group relative overflow-hidden">
                                 
                                 <div className="flex flex-col xl:flex-row gap-6 items-center">
-                                    {/* SEÇÃO 1: IDENTIDADE E SCORES (Agora na mesma linha em telas largas) */}
+                                    {/* SEÇÃO 1: IDENTIDADE E SCORES */}
                                     <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 items-center">
                                         
-                                        {/* Ticker & Info (3 Colunas) */}
+                                        {/* Ticker & Info */}
                                         <div className="lg:col-span-3 flex items-center gap-4">
                                             <div className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg border shrink-0 ${getRankStyle(pick.position || pick.visualPosition)}`}>
                                                 <span className="font-black text-sm leading-none">{pick.position || pick.visualPosition}</span>
@@ -238,6 +256,13 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                                                 <div className="flex items-center mb-1 gap-2">
                                                     <h4 className="text-base font-black text-white tracking-tight">{pick.ticker}</h4>
                                                     {getRiskBadge(pick.riskProfile)}
+                                                    {/* Badge de Dividend Aristocrat e Tier */}
+                                                    {(pick as any).isDividendAristocrat && (
+                                                        <span title="Dividend Aristocrat: Crescimento Consistente" className="text-emerald-400">
+                                                            <Crown size={12} fill="currentColor" />
+                                                        </span>
+                                                    )}
+                                                    {getTierBadge((pick as any).tier)}
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold uppercase border border-slate-700">{pick.sector || 'Geral'}</span>
@@ -262,12 +287,18 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                                                     <p className="text-xs font-bold text-blue-400 font-mono">{formatCurrency(pick.targetPrice || 0)}</p>
                                                 </div>
 
-                                                {/* 3. Yield (Com Cores) */}
+                                                {/* 3. Yield / Variável (Com Cores) */}
                                                 <div className="text-center sm:text-left">
-                                                    <p className="text-[8px] font-bold text-slate-500 uppercase">Yield</p>
-                                                    <p className={`text-xs font-bold font-mono ${getYieldColor(pick.metrics.dy)}`}>
-                                                        {pick.metrics.dy ? pick.metrics.dy.toFixed(1) : 0}%
-                                                    </p>
+                                                    <p className="text-[8px] font-bold text-slate-500 uppercase">{assetClass === 'CRYPTO' ? 'Market Cap' : 'Yield'}</p>
+                                                    {assetClass === 'CRYPTO' ? (
+                                                        <p className="text-xs font-bold font-mono text-slate-300">
+                                                            {pick.metrics.marketCap ? `$${(pick.metrics.marketCap / 1e9).toFixed(1)}B` : '-'}
+                                                        </p>
+                                                    ) : (
+                                                        <p className={`text-xs font-bold font-mono ${getYieldColor(pick.metrics.dy)}`}>
+                                                            {pick.metrics.dy ? pick.metrics.dy.toFixed(1) : 0}%
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -298,7 +329,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                                         </div>
                                     </div>
                                     
-                                    {/* SEÇÃO 2: ALOCAÇÃO E AÇÃO (Separado em telas largas) */}
+                                    {/* SEÇÃO 2: ALOCAÇÃO E AÇÃO */}
                                     <div className="flex flex-col sm:flex-row gap-6 w-full xl:w-auto xl:border-l xl:border-slate-800 xl:pl-6">
                                         
                                         {/* Sua Posição */}
@@ -370,7 +401,6 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
     );
 };
 
-// ... (Subcomponentes UserWalletSectorChart e SectorDistribution mantidos sem alterações)
 const UserWalletSectorChart = ({ assetClass }: { assetClass: string }) => {
     const { assets } = useWallet();
     const navigate = useNavigate();

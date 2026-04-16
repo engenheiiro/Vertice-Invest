@@ -5,8 +5,9 @@ import { researchService, ResearchReport } from '../../services/research';
 import { marketService } from '../../services/market';
 import { authService } from '../../services/auth'; 
 import { subscriptionService } from '../../services/subscription'; 
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Minus, HardDrive, Scissors, CreditCard, Settings, Database, Sparkles, Trash2, ShieldAlert } from 'lucide-react';
+import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Minus, HardDrive, Scissors, CreditCard, Settings, Database, Sparkles, Trash2, ShieldAlert, Target, ClipboardList } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
 interface AssetClassOption {
     id: string;
@@ -56,6 +57,7 @@ const STRATEGIES = [
 ];
 
 export const AdminPanel = () => {
+    // --- ESTADOS EXISTENTES ---
     const [history, setHistory] = useState<ResearchReport[]>([]); 
     const [loadingKey, setLoadingKey] = useState<string | null>(null); 
     const [statusMsg, setStatusMsg] = useState<{type: 'success' | 'error', text: string} | null>(null);
@@ -64,6 +66,8 @@ export const AdminPanel = () => {
     const [isGlobalRunning, setIsGlobalRunning] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [isMacroSyncing, setIsMacroSyncing] = useState(false);
+    const [isResettingHealth, setIsResettingHealth] = useState(false);
+    const [isSnapshotRunning, setIsSnapshotRunning] = useState(false);
     
     const [macroData, setMacroData] = useState<MacroData | null>(null);
     const [isLoadingMacro, setIsLoadingMacro] = useState(true);
@@ -81,6 +85,14 @@ export const AdminPanel = () => {
 
     const [qualityStats, setQualityStats] = useState<any>(null);
 
+    // --- NOVOS ESTADOS (GRÁFICO E LOGS) ---
+    const [accuracyData, setAccuracyData] = useState<any[]>([]);
+    const [accuracyWindow, setAccuracyWindow] = useState<number>(30); // 30, 60, 90
+    const [accuracyAsset, setAccuracyAsset] = useState<string>('BRASIL_10');
+    const [discardLogs, setDiscardLogs] = useState<any[]>([]);
+    const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+    // --- LOADERS ---
     const loadHistory = async () => {
         try {
             const data = await researchService.getHistory();
@@ -116,12 +128,38 @@ export const AdminPanel = () => {
         } catch (e) { console.error("Erro ao carregar configs", e); }
     };
 
+    // --- NOVOS LOADERS ---
+    const loadAccuracy = async () => {
+        try {
+            const data = await researchService.getAlgorithmAccuracy(accuracyAsset, accuracyWindow);
+            setAccuracyData(data.map((d: any) => ({
+                ...d,
+                formattedDate: new Date(d.date).toLocaleDateString('pt-BR')
+            })));
+        } catch (e) { console.error("Erro accuracy", e); }
+    };
+
+    const loadDiscardLogs = async () => {
+        setIsLoadingLogs(true);
+        try {
+            const data = await researchService.getDiscardLogs();
+            setDiscardLogs(data);
+        } catch (e) { console.error("Erro logs", e); }
+        finally { setIsLoadingLogs(false); }
+    };
+
     useEffect(() => {
         loadHistory();
         loadMacro();
         loadConfig();
+        loadDiscardLogs(); // Novo
     }, []);
 
+    useEffect(() => {
+        loadAccuracy(); // Novo
+    }, [accuracyWindow, accuracyAsset]);
+
+    // --- HANDLERS EXISTENTES ---
     const handleSyncData = async () => {
         setIsSyncing(true);
         setStatusMsg(null);
@@ -130,6 +168,7 @@ export const AdminPanel = () => {
             setStatusMsg({ type: 'success', text: "Banco de Dados atualizado com sucesso! Cotações sincronizadas." });
             await loadMacro(); 
             await loadConfig();
+            await loadAccuracy();
         } catch (e: any) {
             setStatusMsg({ type: 'error', text: e.message || "Erro na sincronização." });
         } finally {
@@ -163,11 +202,44 @@ export const AdminPanel = () => {
             await loadHistory();
             await loadMacro();
             await loadConfig();
+            await loadDiscardLogs();
+            await loadAccuracy();
         } catch (error: any) {
             setStatusMsg({ type: 'error', text: error.message || "Erro durante o processamento global." });
         } finally {
             setIsGlobalRunning(false);
             setTimeout(() => setStatusMsg(null), 8000);
+        }
+    };
+
+    const handleForceSnapshot = async () => {
+        if(!confirm("ATENÇÃO: Isso calculará a rentabilidade de TODOS os usuários com base nos preços atuais. Se já houver um snapshot hoje, ele será substituído. Continuar?")) return;
+        
+        setIsSnapshotRunning(true);
+        setStatusMsg(null);
+        try {
+            const res = await researchService.triggerSnapshot(true);
+            setStatusMsg({ type: 'success', text: `Snapshot executado. Criados: ${res.stats.created}, Ignorados: ${res.stats.skipped}` });
+            await loadConfig(); 
+        } catch (e: any) {
+            setStatusMsg({ type: 'error', text: e.message || "Erro ao executar snapshot." });
+        } finally {
+            setIsSnapshotRunning(false);
+            setTimeout(() => setStatusMsg(null), 5000);
+        }
+    };
+
+    const handleResetHealth = async () => {
+        setIsResettingHealth(true);
+        try {
+            const res = await researchService.resetAssetHealth();
+            setStatusMsg({ type: 'success', text: `${res.reactivated} ativos reativados com sucesso.` });
+            await loadConfig();
+        } catch (e: any) {
+            setStatusMsg({ type: 'error', text: "Erro ao resetar saúde dos ativos." });
+        } finally {
+            setIsResettingHealth(false);
+            setTimeout(() => setStatusMsg(null), 3000);
         }
     };
 
@@ -210,19 +282,11 @@ export const AdminPanel = () => {
         setStatusMsg(null);
 
         try {
-            await researchService.crunchNumbers(assetId, false); // false for single asset calc, actually logic handles this via researchController
-            // Need to adjust this since crunchNumbers in UI calls specific endpoint. 
-            // Actually the UI call in previous code was researchService.generateReport which mapped to /generate.
-            // But now we are using the updated researchService with crunchNumbers.
-            // Let's assume crunchNumbers(assetId) triggers calculation for that asset class.
-            
-            // To be safe and compatible with previous implementation logic:
-            // Since previous generateReport called /generate, and now we have /crunch.
-            // We should use crunchNumbers.
-            await researchService.crunchNumbers(assetId); // Assumes single asset calc by default if not bulk
-            
+            await researchService.crunchNumbers(assetId); 
             setStatusMsg({ type: 'success', text: `Análise para ${assetId} gerada com sucesso!` });
             await loadHistory(); 
+            await loadDiscardLogs();
+            await loadAccuracy();
         } catch (error: any) {
             setStatusMsg({ type: 'error', text: error.message || "Erro ao gerar análise." });
         } finally {
@@ -322,16 +386,6 @@ export const AdminPanel = () => {
         return dateString.startsWith(today);
     };
 
-    const getStatusForCell = (assetId: string, strategyId: string) => {
-        const today = new Date().toISOString().split('T')[0];
-        const report = history.find(h => 
-            h.assetClass === assetId && 
-            h.strategy === strategyId && 
-            h.date.startsWith(today)
-        );
-        return !!report;
-    };
-
     const isMacroDataValid = macroData && macroData.selic && macroData.ibov;
 
     return (
@@ -368,9 +422,11 @@ export const AdminPanel = () => {
                     </div>
                 )}
 
-                {/* --- MONITOR DE QUALIDADE DE DADOS (NOVO) --- */}
+                {/* --- MONITOR DE QUALIDADE DE DADOS --- */}
                 {qualityStats && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        
+                        {/* 1. Ativos Processados */}
                         <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
                             <div className="w-12 h-12 bg-blue-900/20 rounded-xl flex items-center justify-center text-blue-500 border border-blue-900/50">
                                 <RefreshCw size={24} />
@@ -382,6 +438,7 @@ export const AdminPanel = () => {
                             </div>
                         </div>
 
+                        {/* 2. Sanity Check */}
                         <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
                             <div className="w-12 h-12 bg-yellow-900/20 rounded-xl flex items-center justify-center text-yellow-500 border border-yellow-900/50">
                                 <ShieldCheck size={24} />
@@ -393,20 +450,152 @@ export const AdminPanel = () => {
                             </div>
                         </div>
 
-                        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${qualityStats.blacklistedAssets > 0 ? 'bg-red-900/20 text-red-500 border-red-900/50' : 'bg-green-900/20 text-green-500 border-green-900/50'}`}>
-                                <ShieldAlert size={24} />
+                        {/* 3. Blacklist Control */}
+                        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg relative overflow-hidden">
+                            <div className="flex items-center gap-4">
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${qualityStats.blacklistedAssets > 0 ? 'bg-red-900/20 text-red-500 border-red-900/50' : 'bg-green-900/20 text-green-500 border-green-900/50'}`}>
+                                    <ShieldAlert size={24} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase">Blacklist Dinâmica</p>
+                                    <h3 className={`text-2xl font-black ${qualityStats.blacklistedAssets > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                                        {qualityStats.blacklistedAssets}
+                                    </h3>
+                                    <p className="text-[9px] text-slate-500 mt-0.5">Ativos bloqueados</p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-[10px] text-slate-500 font-bold uppercase">Blacklist Dinâmica</p>
-                                <h3 className={`text-2xl font-black ${qualityStats.blacklistedAssets > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                                    {qualityStats.blacklistedAssets}
-                                </h3>
-                                <p className="text-[9px] text-slate-500 mt-0.5">Ativos bloqueados por falha</p>
+                            {qualityStats.blacklistedAssets > 0 && (
+                                <button 
+                                    onClick={handleResetHealth} 
+                                    disabled={isResettingHealth}
+                                    className="px-3 py-1.5 bg-red-900/20 border border-red-900/50 text-red-400 hover:bg-red-900/40 text-[10px] font-bold rounded-lg transition-all flex items-center gap-2"
+                                    title="Reativa ativos que foram bloqueados por falhas consecutivas de sync"
+                                >
+                                    {isResettingHealth ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} fill="currentColor" />}
+                                    {isResettingHealth ? 'Sincronizando...' : 'Sync Ativos Problemáticos'}
+                                </button>
+                            )}
+                        </div>
+
+                        {/* 4. SNAPSHOT HEALTH */}
+                        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                            <div className="flex items-center gap-4">
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${qualityStats.snapshotStats?.skipped > 0 ? 'bg-orange-900/20 text-orange-500 border-orange-900/50' : 'bg-indigo-900/20 text-indigo-500 border-indigo-900/50'}`}>
+                                    <Activity size={24} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase">Snapshots Noturnos</p>
+                                    <div className="flex items-baseline gap-2">
+                                        <h3 className="text-2xl font-black text-white">
+                                            {qualityStats.snapshotStats?.created || 0}
+                                        </h3>
+                                        <span className="text-[10px] text-slate-500 font-bold">Criados</span>
+                                    </div>
+                                    <p className={`text-[9px] mt-0.5 font-bold ${qualityStats.snapshotStats?.skipped > 0 ? 'text-orange-500' : 'text-emerald-500'}`}>
+                                        {qualityStats.snapshotStats?.skipped || 0} anomalias ignoradas
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleForceSnapshot}
+                                disabled={isSnapshotRunning}
+                                className="px-3 py-1.5 bg-indigo-900/20 border border-indigo-900/50 text-indigo-400 hover:bg-indigo-900/40 text-[10px] font-bold rounded-lg transition-all flex items-center gap-2"
+                                title="Recalcular rentabilidade de todos os usuários agora"
+                            >
+                                {isSnapshotRunning ? <RefreshCw size={12} className="animate-spin" /> : <Play size={12} fill="currentColor" />}
+                                Forçar
+                            </button>
+                        </div>
+
+                        {/* 5. TIME SERIES HEALTH */}
+                        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                            <div className="flex items-center gap-4">
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${qualityStats.timeSeriesAgeHours > 48 ? 'bg-red-900/20 text-red-500 border-red-900/50 animate-pulse' : 'bg-blue-900/20 text-blue-500 border-blue-900/50'}`}>
+                                    <Clock size={24} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase">Séries Temporais</p>
+                                    <div className="flex items-baseline gap-2">
+                                        <h3 className={`text-2xl font-black ${qualityStats.timeSeriesAgeHours > 48 ? 'text-red-500' : 'text-white'}`}>
+                                            {qualityStats.timeSeriesAgeHours ? qualityStats.timeSeriesAgeHours.toFixed(1) : 0}
+                                        </h3>
+                                        <span className="text-[10px] text-slate-500 font-bold">Horas</span>
+                                    </div>
+                                    <p className={`text-[9px] mt-0.5 font-bold ${qualityStats.timeSeriesAgeHours > 48 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                        {qualityStats.timeSeriesAgeHours > 48 ? 'ALERTA: Dados Defasados' : 'Idade Média Saudável'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                )}
+
+                {/* === NOVO: ÁREA 1: GRÁFICO DE ACURÁCIA === */}
+                <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 mb-8 shadow-lg">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                        <div>
+                            <h3 className="text-base font-bold text-white flex items-center gap-2">
+                                <Target size={18} className="text-purple-500" />
+                                Precisão do Algoritmo (Backtest Contínuo)
+                            </h3>
+                            <p className="text-xs text-slate-500">Comparação: Retorno Médio das Top Picks vs IBOV/IFIX</p>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                            <select 
+                                value={accuracyAsset}
+                                onChange={(e) => setAccuracyAsset(e.target.value)}
+                                className="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1 outline-none"
+                            >
+                                <option value="BRASIL_10">Brasil 10</option>
+                                <option value="STOCK">Ações BR</option>
+                                <option value="FII">FIIs</option>
+                            </select>
+                            
+                            <div className="flex bg-slate-900 p-0.5 rounded border border-slate-700">
+                                {[30, 60, 90].map(days => (
+                                    <button
+                                        key={days}
+                                        onClick={() => setAccuracyWindow(days)}
+                                        className={`px-3 py-1 text-[10px] font-bold rounded ${accuracyWindow === days ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
+                                    >
+                                        {days}D
+                                    </button>
+                                ))}
                             </div>
                         </div>
                     </div>
-                )}
+
+                    <div className="h-[250px] w-full">
+                        {accuracyData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={accuracyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                    <defs>
+                                        <linearGradient id="colorAvg" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
+                                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                                    <XAxis dataKey="formattedDate" tick={{fill: '#64748b', fontSize: 10}} axisLine={false} tickLine={false} minTickGap={20} />
+                                    <YAxis tick={{fill: '#64748b', fontSize: 10}} axisLine={false} tickLine={false} unit="%" />
+                                    <Tooltip 
+                                        contentStyle={{ backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px' }}
+                                        itemStyle={{ fontWeight: 'bold' }}
+                                    />
+                                    <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
+                                    <Area type="monotone" dataKey="avgReturn" name="Carteira" stroke="#3B82F6" fillOpacity={1} fill="url(#colorAvg)" strokeWidth={2} />
+                                    <Area type="monotone" dataKey="benchmarkReturn" name="Benchmark" stroke="#64748b" fill="transparent" strokeDasharray="4 4" strokeWidth={2} />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-slate-500 text-xs">
+                                Sem dados de backtest para o período selecionado.
+                            </div>
+                        )}
+                    </div>
+                </div>
 
                 {/* Macro & Sync */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -565,6 +754,45 @@ export const AdminPanel = () => {
                     </div>
                 </div>
 
+                {/* === NOVO: ÁREA 2: LOG DE DESCARTE === */}
+                <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 mb-8 shadow-lg">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-base font-bold text-white flex items-center gap-2">
+                            <ClipboardList size={18} className="text-red-500" />
+                            Log de Descartes (Quality Gate)
+                        </h3>
+                        <button onClick={loadDiscardLogs} className="text-xs font-bold text-blue-500 hover:text-white flex items-center gap-1">
+                            <RefreshCw size={12} className={isLoadingLogs ? 'animate-spin' : ''} /> Atualizar
+                        </button>
+                    </div>
+                    <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-[300px] custom-scrollbar">
+                        <table className="w-full text-left text-xs">
+                            <thead className="bg-[#0B101A] sticky top-0 z-10">
+                                <tr>
+                                    <th className="p-3 font-bold text-slate-500 uppercase">Data</th>
+                                    <th className="p-3 font-bold text-slate-500 uppercase">Ativo</th>
+                                    <th className="p-3 font-bold text-slate-500 uppercase">Motivo</th>
+                                    <th className="p-3 font-bold text-slate-500 uppercase">Detalhe</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800/50 bg-[#05070A]">
+                                {discardLogs.length === 0 ? (
+                                    <tr><td colSpan={4} className="p-8 text-center text-slate-500">Nenhum descarte recente. O mercado está favorável ou o filtro está permissivo.</td></tr>
+                                ) : (
+                                    discardLogs.map((log: any) => (
+                                        <tr key={log._id} className="hover:bg-slate-900/30">
+                                            <td className="p-3 text-slate-400 font-mono w-32">{new Date(log.createdAt).toLocaleString()}</td>
+                                            <td className="p-3 text-white font-bold w-24">{log.ticker}</td>
+                                            <td className="p-3 text-red-400 font-bold">{log.reason}</td>
+                                            <td className="p-3 text-slate-500">{log.details}</td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 {/* MATRIZ DE GERAÇÃO */}
                 <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl mb-10">
                     <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-[#0B101A]">
@@ -588,7 +816,7 @@ export const AdminPanel = () => {
                                 const latest = getLatestForClass(asset.id);
                                 const updatedToday = isUpdatedToday(latest?.date);
                                 const isLoadingEnhance = loadingKey === `${asset.id}-AI_ENHANCE`;
-                                const isRestricted = asset.id === 'CRYPTO' || asset.id === 'STOCK_US';
+                                const isRestricted = asset.id === 'STOCK_US';
 
                                 return (
                                     <tr key={asset.id} className="hover:bg-slate-900/30 transition-colors group">

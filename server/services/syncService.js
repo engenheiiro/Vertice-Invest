@@ -89,7 +89,11 @@ export const syncService = {
 
                     sector: finalSector, 
                     lastAnalysisDate: timestamp,
-                    updatedAt: timestamp
+                    updatedAt: timestamp,
+                    
+                    // Se o Fundamentus tem dados, o ativo está vivo. Reseta falhas.
+                    isActive: true,
+                    failCount: 0
                 };
 
                 operations.push({
@@ -114,24 +118,65 @@ export const syncService = {
             if (fiiMap.size > 0) fiiMap.forEach((v, k) => pushOp(k, v, 'FII'));
 
             // 3. Atualiza Ativos Internacionais e Cripto
-            const assetsForExternal = await MarketAsset.find({ 
+            let assetsForExternal = await MarketAsset.find({ 
                 type: { $in: ['CRYPTO', 'STOCK_US'] } 
             }).select('ticker type');
+
+            logger.info("ℹ️ [Sync] Verificando/Seeding default cryptocurrencies...");
+            const defaultCryptos = [
+                'BTC', 'ETH', 'USDT', 'BNB', 'SOL', 'USDC', 'XRP', 'DOGE', 'TON', 'ADA',
+                'SHIB', 'AVAX', 'TRX', 'DOT', 'BCH', 'LINK', 'MATIC', 'NEAR', 'LTC', 'ICP',
+                'LEO', 'DAI', 'UNI', 'APT', 'STX', 'ETC', 'MNT', 'FIL', 'RNDR', 'ARB',
+                'XMR', 'OKB', 'IMX', 'KAS', 'XLM', 'INJ', 'VET', 'FDUSD', 'OP', 'GRT',
+                'TAO', 'THETA', 'MKR', 'CRO', 'FET', 'LDO', 'ALGO', 'RUNE', 'AAVE', 'BSV'
+            ];
+            
+            const existingCryptos = new Set(assetsForExternal.filter(a => a.type === 'CRYPTO').map(a => a.ticker));
+            
+            for (const ticker of defaultCryptos) {
+                operations.push({
+                    updateOne: {
+                        filter: { ticker },
+                        update: {
+                            $setOnInsert: {
+                                name: ticker,
+                                type: 'CRYPTO',
+                                currency: 'USD',
+                                sector: 'Criptomoeda',
+                                isIgnored: false,
+                                isBlacklisted: false
+                            }
+                        },
+                        upsert: true
+                    }
+                });
+                
+                if (!existingCryptos.has(ticker)) {
+                    assetsForExternal.push({ ticker, type: 'CRYPTO' });
+                }
+            }
 
             if (assetsForExternal.length > 0) {
                 const tickersToFetch = assetsForExternal.map(a => a.ticker);
                 const quotes = await externalMarketService.getQuotes(tickersToFetch);
                 
                 quotes.forEach(quote => {
+                    const updateData = {
+                        lastPrice: quote.price,
+                        change: quote.change,
+                        updatedAt: timestamp,
+                        isActive: true,
+                        failCount: 0
+                    };
+                    
+                    if (quote.marketCap) updateData.marketCap = quote.marketCap;
+                    if (quote.volume) updateData.liquidity = quote.volume;
+
                     operations.push({
                         updateOne: {
                             filter: { ticker: quote.ticker },
                             update: {
-                                $set: {
-                                    lastPrice: quote.price,
-                                    change: quote.change,
-                                    updatedAt: timestamp
-                                }
+                                $set: updateData
                             }
                         }
                     });
@@ -165,10 +210,12 @@ export const syncService = {
 
                 // Reconstrói a lista de validTickers baseada nos dados JÁ SANITIZADOS
                 operations.forEach(op => {
-                    const t = op.updateOne.filter.ticker;
-                    const update = op.updateOne.update.$set;
-                    if (update.liquidity > MIN_LIQUIDITY_FOR_LIVE_QUOTE) {
-                        validTickers.push(t);
+                    if (op.updateOne && op.updateOne.update && op.updateOne.update.$set) {
+                        const t = op.updateOne.filter.ticker;
+                        const update = op.updateOne.update.$set;
+                        if (update.liquidity && update.liquidity > MIN_LIQUIDITY_FOR_LIVE_QUOTE) {
+                            validTickers.push(t);
+                        }
                     }
                 });
                 

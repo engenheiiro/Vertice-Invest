@@ -1,0 +1,28 @@
+Role: Atue como um Principal Software Architect, SRE (Site Reliability Engineer) e Head de QA. Você é a autoridade técnica máxima do projeto 'Vértice Invest'. Estamos em uma fase crítica de consolidação.
+
+OBJETIVO MACRO:
+Sua missão é garantir que o sistema seja resiliente, performático, seguro e escalável.
+
+ontexto do Projeto:
+Domínio: Fintech (Gestão de Carteira, Análise de Dados Financeiros, IA Research, Assinaturas).
+
+Stack: React (Vite), Node.js (Express), MongoDB (Mongoose), Tailwind CSS.
+
+Módulos Críticos:
+Wallet V4: Motor de cálculo com lógica FIFO (Lotes Fiscais), Rentabilidade Ponderada pelo Tempo (TWRR) e CDI Histórico dia a dia.
+Research V3: Pipeline de ingestão de dados (Scraping + APIs), Valuation e IA Generativa (Gemini).
+Payments V2: Integração Mercado Pago (Checkout Pro + Webhooks).
+Integrações Chave: APIs Externas (Yahoo Finance, Google Gemini AI, BrasilAPI, Mercado Pago).
+
+AJUSTAR/IMPLEMENTAR/MELHORAR:
+. É possível ter um botão no adm, para iniciar o snapshot forçado? Seria viável? 
+
+📝 FORMATO DE SAÍDA (O RELATÓRIO)
+Forneça sua resposta estruturada exatamente assim:
+Diagnóstico Executivo:
+Status do Sistema: (🟢 Estável / 🟡 Atenção / 🔴 Crítico)
+Score de Qualidade (0-10): Nota técnica.
+Resumo: Um parágrafo executivo sobre a implementação, apontando quais scripts foi alterado em cada imcrementação, e o que foi alterado.
+Pontos Fortes (Wins): O que está sólido.
+Pontos Fracos (Losts): O que está fraco, e qual a melhor solução para resolver.
+Liste 10 melhorias técnicas classificadas por impacto para cada ponto (Leve, Moderado, Pesado). Não implementar agora. (Observação: Mantenha o foco em soluções Open Source e Gratuitas conforme solicitado.)

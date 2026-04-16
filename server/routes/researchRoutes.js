@@ -16,7 +16,10 @@ import {
     getRadarStats, 
     updateBacktestConfig,
     clearRadarHistory,
-    getDataQualityStats // Novo Controller
+    getDataQualityStats,
+    resetAssetHealth,
+    getAlgorithmAccuracy,
+    getDiscardLogs // Novo
 } from '../controllers/researchController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -43,7 +46,10 @@ router.post('/sync-macro', requireAdmin, triggerMacroSync);
 router.post('/config/backtest', requireAdmin, updateBacktestConfig);
 router.delete('/signals/history', requireAdmin, clearRadarHistory);
 
-// Monitor de Qualidade
+// Monitor de Qualidade & Acurácia
 router.get('/data-quality', requireAdmin, getDataQualityStats);
+router.post('/reset-health', requireAdmin, resetAssetHealth);
+router.get('/accuracy', requireAdmin, getAlgorithmAccuracy); 
+router.get('/discard-logs', getDiscardLogs); // Nova Rota
 
 export default router;

@@ -36,7 +36,8 @@ export const marketDataService = {
                 return { 
                     price: asset.lastPrice, 
                     change: asset.change || 0, 
-                    name: asset.name 
+                    name: asset.name,
+                    sector: asset.sector
                 };
             }
 
@@ -50,14 +51,15 @@ export const marketDataService = {
                         price: lastClose,
                         change: 0, 
                         name: ticker,
+                        sector: 'Outros',
                         isFallback: true
                     };
                 }
             }
 
-            return { price: 0, change: 0, name: ticker };
+            return { price: 0, change: 0, name: ticker, sector: 'Outros' };
         } catch (error) {
-            return { price: 0, change: 0, name: ticker };
+            return { price: 0, change: 0, name: ticker, sector: 'Outros' };
         }
     },
 
@@ -79,8 +81,8 @@ export const marketDataService = {
             cleanTickers.forEach(ticker => {
                 const asset = assetMap.get(ticker);
                 
-                // Se já estiver desativado pela blacklist, ignora (a menos que force)
-                if (asset && !asset.isActive && !force) return;
+                // Se já estiver desativado pela blacklist, ignora TOTALMENTE (mesmo com force)
+                if (asset && !asset.isActive) return;
 
                 if (force) {
                     toUpdate.push(ticker);
@@ -112,17 +114,24 @@ export const marketDataService = {
                     isSuccess = true;
                     successfulTickers.add(ticker);
                     
+                    const updatePayload = {
+                        lastPrice: newPrice,
+                        change: newChange, 
+                        updatedAt: now,
+                        isActive: true,
+                        failCount: 0 // Reset do contador de falhas em caso de sucesso
+                    };
+                    
+                    if (currentAsset && (currentAsset.type === 'CRYPTO' || currentAsset.type === 'STOCK_US')) {
+                        if (quote.marketCap) updatePayload.marketCap = quote.marketCap;
+                        if (quote.volume) updatePayload.liquidity = quote.volume;
+                    }
+
                     operations.push({
                         updateOne: {
                             filter: { ticker: ticker },
                             update: {
-                                $set: {
-                                    lastPrice: newPrice,
-                                    change: newChange, 
-                                    updatedAt: now,
-                                    isActive: true,
-                                    failCount: 0 // Reset do contador de falhas em caso de sucesso
-                                }
+                                $set: updatePayload
                             }
                         }
                     });
@@ -144,7 +153,6 @@ export const marketDataService = {
 
                         if (shouldDeactivate) {
                             updatePayload.isActive = false;
-                            logger.warn(`⛔ [Blacklist] Ativo ${requestedTicker} desativado após ${newFailCount} falhas consecutivas.`);
                         }
 
                         operations.push({
@@ -261,10 +269,16 @@ export const marketDataService = {
 
     async getMarketData(assetClass) {
         const isBrasil = assetClass === 'STOCK' || assetClass === 'FII' || assetClass === 'BRASIL_10';
+        const isCrypto = assetClass === 'CRYPTO';
         const results = [];
         
-        if (isBrasil) {
-            const queryType = assetClass === 'BRASIL_10' ? { $in: ['STOCK', 'FII'] } : { $in: [assetClass] };
+        if (isBrasil || isCrypto) {
+            let queryType;
+            if (assetClass === 'BRASIL_10') {
+                queryType = { $in: ['STOCK', 'FII'] };
+            } else {
+                queryType = { $in: [assetClass] };
+            }
             
             const dbAssets = await MarketAsset.find({ 
                 type: queryType,
@@ -274,7 +288,7 @@ export const marketDataService = {
             });
 
             for (const asset of dbAssets) {
-                if ((asset.liquidity || 0) < 200000) continue; 
+                // Filtro de liquidez removido daqui e centralizado no scoringEngine.js para gerar DiscardLog
 
                 results.push({
                     ticker: asset.ticker,
@@ -298,9 +312,14 @@ export const marketDataService = {
                         revenueGrowth: asset.revenueGrowth || 0,
                         debtToEquity: asset.debtToEquity || 0,
                         netDebt: asset.netDebt || 0,
+                        payout: asset.payout || 0,
                         vacancy: asset.vacancy || 0,
                         capRate: asset.capRate || 0,
                         qtdImoveis: asset.qtdImoveis || 0,
+                        volatility: asset.volatility || 0,
+                        beta: asset.beta || 0,
+                        sma200: asset.sma200 || 0,
+                        ema50: asset.ema50 || 0,
                         structural: {
                             quality: 50,
                             valuation: 50,

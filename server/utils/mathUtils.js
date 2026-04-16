@@ -33,18 +33,33 @@ export const calculatePercent = (current, initial) => {
 // --- NOVAS FUNÇÕES FINANCEIRAS (V4) ---
 
 /**
- * Calcula o retorno diário usando Modified Dietz (Simplificado para Janela de 1 Dia).
- * R = (V1 - V0 - F) / (V0 + F * weight)
+ * Calcula o retorno diário usando Modified Dietz adaptado para TWRR Diário.
  * @param {number} startEquity Patrimônio Inicial (V0)
  * @param {number} endEquity Patrimônio Final (V1)
  * @param {number} flow Fluxo de Caixa Líquido (Aportes - Resgates)
- * @param {number} weight Peso do fluxo (padrão 0.5 para fluxo no meio do dia)
  */
-export const calculateDailyDietz = (startEquity, endEquity, flow, weight = 0.5) => {
+export const calculateDailyDietz = (startEquity, endEquity, flow) => {
+    // Se não havia patrimônio no início do dia, o fluxo (aporte) é a base de cálculo.
+    // Assumimos que o aporte ocorreu no início do dia para capturar o rendimento do primeiro dia.
+    if (startEquity <= 0.01) {
+        if (flow > 0.01) {
+            return (endEquity - flow) / flow;
+        }
+        return 0;
+    }
+
+    // Se houve resgate total (ou maior que o patrimônio inicial)
+    // O rendimento foi gerado sobre o startEquity antes do resgate.
+    if (startEquity + flow <= 0.01) {
+        return (endEquity - startEquity - flow) / startEquity;
+    }
+
+    // Para TWRR diário com fluxos intradiários, usamos peso 0.5 (Modified Dietz padrão)
+    // Isso permite capturar a rentabilidade intradiária do fluxo sem distorcer a cota.
     const numerator = endEquity - startEquity - flow;
-    const denominator = startEquity + (flow * weight);
+    const denominator = startEquity + (0.5 * flow); 
     
-    if (denominator <= 0.01) return 0; // Evita divisão por zero ou negativa absurda
+    if (denominator <= 0.01) return 0;
     return numerator / denominator;
 };
 
