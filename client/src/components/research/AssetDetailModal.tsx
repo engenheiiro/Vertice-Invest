@@ -42,6 +42,29 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
         return val.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
     };
 
+    const fairValueLabel = type === 'FII' ? 'VP por Cota' : 'Preço Teto';
+
+    // Filtra o audit log para mostrar apenas o que é relevante para o perfil atual
+    const filteredAudit = React.useMemo(() => {
+        if (!asset.auditLog) return [];
+        
+        const universalCategories = ['Qualidade', 'Valuation', 'Risco', 'Dados e Confiança'];
+        const profileCategoryMap: Record<string, string> = {
+            'DEFENSIVE': 'Perfil Defensivo',
+            'MODERATE': 'Perfil Moderado',
+            'BOLD': 'Perfil Arrojado'
+        };
+        
+        const targetCategory = profileCategoryMap[asset.riskProfile || ''];
+        
+        // Remove pontos zero e filtra por categoria
+        return asset.auditLog.filter(log => {
+            if (log.points === 0) return false;
+            // Se for universal ou o perfil atual, mantém
+            return universalCategories.includes(log.category) || log.category === targetCategory;
+        });
+    }, [asset]);
+
     // Lógica de cores do Yield (Visualização 3.0)
     // Verde > 6%, Amarelo > 0%, Cinza = 0%
     const getYieldColor = (dy: number) => {
@@ -157,7 +180,26 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                     <span className="text-[10px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded uppercase">{asset.sector || 'Geral'}</span>
                                 </div>
                                 <div className="flex items-center justify-between mb-1">
-                                    <h2 className="text-4xl font-black text-white tracking-tighter">{asset.ticker}</h2>
+                                    <div className="flex flex-col">
+                                        <h2 className="text-4xl font-black text-white tracking-tighter">{asset.ticker}</h2>
+                                        <div className="flex gap-2 mt-1">
+                                            {asset.riskProfile === 'DEFENSIVE' && (
+                                                <span className="px-2 py-0.5 rounded bg-emerald-900/30 border border-emerald-900/50 text-emerald-400 text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
+                                                    <Shield size={8} /> Defensivo
+                                                </span>
+                                            )}
+                                            {asset.riskProfile === 'MODERATE' && (
+                                                <span className="px-2 py-0.5 rounded bg-blue-900/30 border border-blue-900/50 text-blue-400 text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
+                                                    <Target size={8} /> Moderado
+                                                </span>
+                                            )}
+                                            {asset.riskProfile === 'BOLD' && (
+                                                <span className="px-2 py-0.5 rounded bg-purple-900/30 border border-purple-900/50 text-purple-400 text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
+                                                    <Zap size={8} /> Arrojado
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
                                     <div className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center font-black text-xl shadow-lg shadow-black/20 ${
                                         asset.score >= 90 ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' :
                                         asset.score >= 80 ? 'border-blue-500 text-blue-500 bg-blue-500/10' :
@@ -323,7 +365,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                                     <ThumbsUp size={10} /> Onde Ganhou Pontos
                                                 </p>
                                                 <div className="space-y-2">
-                                                    {asset.auditLog.filter(l => l.points > 0).slice(0, 6).map((log, i) => (
+                                                    {filteredAudit.filter(l => l.points > 0).slice(0, 12).map((log, i) => (
                                                         <div key={`p-${i}`} className="bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-xl flex items-center justify-between group-hover:bg-emerald-500/10 transition-all">
                                                             <div className="flex flex-col">
                                                                 <span className="text-[7px] font-black text-emerald-600 uppercase tracking-tight">{log.category}</span>
@@ -332,7 +374,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                                             <span className="text-[10px] font-black text-emerald-400 ml-2">+{log.points}</span>
                                                         </div>
                                                     ))}
-                                                    {asset.auditLog.filter(l => l.points > 0).length === 0 && (
+                                                    {filteredAudit.filter(l => l.points > 0).length === 0 && (
                                                         <div className="text-[10px] text-slate-600 italic p-4 text-center border border-dashed border-slate-800 rounded-xl">Sem bônus significativos.</div>
                                                     )}
                                                 </div>
@@ -344,7 +386,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                                     <ThumbsDown size={10} /> Onde Perdeu Pontos
                                                 </p>
                                                 <div className="space-y-2">
-                                                    {asset.auditLog.filter(l => l.points < 0).slice(0, 6).map((log, i) => (
+                                                    {filteredAudit.filter(l => l.points < 0).slice(0, 12).map((log, i) => (
                                                         <div key={`m-${i}`} className="bg-red-500/5 border border-red-500/10 p-3 rounded-xl flex items-center justify-between group-hover:bg-red-500/10 transition-all">
                                                             <div className="flex flex-col">
                                                                 <span className="text-[7px] font-black text-red-600 uppercase tracking-tight">{log.category}</span>
@@ -353,7 +395,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                                             <span className="text-[10px] font-black text-red-400 ml-2">{log.points}</span>
                                                         </div>
                                                     ))}
-                                                    {asset.auditLog.filter(l => l.points < 0).length === 0 && (
+                                                    {filteredAudit.filter(l => l.points < 0).length === 0 && (
                                                         <div className="text-[10px] text-slate-600 italic p-4 text-center border border-dashed border-slate-800 rounded-xl">Sem penalidades registradas.</div>
                                                     )}
                                                 </div>
@@ -418,15 +460,6 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                             <p className="text-xs text-slate-500 italic relative z-10">Nenhum risco crítico detectado automaticamente.</p>
                                         )}
                                     </div>
-                                </div>
-
-                                {/* FUNDAMENTOS & DATA */}
-                                <div className="mb-8">
-                                    <div className="flex items-center gap-2 mb-5 pb-2 border-b border-slate-800">
-                                        <BarChart2 size={18} className="text-blue-500" />
-                                        <h4 className="text-sm font-bold text-white uppercase tracking-wide">Quadro de Indicadores</h4>
-                                    </div>
-                                    {renderMetricsByType()}
                                 </div>
 
                                 {/* DADOS FINANCEIROS ENRIQUECIDOS */}

@@ -1,6 +1,9 @@
 
 import { getMacroSector } from '../../config/sectorTaxonomy.js';
 
+// Threshold Global para Recomendação de Compra
+const BUY_THRESHOLD = 70;
+
 export const portfolioEngine = {
     performCompetitiveDraft(allAssets) {
         const finalPortfolio = [];
@@ -30,7 +33,7 @@ export const portfolioEngine = {
                         ...asset,
                         riskProfile: profile,
                         score: asset.scores[scoreKey],
-                        action: asset.scores[scoreKey] >= 65 ? 'BUY' : 'WAIT',
+                        action: asset.scores[scoreKey] >= BUY_THRESHOLD ? 'BUY' : 'WAIT',
                         tier: 'GOLD', // Novo
                         thesis: `${profile}: Top Pick (Score ${asset.scores[scoreKey]})`
                     });
@@ -59,7 +62,7 @@ export const portfolioEngine = {
                             ...asset,
                             riskProfile: profile,
                             score: asset.scores[scoreKey],
-                            action: 'WAIT',
+                            action: asset.scores[scoreKey] >= BUY_THRESHOLD ? 'BUY' : 'WAIT',
                             tier: 'SILVER', // Novo
                             thesis: `${profile}: Oportunidade Secundária`
                         });
@@ -82,7 +85,7 @@ export const portfolioEngine = {
                         ...asset,
                         riskProfile: profile, 
                         score: asset.scores['MODERATE'], 
-                        action: 'WAIT',
+                        action: asset.scores['MODERATE'] >= BUY_THRESHOLD ? 'BUY' : 'WAIT',
                         tier: 'BRONZE', // Novo
                         thesis: `Inclusão Tática: Diversificação para atingir alocação.`
                     });
@@ -131,9 +134,11 @@ export const portfolioEngine = {
             }
 
             if (penalty > 0) {
+                const newScore = Math.max(10, asset.score - penalty);
                 return {
                     ...asset,
-                    score: Math.max(10, asset.score - penalty),
+                    score: newScore,
+                    action: newScore >= BUY_THRESHOLD ? 'BUY' : 'WAIT',
                     thesis: `${asset.thesis} | [Penalidade Concentração: -${penalty}]`
                 };
             }

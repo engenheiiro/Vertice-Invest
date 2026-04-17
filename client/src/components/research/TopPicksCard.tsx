@@ -49,15 +49,8 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
             filtered = picks.filter(p => p.riskProfile === 'BOLD');
         }
 
-        const tierOrder: Record<string, number> = { 'GOLD': 0, 'SILVER': 1, 'BRONZE': 2 };
-
         return filtered
-            .sort((a, b) => {
-                const tierA = tierOrder[(a as any).tier] ?? 3;
-                const tierB = tierOrder[(b as any).tier] ?? 3;
-                if (tierA !== tierB) return tierA - tierB;
-                return b.score - a.score;
-            })
+            .sort((a, b) => b.score - a.score)
             .slice(0, 10)
             .map((item, idx) => ({
                 ...item,

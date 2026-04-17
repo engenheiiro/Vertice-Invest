@@ -26,11 +26,15 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
             ? (report.content.fullAuditLog || report.content.ranking) 
             : report.content.ranking;
 
+        // Clone para evitar mutação e garantir re-render
+        let filtered = [...baseList];
+
         if (viewMode === 'TOP10' && riskFilter !== 'ALL') {
-            baseList = baseList.filter(item => item.riskProfile === riskFilter);
+            filtered = filtered.filter(item => item.riskProfile === riskFilter);
         }
 
-        return baseList;
+        // Ordenação Global por Score (Expectativa do Usuário: Score Maior = Topo)
+        return filtered.sort((a, b) => (b.score || 0) - (a.score || 0));
     }, [viewMode, riskFilter, report]);
 
     // 2. Retorno antecipado DEPOIS dos hooks
