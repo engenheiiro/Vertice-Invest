@@ -156,7 +156,21 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                     <span className="text-[10px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded uppercase">{asset.type}</span>
                                     <span className="text-[10px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded uppercase">{asset.sector || 'Geral'}</span>
                                 </div>
-                                <h2 className="text-4xl font-black text-white tracking-tighter mb-1">{asset.ticker}</h2>
+                                <div className="flex items-center justify-between mb-1">
+                                    <h2 className="text-4xl font-black text-white tracking-tighter">{asset.ticker}</h2>
+                                    <div className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center font-black text-xl shadow-lg shadow-black/20 ${
+                                        asset.score >= 90 ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' :
+                                        asset.score >= 80 ? 'border-blue-500 text-blue-500 bg-blue-500/10' :
+                                        asset.score >= 70 ? 'border-slate-400 text-slate-400 bg-slate-400/10' :
+                                        'border-red-500 text-red-500 bg-red-500/10'
+                                    }`}>
+                                        {asset.score >= 95 ? 'A+' : 
+                                         asset.score >= 90 ? 'A' :
+                                         asset.score >= 80 ? 'B+' :
+                                         asset.score >= 70 ? 'B' :
+                                         asset.score >= 60 ? 'C' : 'F'}
+                                    </div>
+                                </div>
                                 <p className="text-slate-500 text-sm font-medium leading-tight">{asset.name}</p>
                                 
                                 <div className="mt-6 p-4 bg-slate-900/50 rounded-xl border border-slate-800 text-center">
@@ -254,10 +268,111 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                 </button>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8">
                                 
+                                {/* CABEÇALHO DO BOLETIM */}
+                                <div className="bg-[#0D121F] rounded-2xl p-6 border border-slate-700/50 relative overflow-hidden group">
+                                    <div className="flex items-center justify-between relative z-10">
+                                        <div>
+                                            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Resultado da Avaliação IA</h4>
+                                            <div className="flex items-baseline gap-2">
+                                                <span className="text-5xl font-black text-white">{asset.score}</span>
+                                                <span className="text-slate-500 font-bold">/ 100</span>
+                                            </div>
+                                            <p className="text-xs text-slate-400 mt-2 font-medium max-w-sm">
+                                                {asset.score >= 80 ? 'Ativo classe A com fundamentos excepcionais e valuation atrativo.' :
+                                                 asset.score >= 65 ? 'Ativo com fundamentos sólidos, recomendado para diversificação.' :
+                                                 'Ativo apresenta riscos ou valuation esticado, requer cautela.'}
+                                            </p>
+                                        </div>
+
+                                        <div className="hidden lg:grid grid-cols-1 gap-2 min-w-[140px]">
+                                            <div className="flex justify-between items-center text-[10px] font-bold">
+                                                <span className="text-slate-500 uppercase">Qualidade</span>
+                                                <span className="text-emerald-400">{s.quality}%</span>
+                                            </div>
+                                            <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                                                <div className="h-full bg-emerald-500" style={{ width: `${s.quality}%` }}></div>
+                                            </div>
+                                            <div className="flex justify-between items-center text-[10px] font-bold mt-2">
+                                                <span className="text-slate-500 uppercase">Valuation</span>
+                                                <span className="text-blue-400">{s.valuation}%</span>
+                                            </div>
+                                            <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                                                <div className="h-full bg-blue-500" style={{ width: `${s.valuation}%` }}></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[80px] rounded-full pointer-events-none"></div>
+                                </div>
+
+                                {/* GANHOS VS PERDAS (BOLETIM DETALHADO) */}
+                                {asset.auditLog && asset.auditLog.length > 0 && (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                                            <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+                                                <Database size={16} className="text-blue-500" /> Detalhamento de Pontos
+                                            </h4>
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase bg-slate-900 px-2 py-0.5 rounded">Transparência Algorítmica</span>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {/* POSITIVOS */}
+                                            <div className="space-y-2">
+                                                <p className="text-[9px] font-black text-emerald-500 uppercase ml-1 opacity-70 flex items-center gap-1">
+                                                    <ThumbsUp size={10} /> Onde Ganhou Pontos
+                                                </p>
+                                                <div className="space-y-2">
+                                                    {asset.auditLog.filter(l => l.points > 0).slice(0, 6).map((log, i) => (
+                                                        <div key={`p-${i}`} className="bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-xl flex items-center justify-between group-hover:bg-emerald-500/10 transition-all">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[7px] font-black text-emerald-600 uppercase tracking-tight">{log.category}</span>
+                                                                <span className="text-[11px] text-slate-200 font-medium">✓ {log.factor}</span>
+                                                            </div>
+                                                            <span className="text-[10px] font-black text-emerald-400 ml-2">+{log.points}</span>
+                                                        </div>
+                                                    ))}
+                                                    {asset.auditLog.filter(l => l.points > 0).length === 0 && (
+                                                        <div className="text-[10px] text-slate-600 italic p-4 text-center border border-dashed border-slate-800 rounded-xl">Sem bônus significativos.</div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* NEGATIVOS */}
+                                            <div className="space-y-2">
+                                                <p className="text-[9px] font-black text-red-500 uppercase ml-1 opacity-70 flex items-center gap-1">
+                                                    <ThumbsDown size={10} /> Onde Perdeu Pontos
+                                                </p>
+                                                <div className="space-y-2">
+                                                    {asset.auditLog.filter(l => l.points < 0).slice(0, 6).map((log, i) => (
+                                                        <div key={`m-${i}`} className="bg-red-500/5 border border-red-500/10 p-3 rounded-xl flex items-center justify-between group-hover:bg-red-500/10 transition-all">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[7px] font-black text-red-600 uppercase tracking-tight">{log.category}</span>
+                                                                <span className="text-[11px] text-slate-300 font-medium">⚠️ {log.factor}</span>
+                                                            </div>
+                                                            <span className="text-[10px] font-black text-red-400 ml-2">{log.points}</span>
+                                                        </div>
+                                                    ))}
+                                                    {asset.auditLog.filter(l => l.points < 0).length === 0 && (
+                                                        <div className="text-[10px] text-slate-600 italic p-4 text-center border border-dashed border-slate-800 rounded-xl">Sem penalidades registradas.</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* FUNDAMENTOS & DATA */}
+                                <div className="space-y-5">
+                                    <div className="flex items-center gap-2 pb-2 border-b border-slate-800">
+                                        <BarChart2 size={18} className="text-blue-500" />
+                                        <h4 className="text-sm font-bold text-white uppercase tracking-wide">Quadro de Indicadores</h4>
+                                    </div>
+                                    {renderMetricsByType()}
+                                </div>
+
                                 {/* TESE DE INVESTIMENTO (BULL/BEAR) */}
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     {/* BULL CASE */}
                                     <div className="bg-emerald-900/10 border border-emerald-900/30 rounded-2xl p-5 relative overflow-hidden">
                                         <div className="absolute top-0 right-0 p-4 opacity-10">

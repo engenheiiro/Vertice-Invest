@@ -119,7 +119,8 @@ export const getDataQualityStats = async (req, res, next) => {
             snapshotStats: config?.lastSnapshotStats || { created: 0, skipped: 0, timestamp: null }, 
             blacklistedAssets: inactiveCount, 
             totalAssets,
-            timeSeriesAgeHours: avgAgeHours
+            timeSeriesAgeHours: avgAgeHours,
+            timeSeriesStats: config?.lastTimeSeriesStats || { assetsProcessed: 0, timestamp: null }
         });
     } catch (error) { next(error); }
 };

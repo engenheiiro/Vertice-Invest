@@ -19,6 +19,18 @@ interface AuthResponse {
   message?: string;
 }
 
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+const subscribeTokenRefresh = (cb: (token: string) => void) => {
+  refreshSubscribers.push(cb);
+};
+
+const onRrefreshed = (token: string) => {
+  refreshSubscribers.map((cb) => cb(token));
+  refreshSubscribers = [];
+};
+
 export const authService = {
   // Wrapper para chamadas autenticadas
   async api(endpoint: string, options: RequestInit = {}) {
@@ -41,23 +53,41 @@ export const authService = {
         throw new Error("Erro de conexão. Verifique se o servidor está rodando.");
     }
 
-    // Lógica de Refresh Token Automático (Simplificada)
-    if (response.status === 401 || response.status === 403) {
-      const newToken = await this.refreshToken();
-      
-      if (newToken) {
-        headers.set('Authorization', `Bearer ${newToken}`);
-        response = await fetch(`${API_URL}${endpoint}`, {
-          ...options,
-          headers,
-          credentials: 'include'
+    // Lógica de Refresh Token Automático (Queueing)
+    if (response.status === 401) {
+      // Cria a promessa que será resolvida quando o token for renovado
+      const retryOriginalRequest = new Promise<Response>((resolve) => {
+        subscribeTokenRefresh((newToken) => {
+          if (!newToken) {
+             resolve(response); // Retorna a original se falhou o refresh
+             return;
+          }
+          headers.set('Authorization', `Bearer ${newToken}`);
+          resolve(fetch(`${API_URL}${endpoint}`, {
+            ...options,
+            headers,
+            credentials: 'include'
+          }));
         });
-      } else {
-        this.clearSession();
-        if (!endpoint.includes('/subscription/status')) {
-           window.location.hash = '/login';
+      });
+
+      if (!isRefreshing) {
+        isRefreshing = true;
+        const newToken = await this.refreshToken();
+        isRefreshing = false;
+
+        if (newToken) {
+          onRrefreshed(newToken);
+        } else {
+          this.clearSession();
+          if (!window.location.hash.includes('/login') && !endpoint.includes('/subscription/status')) {
+             window.location.hash = '/login';
+          }
+          onRrefreshed(""); // Notifica falha
         }
       }
+
+      return retryOriginalRequest;
     }
 
     return response;

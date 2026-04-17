@@ -524,6 +524,11 @@ export const AdminPanel = () => {
                                     <p className={`text-[9px] mt-0.5 font-bold ${qualityStats.timeSeriesAgeHours > 48 ? 'text-red-500' : 'text-emerald-500'}`}>
                                         {qualityStats.timeSeriesAgeHours > 48 ? 'ALERTA: Dados Defasados' : 'Idade Média Saudável'}
                                     </p>
+                                    {qualityStats.timeSeriesStats?.assetsProcessed > 0 && (
+                                        <p className="text-[9px] text-slate-500 font-bold uppercase mt-1">
+                                            {qualityStats.timeSeriesStats.assetsProcessed} ativos
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </div>
