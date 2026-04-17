@@ -40,7 +40,7 @@ export const authenticateToken = async (req, res, next) => {
     next();
 
   } catch (err) {
-    return res.status(403).json({ message: "Token inválido ou expirado." });
+    return res.status(401).json({ message: "Token inválido ou expirado." });
   }
 };
 

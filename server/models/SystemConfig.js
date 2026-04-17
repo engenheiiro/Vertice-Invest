@@ -44,6 +44,12 @@ const SystemConfigSchema = new mongoose.Schema({
     timestamp: { type: Date }
   },
 
+  // NOVO: Relatório de Séries Temporais
+  lastTimeSeriesStats: {
+    assetsProcessed: { type: Number, default: 0 },
+    timestamp: { type: Date }
+  },
+
   lastUpdated: { type: Date, default: Date.now }
 });
 

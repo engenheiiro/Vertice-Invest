@@ -17,6 +17,12 @@ const RankingItemSchema = new mongoose.Schema({
   riskProfile: { type: String, enum: ['DEFENSIVE', 'MODERATE', 'BOLD'], default: 'MODERATE' },
 
   thesis: String, 
+  auditLog: [{
+    factor: String,
+    points: Number,
+    type: { type: String, enum: ['base', 'bonus', 'penalty'] },
+    category: String
+  }],
   bullThesis: [String], 
   bearThesis: [String], 
   

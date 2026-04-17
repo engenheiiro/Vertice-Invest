@@ -6,10 +6,20 @@ const safeVal = (val) => {
 
 const calculateConfidenceScore = (m) => {
     let confidence = 100;
-    if (!m.revenueGrowth || m.revenueGrowth === 0) confidence -= 25;
-    if (!m.roe || !m.netMargin) confidence -= 15;
-    if (m.avgLiquidity < 1000000) confidence -= 30;
-    return confidence;
+    const audit = [];
+    if (!m.revenueGrowth || m.revenueGrowth === 0) {
+        confidence -= 25;
+        audit.push({ factor: 'Dados de Crescimento Ausentes', points: -25, type: 'penalty', category: 'Confiança' });
+    }
+    if (!m.roe || !m.netMargin) {
+        confidence -= 15;
+        audit.push({ factor: 'Dados de Rentabilidade Ausentes', points: -15, type: 'penalty', category: 'Confiança' });
+    }
+    if (m.avgLiquidity < 1000000) {
+        confidence -= 30;
+        audit.push({ factor: 'Liquidez Abaixo do Ideal (<1M/dia)', points: -30, type: 'penalty', category: 'Confiança' });
+    }
+    return { confidence, audit };
 };
 
 // --- NOVO: IDENTIFICADOR DE DIVIDEND ARISTOCRAT ---
@@ -119,8 +129,9 @@ const calculateProfileScores = (asset, valuationData, context) => {
     const NTNB = MACRO.NTNB_LONG || 6.30;
     
     let defScore = 0, modScore = 0, boldScore = 0;
-    const audit = { DEFENSIVE: [], MODERATE: [], BOLD: [] };
-    const confidence = calculateConfidenceScore(m);
+    const audit = { DEFENSIVE: [], MODERATE: [], BOLD: [], CONFIDENCE: [] };
+    const { confidence, audit: confAudit } = calculateConfidenceScore(m);
+    audit.CONFIDENCE = confAudit;
 
     if (type === 'STOCK' || type === 'STOCK_US') {
         const isDefensiveEligible = isEligibleForDefensive(asset, context);
@@ -243,25 +254,28 @@ const calculateStructuralScores = (asset, context) => {
     const ticker = asset.ticker;
     const isPapel = asset.sector === 'Papel';
 
-    let quality = 50;
-    let valuation = 50;
-    let risk = 50;
     const audit = { QUALITY: [], VALUATION: [], RISK: [] };
+    let quality = 0; audit.QUALITY.push({ factor: 'Base de Qualidade', points: 0, type: 'base' });
+    let valuation = 0; audit.VALUATION.push({ factor: 'Base de Valuation', points: 0, type: 'base' });
+    let risk = 0;
 
     if (type === 'STOCK' || type === 'STOCK_US') {
         // --- QUALITY SCORE ---
         let qScore = 0;
-        if (m.roe > 15) { qScore += 25; audit.QUALITY.push({ factor: 'ROE > 15%', points: 25, type: 'bonus' }); }
-        else if (m.roe > 10) { qScore += 15; audit.QUALITY.push({ factor: 'ROE > 10%', points: 15, type: 'bonus' }); }
+        if (m.roe > 15) { qScore += 25; audit.QUALITY.push({ factor: 'ROE Elevado (>15%)', points: 25, type: 'bonus' }); }
+        else if (m.roe > 10) { qScore += 15; audit.QUALITY.push({ factor: 'ROE Saudável (>10%)', points: 15, type: 'bonus' }); }
+        else { audit.QUALITY.push({ factor: 'ROE Modesto / Baixo', points: 0, type: 'base' }); }
         
-        if (m.netMargin > 10) { qScore += 25; audit.QUALITY.push({ factor: 'Margem Líquida > 10%', points: 25, type: 'bonus' }); }
-        else if (m.netMargin > 5) { qScore += 15; audit.QUALITY.push({ factor: 'Margem Líquida > 5%', points: 15, type: 'bonus' }); }
+        if (m.netMargin > 10) { qScore += 25; audit.QUALITY.push({ factor: 'Margem Líquida Robusta (>10%)', points: 25, type: 'bonus' }); }
+        else if (m.netMargin > 5) { qScore += 15; audit.QUALITY.push({ factor: 'Margem Líquida Regular (>5%)', points: 15, type: 'bonus' }); }
+        else { audit.QUALITY.push({ factor: 'Margem Líquida Estreita', points: 0, type: 'penalty' }); }
 
-        if (m.debtToEquity < 1.0) { qScore += 25; audit.QUALITY.push({ factor: 'Dívida/Patrimônio < 1.0', points: 25, type: 'bonus' }); }
-        else if (m.debtToEquity < 2.0) { qScore += 15; audit.QUALITY.push({ factor: 'Dívida/Patrimônio < 2.0', points: 15, type: 'bonus' }); }
+        if (m.debtToEquity < 1.0) { qScore += 25; audit.QUALITY.push({ factor: 'Estrutura Capital Excelente (D/P < 1.0)', points: 25, type: 'bonus' }); }
+        else if (m.debtToEquity < 2.0) { qScore += 15; audit.QUALITY.push({ factor: 'Alavancagem Controlada (D/P < 2.0)', points: 15, type: 'bonus' }); }
+        else { audit.QUALITY.push({ factor: 'Alavancagem Elevada', points: -10, type: 'penalty' }); qScore -= 10; }
 
-        if (m.revenueGrowth > 10) { qScore += 25; audit.QUALITY.push({ factor: 'Crescimento Receita > 10%', points: 25, type: 'bonus' }); }
-        else if (m.revenueGrowth > 5) { qScore += 10; audit.QUALITY.push({ factor: 'Crescimento Receita > 5%', points: 10, type: 'bonus' }); }
+        if (m.revenueGrowth > 10) { qScore += 25; audit.QUALITY.push({ factor: 'Crescimento de Receita Sólido (>10%)', points: 25, type: 'bonus' }); }
+        else if (m.revenueGrowth > 5) { qScore += 10; audit.QUALITY.push({ factor: 'Crescimento de Receita Moderado', points: 10, type: 'bonus' }); }
 
         // --- NOVO: SUSTENTABILIDADE DE DIVIDENDOS (PAYOUT) ---
         const payout = m.payout || 0;
@@ -551,6 +565,7 @@ export const scoringEngine = {
 
         // Consolidação do Audit Log Completo
         const auditLog = [
+            ...profileResult.audit.CONFIDENCE.map(a => ({ ...a, category: 'Dados e Confiança' })),
             ...profileResult.audit.DEFENSIVE.map(a => ({ ...a, category: 'Perfil Defensivo' })),
             ...profileResult.audit.MODERATE.map(a => ({ ...a, category: 'Perfil Moderado' })),
             ...profileResult.audit.BOLD.map(a => ({ ...a, category: 'Perfil Arrojado' })),

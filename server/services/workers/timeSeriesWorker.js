@@ -1,6 +1,7 @@
 import logger from '../../config/logger.js';
 import MarketAsset from '../../models/MarketAsset.js';
 import AssetHistory from '../../models/AssetHistory.js';
+import SystemConfig from '../../models/SystemConfig.js';
 import { marketDataService } from '../marketDataService.js';
 import { externalMarketService } from '../externalMarketService.js';
 
@@ -104,6 +105,10 @@ export const timeSeriesWorker = {
                         } catch (e) {
                             logger.warn(`[TimeSeriesWorker] Falha ao buscar histórico para ${asset.ticker}`);
                         }
+                    } else {
+                        // "Touch" para que o monitor de admin veja que o cálculo foi renovado hoje
+                        historyEntry.lastUpdated = now;
+                        await historyEntry.save();
                     }
 
                     if (!historyEntry || !historyEntry.history || historyEntry.history.length < 20) return;
@@ -153,6 +158,20 @@ export const timeSeriesWorker = {
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
                 logger.info(`✅ [TimeSeriesWorker] Atualizados ${operations.length} ativos com métricas temporais.`);
+
+                // Atualiza estatísticas no SystemConfig
+                await SystemConfig.findOneAndUpdate(
+                    { key: 'MACRO_INDICATORS' },
+                    { 
+                        $set: { 
+                            lastTimeSeriesStats: {
+                                assetsProcessed: operations.length,
+                                timestamp: new Date()
+                            }
+                        } 
+                    },
+                    { upsert: true }
+                );
             }
 
         } catch (error) {

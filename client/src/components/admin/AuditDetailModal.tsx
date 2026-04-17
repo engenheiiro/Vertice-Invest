@@ -222,48 +222,105 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                                 </div>
 
                                 <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                                    {/* NOTA FINAL (ESTILO PROVA) */}
+                                    <div className="bg-[#0D121F] rounded-2xl p-6 border border-slate-700 relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 p-4">
+                                            <div className={`w-16 h-16 rounded-full border-4 flex items-center justify-center font-black text-2xl rotate-12 shadow-2xl transition-transform group-hover:scale-110 ${
+                                                selectedAsset.score >= 90 ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' :
+                                                selectedAsset.score >= 80 ? 'border-blue-500 text-blue-500 bg-blue-500/10' :
+                                                selectedAsset.score >= 70 ? 'border-slate-400 text-slate-400 bg-slate-400/10' :
+                                                'border-red-500 text-red-500 bg-red-500/10'
+                                            }`}>
+                                                {selectedAsset.score >= 95 ? 'A+' : 
+                                                 selectedAsset.score >= 90 ? 'A' :
+                                                 selectedAsset.score >= 80 ? 'B+' :
+                                                 selectedAsset.score >= 70 ? 'B' :
+                                                 selectedAsset.score >= 60 ? 'C' : 'F'}
+                                            </div>
+                                        </div>
+
+                                        <div className="relative z-10">
+                                            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Resultado da Avaliação</h4>
+                                            <div className="flex items-baseline gap-2">
+                                                <span className="text-5xl font-black text-white">{selectedAsset.score}</span>
+                                                <span className="text-slate-500 font-bold">/ 100</span>
+                                            </div>
+                                            <p className="text-xs text-slate-400 mt-2 font-medium">
+                                                {selectedAsset.score >= 80 ? 'Recomendação Forte para o perfil atual.' :
+                                                 selectedAsset.score >= 65 ? 'Ativo com fundamentos sólidos, mas pontuação média.' :
+                                                 'Ativo descartado pelo Motor de Decisão por falta de critérios.'}
+                                            </p>
+                                        </div>
+                                    </div>
+
                                     {/* RESUMO ESTRUTURAL */}
                                     <div className="grid grid-cols-3 gap-2">
                                         <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-center">
                                             <div className="text-[8px] text-slate-500 font-black uppercase mb-1">Qualidade</div>
-                                            <div className="text-lg font-black text-white">{selectedAsset.metrics?.structural?.quality || 0}</div>
+                                            <div className={`text-lg font-black ${(selectedAsset.metrics?.structural?.quality || 0) > 70 ? 'text-emerald-400' : 'text-white'}`}>
+                                                {selectedAsset.metrics?.structural?.quality || 0}
+                                            </div>
                                         </div>
                                         <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-center">
                                             <div className="text-[8px] text-slate-500 font-black uppercase mb-1">Valuation</div>
-                                            <div className="text-lg font-black text-white">{selectedAsset.metrics?.structural?.valuation || 0}</div>
+                                            <div className={`text-lg font-black ${(selectedAsset.metrics?.structural?.valuation || 0) > 70 ? 'text-blue-400' : 'text-white'}`}>
+                                                {selectedAsset.metrics?.structural?.valuation || 0}
+                                            </div>
                                         </div>
                                         <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800 text-center">
-                                            <div className="text-[8px] text-slate-500 font-black uppercase mb-1">Risco</div>
-                                            <div className="text-lg font-black text-white">{selectedAsset.metrics?.structural?.risk || 0}</div>
+                                            <div className="text-[8px] text-slate-500 font-black uppercase mb-1">Resiliência</div>
+                                            <div className={`text-lg font-black ${(selectedAsset.metrics?.structural?.risk || 0) > 70 ? 'text-purple-400' : 'text-white'}`}>
+                                                {selectedAsset.metrics?.structural?.risk || 0}
+                                            </div>
                                         </div>
                                     </div>
 
-                                    {/* LOG DE EVENTOS */}
+                                    {/* Ganhos vs Perdas */}
                                     <div className="space-y-4">
                                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                            <List size={12} className="text-blue-500" /> Eventos de Scoring
+                                            <List size={12} className="text-blue-500" /> Detalhes do Desempenho
                                         </h4>
                                         
-                                        <div className="space-y-2">
-                                            {selectedAsset.auditLog && selectedAsset.auditLog.length > 0 ? (
-                                                selectedAsset.auditLog.map((log, i) => (
-                                                    <div key={i} className="bg-slate-900/30 border border-slate-800/50 p-3 rounded-xl flex items-center justify-between group hover:border-slate-700 transition-colors">
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="text-[8px] font-black text-slate-600 uppercase tracking-tighter">{log.category}</span>
-                                                            <span className="text-[11px] text-slate-300 font-medium">{log.factor}</span>
+                                        <div className="space-y-3">
+                                            {/* POSITIVOS */}
+                                            {selectedAsset.auditLog && selectedAsset.auditLog.filter(l => l.points > 0).length > 0 && (
+                                                <div className="space-y-2">
+                                                    <p className="text-[9px] font-black text-emerald-500 uppercase ml-1 opacity-70">Critérios Atendidos (+)</p>
+                                                    {selectedAsset.auditLog.filter(l => l.points > 0).map((log, i) => (
+                                                        <div key={`plus-${i}`} className="bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-xl flex items-center justify-between transition-all hover:bg-emerald-500/10">
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <span className="text-[7px] font-black text-emerald-600 uppercase tracking-tighter">{log.category}</span>
+                                                                <span className="text-[11px] text-slate-200 font-semibold italic">"{log.factor}"</span>
+                                                            </div>
+                                                            <div className="text-[10px] font-black text-emerald-400 whitespace-nowrap ml-4">
+                                                                +{log.points}
+                                                            </div>
                                                         </div>
-                                                        <div className={`text-xs font-black px-2 py-1 rounded-lg ${
-                                                            log.type === 'bonus' ? 'bg-emerald-500/10 text-emerald-400' :
-                                                            log.type === 'penalty' ? 'bg-red-500/10 text-red-400' :
-                                                            'bg-blue-500/10 text-blue-400'
-                                                        }`}>
-                                                            {log.points > 0 ? `+${log.points}` : log.points}
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* NEGATIVOS */}
+                                            {selectedAsset.auditLog && selectedAsset.auditLog.filter(l => l.points < 0).length > 0 && (
+                                                <div className="space-y-2 mt-4">
+                                                    <p className="text-[9px] font-black text-red-500 uppercase ml-1 opacity-70">Falhas e Penalidades (-)</p>
+                                                    {selectedAsset.auditLog.filter(l => l.points < 0).map((log, i) => (
+                                                        <div key={`minus-${i}`} className="bg-red-500/5 border border-red-500/10 p-3 rounded-xl flex items-center justify-between transition-all hover:bg-red-500/10">
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <span className="text-[7px] font-black text-red-600 uppercase tracking-tighter">{log.category}</span>
+                                                                <span className="text-[11px] text-slate-300 font-medium">❌ {log.factor}</span>
+                                                            </div>
+                                                            <div className="text-[10px] font-black text-red-400 whitespace-nowrap ml-4">
+                                                                {log.points}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ))
-                                            ) : (
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {(!selectedAsset.auditLog || selectedAsset.auditLog.length === 0) && (
                                                 <div className="text-center py-8 text-slate-600 italic text-xs">
-                                                    Nenhum log detalhado disponível para este ativo.
+                                                    Ativo em base histórica. Re-crunch para logs detalhados.
                                                 </div>
                                             )}
                                         </div>

@@ -7,6 +7,7 @@ import { macroDataService } from './macroDataService.js';
 import { marketDataService } from './marketDataService.js';
 import { syncService } from './syncService.js';
 import { holidayService } from './holidayService.js';
+import { financialService } from './financialService.js';
 import { signalEngine } from './engines/signalEngine.js';
 import MarketAsset from '../models/MarketAsset.js';
 import User from '../models/User.js';
@@ -48,7 +49,8 @@ export const runDailySnapshot = async (force = false) => {
                 
                 for (const asset of assets) {
                     let price = 0;
-                    const multiplier = asset.currency === 'USD' ? 5.75 : 1; 
+                    const usdRate = usdConfig?.dollar || 5.75;
+                    const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1; 
 
                     if (asset.type === 'CASH') {
                         price = 1;
@@ -117,6 +119,10 @@ export const runDailySnapshot = async (force = false) => {
                     }
 
                     if (isValidSnapshot) {
+                        // 4. Busca Dividendos Totais para o Snapshot Histórico
+                        const divData = await financialService.calculateUserDividends(user._id);
+                        const totalDividends = divData.totalAllTime;
+
                         // Se for forçado, deleta snapshot existente do dia para evitar duplicata (Upsert Logic Simplificada)
                         if (force) {
                             await WalletSnapshot.deleteMany({ 
@@ -130,8 +136,9 @@ export const runDailySnapshot = async (force = false) => {
                             date: today,
                             totalEquity,
                             totalInvested,
-                            profit: totalEquity - totalInvested,
-                            profitPercent: totalInvested > 0 ? ((totalEquity - totalInvested) / totalInvested) * 100 : 0,
+                            totalDividends,
+                            profit: totalEquity - totalInvested + totalDividends,
+                            profitPercent: totalInvested > 0 ? ((totalEquity - totalInvested + totalDividends) / totalInvested) * 100 : 0,
                             quotaPrice: quotaPrice 
                         });
                         snapshotsCreated++;

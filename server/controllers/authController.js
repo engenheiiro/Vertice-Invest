@@ -169,7 +169,7 @@ export const refreshToken = async (req, res, next) => {
     
     if (!tokenInDb || RefreshToken.verifyExpiration(tokenInDb)) {
       if (tokenInDb) await RefreshToken.findByIdAndDelete(tokenInDb._id);
-      return res.status(403).json({ message: "Sessão expirada." });
+      return res.status(401).json({ message: "Sessão expirada." });
     }
 
     const user = await User.findById(tokenInDb.user);

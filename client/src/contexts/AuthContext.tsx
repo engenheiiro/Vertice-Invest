@@ -63,17 +63,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const initializeAuth = async () => {
-      const token = localStorage.getItem('accessToken');
-      const storedUser = localStorage.getItem('user');
+      try {
+        const token = localStorage.getItem('accessToken');
+        const storedUser = localStorage.getItem('user');
 
-      if (token && storedUser) {
-        try {
-          setUser(JSON.parse(storedUser));
-        } catch (e) {
-          await logout();
+        if (token && storedUser) {
+          try {
+            setUser(JSON.parse(storedUser));
+          } catch (e) {
+            await logout();
+          }
         }
+      } catch (e) {
+        console.error("Erro na inicialização do Auth", e);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     initializeAuth();
