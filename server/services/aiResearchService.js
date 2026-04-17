@@ -85,6 +85,13 @@ export const aiResearchService = {
 
             let ranking = portfolioEngine.performCompetitiveDraft(processedAssets);
             ranking = portfolioEngine.applyConcentrationPenalty(ranking);
+            
+            // Ordenação Global por Score (Garante que score maior venha primeiro independente do Tier)
+            ranking.sort((a, b) => b.score - a.score);
+
+            // Atribuição de Posição Global (Essencial para o cálculo de Delta/Setas nas próximas revisões)
+            ranking = ranking.map((item, idx) => ({ ...item, position: idx + 1 }));
+
             ranking = await calculateRankingDelta(ranking, assetClass, strategy);
 
             // Estatísticas de Tier para Monitoramento
@@ -94,12 +101,17 @@ export const aiResearchService = {
                 BRONZE: ranking.filter(r => r.tier === 'BRONZE').length
             };
             logger.info(`🏆 [Ranking ${assetClass}] G:${tierStats.GOLD} S:${tierStats.SILVER} B:${tierStats.BRONZE}`);
+            
+            // THRESHOLD GLOBAL: COMPRAR apenas acima de 70 pontos
+            const BUY_THRESHOLD = 70;
 
             const fullList = processedAssets.map(asset => {
                 const entries = Object.entries(asset.scores);
                 const [bestProfile, bestScore] = entries.reduce((a, b) => a[1] > b[1] ? a : b);
+                
                 let action = 'WAIT';
-                if (bestScore >= 70) action = 'BUY'; 
+                if (bestScore >= BUY_THRESHOLD) action = 'BUY'; 
+
                 return {
                     ...asset,
                     riskProfile: bestProfile,
@@ -140,18 +152,26 @@ export const aiResearchService = {
                     ...a,
                     score: a.scores['DEFENSIVE'], 
                     riskProfile: 'DEFENSIVE',     
-                    action: a.scores['DEFENSIVE'] >= 60 ? 'BUY' : 'WAIT',
-                    tier: 'GOLD', // Assume Gold para top selections
+                    action: 'WAIT', // Será redefinido abaixo
+                    tier: 'GOLD', 
                     thesis: `Brasil 10: Score Defensivo ${a.scores['DEFENSIVE']}`
                 }))
                 .sort((a, b) => b.score - a.score)
                 .slice(0, 5); 
         };
 
+        const BUY_THRESHOLD = 70;
+
         const top5Stocks = getTop5Defensive(stockData.processedAssets);
         const top5FIIs = getTop5Defensive(fiiData.processedAssets);
         
         let brasil10List = [...top5Stocks, ...top5FIIs];
+        
+        // Re-aplica a ação baseada no threshold global de 70
+        brasil10List = brasil10List.map(item => ({
+            ...item,
+            action: item.score >= BUY_THRESHOLD ? 'BUY' : 'WAIT'
+        }));
         brasil10List.sort((a, b) => b.score - a.score);
 
         brasil10List = brasil10List.map((item, idx) => ({ ...item, position: idx + 1 }));

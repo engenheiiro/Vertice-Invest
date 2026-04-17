@@ -137,7 +137,7 @@ const calculateProfileScores = (asset, valuationData, context) => {
         const isDefensiveEligible = isEligibleForDefensive(asset, context);
         if (isDefensiveEligible) {
             defScore = 60; 
-            audit.DEFENSIVE.push({ factor: 'Elegibilidade Defensiva', points: 60, type: 'base' });
+            audit.DEFENSIVE.push({ factor: 'Score Base (Setor Defensivo)', points: 60, type: 'base' });
             if (m.marketCap > 10000000000) { defScore += 10; audit.DEFENSIVE.push({ factor: 'Large Cap (>10B)', points: 10, type: 'bonus' }); }
             if (m.dy > 6.0) { defScore += 15; audit.DEFENSIVE.push({ factor: 'Dividend Yield > 6%', points: 15, type: 'bonus' }); }
             if (m.roe > 15) { defScore += 5; audit.DEFENSIVE.push({ factor: 'ROE > 15%', points: 5, type: 'bonus' }); }
@@ -146,19 +146,19 @@ const calculateProfileScores = (asset, valuationData, context) => {
             if (m.beta > 1.2) { defScore -= 5; audit.DEFENSIVE.push({ factor: 'Beta Alto (>1.2)', points: -5, type: 'penalty' }); }
         } else {
             defScore = 30; 
-            audit.DEFENSIVE.push({ factor: 'Ineligível para Perfil Defensivo', points: 30, type: 'base' });
+            audit.DEFENSIVE.push({ factor: 'Ineligível para Carteira Defensiva', points: 30, type: 'base' });
         }
 
         if (m.marketCap > 2000000000) { 
             modScore = 60;
-            audit.MODERATE.push({ factor: 'Mid/Large Cap (>2B)', points: 60, type: 'base' });
+            audit.MODERATE.push({ factor: 'Score Base (Mid/Large Cap)', points: 60, type: 'base' });
             if (m.revenueGrowth > 10) { modScore += 15; audit.MODERATE.push({ factor: 'Crescimento Receita > 10%', points: 15, type: 'bonus' }); }
             if (m.roe > 12) { modScore += 10; audit.MODERATE.push({ factor: 'ROE > 12%', points: 10, type: 'bonus' }); }
             if (upside > 0.20) { modScore += 15; audit.MODERATE.push({ factor: 'Upside > 20%', points: 15, type: 'bonus' }); }
             if (m.netMargin < 5) { modScore -= 15; audit.MODERATE.push({ factor: 'Margem Líquida Baixa (<5%)', points: -15, type: 'penalty' }); }
         } else {
             modScore = 40;
-            audit.MODERATE.push({ factor: 'Small Cap (<2B)', points: 40, type: 'base' });
+            audit.MODERATE.push({ factor: 'Score Base (Small Cap)', points: 40, type: 'base' });
         }
 
         boldScore = 50;
@@ -177,7 +177,7 @@ const calculateProfileScores = (asset, valuationData, context) => {
 
         if (isEligibleForDefensive(asset, context)) {
             defScore = 65;
-            audit.DEFENSIVE.push({ factor: 'Elegibilidade Defensiva FII', points: 65, type: 'base' });
+            audit.DEFENSIVE.push({ factor: 'Score Base (FII Setor Defensivo)', points: 65, type: 'base' });
             if (m.dy > NTNB + 1.5) { defScore += 15; audit.DEFENSIVE.push({ factor: 'Yield > NTN-B + 1.5%', points: 15, type: 'bonus' }); }
             
             if (isPapel) {
@@ -191,11 +191,11 @@ const calculateProfileScores = (asset, valuationData, context) => {
             else if (m.beta > 0.9) { defScore -= 15; audit.DEFENSIVE.push({ factor: 'Beta Elevado (>0.9)', points: -15, type: 'penalty' }); }
         } else {
             defScore = 40;
-            audit.DEFENSIVE.push({ factor: 'Ineligível para Perfil Defensivo FII', points: 40, type: 'base' });
+            audit.DEFENSIVE.push({ factor: 'Ineligível para Carteira Defensiva FII', points: 40, type: 'base' });
         }
         
         modScore = 60;
-        audit.MODERATE.push({ factor: 'Base Moderada FII', points: 60, type: 'base' });
+        audit.MODERATE.push({ factor: 'Score Base (Perfil Moderado FII)', points: 60, type: 'base' });
         if (m.dy > NTNB + 3) { modScore += 15; audit.MODERATE.push({ factor: 'Yield > NTN-B + 3%', points: 15, type: 'bonus' }); }
         
         if (isPapel) {
