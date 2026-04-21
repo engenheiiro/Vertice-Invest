@@ -267,4 +267,23 @@ export const initScheduler = () => {
     cron.schedule('0 6 1 1 *', async () => {
         await holidayService.sync();
     });
+
+    // 9. REATIVAÇÃO AUTOMÁTICA DE ATIVOS INATIVOS (Toda segunda-feira 05:00)
+    // Tenta reobter cotação de ativos que foram desativados por falhas consecutivas.
+    // Se a cotação voltar, o ativo é reativado automaticamente sem intervenção manual.
+    cron.schedule('0 5 * * 1', async () => {
+        try {
+            logger.info("🔄 [Scheduler] Iniciando reativação automática de ativos inativos...");
+            const result = await marketDataService.tryReactivateAssets();
+            logger.info(`✅ [Scheduler] Reativação concluída. Reativados: ${result.reactivated}, Ainda inativos: ${result.stillInactive}`);
+
+            await SystemConfig.findOneAndUpdate(
+                { key: 'MACRO_INDICATORS' },
+                { $set: { lastReactivationStats: { ...result, timestamp: new Date() } } },
+                { upsert: true }
+            );
+        } catch (error) {
+            logger.error(`❌ [Scheduler] Erro na reativação de ativos: ${error.message}`);
+        }
+    });
 };

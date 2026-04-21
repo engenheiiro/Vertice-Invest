@@ -108,10 +108,8 @@ export const marketDataService = {
                 
                 let newPrice = quote.price;
                 let newChange = quote.change || 0;
-                let isSuccess = false;
 
                 if (newPrice && newPrice > 0) {
-                    isSuccess = true;
                     successfulTickers.add(ticker);
                     
                     const updatePayload = {
@@ -267,6 +265,58 @@ export const marketDataService = {
         }
     },
 
+    // --- MELHORIA CRÍTICA 4: Reativação automática de ativos inativos ---
+    // Tenta reativar ativos marcados como isActive=false buscando cotação fresca.
+    // Se a cotação voltar, reseta failCount e reativa. Se não, mantém inativo.
+    async tryReactivateAssets() {
+        try {
+            const inactiveAssets = await MarketAsset.find({ isActive: false }).select('ticker failCount type marketCap');
+            if (inactiveAssets.length === 0) {
+                logger.info(`✅ [Reativação] Nenhum ativo inativo para verificar.`);
+                return { reactivated: 0, stillInactive: 0 };
+            }
+
+            logger.info(`🔄 [Reativação] Verificando ${inactiveAssets.length} ativos inativos...`);
+            const tickers = inactiveAssets.map(a => a.ticker);
+            const quotes = await externalMarketService.getQuotes(tickers);
+
+            const operations = [];
+            let reactivatedCount = 0;
+            const reactivatedTickers = [];
+
+            for (const quote of quotes) {
+                if (quote.price && quote.price > 0) {
+                    operations.push({
+                        updateOne: {
+                            filter: { ticker: this.normalizeSymbol(quote.ticker) },
+                            update: { $set: { isActive: true, failCount: 0, lastPrice: quote.price, change: quote.change || 0, updatedAt: new Date() } }
+                        }
+                    });
+                    reactivatedCount++;
+                    reactivatedTickers.push(quote.ticker);
+                }
+            }
+
+            if (operations.length > 0) {
+                await MarketAsset.bulkWrite(operations);
+                logger.info(`✅ [Reativação] ${reactivatedCount} ativos reativados: ${reactivatedTickers.join(', ')}`);
+            }
+
+            // Alerta para ativos grandes que continuam inativos
+            const successSet = new Set(reactivatedTickers.map(t => this.normalizeSymbol(t)));
+            const stillInactive = inactiveAssets.filter(a => !successSet.has(a.ticker));
+            const importantStillInactive = stillInactive.filter(a => (a.marketCap || 0) > 1000000000);
+            if (importantStillInactive.length > 0) {
+                logger.warn(`⚠️ [Reativação] Ativos grandes ainda inativos: ${importantStillInactive.map(a => a.ticker).join(', ')}`);
+            }
+
+            return { reactivated: reactivatedCount, stillInactive: stillInactive.length };
+        } catch (error) {
+            logger.error(`❌ [Reativação] Falha: ${error.message}`);
+            return { reactivated: 0, stillInactive: 0 };
+        }
+    },
+
     async getMarketData(assetClass) {
         const isBrasil = assetClass === 'STOCK' || assetClass === 'FII' || assetClass === 'BRASIL_10';
         const isCrypto = assetClass === 'CRYPTO';
@@ -290,13 +340,40 @@ export const marketDataService = {
             for (const asset of dbAssets) {
                 // Filtro de liquidez removido daqui e centralizado no scoringEngine.js para gerar DiscardLog
 
+                // --- MELHORIA CRÍTICA 1: Distinguir dado ausente de dado ruim ---
+                // Campos onde 0 = quase certamente dado não coletado (nunca são exatamente 0 na prática)
+                const _missing = {
+                    pl:            !asset.pl            || asset.pl === 0,
+                    marketCap:     !asset.marketCap     || asset.marketCap === 0,
+                    roe:           !asset.roe            || asset.roe === 0,
+                    netMargin:     !asset.netMargin      || asset.netMargin === 0,
+                    revenueGrowth: !asset.revenueGrowth  || asset.revenueGrowth === 0,
+                    evEbitda:      !asset.evEbitda       || asset.evEbitda === 0,
+                    beta:          !asset.beta           || asset.beta === 0,
+                    // Campos com 0 legítimo — NÃO marcados como ausentes
+                    dy:            false,   // Empresa pode não pagar dividendos
+                    debtToEquity:  false,   // Empresa pode não ter dívida
+                    payout:        false,   // Empresa pode não distribuir
+                };
+
+                // Calcula completude dos dados fundamentalistas (0–100%)
+                const fundamentalFields = ['pl', 'marketCap', 'roe', 'netMargin', 'revenueGrowth', 'evEbitda'];
+                const missingCount = fundamentalFields.filter(f => _missing[f]).length;
+                const dataCompleteness = Math.round(((fundamentalFields.length - missingCount) / fundamentalFields.length) * 100);
+
+                // Calcula quantos dias desde a última atualização de fundamentais
+                const _staleDays = asset.lastFundamentalsDate
+                    ? Math.floor((Date.now() - new Date(asset.lastFundamentalsDate).getTime()) / (1000 * 60 * 60 * 24))
+                    : null;
+
                 results.push({
                     ticker: asset.ticker,
                     type: asset.type,
-                    name: asset.name || asset.ticker, 
-                    sector: asset.sector, 
+                    name: asset.name || asset.ticker,
+                    sector: asset.sector,
+                    fiiSubType: asset.fiiSubType || null,
                     price: asset.lastPrice || 0,
-                    dbFlags: { isBlacklisted: asset.isBlacklisted, isTier1: asset.isTier1 }, 
+                    dbFlags: { isBlacklisted: asset.isBlacklisted, isTier1: asset.isTier1 },
                     metrics: {
                         ticker: asset.ticker,
                         price: asset.lastPrice,
@@ -320,6 +397,13 @@ export const marketDataService = {
                         beta: asset.beta || 0,
                         sma200: asset.sma200 || 0,
                         ema50: asset.ema50 || 0,
+                        // Passados para o scoringEngine identificar isPapel e setor
+                        sector: asset.sector,
+                        fiiSubType: asset.fiiSubType || null,
+                        // Flags de qualidade de dados
+                        _missing,
+                        _staleDays,
+                        dataCompleteness,
                         structural: {
                             quality: 50,
                             valuation: 50,

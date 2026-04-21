@@ -45,6 +45,16 @@ export const syncService = {
             const processedTickers = new Set();
             let typosFixedCount = 0; // Contador para Monitor de Qualidade
 
+            const deriveFiiSubType = (sector) => {
+                if (!sector) return null;
+                const s = sector.toLowerCase();
+                if (s.includes('papel') || s.includes('crédito') || s.includes('recebíveis') || s.includes('cri')) return 'PAPEL';
+                if (s.includes('fundo de fundo') || s.includes('fof')) return 'FOF';
+                if (s.includes('híbrido') || s.includes('hibrido')) return 'HIBRIDO';
+                if (s.includes('desenvolvimento') || s.includes('residencial')) return 'DESENVOLVIMENTO';
+                return 'TIJOLO';
+            };
+
             const pushOp = (rawTicker, data, type) => {
                 // 1. CAMADA DE SANITIZAÇÃO (CORREÇÃO DE TYPOS)
                 let ticker = rawTicker;
@@ -87,7 +97,9 @@ export const syncService = {
                     capRate: Number(data.capRate) || 0,
                     qtdImoveis: Number(data.qtdImoveis) || 0,
 
-                    sector: finalSector, 
+                    sector: finalSector,
+                    fiiSubType: type === 'FII' ? deriveFiiSubType(finalSector) : null,
+                    lastFundamentalsDate: timestamp,
                     lastAnalysisDate: timestamp,
                     updatedAt: timestamp,
                     

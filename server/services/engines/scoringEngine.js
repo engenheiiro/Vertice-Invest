@@ -4,14 +4,22 @@ const safeVal = (val) => {
     return Number(val.toFixed(2));
 };
 
+// Helper: resolve isPapel a partir de fiiSubType (explícito) ou setor (fallback por substring)
+const resolvePapel = (fiiSubType, sector) => {
+    if (fiiSubType) return fiiSubType === 'PAPEL';
+    return sector?.toLowerCase().includes('papel') || false;
+};
+
 const calculateConfidenceScore = (m) => {
     let confidence = 100;
     const audit = [];
-    if (!m.revenueGrowth || m.revenueGrowth === 0) {
+
+    // Usa _missing para distinguir dado ausente de dado genuinamente ruim
+    if (m._missing?.revenueGrowth) {
         confidence -= 25;
         audit.push({ factor: 'Dados de Crescimento Ausentes', points: -25, type: 'penalty', category: 'Confiança' });
     }
-    if (!m.roe || !m.netMargin) {
+    if (m._missing?.roe || m._missing?.netMargin) {
         confidence -= 15;
         audit.push({ factor: 'Dados de Rentabilidade Ausentes', points: -15, type: 'penalty', category: 'Confiança' });
     }
@@ -19,6 +27,22 @@ const calculateConfidenceScore = (m) => {
         confidence -= 30;
         audit.push({ factor: 'Liquidez Abaixo do Ideal (<1M/dia)', points: -30, type: 'penalty', category: 'Confiança' });
     }
+
+    // Penalidade de staleness: dados desatualizados reduzem a confiança da análise
+    if (m._staleDays !== null && m._staleDays !== undefined) {
+        if (m._staleDays > 180) {
+            confidence -= 30;
+            audit.push({ factor: `Dados Fundamentais Desatualizados (${m._staleDays} dias)`, points: -30, type: 'penalty', category: 'Confiança' });
+        } else if (m._staleDays > 90) {
+            confidence -= 15;
+            audit.push({ factor: `Dados Fundamentais Desatualizados (${m._staleDays} dias)`, points: -15, type: 'penalty', category: 'Confiança' });
+        }
+    } else {
+        // Data de atualização nunca registrada — penalidade leve
+        confidence -= 5;
+        audit.push({ factor: 'Data de Atualização dos Fundamentais Desconhecida', points: -5, type: 'penalty', category: 'Confiança' });
+    }
+
     return { confidence, audit };
 };
 
@@ -49,10 +73,11 @@ const isEligibleForDefensive = (asset, context) => {
         if (!isSafeSector) {
             if (m.dy < 6.0 || m.pl > 10) return false;
         }
-        if (m.roe < 5) return false; 
-        if (m.netMargin < 3) return false; 
+        // Só aplica rejeição se o dado estiver presente (não ausente) — evita punir por falta de coleta
+        if (!m._missing?.roe && m.roe < 5) return false;
+        if (!m._missing?.netMargin && m.netMargin < 3) return false;
         const isFinancial = sector.includes('Banco') || sector.includes('Segur') || sector.includes('Financeiro');
-        if (m.debtToEquity > 4.0 && !isFinancial) return false; 
+        if (m.debtToEquity > 4.0 && !isFinancial) return false;
     } else if (asset.type === 'FII') {
         if (m.marketCap < 500000000) return false; 
         if (m.dy > 18.0) return false; 
@@ -102,14 +127,16 @@ const calculateIntrinsicValue = (m, type, price, context) => {
         if (fairPrice > price * 2.5) fairPrice = price * 2.5; 
     } else if (type === 'FII') {
         const vp = m.vpCota || price;
-        if (m.sector?.includes('Papel')) {
-            fairPrice = vp; 
+        // Usa fiiSubType (explícito) ou sector como fallback — corrige bug anterior onde
+        // m.sector não existia em metrics e isPapel nunca era detectado
+        const isPapelFII = resolvePapel(m.fiiSubType, m.sector);
+        if (isPapelFII) {
+            fairPrice = vp;
             method = "VP (Papel)";
         } else {
             const ntnb = MACRO.NTNB_LONG || 6.0;
             const yieldPremium = Math.max(0, m.dy - ntnb);
-            const valuationPremium = yieldPremium * 1.0; 
-            fairPrice = vp * (1 + (valuationPremium / 100));
+            fairPrice = vp * (1 + (yieldPremium / 100));
             method = "VP Ajustado";
         }
     } else if (type === 'CRYPTO') {
@@ -173,7 +200,7 @@ const calculateProfileScores = (asset, valuationData, context) => {
 
     } else if (type === 'FII') {
         const isTier1 = asset.dbFlags?.isTier1 || false;
-        const isPapel = asset.sector === 'Papel';
+        const isPapel = resolvePapel(asset.fiiSubType, asset.sector);
 
         if (isEligibleForDefensive(asset, context)) {
             defScore = 65;
@@ -252,8 +279,7 @@ const calculateStructuralScores = (asset, context) => {
     const m = asset.metrics;
     const type = asset.type;
     const ticker = asset.ticker;
-    const isPapel = asset.sector === 'Papel';
-
+    const isPapel = resolvePapel(asset.fiiSubType, asset.sector);
     const audit = { QUALITY: [], VALUATION: [], RISK: [] };
     let quality = 0; audit.QUALITY.push({ factor: 'Base de Qualidade', points: 0, type: 'base' });
     let valuation = 0; audit.VALUATION.push({ factor: 'Base de Valuation', points: 0, type: 'base' });
@@ -479,18 +505,18 @@ const calculateStructuralScores = (asset, context) => {
     return { quality, valuation, risk, audit };
 };
 
-const generateDynamicTheses = (m, type, ticker, context, valuationData, currentPrice, sector) => {
+const generateDynamicTheses = (m, type, ticker, context, valuationData, currentPrice, sector, fiiSubType) => {
     const { MACRO } = context;
     const bull = [];
     const bear = [];
     if (m.dy > MACRO.SELIC) bull.push(`Yield (${m.dy.toFixed(1)}%) supera a Selic.`);
     if (m.pvp < 0.85 && m.pvp > 0) bull.push(`Desconto patrimonial (P/VP ${m.pvp.toFixed(2)}).`);
-    if (m.roe > 18) bull.push(`Rentabilidade alta (ROE ${m.roe.toFixed(1)}%).`);
-    
+    if (!m._missing?.roe && m.roe > 18) bull.push(`Rentabilidade alta (ROE ${m.roe.toFixed(1)}%).`);
+
     if (type === 'FII') {
         const ntnb = context.MACRO?.NTNB_LONG || 6.30;
         const spread = m.dy - ntnb;
-        const isPapel = sector === 'Papel';
+        const isPapel = resolvePapel(fiiSubType, sector);
         
         if (spread > 2.5) bull.push(`Alto prêmio de risco: Spread de ${spread.toFixed(1)}% sobre NTN-B.`);
         else if (spread < 0.5) bear.push(`Prêmio de risco pífio (${spread.toFixed(1)}%) sobre o Tesouro.`);
@@ -552,7 +578,7 @@ export const scoringEngine = {
         const valuationData = calculateIntrinsicValue(asset.metrics, asset.type, asset.price, context);
         const profileResult = calculateProfileScores(asset, valuationData, context);
         const structuralResult = calculateStructuralScores(asset, context);
-        const thesisData = generateDynamicTheses(asset.metrics, asset.type, asset.ticker, context, valuationData, asset.price, asset.sector);
+        const thesisData = generateDynamicTheses(asset.metrics, asset.type, asset.ticker, context, valuationData, asset.price, asset.sector, asset.fiiSubType);
         const aristocrat = isDividendAristocrat(asset.metrics, asset.type);
 
         if (aristocrat) {
