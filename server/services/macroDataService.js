@@ -303,6 +303,50 @@ export const macroDataService = {
         return null;
     },
 
+    // --- MELHORIA CRÍTICA 3: Fonte OFICIAL para taxa NTN-B (Tesouro Transparente Gov.br) ---
+    // Substitui o scraping do Investidor10 como fonte primária.
+    // API pública do governo: sem autenticação, sem risco de bloqueio por mudança de HTML.
+    async fetchNtnbFromTesouroDireto() {
+        try {
+            // Tesouro Transparente CKAN API — retorna os títulos mais recentes negociados
+            const resourceId = '796d2059-14e9-44e3-80a7-de3269fd8229';
+            const url = `https://www.tesourotransparente.gov.br/ckan/api/3/action/datastore_search?resource_id=${resourceId}&limit=100&sort=Data%20Venda%20desc`;
+
+            const res = await axios.get(url, {
+                headers: { ...BASE_HEADERS, 'Accept': 'application/json' },
+                httpsAgent: bcbAgent,
+                timeout: 12000
+            });
+
+            const records = res.data?.result?.records || [];
+            if (records.length === 0) return null;
+
+            // Procura NTN-B longa: IPCA+ com vencimento >= 2035
+            const longMaturityYears = [2035, 2040, 2045, 2050, 2055];
+            let ntnbRate = null;
+
+            for (const year of longMaturityYears) {
+                const bond = records.find(r =>
+                    r['Tipo Titulo']?.includes('IPCA+') &&
+                    r['Tipo Titulo']?.includes(String(year))
+                );
+                if (bond) {
+                    // Taxa Venda Manhã é o que o investidor paga — mais conservador para benchmark
+                    const rate = parseFloat(bond['Taxa Venda Manha'] ?? bond['Taxa Compra Manha'] ?? 0);
+                    if (rate > 3 && rate < 20) {
+                        ntnbRate = rate;
+                        logger.info(`🏛️ [NTN-B] Fonte oficial (Tesouro Transparente): ${rate}% a.a. (IPCA+ ${year})`);
+                        break;
+                    }
+                }
+            }
+            return ntnbRate;
+        } catch (error) {
+            logger.warn(`⚠️ [NTN-B] Fonte oficial indisponível: ${error.message}`);
+            return null;
+        }
+    },
+
     async scrapeInvestidor10() {
         const bonds = [];
         try {
@@ -334,8 +378,23 @@ export const macroDataService = {
     },
 
     async updateTreasuryRates() {
+        // Cadeia de prioridade para NTN-B:
+        // 1. Tesouro Transparente (API oficial gov.br)
+        // 2. Investidor10 (scraping — fallback)
+        // 3. Hardcoded 6.00% (emergência)
         let ntnbLongRate = 6.00;
+
+        const officialRate = await this.fetchNtnbFromTesouroDireto();
+        if (officialRate) {
+            ntnbLongRate = officialRate;
+        }
+
+        // Scraping do Investidor10 mantido para popular a tabela de títulos do frontend
+        // mesmo quando a taxa NTN-B já foi obtida pela fonte oficial
         const list = await this.scrapeInvestidor10();
+        if (!officialRate && list.length === 0) {
+            logger.warn(`⚠️ [Tesouro] Ambas as fontes falharam. Usando fallback hardcoded: ${ntnbLongRate}%`);
+        }
         
         const uniqueBondsMap = new Map();
 
@@ -349,8 +408,12 @@ export const macroDataService = {
             else if (cleanTitle.includes('Renda+')) { type = 'RENDAMAIS'; }
             else if (cleanTitle.includes('Educa+')) { type = 'EDUCA'; }
             
-            if (type === 'IPCA' && (cleanTitle.includes('2035') || cleanTitle.includes('2045'))) {
-                if (bond.rate > 4) ntnbLongRate = bond.rate;
+            // Só usa taxa do scraping se a fonte oficial não conseguiu a taxa
+            if (!officialRate && type === 'IPCA' && (cleanTitle.includes('2035') || cleanTitle.includes('2045'))) {
+                if (bond.rate > 4) {
+                    ntnbLongRate = bond.rate;
+                    logger.info(`🏛️ [NTN-B] Fonte fallback (Investidor10): ${bond.rate}% a.a.`);
+                }
             }
 
             if (!uniqueBondsMap.has(cleanTitle)) {

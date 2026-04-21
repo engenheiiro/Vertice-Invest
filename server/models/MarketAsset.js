@@ -51,6 +51,19 @@ const MarketAssetSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
   failCount: { type: Number, default: 0 }, // Contador de falhas consecutivas de sync
 
+  // --- Qualidade e Atualidade dos Dados ---
+  // Data em que os dados fundamentalistas foram coletados pela última vez.
+  // null = nunca coletado. Usado pelo scoringEngine para penalizar dados antigos.
+  lastFundamentalsDate: { type: Date, default: null },
+
+  // Para FIIs: subtipo explícito para evitar detecção frágil por substring no setor.
+  // null = não classificado (motor usa fallback por 'sector' como compatibilidade).
+  fiiSubType: {
+    type: String,
+    enum: ['TIJOLO', 'PAPEL', 'HIBRIDO', 'FOF', 'DESENVOLVIMENTO', null],
+    default: null
+  },
+
   lastAnalysisDate: { type: Date },
   updatedAt: { type: Date, default: Date.now }
 });
