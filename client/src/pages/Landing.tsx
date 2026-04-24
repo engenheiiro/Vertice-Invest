@@ -1,6 +1,5 @@
 
 import React, { useEffect, useState } from 'react';
-// @ts-ignore
 import { Link } from 'react-router-dom';
 import { 
   ShieldCheck, BrainCircuit, 
@@ -9,35 +8,62 @@ import {
   Lock, TrendingUp, DollarSign
 } from 'lucide-react';
 import { API_URL } from '../config';
-// Importando componente centralizado para garantir consistência
 import PerformanceCard from '../components/dashboard/PerformanceCard';
+
+interface LandingTicker {
+  ticker: string;
+  name?: string;
+  price?: number;
+  change?: number;
+  type?: string;
+}
+
+interface LandingMarketData {
+  macro?: {
+    selic?: number;
+    ipca?: number;
+    dollar?: number;
+    ibov?: number;
+    btc?: number;
+  };
+  tickers?: LandingTicker[];
+  results?: Record<string, unknown>[];
+}
 
 export const Landing = () => {
   const [scrolled, setScrolled] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [marketData, setMarketData] = useState<any>(null);
+  const [marketData, setMarketData] = useState<LandingMarketData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 30);
     window.addEventListener('scroll', handleScroll);
-    
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     const fetchData = async () => {
-        try {
-            const res = await fetch(`${API_URL}/api/market/landing`);
-            if (res.ok) {
-                const data = await res.json();
-                setMarketData(data);
-            }
-        } catch (e) {
-            console.error("Erro ao carregar dados da landing page", e);
-        } finally {
-            setLoading(false);
+      try {
+        const res = await fetch(`${API_URL}/api/market/landing`, { signal: controller.signal });
+        if (res.ok) {
+          const data = await res.json();
+          setMarketData(data);
         }
+      } catch {
+        // falha silenciosa: landing continua funcional sem dados de mercado
+      } finally {
+        clearTimeout(timeoutId);
+        setLoading(false);
+      }
     };
     fetchData();
 
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const toggleFaq = (index: number) => {
@@ -137,19 +163,30 @@ export const Landing = () => {
         <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-[#03060D] to-transparent z-10"></div>
         
         <div className="flex animate-scroll whitespace-nowrap gap-12 text-slate-500 text-[10px] md:text-xs font-mono uppercase tracking-widest opacity-70 hover:opacity-100 transition-opacity">
-           {(marketData?.tickers || [...Array(6)]).map((item: any, i: number) => {
-             const ticker = item?.ticker || `LOAD${i}`;
-             const change = item?.change || 0;
-             return (
-               <React.Fragment key={i}>
+          {loading ? (
+            [...Array(8)].map((_, i) => (
+              <React.Fragment key={i}>
+                <span className="flex items-center gap-2">
+                  <span className="w-1 h-1 rounded-full bg-slate-700 animate-pulse"></span>
+                  <span className="h-2 w-20 bg-slate-800 rounded animate-pulse inline-block"></span>
+                </span>
+                <span className="flex items-center gap-2 text-blue-900/50"> • </span>
+              </React.Fragment>
+            ))
+          ) : (
+            (marketData?.tickers || []).map((item: LandingTicker, i: number) => {
+              const change = item.change || 0;
+              return (
+                <React.Fragment key={i}>
                   <span className="flex items-center gap-2">
-                      <span className={`w-1 h-1 rounded-full ${change >= 0 ? 'bg-green-500' : 'bg-red-500'}`}></span> 
-                      {ticker} {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+                    <span className={`w-1 h-1 rounded-full ${change >= 0 ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                    {item.ticker} {change >= 0 ? '+' : ''}{change.toFixed(2)}%
                   </span>
                   <span className="flex items-center gap-2 text-blue-900/50"> • </span>
-               </React.Fragment>
-             )
-           })}
+                </React.Fragment>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -285,7 +322,7 @@ export const Landing = () => {
                     { ticker: "NVDA", type: "LONG", date: "10 Jan", returnVal: "+8.4%", desc: "Identificado fluxo institucional massivo." },
                     { ticker: "PETR4", type: "SHORT", date: "15 Dez", returnVal: "+6.2%", desc: "Divergência de sentimento político detectada." },
                     { ticker: "BTC", type: "LONG", date: "04 Jan", returnVal: "+12.1%", desc: "Padrão de acumulação on-chain detectado." }
-                ]).map((res: any, i: number) => (
+                ]).map((res: Omit<ResultCardProps, 'delay'>, i: number) => (
                     <ResultCard key={i} {...res} delay={i * 100} />
                 ))}
              </div>
@@ -424,7 +461,8 @@ const StepCard = ({ number, title, desc }: { number: string, title: string, desc
     </div>
 );
 
-const ResultCard = ({ ticker, type, date, returnVal, desc, delay }: any) => (
+interface ResultCardProps { ticker: string; type: string; date: string; returnVal: string; desc: string; delay: number; }
+const ResultCard = ({ ticker, type, date, returnVal, desc, delay }: ResultCardProps) => (
     <div 
         className="bg-[#080C14] border border-slate-800 p-6 rounded-xl relative overflow-hidden group hover:border-slate-700 transition-colors"
         style={{ animationDelay: `${delay}ms` }}
@@ -451,7 +489,8 @@ const ResultCard = ({ ticker, type, date, returnVal, desc, delay }: any) => (
     </div>
 );
 
-const TestimonialCard = ({ name, role, text, image }: any) => (
+interface TestimonialCardProps { name: string; role: string; text: string; image: string; }
+const TestimonialCard = ({ name, role, text, image }: TestimonialCardProps) => (
     <div className="bg-[#02040a] border border-slate-800 p-6 rounded-xl relative">
         <Quote className="text-blue-900/40 absolute top-4 right-4" size={40} />
         <div className="flex items-center gap-3 mb-4">

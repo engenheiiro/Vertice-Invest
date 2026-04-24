@@ -21,7 +21,7 @@ const LABELS: Record<string, string> = {
 };
 
 export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ isOpen, onClose }) => {
-    const { assets, targetAllocation, targetReserve } = useWallet();
+    const { assets, targetAllocation, targetReserve, usdRate } = useWallet();
     const [amount, setAmount] = useState('');
     const [prioritizeReserve, setPrioritizeReserve] = useState(true);
     const [suggestions, setSuggestions] = useState<{ type: AssetType, amount: number, percentage: number }[]>([]);
@@ -48,7 +48,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
 
         const currentValues: Record<string, number> = { STOCK: 0, FII: 0, STOCK_US: 0, CRYPTO: 0, FIXED_INCOME: 0, CASH: 0 };
         assets.forEach(asset => {
-            const val = asset.quantity * asset.currentPrice * (asset.currency === 'USD' ? 5 : 1);
+            const val = asset.quantity * asset.currentPrice * (asset.currency === 'USD' ? (usdRate || 5.75) : 1);
             currentValues[asset.type] = (currentValues[asset.type] || 0) + val;
         });
 

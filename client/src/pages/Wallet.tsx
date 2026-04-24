@@ -12,7 +12,7 @@ import { CashFlowHistory } from '../components/wallet/CashFlowHistory';
 import { AllocationChart } from '../components/wallet/AllocationChart';
 import { SmartContributionModal } from '../components/wallet/SmartContributionModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2 } from 'lucide-react';
+import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2, DollarSign } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useDemo } from '../contexts/DemoContext'; 
@@ -23,7 +23,7 @@ import { FEATURE_LIMITS } from '../constants/subscription';
 
 export const Wallet = () => {
     const { user } = useAuth();
-    const { assets, kpis, resetWallet, isLoading, isRefreshing } = useWallet();
+    const { assets, kpis, resetWallet, isLoading, isRefreshing, usdRate } = useWallet();
     const { isDemoMode, currentStep } = useDemo();
     const navigate = useNavigate();
     
@@ -88,7 +88,17 @@ export const Wallet = () => {
                                 </div>
                             )}
                         </h1>
-                        <p className="text-slate-400 text-sm">Gerencie seus ativos e acompanhe a evolução patrimonial.</p>
+                        <div className="flex items-center gap-3">
+                            <p className="text-slate-400 text-sm">Gerencie seus ativos e acompanhe a evolução patrimonial.</p>
+                            {usdRate > 0 && (
+                                <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-900/20 border border-blue-900/40 rounded-full">
+                                    <DollarSign size={10} className="text-blue-400" />
+                                    <span className="text-[10px] text-blue-400 font-bold font-mono">
+                                        USD/BRL R${usdRate.toFixed(2)}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     
                     <div id="tour-wallet-actions" className={`flex flex-wrap items-center gap-3 transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>

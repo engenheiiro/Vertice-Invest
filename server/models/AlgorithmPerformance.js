@@ -10,8 +10,12 @@ const AlgorithmPerformanceSchema = new mongoose.Schema({
   
   // Performance
   avgReturn: { type: Number, required: true }, // Retorno médio do Top Picks
-  benchmarkReturn: { type: Number, default: 0 }, // Retorno do IBOV/IFIX no mesmo período
-  alpha: { type: Number, default: 0 }, // Diferença (AvgReturn - Benchmark)
+  benchmarkReturn: { type: Number, default: 0 }, // Legado — alias para ibovReturn
+  ibovReturn: { type: Number, default: 0 },
+  spxReturn: { type: Number, default: 0 },
+  cdiReturn: { type: Number, default: 0 },
+  ifixReturn: { type: Number, default: 0 },
+  alpha: { type: Number, default: 0 }, // Diferença (AvgReturn - benchmark)
   
   // Detalhes
   topPicksSnapshot: [{

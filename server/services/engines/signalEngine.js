@@ -36,35 +36,52 @@ export const signalEngine = {
 
     determineRiskProfile(asset) {
         if (asset.type === 'FII') return 'MODERATE';
+        if (asset.type === 'STOCK_US') {
+            const defensiveUSSectors = ['Consumer Staples', 'Utilities', 'Healthcare', 'Financials'];
+            if (defensiveUSSectors.some(s => (asset.sector || '').includes(s))) return 'DEFENSIVE';
+            if (asset.marketCap >= 50_000_000_000) return 'MODERATE';
+            return 'BOLD';
+        }
         if (DEFENSIVE_SECTORS.includes(asset.sector)) {
             if (asset.debtToEquity > 3.5 && asset.sector !== 'Bancos') return 'MODERATE';
             return 'DEFENSIVE';
         }
-        if (asset.marketCap < 2000000000) return 'BOLD'; 
+        if (asset.marketCap < 2000000000) return 'BOLD';
         return 'MODERATE';
     },
 
     // --- ANÁLISE DE CORRELAÇÃO (FILTRO MACRO) ---
     async getMacroContext() {
         try {
-            // Busca Petróleo Brent (BZ=F) e Ibovespa (^BVSP) em tempo real
-            const quotes = await externalMarketService.getQuotes(['BZ=F', '^BVSP']);
+            // Busca Petróleo Brent (BZ=F), Ibovespa (^BVSP) e S&P 500 (^GSPC) em tempo real
+            const quotes = await externalMarketService.getQuotes(['BZ=F', '^BVSP', '^GSPC']);
             const oil = quotes.find(q => q.ticker === 'BZ=F');
-            const ibov = quotes.find(q => q.ticker === '^BVSP');
+            const ibov = quotes.find(q => q.ticker === 'BVSP');
+            const spx = quotes.find(q => q.ticker === 'GSPC');
 
             return {
                 oilChange: oil ? oil.change : 0,
                 ibovChange: ibov ? ibov.change : 0,
-                isCrashDay: ibov ? ibov.change < -2.5 : false
+                spxChange: spx ? spx.change : 0,
+                isCrashDay: ibov ? ibov.change < -2.5 : false,
+                isUSCrashDay: spx ? spx.change < -2.5 : false
             };
         } catch (e) {
             logger.warn("⚠️ [SignalEngine] Falha ao obter contexto macro. Assumindo neutro.");
-            return { oilChange: 0, ibovChange: 0, isCrashDay: false };
+            return { oilChange: 0, ibovChange: 0, spxChange: 0, isCrashDay: false, isUSCrashDay: false };
         }
     },
 
-    isValidCorrelation(ticker, signalType, macroContext) {
-        // Regra 1: Circuit Breaker de Pânico
+    isValidCorrelation(ticker, signalType, macroContext, assetType) {
+        // Para STOCK_US: circuit breaker se SPX despencou (crise sistêmica, não oportunidade)
+        if (assetType === 'STOCK_US') {
+            if (macroContext.isUSCrashDay && signalType !== 'RSI_OVERSOLD') {
+                return { valid: false, reason: "S&P 500 em Pânico (SPX < -2.5%)" };
+            }
+            return { valid: true };
+        }
+
+        // Regra 1: Circuit Breaker de Pânico BR
         // Se o mercado está derretendo (>2.5% queda), evitamos compras agressivas, exceto Ouro/Dólar
         if (macroContext.isCrashDay && signalType !== 'RSI_OVERSOLD') {
             return { valid: false, reason: "Mercado em Pânico (IBOV < -2.5%)" };
@@ -97,7 +114,7 @@ export const signalEngine = {
         // 0. Obter Contexto Macro para Correlações
         const macroContext = await this.getMacroContext();
         if (macroContext.oilChange !== 0) {
-            logger.info(`🌍 [Macro Context] Petróleo: ${macroContext.oilChange.toFixed(2)}% | IBOV: ${macroContext.ibovChange.toFixed(2)}%`);
+            logger.debug(`🌍 [Macro Context] Petróleo: ${macroContext.oilChange.toFixed(2)}% | IBOV: ${macroContext.ibovChange.toFixed(2)}%`);
         }
 
         let signalsFound = 0;
@@ -110,12 +127,15 @@ export const signalEngine = {
 
         try {
             // 1. CARREGAR ATIVOS
-            const assets = await MarketAsset.find({ 
-                isActive: true, 
-                liquidity: { $gt: 500000 }, 
+            const assets = await MarketAsset.find({
+                isActive: true,
                 isIgnored: false,
                 isBlacklisted: false,
-                type: { $in: ['STOCK', 'FII'] }
+                type: { $in: ['STOCK', 'FII', 'STOCK_US'] },
+                $or: [
+                    { liquidity: { $gt: 500000 } },
+                    { avgLiquidity: { $gt: 500000 } }
+                ]
             }).lean(); 
 
             if (assets.length === 0) {
@@ -127,8 +147,13 @@ export const signalEngine = {
             const cutoffDate = new Date(Date.now() - 48 * 60 * 60 * 1000); 
 
             // 2. PRE-FETCHING
-            logger.info(`🔄 [Radar Alpha] Carregando histórico para ${tickers.length} ativos...`);
-            const allHistories = await AssetHistory.find({ ticker: { $in: tickers } }).select('ticker history').lean();
+            // RSI-14 precisa de apenas ~15 pontos; buscamos os últimos 60 para margem de segurança.
+            // Sem o $slice, a query carregaria ~500 entradas × 300 tickers = carga desnecessária.
+            logger.debug(`🔄 [Radar Alpha] Carregando histórico para ${tickers.length} ativos...`);
+            const allHistories = await AssetHistory.find(
+                { ticker: { $in: tickers } },
+                { ticker: 1, history: { $slice: -60 } }
+            ).lean();
 
             const historyMap = new Map();
             allHistories.forEach(h => {
@@ -165,7 +190,7 @@ export const signalEngine = {
                             
                             if (rsi !== null && rsi < 37) {
                                 // VERIFICAÇÃO DE CORRELAÇÃO
-                                const correlationCheck = this.isValidCorrelation(asset.ticker, 'RSI_OVERSOLD', macroContext);
+                                const correlationCheck = this.isValidCorrelation(asset.ticker, 'RSI_OVERSOLD', macroContext, asset.type);
                                 if (!correlationCheck.valid) {
                                     correlationBlocks++;
                                     continue; // Pula este ativo

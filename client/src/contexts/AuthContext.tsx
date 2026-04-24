@@ -48,8 +48,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 localStorage.setItem('user', JSON.stringify(updatedUser));
             }
         }
-    } catch (e) {
-        console.error("Erro ao atualizar perfil", e);
+    } catch {
+        // erro de refresh silencioso: o perfil continua com dados anteriores
     }
   };
 
@@ -74,8 +74,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await logout();
           }
         }
-      } catch (e) {
-        console.error("Erro na inicialização do Auth", e);
+      } catch {
+        // erro na inicialização: usuário permanece deslogado
       } finally {
         setIsLoading(false);
       }
@@ -93,8 +93,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
         await authService.logout();
-    } catch (e) {
-        console.error("Erro no logout API", e);
+    } catch {
+        // garante limpeza local mesmo com falha de rede
     } finally {
         setUser(null);
         localStorage.removeItem('user');

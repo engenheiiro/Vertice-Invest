@@ -193,28 +193,25 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
         let equity = 0;
         let invested = 0;
-        let dayVar = 0;
 
         assets.forEach((asset: Asset) => {
             equity += asset.totalValue;
             invested += asset.totalCost;
-            
-            const changePct = asset.dayChangePct || 0;
-            const changeValue = asset.totalValue * (changePct / 100);
-            dayVar += changeValue;
         });
 
-        const result = equity - invested;
-        const resultPercent = invested > 0 ? (result / invested) * 100 : 0;
-        const dayVarPercent = equity > 0 ? (dayVar / equity) * 100 : 0;
+        // totalResult, dayVariation e dayVariationPercent vêm do servidor pois o servidor
+        // computa corretamente: totalResult = (equity-invested) + realizedProfit + dividends
+        // e dayVariation considera variação cambial intraday em ativos USD.
+        const result = serverKpis?.totalResult ?? (equity - invested);
+        const resultPercent = serverKpis?.totalResultPercent ?? (invested > 0 ? (result / invested) * 100 : 0);
 
         return {
             totalEquity: equity,
             totalInvested: invested,
             totalResult: result,
-            totalResultPercent: resultPercent, 
-            dayVariation: dayVar,
-            dayVariationPercent: dayVarPercent,
+            totalResultPercent: resultPercent,
+            dayVariation: serverKpis?.dayVariation ?? 0,
+            dayVariationPercent: serverKpis?.dayVariationPercent ?? 0,
             totalDividends: serverKpis?.totalDividends || 0,
             projectedDividends: serverKpis?.projectedDividends || 0,
             weightedRentability: serverKpis?.weightedRentability || resultPercent,

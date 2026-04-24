@@ -1,10 +1,10 @@
 
 import express from 'express';
-import { 
-    crunchNumbers, 
-    generateNarrative, 
-    publishContent, 
-    getLatestReport, 
+import {
+    crunchNumbers,
+    generateNarrative,
+    publishContent,
+    getLatestReport,
     listReports,
     getReportDetails,
     getMacroData,
@@ -13,13 +13,16 @@ import {
     triggerMacroSync,
     runFullPipeline,
     getQuantSignals,
-    getRadarStats, 
+    getRadarStats,
     updateBacktestConfig,
     clearRadarHistory,
     getDataQualityStats,
     resetAssetHealth,
     getAlgorithmAccuracy,
-    getDiscardLogs // Novo
+    getDiscardLogs,
+    syncTimeSeries,
+    getPublishStatus,
+    generateExplainableAI
 } from '../controllers/researchController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -43,13 +46,18 @@ router.get('/details/:id', requireAdmin, getReportDetails);
 
 router.post('/sync-market', requireAdmin, triggerMarketSync);
 router.post('/sync-macro', requireAdmin, triggerMacroSync);
+router.post('/sync-time-series', requireAdmin, syncTimeSeries);
 router.post('/config/backtest', requireAdmin, updateBacktestConfig);
 router.delete('/signals/history', requireAdmin, clearRadarHistory);
 
 // Monitor de Qualidade & Acurácia
 router.get('/data-quality', requireAdmin, getDataQualityStats);
 router.post('/reset-health', requireAdmin, resetAssetHealth);
-router.get('/accuracy', requireAdmin, getAlgorithmAccuracy); 
-router.get('/discard-logs', getDiscardLogs); // Nova Rota
+router.get('/accuracy', requireAdmin, getAlgorithmAccuracy);
+router.get('/discard-logs', getDiscardLogs);
+
+// Publicação & Explainable AI
+router.get('/publish-status', requireAdmin, getPublishStatus);
+router.post('/generate-explainable', requireAdmin, generateExplainableAI);
 
 export default router;

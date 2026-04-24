@@ -5,7 +5,8 @@ import SystemConfig from '../models/SystemConfig.js';
 import { fundamentusService } from './fundamentusService.js';
 import { macroDataService } from './macroDataService.js';
 import { externalMarketService } from './externalMarketService.js';
-import { marketDataService } from './marketDataService.js'; 
+import { marketDataService } from './marketDataService.js';
+import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { SECTOR_OVERRIDES } from '../config/sectorOverrides.js';
 
 // Mapa de Correção de Erros da Fonte Externa (Fundamentus/Scraping)
@@ -90,8 +91,9 @@ export const syncService = {
                     netMargin: Number(data.netMargin) || 0,
                     evEbitda: Number(data.evEbitda) || 0,
                     revenueGrowth: Number(data.cresRec5a) || 0,
-                    debtToEquity: Number(data.divBrutaPatrim) || 0, 
+                    debtToEquity: Number(data.divBrutaPatrim) || 0,
                     netDebt: Number(data.netDebt) || 0,
+                    payout: Number(data.payout) || 0,
 
                     vacancy: Number(data.vacancy) || 0,
                     capRate: Number(data.capRate) || 0,
@@ -195,26 +197,30 @@ export const syncService = {
                 });
             }
 
+            // Etapa 3.5: Seed inicial S&P 500 (cria registros se não existirem)
+            logger.info("ℹ️ [Sync] Etapa 3.5: Seed S&P 500 (se necessário)");
+            await usStocksFundamentalsService.seedSP500Assets();
+
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
-                
+
                 // SALVA ESTATÍSTICAS DE QUALIDADE
                 await SystemConfig.findOneAndUpdate(
                     { key: 'MACRO_INDICATORS' },
-                    { 
-                        $set: { 
+                    {
+                        $set: {
                             lastSyncStats: {
                                 typosFixed: typosFixedCount,
                                 assetsProcessed: operations.length,
                                 timestamp: new Date()
                             }
-                        } 
+                        }
                     },
                     { upsert: true }
                 );
 
                 logger.info(`ℹ️ [Sync] Etapa 2: ${operations.length} ativos fundamentados (Typos corrigidos: ${typosFixedCount}).`);
-                
+
                 logger.info("ℹ️ [Sync] Etapa 3: Cotações em tempo real");
                 
                 const validTickers = [];
@@ -242,6 +248,28 @@ export const syncService = {
                     await new Promise(r => setTimeout(r, 200)); 
                 }
                 
+                // Etapa 4: Fundamentals US (1x/dia via guard de tempo)
+                try {
+                    const macroConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
+                    const lastUSFundamentals = macroConfig?.lastUSFundamentalsSync;
+                    const shouldSyncFundamentals = !lastUSFundamentals ||
+                        Date.now() - new Date(lastUSFundamentals).getTime() > 23 * 60 * 60 * 1000;
+
+                    if (shouldSyncFundamentals) {
+                        logger.info("ℹ️ [Sync] Etapa 4: Fundamentals S&P 500 (sincronização diária)");
+                        await usStocksFundamentalsService.syncUSStocksFundamentals();
+                        await SystemConfig.findOneAndUpdate(
+                            { key: 'MACRO_INDICATORS' },
+                            { $set: { lastUSFundamentalsSync: new Date() } },
+                            { upsert: true }
+                        );
+                    } else {
+                        logger.info("ℹ️ [Sync] Etapa 4: Fundamentals US — já sincronizados nas últimas 23h, pulando.");
+                    }
+                } catch (err) {
+                    logger.error(`❌ [Sync] Etapa 4 falhou: ${err.message}`);
+                }
+
                 return { success: true, count: operations.length };
             } else {
                 return { success: false, count: 0, error: "Nenhum ativo válido encontrado." };

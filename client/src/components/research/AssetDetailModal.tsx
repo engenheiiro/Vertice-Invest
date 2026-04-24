@@ -25,11 +25,12 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency, notation: 'compact' }).format(val);
     };
 
-    const formatMoneyShort = (val: number | undefined | null) => {
+    const formatMoneyShort = (val: number | undefined | null, currency: 'BRL' | 'USD' = 'BRL') => {
         if (!val && val !== 0) return '-';
-        if (Math.abs(val) >= 1_000_000_000) return `R$ ${(val / 1_000_000_000).toFixed(1)}B`;
-        if (Math.abs(val) >= 1_000_000) return `R$ ${(val / 1_000_000).toFixed(1)}M`;
-        return `R$ ${val.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
+        const symbol = currency === 'USD' ? '$' : 'R$';
+        if (Math.abs(val) >= 1_000_000_000) return `${symbol} ${(val / 1_000_000_000).toFixed(1)}B`;
+        if (Math.abs(val) >= 1_000_000) return `${symbol} ${(val / 1_000_000).toFixed(1)}M`;
+        return `${symbol} ${val.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
     };
 
     const formatPercent = (val: number | undefined | null) => {
@@ -107,6 +108,19 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                     <DetailRow label="Liquidez Diária" value={formatMoneyShort(m.avgLiquidity)} status='neutral' />
                 </div>
             );
+        } else if (type === 'STOCK_US') {
+            return (
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                    <DetailRow label="P/E (P/L)" value={m.pl ? formatNumber(m.pl) : 'N/A'} status={m.pl && m.pl < 25 ? 'good' : (m.pl && m.pl > 40 ? 'warning' : 'neutral')} />
+                    <DetailRow label="P/VP (P/B)" value={m.pvp ? formatNumber(m.pvp) : 'N/A'} status={getMetricStatus('P_VP', m.pvp)} />
+                    <DetailRow label="ROE" value={formatPercent(m.roe)} status={getMetricStatus('ROE', m.roe)} />
+                    <DetailRow label="Profit Margin" value={formatPercent(m.netMargin)} status={getMetricStatus('NET_MARGIN', m.netMargin)} />
+                    <DetailRow label="Revenue Growth" value={m.revenueGrowth ? formatPercent(m.revenueGrowth) : 'N/A'} status={m.revenueGrowth && m.revenueGrowth > 5 ? 'good' : 'neutral'} />
+                    <DetailRow label="Dividend Yield" value={formatPercent(m.dy)} status={getMetricStatus('DY', m.dy)} />
+                    <DetailRow label="Beta (vs S&P)" value={m.beta ? formatNumber(m.beta) : 'N/A'} status={m.beta && m.beta > 1.5 ? 'warning' : 'neutral'} />
+                    <DetailRow label="Market Cap" value={formatMoneyShort(m.marketCap, 'USD')} status='info' />
+                </div>
+            );
         } else if (type === 'CRYPTO') {
             return (
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4">
@@ -136,6 +150,26 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
 
     const renderFinancialData = () => {
         if (type !== 'STOCK' && type !== 'STOCK_US') return null;
+
+        if (type === 'STOCK_US') {
+            return (
+                <div className="mb-8 bg-[#0B101A] p-4 rounded-xl border border-slate-800/50">
+                    <div className="flex items-center gap-2 mb-5 pb-2 border-b border-slate-800">
+                        <Database size={16} className="text-blue-500" />
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wide">Financials (USD)</h4>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                        <DetailRow label="Market Cap" value={formatMoneyShort(m.marketCap, 'USD')} status='info' />
+                        <DetailRow label="Debt/Equity" value={m.debtToEquity ? formatNumber(m.debtToEquity) : 'N/A'} status={m.debtToEquity && m.debtToEquity > 2 ? 'warning' : 'neutral'} />
+                        <DetailRow label="EPS (LPA)" value={m.lpa ? `$${m.lpa.toFixed(2)}` : 'N/A'} status='neutral' />
+                        <DetailRow label="Book Value" value={m.vpa ? `$${m.vpa.toFixed(2)}` : 'N/A'} status='neutral' />
+                        <DetailRow label="Earnings Growth" value={m.earningsGrowth ? formatPercent(m.earningsGrowth) : 'N/A'} status={m.earningsGrowth && m.earningsGrowth > 10 ? 'good' : 'neutral'} />
+                        <DetailRow label="Volume Médio" value={formatMoneyShort(m.avgLiquidity, 'USD')} status='neutral' />
+                    </div>
+                </div>
+            );
+        }
+
         return (
             <div className="mb-8 bg-[#0B101A] p-4 rounded-xl border border-slate-800/50">
                 <div className="flex items-center gap-2 mb-5 pb-2 border-b border-slate-800">

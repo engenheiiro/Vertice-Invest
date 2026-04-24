@@ -36,14 +36,17 @@ if (process.env.SENTRY_DSN) {
 }
 
 app.use(helmet({
+  hsts: process.env.NODE_ENV === 'production'
+    ? { maxAge: 31536000, includeSubDomains: true }
+    : false,
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://www.mercadopago.com.br"], 
+      scriptSrc: ["'self'", "https://www.mercadopago.com.br", "https://sdk.mercadopago.com", "https://secure.mlstatic.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "https://images.unsplash.com", "https://*.unsplash.com", "https://http2.mlstatic.com"],
-      connectSrc: ["'self'", process.env.SENTRY_DSN ? "https://*.sentry.io" : "", "https://api.mercadopago.com"],
+      connectSrc: ["'self'", ...(process.env.SENTRY_DSN ? ["https://*.sentry.io"] : []), "https://api.mercadopago.com"],
       objectSrc: ["'none'"],
       upgradeInsecureRequests: [],
     },
@@ -55,25 +58,38 @@ app.use(compression());
 app.use(cookieParser()); 
 app.use(express.json({ limit: '10kb' }));
 
+const ALLOWED_ORIGINS = [process.env.CLIENT_URL, 'http://localhost:5173'].filter(Boolean);
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    // Permite origem do Mercado Pago se necessário, mas geralmente webhook é server-to-server sem CORS
-    return callback(null, true);
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    return callback(new Error('Origem não permitida por CORS'));
   },
-  credentials: true 
+  credentials: true
 }));
 
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 3000, 
+  windowMs: 15 * 60 * 1000,
+  max: 3000,
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-app.use('/api/', apiLimiter);
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Muitas tentativas. Tente novamente em 15 minutos.' },
+});
 
-app.use('/api', authRoutes); 
+app.use('/api/', apiLimiter);
+app.use('/api/login', authLimiter);
+app.use('/api/register', authLimiter);
+app.use('/api/forgot-password', authLimiter);
+app.use('/api/reset-password', authLimiter);
+app.use('/api/refresh', authLimiter);
+
+app.use('/api', authRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/research', researchRoutes);
 app.use('/api/wallet', walletRoutes);

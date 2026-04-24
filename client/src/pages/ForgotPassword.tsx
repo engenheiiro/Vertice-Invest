@@ -4,24 +4,29 @@ import { Button, ButtonStatus } from '../components/ui/Button';
 import { Link } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { ArrowLeft, MailCheck } from 'lucide-react';
+import { useFormValidation, validators } from '../hooks/useFormValidation';
 
 export const ForgotPassword = () => {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<ButtonStatus>('idle');
   const [emailSent, setEmailSent] = useState(false);
 
+  const { errors, validate, clearError } = useFormValidation(
+    { email },
+    { email: validators.email() }
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
-    
+    if (!validate()) return;
+
     setStatus('loading');
 
     try {
       await authService.forgotPassword(email);
       setStatus('success');
       setTimeout(() => setEmailSent(true), 1500);
-    } catch (error) {
-      console.error(error);
+    } catch {
       setStatus('error');
       setTimeout(() => setStatus('idle'), 2500);
     }
@@ -35,7 +40,7 @@ export const ForgotPassword = () => {
               </div>
               <h2 className="text-xl font-bold text-slate-900 mb-2">Verifique seu email</h2>
               <p className="text-slate-500 text-sm mb-8 leading-relaxed">
-                  Se um cadastro existir para <strong>{email}</strong>, enviamos um link para redefinição de senha. O link expira em 1 hora.
+                  Se um cadastro existir para <strong>{email}</strong>, enviamos um link para redefinição de senha. O link expira em 30 minutos.
               </p>
               <Link to="/login">
                 <Button variant="outline">Voltar para o Login</Button>
@@ -55,15 +60,20 @@ export const ForgotPassword = () => {
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Input 
-          label="Email Cadastrado" 
-          type="email" 
+        <Input
+          label="Email Cadastrado"
+          type="email"
+          autoComplete="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            clearError('email');
+          }}
+          error={errors.email}
           placeholder="ex: voce@empresa.com"
           disabled={status === 'loading' || status === 'success'}
         />
-        
+
         <div className="pt-4">
             <Button type="submit" status={status}>Enviar Link</Button>
         </div>

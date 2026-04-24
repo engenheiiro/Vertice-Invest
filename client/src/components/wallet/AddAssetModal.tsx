@@ -482,20 +482,32 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
         let placeholder = "Ex: PETR4";
         if (form.type === 'CRYPTO') placeholder = "Ex: BTC, ETH";
-        if (form.type === 'STOCK_US') placeholder = "Ex: AAPL, NVDA";
+        if (form.type === 'STOCK_US') placeholder = "Ex: AAPL, NVDA, MSFT, GOOGL";
         if (form.type === 'FIXED_INCOME') placeholder = "Busque: Tesouro, Nubank, CDB...";
 
         return (
             <div className="relative mb-4" ref={modalRef}>
-                <Input 
-                    label={form.type === 'FIXED_INCOME' ? "Nome do Título / Produto" : "Código / Ticker"}
-                    placeholder={placeholder}
-                    value={form.ticker}
-                    onChange={handleTickerChange}
-                    onFocus={() => { if(searchResults.length > 0) setShowDropdown(true); }}
-                    containerClassName="mb-0"
-                    className="uppercase font-mono tracking-wider px-4 py-3"
-                />
+                <div className="relative">
+                    <Input
+                        label={form.type === 'FIXED_INCOME' ? "Nome do Título / Produto" : "Código / Ticker"}
+                        placeholder={placeholder}
+                        value={form.ticker}
+                        onChange={handleTickerChange}
+                        onFocus={() => { if(searchResults.length > 0) setShowDropdown(true); }}
+                        containerClassName="mb-0"
+                        className="uppercase font-mono tracking-wider px-4 py-3 pr-16"
+                    />
+                    {form.type === 'STOCK_US' && (
+                        <span className="absolute right-3 top-9 text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded">
+                            USD
+                        </span>
+                    )}
+                </div>
+                {form.type === 'STOCK_US' && (
+                    <p className="text-[10px] text-blue-400/60 mt-1 ml-1">
+                        Valores em dólar. Convertido para R$ pela cotação do dia.
+                    </p>
+                )}
                 
                 {isSearching && (
                     <div className="absolute right-3 top-9">

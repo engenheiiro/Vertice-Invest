@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Calculator, Search, List, Activity, DollarSign, BarChart2, Shield, Target, Zap, Filter } from 'lucide-react';
+import { X, Calculator, Search, List, Activity, DollarSign, BarChart2, Shield, Target, Zap, Filter, RefreshCw } from 'lucide-react';
 import { ResearchReport, RankingItem } from '../../services/research';
 
 interface AuditDetailModalProps {
@@ -38,7 +38,22 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
     }, [viewMode, riskFilter, report]);
 
     // 2. Retorno antecipado DEPOIS dos hooks
-    if (!isOpen || !report) return null;
+    if (!isOpen) return null;
+
+    if (!report) return createPortal(
+        <div className="relative z-[100]" role="dialog" aria-modal="true">
+            <div className="fixed inset-0 bg-black/95 backdrop-blur-md animate-fade-in" onClick={onClose} />
+            <div className="fixed inset-0 z-10 flex items-center justify-center p-4">
+                <div className="w-full max-w-7xl bg-[#080C14] border border-slate-700 rounded-3xl flex items-center justify-center h-48 shadow-2xl animate-fade-in">
+                    <div className="flex flex-col items-center gap-3">
+                        <RefreshCw size={22} className="animate-spin text-blue-500" />
+                        <p className="text-sm font-bold text-slate-400">Carregando auditoria...</p>
+                    </div>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
 
     // Helpers
     const formatCurrency = (val: number | undefined | null) => {

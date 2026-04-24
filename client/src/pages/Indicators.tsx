@@ -1,8 +1,8 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Header } from '../components/dashboard/Header';
 import { researchService } from '../services/research';
-import { Activity, TrendingUp, TrendingDown, RefreshCw, ShieldCheck, Database, ArrowUpDown, Target, Percent, ChevronUp, ChevronDown, Landmark, Filter } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, ShieldCheck, Database, ArrowUpDown, Target, Percent, ChevronUp, ChevronDown, Landmark, Filter, Clock } from 'lucide-react';
 
 type SortKey = 'title' | 'type' | 'rate' | 'minInvestment' | 'maturityDate';
 type FilterType = 'ALL' | 'IPCA' | 'PREFIXADO' | 'SELIC' | 'OUTROS';
@@ -28,7 +28,8 @@ export const Indicators = () => {
     const [filterType, setFilterType] = useState<FilterType>('ALL');
     
     const [isTreasuryOpen, setIsTreasuryOpen] = useState(false);
-    const [isPrivateFixedOpen, setIsPrivateFixedOpen] = useState(false); // ALTERAÇÃO: Inicia fechado (collapsed)
+    const [isPrivateFixedOpen, setIsPrivateFixedOpen] = useState(false);
+    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -44,6 +45,8 @@ export const Indicators = () => {
 
     useEffect(() => {
         loadData();
+        intervalRef.current = setInterval(loadData, 15 * 60 * 1000);
+        return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
     }, []);
 
     const handleSort = (key: SortKey) => {
@@ -88,16 +91,15 @@ export const Indicators = () => {
                             Painel de Indicadores
                         </h1>
                         <p className="text-slate-400 text-sm mt-1">Monitoramento em tempo real dos principais índices e taxas.</p>
-                        <p className="text-slate-600 text-[10px] mt-0.5">* Atualização automática a cada 15 minutos.</p>
+                        {data?.lastUpdated ? (
+                            <p className="text-slate-500 text-[10px] mt-0.5 flex items-center gap-1">
+                                <Clock size={9} />
+                                Atualizado: {new Date(data.lastUpdated).toLocaleString('pt-BR')} · Refresh automático a cada 15 min
+                            </p>
+                        ) : (
+                            <p className="text-slate-600 text-[10px] mt-0.5">Atualização automática a cada 15 minutos.</p>
+                        )}
                     </div>
-                    <button 
-                        onClick={loadData}
-                        disabled={isLoading}
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold rounded-xl transition-all border border-slate-700"
-                    >
-                        <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-                        {isLoading ? 'Atualizando...' : 'Atualizar Dados'}
-                    </button>
                 </div>
 
                 {/* Resto do componente mantido... */}
@@ -126,6 +128,11 @@ export const Indicators = () => {
                                 <h2 className="text-lg font-bold text-white uppercase tracking-wide">Tesouro Direto</h2>
                                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
                                     <Database size={10} /> Base Oficial: {data?.bonds?.length || 0} Títulos
+                                    {data?.lastUpdated && (
+                                        <span className="ml-2 flex items-center gap-0.5 text-slate-600 normal-case font-medium">
+                                            <Clock size={9} /> {new Date(data.lastUpdated).toLocaleString('pt-BR')}
+                                        </span>
+                                    )}
                                 </p>
                             </div>
                         </div>
@@ -217,7 +224,7 @@ export const Indicators = () => {
                             <div>
                                 <h2 className="text-lg font-bold text-white uppercase tracking-wide">CDBs, Caixinhas & Cofrinhos</h2>
                                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
-                                    <Database size={10} /> Bancos Digitais & Corretoras
+                                    <Database size={10} /> Bancos Digitais & Corretoras · <span className="text-slate-600 font-medium normal-case">Dados Curados</span>
                                 </p>
                             </div>
                         </div>

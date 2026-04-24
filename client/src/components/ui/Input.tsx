@@ -77,6 +77,7 @@ export const Input: React.FC<InputProps> = ({ label, error, id, onFocus, onBlur,
             onClick={() => setShowPassword(!showPassword)}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-blue-500 transition-colors p-1.5 rounded-full hover:bg-slate-800 focus:outline-none active:scale-95"
             aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+            aria-pressed={showPassword}
             tabIndex={-1}
           >
             {showPassword ? (

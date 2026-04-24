@@ -12,6 +12,10 @@ const yahooFinance = new YahooFinance({
 // Configuração para Scraping Google Finance
 const GOOGLE_FINANCE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+// Tickers que falham consistentemente no Yahoo Finance mas são recuperados pelo Google.
+// Listados aqui para eliminar ruído de warn no log — o fallback já os trata corretamente.
+const PREFER_GOOGLE_TICKERS = new Set(['B3SA3', 'CVBI11', 'MALL11', 'QAGR11', 'RRCI11', 'RVBI11']);
+
 export const externalMarketService = {
     
     // Helper: Scraper do Google Finance (Fallback Secundário)
@@ -158,7 +162,8 @@ export const externalMarketService = {
 
         try {
             // TENTATIVA 1: YAHOO FINANCE (Principal)
-            const results = await yahooFinance.quote(yahooTickers);
+            // validateResult: false suprime erros de schema para tickers com dados parciais (ex: BRK.B, BF.B)
+            const results = await yahooFinance.quote(yahooTickers, {}, { validateResult: false });
             const validResults = Array.isArray(results) ? results : [results];
             
             const mappedResults = validResults.map(item => {
@@ -184,7 +189,10 @@ export const externalMarketService = {
 
             // TENTATIVA 2: GOOGLE FINANCE (Fallback para falhas)
             if (failedTickers.length > 0) {
-                logger.warn(`⚠️ [MarketService] Yahoo falhou para ${failedTickers.length} ativos: [${failedTickers.join(', ')}]. Tentando Google Finance Fallback...`);
+                const unexpectedFails = failedTickers.filter(t => !PREFER_GOOGLE_TICKERS.has(t));
+                if (unexpectedFails.length > 0) {
+                    logger.warn(`⚠️ [MarketService] Yahoo falhou para ${unexpectedFails.length} ativos: [${unexpectedFails.join(', ')}]. Tentando Google Finance Fallback...`);
+                }
                 
                 // Executa em paralelo mas limitado para não ser bloqueado
                 const fallbackPromises = failedTickers.map(async (ticker) => {
@@ -298,7 +306,7 @@ export const externalMarketService = {
                     return 32.50;
                 }
 
-                logger.info(`📈 SPX 12m [${startQuote.date.toISOString().split('T')[0]} -> ${result.quotes[result.quotes.length - 1].date.toISOString().split('T')[0]}]: ${startPrice.toFixed(2)} -> ${endPrice.toFixed(2)} = ${returnPct.toFixed(2)}%`);
+                logger.debug(`📈 SPX 12m [${startQuote.date.toISOString().split('T')[0]} -> ${result.quotes[result.quotes.length - 1].date.toISOString().split('T')[0]}]: ${startPrice.toFixed(2)} -> ${endPrice.toFixed(2)} = ${returnPct.toFixed(2)}%`);
                 return returnPct;
             }
             
@@ -354,7 +362,7 @@ export const externalMarketService = {
 
             if (startPrice > 0 && endPrice > 0) {
                 const returnPct = ((endPrice / startPrice) - 1) * 100;
-                logger.info(`📈 IBOV 12m [${startQuote.date.toISOString().split('T')[0]} -> ${result.quotes[result.quotes.length - 1].date.toISOString().split('T')[0]}]: ${startPrice.toFixed(2)} -> ${endPrice.toFixed(2)} = ${returnPct.toFixed(2)}%`);
+                logger.debug(`📈 IBOV 12m [${startQuote.date.toISOString().split('T')[0]} -> ${result.quotes[result.quotes.length - 1].date.toISOString().split('T')[0]}]: ${startPrice.toFixed(2)} -> ${endPrice.toFixed(2)} = ${returnPct.toFixed(2)}%`);
                 return returnPct;
             }
             
@@ -368,7 +376,7 @@ export const externalMarketService = {
     // Busca Histórico Completo
     async getFullHistory(ticker, type) {
         let symbol = ticker.trim().toUpperCase();
-        
+
         if (type === 'STOCK' || type === 'FII' || type === 'INDEX') {
             if (!symbol.startsWith('^') && !symbol.endsWith('.SA')) {
                 if (/^[A-Z]{4}\d{1,2}$/.test(symbol)) {
@@ -377,29 +385,41 @@ export const externalMarketService = {
             }
         } else if (type === 'CRYPTO' && !symbol.includes('-')) {
             symbol = `${symbol}-USD`;
+        } else if (type === 'STOCK_US') {
+            // US stocks: symbol passed as-is (AAPL, MSFT, etc.) — Yahoo Finance accepts without suffix
+            logger.debug(`[getFullHistory] STOCK_US: ${symbol}`);
+        }
+        // For USD-BRL exchange rate history
+        if (symbol === 'USD-BRL') {
+            symbol = 'BRL=X';
         }
 
         try {
             const today = new Date();
-            const todayStr = today.toISOString().split('T')[0]; 
+            const todayStr = today.toISOString().split('T')[0];
 
-            const queryOptions = { 
-                period1: '2020-01-01', 
+            const queryOptions = {
+                period1: '2020-01-01',
                 period2: todayStr,
                 interval: '1d'
             };
-            
+
             const result = await yahooFinance.chart(symbol, queryOptions);
 
             if (!result || !result.quotes || !Array.isArray(result.quotes)) return null;
 
-            return result.quotes.map(day => ({
-                date: day.date.toISOString().split('T')[0], 
-                close: day.close,
-                adjClose: day.adjclose || day.close
-            }));
+            return result.quotes
+                .filter(day => day.close > 0)
+                .map(day => ({
+                    date: day.date.toISOString().split('T')[0],
+                    close: day.close,
+                    adjClose: day.adjclose || day.close
+                }));
 
         } catch (error) {
+            if (type === 'STOCK_US') {
+                logger.warn(`[getFullHistory] Falha ao buscar histórico de ${ticker} (STOCK_US): ${error.message}`);
+            }
             return null;
         }
     },
