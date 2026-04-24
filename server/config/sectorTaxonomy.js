@@ -75,30 +75,62 @@ export const MACRO_SECTORS = {
     ],
     'SAUDE': [
         'Saúde',
-        'Medicamentos e Outros Produtos', 
-        'Serviços Médico - Hospitalares', 
-        'Análises e Diagnósticos'
+        'Medicamentos e Outros Produtos',
+        'Serviços Médico - Hospitalares',
+        'Análises e Diagnósticos',
+        // US GICS
+        'Healthcare',
+        'Health Care',
+        'Pharmaceuticals',
+        'Biotechnology',
+        'Health Care Equipment',
+        'Health Care Services',
+        'Health Care Facilities',
+        'Health Care Distributors',
+        'Managed Care',
+        'Life Sciences'
     ]
+};
+
+// US GICS sector → macro-sector mapping (English sector names from Yahoo Finance)
+export const US_SECTOR_MAP = {
+    'Technology': 'TECNOLOGIA',
+    'Information Technology': 'TECNOLOGIA',
+    'Communication Services': 'TECNOLOGIA',
+    'Healthcare': 'SAUDE',
+    'Health Care': 'SAUDE',
+    'Financials': 'FINANCEIRO',
+    'Financial Services': 'FINANCEIRO',
+    'Consumer Discretionary': 'CONSUMO',
+    'Consumer Staples': 'CONSUMO',
+    'Energy': 'COMMODITIES',
+    'Materials': 'COMMODITIES',
+    'Industrials': 'INDUSTRIAL',
+    'Real Estate': 'REAL_ESTATE',
+    'Utilities': 'UTILITIES',
 };
 
 // Função Helper para descobrir o Macro Setor
 export const getMacroSector = (subSector) => {
     if (!subSector) return 'OUTROS';
-    
-    // Normalização para evitar erros de case
+
     const normalizedSub = subSector.trim();
+
+    // US GICS sectors (English) — check first for exact match
+    if (US_SECTOR_MAP[normalizedSub]) return US_SECTOR_MAP[normalizedSub];
+    // Partial match for US sectors
+    for (const [usSector, macro] of Object.entries(US_SECTOR_MAP)) {
+        if (normalizedSub.includes(usSector) || usSector.includes(normalizedSub)) return macro;
+    }
 
     // Caso específico para diferenciar 'Papel' (FII) de 'Papel e Celulose' (Commodity)
     if (normalizedSub === 'Papel') return 'FINANCEIRO';
     if (normalizedSub === 'Papel e Celulose') return 'COMMODITIES';
 
     for (const [macro, subs] of Object.entries(MACRO_SECTORS)) {
-        // Verifica se algum dos sub-setores da lista está contido no setor do ativo
-        // Ex: 'Energia Elétrica' (Taxonomia) está contido em 'Energia Elétrica' (Ativo)
-        // Ou 'Elétricas' (Taxonomia) está contido em 'Elétricas' (Ativo)
         if (subs.some(s => normalizedSub.includes(s) || s === normalizedSub)) {
             return macro;
         }
     }
-    return 'OUTROS'; // Default se não encontrar
+    return 'OUTROS';
 };

@@ -4,6 +4,20 @@ import { Input } from '../components/ui/Input';
 import { Button, ButtonStatus } from '../components/ui/Button';
 import { Link, useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth';
+import { useFormValidation, validators } from '../hooks/useFormValidation';
+
+const getPasswordStrength = (pwd: string): 0 | 1 | 2 | 3 => {
+  if (!pwd) return 0;
+  let score = 0;
+  if (pwd.length >= 8) score++;
+  if (/[A-Z]/.test(pwd)) score++;
+  if (/[0-9]/.test(pwd)) score++;
+  return score as 0 | 1 | 2 | 3;
+};
+
+const strengthLabel: Record<1 | 2 | 3, string> = { 1: 'Fraca', 2: 'Média', 3: 'Forte' };
+const strengthColor: Record<1 | 2 | 3, string> = { 1: 'bg-red-500', 2: 'bg-yellow-500', 3: 'bg-emerald-500' };
+const strengthText: Record<1 | 2 | 3, string> = { 1: 'text-red-500', 2: 'text-yellow-500', 3: 'text-emerald-500' };
 
 export const Register = () => {
   const navigate = useNavigate();
@@ -14,54 +28,27 @@ export const Register = () => {
     confirmPassword: ''
   });
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [termsError, setTermsError] = useState('');
   const [serverError, setServerError] = useState('');
   const [status, setStatus] = useState<ButtonStatus>('idle');
 
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    
-    // Validação de Nome (Mínimo 2 nomes ou 3 chars)
-    if (!formData.name.trim()) {
-        newErrors.name = "Nome é obrigatório";
-    } else if (formData.name.trim().length < 3) {
-        newErrors.name = "Nome muito curto";
-    } else if (!/^[a-zA-ZÀ-ÿ\s]+$/.test(formData.name)) {
-        newErrors.name = "Nome contém caracteres inválidos";
-    }
+  const passwordStrength = getPasswordStrength(formData.password);
 
-    // Validação de Email (Regex Estrito)
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!formData.email) {
-        newErrors.email = "Email é obrigatório";
-    } else if (!emailRegex.test(formData.email)) {
-        newErrors.email = "Formato de email inválido";
-    }
-    
-    // Validação de Senha
-    if (!formData.password) {
-        newErrors.password = "Senha é obrigatória";
-    } else if (formData.password.length < 6) {
-        newErrors.password = "A senha deve ter no mínimo 6 caracteres";
-    }
-    
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = "As senhas não coincidem";
-    }
-
-    if (!acceptedTerms) {
-        newErrors.terms = "Você deve aceitar os termos";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  const { errors, validate, clearError } = useFormValidation(formData, {
+    name: validators.name(),
+    email: validators.email(),
+    password: validators.password(),
+    confirmPassword: validators.match('password', 'As senhas'),
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setServerError('');
-    if (!validate()) return;
+    const isValid = validate();
+    const hasTermsError = !acceptedTerms;
+    if (hasTermsError) setTermsError('Você deve aceitar os termos');
+    else setTermsError('');
+    if (!isValid || hasTermsError) return;
 
     setStatus('loading');
 
@@ -75,11 +62,10 @@ export const Register = () => {
       setStatus('success');
       setTimeout(() => {
           navigate('/login');
-      }, 1500);
+      }, 600);
 
-    } catch (error: any) {
-      console.error("Erro de registro:", error);
-      setServerError(error.message || 'Erro ao criar conta.');
+    } catch (error) {
+      setServerError(error instanceof Error ? error.message : 'Erro ao criar conta.');
       setStatus('error');
       setTimeout(() => setStatus('idle'), 2500);
     }
@@ -88,7 +74,7 @@ export const Register = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+    clearError(name as keyof typeof formData);
     setServerError('');
     if (status === 'error') setStatus('idle');
   };
@@ -108,9 +94,10 @@ export const Register = () => {
 
       <form onSubmit={handleSubmit} className="w-full">
         <div>
-            <Input 
-              label="Nome Completo" 
+            <Input
+              label="Nome Completo"
               name="name"
+              autoComplete="name"
               value={formData.name}
               onChange={handleChange}
               error={errors.name}
@@ -120,10 +107,11 @@ export const Register = () => {
               placeholder="Ex: João Silva"
             />
 
-            <Input 
-              label="Email Corporativo ou Pessoal" 
+            <Input
+              label="Email Corporativo ou Pessoal"
               name="email"
-              type="email" 
+              type="email"
+              autoComplete="email"
               value={formData.email}
               onChange={handleChange}
               error={errors.email}
@@ -132,31 +120,55 @@ export const Register = () => {
               className="px-3 py-2.5 text-sm"
               placeholder="Ex: joao@email.com"
             />
-            
+
             <div className="grid grid-cols-2 gap-2 mt-1">
-              <Input 
-                label="Senha" 
+              <Input
+                label="Senha"
                 name="password"
-                type="password" 
+                type="password"
+                autoComplete="new-password"
                 value={formData.password}
                 onChange={handleChange}
                 error={errors.password}
                 disabled={status === 'loading' || status === 'success'}
-                containerClassName="mb-2"
+                containerClassName="mb-1"
                 className="px-3 py-2.5 text-sm"
               />
-              <Input 
-                label="Confirmar" 
+              <Input
+                label="Confirmar"
                 name="confirmPassword"
-                type="password" 
+                type="password"
+                autoComplete="new-password"
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 error={errors.confirmPassword}
                 disabled={status === 'loading' || status === 'success'}
-                containerClassName="mb-2"
+                containerClassName="mb-1"
                 className="px-3 py-2.5 text-sm"
               />
             </div>
+
+            {formData.password && (
+              <div className="mb-2 px-0.5">
+                <div className="flex gap-1">
+                  {([1, 2, 3] as const).map((level) => (
+                    <div
+                      key={level}
+                      className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
+                        passwordStrength >= level && passwordStrength > 0
+                          ? strengthColor[passwordStrength]
+                          : 'bg-slate-200'
+                      }`}
+                    />
+                  ))}
+                </div>
+                {passwordStrength > 0 && (
+                  <p className={`text-[10px] font-bold mt-0.5 ${strengthText[passwordStrength]}`}>
+                    Senha {strengthLabel[passwordStrength]}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="mt-2 flex items-start gap-2">
                 <div className="flex items-center h-5">
@@ -167,7 +179,7 @@ export const Register = () => {
                         checked={acceptedTerms}
                         onChange={(e) => {
                             setAcceptedTerms(e.target.checked);
-                            if (errors.terms) setErrors({...errors, terms: ''});
+                            if (e.target.checked) setTermsError('');
                         }}
                         disabled={status === 'loading' || status === 'success'}
                         className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600 transition-colors cursor-pointer"
@@ -182,8 +194,8 @@ export const Register = () => {
                             Termos de Uso
                         </Link>
                     </div>
-                    {errors.terms && (
-                        <p className="text-red-500 font-bold mt-0.5 animate-fade-in">{errors.terms}</p>
+                    {termsError && (
+                        <p className="text-red-500 font-bold mt-0.5 animate-fade-in">{termsError}</p>
                     )}
                 </div>
             </div>

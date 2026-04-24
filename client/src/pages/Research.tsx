@@ -23,9 +23,8 @@ export const Research = () => {
     const location = useLocation(); // Hook de location para pegar state
     
     const [selectedAsset, setSelectedAsset] = useState('BRASIL_10');
-    const [viewMode, setViewMode] = useState<'ANALYSIS' | 'RANKING' | 'EXPLAINABLE_AI'>('RANKING');
+    const [viewMode, setViewMode] = useState<'ANALYSIS' | 'RANKING'>('RANKING');
     const [report, setReport] = useState<ResearchReport | null>(null);
-    const [discardLogs, setDiscardLogs] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     
     // Estado para controle do modal de asset direto
@@ -56,7 +55,7 @@ export const Research = () => {
             try {
                 const data = await researchService.getLatest(selectedAsset, strategy);
                 setReport(data);
-                
+
                 // LÓGICA DE LINK DIRETO (DEEP LINKING VIA STATE)
                 if (location.state && location.state.openTicker && data && data.content && data.content.ranking) {
                     const targetTicker = location.state.openTicker;
@@ -69,15 +68,6 @@ export const Research = () => {
             } catch (err: any) {
                 console.error("Erro ao buscar análise:", err);
                 setReport(null);
-            }
-            
-            if (viewMode === 'EXPLAINABLE_AI') {
-                const logs = await researchService.getDiscardLogs();
-                if (selectedAsset !== 'BRASIL_10') {
-                     setDiscardLogs(logs.filter((l: any) => l.assetType === selectedAsset));
-                } else {
-                     setDiscardLogs(logs);
-                }
             }
 
         } catch (err: any) {
@@ -144,21 +134,13 @@ export const Research = () => {
                                 >
                                     <Trophy size={16} /> Top 10
                                 </button>
-                                <button 
+                                <button
                                     onClick={() => setViewMode('ANALYSIS')}
                                     className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
                                         viewMode === 'ANALYSIS' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500'
                                     }`}
                                 >
                                     <Newspaper size={16} /> Relatório Semanal
-                                </button>
-                                <button 
-                                    onClick={() => setViewMode('EXPLAINABLE_AI')}
-                                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
-                                        viewMode === 'EXPLAINABLE_AI' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500'
-                                    }`}
-                                >
-                                    <Bot size={16} /> Explainable AI
                                 </button>
                             </div>
 
@@ -191,55 +173,41 @@ export const Research = () => {
                                 Fazer Upgrade
                             </button>
                         </div>
-                    ) : !report && viewMode !== 'EXPLAINABLE_AI' ? (
+                    ) : !report ? (
                         <div className="flex flex-col items-center justify-center py-20 bg-[#080C14] border border-dashed border-slate-800 rounded-3xl text-center">
                             <Info size={48} className="text-slate-700 mb-4" />
                             <h3 className="text-xl font-black text-slate-500 uppercase">Análise não encontrada</h3>
                             <p className="text-slate-600 text-sm mt-2 max-w-sm">Use o painel admin para gerar o relatório inaugural desta categoria.</p>
                         </div>
-                    ) : viewMode === 'EXPLAINABLE_AI' ? (
-                        <div className="max-w-4xl mx-auto animate-fade-in pb-20">
-                            <div className="bg-[#080C14] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative p-8">
-                                <div className="flex items-center gap-3 mb-8">
-                                    <div className="w-12 h-12 bg-purple-600/20 rounded-2xl flex items-center justify-center border border-purple-500/30">
-                                        <Bot size={24} className="text-purple-400" />
+                    ) : viewMode === 'ANALYSIS' ? (
+                        <div className="animate-fade-in space-y-8 pb-20">
+                            {/* Análise Explainable IA */}
+                            {report.isExplainableAIPublished && report.generatedExplainableAI ? (
+                                <div className="bg-[#080C14] border border-indigo-900/30 rounded-3xl overflow-hidden shadow-xl">
+                                    <div className="p-6 border-b border-slate-800">
+                                        <h2 className="text-lg font-black text-white flex items-center gap-3">
+                                            <Bot size={20} className="text-indigo-400" />
+                                            Análise Explainable IA
+                                        </h2>
+                                        <p className="text-slate-500 text-xs mt-1">Gerado por inteligência artificial com base nos dados quantitativos</p>
                                     </div>
-                                    <div>
-                                        <h2 className="text-2xl font-black text-white tracking-tight">Explainable AI</h2>
-                                        <p className="text-slate-400 text-sm">Transparência algorítmica: entenda por que os ativos foram descartados.</p>
+                                    <div className="p-6">
+                                        <ExplainableAIRenderer text={report.generatedExplainableAI} />
                                     </div>
                                 </div>
+                            ) : null}
 
-                                {discardLogs.length === 0 ? (
-                                    <div className="text-center py-12 bg-slate-900/30 rounded-2xl border border-slate-800/50">
-                                        <p className="text-slate-500 font-medium">Nenhum descarte recente para esta categoria.</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        {discardLogs.map((log: any) => (
-                                            <div key={log._id} className="bg-[#0B101A] border border-slate-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-700 transition-colors">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center font-black text-white shrink-0">
-                                                        {log.ticker}
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="text-red-400 font-bold text-sm uppercase tracking-wider">{log.reason}</h4>
-                                                        <p className="text-slate-400 text-xs mt-1">{log.details}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right shrink-0">
-                                                    <span className="text-[10px] font-bold text-slate-500 uppercase bg-slate-900 px-2 py-1 rounded">
-                                                        {new Date(log.createdAt).toLocaleDateString('pt-BR')}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                            {/* Sem conteúdo publicado ainda */}
+                            {!report.isExplainableAIPublished && (
+                                <div className="flex flex-col items-center justify-center py-20 bg-[#080C14] border border-dashed border-slate-800 rounded-3xl text-center">
+                                    <Info size={48} className="text-slate-700 mb-4" />
+                                    <h3 className="text-xl font-black text-slate-500 uppercase">Relatório ainda não publicado</h3>
+                                    <p className="text-slate-600 text-sm mt-2 max-w-sm">O admin ainda não publicou o relatório semanal desta categoria.</p>
+                                </div>
+                            )}
                         </div>
                     ) : (
-                        <ResearchViewer report={report!} view={viewMode as 'ANALYSIS' | 'RANKING'} />
+                        <ResearchViewer report={report!} view="RANKING" />
                     )}
                 </div>
                 
@@ -253,6 +221,99 @@ export const Research = () => {
                 )}
 
             </main>
+        </div>
+    );
+};
+
+// ── Renderer do texto Explainable IA ─────────────────────────────────────────
+
+const SECTION_STYLES: Record<string, { label: string; color: string; border: string; bg: string }> = {
+    '📊': { label: '📊', color: 'text-blue-400',    border: 'border-blue-900/40',    bg: 'bg-blue-900/10'    },
+    '🏆': { label: '🏆', color: 'text-emerald-400', border: 'border-emerald-900/40', bg: 'bg-emerald-900/10' },
+    '🔄': { label: '🔄', color: 'text-purple-400',  border: 'border-purple-900/40',  bg: 'bg-purple-900/10'  },
+    '⚠️': { label: '⚠️', color: 'text-yellow-400',  border: 'border-yellow-900/40',  bg: 'bg-yellow-900/10'  },
+    '💡': { label: '💡', color: 'text-indigo-400',  border: 'border-indigo-900/40',  bg: 'bg-indigo-900/10'  },
+};
+
+const getSectionStyle = (heading: string) => {
+    for (const emoji of Object.keys(SECTION_STYLES)) {
+        if (heading.includes(emoji)) return SECTION_STYLES[emoji];
+    }
+    return { color: 'text-slate-300', border: 'border-slate-700', bg: 'bg-slate-800/30' };
+};
+
+const parseBoldInline = (text: string): React.ReactNode[] => {
+    return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+        part.startsWith('**') && part.endsWith('**')
+            ? <strong key={i} className="text-white font-bold">{part.slice(2, -2)}</strong>
+            : <span key={i}>{part}</span>
+    );
+};
+
+const ExplainableAIRenderer: React.FC<{ text: string }> = ({ text }) => {
+    const lines = text.split('\n');
+
+    return (
+        <div className="space-y-1">
+            {lines.map((line, i) => {
+                const t = line.trim();
+                if (!t) return <div key={i} className="h-2" />;
+
+                // Cabeçalho de seção: ## 📊 Cenário Macro
+                if (t.startsWith('## ')) {
+                    const heading = t.replace(/^## /, '');
+                    const style = getSectionStyle(heading);
+                    return (
+                        <div key={i} className={`flex items-center gap-2 mt-7 mb-3 px-3 py-2 rounded-xl border ${style.border} ${style.bg}`}>
+                            <span className={`text-sm font-black tracking-tight ${style.color}`}>{heading}</span>
+                        </div>
+                    );
+                }
+
+                // Bullet COMPRAR: - 🟢 **TICKER** — …
+                if (/^[-•]\s*🟢/.test(t)) {
+                    const content = t.replace(/^[-•]\s*🟢\s*/, '');
+                    return (
+                        <div key={i} className="flex gap-2 items-start mb-2 ml-2">
+                            <span className="text-[9px] font-black text-emerald-400 bg-emerald-900/20 border border-emerald-900/40 px-1.5 py-0.5 rounded mt-[3px] shrink-0 whitespace-nowrap">
+                                COMPRAR
+                            </span>
+                            <p className="text-slate-300 text-sm leading-relaxed">{parseBoldInline(content)}</p>
+                        </div>
+                    );
+                }
+
+                // Bullet AGUARDAR: - 🟡 **TICKER** — …
+                if (/^[-•]\s*🟡/.test(t)) {
+                    const content = t.replace(/^[-•]\s*🟡\s*/, '');
+                    return (
+                        <div key={i} className="flex gap-2 items-start mb-2 ml-2">
+                            <span className="text-[9px] font-black text-yellow-400 bg-yellow-900/20 border border-yellow-900/40 px-1.5 py-0.5 rounded mt-[3px] shrink-0 whitespace-nowrap">
+                                AGUARDAR
+                            </span>
+                            <p className="text-slate-300 text-sm leading-relaxed">{parseBoldInline(content)}</p>
+                        </div>
+                    );
+                }
+
+                // Bullet genérico: - texto
+                if (/^[-•]\s/.test(t)) {
+                    const content = t.replace(/^[-•]\s/, '');
+                    return (
+                        <div key={i} className="flex gap-3 items-start mb-2 ml-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-500 mt-[7px] shrink-0" />
+                            <p className="text-slate-300 text-sm leading-relaxed">{parseBoldInline(content)}</p>
+                        </div>
+                    );
+                }
+
+                // Parágrafo normal
+                return (
+                    <p key={i} className="text-slate-400 text-sm leading-relaxed mb-2 px-1">
+                        {parseBoldInline(t)}
+                    </p>
+                );
+            })}
         </div>
     );
 };

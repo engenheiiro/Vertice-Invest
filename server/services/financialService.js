@@ -83,6 +83,29 @@ export const financialService = {
 
             const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
             const currentCdiRate = sysConfig?.cdi || 11.25;
+            const currentUsdRate = sysConfig?.dollar || 5.75;
+
+            // G1 FIX: Load historical USD/BRL rates for per-date conversion
+            const usdHistoryDoc = await AssetHistory.findOne({ ticker: 'USD-BRL' }).lean();
+            const usdRateByDate = new Map();
+            if (usdHistoryDoc?.history) {
+                usdHistoryDoc.history.forEach(h => {
+                    if (h.date && (h.close || h.adjClose) > 0) {
+                        usdRateByDate.set(h.date, h.adjClose || h.close);
+                    }
+                });
+            }
+            const getUsdRateForDate = (dateStr) => {
+                if (usdRateByDate.has(dateStr)) return usdRateByDate.get(dateStr);
+                const target = new Date(dateStr);
+                for (let i = 1; i <= 7; i++) {
+                    const prev = new Date(target);
+                    prev.setDate(target.getDate() - i);
+                    const key = prev.toISOString().split('T')[0];
+                    if (usdRateByDate.has(key)) return usdRateByDate.get(key);
+                }
+                return currentUsdRate;
+            };
 
             const uniqueTickers = [...new Set(txs.map(t => t.ticker))];
             
@@ -197,9 +220,11 @@ export const financialService = {
                     }
                     
                     let txAdjPrice = tx.price;
-                    let trueAdjustedFlow = tx.totalValue; // NOVO: Fluxo ajustado real
+                    let trueAdjustedFlow = tx.totalValue; // Fluxo ajustado real
                     const meta = assetMetadataMap.get(tx.ticker);
                     const isFixed = meta?.type === 'FIXED_INCOME' || meta?.type === 'CASH';
+                    const txIsDollarized = meta?.type === 'STOCK_US' || meta?.type === 'CRYPTO' || meta?.currency === 'USD';
+                    const txUsdRate = txIsDollarized ? getUsdRateForDate(cursorIso) : 1;
 
                     if (!isFixed) {
                         const pMap = priceCacheMap.get(tx.ticker);
@@ -222,9 +247,9 @@ export const financialService = {
                             if (!fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker] = { currentValue: 0, rate: meta?.fixedIncomeRate || 100 };
                             fixedIncomeState[tx.ticker].currentValue += tx.totalValue;
                         }
-                        dayFlowNominal += tx.totalValue;
-                        dayFlowAdjusted += trueAdjustedFlow; // MODIFICADO
-                        
+                        dayFlowNominal += tx.totalValue * txUsdRate;
+                        dayFlowAdjusted += trueAdjustedFlow * txUsdRate;
+
                         if (!lastKnownPrices[tx.ticker]) lastKnownPrices[tx.ticker] = { close: tx.price, adjClose: txAdjPrice };
 
                     } else if (tx.type === 'SELL') {
@@ -234,8 +259,8 @@ export const financialService = {
                         if (isFixed) {
                             fixedIncomeState[tx.ticker].currentValue = Math.max(0, fixedIncomeState[tx.ticker].currentValue - tx.totalValue);
                         }
-                        dayFlowNominal -= tx.totalValue;
-                        dayFlowAdjusted -= trueAdjustedFlow; // MODIFICADO
+                        dayFlowNominal -= tx.totalValue * txUsdRate;
+                        dayFlowAdjusted -= trueAdjustedFlow * txUsdRate;
                     }
                     
                     if (portfolio[tx.ticker].qty < 0.000001) {
@@ -267,7 +292,9 @@ export const financialService = {
                         if (portfolio[ticker].qty > 0) {
                             const state = fixedIncomeState[ticker];
                             let dailyFactor = 1;
-                            if (state.rate > 30) dailyFactor = 1 + ((cdiDailyFactor - 1) * (state.rate / 100));
+                            // Threshold > 50 = % do CDI (ex: 110 = 110% CDI); <= 50 = prefixada a.a.
+                            // Alinhado com walletController.js
+                            if (state.rate > 50) dailyFactor = 1 + ((cdiDailyFactor - 1) * (state.rate / 100));
                             else dailyFactor = Math.pow(1 + (state.rate / 100), 1/252);
                             
                             state.currentValue *= dailyFactor;
@@ -275,15 +302,22 @@ export const financialService = {
                     }
                 }
 
+                const usdRateForDay = getUsdRateForDate(cursorIso);
+
                 for (const ticker in portfolio) {
                     const pos = portfolio[ticker];
                     if (pos.qty <= 0) continue;
                     hasPosition = true;
-                    totalInvested += pos.cost;
-                    
+
+                    const meta = assetMetadataMap.get(ticker);
+                    const isDollarized = meta?.type === 'STOCK_US' || meta?.type === 'CRYPTO' || meta?.currency === 'USD';
+                    const fxRate = isDollarized ? usdRateForDay : 1;
+
+                    totalInvested += pos.cost * fxRate;
+
                     let markClose = 0;
                     let markAdjClose = 0;
-                    
+
                     if (fixedIncomeState[ticker]) {
                         const val = fixedIncomeState[ticker].currentValue;
                         const unitPrice = val / pos.qty;
@@ -292,7 +326,7 @@ export const financialService = {
                     } else {
                         const pMap = priceCacheMap.get(ticker);
                         const pData = this.findPriceInMap(pMap, cursorIso);
-                        
+
                         if (pData.close > 0) {
                             markClose = pData.close;
                             markAdjClose = pData.adjClose;
@@ -302,9 +336,9 @@ export const financialService = {
                             markAdjClose = lastKnownPrices[ticker]?.adjClose || markClose;
                         }
                     }
-                    
-                    totalEquityNominal += pos.qty * markClose;
-                    totalEquityAdjusted += pos.qty * markAdjClose;
+
+                    totalEquityNominal += pos.qty * markClose * fxRate;
+                    totalEquityAdjusted += pos.qty * markAdjClose * fxRate;
                 }
 
                 // USO DO HELPER MATHUTILS (Modified Dietz)

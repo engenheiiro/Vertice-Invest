@@ -242,8 +242,8 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                                         
                                         {/* Ticker & Info */}
                                         <div className="lg:col-span-3 flex items-center gap-4">
-                                            <div className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg border shrink-0 ${getRankStyle(pick.position || pick.visualPosition)}`}>
-                                                <span className="font-black text-sm leading-none">{pick.position || pick.visualPosition}</span>
+                                            <div className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg border shrink-0 ${getRankStyle(pick.visualPosition)}`}>
+                                                <span className="font-black text-sm leading-none">{pick.visualPosition}</span>
                                             </div>
                                             <div className="min-w-0">
                                                 <div className="flex items-center mb-1 gap-2">

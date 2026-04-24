@@ -11,7 +11,7 @@ export const Terms = () => {
         </Link>
         <div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">Termos de Uso</h2>
-            <p className="text-slate-500 text-[10px] font-medium uppercase tracking-wider">Última atualização: {new Date().toLocaleDateString()}</p>
+            <p className="text-slate-500 text-[10px] font-medium uppercase tracking-wider">Versão 1.0 — Janeiro de 2025</p>
         </div>
       </div>
 

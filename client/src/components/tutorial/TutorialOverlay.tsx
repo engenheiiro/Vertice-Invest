@@ -380,6 +380,10 @@ export const TutorialOverlay: React.FC = () => {
                         }
                     }
 
+                    // Clamp para dentro da viewport — evita corte em telas pequenas (notebook)
+                    left = Math.max(10, Math.min(left, window.innerWidth - cardWidth - 10));
+                    top = Math.max(10, Math.min(top, window.innerHeight - cardHeight - 10));
+
                     setCardPosition({ top, left, placement });
                 } else {
                     setTargetRect(null);

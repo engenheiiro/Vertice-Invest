@@ -64,12 +64,52 @@ export interface RankingItem {
         volatility?: number;
         sma200?: number;
         ema50?: number;
+        earningsGrowth?: number;
+        lpa?: number;
+        vpa?: number;
+        peg?: number;
+        payoutRatio?: number;
         structural?: {
             quality: number;
             valuation: number;
             risk: number;
         };
     };
+}
+
+export interface ComparisonReportSummary {
+    totalAssets: number;
+    newEntries: number;
+    exits: number;
+    upgrades: number;
+    downgrades: number;
+    positionChanges: number;
+}
+
+export interface ComparisonReport {
+    assetClass: string;
+    generatedAt: string;
+    summary: ComparisonReportSummary;
+    newEntries: { ticker: string; name: string; score: number; action: string; riskProfile: string }[];
+    exits: { ticker: string; name: string; reason: string }[];
+    upgrades: { ticker: string; name: string; previousScore: number; newScore: number }[];
+    downgrades: { ticker: string; name: string; previousScore: number; newScore: number; reason: string }[];
+    biggestMovers: { ticker: string; name: string; positionChange: number; scoreDelta: number }[];
+    topBuys: { ticker: string; name: string; score: number; riskProfile: string; sector: string }[];
+}
+
+export interface PublishStatus {
+    assetClass: string;
+    lastSyncAt: string | null;
+    lastPublishedAt: string | null;
+    isRankingPublished: boolean;
+    isReportPublished: boolean;
+    isExplainableAIPublished: boolean;
+    hasComparisonReport: boolean;
+    hasExplainableAIPrompt: boolean;
+    hasGeneratedExplainableAI: boolean;
+    latestId: string | null;
+    readyToPublish: boolean;
 }
 
 export interface ResearchReport {
@@ -80,6 +120,11 @@ export interface ResearchReport {
     strategy: string;
     isRankingPublished: boolean;
     isMorningCallPublished: boolean;
+    isReportPublished?: boolean;
+    isExplainableAIPublished?: boolean;
+    comparisonReport?: ComparisonReport;
+    explainableAIPrompt?: string;
+    generatedExplainableAI?: string;
     generatedBy?: string;
     content: {
         morningCall: string;
@@ -150,7 +195,7 @@ export const researchService = {
         return await response.json();
     },
 
-    async publish(analysisId: string, type: 'RANKING' | 'MORNING_CALL' | 'BOTH') {
+    async publish(analysisId: string, type: 'RANKING' | 'MORNING_CALL' | 'BOTH' | 'REPORT' | 'EXPLAINABLE_AI' | 'ALL') {
         const response = await authService.api('/api/research/publish', {
             method: 'POST',
             body: JSON.stringify({ analysisId, type })
@@ -247,6 +292,33 @@ export const researchService = {
     async getDiscardLogs() {
         const response = await authService.api('/api/research/discard-logs');
         if (!response.ok) return [];
+        return await response.json();
+    },
+
+    async syncTimeSeries() {
+        const response = await authService.api('/api/research/sync-time-series', { method: 'POST' });
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || "Erro ao sincronizar séries temporais.");
+        }
+        return await response.json();
+    },
+
+    async getPublishStatus(): Promise<PublishStatus[]> {
+        const response = await authService.api('/api/research/publish-status');
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
+    async generateExplainableAI(analysisId: string, customText?: string): Promise<{ generatedExplainableAI: string }> {
+        const response = await authService.api('/api/research/generate-explainable', {
+            method: 'POST',
+            body: JSON.stringify({ analysisId, ...(customText ? { customText } : {}) })
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || "Erro ao gerar Explainable IA.");
+        }
         return await response.json();
     }
 };

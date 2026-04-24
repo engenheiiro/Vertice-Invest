@@ -69,7 +69,8 @@ const calculateLiveKPIS = async (userId, currentCdi) => {
             const businessDays = countBusinessDays(startDate, calcDate);
             const compoundFactor = Math.pow(effectiveDailyFactor, businessDays);
             
-            currentPrice = asset.type === 'CASH' ? compoundFactor : safeMult(asset.averagePrice, compoundFactor);
+            const avgPrice = safeDiv(asset.totalCost, asset.quantity);
+            currentPrice = asset.type === 'CASH' ? compoundFactor : safeMult(avgPrice, compoundFactor);
 
         } else {
             const mData = await marketDataService.getMarketDataByTicker(asset.ticker);
@@ -106,7 +107,7 @@ export const getWalletData = async (req, res, next) => {
                 for (const ticker of distinctTickers) {
                     await financialService.recalculatePosition(userId, ticker);
                 }
-                const healedAssets = await UserAsset.find({ user: userId });
+                const healedAssets = await UserAsset.find({ user: userId, quantity: { $gt: 0.000001 } });
                 if (healedAssets.length > 0) {
                     return getWalletData(req, res, next);
                 }
@@ -224,10 +225,11 @@ export const getWalletData = async (req, res, next) => {
                     let compoundFactor = Math.pow(effectiveDailyFactor, businessDays);
                     if (!isFinite(compoundFactor) || compoundFactor < 1) compoundFactor = 1;
 
+                    const avgPriceFallback = safeDiv(asset.totalCost, asset.quantity);
                     if (asset.type === 'CASH') {
                         totalCurrentValue = asset.quantity * compoundFactor;
                     } else {
-                        totalCurrentValue = asset.quantity * asset.averagePrice * compoundFactor;
+                        totalCurrentValue = asset.quantity * avgPriceFallback * compoundFactor;
                     }
                     totalQuantity = asset.quantity;
                 }
@@ -235,7 +237,7 @@ export const getWalletData = async (req, res, next) => {
                 if (totalQuantity > 0) {
                     currentPrice = totalCurrentValue / totalQuantity;
                 } else {
-                    currentPrice = asset.type === 'CASH' ? 1 : asset.averagePrice;
+                    currentPrice = asset.type === 'CASH' ? 1 : safeDiv(asset.totalCost, asset.quantity);
                 }
 
                 // Ajuste para ativos comprados HOJE (evita variação irreal no dia da compra)
@@ -417,14 +419,20 @@ export const getWalletData = async (req, res, next) => {
             dataQuality = 'ESTIMATED'; // Sem histórico, é apenas ROI simples
         }
 
-        // --- CÁLCULO DE VOLATILIDADE (Sharpe & Beta) ---
-        // Exige histórico de snapshots (pelo menos 10 dias)
-        // Isso é pesado, então fazemos apenas se houver histórico suficiente.
+        // --- CÁLCULO DE VOLATILIDADE (Sharpe) ---
+        // Usa as quotaPrices dos últimos 30 snapshots já carregados.
+        // Beta omitido aqui pois exigiria buscar histórico do Ibovespa (pesado) — disponível em getWalletPerformance.
         if (snapshots.length >= 10) {
-            // Para simplificar no endpoint de resumo, usamos uma lógica aproximada ou deixamos 0
-            // O cálculo real está no getWalletPerformance onde temos o array completo
-            // Para este endpoint, vamos retornar 0 ou um valor mockado se não tivermos cache.
-            // (Para produção real, isso deveria ser calculado no snapshot noturno e salvo)
+            const sortedSnaps = [...snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+            const walletReturns = [];
+            for (let i = 1; i < sortedSnaps.length; i++) {
+                const prev = sortedSnaps[i - 1].quotaPrice || 100;
+                const curr = sortedSnaps[i].quotaPrice || 100;
+                if (prev > 0) walletReturns.push(((curr / prev) - 1) * 100);
+            }
+            if (walletReturns.length >= 5) {
+                sharpeRatio = calculateSharpeRatio(walletReturns, currentCdi);
+            }
         }
 
         res.json({

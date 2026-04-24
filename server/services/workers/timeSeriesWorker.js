@@ -23,11 +23,21 @@ const calculateEMA = (prices, period) => {
 };
 
 const calculateVolatility = (prices) => {
-    if (prices.length < 2) return 0;
+    // Remove preços inválidos: zeros (gaps/fins de semana na fonte) e infinitos causam retornos espúrios
+    const validPrices = prices.filter(p => p > 0 && isFinite(p));
+    if (validPrices.length < 10) return 0;
+
     const returns = [];
-    for (let i = 0; i < prices.length - 1; i++) {
-        returns.push((prices[i] - prices[i + 1]) / prices[i + 1]);
+    for (let i = 0; i < validPrices.length - 1; i++) {
+        const r = (validPrices[i] - validPrices[i + 1]) / validPrices[i + 1];
+        // Descarta retornos diários impossíveis (>50%): indicam splits não ajustados ou dados corrompidos.
+        // Retornos legítimos extremos (circuit breaker -10%) ficam bem abaixo deste limite.
+        if (isFinite(r) && !isNaN(r) && Math.abs(r) < 0.50) {
+            returns.push(r);
+        }
     }
+    if (returns.length < 10) return 0;
+
     const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
     const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (returns.length - 1);
     const stdDev = Math.sqrt(variance);
@@ -62,15 +72,23 @@ export const timeSeriesWorker = {
             const assets = await MarketAsset.find({ isActive: true }).select('ticker type');
             if (assets.length === 0) return;
 
-            // Puxa o histórico do IBOV para calcular o Beta das ações/FIIs
+            // Puxa o histórico do IBOV para calcular o Beta das ações/FIIs.
+            // Indexa retornos por data (YYYY-MM-DD) para alinhar com o ativo por data,
+            // evitando que gaps de pregão (preço=0 filtrado) desalinhem as séries por índice.
             const ibovHistory = await marketDataService.getBenchmarkHistory('^BVSP');
-            let ibovReturns = [];
+            const ibovReturnsByDate = new Map();
             if (ibovHistory && ibovHistory.length > 1) {
-                for (let i = 0; i < ibovHistory.length - 1; i++) {
-                    ibovReturns.push((ibovHistory[i].close - ibovHistory[i + 1].close) / ibovHistory[i + 1].close);
+                const sortedIbov = [...ibovHistory].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // oldest→newest
+                for (let i = 1; i < sortedIbov.length; i++) {
+                    if (sortedIbov[i - 1].close > 0 && sortedIbov[i].close > 0) {
+                        const r = (sortedIbov[i].close - sortedIbov[i - 1].close) / sortedIbov[i - 1].close;
+                        if (isFinite(r) && !isNaN(r) && Math.abs(r) < 0.50) {
+                            const dateKey = new Date(sortedIbov[i].date).toISOString().slice(0, 10);
+                            ibovReturnsByDate.set(dateKey, r);
+                        }
+                    }
                 }
             }
-
             const operations = [];
             let processedCount = 0;
             const totalAssets = assets.length;
@@ -125,12 +143,29 @@ export const timeSeriesWorker = {
                     const volatility = calculateVolatility(volatilityPrices);
 
                     let beta = 1;
-                    if ((asset.type === 'STOCK' || asset.type === 'FII') && ibovReturns.length > 0) {
-                        const assetReturns = [];
-                        for (let j = 0; j < volatilityPrices.length - 1; j++) {
-                            assetReturns.push((volatilityPrices[j] - volatilityPrices[j + 1]) / volatilityPrices[j + 1]);
+                    if ((asset.type === 'STOCK' || asset.type === 'FII') && ibovReturnsByDate.size > 0) {
+                        // Alinha retornos do ativo com IBOV por data, evitando desalinhamento
+                        // causado por dias com preço=0 (gaps) que encurtam a série do ativo mas
+                        // não a do IBOV, corrompendo a covariância e zerando o beta.
+                        const sortedForBeta = historyEntry.history
+                            .filter(h => h.close > 0 && isFinite(h.close))
+                            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // oldest→newest
+
+                        const alignedAssetReturns = [];
+                        const alignedIbovReturns = [];
+
+                        for (let j = 1; j < sortedForBeta.length; j++) {
+                            const dateKey = new Date(sortedForBeta[j].date).toISOString().slice(0, 10);
+                            if (!ibovReturnsByDate.has(dateKey)) continue;
+
+                            const assetReturn = (sortedForBeta[j].close - sortedForBeta[j - 1].close) / sortedForBeta[j - 1].close;
+                            if (!isFinite(assetReturn) || isNaN(assetReturn) || Math.abs(assetReturn) >= 0.50) continue;
+
+                            alignedAssetReturns.push(assetReturn);
+                            alignedIbovReturns.push(ibovReturnsByDate.get(dateKey));
                         }
-                        beta = calculateBeta(assetReturns, ibovReturns);
+
+                        if (alignedAssetReturns.length >= 20) beta = calculateBeta(alignedAssetReturns, alignedIbovReturns);
                     }
 
                     operations.push({

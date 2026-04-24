@@ -13,6 +13,14 @@ import logger from '../config/logger.js';
 const ACCESS_TOKEN_EXPIRATION = '15m';
 const REFRESH_TOKEN_EXPIRATION_DAYS = 7;
 
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+  throw new Error('JWT_SECRET e JWT_REFRESH_SECRET devem estar definidos no ambiente.');
+}
+
+const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
 // --- UTILS DE SEGURANÇA ---
 
 // Log de Auditoria
@@ -55,7 +63,9 @@ export const register = async (req, res, next) => {
     const { name, email, password } = req.body;
 
     if (!name || name.length < 2) throw new Error("Nome muito curto.");
-    if (!password || password.length < 6) throw new Error("Senha deve ter no mínimo 6 caracteres.");
+    if (!password || password.length < 8 || !/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)) {
+      throw new Error("Senha deve ter no mínimo 8 caracteres, uma letra maiúscula e um número.");
+    }
 
     const userExists = await User.findOne({ email }).session(session);
     
@@ -80,10 +90,11 @@ export const register = async (req, res, next) => {
     });
     
     await newUser.save({ session });
-    
+
     await session.commitTransaction();
     session.endSession();
-    
+
+    logAudit(req, 'REGISTER_SUCCESS', 'Nova conta criada', newUser._id, email);
     res.status(201).json({ message: "Conta criada com sucesso!" });
 
   } catch (error) {
@@ -95,23 +106,20 @@ export const register = async (req, res, next) => {
 
 export const login = async (req, res, next) => {
   try {
-    const JWT_SECRET = process.env.JWT_SECRET;
-    const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "fallback_refresh_secret";
-
-    if (!JWT_SECRET) throw new Error("JWT_SECRET não configurado.");
-
     const { email, password } = req.body;
     
     const user = await User.findOne({ email });
     const invalidMsg = "Credenciais inválidas.";
 
     if (!user) {
+        logAudit(req, 'LOGIN_FAILED', 'Usuário não encontrado', null, email);
         return res.status(401).json({ message: invalidMsg });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    
+
     if (!isMatch) {
+        logAudit(req, 'LOGIN_FAILED', 'Senha incorreta', user._id, email);
         return res.status(401).json({ message: invalidMsg });
     }
 
@@ -132,7 +140,7 @@ export const login = async (req, res, next) => {
     );
 
     await RefreshToken.create({
-      token: refreshTokenString,
+      token: hashToken(refreshTokenString),
       user: user._id,
       expiryDate: expiredAt,
     });
@@ -160,15 +168,15 @@ export const login = async (req, res, next) => {
 
 export const refreshToken = async (req, res, next) => {
   try {
-    const JWT_SECRET = process.env.JWT_SECRET;
     const cookies = req.cookies;
     if (!cookies?.jwt) return res.status(401).json({ message: "Sessão inválida." });
     
     const requestToken = cookies.jwt;
-    const tokenInDb = await RefreshToken.findOne({ token: requestToken });
+    const tokenInDb = await RefreshToken.findOne({ token: hashToken(requestToken) });
     
     if (!tokenInDb || RefreshToken.verifyExpiration(tokenInDb)) {
       if (tokenInDb) await RefreshToken.findByIdAndDelete(tokenInDb._id);
+      logAudit(req, 'TOKEN_REFRESH_FAILED', 'Token de refresh inválido ou expirado');
       return res.status(401).json({ message: "Sessão expirada." });
     }
 
@@ -192,7 +200,7 @@ export const logout = async (req, res, next) => {
   try {
     const cookies = req.cookies;
     if (cookies?.jwt) {
-       await RefreshToken.findOneAndDelete({ token: cookies.jwt });
+       await RefreshToken.findOneAndDelete({ token: hashToken(cookies.jwt) });
        res.clearCookie('jwt', { httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production' });
     }
     res.status(200).json({ message: "Logout realizado." });
@@ -209,13 +217,14 @@ export const forgotPassword = async (req, res, next) => {
     if (!user) return res.status(200).json({ message: "Se o email existir, instruções foram enviadas." });
 
     const token = crypto.randomBytes(20).toString('hex');
-    user.resetPasswordToken = token;
-    user.resetPasswordExpires = Date.now() + 3600000;
+    user.resetPasswordToken = hashToken(token);
+    user.resetPasswordExpires = Date.now() + 1800000;
     await user.save();
 
     const origin = req.get('origin') || 'http://localhost:5173';
     await sendResetPasswordEmail(user.email, token, origin);
 
+    logAudit(req, 'PASSWORD_RESET_REQUESTED', 'Link de reset enviado', user._id, user.email);
     res.status(200).json({ message: "Se o email existir, instruções foram enviadas." });
   } catch (error) {
     next(error);
@@ -225,9 +234,14 @@ export const forgotPassword = async (req, res, next) => {
 export const resetPassword = async (req, res, next) => {
   try {
     const { token, newPassword } = req.body;
-    const user = await User.findOne({ resetPasswordToken: token, resetPasswordExpires: { $gt: Date.now() } });
+    const hashedToken = hashToken(token);
+    const user = await User.findOne({ resetPasswordToken: hashedToken, resetPasswordExpires: { $gt: Date.now() } });
 
     if (!user) return res.status(400).json({ message: "Token inválido ou expirado." });
+
+    if (!newPassword || newPassword.length < 8 || !/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(newPassword)) {
+      return res.status(400).json({ message: "Senha deve ter no mínimo 8 caracteres, uma letra maiúscula e um número." });
+    }
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
@@ -235,6 +249,7 @@ export const resetPassword = async (req, res, next) => {
     user.resetPasswordExpires = undefined;
     await user.save();
 
+    logAudit(req, 'PASSWORD_RESET_USED', 'Senha redefinida via token', user._id, user.email);
     res.status(200).json({ message: "Senha atualizada." });
   } catch (error) {
     next(error);
@@ -273,10 +288,15 @@ export const changePassword = async (req, res, next) => {
         const isMatch = await bcrypt.compare(oldPassword, user.password);
         if (!isMatch) return res.status(401).json({ message: "Senha atual incorreta." });
 
+        if (!newPassword || newPassword.length < 8 || !/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(newPassword)) {
+          return res.status(400).json({ message: "Senha deve ter no mínimo 8 caracteres, uma letra maiúscula e um número." });
+        }
+
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(newPassword, salt);
         await user.save();
 
+        logAudit(req, 'PASSWORD_CHANGED', 'Senha alterada pelo usuário', user._id, user.email);
         res.json({ message: "Senha alterada." });
     } catch (error) {
         next(error);

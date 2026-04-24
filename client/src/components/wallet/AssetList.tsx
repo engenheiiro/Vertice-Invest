@@ -14,7 +14,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export const AssetList = () => {
-    const { assets, removeAsset, kpis, targetAllocation, isPrivacyMode } = useWallet();
+    const { assets, removeAsset, kpis, targetAllocation, isPrivacyMode, usdRate } = useWallet();
     const [historyTicker, setHistoryTicker] = useState<string | null>(null);
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
@@ -133,13 +133,15 @@ export const AssetList = () => {
 
                                         {!isCollapsed && groupItems.map((asset) => {
                                             const unitProfit = asset.currentPrice - asset.averagePrice;
-                                            
+                                            const isUSD = asset.type === 'STOCK_US' || asset.currency === 'USD';
+                                            const rate = usdRate || 5.75;
+
                                             let profitPercent = 0;
                                             if (asset.averagePrice > 0) {
                                                 profitPercent = (unitProfit / asset.averagePrice) * 100;
                                             }
-                                            
-                                            const totalProfit = unitProfit * asset.quantity;
+
+                                            const totalProfit = unitProfit * asset.quantity * (isUSD ? rate : 1);
                                             const isProfitable = unitProfit >= 0;
                                             
                                             // % da Classe
@@ -169,11 +171,18 @@ export const AssetList = () => {
                                                     </td>
                                                     <td className="p-4 text-right">
                                                         <p className="font-bold text-white">
-                                                            {formatCurrency(asset.totalValue, 'BRL')} 
+                                                            {formatCurrency(asset.totalValue, 'BRL')}
                                                         </p>
-                                                        <p className="text-[10px] text-slate-500">
-                                                            {asset.quantity} un
-                                                        </p>
+                                                        {isUSD && !isPrivacyMode && (
+                                                            <p className="text-[10px] text-blue-400/70 font-mono">
+                                                                ({formatCurrency(asset.currentPrice * asset.quantity, 'USD')})
+                                                            </p>
+                                                        )}
+                                                        {!isUSD && (
+                                                            <p className="text-[10px] text-slate-500">
+                                                                {asset.quantity} un
+                                                            </p>
+                                                        )}
                                                     </td>
                                                     <td className="p-4 text-right">
                                                         <span className="text-xs font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">

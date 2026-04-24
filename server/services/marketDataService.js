@@ -320,21 +320,26 @@ export const marketDataService = {
     async getMarketData(assetClass) {
         const isBrasil = assetClass === 'STOCK' || assetClass === 'FII' || assetClass === 'BRASIL_10';
         const isCrypto = assetClass === 'CRYPTO';
+        const isStockUS = assetClass === 'STOCK_US';
         const results = [];
-        
-        if (isBrasil || isCrypto) {
+
+        if (isBrasil || isCrypto || isStockUS) {
             let queryType;
             if (assetClass === 'BRASIL_10') {
                 queryType = { $in: ['STOCK', 'FII'] };
             } else {
                 queryType = { $in: [assetClass] };
             }
+
+            // Sem filtro de liquidez aqui — scoringEngine.js gera DiscardLog para tickers insuficientes
+            const extraFilter = {};
             
-            const dbAssets = await MarketAsset.find({ 
+            const dbAssets = await MarketAsset.find({
                 type: queryType,
                 isIgnored: false,
                 isBlacklisted: false,
-                isActive: true // Só pega ativos vivos para análise
+                isActive: true,
+                ...extraFilter
             });
 
             for (const asset of dbAssets) {
@@ -378,9 +383,9 @@ export const marketDataService = {
                         ticker: asset.ticker,
                         price: asset.lastPrice,
                         dy: asset.dy || 0,
-                        pvp: asset.p_vp || 0,
+                        pvp: asset.pvp || asset.p_vp || 0,
                         marketCap: asset.marketCap || 0,
-                        avgLiquidity: asset.liquidity || 0,
+                        avgLiquidity: asset.avgLiquidity || asset.liquidity || 0,
                         pl: asset.pl || 0,
                         roe: asset.roe || 0,
                         roic: asset.roic || 0,

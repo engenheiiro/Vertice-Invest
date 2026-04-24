@@ -17,8 +17,8 @@ export const AuthLayout: React.FC = () => {
     },
     {
       icon: <BrainCircuit size={18} className="text-purple-400" />,
-      title: "Machine Learning Tático",
-      desc: "Redes neurais proprietárias que rastreiam o fluxo de capital institucional e detectam padrões invisíveis ao olho humano."
+      title: "Análise Fundamentalista",
+      desc: "Avalie ações e FIIs com múltiplos como Graham, Bazin e PEG calculados automaticamente com dados fundamentais atualizados."
     },
     {
       icon: <PieChart size={18} className="text-blue-400" />,
@@ -27,13 +27,13 @@ export const AuthLayout: React.FC = () => {
     },
     {
       icon: <Layers size={18} className="text-emerald-400" />,
-      title: "Simulação de Cenários",
-      desc: "Estresse sua carteira contra 10.000 cenários econômicos possíveis (Monte Carlo) antes de tomar qualquer decisão."
+      title: "Sinais Técnicos em Tempo Real",
+      desc: "Sinais baseados em RSI, volume e suportes históricos para identificar assimetrias de entrada e saída com critério quantitativo."
     },
     {
       icon: <Activity size={18} className="text-rose-400" />,
-      title: "Sentinela de Risco 24/7",
-      desc: "Monitoramento contínuo de volatilidade e correlação de ativos. Seja alertado antes que o mercado vire."
+      title: "Morning Call com IA",
+      desc: "Resumo diário do mercado gerado por inteligência artificial com dados de macro, câmbio e fluxos globais consolidados."
     },
     {
       icon: <GraduationCap size={18} className="text-indigo-400" />,
@@ -47,7 +47,7 @@ export const AuthLayout: React.FC = () => {
       setActiveSlide((prev) => (prev + 1) % slides.length);
     }, 5000);
     return () => clearInterval(interval);
-  }, [slides.length]);
+  }, []);
 
   return (
     // MUDANÇA: h-screen e overflow-hidden garantem que não haja scroll na página
@@ -78,10 +78,12 @@ export const AuthLayout: React.FC = () => {
             </div>
 
             <div className="relative z-10 my-auto py-4 lg:py-0">
-                <div className="h-[140px] lg:h-[160px] xl:h-[200px] relative">
+                <div role="region" aria-label="Diferenciais da plataforma" className="h-[140px] lg:h-[160px] xl:h-[200px] relative">
                   {slides.map((slide, index) => (
-                    <div 
+                    <div
                       key={index}
+                      aria-hidden={index !== activeSlide}
+                      aria-current={index === activeSlide ? 'true' : undefined}
                       className={`absolute inset-0 transition-all duration-700 ease-out transform flex flex-col justify-center
                         ${index === activeSlide ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'}
                       `}
@@ -113,9 +115,9 @@ export const AuthLayout: React.FC = () => {
 
             <div className="relative z-10 hidden lg:flex items-center gap-3 opacity-90">
                 <div className="flex -space-x-3">
-                   <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=100&h=100" alt="User" className="w-7 h-7 rounded-full border-2 border-[#080C14] object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
-                   <img src="https://images.unsplash.com/photo-1573496359-136d4755f357?auto=format&fit=crop&w=100&h=100" alt="User" className="w-7 h-7 rounded-full border-2 border-[#080C14] object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
-                   <img src="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=100&h=100" alt="User" className="w-7 h-7 rounded-full border-2 border-[#080C14] object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
+                   <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=56&h=56" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-[#080C14] object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
+                   <img src="https://images.unsplash.com/photo-1573496359-136d4755f357?auto=format&fit=crop&w=56&h=56" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-[#080C14] object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
+                   <img src="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=56&h=56" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-[#080C14] object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
                 </div>
                 <div>
                    <p className="text-[9px] text-slate-300 font-bold uppercase tracking-wide">Comunidade Premium</p>

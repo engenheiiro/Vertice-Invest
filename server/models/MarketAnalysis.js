@@ -79,6 +79,12 @@ const MarketAnalysisSchema = new mongoose.Schema({
   
   isRankingPublished: { type: Boolean, default: false },
   isMorningCallPublished: { type: Boolean, default: false },
+  isReportPublished: { type: Boolean, default: false },
+  isExplainableAIPublished: { type: Boolean, default: false },
+
+  comparisonReport: { type: mongoose.Schema.Types.Mixed, default: null },
+  explainableAIPrompt: { type: String, default: '' },
+  generatedExplainableAI: { type: String, default: '' },
 
   content: {
     morningCall: { type: String, default: "" },

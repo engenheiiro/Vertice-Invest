@@ -53,20 +53,15 @@ const isDividendAristocrat = (m, type) => {
     return (m.revenueGrowth > 5 && m.roe > 12 && m.dy > 4.0 && m.netMargin > 8 && m.payout > 20 && m.payout < 90);
 };
 
-const passStressTest = (m, profile) => {
-    const beta = m.beta || 1.0; 
-    const estimatedDrawdown = beta * -30;
-    if (profile === 'DEFENSIVE') {
-        if (estimatedDrawdown < -35) return false; 
-    }
-    return true;
-};
-
 const isEligibleForDefensive = (asset, context) => {
     const m = asset.metrics;
-    if (m.avgLiquidity < 200000) return false; 
+    if (m.avgLiquidity < 200000) return false;
     if (asset.type === 'STOCK') {
-        if (m.marketCap < 1000000000) return false; 
+        if (m.marketCap < 1000000000) return false;
+        // Beta muito alto (≥1.5) indica ativo pró-cíclico incompatível com perfil defensivo.
+        // O scoring já penaliza -15 pts para beta ≥1.5, mas o gate evita que ativos com
+        // muitos bônus de DY/ROE compensem essa fraqueza estrutural e entrem no DEFENSIVE.
+        if (m.beta >= 1.5) return false;
         const safeSectorsKeywords = ['Banco', 'Segur', 'Elétric', 'Eletric', 'Saneamento', 'Água', 'Telecom', 'Energia', 'Transmissão', 'Financeiro', 'Alimentos', 'Saúde', 'Gás', 'Holding', 'Bebidas'];
         const sector = asset.sector || '';
         const isSafeSector = safeSectorsKeywords.some(keyword => sector.includes(keyword));
@@ -76,6 +71,8 @@ const isEligibleForDefensive = (asset, context) => {
         // Só aplica rejeição se o dado estiver presente (não ausente) — evita punir por falta de coleta
         if (!m._missing?.roe && m.roe < 5) return false;
         if (!m._missing?.netMargin && m.netMargin < 3) return false;
+        // Payout insustentável (>200%) é incompatível com perfil defensivo — dividendo vem do capital.
+        if (!m._missing?.payout && m.payout > 200) return false;
         const isFinancial = sector.includes('Banco') || sector.includes('Segur') || sector.includes('Financeiro');
         if (m.debtToEquity > 4.0 && !isFinancial) return false;
     } else if (asset.type === 'FII') {
@@ -84,9 +81,21 @@ const isEligibleForDefensive = (asset, context) => {
         if (m.vacancy > 12) return false; // Reduzido de 15 para 12 para ser mais defensivo
         if (!asset.sector.includes('Papel') && m.qtdImoveis < 2) return false; // Mono-ativos são vetados do perfil Defensivo
         if (m.avgLiquidity < 1000000) return false; 
+    } else if (asset.type === 'STOCK_US') {
+        // US stocks: exige market cap mínimo de $10B USD e setor defensivo (Consumer Staples, Utilities, Healthcare, Financials)
+        if (m.marketCap < 10_000_000_000) return false;
+        if (m.beta >= 1.8) return false;
+        if (!m._missing?.roe && m.roe < 5) return false;
+        const usDefensiveSectors = ['Consumer Staples', 'Utilities', 'Healthcare', 'Financials'];
+        const sector = asset.sector || '';
+        const isSafeUSSector = usDefensiveSectors.some(s => sector.includes(s));
+        if (!isSafeUSSector) {
+            // Fora dos setores defensivos: exige DY razoável ou P/E moderado
+            if (m.dy < 1.5 && (m.pl === 0 || m.pl > 30)) return false;
+        }
     } else if (asset.type === 'CRYPTO') {
         // Para ser defensivo em crypto, tem que ser gigante e muito líquido (Buy & Hold)
-        if (!['BTC', 'ETH'].includes(asset.ticker) && m.marketCap < 50000000000) return false; 
+        if (!['BTC', 'ETH'].includes(asset.ticker) && m.marketCap < 50000000000) return false;
         if (m.avgLiquidity < 500000000) return false;
     }
     return true;
@@ -161,86 +170,308 @@ const calculateProfileScores = (asset, valuationData, context) => {
     audit.CONFIDENCE = confAudit;
 
     if (type === 'STOCK' || type === 'STOCK_US') {
+        // Setor financeiro pode apresentar crescimento de receita artificialmente alto por
+        // base-year ou reestruturações. Aplica teto de 30% para evitar PEG/Hyper Growth indevidos.
+        const isFinancialSector = asset.sector?.includes('Banco') || asset.sector?.includes('Segur') || asset.sector?.includes('Financeiro') || asset.sector?.includes('Holding') || asset.sector?.includes('Financials') || asset.sector?.includes('Financial');
+        const effectiveRevenueGrowth = (isFinancialSector && m.revenueGrowth > 30) ? 0 : m.revenueGrowth;
+
+        // ── DEFENSIVO ────────────────────────────────────────────────────────────
+        // Base reduzida 60→40: bônus progressivos diferenciam ações medianas de elite.
+        // Mesmo raciocínio aplicado aos FIIs na rodada anterior.
         const isDefensiveEligible = isEligibleForDefensive(asset, context);
         if (isDefensiveEligible) {
-            defScore = 60; 
-            audit.DEFENSIVE.push({ factor: 'Score Base (Setor Defensivo)', points: 60, type: 'base' });
+            defScore = 40;
+            audit.DEFENSIVE.push({ factor: 'Score Base (Setor Defensivo)', points: 40, type: 'base' });
+
+            // Market cap tiers
             if (m.marketCap > 10000000000) { defScore += 10; audit.DEFENSIVE.push({ factor: 'Large Cap (>10B)', points: 10, type: 'bonus' }); }
-            if (m.dy > 6.0) { defScore += 15; audit.DEFENSIVE.push({ factor: 'Dividend Yield > 6%', points: 15, type: 'bonus' }); }
-            if (m.roe > 15) { defScore += 5; audit.DEFENSIVE.push({ factor: 'ROE > 15%', points: 5, type: 'bonus' }); }
-            if (upside > 0.15) { defScore += 10; audit.DEFENSIVE.push({ factor: 'Upside > 15%', points: 10, type: 'bonus' }); }
-            if (m.pvp > 3.0) { defScore -= 10; audit.DEFENSIVE.push({ factor: 'P/VP Esticado (>3.0)', points: -10, type: 'penalty' }); }
-            if (m.beta > 1.2) { defScore -= 5; audit.DEFENSIVE.push({ factor: 'Beta Alto (>1.2)', points: -5, type: 'penalty' }); }
+            else if (m.marketCap > 2000000000) { defScore += 4; audit.DEFENSIVE.push({ factor: 'Mid Cap (>2B)', points: 4, type: 'bonus' }); }
+
+            // DY tiers: escala proporcional ao prêmio real entregue
+            if (m.dy >= 10.0) { defScore += 22; audit.DEFENSIVE.push({ factor: 'Dividend Yield Excepcional (≥10%)', points: 22, type: 'bonus' }); }
+            else if (m.dy >= 8.0) { defScore += 16; audit.DEFENSIVE.push({ factor: 'Dividend Yield Alto (≥8%)', points: 16, type: 'bonus' }); }
+            else if (m.dy >= 6.0) { defScore += 10; audit.DEFENSIVE.push({ factor: 'Dividend Yield > 6%', points: 10, type: 'bonus' }); }
+            else if (m.dy >= 4.0) { defScore += 5; audit.DEFENSIVE.push({ factor: 'Dividend Yield Moderado (≥4%)', points: 5, type: 'bonus' }); }
+
+            // ROE tiers
+            if (m.roe >= 20) { defScore += 15; audit.DEFENSIVE.push({ factor: 'ROE Excelente (≥20%)', points: 15, type: 'bonus' }); }
+            else if (m.roe >= 15) { defScore += 10; audit.DEFENSIVE.push({ factor: 'ROE Robusto (≥15%)', points: 10, type: 'bonus' }); }
+            else if (m.roe >= 12) { defScore += 5; audit.DEFENSIVE.push({ factor: 'ROE Saudável (≥12%)', points: 5, type: 'bonus' }); }
+
+            // Upside tiers
+            if (upside >= 0.30) { defScore += 15; audit.DEFENSIVE.push({ factor: 'Upside Forte (>30%)', points: 15, type: 'bonus' }); }
+            else if (upside >= 0.20) { defScore += 10; audit.DEFENSIVE.push({ factor: 'Upside Moderado (>20%)', points: 10, type: 'bonus' }); }
+            else if (upside >= 0.15) { defScore += 5; audit.DEFENSIVE.push({ factor: 'Upside Positivo (>15%)', points: 5, type: 'bonus' }); }
+            else if (upside >= 0.10) { defScore += 3; audit.DEFENSIVE.push({ factor: 'Upside Leve (>10%)', points: 3, type: 'bonus' }); }
+
+            // P/VP penalties: novo tier intermediário
+            if (m.pvp > 3.0) { defScore -= 10; audit.DEFENSIVE.push({ factor: 'P/VP Muito Esticado (>3.0)', points: -10, type: 'penalty' }); }
+            else if (m.pvp > 2.0) { defScore -= 5; audit.DEFENSIVE.push({ factor: 'P/VP Elevado (>2.0)', points: -5, type: 'penalty' }); }
+
+            // Beta tiers: bônus para ultra-defensivos, penalidade mais severa para voláteis
+            if (m.beta < 0.70) { defScore += 5; audit.DEFENSIVE.push({ factor: 'Beta Defensivo (<0.7)', points: 5, type: 'bonus' }); }
+            else if (m.beta >= 1.5) { defScore -= 15; audit.DEFENSIVE.push({ factor: 'Beta Muito Alto (≥1.5)', points: -15, type: 'penalty' }); }
+            else if (m.beta > 1.2) { defScore -= 8; audit.DEFENSIVE.push({ factor: 'Beta Alto (>1.2)', points: -8, type: 'penalty' }); }
+
+            // Volatilidade anual: ativo defensivo não deve oscilar 30%+ ao ano
+            const stockVol = m.volatility || 20;
+            if (stockVol > 40) { defScore -= 20; audit.DEFENSIVE.push({ factor: 'Volatilidade Muito Alta (>40%)', points: -20, type: 'penalty' }); }
+            else if (stockVol > 30) { defScore -= 10; audit.DEFENSIVE.push({ factor: 'Volatilidade Elevada (>30%)', points: -10, type: 'penalty' }); }
+
+            // Payout acima de 100%: DY inflado por distribuição além do lucro — risco real de corte
+            if (!m._missing?.payout && m.payout > 150) { defScore -= 30; audit.DEFENSIVE.push({ factor: `Payout Insustentável (${m.payout.toFixed(1)}%)`, points: -30, type: 'penalty' }); }
+            else if (!m._missing?.payout && m.payout > 100) { defScore -= 20; audit.DEFENSIVE.push({ factor: `Payout Acima do Lucro (${m.payout.toFixed(1)}%)`, points: -20, type: 'penalty' }); }
+            else if (!m._missing?.payout && m.payout >= 30 && m.payout <= 85) { defScore += 5; audit.DEFENSIVE.push({ factor: `Payout Saudável (${m.payout.toFixed(1)}%)`, points: 5, type: 'bonus' }); }
+
+            // Alavancagem: empresa com dívida crítica não é defensiva, mesmo com bons dividendos.
+            // Reutiliza o mesmo cálculo derivado usado no structural Risk score.
+            const isFinancialSectorForLev = asset.sector?.includes('Banco') || asset.sector?.includes('Segur') || asset.sector?.includes('Financeiro') || asset.sector?.includes('Financials') || asset.sector?.includes('Financial');
+            if (!isFinancialSectorForLev) {
+                const ev = (m.marketCap || 0) + (m.netDebt || 0);
+                if (m.evEbitda > 0 && ev > 0) {
+                    const ebitda = ev / m.evEbitda;
+                    const dlEbitda = m.netDebt / ebitda;
+                    if (dlEbitda > 3.5) {
+                        defScore -= 15;
+                        audit.DEFENSIVE.push({ factor: `Alavancagem Crítica (DL/EBITDA: ${dlEbitda.toFixed(1)}x)`, points: -15, type: 'penalty' });
+                    } else if (dlEbitda > 2.5) {
+                        defScore -= 8;
+                        audit.DEFENSIVE.push({ factor: `Alavancagem Elevada (DL/EBITDA: ${dlEbitda.toFixed(1)}x)`, points: -8, type: 'penalty' });
+                    }
+                }
+            }
         } else {
-            defScore = 30; 
+            defScore = 30;
             audit.DEFENSIVE.push({ factor: 'Ineligível para Carteira Defensiva', points: 30, type: 'base' });
         }
 
-        if (m.marketCap > 2000000000) { 
-            modScore = 60;
-            audit.MODERATE.push({ factor: 'Score Base (Mid/Large Cap)', points: 60, type: 'base' });
-            if (m.revenueGrowth > 10) { modScore += 15; audit.MODERATE.push({ factor: 'Crescimento Receita > 10%', points: 15, type: 'bonus' }); }
-            if (m.roe > 12) { modScore += 10; audit.MODERATE.push({ factor: 'ROE > 12%', points: 10, type: 'bonus' }); }
-            if (upside > 0.20) { modScore += 15; audit.MODERATE.push({ factor: 'Upside > 20%', points: 15, type: 'bonus' }); }
-            if (m.netMargin < 5) { modScore -= 15; audit.MODERATE.push({ factor: 'Margem Líquida Baixa (<5%)', points: -15, type: 'penalty' }); }
-        } else {
+        // ── MODERADO ──────────────────────────────────────────────────────────────
+        // Base reduzida 60→40. Bônus progressivos em crescimento, ROE e upside.
+        if (m.marketCap > 2000000000) {
             modScore = 40;
-            audit.MODERATE.push({ factor: 'Score Base (Small Cap)', points: 40, type: 'base' });
+            audit.MODERATE.push({ factor: 'Score Base (Mid/Large Cap)', points: 40, type: 'base' });
+
+            // Revenue growth tiers
+            if (effectiveRevenueGrowth > 30) { modScore += 22; audit.MODERATE.push({ factor: 'Crescimento Receita Excepcional (>30%)', points: 22, type: 'bonus' }); }
+            else if (effectiveRevenueGrowth > 20) { modScore += 16; audit.MODERATE.push({ factor: 'Crescimento Receita Alto (>20%)', points: 16, type: 'bonus' }); }
+            else if (effectiveRevenueGrowth > 10) { modScore += 10; audit.MODERATE.push({ factor: 'Crescimento Receita > 10%', points: 10, type: 'bonus' }); }
+            else if (effectiveRevenueGrowth > 5) { modScore += 4; audit.MODERATE.push({ factor: 'Crescimento Receita Moderado (>5%)', points: 4, type: 'bonus' }); }
+
+            // ROE tiers
+            if (m.roe > 20) { modScore += 15; audit.MODERATE.push({ factor: 'ROE Excelente (>20%)', points: 15, type: 'bonus' }); }
+            else if (m.roe > 15) { modScore += 10; audit.MODERATE.push({ factor: 'ROE Robusto (>15%)', points: 10, type: 'bonus' }); }
+            else if (m.roe > 12) { modScore += 7; audit.MODERATE.push({ factor: 'ROE Saudável (>12%)', points: 7, type: 'bonus' }); }
+            else if (m.roe > 10) { modScore += 3; audit.MODERATE.push({ factor: 'ROE Positivo (>10%)', points: 3, type: 'bonus' }); }
+
+            // Upside tiers
+            if (upside > 0.40) { modScore += 20; audit.MODERATE.push({ factor: 'Upside Agressivo (>40%)', points: 20, type: 'bonus' }); }
+            else if (upside > 0.30) { modScore += 15; audit.MODERATE.push({ factor: 'Upside Alto (>30%)', points: 15, type: 'bonus' }); }
+            else if (upside > 0.20) { modScore += 10; audit.MODERATE.push({ factor: 'Upside > 20%', points: 10, type: 'bonus' }); }
+            else if (upside > 0.10) { modScore += 5; audit.MODERATE.push({ factor: 'Upside Positivo (>10%)', points: 5, type: 'bonus' }); }
+
+            // Bancos e holdings: margem contábil incomparável — não penalizar
+            const hasAnomalousMargin = m.netMargin > 100 || (isFinancialSector && m.netMargin === 0);
+            if (!hasAnomalousMargin && !m._missing?.netMargin && m.netMargin < 5) {
+                modScore -= 15;
+                audit.MODERATE.push({ factor: 'Margem Líquida Baixa (<5%)', points: -15, type: 'penalty' });
+            }
+
+            // ROE < Selic com buffer de 0.5% para evitar penalizar casos borderline
+            const selic = MACRO.SELIC || 14.75;
+            if (!isFinancialSector && !m._missing?.roe && m.roe > 0 && m.roe < (selic - 0.5)) {
+                const roePenalty = m.roe < selic / 2 ? 20 : 10;
+                modScore -= roePenalty;
+                audit.MODERATE.push({ factor: `ROE Abaixo da Selic (${m.roe.toFixed(1)}% < ${selic.toFixed(1)}%)`, points: -roePenalty, type: 'penalty' });
+            }
+
+            // Payout acima de 100%: distribuição além do lucro é risco de sustentabilidade
+            if (!m._missing?.payout && m.payout > 100) {
+                modScore -= 10;
+                audit.MODERATE.push({ factor: `Payout Insustentável (${m.payout.toFixed(1)}%)`, points: -10, type: 'penalty' });
+            }
+        } else {
+            modScore = 25;
+            audit.MODERATE.push({ factor: 'Score Base (Small Cap)', points: 25, type: 'base' });
         }
 
-        boldScore = 50;
-        audit.BOLD.push({ factor: 'Base Arrojada', points: 50, type: 'base' });
-        if (m.revenueGrowth > 15) {
-            if (pegRatio > 0 && pegRatio < 1.0) { boldScore += 30; audit.BOLD.push({ factor: 'PEG Ratio Excelente (<1.0)', points: 30, type: 'bonus' }); }
-            else if (pegRatio < 1.5) { boldScore += 15; audit.BOLD.push({ factor: 'PEG Ratio Saudável (<1.5)', points: 15, type: 'bonus' }); }
-            if (m.revenueGrowth > 25) { boldScore += 10; audit.BOLD.push({ factor: 'Hyper Growth (>25%)', points: 10, type: 'bonus' }); }
+        // ── ARROJADO ──────────────────────────────────────────────────────────────
+        // Base reduzida 50→35. Bônus tiered em PEG, crescimento e upside.
+        // Sem PEG gate em >15% — gate reduzido para >10% para capturar mais oportunidades.
+        boldScore = 35;
+        audit.BOLD.push({ factor: 'Base Arrojada', points: 35, type: 'base' });
+        const effectivePegForBold = effectiveRevenueGrowth > 0 ? m.pl / effectiveRevenueGrowth : 0;
+
+        // PEG tiers: gate em >10% de crescimento efetivo
+        if (effectiveRevenueGrowth > 10) {
+            if (effectivePegForBold > 0 && effectivePegForBold < 0.5) { boldScore += 30; audit.BOLD.push({ factor: 'PEG Excepcional (<0.5)', points: 30, type: 'bonus' }); }
+            else if (effectivePegForBold < 1.0) { boldScore += 22; audit.BOLD.push({ factor: 'PEG Excelente (<1.0)', points: 22, type: 'bonus' }); }
+            else if (effectivePegForBold < 1.5) { boldScore += 12; audit.BOLD.push({ factor: 'PEG Saudável (<1.5)', points: 12, type: 'bonus' }); }
+            else if (effectivePegForBold < 2.0) { boldScore += 5; audit.BOLD.push({ factor: 'PEG Razoável (<2.0)', points: 5, type: 'bonus' }); }
         }
-        if (upside > 0.50) { boldScore += 20; audit.BOLD.push({ factor: 'Upside Agressivo (>50%)', points: 20, type: 'bonus' }); }
+
+        // Revenue growth tiers (acumulativo ao PEG)
+        if (effectiveRevenueGrowth > 40) { boldScore += 25; audit.BOLD.push({ factor: 'Hyper Growth Extremo (>40%)', points: 25, type: 'bonus' }); }
+        else if (effectiveRevenueGrowth > 25) { boldScore += 15; audit.BOLD.push({ factor: 'Hyper Growth (>25%)', points: 15, type: 'bonus' }); }
+        else if (effectiveRevenueGrowth > 15) { boldScore += 8; audit.BOLD.push({ factor: 'Crescimento Sólido (>15%)', points: 8, type: 'bonus' }); }
+
+        // Upside tiers
+        if (upside > 0.80) { boldScore += 30; audit.BOLD.push({ factor: 'Upside Extremo (>80%)', points: 30, type: 'bonus' }); }
+        else if (upside > 0.50) { boldScore += 20; audit.BOLD.push({ factor: 'Upside Agressivo (>50%)', points: 20, type: 'bonus' }); }
+        else if (upside > 0.30) { boldScore += 10; audit.BOLD.push({ factor: 'Upside Relevante (>30%)', points: 10, type: 'bonus' }); }
+        else if (upside > 0.20) { boldScore += 5; audit.BOLD.push({ factor: 'Upside Moderado (>20%)', points: 5, type: 'bonus' }); }
+
+        // Volatility penalties: novo tier intermediário
         if ((m.volatility || 30) > 60) { boldScore -= 20; audit.BOLD.push({ factor: 'Volatilidade Extrema (>60%)', points: -20, type: 'penalty' }); }
+        else if ((m.volatility || 30) > 45) { boldScore -= 10; audit.BOLD.push({ factor: 'Volatilidade Alta (>45%)', points: -10, type: 'penalty' }); }
+
+        // ── PENALIDADE DE SOBREVALORIZAÇÃO (comum a todos os perfis) ──────────────
+        const hasMeaningfulFairPrice = valuationData.grahamPrice > 0 || valuationData.bazinPrice > 0;
+        if (hasMeaningfulFairPrice && upside < -0.10) {
+            const pct = (Math.abs(upside) * 100).toFixed(0);
+            let boldModPenalty, defPenalty;
+            if (upside < -0.25) {
+                boldModPenalty = 40;
+                defPenalty = 20;
+            } else {
+                boldModPenalty = 25;
+                defPenalty = 10;
+            }
+            boldScore -= boldModPenalty;
+            modScore -= boldModPenalty;
+            defScore -= defPenalty;
+            audit.BOLD.push({ factor: `Sobrevalorizado (preço ${pct}% acima do Preço Justo)`, points: -boldModPenalty, type: 'penalty' });
+            audit.MODERATE.push({ factor: `Sobrevalorizado (preço ${pct}% acima do Preço Justo)`, points: -boldModPenalty, type: 'penalty' });
+            audit.DEFENSIVE.push({ factor: `Sobrevalorizado (preço ${pct}% acima do Preço Justo)`, points: -defPenalty, type: 'penalty' });
+        }
 
     } else if (type === 'FII') {
         const isTier1 = asset.dbFlags?.isTier1 || false;
         const isPapel = resolvePapel(asset.fiiSubType, asset.sector);
+        const yieldSpread = m.dy - NTNB;
 
+        // ── DEFENSIVO ────────────────────────────────────────────────────────
+        // Base reduzida de 65→40: bônus progressivos evitam que FIIs medianos
+        // atinjam 100 trivialmente só por cumprir 3 critérios binários.
         if (isEligibleForDefensive(asset, context)) {
-            defScore = 65;
-            audit.DEFENSIVE.push({ factor: 'Score Base (FII Setor Defensivo)', points: 65, type: 'base' });
-            if (m.dy > NTNB + 1.5) { defScore += 15; audit.DEFENSIVE.push({ factor: 'Yield > NTN-B + 1.5%', points: 15, type: 'bonus' }); }
-            
+            defScore = 40;
+            audit.DEFENSIVE.push({ factor: 'Score Base (FII Defensivo)', points: 40, type: 'base' });
+
+            // Yield spread vs NTN-B: escala proporcional ao prêmio real entregue
+            if (yieldSpread >= 5.0) {
+                defScore += 22; audit.DEFENSIVE.push({ factor: `Yield Excepcional (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 22, type: 'bonus' });
+            } else if (yieldSpread >= 3.0) {
+                defScore += 18; audit.DEFENSIVE.push({ factor: `Yield Alto (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 18, type: 'bonus' });
+            } else if (yieldSpread >= 1.5) {
+                defScore += 12; audit.DEFENSIVE.push({ factor: 'Yield > NTN-B + 1.5%', points: 12, type: 'bonus' });
+            } else if (yieldSpread >= 0.5) {
+                defScore += 5; audit.DEFENSIVE.push({ factor: `Yield Moderado (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 5, type: 'bonus' });
+            } else if (yieldSpread < 0) {
+                defScore -= 10; audit.DEFENSIVE.push({ factor: `Spread Negativo vs NTN-B (${yieldSpread.toFixed(1)}%)`, points: -10, type: 'penalty' });
+            }
+
+            // P/VP: bonifica zona próxima ao valor patrimonial; penaliza ágio excessivo
             if (isPapel) {
                 if (m.pvp >= 0.95 && m.pvp <= 1.05) { defScore += 15; audit.DEFENSIVE.push({ factor: 'P/VP Equilibrado (Papel)', points: 15, type: 'bonus' }); }
+                else if (m.pvp >= 0.88 && m.pvp < 0.95) { defScore += 10; audit.DEFENSIVE.push({ factor: 'P/VP com Deságio Leve (Papel)', points: 10, type: 'bonus' }); }
+                else if (m.pvp > 1.05 && m.pvp <= 1.10) { defScore += 5; audit.DEFENSIVE.push({ factor: 'P/VP com Ágio Leve (Papel)', points: 5, type: 'bonus' }); }
+                else if (m.pvp > 1.10) { defScore -= 5; audit.DEFENSIVE.push({ factor: 'P/VP com Ágio Elevado (Papel)', points: -5, type: 'penalty' }); }
             } else {
-                if (m.pvp >= 0.80 && m.pvp <= 1.05) { defScore += 15; audit.DEFENSIVE.push({ factor: 'P/VP Saudável (Tijolo)', points: 15, type: 'bonus' }); }
+                if (m.pvp >= 0.90 && m.pvp <= 1.05) { defScore += 15; audit.DEFENSIVE.push({ factor: 'P/VP Saudável (Tijolo)', points: 15, type: 'bonus' }); }
+                else if (m.pvp >= 0.82 && m.pvp < 0.90) { defScore += 10; audit.DEFENSIVE.push({ factor: 'P/VP com Deságio (Tijolo)', points: 10, type: 'bonus' }); }
+                else if (m.pvp > 1.05 && m.pvp <= 1.12) { defScore += 5; audit.DEFENSIVE.push({ factor: 'P/VP com Ágio Moderado (Tijolo)', points: 5, type: 'bonus' }); }
+                else if (m.pvp > 1.12) { defScore -= 5; audit.DEFENSIVE.push({ factor: 'P/VP com Ágio Elevado (Tijolo)', points: -5, type: 'penalty' }); }
             }
-            
-            if (isTier1) { defScore += 10; audit.DEFENSIVE.push({ factor: 'Fundo Tier 1 (Elite)', points: 10, type: 'bonus' }); }
-            if (m.beta < 0.7) { defScore += 15; audit.DEFENSIVE.push({ factor: 'Beta Defensivo (<0.7)', points: 15, type: 'bonus' }); }
-            else if (m.beta > 0.9) { defScore -= 15; audit.DEFENSIVE.push({ factor: 'Beta Elevado (>0.9)', points: -15, type: 'penalty' }); }
+
+            // Beta: tiered — diferencia FIIs ultra-estáveis de apenas estáveis
+            if (m.beta < 0.40) { defScore += 12; audit.DEFENSIVE.push({ factor: 'Beta Ultra Defensivo (<0.4)', points: 12, type: 'bonus' }); }
+            else if (m.beta < 0.70) { defScore += 7; audit.DEFENSIVE.push({ factor: 'Beta Defensivo (<0.7)', points: 7, type: 'bonus' }); }
+            else if (m.beta > 0.90) { defScore -= 15; audit.DEFENSIVE.push({ factor: 'Beta Elevado (>0.9)', points: -15, type: 'penalty' }); }
+
+            if (isTier1) { defScore += 8; audit.DEFENSIVE.push({ factor: 'Fundo Tier 1 (Elite)', points: 8, type: 'bonus' }); }
+
+            // Liquidez como proxy de segurança patrimonial
+            if (m.avgLiquidity > 5000000) { defScore += 6; audit.DEFENSIVE.push({ factor: 'Liquidez Alta (>5M)', points: 6, type: 'bonus' }); }
+            else if (m.avgLiquidity > 2000000) { defScore += 3; audit.DEFENSIVE.push({ factor: 'Liquidez Boa (>2M)', points: 3, type: 'bonus' }); }
+
+            // Diversificação de imóveis (Tijolo) — reduz risco concentração
+            if (!isPapel) {
+                if (m.qtdImoveis > 20) { defScore += 6; audit.DEFENSIVE.push({ factor: 'Alta Diversificação (>20 imóveis)', points: 6, type: 'bonus' }); }
+                else if (m.qtdImoveis > 10) { defScore += 3; audit.DEFENSIVE.push({ factor: 'Boa Diversificação (>10 imóveis)', points: 3, type: 'bonus' }); }
+            }
         } else {
-            defScore = 40;
-            audit.DEFENSIVE.push({ factor: 'Ineligível para Carteira Defensiva FII', points: 40, type: 'base' });
-        }
-        
-        modScore = 60;
-        audit.MODERATE.push({ factor: 'Score Base (Perfil Moderado FII)', points: 60, type: 'base' });
-        if (m.dy > NTNB + 3) { modScore += 15; audit.MODERATE.push({ factor: 'Yield > NTN-B + 3%', points: 15, type: 'bonus' }); }
-        
-        if (isPapel) {
-            if (m.pvp < 0.95) { modScore += 10; audit.MODERATE.push({ factor: 'Deságio em Papel (Oportunidade)', points: 10, type: 'bonus' }); }
-        } else {
-            if (m.capRate > (NTNB + 1)) { modScore += 10; audit.MODERATE.push({ factor: 'Cap Rate > NTN-B + 1%', points: 10, type: 'bonus' }); }
-            if (m.pvp < 0.90) { modScore += 10; audit.MODERATE.push({ factor: 'Deságio em Tijolo (>10%)', points: 10, type: 'bonus' }); }
+            defScore = 25;
+            audit.DEFENSIVE.push({ factor: 'Ineligível para Carteira Defensiva FII', points: 25, type: 'base' });
         }
 
-        boldScore = 50;
-        audit.BOLD.push({ factor: 'Base Arrojada FII', points: 50, type: 'base' });
-        if (m.dy >= (NTNB + 5)) { boldScore += 30; audit.BOLD.push({ factor: 'Yield Agressivo (>NTN-B + 5%)', points: 30, type: 'bonus' }); }
-        
-        if (isPapel) {
-            if (m.pvp < 0.90) { boldScore += 20; audit.BOLD.push({ factor: 'Deságio Acentuado em Papel', points: 20, type: 'bonus' }); }
+        // ── MODERADO ─────────────────────────────────────────────────────────
+        modScore = 45;
+        audit.MODERATE.push({ factor: 'Score Base (Perfil Moderado FII)', points: 45, type: 'base' });
+
+        if (yieldSpread >= 5.0) {
+            modScore += 25; audit.MODERATE.push({ factor: `Yield Excepcional (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 25, type: 'bonus' });
+        } else if (yieldSpread >= 3.0) {
+            modScore += 18; audit.MODERATE.push({ factor: `Yield Alto (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 18, type: 'bonus' });
+        } else if (yieldSpread >= 1.5) {
+            modScore += 10; audit.MODERATE.push({ factor: 'Yield > NTN-B + 1.5%', points: 10, type: 'bonus' });
+        } else if (yieldSpread >= 0) {
+            modScore += 4; audit.MODERATE.push({ factor: `Yield Positivo (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 4, type: 'bonus' });
         } else {
-            if (m.pvp < 0.80) { boldScore += 20; audit.BOLD.push({ factor: 'Deságio Acentuado em Tijolo', points: 20, type: 'bonus' }); }
+            modScore -= 10; audit.MODERATE.push({ factor: `Spread Negativo vs NTN-B (${yieldSpread.toFixed(1)}%)`, points: -10, type: 'penalty' });
         }
+
+        if (isPapel) {
+            if (m.pvp < 0.90) { modScore += 12; audit.MODERATE.push({ factor: 'Deságio Expressivo em Papel (>10%)', points: 12, type: 'bonus' }); }
+            else if (m.pvp < 0.95) { modScore += 7; audit.MODERATE.push({ factor: 'Deságio em Papel (5–10%)', points: 7, type: 'bonus' }); }
+            else if (m.pvp < 1.00) { modScore += 3; audit.MODERATE.push({ factor: 'Deságio Leve em Papel', points: 3, type: 'bonus' }); }
+        } else {
+            if (m.capRate > (NTNB + 3)) { modScore += 10; audit.MODERATE.push({ factor: 'Cap Rate Excelente (>NTN-B + 3%)', points: 10, type: 'bonus' }); }
+            else if (m.capRate > (NTNB + 1)) { modScore += 6; audit.MODERATE.push({ factor: 'Cap Rate > NTN-B + 1%', points: 6, type: 'bonus' }); }
+            else if (m.capRate > NTNB) { modScore += 3; audit.MODERATE.push({ factor: 'Cap Rate > NTN-B', points: 3, type: 'bonus' }); }
+
+            if (m.pvp < 0.80) { modScore += 12; audit.MODERATE.push({ factor: 'Deságio Expressivo em Tijolo (>20%)', points: 12, type: 'bonus' }); }
+            else if (m.pvp < 0.90) { modScore += 7; audit.MODERATE.push({ factor: 'Deságio em Tijolo (10–20%)', points: 7, type: 'bonus' }); }
+            else if (m.pvp < 0.95) { modScore += 3; audit.MODERATE.push({ factor: 'Deságio Leve em Tijolo', points: 3, type: 'bonus' }); }
+        }
+
+        if (m.avgLiquidity > 5000000) { modScore += 5; audit.MODERATE.push({ factor: 'Liquidez Alta (>5M)', points: 5, type: 'bonus' }); }
+        else if (m.avgLiquidity > 2000000) { modScore += 3; audit.MODERATE.push({ factor: 'Liquidez Boa (>2M)', points: 3, type: 'bonus' }); }
+
+        // Penalidade por vacância: relevante para moderados que ainda aceitam algum risco
+        if (!isPapel) {
+            if (m.vacancy > 15) { modScore -= 8; audit.MODERATE.push({ factor: `Vacância Alta (${m.vacancy.toFixed(1)}%)`, points: -8, type: 'penalty' }); }
+            else if (m.vacancy > 10) { modScore -= 4; audit.MODERATE.push({ factor: `Vacância Moderada (${m.vacancy.toFixed(1)}%)`, points: -4, type: 'penalty' }); }
+        }
+
+        // ── ARROJADO ──────────────────────────────────────────────────────────
+        boldScore = 35;
+        audit.BOLD.push({ factor: 'Base Arrojada FII', points: 35, type: 'base' });
+
+        if (yieldSpread >= 7.0) {
+            boldScore += 35; audit.BOLD.push({ factor: `Yield Extremo (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 35, type: 'bonus' });
+        } else if (yieldSpread >= 5.0) {
+            boldScore += 25; audit.BOLD.push({ factor: 'Yield Agressivo (>NTN-B + 5%)', points: 25, type: 'bonus' });
+        } else if (yieldSpread >= 3.0) {
+            boldScore += 15; audit.BOLD.push({ factor: `Yield Arrojado (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 15, type: 'bonus' });
+        } else if (yieldSpread >= 1.0) {
+            boldScore += 7; audit.BOLD.push({ factor: `Yield Moderado (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 7, type: 'bonus' });
+        }
+
+        if (isPapel) {
+            if (m.pvp < 0.85) { boldScore += 25; audit.BOLD.push({ factor: 'Deságio Acentuado em Papel (>15%)', points: 25, type: 'bonus' }); }
+            else if (m.pvp < 0.92) { boldScore += 15; audit.BOLD.push({ factor: 'Deságio Expressivo em Papel (8–15%)', points: 15, type: 'bonus' }); }
+            else if (m.pvp < 0.97) { boldScore += 8; audit.BOLD.push({ factor: 'Deságio em Papel (3–8%)', points: 8, type: 'bonus' }); }
+        } else {
+            if (m.pvp < 0.75) { boldScore += 25; audit.BOLD.push({ factor: 'Deságio Extremo em Tijolo (>25%)', points: 25, type: 'bonus' }); }
+            else if (m.pvp < 0.82) { boldScore += 18; audit.BOLD.push({ factor: 'Deságio Acentuado em Tijolo (18–25%)', points: 18, type: 'bonus' }); }
+            else if (m.pvp < 0.90) { boldScore += 10; audit.BOLD.push({ factor: 'Deságio em Tijolo (10–18%)', points: 10, type: 'bonus' }); }
+        }
+
+        // Cap rate agressivo: imóveis com alta rentabilidade operacional
+        if (!isPapel) {
+            if (m.capRate > (NTNB + 5)) { boldScore += 10; audit.BOLD.push({ factor: 'Cap Rate Excepcional (>NTN-B + 5%)', points: 10, type: 'bonus' }); }
+            else if (m.capRate > (NTNB + 3)) { boldScore += 5; audit.BOLD.push({ factor: 'Cap Rate Alto (>NTN-B + 3%)', points: 5, type: 'bonus' }); }
+        }
+
     } else if (type === 'CRYPTO') {
         const isBlueChip = ['BTC', 'ETH'].includes(asset.ticker);
         const isTop10 = m.marketCap > 20000000000;
@@ -265,14 +496,41 @@ const calculateProfileScores = (asset, valuationData, context) => {
         }
     }
 
-    const maxScoreAllowed = (type === 'CRYPTO' || confidence >= 60) ? 100 : 70;
-    const finalScores = { 
-        DEFENSIVE: Math.min(maxScoreAllowed, Math.max(10, defScore)), 
-        MODERATE: Math.min(maxScoreAllowed, Math.max(10, modScore)), 
-        BOLD: Math.min(maxScoreAllowed, Math.max(10, boldScore)) 
+    // Aplica penalidades de confiança diretamente nos scores de perfil (apenas STOCK/STOCK_US)
+    // para que o audit log "Dados e Confiança" reflita deduções reais (não cosmético).
+    // FIIs: revenueGrowth e roe/netMargin são estruturalmente ausentes → não aplicar a penalidade.
+    // CRYPTO: usa suas próprias penalidades de liquidez dentro do bloco acima.
+    if ((type === 'STOCK' || type === 'STOCK_US') && confidence < 100) {
+        const confPenalty = 100 - confidence;
+        defScore -= confPenalty;
+        modScore -= confPenalty;
+        boldScore -= confPenalty;
+    }
+
+    // Dividend Aristocrat bonus aplicado ANTES do clamp de confiança (maxScoreAllowed).
+    // Aplicar depois do clamp violaria o teto de 70 para ativos com dados incompletos,
+    // podendo gerar sinal BUY indevido em ativos que deveriam ficar em WAIT.
+    const isAristocrat = isDividendAristocrat(m, type);
+    if (isAristocrat) {
+        defScore += 10;
+        modScore += 5;
+        audit.DEFENSIVE.push({ factor: 'Dividend Aristocrat Bonus', points: 10, type: 'bonus' });
+        audit.MODERATE.push({ factor: 'Dividend Aristocrat Bonus', points: 5, type: 'bonus' });
+    }
+
+    // Cap graduado: salto binário 59→70/60→100 substituído por escada para evitar que
+    // um dado a menos reduza o teto de 100 para 70 abruptamente.
+    const maxScoreAllowed = type === 'CRYPTO' ? 100
+        : confidence >= 80 ? 100
+        : confidence >= 60 ? 85
+        : 70;
+    const finalScores = {
+        DEFENSIVE: Math.min(maxScoreAllowed, Math.max(10, defScore)),
+        MODERATE: Math.min(maxScoreAllowed, Math.max(10, modScore)),
+        BOLD: Math.min(maxScoreAllowed, Math.max(10, boldScore))
     };
 
-    return { scores: finalScores, audit };
+    return { scores: finalScores, audit, isAristocrat };
 };
 
 const calculateStructuralScores = (asset, context) => {
@@ -292,9 +550,17 @@ const calculateStructuralScores = (asset, context) => {
         else if (m.roe > 10) { qScore += 15; audit.QUALITY.push({ factor: 'ROE Saudável (>10%)', points: 15, type: 'bonus' }); }
         else { audit.QUALITY.push({ factor: 'ROE Modesto / Baixo', points: 0, type: 'base' }); }
         
-        if (m.netMargin > 10) { qScore += 25; audit.QUALITY.push({ factor: 'Margem Líquida Robusta (>10%)', points: 25, type: 'bonus' }); }
-        else if (m.netMargin > 5) { qScore += 15; audit.QUALITY.push({ factor: 'Margem Líquida Regular (>5%)', points: 15, type: 'bonus' }); }
-        else { audit.QUALITY.push({ factor: 'Margem Líquida Estreita', points: 0, type: 'penalty' }); }
+        // Holdings (>100%) e bancos (0%) têm margens contabilmente incomparáveis com empresas industriais.
+        // Tratar como dado ausente evita bônus indevido para ITSA4 (200%) e penalidade falsa para BBDC4 (0%).
+        const isFinancialForQuality = asset.sector?.includes('Banco') || asset.sector?.includes('Segur') || asset.sector?.includes('Financeiro') || asset.sector?.includes('Holding');
+        const netMarginForScoring = (m.netMargin > 100 || (isFinancialForQuality && m.netMargin === 0)) ? null : m.netMargin;
+        if (netMarginForScoring !== null) {
+            if (netMarginForScoring > 10) { qScore += 25; audit.QUALITY.push({ factor: 'Margem Líquida Robusta (>10%)', points: 25, type: 'bonus' }); }
+            else if (netMarginForScoring > 5) { qScore += 15; audit.QUALITY.push({ factor: 'Margem Líquida Regular (>5%)', points: 15, type: 'bonus' }); }
+            else { audit.QUALITY.push({ factor: 'Margem Líquida Estreita', points: 0, type: 'base' }); }
+        } else {
+            audit.QUALITY.push({ factor: 'Margem N/A (Setor Financeiro/Holding)', points: 0, type: 'base' });
+        }
 
         if (m.debtToEquity < 1.0) { qScore += 25; audit.QUALITY.push({ factor: 'Estrutura Capital Excelente (D/P < 1.0)', points: 25, type: 'bonus' }); }
         else if (m.debtToEquity < 2.0) { qScore += 15; audit.QUALITY.push({ factor: 'Alavancagem Controlada (D/P < 2.0)', points: 15, type: 'bonus' }); }
@@ -428,7 +694,7 @@ const calculateStructuralScores = (asset, context) => {
         if (spread >= requiredSpread + 2) { vScore += 90; audit.VALUATION.push({ factor: 'Spread Excelente (>4-5%)', points: 90, type: 'bonus' }); }
         else if (spread >= requiredSpread) { vScore += 70; audit.VALUATION.push({ factor: 'Spread Saudável', points: 70, type: 'bonus' }); }
         else if (spread >= 0) { vScore += 40; audit.VALUATION.push({ factor: 'Spread Positivo', points: 40, type: 'bonus' }); }
-        else { vScore += 10; audit.VALUATION.push({ factor: 'Spread Negativo vs Tesouro', points: 10, type: 'penalty' }); }
+        else { audit.VALUATION.push({ factor: `Spread Negativo vs Tesouro (${spread.toFixed(1)}%)`, points: 0, type: 'penalty' }); }
 
         // Ajuste por P/VP
         if (m.pvp < 0.90) { vScore += 10; audit.VALUATION.push({ factor: 'Deságio P/VP (<0.90)', points: 10, type: 'bonus' }); }
@@ -438,7 +704,11 @@ const calculateStructuralScores = (asset, context) => {
 
         // --- RISK FII ---
         let rScore = 50; audit.RISK.push({ factor: 'Base Risco FII', points: 50, type: 'base' });
-        if (m.avgLiquidity > 2000000) { rScore += 20; audit.RISK.push({ factor: 'Liquidez Alta (>2M)', points: 20, type: 'bonus' }); }
+        // Tiers granulares para criar variância real: antes quase todos travavam em 70 (base+liq>2M)
+        if (m.avgLiquidity > 10000000) { rScore += 30; audit.RISK.push({ factor: 'Liquidez Institucional (>10M)', points: 30, type: 'bonus' }); }
+        else if (m.avgLiquidity > 5000000) { rScore += 25; audit.RISK.push({ factor: 'Liquidez Alta (>5M)', points: 25, type: 'bonus' }); }
+        else if (m.avgLiquidity > 2000000) { rScore += 20; audit.RISK.push({ factor: 'Liquidez Boa (>2M)', points: 20, type: 'bonus' }); }
+        else if (m.avgLiquidity > 1000000) { rScore += 10; audit.RISK.push({ factor: 'Liquidez Mínima (>1M)', points: 10, type: 'bonus' }); }
         
         if (!isPapel) {
             if (m.vacancy > 20) { rScore -= 40; audit.RISK.push({ factor: 'Vacância Crítica (>20%)', points: -40, type: 'penalty' }); }
@@ -572,20 +842,18 @@ export const scoringEngine = {
             return { _discarded: true, reason: "Stablecoin", details: "Ativos pareados não geram ganho de capital" };
         }
         if (asset.price <= 0.01 && asset.type !== 'CRYPTO') return { _discarded: true, reason: "Preço de Centavos", details: `< 0.01` };
-        if (asset.metrics.avgLiquidity < 200000 && asset.type !== 'CRYPTO') return { _discarded: true, reason: "Liquidez Insuficiente", details: `${asset.metrics.avgLiquidity} (Mínimo: 200k)` };
+        // FIIs precisam de liquidez maior que ações para execução real sem slippage.
+        const liquidityFloor = asset.type === 'FII' ? 500000 : 200000;
+        if (asset.metrics.avgLiquidity < liquidityFloor && asset.type !== 'CRYPTO') return { _discarded: true, reason: "Liquidez Insuficiente", details: `${asset.metrics.avgLiquidity} (Mínimo: ${asset.type === 'FII' ? '500k' : '200k'})` };
         if (asset.dbFlags && asset.dbFlags.isBlacklisted) return { _discarded: true, reason: "Blacklist Manual", details: "Banido pelo Admin" }; 
 
         const valuationData = calculateIntrinsicValue(asset.metrics, asset.type, asset.price, context);
         const profileResult = calculateProfileScores(asset, valuationData, context);
         const structuralResult = calculateStructuralScores(asset, context);
         const thesisData = generateDynamicTheses(asset.metrics, asset.type, asset.ticker, context, valuationData, asset.price, asset.sector, asset.fiiSubType);
-        const aristocrat = isDividendAristocrat(asset.metrics, asset.type);
+        const aristocrat = profileResult.isAristocrat;
 
         if (aristocrat) {
-            profileResult.scores.DEFENSIVE = Math.min(100, profileResult.scores.DEFENSIVE + 10);
-            profileResult.scores.MODERATE = Math.min(100, profileResult.scores.MODERATE + 5);
-            profileResult.audit.DEFENSIVE.push({ factor: 'Dividend Aristocrat Bonus', points: 10, type: 'bonus' });
-            profileResult.audit.MODERATE.push({ factor: 'Dividend Aristocrat Bonus', points: 5, type: 'bonus' });
             thesisData.bull.unshift("Dividend Aristocrat: Crescimento consistente e dividendos saudáveis.");
         }
 

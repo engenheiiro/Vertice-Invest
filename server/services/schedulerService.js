@@ -19,6 +19,7 @@ import { calculateDailyDietz } from '../utils/mathUtils.js';
 import { isBusinessDay } from '../utils/dateUtils.js';
 
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
+import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 
 // --- LÓGICA DE SNAPSHOT ISOLADA (Reutilizável) ---
 export const runDailySnapshot = async (force = false) => {
@@ -40,24 +41,27 @@ export const runDailySnapshot = async (force = false) => {
         let snapshotsCreated = 0;
         let snapshotsSkipped = 0;
 
+        const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
+        const usdRate = sysConfig?.dollar || 5.75;
+
         for (const user of users) {
             try {
                 // 1. Calcula Patrimônio Atual
                 const assets = await UserAsset.find({ user: user._id });
                 let totalEquity = 0;
                 let totalInvested = 0;
-                
+
                 for (const asset of assets) {
                     let price = 0;
-                    const usdRate = usdConfig?.dollar || 5.75;
-                    const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1; 
+                    const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1;
 
                     if (asset.type === 'CASH') {
                         price = 1;
-                        totalEquity += asset.quantity; 
+                        totalEquity += asset.quantity;
                         totalInvested += asset.totalCost;
                     } else if (asset.type === 'FIXED_INCOME') {
-                        price = asset.averagePrice; // Simplificação para snapshot noturno
+                        // averagePrice não é campo persistido — deriva do totalCost/quantity
+                        price = asset.quantity > 0 ? asset.totalCost / asset.quantity : 0;
                         totalEquity += asset.quantity * price;
                         totalInvested += asset.totalCost;
                     } else {
@@ -227,17 +231,40 @@ export const initScheduler = () => {
         }
     });
 
-    // 5. Sync Pesado + Cálculo (Diário 08:00)
-    cron.schedule('0 8 * * *', async () => {
-        logger.info("⏰ Rotina Diária V3 Iniciada");
+    // 5a. Sync Manhã (09:00) — dados do pregão anterior consolidados, antes de abrir
+    cron.schedule('0 9 * * *', async () => {
+        logger.info("⏰ Rotina Diária V3 — Manhã (09:00)");
         try {
             const syncResult = await syncService.performFullSync();
             if (syncResult.success) {
-                await timeSeriesWorker.run(); // Roda o worker após o sync
-                await aiResearchService.runBatchAnalysis(null); 
+                await aiResearchService.runBatchAnalysis(null);
+                // Auditoria de precisão (não-crítica)
+                try {
+                    const { runBacktestAnalysis } = await import('../scripts/runBacktestEngine.js');
+                    await runBacktestAnalysis();
+                } catch (e) { logger.warn(`⚠️ BacktestAnalysis (manhã): ${e.message}`); }
             }
         } catch (e) {
-            logger.error(`❌ Rotina Diária V3: ${e.message}`);
+            logger.error(`❌ Rotina Manhã V3: ${e.message}`);
+        }
+    });
+
+    // 5b. Sync Tarde/Pós-Mercado (18:30) — B3 fecha às 17:30, dados completos do dia
+    cron.schedule('30 18 * * *', async () => {
+        logger.info("⏰ Rotina Diária V3 — Pós-Mercado (18:30)");
+        try {
+            const syncResult = await syncService.performFullSync();
+            if (syncResult.success) {
+                // TimeSeriesWorker aqui: dados de fechamento disponíveis (Beta/SMA/EMA corretos)
+                await timeSeriesWorker.run();
+                await aiResearchService.runBatchAnalysis(null);
+                try {
+                    const { runBacktestAnalysis } = await import('../scripts/runBacktestEngine.js');
+                    await runBacktestAnalysis();
+                } catch (e) { logger.warn(`⚠️ BacktestAnalysis (tarde): ${e.message}`); }
+            }
+        } catch (e) {
+            logger.error(`❌ Rotina Tarde V3: ${e.message}`);
         }
     });
 
@@ -268,7 +295,34 @@ export const initScheduler = () => {
         await holidayService.sync();
     });
 
-    // 9. REATIVAÇÃO AUTOMÁTICA DE ATIVOS INATIVOS (Toda segunda-feira 05:00)
+    // 9. Fundamentals S&P 500 (dias úteis 07:30 — antes do pipeline de análise)
+    cron.schedule('30 7 * * 1-5', async () => {
+        try {
+            logger.info("⏰ [Scheduler] Sync Fundamentals S&P 500...");
+            await usStocksFundamentalsService.syncUSStocksFundamentals();
+            await SystemConfig.findOneAndUpdate(
+                { key: 'MACRO_INDICATORS' },
+                { $set: { lastUSFundamentalsSync: new Date() } },
+                { upsert: true }
+            );
+            logger.info("✅ [Scheduler] Fundamentals S&P 500 sincronizados.");
+        } catch (error) {
+            logger.error(`❌ [Scheduler] Fundamentals US: ${error.message}`);
+        }
+    });
+
+    // 10. Taxa USD/BRL histórica (toda segunda-feira 06:00 — antes dos outros syncs)
+    cron.schedule('0 6 * * 1', async () => {
+        try {
+            logger.info("⏰ [Scheduler] Sync taxa USD/BRL histórica...");
+            await macroDataService.syncHistoricalUSDRate();
+            logger.info("✅ [Scheduler] Taxa USD/BRL histórica sincronizada.");
+        } catch (error) {
+            logger.error(`❌ [Scheduler] Sync USD/BRL histórico: ${error.message}`);
+        }
+    });
+
+    // 11. REATIVAÇÃO AUTOMÁTICA DE ATIVOS INATIVOS (Toda segunda-feira 05:00)
     // Tenta reobter cotação de ativos que foram desativados por falhas consecutivas.
     // Se a cotação voltar, o ativo é reativado automaticamente sem intervenção manual.
     cron.schedule('0 5 * * 1', async () => {

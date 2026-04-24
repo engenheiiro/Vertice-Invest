@@ -3,9 +3,10 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { syncService } from '../services/syncService.js'; 
+import { syncService } from '../services/syncService.js';
 import { aiResearchService } from '../services/aiResearchService.js';
-import { signalEngine } from '../services/engines/signalEngine.js'; // Importado
+import { signalEngine } from '../services/engines/signalEngine.js';
+import { runBacktestAnalysis } from './runBacktestEngine.js';
 
 // Configuração de ambiente para rodar via terminal
 const __filename = fileURLToPath(import.meta.url);
@@ -52,6 +53,15 @@ const syncProd = async () => {
             
             const backtestResult = await signalEngine.runBacktest();
             console.log(`info: 🕵️ Backtest: ${backtestResult.processed || 0} sinais auditados.`);
+
+            // 4. Auditoria de Precisão do Algoritmo (gráfico de acurácia)
+            console.log("info: 📊 Rodando auditoria de precisão do algoritmo...");
+            try {
+                await runBacktestAnalysis();
+                console.log("info: ✅ Auditoria de precisão concluída.");
+            } catch (backtestErr) {
+                console.log(`info: ⚠️ Auditoria de precisão falhou (não crítico): ${backtestErr.message}`);
+            }
 
             console.log("info: ⏰ Script: Sync Prod Data - Finalizado");
             process.exit(0);

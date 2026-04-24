@@ -6,6 +6,7 @@ import http from 'http';
 import SystemConfig from '../models/SystemConfig.js';
 import TreasuryBond from '../models/TreasuryBond.js';
 import EconomicIndex from '../models/EconomicIndex.js';
+import AssetHistory from '../models/AssetHistory.js';
 import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
 import { isBusinessDay } from '../utils/dateUtils.js';
@@ -82,7 +83,7 @@ export const macroDataService = {
 
         // Se a data for futura ou hoje, não precisa atualizar
         if (startDateObj > new Date()) {
-            logger.info(`✅ [Macro] Histórico já está atualizado.`);
+            logger.debug(`✅ [Macro] Histórico já está atualizado.`);
             return;
         }
 
@@ -335,14 +336,14 @@ export const macroDataService = {
                     const rate = parseFloat(bond['Taxa Venda Manha'] ?? bond['Taxa Compra Manha'] ?? 0);
                     if (rate > 3 && rate < 20) {
                         ntnbRate = rate;
-                        logger.info(`🏛️ [NTN-B] Fonte oficial (Tesouro Transparente): ${rate}% a.a. (IPCA+ ${year})`);
+                        logger.debug(`🏛️ [NTN-B] Fonte oficial (Tesouro Transparente): ${rate}% a.a. (IPCA+ ${year})`);
                         break;
                     }
                 }
             }
             return ntnbRate;
         } catch (error) {
-            logger.warn(`⚠️ [NTN-B] Fonte oficial indisponível: ${error.message}`);
+            logger.debug(`[NTN-B] Fonte oficial indisponível (${error.message}). Usando Investidor10.`);
             return null;
         }
     },
@@ -442,10 +443,89 @@ export const macroDataService = {
             }));
 
             await TreasuryBond.bulkWrite(operations);
-            logger.info(`🏛️ [Tesouro Direto] Atualizado com sucesso: ${uniqueBonds.length} títulos.`);
+            logger.debug(`🏛️ [Tesouro Direto] Atualizado com sucesso: ${uniqueBonds.length} títulos.`);
         } 
         
         return { ntnbLong: ntnbLongRate };
+    },
+
+    // Busca e armazena série histórica diária de USD/BRL (últimos 2 anos)
+    // Usada por financialService.rebuildUserHistory() para converter USD corretamente por data
+    async syncHistoricalUSDRate() {
+        try {
+            logger.info('💱 [Câmbio] Sincronizando histórico USD/BRL...');
+
+            // AwesomeAPI: /daily/USD-BRL/730 retorna os últimos 730 dias úteis
+            const res = await axios.get('https://economia.awesomeapi.com.br/json/daily/USD-BRL/730', {
+                headers: BASE_HEADERS,
+                timeout: 10000
+            });
+
+            if (!res.data || !Array.isArray(res.data) || res.data.length === 0) {
+                logger.warn('⚠️ [Câmbio] AwesomeAPI não retornou dados históricos. Tentando fallback Yahoo Finance...');
+                await this._syncHistoricalUSDRateYahoo();
+                return;
+            }
+
+            // AwesomeAPI retorna do mais recente para o mais antigo
+            const historyEntries = res.data
+                .filter(d => d.bid && parseFloat(d.bid) > 0)
+                .map(d => {
+                    // timestamp em segundos → Date → YYYY-MM-DD
+                    const dateStr = new Date(parseInt(d.timestamp) * 1000).toISOString().split('T')[0];
+                    return {
+                        date: dateStr,
+                        close: parseFloat(d.bid),
+                        adjClose: parseFloat(d.bid)
+                    };
+                });
+
+            if (historyEntries.length === 0) {
+                logger.warn('⚠️ [Câmbio] Nenhuma entrada válida na resposta da AwesomeAPI.');
+                return;
+            }
+
+            // Remover duplicatas por data (manter mais recente)
+            const byDate = {};
+            for (const entry of historyEntries) {
+                if (!byDate[entry.date]) byDate[entry.date] = entry;
+            }
+            const deduped = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
+
+            await AssetHistory.findOneAndUpdate(
+                { ticker: 'USD-BRL' },
+                {
+                    $set: {
+                        ticker: 'USD-BRL',
+                        history: deduped,
+                        lastUpdated: new Date()
+                    }
+                },
+                { upsert: true, new: true }
+            );
+
+            logger.debug(`✅ [Câmbio] Histórico USD/BRL atualizado: ${deduped.length} dias.`);
+        } catch (error) {
+            logger.error(`❌ [Câmbio] Erro ao sincronizar histórico USD/BRL: ${error.message}`);
+            // Tenta fallback via Yahoo Finance (BRL=X)
+            try {
+                await this._syncHistoricalUSDRateYahoo();
+            } catch (e) {
+                logger.error(`❌ [Câmbio] Fallback Yahoo também falhou: ${e.message}`);
+            }
+        }
+    },
+
+    async _syncHistoricalUSDRateYahoo() {
+        const history = await externalMarketService.getFullHistory('USD-BRL', 'CURRENCY');
+        if (!history || history.length === 0) return;
+
+        await AssetHistory.findOneAndUpdate(
+            { ticker: 'USD-BRL' },
+            { $set: { ticker: 'USD-BRL', history, lastUpdated: new Date() } },
+            { upsert: true, new: true }
+        );
+        logger.debug(`✅ [Câmbio] Histórico USD/BRL via Yahoo: ${history.length} dias.`);
     },
 
     async performMacroSync() {
