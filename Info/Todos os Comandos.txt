@@ -1,6 +1,6 @@
 📘 Vértice Invest - Cheat Sheet de Comandos (Oficial)
 
-🚀 1. Setup & Inicialização (Ambiente Dev)
+🚀 1. Setup & Inicialização
 
 # Instala todas as dependências (Raiz, Client e Server) de uma vez
 npm run setup
@@ -8,6 +8,9 @@ npm run setup
 # Inicia o modo de desenvolvimento (Frontend + Backend + Watchers)
 # Conecta ao MongoDB definido no .env
 npm run dev
+
+# Inicia o servidor em modo produção (sem nodemon, sem HMR)
+npm start
 
 ⚙️ 2. Operações de Banco de Dados & Manutenção
 
@@ -24,6 +27,17 @@ npm run seed:market
 # Gestão de Acesso
 # Promove um usuário existente para ADMIN (Acesso total + Debug).
 npm run seed:admin seu@email.com
+
+# Lista todos os usuários cadastrados no banco (nome, email, plano, status, role, validade).
+npm run list:users
+
+# Altera o plano de um usuário (GUEST | ESSENTIAL | PRO | BLACK).
+# Dias é opcional — padrão: 365. Define status como ACTIVE automaticamente.
+npm run set:plan seu@email.com PRO
+npm run set:plan seu@email.com PRO 30
+
+# Redefine a senha de um usuário (mínimo 6 caracteres).
+npm run set:password seu@email.com NovaSenha123
 
 📡 3. Inteligência & Dados (Produção/Rotinas)
 
@@ -56,6 +70,12 @@ npm run test:ingestion
 
 # Teste de Pegar 5 ativos da época e comprar o preço
 npm run test:backtest
+
+# Testa o scraper do Fundamentus diretamente (verifica se o site mudou estrutura)
+npm run test:fundamentus
+
+# Verifica erros de lint no Client e no Server
+npm run lint
 
 📦 5. Build (Deploy)
 
