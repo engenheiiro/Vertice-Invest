@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 1200px;
+      height: 630px;
+      overflow: hidden;
+      background: #080C14;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    /* Grid sutil de fundo */
+    .grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(37, 99, 235, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(37, 99, 235, 0.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    /* Glow central */
+    .glow {
+      position: absolute;
+      width: 700px;
+      height: 400px;
+      background: radial-gradient(ellipse at center, rgba(37, 99, 235, 0.12) 0%, transparent 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    /* Borda sutil */
+    .border-frame {
+      position: absolute;
+      inset: 24px;
+      border: 1px solid rgba(37, 99, 235, 0.15);
+      border-radius: 16px;
+    }
+
+    /* Linha decorativa topo */
+    .top-line {
+      position: absolute;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 120px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #2563EB, transparent);
+    }
+
+    .content {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+    }
+
+    /* Logo */
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .shield-wrap {
+      width: 72px;
+      height: 72px;
+      background: #2563EB;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow:
+        0 0 0 1px rgba(37,99,235,0.4),
+        0 0 40px rgba(37, 99, 235, 0.35),
+        0 0 80px rgba(37, 99, 235, 0.15);
+    }
+
+    .shield-wrap svg {
+      width: 38px;
+      height: 38px;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .brand-name {
+      font-size: 56px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      color: #f1f5f9;
+      line-height: 1;
+    }
+
+    .brand-sub {
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: 6px;
+      color: #2563EB;
+      text-transform: uppercase;
+    }
+
+    /* Divisor */
+    .divider {
+      width: 320px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(148,163,184,0.2), transparent);
+    }
+
+    /* Tagline */
+    .tagline {
+      font-size: 22px;
+      font-weight: 400;
+      color: #94a3b8;
+      letter-spacing: 0.3px;
+      text-align: center;
+    }
+
+    .tagline span {
+      color: #cbd5e1;
+      font-weight: 500;
+    }
+
+    /* Pills de categorias */
+    .pills {
+      display: flex;
+      gap: 12px;
+    }
+
+    .pill {
+      padding: 6px 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(37,99,235,0.3);
+      background: rgba(37,99,235,0.08);
+      color: #93c5fd;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+    }
+
+    /* URL rodapé */
+    .url {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 14px;
+      color: #475569;
+      letter-spacing: 1px;
+      font-weight: 400;
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="glow"></div>
+  <div class="border-frame"></div>
+  <div class="top-line"></div>
+
+  <div class="content">
+    <div class="logo-row">
+      <div class="shield-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="rgba(255,255,255,0.1)" />
+          <path d="m9 12 2 2 4-4" stroke="white" stroke-width="2.5" />
+        </svg>
+      </div>
+      <div class="brand">
+        <div class="brand-name">VÉRTICE</div>
+        <div class="brand-sub">Invest</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="tagline">
+      <span>Análise Quantitativa</span> de Investimentos
+    </div>
+
+    <div class="pills">
+      <div class="pill">Ações</div>
+      <div class="pill">FIIs</div>
+      <div class="pill">Cripto</div>
+    </div>
+  </div>
+
+  <div class="url">verticeinvest.com.br</div>
+</body>
+</html>
