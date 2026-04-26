@@ -31,6 +31,10 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 | Planos e feature gating | `server/config/subscription.js` |
 | Setores macro | `server/config/sectorTaxonomy.js` |
 | Constantes financeiras | `server/config/financialConstants.js` |
+| Matemática financeira segura | `server/utils/mathUtils.js` |
+| Middleware JWT + downgrade de plano | `server/middleware/authMiddleware.js` |
+| Guards de rota (auth/admin) | `client/src/components/auth/ProtectedRoute.tsx`, `AdminRoute.tsx` |
+| Séries temporais (worker) | `server/services/workers/timeSeriesWorker.js` |
 
 ---
 
@@ -75,6 +79,8 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 4. **Delta de posição:** comparado com o último `MarketAnalysis` salvo (seta direcional no frontend).
 5. **ES Modules:** backend usa `import/export`. Nunca `require()`.
 6. **Secrets:** nunca hardcode. Usar variáveis do `.env`.
+7. **Matemática financeira:** sempre usar `safeFloat()`, `safeCurrency()`, `safeAdd/Sub/Mult/Div()` de `mathUtils.js`. Nunca operar com floats brutos em valores monetários.
+8. **Rate limiting em novas rotas:** usar `writeLimiter` (50 ops/15min) em todo POST/PUT/DELETE de wallet. Rotas de auth já têm `authLimiter` (20/15min). Geral: `apiLimiter` (3000/15min).
 
 ---
 
@@ -85,7 +91,11 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 - **`SystemConfig`** (key `MACRO_INDICATORS`): cache macro — `selic`, `ipca`, `ntnbLong`, `riskFree`, `ibov`, `dollar`, `btc`.
 - **`DiscardLog`**: ativos descartados por run — `runId`, `ticker`, `reason`, `details`.
 - **`User`**: `plan` (GUEST|ESSENTIAL|PRO|BLACK), `role` (USER|ADMIN), `subscriptionStatus`.
-- **`UserAsset`**: holdings — `taxLots[]` para FIFO, `totalCost`, `realizedProfit`.
+- **`UserAsset`**: holdings — `taxLots[]` para FIFO, `totalCost`, `realizedProfit`, `fifoRealizedProfit`. Índice único `{ user, ticker }`.
+- **`WalletSnapshot`**: snapshot patrimonial diário — `equity`, `invested`, `result`, `twrr`, `dividends`. Gerado por `schedulerService.runDailySnapshot()`.
+- **`QuantSignal`**: sinal técnico salvo — `ticker`, `type`, `strength`, `rsiValue`, `volumeRatio`.
+- **`RefreshToken`**: tokens de refresh persistidos no banco — `token`, `user`, `expiresAt`.
+- **`UsageLog`**: auditoria de uso por feature e plano.
 
 ---
 
@@ -114,12 +124,22 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < BLACK (3). Definido em `server
 
 ---
 
+## Convenções Backend
+
+- **Ordem de middleware por rota:** `rateLimiter` → `authenticateToken` → `requireAdmin` (se admin) → handler.
+- **Downgrade automático de plano:** `authMiddleware` verifica `validUntil` a cada request e rebaixa para GUEST se expirado — não duplicar essa lógica em handlers.
+- **Snapshot diário TWRR:** `schedulerService.runDailySnapshot()` usa Modified Dietz (weight 0.5). Não recalcular performance histórica em query — usar `WalletSnapshot`.
+- **Alias frontend:** `@` → `src/`. Proxy de dev: `/api` → `http://localhost:5000` (configurado no `vite.config.ts`).
+
+---
+
 ## Contextos e Hooks (Frontend)
 
 - **`AuthContext`** — `user{id, name, email, plan, role, subscriptionStatus}`, `isAuthenticated`, `login()`, `logout()`, `refreshProfile()`
 - **`WalletContext`** — `assets[]`, `kpis{totalEquity, totalInvested, totalResult, totalDividends, sharpeRatio, beta}`, `isPrivacyMode`, `addAsset()`, `removeAsset()`. Demo mode retorna DEMO_ASSETS quando `isDemoMode=true`.
 - **`ToastContext`** — `addToast(message, type: 'success'|'error'|'info')`, auto-dismiss 4s.
 - **`DemoContext`** — inicia automaticamente se `user.hasSeenTutorial === false` (delay 1.2s). IDs: `tour-equity`, `tour-wallet-*`, etc.
+- **Demo mode:** `WalletContext` injeta `DEMO_ASSETS` quando `isDemoMode=true`. Mutações de carteira devem checar `if (isDemoMode) return` antes de chamar a API.
 - **`useDashboardData`** — React Query agregando macro (cache 15min), sinais (5min), dividendos (5min), research (1h).
 - **Token refresh:** interceptor automático em 401; fila de requests aguarda novo token; redireciona para `/login` se refresh falhar.
 
