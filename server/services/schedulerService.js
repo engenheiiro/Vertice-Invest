@@ -340,4 +340,14 @@ export const initScheduler = () => {
             logger.error(`❌ [Scheduler] Erro na reativação de ativos: ${error.message}`);
         }
     });
+
+    // 12. LIMPEZA DE ARMAZENAMENTO (Domingo 01:00 — janela de menor tráfego)
+    cron.schedule('0 1 * * 0', async () => {
+        try {
+            const { runStorageCleanup } = await import('./cleanupService.js');
+            await runStorageCleanup();
+        } catch (error) {
+            logger.error(`❌ [Scheduler] Cleanup de armazenamento: ${error.message}`);
+        }
+    });
 };

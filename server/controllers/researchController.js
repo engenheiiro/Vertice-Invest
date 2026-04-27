@@ -90,6 +90,15 @@ export const clearRadarHistory = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
+export const runStorageCleanupHandler = async (req, res, next) => {
+    try {
+        const { runStorageCleanup } = await import('../services/cleanupService.js');
+        logger.info(`🧹 [Admin] Limpeza de armazenamento iniciada por ${req.user.email}`);
+        const stats = await runStorageCleanup();
+        res.json({ message: "Limpeza concluída.", stats });
+    } catch (error) { next(error); }
+};
+
 export const updateBacktestConfig = async (req, res, next) => {
     try {
         const { days } = req.body;

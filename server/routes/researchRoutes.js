@@ -22,7 +22,8 @@ import {
     getDiscardLogs,
     syncTimeSeries,
     getPublishStatus,
-    generateExplainableAI
+    generateExplainableAI,
+    runStorageCleanupHandler
 } from '../controllers/researchController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -49,6 +50,7 @@ router.post('/sync-macro', requireAdmin, triggerMacroSync);
 router.post('/sync-time-series', requireAdmin, syncTimeSeries);
 router.post('/config/backtest', requireAdmin, updateBacktestConfig);
 router.delete('/signals/history', requireAdmin, clearRadarHistory);
+router.post('/cleanup-storage', requireAdmin, runStorageCleanupHandler);
 
 // Monitor de Qualidade & Acurácia
 router.get('/data-quality', requireAdmin, getDataQualityStats);

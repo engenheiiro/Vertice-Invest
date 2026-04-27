@@ -115,17 +115,19 @@ export const getWalletData = async (req, res, next) => {
         }
 
         if (userAssets.length === 0) {
-            return res.json({ 
-                assets: [], 
-                kpis: { 
-                    totalEquity: 0, totalInvested: 0, totalResult: 0, totalResultPercent: 0, 
+            const emptyConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
+            const emptyUsdRate = safeFloat(emptyConfig?.dollar || 5.75);
+            return res.json({
+                assets: [],
+                kpis: {
+                    totalEquity: 0, totalInvested: 0, totalResult: 0, totalResultPercent: 0,
                     dayVariation: 0, dayVariationPercent: 0, totalDividends: 0, projectedDividends: 0,
                     weightedRentability: 0,
                     dataQuality: 'AUDITED',
                     sharpeRatio: 0,
                     beta: 0
                 },
-                meta: { usdRate: 5.75 }
+                meta: { usdRate: emptyUsdRate }
             });
         }
 
