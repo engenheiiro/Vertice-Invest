@@ -20,7 +20,7 @@ export const paymentService = {
         }
 
         const userId = user.id || user._id;
-        
+
         // Usa Preference (Checkout API)
         const preference = new Preference(client);
 
@@ -28,14 +28,14 @@ export const paymentService = {
             // URLs de Retorno
             const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.API_URL || 'http://localhost:5000';
             const apiUrl = baseUrl.replace(/\/$/, '');
-            
+
             const successUrl = `${apiUrl}/api/subscription/return?plan=${planKey}&status=success`;
             const failureUrl = `${apiUrl}/api/subscription/return?plan=${planKey}&status=failure`;
             const pendingUrl = `${apiUrl}/api/subscription/return?plan=${planKey}&status=pending`;
 
             // --- DETECÇÃO DE AMBIENTE SANDBOX ---
             const isSandbox = accessToken.startsWith('TEST-');
-            
+
             // Em Sandbox, não podemos usar o mesmo e-mail do vendedor (Seller) como comprador (Buyer).
             let payerEmail = user.email;
             if (isSandbox) {
@@ -58,8 +58,9 @@ export const paymentService = {
                         category_id: 'services' // Categoria correta para evitar confusão
                     }
                 ],
-                external_reference: userId.toString(),
-                
+                // Encoda o planKey para o webhook não depender de threshold de preço
+                external_reference: `${userId.toString()}:${planKey}`,
+
                 // NOTIFICAÇÃO WEBHOOK (Ação Obrigatória do Mercado Pago)
                 notification_url: `${apiUrl}/api/webhooks/mercadopago`,
 
@@ -69,17 +70,17 @@ export const paymentService = {
                     pending: pendingUrl
                 },
                 auto_return: 'approved',
-                
+
                 payer: {
                     name: user.name,
                     email: payerEmail
                 },
-                
+
                 payment_methods: {
                     excluded_payment_types: [], // Aceita tudo (PIX, Cartão, Boleto)
                     installments: 1 // Assinatura mensal = 1x
                 },
-                
+
                 // NOME NA FATURA DO CARTÃO (Máx 22 chars)
                 statement_descriptor: "VERTICE INVEST"
             };
@@ -87,13 +88,13 @@ export const paymentService = {
             logger.info(`💳 Criando Checkout para User ${userId} | Plano: ${planKey} | Valor: ${planConfig.price}`);
 
             const response = await preference.create({ body });
-            
+
             if (!response || !response.init_point) {
                 throw new Error("Mercado Pago não retornou link de checkout.");
             }
 
             logger.info(`✅ Link de Pagamento Gerado: ${response.init_point}`);
-            
+
             return {
                 init_point: response.init_point,
                 id: response.id

@@ -4,7 +4,7 @@ import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 import UsageLog from '../models/UsageLog.js';
 import logger from '../config/logger.js';
-import { PLANS, LIMITS_CONFIG } from '../config/subscription.js';
+import { PLANS, LIMITS_CONFIG, TEST_PLAN_MAP } from '../config/subscription.js';
 import { paymentService } from '../services/paymentService.js';
 
 const getMonthKey = () => {
@@ -102,6 +102,29 @@ export const registerUsage = async (req, res, next) => {
     }
 };
 
+export const createTestCheckoutSession = async (req, res, next) => {
+    try {
+        const { planKey } = req.body;
+        const TESTABLE_PLANS = ['ESSENTIAL', 'PRO', 'BLACK'];
+
+        if (!TESTABLE_PLANS.includes(planKey)) {
+            return res.status(400).json({ message: "Plano inválido para teste. Use ESSENTIAL, PRO ou BLACK." });
+        }
+
+        // Usa a mesma função do fluxo real — apenas com a variante _TEST (R$0,50, mesmos dias)
+        const testPlanKey = `${planKey}_TEST`;
+        const subscription = await paymentService.createSubscription(req.user, testPlanKey);
+
+        res.status(200).json({
+            redirectUrl: subscription.init_point,
+            subscriptionId: subscription.id
+        });
+    } catch (error) {
+        logger.error(`Erro ao criar checkout de teste: ${error.message}`);
+        next(error);
+    }
+};
+
 export const createCheckoutSession = async (req, res, next) => {
     try {
         const { planId } = req.body;
@@ -157,20 +180,18 @@ export const syncPayment = async (req, res, next) => {
             return res.status(404).json({ message: "Pagamento não encontrado no Mercado Pago." });
         }
 
-        // Verifica se o pagamento pertence ao usuário (Segurança)
-        if (payment.external_reference !== userId) {
+        // external_reference no formato "{userId}:{planKey}" — extrai o userId para verificar ownership
+        const refUserId = payment.external_reference?.split(':')[0];
+        if (refUserId !== userId) {
             return res.status(403).json({ message: "Este pagamento não pertence a este usuário." });
         }
 
         if (payment.status === 'approved') {
             const user = await User.findById(userId);
-            
-            // Lógica de Preço (Atualizada para Produção)
-            const amount = payment.transaction_amount;
-            let plan = 'ESSENTIAL';
-            if (amount >= 340) plan = 'BLACK';      // R$ 349,90
-            else if (amount >= 110) plan = 'PRO';   // R$ 119,90
-            else if (amount >= 30) plan = 'ESSENTIAL'; // R$ 39,90
+
+            // Extrai planKey do external_reference e resolve teste → real
+            const planKey = payment.external_reference?.split(':')[1];
+            const plan = TEST_PLAN_MAP[planKey] || planKey || 'ESSENTIAL';
 
             // Verifica se já não foi processado (Idempotência básica)
             if (user.plan === plan && user.validUntil && new Date(user.validUntil) > new Date()) {
@@ -197,7 +218,7 @@ export const syncPayment = async (req, res, next) => {
                 await Transaction.create({
                     user: user._id,
                     plan: plan,
-                    amount: amount,
+                    amount: payment.transaction_amount,
                     status: 'PAID',
                     method: payment.payment_type_id === 'bank_transfer' ? 'PIX' : 'CREDIT_CARD',
                     gatewayId: paymentId.toString()

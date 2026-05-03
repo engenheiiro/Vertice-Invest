@@ -1,10 +1,21 @@
 
 // --- PREÇOS DE PRODUÇÃO ---
 export const PLANS = {
-    'ESSENTIAL': { price: 39.90, days: 30, title: 'Vértice Essential' },
-    'PRO': { price: 119.90, days: 30, title: 'Vértice Pro' },
-    'BLACK': { price: 349.90, days: 30, title: 'Vértice Black Elite' },
-    'TEST': { price: 0.50, days: 1, title: 'Plano de Teste (Dev)' } // Plano Oculto para Teste
+    'ESSENTIAL': { price: 39.90,  days: 30, title: 'Vértice Essential' },
+    'PRO':       { price: 119.90, days: 30, title: 'Vértice Pro' },
+    'BLACK':     { price: 349.90, days: 30, title: 'Vértice Black Elite' },
+
+    // Variantes de teste: mesmo código, preço R$0,50 (visíveis só para admin)
+    'ESSENTIAL_TEST': { price: 0.50, days: 30, title: 'Vértice Essential' },
+    'PRO_TEST':       { price: 0.50, days: 30, title: 'Vértice Pro' },
+    'BLACK_TEST':     { price: 0.50, days: 30, title: 'Vértice Black Elite' },
+};
+
+// Mapeia plano de teste → plano real
+export const TEST_PLAN_MAP = {
+    'ESSENTIAL_TEST': 'ESSENTIAL',
+    'PRO_TEST':       'PRO',
+    'BLACK_TEST':     'BLACK',
 };
 
 // Definição de limites por feature e plano

@@ -4,6 +4,7 @@ import { Header } from '../../components/dashboard/Header';
 import { researchService, ResearchReport, PublishStatus } from '../../services/research';
 import { marketService } from '../../services/market';
 import { authService } from '../../services/auth';
+import { subscriptionService } from '../../services/subscription';
 import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Minus, HardDrive, Scissors, Settings, Database, Trash2, ShieldAlert, Target, ClipboardList, MessageSquare, Share2, Send, Copy, X } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
@@ -75,6 +76,8 @@ export const AdminPanel = () => {
 
     const [splitTicker, setSplitTicker] = useState('');
     const [isFixingSplit, setIsFixingSplit] = useState(false);
+
+    const [testPaymentLoading, setTestPaymentLoading] = useState<string | null>(null);
 
     const [backtestDays, setBacktestDays] = useState<number>(7);
     const [isSavingConfig, setIsSavingConfig] = useState(false);
@@ -403,6 +406,19 @@ export const AdminPanel = () => {
         } finally {
             setIsFixingSplit(false);
             setTimeout(() => setStatusMsg(null), 5000);
+        }
+    };
+
+    const handleTestPayment = async (planKey: string) => {
+        setTestPaymentLoading(planKey);
+        try {
+            const data = await subscriptionService.testCheckout(planKey);
+            if (data.redirectUrl) window.open(data.redirectUrl, '_blank');
+        } catch (e: any) {
+            setStatusMsg({ type: 'error', text: e.message || "Erro ao gerar link de teste." });
+            setTimeout(() => setStatusMsg(null), 5000);
+        } finally {
+            setTestPaymentLoading(null);
         }
     };
 
@@ -1046,6 +1062,38 @@ export const AdminPanel = () => {
                                         <Zap size={16} />
                                     </button>
                                 </form>
+                            </div>
+                        </div>
+
+                        {/* Testar Pagamento */}
+                        <div className="bg-[#080C14] border border-amber-900/30 rounded-2xl p-6 shadow-lg mb-6">
+                            <div className="flex items-center gap-2 mb-1">
+                                <ShieldAlert size={18} className="text-amber-500" />
+                                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Testar Pagamento (R$0,50)</h3>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mb-4">Gera um checkout real no Mercado Pago com valor mínimo. O webhook ativa o plano correto ao aprovar.</p>
+                            <div className="grid grid-cols-3 gap-3">
+                                {[
+                                    { key: 'ESSENTIAL', label: 'Essential', color: 'blue' },
+                                    { key: 'PRO', label: 'Pro', color: 'emerald' },
+                                    { key: 'BLACK', label: 'Black', color: 'purple' },
+                                ].map(({ key, label, color }) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => handleTestPayment(key)}
+                                        disabled={testPaymentLoading !== null}
+                                        className={`py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5
+                                            ${color === 'blue' ? 'bg-blue-900/20 border-blue-700/40 text-blue-400 hover:bg-blue-900/40' : ''}
+                                            ${color === 'emerald' ? 'bg-emerald-900/20 border-emerald-700/40 text-emerald-400 hover:bg-emerald-900/40' : ''}
+                                            ${color === 'purple' ? 'bg-purple-900/20 border-purple-700/40 text-purple-400 hover:bg-purple-900/40' : ''}
+                                            disabled:opacity-50 disabled:cursor-not-allowed`}
+                                    >
+                                        {testPaymentLoading === key
+                                            ? <RefreshCw size={13} className="animate-spin" />
+                                            : null}
+                                        {label}
+                                    </button>
+                                ))}
                             </div>
                         </div>
 

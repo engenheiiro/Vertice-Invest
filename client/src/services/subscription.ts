@@ -33,6 +33,16 @@ export const subscriptionService = {
         return await response.json();
     },
 
+    async testCheckout(planKey: string) {
+        const response = await authService.api('/api/subscription/test-checkout', {
+            method: 'POST',
+            body: JSON.stringify({ planKey })
+        });
+
+        if (!response.ok) throw new Error("Erro ao iniciar checkout de teste");
+        return await response.json();
+    },
+
     async getStatus() {
         const response = await authService.api('/api/subscription/status');
         if (!response.ok) return null;
