@@ -40,6 +40,14 @@ const fmtLiquidity = (val) => {
     return `R$ ${val.toFixed(0)}/dia`;
 };
 
+const fmtLiquidityUSD = (val) => {
+    if (!val || isNaN(val)) return 'N/D';
+    if (val >= 1e9) return `$ ${(val / 1e9).toFixed(2)} bi/dia`;
+    if (val >= 1e6) return `$ ${(val / 1e6).toFixed(2)} mi/dia`;
+    if (val >= 1e3) return `$ ${(val / 1e3).toFixed(0)} mil/dia`;
+    return `$ ${val.toFixed(0)}/dia`;
+};
+
 const fmtUSD = (val, fallback = 'N/D') => {
     if (val === null || val === undefined || isNaN(val) || !isFinite(val)) return fallback;
     return `$ ${Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -110,10 +118,15 @@ const formatAuditLog = (auditLog) => {
     return out;
 };
 
-const formatMetrics = (m, type) => {
+const formatMetrics = (m, type, sector) => {
     if (!m) return '  (sem métricas)\n';
     const fmtP = type === 'STOCK_US' ? fmtUSD : fmtBRL;
     const fmtCap = type === 'STOCK_US' ? fmtMarketCapUSD : fmtMarketCap;
+    const fmtLiq = (type === 'STOCK_US' || type === 'CRYPTO') ? fmtLiquidityUSD : fmtLiquidity;
+    const isFinancialSector = !!(sector?.includes('Banco') || sector?.includes('Segur') || sector?.includes('Financeiro') || sector?.includes('Holding') || sector?.includes('Financial') || sector?.includes('Insurance'));
+    // Para STOCK_US, campos não coletados são zerados no DB; exibir N/D em vez de 0.00
+    const fmtUsZero = (val, decimals = 2) => (type === 'STOCK_US' && (val === 0 || val === null || val === undefined)) ? 'N/D' : fmt(val, decimals);
+    const fmtUsZeroPct = (val) => (type === 'STOCK_US' && (val === 0 || val === null || val === undefined)) ? 'N/D' : fmtPct(val);
     let out = '';
 
     out += `  ── Valuation ─────────────────────────────────────────\n`;
@@ -123,21 +136,21 @@ const formatMetrics = (m, type) => {
 
     out += `\n  ── Indicadores de Mercado ────────────────────────────\n`;
     out += `  Market Cap:        ${fmtCap(m.marketCap)}\n`;
-    out += `  Liquidez Média:    ${fmtLiquidity(m.avgLiquidity)}\n`;
+    out += `  Liquidez Média:    ${fmtLiq(m.avgLiquidity)}\n`;
     out += `  Volatilidade:      ${fmtPct(m.volatility)}   Beta: ${fmt(m.beta, 2)}\n`;
     out += `  SMA200:            ${fmtP(m.sma200)}   EMA50: ${fmtP(m.ema50)}\n`;
 
     if (type === 'STOCK' || type === 'STOCK_US') {
         out += `\n  ── Múltiplos Fundamentais ────────────────────────────\n`;
-        out += `  P/L:               ${fmt(m.pl, 2)}   P/VP:         ${fmt(m.pvp, 2)}\n`;
-        out += `  EV/EBITDA:         ${fmt(m.evEbitda, 2)}   EV/EBIT:      ${fmt(m.evEbit, 2)}\n`;
+        out += `  P/L:               ${fmt(m.pl, 2)}   P/VP:         ${fmtUsZero(m.pvp)}\n`;
+        out += `  EV/EBITDA:         ${isFinancialSector ? 'N/A (financeiro)' : fmtUsZero(m.evEbitda)}   EV/EBIT:      ${fmt(m.evEbit, 2)}\n`;
         out += `  PSR:               ${fmt(m.psr, 2)}   P/EBIT:       ${fmt(m.pEbit, 2)}\n`;
         out += `  P/Ativos:          ${fmt(m.pAtivos, 2)}   P/Cap.Giro:   ${fmt(m.pCapGiro, 2)}\n`;
         out += `  P/Ativ.Circ.Liq:   ${fmt(m.pAtivCircLiq, 2)}   Earnings Yield: ${fmtPct(m.earningsYield)}\n`;
 
         out += `\n  ── Rentabilidade e Eficiência ────────────────────────\n`;
-        out += `  ROE:               ${fmtPct(m.roe)}   ROIC:         ${fmtPct(m.roic)}\n`;
-        out += `  Margem Líquida:    ${fmtPct(m.netMargin)}   Margem EBIT:  ${fmtPct(m.ebitMargin)}\n`;
+        out += `  ROE:               ${fmtPct(m.roe)}   ROIC:         ${fmtUsZeroPct(m.roic)}\n`;
+        out += `  Margem Líquida:    ${isFinancialSector ? 'N/A (financeiro)' : fmtPct(m.netMargin)}   Margem EBIT:  ${isFinancialSector ? 'N/A (financeiro)' : fmtPct(m.ebitMargin)}\n`;
         out += `  Crescimento 5a:    ${fmtPct(m.revenueGrowth)}\n`;
 
         out += `\n  ── Endividamento e Saúde Financeira ──────────────────\n`;
@@ -236,7 +249,7 @@ const formatRankingItem = (item, idx) => {
     out += formatAuditLog(item.auditLog);
 
     out += `\n  MÉTRICAS:\n`;
-    out += formatMetrics(m, item.type);
+    out += formatMetrics(m, item.type, item.sector);
 
     return out;
 };

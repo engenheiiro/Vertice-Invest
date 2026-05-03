@@ -32,7 +32,8 @@ function extractFundamentals(ticker, data) {
     const netMargin = fd.profitMargins ? fd.profitMargins * 100 : null;
     const revenueGrowth = fd.revenueGrowth ? fd.revenueGrowth * 100 : null;
     const earningsGrowth = fd.earningsGrowth ? fd.earningsGrowth * 100 : null;
-    const debtToEquity = fd.debtToEquity || null;
+    // Yahoo Finance retorna debtToEquity em formato percentual (ex: 47.49 = 47.49% = ratio 0.4749)
+    const debtToEquity = fd.debtToEquity != null ? fd.debtToEquity / 100 : null;
     const avgLiquidity = sd.averageVolume || ks.averageDailyVolume10Day || null;
     const lastPrice = fd.currentPrice || sd.regularMarketPrice || null;
     const payoutRatio = sd.payoutRatio ? sd.payoutRatio * 100 : null;
@@ -49,7 +50,7 @@ function extractFundamentals(ticker, data) {
 
     return {
         pl, pvp, dy, beta, marketCap, roe, netMargin, revenueGrowth, earningsGrowth,
-        netDebt: debtToEquity, avgLiquidity, lastPrice, payoutRatio, vpa, lpa, sector, name, peg,
+        debtToEquity, avgLiquidity, lastPrice, payoutRatio, vpa, lpa, sector, name, peg,
     };
 }
 
@@ -119,9 +120,9 @@ export const usStocksFundamentalsService = {
                 if (fundamentals.netMargin !== null) updatePayload.netMargin = fundamentals.netMargin;
                 if (fundamentals.revenueGrowth !== null) updatePayload.revenueGrowth = fundamentals.revenueGrowth;
                 if (fundamentals.earningsGrowth !== null) updatePayload.earningsGrowth = fundamentals.earningsGrowth;
-                if (fundamentals.netDebt !== null) updatePayload.debtToEquity = fundamentals.netDebt;
+                if (fundamentals.debtToEquity !== null) updatePayload.debtToEquity = fundamentals.debtToEquity;
                 if (fundamentals.avgLiquidity) updatePayload.liquidity = fundamentals.avgLiquidity;
-                if (fundamentals.payoutRatio !== null) updatePayload.payoutRatio = fundamentals.payoutRatio;
+                if (fundamentals.payoutRatio !== null) updatePayload.payout = fundamentals.payoutRatio;
                 if (fundamentals.vpa !== null) updatePayload.vpa = fundamentals.vpa;
                 if (fundamentals.lpa !== null) updatePayload.lpa = fundamentals.lpa;
                 if (fundamentals.peg !== null) updatePayload.peg = fundamentals.peg;

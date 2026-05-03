@@ -1,9 +1,16 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Shield } from 'lucide-react';
+import { PageMeta } from '../components/seo/PageMeta';
 
 export const Terms = () => {
   return (
+    <>
+    <PageMeta
+      title="Termos de Uso"
+      description="Leia os termos de uso e política de privacidade da Vértice Invest, plataforma de análise quantitativa de Ações, FIIs e Criptomoedas."
+      canonical="/terms"
+    />
     <div className="w-full max-h-[500px] overflow-y-auto pr-3 custom-scrollbar">
       <div className="mb-6 flex items-center gap-2 sticky top-0 bg-white/95 backdrop-blur-sm z-20 pb-2 pt-1 border-b border-slate-100">
         <Link to="/register" className="p-2 -ml-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500">
@@ -48,5 +55,6 @@ export const Terms = () => {
         </Link>
       </div>
     </div>
+    </>
   );
 };

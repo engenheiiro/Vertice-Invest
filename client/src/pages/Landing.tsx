@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PageMeta } from '../components/seo/PageMeta';
 import { 
   ShieldCheck, BrainCircuit, 
   ChevronRight, Activity, Globe, Cpu, ChevronDown, CheckCircle2,
@@ -70,7 +71,26 @@ export const Landing = () => {
     setOpenFaq(openFaq === index ? null : index);
   };
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'Vértice Invest',
+    applicationCategory: 'FinanceApplication',
+    operatingSystem: 'Web',
+    description: 'Plataforma de análise quantitativa para Ações, FIIs e Cripto com rankings, sinais técnicos e carteira inteligente.',
+    url: 'https://verticeinvest.com.br',
+    inLanguage: 'pt-BR',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'BRL' },
+    publisher: { '@type': 'Organization', name: 'Vértice Invest', url: 'https://verticeinvest.com.br' },
+  };
+
   return (
+    <>
+    <PageMeta
+      canonical="/"
+      description="Plataforma de análise quantitativa de Ações, FIIs e Criptomoedas. Rankings fundamentalistas, sinais técnicos, carteira inteligente e aporte automático para investidores brasileiros."
+      jsonLd={jsonLd}
+    />
     <div className="min-h-screen bg-[#02040a] text-white selection:bg-blue-500 selection:text-white overflow-x-hidden font-sans">
       
       {/* NAVBAR */}
@@ -119,10 +139,11 @@ export const Landing = () => {
                 O Fim da <br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400">Incerteza Financeira</span>
               </h1>
-              
+              <p className="sr-only">Análise quantitativa de Ações, FIIs e Criptomoedas — Rankings, sinais técnicos e carteira inteligente para investidores brasileiros.</p>
+
               <div className="text-sm md:text-base text-slate-400 max-w-lg leading-relaxed mx-auto lg:mx-0">
                 <p className="mb-4">
-                  Nossa IA processa bilhões de dados globais para entregar clareza onde outros veem caos.
+                  Nossa IA analisa Ações, FIIs e Cripto com dados fundamentalistas e técnicos para entregar clareza onde outros veem caos.
                 </p>
                 <div className="pl-4 border-l-2 border-blue-500/50 italic text-slate-300">
                   <span className="font-bold text-white not-italic block mb-0.5">Pode cancelar suas outras assinaturas.</span>
@@ -420,6 +441,7 @@ export const Landing = () => {
         </div>
       </footer>
     </div>
+    </>
   );
 };
 

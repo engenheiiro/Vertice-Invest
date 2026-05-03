@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Input } from '../components/ui/Input';
 import { Button, ButtonStatus } from '../components/ui/Button';
 import { Link, useNavigate } from 'react-router-dom';
+import { PageMeta } from '../components/seo/PageMeta';
 import { authService } from '../services/auth';
 import { useFormValidation, validators } from '../hooks/useFormValidation';
 
@@ -80,6 +81,8 @@ export const Register = () => {
   };
 
   return (
+    <>
+    <PageMeta title="Criar Conta" noindex />
     <div className="w-full">
       <div className="mb-3 text-center lg:text-left">
         <h2 className="text-lg font-bold text-slate-900 tracking-tight">Nova Credencial</h2>
@@ -213,5 +216,6 @@ export const Register = () => {
         </Link>
       </div>
     </div>
+    </>
   );
 };

@@ -107,7 +107,7 @@ const calculateIntrinsicValue = (m, type, price, context) => {
     let method = "Mercado";
     let grahamPrice = 0;
     let bazinPrice = 0;
-    let pegRatio = 0; 
+    let pegRatio = null;
 
     if (type === 'STOCK' || type === 'STOCK_US') {
         if (m.pl > 0 && m.pl < 80 && m.pvp > 0) {
@@ -116,15 +116,15 @@ const calculateIntrinsicValue = (m, type, price, context) => {
             grahamPrice = Math.sqrt(22.5 * lpa * vpa);
         }
         if (m.dy > 0) {
-            const adjustedDy = Math.min(m.dy, 14) / 100; 
+            const adjustedDy = Math.min(m.dy, 14) / 100;
             const dividendPerShare = price * adjustedDy;
-            bazinPrice = dividendPerShare / 0.06; 
+            bazinPrice = dividendPerShare / 0.06;
         }
         if (m.pl > 0 && m.revenueGrowth > 0) {
             pegRatio = m.pl / m.revenueGrowth;
         }
         if (grahamPrice > 0 && bazinPrice > 0) {
-            fairPrice = (grahamPrice * 0.4) + (bazinPrice * 0.6); 
+            fairPrice = (grahamPrice * 0.4) + (bazinPrice * 0.6);
             method = "Híbrido (Bazin+Graham)";
         } else if (grahamPrice > 0) {
             fairPrice = grahamPrice;
@@ -133,7 +133,18 @@ const calculateIntrinsicValue = (m, type, price, context) => {
             fairPrice = bazinPrice;
             method = "Bazin";
         }
-        if (fairPrice > price * 2.5) fairPrice = price * 2.5; 
+        // PEG reverso para STOCK_US: aplica método Lynch quando Graham e Bazin não produzem
+        // preço justo e o ativo está barato em relação ao crescimento (PEG < 1.0)
+        if (type === 'STOCK_US' && grahamPrice === 0 && bazinPrice === 0 && m.pl > 0 && m.pl < 80 && m.revenueGrowth > 10) {
+            const lpa = price / m.pl;
+            const cappedGrowth = Math.min(m.revenueGrowth, 40);
+            const pegReversoPrice = lpa * cappedGrowth; // Lynch: fair P/E = taxa de crescimento
+            if (pegReversoPrice > price) { // somente se o ativo está subavaliado (PEG < 1)
+                fairPrice = pegReversoPrice;
+                method = 'PEG Reverso';
+            }
+        }
+        if (fairPrice > price * 2.5) fairPrice = price * 2.5;
     } else if (type === 'FII') {
         const vp = m.vpCota || price;
         // Usa fiiSubType (explícito) ou sector como fallback — corrige bug anterior onde
@@ -152,7 +163,7 @@ const calculateIntrinsicValue = (m, type, price, context) => {
         fairPrice = price;
         method = "Mercado";
     }
-    return { fairPrice: safeVal(fairPrice), method, grahamPrice: safeVal(grahamPrice), bazinPrice: safeVal(bazinPrice), pegRatio: safeVal(pegRatio) };
+    return { fairPrice: safeVal(fairPrice), method, grahamPrice: safeVal(grahamPrice), bazinPrice: safeVal(bazinPrice), pegRatio: pegRatio !== null ? safeVal(pegRatio) : null };
 };
 
 const calculateProfileScores = (asset, valuationData, context) => {
@@ -323,6 +334,13 @@ const calculateProfileScores = (asset, valuationData, context) => {
         // Volatility penalties: novo tier intermediário
         if ((m.volatility || 30) > 60) { boldScore -= 20; audit.BOLD.push({ factor: 'Volatilidade Extrema (>60%)', points: -20, type: 'penalty' }); }
         else if ((m.volatility || 30) > 45) { boldScore -= 10; audit.BOLD.push({ factor: 'Volatilidade Alta (>45%)', points: -10, type: 'penalty' }); }
+
+        // Payout acima de 100%: mesma penalidade do perfil Defensivo — distribuição
+        // além do lucro é risco real independente do perfil de risco do investidor
+        if (!m._missing?.payout && m.payout > 100) {
+            boldScore -= 20;
+            audit.BOLD.push({ factor: `Payout Insustentável (${m.payout.toFixed(1)}%)`, points: -20, type: 'penalty' });
+        }
 
         // ── PENALIDADE DE SOBREVALORIZAÇÃO (comum a todos os perfis) ──────────────
         const hasMeaningfulFairPrice = valuationData.grahamPrice > 0 || valuationData.bazinPrice > 0;
@@ -624,7 +642,7 @@ const calculateStructuralScores = (asset, context) => {
         else if (m.avgLiquidity < 100000) { rScore -= 20; audit.RISK.push({ factor: 'Liquidez Crítica (<100k)', points: -20, type: 'penalty' }); }
 
         // --- REFINAMENTO: Penalidade por dívida alta (DL/EBITDA) ---
-        const isFinancial = asset.sector?.includes('Banco') || asset.sector?.includes('Segur') || asset.sector?.includes('Financeiro');
+        const isFinancial = asset.sector?.includes('Banco') || asset.sector?.includes('Segur') || asset.sector?.includes('Financeiro') || asset.sector?.includes('Financial') || asset.sector?.includes('Insurance') || asset.sector?.includes('Holding');
         if (!isFinancial) {
             // Cálculo de EBITDA Derivado: EV = MarketCap + NetDebt. EV/EBITDA = EV / EBITDA => EBITDA = EV / (EV/EBITDA)
             const ev = (m.marketCap || 0) + (m.netDebt || 0);

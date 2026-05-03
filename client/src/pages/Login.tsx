@@ -6,6 +6,7 @@ import { authService } from '../services/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft } from 'lucide-react';
 import { useFormValidation, validators } from '../hooks/useFormValidation';
+import { PageMeta } from '../components/seo/PageMeta';
 
 export const Login = () => {
   const navigate = useNavigate();
@@ -51,6 +52,8 @@ export const Login = () => {
   };
 
   return (
+    <>
+    <PageMeta title="Entrar" noindex />
     <div className="w-full relative">
       {/* Botão de Voltar Profissional */}
       <div className="mb-8">
@@ -132,5 +135,6 @@ export const Login = () => {
         </Link>
       </div>
     </div>
+    </>
   );
 };

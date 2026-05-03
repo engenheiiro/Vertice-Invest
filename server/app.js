@@ -20,6 +20,7 @@ import walletRoutes from './routes/walletRoutes.js';
 import marketRoutes from './routes/marketRoutes.js'; 
 import webhookRoutes from './routes/webhookRoutes.js'; // Nova Rota
 import academyRoutes from './routes/academyRoutes.js';
+import sitemapRouter from './routes/sitemapRouter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -96,6 +97,8 @@ app.use('/api/wallet', walletRoutes);
 app.use('/api/market', marketRoutes);
 app.use('/api/webhooks', webhookRoutes); // Registro dos Webhooks
 app.use('/api/academy', academyRoutes);
+
+app.use(sitemapRouter);
 
 const distPath = path.resolve(__dirname, '../client/dist');
 if (fs.existsSync(distPath)) {

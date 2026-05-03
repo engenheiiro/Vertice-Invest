@@ -1,6 +1,6 @@
 
 import React, { Suspense, lazy, PropsWithChildren } from 'react';
-import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 
 import { AuthLayout } from './components/layout/AuthLayout';
@@ -75,7 +75,7 @@ export default function App() {
   return (
     <ToastProvider>
       <AuthProvider>
-        <HashRouter>
+        <BrowserRouter>
           <Routes>
             <Route path="/" element={<Landing />} />
 
@@ -110,7 +110,7 @@ export default function App() {
             
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </HashRouter>
+        </BrowserRouter>
       </AuthProvider>
     </ToastProvider>
   );

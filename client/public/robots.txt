@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /wallet
+Disallow: /research
+Disallow: /radar
+Disallow: /indicators
+Disallow: /courses
+Disallow: /profile
+Disallow: /admin
+Disallow: /checkout
+Disallow: /pricing
+
+Sitemap: https://verticeinvest.com.br/sitemap.xml
