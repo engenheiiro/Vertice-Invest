@@ -5,6 +5,7 @@ import { CheckCircle2, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionService } from '../services/subscription';
+import { authService } from '../services/auth';
 
 export const CheckoutSuccess = () => {
     const navigate = useNavigate();
@@ -21,21 +22,34 @@ export const CheckoutSuccess = () => {
 
     useEffect(() => {
         const verify = async () => {
-            // Se tivermos um ID de pagamento, forçamos a sincronização com o backend
-            // Isso resolve o problema de delay do Webhook ou falha em localhost
             if (paymentId && status === 'approved') {
-                try {
-                    await subscriptionService.syncPayment(paymentId);
-                    await refreshProfile(); // Atualiza o contexto do usuário com o novo plano
-                    setMessage('Pagamento confirmado e plano ativado!');
-                    setVerificationStatus('success');
-                } catch (error) {
-                    console.error("Erro ao sincronizar:", error);
-                    // Mesmo se der erro no sync manual, tentamos atualizar o perfil caso o webhook tenha funcionado
-                    await refreshProfile();
-                    setMessage('Pagamento recebido. Seu plano será ativado em instantes.');
-                    setVerificationStatus('success'); // Mantemos sucesso visual pois o pagamento no MP foi OK
+                // Força sincronização com MP (backup do webhook, crítico em localhost)
+                try { await subscriptionService.syncPayment(paymentId); } catch {}
+
+                // Poll até o plano mudar no banco (max ~30s, 10 tentativas a cada 3s)
+                const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+                const planAnterior = storedUser.plan;
+                let atualizado = false;
+
+                for (let i = 0; i < 10; i++) {
+                    try {
+                        const res = await authService.api('/api/subscription/status');
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data.current?.plan && data.current.plan !== planAnterior) {
+                                await refreshProfile();
+                                atualizado = true;
+                                break;
+                            }
+                        }
+                    } catch {}
+                    if (i < 9) await new Promise(r => setTimeout(r, 3000));
                 }
+
+                if (!atualizado) await refreshProfile(); // Atualiza contexto mesmo sem mudança detectada
+
+                setMessage('Pagamento confirmado e plano ativado!');
+                setVerificationStatus('success');
             } else {
                 await refreshProfile();
                 setMessage('Assinatura processada.');
@@ -43,7 +57,7 @@ export const CheckoutSuccess = () => {
             setIsVerifying(false);
         };
 
-        // Pequeno delay para garantir que o backend do MP já processou se for muito rápido
+        // Delay inicial para o MP processar antes da primeira checagem
         setTimeout(verify, 1500);
     }, [paymentId, status, refreshProfile]);
 

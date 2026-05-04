@@ -42,10 +42,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const data = await response.json();
             if (data.current) {
                 const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-                // Merge dos dados novos com os existentes
                 const updatedUser = { ...storedUser, ...data.current };
                 setUser(updatedUser);
                 localStorage.setItem('user', JSON.stringify(updatedUser));
+                queryClient.invalidateQueries();
             }
         }
     } catch {
