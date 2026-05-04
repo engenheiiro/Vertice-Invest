@@ -13,7 +13,8 @@ vi.mock('../config/logger.js', () => ({
     default: {
         info: vi.fn(),
         error: vi.fn(),
-        warn: vi.fn()
+        warn: vi.fn(),
+        debug: vi.fn()
     }
 }));
 

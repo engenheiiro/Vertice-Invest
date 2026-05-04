@@ -7,12 +7,15 @@
     "start": "node index.js",
     "dev": "npx nodemon index.js --ignore logs/ --ignore **/*.log --ignore crash-report.txt",
     "test": "vitest",
+    "test:wallet": "vitest run tests/wallet_snapshot.spec.js",
     "test:regression": "vitest run tests/quant_regression.spec.js",
+    "test:all": "vitest run",
     "test:stress": "node server/scripts/stressTest2020.js",
     "test:fundamentus": "node tests/test_fundamentus.js",
     "sync:prod": "node server/scripts/syncProdData.js",
     "sync:TimeSeriesWorker": "node scripts/syncTimeSeries.js",
-    "lint": "node --check index.js"
+    "lint": "node --check index.js",
+    "backtest:portfolio": "node scripts/seedPortfolioBacktest.js"
   },
   "dependencies": {
     "@google/genai": "*",

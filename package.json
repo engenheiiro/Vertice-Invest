@@ -23,10 +23,13 @@
     "test:backtest": "node server/scripts/runBacktestEngine.js",
     "test:client": "npm run test --prefix client",
     "test:server": "npm run test --prefix server",
+    "test:wallet": "npm run test:wallet --prefix server",
+    "test:all": "npm run test:all --prefix server",
     "test:ingestion": "npm run test --prefix server -- tests/ingestion.spec.js",
     "test:regression": "npm run test:regression --prefix server",
     "test:fundamentus": "npm run test:fundamentus --prefix server",
-    "lint": "npm run lint --prefix client && npm run lint --prefix server"
+    "lint": "npm run lint --prefix client && npm run lint --prefix server",
+    "backtest:portfolio": "node server/scripts/seedPortfolioBacktest.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

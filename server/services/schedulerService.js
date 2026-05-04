@@ -16,7 +16,7 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import AssetTransaction from '../models/AssetTransaction.js'; 
 import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
 import { calculateDailyDietz } from '../utils/mathUtils.js';
-import { isBusinessDay } from '../utils/dateUtils.js';
+import { isBusinessDay, countBusinessDays } from '../utils/dateUtils.js';
 
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
@@ -43,6 +43,9 @@ export const runDailySnapshot = async (force = false) => {
 
         const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
         const usdRate = sysConfig?.dollar || 5.75;
+        const currentCdi = (sysConfig?.cdi > 0 ? sysConfig.cdi : null) || (sysConfig?.selic > 0 ? sysConfig.selic : null) || 11.25;
+        const todayDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(today);
+        const calcDate = new Date(todayDateStr + 'T00:00:00.000Z');
 
         for (const user of users) {
             try {
@@ -55,14 +58,41 @@ export const runDailySnapshot = async (force = false) => {
                     let price = 0;
                     const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1;
 
-                    if (asset.type === 'CASH') {
-                        price = 1;
-                        totalEquity += asset.quantity;
-                        totalInvested += asset.totalCost;
-                    } else if (asset.type === 'FIXED_INCOME') {
-                        // averagePrice não é campo persistido — deriva do totalCost/quantity
-                        price = asset.quantity > 0 ? asset.totalCost / asset.quantity : 0;
-                        totalEquity += asset.quantity * price;
+                    if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
+                        // Calcula valor atual com juros compostos (mesma lógica do walletController)
+                        const rawRate = asset.fixedIncomeRate > 0 ? asset.fixedIncomeRate : 100;
+                        const selicDailyFactor = Math.pow(1 + (currentCdi / 100), 1 / 252);
+                        let effectiveDailyFactor;
+                        if (rawRate > 50) {
+                            // Taxa em % do CDI (ex: 100 = 100% do CDI)
+                            effectiveDailyFactor = ((selicDailyFactor - 1) * (rawRate / 100)) + 1;
+                        } else {
+                            // Taxa prefixada anual (ex: 12.5%)
+                            effectiveDailyFactor = Math.pow(1 + (rawRate / 100), 1 / 252);
+                        }
+
+                        let accruedValue = 0;
+                        if (asset.taxLots && asset.taxLots.length > 0) {
+                            for (const lot of asset.taxLots) {
+                                const lotDate = new Date(new Date(lot.date).toISOString().split('T')[0] + 'T00:00:00.000Z');
+                                const bDays = countBusinessDays(lotDate, calcDate);
+                                const factor = Math.max(1, Math.pow(effectiveDailyFactor, bDays));
+                                accruedValue += asset.type === 'CASH'
+                                    ? lot.quantity * factor
+                                    : lot.quantity * lot.price * factor;
+                            }
+                        } else {
+                            // Fallback sem tax lots
+                            const startDate = new Date(new Date(asset.startDate || asset.updatedAt).toISOString().split('T')[0] + 'T00:00:00.000Z');
+                            const bDays = countBusinessDays(startDate, calcDate);
+                            const factor = Math.max(1, Math.pow(effectiveDailyFactor, bDays));
+                            const avgPrice = asset.quantity > 0 ? asset.totalCost / asset.quantity : 0;
+                            accruedValue = asset.type === 'CASH'
+                                ? asset.quantity * factor
+                                : asset.quantity * avgPrice * factor;
+                        }
+
+                        totalEquity += accruedValue;
                         totalInvested += asset.totalCost;
                     } else {
                         const marketData = await marketDataService.getMarketDataByTicker(asset.ticker);
@@ -116,10 +146,21 @@ export const runDailySnapshot = async (force = false) => {
                     }
 
                     // Proteção contra Reset Indevido
-                    if (lastSnapshot && Math.abs(quotaPrice - 100) < 0.1 && Math.abs(lastSnapshot.quotaPrice - 100) > 5) {
+                    // Cobre dois casos:
+                    // 1. lastSnapshot existe e quotaPrice caiu para ~100 (reset clássico)
+                    // 2. lastSnapshot é null MAS existem snapshots anteriores no banco —
+                    //    isso indica que o findOne falhou ou a conta foi recriada; salvar
+                    //    quota=100 agora apagaria o histórico real.
+                    if (Math.abs(quotaPrice - 100) < 0.1) {
+                        const hasHistory = lastSnapshot
+                            ? Math.abs(lastSnapshot.quotaPrice - 100) > 5
+                            : await WalletSnapshot.exists({ user: user._id });
+
+                        if (hasHistory) {
                             logger.error(`❌ Erro Crítico: Cota resetou para 100 indevidamente para ${user._id}. Snapshot abortado.`);
                             isValidSnapshot = false;
                             snapshotsSkipped++;
+                        }
                     }
 
                     if (isValidSnapshot) {

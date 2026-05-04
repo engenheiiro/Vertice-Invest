@@ -265,7 +265,7 @@ describe('Melhoria 3 — Detecção de FII Papel via fiiSubType', () => {
                 ...makeFII().metrics,
                 fiiSubType: 'TIJOLO',
                 sector: 'Papel',
-                pvp: 0.88,
+                pvp: 0.95,
                 dy: 10.5,
             }
         });
@@ -304,7 +304,7 @@ describe('Melhoria 3 — Detecção de FII Papel via fiiSubType', () => {
                 ...makeFII().metrics,
                 fiiSubType: null,
                 sector: 'Shoppings',
-                pvp: 0.88,
+                pvp: 0.95,
                 dy: 10.0,
             }
         });

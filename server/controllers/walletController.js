@@ -483,29 +483,49 @@ export const getWalletPerformance = async (req, res, next) => {
 
         if (lastSnapshotDate !== todayStr) {
             const liveData = await calculateLiveKPIS(userId, config?.cdi || 11.25);
-            
+
             if (liveData && liveData.totalEquity > 0) {
                 let validPrevQuota = 100;
                 let validPrevEquity = 0;
-                
+                let validPrevSnap = null;
+
                 for (let i = history.length - 1; i >= 0; i--) {
                     const snap = history[i];
                     if (snap.quotaPrice && Math.abs(snap.quotaPrice - 100) > 0.01) {
                         validPrevQuota = snap.quotaPrice;
                         validPrevEquity = snap.totalEquity;
+                        validPrevSnap = snap;
                         break;
                     }
                     if (i === 0) {
                         validPrevQuota = snap.quotaPrice || 100;
                         validPrevEquity = snap.totalEquity;
+                        validPrevSnap = snap;
                     }
                 }
 
+                // Calcula fluxo de caixa desde o último snapshot (aportes/resgates)
+                // Necessário para Modified Dietz — sem isso, aportes inflam o retorno live
+                let periodFlow = 0;
+                if (validPrevSnap) {
+                    const anchorDate = new Date(validPrevSnap.date);
+                    anchorDate.setHours(23, 59, 59, 999);
+                    const txsSince = await AssetTransaction.find({
+                        user: userId,
+                        date: { $gt: anchorDate }
+                    }).lean();
+                    txsSince.forEach(tx => {
+                        if (tx.type === 'BUY') periodFlow += tx.totalValue;
+                        else if (tx.type === 'SELL') periodFlow -= tx.totalValue;
+                    });
+                }
+
                 let liveQuotaPrice = validPrevQuota;
-                if (validPrevEquity > 0) {
-                    const dailyReturn = (liveData.totalEquity - validPrevEquity) / validPrevEquity;
-                    const safeReturn = Math.max(-0.2, Math.min(0.2, dailyReturn));
-                    liveQuotaPrice = validPrevQuota * (1 + safeReturn);
+                if (validPrevEquity > 0 || periodFlow > 0) {
+                    const periodReturn = calculateDailyDietz(validPrevEquity, liveData.totalEquity, periodFlow);
+                    if (periodReturn > -0.8 && periodReturn < 1.0) {
+                        liveQuotaPrice = validPrevQuota * (1 + periodReturn);
+                    }
                 }
 
                 history.push({

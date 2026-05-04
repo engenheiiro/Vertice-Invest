@@ -52,10 +52,26 @@ npm run sync:prod
 # É utilizado pelo comando sync:Prod para montar a análise/ranking.
 npm run sync:TimeSeriesWorker
 
-🧪 4. Testes & Qualidade (QA)
+🔁 4. Backtest de Portfólio
+
+# Simula "e se eu tivesse comprado esse portfólio X tempo atrás?"
+# Interativo: escolha o usuário, o ranking (Brasil 10, Ações, FIIs, Cripto),
+# o perfil de risco (Defensiva / Moderado / Arrojado), a data e o valor a investir.
+# Busca os preços históricos de cada ativo na data escolhida, cadastra as transações
+# na carteira do usuário e reconstrói os snapshots — exibindo o P&L real desde aquela data.
+npm run backtest:portfolio
+
+🧪 5. Testes & Qualidade (QA)
 
 # Testes Unitários do Backend (Serviços, Models, Utils)
 npm run test:server
+
+# Roda TODOS os testes do servidor de uma vez (74 testes — QA completo)
+npm run test:all
+
+# Testes de Carteira (Snapshot, TWRR, Circuit Breaker, Sharpe, FIXED_INCOME)
+# Valida calculateDailyDietz, acumulação de cota, anti-reset e cálculo live de KPI.
+npm run test:wallet
 
 # Testes Unitários do Frontend (Componentes, Hooks)
 npm run test:client
@@ -77,7 +93,7 @@ npm run test:fundamentus
 # Verifica erros de lint no Client e no Server
 npm run lint
 
-📦 5. Build (Deploy)
+📦 6. Build (Deploy)
 
 # Gera os arquivos estáticos otimizados do React para produção
 npm run build
