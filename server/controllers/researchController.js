@@ -51,18 +51,38 @@ export const getQuantSignals = async (req, res, next) => {
     try {
         const { history } = req.query;
         let query = history === 'true' ? {} : { status: 'ACTIVE' };
-        let limit = history === 'true' ? 200 : 20;
-        const signals = await QuantSignal.find(query).sort({ timestamp: -1 }).limit(limit).lean(); 
-        
-        // ... (Lógica de preenchimento de preço mantida)
+        const limit = 200;
+        const signals = await QuantSignal.find(query).sort({ timestamp: -1 }).limit(limit).lean();
+
         if (signals.length > 0) {
-             const tickers = signals.map(s => s.ticker);
-             const assets = await MarketAsset.find({ ticker: { $in: tickers } }).select('ticker lastPrice');
-             const priceMap = new Map();
-             assets.forEach(a => priceMap.set(a.ticker, a.lastPrice));
-             signals.forEach(s => { if(s.status === 'ACTIVE') s.finalPrice = priceMap.get(s.ticker); });
+            const tickers = signals.map(s => s.ticker);
+            const assets = await MarketAsset.find({ ticker: { $in: tickers } }).select('ticker lastPrice');
+            const priceMap = new Map();
+            assets.forEach(a => priceMap.set(a.ticker, a.lastPrice));
+            signals.forEach(s => { if (s.status === 'ACTIVE') s.finalPrice = priceMap.get(s.ticker); });
         }
-        res.json(signals);
+
+        // Metadata do último scan para exibição no frontend (countdown, contexto)
+        const scanMetaDoc = await SystemConfig.findOne({ key: 'RADAR_SCAN_META' }).lean();
+        const scanMeta = scanMetaDoc?.value || null;
+
+        const meta = scanMeta ? {
+            lastScanAt: scanMeta.lastScanAt,
+            nextScanAt: new Date(new Date(scanMeta.lastScanAt).getTime() + 15 * 60 * 1000).toISOString(),
+            assetsScanned: scanMeta.assetsScanned || 0,
+            assetsWithHistory: scanMeta.assetsWithHistory || 0,
+            activeSignalsTotal: scanMeta.activeSignalsTotal ?? signals.filter(s => s.status === 'ACTIVE').length,
+            scanIntervalMinutes: 15
+        } : {
+            lastScanAt: null,
+            nextScanAt: null,
+            assetsScanned: 0,
+            assetsWithHistory: 0,
+            activeSignalsTotal: signals.filter(s => s.status === 'ACTIVE').length,
+            scanIntervalMinutes: 15
+        };
+
+        res.json({ signals, meta });
     } catch (error) { next(error); }
 };
 
@@ -70,12 +90,12 @@ export const getQuantSignals = async (req, res, next) => {
 export const getRadarStats = async (req, res, next) => {
     try {
         const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const hitMissStats = await QuantSignal.aggregate([ { $match: { status: { $in: ['HIT', 'MISS'] } } }, { $group: { _id: "$status", count: { $sum: 1 } } } ]);
+        const hitMissStats = await QuantSignal.aggregate([ { $match: { status: { $in: ['HIT', 'MISS'] }, auditDate: { $gte: thirtyDaysAgo } } }, { $group: { _id: "$status", count: { $sum: 1 } } } ]);
         const hits = hitMissStats.find(s => s._id === 'HIT')?.count || 0;
         const misses = hitMissStats.find(s => s._id === 'MISS')?.count || 0;
         const totalClosed = hits + misses;
         const winRate = totalClosed > 0 ? (hits / totalClosed) * 100 : 0;
-        const closedSectors = await QuantSignal.aggregate([ { $match: { status: 'HIT' } }, { $group: { _id: "$sector", count: { $sum: 1 }, avgReturn: { $avg: "$resultPercent" } } }, { $sort: { count: -1 } }, { $limit: 6 } ]);
+        const closedSectors = await QuantSignal.aggregate([ { $match: { status: 'HIT', auditDate: { $gte: thirtyDaysAgo } } }, { $group: { _id: "$sector", count: { $sum: 1 }, avgReturn: { $avg: "$resultPercent" } } }, { $sort: { count: -1 } }, { $limit: 6 } ]);
         const openSectors = await QuantSignal.aggregate([ { $match: { status: 'ACTIVE' } }, { $group: { _id: "$sector", count: { $sum: 1 }, avgReturn: { $avg: 0 } } }, { $sort: { count: -1 } }, { $limit: 6 } ]);
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
         res.json({ winRate: parseFloat(winRate.toFixed(1)), totalSignals: totalClosed, heatmapClosed: closedSectors.map(s => ({ sector: s._id || 'Outros', value: s.count, avgReturn: parseFloat(s.avgReturn.toFixed(2)) })), heatmapOpen: openSectors.map(s => ({ sector: s._id || 'Outros', value: s.count, avgReturn: 0 })), backtestHorizon: config?.backtestHorizon || 7 });

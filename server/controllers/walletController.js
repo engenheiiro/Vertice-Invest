@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import UserAsset from '../models/UserAsset.js';
 import AssetTransaction from '../models/AssetTransaction.js';
 import MarketAsset from '../models/MarketAsset.js';
+import TreasuryBond from '../models/TreasuryBond.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
@@ -618,10 +619,11 @@ export const getWalletPerformance = async (req, res, next) => {
 
             return {
                 date: dateStr,
-                wallet: walletTWRR, 
+                wallet: walletTWRR,
                 walletRoi: walletROI,
+                equity: point.totalEquity ?? 0,
                 cdi: (accumulatedCDI - 1) * 100,
-                ipca: (accumulatedIPCA - 1) * 100, // Novo Benchmark
+                ipca: (accumulatedIPCA - 1) * 100,
                 ibov: ibovPercent
             };
         });
@@ -759,13 +761,34 @@ export const resetWallet = async (req, res, next) => {
 
 export const searchAssets = async (req, res, next) => {
     try {
-        const { q } = req.query;
+        const { q, type } = req.query;
         if (!q || q.length < 2) return res.json([]);
-        const results = await MarketAsset.find({
+
+        const marketResults = await MarketAsset.find({
             $or: [{ ticker: { $regex: `^${q}`, $options: 'i' } }, { name: { $regex: q, $options: 'i' } }],
-            isIgnored: false
-        }).sort({ liquidity: -1 }).limit(10).select('ticker name type lastPrice');
-        res.json(results);
+            isIgnored: { $ne: true }
+        }).sort({ liquidity: -1 }).limit(8).select('ticker name type lastPrice rate index');
+
+        if (type === 'FIXED_INCOME') {
+            const bonds = await TreasuryBond.find({
+                title: { $regex: q, $options: 'i' }
+            }).sort({ type: 1, maturityDate: 1 }).limit(10);
+
+            const formattedBonds = bonds.map(b => ({
+                ticker: b.title,
+                name: b.title,
+                type: 'FIXED_INCOME',
+                lastPrice: b.unitPrice,
+                rate: b.rate,
+                index: b.index,
+                maturityDate: b.maturityDate,
+                isTreasury: true
+            }));
+
+            return res.json([...marketResults, ...formattedBonds]);
+        }
+
+        res.json(marketResults);
     } catch (error) { next(error); }
 };
 

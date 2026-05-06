@@ -48,6 +48,16 @@ npm run set:password seu@email.com NovaSenha123
 # 4. Executa Scanner do Radar Alpha.
 npm run sync:prod
 
+# Roda APENAS o Scanner do Radar Alpha + Backtest dos sinais ativos + Auditoria de precisão.
+# Use quando quiser forçar uma varredura manual sem rodar o sync completo de mercado.
+# Equivalente ao que o cron executa automaticamente a cada 15 min (2,17,32,47 de cada hora).
+npm run scan:radar
+
+# Gera relatório completo do Radar Alpha em reports/radar_latest.txt.
+# Mostra sinais ativos, histórico recente (48h), win rate, e diagnóstico detalhado de
+# por que cada classe (Ações BR, FIIs, STOCK_US) passa ou não passa nos filtros do scanner.
+npm run radar:report
+
 # Busca o histórico de preços, calcula SMA200, EMA50, Volatilidade (anualizada) e Beta (usando o IBOV como benchmark), e salva.
 # É utilizado pelo comando sync:Prod para montar a análise/ranking.
 npm run sync:TimeSeriesWorker

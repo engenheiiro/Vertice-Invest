@@ -13,8 +13,8 @@ export interface PortfolioItem {
     shares: number;
     avgPrice: number;
     currentPrice: number;
-    type: string; 
-    aiScore: number; 
+    type: string;
+    aiScore: number;
     aiSentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
 }
 
@@ -22,16 +22,28 @@ export interface AiSignal {
     id: string;
     ticker: string;
     type: 'OPPORTUNITY' | 'RISK' | 'NEUTRAL' | 'DELAYED';
+    signalType?: 'RSI_OVERSOLD' | 'DEEP_VALUE' | 'SUPPORT_ZONE' | 'VOLUME_SPIKE';
     assetType: string;
     message: string;
     time: string;
     impact: 'HIGH' | 'MEDIUM' | 'LOW';
-    probability?: number; 
-    thesis?: string;      
+    probability?: number;
+    thesis?: string;
     score?: number;
+    value?: number;
+    urgencyLevel?: 'CRITICAL' | 'HIGH' | 'MEDIUM';
     riskProfile?: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
     source: 'ALGO' | 'RESEARCH';
-    quality?: 'GOLD' | 'SILVER'; // NOVO CAMPO
+    quality?: 'GOLD' | 'SILVER';
+}
+
+export interface RadarMeta {
+    lastScanAt: string | null;
+    nextScanAt: string | null;
+    assetsScanned: number;
+    assetsWithHistory: number;
+    activeSignalsTotal: number;
+    scanIntervalMinutes: number;
 }
 
 export interface MarketIndex {
@@ -48,7 +60,6 @@ export interface SystemHealth {
     message: string;
 }
 
-// Interface do Sinal do Backend (Atualizada)
 interface QuantSignal {
     _id: string;
     ticker: string;
@@ -56,6 +67,7 @@ interface QuantSignal {
     riskProfile: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
     type: 'RSI_OVERSOLD' | 'VOLUME_SPIKE' | 'DEEP_VALUE' | 'SUPPORT_ZONE';
     quality?: 'GOLD' | 'SILVER';
+    urgencyLevel?: 'CRITICAL' | 'HIGH' | 'MEDIUM';
     value: number;
     message: string;
     timestamp: string;
@@ -64,33 +76,33 @@ interface QuantSignal {
 export const useDashboardData = () => {
     const { user } = useAuth();
     const { assets, kpis, isLoading: isWalletLoading } = useWallet();
-    
+
     // 1. Dados Macro
     const macroQuery = useQuery({
         queryKey: ['macroData'],
         queryFn: researchService.getMacroData,
-        staleTime: 1000 * 60 * 15, // 15 min
+        staleTime: 1000 * 60 * 15,
     });
 
     // 2. Dividendos
     const dividendsQuery = useQuery({
         queryKey: ['dividends'],
         queryFn: walletService.getDividends,
-        staleTime: 1000 * 60 * 5, // 5 min
+        staleTime: 1000 * 60 * 5,
     });
 
-    // 3. Sinais Quantitativos (NOVO)
+    // 3. Sinais Quantitativos — agora retorna { signals, meta }
     const signalsQuery = useQuery({
         queryKey: ['quantSignals'],
         queryFn: async () => {
             const res = await authService.api('/api/research/signals');
-            if (!res.ok) return [];
+            if (!res.ok) return { signals: [], meta: null };
             return await res.json();
         },
-        staleTime: 1000 * 60 * 5, // 5 min
+        staleTime: 1000 * 60 * 5,
     });
 
-    // 4. Research Reports (Legacy para Carteiras Recomendadas)
+    // 4. Research Reports (para scoreMap da tabela de carteira)
     const researchQuery = useQuery({
         queryKey: ['dashboardResearch'],
         queryFn: async () => {
@@ -101,7 +113,7 @@ export const useDashboardData = () => {
             ]);
             return { stockReport, fiiReport, brasil10Report };
         },
-        staleTime: 1000 * 60 * 60, // 1 hora
+        staleTime: 1000 * 60 * 60,
     });
 
     // --- PROCESSAMENTO ---
@@ -121,7 +133,7 @@ export const useDashboardData = () => {
     const systemHealth: SystemHealth = useMemo(() => {
         if (macroQuery.isError) return { status: 'OFFLINE', lastSync: null, latencyMs: 0, message: 'Falha na conexão' };
         if (macroQuery.isLoading) return { status: 'OFFLINE', lastSync: null, latencyMs: 0, message: 'Conectando...' };
-        
+
         const data = macroQuery.data;
         let status: 'ONLINE' | 'STALE' | 'OFFLINE' = 'ONLINE';
         let msg = 'Sistemas Operacionais';
@@ -138,68 +150,54 @@ export const useDashboardData = () => {
         return { status, lastSync: date, latencyMs: 45, message: msg };
     }, [macroQuery.data, macroQuery.isError, macroQuery.isLoading]);
 
-    const signals: AiSignal[] = useMemo(() => {
-        // Mapeamento dos Sinais Quantitativos do Backend
-        const rawSignals: QuantSignal[] = signalsQuery.data || [];
-        
-        const mapped = rawSignals.map(sig => {
-            let type: AiSignal['type'] = 'OPPORTUNITY';
-            
-            let impact: AiSignal['impact'] = 'MEDIUM';
-            if (sig.quality === 'GOLD') impact = 'HIGH'; // Ouro = High Impact
-            else if (sig.type === 'DEEP_VALUE' || (sig.type === 'RSI_OVERSOLD' && sig.value < 20)) impact = 'HIGH';
+    // Metadata do Radar Alfa (countdown, contexto de scan)
+    const radarMeta: RadarMeta | null = useMemo(() => {
+        return signalsQuery.data?.meta || null;
+    }, [signalsQuery.data]);
 
-            // Simula um score baseado na intensidade do sinal para exibição
+    const signals: AiSignal[] = useMemo(() => {
+        const rawSignals: QuantSignal[] = signalsQuery.data?.signals || [];
+
+        const mapped = rawSignals.map(sig => {
+            let impact: AiSignal['impact'] = 'MEDIUM';
+            if (sig.urgencyLevel === 'CRITICAL' || sig.quality === 'GOLD') impact = 'HIGH';
+            else if (sig.urgencyLevel === 'HIGH') impact = 'HIGH';
+
             let score = 75;
-            if (sig.type === 'RSI_OVERSOLD') score = Math.round(100 - sig.value); 
-            if (sig.type === 'DEEP_VALUE') score = 95; 
+            if (sig.type === 'RSI_OVERSOLD') score = Math.round(100 - sig.value);
+            if (sig.type === 'DEEP_VALUE') score = 95;
             if (sig.type === 'SUPPORT_ZONE') score = 80;
-            if (sig.quality === 'SILVER') score -= 10; // Penaliza score visual se for prata
+            if (sig.quality === 'SILVER') score -= 10;
+            score = Math.max(0, Math.min(100, score));
 
             return {
                 id: sig._id,
                 ticker: sig.ticker,
                 assetType: sig.assetType || 'STOCK',
-                type: type,
+                type: 'OPPORTUNITY' as const,
+                signalType: sig.type,
                 message: sig.message,
-                time: new Date(sig.timestamp).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
-                impact: impact,
-                score: score,
+                time: new Date(sig.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                impact,
+                score,
+                value: sig.value,
+                urgencyLevel: sig.urgencyLevel || (sig.quality === 'GOLD' ? 'HIGH' : 'MEDIUM'),
                 riskProfile: sig.riskProfile || 'MODERATE',
                 source: 'ALGO' as const,
-                quality: sig.quality || 'GOLD' // Default para compatibilidade
+                quality: sig.quality || 'GOLD'
             };
         });
-
-        // Fallback se não houver sinais reais do Scanner
-        if (mapped.length === 0) {
-            const report = researchQuery.data?.brasil10Report;
-            if (report?.content?.ranking) {
-                return report.content.ranking.slice(0, 3).map((item: RankingItem) => ({
-                    id: item.ticker + 'legacy',
-                    ticker: item.ticker,
-                    assetType: item.type || 'STOCK',
-                    type: 'NEUTRAL',
-                    message: `Fundamento Sólido: Score ${item.score} (Carteira Brasil 10)`,
-                    time: 'Daily',
-                    impact: 'LOW',
-                    score: item.score,
-                    riskProfile: item.riskProfile,
-                    source: 'RESEARCH' as const,
-                    quality: 'SILVER' as const // Fallback é sempre Prata
-                }));
-            }
-        }
 
         if (user?.plan === 'ESSENTIAL' || user?.plan === 'GUEST') {
             return mapped.map(s => ({
                 ...s,
-                type: 'DELAYED',
+                type: 'DELAYED' as const,
                 message: `[SINAL QUANT PRO] ${s.ticker}: Oportunidade Técnica Detectada.`
             }));
         }
+
         return mapped;
-    }, [signalsQuery.data, researchQuery.data, user?.plan]);
+    }, [signalsQuery.data, user?.plan]);
 
     // Score Map para enriquecer Portfolio
     const scoreMap = useMemo(() => {
@@ -223,7 +221,7 @@ export const useDashboardData = () => {
             const cleanTicker = asset.ticker.trim().toUpperCase();
             const researchData = scoreMap.get(cleanTicker);
             let sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
-            
+
             if (researchData) {
                 if (researchData.action === 'BUY') sentiment = 'BULLISH';
                 else if (researchData.action === 'SELL') sentiment = 'BEARISH';
@@ -235,8 +233,8 @@ export const useDashboardData = () => {
                 shares: asset.quantity,
                 avgPrice: asset.averagePrice,
                 currentPrice: asset.currentPrice,
-                type: asset.type, 
-                aiScore: researchData ? researchData.score : 0, 
+                type: asset.type,
+                aiScore: researchData ? researchData.score : 0,
                 aiSentiment: sentiment
             };
         });
@@ -265,11 +263,12 @@ export const useDashboardData = () => {
     return {
         portfolio,
         signals,
+        radarMeta,
         equity,
         dividends: totalDividends,
         marketIndices,
-        systemHealth, 
+        systemHealth,
         isLoading: isWalletLoading || macroQuery.isLoading,
-        isResearchLoading: researchQuery.isLoading 
+        isResearchLoading: researchQuery.isLoading
     };
 };

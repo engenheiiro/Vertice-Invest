@@ -149,9 +149,17 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
 
                         <div className="p-6">
                             <div className="mb-6 space-y-4">
-                                <Input 
-                                    label="Valor do Aporte (R$)" type="number" placeholder="0,00"
-                                    value={amount} onChange={(e) => setAmount(e.target.value)}
+                                <Input
+                                    label="Valor do Aporte (R$)"
+                                    type="number"
+                                    placeholder="0,00"
+                                    min="0"
+                                    value={amount}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '' || parseFloat(val) >= 0) setAmount(val);
+                                    }}
+                                    onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                     autoFocus
                                 />
 

@@ -65,18 +65,18 @@ export const DEMO_HISTORY = [
 ];
 
 export const DEMO_PERFORMANCE = [
-    { date: '2024-01-01', wallet: 0, walletRoi: 0, cdi: 0.8, ibov: -1.5 },
-    { date: '2024-02-01', wallet: 5.5, walletRoi: 2.5, cdi: 1.6, ibov: -3.2 },
-    { date: '2024-03-01', wallet: 12.2, walletRoi: 7.1, cdi: 2.5, ibov: -2.1 },
-    { date: '2024-04-01', wallet: 22.5, walletRoi: 11.3, cdi: 3.4, ibov: 0.5 },
-    { date: '2024-05-01', wallet: 35.4, walletRoi: 18.0, cdi: 4.3, ibov: -1.8 },
-    { date: '2024-06-01', wallet: 31.1, walletRoi: 16.3, cdi: 5.2, ibov: 2.4 },
-    { date: '2024-07-01', wallet: 48.6, walletRoi: 25.8, cdi: 6.1, ibov: 4.1 },
-    { date: '2024-08-01', wallet: 62.3, walletRoi: 35.2, cdi: 7.0, ibov: 6.5 },
-    { date: '2024-09-01', wallet: 75.8, walletRoi: 42.7, cdi: 7.9, ibov: 3.2 },
-    { date: '2024-10-01', wallet: 84.2, walletRoi: 49.6, cdi: 8.8, ibov: 1.8 },
-    { date: '2024-11-01', wallet: 92.5, walletRoi: 56.7, cdi: 9.7, ibov: 4.5 },
-    { date: '2024-12-01', wallet: 96.44, walletRoi: 42.54, cdi: 10.8, ibov: 3.2 }, // Termina positivo
+    { date: '2024-01-01', wallet: 0,     walletRoi: 0,     cdi: 0.8,  ibov: -1.5, ipca: 0.6,  equity: 322.34 },
+    { date: '2024-02-01', wallet: 5.5,   walletRoi: 2.5,   cdi: 1.6,  ibov: -3.2, ipca: 1.3,  equity: 340.07 },
+    { date: '2024-03-01', wallet: 12.2,  walletRoi: 7.1,   cdi: 2.5,  ibov: -2.1, ipca: 2.0,  equity: 361.67 },
+    { date: '2024-04-01', wallet: 22.5,  walletRoi: 11.3,  cdi: 3.4,  ibov: 0.5,  ipca: 2.8,  equity: 394.87 },
+    { date: '2024-05-01', wallet: 35.4,  walletRoi: 18.0,  cdi: 4.3,  ibov: -1.8, ipca: 3.6,  equity: 436.45 },
+    { date: '2024-06-01', wallet: 31.1,  walletRoi: 16.3,  cdi: 5.2,  ibov: 2.4,  ipca: 4.4,  equity: 422.59 },
+    { date: '2024-07-01', wallet: 48.6,  walletRoi: 25.8,  cdi: 6.1,  ibov: 4.1,  ipca: 5.2,  equity: 479.00 },
+    { date: '2024-08-01', wallet: 62.3,  walletRoi: 35.2,  cdi: 7.0,  ibov: 6.5,  ipca: 6.1,  equity: 523.16 },
+    { date: '2024-09-01', wallet: 75.8,  walletRoi: 42.7,  cdi: 7.9,  ibov: 3.2,  ipca: 7.0,  equity: 566.67 },
+    { date: '2024-10-01', wallet: 84.2,  walletRoi: 49.6,  cdi: 8.8,  ibov: 1.8,  ipca: 7.9,  equity: 593.75 },
+    { date: '2024-11-01', wallet: 92.5,  walletRoi: 56.7,  cdi: 9.7,  ibov: 4.5,  ipca: 8.8,  equity: 620.50 },
+    { date: '2024-12-01', wallet: 96.44, walletRoi: 42.54, cdi: 10.8, ibov: 3.2,  ipca: 9.8,  equity: 633.09 },
 ];
 
 export const DEMO_DIVIDENDS = {

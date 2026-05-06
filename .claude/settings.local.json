@@ -3,7 +3,8 @@
     "allow": [
       "Bash(awk -F'Score:   ' '{print $2}')",
       "Bash(sort -t'/' -k1 -n)",
-      "Bash(grep \"STOCK_US\\\\|R\\\\$ [0-9]\\\\+\\\\.[0-9]* mi\\\\|R\\\\$ [0-9]\\\\+\\\\.[0-9]* mil\")"
+      "Bash(grep \"STOCK_US\\\\|R\\\\$ [0-9]\\\\+\\\\.[0-9]* mi\\\\|R\\\\$ [0-9]\\\\+\\\\.[0-9]* mil\")",
+      "Bash(xargs grep *)"
     ]
   }
 }

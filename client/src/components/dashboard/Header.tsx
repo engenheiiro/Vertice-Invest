@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, LayoutGrid, PieChart, BrainCircuit, 
+import {
+  ShieldCheck, LayoutGrid, PieChart, BrainCircuit,
   GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
-  Eye, EyeOff, Play
+  Eye, EyeOff, Play, Radar
 } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -35,6 +35,7 @@ export const Header: React.FC = () => {
       if (path.includes('/dashboard')) return 'terminal';
       if (path.includes('/wallet')) return 'wallet';
       if (path.includes('/research')) return 'research';
+      if (path.includes('/radar')) return 'radar';
       if (path.includes('/indicators')) return 'indicators';
       if (path.includes('/courses')) return 'courses';
       if (path.includes('/pricing')) return 'pricing';
@@ -67,6 +68,9 @@ export const Header: React.FC = () => {
               </Link>
               <Link to="/research">
                  <NavLink icon={<BrainCircuit size={14} />} label="Research" active={activeTab === 'research'} />
+              </Link>
+              <Link to="/radar">
+                 <NavLink icon={<Radar size={14} />} label="Radar" active={activeTab === 'radar'} />
               </Link>
               <Link to="/indicators">
                  <NavLink icon={<BarChart3 size={14} />} label="Indicadores" active={activeTab === 'indicators'} />

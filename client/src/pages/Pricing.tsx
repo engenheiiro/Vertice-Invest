@@ -97,7 +97,7 @@ export const Pricing = () => {
                 {/* Grid de Planos */}
                 <div className="grid md:grid-cols-3 gap-6 lg:gap-8 items-start">
                     
-                    <PricingCard 
+                    <PricingCard
                         id="ESSENTIAL"
                         title={PLAN_DETAILS['ESSENTIAL'].label}
                         price={PLAN_DETAILS['ESSENTIAL'].price}
@@ -106,6 +106,7 @@ export const Pricing = () => {
                         features={buildFeaturesForPlan('ESSENTIAL')}
                         current={user?.plan === 'ESSENTIAL'}
                         buttonVariant="outline"
+                        buttonColorClass="!bg-transparent !text-emerald-400 !border-emerald-500/50 hover:!bg-emerald-500/10 hover:!border-emerald-400"
                         borderColor="border-emerald-500/30"
                         hoverColor="hover:border-emerald-500/50"
                         onSelect={handleSelectPlan}
@@ -131,7 +132,7 @@ export const Pricing = () => {
                         />
                     </div>
 
-                    <PricingCard 
+                    <PricingCard
                         id="BLACK"
                         title={PLAN_DETAILS['BLACK'].label}
                         price={PLAN_DETAILS['BLACK'].price}
@@ -140,6 +141,7 @@ export const Pricing = () => {
                         features={buildFeaturesForPlan('BLACK')}
                         current={user?.plan === 'BLACK'}
                         buttonVariant="outline"
+                        buttonColorClass="!bg-transparent !text-[#D4AF37] !border-[#D4AF37]/50 hover:!bg-[#D4AF37]/10 hover:!border-[#D4AF37]"
                         borderColor="border-[#D4AF37]/30"
                         hoverColor="hover:border-[#D4AF37]/60"
                         onSelect={handleSelectPlan}
@@ -162,7 +164,7 @@ export const Pricing = () => {
     );
 };
 
-const PricingCard = ({ id, title, price, description, icon, features, isPopular, current, buttonVariant, borderColor = "border-slate-800", hoverColor = "hover:border-slate-700", onSelect, isLoading }: any) => (
+const PricingCard = ({ id, title, price, description, icon, features, isPopular, current, buttonVariant, buttonColorClass = '', borderColor = "border-slate-800", hoverColor = "hover:border-slate-700", onSelect, isLoading }: any) => (
     <div className={`bg-[#080C14] border ${borderColor} rounded-2xl p-8 relative overflow-hidden flex flex-col h-full transition-all duration-300 ${isPopular ? 'shadow-2xl shadow-blue-900/10 ring-1 ring-blue-500/30 bg-[#0B101A]' : hoverColor}`}>
         
         {isPopular && (
@@ -220,9 +222,9 @@ const PricingCard = ({ id, title, price, description, icon, features, isPopular,
                     <Check size={16} /> Seu Plano Atual
                 </div>
             ) : (
-                <Button 
-                    variant={buttonVariant} 
-                    className="w-full text-xs uppercase tracking-wide py-4"
+                <Button
+                    variant={buttonVariant}
+                    className={`w-full text-xs uppercase tracking-wide py-4 ${buttonColorClass}`}
                     onClick={() => onSelect(id)}
                     status={isLoading ? 'loading' : 'idle'}
                 >

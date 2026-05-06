@@ -1,0 +1,1098 @@
+════════════════════════════════════════════════════════════════════════════════
+  VÉRTICE INVEST — RADAR ALPHA REPORT
+  Gerado em: 06/05/2026 às 07:47:39
+  Última varredura: há 0 min — 791 ativos, 791 com histórico
+  Upserts: 156 | Inativados: 0 | Ativos Total: 156
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+  SINAIS ATIVOS: 156 oportunidades
+════════════════════════════════════════════════════════════════════════════════
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] MELK3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Construção Civil   Perfil: DEFENSIVE
+  Deep Value: Negociando a 42% do Valor Intrínseco.
+  Graham: R$ 7.89   Entrada: R$ 3.33
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] VVEO3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Logística   Perfil: DEFENSIVE
+  Deep Value: Negociando a 50% do Valor Intrínseco.
+  Graham: R$ 2.70   Entrada: R$ 1.33
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] VGRI11    FII         🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Papel   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 16. Oportunidade Ouro.
+  RSI: 15.6
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] MYPK3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Indústria   Perfil: DEFENSIVE
+  Deep Value: Negociando a 50% do Valor Intrínseco.
+  Graham: R$ 19.67   Entrada: R$ 9.63
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] PFRM3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Varejo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 52% do Valor Intrínseco.
+  Graham: R$ 14.85   Entrada: R$ 7.66
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] LOGG3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Logística   Perfil: DEFENSIVE
+  Deep Value: Negociando a 44% do Valor Intrínseco.
+  Graham: R$ 63.00   Entrada: R$ 27.48
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] JHSF3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Construção Civil   Perfil: DEFENSIVE
+  Deep Value: Negociando a 51% do Valor Intrínseco.
+  Graham: R$ 24.11   Entrada: R$ 12.26
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] SMTO3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Agro   Perfil: DEFENSIVE
+  Deep Value: Negociando a 48% do Valor Intrínseco.
+  Graham: R$ 34.74   Entrada: R$ 16.72
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] MLAS3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Tecnologia   Perfil: DEFENSIVE
+  Deep Value: Negociando a 45% do Valor Intrínseco.
+  Graham: R$ 3.49   Entrada: R$ 1.55
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] BBAS3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Bancos   Perfil: DEFENSIVE
+  Deep Value: Negociando a 46% do Valor Intrínseco.
+  Graham: R$ 47.28   Entrada: R$ 22.10
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] SAPR3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Outros   Perfil: DEFENSIVE
+  Deep Value: Negociando a 59% do Valor Intrínseco.
+  Graham: R$ 16.60   Entrada: R$ 9.62
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] CEAB3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Varejo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 50% do Valor Intrínseco.
+  Graham: R$ 23.02   Entrada: R$ 11.28
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] SAPR4     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Outros   Perfil: DEFENSIVE
+  Deep Value: Negociando a 49% do Valor Intrínseco.
+  Graham: R$ 16.44   Entrada: R$ 8.04
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] HBOR3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Construção Civil   Perfil: DEFENSIVE
+  Deep Value: Negociando a 52% do Valor Intrínseco.
+  Graham: R$ 4.46   Entrada: R$ 2.34
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] CYRE3     STOCK       🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Construção Civil   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 13. Oportunidade Ouro.
+  RSI: 13.0
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] CYRE3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Construção Civil   Perfil: DEFENSIVE
+  Deep Value: Negociando a 50% do Valor Intrínseco.
+  Graham: R$ 45.59   Entrada: R$ 22.80
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] EUCA4     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Materiais Básicos   Perfil: DEFENSIVE
+  Deep Value: Negociando a 45% do Valor Intrínseco.
+  Graham: R$ 47.66   Entrada: R$ 20.85
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] BRSR6     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Bancos   Perfil: DEFENSIVE
+  Deep Value: Negociando a 32% do Valor Intrínseco.
+  Graham: R$ 48.34   Entrada: R$ 15.40
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] ALLD3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Varejo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 18% do Valor Intrínseco.
+  Graham: R$ 35.55   Entrada: R$ 6.29
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] LHX       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Industrials   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 19. Oportunidade Ouro.
+  RSI: 19.1
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] COGN3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Educação   Perfil: DEFENSIVE
+  Deep Value: Negociando a 42% do Valor Intrínseco.
+  Graham: R$ 6.52   Entrada: R$ 2.74
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] SAPR11    STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Saneamento   Perfil: DEFENSIVE
+  Deep Value: Negociando a 51% do Valor Intrínseco.
+  Graham: R$ 83.46   Entrada: R$ 42.07
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] EVEN3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Construção Civil   Perfil: DEFENSIVE
+  Deep Value: Negociando a 39% do Valor Intrínseco.
+  Graham: R$ 15.10   Entrada: R$ 5.91
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] AZZA3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Varejo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 35% do Valor Intrínseco.
+  Graham: R$ 65.09   Entrada: R$ 22.18
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] BBDC3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Outros   Perfil: DEFENSIVE
+  Deep Value: Negociando a 57% do Valor Intrínseco.
+  Graham: R$ 28.77   Entrada: R$ 16.51
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] MTRE3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Construção Civil   Perfil: DEFENSIVE
+  Deep Value: Negociando a 36% do Valor Intrínseco.
+  Graham: R$ 10.36   Entrada: R$ 3.67
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] SANB11    STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Bancos   Perfil: DEFENSIVE
+  Deep Value: Negociando a 59% do Valor Intrínseco.
+  Graham: R$ 48.63   Entrada: R$ 28.86
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] GMAT3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Varejo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 48% do Valor Intrínseco.
+  Graham: R$ 9.23   Entrada: R$ 4.39
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] ROMI3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Indústria   Perfil: DEFENSIVE
+  Deep Value: Negociando a 43% do Valor Intrínseco.
+  Graham: R$ 15.73   Entrada: R$ 6.83
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] GRND3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Varejo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 58% do Valor Intrínseco.
+  Graham: R$ 7.33   Entrada: R$ 4.29
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] SANB3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Outros   Perfil: DEFENSIVE
+  Deep Value: Negociando a 58% do Valor Intrínseco.
+  Graham: R$ 24.29   Entrada: R$ 14.20
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] MFII11    FII         🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Desenvolvimento   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 15. Oportunidade Ouro.
+  RSI: 15.2
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] ETER3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Materiais Básicos   Perfil: DEFENSIVE
+  Deep Value: Negociando a 25% do Valor Intrínseco.
+  Graham: R$ 16.44   Entrada: R$ 4.11
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] SBFG3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Varejo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 57% do Valor Intrínseco.
+  Graham: R$ 19.66   Entrada: R$ 11.15
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] LMT       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Industrials   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 16. Oportunidade Ouro.
+  RSI: 16.0
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] NOC       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Industrials   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 8. Oportunidade Ouro.
+  RSI: 7.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] SUZB3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Papel e Celulose   Perfil: DEFENSIVE
+  Deep Value: Negociando a 50% do Valor Intrínseco.
+  Graham: R$ 84.99   Entrada: R$ 42.38
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] SHUL4     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Indústria   Perfil: DEFENSIVE
+  Deep Value: Negociando a 60% do Valor Intrínseco.
+  Graham: R$ 8.95   Entrada: R$ 5.29
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] EMAE4     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Elétricas   Perfil: DEFENSIVE
+  Deep Value: Negociando a 52% do Valor Intrínseco.
+  Graham: R$ 85.09   Entrada: R$ 44.63
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] HBRE3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Construção Civil   Perfil: DEFENSIVE
+  Deep Value: Negociando a 31% do Valor Intrínseco.
+  Graham: R$ 10.46   Entrada: R$ 3.23
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] EZTC3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Construção Civil   Perfil: DEFENSIVE
+  Deep Value: Negociando a 50% do Valor Intrínseco.
+  Graham: R$ 27.28   Entrada: R$ 13.77
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] VLID3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Tecnologia   Perfil: DEFENSIVE
+  Deep Value: Negociando a 51% do Valor Intrínseco.
+  Graham: R$ 38.08   Entrada: R$ 19.53
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] TRIS3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Construção Civil   Perfil: DEFENSIVE
+  Deep Value: Negociando a 46% do Valor Intrínseco.
+  Graham: R$ 10.07   Entrada: R$ 4.68
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] BRAV3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Petróleo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 46% do Valor Intrínseco.
+  Graham: R$ 40.33   Entrada: R$ 18.48
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] VITT3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Agro   Perfil: DEFENSIVE
+  Deep Value: Negociando a 57% do Valor Intrínseco.
+  Graham: R$ 6.15   Entrada: R$ 3.48
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] CYRE4     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Outros   Perfil: DEFENSIVE
+  Deep Value: Negociando a 45% do Valor Intrínseco.
+  Graham: R$ 45.43   Entrada: R$ 20.58
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] VTRU3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Educação   Perfil: DEFENSIVE
+  Deep Value: Negociando a 41% do Valor Intrínseco.
+  Graham: R$ 33.72   Entrada: R$ 13.76
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] RECV3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Petróleo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 48% do Valor Intrínseco.
+  Graham: R$ 26.72   Entrada: R$ 12.90
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] DEXP3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Materiais Básicos   Perfil: DEFENSIVE
+  Deep Value: Negociando a 50% do Valor Intrínseco.
+  Graham: R$ 14.79   Entrada: R$ 7.43
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] ABCB4     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Bancos   Perfil: DEFENSIVE
+  Deep Value: Negociando a 53% do Valor Intrínseco.
+  Graham: R$ 47.04   Entrada: R$ 24.94
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] BMGB4     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Bancos   Perfil: DEFENSIVE
+  Deep Value: Negociando a 49% do Valor Intrínseco.
+  Graham: R$ 11.01   Entrada: R$ 5.45
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [⚠ CRÍTICO] RIAA3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Outros   Perfil: DEFENSIVE
+  Deep Value: Negociando a 36% do Valor Intrínseco.
+  Graham: R$ 26.61   Entrada: R$ 9.61
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   BRCO11    FII         🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Logística   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 25. Oportunidade Ouro.
+  RSI: 24.5
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   NEOE3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Elétricas   Perfil: DEFENSIVE
+  Deep Value: Negociando a 61% do Valor Intrínseco.
+  Graham: R$ 55.31   Entrada: R$ 33.80
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   BLAU3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Saúde   Perfil: DEFENSIVE
+  Deep Value: Negociando a 60% do Valor Intrínseco.
+  Graham: R$ 17.39   Entrada: R$ 10.49
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   ANIM3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Educação   Perfil: DEFENSIVE
+  Deep Value: Negociando a 63% do Valor Intrínseco.
+  Graham: R$ 6.27   Entrada: R$ 4.03
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   GD        STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Industrials   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 22. Oportunidade Ouro.
+  RSI: 21.5
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   TW        STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Financial Services   Perfil: BOLD
+  Sobrevenda Extrema: RSI em 30. Oportunidade Ouro.
+  RSI: 29.9
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   RZTR11    FII         🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Fiagro   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 28. Oportunidade Ouro.
+  RSI: 27.6
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   SEER3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Educação   Perfil: DEFENSIVE
+  Deep Value: Negociando a 64% do Valor Intrínseco.
+  Graham: R$ 20.85   Entrada: R$ 13.40
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   SMFT3     STOCK       🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Saúde   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 27. Oportunidade Ouro.
+  RSI: 27.0
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   BPAC3     STOCK       🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Outros   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 26. Oportunidade Ouro.
+  RSI: 26.3
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   LNG       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Energy   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 28. Oportunidade Ouro.
+  RSI: 28.4
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   FIQE3     STOCK       🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Telecom   Perfil: DEFENSIVE
+  Sobrevenda Extrema: RSI em 22. Oportunidade Ouro.
+  RSI: 21.6
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   CMIG4     STOCK       🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Elétricas   Perfil: DEFENSIVE
+  Sobrevenda Extrema: RSI em 28. Oportunidade Ouro.
+  RSI: 28.1
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   CMIG4     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Elétricas   Perfil: DEFENSIVE
+  Deep Value: Negociando a 64% do Valor Intrínseco.
+  Graham: R$ 18.82   Entrada: R$ 12.22
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   CSED3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Educação   Perfil: DEFENSIVE
+  Deep Value: Negociando a 60% do Valor Intrínseco.
+  Graham: R$ 9.00   Entrada: R$ 5.39
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   MCK       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Healthcare   Perfil: DEFENSIVE
+  Sobrevenda Extrema: RSI em 27. Oportunidade Ouro.
+  RSI: 27.0
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   MCLO11    FII         🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Lajes Corporativas   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 23. Oportunidade Ouro.
+  RSI: 23.2
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   PSX       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Energy   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 29. Oportunidade Ouro.
+  RSI: 29.2
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   ECOR3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Infraestrutura   Perfil: DEFENSIVE
+  Deep Value: Negociando a 68% do Valor Intrínseco.
+  Graham: R$ 12.85   Entrada: R$ 8.64
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   ABT       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Healthcare   Perfil: DEFENSIVE
+  Sobrevenda Extrema: RSI em 27. Oportunidade Ouro.
+  RSI: 27.0
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   LAVV3     STOCK       🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Construção Civil   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 24. Oportunidade Ouro.
+  RSI: 24.3
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   LAVV3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Construção Civil   Perfil: DEFENSIVE
+  Deep Value: Negociando a 68% do Valor Intrínseco.
+  Graham: R$ 18.44   Entrada: R$ 12.60
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   SAPR11    STOCK       🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Saneamento   Perfil: DEFENSIVE
+  Sobrevenda Extrema: RSI em 27. Oportunidade Ouro.
+  RSI: 26.9
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   BBDC4     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Bancos   Perfil: DEFENSIVE
+  Deep Value: Negociando a 66% do Valor Intrínseco.
+  Graham: R$ 28.89   Entrada: R$ 19.13
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   SYNE3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Construção Civil   Perfil: DEFENSIVE
+  Deep Value: Negociando a 61% do Valor Intrínseco.
+  Graham: R$ 6.33   Entrada: R$ 3.93
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   SCAR3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Indústria   Perfil: DEFENSIVE
+  Deep Value: Negociando a 69% do Valor Intrínseco.
+  Graham: R$ 21.08   Entrada: R$ 14.54
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   DRS       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Industrials   Perfil: BOLD
+  Sobrevenda Extrema: RSI em 30. Oportunidade Ouro.
+  RSI: 29.9
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   CTSH      STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Technology   Perfil: BOLD
+  Sobrevenda Extrema: RSI em 26. Oportunidade Ouro.
+  RSI: 26.1
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   EPAM      STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Technology   Perfil: BOLD
+  Sobrevenda Extrema: RSI em 28. Oportunidade Ouro.
+  RSI: 28.3
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   PETR4     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Petróleo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 62% do Valor Intrínseco.
+  Graham: R$ 78.14   Entrada: R$ 48.58
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   HYPE3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Saúde   Perfil: DEFENSIVE
+  Deep Value: Negociando a 69% do Valor Intrínseco.
+  Graham: R$ 33.86   Entrada: R$ 23.32
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   CAG       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Consumer Defensive   Perfil: BOLD
+  Sobrevenda Extrema: RSI em 29. Oportunidade Ouro.
+  RSI: 29.2
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   HSY       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Consumer Defensive   Perfil: BOLD
+  Sobrevenda Extrema: RSI em 30. Oportunidade Ouro.
+  RSI: 29.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   EMAE4     STOCK       🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Elétricas   Perfil: DEFENSIVE
+  Sobrevenda Extrema: RSI em 24. Oportunidade Ouro.
+  RSI: 23.6
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   VULC3     STOCK       🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Varejo   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 27. Oportunidade Ouro.
+  RSI: 26.6
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   VULC3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Varejo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 63% do Valor Intrínseco.
+  Graham: R$ 25.20   Entrada: R$ 15.86
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   EXC       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Utilities   Perfil: DEFENSIVE
+  Sobrevenda Extrema: RSI em 30. Oportunidade Ouro.
+  RSI: 29.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   CAML3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Alimentos   Perfil: DEFENSIVE
+  Deep Value: Negociando a 62% do Valor Intrínseco.
+  Graham: R$ 10.28   Entrada: R$ 6.41
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   RANI3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Papel e Celulose   Perfil: DEFENSIVE
+  Deep Value: Negociando a 69% do Valor Intrínseco.
+  Graham: R$ 11.15   Entrada: R$ 7.75
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   ESPA3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Varejo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 66% do Valor Intrínseco.
+  Graham: R$ 1.54   Entrada: R$ 1.01
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   JALL3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Agro   Perfil: DEFENSIVE
+  Deep Value: Negociando a 66% do Valor Intrínseco.
+  Graham: R$ 5.09   Entrada: R$ 3.36
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   PETR3     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Outros   Perfil: DEFENSIVE
+  Deep Value: Negociando a 70% do Valor Intrínseco.
+  Graham: R$ 76.93   Entrada: R$ 53.54
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   SANB4     STOCK       🥇 GOLD    DEEP_VALUE        0min
+  Setor: Outros   Perfil: DEFENSIVE
+  Deep Value: Negociando a 60% do Valor Intrínseco.
+  Graham: R$ 24.39   Entrada: R$ 14.68
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   CME       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Financial Services   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 28. Oportunidade Ouro.
+  RSI: 27.6
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   RTX       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Industrials   Perfil: MODERATE
+  Sobrevenda Extrema: RSI em 27. Oportunidade Ouro.
+  RSI: 26.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [↑ ALTO]   SRE       STOCK_US    🥇 GOLD    RSI_OVERSOLD      0min
+  Setor: Utilities   Perfil: DEFENSIVE
+  Sobrevenda Extrema: RSI em 29. Oportunidade Ouro.
+  RSI: 28.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  LVBI11    FII         🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Logística   Perfil: MODERATE
+  Sobrevenda: RSI em 36. Monitorar repique.
+  RSI: 35.5
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  GZIT11    FII         🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Shoppings   Perfil: MODERATE
+  Sobrevenda: RSI em 33. Monitorar repique.
+  RSI: 32.7
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  POMO3     STOCK       🥈 SILVER  DEEP_VALUE        0min
+  Setor: Outros   Perfil: DEFENSIVE
+  Deep Value: Negociando a 78% do Valor Intrínseco.
+  Graham: R$ 7.55   Entrada: R$ 5.99
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  ACN       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Technology   Perfil: MODERATE
+  Sobrevenda: RSI em 32. Monitorar repique.
+  RSI: 32.4
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  NOW       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Technology   Perfil: MODERATE
+  Sobrevenda: RSI em 36. Monitorar repique.
+  RSI: 35.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  MPC       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Energy   Perfil: MODERATE
+  Sobrevenda: RSI em 32. Monitorar repique.
+  RSI: 32.0
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  PODD      STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Healthcare   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 31. Monitorar repique.
+  RSI: 31.4
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  WDAY      STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Technology   Perfil: BOLD
+  Sobrevenda: RSI em 35. Monitorar repique.
+  RSI: 34.6
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  VEEV      STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Healthcare   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 33. Monitorar repique.
+  RSI: 33.5
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  HUBS      STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Technology   Perfil: BOLD
+  Sobrevenda: RSI em 37. Monitorar repique.
+  RSI: 36.7
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  APPN      STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Technology   Perfil: BOLD
+  Sobrevenda: RSI em 34. Monitorar repique.
+  RSI: 34.5
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  G         STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Technology   Perfil: BOLD
+  Sobrevenda: RSI em 33. Monitorar repique.
+  RSI: 33.1
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  DT        STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Technology   Perfil: BOLD
+  Sobrevenda: RSI em 36. Monitorar repique.
+  RSI: 36.2
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  OXY       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Energy   Perfil: MODERATE
+  Sobrevenda: RSI em 34. Monitorar repique.
+  RSI: 34.3
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  WIZC3     STOCK       🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Seguros   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 32. Monitorar repique.
+  RSI: 31.9
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  EOG       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Energy   Perfil: MODERATE
+  Sobrevenda: RSI em 37. Monitorar repique.
+  RSI: 36.6
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  LIFE11    FII         🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Fundo de Fundos   Perfil: MODERATE
+  Sobrevenda: RSI em 31. Monitorar repique.
+  RSI: 31.4
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  RDOR3     STOCK       🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Saúde   Perfil: MODERATE
+  Sobrevenda: RSI em 37. Monitorar repique.
+  RSI: 36.9
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  COR       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Healthcare   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 37. Monitorar repique.
+  RSI: 36.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  AM        STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Energy   Perfil: BOLD
+  Sobrevenda: RSI em 30. Monitorar repique.
+  RSI: 30.1
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  BEEF3     STOCK       🥈 SILVER  DEEP_VALUE        0min
+  Setor: Alimentos   Perfil: DEFENSIVE
+  Deep Value: Negociando a 78% do Valor Intrínseco.
+  Graham: R$ 5.22   Entrada: R$ 4.10
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  SRRK      STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Healthcare   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 36. Monitorar repique.
+  RSI: 35.5
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  MOS       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Basic Materials   Perfil: BOLD
+  Sobrevenda: RSI em 34. Monitorar repique.
+  RSI: 34.0
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  DHR       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Healthcare   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 36. Monitorar repique.
+  RSI: 36.5
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  HON       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Industrials   Perfil: MODERATE
+  Sobrevenda: RSI em 34. Monitorar repique.
+  RSI: 34.2
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  FESA4     STOCK       🥈 SILVER  DEEP_VALUE        0min
+  Setor: Siderurgia   Perfil: DEFENSIVE
+  Deep Value: Negociando a 73% do Valor Intrínseco.
+  Graham: R$ 10.32   Entrada: R$ 7.50
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  LREN3     STOCK       🥈 SILVER  DEEP_VALUE        0min
+  Setor: Varejo   Perfil: DEFENSIVE
+  Deep Value: Negociando a 74% do Valor Intrínseco.
+  Graham: R$ 19.00   Entrada: R$ 13.75
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  ITSA4     STOCK       🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Bancos   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 31. Monitorar repique.
+  RSI: 31.2
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  ALUP11    STOCK       🥈 SILVER  DEEP_VALUE        0min
+  Setor: Elétricas   Perfil: DEFENSIVE
+  Deep Value: Negociando a 72% do Valor Intrínseco.
+  Graham: R$ 48.02   Entrada: R$ 34.39
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  MTRE3     STOCK       🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Construção Civil   Perfil: BOLD
+  Sobrevenda: RSI em 35. Monitorar repique.
+  RSI: 34.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  KMI       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Energy   Perfil: MODERATE
+  Sobrevenda: RSI em 30. Monitorar repique.
+  RSI: 30.3
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  POMO4     STOCK       🥈 SILVER  DEEP_VALUE        0min
+  Setor: Indústria   Perfil: DEFENSIVE
+  Deep Value: Negociando a 79% do Valor Intrínseco.
+  Graham: R$ 7.97   Entrada: R$ 6.34
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  PCG       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Utilities   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 35. Monitorar repique.
+  RSI: 35.0
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  PLPL3     STOCK       🥈 SILVER  DEEP_VALUE        0min
+  Setor: Construção Civil   Perfil: DEFENSIVE
+  Deep Value: Negociando a 72% do Valor Intrínseco.
+  Graham: R$ 14.10   Entrada: R$ 10.26
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  MDIA3     STOCK       🥈 SILVER  DEEP_VALUE        0min
+  Setor: Alimentos   Perfil: DEFENSIVE
+  Deep Value: Negociando a 72% do Valor Intrínseco.
+  Graham: R$ 33.20   Entrada: R$ 24.03
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  LDOS      STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Technology   Perfil: BOLD
+  Sobrevenda: RSI em 32. Monitorar repique.
+  RSI: 32.0
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  TRXB11    FII         🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Renda Urbana   Perfil: MODERATE
+  Sobrevenda: RSI em 35. Monitorar repique.
+  RSI: 34.9
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  IQV       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Healthcare   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 37. Monitorar repique.
+  RSI: 36.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  PCIP11    FII         🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Papel   Perfil: MODERATE
+  Sobrevenda: RSI em 36. Monitorar repique.
+  RSI: 35.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  SUZB3     STOCK       🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Papel e Celulose   Perfil: MODERATE
+  Sobrevenda: RSI em 36. Monitorar repique.
+  RSI: 35.9
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  FE        STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Utilities   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 36. Monitorar repique.
+  RSI: 35.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  WIZC3     STOCK       🥈 SILVER  DEEP_VALUE        0min
+  Setor: Seguros   Perfil: DEFENSIVE
+  Deep Value: Negociando a 80% do Valor Intrínseco.
+  Graham: R$ 11.21   Entrada: R$ 8.94
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  YDUQ3     STOCK       🥈 SILVER  DEEP_VALUE        0min
+  Setor: Educação   Perfil: DEFENSIVE
+  Deep Value: Negociando a 78% do Valor Intrínseco.
+  Graham: R$ 12.89   Entrada: R$ 10.11
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  CAH       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Healthcare   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 34. Monitorar repique.
+  RSI: 34.4
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  SO        STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Utilities   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 32. Monitorar repique.
+  RSI: 31.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  BRAV3     STOCK       🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Petróleo   Perfil: MODERATE
+  Sobrevenda: RSI em 32. Monitorar repique.
+  RSI: 31.9
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  PRNR3     STOCK       🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Indústria   Perfil: BOLD
+  Sobrevenda: RSI em 32. Monitorar repique.
+  RSI: 31.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  T         STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Communication Services   Perfil: MODERATE
+  Sobrevenda: RSI em 36. Monitorar repique.
+  RSI: 35.8
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  KR        STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Consumer Defensive   Perfil: BOLD
+  Sobrevenda: RSI em 36. Monitorar repique.
+  RSI: 36.1
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  GILD      STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Healthcare   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 33. Monitorar repique.
+  RSI: 33.0
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  CSUD3     STOCK       🥈 SILVER  DEEP_VALUE        0min
+  Setor: Tecnologia   Perfil: DEFENSIVE
+  Deep Value: Negociando a 71% do Valor Intrínseco.
+  Graham: R$ 25.08   Entrada: R$ 17.84
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  WBD       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Communication Services   Perfil: MODERATE
+  Sobrevenda: RSI em 36. Monitorar repique.
+  RSI: 36.4
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  JNJ       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Healthcare   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 30. Monitorar repique.
+  RSI: 30.4
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  PFE       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Healthcare   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 30. Monitorar repique.
+  RSI: 30.0
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  RSG       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Industrials   Perfil: MODERATE
+  Sobrevenda: RSI em 34. Monitorar repique.
+  RSI: 34.3
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  XOM       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Energy   Perfil: MODERATE
+  Sobrevenda: RSI em 34. Monitorar repique.
+  RSI: 33.6
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  CVX       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Energy   Perfil: MODERATE
+  Sobrevenda: RSI em 35. Monitorar repique.
+  RSI: 35.2
+  Desde: 06/05/2026, 07:47:29
+────────────────────────────────────────────────────────────────────────────────
+  [· MÉDIO]  DUK       STOCK_US    🥈 SILVER  RSI_OVERSOLD      0min
+  Setor: Utilities   Perfil: DEFENSIVE
+  Sobrevenda: RSI em 36. Monitorar repique.
+  RSI: 35.8
+  Desde: 06/05/2026, 07:47:29
+
+════════════════════════════════════════════════════════════════════════════════
+  SINAIS ATIVOS POR CLASSE
+════════════════════════════════════════════════════════════════════════════════
+  STOCK          █████████████████████████████████████████████████████████████████████████████████████████████  93 sinais
+  FII            ██████████  10 sinais
+  STOCK_US       █████████████████████████████████████████████████████  53 sinais
+  CRYPTO         ░░░░░░░░░░  0 sinais
+  FIXED_INCOME   ░░░░░░░░░░  0 sinais
+
+════════════════════════════════════════════════════════════════════════════════
+  HISTÓRICO RECENTE (48h): 2058 encerrados   HIT: 16  MISS: 20  NEUTRO: 2022   Win Rate: 44.4%
+════════════════════════════════════════════════════════════════════════════════
+  ⏱ NEUTRO  EMET11   RSI_OVERSOLD        N/A entrada: R$ 9.10 → R$ —
+  ⏱ NEUTRO  CASH3    RSI_OVERSOLD        N/A entrada: R$ 4.38 → R$ —
+  ⏱ NEUTRO  INTB3    RSI_OVERSOLD        N/A entrada: R$ 13.90 → R$ —
+  ⏱ NEUTRO  EZTC3    RSI_OVERSOLD        N/A entrada: R$ 13.75 → R$ —
+  ⏱ NEUTRO  BLAU3    RSI_OVERSOLD        N/A entrada: R$ 10.48 → R$ —
+  ⏱ NEUTRO  GMAT3    RSI_OVERSOLD        N/A entrada: R$ 4.45 → R$ —
+  ⏱ NEUTRO  TGMA3    RSI_OVERSOLD        N/A entrada: R$ 30.89 → R$ —
+  ⏱ NEUTRO  COGN3    RSI_OVERSOLD        N/A entrada: R$ 2.73 → R$ —
+  ⏱ NEUTRO  CEAB3    RSI_OVERSOLD        N/A entrada: R$ 11.47 → R$ —
+  ⏱ NEUTRO  RANI3    RSI_OVERSOLD        N/A entrada: R$ 7.73 → R$ —
+  ⏱ NEUTRO  MIDW11   RSI_OVERSOLD        N/A entrada: R$ 10.69 → R$ —
+  ⏱ NEUTRO  PMLL11   RSI_OVERSOLD        N/A entrada: R$ 108.48 → R$ —
+  ⏱ NEUTRO  IBBP11   RSI_OVERSOLD        N/A entrada: R$ 7.97 → R$ —
+  ⏱ NEUTRO  HFOF11   RSI_OVERSOLD        N/A entrada: R$ 6.70 → R$ —
+  ⏱ NEUTRO  DIRR3    RSI_OVERSOLD        N/A entrada: R$ 12.93 → R$ —
+  ⏱ NEUTRO  BFCC11   RSI_OVERSOLD        N/A entrada: R$ 102.61 → R$ —
+  ⏱ NEUTRO  BRBI11   RSI_OVERSOLD        N/A entrada: R$ 18.76 → R$ —
+  ⏱ NEUTRO  IGTI11   RSI_OVERSOLD        N/A entrada: R$ 27.56 → R$ —
+  ⏱ NEUTRO  VXXV11   RSI_OVERSOLD        N/A entrada: R$ 755.00 → R$ —
+  ⏱ NEUTRO  PQDP11   RSI_OVERSOLD        N/A entrada: R$ 2689.00 → R$ —
+
+════════════════════════════════════════════════════════════════════════════════
+  DIAGNÓSTICO — ELEGIBILIDADE STOCK BR + FII
+════════════════════════════════════════════════════════════════════════════════
+  Total STOCK + FII: 681
+  ✅ Passam liquidez (>500k): 340   ❌ Reprovados: 341
+  ✅ Com histórico (>15 candles): 340   ❌ Sem histórico: 0
+
+  [RSI < 37]
+  Calculados: 339   Sem dados: 1
+  ✅ RSI < 37: 30   (RSI < 30 GOLD: 16)   ❌ RSI >= 37: 309
+  Candidatos (verificando netMargin > -5):
+    BPAC3    [STOCK]  RSI: 26.3  netMargin: 0.00  ✅ margem OK
+    BRAV3    [STOCK]  RSI: 31.9  netMargin: 12.14  ✅ margem OK
+    BRCO11   [FII]  RSI: 24.5  netMargin: 0.00  ✅ margem OK
+    BRKM5    [STOCK]  RSI: 29.4  netMargin: -15.50  ❌ margem reprovada (-15.50)
+    CMIG4    [STOCK]  RSI: 28.1  netMargin: 11.46  ✅ margem OK
+    CYRE3    [STOCK]  RSI: 13.0  netMargin: 17.17  ✅ margem OK
+    EMAE4    [STOCK]  RSI: 23.6  netMargin: 51.01  ✅ margem OK
+    FIQE3    [STOCK]  RSI: 21.6  netMargin: 17.62  ✅ margem OK
+    GZIT11   [FII]  RSI: 32.7  netMargin: 0.00  ✅ margem OK
+    ITSA4    [STOCK]  RSI: 31.2  netMargin: 200.63  ✅ margem OK
+    LAVV3    [STOCK]  RSI: 24.3  netMargin: 26.35  ✅ margem OK
+    LIFE11   [FII]  RSI: 31.4  netMargin: 0.00  ✅ margem OK
+    LVBI11   [FII]  RSI: 35.5  netMargin: 0.00  ✅ margem OK
+    MCLO11   [FII]  RSI: 23.2  netMargin: 0.00  ✅ margem OK
+    MFII11   [FII]  RSI: 15.2  netMargin: 0.00  ✅ margem OK
+    MTRE3    [STOCK]  RSI: 34.8  netMargin: 7.40  ✅ margem OK
+    PCIP11   [FII]  RSI: 35.8  netMargin: 0.00  ✅ margem OK
+    PRNR3    [STOCK]  RSI: 31.8  netMargin: 0.54  ✅ margem OK
+    PTBL3    [STOCK]  RSI: 14.3  netMargin: -11.19  ❌ margem reprovada (-11.19)
+    RCSL4    [STOCK]  RSI: 31.9  netMargin: -1077.14  ❌ margem reprovada (-1077.14)
+
+  [DEEP VALUE Graham — só STOCK]
+  Total STOCK: 336   PL > 0: 259   P/VP > 0: 307   Ambos: 254
+  Candidatos desconto < 80% Graham: 124  (GOLD < 70%: 106)
+    RANI3     Preço: R$ 7.73  Graham: R$ 11.15  Desconto: 69.4%
+    CEAB3     Preço: R$ 11.47  Graham: R$ 23.02  Desconto: 49.8%
+    COGN3     Preço: R$ 2.73  Graham: R$ 6.52  Desconto: 41.9%
+    VTRU3     Preço: R$ 13.76  Graham: R$ 33.72  Desconto: 40.8%
+    LAVV3     Preço: R$ 12.58  Graham: R$ 18.44  Desconto: 68.2%
+    CAMB3     Preço: R$ 9.95  Graham: R$ 16.65  Desconto: 59.8%
+    GMAT3     Preço: R$ 4.45  Graham: R$ 9.23  Desconto: 48.2%
+    SAPR11    Preço: R$ 42.49  Graham: R$ 83.46  Desconto: 50.9%
+    BLAU3     Preço: R$ 10.48  Graham: R$ 17.39  Desconto: 60.3%
+    EZTC3     Preço: R$ 13.75  Graham: R$ 27.28  Desconto: 50.4%
+    LREN3     Preço: R$ 14.05  Graham: R$ 19.00  Desconto: 73.9%
+    LOGG3     Preço: R$ 27.51  Graham: R$ 63.00  Desconto: 43.7%
+    POMO4     Preço: R$ 6.28  Graham: R$ 7.97  Desconto: 78.8%
+    AZZA3     Preço: R$ 22.73  Graham: R$ 65.09  Desconto: 34.9%
+    WIZC3     Preço: R$ 8.94  Graham: R$ 11.21  Desconto: 79.8%
+    TECN3     Preço: R$ 8.54  Graham: R$ 14.21  Desconto: 60.1%
+    VLID3     Preço: R$ 19.45  Graham: R$ 38.08  Desconto: 51.1%
+    CSUD3     Preço: R$ 17.84  Graham: R$ 25.08  Desconto: 71.1%
+    PLPL3     Preço: R$ 10.15  Graham: R$ 14.10  Desconto: 72.0%
+    MDIA3     Preço: R$ 23.94  Graham: R$ 33.20  Desconto: 72.1%
+
+════════════════════════════════════════════════════════════════════════════════
+  DIAGNÓSTICO — STOCK_US
+════════════════════════════════════════════════════════════════════════════════
+  Elegíveis: 451   Com histórico: 451   RSI < 37: 56
+
+    ACN        [MEDIUM]  RSI: 32.4  Sobrevenda: RSI em 32. Monitorar repique.
+    NOW        [MEDIUM]  RSI: 35.8  Sobrevenda: RSI em 36. Monitorar repique.
+    GD         [HIGH]  RSI: 21.5  Sobrevenda Extrema: RSI em 22. Oportunidade Ouro.
+    MPC        [MEDIUM]  RSI: 32.0  Sobrevenda: RSI em 32. Monitorar repique.
+    PODD       [MEDIUM]  RSI: 31.4  Sobrevenda: RSI em 31. Monitorar repique.
+    WDAY       [MEDIUM]  RSI: 34.6  Sobrevenda: RSI em 35. Monitorar repique.
+    VEEV       [MEDIUM]  RSI: 33.5  Sobrevenda: RSI em 33. Monitorar repique.
+    HUBS       [MEDIUM]  RSI: 36.7  Sobrevenda: RSI em 37. Monitorar repique.
+    APPN       [MEDIUM]  RSI: 34.5  Sobrevenda: RSI em 34. Monitorar repique.
+    TW         [HIGH]  RSI: 29.9  Sobrevenda Extrema: RSI em 30. Oportunidade Ouro.
+    G          [MEDIUM]  RSI: 33.1  Sobrevenda: RSI em 33. Monitorar repique.
+    DT         [MEDIUM]  RSI: 36.2  Sobrevenda: RSI em 36. Monitorar repique.
+    OXY        [MEDIUM]  RSI: 34.3  Sobrevenda: RSI em 34. Monitorar repique.
+    EOG        [MEDIUM]  RSI: 36.6  Sobrevenda: RSI em 37. Monitorar repique.
+    LNG        [HIGH]  RSI: 28.4  Sobrevenda Extrema: RSI em 28. Oportunidade Ouro.
+    MCK        [HIGH]  RSI: 27.0  Sobrevenda Extrema: RSI em 27. Oportunidade Ouro.
+    COR        [MEDIUM]  RSI: 36.8  Sobrevenda: RSI em 37. Monitorar repique.
+    PSX        [HIGH]  RSI: 29.2  Sobrevenda Extrema: RSI em 29. Oportunidade Ouro.
+    AM         [MEDIUM]  RSI: 30.1  Sobrevenda: RSI em 30. Monitorar repique.
+    SRRK       [MEDIUM]  RSI: 35.5  Sobrevenda: RSI em 36. Monitorar repique.
+    LHX        [CRITICAL]  RSI: 19.1  Sobrevenda Extrema: RSI em 19. Oportunidade Ouro.
+    MOS        [MEDIUM]  RSI: 34.0  Sobrevenda: RSI em 34. Monitorar repique.
+    ABT        [HIGH]  RSI: 27.0  Sobrevenda Extrema: RSI em 27. Oportunidade Ouro.
+    DHR        [MEDIUM]  RSI: 36.5  Sobrevenda: RSI em 36. Monitorar repique.
+    HON        [MEDIUM]  RSI: 34.2  Sobrevenda: RSI em 34. Monitorar repique.
+    KMI        [MEDIUM]  RSI: 30.3  Sobrevenda: RSI em 30. Monitorar repique.
+    DRS        [HIGH]  RSI: 29.9  Sobrevenda Extrema: RSI em 30. Oportunidade Ouro.
+    CTSH       [HIGH]  RSI: 26.1  Sobrevenda Extrema: RSI em 26. Oportunidade Ouro.
+    PCG        [MEDIUM]  RSI: 35.0  Sobrevenda: RSI em 35. Monitorar repique.
+    EPAM       [HIGH]  RSI: 28.3  Sobrevenda Extrema: RSI em 28. Oportunidade Ouro.
+    LDOS       [MEDIUM]  RSI: 32.0  Sobrevenda: RSI em 32. Monitorar repique.
+    CAG        [HIGH]  RSI: 29.2  Sobrevenda Extrema: RSI em 29. Oportunidade Ouro.
+    HSY        [HIGH]  RSI: 29.8  Sobrevenda Extrema: RSI em 30. Oportunidade Ouro.
+    IQV        [MEDIUM]  RSI: 36.8  Sobrevenda: RSI em 37. Monitorar repique.
+    LMT        [CRITICAL]  RSI: 16.0  Sobrevenda Extrema: RSI em 16. Oportunidade Ouro.
+    NOC        [CRITICAL]  RSI: 7.8  Sobrevenda Extrema: RSI em 8. Oportunidade Ouro.
+    EXC        [HIGH]  RSI: 29.8  Sobrevenda Extrema: RSI em 30. Oportunidade Ouro.
+    FE         [MEDIUM]  RSI: 35.8  Sobrevenda: RSI em 36. Monitorar repique.
+    CAH        [MEDIUM]  RSI: 34.4  Sobrevenda: RSI em 34. Monitorar repique.
+    SO         [MEDIUM]  RSI: 31.8  Sobrevenda: RSI em 32. Monitorar repique.
+    T          [MEDIUM]  RSI: 35.8  Sobrevenda: RSI em 36. Monitorar repique.
+    KR         [MEDIUM]  RSI: 36.1  Sobrevenda: RSI em 36. Monitorar repique.
+    GILD       [MEDIUM]  RSI: 33.0  Sobrevenda: RSI em 33. Monitorar repique.
+    WBD        [MEDIUM]  RSI: 36.4  Sobrevenda: RSI em 36. Monitorar repique.
+    JNJ        [MEDIUM]  RSI: 30.4  Sobrevenda: RSI em 30. Monitorar repique.
+    PFE        [MEDIUM]  RSI: 30.0  Sobrevenda: RSI em 30. Monitorar repique.
+    CME        [HIGH]  RSI: 27.6  Sobrevenda Extrema: RSI em 28. Oportunidade Ouro.
+    RTX        [HIGH]  RSI: 26.8  Sobrevenda Extrema: RSI em 27. Oportunidade Ouro.
+    RSG        [MEDIUM]  RSI: 34.3  Sobrevenda: RSI em 34. Monitorar repique.
+    XOM        [MEDIUM]  RSI: 33.6  Sobrevenda: RSI em 34. Monitorar repique.
+    CVX        [MEDIUM]  RSI: 35.2  Sobrevenda: RSI em 35. Monitorar repique.
+    DUK        [MEDIUM]  RSI: 35.8  Sobrevenda: RSI em 36. Monitorar repique.
+    SRE        [HIGH]  RSI: 28.8  Sobrevenda Extrema: RSI em 29. Oportunidade Ouro.
+
+════════════════════════════════════════════════════════════════════════════════
+  Relatório gerado em 06/05/2026, 07:47:39
+════════════════════════════════════════════════════════════════════════════════

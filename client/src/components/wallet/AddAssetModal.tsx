@@ -244,7 +244,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             setIsSearching(true);
             searchTimeoutRef.current = setTimeout(async () => {
                 try {
-                    const results = await walletService.searchAsset(val);
+                    const results = await walletService.searchAsset(val, form.type);
                     if (results && Array.isArray(results) && results.length > 0) {
                         setSearchResults(results);
                         setShowDropdown(true);
@@ -483,7 +483,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         let placeholder = "Ex: PETR4";
         if (form.type === 'CRYPTO') placeholder = "Ex: BTC, ETH";
         if (form.type === 'STOCK_US') placeholder = "Ex: AAPL, NVDA, MSFT, GOOGL";
-        if (form.type === 'FIXED_INCOME') placeholder = "Busque: Tesouro, Nubank, CDB...";
+        if (form.type === 'FIXED_INCOME') placeholder = "Busque: Tesouro Selic, NTN-B, CDB, LCI...";
 
         return (
             <div className="relative mb-4" ref={modalRef}>
@@ -533,14 +533,18 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                     </p>
                                     <p className="text-[10px] text-slate-400 truncate max-w-[200px]">{result.name}</p>
                                 </div>
-                                <div className="text-right">
-                                    <span className="text-[9px] font-bold bg-slate-700 px-1.5 py-0.5 rounded text-slate-300">
-                                        {result.type === 'STOCK' ? 'AÇÃO' : 
-                                         result.type === 'FIXED_INCOME' ? 'RENDA FIXA' : 
+                                <div className="text-right shrink-0">
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${result.isTreasury ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-700/30' : 'bg-slate-700 text-slate-300'}`}>
+                                        {result.isTreasury ? 'TESOURO' :
+                                         result.type === 'STOCK' ? 'AÇÃO' :
+                                         result.type === 'FIXED_INCOME' ? 'RENDA FIXA' :
                                          result.type}
                                     </span>
-                                    {(result.rate !== undefined) && (
-                                        <p className="text-[9px] text-emerald-400 font-mono mt-0.5">{result.rate}% do {result.index || 'CDI'}</p>
+                                    {result.rate !== undefined && (
+                                        <p className="text-[9px] text-emerald-400 font-mono mt-0.5">{result.rate}% {result.index || 'CDI'}</p>
+                                    )}
+                                    {result.isTreasury && result.maturityDate && (
+                                        <p className="text-[9px] text-slate-500 font-mono mt-0.5">Venc. {result.maturityDate}</p>
                                     )}
                                 </div>
                             </div>
@@ -721,11 +725,11 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                                 onChange={handleTypeSelectChange} 
                                                 className="w-full bg-[#0B101A] text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-[#0F1729] transition-all duration-300 shadow-sm"
                                             >
-                                                <option value="STOCK">Ações Brasil</option>
-                                                <option value="FII">Fundos Imobiliários</option>
-                                                <option value="STOCK_US">Ações Exterior</option>
+                                                <option value="STOCK">Ações Brasil (B3)</option>
+                                                <option value="FII">Fundos Imobiliários (FIIs)</option>
+                                                <option value="STOCK_US">Ações Exterior (USD)</option>
                                                 <option value="CRYPTO">Criptomoedas</option>
-                                                <option value="FIXED_INCOME">Renda Fixa</option>
+                                                <option value="FIXED_INCOME">Renda Fixa / Tesouro Direto</option>
                                                 <option value="CASH">Reserva / Caixa</option>
                                             </select>
                                             <Tag className="absolute right-3 top-3.5 text-slate-600 pointer-events-none" size={14} />

@@ -27,6 +27,9 @@ const SystemConfigSchema = new mongoose.Schema({
   btc: { type: Number, default: 90000 },
   btcChange: { type: Number, default: 0 },
 
+  // Campo genérico para metadados (ex: RADAR_SCAN_META)
+  value: { type: mongoose.Schema.Types.Mixed, default: null },
+
   // Configurações do Sistema
   backtestHorizon: { type: Number, default: 7 }, // Dias para auditar o sinal (3, 7, 15, 30)
 

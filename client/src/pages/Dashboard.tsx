@@ -13,14 +13,15 @@ import { useDemo } from '../contexts/DemoContext';
 import { Lock } from 'lucide-react';
 
 export const Dashboard = () => {
-  const { 
-      portfolio, 
-      signals, 
-      dividends, 
-      marketIndices, 
-      isLoading, 
+  const {
+      portfolio,
+      signals,
+      radarMeta,
+      dividends,
+      marketIndices,
+      isLoading,
       isResearchLoading,
-      systemHealth // Pegando systemHealth do hook
+      systemHealth
   } = useDashboardData();
   
   const { isPrivacyMode, kpis } = useWallet();
@@ -89,10 +90,10 @@ export const Dashboard = () => {
                 
                 {/* ID para o Tutorial: tour-radar */}
                 <div id="tour-radar" className={`transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
-                    <AiRadar 
-                        signals={signals} 
-                        isLoading={isResearchLoading} 
-                        lastUpdated={systemHealth?.lastSync} // Passando data de atualização
+                    <AiRadar
+                        signals={signals}
+                        isLoading={isResearchLoading}
+                        meta={radarMeta}
                     />
                 </div>
 

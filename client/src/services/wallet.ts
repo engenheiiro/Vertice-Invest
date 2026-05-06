@@ -43,8 +43,10 @@ export const walletService = {
         return await response.json();
     },
 
-    async searchAsset(query: string) {
-        const response = await authService.api(`/api/wallet/search?q=${query}`);
+    async searchAsset(query: string, type?: string) {
+        const params = new URLSearchParams({ q: query });
+        if (type) params.append('type', type);
+        const response = await authService.api(`/api/wallet/search?${params}`);
         if (!response.ok) return null;
         return await response.json();
     },

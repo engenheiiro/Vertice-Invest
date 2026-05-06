@@ -79,8 +79,15 @@ export const AllocationChart = () => {
 
     // Handlers
     const handleTargetChange = (type: AssetType, val: string) => {
-        const num = parseFloat(val) || 0;
+        const num = Math.max(0, Math.min(100, parseFloat(val) || 0));
         setTempTargets(prev => ({ ...prev, [type]: num }));
+    };
+
+    const handleReserveChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const raw = e.target.value;
+        if (raw === '' || raw === '-') return;
+        const num = Math.max(0, parseFloat(raw) || 0);
+        setTempReserve(String(num));
     };
 
     const saveTargets = () => {
@@ -229,7 +236,14 @@ export const AllocationChart = () => {
                                 <span className="text-xs text-slate-300 w-24">Reserva</span>
                                 <div className="flex-1 relative">
                                     <span className="absolute left-3 top-1.5 text-xs text-slate-500">R$</span>
-                                    <input type="number" value={tempReserve} onChange={(e) => setTempReserve(e.target.value)} className="w-full bg-[#0B101A] border border-slate-800 rounded px-3 pl-8 py-1.5 text-xs text-white focus:border-blue-500 outline-none font-mono"/>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={tempReserve}
+                                        onChange={handleReserveChange}
+                                        onWheel={(e) => e.currentTarget.blur()}
+                                        className="w-full bg-[#0B101A] border border-slate-800 rounded px-3 pl-8 py-1.5 text-xs text-white focus:border-blue-500 outline-none font-mono"
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -240,7 +254,16 @@ export const AllocationChart = () => {
                                     <div key={type} className="flex items-center gap-3">
                                         <span className="text-xs text-slate-300 w-24 truncate">{LABELS[type]}</span>
                                         <div className="flex-1 relative">
-                                            <input type="number" value={tempTargets[type] || 0} onChange={(e) => handleTargetChange(type, e.target.value)} className="w-full bg-[#0B101A] border border-slate-800 rounded px-3 py-1.5 text-xs text-white focus:border-blue-500 outline-none"/>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                value={tempTargets[type] || ''}
+                                                placeholder="0"
+                                                onChange={(e) => handleTargetChange(type, e.target.value)}
+                                                onWheel={(e) => e.currentTarget.blur()}
+                                                className="w-full bg-[#0B101A] border border-slate-800 rounded px-3 py-1.5 text-xs text-white focus:border-blue-500 outline-none"
+                                            />
                                             <span className="absolute right-3 top-1.5 text-xs text-slate-600">%</span>
                                         </div>
                                     </div>

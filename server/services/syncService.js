@@ -53,6 +53,7 @@ export const syncService = {
                 if (s.includes('fundo de fundo') || s.includes('fof')) return 'FOF';
                 if (s.includes('híbrido') || s.includes('hibrido')) return 'HIBRIDO';
                 if (s.includes('desenvolvimento') || s.includes('residencial')) return 'DESENVOLVIMENTO';
+                if (s.includes('fiagro')) return 'FIAGRO';
                 return 'TIJOLO';
             };
 

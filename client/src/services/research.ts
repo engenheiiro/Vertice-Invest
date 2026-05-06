@@ -229,7 +229,7 @@ export const researchService = {
 
     async getSignalsHistory() {
         const response = await authService.api('/api/research/signals?history=true');
-        if (!response.ok) return [];
+        if (!response.ok) return { signals: [], meta: null };
         return await response.json();
     },
 
