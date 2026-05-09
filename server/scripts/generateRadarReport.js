@@ -114,10 +114,13 @@ export async function generateRadarReport() {
         w(`  ${pad(cls, 14, true)} ${'█'.repeat(n)}${'░'.repeat(Math.max(0, 10 - n))}  ${n} sinais`);
     }
 
-    // HISTÓRICO RECENTE 48h
+    // HISTÓRICO RECENTE 48h (apenas sinais v2 — gerados após 2026-05-09)
     const since48h = new Date(now.getTime() - 48 * 3600 * 1000);
+    const v2StartDate = new Date('2026-05-09T00:00:00.000Z');
     const recent = await QuantSignal.find({
         status: { $in: ['HIT', 'MISS', 'NEUTRAL'] },
+        quality: 'GOLD',
+        timestamp: { $gte: v2StartDate },
         auditDate: { $gte: since48h }
     }).sort({ auditDate: -1 }).lean();
 
@@ -169,7 +172,7 @@ export async function generateRadarReport() {
     const histMap  = new Map(withHist.map(h => [h.ticker, h.history.sort((a, b) => new Date(b.date) - new Date(a.date))]));
     const assetMap = new Map(brFiiAssets.map(a => [a.ticker, a]));
 
-    let rsiOk = 0, rsiGold = 0, rsiNo = 0, rsiOut = 0;
+    let rsiOk = 0, rsiNo = 0, rsiOut = 0;
     const rsiCands = [];
 
     for (const [ticker, hist] of histMap) {
@@ -178,9 +181,8 @@ export async function generateRadarReport() {
         const closes = hist.map(h => h.adjClose || h.close).filter(v => v > 0);
         const rsi    = calculateRSI(closes, 14);
         if (rsi === null) { rsiNo++; continue; }
-        if (rsi < 37) {
+        if (rsi < 30) {
             rsiOk++;
-            if (rsi < 30) rsiGold++;
             rsiCands.push({ ticker, rsi, type: asset.type, netMargin: asset.netMargin, ok: asset.netMargin > -5 });
         } else {
             rsiOut++;
@@ -188,9 +190,9 @@ export async function generateRadarReport() {
     }
 
     w('');
-    w('  [RSI < 37]');
+    w('  [RSI < 30 — limiar GOLD]');
     w(`  Calculados: ${rsiOk + rsiOut}   Sem dados: ${rsiNo}`);
-    w(`  ✅ RSI < 37: ${rsiOk}   (RSI < 30 GOLD: ${rsiGold})   ❌ RSI >= 37: ${rsiOut}`);
+    w(`  ✅ RSI < 30 (GOLD): ${rsiOk}   ❌ RSI >= 30: ${rsiOut}`);
 
     if (rsiCands.length > 0) {
         w('  Candidatos (verificando netMargin > -5):');
@@ -199,7 +201,7 @@ export async function generateRadarReport() {
             w(`    ${pad(s.ticker, 8, true)} [${s.type}]  RSI: ${s.rsi.toFixed(1)}  netMargin: ${s.netMargin?.toFixed(2) ?? '?'}  ${ms}`);
         }
     } else {
-        w('  ⚠️  Nenhum ativo BR/FII com RSI < 37 — mercado fora da zona de sobrevenda.');
+        w('  ⚠️  Nenhum ativo BR/FII com RSI < 30 — mercado fora da zona de sobrevenda extrema.');
     }
 
     const stocks     = brFiiAssets.filter(a => a.type === 'STOCK');
@@ -209,27 +211,27 @@ export async function generateRadarReport() {
     w('  [DEEP VALUE Graham — só STOCK]');
     w(`  Total STOCK: ${stocks.length}   PL > 0: ${stocks.filter(a => a.pl > 0).length}   P/VP > 0: ${stocks.filter(a => a.p_vp > 0).length}   Ambos: ${stocksFull.length}`);
 
-    let dvCount = 0, dvGold = 0;
+    let dvCount = 0;
     const dvSamples = [];
     for (const a of stocksFull) {
         if (!a.lastPrice || a.lastPrice <= 0) continue;
+        if (!a.roe || a.roe <= 0) continue;
         const g = Math.sqrt(22.5 * (a.lastPrice / a.pl) * (a.lastPrice / a.p_vp));
         if (!isFinite(g) || isNaN(g) || g <= 0) continue;
         const d = a.lastPrice / g;
-        if (d < 0.80) {
+        if (d < 0.70) {
             dvCount++;
-            if (d < 0.70) dvGold++;
-            dvSamples.push({ ticker: a.ticker, price: a.lastPrice, graham: g.toFixed(2), pct: (d * 100).toFixed(1) });
+            dvSamples.push({ ticker: a.ticker, price: a.lastPrice, graham: g.toFixed(2), pct: (d * 100).toFixed(1), roe: a.roe?.toFixed(1) });
         }
     }
 
-    w(`  Candidatos desconto < 80% Graham: ${dvCount}  (GOLD < 70%: ${dvGold})`);
+    w(`  Candidatos GOLD (desconto < 70% + ROE > 0): ${dvCount}`);
     if (dvSamples.length > 0) {
         for (const s of dvSamples.slice(0, 20)) {
-            w(`    ${pad(s.ticker, 8, true)}  Preço: R$ ${Number(s.price).toFixed(2)}  Graham: R$ ${s.graham}  Desconto: ${s.pct}%`);
+            w(`    ${pad(s.ticker, 8, true)}  Preço: R$ ${Number(s.price).toFixed(2)}  Graham: R$ ${s.graham}  Desconto: ${s.pct}%  ROE: ${s.roe}%`);
         }
     } else {
-        w('  ⚠️  Nenhum STOCK com desconto < 80% do Graham. Verifique se pl/p_vp estão no BD.');
+        w('  ⚠️  Nenhum STOCK com desconto < 70% do Graham + ROE > 0.');
     }
 
     // DIAGNÓSTICO STOCK_US
@@ -249,14 +251,14 @@ export async function generateRadarReport() {
     ).lean();
     const usWithHist = usHist.filter(h => h.history && h.history.length > 15);
 
-    let usBelow37 = 0;
+    let usBelow30 = 0;
     for (const h of usWithHist) {
         const closes = h.history.sort((a, b) => new Date(b.date) - new Date(a.date)).map(x => x.adjClose || x.close).filter(v => v > 0);
         const rsi = calculateRSI(closes, 14);
-        if (rsi !== null && rsi < 37) usBelow37++;
+        if (rsi !== null && rsi < 30) usBelow30++;
     }
 
-    w(`  Elegíveis: ${usAssets.length}   Com histórico: ${usWithHist.length}   RSI < 37: ${usBelow37}`);
+    w(`  Elegíveis: ${usAssets.length}   Com histórico: ${usWithHist.length}   RSI < 30 (GOLD): ${usBelow30}`);
     w('');
     const usActive = active.filter(s => s.assetType === 'STOCK_US');
     if (usActive.length === 0) {

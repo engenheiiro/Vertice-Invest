@@ -4,7 +4,7 @@ import { Header } from '../components/dashboard/Header';
 import { researchService } from '../services/research';
 import {
     Radar, ArrowLeft, CheckCircle2, XCircle, Clock, TrendingUp, TrendingDown,
-    Minus, Target, Layers, Filter, Info, Shield, Activity, Zap, Medal, AlertTriangle
+    Minus, Target, Layers, Filter, Info, Shield, Activity, Zap, Medal
 } from 'lucide-react';
 // @ts-ignore
 import { Link } from 'react-router-dom';
@@ -46,7 +46,6 @@ interface RadarStats {
 
 type StatusFilter = 'ALL' | 'HIT' | 'MISS' | 'NEUTRAL';
 type AssetTypeFilter = 'ALL' | 'STOCK' | 'FII' | 'STOCK_US' | 'CRYPTO' | 'FIXED_INCOME';
-type QualityFilter = 'GOLD' | 'ALL';
 
 const getTypeLabel = (type: string) => {
     if (type === 'FII') return 'FII';
@@ -150,7 +149,6 @@ export const RadarPage = () => {
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
     const [sectorView, setSectorView] = useState<'OPEN' | 'CLOSED'>('OPEN');
     const [assetTypeFilter, setAssetTypeFilter] = useState<AssetTypeFilter>('ALL');
-    const [qualityFilter, setQualityFilter] = useState<QualityFilter>('GOLD');
 
     useEffect(() => {
         const load = async () => {
@@ -177,7 +175,6 @@ export const RadarPage = () => {
         return signals
             .filter(s => {
                 if (s.status !== 'ACTIVE') return false;
-                if (qualityFilter === 'GOLD' && s.quality !== 'GOLD') return false;
                 if (assetTypeFilter !== 'ALL' && s.assetType !== assetTypeFilter) return false;
                 return true;
             })
@@ -186,7 +183,7 @@ export const RadarPage = () => {
                 if (rankDiff !== 0) return rankDiff;
                 return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
             });
-    }, [signals, assetTypeFilter, qualityFilter]);
+    }, [signals, assetTypeFilter]);
 
     const closedSignals = useMemo(() => signals.filter(s => s.status !== 'ACTIVE'), [signals]);
 
@@ -270,9 +267,9 @@ export const RadarPage = () => {
                         <h4 className="text-xs font-bold text-blue-300 uppercase mb-1">Critérios de Saída Automática</h4>
                         <p className="text-[11px] text-slate-400 leading-relaxed">
                             O sistema encerra a auditoria de um sinal quando um dos alvos é atingido:&nbsp;
-                            <span className="text-emerald-400 font-bold">+3.0% Take Profit</span> &nbsp;|&nbsp;
-                            <span className="text-red-400 font-bold">-2.0% Stop Loss</span> &nbsp;|&nbsp;
-                            <span className="text-slate-300 font-bold">{stats?.backtestHorizon || 7} dias Time Stop</span>
+                            <span className="text-emerald-400 font-bold">+5.0% Take Profit</span> &nbsp;|&nbsp;
+                            <span className="text-red-400 font-bold">-3.0% Stop Loss</span> &nbsp;|&nbsp;
+                            <span className="text-slate-300 font-bold">{stats?.backtestHorizon || 14} dias Time Stop</span>
                         </p>
                     </div>
                 </div>
@@ -371,17 +368,10 @@ export const RadarPage = () => {
                             ))}
                         </div>
 
-                        {/* Filtro de qualidade */}
-                        <button
-                            onClick={() => setQualityFilter(q => q === 'GOLD' ? 'ALL' : 'GOLD')}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold border transition-all ${
-                                qualityFilter === 'GOLD'
-                                    ? 'bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30'
-                                    : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
-                            }`}
-                        >
-                            <Medal size={10} /> {qualityFilter === 'GOLD' ? 'Apenas Ouro' : 'Todos'}
-                        </button>
+                        {/* Qualidade fixa: apenas GOLD */}
+                        <span className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold border bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30">
+                            <Medal size={10} /> Apenas GOLD
+                        </span>
                     </div>
 
                     {isLoading ? (
@@ -402,7 +392,6 @@ export const RadarPage = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {activeSignals.map(signal => {
                                 const urgency = getUrgencyStyle(signal.urgencyLevel);
-                                const isGold = signal.quality === 'GOLD';
                                 const resultNow = signal.resultPercent;
 
                                 return (
@@ -424,8 +413,8 @@ export const RadarPage = () => {
                                                     <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border uppercase ${urgency.badge}`}>
                                                         {urgency.label}
                                                     </span>
-                                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border uppercase flex items-center gap-0.5 ${isGold ? 'bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30' : 'bg-slate-300/10 text-slate-300 border-slate-400/30'}`}>
-                                                        <Medal size={9} /> {isGold ? 'Ouro' : 'Prata'}
+                                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded border uppercase flex items-center gap-0.5 bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30">
+                                                        <Medal size={9} /> Ouro
                                                     </span>
                                                     <SignalValueTag type={signal.type} value={signal.value} />
                                                 </div>

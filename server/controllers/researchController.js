@@ -90,15 +90,16 @@ export const getQuantSignals = async (req, res, next) => {
 export const getRadarStats = async (req, res, next) => {
     try {
         const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const hitMissStats = await QuantSignal.aggregate([ { $match: { status: { $in: ['HIT', 'MISS'] }, auditDate: { $gte: thirtyDaysAgo } } }, { $group: { _id: "$status", count: { $sum: 1 } } } ]);
+        const v2StartDate = new Date('2026-05-09T00:00:00.000Z');
+        const hitMissStats = await QuantSignal.aggregate([ { $match: { status: { $in: ['HIT', 'MISS'] }, quality: 'GOLD', timestamp: { $gte: v2StartDate }, auditDate: { $gte: thirtyDaysAgo } } }, { $group: { _id: "$status", count: { $sum: 1 } } } ]);
         const hits = hitMissStats.find(s => s._id === 'HIT')?.count || 0;
         const misses = hitMissStats.find(s => s._id === 'MISS')?.count || 0;
         const totalClosed = hits + misses;
         const winRate = totalClosed > 0 ? (hits / totalClosed) * 100 : 0;
-        const closedSectors = await QuantSignal.aggregate([ { $match: { status: 'HIT', auditDate: { $gte: thirtyDaysAgo } } }, { $group: { _id: "$sector", count: { $sum: 1 }, avgReturn: { $avg: "$resultPercent" } } }, { $sort: { count: -1 } }, { $limit: 6 } ]);
-        const openSectors = await QuantSignal.aggregate([ { $match: { status: 'ACTIVE' } }, { $group: { _id: "$sector", count: { $sum: 1 }, avgReturn: { $avg: 0 } } }, { $sort: { count: -1 } }, { $limit: 6 } ]);
+        const closedSectors = await QuantSignal.aggregate([ { $match: { status: 'HIT', quality: 'GOLD', timestamp: { $gte: v2StartDate }, auditDate: { $gte: thirtyDaysAgo } } }, { $group: { _id: "$sector", count: { $sum: 1 }, avgReturn: { $avg: "$resultPercent" } } }, { $sort: { count: -1 } }, { $limit: 6 } ]);
+        const openSectors = await QuantSignal.aggregate([ { $match: { status: 'ACTIVE', quality: 'GOLD' } }, { $group: { _id: "$sector", count: { $sum: 1 }, avgReturn: { $avg: 0 } } }, { $sort: { count: -1 } }, { $limit: 6 } ]);
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-        res.json({ winRate: parseFloat(winRate.toFixed(1)), totalSignals: totalClosed, heatmapClosed: closedSectors.map(s => ({ sector: s._id || 'Outros', value: s.count, avgReturn: parseFloat(s.avgReturn.toFixed(2)) })), heatmapOpen: openSectors.map(s => ({ sector: s._id || 'Outros', value: s.count, avgReturn: 0 })), backtestHorizon: config?.backtestHorizon || 7 });
+        res.json({ winRate: parseFloat(winRate.toFixed(1)), totalSignals: totalClosed, heatmapClosed: closedSectors.map(s => ({ sector: s._id || 'Outros', value: s.count, avgReturn: parseFloat(s.avgReturn.toFixed(2)) })), heatmapOpen: openSectors.map(s => ({ sector: s._id || 'Outros', value: s.count, avgReturn: 0 })), backtestHorizon: config?.backtestHorizon || 14 });
     } catch (error) { next(error); }
 };
 

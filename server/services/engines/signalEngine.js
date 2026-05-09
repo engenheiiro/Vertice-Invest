@@ -104,8 +104,9 @@ export const signalEngine = {
     },
 
     // Determina urgência do sinal Deep Value (discount = preço / graham)
+    // Threshold ajustado: sinais só gerados para discount < 0.70 (tudo GOLD)
     _grahamUrgency(discount) {
-        if (discount < 0.60) return 'CRITICAL';
+        if (discount < 0.55) return 'CRITICAL';
         if (discount < 0.70) return 'HIGH';
         return 'MEDIUM';
     },
@@ -179,80 +180,79 @@ export const signalEngine = {
                     const currentPrice = asset.lastPrice;
                     const riskProfile = this.determineRiskProfile(asset);
 
-                    // --- CHECK 1: RSI OVERSOLD ---
+                    // --- CHECK 1: RSI OVERSOLD (GOLD only: RSI < 30) ---
                     if (asset.netMargin > -5) {
                         const rsi = this.calculateRSI(closes, 14);
 
-                        if (rsi !== null && rsi < 37) {
-                            const correlationCheck = this.isValidCorrelation(asset.ticker, 'RSI_OVERSOLD', macroContext, asset.type);
+                        if (rsi !== null && rsi < 30) {
+                            // Filtro de tendência: bloqueia "facas caindo" (preço > 25% abaixo da SMA200)
+                            const trendBlock = asset.sma200 > 0 && currentPrice < asset.sma200 * 0.75;
 
-                            if (!correlationCheck.valid) {
+                            if (trendBlock) {
                                 correlationBlocks++;
                             } else {
-                                const isGold = rsi < 30;
-                                const quality = isGold ? 'GOLD' : 'SILVER';
-                                const urgencyLevel = this._rsiUrgency(rsi);
-                                const message = `${isGold ? 'Sobrevenda Extrema' : 'Sobrevenda'}: RSI em ${rsi.toFixed(0)}. ${isGold ? 'Oportunidade Ouro.' : 'Monitorar repique.'}`;
+                                const correlationCheck = this.isValidCorrelation(asset.ticker, 'RSI_OVERSOLD', macroContext, asset.type);
 
-                                processedPairs.add(`${asset.ticker}-RSI_OVERSOLD`);
-                                upsertOps.push({
-                                    updateOne: {
-                                        filter: { ticker: asset.ticker, type: 'RSI_OVERSOLD', status: 'ACTIVE' },
-                                        update: {
-                                            // Atualiza campos dinâmicos a cada varredura
-                                            $set: { quality, value: rsi, message, urgencyLevel, timestamp: new Date() },
-                                            // Campos imutáveis: só definidos na criação
-                                            $setOnInsert: {
-                                                ticker: asset.ticker,
-                                                type: 'RSI_OVERSOLD',
-                                                assetType: asset.type,
-                                                riskProfile,
-                                                sector: asset.sector || 'Outros',
-                                                priceAtSignal: currentPrice,
-                                                status: 'ACTIVE'
-                                            }
-                                        },
-                                        upsert: true
-                                    }
-                                });
+                                if (!correlationCheck.valid) {
+                                    correlationBlocks++;
+                                } else {
+                                    const quality = 'GOLD';
+                                    const urgencyLevel = this._rsiUrgency(rsi);
+                                    const message = `${rsi < 20 ? 'Sobrevenda Extrema' : 'Sobrevenda Técnica'}: RSI em ${rsi.toFixed(0)}. Anomalia estatística detectada.`;
+
+                                    processedPairs.add(`${asset.ticker}-RSI_OVERSOLD`);
+                                    upsertOps.push({
+                                        updateOne: {
+                                            filter: { ticker: asset.ticker, type: 'RSI_OVERSOLD', status: 'ACTIVE' },
+                                            update: {
+                                                $set: { quality, value: rsi, message, urgencyLevel, timestamp: new Date() },
+                                                $setOnInsert: {
+                                                    ticker: asset.ticker,
+                                                    type: 'RSI_OVERSOLD',
+                                                    assetType: asset.type,
+                                                    riskProfile,
+                                                    sector: asset.sector || 'Outros',
+                                                    priceAtSignal: currentPrice,
+                                                    status: 'ACTIVE'
+                                                }
+                                            },
+                                            upsert: true
+                                        }
+                                    });
+                                }
                             }
                         }
                     }
 
-                    // --- CHECK 2: DEEP VALUE (Graham) ---
-                    if (asset.pl > 0 && asset.p_vp > 0 && asset.type === 'STOCK') {
+                    // --- CHECK 2: DEEP VALUE Graham (GOLD only: desconto < 70% + ROE > 0) ---
+                    if (asset.pl > 0 && asset.p_vp > 0 && asset.type === 'STOCK' && asset.roe > 0) {
                         const grahamNumber = Math.sqrt(22.5 * (currentPrice / asset.pl) * (currentPrice / asset.p_vp));
                         const discount = currentPrice / grahamNumber;
 
-                        if (grahamNumber > 0 && discount < 0.80) {
-                            if (macroContext.isCrashDay && discount > 0.70) {
-                                correlationBlocks++;
-                            } else {
-                                const isGold = discount < 0.70;
-                                const quality = isGold ? 'GOLD' : 'SILVER';
-                                const urgencyLevel = this._grahamUrgency(discount);
-                                const message = `Deep Value: Negociando a ${(discount * 100).toFixed(0)}% do Valor Intrínseco.`;
+                        if (grahamNumber > 0 && discount < 0.70) {
+                            const quality = 'GOLD';
+                            const urgencyLevel = this._grahamUrgency(discount);
+                            const message = `Deep Value: Negociando a ${(discount * 100).toFixed(0)}% do Valor Intrínseco. ROE: ${asset.roe?.toFixed(1)}%.`;
 
-                                processedPairs.add(`${asset.ticker}-DEEP_VALUE`);
-                                upsertOps.push({
-                                    updateOne: {
-                                        filter: { ticker: asset.ticker, type: 'DEEP_VALUE', status: 'ACTIVE' },
-                                        update: {
-                                            $set: { quality, value: grahamNumber, message, urgencyLevel, timestamp: new Date() },
-                                            $setOnInsert: {
-                                                ticker: asset.ticker,
-                                                type: 'DEEP_VALUE',
-                                                assetType: asset.type,
-                                                riskProfile: 'DEFENSIVE',
-                                                sector: asset.sector || 'Outros',
-                                                priceAtSignal: currentPrice,
-                                                status: 'ACTIVE'
-                                            }
-                                        },
-                                        upsert: true
-                                    }
-                                });
-                            }
+                            processedPairs.add(`${asset.ticker}-DEEP_VALUE`);
+                            upsertOps.push({
+                                updateOne: {
+                                    filter: { ticker: asset.ticker, type: 'DEEP_VALUE', status: 'ACTIVE' },
+                                    update: {
+                                        $set: { quality, value: grahamNumber, message, urgencyLevel, timestamp: new Date() },
+                                        $setOnInsert: {
+                                            ticker: asset.ticker,
+                                            type: 'DEEP_VALUE',
+                                            assetType: asset.type,
+                                            riskProfile: 'DEFENSIVE',
+                                            sector: asset.sector || 'Outros',
+                                            priceAtSignal: currentPrice,
+                                            status: 'ACTIVE'
+                                        }
+                                    },
+                                    upsert: true
+                                }
+                            });
                         }
                     }
 
@@ -323,10 +323,10 @@ export const signalEngine = {
 
         try {
             const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-            const horizonDays = config?.backtestHorizon || 7;
+            const horizonDays = config?.backtestHorizon || 14;
 
-            const TAKE_PROFIT_PCT = 3.0;
-            const STOP_LOSS_PCT = -2.0;
+            const TAKE_PROFIT_PCT = 5.0;
+            const STOP_LOSS_PCT = -3.0;
 
             const activeSignals = await QuantSignal.find({ status: 'ACTIVE' });
 

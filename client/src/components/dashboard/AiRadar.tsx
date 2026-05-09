@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Radar, Zap, Lock, Shield, Activity, Crown, Info, History, Filter, Medal, Check, AlertTriangle, TrendingUp, Clock } from 'lucide-react';
+import { Radar, Zap, Lock, Shield, Activity, Crown, Info, History, Medal, TrendingUp, Clock } from 'lucide-react';
 import { AiSignal, RadarMeta } from '../../hooks/useDashboardData';
 // @ts-ignore
 import { useNavigate } from 'react-router-dom';
@@ -127,7 +127,6 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
     const navigate = useNavigate();
     const { user } = useAuth();
     const [filter, setFilter] = useState<FilterType>('ALL');
-    const [goldOnly, setGoldOnly] = useState(true);
 
     const hasAccess = user?.plan === 'PRO' || user?.plan === 'BLACK';
 
@@ -136,17 +135,13 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
     const filteredSignals = useMemo(() => {
         if (!hasAccess) return signals.slice(0, 3);
         return signals
-            .filter(s => {
-                const matchesType = filter === 'ALL' || s.assetType === filter;
-                const matchesQuality = goldOnly ? s.quality === 'GOLD' : true;
-                return matchesType && matchesQuality;
-            })
+            .filter(s => filter === 'ALL' || s.assetType === filter)
             .sort((a, b) => {
                 const rankDiff = urgencyRank(b.urgencyLevel) - urgencyRank(a.urgencyLevel);
                 if (rankDiff !== 0) return rankDiff;
                 return (b.score || 0) - (a.score || 0);
             });
-    }, [signals, filter, goldOnly, hasAccess]);
+    }, [signals, filter, hasAccess]);
 
     const isEmpty = filteredSignals.length === 0;
 
@@ -193,23 +188,18 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                             <Info size={12} className="text-slate-600 cursor-help hover:text-blue-400 transition-colors" />
                             <div className="absolute left-0 top-6 w-64 p-4 bg-[#0F1729] border border-slate-700 rounded-xl shadow-2xl z-50 opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none text-left">
                                 <p className="text-[10px] text-slate-300 leading-relaxed mb-2">
-                                    Scanner quantitativo que detecta anomalias técnicas a cada <strong>15 minutos</strong>. Sinais encerrados automaticamente em +3% (alvo) ou -2% (stop).
+                                    Scanner quantitativo que detecta anomalias técnicas a cada <strong>15 minutos</strong>. Apenas sinais <strong className="text-[#D4AF37]">GOLD</strong>. Saída automática em +5% (alvo) ou -3% (stop).
                                 </p>
                                 <div className="space-y-1.5">
                                     <div className="flex items-center gap-2 text-[10px]">
                                         <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                                         <span className="text-red-400 font-bold">CRÍTICO:</span>
-                                        <span className="text-slate-400">RSI &lt; 20 ou Graham &gt; 40%</span>
+                                        <span className="text-slate-400">RSI &lt; 20 ou Graham &gt; 45%</span>
                                     </div>
                                     <div className="flex items-center gap-2 text-[10px]">
                                         <span className="w-2 h-2 rounded-full bg-orange-400" />
                                         <span className="text-orange-400 font-bold">ALTO:</span>
-                                        <span className="text-slate-400">RSI 20–30 ou Graham 30–40%</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-[10px]">
-                                        <span className="w-2 h-2 rounded-full bg-yellow-400" />
-                                        <span className="text-yellow-400 font-bold">MÉDIO:</span>
-                                        <span className="text-slate-400">RSI 30–37 ou Graham 20–30%</span>
+                                        <span className="text-slate-400">RSI 20–30 ou Graham 30–45%</span>
                                     </div>
                                 </div>
                             </div>
@@ -256,13 +246,9 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                                 <button key={type} onClick={() => setFilter(type)} className={`px-1.5 py-0.5 text-[8px] font-bold rounded transition-colors ${filter === type ? activeClass : 'text-slate-500 hover:text-slate-300'}`}>{label}</button>
                             ))}
                         </div>
-                        <button
-                            onClick={() => setGoldOnly(!goldOnly)}
-                            className={`flex items-center gap-1 px-2 py-1 rounded text-[8px] font-bold border transition-colors ${goldOnly ? 'bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30' : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'}`}
-                        >
-                            {goldOnly ? <Check size={8} /> : <Filter size={8} />}
-                            GOLD
-                        </button>
+                        <span className="flex items-center gap-1 px-2 py-1 rounded text-[8px] font-bold border bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30">
+                            <Medal size={8} /> GOLD
+                        </span>
                     </div>
                 )}
             </div>
@@ -293,7 +279,6 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                 {(hasAccess ? filteredSignals : signals.slice(0, 3)).map((signal, idx) => {
                     const urgency = getUrgencyStyle(signal.urgencyLevel);
                     const score = Math.round(signal.score || 0);
-                    const isGold = signal.quality === 'GOLD';
 
                     return (
                         <div
@@ -315,9 +300,9 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                                         <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase ${urgency.badge}`}>
                                             {urgency.label}
                                         </span>
-                                        {/* Badge qualidade */}
-                                        <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase flex items-center gap-0.5 ${isGold ? 'bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30' : 'bg-slate-300/10 text-slate-300 border-slate-400/30'}`}>
-                                            <Medal size={7} /> {isGold ? 'Ouro' : 'Prata'}
+                                        {/* Badge qualidade — todos os sinais são GOLD */}
+                                        <span className="text-[7px] font-black px-1.5 py-0.5 rounded border uppercase flex items-center gap-0.5 bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30">
+                                            <Medal size={7} /> Ouro
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
@@ -358,7 +343,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                         <p className="text-xs font-bold text-slate-500">
                             {filter === 'CRYPTO' ? 'Scanner ainda não cobre cripto. Em breve.'
                              : filter === 'FIXED_INCOME' ? 'Renda Fixa não gera sinais quantitativos.'
-                             : `Nenhuma anomalia${goldOnly ? ' GOLD' : ''} no momento.`}
+                             : 'Nenhuma anomalia GOLD detectada no momento.'}
                         </p>
                         {meta?.nextScanAt && filter !== 'CRYPTO' && filter !== 'FIXED_INCOME' && (
                             <p className="text-[10px] text-slate-600 mt-1.5 flex items-center gap-1">
