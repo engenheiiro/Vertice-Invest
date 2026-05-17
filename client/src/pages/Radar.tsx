@@ -36,16 +36,23 @@ interface RadarMeta {
     scanIntervalMinutes: number;
 }
 
+interface AssetTypeAccuracy {
+    winRate: number;
+    totalSignals: number;
+}
+
 interface RadarStats {
     winRate: number;
     totalSignals: number;
     backtestHorizon: number;
+    byAssetType?: { STOCK: AssetTypeAccuracy; FII: AssetTypeAccuracy; STOCK_US: AssetTypeAccuracy };
     heatmapClosed: { sector: string; value: number; avgReturn: number }[];
     heatmapOpen: { sector: string; value: number; avgReturn: number }[];
 }
 
 type StatusFilter = 'ALL' | 'HIT' | 'MISS' | 'NEUTRAL';
 type AssetTypeFilter = 'ALL' | 'STOCK' | 'FII' | 'STOCK_US' | 'CRYPTO' | 'FIXED_INCOME';
+type AccuracyFilter = 'ALL' | 'STOCK' | 'FII' | 'STOCK_US';
 
 const getTypeLabel = (type: string) => {
     if (type === 'FII') return 'FII';
@@ -149,6 +156,7 @@ export const RadarPage = () => {
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
     const [sectorView, setSectorView] = useState<'OPEN' | 'CLOSED'>('OPEN');
     const [assetTypeFilter, setAssetTypeFilter] = useState<AssetTypeFilter>('ALL');
+    const [accuracyFilter, setAccuracyFilter] = useState<AccuracyFilter>('ALL');
 
     useEffect(() => {
         const load = async () => {
@@ -198,10 +206,16 @@ export const RadarPage = () => {
         return diff === 0 ? 'agora' : `há ${diff} min`;
     }, [meta?.lastScanAt]);
 
-    const pieData = stats ? [
-        { name: 'Acertos', value: parseFloat(stats.winRate.toFixed(1)), color: '#34d399' },
-        { name: 'Erros', value: parseFloat((100 - stats.winRate).toFixed(1)), color: '#ef4444' }
-    ] : [];
+    const displayedAccuracy = useMemo(() => {
+        if (!stats) return { winRate: 0, totalSignals: 0 };
+        if (accuracyFilter === 'ALL') return { winRate: stats.winRate, totalSignals: stats.totalSignals };
+        return stats.byAssetType?.[accuracyFilter] ?? { winRate: 0, totalSignals: 0 };
+    }, [stats, accuracyFilter]);
+
+    const pieData = [
+        { name: 'Acertos', value: parseFloat(displayedAccuracy.winRate.toFixed(1)), color: '#34d399' },
+        { name: 'Erros',   value: parseFloat((100 - displayedAccuracy.winRate).toFixed(1)), color: '#ef4444' }
+    ];
 
     const activeHeatmapData = useMemo(() => {
         const source = sectorView === 'OPEN' ? (stats?.heatmapOpen || []) : (stats?.heatmapClosed || []);
@@ -267,8 +281,8 @@ export const RadarPage = () => {
                         <h4 className="text-xs font-bold text-blue-300 uppercase mb-1">Critérios de Saída Automática</h4>
                         <p className="text-[11px] text-slate-400 leading-relaxed">
                             O sistema encerra a auditoria de um sinal quando um dos alvos é atingido:&nbsp;
-                            <span className="text-emerald-400 font-bold">+5.0% Take Profit</span> &nbsp;|&nbsp;
-                            <span className="text-red-400 font-bold">-3.0% Stop Loss</span> &nbsp;|&nbsp;
+                            <span className="text-emerald-400 font-bold">+3.5% Take Profit</span> &nbsp;|&nbsp;
+                            <span className="text-red-400 font-bold">-3.5% Stop Loss</span> &nbsp;|&nbsp;
                             <span className="text-slate-300 font-bold">{stats?.backtestHorizon || 14} dias Time Stop</span>
                         </p>
                     </div>
@@ -277,17 +291,42 @@ export const RadarPage = () => {
                 {/* ── SEÇÃO 3: Estatísticas ── */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Card win rate */}
-                    <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-5">
-                        <div className="flex justify-between items-start mb-4">
+                    <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-5 flex flex-col">
+                        <div className="flex justify-between items-start mb-3">
                             <div>
                                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                                     <Target size={16} className="text-emerald-500" /> Taxa de Acerto
                                 </h3>
                                 <p className="text-[10px] text-slate-500">Últimos 30 dias · sinais fechados</p>
                             </div>
-                            <span className="text-2xl font-black text-white">{stats?.winRate ?? '—'}%</span>
+                            <span className="text-2xl font-black text-white">
+                                {displayedAccuracy.winRate > 0 ? `${displayedAccuracy.winRate}%` : '—'}
+                            </span>
                         </div>
-                        <div className="h-32 w-full">
+
+                        {/* Abas de filtro por tipo */}
+                        <div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-800 mb-3 gap-px">
+                            {([
+                                ['ALL',      'Todos'],
+                                ['STOCK',    'Ações BR'],
+                                ['FII',      'FIIs'],
+                                ['STOCK_US', 'Exterior'],
+                            ] as [AccuracyFilter, string][]).map(([key, label]) => (
+                                <button
+                                    key={key}
+                                    onClick={() => setAccuracyFilter(key)}
+                                    className={`flex-1 py-1 text-[9px] font-bold rounded transition-all truncate ${
+                                        accuracyFilter === key
+                                            ? 'bg-slate-700 text-white'
+                                            : 'text-slate-500 hover:text-slate-300'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="h-28 w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <RechartsPie>
                                     <Pie data={pieData} dataKey="value" innerRadius={25} outerRadius={42} paddingAngle={4} stroke="none">
@@ -296,7 +335,9 @@ export const RadarPage = () => {
                                 </RechartsPie>
                             </ResponsiveContainer>
                         </div>
-                        <p className="text-center text-[10px] text-slate-500 mt-[-18px]">Base: {stats?.totalSignals || 0} sinais</p>
+                        <p className="text-center text-[10px] text-slate-500 mt-[-14px]">
+                            Base: {displayedAccuracy.totalSignals} sinais
+                        </p>
                     </div>
 
                     {/* Card concentração setorial */}

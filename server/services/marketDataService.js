@@ -33,11 +33,12 @@ export const marketDataService = {
             const asset = await MarketAsset.findOne({ ticker: cleanTicker });
 
             if (asset && asset.lastPrice > 0) {
-                return { 
-                    price: asset.lastPrice, 
-                    change: asset.change || 0, 
+                return {
+                    price: asset.lastPrice,
+                    change: asset.change || 0,
                     name: asset.name,
-                    sector: asset.sector
+                    sector: asset.sector,
+                    dy: asset.dy || 0
                 };
             }
 

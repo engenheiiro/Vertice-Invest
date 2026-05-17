@@ -29,7 +29,8 @@ const Research = lazy(() => import('./pages/Research').then(module => ({ default
 const RadarPage = lazy(() => import('./pages/Radar').then(module => ({ default: module.RadarPage }))); // Nova
 const Courses = lazy(() => import('./pages/Courses').then(module => ({ default: module.Courses })));
 const CoursePlayer = lazy(() => import('./pages/CoursePlayer').then(module => ({ default: module.CoursePlayer })));
-const Indicators = lazy(() => import('./pages/Indicators').then(module => ({ default: module.Indicators }))); 
+const Indicators = lazy(() => import('./pages/Indicators').then(module => ({ default: module.Indicators })));
+const Calculator = lazy(() => import('./pages/Calculator').then(module => ({ default: module.Calculator })));
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel').then(module => ({ default: module.AdminPanel }))); 
 
 const PageLoader = () => (
@@ -93,6 +94,7 @@ export default function App() {
               <Route path="/research" element={<Research />} />
               <Route path="/radar" element={<RadarPage />} /> {/* Rota Nova */}
               <Route path="/indicators" element={<Indicators />} />
+              <Route path="/calculadora" element={<Calculator />} />
               <Route path="/courses" element={<Courses />} />
               <Route path="/courses/:courseId" element={<CoursePlayer />} />
               <Route path="/profile" element={<Profile />} />

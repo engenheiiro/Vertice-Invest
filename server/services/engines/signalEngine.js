@@ -180,13 +180,25 @@ export const signalEngine = {
                     const currentPrice = asset.lastPrice;
                     const riskProfile = this.determineRiskProfile(asset);
 
-                    // --- CHECK 1: RSI OVERSOLD (GOLD only: RSI < 30) ---
+                    // Confirmação de volume: volume atual >= 1.2x média dos últimos 20 pregões
+                    const volumes = history.map(h => h.volume).filter(v => v > 0);
+                    const avgVolume20 = volumes.length >= 20
+                        ? volumes.slice(0, 20).reduce((a, b) => a + b, 0) / 20
+                        : 0;
+                    const currentVolume = volumes[0] || 0;
+                    const hasVolumeConfirmation = avgVolume20 > 0
+                        ? currentVolume >= avgVolume20 * 1.2
+                        : true;
+
+                    // --- CHECK 1: RSI OVERSOLD (GOLD only: RSI < 30 + reversão + volume) ---
                     if (asset.netMargin > -5) {
                         const rsi = this.calculateRSI(closes, 14);
+                        // Exige que o preço de hoje esteja acima de ontem (rebate confirmado, não faca caindo)
+                        const isReverting = closes.length >= 3 && closes[0] > closes[1];
 
-                        if (rsi !== null && rsi < 30) {
-                            // Filtro de tendência: bloqueia "facas caindo" (preço > 25% abaixo da SMA200)
-                            const trendBlock = asset.sma200 > 0 && currentPrice < asset.sma200 * 0.75;
+                        if (rsi !== null && rsi < 30 && isReverting && hasVolumeConfirmation) {
+                            // Filtro de tendência: bloqueia downtrends moderados (preço > 15% abaixo da SMA200)
+                            const trendBlock = asset.sma200 > 0 && currentPrice < asset.sma200 * 0.85;
 
                             if (trendBlock) {
                                 correlationBlocks++;
@@ -224,8 +236,9 @@ export const signalEngine = {
                         }
                     }
 
-                    // --- CHECK 2: DEEP VALUE Graham (GOLD only: desconto < 70% + ROE > 0) ---
-                    if (asset.pl > 0 && asset.p_vp > 0 && asset.type === 'STOCK' && asset.roe > 0) {
+                    // --- CHECK 2: DEEP VALUE Graham (GOLD only: desconto < 70% + ROE > 0 + sem downtrend) ---
+                    const inDowntrend = asset.sma200 > 0 && currentPrice < asset.sma200;
+                    if (asset.pl > 0 && asset.p_vp > 0 && asset.type === 'STOCK' && asset.roe > 0 && !inDowntrend) {
                         const grahamNumber = Math.sqrt(22.5 * (currentPrice / asset.pl) * (currentPrice / asset.p_vp));
                         const discount = currentPrice / grahamNumber;
 
@@ -325,8 +338,8 @@ export const signalEngine = {
             const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
             const horizonDays = config?.backtestHorizon || 14;
 
-            const TAKE_PROFIT_PCT = 5.0;
-            const STOP_LOSS_PCT = -3.0;
+            const TAKE_PROFIT_PCT = 3.5;
+            const STOP_LOSS_PCT = -3.5;
 
             const activeSignals = await QuantSignal.find({ status: 'ACTIVE' });
 
