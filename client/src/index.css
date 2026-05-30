@@ -9,6 +9,20 @@
   html {
     scroll-behavior: smooth;
   }
+  /*
+   * Trava de overflow horizontal (mobile).
+   * Elementos absolutos invisíveis (tooltips opacity-0 com w-48/w-64) e larguras
+   * largas contribuíam para o scrollWidth da página, fazendo o Chromium/Brave
+   * entrar em "shrink-to-fit" no celular — o que reativava os breakpoints de
+   * desktop (md:) e escondia o menu mobile, os cards e o banner de instalar.
+   * `overflow-x: clip` corta esse estouro SEM criar scroll container (não quebra
+   * o header `sticky`) e SEM afetar scrolls internos (tabelas com overflow-x-auto).
+   * No desktop não há estouro horizontal, então é um no-op — layout idêntico.
+   */
+  html,
+  body {
+    overflow-x: clip;
+  }
 }
 
 @layer utilities {
