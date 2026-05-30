@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck, LayoutGrid, PieChart, BrainCircuit,
   GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
-  Eye, EyeOff, Play, Radar, Calculator
+  Eye, EyeOff, Play, Radar, Calculator, Menu, X
 } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -18,12 +18,18 @@ export const Header: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [time, setTime] = useState(new Date());
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // Relógio em Tempo Real
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Fecha o menu mobile ao trocar de rota
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
@@ -47,9 +53,23 @@ export const Header: React.FC = () => {
   const activeTab = getActiveTab();
   const isAdmin = user?.role === 'ADMIN';
 
+  // Itens de navegação do drawer mobile (mesmos destinos do desktop)
+  const mobileLinks = [
+    { to: '/dashboard', label: 'Terminal', icon: <LayoutGrid size={18} />, key: 'terminal' },
+    { to: '/wallet', label: 'Carteira', icon: <PieChart size={18} />, key: 'wallet' },
+    { to: '/research', label: 'Research', icon: <BrainCircuit size={18} />, key: 'research' },
+    { to: '/radar', label: 'Radar', icon: <Radar size={18} />, key: 'radar' },
+    { to: '/indicators', label: 'Indicadores', icon: <BarChart3 size={18} />, key: 'indicators' },
+    { to: '/calculadora', label: 'Calculadora', icon: <Calculator size={18} />, key: 'calculadora' },
+    { to: '/courses', label: 'Cursos', icon: <GraduationCap size={18} />, key: 'courses' },
+    { to: '/pricing', label: 'Planos', icon: <Crown size={18} />, key: 'pricing' },
+    { to: '/profile', label: 'Meu Perfil', icon: <UserIcon size={18} />, key: 'profile' },
+    ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: <Settings size={18} />, key: 'admin' }] : []),
+  ];
+
   return (
-    <nav className="border-b border-slate-800/60 bg-[#03060D]/80 backdrop-blur-md sticky top-0 z-50">
-      <div className="max-w-[1600px] mx-auto px-6 h-14 flex items-center justify-between">
+    <nav className="border-b border-slate-800/60 bg-[#03060D]/80 backdrop-blur-md sticky top-0 z-50 pt-[env(safe-area-inset-top)]">
+      <div className="max-w-[1600px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-6">
            <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/dashboard')}>
               <div className="w-6 h-6 bg-blue-600 flex items-center justify-center rounded-md shadow-lg shadow-blue-600/20">
@@ -146,16 +166,59 @@ export const Header: React.FC = () => {
                   <p className="text-[10px] text-emerald-500 font-mono">ONLINE</p>
               </Link>
               
-              <button 
-                onClick={handleLogout} 
+              <button
+                onClick={handleLogout}
                 className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
                 title="Sair"
               >
                   <LogOut size={16} />
               </button>
+
+              {/* Botão Hambúrguer — apenas mobile */}
+              <button
+                onClick={() => setIsMenuOpen((v) => !v)}
+                className="md:hidden p-2 hover:bg-slate-800 rounded-lg text-slate-300 hover:text-white transition-colors"
+                aria-label={isMenuOpen ? 'Fechar menu' : 'Abrir menu'}
+                aria-expanded={isMenuOpen}
+              >
+                  {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+              </button>
            </div>
         </div>
       </div>
+
+      {/* Drawer de navegação mobile — invisível no desktop (md:hidden) */}
+      {isMenuOpen && (
+        <div className="md:hidden fixed inset-0 top-14 z-40">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setIsMenuOpen(false)}
+          />
+          {/* Painel */}
+          <div className="relative z-10 bg-[#03060D]/98 border-b border-slate-800/60 px-4 py-3 max-h-[calc(100vh-3.5rem)] overflow-y-auto">
+            <div className="flex flex-col gap-1">
+              {mobileLinks.map((item) => {
+                const active = activeTab === item.key;
+                return (
+                  <Link
+                    key={item.key}
+                    to={item.to}
+                    onClick={() => setIsMenuOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors min-h-[48px]
+                      ${active
+                        ? 'bg-slate-800 text-white border border-slate-700/50'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800/50 border border-transparent'}`}
+                  >
+                    {item.icon}
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </nav>
   );
 };

@@ -152,7 +152,8 @@ export const MonthlyReturnsTable = () => {
                 <h3 className="font-bold text-slate-200 text-sm">Rentabilidade Mensal</h3>
             </div>
             
-            <div className="overflow-x-auto custom-scrollbar">
+            {/* Tabela completa — desktop (inalterada) */}
+            <div className="hidden md:block overflow-x-auto custom-scrollbar">
                 <table className="w-full text-center border-collapse text-xs">
                     <thead>
                         <tr className="bg-[#0F131E] text-slate-500 font-bold border-b border-slate-800">
@@ -195,7 +196,38 @@ export const MonthlyReturnsTable = () => {
                     </tbody>
                 </table>
             </div>
-            
+
+            {/* Cards por ano — mobile (md:hidden) */}
+            <div className="md:hidden p-3 space-y-3">
+                {tableData.map((row) => (
+                    <div key={row.year} className="bg-[#0B101A] border border-slate-800 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="font-bold text-white">{row.year}</span>
+                            <div className="flex gap-3 text-right">
+                                <div>
+                                    <p className="text-[9px] text-slate-500 uppercase">Ano</p>
+                                    <p className={`text-xs font-mono font-bold ${getColor(row.ytd)}`}>{formatPercent(row.ytd)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] text-slate-500 uppercase">Acum.</p>
+                                    <p className={`text-xs font-mono font-bold ${getColor(row.accumulated)}`}>{formatPercent(row.accumulated)}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1.5">
+                            {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((label, idx) => (
+                                <div key={label} className="bg-slate-900/40 rounded-md py-1.5 text-center">
+                                    <p className="text-[9px] text-slate-500">{label}</p>
+                                    <p className={`text-[10px] font-mono font-medium ${getColor(row.months[idx]?.value ?? null)}`}>
+                                        {formatPercent(row.months[idx]?.value ?? null)}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+
             <div className="p-3 bg-[#0B101A] border-t border-slate-800 text-[10px] text-slate-500 text-center flex items-center justify-center gap-1.5">
                 <AlertCircle size={10} />
                 <span>Valores baseados na cota diária da carteira (TWRR). Rentabilidade passada não garante futuro.</span>

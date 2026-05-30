@@ -12,7 +12,7 @@ export const Profile = () => {
         <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
             <Header />
 
-            <main className="max-w-[1200px] mx-auto p-6 animate-fade-in">
+            <main className="max-w-[1200px] mx-auto p-4 md:p-6 animate-fade-in">
                 {/* Breadcrumb / Back Navigation */}
                 <div className="mb-6">
                     <Link to="/dashboard" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white transition-colors group">

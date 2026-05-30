@@ -82,7 +82,7 @@ export const Indicators = () => {
         <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
             <Header />
 
-            <main className="max-w-[1600px] mx-auto p-6 animate-fade-in">
+            <main className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in">
                 {/* Header e Grid de Indicadores */}
                 <div className="flex items-center justify-between mb-8">
                     <div>

@@ -90,7 +90,8 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                 </div>
             </div>
             
-            <div className="overflow-x-auto custom-scrollbar">
+            {/* Tabela completa — desktop (inalterada) */}
+            <div className="hidden md:block overflow-x-auto custom-scrollbar">
                 <table className="w-full text-left border-collapse min-w-[750px]">
                     <thead>
                         <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500 bg-[#0B101A]">
@@ -246,6 +247,95 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                         )}
                     </tbody>
                 </table>
+            </div>
+
+            {/* Lista em cards — mobile (md:hidden). Mesma lógica de grupos/colapso da tabela. */}
+            <div className="md:hidden p-3 space-y-3">
+                {isLoading ? (
+                    [...Array(4)].map((_, i) => (
+                        <div key={i} className="animate-pulse bg-[#0B101A] border border-slate-800 rounded-xl p-4 h-24" />
+                    ))
+                ) : items.length === 0 ? (
+                    <div className="p-8 text-center text-slate-500 text-sm">Nenhum ativo na carteira.</div>
+                ) : (
+                    Object.entries(groupedItems).map(([group, groupItems]) => (
+                        <div key={group} className="space-y-2">
+                            <button
+                                onClick={() => toggleGroup(group)}
+                                className="w-full flex items-center justify-between bg-[#0F131E] border border-slate-800/50 rounded-lg px-3 py-2"
+                            >
+                                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest flex items-center gap-2">
+                                    {collapsedGroups[group] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                                    <Folder size={12} /> {group}
+                                </span>
+                                <span className="text-[9px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                                    {(groupItems as PortfolioItem[]).length} Ativos
+                                </span>
+                            </button>
+
+                            {!collapsedGroups[group] && (groupItems as PortfolioItem[]).map((item) => {
+                                const profit = item.currentPrice - item.avgPrice;
+                                const profitPercent = item.avgPrice > 0 ? (profit / item.avgPrice) * 100 : 0;
+                                const isChampion = profitPercent > 15;
+
+                                return (
+                                    <div key={item.ticker} className="bg-[#0B101A] border border-slate-800 rounded-xl p-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="w-9 h-9 shrink-0 rounded bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300 border border-slate-700">
+                                                    {isDemoMode ? <Lock size={12} /> : item.ticker.substring(0, 2)}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <p className="font-bold text-slate-200">{isDemoMode ? '••••' : item.ticker}</p>
+                                                        {isChampion && !isDemoMode && (
+                                                            <span title="Campeã: Retorno > 15%" className="text-[#D4AF37]">
+                                                                <Medal size={12} fill="currentColor" />
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-500 truncate">{isDemoMode ? '•••••••' : item.name}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right shrink-0">
+                                                <p className="font-bold text-slate-200 text-sm">{formatCurrency(item.currentPrice * item.shares)}</p>
+                                                <p className="text-[10px] text-slate-500">{item.shares} un</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                                            <div className="bg-slate-900/40 rounded-lg py-2">
+                                                <p className="text-[9px] text-slate-500 uppercase">Var.</p>
+                                                <p className={`text-xs font-bold ${profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                    {profit >= 0 ? '+' : ''}{profitPercent.toFixed(1)}%
+                                                </p>
+                                            </div>
+                                            <div className="bg-slate-900/40 rounded-lg py-2">
+                                                <p className="text-[9px] text-slate-500 uppercase">IA Score</p>
+                                                <p className="text-xs font-black text-white">
+                                                    {item.aiScore > 0 ? item.aiScore : '--'}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center justify-center">
+                                                {item.aiScore > 0 ? (
+                                                    <span className={`inline-block text-[9px] font-black uppercase px-2 py-1 rounded border text-center ${
+                                                        item.aiSentiment === 'BULLISH' ? 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10' :
+                                                        item.aiSentiment === 'BEARISH' ? 'text-red-500 border-red-500/30 bg-red-500/10' :
+                                                        'text-slate-400 border-slate-700 bg-slate-800'
+                                                    }`}>
+                                                        {item.aiSentiment === 'BULLISH' ? 'COMPRA' : item.aiSentiment === 'BEARISH' ? 'VENDA' : 'MANTER'}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] text-slate-600">--</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))
+                )}
             </div>
         </div>
     );

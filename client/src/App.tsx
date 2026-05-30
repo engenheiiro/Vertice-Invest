@@ -9,8 +9,10 @@ import { AdminRoute } from './components/auth/AdminRoute';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WalletProvider } from './contexts/WalletContext';
 import { ToastProvider } from './contexts/ToastContext';
-import { DemoProvider } from './contexts/DemoContext'; 
-import { TutorialOverlay } from './components/tutorial/TutorialOverlay'; 
+import { DemoProvider } from './contexts/DemoContext';
+import { TutorialOverlay } from './components/tutorial/TutorialOverlay';
+import { InstallPrompt } from './components/pwa/InstallPrompt';
+import { ReloadPrompt } from './components/pwa/ReloadPrompt';
 
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
@@ -75,6 +77,8 @@ const ProtectedAppLayout = () => {
 export default function App() {
   return (
     <ToastProvider>
+      <ReloadPrompt />
+      <InstallPrompt />
       <AuthProvider>
         <BrowserRouter>
           <Routes>

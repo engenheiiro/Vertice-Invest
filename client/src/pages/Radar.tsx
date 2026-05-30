@@ -235,7 +235,7 @@ export const RadarPage = () => {
         <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
             <Header />
 
-            <main className="max-w-[1200px] mx-auto p-6 animate-fade-in space-y-8">
+            <main className="max-w-[1200px] mx-auto p-4 md:p-6 animate-fade-in space-y-8">
 
                 {/* ── Cabeçalho ── */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

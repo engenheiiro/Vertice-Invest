@@ -74,7 +74,7 @@ export const Wallet = () => {
         <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
             <Header />
             
-            <main className="max-w-[1600px] mx-auto p-6 animate-fade-in relative">
+            <main className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in relative">
                 
                 {/* Header Actions */}
                 <div id="tour-wallet-intro" className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
