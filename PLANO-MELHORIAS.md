@@ -10,7 +10,7 @@
 ## Progresso geral
 | Categoria | Concluído | Total |
 |---|---|---|
-| Fase 0 — Segurança crítica | 3 | 5 |
+| Fase 0 — Segurança crítica | 4 | 5 |
 | Bugs (B) | 0 | 12 |
 | Melhorias/Refatorações (M) | 0 | 14 |
 | Implementações (I) | 0 | 14 |
@@ -41,7 +41,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
   - [ ] `API_KEY` (Gemini), `BRAPI_TOKEN`, `SENTRY_DSN` — **regenerar nos painéis (usuário)**
   - [ ] `MP_ACCESS_TOKEN` + `MP_WEBHOOK_SECRET` (Mercado Pago — produção financeira, urgente) — **painel MP (usuário)**
   - [ ] `SMTP_*` — **provedor de email (usuário)**
-- [ ] **F0.2 — Limpar histórico do git** (`.env` está em 6 commits). filter-repo/BFG indisponíveis (sem Python/Java); usar `git filter-branch` nativo + `git push --force`. **Operação destrutiva — aguardando confirmação do método.**
+- [x] **F0.2 — Limpar histórico do git** — ✅ **concluído**: `git filter-branch` removeu `.env` de todo o histórico; force-push para `origin/main` confirmado (topo `2002fd9`; verificado: **0 ocorrências de `.env` no histórico do GitHub**). Backup em `d:/Github/vertice-backup-prefilter-20260531.bundle`.
 - [x] **F0.3 — Criar `.env.example`** com todas as chaves vazias/descritas
 - [x] **F0.4 — Secret scanning** — `.gitleaks.toml` + workflow CI `.github/workflows/secret-scan.yml` + pre-commit husky (`.husky/pre-commit`) que bloqueia `.env` e roda gitleaks se instalado
 - [x] **F0.5 — `.gitignore`** reforçado: `.env`, `.env.*` ignorados, `!.env.example` rastreável
