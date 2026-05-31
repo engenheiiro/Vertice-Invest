@@ -31,7 +31,7 @@
     "test:fundamentus": "npm run test:fundamentus --prefix server",
     "lint": "npm run lint --prefix client && npm run lint --prefix server",
     "backtest:portfolio": "node server/scripts/seedPortfolioBacktest.js",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
