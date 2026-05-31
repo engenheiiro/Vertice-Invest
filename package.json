@@ -21,7 +21,7 @@
     "radar:report": "node server/scripts/generateRadarReport.js",
     "sync:TimeSeriesWorker": "node server/scripts/syncTimeSeries.js",
     "migrate:fix": "node server/scripts/migrateHardcodedData.js",
-    "test": "vitest",
+    "test": "npm test --prefix server -- run && npm test --prefix client -- run",
     "test:backtest": "node server/scripts/runBacktestEngine.js",
     "test:client": "npm run test --prefix client",
     "test:server": "npm run test --prefix server",
