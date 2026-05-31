@@ -10,9 +10,9 @@
 ## Progresso geral
 | Categoria | Concluído | Total |
 |---|---|---|
-| Fase 0 — Segurança crítica | 4 | 5 |
+| Fase 0 — Segurança crítica | 5 | 5 ✅ |
 | Bugs (B) | 12 | 12 ✅ |
-| Melhorias/Refatorações (M) | 0 | 14 |
+| Melhorias/Refatorações (M) | 14 | 14 ✅ |
 | Implementações (I) | 3 | 14 |
 | Segurança (S) | 3 | 12 |
 | Infra/DevOps (D) | 7 | 13 |
@@ -35,12 +35,12 @@ Uma auditoria completa (backend, frontend, infra/segurança) revelou um MVP func
 
 Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece em 6 commits do histórico** com segredos vivos.
 
-- [ ] **F0.1 — Rotacionar TODAS as chaves comprometidas** (antes de limpar histórico; assumir vazamento total):
-  - [x] `JWT_SECRET` e `JWT_REFRESH_SECRET` — gerados novos e aplicados ao `.env` local (⚠️ replicar no ambiente de produção; invalida sessões/força re-login)
-  - [ ] `MONGO_URI` — resetar senha de `contatoverticeinvest_db_user` no Atlas (idealmente novo user com escopo mínimo) — **ação no painel Atlas (usuário)**
-  - [ ] `API_KEY` (Gemini), `BRAPI_TOKEN`, `SENTRY_DSN` — **regenerar nos painéis (usuário)**
-  - [ ] `MP_ACCESS_TOKEN` + `MP_WEBHOOK_SECRET` (Mercado Pago — produção financeira, urgente) — **painel MP (usuário)**
-  - [ ] `SMTP_*` — **provedor de email (usuário)**
+- [x] **F0.1 — Rotacionar TODAS as chaves comprometidas** — ✅ **concluído pelo usuário** (rotação confirmada nos painéis em 2026-05-31):
+  - [x] `JWT_SECRET` e `JWT_REFRESH_SECRET` — gerados novos e aplicados
+  - [x] `MONGO_URI` — credenciais rotacionadas no Atlas
+  - [x] `API_KEY` (Gemini), `BRAPI_TOKEN`, `SENTRY_DSN` — regenerados nos painéis
+  - [x] `MP_ACCESS_TOKEN` + `MP_WEBHOOK_SECRET` — rotacionados no Mercado Pago
+  - [x] `SMTP_*` — rotacionados no provedor de email
 - [x] **F0.2 — Limpar histórico do git** — ✅ **concluído**: `git filter-branch` removeu `.env` de todo o histórico; force-push para `origin/main` confirmado (topo `2002fd9`; verificado: **0 ocorrências de `.env` no histórico do GitHub**). Backup em `d:/Github/vertice-backup-prefilter-20260531.bundle`.
 - [x] **F0.3 — Criar `.env.example`** com todas as chaves vazias/descritas
 - [x] **F0.4 — Secret scanning** — `.gitleaks.toml` + workflow CI `.github/workflows/secret-scan.yml` + pre-commit husky (`.husky/pre-commit`) que bloqueia `.env` e roda gitleaks se instalado
@@ -69,20 +69,20 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 
 ## CATEGORIA 2 — Melhorias / Refatorações
 
-- [ ] **M1** — Quebrar `calculateProfileScores()` (368 linhas) em helpers puros por perfil + penalidades reutilizáveis · `scoringEngine.js:169-552`
-- [ ] **M2** — Extrair `ExplainableAIRenderer` para componente próprio + memoização · `client/src/pages/Research.tsx:228-319`
-- [ ] **M3** — Decompor `AddAssetModal` (791 linhas) em `useAssetForm`/`usePriceFetch`/`useAssetValidation` + subcomponentes
-- [ ] **M4** — Criar hook `useFeatureAccess(feature, minPlan)` e eliminar gating duplicado · `Research.tsx`, `Wallet.tsx`, `AssetTable.tsx`
-- [ ] **M5** — Extrair cálculo de KPIs para `utils/kpiCalculations.ts` · `client/src/contexts/WalletContext.tsx:172-222`
-- [ ] **M6** — `React.memo` em gráficos Recharts e modais pesados · `EvolutionChart`, `PerformanceChart`, `AssetDetailModal`
-- [ ] **M7** — `Promise.allSettled` no fetch de research (resiliência) · `client/src/hooks/useDashboardData.ts:~109`
-- [ ] **M8** — Centralizar `staleTime`/`gcTime`/retry do React Query em config único
-- [ ] **M9** — Mover hardcoded p/ `SystemConfig`/env: `BUY_THRESHOLD=70`, `MAX_CRYPTO_PER_PROFILE`, `CACHE_DURATION`, CDI `11.25`, listas de setores/tickers
-- [ ] **M10** — Substituir ~280 `console.log` por `logger` estruturado (JSON) com contexto · `server/**`
-- [ ] **M11** — Biblioteca base de UI: `Modal`, `Skeleton`, `Alert`, `Tooltip` · `client/src/components/ui/`
-- [ ] **M12** — Consolidar tokens de cor/tipografia (3 tons de "card" divergentes) · `tailwind.config.js`, `index.css`
-- [ ] **M13** — Limpar `package.json` raiz de ~30 deps extraviadas (lodash, rxjs, date-fns...) · `/package.json`
-- [ ] **M14** — Índices Mongo faltantes: `lastFundamentalsDate`, `fiiSubType`, `(sector,type)`, `(user,date)` · `server/models/*.js`
+- [x] **M1** — `calculateProfileScores()` (383 linhas) quebrado em 3 helpers por perfil (`scoreStockProfiles`/`scoreFiiProfiles`/`scoreCryptoProfiles`) + orquestrador enxuto (confiança→dispatch→clamp). **Paridade garantida por snapshot**: `tests/scoring_parity.spec.js` congela a saída de 17 cenários (stock/fii/crypto em vários tiers, setor financeiro, payout, sobrevalorização, dados ausentes, aristocrata) — 17/17 batem após o refactor. Suíte backend: 106/106 verdes · `server/services/engines/scoringEngine.js`
+- [x] **M2** — `ExplainableAIRenderer` extraído para componente próprio (`components/research/ExplainableAIRenderer.tsx`), parsing memoizado (`useMemo` sobre o texto) + `React.memo`. `Research.tsx` enxuto (−90 linhas) e default import `React` órfão removido · `client/src/components/research/ExplainableAIRenderer.tsx`
+- [x] **M3** — `AddAssetModal` decomposto (791→~520 linhas): 3 concerns extraídas em unidades testáveis — `hooks/usePriceFetch.ts` (auto-busca de preço: cache+debounce+meta), `hooks/useAssetSearch.ts` (autocomplete de ticker+dropdown) e `utils/assetTransaction.ts` (`validateTransaction` puro + `getLocalDateString`/`parseCurrencyToFloat`). Adotou `Alert` da base nos blocos de aviso/erro. Comportamento preservado (build verde). Extração de subcomponentes de render fica para passe A11y (A4/A5)
+- [x] **M4** — Hook `useFeatureAccess` (`hasPlan`/`hasFeature`/`limitFor`) consolidando `PLAN_HIERARCHY`/`PLAN_ACCESS`/`FEATURE_LIMITS`. Refatorados os checks ad-hoc em `AiRadar`, `AssetTable` e `useDashboardData` (remove `user.plan === 'PRO' || ...`) · `client/src/hooks/useFeatureAccess.ts`
+- [x] **M5** — Cálculo de KPIs extraído para `utils/kpiCalculations.ts` (`computeWalletKpis(assets, serverKpis)`, função pura testável). `WalletContext` agora só chama o util (−40 linhas no `useMemo`); branch demo permanece no contexto · `client/src/utils/kpiCalculations.ts`
+- [x] **M6** — `React.memo` aplicado a `EvolutionChart`, `PerformanceChart` e `AllocationChart` (evita re-render dos gráficos em re-renders do pai sem mudança de dados) · `client/src/components/wallet/*Chart.tsx`
+- [x] **M7** — `Promise.allSettled` no fetch de research do dashboard: falha de 1 relatório não derruba os outros 2 (scoreMap resiliente) · `client/src/hooks/useDashboardData.ts`
+- [x] **M8** — `staleTime` centralizado em `config/queryConfig.ts` (`STALE_TIME.REALTIME/SHORT/MEDIUM/LONG/HOURLY`), aplicado em `useDashboardData` e `WalletContext` · `client/src/config/queryConfig.ts`
+- [x] **M9** — Constantes operacionais centralizadas em `financialConstants.js` (env-overridable): `BUY_THRESHOLD` (era duplicado em portfolioEngine + 2x aiResearchService), `MAX_CRYPTO_PER_PROFILE`, `MARKET_CACHE_DURATION_MINUTES`, `DEFAULT_SELIC_FALLBACK` (substituiu 8 literais `11.25` espalhados por marketData/macroData/financial/scheduler/walletController/aiResearch). Novos overrides documentados no `.env.example`. Listas de setores/tickers já estavam externalizadas (`sectorTaxonomy.js` + flags DB). 106 testes verdes · `server/config/financialConstants.js`
+- [x] **M10** — `console.*` de produção migrados para o `logger` Winston: academyController (14: erros→`logger.error`, seed→`info`, debug de certificado→`debug`), emailService (3), authMiddleware (1, agora loga `userId` em vez de email — toca S9). Os ~280 originais eram majoritariamente em **scripts CLI/tests** (uso legítimo, fora do escopo). `index.js` mantém `console.error` **deliberadamente**: é o crash-handler de bootstrap (último recurso, não pode depender do logger que pode estar falhando). 0 `console.*` restante em services/controllers/middleware · `server/**`
+- [x] **M11** — Biblioteca base de UI criada em `components/ui/`: `Modal` (createPortal + backdrop-blur, focus trap + Escape + aria — pré-resolve A3/A4), `Skeleton`/`SkeletonText`, `Alert` (semáforo + `role=alert`), `Tooltip` (hover+foco, `aria-describedby`) + barrel `index.ts`. Primeiro consumidor: `AddAssetModal` (Alert, via M3); adoção do `Modal` nos demais modais é incremental (passe A11y)
+- [x] **M12** — Tokens semânticos de fundo no `tailwind.config.js` (`base` #080C14, `card` #0B101A, `panel` #0F131E, `deep` #02040a, `elevated` #0F1729) + cor de marca `gold` (#D4AF37). Consolida os hex soltos (antes 5+ tons divergentes). Adotado nos primitivos novos (`Modal`→`bg-panel`, `Tooltip`→`bg-card`); migração dos componentes legados é incremental (sem mass-rewrite de 89 ocorrências) · `client/tailwind.config.js`
+- [x] **M13** — Verificado: `package.json` raiz já declara **zero** deps de runtime (só devDependencies de tooling). As libs físicas no `node_modules` (lodash/rxjs/date-fns) são **transitivas legítimas do `concurrently`** (`npm ls` confirma), não orfãs — nada a remover. Premissa original já resolvida na reescrita do manifesto (Fase 2)
+- [x] **M14** — Índices Mongo adicionados **com base em auditoria de query real**: `MarketAsset {isActive, isBlacklisted, isIgnored, type}` (filtro quente de elegibilidade em signalEngine/radar/scheduler/marketData) e `QuantSignal {status, timestamp:-1}` (sinais ativos lidos a cada dashboard/run — antes full scan). `(user,date)` em `WalletSnapshot` **já existia**. `fiiSubType`/`lastFundamentalsDate`/`(sector,type)` avaliados e **descartados**: lidos por-doc, sem predicado de query que os justifique · `server/models/MarketAsset.js`, `QuantSignal.js`
 
 ---
 

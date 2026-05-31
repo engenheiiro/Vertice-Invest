@@ -1,13 +1,13 @@
 ════════════════════════════════════════════════════════════════════════════════
   VÉRTICE INVEST — RANKING QUANTITATIVO
-  Gerado em: 30/05/2026 às 03:34:31
+  Gerado em: 31/05/2026 às 09:01:23
   ────────────────────────────────────────────────────────────────────────────
   Contexto Macro:
     SELIC:      14.50%    CDI:        14.40%
     IPCA:       4.39%    Risk Free:  14.50%
     NTN-B Long: 7.44%    Dólar:      R$ 5,03
     Ibovespa:   173787 pts (-0.73%)
-    BTC:        $73658 (+0.26%)
+    BTC:        $73840 (-0.03%)
 ════════════════════════════════════════════════════════════════════════════════
 
 
@@ -107,7 +107,7 @@
   Valuation:         75/100
   Risco:             80/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #2  MILS3  —  MILS3  [STOCK]
@@ -207,7 +207,7 @@
   Valuation:         95/100
   Risco:             60/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #3  SHUL4  —  SHUL4  [STOCK]
@@ -295,7 +295,7 @@
   Valuation:         100/100
   Risco:             60/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #4  TAEE11  —  TAEE11  [STOCK]
@@ -396,7 +396,7 @@
   Valuation:         75/100
   Risco:             40/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #5  SAPR11  —  SAPR11  [STOCK]
@@ -493,7 +493,7 @@
   Valuation:         100/100
   Risco:             90/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #6  CPSH11  —  CPSH11  [FII]
@@ -1000,7 +1000,7 @@
   Valuation:         100/100
   Risco:             60/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #2  MTRE3  —  MTRE3  [STOCK]
@@ -1089,7 +1089,7 @@
   Valuation:         100/100
   Risco:             0/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #3  ITSA4  —  ITSA4  [STOCK]
@@ -1181,7 +1181,7 @@
   Valuation:         75/100
   Risco:             80/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #4  MILS3  —  MILS3  [STOCK]
@@ -1281,7 +1281,7 @@
   Valuation:         95/100
   Risco:             60/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #5  CYRE3  —  CYRE3  [STOCK]
@@ -1377,7 +1377,7 @@
   Valuation:         100/100
   Risco:             65/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #6  SHUL4  —  SHUL4  [STOCK]
@@ -1465,7 +1465,7 @@
   Valuation:         100/100
   Risco:             60/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #7  POMO4  —  POMO4  [STOCK]
@@ -1563,7 +1563,7 @@
   Valuation:         100/100
   Risco:             70/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #8  SAPR11  —  SAPR11  [STOCK]
@@ -1660,7 +1660,7 @@
   Valuation:         100/100
   Risco:             90/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #9  PETR4  —  PETR4  [STOCK]
@@ -1752,7 +1752,7 @@
   Valuation:         100/100
   Risco:             80/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #10  BRAV3  —  BRAV3  [STOCK]
@@ -1841,7 +1841,7 @@
   Valuation:         100/100
   Risco:             60/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #11  TAEE11  —  TAEE11  [STOCK]
@@ -1942,7 +1942,7 @@
   Valuation:         75/100
   Risco:             40/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #12  SMFT3  —  SMFT3  [STOCK]
@@ -2031,7 +2031,7 @@
   Valuation:         15/100
   Risco:             80/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #13  MDNE3  —  MDNE3  [STOCK]
@@ -2134,7 +2134,7 @@
   Valuation:         100/100
   Risco:             70/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #14  LAVV3  —  LAVV3  [STOCK]
@@ -2234,7 +2234,7 @@
   Valuation:         100/100
   Risco:             60/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #15  RECV3  —  RECV3  [STOCK]
@@ -2334,7 +2334,7 @@
   Valuation:         100/100
   Risco:             70/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #16  WIZC3  —  WIZC3  [STOCK]
@@ -2430,7 +2430,7 @@
   Valuation:         100/100
   Risco:             60/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #17  PFRM3  —  PFRM3  [STOCK]
@@ -2517,7 +2517,7 @@
   Valuation:         100/100
   Risco:             50/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #18  RDOR3  —  RDOR3  [STOCK]
@@ -2609,7 +2609,7 @@
   Valuation:         0/100
   Risco:             90/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #19  AURE3  —  AURE3  [STOCK]
@@ -2692,7 +2692,7 @@
   Valuation:         30/100
   Risco:             40/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #20  CMIG4  —  CMIG4  [STOCK]
@@ -2788,7 +2788,7 @@
   Valuation:         100/100
   Risco:             80/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #21  PSSA3  —  PSSA3  [STOCK]
@@ -2887,7 +2887,7 @@
   Valuation:         75/100
   Risco:             80/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #22  AZZA3  —  AZZA3  [STOCK]
@@ -2985,7 +2985,7 @@
   Valuation:         100/100
   Risco:             60/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #23  VULC3  —  VULC3  [STOCK]
@@ -3086,7 +3086,7 @@
   Valuation:         100/100
   Risco:             60/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #24  PRNR3  —  PRNR3  [STOCK]
@@ -3166,7 +3166,7 @@
   Valuation:         15/100
   Risco:             45/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #25  FIQE3  —  FIQE3  [STOCK]
@@ -3267,7 +3267,7 @@
   Valuation:         80/100
   Risco:             70/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #26  INTB3  —  INTB3  [STOCK]
@@ -3366,7 +3366,7 @@
   Valuation:         95/100
   Risco:             70/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #27  LEVE3  —  LEVE3  [STOCK]
@@ -3464,7 +3464,7 @@
   Valuation:         90/100
   Risco:             70/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #28  RIAA3  —  RIAA3  [STOCK]
@@ -3564,7 +3564,7 @@
   Valuation:         100/100
   Risco:             70/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #29  CSUD3  —  CSUD3  [STOCK]
@@ -3648,7 +3648,7 @@
   Valuation:         100/100
   Risco:             60/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ────────────────────────────────────────────────────────────────────────────────
   #30  FLRY3  —  FLRY3  [STOCK]
@@ -3737,7 +3737,7 @@
   Valuation:         50/100
   Risco:             60/100
 
-  ⚠ Defasagem dos Dados Fundamentais: 27 dias
+  ⚠ Defasagem dos Dados Fundamentais: 28 dias
 
 ════════════════════════════════════════════════════════════════════════════════
   LISTA COMPLETA PONTUADA — FORA DO RANKING (172 ativos)
@@ -4501,7 +4501,7 @@
   Setor: Papel
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Defensivo
-  Score:   85.0/100   Delta Posição: ⬆️ +1 (era #5)
+  Score:   85.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   85.0/100
@@ -4580,7 +4580,7 @@
   Setor: Fiagro
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Defensivo
-  Score:   85.0/100   Delta Posição: ⬆️ +1 (era #6)
+  Score:   85.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   85.0/100
@@ -4661,7 +4661,7 @@
   Setor: Shoppings
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   85.0/100   Delta Posição: ⬆️ +1 (era #7)
+  Score:   85.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   85.0/100
@@ -4746,7 +4746,7 @@
   Setor: Híbrido
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   85.0/100   Delta Posição: ⬆️ +1 (era #8)
+  Score:   85.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   85.0/100
@@ -4830,7 +4830,7 @@
   Setor: Desenvolvimento
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   85.0/100   Delta Posição: ⬆️ +1 (era #9)
+  Score:   85.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   25.0/100
@@ -4910,7 +4910,7 @@
   Setor: Papel
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   85.0/100   Delta Posição: ⬆️ +1 (era #10)
+  Score:   85.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   85.0/100
@@ -4991,7 +4991,7 @@
   Setor: Papel
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   85.0/100   Delta Posição: ⬆️ +7 (era #17)
+  Score:   85.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   77.0/100
@@ -5072,7 +5072,7 @@
   Setor: Papel
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   85.0/100   Delta Posição: ⬆️ +1 (era #12)
+  Score:   85.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   25.0/100
@@ -5151,7 +5151,7 @@
   Setor: Papel
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   85.0/100   Delta Posição: ⬇️ -8 (era #4)
+  Score:   85.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   77.0/100
@@ -5235,7 +5235,7 @@
   Setor: Lajes Corporativas
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   85.0/100   Delta Posição: 🆕 Novo
+  Score:   85.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   73.0/100
@@ -5567,7 +5567,7 @@
   Setor: Papel
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥈 SILVER       Perfil: Moderado
-  Score:   80.0/100   Delta Posição: ⬇️ -6 (era #11)
+  Score:   80.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   77.0/100
@@ -5808,7 +5808,7 @@
   Setor: Multicategoria
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   70.0/100   Delta Posição: ⬆️ +5 (era #25)
+  Score:   70.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   25.0/100
@@ -5887,7 +5887,7 @@
   Setor: Fiagro
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   70.0/100   Delta Posição: ⬆️ +1 (era #22)
+  Score:   70.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   25.0/100
@@ -5966,7 +5966,7 @@
   Setor: Multicategoria
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   65.0/100   Delta Posição: ⬇️ -2 (era #20)
+  Score:   65.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   25.0/100
@@ -6046,7 +6046,7 @@
   Setor: Fiagro
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Defensivo
-  Score:   60.0/100   Delta Posição: ⬆️ +1 (era #24)
+  Score:   60.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   60.0/100
@@ -6126,7 +6126,7 @@
   Setor: Fiagro
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   58.0/100   Delta Posição: ⬆️ +4 (era #28)
+  Score:   58.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   25.0/100
@@ -6200,7 +6200,7 @@
   Setor: Outros
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥈 SILVER       Perfil: Arrojado
-  Score:   53.0/100   Delta Posição: 🆕 Novo
+  Score:   53.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   25.0/100
@@ -6437,7 +6437,7 @@
   Setor: Outros
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥉 BRONZE       Perfil: Arrojado
-  Score:   35.0/100   Delta Posição: 🆕 Novo
+  Score:   35.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   25.0/100
@@ -7191,7 +7191,7 @@
     Moderado:    10.0/100
     Arrojado:    10.0/100
   ············································································
-  Preço Atual:    $ 2.016,26            Preço Alvo: $ 2.016,26
+  Preço Atual:    $ 2.020,54            Preço Alvo: $ 2.020,54
   Upside/Downside: +0.0%
   ············································································
   TESE: DEFENSIVE: Top Pick (Score 100)
@@ -7200,7 +7200,7 @@
     + Blue Chip do mercado cripto (Reserva de Valor / Infraestrutura).
     + Alta capitalização de mercado (Large Cap), maior resiliência.
     + Altíssima liquidez, facilitando entrada/saída institucional.
-    + Volume/MarketCap saudável (6.0%), indicando adoção orgânica.
+    + Volume/MarketCap saudável (3.0%), indicando adoção orgânica.
 
   Bear Thesis:
     - Tendência de baixa de longo prazo (Preço < SMA200).
@@ -7221,20 +7221,20 @@
 
   MÉTRICAS:
   ── Valuation ─────────────────────────────────────────
-  Preço Justo:       R$ 2.016,26   Método: Mercado
+  Preço Justo:       R$ 2.020,54   Método: Mercado
   Preço Graham:      R$ 0,00   Preço Bazin:  R$ 0,00
   PEG Ratio:         N/D
 
   ── Indicadores de Mercado ────────────────────────────
-  Market Cap:        R$ 243.27 bi
-  Liquidez Média:    $ 14.67 bi/dia
+  Market Cap:        R$ 243.82 bi
+  Liquidez Média:    $ 7.30 bi/dia
   Volatilidade:      60.17%   Beta: 1.00
   SMA200:            R$ 2.916,36   EMA50: R$ 2.004,29
 
   ── Indicadores Cripto ────────────────────────────────
-  Market Cap:        R$ 243.27 bi
+  Market Cap:        R$ 243.82 bi
   Volatilidade:      60.17%   Beta: 1.00
-  Liquidez:          R$ 14.67 bi/dia
+  Liquidez:          R$ 7.30 bi/dia
 
   ── Scores Estruturais (0–100) ────────────────────────
   Qualidade:         90/100
@@ -7254,7 +7254,7 @@
     Moderado:    10.0/100
     Arrojado:    10.0/100
   ············································································
-  Preço Atual:    $ 73.558,98           Preço Alvo: $ 73.558,98
+  Preço Atual:    $ 73.852,80           Preço Alvo: $ 73.852,80
   Upside/Downside: +0.0%
   ············································································
   TESE: DEFENSIVE: Top Pick (Score 100)
@@ -7263,7 +7263,6 @@
     + Blue Chip do mercado cripto (Reserva de Valor / Infraestrutura).
     + Alta capitalização de mercado (Large Cap), maior resiliência.
     + Altíssima liquidez, facilitando entrada/saída institucional.
-    + Volume/MarketCap saudável (2.4%), indicando adoção orgânica.
     + Volatilidade controlada para o setor (38.7% a.a.).
 
   Bear Thesis:
@@ -7285,29 +7284,29 @@
 
   MÉTRICAS:
   ── Valuation ─────────────────────────────────────────
-  Preço Justo:       R$ 73.558,98   Método: Mercado
+  Preço Justo:       R$ 73.852,80   Método: Mercado
   Preço Graham:      R$ 0,00   Preço Bazin:  R$ 0,00
   PEG Ratio:         N/D
 
   ── Indicadores de Mercado ────────────────────────────
-  Market Cap:        R$ 1.47 tri
-  Liquidez Média:    $ 34.70 bi/dia
+  Market Cap:        R$ 1.48 tri
+  Liquidez Média:    $ 17.66 bi/dia
   Volatilidade:      38.73%   Beta: 1.00
   SMA200:            R$ 87.720,04   EMA50: R$ 66.515,47
 
   ── Indicadores Cripto ────────────────────────────────
-  Market Cap:        R$ 1.47 tri
+  Market Cap:        R$ 1.48 tri
   Volatilidade:      38.73%   Beta: 1.00
-  Liquidez:          R$ 34.70 bi/dia
+  Liquidez:          R$ 17.66 bi/dia
 
   ── Scores Estruturais (0–100) ────────────────────────
   Qualidade:         90/100
   Valuation:         75/100
-  Risco:             100/100
+  Risco:             95/100
   ⚠ Campos Ausentes: pl, roe, netMargin, revenueGrowth, evEbitda
 
 ────────────────────────────────────────────────────────────────────────────────
-  #3  XRP  —  XRP  [CRYPTO]
+  #3  BNB  —  BNB  [CRYPTO]
   Setor: Criptomoeda
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
@@ -7318,15 +7317,76 @@
     Moderado:   100.0/100
     Arrojado:    10.0/100
   ············································································
-  Preço Atual:    $ 1,34                Preço Alvo: $ 1,34
-  Upside/Downside: -0.3%
+  Preço Atual:    $ 721,79              Preço Alvo: $ 721,79
+  Upside/Downside: +0.0%
   ············································································
   TESE: MODERATE: Top Pick (Score 100)
 
   Bull Thesis:
     + Alta capitalização de mercado (Large Cap), maior resiliência.
     + Altíssima liquidez, facilitando entrada/saída institucional.
-    + Volume/MarketCap saudável (3.1%), indicando adoção orgânica.
+    + Volume/MarketCap saudável (4.3%), indicando adoção orgânica.
+    + Volatilidade controlada para o setor (48.4% a.a.).
+
+  Bear Thesis:
+    - Tendência de baixa de longo prazo (Preço < SMA200).
+
+  AUDIT LOG:
+  [Dados e Confiança]
+    ▼ Dados de Crescimento Ausentes                           [ -25 pts] (penalidade)
+    ▼ Dados de Rentabilidade Ausentes                         [ -15 pts] (penalidade)
+    ▼ Data de Atualização dos Fundamentais Desconhecida       [  -5 pts] (penalidade)
+  [Perfil Moderado]
+    ▲ Crypto Large Cap                                        [ +90 pts] (base)
+    ▲ Alta Liquidez Institucional                             [ +10 pts] (bônus)
+  [Qualidade]
+    ○ Base de Qualidade                                       [   0 pts] (base)
+  [Valuation]
+    ○ Base de Valuation                                       [   0 pts] (base)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 721,79   Método: Mercado
+  Preço Graham:      R$ 0,00   Preço Bazin:  R$ 0,00
+  PEG Ratio:         N/D
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 97.34 bi
+  Liquidez Média:    $ 4.23 bi/dia
+  Volatilidade:      48.39%   Beta: 1.00
+  SMA200:            R$ 843,53   EMA50: R$ 598,06
+
+  ── Indicadores Cripto ────────────────────────────────
+  Market Cap:        R$ 97.34 bi
+  Volatilidade:      48.39%   Beta: 1.00
+  Liquidez:          R$ 4.23 bi/dia
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         70/100
+  Valuation:         65/100
+  Risco:             95/100
+  ⚠ Campos Ausentes: pl, roe, netMargin, revenueGrowth, evEbitda
+
+────────────────────────────────────────────────────────────────────────────────
+  #4  XRP  —  XRP  [CRYPTO]
+  Setor: Criptomoeda
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
+  Score:   100.0/100   Delta Posição: ⬇️ -1 (era #3)
+  ············································································
+  Scores por Perfil:
+    Defensivo:   10.0/100
+    Moderado:   100.0/100
+    Arrojado:    10.0/100
+  ············································································
+  Preço Atual:    $ 1,34                Preço Alvo: $ 1,34
+  Upside/Downside: +0.0%
+  ············································································
+  TESE: MODERATE: Top Pick (Score 100)
+
+  Bull Thesis:
+    + Alta capitalização de mercado (Large Cap), maior resiliência.
+    + Altíssima liquidez, facilitando entrada/saída institucional.
 
   Bear Thesis:
     - Tendência de baixa de longo prazo (Preço < SMA200).
@@ -7351,76 +7411,15 @@
   PEG Ratio:         N/D
 
   ── Indicadores de Mercado ────────────────────────────
-  Market Cap:        R$ 83.37 bi
-  Liquidez Média:    $ 2.61 bi/dia
+  Market Cap:        R$ 83.08 bi
+  Liquidez Média:    $ 1.15 bi/dia
   Volatilidade:      59.57%   Beta: 1.00
   SMA200:            R$ 1,94   EMA50: R$ 1,33
 
   ── Indicadores Cripto ────────────────────────────────
-  Market Cap:        R$ 83.37 bi
+  Market Cap:        R$ 83.08 bi
   Volatilidade:      59.57%   Beta: 1.00
-  Liquidez:          R$ 2.61 bi/dia
-
-  ── Scores Estruturais (0–100) ────────────────────────
-  Qualidade:         70/100
-  Valuation:         80/100
-  Risco:             95/100
-  ⚠ Campos Ausentes: pl, roe, netMargin, revenueGrowth, evEbitda
-
-────────────────────────────────────────────────────────────────────────────────
-  #4  BNB  —  BNB  [CRYPTO]
-  Setor: Criptomoeda
-  ············································································
-  Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   100.0/100   Delta Posição: ⬆️ +1 (era #5)
-  ············································································
-  Scores por Perfil:
-    Defensivo:   10.0/100
-    Moderado:   100.0/100
-    Arrojado:    10.0/100
-  ············································································
-  Preço Atual:    $ 664,54              Preço Alvo: $ 664,54
-  Upside/Downside: +0.0%
-  ············································································
-  TESE: MODERATE: Top Pick (Score 100)
-
-  Bull Thesis:
-    + Alta capitalização de mercado (Large Cap), maior resiliência.
-    + Altíssima liquidez, facilitando entrada/saída institucional.
-    + Volatilidade controlada para o setor (48.4% a.a.).
-
-  Bear Thesis:
-    - Tendência de baixa de longo prazo (Preço < SMA200).
-
-  AUDIT LOG:
-  [Dados e Confiança]
-    ▼ Dados de Crescimento Ausentes                           [ -25 pts] (penalidade)
-    ▼ Dados de Rentabilidade Ausentes                         [ -15 pts] (penalidade)
-    ▼ Data de Atualização dos Fundamentais Desconhecida       [  -5 pts] (penalidade)
-  [Perfil Moderado]
-    ▲ Crypto Large Cap                                        [ +90 pts] (base)
-    ▲ Alta Liquidez Institucional                             [ +10 pts] (bônus)
-  [Qualidade]
-    ○ Base de Qualidade                                       [   0 pts] (base)
-  [Valuation]
-    ○ Base de Valuation                                       [   0 pts] (base)
-
-  MÉTRICAS:
-  ── Valuation ─────────────────────────────────────────
-  Preço Justo:       R$ 664,54   Método: Mercado
-  Preço Graham:      R$ 0,00   Preço Bazin:  R$ 0,00
-  PEG Ratio:         N/D
-
-  ── Indicadores de Mercado ────────────────────────────
-  Market Cap:        R$ 89.79 bi
-  Liquidez Média:    $ 1.61 bi/dia
-  Volatilidade:      48.39%   Beta: 1.00
-  SMA200:            R$ 843,53   EMA50: R$ 598,06
-
-  ── Indicadores Cripto ────────────────────────────────
-  Market Cap:        R$ 89.79 bi
-  Volatilidade:      48.39%   Beta: 1.00
-  Liquidez:          R$ 1.61 bi/dia
+  Liquidez:          R$ 1.15 bi/dia
 
   ── Scores Estruturais (0–100) ────────────────────────
   Qualidade:         70/100
@@ -7433,14 +7432,14 @@
   Setor: Criptomoeda
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   95.0/100   Delta Posição: ⬇️ -2 (era #3)
+  Score:   95.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   10.0/100
     Moderado:   100.0/100
     Arrojado:    10.0/100
   ············································································
-  Preço Atual:    $ 82,59               Preço Alvo: $ 82,59
+  Preço Atual:    $ 82,65               Preço Alvo: $ 82,65
   Upside/Downside: +0.0%
   ············································································
   TESE: MODERATE: Top Pick (Score 100) | [Penalidade Concentração: -5]
@@ -7448,7 +7447,7 @@
   Bull Thesis:
     + Alta capitalização de mercado (Large Cap), maior resiliência.
     + Altíssima liquidez, facilitando entrada/saída institucional.
-    + Volume/MarketCap saudável (7.0%), indicando adoção orgânica.
+    + Volume/MarketCap saudável (4.5%), indicando adoção orgânica.
 
   Bear Thesis:
     - Tendência de baixa de longo prazo (Preço < SMA200).
@@ -7468,20 +7467,20 @@
 
   MÉTRICAS:
   ── Valuation ─────────────────────────────────────────
-  Preço Justo:       R$ 82,59   Método: Mercado
+  Preço Justo:       R$ 82,65   Método: Mercado
   Preço Graham:      R$ 0,00   Preço Bazin:  R$ 0,00
   PEG Ratio:         N/D
 
   ── Indicadores de Mercado ────────────────────────────
-  Market Cap:        R$ 47.76 bi
-  Liquidez Média:    $ 3.35 bi/dia
+  Market Cap:        R$ 47.81 bi
+  Liquidez Média:    $ 2.14 bi/dia
   Volatilidade:      64.18%   Beta: 1.00
   SMA200:            R$ 130,79   EMA50: R$ 81,76
 
   ── Indicadores Cripto ────────────────────────────────
-  Market Cap:        R$ 47.76 bi
+  Market Cap:        R$ 47.81 bi
   Volatilidade:      64.18%   Beta: 1.00
-  Liquidez:          R$ 3.35 bi/dia
+  Liquidez:          R$ 2.14 bi/dia
 
   ── Scores Estruturais (0–100) ────────────────────────
   Qualidade:         70/100
@@ -7490,25 +7489,25 @@
   ⚠ Campos Ausentes: pl, roe, netMargin, revenueGrowth, evEbitda
 
 ────────────────────────────────────────────────────────────────────────────────
-  #6  ETC  —  ETC  [CRYPTO]
+  #6  AAVE  —  AAVE  [CRYPTO]
   Setor: Criptomoeda
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   95.0/100   Delta Posição: ➡️ Manteve
+  Score:   95.0/100   Delta Posição: 🆕 Novo
   ············································································
   Scores por Perfil:
     Defensivo:   10.0/100
     Moderado:    10.0/100
     Arrojado:    95.0/100
   ············································································
-  Preço Atual:    $ 8,26                Preço Alvo: $ 8,26
+  Preço Atual:    $ 82,66               Preço Alvo: $ 82,66
   Upside/Downside: +0.0%
   ············································································
   TESE: BOLD: Top Pick (Score 95)
 
   Bull Thesis:
     + Baixa capitalização (Small Cap), alta assimetria de retorno.
-    + Volume/MarketCap saudável (4.4%), indicando adoção orgânica.
+    + Volume/MarketCap saudável (12.1%), indicando adoção orgânica.
 
   Bear Thesis:
     - Tendência de baixa de longo prazo (Preço < SMA200).
@@ -7527,25 +7526,25 @@
 
   MÉTRICAS:
   ── Valuation ─────────────────────────────────────────
-  Preço Justo:       R$ 8,26   Método: Mercado
+  Preço Justo:       R$ 82,66   Método: Mercado
   Preço Graham:      R$ 0,00   Preço Bazin:  R$ 0,00
   PEG Ratio:         N/D
 
   ── Indicadores de Mercado ────────────────────────────
-  Market Cap:        R$ 1.30 bi
-  Liquidez Média:    $ 57.62 mi/dia
-  Volatilidade:      66.42%   Beta: 1.00
-  SMA200:            R$ 12,27   EMA50: R$ 8,16
+  Market Cap:        R$ 1.27 bi
+  Liquidez Média:    $ 153.77 mi/dia
+  Volatilidade:      72.35%   Beta: 1.00
+  SMA200:            R$ 166,56   EMA50: R$ 101,76
 
   ── Indicadores Cripto ────────────────────────────────
-  Market Cap:        R$ 1.30 bi
-  Volatilidade:      66.42%   Beta: 1.00
-  Liquidez:          R$ 57.62 mi/dia
+  Market Cap:        R$ 1.27 bi
+  Volatilidade:      72.35%   Beta: 1.00
+  Liquidez:          R$ 153.77 mi/dia
 
   ── Scores Estruturais (0–100) ────────────────────────
   Qualidade:         40/100
   Valuation:         80/100
-  Risco:             65/100
+  Risco:             50/100
   ⚠ Campos Ausentes: pl, roe, netMargin, revenueGrowth, evEbitda
 
 ────────────────────────────────────────────────────────────────────────────────
@@ -7553,7 +7552,7 @@
   Setor: Criptomoeda
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   95.0/100   Delta Posição: 🆕 Novo
+  Score:   95.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   10.0/100
@@ -7561,16 +7560,14 @@
     Arrojado:    95.0/100
   ············································································
   Preço Atual:    $ 0,13                Preço Alvo: $ 0,13
-  Upside/Downside: +1.2%
+  Upside/Downside: -1.7%
   ············································································
   TESE: BOLD: Top Pick (Score 95)
 
   Bull Thesis:
     + Baixa capitalização (Small Cap), alta assimetria de retorno.
-    + Volume/MarketCap saudável (12.9%), indicando adoção orgânica.
-
-  Bear Thesis:
-    - Tendência de baixa de longo prazo (Preço < SMA200).
+    + Volume/MarketCap saudável (7.5%), indicando adoção orgânica.
+    + Tendência de alta de longo prazo (Preço > SMA200).
 
   AUDIT LOG:
   [Dados e Confiança]
@@ -7591,42 +7588,42 @@
   PEG Ratio:         N/D
 
   ── Indicadores de Mercado ────────────────────────────
-  Market Cap:        R$ 1.15 bi
-  Liquidez Média:    $ 147.57 mi/dia
+  Market Cap:        R$ 1.18 bi
+  Liquidez Média:    $ 88.92 mi/dia
   Volatilidade:      68.46%   Beta: 1.00
   SMA200:            R$ 0,13   EMA50: R$ 0,09
 
   ── Indicadores Cripto ────────────────────────────────
-  Market Cap:        R$ 1.15 bi
+  Market Cap:        R$ 1.18 bi
   Volatilidade:      68.46%   Beta: 1.00
-  Liquidez:          R$ 147.57 mi/dia
+  Liquidez:          R$ 88.92 mi/dia
 
   ── Scores Estruturais (0–100) ────────────────────────
-  Qualidade:         40/100
-  Valuation:         65/100
+  Qualidade:         50/100
+  Valuation:         50/100
   Risco:             65/100
   ⚠ Campos Ausentes: pl, roe, netMargin, revenueGrowth, evEbitda
 
 ────────────────────────────────────────────────────────────────────────────────
-  #8  ICP  —  ICP  [CRYPTO]
+  #8  OKB  —  OKB  [CRYPTO]
   Setor: Criptomoeda
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   90.0/100   Delta Posição: ⬇️ -1 (era #7)
+  Score:   90.0/100   Delta Posição: 🆕 Novo
   ············································································
   Scores por Perfil:
     Defensivo:   10.0/100
     Moderado:    10.0/100
     Arrojado:    95.0/100
   ············································································
-  Preço Atual:    $ 2,71                Preço Alvo: $ 2,71
-  Upside/Downside: -0.1%
+  Preço Atual:    $ 93,32               Preço Alvo: $ 93,32
+  Upside/Downside: +-0.0%
   ············································································
   TESE: BOLD: Top Pick (Score 95) | [Penalidade Concentração: -5]
 
   Bull Thesis:
     + Baixa capitalização (Small Cap), alta assimetria de retorno.
-    + Volume/MarketCap saudável (5.5%), indicando adoção orgânica.
+    + Volume/MarketCap saudável (4.3%), indicando adoção orgânica.
 
   Bear Thesis:
     - Tendência de baixa de longo prazo (Preço < SMA200).
@@ -7645,20 +7642,20 @@
 
   MÉTRICAS:
   ── Valuation ─────────────────────────────────────────
-  Preço Justo:       R$ 2,71   Método: Mercado
+  Preço Justo:       R$ 93,32   Método: Mercado
   Preço Graham:      R$ 0,00   Preço Bazin:  R$ 0,00
   PEG Ratio:         N/D
 
   ── Indicadores de Mercado ────────────────────────────
-  Market Cap:        R$ 1.50 bi
-  Liquidez Média:    $ 82.67 mi/dia
-  Volatilidade:      99.75%   Beta: 1.00
-  SMA200:            R$ 3,34   EMA50: R$ 2,29
+  Market Cap:        R$ 1.96 bi
+  Liquidez Média:    $ 83.85 mi/dia
+  Volatilidade:      85.77%   Beta: 1.00
+  SMA200:            R$ 114,77   EMA50: R$ 81,68
 
   ── Indicadores Cripto ────────────────────────────────
-  Market Cap:        R$ 1.50 bi
-  Volatilidade:      99.75%   Beta: 1.00
-  Liquidez:          R$ 82.67 mi/dia
+  Market Cap:        R$ 1.96 bi
+  Volatilidade:      85.77%   Beta: 1.00
+  Liquidez:          R$ 83.85 mi/dia
 
   ── Scores Estruturais (0–100) ────────────────────────
   Qualidade:         40/100
@@ -7669,39 +7666,35 @@
 ════════════════════════════════════════════════════════════════════════════════
   LISTA COMPLETA PONTUADA — FORA DO RANKING (37 ativos)
 ════════════════════════════════════════════════════════════════════════════════
-  TRX         Score: 100.0/100  D: 10  M:100  B: 10  ✅ COMPRAR       $ 0.34          Criptomoeda
-             Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Large Cap(+90) | Alta Liquidez Institucional(+10) | Base de Qualidade(0) | Base de Valuation(0)
-  FIL         Score:  95.0/100  D: 10  M: 10  B: 95  ✅ COMPRAR       $ 0.98          Criptomoeda
+  FIL         Score:  95.0/100  D: 10  M: 10  B: 95  ✅ COMPRAR       $ 0.96          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Base de Qualidade(0) | Base de Valuation(0)
-  INJ         Score:  95.0/100  D: 10  M: 10  B: 95  ✅ COMPRAR       $ 6.97          Criptomoeda
+  INJ         Score:  95.0/100  D: 10  M: 10  B: 95  ✅ COMPRAR       $ 6.72          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Base de Qualidade(0) | Base de Valuation(0)
-  OP          Score:  95.0/100  D: 10  M: 10  B: 95  ✅ COMPRAR       $ 0.12          Criptomoeda
-             Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Base de Qualidade(0) | Base de Valuation(0)
-  FET         Score:  95.0/100  D: 10  M: 10  B: 95  ✅ COMPRAR       $ 0.24          Criptomoeda
-             Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Base de Qualidade(0) | Base de Valuation(0)
-  AAVE        Score:  95.0/100  D: 10  M: 10  B: 95  ✅ COMPRAR       $ 82.80         Criptomoeda
+  FET         Score:  95.0/100  D: 10  M: 10  B: 95  ✅ COMPRAR       $ 0.27          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Base de Qualidade(0) | Base de Valuation(0)
   ADA         Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 0.24          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Mid Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
-  AVAX        Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 8.94          Criptomoeda
+  AVAX        Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 9.00          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Mid Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
   DOGE        Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 0.10          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Mid Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
-  DOT         Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 1.20          Criptomoeda
+  DOT         Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 1.19          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Mid Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
-  LINK        Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 9.19          Criptomoeda
+  LINK        Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 9.21          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Mid Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
   SHIB        Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 0.00          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Mid Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
-  BCH         Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 302.80        Criptomoeda
+  TRX         Score:  90.0/100  D: 10  M: 90  B: 10  ✅ COMPRAR       $ 0.35          Criptomoeda
+             Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Large Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
+  BCH         Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 301.60        Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Mid Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
-  NEAR        Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 2.38          Criptomoeda
+  NEAR        Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 2.27          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Mid Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
-  LTC         Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 52.44         Criptomoeda
+  LTC         Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 52.26         Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Mid Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
   RNDR        Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 6.80          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Mid Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
-  XMR         Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 399.83        Criptomoeda
+  XMR         Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 363.21        Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Mid Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
   XLM         Score:  90.0/100  D: 10  M: 10  B: 90  ✅ COMPRAR       $ 0.26          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Alta Liquidez Institucional(+10) | Crypto Mid Cap(+90) | Base de Qualidade(0) | Base de Valuation(0)
@@ -7709,21 +7702,25 @@
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Liquidez Abaixo do Ideal (<1M/dia)(-30) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   MATIC       Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.22          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
+  ICP         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 2.72          Criptomoeda
+             Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   APT         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.00          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Liquidez Abaixo do Ideal (<1M/dia)(-30) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   UNI         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.00          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Liquidez Abaixo do Ideal (<1M/dia)(-30) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
+  ETC         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 8.21          Criptomoeda
+             Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   MNT         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.12          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Liquidez Abaixo do Ideal (<1M/dia)(-30) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   ARB         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.00          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Liquidez Abaixo do Ideal (<1M/dia)(-30) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
-  OKB         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 86.90         Criptomoeda
-             Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   IMX         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.00          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Liquidez Abaixo do Ideal (<1M/dia)(-30) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   KAS         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.03          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   VET         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.01          Criptomoeda
+             Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
+  OP          Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.12          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   TAO         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.00          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Liquidez Abaixo do Ideal (<1M/dia)(-30) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
@@ -7731,13 +7728,13 @@
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   THETA       Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.19          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
-  MKR         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 1530.63       Criptomoeda
+  MKR         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 1540.55       Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Liquidez Abaixo do Ideal (<1M/dia)(-30) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   LDO         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.32          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   RUNE        Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 0.42          Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
-  BSV         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 14.02         Criptomoeda
+  BSV         Score:  85.0/100  D: 10  M: 10  B: 85  ✅ COMPRAR       $ 13.99         Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Small Cap (Assimetria)(+95) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
   LEO         Score:  80.0/100  D: 10  M: 10  B: 80  ✅ COMPRAR       $ 10.06         Criptomoeda
              Audit: Dados de Crescimento Ausentes(-25) | Dados de Rentabilidade Ausentes(-15) | Liquidez Abaixo do Ideal (<1M/dia)(-30) | Data de Atualização dos Fundamentais Desconhecida(-5) | Crypto Mid Cap(+90) | Baixa Liquidez Crypto(-10) | Base de Qualidade(0) | Base de Valuation(0)
@@ -7767,7 +7764,7 @@
   Setor: Healthcare
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   100.0/100   Delta Posição: ⬆️ +1 (era #2)
+  Score:   100.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -7851,7 +7848,7 @@
   Setor: Healthcare
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   97.0/100   Delta Posição: ⬆️ +1 (era #3)
+  Score:   97.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -7939,7 +7936,7 @@
   Setor: Financial Services
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Defensivo
-  Score:   95.0/100   Delta Posição: ⬆️ +3 (era #6)
+  Score:   95.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   95.0/100
@@ -8127,7 +8124,7 @@
   Setor: Technology
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   90.0/100   Delta Posição: ⬇️ -4 (era #1)
+  Score:   90.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   40.0/100
@@ -8219,7 +8216,7 @@
   Setor: Healthcare
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   86.0/100   Delta Posição: ⬇️ -1 (era #5)
+  Score:   86.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -8395,7 +8392,7 @@
   Setor: Healthcare
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   85.0/100   Delta Posição: ⬆️ +5 (era #13)
+  Score:   85.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   10.0/100
@@ -8480,7 +8477,7 @@
   Setor: Consumer Defensive
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Defensivo
-  Score:   80.0/100   Delta Posição: ⬆️ +1 (era #10)
+  Score:   80.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   80.0/100
@@ -8569,7 +8566,7 @@
   Setor: Technology
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   77.0/100   Delta Posição: ⬆️ +1 (era #11)
+  Score:   77.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -8656,7 +8653,7 @@
   Setor: Healthcare
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥈 SILVER       Perfil: Arrojado
-  Score:   77.0/100   Delta Posição: ⬇️ -3 (era #8)
+  Score:   77.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   60.0/100
@@ -8746,7 +8743,7 @@
   Setor: Communication Services
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Defensivo
-  Score:   75.0/100   Delta Posição: ⬇️ -3 (era #9)
+  Score:   75.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   75.0/100
@@ -8833,7 +8830,7 @@
   Setor: Consumer Cyclical
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   74.0/100   Delta Posição: ⬆️ +1 (era #14)
+  Score:   74.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -8918,7 +8915,7 @@
   Setor: Technology
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥈 SILVER       Perfil: Moderado
-  Score:   72.0/100   Delta Posição: ⬆️ +1 (era #15)
+  Score:   72.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -9000,11 +8997,11 @@
   ⚠ Campos Ausentes: evEbitda
 
 ────────────────────────────────────────────────────────────────────────────────
-  #15  CELH  —  Mr. Eric  Hanson  [STOCK_US]
+  #15  CELH  —  Mr. John  Fieldly C.P.A.  [STOCK_US]
   Setor: Consumer Defensive
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   72.0/100   Delta Posição: ⬆️ +1 (era #16)
+  Score:   72.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -9087,7 +9084,7 @@
   Setor: Real Estate
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Defensivo
-  Score:   70.0/100   Delta Posição: ⬆️ +1 (era #17)
+  Score:   70.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   70.0/100
@@ -9174,7 +9171,7 @@
   Setor: Healthcare
   ············································································
   Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Defensivo
-  Score:   70.0/100   Delta Posição: ⬆️ +1 (era #18)
+  Score:   70.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   70.0/100
@@ -9266,7 +9263,7 @@
   Setor: Consumer Cyclical
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   67.0/100   Delta Posição: ⬆️ +7 (era #25)
+  Score:   67.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -9446,7 +9443,7 @@
   Setor: Industrials
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   65.0/100   Delta Posição: ⬇️ -8 (era #12)
+  Score:   65.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   37.0/100
@@ -9538,7 +9535,7 @@
   Setor: Financial Services
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   65.0/100   Delta Posição: ⬆️ +2 (era #23)
+  Score:   65.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -9624,7 +9621,7 @@
   Setor: Utilities
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Defensivo
-  Score:   65.0/100   Delta Posição: ⬆️ +2 (era #24)
+  Score:   65.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   65.0/100
@@ -9717,7 +9714,7 @@
   Setor: Communication Services
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   62.0/100   Delta Posição: 🆕 Novo
+  Score:   62.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -9804,7 +9801,7 @@
   Setor: Financial Services
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Defensivo
-  Score:   60.0/100   Delta Posição: ⬇️ -2 (era #22)
+  Score:   60.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   60.0/100
@@ -9891,7 +9888,7 @@
   Setor: Technology
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥈 SILVER       Perfil: Arrojado
-  Score:   57.0/100   Delta Posição: 🆕 Novo
+  Score:   57.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -9973,7 +9970,7 @@
   Setor: Consumer Defensive
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Defensivo
-  Score:   55.0/100   Delta Posição: ⬆️ +2 (era #28)
+  Score:   55.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   60.0/100
@@ -10063,11 +10060,11 @@
   ⚠ Campos Ausentes: evEbitda
 
 ────────────────────────────────────────────────────────────────────────────────
-  #27  CAG  —  Mr. Sean M. Connolly  [STOCK_US]
+  #27  CAG  —  Mr. David S. Marberger CPA  [STOCK_US]
   Setor: Consumer Defensive
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Arrojado
-  Score:   55.0/100   Delta Posição: ⬆️ +3 (era #30)
+  Score:   55.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -10150,7 +10147,7 @@
   Setor: Industrials
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Moderado
-  Score:   55.0/100   Delta Posição: ⬆️ +1 (era #29)
+  Score:   55.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -10231,7 +10228,7 @@
   Setor: Basic Materials
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥈 SILVER       Perfil: Arrojado
-  Score:   50.0/100   Delta Posição: 🆕 Novo
+  Score:   50.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -10326,7 +10323,7 @@
   Setor: Consumer Cyclical
   ············································································
   Ação:    ⏳ AGUARDAR          Tier: 🥈 SILVER       Perfil: Arrojado
-  Score:   47.0/100   Delta Posição: 🆕 Novo
+  Score:   47.0/100   Delta Posição: ➡️ Manteve
   ············································································
   Scores por Perfil:
     Defensivo:   30.0/100
@@ -10435,6 +10432,8 @@
              Audit: Score Base (Setor Defensivo)(+40) | Large Cap (>10B)(+10) | ROE Excelente (≥20%)(+15) | Volatilidade Elevada (>30%)(-10) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | ROE Excelente (>20%)(+15) | Base Arrojada(+35) | PEG Saudável (<1.5)(+12) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-1.7%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20) | Liquidez Alta (>5M)(+10)
   ABNB        Score:  65.0/100  D: 30  M: 65  B: 48  ⏳ AGUARDAR      $ 133.31        Consumer Cyclical
              Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | ROE Excelente (>20%)(+15) | Base Arrojada(+35) | PEG Razoável (<2.0)(+5) | Crescimento Sólido (>15%)(+8) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-4.4%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
+  ESTC        Score:  65.0/100  D: 30  M: 65  B: 45  ⏳ AGUARDAR      $ 64.70         Technology
+             Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | ROE Excelente (>20%)(+15) | Base Arrojada(+35) | PEG Saudável (<1.5)(+12) | Crescimento Sólido (>15%)(+8) | Volatilidade Alta (>45%)(-10) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-2.1%)(-20) | Base de Risco(+50)
   FOLD        Score:  65.0/100  D: 30  M: 56  B: 65  ⏳ AGUARDAR      $ 14.49         Healthcare
              Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Alto (>20%)(+16) | Upside Alto (>30%)(+15) | Margem Líquida Baixa (<5%)(-15) | Base Arrojada(+35) | PEG Excelente (<1.0)(+22) | Crescimento Sólido (>15%)(+8) | Upside Relevante (>30%)(+10) | Volatilidade Alta (>45%)(-10) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Alavancagem Controlada (D/P < 2.0)(+15) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-1.8%)(-20) | Base de Risco(+50) | Dívida/Patrimônio Elevada (>1.5)(-15)
   INVA        Score:  65.0/100  D: 10  M: 10  B: 65  ⏳ AGUARDAR      $ 21.42         Healthcare
@@ -10641,8 +10640,6 @@
              Audit: Score Base (Setor Defensivo)(+40) | Large Cap (>10B)(+10) | ROE Excelente (≥20%)(+15) | Sobrevalorizado (preço 88% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | ROE Excelente (>20%)(+15) | Sobrevalorizado (preço 88% acima do Preço Justo)(-40) | Base Arrojada(+35) | PEG Razoável (<2.0)(+5) | Crescimento Sólido (>15%)(+8) | Sobrevalorizado (preço 88% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Alavancagem Elevada(-10) | Crescimento de Receita Sólido (>10%)(+25) | Payout Muito Baixo (18.2%)(-5) | Base de Valuation(0) | Spread Negativo vs Tesouro (-3.9%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
   LCID        Score:  45.0/100  D: 30  M: 41  B: 45  ⏳ AGUARDAR      $ 6.55          Consumer Cyclical
              Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Alto (>20%)(+16) | Margem Líquida Baixa (<5%)(-15) | Base Arrojada(+35) | PEG Excelente (<1.0)(+22) | Crescimento Sólido (>15%)(+8) | Volatilidade Extrema (>60%)(-20) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Alavancagem Controlada (D/P < 2.0)(+15) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Base de Risco(+50) | Liquidez Alta (>5M)(+10) | Dívida/Patrimônio Elevada (>1.5)(-15)
-  ESTC        Score:  45.0/100  D: 30  M: 35  B: 45  ⏳ AGUARDAR      $ 64.70         Technology
-             Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | Margem Líquida Baixa (<5%)(-15) | Base Arrojada(+35) | PEG Saudável (<1.5)(+12) | Crescimento Sólido (>15%)(+8) | Volatilidade Alta (>45%)(-10) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-2.1%)(-20) | Base de Risco(+50)
   GTLB        Score:  45.0/100  D: 30  M: 41  B: 45  ⏳ AGUARDAR      $ 31.05         Technology
              Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Alto (>20%)(+16) | Margem Líquida Baixa (<5%)(-15) | Base Arrojada(+35) | PEG Saudável (<1.5)(+12) | Crescimento Sólido (>15%)(+8) | Volatilidade Alta (>45%)(-10) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-4.3%)(-20) | Base de Risco(+50) | Liquidez Alta (>5M)(+10)
   FOXA        Score:  45.0/100  D: 45  M: 10  B: 10  ⏳ AGUARDAR      $ 63.92         Communication Services
@@ -10677,8 +10674,6 @@
              Audit: Liquidez Abaixo do Ideal (<1M/dia)(-30) | Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Excepcional (>30%)(+22) | ROE Robusto (>15%)(+10) | Base Arrojada(+35) | PEG Saudável (<1.5)(+12) | Hyper Growth (>25%)(+15) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-5.0%)(-20) | Base de Risco(+50)
   MDB         Score:  41.0/100  D: 30  M: 41  B: 35  ⏳ AGUARDAR      $ 335.55        Technology
              Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Alto (>20%)(+16) | Margem Líquida Baixa (<5%)(-15) | Base Arrojada(+35) | PEG Razoável (<2.0)(+5) | Hyper Growth (>25%)(+15) | Volatilidade Extrema (>60%)(-20) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-5.3%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
-  AMBA        Score:  41.0/100  D: 30  M: 41  B: 23  ⏳ AGUARDAR      $ 72.18         Technology
-             Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Alto (>20%)(+16) | Margem Líquida Baixa (<5%)(-15) | Base Arrojada(+35) | Crescimento Sólido (>15%)(+8) | Volatilidade Extrema (>60%)(-20) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-5.9%)(-20) | Base de Risco(+50)
   ACN         Score:  40.0/100  D: 40  M: 19  B: 10  ⏳ AGUARDAR      $ 187.07        Technology
              Audit: Score Base (Setor Defensivo)(+40) | Large Cap (>10B)(+10) | ROE Excelente (≥20%)(+15) | Volatilidade Elevada (>30%)(-10) | Payout Saudável (51.0%)(+5) | Sobrevalorizado (preço 42% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Moderado (>5%)(+4) | ROE Excelente (>20%)(+15) | Sobrevalorizado (preço 42% acima do Preço Justo)(-40) | Base Arrojada(+35) | Sobrevalorizado (preço 42% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Moderado(+10) | Payout Saudável (51.0%)(+15) | Base de Valuation(0) | Spread Negativo vs Tesouro (-0.9%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20) | Liquidez Alta (>5M)(+10)
   MU          Score:  40.0/100  D: 10  M: 37  B: 40  ⏳ AGUARDAR      $ 971.00        Technology
@@ -10788,7 +10783,7 @@
   FDX         Score:  37.0/100  D: 37  M: 10  B: 10  ⏳ AGUARDAR      $ 411.75        Industrials
              Audit: Score Base (Setor Defensivo)(+40) | Large Cap (>10B)(+10) | ROE Robusto (≥15%)(+10) | Beta Alto (>1.2)(-8) | Payout Saudável (30.6%)(+5) | Sobrevalorizado (preço 77% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Moderado (>5%)(+4) | ROE Robusto (>15%)(+10) | Margem Líquida Baixa (<5%)(-15) | Sobrevalorizado (preço 77% acima do Preço Justo)(-40) | Base Arrojada(+35) | Sobrevalorizado (preço 77% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Estreita(0) | Alavancagem Controlada (D/P < 2.0)(+15) | Crescimento de Receita Moderado(+10) | Base de Valuation(0) | Spread Negativo vs Tesouro (-2.9%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
   NSC         Score:  37.0/100  D: 37  M: 10  B: 10  ⏳ AGUARDAR      $ 304.96        Industrials
-             Audit: Score Base (Setor Defensivo)(+40) | Large Cap (>10B)(+10) | ROE Robusto (≥15%)(+10) | Beta Alto (>1.2)(-8) | Payout Saudável (45.5%)(+5) | Sobrevalorizado (preço 71% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | ROE Robusto (>15%)(+10) | Sobrevalorizado (preço 71% acima do Preço Justo)(-40) | Base Arrojada(+35) | Sobrevalorizado (preço 71% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Alavancagem Controlada (D/P < 2.0)(+15) | Payout Saudável (45.5%)(+15) | Base de Valuation(0) | Spread Negativo vs Tesouro (-3.5%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
+             Audit: Score Base (Setor Defensivo)(+40) | Large Cap (>10B)(+10) | ROE Robusto (≥15%)(+10) | Beta Alto (>1.2)(-8) | Payout Saudável (45.5%)(+5) | Sobrevalorizado (preço 71% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | ROE Robusto (>15%)(+10) | Sobrevalorizado (preço 71% acima do Preço Justo)(-40) | Base Arrojada(+35) | Sobrevalorizado (preço 71% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Alavancagem Controlada (D/P < 2.0)(+15) | Payout Saudável (45.5%)(+15) | Base de Valuation(0) | Spread Negativo vs Tesouro (-3.6%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
   IP          Score:  37.0/100  D: 30  M: 25  B: 37  ⏳ AGUARDAR      $ 33.47         Consumer Cyclical
              Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | Margem Líquida Baixa (<5%)(-15) | Payout Insustentável (158.1%)(-10) | Base Arrojada(+35) | PEG Excelente (<1.0)(+22) | Payout Insustentável (158.1%)(-20) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Payout Insustentável (158.1%)(-30) | Base de Valuation(0) | P/L Justo (<15)(+15) | Spread vs Tesouro Positivo (0.6%)(+10) | Base de Risco(+50) | Large Cap (Segurança)(+20) | Liquidez Alta (>5M)(+10)
   RIVN        Score:  37.0/100  D: 30  M: 35  B: 37  ⏳ AGUARDAR      $ 16.30         Consumer Cyclical
@@ -10852,11 +10847,11 @@
   PCG         Score:  35.0/100  D: 35  M: 10  B: 17  ⏳ AGUARDAR      $ 16.34         Utilities
              Audit: Score Base (Setor Defensivo)(+40) | Large Cap (>10B)(+10) | Beta Defensivo (<0.7)(+5) | Sobrevalorizado (preço 80% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | ROE Abaixo da Selic (8.8% < 14.5%)(-10) | Sobrevalorizado (preço 80% acima do Preço Justo)(-40) | Base Arrojada(+35) | PEG Excelente (<1.0)(+22) | Sobrevalorizado (preço 80% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Robusta (>10%)(+25) | Alavancagem Controlada (D/P < 2.0)(+15) | Crescimento de Receita Sólido (>10%)(+25) | Payout Muito Baixo (11.6%)(-5) | Base de Valuation(0) | P/L Justo (<15)(+15) | Spread vs Tesouro Positivo (0.5%)(+10) | Base de Risco(+50) | Large Cap (Segurança)(+20) | Liquidez Alta (>5M)(+10) | Dívida/Patrimônio Elevada (>1.5)(-15)
   OKTA        Score:  35.0/100  D: 30  M: 30  B: 35  ⏳ AGUARDAR      $ 123.27        Technology
-             Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | ROE Abaixo da Selic (3.5% < 14.5%)(-20) | Base Arrojada(+35) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Regular (>5%)(+15) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-6.3%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
+             Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | ROE Abaixo da Selic (3.7% < 14.5%)(-20) | Base Arrojada(+35) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Regular (>5%)(+15) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-6.3%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
   U           Score:  35.0/100  D: 30  M: 35  B: 35  ⏳ AGUARDAR      $ 30.47         Technology
              Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | Margem Líquida Baixa (<5%)(-15) | Base Arrojada(+35) | PEG Saudável (<1.5)(+12) | Crescimento Sólido (>15%)(+8) | Volatilidade Extrema (>60%)(-20) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-3.1%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20) | Liquidez Alta (>5M)(+10)
   LI          Score:  35.0/100  D: 30  M: 25  B: 35  ⏳ AGUARDAR      $ 15.01         Consumer Cyclical
-             Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Margem Líquida Baixa (<5%)(-15) | Base Arrojada(+35) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Base de Valuation(0) | P/L Barato (<10)(+30) | Spread vs Tesouro Excelente (31.6%)(+20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
+             Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Margem Líquida Baixa (<5%)(-15) | Base Arrojada(+35) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Base de Valuation(0) | P/L Barato (<10)(+30) | Spread vs Tesouro Excelente (37.6%)(+20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
   INTU        Score:  35.0/100  D: 35  M: 25  B: 10  ⏳ AGUARDAR      $ 331.53        Technology
              Audit: Score Base (Setor Defensivo)(+40) | Large Cap (>10B)(+10) | ROE Excelente (≥20%)(+15) | Volatilidade Elevada (>30%)(-10) | Sobrevalorizado (preço 76% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | ROE Excelente (>20%)(+15) | Sobrevalorizado (preço 76% acima do Preço Justo)(-40) | Base Arrojada(+35) | PEG Razoável (<2.0)(+5) | Sobrevalorizado (preço 76% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-2.5%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
   BOX         Score:  35.0/100  D: 30  M: 35  B: 35  ⏳ AGUARDAR      $ 26.96         Technology
@@ -10865,6 +10860,8 @@
              Audit: Liquidez Abaixo do Ideal (<1M/dia)(-30) | Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | ROE Excelente (>20%)(+15) | Base Arrojada(+35) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-3.4%)(-20) | Base de Risco(+50)
   MSTR        Score:  35.0/100  D: 15  M: 35  B: 10  ⏳ AGUARDAR      $ 159.09        Technology
              Audit: Dados de Rentabilidade Ausentes(-15) | Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | Base Arrojada(+35) | Volatilidade Extrema (>60%)(-20) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-4.6%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20) | Liquidez Alta (>5M)(+10)
+  AMBA        Score:  35.0/100  D: 30  M: 35  B: 23  ⏳ AGUARDAR      $ 72.18         Technology
+             Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | Margem Líquida Baixa (<5%)(-15) | Base Arrojada(+35) | Crescimento Sólido (>15%)(+8) | Volatilidade Extrema (>60%)(-20) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-5.9%)(-20) | Base de Risco(+50)
   SMTC        Score:  35.0/100  D: 30  M: 35  B: 33  ⏳ AGUARDAR      $ 152.54        Technology
              Audit: Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | Margem Líquida Baixa (<5%)(-15) | Base Arrojada(+35) | Crescimento Sólido (>15%)(+8) | Volatilidade Alta (>45%)(-10) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Estreita(0) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-4.9%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
   LHX         Score:  35.0/100  D: 20  M: 10  B: 35  ⏳ AGUARDAR      $ 315.18        Industrials
@@ -11065,6 +11062,8 @@
              Audit: Ineligível para Carteira Defensiva(+30) | Sobrevalorizado (preço 71% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Moderado (>5%)(+4) | ROE Excelente (>20%)(+15) | Sobrevalorizado (preço 71% acima do Preço Justo)(-40) | Base Arrojada(+35) | Sobrevalorizado (preço 71% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Moderado(+10) | Base de Valuation(0) | Spread Negativo vs Tesouro (-2.2%)(-20) | Base de Risco(+50)
   G           Score:  19.0/100  D: 10  M: 19  B: 10  ⏳ AGUARDAR      $ 32.95         Technology
              Audit: Ineligível para Carteira Defensiva(+30) | Sobrevalorizado (preço 62% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Moderado (>5%)(+4) | ROE Excelente (>20%)(+15) | Sobrevalorizado (preço 62% acima do Preço Justo)(-40) | Base Arrojada(+35) | Sobrevalorizado (preço 62% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Moderado(+10) | Base de Valuation(0) | P/L Justo (<15)(+15) | Spread vs Tesouro Positivo (2.5%)(+10) | Base de Risco(+50)
+  DELL        Score:  17.0/100  D: 10  M: 10  B: 17  ⏳ AGUARDAR      $ 420.91        Technology
+             Audit: Dados de Rentabilidade Ausentes(-15) | Ineligível para Carteira Defensiva(+30) | Sobrevalorizado (preço 90% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Excepcional (>30%)(+22) | Sobrevalorizado (preço 90% acima do Preço Justo)(-40) | Base Arrojada(+35) | PEG Excelente (<1.0)(+22) | Hyper Growth Extremo (>40%)(+25) | Volatilidade Alta (>45%)(-10) | Sobrevalorizado (preço 90% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Regular (>5%)(+15) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-5.4%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20) | Liquidez Alta (>5M)(+10)
   DHI         Score:  17.0/100  D: 17  M: 10  B: 10  ⏳ AGUARDAR      $ 147.09        Consumer Cyclical
              Audit: Score Base (Setor Defensivo)(+40) | Large Cap (>10B)(+10) | ROE Saudável (≥12%)(+5) | Beta Alto (>1.2)(-8) | Volatilidade Elevada (>30%)(-10) | Sobrevalorizado (preço 80% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | ROE Saudável (>12%)(+7) | ROE Abaixo da Selic (13.1% < 14.5%)(-10) | Sobrevalorizado (preço 80% acima do Preço Justo)(-40) | Base Arrojada(+35) | Sobrevalorizado (preço 80% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Saudável (>10%)(+15) | Margem Líquida Regular (>5%)(+15) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Payout Muito Baixo (16.0%)(-5) | Base de Valuation(0) | P/L Justo (<15)(+15) | Spread Negativo vs Tesouro (-0.2%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
   CARR        Score:  17.0/100  D: 17  M: 10  B: 10  ⏳ AGUARDAR      $ 63.87         Industrials
@@ -11117,8 +11116,6 @@
              Audit: Score Base (Setor Defensivo)(+40) | Large Cap (>10B)(+10) | Beta Alto (>1.2)(-8) | Volatilidade Elevada (>30%)(-10) | Sobrevalorizado (preço 63% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | ROE Abaixo da Selic (8.1% < 14.5%)(-10) | Sobrevalorizado (preço 63% acima do Preço Justo)(-40) | Base Arrojada(+35) | Sobrevalorizado (preço 63% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Regular (>5%)(+15) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Base de Valuation(0) | P/L Justo (<15)(+15) | Spread vs Tesouro Positivo (0.3%)(+10) | Base de Risco(+50) | Large Cap (Segurança)(+20)
   KLAC        Score:  10.0/100  D: 10  M: 10  B: 10  ⏳ AGUARDAR      $ 1921.71       Technology
              Audit: Liquidez Abaixo do Ideal (<1M/dia)(-30) | Ineligível para Carteira Defensiva(+30) | Sobrevalorizado (preço 92% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita > 10%(+10) | ROE Excelente (>20%)(+15) | Sobrevalorizado (preço 92% acima do Preço Justo)(-40) | Base Arrojada(+35) | Sobrevalorizado (preço 92% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Elevado (>15%)(+25) | Margem Líquida Robusta (>10%)(+25) | Alavancagem Controlada (D/P < 2.0)(+15) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-5.6%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
-  DELL        Score:  10.0/100  D: 10  M: 10  B: 10  ⏳ AGUARDAR      $ 420.91        Technology
-             Audit: Dados de Rentabilidade Ausentes(-15) | Ineligível para Carteira Defensiva(+30) | Sobrevalorizado (preço 87% acima do Preço Justo)(-20) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Excepcional (>30%)(+22) | Sobrevalorizado (preço 87% acima do Preço Justo)(-40) | Base Arrojada(+35) | PEG Saudável (<1.5)(+12) | Hyper Growth (>25%)(+15) | Volatilidade Alta (>45%)(-10) | Sobrevalorizado (preço 87% acima do Preço Justo)(-40) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Regular (>5%)(+15) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Sólido (>10%)(+25) | Base de Valuation(0) | Spread Negativo vs Tesouro (-5.4%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20) | Liquidez Alta (>5M)(+10)
   TDY         Score:  10.0/100  D: 10  M: 10  B: 10  ⏳ AGUARDAR      $ 619.83        Technology
              Audit: Liquidez Abaixo do Ideal (<1M/dia)(-30) | Ineligível para Carteira Defensiva(+30) | Score Base (Mid/Large Cap)(+40) | Crescimento Receita Moderado (>5%)(+4) | ROE Abaixo da Selic (9.0% < 14.5%)(-10) | Base Arrojada(+35) | Base de Qualidade(0) | ROE Modesto / Baixo(0) | Margem Líquida Robusta (>10%)(+25) | Estrutura Capital Excelente (D/P < 1.0)(+25) | Crescimento de Receita Moderado(+10) | Base de Valuation(0) | Spread Negativo vs Tesouro (-4.3%)(-20) | Base de Risco(+50) | Large Cap (Segurança)(+20)
   MCHP        Score:  10.0/100  D: 10  M: 10  B: 10  ⏳ AGUARDAR      $ 94.65         Technology
@@ -11302,5 +11299,5 @@
 
 
 ════════════════════════════════════════════════════════════════════════════════
-  FIM DO RELATÓRIO  |  30/05/2026 03:34:31
+  FIM DO RELATÓRIO  |  31/05/2026 09:01:23
 ════════════════════════════════════════════════════════════════════════════════
