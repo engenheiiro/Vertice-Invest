@@ -14,6 +14,26 @@ interface AssetDetailModalProps {
 type MetricStatus = 'good' | 'bad' | 'neutral' | 'warning' | 'info';
 
 export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onClose, asset }) => {
+    // Hooks PRIMEIRO (regras de hooks): memo null-safe; o guard de render vem depois.
+    const filteredAudit = React.useMemo(() => {
+        if (!asset?.auditLog) return [];
+
+        const universalCategories = ['Qualidade', 'Valuation', 'Risco', 'Dados e Confiança'];
+        const profileCategoryMap: Record<string, string> = {
+            'DEFENSIVE': 'Perfil Defensivo',
+            'MODERATE': 'Perfil Moderado',
+            'BOLD': 'Perfil Arrojado'
+        };
+
+        const targetCategory = profileCategoryMap[asset.riskProfile || ''];
+
+        // Remove pontos zero e filtra por categoria (universal ou perfil atual)
+        return asset.auditLog.filter(log => {
+            if (log.points === 0) return false;
+            return universalCategories.includes(log.category) || log.category === targetCategory;
+        });
+    }, [asset]);
+
     if (!isOpen || !asset) return null;
 
     const m = asset.metrics;
@@ -45,27 +65,6 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
 
     const fairValueLabel = type === 'FII' ? 'VP por Cota' : 'Preço Teto';
 
-    // Filtra o audit log para mostrar apenas o que é relevante para o perfil atual
-    const filteredAudit = React.useMemo(() => {
-        if (!asset.auditLog) return [];
-        
-        const universalCategories = ['Qualidade', 'Valuation', 'Risco', 'Dados e Confiança'];
-        const profileCategoryMap: Record<string, string> = {
-            'DEFENSIVE': 'Perfil Defensivo',
-            'MODERATE': 'Perfil Moderado',
-            'BOLD': 'Perfil Arrojado'
-        };
-        
-        const targetCategory = profileCategoryMap[asset.riskProfile || ''];
-        
-        // Remove pontos zero e filtra por categoria
-        return asset.auditLog.filter(log => {
-            if (log.points === 0) return false;
-            // Se for universal ou o perfil atual, mantém
-            return universalCategories.includes(log.category) || log.category === targetCategory;
-        });
-    }, [asset]);
-
     // Lógica de cores do Yield (Visualização 3.0)
     // Verde > 6%, Amarelo > 0%, Cinza = 0%
     const getYieldColor = (dy: number) => {
@@ -81,9 +80,10 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
             case 'ROE': return value > 15 ? 'good' : (value < 5 ? 'bad' : 'neutral');
             case 'ROIC': return value > 12 ? 'good' : (value < 5 ? 'bad' : 'neutral');
             case 'NET_MARGIN': return value > 10 ? 'good' : (value < 0 ? 'bad' : 'neutral');
-            case 'DEBT_EQUITY': 
-                const val = value > 10 ? value / 100 : value; 
+            case 'DEBT_EQUITY': {
+                const val = value > 10 ? value / 100 : value;
                 return val < 1.0 ? 'good' : (val > 2.0 ? 'bad' : 'warning');
+            }
             case 'P_VP': return (value > 0 && value < 1.15) ? 'good' : (value > 1.3 ? 'warning' : 'neutral');
             case 'DY': return value > 8 ? 'good' : (value < 4 ? 'neutral' : 'info');
             case 'VACANCY': return value > 15 ? 'bad' : (value < 5 ? 'good' : 'warning');

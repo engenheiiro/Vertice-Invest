@@ -37,7 +37,7 @@ export const DividendDashboard = () => {
 
             try {
                 const res = await walletService.getDividends();
-                let cleanHistory = Array.isArray(res?.history) ? res.history : [];
+                const cleanHistory = Array.isArray(res?.history) ? res.history : [];
                 while(cleanHistory.length > 0 && cleanHistory[0].value === 0) {
                     cleanHistory.shift();
                 }

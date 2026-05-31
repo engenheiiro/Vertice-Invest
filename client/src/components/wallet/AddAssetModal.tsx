@@ -317,7 +317,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     };
 
     const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        let val = e.target.value;
+        const val = e.target.value;
         if (val.includes('-')) return;
         setForm({ ...form, quantity: val });
     };
@@ -331,7 +331,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     
     const parseCurrencyToFloat = (value: string) => {
         if (!value) return NaN;
-        let clean = value.replace(/\./g, '').replace(',', '.');
+        const clean = value.replace(/\./g, '').replace(',', '.');
         return parseFloat(clean);
     };
 
@@ -390,12 +390,12 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             }
         }
 
-        let finalRate = form.rate ? parseFloat(form.rate.replace(',', '.')) : 0;
+        const finalRate = form.rate ? parseFloat(form.rate.replace(',', '.')) : 0;
 
         setStatus('loading');
 
         try {
-            let finalTicker = form.ticker.toUpperCase();
+            const finalTicker = form.ticker.toUpperCase();
 
             await addAsset({
                 ticker: finalTicker,

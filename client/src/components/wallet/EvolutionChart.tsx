@@ -72,7 +72,7 @@ export const EvolutionChart = () => {
         const minDate = rawDates.length > 0 ? new Date(Math.min(...rawDates)) : new Date();
         const maxDate = new Date(); 
 
-        let filledData: any[] = [];
+        const filledData: any[] = [];
 
         if (timeRange === '1M') {
             // LÓGICA DIÁRIA (Mês Atual)
@@ -133,7 +133,7 @@ export const EvolutionChart = () => {
                 });
             });
 
-            let cursor = new Date(minDate);
+            const cursor = new Date(minDate);
             let lastInvested = 0;
             let lastEquity = 0;
 

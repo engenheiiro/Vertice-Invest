@@ -22,7 +22,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
         // Proteção interna
         if (!report) return [];
 
-        let baseList = viewMode === 'FULL' 
+        const baseList = viewMode === 'FULL' 
             ? (report.content.fullAuditLog || report.content.ranking) 
             : report.content.ranking;
 

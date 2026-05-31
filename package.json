@@ -2,6 +2,7 @@
   "name": "vertice-invest-root",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "client": "npm run dev --prefix client",
@@ -29,13 +30,31 @@
     "test:ingestion": "npm run test --prefix server -- tests/ingestion.spec.js",
     "test:regression": "npm run test:regression --prefix server",
     "test:fundamentus": "npm run test:fundamentus --prefix server",
-    "lint": "npm run lint --prefix client && npm run lint --prefix server",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "npm run lint --prefix client && npm run lint --prefix server",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "backtest:portfolio": "node server/scripts/seedPortfolioBacktest.js",
     "prepare": "husky || true"
   },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": "eslint --fix"
+  },
   "devDependencies": {
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
+    "@eslint/js": "^9.39.4",
     "concurrently": "^8.2.2",
-    "husky": "^9.1.7"
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.7",
+    "prettier": "^3.8.3",
+    "typescript-eslint": "^8.60.0"
   },
   "engines": {
     "node": ">=22.0.0"

@@ -1,0 +1,12 @@
+node_modules
+dist
+dev-dist
+build
+coverage
+server/logs
+package-lock.json
+pnpm-lock.yaml
+*.md
+.husky
+client/dist
+client/dev-dist

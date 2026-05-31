@@ -15,7 +15,7 @@
 | Melhorias/Refatorações (M) | 0 | 14 |
 | Implementações (I) | 3 | 14 |
 | Segurança (S) | 3 | 12 |
-| Infra/DevOps (D) | 0 | 13 |
+| Infra/DevOps (D) | 4 | 13 |
 | Testes (T) | 0 | 12 |
 | Acessibilidade/UX (A) | 0 | 12 |
 
@@ -125,13 +125,13 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 ## CATEGORIA 5 — Infraestrutura / DevOps
 
 - [ ] **D1** — CI GitHub Actions: lint + typecheck + test + build em cada PR · `.github/workflows/ci.yml`
-- [ ] **D2** — ESLint (client + server) com regras compartilhadas · `eslint.config.js`
-- [ ] **D3** — Prettier + formatação consistente · `.prettierrc`
+- [x] **D2** — ESLint flat config (v9) na raiz cobrindo client (TS/React) e server (Node ESM); regras pragmáticas (erros só p/ bugs reais). Corrigiu 4 erros reais: hook condicional no `AssetDetailModal`, `no-case-declarations`, `COLORS` indefinido · `eslint.config.js`
+- [x] **D3** — Prettier configurado (`.prettierrc` + `.prettierignore`) + scripts `format`/`format:check`. Enforcement via lint-staged deixado como `eslint --fix` para evitar reformatação em massa (4→2 espaços); passada completa de Prettier fica como tarefa deliberada futura
 - [ ] **D4** — TypeScript strict no client + resolver 9 `@ts-ignore` (tipos React Router) · `client/tsconfig.json`
-- [ ] **D5** — Husky + lint-staged (pre-commit: lint, format, secret scan) · `.husky/`
+- [x] **D5** — `lint-staged` (`eslint --fix` nos arquivos staged) adicionado ao pre-commit do husky, somado à barreira de segredos (.env block + gitleaks) · `.husky/pre-commit`, `package.json`
 - [ ] **D6** — Dockerfile (server) + docker-compose (server+mongo)
 - [ ] **D7** — Cobertura de testes no Vitest com gate mínimo (~70% em utils financeiros) · `vitest.config.ts`
-- [ ] **D8** — Conventional Commits + commitlint
+- [x] **D8** — Conventional Commits validados por commitlint no hook `commit-msg` do husky · `commitlint.config.js`, `.husky/commit-msg`
 - [ ] **D9** — Branch protection no `main` (PR + CI verde)
 - [ ] **D10** — Script de build do server + `build:all` no raiz · `/package.json`
 - [ ] **D11** — Sourcemaps de produção (upload p/ Sentry, não público) · `client/vite.config.ts`

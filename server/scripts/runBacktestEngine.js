@@ -193,7 +193,7 @@ const runBacktest = async () => {
         await runBacktestAnalysis();
         process.exit(0);
     } catch (error) {
-        console.error(`${COLORS.red}❌ Erro Fatal: ${error.message}${COLORS.reset}`);
+        console.error(`❌ Erro Fatal: ${error.message}`);
         process.exit(1);
     }
 };

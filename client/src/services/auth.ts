@@ -34,7 +34,7 @@ const onRrefreshed = (token: string) => {
 export const authService = {
   // Wrapper para chamadas autenticadas
   async api(endpoint: string, options: RequestInit = {}) {
-    let token = localStorage.getItem('accessToken');
+    const token = localStorage.getItem('accessToken');
     
     const headers = new Headers(options.headers);
     if (token) {

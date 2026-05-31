@@ -18,7 +18,7 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
 }) => {
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let inputValue = e.target.value;
+    const inputValue = e.target.value;
     
     // Remove tudo que não é dígito
     const rawValue = inputValue.replace(/\D/g, '');
