@@ -1,65 +1,52 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, PlusCircle, DollarSign, BarChart2, Tag, ArrowUpCircle, ArrowDownCircle, Search, Loader2, Clock, CheckCircle2, TrendingUp, Percent, Edit3, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { X, PlusCircle, DollarSign, BarChart2, Tag, ArrowUpCircle, ArrowDownCircle, Search, Loader2, Clock, CheckCircle2, TrendingUp, Percent, Edit3, ShieldCheck } from 'lucide-react';
 import { Input } from '../ui/Input';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { Button } from '../ui/Button';
+import { Alert } from '../ui/Alert';
 import { useWallet, AssetType } from '../../contexts/WalletContext';
 import { useToast } from '../../contexts/ToastContext';
-import { walletService } from '../../services/wallet';
-import { marketService } from '../../services/market';
+import { usePriceFetch } from '../../hooks/usePriceFetch';
+import { useAssetSearch } from '../../hooks/useAssetSearch';
+import {
+    getLocalDateString,
+    parseCurrencyToFloat,
+    validateTransaction,
+    type AssetFormState,
+} from '../../utils/assetTransaction';
 
 interface AddAssetModalProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-const getLocalDateString = () => {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+const INITIAL_FORM: AssetFormState = {
+    ticker: '',
+    name: '',
+    type: 'STOCK',
+    quantity: '',
+    price: '',
+    rate: '',
+    date: getLocalDateString(),
 };
 
 export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose }) => {
     const { addAsset, assets } = useWallet();
     const { addToast } = useToast();
-    
+
     const [status, setStatus] = useState<'idle' | 'loading' | 'success'>('idle');
     const [validationError, setValidationError] = useState('');
     const [transactionType, setTransactionType] = useState<'BUY' | 'SELL'>('BUY');
-    const [isSearching, setIsSearching] = useState(false);
-    
-    const [isFetchingPrice, setIsFetchingPrice] = useState(false);
-    const [priceSource, setPriceSource] = useState<'manual' | 'historical'>('manual');
-    const [suggestedPrice, setSuggestedPrice] = useState<number | null>(null);
     const [priceWarning, setPriceWarning] = useState<string | null>(null);
-    const [historicalDateFound, setHistoricalDateFound] = useState<string | null>(null);
-    const [isCurrentPrice, setIsCurrentPrice] = useState(false); 
-    
-    const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [showDropdown, setShowDropdown] = useState(false);
 
-    // Cache de Preços da Sessão (Map<Ticker+Date, PriceData>)
-    const priceCache = useRef<Map<string, any>>(new Map());
+    const [form, setForm] = useState<AssetFormState>(INITIAL_FORM);
 
-    const [form, setForm] = useState({
-        ticker: '',
-        name: '', 
-        type: 'STOCK' as AssetType,
-        quantity: '',
-        price: '',
-        rate: '', 
-        date: getLocalDateString()
-    });
+    // Concerns extraídas (M3): busca de preço e autocomplete de ticker.
+    const priceFetch = usePriceFetch({ isOpen, form, setForm });
+    const search = useAssetSearch({ form, transactionType, setForm });
 
-    const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const priceFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const modalRef = useRef<HTMLDivElement>(null);
-
-    // Reset ao abrir o modal
+    // Reset ao abrir o modal.
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
@@ -67,27 +54,17 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             setValidationError('');
             setPriceWarning(null);
             setTransactionType('BUY');
-            setSearchResults([]);
-            setPriceSource('manual');
-            setSuggestedPrice(null);
-            setHistoricalDateFound(null);
-            setIsCurrentPrice(false);
-            setForm({ 
-                ticker: '', 
-                name: '', 
-                type: 'STOCK', 
-                quantity: '', 
-                price: '', 
-                rate: '', 
-                date: getLocalDateString() 
-            }); 
+            setForm({ ...INITIAL_FORM, date: getLocalDateString() });
+            priceFetch.reset();
+            search.reset();
         } else {
             document.body.style.overflow = 'unset';
         }
         return () => { document.body.style.overflow = 'unset'; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
 
-    // Lógica de Validação de Preço (Warning)
+    // Validação de preço (warning) — desvio da cotação de referência ou data antiga.
     useEffect(() => {
         if (!form.price) {
             setPriceWarning(null);
@@ -97,127 +74,46 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         const userPrice = parseCurrencyToFloat(form.price);
         if (isNaN(userPrice)) return;
 
-        // Caso 1: Preço sugerido (histórico/atual) existe, mas usuário desviou muito (> 10%)
+        const suggestedPrice = priceFetch.suggestedPrice;
+
+        // Caso 1: existe preço de referência e o usuário desviou > 10%.
         if (suggestedPrice && suggestedPrice > 0) {
-            const diff = Math.abs(userPrice - suggestedPrice);
-            const percentDiff = (diff / suggestedPrice) * 100;
-            
+            const percentDiff = (Math.abs(userPrice - suggestedPrice) / suggestedPrice) * 100;
             if (percentDiff > 10) {
                 setPriceWarning(`Atenção: O preço inserido difere ${percentDiff.toFixed(0)}% da cotação de referência (R$ ${suggestedPrice.toFixed(2)}).`);
                 return;
             }
         }
 
-        // Caso 2: Sem preço sugerido (manual) e data antiga (> 7 dias atrás)
+        // Caso 2: preço manual com data antiga (> 7 dias).
         if (!suggestedPrice && form.date) {
-            const txDate = new Date(form.date);
-            const today = new Date();
-            const diffDays = (today.getTime() - txDate.getTime()) / (1000 * 3600 * 24);
-            
+            const diffDays = (new Date().getTime() - new Date(form.date).getTime()) / (1000 * 3600 * 24);
             if (diffDays > 7 && form.type !== 'FIXED_INCOME' && form.type !== 'CASH') {
-                setPriceWarning("Data antiga. Verifique se o preço corresponde à cotação histórica exata para não distorcer a rentabilidade.");
+                setPriceWarning('Data antiga. Verifique se o preço corresponde à cotação histórica exata para não distorcer a rentabilidade.');
                 return;
             }
         }
 
         setPriceWarning(null);
-
-    }, [form.price, form.date, suggestedPrice]);
-
-    // Busca de Preço Automático (Com Cache e Debounce)
-    useEffect(() => {
-        if (!isOpen || form.type === 'CASH' || form.type === 'FIXED_INCOME' || !form.ticker || form.ticker.length < 3 || !form.date) {
-            return;
-        }
-        
-        if (priceFetchTimeoutRef.current) clearTimeout(priceFetchTimeoutRef.current);
-
-        // Check Cache First
-        const cacheKey = `${form.ticker}-${form.date}-${form.type}`;
-        if (priceCache.current.has(cacheKey)) {
-            const cached = priceCache.current.get(cacheKey);
-            applyPriceData(cached, form.date);
-            return;
-        }
-
-        setIsFetchingPrice(true);
-        setHistoricalDateFound(null);
-        setIsCurrentPrice(false);
-        setSuggestedPrice(null);
-
-        priceFetchTimeoutRef.current = setTimeout(async () => {
-            try {
-                const today = getLocalDateString();
-                let priceData = null;
-                
-                if (form.date === today) {
-                    const quote = await marketService.getCurrentQuote(form.ticker);
-                    if (quote && quote.price > 0) {
-                        priceData = { price: quote.price, isLive: true };
-                    }
-                } else if (form.date < today) {
-                    const history = await marketService.getHistoricalPrice(form.ticker, form.date, form.type);
-                    if (history && history.price > 0) {
-                        priceData = history;
-                    }
-                }
-                
-                if (priceData) {
-                    priceCache.current.set(cacheKey, priceData); // Save to cache
-                    applyPriceData(priceData, form.date);
-                } else {
-                    setPriceSource('manual');
-                }
-            } catch (err) {
-                console.error("Erro ao buscar preço", err);
-            } finally {
-                setIsFetchingPrice(false);
-            }
-        }, 600); // 600ms Debounce
-
-    }, [form.date, form.ticker, form.type, isOpen]);
-
-    const applyPriceData = (data: any, targetDate: string) => {
-        if (data && data.price) {
-            const fmtPrice = data.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            setForm(prev => ({ ...prev, price: fmtPrice }));
-            setPriceSource('historical');
-            setSuggestedPrice(data.price); 
-            if (data.isLive) setIsCurrentPrice(true);
-            else if (data.foundDate && data.foundDate !== targetDate) setHistoricalDateFound(data.foundDate); 
-        }
-        setIsFetchingPrice(false);
-    };
-
-    // Fechar dropdown ao clicar fora
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-                setShowDropdown(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+    }, [form.price, form.date, form.type, priceFetch.suggestedPrice]);
 
     const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const selectedDate = e.target.value;
-        setForm(prev => ({ ...prev, date: selectedDate }));
+        setForm(prev => ({ ...prev, date: e.target.value }));
     };
 
     const handleTypeSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newType = e.target.value as AssetType;
-        
+
         let defaultRate = '';
         let defaultQty = '';
-        let defaultTicker = ''; 
+        let defaultTicker = '';
 
         if (newType === 'FIXED_INCOME') {
             defaultRate = '10,00';
             defaultQty = '1';
         } else if (newType === 'CASH') {
             defaultTicker = 'RESERVA';
-            defaultQty = ''; // Valor monetário vai no price
+            defaultQty = '';
         }
 
         setForm(prev => ({
@@ -226,78 +122,14 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             ticker: defaultTicker,
             rate: defaultRate,
             quantity: defaultQty,
-            price: '' 
+            price: '',
         }));
     };
 
     const handleTickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value.toUpperCase();
         setForm(prev => ({ ...prev, ticker: val }));
-
-        if (transactionType === 'SELL' || form.type === 'CASH') return;
-
-        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-
-        const minChars = form.type === 'FIXED_INCOME' ? 2 : 3;
-
-        if (val.length >= minChars) {
-            setIsSearching(true);
-            searchTimeoutRef.current = setTimeout(async () => {
-                try {
-                    const results = await walletService.searchAsset(val, form.type);
-                    if (results && Array.isArray(results) && results.length > 0) {
-                        setSearchResults(results);
-                        setShowDropdown(true);
-                    } else {
-                        if (form.type === 'FIXED_INCOME') {
-                            setSearchResults([{
-                                ticker: val,
-                                name: `Criar: ${val}`,
-                                type: 'FIXED_INCOME',
-                                isManual: true
-                            }]);
-                            setShowDropdown(true);
-                        } else {
-                            setSearchResults([]);
-                            setShowDropdown(false);
-                        }
-                    }
-                } catch (error) {
-                    console.error("Erro busca");
-                } finally {
-                    setIsSearching(false);
-                }
-            }, 300);
-        } else {
-            setSearchResults([]);
-            setShowDropdown(false);
-        }
-    };
-
-    const handleSelectResult = (result: any) => {
-        let rateVal = form.rate;
-        if (result.rate !== undefined && result.rate !== null) {
-            rateVal = result.rate.toString().replace('.', ',');
-            if (!rateVal.includes(',')) rateVal += ',00';
-        }
-
-        const finalTicker = result.isManual ? result.ticker : (result.ticker || result.name);
-        const finalName = result.name || result.ticker;
-        const finalType = result.type ? (result.type as AssetType) : form.type;
-        
-        const finalQty = finalType === 'FIXED_INCOME' ? '1' : form.quantity;
-
-        setForm(prev => ({ 
-            ...prev, 
-            ticker: finalTicker, 
-            name: finalName, 
-            type: finalType,
-            rate: rateVal, 
-            quantity: finalQty
-        }));
-        
-        setShowDropdown(false);
-        setSearchResults([]);
+        search.searchTicker(val);
     };
 
     const handleSellAssetSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -309,7 +141,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                 ticker: selectedTicker,
                 name: asset.name || '',
                 type: asset.type,
-                price: asset.currentPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+                price: asset.currentPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
             }));
         } else {
             setForm(prev => ({ ...prev, ticker: selectedTicker }));
@@ -319,122 +151,46 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
         if (val.includes('-')) return;
-        setForm({ ...form, quantity: val });
+        setForm(prev => ({ ...prev, quantity: val }));
     };
 
-    // Currency Input Handler (Auto-formatting)
     const handleCurrencyChange = (formattedValue: string) => {
-        setForm({ ...form, price: formattedValue });
-        setPriceSource('manual');
-        setIsCurrentPrice(false);
-    };
-    
-    const parseCurrencyToFloat = (value: string) => {
-        if (!value) return NaN;
-        const clean = value.replace(/\./g, '').replace(',', '.');
-        return parseFloat(clean);
+        setForm(prev => ({ ...prev, price: formattedValue }));
+        priceFetch.setManual();
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setValidationError('');
-        
-        let finalQty = 0;
-        let finalPrice = 0;
 
-        // Validação de Data Futura
-        const today = getLocalDateString();
-        if (form.date > today) {
-            setValidationError('Não é permitido lançar transações futuras.');
+        const { error, payload } = validateTransaction(form, transactionType, assets);
+        if (error || !payload) {
+            setValidationError(error || 'Erro de validação.');
             return;
         }
 
-        if (form.type === 'CASH') {
-            const rawAmount = parseCurrencyToFloat(form.price);
-            if (isNaN(rawAmount) || rawAmount <= 0) {
-                setValidationError('O valor deve ser válido.');
-                return;
-            }
-            finalQty = rawAmount;
-            finalPrice = 1;
-            
-            if (transactionType === 'SELL') {
-                const owned = assets.find(a => a.ticker === 'RESERVA');
-                if (!owned || owned.quantity < finalQty) {
-                    setValidationError(`Saldo insuficiente. Disponível: ${owned ? owned.quantity.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}) : 'R$ 0,00'}`);
-                    return;
-                }
-                finalQty = -finalQty;
-            }
-
-        } else {
-            finalQty = parseFloat(form.quantity.replace(',', '.')); 
-            finalPrice = parseCurrencyToFloat(form.price);
-
-            if (isNaN(finalQty) || finalQty <= 0) {
-                setValidationError('A quantidade deve ser um número válido maior que zero.');
-                return;
-            }
-            if (isNaN(finalPrice) || finalPrice < 0) { 
-                setValidationError('O preço deve ser um valor válido.');
-                return;
-            }
-
-            if (transactionType === 'SELL') {
-                const owned = assets.find(a => a.ticker === form.ticker);
-                if (!owned || owned.quantity < finalQty) {
-                    setValidationError(`Saldo insuficiente. Você possui ${owned ? owned.quantity : 0} unid.`);
-                    return;
-                }
-                finalQty = -finalQty;
-            }
-        }
-
-        const finalRate = form.rate ? parseFloat(form.rate.replace(',', '.')) : 0;
-
+        const today = getLocalDateString();
         setStatus('loading');
 
         try {
-            const finalTicker = form.ticker.toUpperCase();
-
-            await addAsset({
-                ticker: finalTicker,
-                name: form.name || finalTicker,
-                type: form.type,
-                quantity: finalQty,
-                price: finalPrice, 
-                averagePrice: finalPrice, 
-                currency: form.type === 'STOCK_US' ? 'USD' : 'BRL',
-                sector: 'General',
-                date: form.date,
-                fixedIncomeRate: finalRate
-            });
-
+            await addAsset(payload);
             setStatus('success');
-            
-            // FEEDBACK RICO AO USUÁRIO
-            addToast("Transação registrada com sucesso!", "success");
-            
-            // Verifica se a data é antiga para mostrar aviso de recálculo
+            addToast('Transação registrada com sucesso!', 'success');
+
+            // Data antiga → backend recalcula a evolução patrimonial.
             if (form.date < today) {
-                // Mensagem de rebuild sutil
-                setTimeout(() => {
-                    // O backend já está aguardando, então quando chegar aqui já recalculou.
-                    // Apenas informamos que o histórico foi ajustado.
-                    addToast("Evolução patrimonial recalculada.", "info");
-                }, 500);
+                setTimeout(() => addToast('Evolução patrimonial recalculada.', 'info'), 500);
             }
 
             setTimeout(() => {
                 setStatus('idle');
                 onClose();
             }, 1000);
-
         } catch (error: any) {
             console.error(error);
             setStatus('idle');
-            setValidationError(error.message || "Erro ao processar transação.");
-            addToast("Falha ao registrar transação.", "error");
+            setValidationError(error.message || 'Erro ao processar transação.');
+            addToast('Falha ao registrar transação.', 'error');
         }
     };
 
@@ -459,7 +215,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                 <div className="flex flex-col gap-1.5 mb-4">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">Ativo para Venda</label>
                     <div className="relative">
-                        <select 
+                        <select
                             value={form.ticker}
                             onChange={handleSellAssetSelect}
                             className="w-full bg-[#0B101A] text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-[#0F1729] transition-all duration-300 shadow-sm"
@@ -486,14 +242,14 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         if (form.type === 'FIXED_INCOME') placeholder = "Busque: Tesouro Selic, NTN-B, CDB, LCI...";
 
         return (
-            <div className="relative mb-4" ref={modalRef}>
+            <div className="relative mb-4" ref={search.containerRef}>
                 <div className="relative">
                     <Input
                         label={form.type === 'FIXED_INCOME' ? "Nome do Título / Produto" : "Código / Ticker"}
                         placeholder={placeholder}
                         value={form.ticker}
                         onChange={handleTickerChange}
-                        onFocus={() => { if(searchResults.length > 0) setShowDropdown(true); }}
+                        onFocus={() => { if (search.searchResults.length > 0) search.setShowDropdown(true); }}
                         containerClassName="mb-0"
                         className="uppercase font-mono tracking-wider px-4 py-3 pr-16"
                     />
@@ -508,21 +264,21 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         Valores em dólar. Convertido para R$ pela cotação do dia.
                     </p>
                 )}
-                
-                {isSearching && (
+
+                {search.isSearching && (
                     <div className="absolute right-3 top-9">
                         <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
                     </div>
                 )}
 
-                {showDropdown && searchResults.length > 0 && (
+                {search.showDropdown && search.searchResults.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-[#0F1729] border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar animate-fade-in">
-                        {searchResults.map((result, idx) => (
-                            <div 
+                        {search.searchResults.map((result, idx) => (
+                            <div
                                 key={idx}
                                 onMouseDown={(e) => {
                                     e.preventDefault();
-                                    handleSelectResult(result);
+                                    search.selectResult(result);
                                 }}
                                 className="p-3 hover:bg-slate-800 cursor-pointer border-b border-slate-800/50 last:border-0 flex justify-between items-center transition-colors"
                             >
@@ -561,7 +317,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             return (
                 <div className="col-span-2">
                     <div className="relative">
-                        <CurrencyInput 
+                        <CurrencyInput
                             label={label}
                             value={form.price}
                             onChange={handleCurrencyChange}
@@ -581,7 +337,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             return (
                 <>
                     <div className="relative">
-                        <CurrencyInput 
+                        <CurrencyInput
                             label="Valor Total Investido (R$)"
                             value={form.price}
                             onChange={handleCurrencyChange}
@@ -590,13 +346,13 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         />
                         <DollarSign className="absolute right-3 top-9 text-slate-600 pointer-events-none" size={16} />
                     </div>
-                    
+
                     <div className="relative">
-                        <Input 
+                        <Input
                             label="Rentabilidade"
                             placeholder="Ex: 11,50 ou 115"
                             value={form.rate}
-                            onChange={(e) => setForm({...form, rate: e.target.value})}
+                            onChange={(e) => setForm(prev => ({ ...prev, rate: e.target.value }))}
                             containerClassName="mb-0"
                         />
                         <Percent className="absolute right-3 top-9 text-slate-600 pointer-events-none" size={16} />
@@ -608,7 +364,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         return (
             <>
                 <div className="relative">
-                    <Input 
+                    <Input
                         label={form.type === 'CRYPTO' ? "Quantidade" : "Quantidade (Cotas)"}
                         type="number"
                         step={form.type === 'CRYPTO' ? "0.00000001" : "1"}
@@ -620,22 +376,22 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                     />
                     <BarChart2 className="absolute right-3 top-9 text-slate-600 pointer-events-none" size={16} />
                 </div>
-                
+
                 <div className="relative">
-                    <CurrencyInput 
+                    <CurrencyInput
                         label="Preço Unitário"
                         value={form.price}
                         onChange={handleCurrencyChange}
                         containerClassName="mb-0"
-                        className={priceSource === 'historical' ? 'px-4 py-3 border-blue-500/50 text-blue-100 bg-blue-900/10' : ''}
+                        className={priceFetch.priceSource === 'historical' ? 'px-4 py-3 border-blue-500/50 text-blue-100 bg-blue-900/10' : ''}
                     />
-                    
+
                     <div className="absolute right-3 top-9 pointer-events-none">
-                        {isFetchingPrice ? (
+                        {priceFetch.isFetchingPrice ? (
                             <Loader2 className="animate-spin text-blue-500" size={16} />
-                        ) : priceSource === 'historical' ? (
+                        ) : priceFetch.priceSource === 'historical' ? (
                             <div className="group relative">
-                                {isCurrentPrice ? (
+                                {priceFetch.isCurrentPrice ? (
                                     <TrendingUp className="text-emerald-400 animate-fade-in" size={16} />
                                 ) : (
                                     <Clock className="text-blue-400 animate-fade-in" size={16} />
@@ -646,9 +402,9 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         )}
                     </div>
 
-                    {priceSource === 'historical' && !isFetchingPrice && (
-                        <div className={`absolute -bottom-5 left-1 flex items-center gap-1 text-[9px] font-medium animate-fade-in ${isCurrentPrice ? 'text-emerald-400' : 'text-blue-400'}`}>
-                            {isCurrentPrice ? (
+                    {priceFetch.priceSource === 'historical' && !priceFetch.isFetchingPrice && (
+                        <div className={`absolute -bottom-5 left-1 flex items-center gap-1 text-[9px] font-medium animate-fade-in ${priceFetch.isCurrentPrice ? 'text-emerald-400' : 'text-blue-400'}`}>
+                            {priceFetch.isCurrentPrice ? (
                                 <>
                                     <CheckCircle2 size={10} />
                                     Preço Atual de Mercado
@@ -656,8 +412,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                             ) : (
                                 <>
                                     <Clock size={10} />
-                                    {historicalDateFound 
-                                        ? `Preço aprox. de ${new Date(historicalDateFound).toLocaleDateString('pt-BR')}`
+                                    {priceFetch.historicalDateFound
+                                        ? `Preço aprox. de ${new Date(priceFetch.historicalDateFound).toLocaleDateString('pt-BR')}`
                                         : 'Preço histórico sugerido'
                                     }
                                 </>
@@ -671,7 +427,6 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
     if (!isOpen) return null;
 
-    // Data máxima permitida = Hoje
     const maxDate = getLocalDateString();
 
     return createPortal(
@@ -682,11 +437,11 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                 <div className="flex min-h-full items-center justify-center p-4 text-center">
                     <div className="relative transform overflow-hidden rounded-2xl bg-[#080C14] border border-slate-800 text-left shadow-2xl transition-all w-full max-w-lg animate-fade-in my-auto max-h-[90vh] flex flex-col">
                         <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-[#0B101A] shrink-0">
-                            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                            <h2 id="modal-title" className="text-lg font-bold text-white flex items-center gap-2">
                                 <PlusCircle size={18} className="text-blue-500" />
                                 Nova Transação
                             </h2>
-                            <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
+                            <button onClick={onClose} aria-label="Fechar" className="text-slate-500 hover:text-white transition-colors">
                                 <X size={20} />
                             </button>
                         </div>
@@ -695,8 +450,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                             <button
                                 onClick={() => setTransactionType('BUY')}
                                 className={`flex items-center justify-center gap-2 py-3 text-xs font-bold uppercase tracking-wider transition-all rounded-lg ${
-                                    transactionType === 'BUY' 
-                                    ? 'bg-emerald-600 text-white shadow-lg' 
+                                    transactionType === 'BUY'
+                                    ? 'bg-emerald-600 text-white shadow-lg'
                                     : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
                                 }`}
                             >
@@ -705,8 +460,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                             <button
                                 onClick={() => setTransactionType('SELL')}
                                 className={`flex items-center justify-center gap-2 py-3 text-xs font-bold uppercase tracking-wider transition-all rounded-lg ${
-                                    transactionType === 'SELL' 
-                                    ? 'bg-red-600 text-white shadow-lg' 
+                                    transactionType === 'SELL'
+                                    ? 'bg-red-600 text-white shadow-lg'
                                     : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
                                 }`}
                             >
@@ -720,9 +475,9 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                     <div className="col-span-2">
                                         <label className="text-[10px] font-bold uppercase text-slate-500 ml-1 mb-1.5 block">Tipo de Ativo</label>
                                         <div className="relative">
-                                            <select 
+                                            <select
                                                 value={form.type}
-                                                onChange={handleTypeSelectChange} 
+                                                onChange={handleTypeSelectChange}
                                                 className="w-full bg-[#0B101A] text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-[#0F1729] transition-all duration-300 shadow-sm"
                                             >
                                                 <option value="STOCK">Ações Brasil (B3)</option>
@@ -735,7 +490,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                             <Tag className="absolute right-3 top-3.5 text-slate-600 pointer-events-none" size={14} />
                                         </div>
                                     </div>
-                                    <Input 
+                                    <Input
                                         label="Data do Aporte" type="date" value={form.date}
                                         max={maxDate}
                                         onChange={handleDateChange}
@@ -746,11 +501,11 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                 {renderTickerField()}
 
                                 {form.type !== 'CASH' && (
-                                    <Input 
-                                        label="Nome do Ativo" 
+                                    <Input
+                                        label="Nome do Ativo"
                                         placeholder={form.ticker ? form.ticker : "Preenchimento automático..."}
-                                        value={form.name} 
-                                        onChange={(e) => setForm({...form, name: e.target.value})}
+                                        value={form.name}
+                                        onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
                                         containerClassName="mb-0"
                                         className="bg-[#0B101A] text-slate-300 border-slate-800 focus:border-slate-600 px-4 py-3"
                                     />
@@ -760,20 +515,16 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                     {renderQuantityAndPriceFields()}
                                 </div>
 
-                                {/* WARNINGS DE PREÇO */}
                                 {priceWarning && (
-                                    <div className="bg-yellow-900/20 border border-yellow-700/30 p-3 rounded-lg flex items-start gap-3 animate-fade-in">
-                                        <AlertTriangle size={16} className="text-yellow-500 shrink-0 mt-0.5" />
-                                        <p className="text-[10px] text-yellow-200 leading-relaxed font-medium">
-                                            {priceWarning}
-                                        </p>
-                                    </div>
+                                    <Alert variant="warning" className="animate-fade-in">
+                                        {priceWarning}
+                                    </Alert>
                                 )}
 
                                 {validationError && (
-                                    <p className="text-xs text-red-500 font-bold text-center animate-shake bg-red-900/10 p-2 rounded-lg border border-red-900/20">
+                                    <Alert variant="error" className="animate-shake">
                                         {validationError}
-                                    </p>
+                                    </Alert>
                                 )}
 
                                 <div className="pt-4 flex gap-3">

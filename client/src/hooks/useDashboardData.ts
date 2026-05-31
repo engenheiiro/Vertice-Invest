@@ -1,11 +1,12 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { researchService, RankingItem } from '../services/research';
 import { walletService } from '../services/wallet';
 import { authService } from '../services/auth';
+import { STALE_TIME } from '../config/queryConfig';
+import { useFeatureAccess } from './useFeatureAccess';
 
 export interface PortfolioItem {
     ticker: string;
@@ -74,21 +75,21 @@ interface QuantSignal {
 }
 
 export const useDashboardData = () => {
-    const { user } = useAuth();
+    const { hasPlan } = useFeatureAccess();
     const { assets, kpis, isLoading: isWalletLoading } = useWallet();
 
     // 1. Dados Macro
     const macroQuery = useQuery({
         queryKey: ['macroData'],
         queryFn: researchService.getMacroData,
-        staleTime: 1000 * 60 * 15,
+        staleTime: STALE_TIME.LONG,
     });
 
     // 2. Dividendos
     const dividendsQuery = useQuery({
         queryKey: ['dividends'],
         queryFn: walletService.getDividends,
-        staleTime: 1000 * 60 * 5,
+        staleTime: STALE_TIME.SHORT,
     });
 
     // 3. Sinais Quantitativos — agora retorna { signals, meta }
@@ -99,21 +100,28 @@ export const useDashboardData = () => {
             if (!res.ok) return { signals: [], meta: null };
             return await res.json();
         },
-        staleTime: 1000 * 60 * 5,
+        staleTime: STALE_TIME.SHORT,
     });
 
     // 4. Research Reports (para scoreMap da tabela de carteira)
     const researchQuery = useQuery({
         queryKey: ['dashboardResearch'],
         queryFn: async () => {
-            const [stockReport, fiiReport, brasil10Report] = await Promise.all([
+            // allSettled: a falha de um relatório não derruba os outros dois.
+            const [stock, fii, brasil10] = await Promise.allSettled([
                 researchService.getLatest('STOCK', 'BUY_HOLD'),
                 researchService.getLatest('FII', 'BUY_HOLD'),
                 researchService.getLatest('BRASIL_10', 'BUY_HOLD')
             ]);
-            return { stockReport, fiiReport, brasil10Report };
+            const valueOrNull = (r: PromiseSettledResult<any>) =>
+                r.status === 'fulfilled' ? r.value : null;
+            return {
+                stockReport: valueOrNull(stock),
+                fiiReport: valueOrNull(fii),
+                brasil10Report: valueOrNull(brasil10),
+            };
         },
-        staleTime: 1000 * 60 * 60,
+        staleTime: STALE_TIME.HOURLY,
     });
 
     // --- PROCESSAMENTO ---
@@ -155,6 +163,7 @@ export const useDashboardData = () => {
         return signalsQuery.data?.meta || null;
     }, [signalsQuery.data]);
 
+    const isProUser = hasPlan('PRO');
     const signals: AiSignal[] = useMemo(() => {
         const rawSignals: QuantSignal[] = signalsQuery.data?.signals || [];
 
@@ -188,7 +197,7 @@ export const useDashboardData = () => {
             };
         });
 
-        if (user?.plan === 'ESSENTIAL' || user?.plan === 'GUEST') {
+        if (!isProUser) {
             return mapped.map(s => ({
                 ...s,
                 type: 'DELAYED' as const,
@@ -197,7 +206,7 @@ export const useDashboardData = () => {
         }
 
         return mapped;
-    }, [signalsQuery.data, user?.plan]);
+    }, [signalsQuery.data, isProUser]);
 
     // Score Map para enriquecer Portfolio
     const scoreMap = useMemo(() => {

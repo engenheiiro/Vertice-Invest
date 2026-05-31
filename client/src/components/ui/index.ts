@@ -1,0 +1,10 @@
+// Biblioteca base de UI (M11) — primitivos do design system.
+export { Modal } from './Modal';
+export { Skeleton, SkeletonText } from './Skeleton';
+export { Alert } from './Alert';
+export { Tooltip } from './Tooltip';
+export { Button } from './Button';
+export { Input } from './Input';
+export { CurrencyInput } from './CurrencyInput';
+export { ConfirmModal } from './ConfirmModal';
+export { PlanBadge } from './PlanBadge';

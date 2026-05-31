@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Radar, Zap, Lock, Shield, Activity, Crown, Info, History, Medal, TrendingUp, Clock } from 'lucide-react';
 import { AiSignal, RadarMeta } from '../../hooks/useDashboardData';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { useFeatureAccess } from '../../hooks/useFeatureAccess';
 
 interface AiRadarProps {
     signals: AiSignal[];
@@ -124,10 +124,10 @@ const SignalValueBadge: React.FC<{ signalType?: string; value?: number }> = ({ s
 
 export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, meta }) => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { hasPlan } = useFeatureAccess();
     const [filter, setFilter] = useState<FilterType>('ALL');
 
-    const hasAccess = user?.plan === 'PRO' || user?.plan === 'BLACK';
+    const hasAccess = hasPlan('PRO');
 
     const urgencyRank = (level?: string) => level === 'CRITICAL' ? 3 : level === 'HIGH' ? 2 : 1;
 

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { PieChart, TrendingUp, RefreshCw, Folder, ChevronDown, ChevronRight, Lock, Medal } from 'lucide-react';
 import { PortfolioItem } from '../../hooks/useDashboardData';
-import { useAuth } from '../../contexts/AuthContext';
+import { useFeatureAccess } from '../../hooks/useFeatureAccess';
 import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
 import { useNavigate } from 'react-router-dom';
@@ -24,15 +24,15 @@ const GROUP_NAMES: Record<string, string> = {
 };
 
 export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false, isResearchLoading = false }) => {
-    const { user } = useAuth();
-    const { isPrivacyMode } = useWallet(); 
+    const { hasPlan } = useFeatureAccess();
+    const { isPrivacyMode } = useWallet();
     const { isDemoMode } = useDemo();
     const navigate = useNavigate();
     
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
-    const isPro = user?.plan !== 'GUEST' && user?.plan !== 'ESSENTIAL';
-    const isBlack = user?.plan === 'BLACK';
+    const isPro = hasPlan('PRO');
+    const isBlack = hasPlan('BLACK');
 
     const formatCurrency = (val: number) => {
         if (isPrivacyMode) return '••••••';

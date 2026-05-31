@@ -29,7 +29,7 @@ const LABEL_MAP: Record<string, string> = {
     ibovBRL:   'Ibovespa',
 };
 
-export const PerformanceChart = () => {
+export const PerformanceChart = React.memo(() => {
     const [data, setData] = useState<PerformancePoint[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [metricMode, setMetricMode] = useState<'TWRR' | 'ROI'>('TWRR');
@@ -379,4 +379,4 @@ export const PerformanceChart = () => {
             </div>
         </div>
     );
-};
+});

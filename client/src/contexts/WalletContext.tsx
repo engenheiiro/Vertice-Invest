@@ -6,6 +6,8 @@ import { useAuth } from './AuthContext';
 import { useDemo } from './DemoContext'; // Importar DemoContext
 import { useToast } from './ToastContext';
 import { DEMO_ASSETS, DEMO_KPIS, DEMO_HISTORY } from '../data/DEMO_DATA'; // Importar Dados Mock
+import { STALE_TIME } from '../config/queryConfig';
+import { computeWalletKpis } from '../utils/kpiCalculations';
 
 export type AssetType = 'STOCK' | 'FII' | 'CRYPTO' | 'STOCK_US' | 'FIXED_INCOME' | 'CASH';
 
@@ -98,14 +100,14 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         queryKey: ['wallet', user?.id],
         queryFn: walletService.getWallet,
         enabled: !!user?.id && !isDemoMode, // Não busca se estiver em Demo
-        staleTime: 1000 * 60 * 2,
+        staleTime: STALE_TIME.REALTIME,
     });
 
     const historyQuery = useQuery({
         queryKey: ['walletHistory', user?.id],
         queryFn: walletService.getHistory,
         enabled: !!user?.id && !isDemoMode,
-        staleTime: 1000 * 60 * 10,
+        staleTime: STALE_TIME.MEDIUM,
     });
 
     // --- FORCE REFRESH ON MOUNT ---
@@ -185,47 +187,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         // Se estiver em demo, retorna os KPIs fixos do demo
         if (isDemoMode) return { ...DEMO_KPIS, dataQuality: 'AUDITED' as const, sharpeRatio: 1.8, beta: 0.85 };
 
-        if (assets.length === 0) {
-            return {
-                totalEquity: 0, totalInvested: 0, totalResult: 0, totalResultPercent: 0,
-                dayVariation: 0, dayVariationPercent: 0, 
-                totalDividends: serverKpis?.totalDividends || 0,
-                projectedDividends: serverKpis?.projectedDividends || 0,
-                weightedRentability: 0,
-                dataQuality: 'AUDITED' as const,
-                sharpeRatio: 0,
-                beta: 0
-            };
-        }
-
-        let equity = 0;
-        let invested = 0;
-
-        assets.forEach((asset: Asset) => {
-            equity += asset.totalValue;
-            invested += asset.totalCost;
-        });
-
-        // totalResult, dayVariation e dayVariationPercent vêm do servidor pois o servidor
-        // computa corretamente: totalResult = (equity-invested) + realizedProfit + dividends
-        // e dayVariation considera variação cambial intraday em ativos USD.
-        const result = serverKpis?.totalResult ?? (equity - invested);
-        const resultPercent = serverKpis?.totalResultPercent ?? (invested > 0 ? (result / invested) * 100 : 0);
-
-        return {
-            totalEquity: equity,
-            totalInvested: invested,
-            totalResult: result,
-            totalResultPercent: resultPercent,
-            dayVariation: serverKpis?.dayVariation ?? 0,
-            dayVariationPercent: serverKpis?.dayVariationPercent ?? 0,
-            totalDividends: serverKpis?.totalDividends || 0,
-            projectedDividends: serverKpis?.projectedDividends || 0,
-            weightedRentability: serverKpis?.weightedRentability || resultPercent,
-            dataQuality: serverKpis?.dataQuality || 'ESTIMATED',
-            sharpeRatio: serverKpis?.sharpeRatio || 0,
-            beta: serverKpis?.beta || 0
-        };
+        // Cálculo puro extraído para utils/kpiCalculations.ts (M5, testável).
+        return computeWalletKpis(assets, serverKpis);
     }, [assets, serverKpis, isDemoMode]);
     
     const usdRate = walletQuery.data?.meta?.usdRate || 5.75;

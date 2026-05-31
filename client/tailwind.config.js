@@ -9,6 +9,20 @@ export default {
       fontFamily: {
         sans: ['Inter', 'sans-serif'],
       },
+      // Tokens do design system Vértice (M12). Consolidam os tons de fundo que
+      // antes apareciam como hex soltos (#080C14, #0B101A, #0F131E, ...).
+      // Uso: bg-base, bg-card, bg-panel, bg-deep, bg-elevated, text-gold.
+      colors: {
+        base: '#080C14', // fundo principal da aplicação
+        deep: '#02040a', // fundo mais profundo (listas/áreas internas)
+        card: '#0B101A', // superfície de cards
+        panel: '#0F131E', // modais / painéis
+        elevated: '#0F1729', // hover de inputs e dropdowns
+        gold: {
+          DEFAULT: '#D4AF37', // dourado de marca (Vértice)
+          light: '#F2D06B',
+        },
+      },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out forwards',
         'shake': 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both',

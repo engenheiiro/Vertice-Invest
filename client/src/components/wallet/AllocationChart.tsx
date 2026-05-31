@@ -26,7 +26,7 @@ const LABELS: Record<AssetType, string> = {
 
 const ORDERED_TYPES: AssetType[] = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
 
-export const AllocationChart = () => {
+export const AllocationChart = React.memo(() => {
     const { assets, kpis, targetAllocation, targetReserve, updateTargets } = useWallet();
     const [viewMode, setViewMode] = useState<'CURRENT' | 'IDEAL'>('CURRENT');
     const [isEditing, setIsEditing] = useState(false);
@@ -283,4 +283,4 @@ export const AllocationChart = () => {
             )}
         </div>
     );
-};
+});

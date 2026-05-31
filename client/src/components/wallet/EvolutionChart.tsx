@@ -36,7 +36,7 @@ const CustomXAxisTick = (props: any) => {
     );
 };
 
-export const EvolutionChart = () => {
+export const EvolutionChart = React.memo(() => {
     const { kpis, history, isPrivacyMode } = useWallet();
     const [timeRange, setTimeRange] = useState<'ALL' | '12M' | 'YTD' | '1M'>('ALL');
 
@@ -376,4 +376,4 @@ export const EvolutionChart = () => {
             </div>
         </div>
     );
-};
+});
