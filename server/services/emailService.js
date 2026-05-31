@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import logger from '../config/logger.js'; // (M10) logger estruturado
 
 // Criação do transportador SMTP
 const transporter = nodemailer.createTransport({
@@ -43,13 +44,13 @@ export const sendResetPasswordEmail = async (to, token, origin) => {
       html: htmlContent,
     });
     
-    console.log("📨 Email enviado: %s", info.messageId);
+    logger.info("📨 Email enviado: %s", info.messageId);
     // Para Ethereal (teste), logamos a URL de preview
     if (process.env.SMTP_HOST?.includes('ethereal')) {
-        console.log("🔗 Preview URL: %s", nodemailer.getTestMessageUrl(info));
+        logger.info("🔗 Preview URL: %s", nodemailer.getTestMessageUrl(info));
     }
   } catch (error) {
-    console.error("❌ Erro ao enviar email:", error);
+    logger.error("❌ Erro ao enviar email:", error);
     throw new Error("Falha no serviço de email.");
   }
 };

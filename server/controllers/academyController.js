@@ -6,6 +6,7 @@ import Quiz from '../models/Quiz.js';
 import QuizAttempt from '../models/QuizAttempt.js';
 import jwt from 'jsonwebtoken';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import logger from '../config/logger.js'; // (M10) logger estruturado
 
 // Helper para checar hierarquia de planos
 const PLAN_LEVELS = {
@@ -28,7 +29,7 @@ const getUserFromRequest = async (req) => {
                 return await User.findById(decoded.id);
             }
         } catch (e) {
-            console.error("Error decoding token in helper:", e);
+            logger.error("Error decoding token in helper:", e);
         }
     }
     
@@ -299,11 +300,11 @@ export const generateCertificate = async (req, res) => {
         const user = await getUserFromRequest(req);
         if (!user) return res.status(404).json({ message: "Usuário não encontrado para gerar certificado." });
 
-        console.log(`Generating certificate for course: ${courseId}, user: ${user._id}`);
+        logger.debug(`Generating certificate for course: ${courseId}, user: ${user._id}`);
         
         const course = await Course.findById(courseId);
         if (!course) {
-            console.log(`Course not found: ${courseId}`);
+            logger.debug(`Course not found: ${courseId}`);
             return res.status(404).json({ message: "Curso não encontrado" });
         }
 
@@ -311,10 +312,10 @@ export const generateCertificate = async (req, res) => {
         const lessons = await Lesson.find({ courseId });
         const progress = await UserProgress.find({ userId: user._id, courseId, completed: true });
 
-        console.log(`Course: ${course.title} (${courseId}). Lessons in DB: ${lessons.length}. Progress in DB: ${progress.length}`);
+        logger.debug(`Course: ${course.title} (${courseId}). Lessons in DB: ${lessons.length}. Progress in DB: ${progress.length}`);
         
         if (progress.length < lessons.length && lessons.length > 0) {
-            console.log(`Completion check failed. Progress: ${progress.length}/${lessons.length}`);
+            logger.debug(`Completion check failed. Progress: ${progress.length}/${lessons.length}`);
             return res.status(403).json({ message: "Você precisa concluir todas as aulas para emitir o certificado." });
         }
 
@@ -498,7 +499,7 @@ export const generateCertificate = async (req, res) => {
         res.send(Buffer.from(pdfBytes));
 
     } catch (error) {
-        console.error("Certificate Error:", error);
+        logger.error("Certificate Error:", error);
         res.status(500).json({ message: "Erro ao gerar certificado", error: error.message });
     }
 };
@@ -506,14 +507,14 @@ export const generateCertificate = async (req, res) => {
 // Seeder para popular dados de exemplo
 export const seedAcademy = async (req, res) => {
     try {
-        console.log("Starting academy seed process...");
+        logger.info("Starting academy seed process...");
         
         // Deletar dados antigos em ordem para evitar problemas de integridade (embora não haja FKs rígidas no Mongo)
-        console.log("Cleaning existing data...");
+        logger.info("Cleaning existing data...");
         const delProgress = await UserProgress.deleteMany({});
         const delLessons = await Lesson.deleteMany({});
         const delCourses = await Course.deleteMany({});
-        console.log(`Cleaned: ${delProgress.deletedCount} progress, ${delLessons.deletedCount} lessons, ${delCourses.deletedCount} courses`);
+        logger.info(`Cleaned: ${delProgress.deletedCount} progress, ${delLessons.deletedCount} lessons, ${delCourses.deletedCount} courses`);
 
         // Deletar quizzes antigos
         await Quiz.deleteMany({});
@@ -562,7 +563,7 @@ export const seedAcademy = async (req, res) => {
             }
         ];
 
-        console.log("Inserting courses...");
+        logger.info("Inserting courses...");
         await Course.insertMany(coursesData);
 
         const lessonsData = [
@@ -597,7 +598,7 @@ export const seedAcademy = async (req, res) => {
             { _id: "me-6", title: "Lotes Fiscais (FIFO) avançado e elisão fiscal legal", description: "Como pagar menos imposto de forma legal.", youtubeVideoId: "dQw4w9WgXcQ", duration: 1300, courseId: "course-me", order: 6 }
         ];
 
-        console.log("Inserting lessons...");
+        logger.info("Inserting lessons...");
         await Lesson.insertMany(lessonsData);
 
         // Inserir Quizzes de exemplo
@@ -625,10 +626,10 @@ export const seedAcademy = async (req, res) => {
             }
         ];
 
-        console.log("Inserting quizzes...");
+        logger.info("Inserting quizzes...");
         await Quiz.insertMany(quizzesData);
 
-        console.log("Seed completed successfully.");
+        logger.info("Seed completed successfully.");
         res.json({ 
             message: "Academy seeded successfully!",
             summary: {
@@ -637,7 +638,7 @@ export const seedAcademy = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error("CRITICAL Seed Error:", error);
+        logger.error("CRITICAL Seed Error:", error);
         res.status(500).json({ 
             message: "Erro ao popular banco", 
             error: error.message,

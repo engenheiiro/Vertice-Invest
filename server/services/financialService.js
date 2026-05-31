@@ -10,6 +10,7 @@ import SystemConfig from '../models/SystemConfig.js';
 import EconomicIndex from '../models/EconomicIndex.js'; 
 import AuditLog from '../models/AuditLog.js'; // Novo
 import { marketDataService } from './marketDataService.js';
+import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { externalMarketService } from './externalMarketService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js'; 
@@ -82,7 +83,7 @@ export const financialService = {
             }
 
             const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-            const currentCdiRate = sysConfig?.cdi || 11.25;
+            const currentCdiRate = sysConfig?.cdi || DEFAULT_SELIC_FALLBACK;
             const currentUsdRate = sysConfig?.dollar || 5.75;
 
             // G1 FIX: Load historical USD/BRL rates for per-date conversion

@@ -6,6 +6,7 @@ import http from 'http';
 import SystemConfig from '../models/SystemConfig.js';
 import TreasuryBond from '../models/TreasuryBond.js';
 import EconomicIndex from '../models/EconomicIndex.js';
+import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import AssetHistory from '../models/AssetHistory.js';
 import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
@@ -48,7 +49,7 @@ export const macroDataService = {
                 httpsAgent: bcbAgent,
                 timeout: 5000
             });
-            const selicVal = selicRes.data[0]?.valor ? parseFloat(selicRes.data[0].valor) : 11.25;
+            const selicVal = selicRes.data[0]?.valor ? parseFloat(selicRes.data[0].valor) : DEFAULT_SELIC_FALLBACK;
             
             let ipcaVal = 4.50;
             try {
@@ -70,7 +71,7 @@ export const macroDataService = {
             };
 
         } catch (error) {
-            return { selic: 11.25, ipca: 4.50, cdi: 11.15, cdi12m: 11.15 }; 
+            return { selic: DEFAULT_SELIC_FALLBACK, ipca: 4.50, cdi: 11.15, cdi12m: 11.15 };
         }
     },
 
@@ -179,7 +180,7 @@ export const macroDataService = {
         try {
             // Pega a meta atual salva no banco
             const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-            const currentSelic = config?.selic || 11.25;
+            const currentSelic = config?.selic || DEFAULT_SELIC_FALLBACK;
             const currentCdi = Math.max(0, currentSelic - 0.10); // Ex: 11.15
             
             // Fator diário = (1 + Taxa/100)^(1/252)

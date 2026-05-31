@@ -31,6 +31,10 @@ const QuantSignalSchema = new mongoose.Schema({
 
 // TTL Index: Mantém histórico por 30 dias
 QuantSignalSchema.index({ timestamp: 1 }, { expireAfterSeconds: 2592000 });
+// (M14) Sinais ativos são lidos a cada load do dashboard e run do radar
+// (`{ status: 'ACTIVE' }` ordenado por timestamp desc). Sem este índice a
+// busca fazia full scan da coleção.
+QuantSignalSchema.index({ status: 1, timestamp: -1 });
 
 const QuantSignal = mongoose.models.QuantSignal || mongoose.model('QuantSignal', QuantSignalSchema);
 export default QuantSignal;

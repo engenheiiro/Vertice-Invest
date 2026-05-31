@@ -12,17 +12,17 @@ import { financialService } from '../services/financialService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, calculateSharpeRatio, calculateBeta } from '../utils/mathUtils.js';
 import { countBusinessDays, isBusinessDay } from '../utils/dateUtils.js';
 import logger from '../config/logger.js';
-import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js'; 
+import { HISTORICAL_CDI_RATES, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { runDailySnapshot } from '../services/schedulerService.js'; // Importado
 
 const getDailyFactorForDate = (date, currentConfigRate) => {
     const year = date.getFullYear();
     const currentYear = new Date().getFullYear();
-    
-    let rate = 11.25; 
+
+    let rate = DEFAULT_SELIC_FALLBACK;
 
     if (year === currentYear) {
-        rate = currentConfigRate || 11.25;
+        rate = currentConfigRate || DEFAULT_SELIC_FALLBACK;
     } else {
         rate = HISTORICAL_CDI_RATES[year] || 10.0;
     }

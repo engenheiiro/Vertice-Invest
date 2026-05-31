@@ -1,0 +1,2382 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto-btc 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Dados e Confiança",
+      "factor": "Data de Atualização dos Fundamentais Desconhecida",
+      "points": -5,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Crypto Blue Chip",
+      "points": 90,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Alta Liquidez Institucional",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [
+    "Blue Chip do mercado cripto (Reserva de Valor / Infraestrutura).",
+    "Alta capitalização de mercado (Large Cap), maior resiliência.",
+    "Altíssima liquidez, facilitando entrada/saída institucional.",
+    "Volume/MarketCap saudável (2.5%), indicando adoção orgânica.",
+    "Tendência de alta de longo prazo (Preço > SMA200).",
+    "Volatilidade controlada para o setor (45.0% a.a.).",
+  ],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 10,
+    "DEFENSIVE": 100,
+    "MODERATE": 10,
+  },
+  "structural": {
+    "quality": 100,
+    "risk": 95,
+    "valuation": 60,
+  },
+  "targetPrice": 350000,
+  "ticker": "BTC",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto-large 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Dados e Confiança",
+      "factor": "Data de Atualização dos Fundamentais Desconhecida",
+      "points": -5,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Crypto Large Cap",
+      "points": 90,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Alta Liquidez Institucional",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [
+    "Alta capitalização de mercado (Large Cap), maior resiliência.",
+    "Altíssima liquidez, facilitando entrada/saída institucional.",
+    "Volume/MarketCap saudável (5.0%), indicando adoção orgânica.",
+    "Tendência de alta de longo prazo (Preço > SMA200).",
+  ],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 10,
+    "DEFENSIVE": 10,
+    "MODERATE": 100,
+  },
+  "structural": {
+    "quality": 80,
+    "risk": 95,
+    "valuation": 50,
+  },
+  "targetPrice": 800,
+  "ticker": "SOL",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto-mid 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Dados e Confiança",
+      "factor": "Data de Atualização dos Fundamentais Desconhecida",
+      "points": -5,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Crypto Mid Cap",
+      "points": 90,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [
+    "Volume/MarketCap saudável (5.0%), indicando adoção orgânica.",
+    "Tendência de alta de longo prazo (Preço > SMA200).",
+  ],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 90,
+    "DEFENSIVE": 10,
+    "MODERATE": 10,
+  },
+  "structural": {
+    "quality": 60,
+    "risk": 65,
+    "valuation": 50,
+  },
+  "targetPrice": 80,
+  "ticker": "LINK",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto-small-lowliq 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Dados e Confiança",
+      "factor": "Data de Atualização dos Fundamentais Desconhecida",
+      "points": -5,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Crypto Small Cap (Assimetria)",
+      "points": 95,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Baixa Liquidez Crypto",
+      "points": -10,
+      "type": "penalty",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+  ],
+  "bearThesis": [
+    "Baixa liquidez, risco de slippage e manipulação.",
+    "Volatilidade extrema (120.0% a.a.).",
+  ],
+  "bullThesis": [
+    "Baixa capitalização (Small Cap), alta assimetria de retorno.",
+    "Volume/MarketCap saudável (3.3%), indicando adoção orgânica.",
+    "Tendência de alta de longo prazo (Preço > SMA200).",
+  ],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 85,
+    "DEFENSIVE": 10,
+    "MODERATE": 10,
+  },
+  "structural": {
+    "quality": 50,
+    "risk": 0,
+    "valuation": 50,
+  },
+  "targetPrice": 0.5,
+  "ticker": "TINY",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-bold-deep-discount 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados de Crescimento Ausentes",
+      "points": -25,
+      "type": "penalty",
+    },
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados de Rentabilidade Ausentes",
+      "points": -15,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Score Base (FII Defensivo)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Yield Excepcional (NTN-B +7.7%)",
+      "points": 22,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Beta Defensivo (<0.7)",
+      "points": 7,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 3,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Alta Diversificação (>20 imóveis)",
+      "points": 6,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Perfil Moderado FII)",
+      "points": 45,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Yield Excepcional (NTN-B +7.7%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Cap Rate Excelente (>NTN-B + 3%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Deságio Expressivo em Tijolo (>20%)",
+      "points": 12,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 3,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada FII",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Yield Extremo (NTN-B +7.7%)",
+      "points": 35,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Deságio Extremo em Tijolo (>25%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Cap Rate Excepcional (>NTN-B + 5%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base Qualidade FII",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Multi-propriedade (>10 imóveis)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Yield Real > 2%",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread Excelente (>4-5%)",
+      "points": 90,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Deságio P/VP (<0.90)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base Risco FII",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 20,
+      "type": "bonus",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [
+    "Desconto patrimonial (P/VP 0.70).",
+    "Alto prêmio de risco: Spread de 7.7% sobre NTN-B.",
+    "Baixa volatilidade (Beta 0.50): Perfil defensivo.",
+  ],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 85,
+    "DEFENSIVE": 78,
+    "MODERATE": 85,
+  },
+  "structural": {
+    "quality": 80,
+    "risk": 70,
+    "valuation": 100,
+  },
+  "targetPrice": 64.62,
+  "ticker": "DEEP11",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-negative-spread 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados de Crescimento Ausentes",
+      "points": -25,
+      "type": "penalty",
+    },
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados de Rentabilidade Ausentes",
+      "points": -15,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Score Base (FII Defensivo)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Spread Negativo vs NTN-B (-1.3%)",
+      "points": -10,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "P/VP com Ágio Elevado (Tijolo)",
+      "points": -5,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Beta Defensivo (<0.7)",
+      "points": 7,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 3,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Alta Diversificação (>20 imóveis)",
+      "points": 6,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Perfil Moderado FII)",
+      "points": 45,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Spread Negativo vs NTN-B (-1.3%)",
+      "points": -10,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Cap Rate > NTN-B + 1%",
+      "points": 6,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 3,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada FII",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base Qualidade FII",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Multi-propriedade (>10 imóveis)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread Negativo vs Tesouro (-1.3%)",
+      "points": 0,
+      "type": "penalty",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Ágio Excessivo (>1.10)",
+      "points": -20,
+      "type": "penalty",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base Risco FII",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 20,
+      "type": "bonus",
+    },
+  ],
+  "bearThesis": [
+    "Prêmio de risco pífio (-1.3%) sobre o Tesouro.",
+  ],
+  "bullThesis": [
+    "Baixa volatilidade (Beta 0.50): Perfil defensivo.",
+  ],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 35,
+    "DEFENSIVE": 41,
+    "MODERATE": 44,
+  },
+  "structural": {
+    "quality": 60,
+    "risk": 70,
+    "valuation": 0,
+  },
+  "targetPrice": 110,
+  "ticker": "LOWY11",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-papel-defensive 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados de Crescimento Ausentes",
+      "points": -25,
+      "type": "penalty",
+    },
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados de Rentabilidade Ausentes",
+      "points": -15,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Score Base (FII Defensivo)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Yield Excepcional (NTN-B +5.7%)",
+      "points": 22,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "P/VP Equilibrado (Papel)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Beta Ultra Defensivo (<0.4)",
+      "points": 12,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 3,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Perfil Moderado FII)",
+      "points": 45,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Yield Excepcional (NTN-B +5.7%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 3,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada FII",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Yield Agressivo (>NTN-B + 5%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base Qualidade FII",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Liquidez Saudável (Papel)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Yield Real > 2%",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread Excelente (>4-5%)",
+      "points": 90,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base Risco FII",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 20,
+      "type": "bonus",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [
+    "Alto prêmio de risco: Spread de 5.7% sobre NTN-B.",
+    "Baixa volatilidade (Beta 0.30): Perfil defensivo.",
+  ],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 60,
+    "DEFENSIVE": 85,
+    "MODERATE": 73,
+  },
+  "structural": {
+    "quality": 75,
+    "risk": 70,
+    "valuation": 90,
+  },
+  "targetPrice": 100,
+  "ticker": "KNCR11",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-tijolo-defensive 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados de Crescimento Ausentes",
+      "points": -25,
+      "type": "penalty",
+    },
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados de Rentabilidade Ausentes",
+      "points": -15,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Score Base (FII Defensivo)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Yield Alto (NTN-B +4.2%)",
+      "points": 18,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "P/VP Saudável (Tijolo)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Beta Defensivo (<0.7)",
+      "points": 7,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Fundo Tier 1 (Elite)",
+      "points": 8,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 3,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Alta Diversificação (>20 imóveis)",
+      "points": 6,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Perfil Moderado FII)",
+      "points": 45,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Yield Alto (NTN-B +4.2%)",
+      "points": 18,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Cap Rate > NTN-B + 1%",
+      "points": 6,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 3,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada FII",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Yield Arrojado (NTN-B +4.2%)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base Qualidade FII",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Multi-propriedade (>10 imóveis)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Yield Real > 2%",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread Excelente (>4-5%)",
+      "points": 90,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base Risco FII",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 20,
+      "type": "bonus",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [
+    "Alto prêmio de risco: Spread de 4.2% sobre NTN-B.",
+    "Baixa volatilidade (Beta 0.50): Perfil defensivo.",
+  ],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 50,
+    "DEFENSIVE": 85,
+    "MODERATE": 72,
+  },
+  "structural": {
+    "quality": 80,
+    "risk": 70,
+    "valuation": 90,
+  },
+  "targetPrice": 166.72,
+  "ticker": "HGLG11",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-tijolo-high-vacancy 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados de Crescimento Ausentes",
+      "points": -25,
+      "type": "penalty",
+    },
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados de Rentabilidade Ausentes",
+      "points": -15,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Ineligível para Carteira Defensiva FII",
+      "points": 25,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Perfil Moderado FII)",
+      "points": 45,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Yield > NTN-B + 1.5%",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Cap Rate > NTN-B + 1%",
+      "points": 6,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Deságio Expressivo em Tijolo (>20%)",
+      "points": 12,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 3,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Vacância Alta (18.0%)",
+      "points": -8,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada FII",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Yield Moderado (NTN-B +1.7%)",
+      "points": 7,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Deságio Acentuado em Tijolo (18–25%)",
+      "points": 18,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base Qualidade FII",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Vacância Elevada (18.0%)",
+      "points": -24,
+      "type": "penalty",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Multi-propriedade (>10 imóveis)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread Positivo",
+      "points": 40,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Deságio P/VP (<0.90)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base Risco FII",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Liquidez Boa (>2M)",
+      "points": 20,
+      "type": "bonus",
+    },
+  ],
+  "bearThesis": [
+    "Vacância elevada (18.0%): Risco de fluxo de caixa.",
+  ],
+  "bullThesis": [
+    "Desconto patrimonial (P/VP 0.78).",
+    "Baixa volatilidade (Beta 0.50): Perfil defensivo.",
+  ],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 60,
+    "DEFENSIVE": 25,
+    "MODERATE": 68,
+  },
+  "structural": {
+    "quality": 36,
+    "risk": 70,
+    "valuation": 50,
+  },
+  "targetPrice": 81.36,
+  "ticker": "VACA11",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-aristocrat 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Score Base (Setor Defensivo)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Large Cap (>10B)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Dividend Yield Moderado (≥4%)",
+      "points": 5,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "ROE Robusto (≥15%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Payout Saudável (55.0%)",
+      "points": 5,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Dividend Aristocrat Bonus",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Mid/Large Cap)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Crescimento Receita Moderado (>5%)",
+      "points": 4,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "ROE Robusto (>15%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Dividend Aristocrat Bonus",
+      "points": 5,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "ROE Elevado (>15%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Margem Líquida Robusta (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Estrutura Capital Excelente (D/P < 1.0)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Crescimento de Receita Moderado",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Payout Saudável (55.0%)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/L Justo (<15)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/VP Justo (<2.5)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "EV/EBITDA Atrativo (<8)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread vs Tesouro Positivo (2.0%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base de Risco",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Large Cap (Segurança)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Caixa Robusto / Baixa Alavancagem",
+      "points": 10,
+      "type": "bonus",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [
+    "Dividend Aristocrat: Crescimento consistente e dividendos saudáveis.",
+  ],
+  "isDividendAristocrat": true,
+  "scores": {
+    "BOLD": 35,
+    "DEFENSIVE": 80,
+    "MODERATE": 59,
+  },
+  "structural": {
+    "quality": 100,
+    "risk": 80,
+    "valuation": 60,
+  },
+  "targetPrice": 31.79,
+  "ticker": "ARIS3",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-elite-defensive 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Score Base (Setor Defensivo)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Large Cap (>10B)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Dividend Yield > 6%",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "ROE Robusto (≥15%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Upside Positivo (>15%)",
+      "points": 5,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Payout Saudável (55.0%)",
+      "points": 5,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Dividend Aristocrat Bonus",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Mid/Large Cap)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Crescimento Receita > 10%",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "ROE Robusto (>15%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Upside Positivo (>10%)",
+      "points": 5,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Dividend Aristocrat Bonus",
+      "points": 5,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "PEG Saudável (<1.5)",
+      "points": 12,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "ROE Elevado (>15%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Margem Líquida Robusta (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Estrutura Capital Excelente (D/P < 1.0)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Crescimento de Receita Sólido (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Payout Saudável (55.0%)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/L Justo (<15)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/VP Justo (<2.5)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "EV/EBITDA Atrativo (<8)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Dividend Yield > 6%",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread vs Tesouro Positivo (2.0%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base de Risco",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Large Cap (Segurança)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Caixa Robusto / Baixa Alavancagem",
+      "points": 10,
+      "type": "bonus",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [
+    "Dividend Aristocrat: Crescimento consistente e dividendos saudáveis.",
+  ],
+  "isDividendAristocrat": true,
+  "scores": {
+    "BOLD": 47,
+    "DEFENSIVE": 90,
+    "MODERATE": 70,
+  },
+  "structural": {
+    "quality": 100,
+    "risk": 80,
+    "valuation": 80,
+  },
+  "targetPrice": 46.33,
+  "ticker": "ELET3",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-financial-sector 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Ineligível para Carteira Defensiva",
+      "points": 30,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Mid/Large Cap)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "ROE Robusto (>15%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "ROE Elevado (>15%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Margem N/A (Setor Financeiro/Holding)",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Estrutura Capital Excelente (D/P < 1.0)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Crescimento de Receita Sólido (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Payout Saudável (60.0%)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/L Justo (<15)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/VP Justo (<2.5)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "EV/EBITDA Atrativo (<8)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Dividend Yield > 6%",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread vs Tesouro Positivo (2.0%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base de Risco",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Large Cap (Segurança)",
+      "points": 20,
+      "type": "bonus",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [
+    "Rentabilidade alta (ROE 19.0%).",
+  ],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 35,
+    "DEFENSIVE": 30,
+    "MODERATE": 50,
+  },
+  "structural": {
+    "quality": 90,
+    "risk": 70,
+    "valuation": 80,
+  },
+  "targetPrice": 31.75,
+  "ticker": "ITUB4",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-high-payout 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Score Base (Setor Defensivo)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Large Cap (>10B)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Dividend Yield Excepcional (≥10%)",
+      "points": 22,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "ROE Saudável (≥12%)",
+      "points": 5,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Upside Forte (>30%)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Payout Insustentável (160.0%)",
+      "points": -30,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Mid/Large Cap)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Crescimento Receita > 10%",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "ROE Saudável (>12%)",
+      "points": 7,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Upside Agressivo (>40%)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "ROE Abaixo da Selic (14.0% < 14.8%)",
+      "points": -10,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Payout Insustentável (160.0%)",
+      "points": -10,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "PEG Saudável (<1.5)",
+      "points": 12,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Upside Agressivo (>50%)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Payout Insustentável (160.0%)",
+      "points": -20,
+      "type": "penalty",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "ROE Saudável (>10%)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Margem Líquida Robusta (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Estrutura Capital Excelente (D/P < 1.0)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Crescimento de Receita Sólido (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Payout Insustentável (160.0%)",
+      "points": -30,
+      "type": "penalty",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/L Justo (<15)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/VP Justo (<2.5)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "EV/EBITDA Atrativo (<8)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Dividend Yield > 6%",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread vs Tesouro Positivo (2.0%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base de Risco",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Large Cap (Segurança)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Caixa Robusto / Baixa Alavancagem",
+      "points": 10,
+      "type": "bonus",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 47,
+    "DEFENSIVE": 62,
+    "MODERATE": 57,
+  },
+  "structural": {
+    "quality": 60,
+    "risk": 80,
+    "valuation": 80,
+  },
+  "targetPrice": 40.21,
+  "ticker": "XPTO3",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-hypergrowth-bold 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Ineligível para Carteira Defensiva",
+      "points": 30,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Sobrevalorizado (preço 62% acima do Preço Justo)",
+      "points": -20,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Mid/Large Cap)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Crescimento Receita Excepcional (>30%)",
+      "points": 22,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "ROE Excelente (>20%)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Sobrevalorizado (preço 62% acima do Preço Justo)",
+      "points": -40,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "PEG Excepcional (<0.5)",
+      "points": 30,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Hyper Growth Extremo (>40%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Volatilidade Alta (>45%)",
+      "points": -10,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Sobrevalorizado (preço 62% acima do Preço Justo)",
+      "points": -40,
+      "type": "penalty",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "ROE Elevado (>15%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Margem Líquida Robusta (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Estrutura Capital Excelente (D/P < 1.0)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Crescimento de Receita Sólido (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Payout Saudável (55.0%)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/VP Justo (<2.5)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "EV/EBITDA Atrativo (<8)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread Negativo vs Tesouro (-0.7%)",
+      "points": -20,
+      "type": "penalty",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base de Risco",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Caixa Robusto / Baixa Alavancagem",
+      "points": 10,
+      "type": "bonus",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [
+    "Rentabilidade alta (ROE 22.0%).",
+  ],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 40,
+    "DEFENSIVE": 10,
+    "MODERATE": 37,
+  },
+  "structural": {
+    "quality": 100,
+    "risk": 60,
+    "valuation": 15,
+  },
+  "targetPrice": 19.17,
+  "ticker": "GROW3",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-ineligible-smallcap 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Ineligível para Carteira Defensiva",
+      "points": 30,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Sobrevalorizado (preço 49% acima do Preço Justo)",
+      "points": -20,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Small Cap)",
+      "points": 25,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Sobrevalorizado (preço 49% acima do Preço Justo)",
+      "points": -40,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "PEG Saudável (<1.5)",
+      "points": 12,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Sobrevalorizado (preço 49% acima do Preço Justo)",
+      "points": -40,
+      "type": "penalty",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "ROE Modesto / Baixo",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Margem Líquida Robusta (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Estrutura Capital Excelente (D/P < 1.0)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Crescimento de Receita Sólido (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Payout Saudável (55.0%)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/L Justo (<15)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/VP Justo (<2.5)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "EV/EBITDA Atrativo (<8)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread vs Tesouro Positivo (2.0%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base de Risco",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Alavancagem Elevada (DL/EBITDA: 2.7x)",
+      "points": -15,
+      "type": "penalty",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 10,
+    "DEFENSIVE": 10,
+    "MODERATE": 10,
+  },
+  "structural": {
+    "quality": 90,
+    "risk": 35,
+    "valuation": 60,
+  },
+  "targetPrice": 4.07,
+  "ticker": "SMAL3",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-missing-data 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados de Crescimento Ausentes",
+      "points": -25,
+      "type": "penalty",
+    },
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados de Rentabilidade Ausentes",
+      "points": -15,
+      "type": "penalty",
+    },
+    {
+      "category": "Dados e Confiança",
+      "factor": "Liquidez Abaixo do Ideal (<1M/dia)",
+      "points": -30,
+      "type": "penalty",
+    },
+    {
+      "category": "Dados e Confiança",
+      "factor": "Dados Fundamentais Desatualizados (200 dias)",
+      "points": -30,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Score Base (Setor Defensivo)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Large Cap (>10B)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Dividend Yield > 6%",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "ROE Robusto (≥15%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Upside Positivo (>15%)",
+      "points": 5,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Payout Saudável (55.0%)",
+      "points": 5,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Dividend Aristocrat Bonus",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Mid/Large Cap)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Crescimento Receita > 10%",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "ROE Robusto (>15%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Upside Positivo (>10%)",
+      "points": 5,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Dividend Aristocrat Bonus",
+      "points": 5,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "PEG Saudável (<1.5)",
+      "points": 12,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "ROE Elevado (>15%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Margem Líquida Robusta (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Estrutura Capital Excelente (D/P < 1.0)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Crescimento de Receita Sólido (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Payout Saudável (55.0%)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/L Justo (<15)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "P/VP Justo (<2.5)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "EV/EBITDA Atrativo (<8)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Dividend Yield > 6%",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread vs Tesouro Positivo (2.0%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base de Risco",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Large Cap (Segurança)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Caixa Robusto / Baixa Alavancagem",
+      "points": 10,
+      "type": "bonus",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [
+    "Dividend Aristocrat: Crescimento consistente e dividendos saudáveis.",
+  ],
+  "isDividendAristocrat": true,
+  "scores": {
+    "BOLD": 10,
+    "DEFENSIVE": 10,
+    "MODERATE": 10,
+  },
+  "structural": {
+    "quality": 100,
+    "risk": 80,
+    "valuation": 80,
+  },
+  "targetPrice": 46.33,
+  "ticker": "MISS3",
+}
+`;
+
+exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-overvalued 1`] = `
+{
+  "auditLog": [
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Ineligível para Carteira Defensiva",
+      "points": 30,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Sobrevalorizado (preço 85% acima do Preço Justo)",
+      "points": -20,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Score Base (Mid/Large Cap)",
+      "points": 40,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "ROE Robusto (>15%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Sobrevalorizado (preço 85% acima do Preço Justo)",
+      "points": -40,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Base Arrojada",
+      "points": 35,
+      "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Sobrevalorizado (preço 85% acima do Preço Justo)",
+      "points": -40,
+      "type": "penalty",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Base de Qualidade",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "ROE Elevado (>15%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Margem Líquida Robusta (>10%)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Estrutura Capital Excelente (D/P < 1.0)",
+      "points": 25,
+      "type": "bonus",
+    },
+    {
+      "category": "Qualidade",
+      "factor": "Payout Saudável (55.0%)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Base de Valuation",
+      "points": 0,
+      "type": "base",
+    },
+    {
+      "category": "Valuation",
+      "factor": "EV/EBITDA Atrativo (<8)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Valuation",
+      "factor": "Spread Negativo vs Tesouro (-4.1%)",
+      "points": -20,
+      "type": "penalty",
+    },
+    {
+      "category": "Risco",
+      "factor": "Base de Risco",
+      "points": 50,
+      "type": "base",
+    },
+    {
+      "category": "Risco",
+      "factor": "Large Cap (Segurança)",
+      "points": 20,
+      "type": "bonus",
+    },
+    {
+      "category": "Risco",
+      "factor": "Caixa Robusto / Baixa Alavancagem",
+      "points": 10,
+      "type": "bonus",
+    },
+  ],
+  "bearThesis": [],
+  "bullThesis": [],
+  "isDividendAristocrat": false,
+  "scores": {
+    "BOLD": 10,
+    "DEFENSIVE": 10,
+    "MODERATE": 10,
+  },
+  "structural": {
+    "quality": 90,
+    "risk": 80,
+    "valuation": 0,
+  },
+  "targetPrice": 30,
+  "ticker": "OVER3",
+}
+`;

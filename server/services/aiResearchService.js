@@ -8,6 +8,8 @@ import SystemConfig from '../models/SystemConfig.js';
 import MarketAnalysis from '../models/MarketAnalysis.js';
 import DiscardLog from '../models/DiscardLog.js';
 import { rankingTxtExportService } from './rankingTxtExportService.js';
+// (M9) Threshold global e fallback de Selic centralizados em financialConstants.
+import { BUY_THRESHOLD, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 
 const generateComparisonReport = (assetClass, newRanking, previousRanking) => {
     if (!previousRanking || previousRanking.length === 0) return null;
@@ -209,7 +211,7 @@ export const aiResearchService = {
                     RISK_FREE: macroConfig.riskFree,
                     NTNB_LONG: macroConfig.ntnbLong
                 } : {
-                    SELIC: 11.25, IPCA: 4.50, RISK_FREE: 11.25, NTNB_LONG: 6.30
+                    SELIC: DEFAULT_SELIC_FALLBACK, IPCA: 4.50, RISK_FREE: DEFAULT_SELIC_FALLBACK, NTNB_LONG: 6.30
                 }
             };
 
@@ -266,9 +268,7 @@ export const aiResearchService = {
             };
             logger.info(`🏆 [Ranking ${assetClass}] G:${tierStats.GOLD} S:${tierStats.SILVER} B:${tierStats.BRONZE}`);
             
-            // THRESHOLD GLOBAL: COMPRAR apenas acima de 70 pontos
-            const BUY_THRESHOLD = 70;
-
+            // THRESHOLD GLOBAL (BUY_THRESHOLD): COMPRAR apenas acima de 70 pontos — ver financialConstants
             // Ativos no ranking já têm perfil e score atribuídos pelo draft competitivo
             // (incluindo penalidades de concentração). A auditoria deve refletir exatamente
             // os mesmos valores para evitar inconsistência entre as duas abas.
@@ -350,8 +350,6 @@ export const aiResearchService = {
                 .sort((a, b) => b.score - a.score)
                 .slice(0, 5); 
         };
-
-        const BUY_THRESHOLD = 70;
 
         const top5Stocks = getTop5Defensive(stockData.processedAssets);
         const top5FIIs = getTop5Defensive(fiiData.processedAssets);

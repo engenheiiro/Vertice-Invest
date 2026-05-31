@@ -4,15 +4,17 @@ import MarketAsset from '../models/MarketAsset.js';
 import AssetHistory from '../models/AssetHistory.js'; 
 import SystemConfig from '../models/SystemConfig.js';
 import { externalMarketService } from './externalMarketService.js';
+// (M9) Janela de cache e fallback de Selic centralizados em financialConstants.
+import { MARKET_CACHE_DURATION_MINUTES, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 
-const CACHE_DURATION_MINUTES = 20; 
+const CACHE_DURATION_MINUTES = MARKET_CACHE_DURATION_MINUTES;
 const MAX_FAILURES_BEFORE_BLACKLIST = 10;
 
 const FALLBACK_MACRO = {
-    selic: { value: 11.25 },
+    selic: { value: DEFAULT_SELIC_FALLBACK },
     cdi: { value: 11.15 },
     ipca: { value: 4.50 },
-    riskFree: { value: 11.25 },
+    riskFree: { value: DEFAULT_SELIC_FALLBACK },
     ntnbLong: { value: 6.30 },
     ibov: { value: 128000, change: 0 },
     usd: { value: 5.75, change: 0 },

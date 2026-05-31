@@ -1,6 +1,7 @@
 
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import logger from '../config/logger.js'; // (M10) logger estruturado
 
 // Middleware 1: Verifica Token E Validade da Assinatura
 export const authenticateToken = async (req, res, next) => {
@@ -27,7 +28,8 @@ export const authenticateToken = async (req, res, next) => {
 
         // Se não tem data ou já passou a data
         if (!validUntil || validUntil < now) {
-            console.log(`🔒 Assinatura de ${user.email} expirou em ${validUntil}. Rebaixando para GUEST.`);
+            // (M10/S9) Loga por userId — evita PII (email) em claro no log.
+            logger.info(`🔒 Assinatura expirou (user ${user._id}) em ${validUntil}. Rebaixando para GUEST.`);
             
             user.plan = 'GUEST';
             user.subscriptionStatus = 'PAST_DUE'; // Ou CANCELED

@@ -8,6 +8,7 @@ import { marketDataService } from './marketDataService.js';
 import { syncService } from './syncService.js';
 import { holidayService } from './holidayService.js';
 import { financialService } from './financialService.js';
+import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { signalEngine } from './engines/signalEngine.js';
 import MarketAsset from '../models/MarketAsset.js';
 import User from '../models/User.js';
@@ -43,7 +44,7 @@ export const runDailySnapshot = async (force = false) => {
 
         const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
         const usdRate = sysConfig?.dollar || 5.75;
-        const currentCdi = (sysConfig?.cdi > 0 ? sysConfig.cdi : null) || (sysConfig?.selic > 0 ? sysConfig.selic : null) || 11.25;
+        const currentCdi = (sysConfig?.cdi > 0 ? sysConfig.cdi : null) || (sysConfig?.selic > 0 ? sysConfig.selic : null) || DEFAULT_SELIC_FALLBACK;
         const todayDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(today);
         const calcDate = new Date(todayDateStr + 'T00:00:00.000Z');
 

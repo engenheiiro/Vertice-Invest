@@ -171,21 +171,14 @@ const calculateIntrinsicValue = (m, type, price, context) => {
     return { fairPrice: safeVal(fairPrice), method, grahamPrice: safeVal(grahamPrice), bazinPrice: safeVal(bazinPrice), pegRatio: pegRatio !== null ? safeVal(pegRatio) : null };
 };
 
-const calculateProfileScores = (asset, valuationData, context) => {
+// (M1) Scoring por perfil de ação (STOCK/STOCK_US). Retorna os três scores brutos
+// e popula `audit`. Lógica idêntica à versão monolítica anterior.
+const scoreStockProfiles = (asset, valuationData, context, audit) => {
     const { MACRO } = context;
     const m = asset.metrics;
-    const type = asset.type;
-    const { fairPrice, pegRatio } = valuationData;
-    
-    const upside = asset.price > 0 ? (fairPrice / asset.price) - 1 : 0;
-    const NTNB = MACRO.NTNB_LONG || 6.30;
-    
+    const upside = asset.price > 0 ? (valuationData.fairPrice / asset.price) - 1 : 0;
     let defScore = 0, modScore = 0, boldScore = 0;
-    const audit = { DEFENSIVE: [], MODERATE: [], BOLD: [], CONFIDENCE: [] };
-    const { confidence, audit: confAudit } = calculateConfidenceScore(m);
-    audit.CONFIDENCE = confAudit;
-
-    if (type === 'STOCK' || type === 'STOCK_US') {
+    {
         // Setor financeiro pode apresentar crescimento de receita artificialmente alto por
         // base-year ou reestruturações. Aplica teto de 30% para evitar PEG/Hyper Growth indevidos.
         const isFinancialSector = asset.sector?.includes('Banco') || asset.sector?.includes('Segur') || asset.sector?.includes('Financeiro') || asset.sector?.includes('Holding') || asset.sector?.includes('Financials') || asset.sector?.includes('Financial');
@@ -367,7 +360,17 @@ const calculateProfileScores = (asset, valuationData, context) => {
             audit.DEFENSIVE.push({ factor: `Sobrevalorizado (preço ${pct}% acima do Preço Justo)`, points: -defPenalty, type: 'penalty' });
         }
 
-    } else if (type === 'FII') {
+    }
+    return { defScore, modScore, boldScore };
+};
+
+// (M1) Scoring por perfil de FII. Lógica idêntica à versão monolítica anterior.
+const scoreFiiProfiles = (asset, context, audit) => {
+    const { MACRO } = context;
+    const m = asset.metrics;
+    const NTNB = MACRO.NTNB_LONG || 6.30;
+    let defScore = 0, modScore = 0, boldScore = 0;
+    {
         const isTier1 = asset.dbFlags?.isTier1 || false;
         const isPapel = resolvePapel(asset.fiiSubType, asset.sector);
         const yieldSpread = m.dy - NTNB;
@@ -495,7 +498,15 @@ const calculateProfileScores = (asset, valuationData, context) => {
             else if (m.capRate > (NTNB + 3)) { boldScore += 5; audit.BOLD.push({ factor: 'Cap Rate Alto (>NTN-B + 3%)', points: 5, type: 'bonus' }); }
         }
 
-    } else if (type === 'CRYPTO') {
+    }
+    return { defScore, modScore, boldScore };
+};
+
+// (M1) Scoring por perfil de cripto. Lógica idêntica à versão monolítica anterior.
+const scoreCryptoProfiles = (asset, audit) => {
+    const m = asset.metrics;
+    let defScore = 0, modScore = 0, boldScore = 0;
+    {
         const isBlueChip = ['BTC', 'ETH'].includes(asset.ticker);
         const isTop10 = m.marketCap > 20000000000;
         const isMidCap = m.marketCap > 2000000000 && m.marketCap <= 20000000000;
@@ -517,6 +528,26 @@ const calculateProfileScores = (asset, valuationData, context) => {
             defScore += 10; modScore += 10;
             audit.MODERATE.push({ factor: 'Alta Liquidez Institucional', points: 10, type: 'bonus' });
         }
+    }
+    return { defScore, modScore, boldScore };
+};
+
+// (M1) Orquestrador: confiança, dispatch por tipo (helpers acima) e clamp final.
+const calculateProfileScores = (asset, valuationData, context) => {
+    const m = asset.metrics;
+    const type = asset.type;
+
+    let defScore = 0, modScore = 0, boldScore = 0;
+    const audit = { DEFENSIVE: [], MODERATE: [], BOLD: [], CONFIDENCE: [] };
+    const { confidence, audit: confAudit } = calculateConfidenceScore(m);
+    audit.CONFIDENCE = confAudit;
+
+    if (type === 'STOCK' || type === 'STOCK_US') {
+        ({ defScore, modScore, boldScore } = scoreStockProfiles(asset, valuationData, context, audit));
+    } else if (type === 'FII') {
+        ({ defScore, modScore, boldScore } = scoreFiiProfiles(asset, context, audit));
+    } else if (type === 'CRYPTO') {
+        ({ defScore, modScore, boldScore } = scoreCryptoProfiles(asset, audit));
     }
 
     // Aplica penalidades de confiança diretamente nos scores de perfil (apenas STOCK/STOCK_US)

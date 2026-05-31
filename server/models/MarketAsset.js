@@ -69,6 +69,10 @@ const MarketAssetSchema = new mongoose.Schema({
 });
 
 MarketAssetSchema.index({ type: 1, isActive: 1 });
+// (M14) Índice do filtro quente de elegibilidade: signalEngine, generateRadarReport,
+// scheduler e marketDataService varrem por { isActive, isBlacklisted, isIgnored, type }.
+// Campos de igualdade primeiro evitam full collection scan a cada run.
+MarketAssetSchema.index({ isActive: 1, isBlacklisted: 1, isIgnored: 1, type: 1 });
 
 const MarketAsset = mongoose.models.MarketAsset || mongoose.model('MarketAsset', MarketAssetSchema);
 export default MarketAsset;

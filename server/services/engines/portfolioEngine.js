@@ -1,13 +1,8 @@
 
 import { getMacroSector } from '../../config/sectorTaxonomy.js';
 import { getFiiManager } from '../../config/fiiManagerMap.js';
-
-// Threshold Global para Recomendação de Compra
-const BUY_THRESHOLD = 70;
-
-// Máximo de ativos CRYPTO por perfil: sem este limite, o bypass de setor de crypto
-// permite que todos os slots BOLD sejam preenchidos por cripto.
-const MAX_CRYPTO_PER_PROFILE = 3;
+// (M9) Threshold global e cap de cripto centralizados em financialConstants.
+import { BUY_THRESHOLD, MAX_CRYPTO_PER_PROFILE } from '../../config/financialConstants.js';
 
 // Composite estrutural = média de quality, valuation e risk (0–100 cada).
 // Usado como critério de desempate quando dois ativos têm o mesmo score de perfil.
