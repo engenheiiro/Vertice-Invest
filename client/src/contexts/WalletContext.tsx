@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { walletService } from '../services/wallet';
 import { useAuth } from './AuthContext';
 import { useDemo } from './DemoContext'; // Importar DemoContext
+import { useToast } from './ToastContext';
 import { DEMO_ASSETS, DEMO_KPIS, DEMO_HISTORY } from '../data/DEMO_DATA'; // Importar Dados Mock
 
 export type AssetType = 'STOCK' | 'FII' | 'CRYPTO' | 'STOCK_US' | 'FIXED_INCOME' | 'CASH';
@@ -73,6 +74,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const { user } = useAuth();
     const { isDemoMode } = useDemo(); // Hook do Modo Demo
+    const { addToast } = useToast();
     const queryClient = useQueryClient();
     
     const [targetAllocation, setTargetAllocation] = useState<AllocationMap>({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10 });
@@ -121,9 +123,10 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['dividends'] });
-            queryClient.invalidateQueries({ queryKey: ['cashFlow'] }); 
+            queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
             queryClient.invalidateQueries({ queryKey: ['dashboardResearch'] });
         }
+        // Feedback de sucesso/erro do "add" é tratado no AddAssetModal (evita toast duplicado).
     });
 
     const removeAssetMutation = useMutation({
@@ -132,7 +135,9 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
-        }
+            addToast('Ativo removido da carteira.', 'success');
+        },
+        onError: (err: any) => addToast(err?.message || 'Erro ao remover ativo.', 'error')
     });
 
     const resetWalletMutation = useMutation({
@@ -142,7 +147,9 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['dividends'] });
             queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
-        }
+            addToast('Carteira resetada com sucesso.', 'success');
+        },
+        onError: (err: any) => addToast(err?.message || 'Erro ao resetar carteira.', 'error')
     });
 
     // --- ACTIONS ---

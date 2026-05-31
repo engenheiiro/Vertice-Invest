@@ -95,16 +95,26 @@ export const financialService = {
                     }
                 });
             }
+            // Série ordenada (asc) para busca da taxa histórica mais próxima — evita
+            // cair na taxa ATUAL para datas passadas com gaps > 7 dias (P&L histórico).
+            const usdSorted = [...usdRateByDate.entries()]
+                .map(([d, r]) => [new Date(d).getTime(), r])
+                .filter(([t]) => !Number.isNaN(t))
+                .sort((a, b) => a[0] - b[0]);
+
             const getUsdRateForDate = (dateStr) => {
                 if (usdRateByDate.has(dateStr)) return usdRateByDate.get(dateStr);
-                const target = new Date(dateStr);
-                for (let i = 1; i <= 7; i++) {
-                    const prev = new Date(target);
-                    prev.setDate(target.getDate() - i);
-                    const key = prev.toISOString().split('T')[0];
-                    if (usdRateByDate.has(key)) return usdRateByDate.get(key);
+                if (usdSorted.length === 0) return currentUsdRate; // sem histórico: último recurso
+                const targetMs = new Date(dateStr).getTime();
+                // taxa mais recente em data <= alvo (busca binária)
+                let lo = 0, hi = usdSorted.length - 1, best = -1;
+                while (lo <= hi) {
+                    const mid = (lo + hi) >> 1;
+                    if (usdSorted[mid][0] <= targetMs) { best = mid; lo = mid + 1; }
+                    else hi = mid - 1;
                 }
-                return currentUsdRate;
+                // alvo anterior a todo o histórico → usa a 1ª taxa conhecida (não a atual)
+                return best >= 0 ? usdSorted[best][1] : usdSorted[0][1];
             };
 
             const uniqueTickers = [...new Set(txs.map(t => t.ticker))];

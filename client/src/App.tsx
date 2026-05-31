@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import { ShieldCheck } from 'lucide-react';
 
 import { AuthLayout } from './components/layout/AuthLayout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AdminRoute } from './components/auth/AdminRoute'; 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -76,6 +77,7 @@ const ProtectedAppLayout = () => {
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <ToastProvider>
       <ReloadPrompt />
       <InstallPrompt />
@@ -119,5 +121,6 @@ export default function App() {
         </BrowserRouter>
       </AuthProvider>
     </ToastProvider>
+    </ErrorBoundary>
   );
 }

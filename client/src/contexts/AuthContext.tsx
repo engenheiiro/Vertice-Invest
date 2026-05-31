@@ -38,18 +38,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshProfile = async () => {
     try {
         const response = await authService.api('/api/subscription/status');
-        if (response.ok) {
-            const data = await response.json();
-            if (data.current) {
-                const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-                const updatedUser = { ...storedUser, ...data.current };
-                setUser(updatedUser);
-                localStorage.setItem('user', JSON.stringify(updatedUser));
-                queryClient.invalidateQueries();
-            }
+        if (!response.ok) {
+            // 401 é tratado pelo interceptor (refresh/redirect). Demais status logamos.
+            console.warn(`[Auth] /subscription/status retornou ${response.status} ao atualizar perfil.`);
+            return;
         }
-    } catch {
-        // erro de refresh silencioso: o perfil continua com dados anteriores
+        const data = await response.json();
+        if (data.current) {
+            const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+            const updatedUser = { ...storedUser, ...data.current };
+            setUser(updatedUser);
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            queryClient.invalidateQueries();
+        }
+    } catch (err) {
+        // Não derruba a sessão (mantém dados anteriores), mas torna a falha visível (Sentry capta console.error).
+        console.error('[Auth] Falha ao atualizar perfil/assinatura:', err);
     }
   };
 

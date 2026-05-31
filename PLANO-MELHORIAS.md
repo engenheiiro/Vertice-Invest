@@ -11,9 +11,9 @@
 | Categoria | Concluído | Total |
 |---|---|---|
 | Fase 0 — Segurança crítica | 4 | 5 |
-| Bugs (B) | 8 | 12 |
+| Bugs (B) | 12 | 12 ✅ |
 | Melhorias/Refatorações (M) | 0 | 14 |
-| Implementações (I) | 2 | 14 |
+| Implementações (I) | 3 | 14 |
 | Segurança (S) | 3 | 12 |
 | Infra/DevOps (D) | 0 | 13 |
 | Testes (T) | 0 | 12 |
@@ -54,14 +54,14 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 
 - [x] **B1** — `v2StartDate` (marco intencional do motor de sinais v2) extraído para constante única `V2_SIGNAL_START_DATE` em `financialConstants.js`, consumida por `researchController.js:93` e `generateRadarReport.js` (DRY, sem mudança de comportamento)
 - [x] **B2** — `failCount` agora com coerção de tipo (`Number.isFinite`) + teto `Math.min(...,999)` antes de blacklistar · `server/services/marketDataService.js`
-- [ ] **B3** — Câmbio USD/BRL histórico usa snapshot atual → P&L histórico incorreto; buscar câmbio por data · `server/services/financialService.js:~150`
+- [x] **B3** — `getUsdRateForDate` agora faz busca binária pela taxa histórica mais próxima anterior (em vez de janela fixa de 7 dias → taxa atual); só usa taxa atual se não houver histórico · `server/services/financialService.js`
 - [x] **B4** — Limite JSON `10kb` → `1mb` em `server/app.js` (comporta rankings com 100+ ativos + auditLog)
-- [ ] **B5** — `resolvePapel`/`isPapelFII` por substring frágil → garantir `fiiSubType` na ingestão · `server/services/engines/scoringEngine.js:~152`
+- [x] **B5** — Fallback de `resolvePapel` expandido (`papel`/`recebív`) mantendo prioridade do `fiiSubType` explícito; sem falso-positivo (testes `critical_improvements` verdes) · `server/services/engines/scoringEngine.js`
 - [x] **B6** — Verificação de TLS habilitada por padrão (`rejectUnauthorized: true`) nos agents BCB/scraping; escape hatch `ALLOW_INSECURE_TLS` (documentado no `.env.example`); fallbacks HTTP/sintético cobrem falhas · `server/services/macroDataService.js`
 - [x] **B7** — 3 `catch {}` silenciosos do macro agora logam em `logger.debug` (mantendo o fallback) · `server/services/macroDataService.js`
 - [x] **B8** — Regex de email do model trocado por padrão HTML5 (rejeita `@@`, sem TLD, espaços; validado). Validação primária já via Zod (`authSchemas.js`) · `server/models/User.js`
-- [ ] **B9** — Mutações de carteira sem feedback → adicionar toasts sucesso/erro · `client/src/pages/Wallet.tsx`
-- [ ] **B10** — `refreshProfile()` engole erro → expor estado de erro; retry/logout controlado · `client/src/contexts/AuthContext.tsx:51-53`
+- [x] **B9** — Toasts de sucesso/erro nas mutações de carteira (remove/reset) no `WalletContext`; `add` mantém feedback próprio no `AddAssetModal` (sem duplicar) · `client/src/contexts/WalletContext.tsx`
+- [x] **B10** — `refreshProfile()` deixa de engolir erro: loga falhas (Sentry capta) e trata resposta não-ok; 401 segue no interceptor · `client/src/contexts/AuthContext.tsx`
 - [x] **B11** — `server/server.js` removido (código morto: importava de `./src/` inexistente). Entrypoint único `index.js`, usado por `npm start` e `nodemon.json`
 - [x] **B12** — Threshold Fundamentus avaliado **sempre**; em produção lança erro, em teste emite `logger.warn` (regressão visível, sem quebrar testes) — ações e FIIs · `server/services/fundamentusService.js`
 
@@ -88,7 +88,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 
 ## CATEGORIA 3 — Implementações / Novas Features
 
-- [ ] **I1** — Error Boundary global + por página, integrado ao Sentry · `client/src/App.tsx`, `components/ErrorBoundary.tsx`
+- [x] **I1** — `ErrorBoundary` global criado (reporta ao Sentry + fallback amigável com reload) envolvendo todo o app · `client/src/components/ErrorBoundary.tsx`, `client/src/App.tsx`
 - [x] **I2** — Health check `/api/health` (status, estado do Mongo, uptime) em `server/app.js`, montado **antes do rate limiter** para não estrangular probes; retorna 503 se Mongo desconectado
 - [ ] **I3** — Cache Redis para market data + macro (TTL alinhado ao fechamento) · `marketDataService.js`, `macroDataService.js`
 - [ ] **I4** — Circuit breaker + retry/backoff para integrações externas · `server/services/*`

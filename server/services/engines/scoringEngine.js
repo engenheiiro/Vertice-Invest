@@ -4,10 +4,15 @@ const safeVal = (val) => {
     return Number(val.toFixed(2));
 };
 
-// Helper: resolve isPapel a partir de fiiSubType (explícito) ou setor (fallback por substring)
+// Helper: resolve isPapel a partir de fiiSubType (explícito) ou setor (fallback por substring).
+// Rótulos de FII de Papel na base: "Papel", "Recebíveis" (CRI/CRA). Hints específicos
+// para não gerar falso-positivo com setores de tijolo (ex.: "Shoppings", "Logística").
+const PAPEL_SECTOR_HINTS = ['papel', 'recebív', 'recebiv'];
 const resolvePapel = (fiiSubType, sector) => {
     if (fiiSubType) return fiiSubType === 'PAPEL';
-    return sector?.toLowerCase().includes('papel') || false;
+    if (!sector) return false;
+    const s = sector.toLowerCase();
+    return PAPEL_SECTOR_HINTS.some(h => s.includes(h));
 };
 
 const calculateConfidenceScore = (m) => {
