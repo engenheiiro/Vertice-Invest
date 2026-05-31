@@ -11,9 +11,9 @@
 | Categoria | Concluído | Total |
 |---|---|---|
 | Fase 0 — Segurança crítica | 4 | 5 |
-| Bugs (B) | 0 | 12 |
+| Bugs (B) | 4 | 12 |
 | Melhorias/Refatorações (M) | 0 | 14 |
-| Implementações (I) | 0 | 14 |
+| Implementações (I) | 1 | 14 |
 | Segurança (S) | 0 | 12 |
 | Infra/DevOps (D) | 0 | 13 |
 | Testes (T) | 0 | 12 |
@@ -52,17 +52,17 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 
 ## CATEGORIA 1 — Correções de Bugs
 
-- [ ] **B1** — `v2StartDate` fixo em `'2026-05-09'` quebra filtro de sinais → tornar dinâmico (config/relativo) · `server/controllers/researchController.js:202`
+- [x] **B1** — `v2StartDate` (marco intencional do motor de sinais v2) extraído para constante única `V2_SIGNAL_START_DATE` em `financialConstants.js`, consumida por `researchController.js:93` e `generateRadarReport.js` (DRY, sem mudança de comportamento)
 - [ ] **B2** — `failCount` sem teto pode blacklistar errado → `Math.min(999, (failCount||0)+1)` + validação de tipo · `server/services/marketDataService.js:~145`
 - [ ] **B3** — Câmbio USD/BRL histórico usa snapshot atual → P&L histórico incorreto; buscar câmbio por data · `server/services/financialService.js:~150`
-- [ ] **B4** — Limite JSON 10KB rejeita exportações de ranking grandes → aumentar limite na rota ou paginar · `server/app.js:~60`
+- [x] **B4** — Limite JSON `10kb` → `1mb` em `server/app.js` (comporta rankings com 100+ ativos + auditLog)
 - [ ] **B5** — `resolvePapel`/`isPapelFII` por substring frágil → garantir `fiiSubType` na ingestão · `server/services/engines/scoringEngine.js:~152`
 - [ ] **B6** — SSL desabilitado (`rejectUnauthorized:false`) no fallback macro → HTTPS com timeout · `server/services/macroDataService.js:~122`
 - [ ] **B7** — `catch {}` silenciosos engolem erros → logar motivo em cada camada · `macroDataService.js:~55`, `fundamentusService.js:~140`
-- [ ] **B8** — Email regex permissivo aceita inválidos → regex estrito + Zod · `server/models/User.js:~19`
+- [x] **B8** — Regex de email do model trocado por padrão HTML5 (rejeita `@@`, sem TLD, espaços; validado). Validação primária já via Zod (`authSchemas.js`) · `server/models/User.js`
 - [ ] **B9** — Mutações de carteira sem feedback → adicionar toasts sucesso/erro · `client/src/pages/Wallet.tsx`
 - [ ] **B10** — `refreshProfile()` engole erro → expor estado de erro; retry/logout controlado · `client/src/contexts/AuthContext.tsx:51-53`
-- [ ] **B11** — Dois entrypoints (`server.js` vs `index.js`) → consolidar; remover morto · `server/server.js`, `server/index.js`
+- [x] **B11** — `server/server.js` removido (código morto: importava de `./src/` inexistente). Entrypoint único `index.js`, usado por `npm start` e `nodemon.json`
 - [ ] **B12** — Threshold Fundamentus (`dataMap.size < 100`) só fora de teste → aplicar sempre + alertar · `server/services/fundamentusService.js:~145`
 
 ---
@@ -89,7 +89,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 ## CATEGORIA 3 — Implementações / Novas Features
 
 - [ ] **I1** — Error Boundary global + por página, integrado ao Sentry · `client/src/App.tsx`, `components/ErrorBoundary.tsx`
-- [ ] **I2** — Health check `/api/health` (Mongo, cache, dependências) · `server/routes`, `server/app.js`
+- [x] **I2** — Health check `/api/health` (status, estado do Mongo, uptime) em `server/app.js`, montado **antes do rate limiter** para não estrangular probes; retorna 503 se Mongo desconectado
 - [ ] **I3** — Cache Redis para market data + macro (TTL alinhado ao fechamento) · `marketDataService.js`, `macroDataService.js`
 - [ ] **I4** — Circuit breaker + retry/backoff para integrações externas · `server/services/*`
 - [ ] **I5** — Rate limiting por usuário em rotas caras (`/research/*`, `/wallet/*`) · `server/app.js`, middleware

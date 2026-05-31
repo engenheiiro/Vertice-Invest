@@ -13,6 +13,7 @@ import { macroDataService } from '../services/macroDataService.js';
 import { syncService } from '../services/syncService.js';
 import { signalEngine } from '../services/engines/signalEngine.js';
 import { LIMITS_CONFIG } from '../config/subscription.js';
+import { V2_SIGNAL_START_DATE } from '../config/financialConstants.js';
 import logger from '../config/logger.js';
 
 // ... (Outros controllers mantidos)
@@ -90,7 +91,7 @@ export const getQuantSignals = async (req, res, next) => {
 export const getRadarStats = async (req, res, next) => {
     try {
         const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const v2StartDate = new Date('2026-05-09T00:00:00.000Z');
+        const v2StartDate = V2_SIGNAL_START_DATE;
         const baseMatch = { status: { $in: ['HIT', 'MISS'] }, quality: 'GOLD', timestamp: { $gte: v2StartDate }, auditDate: { $gte: thirtyDaysAgo } };
 
         const [hitMissStats, byTypeRaw, closedSectors, openSectors, config] = await Promise.all([

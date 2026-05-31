@@ -12,5 +12,10 @@ export const HISTORICAL_CDI_RATES = {
     2021: 4.40, // Ajustado para precisão (algumas fontes citam 4.42, mantendo padrão conservador)
     2022: 12.38,
     2023: 13.03,
-    2024: 10.80 
+    2024: 10.80
 };
+
+// Data de corte do motor de sinais "v2": apenas sinais gerados a partir
+// desta data entram nos cálculos de acurácia/estatísticas do Radar.
+// Fonte única da verdade — usado em researchController e generateRadarReport.
+export const V2_SIGNAL_START_DATE = new Date('2026-05-09T00:00:00.000Z');

@@ -1,5 +1,6 @@
 
 import express from 'express';
+import mongoose from 'mongoose';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
@@ -56,8 +57,10 @@ app.use(helmet({
 }));
 
 app.use(compression());
-app.use(cookieParser()); 
-app.use(express.json({ limit: '10kb' }));
+app.use(cookieParser());
+// Limite generoso o suficiente para payloads legítimos (ex.: rankings com 100+
+// ativos e auditLog completo), mantendo proteção contra corpos abusivos.
+app.use(express.json({ limit: '1mb' }));
 
 const ALLOWED_ORIGINS = [process.env.CLIENT_URL, 'http://localhost:5173'].filter(Boolean);
 app.use(cors({
@@ -67,6 +70,20 @@ app.use(cors({
   },
   credentials: true
 }));
+
+// Health check (liveness/readiness) — antes do rate limiter para não ser
+// estrangulado por probes de monitoramento (Render, uptime checks, k8s).
+const MONGO_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+app.get('/api/health', (req, res) => {
+  const state = mongoose.connection.readyState;
+  const healthy = state === 1;
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'degraded',
+    mongo: MONGO_STATES[state] ?? 'unknown',
+    uptime: Math.round(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
+});
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

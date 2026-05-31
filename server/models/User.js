@@ -7,9 +7,11 @@ const UserSchema = new mongoose.Schema({
     type: String, 
     required: true, 
     unique: true, 
-    lowercase: true, 
+    lowercase: true,
     trim: true,
-    match: [/^\S+@\S+\.\S+$/, 'Formato de email inválido']
+    // Regex baseado na especificação HTML5 (rejeita espaços, múltiplos @, TLD ausente
+    // e domínios/labels malformados). A validação primária ocorre via Zod (authSchemas).
+    match: [/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/, 'Formato de email inválido']
   },
   // CPF: Armazenar apenas números (11 dígitos). Sparse permite que usuários antigos fiquem sem CPF temporariamente.
   cpf: { 

@@ -12,6 +12,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { V2_SIGNAL_START_DATE } from '../config/financialConstants.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -114,9 +115,9 @@ export async function generateRadarReport() {
         w(`  ${pad(cls, 14, true)} ${'█'.repeat(n)}${'░'.repeat(Math.max(0, 10 - n))}  ${n} sinais`);
     }
 
-    // HISTÓRICO RECENTE 48h (apenas sinais v2 — gerados após 2026-05-09)
+    // HISTÓRICO RECENTE 48h (apenas sinais v2 — gerados após V2_SIGNAL_START_DATE)
     const since48h = new Date(now.getTime() - 48 * 3600 * 1000);
-    const v2StartDate = new Date('2026-05-09T00:00:00.000Z');
+    const v2StartDate = V2_SIGNAL_START_DATE;
     const recent = await QuantSignal.find({
         status: { $in: ['HIT', 'MISS', 'NEUTRAL'] },
         quality: 'GOLD',
