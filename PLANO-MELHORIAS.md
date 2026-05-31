@@ -11,10 +11,10 @@
 | Categoria | Concluído | Total |
 |---|---|---|
 | Fase 0 — Segurança crítica | 4 | 5 |
-| Bugs (B) | 4 | 12 |
+| Bugs (B) | 8 | 12 |
 | Melhorias/Refatorações (M) | 0 | 14 |
-| Implementações (I) | 1 | 14 |
-| Segurança (S) | 0 | 12 |
+| Implementações (I) | 2 | 14 |
+| Segurança (S) | 3 | 12 |
 | Infra/DevOps (D) | 0 | 13 |
 | Testes (T) | 0 | 12 |
 | Acessibilidade/UX (A) | 0 | 12 |
@@ -53,17 +53,17 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 ## CATEGORIA 1 — Correções de Bugs
 
 - [x] **B1** — `v2StartDate` (marco intencional do motor de sinais v2) extraído para constante única `V2_SIGNAL_START_DATE` em `financialConstants.js`, consumida por `researchController.js:93` e `generateRadarReport.js` (DRY, sem mudança de comportamento)
-- [ ] **B2** — `failCount` sem teto pode blacklistar errado → `Math.min(999, (failCount||0)+1)` + validação de tipo · `server/services/marketDataService.js:~145`
+- [x] **B2** — `failCount` agora com coerção de tipo (`Number.isFinite`) + teto `Math.min(...,999)` antes de blacklistar · `server/services/marketDataService.js`
 - [ ] **B3** — Câmbio USD/BRL histórico usa snapshot atual → P&L histórico incorreto; buscar câmbio por data · `server/services/financialService.js:~150`
 - [x] **B4** — Limite JSON `10kb` → `1mb` em `server/app.js` (comporta rankings com 100+ ativos + auditLog)
 - [ ] **B5** — `resolvePapel`/`isPapelFII` por substring frágil → garantir `fiiSubType` na ingestão · `server/services/engines/scoringEngine.js:~152`
-- [ ] **B6** — SSL desabilitado (`rejectUnauthorized:false`) no fallback macro → HTTPS com timeout · `server/services/macroDataService.js:~122`
-- [ ] **B7** — `catch {}` silenciosos engolem erros → logar motivo em cada camada · `macroDataService.js:~55`, `fundamentusService.js:~140`
+- [x] **B6** — Verificação de TLS habilitada por padrão (`rejectUnauthorized: true`) nos agents BCB/scraping; escape hatch `ALLOW_INSECURE_TLS` (documentado no `.env.example`); fallbacks HTTP/sintético cobrem falhas · `server/services/macroDataService.js`
+- [x] **B7** — 3 `catch {}` silenciosos do macro agora logam em `logger.debug` (mantendo o fallback) · `server/services/macroDataService.js`
 - [x] **B8** — Regex de email do model trocado por padrão HTML5 (rejeita `@@`, sem TLD, espaços; validado). Validação primária já via Zod (`authSchemas.js`) · `server/models/User.js`
 - [ ] **B9** — Mutações de carteira sem feedback → adicionar toasts sucesso/erro · `client/src/pages/Wallet.tsx`
 - [ ] **B10** — `refreshProfile()` engole erro → expor estado de erro; retry/logout controlado · `client/src/contexts/AuthContext.tsx:51-53`
 - [x] **B11** — `server/server.js` removido (código morto: importava de `./src/` inexistente). Entrypoint único `index.js`, usado por `npm start` e `nodemon.json`
-- [ ] **B12** — Threshold Fundamentus (`dataMap.size < 100`) só fora de teste → aplicar sempre + alertar · `server/services/fundamentusService.js:~145`
+- [x] **B12** — Threshold Fundamentus avaliado **sempre**; em produção lança erro, em teste emite `logger.warn` (regressão visível, sem quebrar testes) — ações e FIIs · `server/services/fundamentusService.js`
 
 ---
 
@@ -97,7 +97,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [ ] **I7** — OpenAPI/Swagger documentando endpoints `/api`
 - [ ] **I8** — Lazy-load das abas da Wallet via `React.lazy` · `client/src/pages/Wallet.tsx`
 - [ ] **I9** — Validação Zod centralizada em todas as rotas de escrita + sanitização · `validateResource.js`, `schemas/`
-- [ ] **I10** — Validação de assinatura de webhook MP com `MP_WEBHOOK_SECRET` · `server/routes/webhookRoutes.js`
+- [x] **I10** — Validação de assinatura do webhook MP endurecida: **fail-closed** em produção sem secret + comparação **constant-time** (`crypto.timingSafeEqual`) · `server/controllers/webhookController.js` (HMAC já existia)
 - [ ] **I11** — Transações atômicas (`mongoose.session`) nas mutações de carteira · `server/controllers/walletController.js`
 - [ ] **I12** — Skeleton screens padronizados + estados erro/loading granulares por query
 - [ ] **I13** — Painel admin de configuração (editar `SystemConfig` sem deploy) — depende de M9
@@ -109,9 +109,9 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 
 - [ ] **S1** — 🔴 Rotação de segredos + limpeza de histórico (= Fase 0)
 - [ ] **S2** — 🔴 `.env.example` + secret scanning (gitleaks) no pre-commit e CI
-- [ ] **S3** — 🟠 Validação de assinatura webhook Mercado Pago (= I10) · `webhookRoutes.js`
-- [ ] **S4** — 🟠 Auditar TODAS as rotas admin p/ garantir `requireAdmin` · `server/routes/*`
-- [ ] **S5** — 🟠 Invalidar `RefreshToken` no logout (garantir delete no DB) · `authController.js`
+- [x] **S3** — 🟠 Validação de assinatura webhook MP endurecida (= I10) · `webhookController.js`
+- [x] **S4** — 🟠 Auditoria concluída: **todas** as rotas admin (research, wallet, academy, subscription) já têm `requireAdmin`; market `/status/:ticker` é read-only sob `authenticateToken`. **Sem brechas.**
+- [x] **S5** — 🟠 Verificado: `logout` já deleta o `RefreshToken` do DB (`findOneAndDelete` + `clearCookie` `sameSite:strict`) · `authController.js:199-210`. **Já implementado.**
 - [ ] **S6** — 🟡 Requisitos de senha mais fortes (caractere especial, senhas comuns) · `authController.js:~66` + Zod
 - [ ] **S7** — 🟡 Proteção CSRF + cookies `SameSite=Strict` · `server/app.js`, helmet
 - [ ] **S8** — 🟡 Sanitização anti-injeção NoSQL/XSS além do Mongoose

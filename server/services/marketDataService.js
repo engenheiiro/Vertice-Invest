@@ -143,7 +143,10 @@ export const marketDataService = {
                 if (!successfulTickers.has(requestedTicker)) {
                     const asset = assetMap.get(requestedTicker);
                     if (asset) {
-                        const newFailCount = (asset.failCount || 0) + 1;
+                        // Coerção defensiva: evita que failCount corrompido (string/NaN)
+                        // gere contagem inválida; teto de 999 previne overflow lógico.
+                        const currentFail = Number.isFinite(asset.failCount) ? asset.failCount : 0;
+                        const newFailCount = Math.min(currentFail + 1, 999);
                         const shouldDeactivate = newFailCount >= MAX_FAILURES_BEFORE_BLACKLIST;
                         
                         const updatePayload = {

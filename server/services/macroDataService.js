@@ -13,17 +13,23 @@ import { isBusinessDay } from '../utils/dateUtils.js';
 
 const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391, SELIC_DAILY: 11 };
 
+// Verificação de certificado HABILITADA por padrão (segurança contra MITM).
+// Escape hatch: defina ALLOW_INSECURE_TLS=true SOMENTE se o ambiente de
+// hospedagem tiver problema com a cadeia de certificados do BCB. As camadas de
+// fallback (HTTP + síntese local) já cobrem falhas de TLS sem quebrar o sync.
+const REJECT_UNAUTHORIZED = process.env.ALLOW_INSECURE_TLS !== 'true';
+
 const httpAgent = new http.Agent({ keepAlive: true });
-const bcbAgent = new https.Agent({ 
-    rejectUnauthorized: false, 
+const bcbAgent = new https.Agent({
+    rejectUnauthorized: REJECT_UNAUTHORIZED,
     keepAlive: true,
-    minVersion: 'TLSv1.2' 
+    minVersion: 'TLSv1.2'
 });
 
-const scrapingAgent = new https.Agent({ 
-    rejectUnauthorized: false, 
+const scrapingAgent = new https.Agent({
+    rejectUnauthorized: REJECT_UNAUTHORIZED,
     keepAlive: true,
-    ciphers: 'DEFAULT:!DH' 
+    ciphers: 'DEFAULT:!DH'
 });
 
 const BASE_HEADERS = {
@@ -52,7 +58,9 @@ export const macroDataService = {
                     timeout: 5000 
                 });
                 if (ipcaRes.data[0]?.valor) ipcaVal = parseFloat(ipcaRes.data[0].valor);
-            } catch (e) { }
+            } catch (e) {
+                logger.debug(`[Macro] IPCA indisponível, usando default ${ipcaVal}: ${e.message}`);
+            }
 
             return { 
                 selic: selicVal, 
@@ -79,7 +87,9 @@ export const macroDataService = {
                 startDateObj = d;
                 startDateStr = d.toLocaleDateString('pt-BR');
             }
-        } catch (e) { }
+        } catch (e) {
+            logger.debug(`[Macro] Falha ao ler última entrada SELIC, usando default ${startDateStr}: ${e.message}`);
+        }
 
         // Se a data for futura ou hoje, não precisa atualizar
         if (startDateObj > new Date()) {
@@ -113,7 +123,9 @@ export const macroDataService = {
                     logger.info(`✅ [Macro] Sucesso via HTTPS (Últimos 50): ${resUlt.data.length} registros.`);
                     return;
                 }
-            } catch (e) { }
+            } catch (e) {
+                logger.debug(`[Macro] Fallback HTTPS 'últimos/50' também falhou: ${e.message}`);
+            }
         }
 
         // TENTATIVA 2: HTTP (SEM SSL - Bypass WAF)

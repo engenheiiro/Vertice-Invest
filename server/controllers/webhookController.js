@@ -12,12 +12,14 @@ const isValidSignature = (req) => {
     const requestId = req.headers['x-request-id'];
     const WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET;
 
-    // Se não tiver secret configurado (dev), permite passar com warning
+    // Sem secret: fail-CLOSED em produção (rejeita) para impedir spoof de pagamento.
+    // Em dev/test, permite passar para não travar setups locais.
     if (!WEBHOOK_SECRET) {
-        // Em produção, isso deveria ser um erro, mas para não quebrar setups sem env, logamos warning.
         if (process.env.NODE_ENV === 'production') {
-            logger.warn("⚠️ Webhook sem segredo configurado (MP_WEBHOOK_SECRET). Inseguro.");
+            logger.error("⛔ Webhook MP rejeitado: MP_WEBHOOK_SECRET não configurado em produção.");
+            return false;
         }
+        logger.warn("⚠️ Webhook sem segredo (MP_WEBHOOK_SECRET) — liberado apenas em ambiente não-produção.");
         return true;
     }
 
@@ -44,7 +46,14 @@ const isValidSignature = (req) => {
     hmac.update(manifest);
     const calculatedSignature = hmac.digest('hex');
 
-    return calculatedSignature === v1;
+    // Comparação constant-time (evita timing attack na verificação da assinatura).
+    try {
+        const a = Buffer.from(calculatedSignature, 'hex');
+        const b = Buffer.from(v1, 'hex');
+        return a.length === b.length && crypto.timingSafeEqual(a, b);
+    } catch {
+        return false;
+    }
 };
 
 // Extrai userId e planKey do external_reference no formato "{userId}:{planKey}"

@@ -142,8 +142,10 @@ export const fundamentusService = {
                 }
             });
 
-            if (dataMap.size < 100 && process.env.NODE_ENV !== 'test') {
-                throw new Error(`Scraping retornou apenas ${dataMap.size} ações. Possível bloqueio ou instabilidade no Fundamentus.`);
+            if (dataMap.size < 100) {
+                const msg = `Scraping retornou apenas ${dataMap.size} ações. Possível bloqueio ou instabilidade no Fundamentus.`;
+                if (process.env.NODE_ENV !== 'test') throw new Error(msg);
+                logger.warn(`⚠️ [Fundamentus][TEST] ${msg}`); // não falha o teste, mas torna a regressão visível
             }
 
             logger.info(`✅ Fundamentus: ${dataMap.size} ações processadas com dados completos.`);
@@ -213,8 +215,10 @@ export const fundamentusService = {
                 }
             });
 
-            if (dataMap.size < 100 && process.env.NODE_ENV !== 'test') {
-                throw new Error(`Scraping retornou apenas ${dataMap.size} FIIs. Possível bloqueio ou instabilidade no Fundamentus.`);
+            if (dataMap.size < 100) {
+                const msg = `Scraping retornou apenas ${dataMap.size} FIIs. Possível bloqueio ou instabilidade no Fundamentus.`;
+                if (process.env.NODE_ENV !== 'test') throw new Error(msg);
+                logger.warn(`⚠️ [Fundamentus][TEST] ${msg}`); // não falha o teste, mas torna a regressão visível
             }
 
             logger.info(`✅ Fundamentus: ${dataMap.size} FIIs processados com dados completos.`);
