@@ -10,6 +10,7 @@
     "test:wallet": "vitest run tests/wallet_snapshot.spec.js",
     "test:regression": "vitest run tests/quant_regression.spec.js",
     "test:all": "vitest run",
+    "test:ci": "vitest run tests/financial_regression.spec.js tests/wallet_snapshot.spec.js tests/critical_improvements.spec.js --coverage",
     "test:stress": "node server/scripts/stressTest2020.js",
     "test:fundamentus": "node tests/test_fundamentus.js",
     "sync:prod": "node server/scripts/syncProdData.js",
@@ -44,6 +45,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^1.6.1",
     "nodemon": "^3.0.0",
     "vitest": "^1.0.0"
   }

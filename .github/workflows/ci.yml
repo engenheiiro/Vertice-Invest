@@ -1,0 +1,45 @@
+name: CI
+
+# Gate de qualidade: lint + typecheck + testes (com cobertura) + build em cada PR/push.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: lint • typecheck • test • build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (root + client + server)
+        run: npm run setup
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Typecheck (client + server)
+        run: npm run typecheck
+
+      - name: Test backend (com cobertura)
+        run: npm run test:ci --prefix server
+
+      - name: Test frontend
+        run: npm run test --prefix client -- run
+
+      - name: Build client
+        run: npm run build:client

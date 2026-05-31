@@ -15,7 +15,7 @@
 | Melhorias/Refatorações (M) | 0 | 14 |
 | Implementações (I) | 3 | 14 |
 | Segurança (S) | 3 | 12 |
-| Infra/DevOps (D) | 4 | 13 |
+| Infra/DevOps (D) | 6 | 13 |
 | Testes (T) | 0 | 12 |
 | Acessibilidade/UX (A) | 0 | 12 |
 
@@ -124,13 +124,13 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 
 ## CATEGORIA 5 — Infraestrutura / DevOps
 
-- [ ] **D1** — CI GitHub Actions: lint + typecheck + test + build em cada PR · `.github/workflows/ci.yml`
+- [x] **D1** — CI GitHub Actions (`ci.yml`): install → lint (ESLint) → typecheck → test backend (com cobertura) → test frontend → build. Roda suite **determinística** (exclui `quant_regression` flaky até T3). Todos os passos validados localmente · `.github/workflows/ci.yml`
 - [x] **D2** — ESLint flat config (v9) na raiz cobrindo client (TS/React) e server (Node ESM); regras pragmáticas (erros só p/ bugs reais). Corrigiu 4 erros reais: hook condicional no `AssetDetailModal`, `no-case-declarations`, `COLORS` indefinido · `eslint.config.js`
 - [x] **D3** — Prettier configurado (`.prettierrc` + `.prettierignore`) + scripts `format`/`format:check`. Enforcement via lint-staged deixado como `eslint --fix` para evitar reformatação em massa (4→2 espaços); passada completa de Prettier fica como tarefa deliberada futura
 - [ ] **D4** — TypeScript strict no client + resolver 9 `@ts-ignore` (tipos React Router) · `client/tsconfig.json`
 - [x] **D5** — `lint-staged` (`eslint --fix` nos arquivos staged) adicionado ao pre-commit do husky, somado à barreira de segredos (.env block + gitleaks) · `.husky/pre-commit`, `package.json`
 - [ ] **D6** — Dockerfile (server) + docker-compose (server+mongo)
-- [ ] **D7** — Cobertura de testes no Vitest com gate mínimo (~70% em utils financeiros) · `vitest.config.ts`
+- [x] **D7** — Cobertura Vitest (`@vitest/coverage-v8`) em `server/vitest.config.js` com **gate-ratchet** por arquivo: `mathUtils.js` (linhas/stmts ≥70%, branches ≥85%) e `scoringEngine.js` (linhas ≥70%, funcs ≥90%). Script `test:ci`. Subir conforme T1/T2/T8 · `server/vitest.config.js`
 - [x] **D8** — Conventional Commits validados por commitlint no hook `commit-msg` do husky · `commitlint.config.js`, `.husky/commit-msg`
 - [ ] **D9** — Branch protection no `main` (PR + CI verde)
 - [ ] **D10** — Script de build do server + `build:all` no raiz · `/package.json`
