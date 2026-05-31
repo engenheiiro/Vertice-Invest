@@ -21,5 +21,13 @@ if command -v gitleaks >/dev/null 2>&1; then
   }
 fi
 
-# 3) Lint + format dos arquivos staged (eslint --fix + prettier)
-npx lint-staged
+# 3) Lint dos arquivos staged (eslint --fix). Requer a toolchain Node completa.
+#    Ambientes restritos (ex.: GitHub Desktop no Windows) não expõem `bash` ao
+#    hook e a cadeia do npx falha (código 127). Nesses casos, pulamos com aviso —
+#    o CI roda o ESLint completo em cada push, então o enforcement é mantido.
+if command -v bash >/dev/null 2>&1 && command -v npx >/dev/null 2>&1; then
+  npx lint-staged
+else
+  echo "ℹ husky: ambiente sem bash/npx (ex.: GitHub Desktop) — pulando lint-staged."
+  echo "  Os segredos já foram verificados acima; o ESLint roda no CI."
+fi

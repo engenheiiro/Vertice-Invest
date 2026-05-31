@@ -1,1 +1,7 @@
-npx --no -- commitlint --edit "$1"
+# Valida a mensagem (Conventional Commits). Em ambientes restritos sem bash
+# (ex.: GitHub Desktop no Windows), pula com aviso — o commitlint roda no CI.
+if command -v bash >/dev/null 2>&1 && command -v npx >/dev/null 2>&1; then
+  npx --no -- commitlint --edit "$1"
+else
+  echo "ℹ husky: ambiente sem bash/npx — pulando commitlint (validado no CI)."
+fi
