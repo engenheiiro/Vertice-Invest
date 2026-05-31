@@ -16,7 +16,7 @@
 | Implementações (I) | 3 | 14 |
 | Segurança (S) | 3 | 12 |
 | Infra/DevOps (D) | 7 | 13 |
-| Testes (T) | 10 | 12 |
+| Testes (T) | 11 | 12 |
 | Acessibilidade/UX (A) | 0 | 12 |
 
 ---
@@ -150,7 +150,7 @@ Hoje: ~4 specs no backend e **1 teste no frontend** para 67 componentes.
 - [x] **T4** — `market_data_service.spec.js`: `refreshQuotesBatch` com Mongoose/externos mockados — cache fresco (não busca) vs stale (busca+atualiza), skip de ativo inativo mesmo com force, `failCount` incrementa e desativa ao atingir teto (10), coerção de `failCount` corrompido [B2] + `normalizeSymbol`. 6 testes · `server/tests/market_data_service.spec.js`
 - [x] **T5** — `fundamentus_parse.spec.js`: `parseBrFloat` (exportado p/ teste) normaliza formato BR — milhar/decimal, percentual, traço/vazio/null → 0, negativos, texto não-numérico → 0 (nunca NaN). 5 testes · `server/tests/fundamentus_parse.spec.js`
 - [x] **T6** — `research_delta.spec.js`: `generateComparisonReport` (exportado p/ teste) — sem base anterior → null, entradas novas/saídas, upgrade (WAIT→BUY)/downgrade (BUY→WAIT), biggestMovers por Δscore≥5 e Δposição≥3, topBuys (só BUY), summary. Deps pesadas (Gemini/models) mockadas só p/ o import. 7 testes · `server/tests/research_delta.spec.js`
-- [ ] **T7** — Integração: auth → ranking → portfólio end-to-end · `server/tests/integration`
+- [x] **T7** — `pipeline_integration.spec.js`: integração real das engines (scoring→portfolio→ranking), replicando o encadeamento do `aiResearchService` (processAsset → performCompetitiveDraft → applyConcentrationPenalty → sort) **sem DB/HTTP**. Verifica descarte de inelegíveis (stablecoin/penny), perfil/score/ação válidos em todo item, **ordenação soberana** decrescente e **Regra #1** (BUY⇔score≥70) ponta-a-ponta. 5 testes · `server/tests/pipeline_integration.spec.js`. *(Versão HTTP+mongo-memory deixada como melhoria futura — alto custo de infra/CI vs. valor)*
 - [x] **T8** — Edge cases da matemática financeira segura: `safeDiv`/0, `calculatePercent` base 0, guardas de dados insuficientes (`calculateSharpeRatio`/`calculateBeta`/`calculateStdDev` → neutro), ramos de aporte/resgate total do Modified Dietz. 17 testes · `server/tests/math_edge_cases.spec.js`. **Venda > posição** coberta no client via `validateTransaction` (ver abaixo). Adicionado ao `test:ci`
 - [x] **(extra) Testes de unidade dos utils extraídos (client)** — `assetTransaction.test.ts` (14: `validateTransaction` BUY/SELL/CASH/FIXED_INCOME, data futura, saldo insuficiente, payloads) + `kpiCalculations.test.ts` (6: `computeWalletKpis` vazio/soma/override do servidor/fallbacks). Base para T9/T10. 20 testes · `client/src/utils/*.test.ts`
 - [x] **T9** — `useFeatureAccess.test.ts` (hook): `hasPlan` (hierarquia), `hasFeature` (PLAN_ACCESS — PRO tem radar mas não global; BLACK tem exclusivas), `limitFor` (FEATURE_LIMITS, chave inexistente→0), GUEST default. `useAuth` mockado, `renderHook`. 6 testes · `client/src/hooks/useFeatureAccess.test.ts`. **Infra:** instalado `@testing-library/react` + `jest-dom` + `user-event` + `src/test/setup.ts`
