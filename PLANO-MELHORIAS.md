@@ -16,7 +16,7 @@
 | Implementações (I) | 3 | 14 |
 | Segurança (S) | 3 | 12 |
 | Infra/DevOps (D) | 7 | 13 |
-| Testes (T) | 7 | 12 |
+| Testes (T) | 10 | 12 |
 | Acessibilidade/UX (A) | 0 | 12 |
 
 ---
@@ -153,9 +153,9 @@ Hoje: ~4 specs no backend e **1 teste no frontend** para 67 componentes.
 - [ ] **T7** — Integração: auth → ranking → portfólio end-to-end · `server/tests/integration`
 - [x] **T8** — Edge cases da matemática financeira segura: `safeDiv`/0, `calculatePercent` base 0, guardas de dados insuficientes (`calculateSharpeRatio`/`calculateBeta`/`calculateStdDev` → neutro), ramos de aporte/resgate total do Modified Dietz. 17 testes · `server/tests/math_edge_cases.spec.js`. **Venda > posição** coberta no client via `validateTransaction` (ver abaixo). Adicionado ao `test:ci`
 - [x] **(extra) Testes de unidade dos utils extraídos (client)** — `assetTransaction.test.ts` (14: `validateTransaction` BUY/SELL/CASH/FIXED_INCOME, data futura, saldo insuficiente, payloads) + `kpiCalculations.test.ts` (6: `computeWalletKpis` vazio/soma/override do servidor/fallbacks). Base para T9/T10. 20 testes · `client/src/utils/*.test.ts`
-- [ ] **T9** — Hook tests: `useDashboardData`, `useWallet`
-- [ ] **T10** — Component tests: `Wallet`, `Research`, `AddAssetModal`
-- [ ] **T11** — Context tests: `AuthContext`, `WalletContext` (mutations + demo mode)
+- [x] **T9** — `useFeatureAccess.test.ts` (hook): `hasPlan` (hierarquia), `hasFeature` (PLAN_ACCESS — PRO tem radar mas não global; BLACK tem exclusivas), `limitFor` (FEATURE_LIMITS, chave inexistente→0), GUEST default. `useAuth` mockado, `renderHook`. 6 testes · `client/src/hooks/useFeatureAccess.test.ts`. **Infra:** instalado `@testing-library/react` + `jest-dom` + `user-event` + `src/test/setup.ts`
+- [x] **T10** — Component tests (base de UI M11): `Alert.test.tsx` (4 — children, `role=alert` p/ erro/aviso vs `role=status`, título) + `Modal.test.tsx` (4 — fechado→null, aria de diálogo, **fecha com Escape [A3]** via user-event, botão fechar). 8 testes · `client/src/components/ui/*.test.tsx`
+- [x] **T11** — `WalletContext.test.tsx` (context): modo demo injeta `DEMO_ASSETS`, expõe KPIs fixos (sharpe 1.8 / beta 0.85), desliga privacidade e **bloqueia mutações** (`addAsset` não chama a API). Contextos e `walletService` mockados, `QueryClientProvider` no wrapper. 3 testes · `client/src/contexts/WalletContext.test.tsx`
 - [ ] **T12** — E2E (Playwright): login → adicionar ativo → research → gating de plano · `e2e/`
 
 ---
