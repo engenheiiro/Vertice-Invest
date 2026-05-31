@@ -21,7 +21,8 @@ const HEADERS = {
     'Pragma': 'no-cache'
 };
 
-const parseBrFloat = (str) => {
+// Exportado para teste (T5). Uso interno inalterado.
+export const parseBrFloat = (str) => {
     if (!str || str.trim() === '-') return 0;
     // Remove pontos de milhar e substitui vírgula decimal por ponto
     const cleanStr = str.replace(/\./g, '').replace(',', '.').replace('%', '').trim();

@@ -11,7 +11,8 @@ import { rankingTxtExportService } from './rankingTxtExportService.js';
 // (M9) Threshold global e fallback de Selic centralizados em financialConstants.
 import { BUY_THRESHOLD, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 
-const generateComparisonReport = (assetClass, newRanking, previousRanking) => {
+// Exportado para teste (T6). Função pura: calcula o delta entre dois rankings.
+export const generateComparisonReport = (assetClass, newRanking, previousRanking) => {
     if (!previousRanking || previousRanking.length === 0) return null;
 
     const prevMap = new Map(previousRanking.map(r => [r.ticker, r]));
