@@ -1,7 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
-// @ts-ignore
 import { useLocation } from 'react-router-dom';
 import { authService } from '../services/auth';
 

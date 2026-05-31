@@ -16,9 +16,9 @@ const getPasswordStrength = (pwd: string): 0 | 1 | 2 | 3 => {
   return score as 0 | 1 | 2 | 3;
 };
 
-const strengthLabel: Record<1 | 2 | 3, string> = { 1: 'Fraca', 2: 'Média', 3: 'Forte' };
-const strengthColor: Record<1 | 2 | 3, string> = { 1: 'bg-red-500', 2: 'bg-yellow-500', 3: 'bg-emerald-500' };
-const strengthText: Record<1 | 2 | 3, string> = { 1: 'text-red-500', 2: 'text-yellow-500', 3: 'text-emerald-500' };
+const strengthLabel: Record<number, string> = { 1: 'Fraca', 2: 'Média', 3: 'Forte' };
+const strengthColor: Record<number, string> = { 1: 'bg-red-500', 2: 'bg-yellow-500', 3: 'bg-emerald-500' };
+const strengthText: Record<number, string> = { 1: 'text-red-500', 2: 'text-yellow-500', 3: 'text-emerald-500' };
 
 export const Register = () => {
   const navigate = useNavigate();

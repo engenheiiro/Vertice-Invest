@@ -5,7 +5,6 @@ import { PortfolioItem } from '../../hooks/useDashboardData';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
-// @ts-ignore
 import { useNavigate } from 'react-router-dom';
 
 interface AssetTableProps {

@@ -16,7 +16,6 @@ import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2,
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useDemo } from '../contexts/DemoContext'; 
-// @ts-ignore
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { FEATURE_LIMITS } from '../constants/subscription';

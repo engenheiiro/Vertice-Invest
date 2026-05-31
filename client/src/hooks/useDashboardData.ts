@@ -229,7 +229,7 @@ export const useDashboardData = () => {
 
             return {
                 ticker: asset.ticker,
-                name: asset.name,
+                name: asset.name || asset.ticker,
                 shares: asset.quantity,
                 avgPrice: asset.averagePrice,
                 currentPrice: asset.currentPrice,

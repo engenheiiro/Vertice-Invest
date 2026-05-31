@@ -339,11 +339,11 @@ export const Landing = () => {
              </div>
 
              <div className="grid md:grid-cols-3 gap-6">
-                {(marketData?.results || [
+                {((marketData?.results || [
                     { ticker: "NVDA", type: "LONG", date: "10 Jan", returnVal: "+8.4%", desc: "Identificado fluxo institucional massivo." },
                     { ticker: "PETR4", type: "SHORT", date: "15 Dez", returnVal: "+6.2%", desc: "Divergência de sentimento político detectada." },
                     { ticker: "BTC", type: "LONG", date: "04 Jan", returnVal: "+12.1%", desc: "Padrão de acumulação on-chain detectado." }
-                ]).map((res: Omit<ResultCardProps, 'delay'>, i: number) => (
+                ]) as Omit<ResultCardProps, 'delay'>[]).map((res, i) => (
                     <ResultCard key={i} {...res} delay={i * 100} />
                 ))}
              </div>

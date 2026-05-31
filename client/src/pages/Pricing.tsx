@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
 import { Check, X, ArrowLeft, Zap, Shield, Crown, ExternalLink } from 'lucide-react';
-// @ts-ignore
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { useAuth, UserPlan } from '../contexts/AuthContext';

@@ -6,7 +6,6 @@ import {
     Radar, ArrowLeft, CheckCircle2, XCircle, Clock, TrendingUp, TrendingDown,
     Minus, Target, Layers, Filter, Info, Shield, Activity, Zap, Medal
 } from 'lucide-react';
-// @ts-ignore
 import { Link } from 'react-router-dom';
 import { PieChart as RechartsPie, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 

@@ -2,7 +2,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Radar, Zap, Lock, Shield, Activity, Crown, Info, History, Medal, TrendingUp, Clock } from 'lucide-react';
 import { AiSignal, RadarMeta } from '../../hooks/useDashboardData';
-// @ts-ignore
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 

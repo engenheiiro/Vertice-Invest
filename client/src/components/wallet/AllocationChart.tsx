@@ -49,8 +49,8 @@ export const AllocationChart = () => {
 
     // 2. Preparar Dados para Recharts
     const chartData = useMemo(() => {
-        const data = [];
-        
+        const data: { name: string; type: AssetType; value: number; color: string }[] = [];
+
         ORDERED_TYPES.forEach(type => {
             // Ignora CASH no gráfico de pizza se for visão de investimento (padrão)
             // Mas se quiser mostrar caixa, teria que mudar a base 100%. 

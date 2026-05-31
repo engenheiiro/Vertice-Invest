@@ -80,7 +80,7 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view }) 
                                 {report.assetClass}
                             </span>
                             <span className="text-[10px] text-slate-500 font-bold uppercase">
-                                {new Date(report.date || report.createdAt).toLocaleDateString('pt-BR', { dateStyle: 'long' })}
+                                {new Date(report.date || report.createdAt || Date.now()).toLocaleDateString('pt-BR', { dateStyle: 'long' })}
                             </span>
                         </div>
                         <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">

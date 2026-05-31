@@ -2,7 +2,6 @@
 import React, { useEffect, useState, useLayoutEffect } from 'react';
 import { useDemo } from '../../contexts/DemoContext';
 import { X, ChevronRight, Check, Zap, TrendingUp, Shield, BarChart3, Lock, Navigation, MousePointerClick, Eye, Trophy, Radar, PieChart, Layout, Coins, FileText, Settings } from 'lucide-react';
-// @ts-ignore
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // --- PASSOS DO DASHBOARD ---

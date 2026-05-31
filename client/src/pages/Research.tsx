@@ -6,7 +6,6 @@ import { ResearchViewer } from '../components/research/ResearchViewer';
 import { AssetDetailModal } from '../components/research/AssetDetailModal'; // Importado
 import { Bot, Newspaper, Trophy, Loader2, Lock, Crown, Info, RefreshCcw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-// @ts-ignore
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const ASSETS = [
