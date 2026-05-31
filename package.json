@@ -1,4 +1,3 @@
-
 {
   "name": "vertice-invest-root",
   "version": "1.0.0",
@@ -31,10 +30,12 @@
     "test:regression": "npm run test:regression --prefix server",
     "test:fundamentus": "npm run test:fundamentus --prefix server",
     "lint": "npm run lint --prefix client && npm run lint --prefix server",
-    "backtest:portfolio": "node server/scripts/seedPortfolioBacktest.js"
+    "backtest:portfolio": "node server/scripts/seedPortfolioBacktest.js",
+    "prepare": "husky"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "husky": "^9.1.7"
   },
   "engines": {
     "node": ">=22.0.0"

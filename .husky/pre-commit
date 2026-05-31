@@ -1,0 +1,22 @@
+# Pre-commit: barreira contra vazamento de segredos
+# 1) Bloqueia qualquer arquivo .env (exceto .env.example) entrando no commit
+# 2) Roda gitleaks nos arquivos staged, se estiver instalado localmente
+
+staged="$(git diff --cached --name-only --diff-filter=ACM)"
+
+# 1) Nunca permitir commitar arquivos .env reais
+blocked="$(printf '%s\n' "$staged" | grep -E '(^|/)\.env($|\.)' | grep -vE '\.env\.example$' || true)"
+if [ -n "$blocked" ]; then
+  echo "✖ Commit bloqueado: arquivo(s) de ambiente detectado(s):"
+  printf '   %s\n' "$blocked"
+  echo "  Remova do stage (git restore --staged <arquivo>) — segredos não devem ser versionados."
+  exit 1
+fi
+
+# 2) Scan de segredos com gitleaks (se disponível)
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact --config .gitleaks.toml || {
+    echo "✖ gitleaks encontrou possíveis segredos nos arquivos staged."
+    exit 1
+  }
+fi

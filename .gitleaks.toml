@@ -1,0 +1,23 @@
+# Configuração do gitleaks para o Vértice Invest
+# Usa os detectores padrão do gitleaks e adiciona uma allowlist
+# para placeholders legítimos (ex.: .env.example).
+# Docs: https://github.com/gitleaks/gitleaks
+
+title = "Vertice Invest gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Caminhos e padrões que não devem disparar alerta"
+paths = [
+  '''\.env\.example$''',
+  '''\.gitleaks\.toml$''',
+  '''PLANO-MELHORIAS\.md$''',
+]
+# Placeholders comuns que aparecem em exemplos/documentação
+regexes = [
+  '''seu_usuario_ethereal''',
+  '''sua_senha_ethereal''',
+  '''APP_USR-.*placeholder''',
+]
