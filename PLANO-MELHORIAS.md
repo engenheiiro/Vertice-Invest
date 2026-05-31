@@ -16,7 +16,7 @@
 | Implementações (I) | 3 | 14 |
 | Segurança (S) | 3 | 12 |
 | Infra/DevOps (D) | 7 | 13 |
-| Testes (T) | 0 | 12 |
+| Testes (T) | 3 | 12 |
 | Acessibilidade/UX (A) | 0 | 12 |
 
 ---
@@ -144,9 +144,9 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 
 Hoje: ~4 specs no backend e **1 teste no frontend** para 67 componentes.
 
-- [ ] **T1** — Unit dos helpers do scoringEngine (Graham/Bazin/PEG, confidence, gates)
-- [ ] **T2** — Unit do draft competitivo + penalidades (vazio, todos rejeitados, caps de setor) · `portfolioEngine.js`
-- [ ] **T3** — Unit dos sinais (RSI/Volume/Suporte, correlações) · `signalEngine.js`
+- [x] **T1** — `scoring_engine.spec.js`: gates de descarte (stablecoin, penny, liquidez STOCK/FII, blacklist) + saída de ativo saudável (scores por perfil, auditLog, structural). 6 testes · `server/tests/scoring_engine.spec.js`
+- [x] **T2** — `portfolio_engine.spec.js`: penalidade de concentração setorial (3º -5, 4º -15, isolamento por perfil, rebaixa p/ WAIT) + cap de cripto no draft + entrada vazia. 7 testes · `server/tests/portfolio_engine.spec.js`
+- [x] **T3** — `quant_regression.spec.js` reescrito e **determinístico** (mock de `externalMarketService`/`SystemConfig`, dados que disparam RSI com reversão, asserção no `bulkWrite`). Roda em ~9ms; re-incluído no CI · `server/tests/quant_regression.spec.js`
 - [ ] **T4** — Service tests: `marketDataService` (cache, blacklist, fallback)
 - [ ] **T5** — Service tests: `fundamentusService` (parsing, cálculos reversos, validação)
 - [ ] **T6** — Service tests: `aiResearchService` (orquestração, delta) com mocks

@@ -15,6 +15,8 @@ export default defineConfig({
       thresholds: {
         'utils/mathUtils.js': { lines: 70, statements: 70, branches: 85, functions: 25 },
         'services/engines/scoringEngine.js': { lines: 70, statements: 70, branches: 45, functions: 90 },
+        'services/engines/portfolioEngine.js': { lines: 80, statements: 80, branches: 70, functions: 90 },
+        'services/engines/signalEngine.js': { lines: 60, statements: 60, branches: 30, functions: 70 },
       },
     },
   },
