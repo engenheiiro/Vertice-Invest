@@ -140,7 +140,7 @@ export const getRadarStats = async (req, res, next) => {
 export const clearRadarHistory = async (req, res, next) => {
     try {
         await QuantSignal.deleteMany({});
-        logger.info(`🗑️ [Admin] Histórico do Radar Alpha limpo por ${req.user.email}`);
+        logger.info(`🗑️ [Admin] Histórico do Radar Alpha limpo por admin ${req.user._id}`);
         res.json({ message: "Histórico do Radar limpo com sucesso." });
     } catch (error) { next(error); }
 };
@@ -148,7 +148,7 @@ export const clearRadarHistory = async (req, res, next) => {
 export const runStorageCleanupHandler = async (req, res, next) => {
     try {
         const { runStorageCleanup } = await import('../services/cleanupService.js');
-        logger.info(`🧹 [Admin] Limpeza de armazenamento iniciada por ${req.user.email}`);
+        logger.info(`🧹 [Admin] Limpeza de armazenamento iniciada por admin ${req.user._id}`);
         const stats = await runStorageCleanup();
         res.json({ message: "Limpeza concluída.", stats });
     } catch (error) { next(error); }

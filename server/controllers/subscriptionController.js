@@ -225,7 +225,7 @@ export const syncPayment = async (req, res, next) => {
                 });
             }
 
-            logger.info(`✅ [Sync] Plano ${plan} ativado manualmente para ${user.email}`);
+            logger.info(`✅ [Sync] Plano ${plan} ativado manualmente para user ${user._id}`);
             return res.json({ success: true, plan, validUntil: newValidUntil });
         }
 

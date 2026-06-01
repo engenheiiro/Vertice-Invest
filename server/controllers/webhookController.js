@@ -144,7 +144,7 @@ export const handleMercadoPagoWebhook = async (req, res) => {
                         gatewayId: resourceId.toString()
                     });
 
-                    logger.info(`✅ Acesso liberado para ${user.email} até ${newValidUntil.toISOString()}`);
+                    logger.info(`✅ Acesso liberado para user ${user._id} até ${newValidUntil.toISOString()}`);
                 } else {
                     logger.error(`❌ Usuário ${userId} não encontrado para liberar acesso.`);
                 }
