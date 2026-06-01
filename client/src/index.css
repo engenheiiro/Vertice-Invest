@@ -52,6 +52,52 @@
   }
 }
 
+/*
+ * (X1) Acessibilidade vestibular — respeita "Reduzir movimento" do SO (WCAG 2.3.3).
+ * Neutraliza animações, transições e spin/pulse para quem pediu menos movimento.
+ * Loaders com texto ("Carregando…") continuam comunicando o estado mesmo parados.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  html {
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * (M1) Espaço no rodapé do conteúdo para a barra de navegação inferior fixa
+ * (BottomNav, ~64px + safe-area) não cobrir os últimos itens no mobile.
+ * Aplica só no <main> (dentro do fundo escuro das páginas) e só no mobile.
+ */
+@media (max-width: 767px) {
+  main {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+}
+
+/*
+ * (X3) Foco visível e consistente para navegação por teclado. `:focus-visible`
+ * só dispara no foco por teclado (Tab) — não aparece no clique de mouse, então
+ * não polui a UX de quem usa ponteiro. Elementos com anel próprio (focus:ring)
+ * seguem como estão.
+ */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #3b82f6; /* blue-500 */
+  outline-offset: 2px;
+}
+
 /* CUSTOM GLOBAL SCROLLBAR - DARK THEME */
 ::-webkit-scrollbar {
   width: 8px;
