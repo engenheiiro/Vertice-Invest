@@ -32,7 +32,7 @@ const INITIAL_FORM: AssetFormState = {
 };
 
 export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose }) => {
-    const { addAsset, assets } = useWallet();
+    const { addAsset, assets, usdRate } = useWallet();
     const { addToast } = useToast();
 
     const [status, setStatus] = useState<'idle' | 'loading' | 'success'>('idle');
@@ -436,7 +436,42 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         </div>
                     )}
                 </div>
+
+                {renderTransactionTotal()}
             </>
+        );
+    };
+
+    /**
+     * Mostra o VALOR total da transação (quantidade × preço) ao vivo. Essencial
+     * para cripto, onde a quantidade tem muitas casas (0,00028 BTC) e só o preço
+     * unitário não diz quanto se está investindo. Ativos dolarizados (cripto /
+     * STOCK_US) têm preço em USD: exibe o total em US$ e o equivalente em R$.
+     */
+    const renderTransactionTotal = () => {
+        const qtyNum = parseFloat((form.quantity || '').replace(',', '.'));
+        const priceNum = parseCurrencyToFloat(form.price);
+        if (!isFinite(qtyNum) || qtyNum <= 0 || !isFinite(priceNum) || priceNum <= 0) return null;
+
+        const isDollarized = form.type === 'CRYPTO' || form.type === 'STOCK_US';
+        const totalNative = qtyNum * priceNum;
+        const fmt = (v: number, currency: 'BRL' | 'USD') =>
+            new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(v);
+
+        return (
+            <div className="col-span-2 mt-2 flex items-baseline justify-between rounded-lg bg-[#0B101A] border border-slate-800 px-3 py-2 animate-fade-in">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    {transactionType === 'BUY' ? 'Total da Compra' : 'Total da Venda'}
+                </span>
+                <span className="text-sm font-bold text-emerald-400 font-mono">
+                    {isDollarized ? fmt(totalNative, 'USD') : fmt(totalNative, 'BRL')}
+                    {isDollarized && usdRate > 0 && (
+                        <span className="ml-2 text-[11px] font-medium text-slate-400">
+                            ≈ {fmt(totalNative * usdRate, 'BRL')}
+                        </span>
+                    )}
+                </span>
+            </div>
         );
     };
 
