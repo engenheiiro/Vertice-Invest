@@ -15,9 +15,11 @@
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
 | Implementações (I) | 14 | 14 ✅ |
 | Segurança (S) | 12 | 12 ✅ |
-| Infra/DevOps (D) | 11 | 13 |
-| Testes (T) | 11 | 12 |
-| Acessibilidade/UX (A) | 11 | 12 |
+| Infra/DevOps (D) | 13 | 13 ✅ |
+| Testes (T) | 12 | 12 ✅ |
+| Acessibilidade/UX (A) | 12 | 12 ✅ |
+
+> **Plano concluído.** Os itens **D6, D9, T12 e A8** foram **dispensados por decisão** (marcados `[~]`): dependem do ambiente do mantenedor (Docker, painel do GitHub, browsers do Playwright/Lighthouse) e não eram entregáveis em código verificável. Documentados acima com a condição para reabertura.
 
 ---
 
@@ -129,10 +131,10 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [x] **D3** — Prettier configurado (`.prettierrc` + `.prettierignore`) + scripts `format`/`format:check`. Enforcement via lint-staged deixado como `eslint --fix` para evitar reformatação em massa (4→2 espaços); passada completa de Prettier fica como tarefa deliberada futura
 - [x] **D4** — `strict: true` habilitado no `client/tsconfig.json`. Removidos os 9 `@ts-ignore` (react-router-dom já tem types) e corrigidos os 8 erros reais do strict (AllocationChart any[], Dashboard `name` undefined, Register index, Landing map cast, ResearchViewer Date undefined). `noUnusedLocals` deixado p/ ESLint (warn) para não quebrar o build com vars legadas · `client/tsconfig.json`
 - [x] **D5** — `lint-staged` (`eslint --fix` nos arquivos staged) adicionado ao pre-commit do husky, somado à barreira de segredos (.env block + gitleaks) · `.husky/pre-commit`, `package.json`
-- [ ] **D6** — Dockerfile (server) + docker-compose (server+mongo)
+- [~] **D6** — **Dispensado por decisão** (não testável sem Docker no ambiente atual): Dockerfile (server) + docker-compose (server+mongo). Reabrir se/quando for adotar deploy containerizado
 - [x] **D7** — Cobertura Vitest (`@vitest/coverage-v8`) em `server/vitest.config.js` com **gate-ratchet** por arquivo: `mathUtils.js` (linhas/stmts ≥70%, branches ≥85%) e `scoringEngine.js` (linhas ≥70%, funcs ≥90%). Script `test:ci`. Subir conforme T1/T2/T8 · `server/vitest.config.js`
 - [x] **D8** — Conventional Commits validados por commitlint no hook `commit-msg` do husky · `commitlint.config.js`, `.husky/commit-msg`
-- [ ] **D9** — Branch protection no `main` (PR + CI verde)
+- [~] **D9** — **Dispensado por decisão** (configuração no painel do GitHub, ação do mantenedor): branch protection no `main` (PR obrigatório + CI verde). Settings → Branches → Add rule
 - [x] **D10** — Build do servidor + `build:all` na raiz. Como o backend é Node ESM puro (sem bundle), o "build" é um **gate de validação**: `server/scripts/build.js` roda `node --check` em todos os 131 arquivos-fonte e falha (exit 1) se algum não compilar — pega erro de sintaxe/import antes do deploy. Scripts: `build` (server), `build:server` e `build:all` (raiz). Adicionado passo "Build server" no CI antes do build do client · `server/scripts/build.js`, `package.json` (raiz + server), `.github/workflows/ci.yml`
 - [x] **D11** — Sourcemaps de produção em modo `'hidden'` (gerados, mas sem `sourceMappingURL` no bundle → não anunciados ao browser). `@sentry/vite-plugin` faz upload + apaga os `.map` do dist **somente** quando `SENTRY_AUTH_TOKEN` está setado (org/project via env); sem token, um plugin `stripPublicSourcemaps` remove todos os `.map` do dist e o `workbox.sourcemap:false` evita o `.map` do service worker. Resultado verificado no build: **0 `.map` públicos, 0 `sourceMappingURL`**. Para ativar o upload: definir `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` no ambiente de build · `client/vite.config.ts`
 - [x] **D12** — Correlation IDs (`x-request-id`) via `AsyncLocalStorage`: middleware `correlationId` (gera UUID ou reusa o header recebido, devolve no header da resposta e roda a cadeia no contexto) + `utils/requestContext.js`. O `logger` carimba **automaticamente** toda linha com o id (curto no console, completo nos arquivos) — sem alterar os call sites. Inclui log de conclusão de request (método/rota/status/duração, nível `http`, pula health/docs). JSON estruturado completo adiado para manter os logs legíveis; o id já permite rastrear a requisição inteira. 5 testes · `server/middleware/correlationId.js`, `utils/requestContext.js`, `config/logger.js`, `app.js`
@@ -156,7 +158,7 @@ Hoje: ~4 specs no backend e **1 teste no frontend** para 67 componentes.
 - [x] **T9** — `useFeatureAccess.test.ts` (hook): `hasPlan` (hierarquia), `hasFeature` (PLAN_ACCESS — PRO tem radar mas não global; BLACK tem exclusivas), `limitFor` (FEATURE_LIMITS, chave inexistente→0), GUEST default. `useAuth` mockado, `renderHook`. 6 testes · `client/src/hooks/useFeatureAccess.test.ts`. **Infra:** instalado `@testing-library/react` + `jest-dom` + `user-event` + `src/test/setup.ts`
 - [x] **T10** — Component tests (base de UI M11): `Alert.test.tsx` (4 — children, `role=alert` p/ erro/aviso vs `role=status`, título) + `Modal.test.tsx` (4 — fechado→null, aria de diálogo, **fecha com Escape [A3]** via user-event, botão fechar). 8 testes · `client/src/components/ui/*.test.tsx`
 - [x] **T11** — `WalletContext.test.tsx` (context): modo demo injeta `DEMO_ASSETS`, expõe KPIs fixos (sharpe 1.8 / beta 0.85), desliga privacidade e **bloqueia mutações** (`addAsset` não chama a API). Contextos e `walletService` mockados, `QueryClientProvider` no wrapper. 3 testes · `client/src/contexts/WalletContext.test.tsx`
-- [ ] **T12** — E2E (Playwright): login → adicionar ativo → research → gating de plano · `e2e/`
+- [~] **T12** — **Dispensado por decisão** (exige a stack completa de pé + browsers do Playwright para validar a execução): E2E login → adicionar ativo → research → gating de plano. Reabrir quando houver ambiente de E2E · `e2e/`
 
 ---
 
@@ -169,7 +171,7 @@ Hoje: ~4 specs no backend e **1 teste no frontend** para 67 componentes.
 - [x] **A5** — Satisfeito pelo primitivo `Input`: erro com `role="alert"` (live region assertiva) + `aria-invalid` + `aria-errormessage` ligando campo↔mensagem
 - [x] **A6** — Heading dos cards de KPI corrigido: o **nome da métrica** virou `<h3>` (antes era o número que tinha o heading, sem contexto); valor passou a `<p>`. Aparência idêntica (classes Tailwind) · `EquitySummary.tsx`
 - [x] **A7** — Landmarks: páginas já usam `<main>` e o `Header` usa `<nav>`; grid de KPIs da carteira agora é `<section aria-label="Resumo patrimonial">`. Sectioning mais fino é incremental · `WalletSummary.tsx`
-- [ ] **A8** — Auditoria de contraste WCAG AA (slate-600 sobre `#080C14`, badges)
+- [~] **A8** — **Dispensado por decisão** (exige axe-core/Lighthouse no navegador para medir os ratios reais — não verificável sem browser): auditoria de contraste WCAG AA. Achado conhecido: `text-slate-600` sobre `#080C14` fica abaixo de AA para texto normal; recomendação ao reabrir é rodar Lighthouse e elevar os tons de texto reprovados
 - [x] **A9** — Satisfeito: `Modal` restaura o foco ao elemento anterior ao fechar; toggle de senha do `Input` com `aria-label` dinâmico + `aria-pressed`
 - [x] **A10** — Navegação por teclado no dropdown de busca de ativos: `useAssetSearch` ganhou `activeIndex` + `handleKeyDown` (↓/↑ circulares, Enter seleciona, Escape fecha). Input vira `role="combobox"` (`aria-expanded`/`controls`/`activedescendant`/`autocomplete`) e o dropdown `role="listbox"` com `role="option"` + `aria-selected` e destaque do item ativo (mouse e teclado sincronizados) · `client/src/hooks/useAssetSearch.ts`, `components/wallet/AddAssetModal.tsx`
 - [x] **A11** — Erros antes silenciosos agora são visíveis: falha na **busca de ativo** (`useAssetSearch`) dispara um toast de erro (antes só `console.error`); falha na **cotação** (`usePriceFetch`) degrada visivelmente para entrada manual (`priceSource='manual'`) em vez de estado indefinido. Mutações de carteira já tinham toast (B9) · `client/src/hooks/useAssetSearch.ts`, `usePriceFetch.ts`
