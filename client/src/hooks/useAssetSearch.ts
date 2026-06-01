@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { walletService } from '../services/wallet';
 import { useToast } from '../contexts/ToastContext';
 import type { AssetFormState } from '../utils/assetTransaction';
@@ -20,6 +20,8 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  // (A10) índice destacado para navegação por teclado no dropdown.
+  const [activeIndex, setActiveIndex] = useState(-1);
 
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -49,6 +51,7 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
       searchTimeoutRef.current = setTimeout(async () => {
         try {
           const results = await walletService.searchAsset(val, form.type);
+          setActiveIndex(-1); // (A10) novo conjunto de resultados → reseta destaque
           if (results && Array.isArray(results) && results.length > 0) {
             setSearchResults(results);
             setShowDropdown(true);
@@ -98,11 +101,33 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
 
     setShowDropdown(false);
     setSearchResults([]);
+    setActiveIndex(-1);
   };
 
   const reset = () => {
     setSearchResults([]);
     setShowDropdown(false);
+    setActiveIndex(-1);
+  };
+
+  /** (A10) Navegação por teclado no dropdown: setas, Enter e Escape. */
+  const handleKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (!showDropdown || searchResults.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((i) => (i + 1) % searchResults.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((i) => (i - 1 + searchResults.length) % searchResults.length);
+    } else if (e.key === 'Enter') {
+      if (activeIndex >= 0 && activeIndex < searchResults.length) {
+        e.preventDefault();
+        selectResult(searchResults[activeIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false);
+      setActiveIndex(-1);
+    }
   };
 
   return {
@@ -110,6 +135,9 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
     showDropdown,
     setShowDropdown,
     isSearching,
+    activeIndex,
+    setActiveIndex,
+    handleKeyDown,
     containerRef,
     searchTicker,
     selectResult,

@@ -250,6 +250,12 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         value={form.ticker}
                         onChange={handleTickerChange}
                         onFocus={() => { if (search.searchResults.length > 0) search.setShowDropdown(true); }}
+                        onKeyDown={search.handleKeyDown}
+                        role="combobox"
+                        aria-expanded={search.showDropdown && search.searchResults.length > 0}
+                        aria-controls="asset-search-listbox"
+                        aria-activedescendant={search.activeIndex >= 0 ? `asset-option-${search.activeIndex}` : undefined}
+                        aria-autocomplete="list"
                         containerClassName="mb-0"
                         className="uppercase font-mono tracking-wider px-4 py-3 pr-16"
                     />
@@ -272,15 +278,24 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                 )}
 
                 {search.showDropdown && search.searchResults.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-[#0F1729] border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar animate-fade-in">
+                    <div
+                        id="asset-search-listbox"
+                        role="listbox"
+                        aria-label="Resultados da busca"
+                        className="absolute top-full left-0 right-0 mt-1 bg-[#0F1729] border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar animate-fade-in"
+                    >
                         {search.searchResults.map((result, idx) => (
                             <div
                                 key={idx}
+                                id={`asset-option-${idx}`}
+                                role="option"
+                                aria-selected={idx === search.activeIndex}
+                                onMouseEnter={() => search.setActiveIndex(idx)}
                                 onMouseDown={(e) => {
                                     e.preventDefault();
                                     search.selectResult(result);
                                 }}
-                                className="p-3 hover:bg-slate-800 cursor-pointer border-b border-slate-800/50 last:border-0 flex justify-between items-center transition-colors"
+                                className={`p-3 cursor-pointer border-b border-slate-800/50 last:border-0 flex justify-between items-center transition-colors ${idx === search.activeIndex ? 'bg-slate-800' : 'hover:bg-slate-800'}`}
                             >
                                 <div>
                                     <p className="text-xs font-bold text-white uppercase flex items-center gap-2">
