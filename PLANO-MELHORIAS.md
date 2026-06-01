@@ -15,7 +15,7 @@
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
 | Implementações (I) | 14 | 14 ✅ |
 | Segurança (S) | 12 | 12 ✅ |
-| Infra/DevOps (D) | 9 | 13 |
+| Infra/DevOps (D) | 10 | 13 |
 | Testes (T) | 11 | 12 |
 | Acessibilidade/UX (A) | 0 | 12 |
 
@@ -134,7 +134,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [x] **D8** — Conventional Commits validados por commitlint no hook `commit-msg` do husky · `commitlint.config.js`, `.husky/commit-msg`
 - [ ] **D9** — Branch protection no `main` (PR + CI verde)
 - [x] **D10** — Build do servidor + `build:all` na raiz. Como o backend é Node ESM puro (sem bundle), o "build" é um **gate de validação**: `server/scripts/build.js` roda `node --check` em todos os 131 arquivos-fonte e falha (exit 1) se algum não compilar — pega erro de sintaxe/import antes do deploy. Scripts: `build` (server), `build:server` e `build:all` (raiz). Adicionado passo "Build server" no CI antes do build do client · `server/scripts/build.js`, `package.json` (raiz + server), `.github/workflows/ci.yml`
-- [ ] **D11** — Sourcemaps de produção (upload p/ Sentry, não público) · `client/vite.config.ts`
+- [x] **D11** — Sourcemaps de produção em modo `'hidden'` (gerados, mas sem `sourceMappingURL` no bundle → não anunciados ao browser). `@sentry/vite-plugin` faz upload + apaga os `.map` do dist **somente** quando `SENTRY_AUTH_TOKEN` está setado (org/project via env); sem token, um plugin `stripPublicSourcemaps` remove todos os `.map` do dist e o `workbox.sourcemap:false` evita o `.map` do service worker. Resultado verificado no build: **0 `.map` públicos, 0 `sourceMappingURL`**. Para ativar o upload: definir `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` no ambiente de build · `client/vite.config.ts`
 - [x] **D12** — Correlation IDs (`x-request-id`) via `AsyncLocalStorage`: middleware `correlationId` (gera UUID ou reusa o header recebido, devolve no header da resposta e roda a cadeia no contexto) + `utils/requestContext.js`. O `logger` carimba **automaticamente** toda linha com o id (curto no console, completo nos arquivos) — sem alterar os call sites. Inclui log de conclusão de request (método/rota/status/duração, nível `http`, pula health/docs). JSON estruturado completo adiado para manter os logs legíveis; o id já permite rastrear a requisição inteira. 5 testes · `server/middleware/correlationId.js`, `utils/requestContext.js`, `config/logger.js`, `app.js`
 - [ ] **D13** — Investigar bundle/`dist` de 16MB do client
 
