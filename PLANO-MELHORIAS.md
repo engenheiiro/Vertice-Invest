@@ -13,7 +13,7 @@
 | Fase 0 — Segurança crítica | 5 | 5 ✅ |
 | Bugs (B) | 12 | 12 ✅ |
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
-| Implementações (I) | 5 | 14 |
+| Implementações (I) | 6 | 14 |
 | Segurança (S) | 12 | 12 ✅ |
 | Infra/DevOps (D) | 7 | 13 |
 | Testes (T) | 11 | 12 |
@@ -92,7 +92,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [x] **I2** — Health check `/api/health` (status, estado do Mongo, uptime) em `server/app.js`, montado **antes do rate limiter** para não estrangular probes; retorna 503 se Mongo desconectado
 - [ ] **I3** — Cache Redis para market data + macro (TTL alinhado ao fechamento) · `marketDataService.js`, `macroDataService.js`
 - [ ] **I4** — Circuit breaker + retry/backoff para integrações externas · `server/services/*`
-- [ ] **I5** — Rate limiting por usuário em rotas caras (`/research/*`, `/wallet/*`) · `server/app.js`, middleware
+- [x] **I5** — Rate limiting **por usuário** (não por IP) em `middleware/rateLimiters.js`: chave `u:<id>` (fallback IP), via factory `createUserLimiter`. `walletWriteLimiter` (50/15min) substitui o `writeLimiter` por-IP da carteira — corrige injustiça atrás de NAT e evasão por troca de IP. `researchHeavyLimiter` (20/15min) nas rotas caras de research (full-pipeline, crunch, enhance, narrative, syncs, cleanup) e `researchReadLimiter` (300/15min) nas leituras agregadas (latest/macro/signals). Montados após `authenticateToken` (req.user garantido). 3 testes (teto/429, isolamento mesmo-IP, fallback IP) · `server/middleware/rateLimiters.js`, `walletRoutes.js`, `researchRoutes.js`, `tests/rate_limiters.spec.js`
 - [ ] **I6** — Cache do plano/assinatura (TTL 5–10min) em vez de hit no DB por request · `server/middleware/authMiddleware.js`
 - [ ] **I7** — OpenAPI/Swagger documentando endpoints `/api`
 - [x] **I8** — Lazy-load das abas da Wallet via `React.lazy` + `Suspense`. OVERVIEW (aba default) segue eager para não piscar fallback no load; PERFORMANCE/DIVIDENDS/STATEMENT viraram chunks separados (`PerformanceChart` 7.85kB, `DividendDashboard` 8.34kB, `MonthlyReturnsTable` 5.57kB, `CashFlowHistory` 5.20kB — ~27kB raw/~10kB gzip adiados do bundle inicial), carregados sob demanda com fallback de esqueleto. `tsc` limpo, build OK · `client/src/pages/Wallet.tsx`

@@ -26,31 +26,33 @@ import {
     runStorageCleanupHandler
 } from '../controllers/researchController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
+import { researchHeavyLimiter, researchReadLimiter } from '../middleware/rateLimiters.js';
 
 const router = express.Router();
 
 router.use(authenticateToken);
 
-router.get('/latest', getLatestReport);
-router.get('/macro', getMacroData);
-router.get('/signals', getQuantSignals); 
+// (I5) Leituras agregadas (hit a cada load do dashboard): 300/15min por usuário.
+router.get('/latest', researchReadLimiter, getLatestReport);
+router.get('/macro', researchReadLimiter, getMacroData);
+router.get('/signals', researchReadLimiter, getQuantSignals);
 router.get('/radar-stats', getRadarStats);
 
-// Fluxo Granular Admin
-router.post('/crunch', requireAdmin, crunchNumbers);
-router.post('/full-pipeline', requireAdmin, runFullPipeline); 
-router.post('/enhance', requireAdmin, enhanceWithAI); 
-router.post('/narrative', requireAdmin, generateNarrative);
+// (I5) Fluxo Granular Admin — operações caras (pipeline, IA, syncs): 20/15min por usuário.
+router.post('/crunch', researchHeavyLimiter, requireAdmin, crunchNumbers);
+router.post('/full-pipeline', researchHeavyLimiter, requireAdmin, runFullPipeline);
+router.post('/enhance', researchHeavyLimiter, requireAdmin, enhanceWithAI);
+router.post('/narrative', researchHeavyLimiter, requireAdmin, generateNarrative);
 router.post('/publish', requireAdmin, publishContent);
 router.get('/history', requireAdmin, listReports);
 router.get('/details/:id', requireAdmin, getReportDetails);
 
-router.post('/sync-market', requireAdmin, triggerMarketSync);
-router.post('/sync-macro', requireAdmin, triggerMacroSync);
-router.post('/sync-time-series', requireAdmin, syncTimeSeries);
+router.post('/sync-market', researchHeavyLimiter, requireAdmin, triggerMarketSync);
+router.post('/sync-macro', researchHeavyLimiter, requireAdmin, triggerMacroSync);
+router.post('/sync-time-series', researchHeavyLimiter, requireAdmin, syncTimeSeries);
 router.post('/config/backtest', requireAdmin, updateBacktestConfig);
 router.delete('/signals/history', requireAdmin, clearRadarHistory);
-router.post('/cleanup-storage', requireAdmin, runStorageCleanupHandler);
+router.post('/cleanup-storage', researchHeavyLimiter, requireAdmin, runStorageCleanupHandler);
 
 // Monitor de Qualidade & Acurácia
 router.get('/data-quality', requireAdmin, getDataQualityStats);

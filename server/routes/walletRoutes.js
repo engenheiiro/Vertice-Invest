@@ -1,8 +1,8 @@
 
 import express from 'express';
-import rateLimit from 'express-rate-limit';
-import { 
-    getWalletData, 
+import { walletWriteLimiter } from '../middleware/rateLimiters.js';
+import {
+    getWalletData,
     getWalletHistory, 
     addAssetTransaction, 
     removeAsset, 
@@ -23,14 +23,9 @@ import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js
 
 const router = express.Router();
 
-// --- RATE LIMITER ESTRITO PARA ESCRITA ---
-const writeLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 50, // Limite de 50 operações de escrita por IP
-    message: { message: "Muitas operações de escrita. Aguarde 15 minutos." },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
+// (I5) Escrita limitada por USUÁRIO (50/15min) — ver middleware/rateLimiters.js.
+// authenticateToken roda antes, então req.user.id está garantido na chave.
+const writeLimiter = walletWriteLimiter;
 
 router.use(authenticateToken);
 
