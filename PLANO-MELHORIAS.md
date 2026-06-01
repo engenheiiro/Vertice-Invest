@@ -15,7 +15,7 @@
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
 | Implementações (I) | 14 | 14 ✅ |
 | Segurança (S) | 12 | 12 ✅ |
-| Infra/DevOps (D) | 10 | 13 |
+| Infra/DevOps (D) | 11 | 13 |
 | Testes (T) | 11 | 12 |
 | Acessibilidade/UX (A) | 0 | 12 |
 
@@ -136,7 +136,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [x] **D10** — Build do servidor + `build:all` na raiz. Como o backend é Node ESM puro (sem bundle), o "build" é um **gate de validação**: `server/scripts/build.js` roda `node --check` em todos os 131 arquivos-fonte e falha (exit 1) se algum não compilar — pega erro de sintaxe/import antes do deploy. Scripts: `build` (server), `build:server` e `build:all` (raiz). Adicionado passo "Build server" no CI antes do build do client · `server/scripts/build.js`, `package.json` (raiz + server), `.github/workflows/ci.yml`
 - [x] **D11** — Sourcemaps de produção em modo `'hidden'` (gerados, mas sem `sourceMappingURL` no bundle → não anunciados ao browser). `@sentry/vite-plugin` faz upload + apaga os `.map` do dist **somente** quando `SENTRY_AUTH_TOKEN` está setado (org/project via env); sem token, um plugin `stripPublicSourcemaps` remove todos os `.map` do dist e o `workbox.sourcemap:false` evita o `.map` do service worker. Resultado verificado no build: **0 `.map` públicos, 0 `sourceMappingURL`**. Para ativar o upload: definir `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` no ambiente de build · `client/vite.config.ts`
 - [x] **D12** — Correlation IDs (`x-request-id`) via `AsyncLocalStorage`: middleware `correlationId` (gera UUID ou reusa o header recebido, devolve no header da resposta e roda a cadeia no contexto) + `utils/requestContext.js`. O `logger` carimba **automaticamente** toda linha com o id (curto no console, completo nos arquivos) — sem alterar os call sites. Inclui log de conclusão de request (método/rota/status/duração, nível `http`, pula health/docs). JSON estruturado completo adiado para manter os logs legíveis; o id já permite rastrear a requisição inteira. 5 testes · `server/middleware/correlationId.js`, `utils/requestContext.js`, `config/logger.js`, `app.js`
-- [ ] **D13** — Investigar bundle/`dist` de 16MB do client
+- [x] **D13** — Investigado: os 16MB do `dist` eram **~14MB de imagens**, não JS (JS total ~1.4MB, já code-split pelo I8 — load inicial saudável). Ação imediata: removidos **3MB de assets órfãos** (`public/Story.png` + `public/story 2.png`, duplicata, sem nenhuma referência no código) → `dist` 16MB→13MB. Os ~10MB restantes são PNGs de conteúdo da **Academy**, carregados **sob demanda** (não no load inicial; o workbox só pré-cacheia js/css/html/svg/woff2, não png). **Recomendação de follow-up** (opcional, fora deste escopo por exigir pipeline de imagem): converter os PNGs da Academy + `og-image.png` (808KB) para WebP/comprimir — potencial de −50–70% nesses ~10MB · `client/public/`
 
 ---
 
