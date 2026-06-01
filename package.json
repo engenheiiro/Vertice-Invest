@@ -19,6 +19,7 @@
     "set:password": "node server/scripts/setPassword.js",
     "seed:market": "node server/scripts/seedMarketData.js",
     "sync:prod": "node server/scripts/syncProdData.js",
+    "sync:dividends": "node server/scripts/syncDividends.js",
     "scan:radar": "node server/scripts/runRadarScanner.js",
     "radar:report": "node server/scripts/generateRadarReport.js",
     "sync:TimeSeriesWorker": "node server/scripts/syncTimeSeries.js",

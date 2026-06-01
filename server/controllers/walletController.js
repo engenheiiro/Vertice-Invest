@@ -700,6 +700,11 @@ export const addAssetTransaction = async (req, res, next) => {
         if (isRetroactive) {
             try { await financialService.rebuildUserHistory(userId); } catch (err) {}
         }
+        // Ingestão de proventos do ticker em background (não bloqueia a resposta).
+        // Garante que compras novas já apareçam com proventos sem rodar o script.
+        if (transactionType === 'BUY' && !['CRYPTO', 'FIXED_INCOME', 'CASH'].includes(type)) {
+            financialService.syncDividends([{ ticker: ticker.toUpperCase(), type }]).catch(() => {});
+        }
         res.status(201).json({ message: "Transação registrada.", asset: updatedAsset });
     } catch (error) {
         await session.abortTransaction(); session.endSession(); next(error);

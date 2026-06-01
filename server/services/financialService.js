@@ -406,6 +406,44 @@ export const financialService = {
         }
     },
 
+    /**
+     * Ingestão de proventos: busca o histórico de cada ticker e faz upsert em
+     * DividendEvent (índice único ticker+date+amount evita duplicar). Cripto,
+     * renda fixa e caixa são ignorados. `assets`: [{ ticker, type }].
+     */
+    async syncDividends(assets) {
+        if (!Array.isArray(assets) || assets.length === 0) return { tickers: 0, events: 0 };
+
+        const seen = new Set();
+        let tickerCount = 0;
+        let eventCount = 0;
+
+        for (const { ticker, type } of assets) {
+            if (!ticker) continue;
+            const key = ticker.toUpperCase();
+            if (seen.has(key) || ['CRYPTO', 'FIXED_INCOME', 'CASH'].includes(type)) continue;
+            seen.add(key);
+            tickerCount++;
+
+            const events = await externalMarketService.getDividendsHistory(ticker, type);
+            for (const ev of events) {
+                try {
+                    const res = await DividendEvent.updateOne(
+                        { ticker: key, date: ev.date, amount: ev.amount },
+                        { $setOnInsert: { ticker: key, date: ev.date, amount: ev.amount, type: 'DIVIDEND', currency: 'BRL' } },
+                        { upsert: true },
+                    );
+                    if (res.upsertedCount > 0) eventCount++;
+                } catch (e) {
+                    // Corrida no índice único (evento já inserido) — ignora.
+                }
+            }
+        }
+
+        logger.info(`[Dividends] Sync concluído: ${eventCount} novos eventos em ${tickerCount} tickers.`);
+        return { tickers: tickerCount, events: eventCount };
+    },
+
     // ... (Mantém o restante igual) ...
     async calculateUserDividends(userId) {
         // ... (Mantém inalterado)

@@ -62,6 +62,11 @@ npm run radar:report
 # É utilizado pelo comando sync:Prod para montar a análise/ranking.
 npm run sync:TimeSeriesWorker
 
+# Popula os PROVENTOS (DividendEvent) de todos os tickers presentes nas carteiras.
+# Use para preencher carteiras antigas que estavam com "Proventos" zerados.
+# Novas compras já sincronizam sozinhas; o cron diário (04:00) mantém atualizado.
+npm run sync:dividends
+
 🔁 4. Backtest de Portfólio
 
 # Simula "e se eu tivesse comprado esse portfólio X tempo atrás?"

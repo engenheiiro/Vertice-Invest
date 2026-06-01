@@ -443,8 +443,36 @@ export const externalMarketService = {
         }
     },
 
+    // Busca o histórico de proventos (dividendos/JCP) via Yahoo Finance.
+    // Retorna [{ date: Date (ex-date), amount: number por cota }] ordenado por data.
     async getDividendsHistory(ticker, type) {
-        return [];
+        // Cripto, renda fixa e caixa não pagam proventos.
+        if (['CRYPTO', 'FIXED_INCOME', 'CASH'].includes(type)) return [];
+
+        let symbol = ticker.trim().toUpperCase();
+        // B3 (ações/FIIs) precisam do sufixo .SA; STOCK_US vai como está.
+        if ((type === 'STOCK' || type === 'FII') && !symbol.endsWith('.SA') && /^[A-Z]{4}\d{1,2}$/.test(symbol)) {
+            symbol = `${symbol}.SA`;
+        }
+
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const result = await yahooFinance.chart(symbol, {
+                period1: '2018-01-01',
+                period2: today,
+                interval: '1d',
+                events: 'dividends',
+            });
+
+            const divs = result?.events?.dividends || [];
+            return divs
+                .filter((d) => d && d.amount > 0 && d.date)
+                .map((d) => ({ date: new Date(d.date), amount: d.amount }))
+                .sort((a, b) => a.date - b.date);
+        } catch (error) {
+            logger.warn(`[Dividends] Falha ao buscar proventos de ${ticker}: ${error.message}`);
+            return [];
+        }
     },
 
     async getSplitsHistory(ticker, type) {

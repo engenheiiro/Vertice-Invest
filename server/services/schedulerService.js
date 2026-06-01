@@ -335,6 +335,21 @@ export const initScheduler = () => {
         }
     });
 
+    // 7.1 Sync de Proventos (Diário 04:00 AM) — popula DividendEvent dos tickers
+    // que aparecem nas carteiras, mantendo os proventos atualizados.
+    cron.schedule('0 4 * * *', async () => {
+        try {
+            const assets = await UserAsset.find({
+                type: { $nin: ['CRYPTO', 'FIXED_INCOME', 'CASH'] },
+            }).select('ticker type');
+            const uniq = new Map();
+            assets.forEach((a) => { if (!uniq.has(a.ticker)) uniq.set(a.ticker, { ticker: a.ticker, type: a.type }); });
+            if (uniq.size > 0) await financialService.syncDividends([...uniq.values()]);
+        } catch (error) {
+            logger.error(`❌ Erro Sync Proventos: ${error.message}`);
+        }
+    });
+
     // 8. Sync Feriados (Anual)
     cron.schedule('0 6 1 1 *', async () => {
         await holidayService.sync();
