@@ -14,6 +14,7 @@ const DividendDashboard = lazy(() => import('../components/wallet/DividendDashbo
 const CashFlowHistory = lazy(() => import('../components/wallet/CashFlowHistory').then(m => ({ default: m.CashFlowHistory })));
 import { SmartContributionModal } from '../components/wallet/SmartContributionModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { SkeletonChart, SkeletonTableRows } from '../components/ui'; // (I12) skeletons padronizados
 import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2, DollarSign } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
@@ -138,9 +139,9 @@ export const Wallet = () => {
                 </div>
 
                 {isLoading ? (
-                    <div className="animate-pulse space-y-6">
-                        <div className="h-64 bg-slate-800/30 rounded-2xl"></div>
-                        <div className="h-40 bg-slate-800/30 rounded-2xl"></div>
+                    <div className="space-y-6">
+                        <SkeletonChart className="h-64" />
+                        <SkeletonTableRows rows={4} />
                     </div>
                 ) : (
                     <div id="tour-wallet-content" className={`transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
@@ -220,11 +221,11 @@ export const Wallet = () => {
     );
 };
 
-// (I8) Fallback enquanto o chunk da aba é baixado — mesmo esqueleto do loading geral.
+// (I8/I12) Fallback enquanto o chunk da aba é baixado — skeletons padronizados.
 const TabFallback = () => (
-    <div className="animate-pulse space-y-6">
-        <div className="h-64 bg-slate-800/30 rounded-2xl"></div>
-        <div className="h-40 bg-slate-800/30 rounded-2xl"></div>
+    <div className="space-y-6">
+        <SkeletonChart className="h-64" />
+        <SkeletonTableRows rows={3} />
     </div>
 );
 

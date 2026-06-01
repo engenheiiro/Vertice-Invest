@@ -2,6 +2,7 @@
 import React from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Activity, Layers, BarChart2, Info, ShieldCheck, AlertTriangle, Scale } from 'lucide-react';
+import { SkeletonKpiGrid } from '../ui'; // (I12) skeleton padronizado
 
 interface EquitySummaryProps {
     onGenerateReport?: () => void; 
@@ -33,13 +34,7 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
     const grossMultiple = (kpis?.totalInvested || 0) > 0 ? totalGross / kpis.totalInvested : 0;
 
     if (isLoading) {
-        return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-[140px] bg-slate-800/30 rounded-2xl border border-slate-800 animate-pulse"></div>
-                ))}
-            </div>
-        );
+        return <SkeletonKpiGrid count={4} className="mb-8" />;
     }
 
     return (

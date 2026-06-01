@@ -13,7 +13,7 @@
 | Fase 0 — Segurança crítica | 5 | 5 ✅ |
 | Bugs (B) | 12 | 12 ✅ |
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
-| Implementações (I) | 11 | 14 |
+| Implementações (I) | 12 | 14 |
 | Segurança (S) | 12 | 12 ✅ |
 | Infra/DevOps (D) | 7 | 13 |
 | Testes (T) | 11 | 12 |
@@ -99,7 +99,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [x] **I9** — Validação Zod centralizada nas rotas de escrita da carteira via `validate(schema)` (já usado em auth): novo `schemas/walletSchemas.js` cobre `POST /add` (ticker/quantity≠0/price≥0/type∈enum, coerção de strings), `PUT /:id` (tags ≤20), `DELETE /:id` e `DELETE /transactions/:id` (ObjectId 24-hex) e `POST /fix-splits`. Gate puro — não muta `req.body`, então a lógica dos handlers é preservada. Sanitização anti-injeção é o S8 (global). Writes de research são admin-gated e majoritariamente sem body (triggers). 13 testes · `server/schemas/walletSchemas.js`, `walletRoutes.js`, `tests/wallet_schemas.spec.js`
 - [x] **I10** — Validação de assinatura do webhook MP endurecida: **fail-closed** em produção sem secret + comparação **constant-time** (`crypto.timingSafeEqual`) · `server/controllers/webhookController.js` (HMAC já existia)
 - [x] **I11** — Transações atômicas nas mutações de carteira: `addAssetTransaction`/`removeAsset`/`resetWallet` já usavam `mongoose.startSession()` + commit/abort. **Fechada a brecha do `deleteTransaction`** — agora o delete da transação e o `recalculatePosition` rodam na MESMA sessão (recálculo que falha reverte o delete, sem posição inconsistente); `rebuildUserHistory` segue como pós-commit best-effort. 3 testes (commit/abort/404) · `server/controllers/walletController.js`, `tests/wallet_delete_transaction.spec.js`
-- [ ] **I12** — Skeleton screens padronizados + estados erro/loading granulares por query
+- [x] **I12** — Vocabulário de skeletons compostos no `components/ui/Skeleton` (sobre o base do M11): `SkeletonCard`, `SkeletonChart`, `SkeletonKpiGrid`, `SkeletonTableRows`, todos com `role="status"` + `aria-label` (A11y). Adotados nos pontos de maior tráfego — `WalletSummary` (grid de KPIs), página `Wallet` (loading geral) e o `TabFallback` do lazy-load (I8) — substituindo `div animate-pulse` ad-hoc. Migração dos demais loaders é incremental. 6 testes · `client/src/components/ui/Skeleton.tsx`, `WalletSummary.tsx`, `pages/Wallet.tsx`, `tests Skeleton.test.tsx`
 - [ ] **I13** — Painel admin de configuração (editar `SystemConfig` sem deploy) — depende de M9
 - [ ] **I14** — MFA/2FA opcional (TOTP) · `authController.js`, models
 

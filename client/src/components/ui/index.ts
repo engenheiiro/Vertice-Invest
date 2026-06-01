@@ -1,6 +1,6 @@
 // Biblioteca base de UI (M11) — primitivos do design system.
 export { Modal } from './Modal';
-export { Skeleton, SkeletonText } from './Skeleton';
+export { Skeleton, SkeletonText, SkeletonCard, SkeletonChart, SkeletonKpiGrid, SkeletonTableRows } from './Skeleton';
 export { Alert } from './Alert';
 export { Tooltip } from './Tooltip';
 export { Button } from './Button';
