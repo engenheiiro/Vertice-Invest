@@ -8,6 +8,7 @@ import RefreshToken from '../models/RefreshToken.js';
 import AuditLog from '../models/AuditLog.js';
 import { sendResetPasswordEmail } from '../services/emailService.js';
 import logger from '../config/logger.js';
+import { getPasswordError } from '../utils/passwordPolicy.js'; // (S6) política de senha
 
 // Configurações
 const ACCESS_TOKEN_EXPIRATION = '15m';
@@ -63,9 +64,8 @@ export const register = async (req, res, next) => {
     const { name, email, password } = req.body;
 
     if (!name || name.length < 2) throw new Error("Nome muito curto.");
-    if (!password || password.length < 8 || !/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)) {
-      throw new Error("Senha deve ter no mínimo 8 caracteres, uma letra maiúscula e um número.");
-    }
+    const pwError = getPasswordError(password);
+    if (pwError) throw new Error(pwError);
 
     const userExists = await User.findOne({ email }).session(session);
     
@@ -239,8 +239,9 @@ export const resetPassword = async (req, res, next) => {
 
     if (!user) return res.status(400).json({ message: "Token inválido ou expirado." });
 
-    if (!newPassword || newPassword.length < 8 || !/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(newPassword)) {
-      return res.status(400).json({ message: "Senha deve ter no mínimo 8 caracteres, uma letra maiúscula e um número." });
+    const pwError = getPasswordError(newPassword);
+    if (pwError) {
+      return res.status(400).json({ message: pwError });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -288,8 +289,9 @@ export const changePassword = async (req, res, next) => {
         const isMatch = await bcrypt.compare(oldPassword, user.password);
         if (!isMatch) return res.status(401).json({ message: "Senha atual incorreta." });
 
-        if (!newPassword || newPassword.length < 8 || !/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(newPassword)) {
-          return res.status(400).json({ message: "Senha deve ter no mínimo 8 caracteres, uma letra maiúscula e um número." });
+        const pwError = getPasswordError(newPassword);
+        if (pwError) {
+          return res.status(400).json({ message: pwError });
         }
 
         const salt = await bcrypt.genSalt(10);

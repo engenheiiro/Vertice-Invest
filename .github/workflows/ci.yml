@@ -29,6 +29,15 @@ jobs:
       - name: Install (root + client + server)
         run: npm run setup
 
+      # (S12) Auditoria de dependências — informativa (não bloqueia o build;
+      # Dependabot abre PRs de correção). Surfaceia vulnerabilidades >= high.
+      - name: Security audit (npm)
+        continue-on-error: true
+        run: |
+          echo "::group::root"  && npm audit --audit-level=high; echo "::endgroup::"
+          echo "::group::client" && npm audit --audit-level=high --prefix client; echo "::endgroup::"
+          echo "::group::server" && npm audit --audit-level=high --prefix server; echo "::endgroup::"
+
       - name: Lint (ESLint)
         run: npm run lint
 

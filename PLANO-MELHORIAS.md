@@ -14,7 +14,7 @@
 | Bugs (B) | 12 | 12 ✅ |
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
 | Implementações (I) | 3 | 14 |
-| Segurança (S) | 3 | 12 |
+| Segurança (S) | 6 | 12 |
 | Infra/DevOps (D) | 7 | 13 |
 | Testes (T) | 11 | 12 |
 | Acessibilidade/UX (A) | 0 | 12 |
@@ -112,13 +112,13 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [x] **S3** — 🟠 Validação de assinatura webhook MP endurecida (= I10) · `webhookController.js`
 - [x] **S4** — 🟠 Auditoria concluída: **todas** as rotas admin (research, wallet, academy, subscription) já têm `requireAdmin`; market `/status/:ticker` é read-only sob `authenticateToken`. **Sem brechas.**
 - [x] **S5** — 🟠 Verificado: `logout` já deleta o `RefreshToken` do DB (`findOneAndDelete` + `clearCookie` `sameSite:strict`) · `authController.js:199-210`. **Já implementado.**
-- [ ] **S6** — 🟡 Requisitos de senha mais fortes (caractere especial, senhas comuns) · `authController.js:~66` + Zod
+- [x] **S6** — 🟡 Política de senha centralizada em `utils/passwordPolicy.js` (`getPasswordError`): mínimo 8 + minúscula/maiúscula/dígito **+ bloqueio de senhas comuns** (blocklist case-insensitive). Eliminou a regra duplicada em register/reset/change do `authController` e alinhou o `registerSchema` (Zod, antes só `min(6)`) ao mesmo padrão. 8 testes · `server/utils/passwordPolicy.js`
 - [ ] **S7** — 🟡 Proteção CSRF + cookies `SameSite=Strict` · `server/app.js`, helmet
 - [ ] **S8** — 🟡 Sanitização anti-injeção NoSQL/XSS além do Mongoose
 - [ ] **S9** — 🟡 Não logar PII em claro (email no downgrade de plano) · `authMiddleware.js:~30`
-- [ ] **S10** — 🟡 Pin do `@google/genai` (hoje `*`) e upgrade `axios ^1.7` · `server/package.json`
+- [x] **S10** — 🟡 `@google/genai` saiu de `*` (perigoso — permitia major quebrado) para `^1.38.0`; `axios` floor elevado de `^1.6.0` para `^1.7.0`. Versões instaladas já satisfazem (sem reinstalação) · `server/package.json`
 - [ ] **S11** — 🟠 Criptografia em repouso (Atlas) + revisão LGPD de dados enviados ao Gemini
-- [ ] **S12** — 🟡 Dependabot/`npm audit` automatizado no CI
+- [x] **S12** — 🟡 `.github/dependabot.yml` (PRs semanais de update/segurança nos 3 manifestos + GitHub Actions) + step `npm audit --audit-level=high` no CI (informativo, `continue-on-error` — não bloqueia o build) · `.github/dependabot.yml`, `ci.yml`
 
 ---
 
