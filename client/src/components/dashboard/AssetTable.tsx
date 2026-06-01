@@ -92,15 +92,17 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
             {/* Tabela completa — desktop (inalterada) */}
             <div className="hidden md:block overflow-x-auto custom-scrollbar">
                 <table className="w-full text-left border-collapse min-w-[750px]">
+                    {/* (A2) scope="col" associa cada cabeçalho à sua coluna p/ leitores de tela */}
+                    <caption className="sr-only">Ativos da carteira com preço, posição, performance e recomendação</caption>
                     <thead>
                         <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500 bg-[#0B101A]">
-                            <th className="p-4 font-bold">Ativo</th>
-                            <th className="p-4 font-bold text-right">Preço Atual</th>
-                            <th className="p-4 font-bold text-right">Preço Médio</th>
-                            <th className="p-4 font-bold text-right">Posição</th>
-                            <th className="p-4 font-bold w-48">Performance</th>
-                            <th className="p-4 font-bold text-right">IA Score</th>
-                            <th className="p-4 font-bold text-center">Recomendação</th>
+                            <th scope="col" className="p-4 font-bold">Ativo</th>
+                            <th scope="col" className="p-4 font-bold text-right">Preço Atual</th>
+                            <th scope="col" className="p-4 font-bold text-right">Preço Médio</th>
+                            <th scope="col" className="p-4 font-bold text-right">Posição</th>
+                            <th scope="col" className="p-4 font-bold w-48">Performance</th>
+                            <th scope="col" className="p-4 font-bold text-right">IA Score</th>
+                            <th scope="col" className="p-4 font-bold text-center">Recomendação</th>
                         </tr>
                     </thead>
                     <tbody className="text-sm divide-y divide-slate-800/50">

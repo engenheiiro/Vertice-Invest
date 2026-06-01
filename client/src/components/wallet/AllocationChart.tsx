@@ -134,7 +134,12 @@ export const AllocationChart = React.memo(() => {
             <div className="flex items-center gap-2 h-full min-h-0">
                 
                 {/* Chart Container - Tamanho Reduzido e Fixo */}
-                <div className="relative w-[140px] h-[140px] shrink-0">
+                {/* (A1) role=img + aria-label: leitores de tela leem um resumo no lugar do SVG */}
+                <div
+                    className="relative w-[140px] h-[140px] shrink-0"
+                    role="img"
+                    aria-label={`Gráfico de alocação da carteira: ${chartData.map((d) => `${d.name} ${Number(d.value).toFixed(0)}%`).join(', ')}`}
+                >
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                             <Pie

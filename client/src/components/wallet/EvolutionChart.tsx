@@ -282,7 +282,8 @@ export const EvolutionChart = React.memo(() => {
                 </div>
             </div>
 
-            <div className="flex-1 w-full relative min-h-0 text-xs">
+            {/* (A1) descrição textual do gráfico para leitores de tela */}
+            <div className="flex-1 w-full relative min-h-0 text-xs" role="img" aria-label="Gráfico de evolução patrimonial da carteira ao longo do tempo">
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }} barGap={0}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />

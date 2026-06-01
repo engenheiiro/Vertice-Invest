@@ -258,7 +258,8 @@ export const PerformanceChart = React.memo(() => {
                 </div>
             </div>
 
-            <div className="flex-1 w-full text-xs min-h-0">
+            {/* (A1) descrição textual do gráfico para leitores de tela */}
+            <div className="flex-1 w-full text-xs min-h-0" role="img" aria-label="Gráfico de rentabilidade da carteira comparada aos benchmarks (CDI, IPCA, Ibovespa)">
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={displayData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                         <defs>

@@ -17,7 +17,7 @@
 | Segurança (S) | 12 | 12 ✅ |
 | Infra/DevOps (D) | 11 | 13 |
 | Testes (T) | 11 | 12 |
-| Acessibilidade/UX (A) | 0 | 12 |
+| Acessibilidade/UX (A) | 6 | 12 |
 
 ---
 
@@ -162,15 +162,15 @@ Hoje: ~4 specs no backend e **1 teste no frontend** para 67 componentes.
 
 ## CATEGORIA 7 — Acessibilidade / UX
 
-- [ ] **A1** — `aria-label`/descrições em gráficos Recharts · `EvolutionChart`, `PerformanceChart`, `AllocationChart`
-- [ ] **A2** — `scope` em headers de tabela + associação linha↔header · `AssetTable.tsx`
-- [ ] **A3** — Focus trap + tecla `Escape` em todos os modais (via `Modal` base — M11)
-- [ ] **A4** — `aria-labelledby` no título dos modais · `AssetDetailModal`, `AddAssetModal`
-- [ ] **A5** — Live region (`aria-live`) p/ erros de validação · `AddAssetModal`, `Input`
+- [x] **A1** — Contêiner dos gráficos Recharts com `role="img"` + `aria-label` descritivo (resumo dinâmico no AllocationChart; descrição fixa em Evolution/Performance) — leitores de tela anunciam o conteúdo em vez do SVG · `EvolutionChart`, `PerformanceChart`, `AllocationChart`
+- [x] **A2** — `scope="col"` em todos os `<th>` + `<caption className="sr-only">` na tabela de ativos · `AssetTable.tsx`
+- [x] **A3** — Satisfeito pelo primitivo `Modal` (M11): focus trap com ciclo de Tab, fechar com `Escape` e clique no backdrop, restauração de foco ao fechar. Migração dos modais legados ao primitivo é incremental
+- [x] **A4** — Satisfeito pelo `Modal` (M11): `role="dialog"` + `aria-modal` + `aria-labelledby` apontando para o título (`useId`)
+- [x] **A5** — Satisfeito pelo primitivo `Input`: erro com `role="alert"` (live region assertiva) + `aria-invalid` + `aria-errormessage` ligando campo↔mensagem
 - [ ] **A6** — Hierarquia semântica de headings nos cards de KPI · `EquitySummary.tsx`
 - [ ] **A7** — HTML semântico (`section`/`article`/`aside`) no lugar de `div` genérica
 - [ ] **A8** — Auditoria de contraste WCAG AA (slate-600 sobre `#080C14`, badges)
-- [ ] **A9** — Gestão de foco ao abrir/fechar modal e no toggle de senha · `Input.tsx`
+- [x] **A9** — Satisfeito: `Modal` restaura o foco ao elemento anterior ao fechar; toggle de senha do `Input` com `aria-label` dinâmico + `aria-pressed`
 - [ ] **A10** — Navegação por teclado em dropdowns (setas) + ordem de tab explícita
 - [ ] **A11** — Estados de erro visíveis (substituir `catch` silenciosos por toast/Alert)
 - [ ] **A12** — Documentação README + CONTRIBUTING + ARCHITECTURE · raiz
