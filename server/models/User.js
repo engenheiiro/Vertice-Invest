@@ -55,6 +55,12 @@ const UserSchema = new mongoose.Schema({
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },
 
+  // --- MFA / 2FA (TOTP) — I14. Opt-in; campos sensíveis não retornam por padrão. ---
+  mfaEnabled: { type: Boolean, default: false },
+  mfaSecret: { type: String, select: false },          // segredo TOTP confirmado
+  mfaPendingSecret: { type: String, select: false },   // durante o setup, antes de confirmar
+  mfaBackupCodes: { type: [String], select: false, default: [] }, // códigos de recuperação (hash)
+
   createdAt: { type: Date, default: Date.now }
 });
 

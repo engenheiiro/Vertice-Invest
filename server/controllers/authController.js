@@ -10,6 +10,7 @@ import { sendResetPasswordEmail } from '../services/emailService.js';
 import logger from '../config/logger.js';
 import { getPasswordError } from '../utils/passwordPolicy.js'; // (S6) política de senha
 import { invalidateUser } from '../utils/userCache.js'; // (I6) bust de cache no update de perfil
+import { verifyTotp, consumeBackupCode } from '../utils/mfa.js'; // (I14) MFA no login
 
 // Configurações
 const ACCESS_TOKEN_EXPIRATION = '15m';
@@ -52,7 +53,8 @@ const sanitizeUser = (user) => {
         subscriptionStatus: user.subscriptionStatus,
         validUntil: user.validUntil,
         hasSeenTutorial: user.hasSeenTutorial,
-        cpf: user.cpf
+        cpf: user.cpf,
+        mfaEnabled: !!user.mfaEnabled // (I14) p/ a UI refletir o status
     };
 };
 
@@ -107,9 +109,10 @@ export const register = async (req, res, next) => {
 
 export const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-    
-    const user = await User.findOne({ email });
+    const { email, password, mfaToken } = req.body;
+
+    // Seleciona os campos de MFA (select:false por padrão) para o gate abaixo.
+    const user = await User.findOne({ email }).select('+mfaSecret +mfaBackupCodes');
     const invalidMsg = "Credenciais inválidas.";
 
     if (!user) {
@@ -122,6 +125,33 @@ export const login = async (req, res, next) => {
     if (!isMatch) {
         logAudit(req, 'LOGIN_FAILED', 'Senha incorreta', user._id, email);
         return res.status(401).json({ message: invalidMsg });
+    }
+
+    // --- (I14) Segundo fator (opt-in) ---
+    // Só afeta usuários com MFA ativo; demais seguem o fluxo normal.
+    if (user.mfaEnabled) {
+        if (!mfaToken) {
+            // Senha OK, mas falta o 2º fator — sinaliza ao cliente sem emitir tokens.
+            logAudit(req, 'LOGIN_MFA_REQUIRED', 'Aguardando segundo fator', user._id, email);
+            return res.status(200).json({ mfaRequired: true });
+        }
+
+        let mfaOk = verifyTotp(mfaToken, user.mfaSecret);
+        if (!mfaOk) {
+            // Fallback: código de backup (consumo único).
+            const { ok, remaining } = consumeBackupCode(mfaToken, user.mfaBackupCodes);
+            if (ok) {
+                mfaOk = true;
+                user.mfaBackupCodes = remaining;
+                await user.save();
+                logAudit(req, 'LOGIN_MFA_BACKUP', 'Login via código de backup', user._id, email);
+            }
+        }
+
+        if (!mfaOk) {
+            logAudit(req, 'LOGIN_FAILED', 'Segundo fator inválido', user._id, email);
+            return res.status(401).json({ message: invalidMsg });
+        }
     }
 
     // Geração de Tokens

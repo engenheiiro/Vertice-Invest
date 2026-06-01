@@ -5,6 +5,7 @@ import { User } from '../contexts/AuthContext';
 interface LoginCredentials {
   email: string;
   password: string;
+  mfaToken?: string; // (I14) segundo fator, quando a conta tem MFA ativo
 }
 
 interface RegisterData {
@@ -17,6 +18,7 @@ interface AuthResponse {
   user?: User;
   accessToken?: string;
   message?: string;
+  mfaRequired?: boolean; // (I14) senha OK, falta o segundo fator
 }
 
 let isRefreshing = false;
@@ -205,6 +207,39 @@ export const authService = {
       const resData = await response.json();
       if (!response.ok) throw new Error(resData.message || "Erro ao alterar senha");
       return resData;
+  },
+
+  // --- MFA / 2FA (I14) ---
+
+  async getMfaStatus(): Promise<{ mfaEnabled: boolean }> {
+      const response = await this.api('/api/mfa/status', { method: 'GET' });
+      return response.json();
+  },
+
+  async setupMfa(): Promise<{ secret: string; otpauth: string; qr: string }> {
+      const response = await this.api('/api/mfa/setup', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Erro ao iniciar configuração do MFA');
+      return data;
+  },
+
+  async enableMfa(token: string): Promise<{ backupCodes: string[] }> {
+      const response = await this.api('/api/mfa/enable', {
+          method: 'POST',
+          body: JSON.stringify({ token })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Código inválido');
+      return data;
+  },
+
+  async disableMfa(payload: { token?: string; password?: string }): Promise<void> {
+      const response = await this.api('/api/mfa/disable', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Erro ao desativar o MFA');
   },
 
   // --- MÉTODOS DE RECUPERAÇÃO ---
