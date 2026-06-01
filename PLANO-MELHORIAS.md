@@ -17,7 +17,7 @@
 | Segurança (S) | 12 | 12 ✅ |
 | Infra/DevOps (D) | 11 | 13 |
 | Testes (T) | 11 | 12 |
-| Acessibilidade/UX (A) | 8 | 12 |
+| Acessibilidade/UX (A) | 9 | 12 |
 
 ---
 
@@ -173,7 +173,7 @@ Hoje: ~4 specs no backend e **1 teste no frontend** para 67 componentes.
 - [x] **A9** — Satisfeito: `Modal` restaura o foco ao elemento anterior ao fechar; toggle de senha do `Input` com `aria-label` dinâmico + `aria-pressed`
 - [ ] **A10** — Navegação por teclado em dropdowns (setas) + ordem de tab explícita
 - [ ] **A11** — Estados de erro visíveis (substituir `catch` silenciosos por toast/Alert)
-- [ ] **A12** — Documentação README + CONTRIBUTING + ARCHITECTURE · raiz
+- [x] **A12** — Documentação de onboarding na raiz: `README.md` (stack, quickstart, scripts, env, testes), `CONTRIBUTING.md` (fluxo, convenções ESM/Zod/logger, Conventional Commits, husky, testes) e `ARCHITECTURE.md` (camadas do backend, pipeline quantitativo, modelos, segurança em camadas, frontend, CI). Complementam o `CLAUDE.md` existente · raiz
 
 ---
 
