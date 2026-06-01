@@ -9,10 +9,10 @@ import { SubscriptionCard } from '../components/profile/SubscriptionCard';
 
 export const Profile = () => {
     return (
-        <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
 
-            <main className="max-w-[1200px] mx-auto p-4 md:p-6 animate-fade-in">
+            <main id="main-content" tabIndex={-1} className="max-w-[1200px] mx-auto p-4 md:p-6 animate-fade-in">
                 {/* Breadcrumb / Back Navigation */}
                 <div className="mb-6">
                     <Link to="/dashboard" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white transition-colors group">

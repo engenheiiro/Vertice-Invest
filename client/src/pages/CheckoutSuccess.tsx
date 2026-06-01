@@ -62,7 +62,7 @@ export const CheckoutSuccess = () => {
     }, [paymentId, status, refreshProfile]);
 
     return (
-        <div className="min-h-screen bg-[#02040a] flex items-center justify-center p-6 relative overflow-hidden">
+        <div className="min-h-screen bg-deep flex items-center justify-center p-6 relative overflow-hidden">
             {/* Confetti Background */}
             <div className="absolute inset-0 pointer-events-none">
                  <div className="absolute top-0 left-1/4 w-2 h-2 bg-blue-500 rounded-full animate-bounce delay-100"></div>
@@ -70,7 +70,7 @@ export const CheckoutSuccess = () => {
                  <div className="absolute bottom-1/4 right-10 w-2 h-2 bg-purple-500 rounded-full animate-bounce delay-500"></div>
             </div>
 
-            <div className="max-w-md w-full bg-[#080C14] border border-slate-800 rounded-2xl p-8 text-center relative z-10 shadow-2xl shadow-blue-900/10">
+            <div className="max-w-md w-full bg-base border border-slate-800 rounded-2xl p-8 text-center relative z-10 shadow-2xl shadow-blue-900/10">
                 
                 {isVerifying ? (
                     <div className="py-10">

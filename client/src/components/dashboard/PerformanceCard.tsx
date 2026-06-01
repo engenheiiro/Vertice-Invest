@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { BarChart3, Calculator, DollarSign, BrainCircuit } from 'lucide-react';
+import { formatCurrency as fmtCurrency } from '../../utils/format';
 
 const PerformanceCard = ({ macro, isLoading }: { macro: any, isLoading: boolean }) => {
   const [viewMode, setViewMode] = useState<'chart' | 'simulator'>('chart');
@@ -29,7 +30,7 @@ const PerformanceCard = ({ macro, isLoading }: { macro: any, isLoading: boolean 
   const verticeResult = numValue * (1 + iaReturn/100);
   const diff = verticeResult - cdiResult;
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const formatCurrency = (val: number) => fmtCurrency(val);
 
   return (
     <div className="bg-[#03060D]/80 backdrop-blur-xl border border-slate-800 p-6 rounded-3xl shadow-2xl relative overflow-hidden group w-full transition-all duration-500">
@@ -104,4 +105,5 @@ const PerformanceCard = ({ macro, isLoading }: { macro: any, isLoading: boolean 
   );
 };
 
-export default PerformanceCard;
+// (P1) memoizado: só re-renderiza quando macro/isLoading mudam.
+export default React.memo(PerformanceCard);

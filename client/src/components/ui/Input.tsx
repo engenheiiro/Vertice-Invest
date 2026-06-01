@@ -55,11 +55,11 @@ export const Input: React.FC<InputProps> = ({ label, error, id, onFocus, onBlur,
           }}
           className={`
             w-full rounded-xl border-0 ring-1 ring-inset transition-all duration-300 outline-none font-medium text-sm
-            bg-[#0B101A] text-slate-200 placeholder:text-slate-600
+            bg-card text-slate-200 placeholder:text-slate-600
             ${isPasswordType ? 'pr-12' : ''} 
             ${isFocused 
-                ? 'ring-2 ring-blue-600 bg-[#0F1729] shadow-lg shadow-blue-900/10' 
-                : 'ring-slate-800 hover:ring-slate-700 hover:bg-[#0F1729]'
+                ? 'ring-2 ring-blue-600 bg-elevated shadow-lg shadow-blue-900/10' 
+                : 'ring-slate-800 hover:ring-slate-700 hover:bg-elevated'
             }
             ${error 
               ? 'ring-red-500/50 bg-red-900/10 focus:ring-red-500 placeholder:text-red-300/50' 

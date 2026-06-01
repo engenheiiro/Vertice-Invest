@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'rechar
 import { Coins, CalendarCheck, TrendingUp, CheckCircle2, Clock, Calculator } from 'lucide-react';
 import { useDemo } from '../../contexts/DemoContext';
 import { DEMO_DIVIDENDS } from '../../data/DEMO_DATA';
+import { formatCurrency as fmtCurrency } from '../../utils/format';
 
 interface DividendData {
     history: { 
@@ -64,8 +65,7 @@ export const DividendDashboard = () => {
         return data.history;
     }, [data.history, timeRange]);
 
-    const formatCurrency = (val: number) => 
-        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    const formatCurrency = (val: number) => fmtCurrency(val);
 
     const totalProvisioned = data.provisioned.reduce((acc, curr) => acc + (curr.amount || 0), 0);
 
@@ -90,8 +90,8 @@ export const DividendDashboard = () => {
             }
 
             return (
-                <div className="bg-[#0F1729] border border-[#D4AF37] rounded-lg p-3 shadow-xl min-w-[180px] z-50">
-                    <p className="text-xs text-[#D4AF37] font-bold uppercase mb-2 border-b border-[#D4AF37]/30 pb-1">
+                <div className="bg-elevated border border-gold rounded-lg p-3 shadow-xl min-w-[180px] z-50">
+                    <p className="text-xs text-gold font-bold uppercase mb-2 border-b border-gold/30 pb-1">
                         {formattedLabel}
                     </p>
                     <div className="space-y-1 mb-2">
@@ -102,9 +102,9 @@ export const DividendDashboard = () => {
                             </div>
                         ))}
                     </div>
-                    <div className="flex justify-between border-t border-[#D4AF37]/30 pt-1">
+                    <div className="flex justify-between border-t border-gold/30 pt-1">
                         <span className="text-xs text-white font-bold">Total</span>
-                        <span className="text-xs text-[#D4AF37] font-mono font-bold">{formatCurrency(dataPoint.value)}</span>
+                        <span className="text-xs text-gold font-mono font-bold">{formatCurrency(dataPoint.value)}</span>
                     </div>
                 </div>
             );
@@ -114,7 +114,7 @@ export const DividendDashboard = () => {
 
     if (isLoading) {
         return (
-            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[300px] animate-pulse"></div>
+            <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[300px] animate-pulse"></div>
         );
     }
 
@@ -123,11 +123,11 @@ export const DividendDashboard = () => {
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             
-            <div className="lg:col-span-2 bg-[#080C14] border border-slate-800 rounded-2xl p-6 relative overflow-hidden flex flex-col">
+            <div className="lg:col-span-2 bg-base border border-slate-800 rounded-2xl p-6 relative overflow-hidden flex flex-col">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <div>
                         <h3 className="text-base font-bold text-white flex items-center gap-2">
-                            <Coins size={16} className="text-[#D4AF37]" />
+                            <Coins size={16} className="text-gold" />
                             Evolução de Proventos
                         </h3>
                         <p className="text-xs text-slate-500">Histórico de Pagamentos</p>
@@ -138,7 +138,7 @@ export const DividendDashboard = () => {
                             onClick={() => setTimeRange('12M')}
                             className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
                                 timeRange === '12M' 
-                                ? 'bg-[#D4AF37]/20 text-[#D4AF37] shadow-sm border border-[#D4AF37]/50' 
+                                ? 'bg-gold/20 text-gold shadow-sm border border-gold/50' 
                                 : 'text-slate-500 hover:text-slate-300'
                             }`}
                         >
@@ -148,7 +148,7 @@ export const DividendDashboard = () => {
                             onClick={() => setTimeRange('ALL')}
                             className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
                                 timeRange === 'ALL' 
-                                ? 'bg-[#D4AF37]/20 text-[#D4AF37] shadow-sm border border-[#D4AF37]/50' 
+                                ? 'bg-gold/20 text-gold shadow-sm border border-gold/50' 
                                 : 'text-slate-500 hover:text-slate-300'
                             }`}
                         >
@@ -196,7 +196,7 @@ export const DividendDashboard = () => {
                 </div>
             </div>
 
-            <div className="lg:col-span-1 bg-[#080C14] border border-slate-800 rounded-2xl p-6 flex flex-col">
+            <div className="lg:col-span-1 bg-base border border-slate-800 rounded-2xl p-6 flex flex-col">
                 <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-800">
                     <div>
                         <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -214,7 +214,7 @@ export const DividendDashboard = () => {
                         data.provisioned.map((item, idx) => {
                             const received = isDatePassed(item.date);
                             return (
-                                <div key={idx} className="flex items-center justify-between p-3 bg-[#0F131E] rounded-xl border border-slate-800/50">
+                                <div key={idx} className="flex items-center justify-between p-3 bg-panel rounded-xl border border-slate-800/50">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-300 border border-slate-700">
                                             {item.ticker ? item.ticker.substring(0, 4) : 'DIV'}

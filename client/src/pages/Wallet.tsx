@@ -14,10 +14,11 @@ const DividendDashboard = lazy(() => import('../components/wallet/DividendDashbo
 const CashFlowHistory = lazy(() => import('../components/wallet/CashFlowHistory').then(m => ({ default: m.CashFlowHistory })));
 import { SmartContributionModal } from '../components/wallet/SmartContributionModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { SkeletonChart, SkeletonTableRows } from '../components/ui'; // (I12) skeletons padronizados
+import { SkeletonChart, SkeletonTableRows, EmptyState, Button } from '../components/ui'; // (I12) skeletons padronizados + (U3) empty state
 import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2, DollarSign } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
+import { useToast } from '../contexts/ToastContext';
 import { useDemo } from '../contexts/DemoContext'; 
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth';
@@ -26,6 +27,7 @@ import { FEATURE_LIMITS } from '../constants/subscription';
 export const Wallet = () => {
     const { user } = useAuth();
     const { assets, kpis, resetWallet, isLoading, isRefreshing, usdRate } = useWallet();
+    const { addToast } = useToast();
     const { isDemoMode, currentStep } = useDemo();
     const navigate = useNavigate();
     
@@ -69,14 +71,15 @@ export const Wallet = () => {
             setLimitModalOpen(true);
             return;
         }
-        alert("Iniciando motor de rebalanceamento... (Mock)");
+        // Feature ainda em desenvolvimento — comunica honestamente em vez de simular.
+        addToast('Rebalanceamento com IA está em desenvolvimento e chega em breve. 🚧', 'info');
     };
 
     return (
-        <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
             
-            <main className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in relative">
+            <main id="main-content" tabIndex={-1} className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in relative">
                 
                 {/* Header Actions */}
                 <div id="tour-wallet-intro" className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
@@ -146,19 +149,34 @@ export const Wallet = () => {
                 ) : (
                     <div id="tour-wallet-content" className={`transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
                         {activeTab === 'OVERVIEW' && (
-                            <>
-                                <div id="tour-wallet-charts" className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 animate-fade-in">
-                                    <div className="lg:col-span-2">
-                                        <EvolutionChart />
-                                    </div>
-                                    <div className="lg:col-span-1">
-                                        <AllocationChart />
-                                    </div>
+                            assets.length === 0 && !isLoading ? (
+                                <div className="bg-base border border-slate-800 rounded-2xl animate-fade-in">
+                                    <EmptyState
+                                        icon={<PieChart size={28} />}
+                                        title="Sua carteira está vazia"
+                                        description="Adicione seu primeiro ativo para acompanhar patrimônio, rentabilidade, proventos e alocação em tempo real."
+                                        action={
+                                            <Button onClick={() => setIsAddModalOpen(true)} className="!w-auto px-6 gap-2">
+                                                <Plus size={16} /> Adicionar primeiro ativo
+                                            </Button>
+                                        }
+                                    />
                                 </div>
-                                <div id="tour-wallet-list" className="mb-8 animate-fade-in">
-                                    <AssetList />
-                                </div>
-                            </>
+                            ) : (
+                                <>
+                                    <div id="tour-wallet-charts" className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 animate-fade-in">
+                                        <div className="lg:col-span-2">
+                                            <EvolutionChart />
+                                        </div>
+                                        <div className="lg:col-span-1">
+                                            <AllocationChart />
+                                        </div>
+                                    </div>
+                                    <div id="tour-wallet-list" className="mb-8 animate-fade-in">
+                                        <AssetList />
+                                    </div>
+                                </>
+                            )
                         )}
 
                         {activeTab === 'PERFORMANCE' && (

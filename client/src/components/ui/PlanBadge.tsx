@@ -13,7 +13,7 @@ export const PlanBadge: React.FC<PlanBadgeProps> = ({ plan, className = '', show
     GUEST: "bg-slate-800 text-slate-400 border-slate-700",
     ESSENTIAL: "bg-emerald-900/30 text-emerald-400 border-emerald-900/50 shadow-[0_0_10px_rgba(16,185,129,0.1)]",
     PRO: "bg-blue-900/30 text-blue-400 border-blue-900/50 shadow-[0_0_10px_rgba(59,130,246,0.2)]",
-    BLACK: "bg-gradient-to-r from-slate-900 via-[#1a1a1a] to-slate-900 text-[#D4AF37] border-[#D4AF37]/30 shadow-[0_0_15px_rgba(212,175,55,0.15)]"
+    BLACK: "bg-gradient-to-r from-slate-900 via-[#1a1a1a] to-slate-900 text-gold border-gold/30 shadow-[0_0_15px_rgba(212,175,55,0.15)]"
   };
 
   const labels = {

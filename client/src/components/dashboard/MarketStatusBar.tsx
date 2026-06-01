@@ -26,7 +26,7 @@ export const MarketStatusBar: React.FC<MarketStatusBarProps> = ({ indices }) => 
     }, []);
 
     return (
-        <div className="w-full bg-[#02040a] border-b border-slate-800/60 py-1.5 overflow-hidden">
+        <div className="w-full bg-deep border-b border-slate-800/60 py-1.5 overflow-hidden">
             <div className="max-w-[1600px] mx-auto px-6 flex items-center gap-6 overflow-x-auto no-scrollbar">
                 <div className="flex items-center gap-2 pr-4 border-r border-slate-800/60 shrink-0">
                     <span className={`w-1.5 h-1.5 rounded-full ${marketStatus.dot}`}></span>

@@ -6,6 +6,7 @@ import { Calculator as CalculatorIcon, TrendingUp, ChevronDown, Info, AlertCircl
 import { Header } from '../components/dashboard/Header';
 import { researchService } from '../services/research';
 import { authService } from '../services/auth';
+import { formatCurrency as fmtCurrency } from '../utils/format';
 
 // ─── Listas curadas ───────────────────────────────────────────────────────────
 
@@ -179,8 +180,7 @@ function calcAll(
 
 // ─── Formatação ───────────────────────────────────────────────────────────────
 
-const brl = (n: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
+const brl = (n: number) => fmtCurrency(n);
 
 const pct = (n: number) =>
   `${n.toFixed(2).replace('.', ',')}%`;
@@ -216,12 +216,8 @@ function CurrencyInput({ label, value, onChange }: { label: string; value: numbe
 
   // Real-time BRL mask: always show formatted currency, even while typing
   const displayValue = focused
-    ? (digits.length > 0
-        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(digits) / 100)
-        : '')
-    : (value > 0
-        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
-        : '');
+    ? (digits.length > 0 ? brl(Number(digits) / 100) : '')
+    : (value > 0 ? brl(value) : '');
 
   return (
     <div>
@@ -234,7 +230,7 @@ function CurrencyInput({ label, value, onChange }: { label: string; value: numbe
         onFocus={handleFocus}
         onBlur={handleBlur}
         placeholder="R$ 0,00"
-        className="w-full bg-[#0F131E] border border-white/10 focus:border-emerald-500/50 focus:outline-none rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 transition-colors"
+        className="w-full bg-panel border border-white/10 focus:border-emerald-500/50 focus:outline-none rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 transition-colors"
       />
     </div>
   );
@@ -316,7 +312,7 @@ function AssetSelect({
         <select
           value={value ?? ''}
           onChange={e => onChange(e.target.value || null)}
-          className="w-full appearance-none bg-[#0F131E] border border-white/10 focus:border-purple-500/50 focus:outline-none rounded-lg px-3 py-2.5 text-sm text-white transition-colors pr-8"
+          className="w-full appearance-none bg-panel border border-white/10 focus:border-purple-500/50 focus:outline-none rounded-lg px-3 py-2.5 text-sm text-white transition-colors pr-8"
         >
           <option value="">— Não comparar —</option>
           {options.map(o => (
@@ -342,7 +338,7 @@ function MacroChip({ label, value }: { label: string; value: string }) {
 function PieTooltip({ active, payload }: { active?: boolean; payload?: Array<{ name: string; value: number; payload: { color: string } }> }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-[#0F131E] border border-white/10 rounded-lg px-3 py-2 text-xs shadow-xl">
+    <div className="bg-panel border border-white/10 rounded-lg px-3 py-2 text-xs shadow-xl">
       <p style={{ color: payload[0].payload.color }} className="font-semibold mb-0.5">{payload[0].name}</p>
       <p className="text-white font-mono font-bold">{brl(payload[0].value)}</p>
     </div>
@@ -419,10 +415,10 @@ export const Calculator: React.FC = () => {
   ] : [];
 
   return (
-    <div className="min-h-screen bg-[#080C14] text-white">
+    <div className="min-h-screen bg-base text-white">
       <Header />
 
-      <main className="max-w-[1400px] mx-auto px-4 md:px-6 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-[1400px] mx-auto px-4 md:px-6 py-8">
 
         {/* Título */}
         <div className="flex items-center gap-3 mb-8">
@@ -440,7 +436,7 @@ export const Calculator: React.FC = () => {
           {/* ── Painel esquerdo: configuração ── */}
           <div className="space-y-5">
 
-            <div className="bg-[#0B101A] border border-white/5 rounded-xl p-5 space-y-4">
+            <div className="bg-card border border-white/5 rounded-xl p-5 space-y-4">
               <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Configuração</h2>
 
               <CurrencyInput label="Investimento inicial" value={initial} onChange={setInitial} />
@@ -456,7 +452,7 @@ export const Calculator: React.FC = () => {
             </div>
 
             {/* Parâmetros de mercado */}
-            <div className="bg-[#0B101A] border border-white/5 rounded-xl p-5">
+            <div className="bg-card border border-white/5 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Parâmetros hoje</h2>
                 {macroLoading && <div className="w-3 h-3 rounded-full border border-slate-600 border-t-emerald-400 animate-spin" />}
@@ -481,7 +477,7 @@ export const Calculator: React.FC = () => {
             </div>
 
             {/* Comparar com ativos */}
-            <div className="bg-[#0B101A] border border-white/5 rounded-xl p-5 space-y-4">
+            <div className="bg-card border border-white/5 rounded-xl p-5 space-y-4">
               <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Comparar com ativo</h2>
               <AssetSelect
                 label="Ação (mais queridas)"
@@ -530,7 +526,7 @@ export const Calculator: React.FC = () => {
           <div className="lg:col-span-2 space-y-5">
 
             {/* Ranking */}
-            <div className="bg-[#0B101A] border border-white/5 rounded-xl p-5">
+            <div className="bg-card border border-white/5 rounded-xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Melhores opções · Valor líquido de resgate</h2>
                 <span className="text-[10px] text-slate-600">{formatPeriod(periodMonths)}</span>
@@ -597,7 +593,7 @@ export const Calculator: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
                 {/* Gráfico de pizza */}
-                <div className="bg-[#0B101A] border border-white/5 rounded-xl p-4">
+                <div className="bg-card border border-white/5 rounded-xl p-4">
                   <p className="text-[10px] text-slate-500 mb-3 font-semibold uppercase tracking-wider">Composição do resultado · {best.label}</p>
                   <div className="flex items-center gap-4">
                     <div className="w-28 h-28 shrink-0">
@@ -642,12 +638,12 @@ export const Calculator: React.FC = () => {
 
                 {/* Cards de destaque */}
                 <div className="space-y-4">
-                  <div className="bg-[#0B101A] border border-white/5 rounded-xl p-4">
+                  <div className="bg-card border border-white/5 rounded-xl p-4">
                     <p className="text-[10px] text-slate-500 mb-1">Melhor opção</p>
                     <p className="text-sm font-bold text-emerald-400">{best.label}</p>
                     <p className="text-lg font-bold text-white mt-1">{brl(best.netValue)}</p>
                   </div>
-                  <div className="bg-[#0B101A] border border-white/5 rounded-xl p-4">
+                  <div className="bg-card border border-white/5 rounded-xl p-4">
                     <p className="text-[10px] text-slate-500 mb-1">Total investido</p>
                     <p className="text-lg font-bold text-white">{brl(totalInvested)}</p>
                     <p className="text-xs text-slate-500 mt-1">
@@ -662,7 +658,7 @@ export const Calculator: React.FC = () => {
 
         {/* ── Tabela de simulação detalhada ── */}
         {results.length > 0 && (
-          <div ref={tableRef} className="mt-8 bg-[#0B101A] border border-white/5 rounded-xl overflow-hidden">
+          <div ref={tableRef} className="mt-8 bg-card border border-white/5 rounded-xl overflow-hidden">
             <div className="p-5 border-b border-white/5">
               <h2 className="text-sm font-bold text-white">Simulação do investimento</h2>
               <div className="flex flex-wrap gap-6 mt-3 text-xs">

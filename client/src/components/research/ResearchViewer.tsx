@@ -67,7 +67,7 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view }) 
 
     return (
         <div className="max-w-4xl mx-auto animate-fade-in pb-20">
-            <div className="bg-[#080C14] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative">
+            <div className="bg-base border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative">
                 
                 {/* Header Decorativo */}
                 <div className="h-48 bg-gradient-to-r from-blue-900/20 to-[#080C14] border-b border-slate-800/50 p-8 flex flex-col justify-end relative overflow-hidden">
@@ -105,7 +105,7 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view }) 
                     </div>
                 </div>
 
-                <div className="bg-[#0B101A] p-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="bg-card p-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold uppercase tracking-widest">
                         <ShieldCheck size={14} className="text-emerald-500" />
                         Verificado por Algoritmo Vértice Sênior

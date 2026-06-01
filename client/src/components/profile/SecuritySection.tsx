@@ -142,7 +142,7 @@ export const SecuritySection = () => {
     };
 
     return (
-        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6">
+        <div className="bg-base border border-slate-800 rounded-2xl p-6">
             <div className="flex items-center gap-2 mb-1">
                 <Lock size={16} className="text-blue-500" />
                 <h3 className="text-base font-bold text-white">Segurança & Acesso</h3>
@@ -151,7 +151,7 @@ export const SecuritySection = () => {
 
             <div className="space-y-4">
                 {/* 2FA — fluxo real (I14) */}
-                <div className="p-4 bg-[#0B101A] border border-slate-800 rounded-xl transition-colors">
+                <div className="p-4 bg-card border border-slate-800 rounded-xl transition-colors">
                     <div className="flex items-center justify-between">
                         <div className="flex items-start gap-3">
                             <div className={`p-2 rounded-lg ${mfaEnabled ? 'bg-emerald-900/20 text-emerald-500' : 'bg-slate-800 text-slate-500'}`}>
@@ -258,7 +258,7 @@ export const SecuritySection = () => {
                         </p>
                         <div className="grid grid-cols-2 gap-2 mb-3">
                             {backupCodes.map((c) => (
-                                <code key={c} className="text-xs font-mono text-slate-200 bg-[#0B101A] border border-slate-800 rounded px-2 py-1 text-center">{c}</code>
+                                <code key={c} className="text-xs font-mono text-slate-200 bg-card border border-slate-800 rounded px-2 py-1 text-center">{c}</code>
                             ))}
                         </div>
                         <button onClick={copyBackup} className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300">
@@ -269,7 +269,7 @@ export const SecuritySection = () => {
                 )}
 
                 {/* Password Change - Expansível (inalterado) */}
-                <div className={`p-4 bg-[#0B101A] border border-slate-800 rounded-xl transition-all ${isChangingPassword ? 'border-blue-900/50 bg-blue-900/5' : 'hover:border-slate-700'}`}>
+                <div className={`p-4 bg-card border border-slate-800 rounded-xl transition-all ${isChangingPassword ? 'border-blue-900/50 bg-blue-900/5' : 'hover:border-slate-700'}`}>
 
                     {/* Header do Card de Senha */}
                     <div

@@ -99,14 +99,17 @@ export const Modal = ({
         aria-hidden="true"
       />
       <div className="fixed inset-0 z-10 overflow-y-auto">
-        <div className="flex min-h-full items-center justify-center p-4">
+        {/* (M3) No mobile o painel cola embaixo (bottom sheet); no desktop centraliza. */}
+        <div className="flex min-h-full items-end justify-center p-0 sm:items-center sm:p-4">
           <div
             ref={panelRef}
             tabIndex={-1}
-            className={`relative w-full ${maxWidth} transform overflow-hidden rounded-2xl bg-panel border border-slate-800 text-left shadow-2xl transition-all animate-fade-in outline-none ${
+            className={`relative w-full ${maxWidth} transform overflow-hidden rounded-t-2xl sm:rounded-2xl bg-panel border border-slate-800 text-left shadow-2xl transition-all animate-fade-in outline-none ${
               accent ? `border-t-4 ${accent}` : ''
             }`}
           >
+            {/* Puxador visual do bottom sheet (só mobile). */}
+            <div className="sm:hidden mx-auto mt-2 h-1 w-10 rounded-full bg-slate-700" aria-hidden="true" />
             {(title || showClose) && (
               <div className="flex items-center justify-between gap-4 p-6 border-b border-slate-800">
                 {title ? (

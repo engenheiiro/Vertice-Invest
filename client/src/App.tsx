@@ -10,8 +10,10 @@ import { AdminRoute } from './components/auth/AdminRoute';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WalletProvider } from './contexts/WalletContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { ConfirmProvider } from './hooks/useConfirm';
 import { DemoProvider } from './contexts/DemoContext';
 import { TutorialOverlay } from './components/tutorial/TutorialOverlay';
+import { BottomNav } from './components/layout/BottomNav';
 import { InstallPrompt } from './components/pwa/InstallPrompt';
 import { ReloadPrompt } from './components/pwa/ReloadPrompt';
 
@@ -37,7 +39,7 @@ const Calculator = lazy(() => import('./pages/Calculator').then(module => ({ def
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel').then(module => ({ default: module.AdminPanel }))); 
 
 const PageLoader = () => (
-  <div className="fixed inset-0 bg-[#02040a] flex items-center justify-center z-[9999]">
+  <div className="fixed inset-0 bg-deep flex items-center justify-center z-[9999]">
     <div className="relative flex flex-col items-center">
       <div className="absolute inset-0 bg-blue-600/20 blur-[100px] rounded-full animate-pulse"></div>
       <div className="relative z-10 w-20 h-20 flex items-center justify-center mb-8">
@@ -69,6 +71,7 @@ const ProtectedAppLayout = () => {
           <Suspense fallback={<PageLoader />}>
             <Outlet />
           </Suspense>
+          <BottomNav />
         </WalletProvider>
       </DemoProvider>
     </ProtectedRoute>
@@ -79,6 +82,7 @@ export default function App() {
   return (
     <ErrorBoundary>
     <ToastProvider>
+      <ConfirmProvider>
       <ReloadPrompt />
       <InstallPrompt />
       <AuthProvider>
@@ -120,6 +124,7 @@ export default function App() {
           </Routes>
         </BrowserRouter>
       </AuthProvider>
+      </ConfirmProvider>
     </ToastProvider>
     </ErrorBoundary>
   );

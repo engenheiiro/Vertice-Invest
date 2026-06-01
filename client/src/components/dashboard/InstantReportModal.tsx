@@ -63,9 +63,9 @@ export const InstantReportModal: React.FC<InstantReportModalProps> = ({ isOpen, 
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
-                    <div className="relative w-full max-w-2xl bg-[#080C14] border border-slate-700 rounded-2xl shadow-2xl animate-fade-in flex flex-col max-h-[85vh]">
+                    <div className="relative w-full max-w-2xl bg-base border border-slate-700 rounded-2xl shadow-2xl animate-fade-in flex flex-col max-h-[85vh]">
                         
-                        <div className="p-6 border-b border-slate-800 bg-[#0B101A] flex items-center justify-between">
+                        <div className="p-6 border-b border-slate-800 bg-card flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/20">
                                     <Bot size={24} className="text-white" />
@@ -86,7 +86,7 @@ export const InstantReportModal: React.FC<InstantReportModalProps> = ({ isOpen, 
                             {renderContent()}
                         </div>
 
-                        <div className="p-4 border-t border-slate-800 bg-[#0B101A] flex justify-end">
+                        <div className="p-4 border-t border-slate-800 bg-card flex justify-end">
                             <Button variant="outline" onClick={onClose} className="w-auto px-6 h-10 text-xs">
                                 Fechar
                             </Button>

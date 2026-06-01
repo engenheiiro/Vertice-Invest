@@ -36,8 +36,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
     if (!this.state.hasError) return this.props.children;
 
     return (
-      <div className="fixed inset-0 bg-[#02040a] flex items-center justify-center p-6 z-[9999]">
-        <div className="max-w-md w-full text-center bg-[#0B101A] border border-red-500/20 rounded-2xl p-8">
+      <div className="fixed inset-0 bg-deep flex items-center justify-center p-6 z-[9999]">
+        <div className="max-w-md w-full text-center bg-card border border-red-500/20 rounded-2xl p-8">
           <div className="w-14 h-14 mx-auto mb-5 flex items-center justify-center rounded-2xl bg-red-500/10">
             <AlertTriangle className="w-7 h-7 text-red-400" />
           </div>

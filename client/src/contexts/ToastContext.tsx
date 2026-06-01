@@ -41,9 +41,9 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             key={toast.id}
             className={`
               pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border min-w-[300px] animate-fade-in
-              ${toast.type === 'success' ? 'bg-[#0B101A] border-emerald-500/30 text-emerald-400' : ''}
-              ${toast.type === 'error' ? 'bg-[#0B101A] border-red-500/30 text-red-400' : ''}
-              ${toast.type === 'info' ? 'bg-[#0B101A] border-blue-500/30 text-blue-400' : ''}
+              ${toast.type === 'success' ? 'bg-card border-emerald-500/30 text-emerald-400' : ''}
+              ${toast.type === 'error' ? 'bg-card border-red-500/30 text-red-400' : ''}
+              ${toast.type === 'info' ? 'bg-card border-blue-500/30 text-blue-400' : ''}
             `}
           >
             {toast.type === 'success' && <CheckCircle size={18} />}

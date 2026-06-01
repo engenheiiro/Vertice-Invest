@@ -6,6 +6,7 @@ import { useFeatureAccess } from '../../hooks/useFeatureAccess';
 import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
 import { useNavigate } from 'react-router-dom';
+import { formatCurrency as fmtCurrency } from '../../utils/format';
 
 interface AssetTableProps {
     items: PortfolioItem[];
@@ -34,10 +35,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
     const isPro = hasPlan('PRO');
     const isBlack = hasPlan('BLACK');
 
-    const formatCurrency = (val: number) => {
-        if (isPrivacyMode) return '••••••';
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-    };
+    const formatCurrency = (val: number) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
 
     const toggleGroup = (groupName: string) => {
         setCollapsedGroups(prev => ({
@@ -56,8 +54,8 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
     }, {} as Record<string, PortfolioItem[]>);
 
     return (
-        <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-full min-h-[400px]">
-            <div className="p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0B101A]">
+        <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-full min-h-[400px]">
+            <div className="p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card">
                 <h3 className="font-bold text-slate-200 flex items-center gap-2">
                     <PieChart size={16} className="text-blue-500" />
                     Carteira Inteligente
@@ -79,7 +77,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                     <button 
                         className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors border flex items-center gap-1.5 ${
                             isBlack 
-                            ? 'bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30 hover:bg-[#D4AF37]/20' 
+                            ? 'bg-gold/10 text-gold border-gold/30 hover:bg-gold/20' 
                             : 'bg-slate-800 text-slate-500 border-slate-700 opacity-50 cursor-not-allowed'
                         }`}
                         title={isBlack ? "Rebalanceamento Automático" : "Exclusivo Black"}
@@ -95,7 +93,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                     {/* (A2) scope="col" associa cada cabeçalho à sua coluna p/ leitores de tela */}
                     <caption className="sr-only">Ativos da carteira com preço, posição, performance e recomendação</caption>
                     <thead>
-                        <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500 bg-[#0B101A]">
+                        <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500 bg-card">
                             <th scope="col" className="p-4 font-bold">Ativo</th>
                             <th scope="col" className="p-4 font-bold text-right">Preço Atual</th>
                             <th scope="col" className="p-4 font-bold text-right">Preço Médio</th>
@@ -122,7 +120,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                             Object.entries(groupedItems).map(([group, groupItems]) => (
                                 <React.Fragment key={group}>
                                     <tr 
-                                        className="bg-[#0F131E] border-y border-slate-800/50 cursor-pointer hover:bg-[#161b28] transition-colors"
+                                        className="bg-panel border-y border-slate-800/50 cursor-pointer hover:bg-[#161b28] transition-colors"
                                         onClick={() => toggleGroup(group)}
                                     >
                                         <td colSpan={7} className="px-4 py-2">
@@ -166,7 +164,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                                 <div className="flex items-center gap-1.5">
                                                                     <p className="font-bold text-slate-200">{item.ticker}</p>
                                                                     {isChampion && (
-                                                                        <span title="Campeã: Retorno > 15%" className="text-[#D4AF37] animate-pulse">
+                                                                        <span title="Campeã: Retorno > 15%" className="text-gold animate-pulse">
                                                                             <Medal size={12} fill="currentColor" />
                                                                         </span>
                                                                     )}
@@ -254,7 +252,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
             <div className="md:hidden p-3 space-y-3">
                 {isLoading ? (
                     [...Array(4)].map((_, i) => (
-                        <div key={i} className="animate-pulse bg-[#0B101A] border border-slate-800 rounded-xl p-4 h-24" />
+                        <div key={i} className="animate-pulse bg-card border border-slate-800 rounded-xl p-4 h-24" />
                     ))
                 ) : items.length === 0 ? (
                     <div className="p-8 text-center text-slate-500 text-sm">Nenhum ativo na carteira.</div>
@@ -263,7 +261,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                         <div key={group} className="space-y-2">
                             <button
                                 onClick={() => toggleGroup(group)}
-                                className="w-full flex items-center justify-between bg-[#0F131E] border border-slate-800/50 rounded-lg px-3 py-2"
+                                className="w-full flex items-center justify-between bg-panel border border-slate-800/50 rounded-lg px-3 py-2"
                             >
                                 <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest flex items-center gap-2">
                                     {collapsedGroups[group] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
@@ -280,7 +278,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                 const isChampion = profitPercent > 15;
 
                                 return (
-                                    <div key={item.ticker} className="bg-[#0B101A] border border-slate-800 rounded-xl p-4">
+                                    <div key={item.ticker} className="bg-card border border-slate-800 rounded-xl p-4">
                                         <div className="flex items-center justify-between gap-3">
                                             <div className="flex items-center gap-3 min-w-0">
                                                 <div className="w-9 h-9 shrink-0 rounded bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300 border border-slate-700">
@@ -290,7 +288,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                     <div className="flex items-center gap-1.5">
                                                         <p className="font-bold text-slate-200">{isDemoMode ? '••••' : item.ticker}</p>
                                                         {isChampion && !isDemoMode && (
-                                                            <span title="Campeã: Retorno > 15%" className="text-[#D4AF37]">
+                                                            <span title="Campeã: Retorno > 15%" className="text-gold">
                                                                 <Medal size={12} fill="currentColor" />
                                                             </span>
                                                         )}

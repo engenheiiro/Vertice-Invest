@@ -4,6 +4,8 @@ import { useWallet, AssetType, AllocationMap } from '../../contexts/WalletContex
 import { Settings, Check, X, DollarSign } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { formatCompact as fmtCompact } from '../../utils/format';
+import { useToast } from '../../contexts/ToastContext';
 
 // Cores
 const COLORS: Record<AssetType, string> = {
@@ -28,6 +30,7 @@ const ORDERED_TYPES: AssetType[] = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 
 
 export const AllocationChart = React.memo(() => {
     const { assets, kpis, targetAllocation, targetReserve, updateTargets } = useWallet();
+    const { addToast } = useToast();
     const [viewMode, setViewMode] = useState<'CURRENT' | 'IDEAL'>('CURRENT');
     const [isEditing, setIsEditing] = useState(false);
     
@@ -97,7 +100,7 @@ export const AllocationChart = React.memo(() => {
         }, 0);
 
         if (Math.abs(sumPercents - 100) > 0.5) {
-            alert(`A soma das alocações deve ser 100%. Atual: ${sumPercents.toFixed(1)}%`);
+            addToast(`A soma das alocações deve ser 100%. Atual: ${sumPercents.toFixed(1)}%`, 'error');
             return;
         }
 
@@ -106,11 +109,10 @@ export const AllocationChart = React.memo(() => {
         setViewMode('IDEAL');
     };
 
-    const formatCurrency = (val: number) => 
-        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(val);
+    const formatCurrency = (val: number) => fmtCompact(val);
 
     return (
-        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden">
+        <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden">
             
             {/* Header */}
             <div className="flex justify-between items-start mb-2 shrink-0">
@@ -229,7 +231,7 @@ export const AllocationChart = React.memo(() => {
 
             {/* Modal de Edição (Overlay Absoluto) */}
             {isEditing && (
-                <div className="absolute inset-0 bg-[#080C14] z-20 flex flex-col p-6 animate-fade-in rounded-2xl">
+                <div className="absolute inset-0 bg-base z-20 flex flex-col p-6 animate-fade-in rounded-2xl">
                     <div className="flex justify-between items-center mb-4">
                         <h4 className="text-sm font-bold text-white">Configurar Carteira Ideal</h4>
                         <button onClick={() => setIsEditing(false)}><X size={16} className="text-slate-500" /></button>
@@ -247,7 +249,7 @@ export const AllocationChart = React.memo(() => {
                                         value={tempReserve}
                                         onChange={handleReserveChange}
                                         onWheel={(e) => e.currentTarget.blur()}
-                                        className="w-full bg-[#0B101A] border border-slate-800 rounded px-3 pl-8 py-1.5 text-xs text-white focus:border-blue-500 outline-none font-mono"
+                                        className="w-full bg-card border border-slate-800 rounded px-3 pl-8 py-1.5 text-xs text-white focus:border-blue-500 outline-none font-mono"
                                     />
                                 </div>
                             </div>
@@ -267,7 +269,7 @@ export const AllocationChart = React.memo(() => {
                                                 placeholder="0"
                                                 onChange={(e) => handleTargetChange(type, e.target.value)}
                                                 onWheel={(e) => e.currentTarget.blur()}
-                                                className="w-full bg-[#0B101A] border border-slate-800 rounded px-3 py-1.5 text-xs text-white focus:border-blue-500 outline-none"
+                                                className="w-full bg-card border border-slate-800 rounded px-3 py-1.5 text-xs text-white focus:border-blue-500 outline-none"
                                             />
                                             <span className="absolute right-3 top-1.5 text-xs text-slate-600">%</span>
                                         </div>

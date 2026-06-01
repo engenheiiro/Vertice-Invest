@@ -8,6 +8,8 @@ import { subscriptionService } from '../../services/subscription';
 import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Minus, HardDrive, Scissors, Settings, Database, Trash2, ShieldAlert, Target, ClipboardList, MessageSquare, Share2, Send, Copy, X } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 import { TunablesCard } from '../../components/admin/TunablesCard'; // (I13)
+import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../../hooks/useConfirm';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
 interface AssetClassOption {
@@ -54,6 +56,8 @@ const ASSET_CLASSES: AssetClassOption[] = [
 type TabId = 'painel' | 'operacoes' | 'ferramentas';
 
 export const AdminPanel = () => {
+    const { addToast } = useToast();
+    const confirm = useConfirm();
     const [activeTab, setActiveTab] = useState<TabId>('painel');
 
     // --- ESTADOS ---
@@ -234,7 +238,13 @@ export const AdminPanel = () => {
     };
 
     const handleForceSnapshot = async () => {
-        if (!confirm("ATENÇÃO: Isso calculará a rentabilidade de TODOS os usuários com base nos preços atuais. Se já houver um snapshot hoje, ele será substituído. Continuar?")) return;
+        const ok = await confirm({
+            title: 'Forçar snapshot de rentabilidade',
+            message: 'Isso calculará a rentabilidade de TODOS os usuários com base nos preços atuais. Se já houver um snapshot hoje, ele será substituído. Continuar?',
+            confirmText: 'Executar',
+            isDestructive: true,
+        });
+        if (!ok) return;
 
         setIsSnapshotRunning(true);
         setStatusMsg(null);
@@ -327,7 +337,7 @@ export const AdminPanel = () => {
             setLocalGeneratedText(generatedAI);
         } catch (e) {
             setPromptModal(p => ({ ...p, open: false }));
-            alert("Erro ao carregar prompt.");
+            addToast("Erro ao carregar prompt.", 'error');
         } finally {
             setIsLoadingPrompt(false);
         }
@@ -387,7 +397,13 @@ export const AdminPanel = () => {
     const handleFixSplit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!splitTicker) return;
-        if (!confirm(`ATENÇÃO: Isso alterará o histórico de transações de TODOS os usuários que possuem ${splitTicker.toUpperCase()}. Confirma?`)) return;
+        const ok = await confirm({
+            title: 'Corrigir desdobramento (split)',
+            message: `Isso alterará o histórico de transações de TODOS os usuários que possuem ${splitTicker.toUpperCase()}. Confirma?`,
+            confirmText: 'Aplicar',
+            isDestructive: true,
+        });
+        if (!ok) return;
 
         setIsFixingSplit(true);
         setStatusMsg(null);
@@ -453,7 +469,13 @@ export const AdminPanel = () => {
     };
 
     const handleClearRadarHistory = async () => {
-        if (!confirm("ATENÇÃO: Isso apagará TODOS os sinais históricos do Radar Alpha. Apenas novos sinais serão gerados a partir do próximo scan. Confirma?")) return;
+        const ok = await confirm({
+            title: 'Limpar histórico do Radar',
+            message: 'Isso apagará TODOS os sinais históricos do Radar Alpha. Apenas novos sinais serão gerados a partir do próximo scan. Confirma?',
+            confirmText: 'Limpar',
+            isDestructive: true,
+        });
+        if (!ok) return;
 
         setIsClearingRadar(true);
         try {
@@ -475,7 +497,7 @@ export const AdminPanel = () => {
             setSelectedAuditReport(fullReport);
         } catch (e) {
             setAuditModalOpen(false);
-            alert("Erro ao carregar detalhes da auditoria.");
+            addToast("Erro ao carregar detalhes da auditoria.", 'error');
         }
     };
 
@@ -501,10 +523,10 @@ export const AdminPanel = () => {
     ];
 
     return (
-        <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
 
-            <main className="max-w-[1400px] mx-auto p-6 animate-fade-in">
+            <main id="main-content" tabIndex={-1} className="max-w-[1400px] mx-auto p-6 animate-fade-in">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                     <div>
@@ -532,7 +554,7 @@ export const AdminPanel = () => {
                 )}
 
                 {/* Tab Navigation */}
-                <div className="flex gap-1 mb-6 bg-[#080C14] border border-slate-800 rounded-xl p-1">
+                <div className="flex gap-1 mb-6 bg-base border border-slate-800 rounded-xl p-1">
                     {TABS.map(({ id, label, Icon }) => (
                         <button
                             key={id}
@@ -555,7 +577,7 @@ export const AdminPanel = () => {
                         {/* Stats KPI — sempre renderiza, skeleton enquanto carrega */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
 
-                            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
+                            <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
                                 <div className="w-12 h-12 bg-blue-900/20 rounded-xl flex items-center justify-center text-blue-500 border border-blue-900/50 shrink-0">
                                     <RefreshCw size={24} />
                                 </div>
@@ -566,7 +588,7 @@ export const AdminPanel = () => {
                                 </div>
                             </div>
 
-                            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
+                            <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
                                 <div className="w-12 h-12 bg-yellow-900/20 rounded-xl flex items-center justify-center text-yellow-500 border border-yellow-900/50 shrink-0">
                                     <ShieldCheck size={24} />
                                 </div>
@@ -577,7 +599,7 @@ export const AdminPanel = () => {
                                 </div>
                             </div>
 
-                            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                            <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
                                 <div className="flex items-center gap-4">
                                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shrink-0 ${qualityStats?.blacklistedAssets > 0 ? 'bg-red-900/20 text-red-500 border-red-900/50' : 'bg-green-900/20 text-green-500 border-green-900/50'}`}>
                                         <ShieldAlert size={24} />
@@ -603,7 +625,7 @@ export const AdminPanel = () => {
                                 )}
                             </div>
 
-                            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                            <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
                                 <div className="flex items-center gap-4">
                                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shrink-0 ${qualityStats?.snapshotStats?.skipped > 0 ? 'bg-orange-900/20 text-orange-500 border-orange-900/50' : 'bg-indigo-900/20 text-indigo-500 border-indigo-900/50'}`}>
                                         <Activity size={24} />
@@ -632,7 +654,7 @@ export const AdminPanel = () => {
                                 </button>
                             </div>
 
-                            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                            <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
                                 <div className="flex items-center gap-4">
                                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shrink-0 ${qualityStats?.timeSeriesAgeHours > 48 ? 'bg-red-900/20 text-red-500 border-red-900/50 animate-pulse' : 'bg-blue-900/20 text-blue-500 border-blue-900/50'}`}>
                                         <Clock size={24} />
@@ -663,7 +685,7 @@ export const AdminPanel = () => {
                         </div>
 
                         {/* Precisão do Algoritmo */}
-                        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 mb-6 shadow-lg">
+                        <div className="bg-base border border-slate-800 rounded-2xl p-6 mb-6 shadow-lg">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                                 <div>
                                     <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -741,7 +763,7 @@ export const AdminPanel = () => {
                         </div>
 
                         {/* Ambiente Macro */}
-                        <div className="bg-[#0B101A] border border-slate-800 rounded-2xl p-4">
+                        <div className="bg-card border border-slate-800 rounded-2xl p-4">
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex flex-col">
                                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
@@ -792,7 +814,7 @@ export const AdminPanel = () => {
                 {activeTab === 'operacoes' && (
                     <>
                         {/* Protocolo V3 */}
-                        <div className="bg-[#080C14] border border-blue-900/30 rounded-2xl p-6 mb-6 relative overflow-hidden shadow-lg">
+                        <div className="bg-base border border-blue-900/30 rounded-2xl p-6 mb-6 relative overflow-hidden shadow-lg">
                             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600" />
                             <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                                 <div>
@@ -818,7 +840,7 @@ export const AdminPanel = () => {
                             const lastPub = publishStatus.map(s => s.lastPublishedAt).filter(Boolean).sort().reverse()[0];
                             const daysSinceLastPub = lastPub ? Math.floor((Date.now() - new Date(lastPub).getTime()) / 86400000) : null;
                             return (
-                                <div className="bg-[#080C14] border border-indigo-900/40 rounded-2xl p-5 mb-6 shadow-lg">
+                                <div className="bg-base border border-indigo-900/40 rounded-2xl p-5 mb-6 shadow-lg">
                                     <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                                         <div>
                                             <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-1">
@@ -865,8 +887,8 @@ export const AdminPanel = () => {
                         })()}
 
                         {/* Matriz de Geração */}
-                        <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-                            <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-[#0B101A]">
+                        <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+                            <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-card">
                                 <div className="flex items-center gap-2">
                                     <Server size={18} className="text-slate-400" />
                                     <h3 className="font-bold text-white text-sm uppercase tracking-wider">Matriz de Geração & Refinamento</h3>
@@ -875,7 +897,7 @@ export const AdminPanel = () => {
                             </div>
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="bg-[#0B101A] border-b border-slate-800 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                    <tr className="bg-card border-b border-slate-800 text-[10px] font-black text-slate-500 uppercase tracking-widest">
                                         <th className="px-5 py-3">Ativo</th>
                                         <th className="px-5 py-3 text-center">Visualizar</th>
                                         <th className="px-5 py-3 text-center">Publicar</th>
@@ -981,7 +1003,7 @@ export const AdminPanel = () => {
                             {/* (I13) Parâmetros operacionais editáveis sem deploy */}
                             <TunablesCard />
                             {/* Configuração Radar */}
-                            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
+                            <div className="bg-base border border-slate-800 rounded-2xl p-6 shadow-lg">
                                 <div className="flex items-center gap-2 mb-4">
                                     <Settings size={18} className="text-blue-500" />
                                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">Configuração Radar</h3>
@@ -1019,7 +1041,7 @@ export const AdminPanel = () => {
                             </div>
 
                             {/* Inspector de Cache */}
-                            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
+                            <div className="bg-base border border-slate-800 rounded-2xl p-6 shadow-lg">
                                 <div className="flex items-center gap-2 mb-4">
                                     <HardDrive size={18} className="text-emerald-500" />
                                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">Inspector de Cache</h3>
@@ -1029,14 +1051,14 @@ export const AdminPanel = () => {
                                         placeholder="Ticker..."
                                         value={cacheSearchTicker}
                                         onChange={(e) => setCacheSearchTicker(e.target.value.toUpperCase())}
-                                        className="flex-1 bg-[#0B101A] border border-slate-700 border-r-0 rounded-l-xl px-4 py-2 text-sm text-white focus:outline-none font-mono uppercase"
+                                        className="flex-1 bg-card border border-slate-700 border-r-0 rounded-l-xl px-4 py-2 text-sm text-white focus:outline-none font-mono uppercase"
                                     />
                                     <button type="submit" disabled={isSearchingCache} className="px-3 bg-slate-800 border border-slate-700 border-l-0 rounded-r-xl text-slate-300 hover:text-white">
                                         {isSearchingCache ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />}
                                     </button>
                                 </form>
                                 {cacheData && (
-                                    <div className="p-3 bg-[#0F131E] rounded-xl border border-slate-800 space-y-1">
+                                    <div className="p-3 bg-panel rounded-xl border border-slate-800 space-y-1">
                                         <div className="flex justify-between font-bold text-white">
                                             <span>{cacheData.ticker}</span>
                                             <span className={`text-[9px] px-1.5 rounded ${cacheData.status === 'CACHED' ? 'bg-green-900 text-green-400' : 'bg-red-900 text-red-400'}`}>{cacheData.status}</span>
@@ -1048,7 +1070,7 @@ export const AdminPanel = () => {
                             </div>
 
                             {/* Reparar Splits */}
-                            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
+                            <div className="bg-base border border-slate-800 rounded-2xl p-6 shadow-lg">
                                 <div className="flex items-center gap-2 mb-4">
                                     <Scissors size={18} className="text-yellow-500" />
                                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">Reparar Splits</h3>
@@ -1059,7 +1081,7 @@ export const AdminPanel = () => {
                                         placeholder="Ticker"
                                         value={splitTicker}
                                         onChange={(e) => setSplitTicker(e.target.value.toUpperCase())}
-                                        className="flex-1 bg-[#0B101A] border border-slate-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none font-mono uppercase"
+                                        className="flex-1 bg-card border border-slate-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none font-mono uppercase"
                                     />
                                     <button type="submit" disabled={isFixingSplit || !splitTicker} className="px-3 py-2 bg-yellow-600/20 text-yellow-500 border border-yellow-600/30 rounded-xl hover:text-white hover:bg-yellow-600/40 transition-colors">
                                         <Zap size={16} />
@@ -1069,7 +1091,7 @@ export const AdminPanel = () => {
                         </div>
 
                         {/* Testar Pagamento */}
-                        <div className="bg-[#080C14] border border-amber-900/30 rounded-2xl p-6 shadow-lg mb-6">
+                        <div className="bg-base border border-amber-900/30 rounded-2xl p-6 shadow-lg mb-6">
                             <div className="flex items-center gap-2 mb-1">
                                 <ShieldAlert size={18} className="text-amber-500" />
                                 <h3 className="text-sm font-bold text-white uppercase tracking-wider">Testar Pagamento (R$0,50)</h3>
@@ -1101,7 +1123,7 @@ export const AdminPanel = () => {
                         </div>
 
                         {/* Log de Descartes */}
-                        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
+                        <div className="bg-base border border-slate-800 rounded-2xl p-6 shadow-lg">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                                     <ClipboardList size={18} className="text-red-500" />
@@ -1113,7 +1135,7 @@ export const AdminPanel = () => {
                             </div>
                             <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-[300px] custom-scrollbar">
                                 <table className="w-full text-left text-xs">
-                                    <thead className="bg-[#0B101A] sticky top-0 z-10">
+                                    <thead className="bg-card sticky top-0 z-10">
                                         <tr>
                                             <th className="p-3 font-bold text-slate-500 uppercase">Data</th>
                                             <th className="p-3 font-bold text-slate-500 uppercase">Ativo</th>
@@ -1147,7 +1169,7 @@ export const AdminPanel = () => {
             {/* Modal — Prompt + Explainable IA */}
             {promptModal.open && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                    <div className="bg-[#0B101A] border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
+                    <div className="bg-card border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
                         <div className="flex items-center justify-between p-5 border-b border-slate-800">
                             <h3 className="text-sm font-bold text-white flex items-center gap-2">
                                 <MessageSquare size={16} className="text-blue-400" />
@@ -1228,7 +1250,7 @@ const PubBtn = ({ icon, label, active, onClick, disabled, isLoading, title, vari
 );
 
 const MacroCard = ({ label, value, change, sub, color }: { label: string, value: string, change?: number, sub: string, color?: string }) => (
-    <div className="bg-[#0F131E] border border-slate-800 p-3 rounded-xl flex flex-col justify-between h-full">
+    <div className="bg-panel border border-slate-800 p-3 rounded-xl flex flex-col justify-between h-full">
         <div>
             <p className="text-[9px] text-slate-500 font-bold uppercase mb-1">{label}</p>
             <p className={`text-sm font-mono font-bold ${color || 'text-white'}`}>{value}</p>

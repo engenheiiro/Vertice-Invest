@@ -13,7 +13,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
 
   if (isLoading) {
     return (
-        <div className="min-h-screen flex items-center justify-center bg-[#02040a]">
+        <div className="min-h-screen flex items-center justify-center bg-deep">
             <Loader2 className="animate-spin text-blue-600" />
         </div>
     );
@@ -27,7 +27,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
   // Se estiver logado mas não for ADMIN, manda para dashboard com aviso (opcional) ou bloqueia
   if (user?.role !== 'ADMIN') {
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-[#02040a] text-white p-6 text-center">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-deep text-white p-6 text-center">
             <div className="w-16 h-16 bg-red-900/20 rounded-2xl flex items-center justify-center mb-4 border border-red-900/50">
                 <Lock size={32} className="text-red-500" />
             </div>

@@ -5,7 +5,8 @@ import { researchService, ResearchReport, RankingItem } from '../services/resear
 import { ResearchViewer } from '../components/research/ResearchViewer';
 import { AssetDetailModal } from '../components/research/AssetDetailModal'; // Importado
 import { ExplainableAIRenderer } from '../components/research/ExplainableAIRenderer';
-import { Bot, Newspaper, Trophy, Loader2, Lock, Crown, Info, RefreshCcw } from 'lucide-react';
+import { Bot, Newspaper, Trophy, Lock, Crown, Info, RefreshCcw } from 'lucide-react';
+import { SkeletonCard, SkeletonTableRows } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -85,10 +86,10 @@ export const Research = () => {
     const requiredPlanLabel = ASSETS.find(a => a.id === selectedAsset)?.minPlan || 'PRO';
 
     return (
-        <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
 
-            <main className="max-w-[1600px] mx-auto p-4 md:p-8">
+            <main id="main-content" tabIndex={-1} className="max-w-[1600px] mx-auto p-4 md:p-8">
                 
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-12">
                     <div>
@@ -104,7 +105,7 @@ export const Research = () => {
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-center">
-                        <div className="flex bg-[#080C14] border border-slate-800 p-1.5 rounded-2xl overflow-x-auto no-scrollbar gap-1 shadow-inner w-full sm:w-auto">
+                        <div className="flex bg-base border border-slate-800 p-1.5 rounded-2xl overflow-x-auto no-scrollbar gap-1 shadow-inner w-full sm:w-auto">
                             {ASSETS.map(asset => {
                                 const allowed = checkAccess(asset.id);
                                 return (
@@ -125,7 +126,7 @@ export const Research = () => {
                         </div>
 
                         <div className="flex gap-2">
-                            <div className="flex bg-[#080C14] border border-slate-800 p-1.5 rounded-2xl gap-1 shadow-inner">
+                            <div className="flex bg-base border border-slate-800 p-1.5 rounded-2xl gap-1 shadow-inner">
                                 <button 
                                     onClick={() => setViewMode('RANKING')}
                                     className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
@@ -147,7 +148,7 @@ export const Research = () => {
                             <button 
                                 onClick={fetchReport}
                                 disabled={isLoading || !hasAccessToSelected}
-                                className="bg-[#080C14] border border-slate-800 p-3 rounded-2xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                                className="bg-base border border-slate-800 p-3 rounded-2xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
                                 title="Atualizar Dados"
                             >
                                 <RefreshCcw size={18} className={isLoading ? 'animate-spin' : ''} />
@@ -158,12 +159,14 @@ export const Research = () => {
 
                 <div className="min-h-[400px]">
                     {isLoading ? (
-                        <div className="flex flex-col items-center justify-center py-20">
-                            <Loader2 size={40} className="text-blue-500 animate-spin mb-4" />
-                            <p className="text-slate-500 text-sm font-bold uppercase tracking-widest text-center">Acessando Intel Vértice...</p>
+                        <div className="space-y-4 animate-fade-in" aria-busy="true" aria-label="Carregando análise Vértice">
+                            <SkeletonCard className="h-28" />
+                            <div className="bg-card border border-slate-800 rounded-2xl p-5">
+                                <SkeletonTableRows rows={6} />
+                            </div>
                         </div>
                     ) : !hasAccessToSelected ? (
-                        <div className="flex flex-col items-center justify-center py-20 bg-[#080C14] border border-slate-800 rounded-3xl p-10 text-center">
+                        <div className="flex flex-col items-center justify-center py-20 bg-base border border-slate-800 rounded-3xl p-10 text-center">
                             <Crown size={40} className="text-blue-500 mb-6" />
                             <h2 className="text-2xl font-black text-white mb-3">Conteúdo Exclusivo {requiredPlanLabel}</h2>
                             <p className="text-slate-400 max-w-sm mb-8">
@@ -174,7 +177,7 @@ export const Research = () => {
                             </button>
                         </div>
                     ) : !report ? (
-                        <div className="flex flex-col items-center justify-center py-20 bg-[#080C14] border border-dashed border-slate-800 rounded-3xl text-center">
+                        <div className="flex flex-col items-center justify-center py-20 bg-base border border-dashed border-slate-800 rounded-3xl text-center">
                             <Info size={48} className="text-slate-700 mb-4" />
                             <h3 className="text-xl font-black text-slate-500 uppercase">Análise não encontrada</h3>
                             <p className="text-slate-600 text-sm mt-2 max-w-sm">Use o painel admin para gerar o relatório inaugural desta categoria.</p>
@@ -183,7 +186,7 @@ export const Research = () => {
                         <div className="animate-fade-in space-y-8 pb-20">
                             {/* Análise Explainable IA */}
                             {report.isExplainableAIPublished && report.generatedExplainableAI ? (
-                                <div className="bg-[#080C14] border border-indigo-900/30 rounded-3xl overflow-hidden shadow-xl">
+                                <div className="bg-base border border-indigo-900/30 rounded-3xl overflow-hidden shadow-xl">
                                     <div className="p-6 border-b border-slate-800">
                                         <h2 className="text-lg font-black text-white flex items-center gap-3">
                                             <Bot size={20} className="text-indigo-400" />
@@ -199,7 +202,7 @@ export const Research = () => {
 
                             {/* Sem conteúdo publicado ainda */}
                             {!report.isExplainableAIPublished && (
-                                <div className="flex flex-col items-center justify-center py-20 bg-[#080C14] border border-dashed border-slate-800 rounded-3xl text-center">
+                                <div className="flex flex-col items-center justify-center py-20 bg-base border border-dashed border-slate-800 rounded-3xl text-center">
                                     <Info size={48} className="text-slate-700 mb-4" />
                                     <h3 className="text-xl font-black text-slate-500 uppercase">Relatório ainda não publicado</h3>
                                     <p className="text-slate-600 text-sm mt-2 max-w-sm">O admin ainda não publicou o relatório semanal desta categoria.</p>

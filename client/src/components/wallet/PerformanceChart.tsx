@@ -5,6 +5,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { TrendingUp, RefreshCw } from 'lucide-react';
 import { useDemo } from '../../contexts/DemoContext';
 import { DEMO_PERFORMANCE } from '../../data/DEMO_DATA';
+import { formatCurrency as fmtCurrency } from '../../utils/format';
 
 interface PerformancePoint {
     date: string;
@@ -16,7 +17,6 @@ interface PerformancePoint {
     ipca?: number;
 }
 
-const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 
 const LABEL_MAP: Record<string, string> = {
     walletVal: 'Minha Carteira',
@@ -130,7 +130,7 @@ export const PerformanceChart = React.memo(() => {
 
     if (isLoading) {
         return (
-            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[420px] flex items-center justify-center animate-pulse">
+            <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex items-center justify-center animate-pulse">
                 <div className="text-center">
                     <RefreshCw className="animate-spin text-blue-500 mx-auto mb-2" />
                     <p className="text-xs text-slate-500">Calculando rentabilidade relativa...</p>
@@ -141,7 +141,7 @@ export const PerformanceChart = React.memo(() => {
 
     if (data.length === 0) {
         return (
-            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[420px] flex items-center justify-center">
+            <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex items-center justify-center">
                 <p className="text-slate-500 text-sm">Dados insuficientes para comparação histórica.</p>
             </div>
         );
@@ -157,7 +157,7 @@ export const PerformanceChart = React.memo(() => {
     const walletDataKey = viewMode === 'brl' ? 'walletBRL' : (metricMode === 'TWRR' ? 'wallet' : 'walletRoi');
 
     return (
-        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden">
+        <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden">
 
             {/* HEADER COM CONTROLES */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 z-10 relative">
@@ -312,7 +312,7 @@ export const PerformanceChart = React.memo(() => {
                             formatter={(value: number, name: string) => {
                                 const label = LABEL_MAP[name] ?? name;
                                 if (viewMode === 'brl') {
-                                    return [BRL.format(value), label];
+                                    return [fmtCurrency(value), label];
                                 }
                                 return [`${value.toFixed(2)}%`, label];
                             }}

@@ -66,7 +66,7 @@ export const AuthLayout: React.FC = () => {
       <div className="relative z-10 w-full max-w-[450px] lg:max-w-[800px] xl:max-w-[950px] bg-white rounded-2xl shadow-2xl shadow-black/80 overflow-hidden flex flex-col lg:flex-row border border-slate-800 ring-1 ring-white/10 lg:max-h-[85vh] xl:max-h-none">
         
         {/* Coluna da Esquerda (Carrossel) */}
-        <div className="w-full lg:w-[45%] xl:w-[50%] bg-[#080C14] relative p-6 lg:p-8 xl:p-12 flex flex-col justify-between text-white overflow-hidden border-b lg:border-b-0 lg:border-r border-slate-800 min-h-[220px] lg:min-h-auto">
+        <div className="w-full lg:w-[45%] xl:w-[50%] bg-base relative p-6 lg:p-8 xl:p-12 flex flex-col justify-between text-white overflow-hidden border-b lg:border-b-0 lg:border-r border-slate-800 min-h-[220px] lg:min-h-auto">
             <div className="absolute inset-0 bg-gradient-to-b from-[#0F1729] to-[#080C14] z-0"></div>
             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full blur-[60px] z-0"></div>
             
@@ -115,9 +115,9 @@ export const AuthLayout: React.FC = () => {
 
             <div className="relative z-10 hidden lg:flex items-center gap-3 opacity-90">
                 <div className="flex -space-x-3">
-                   <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=56&h=56" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-[#080C14] object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
-                   <img src="https://images.unsplash.com/photo-1573496359-136d4755f357?auto=format&fit=crop&w=56&h=56" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-[#080C14] object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
-                   <img src="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=56&h=56" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-[#080C14] object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
+                   <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=56&h=56" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-base object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
+                   <img src="https://images.unsplash.com/photo-1573496359-136d4755f357?auto=format&fit=crop&w=56&h=56" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-base object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
+                   <img src="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=56&h=56" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-base object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
                 </div>
                 <div>
                    <p className="text-[9px] text-slate-300 font-bold uppercase tracking-wide">Comunidade Premium</p>

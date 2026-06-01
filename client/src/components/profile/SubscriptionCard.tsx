@@ -34,12 +34,12 @@ export const SubscriptionCard = () => {
         <div className="bg-gradient-to-br from-[#080C14] to-[#0A101F] border border-slate-800 rounded-2xl p-6 relative overflow-hidden group">
             {/* Efeitos de Fundo */}
             {userPlan === 'PRO' && <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full blur-[80px] pointer-events-none"></div>}
-            {userPlan === 'BLACK' && <div className="absolute top-0 right-0 w-64 h-64 bg-[#D4AF37]/5 rounded-full blur-[80px] pointer-events-none"></div>}
+            {userPlan === 'BLACK' && <div className="absolute top-0 right-0 w-64 h-64 bg-gold/5 rounded-full blur-[80px] pointer-events-none"></div>}
 
             <div className="flex flex-col md:flex-row justify-between items-start mb-6 relative z-10 gap-4">
                 <div>
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-bold text-white uppercase tracking-wider mb-2 ${
-                        userPlan === 'BLACK' ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30' : 
+                        userPlan === 'BLACK' ? 'bg-gold/20 text-gold border border-gold/30' : 
                         userPlan === 'PRO' ? 'bg-blue-600 border border-blue-500' : 'bg-slate-700 text-slate-300 border border-slate-600'
                     }`}>
                         {userPlan === 'BLACK' && <Crown size={10} fill="currentColor" />}
@@ -71,12 +71,12 @@ export const SubscriptionCard = () => {
                 </div>
             </div>
 
-            <div className="space-y-2 mb-6 relative z-10 bg-[#0B101A] p-4 rounded-xl border border-slate-800/50">
+            <div className="space-y-2 mb-6 relative z-10 bg-card p-4 rounded-xl border border-slate-800/50">
                 <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Recursos Ativos</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {currentPlan.features.map((feat, idx) => (
                         <div key={idx} className="flex items-center gap-2 text-xs text-slate-300">
-                            <CheckCircle2 size={14} className={userPlan === 'BLACK' ? 'text-[#D4AF37]' : 'text-emerald-500'} />
+                            <CheckCircle2 size={14} className={userPlan === 'BLACK' ? 'text-gold' : 'text-emerald-500'} />
                             <span>{feat}</span>
                         </div>
                     ))}

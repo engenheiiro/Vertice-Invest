@@ -95,7 +95,7 @@ export const ProfileSettings = () => {
     };
 
     return (
-        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6">
+        <div className="bg-base border border-slate-800 rounded-2xl p-6">
             <h3 className="text-base font-bold text-white mb-1">Informações Pessoais</h3>
             <p className="text-xs text-slate-500 mb-6">Atualize seus dados de identificação e contato.</p>
 

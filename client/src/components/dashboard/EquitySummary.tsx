@@ -2,6 +2,8 @@
 import React from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Activity, Layers, BarChart2, Info } from 'lucide-react';
+import { formatCurrency as fmtCurrency } from '../../utils/format';
+import { useCountUp } from '../../hooks/useCountUp';
 
 interface EquitySummaryProps {
     onGenerateReport?: () => void; 
@@ -9,11 +11,11 @@ interface EquitySummaryProps {
 
 export const EquitySummary: React.FC<EquitySummaryProps> = () => {
     const { kpis, isPrivacyMode, isLoading } = useWallet();
+    const animatedEquity = useCountUp(kpis?.totalEquity || 0);
 
     const formatCurrency = (val: number | null | undefined) => {
         if (isLoading) return <div className="h-6 w-24 bg-slate-800 rounded animate-pulse"></div>;
-        if (isPrivacyMode) return '••••••';
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+        return fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
     };
 
     const safeFixed = (val: number | null | undefined) => {
@@ -41,8 +43,12 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
                     icon={<Wallet size={18} className="text-blue-500" />}
                     value={
                         <div className="flex items-baseline gap-2">
-                            <span className={isEquityProfitable ? "text-emerald-400" : "text-white"}>
-                                {formatCurrency(kpis.totalEquity)}
+                            <span
+                                className={isEquityProfitable ? "text-emerald-400" : "text-white"}
+                                aria-live="polite"
+                                aria-atomic="true"
+                            >
+                                {formatCurrency(animatedEquity)}
                             </span>
                             <span className={`text-xs font-bold px-1.5 py-0.5 rounded border translate-y-[-2px] ${isTotalPositive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
                                 {isTotalPositive ? '+' : ''}{safeFixed(kpis.totalResultPercent)}%
@@ -106,13 +112,13 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
                 <DashboardCard 
                     label="PROV. ACUMULADOS"
                     value={formatCurrency(kpis.totalDividends)}
-                    icon={<PiggyBank size={18} className="text-[#D4AF37]" />}
+                    icon={<PiggyBank size={18} className="text-gold" />}
                     subLabel="Média Mensal Est."
                     subContent={
-                        <span className="text-[#D4AF37] font-bold text-xs">{formatCurrency(kpis.projectedDividends)}</span>
+                        <span className="text-gold font-bold text-xs">{formatCurrency(kpis.projectedDividends)}</span>
                     }
                     badge={
-                        <div className="text-[10px] font-bold px-2 py-0.5 rounded border bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/20 flex items-center gap-1">
+                        <div className="text-[10px] font-bold px-2 py-0.5 rounded border bg-gold/10 text-gold border-gold/20 flex items-center gap-1">
                             <Layers size={10} /> Passivo
                         </div>
                     }
@@ -128,9 +134,9 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
 const DashboardCard = ({ label, value, icon, subLabel, subContent, badge, glow, tooltipText }: any) => (
     <div className="relative group hover:border-slate-700 transition-colors">
         {/* Background Container (Clipped) */}
-        <div className="absolute inset-0 bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden">
+        <div className="absolute inset-0 bg-base border border-slate-800 rounded-2xl overflow-hidden">
             {glow === 'blue' && <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/5 rounded-full blur-[60px] pointer-events-none"></div>}
-            {glow === 'gold' && <div className="absolute top-0 right-0 w-32 h-32 bg-[#D4AF37]/5 rounded-full blur-[60px] pointer-events-none"></div>}
+            {glow === 'gold' && <div className="absolute top-0 right-0 w-32 h-32 bg-gold/5 rounded-full blur-[60px] pointer-events-none"></div>}
         </div>
 
         {/* Content Container (Allows Overflow for Tooltip) */}
@@ -147,7 +153,7 @@ const DashboardCard = ({ label, value, icon, subLabel, subContent, badge, glow, 
                             {tooltipText && (
                                 <div className="group/info relative flex items-center">
                                     <Info size={10} className="text-slate-600 cursor-help hover:text-blue-400 transition-colors" />
-                                    <div className="absolute left-0 top-6 w-48 p-2 bg-[#0F1729] border border-slate-700 rounded-lg shadow-xl z-50 opacity-0 group-hover/info:opacity-100 transition-opacity pointer-events-none">
+                                    <div className="absolute left-0 top-6 w-48 p-2 bg-elevated border border-slate-700 rounded-lg shadow-xl z-50 opacity-0 group-hover/info:opacity-100 transition-opacity pointer-events-none">
                                         <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
                                             {tooltipText}
                                         </p>

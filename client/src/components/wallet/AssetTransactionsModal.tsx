@@ -4,6 +4,9 @@ import { createPortal } from 'react-dom';
 import { X, Trash2, Calendar, TrendingUp, TrendingDown, History, Loader2 } from 'lucide-react';
 import { walletService } from '../../services/wallet';
 import { useWallet } from '../../contexts/WalletContext';
+import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../../hooks/useConfirm';
+import { formatCurrency as fmtCurrency } from '../../utils/format';
 
 interface Transaction {
     _id: string;
@@ -28,6 +31,8 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     
     const { refreshWallet } = useWallet();
+    const { addToast } = useToast();
+    const confirm = useConfirm();
 
     // Reset ao abrir
     useEffect(() => {
@@ -74,20 +79,26 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm("Tem certeza que deseja excluir esta movimentação? O preço médio será recalculado.")) return;
-        
+        const ok = await confirm({
+            title: 'Excluir movimentação',
+            message: 'Tem certeza que deseja excluir esta movimentação? O preço médio será recalculado.',
+            confirmText: 'Excluir',
+            isDestructive: true,
+        });
+        if (!ok) return;
+
         try {
             await walletService.deleteTransaction(id);
             // Recarrega a primeira página para garantir consistência
             loadTransactions(1, true);
             refreshWallet(); // Invalida queries globais
+            addToast('Movimentação excluída.', 'success');
         } catch (e) {
-            alert("Erro ao excluir.");
+            addToast('Erro ao excluir a movimentação.', 'error');
         }
     };
 
-    const formatCurrency = (val: number) => 
-        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    const formatCurrency = (val: number) => fmtCurrency(val);
 
     if (!isOpen) return null;
 
@@ -97,10 +108,10 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
             
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
-                    <div className="relative w-full max-w-2xl bg-[#080C14] border border-slate-700 rounded-3xl overflow-hidden shadow-2xl animate-fade-in flex flex-col max-h-[85vh]">
+                    <div className="relative w-full max-w-2xl bg-base border border-slate-700 rounded-3xl overflow-hidden shadow-2xl animate-fade-in flex flex-col max-h-[85vh]">
                         
                         {/* Header */}
-                        <div className="p-5 border-b border-slate-800 bg-[#0B101A] flex items-center justify-between">
+                        <div className="p-5 border-b border-slate-800 bg-card flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
                                     <History size={20} className="text-blue-500" />
@@ -128,7 +139,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
                             ) : (
                                 <div className="space-y-3">
                                     {transactions.map((tx) => (
-                                        <div key={tx._id} className="flex items-center justify-between p-4 rounded-xl bg-[#0F131E] border border-slate-800 hover:border-slate-700 transition-colors group">
+                                        <div key={tx._id} className="flex items-center justify-between p-4 rounded-xl bg-panel border border-slate-800 hover:border-slate-700 transition-colors group">
                                             
                                             <div className="flex items-center gap-4">
                                                 <div className={`p-2 rounded-lg ${tx.type === 'BUY' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>

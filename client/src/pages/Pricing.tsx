@@ -4,12 +4,14 @@ import { Check, X, ArrowLeft, Zap, Shield, Crown, ExternalLink } from 'lucide-re
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { useAuth, UserPlan } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { subscriptionService } from '../services/subscription';
 import { Header } from '../components/dashboard/Header';
 import { PLAN_ACCESS, PLAN_DETAILS } from '../constants/subscription';
 
 export const Pricing = () => {
     const { user } = useAuth();
+    const { addToast } = useToast();
     const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
     const handleSelectPlan = async (planId: string) => {
@@ -26,7 +28,7 @@ export const Pricing = () => {
             }
         } catch (error) {
             console.error("Erro ao iniciar checkout", error);
-            alert("Não foi possível conectar ao Mercado Pago. Tente novamente.");
+            addToast("Não foi possível conectar ao Mercado Pago. Tente novamente.", 'error');
             setLoadingPlan(null);
         }
     };
@@ -62,7 +64,7 @@ export const Pricing = () => {
     };
 
     return (
-        <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30 pb-20">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-20">
             <Header />
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 lg:py-16 animate-fade-in">
@@ -136,13 +138,13 @@ export const Pricing = () => {
                         title={PLAN_DETAILS['BLACK'].label}
                         price={PLAN_DETAILS['BLACK'].price}
                         description="Gestão de nível institucional."
-                        icon={<Crown className="text-[#D4AF37]" size={20} fill="currentColor" />}
+                        icon={<Crown className="text-gold" size={20} fill="currentColor" />}
                         features={buildFeaturesForPlan('BLACK')}
                         current={user?.plan === 'BLACK'}
                         buttonVariant="outline"
-                        buttonColorClass="!bg-transparent !text-[#D4AF37] !border-[#D4AF37]/50 hover:!bg-[#D4AF37]/10 hover:!border-[#D4AF37]"
-                        borderColor="border-[#D4AF37]/30"
-                        hoverColor="hover:border-[#D4AF37]/60"
+                        buttonColorClass="!bg-transparent !text-gold !border-gold/50 hover:!bg-gold/10 hover:!border-gold"
+                        borderColor="border-gold/30"
+                        hoverColor="hover:border-gold/60"
                         onSelect={handleSelectPlan}
                         isLoading={loadingPlan === 'BLACK'}
                     />
@@ -164,7 +166,7 @@ export const Pricing = () => {
 };
 
 const PricingCard = ({ id, title, price, description, icon, features, isPopular, current, buttonVariant, buttonColorClass = '', borderColor = "border-slate-800", hoverColor = "hover:border-slate-700", onSelect, isLoading }: any) => (
-    <div className={`bg-[#080C14] border ${borderColor} rounded-2xl p-8 relative overflow-hidden flex flex-col h-full transition-all duration-300 ${isPopular ? 'shadow-2xl shadow-blue-900/10 ring-1 ring-blue-500/30 bg-[#0B101A]' : hoverColor}`}>
+    <div className={`bg-base border ${borderColor} rounded-2xl p-8 relative overflow-hidden flex flex-col h-full transition-all duration-300 ${isPopular ? 'shadow-2xl shadow-blue-900/10 ring-1 ring-blue-500/30 bg-card' : hoverColor}`}>
         
         {isPopular && (
             <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-500"></div>
@@ -205,7 +207,7 @@ const PricingCard = ({ id, title, price, description, icon, features, isPopular,
                         </span>
                         {feature.highlight && feature.available && (
                             <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${
-                                id === 'BLACK' ? 'text-[#D4AF37] bg-[#D4AF37]/10 border-[#D4AF37]/20' : 'text-blue-400 bg-blue-900/20 border-blue-900/30'
+                                id === 'BLACK' ? 'text-gold bg-gold/10 border-gold/20' : 'text-blue-400 bg-blue-900/20 border-blue-900/30'
                             }`}>
                                 {feature.highlight}
                             </span>

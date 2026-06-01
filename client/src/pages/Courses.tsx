@@ -119,14 +119,14 @@ export const Courses = () => {
 
     if (loading && courses.length === 0) {
         return (
-            <div className="min-h-screen bg-[#02040a] flex items-center justify-center">
+            <div className="min-h-screen bg-deep flex items-center justify-center">
                 <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
             
             {/* Hero Banner */}

@@ -54,7 +54,7 @@ const DASHBOARD_STEPS = [
                     <li><strong className="text-blue-400">Carteira:</strong> Gestão profunda de ativos e rebalanceamento.</li>
                     <li><strong className="text-purple-400">Research:</strong> Relatórios detalhados da nossa IA.</li>
                     <li><strong className="text-pink-400">Indicadores:</strong> Monitoramento Macro (Selic, IPCA, Bonds).</li>
-                    <li><strong className="text-[#D4AF37]">Cursos:</strong> Acesso à Vértice Academy.</li>
+                    <li><strong className="text-gold">Cursos:</strong> Acesso à Vértice Academy.</li>
                 </ul>
             </>
         ),
@@ -133,11 +133,11 @@ const DASHBOARD_STEPS = [
             <>
                 Diferente de outras plataformas que focam apenas na cotação, focamos na sua <span className="text-emerald-400 font-bold">Liberdade Financeira</span>.
                 <br/><br/>
-                O <strong className="text-[#D4AF37]">Cofre de Dividendos</strong> projeta exatamente quanto vai cair na sua conta, filtrando <span className="text-red-400 font-bold">Yield Traps</span> (armadilhas de dividendos).
+                O <strong className="text-gold">Cofre de Dividendos</strong> projeta exatamente quanto vai cair na sua conta, filtrando <span className="text-red-400 font-bold">Yield Traps</span> (armadilhas de dividendos).
             </>
         ),
         highlightId: 'tour-dividends',
-        icon: <Lock className="text-[#D4AF37]" size={24} />,
+        icon: <Lock className="text-gold" size={24} />,
         badge: "CASH FLOW"
     },
     {
@@ -195,7 +195,7 @@ const WALLET_STEPS = [
                 <ul className="list-disc pl-4 mt-3 space-y-2 text-xs">
                     <li><strong className="text-emerald-400">Nova Transação:</strong> Registro manual rápido.</li>
                     <li><strong className="text-blue-400">Aporte Inteligente:</strong> Algoritmo que diz onde investir dinheiro novo para manter o equilíbrio.</li>
-                    <li><strong className="text-[#D4AF37]">Rebalanceamento IA:</strong> (Black) Automação de venda e compra.</li>
+                    <li><strong className="text-gold">Rebalanceamento IA:</strong> (Black) Automação de venda e compra.</li>
                 </ul>
             </>
         ),
@@ -245,7 +245,7 @@ const WALLET_STEPS = [
             </>
         ),
         highlightId: 'tour-tab-dividends',
-        icon: <Coins className="text-[#D4AF37]" size={24} />,
+        icon: <Coins className="text-gold" size={24} />,
         badge: "RENDA PASSIVA"
     },
     {
@@ -442,7 +442,7 @@ export const TutorialOverlay: React.FC = () => {
                     }}
                 />
             ) : (
-                <div className="absolute inset-0 bg-[#02040a]/45 backdrop-blur-sm transition-opacity duration-700"></div>
+                <div className="absolute inset-0 bg-deep/45 backdrop-blur-sm transition-opacity duration-700"></div>
             )}
 
             {/* CARD DE CONTEÚDO */}
@@ -450,7 +450,7 @@ export const TutorialOverlay: React.FC = () => {
                 className={`pointer-events-auto absolute transition-all duration-700 ease-[cubic-bezier(0.25,0.1,0.25,1)] w-[90%] max-w-[420px] flex flex-col ${cardPosition.placement === 'center' ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2' : ''}`}
                 style={cardPosition.placement !== 'center' ? { top: cardPosition.top, left: cardPosition.left } : {}}
             >
-                <div className="bg-[#0F1729] border border-slate-700/60 rounded-2xl shadow-2xl relative overflow-hidden group">
+                <div className="bg-elevated border border-slate-700/60 rounded-2xl shadow-2xl relative overflow-hidden group">
                     
                     {/* Barra de Progresso Superior */}
                     <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
@@ -522,8 +522,8 @@ export const TutorialOverlay: React.FC = () => {
                 {/* Seta Indicativa */}
                 {cardPosition.placement !== 'center' && cardPosition.placement !== 'left-side' && (
                     <div 
-                        className={`absolute w-4 h-4 bg-[#0F1729] border-l border-t border-slate-700/60 transform rotate-45 left-8
-                        ${cardPosition.placement === 'bottom' ? '-top-2 border-b-0 border-r-0 bg-[#0F1729]' : '-bottom-2 border-l-0 border-t-0 border-r border-b border-slate-700/60 bg-[#0F1729]'}
+                        className={`absolute w-4 h-4 bg-elevated border-l border-t border-slate-700/60 transform rotate-45 left-8
+                        ${cardPosition.placement === 'bottom' ? '-top-2 border-b-0 border-r-0 bg-elevated' : '-bottom-2 border-l-0 border-t-0 border-r border-b border-slate-700/60 bg-elevated'}
                         `}
                     ></div>
                 )}
@@ -531,7 +531,7 @@ export const TutorialOverlay: React.FC = () => {
                 {/* Seta Indicativa Lateral (Direita do card) */}
                 {cardPosition.placement === 'left-side' && (
                     <div 
-                        className="absolute top-8 -right-2 w-4 h-4 bg-[#0F1729] border-t border-r border-slate-700/60 transform rotate-45"
+                        className="absolute top-8 -right-2 w-4 h-4 bg-elevated border-t border-r border-slate-700/60 transform rotate-45"
                     ></div>
                 )}
             </div>

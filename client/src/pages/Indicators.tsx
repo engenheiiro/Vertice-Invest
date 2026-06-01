@@ -79,10 +79,10 @@ export const Indicators = () => {
     const fmtCurrency = (val: number) => val ? `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-';
 
     return (
-        <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
 
-            <main className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in">
+            <main id="main-content" tabIndex={-1} className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in">
                 {/* Header e Grid de Indicadores */}
                 <div className="flex items-center justify-between mb-8">
                     <div>
@@ -115,9 +115,9 @@ export const Indicators = () => {
                 </div>
 
                 {/* --- CONTÊINER 1: TESOURO DIRETO --- */}
-                <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative z-0 mb-6">
+                <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative z-0 mb-6">
                     <div 
-                        className="p-6 border-b border-slate-800 bg-[#0B101A] flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-[#0F131E] transition-colors"
+                        className="p-6 border-b border-slate-800 bg-card flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-panel transition-colors"
                         onClick={() => setIsTreasuryOpen(!isTreasuryOpen)}
                     >
                         <div className="flex items-center gap-3">
@@ -165,7 +165,7 @@ export const Indicators = () => {
                     {isTreasuryOpen && (
                         <div className="overflow-x-auto relative z-10 animate-fade-in">
                             <table className="w-full text-left border-collapse min-w-[800px]">
-                                <thead className="bg-[#0F131E] text-[10px] font-black text-slate-500 uppercase tracking-widest sticky top-0 z-30 shadow-sm">
+                                <thead className="bg-panel text-[10px] font-black text-slate-500 uppercase tracking-widest sticky top-0 z-30 shadow-sm">
                                     <tr>
                                         <SortableHeader label="Título Público" sortKey="title" currentSort={sortConfig} onSort={handleSort} align="left" />
                                         <SortableHeader label="Tipo" sortKey="type" currentSort={sortConfig} onSort={handleSort} align="left" />
@@ -212,9 +212,9 @@ export const Indicators = () => {
                 </div>
 
                 {/* --- CONTÊINER 2: CDBS & COFRINHOS --- */}
-                <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative z-0">
+                <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative z-0">
                     <div 
-                        className="p-6 border-b border-slate-800 bg-[#0B101A] flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-[#0F131E] transition-colors"
+                        className="p-6 border-b border-slate-800 bg-card flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-panel transition-colors"
                         onClick={() => setIsPrivateFixedOpen(!isPrivateFixedOpen)}
                     >
                         <div className="flex items-center gap-3">
@@ -239,7 +239,7 @@ export const Indicators = () => {
                     {isPrivateFixedOpen && (
                         <div className="overflow-x-auto relative z-10 animate-fade-in">
                             <table className="w-full text-left border-collapse min-w-[800px]">
-                                <thead className="bg-[#0F131E] text-[10px] font-black text-slate-500 uppercase tracking-widest sticky top-0 z-30 shadow-sm">
+                                <thead className="bg-panel text-[10px] font-black text-slate-500 uppercase tracking-widest sticky top-0 z-30 shadow-sm">
                                     <tr>
                                         <th className="px-6 py-4">Produto</th>
                                         <th className="px-6 py-4">Emissor</th>
@@ -282,7 +282,7 @@ export const Indicators = () => {
 // ... (Subcomponentes mantidos inalterados) ...
 const SortableHeader = ({ label, sortKey, currentSort, onSort, align, icon }: any) => (
     <th 
-        className={`px-6 py-4 cursor-pointer hover:text-white transition-colors text-${align} bg-[#0F131E]`}
+        className={`px-6 py-4 cursor-pointer hover:text-white transition-colors text-${align} bg-panel`}
         onClick={() => onSort(sortKey)}
     >
         <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
@@ -306,7 +306,7 @@ const IndicatorCard = ({ label, value, suffix = '', desc, color = 'text-white', 
     }
 
     return (
-        <div className="bg-[#080C14] border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition-colors relative overflow-hidden group">
+        <div className="bg-base border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition-colors relative overflow-hidden group">
             <div className="flex justify-between items-start mb-2 relative z-10">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
                 {icon && <div className="text-slate-600">{icon}</div>}

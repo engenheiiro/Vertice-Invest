@@ -5,6 +5,7 @@ import { X, Calculator, Target, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { useWallet, AssetType } from '../../contexts/WalletContext';
+import { formatCurrency as fmtCurrency } from '../../utils/format';
 
 interface SmartContributionModalProps {
     isOpen: boolean;
@@ -103,8 +104,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
         setSuggestions(finalSuggestions);
     };
 
-    const formatCurrency = (val: number) => 
-        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    const formatCurrency = (val: number) => fmtCurrency(val);
 
     if (!isOpen) return null;
 
@@ -119,12 +119,12 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                 <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
                     
                     {/* Modal Panel */}
-                    <div className="relative transform overflow-hidden rounded-2xl bg-[#080C14] border border-slate-800 text-left shadow-2xl transition-all w-full max-w-md animate-fade-in my-auto max-h-[90vh] flex flex-col">
+                    <div className="relative transform overflow-hidden rounded-2xl bg-base border border-slate-800 text-left shadow-2xl transition-all w-full max-w-md animate-fade-in my-auto max-h-[90vh] flex flex-col">
                         
-                        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-[#0B101A] shrink-0">
+                        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-card shrink-0">
                             <div className="flex items-center gap-2">
                                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                                    <Calculator size={18} className="text-[#D4AF37]" />
+                                    <Calculator size={18} className="text-gold" />
                                     <span className="bg-gradient-to-r from-[#D4AF37] to-[#F2D06B] bg-clip-text text-transparent">
                                         Aporte Inteligente
                                     </span>
@@ -132,12 +132,12 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                                 
                                 {/* INFO TOOLTIP */}
                                 <div className="group relative flex items-center">
-                                    <Info size={14} className="text-slate-500 cursor-help hover:text-[#D4AF37] transition-colors" />
-                                    <div className="absolute left-1/2 -translate-x-1/2 top-6 w-64 p-3 bg-[#0F1729] border border-slate-700 rounded-xl shadow-2xl z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-left">
+                                    <Info size={14} className="text-slate-500 cursor-help hover:text-gold transition-colors" />
+                                    <div className="absolute left-1/2 -translate-x-1/2 top-6 w-64 p-3 bg-elevated border border-slate-700 rounded-xl shadow-2xl z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-left">
                                         <p className="text-[11px] text-slate-300 leading-relaxed">
                                             O algoritmo calcula matematicamente onde alocar seu novo dinheiro para aproximar sua carteira atual das suas metas definidas em <strong>Carteira {'>'} Distribuição {'>'} Ideal</strong>.
                                         </p>
-                                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#0F1729] border-t border-l border-slate-700 transform rotate-45"></div>
+                                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-elevated border-t border-l border-slate-700 transform rotate-45"></div>
                                     </div>
                                 </div>
                             </div>
@@ -164,7 +164,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                                 />
 
                                 <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-900/30 cursor-pointer hover:border-slate-700 transition-colors select-none">
-                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${prioritizeReserve ? 'bg-[#D4AF37] border-[#D4AF37]' : 'border-slate-600'}`}>
+                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${prioritizeReserve ? 'bg-gold border-gold' : 'border-slate-600'}`}>
                                         {prioritizeReserve && <CheckCircle2 size={14} className="text-black" />}
                                     </div>
                                     <input 
@@ -185,13 +185,13 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                                 <div className="space-y-3">
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sugestão de Alocação</h4>
-                                        <span className="text-xs font-bold text-black bg-[#D4AF37] px-2 py-0.5 rounded shadow-sm">Total: {formatCurrency(parseFloat(amount))}</span>
+                                        <span className="text-xs font-bold text-black bg-gold px-2 py-0.5 rounded shadow-sm">Total: {formatCurrency(parseFloat(amount))}</span>
                                     </div>
 
                                     {suggestions.map((item) => (
-                                        <div key={item.type} className="flex items-center justify-between p-3 rounded-xl bg-[#0B101A] border border-slate-800 animate-fade-in">
+                                        <div key={item.type} className="flex items-center justify-between p-3 rounded-xl bg-card border border-slate-800 animate-fade-in">
                                             <div className="flex items-center gap-3">
-                                                <div className={`p-2 rounded-lg bg-slate-800/50 border border-slate-700 ${item.type === 'CASH' ? 'text-[#D4AF37]' : 'text-blue-400'}`}>
+                                                <div className={`p-2 rounded-lg bg-slate-800/50 border border-slate-700 ${item.type === 'CASH' ? 'text-gold' : 'text-blue-400'}`}>
                                                     <Target size={16} />
                                                 </div>
                                                 <div>
@@ -216,7 +216,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                             )}
                         </div>
                         
-                        <div className="p-5 border-t border-slate-800 bg-[#0B101A] flex justify-end rounded-b-2xl shrink-0">
+                        <div className="p-5 border-t border-slate-800 bg-card flex justify-end rounded-b-2xl shrink-0">
                             <Button onClick={onClose} variant="outline" className="w-auto px-6">Fechar</Button>
                         </div>
                     </div>

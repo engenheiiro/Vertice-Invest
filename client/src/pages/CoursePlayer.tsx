@@ -5,13 +5,15 @@ import ReactPlayer from 'react-player';
 const Player = ReactPlayer as any;
 import { COURSES, LESSONS } from '../data/academy';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 
 export const CoursePlayer = () => {
     const { courseId } = useParams();
     const [searchParams, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
     const { user } = useAuth();
-    
+    const { addToast } = useToast();
+
     const [course, setCourse] = useState<any>(null);
     const [lessons, setLessons] = useState<any[]>([]);
     const [currentLesson, setCurrentLesson] = useState<any>(null);
@@ -189,7 +191,7 @@ export const CoursePlayer = () => {
 
     const handleQuizSubmit = async () => {
         if (quizAnswers.includes(-1)) {
-            alert("Por favor, responda todas as perguntas.");
+            addToast("Por favor, responda todas as perguntas.", 'info');
             return;
         }
 
@@ -251,7 +253,7 @@ export const CoursePlayer = () => {
             window.URL.revokeObjectURL(url);
         } catch (err: any) {
             console.error(err);
-            alert(`Erro ao baixar certificado: ${err.message || 'Verifique se você concluiu todas as aulas.'}`);
+            addToast(`Erro ao baixar certificado: ${err.message || 'Verifique se você concluiu todas as aulas.'}`, 'error');
         } finally {
             setDownloading(false);
         }
@@ -261,7 +263,7 @@ export const CoursePlayer = () => {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#02040a] flex items-center justify-center">
+            <div className="min-h-screen bg-deep flex items-center justify-center">
                 <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
             </div>
         );
@@ -269,7 +271,7 @@ export const CoursePlayer = () => {
 
     if (error) {
         return (
-            <div className="min-h-screen bg-[#02040a] flex flex-col items-center justify-center text-white p-6">
+            <div className="min-h-screen bg-deep flex flex-col items-center justify-center text-white p-6">
                 <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 max-w-md text-center">
                     <Lock className="w-16 h-16 text-slate-500 mx-auto mb-4" />
                     <h2 className="text-2xl font-bold mb-2">Acesso Restrito</h2>
@@ -286,11 +288,11 @@ export const CoursePlayer = () => {
     }
 
     return (
-        <div className="min-h-screen bg-[#02040a] text-white font-sans flex flex-col md:flex-row">
+        <div className="min-h-screen bg-deep text-white font-sans flex flex-col md:flex-row">
             {/* Main Player Area */}
             <div className="flex-1 flex flex-col h-screen overflow-y-auto">
                 {/* Header */}
-                <div className="p-6 flex items-center gap-4 border-b border-white/5 bg-[#02040a]/80 backdrop-blur-md sticky top-0 z-30">
+                <div className="p-6 flex items-center gap-4 border-b border-white/5 bg-deep/80 backdrop-blur-md sticky top-0 z-30">
                     <button 
                         onClick={() => navigate('/courses')}
                         className="p-2 hover:bg-white/10 rounded-full transition-colors"

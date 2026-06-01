@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { useWallet, AssetType, Asset } from '../../contexts/WalletContext';
 import { TrendingUp, TrendingDown, Trash2, Folder, PieChart, History, ChevronDown, ChevronRight, EyeOff } from 'lucide-react';
 import { AssetTransactionsModal } from './AssetTransactionsModal';
+import { formatCurrency as fmtCurrency, type Currency } from '../../utils/format';
+import { useConfirm } from '../../hooks/useConfirm';
 
 const TYPE_LABELS: Record<string, string> = {
     STOCK: 'Ações Brasil',
@@ -15,13 +17,12 @@ const TYPE_LABELS: Record<string, string> = {
 
 export const AssetList = () => {
     const { assets, removeAsset, kpis, targetAllocation, isPrivacyMode } = useWallet();
+    const confirm = useConfirm();
     const [historyTicker, setHistoryTicker] = useState<string | null>(null);
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
-    const formatCurrency = (val: number | null | undefined, currency: string = 'BRL') => {
-        if (isPrivacyMode) return '••••••';
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(val || 0);
-    };
+    const formatCurrency = (val: number | null | undefined, currency: Currency = 'BRL') =>
+        fmtCurrency(val, currency, { privacy: isPrivacyMode });
 
     const formatPercent = (val: number | null | undefined) => {
         const v = val || 0;
@@ -44,8 +45,8 @@ export const AssetList = () => {
 
     return (
         <>
-            <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden animate-fade-in">
-                <div className="p-5 border-b border-slate-800 bg-[#0B101A] flex justify-between items-center">
+            <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden animate-fade-in">
+                <div className="p-5 border-b border-slate-800 bg-card flex justify-between items-center">
                     <h3 className="font-bold text-slate-200 flex items-center gap-2">
                         <Folder size={16} className="text-blue-500" />
                         Detalhamento por Classe
@@ -57,10 +58,92 @@ export const AssetList = () => {
                     )}
                 </div>
 
-                <div className="overflow-x-auto">
+                {/* (M4) Mobile: cards empilhados no lugar da tabela larga (evita scroll-x). */}
+                <div className="md:hidden divide-y divide-slate-800/50">
+                    {visibleTypes.map(type => {
+                        const groupItems = groupedAssets[type];
+                        const isCollapsed = collapsedGroups[type];
+                        const totalValueGroup = groupItems.reduce((acc, item) => acc + (item.totalValue || 0), 0);
+                        const totalCostGroup = groupItems.reduce((acc, item) => acc + (item.totalCost || 0), 0);
+                        const profitGroup = totalValueGroup - totalCostGroup;
+                        const profitPercentGroup = totalCostGroup > 0 ? (profitGroup / totalCostGroup) * 100 : 0;
+
+                        return (
+                            <div key={type}>
+                                <button
+                                    onClick={() => toggleGroup(type)}
+                                    className="w-full flex items-center justify-between px-4 py-3 bg-panel text-left"
+                                >
+                                    <span className="text-xs font-bold text-blue-400 uppercase tracking-widest flex items-center gap-2 min-w-0">
+                                        {isCollapsed ? <ChevronRight size={14} className="shrink-0" /> : <ChevronDown size={14} className="shrink-0" />}
+                                        <span className="truncate">{TYPE_LABELS[type]}</span>
+                                        <span className="text-[10px] text-slate-500 shrink-0">({groupItems.length})</span>
+                                    </span>
+                                    <span className="text-right shrink-0 ml-3">
+                                        <span className="block text-white font-mono font-bold text-sm">{formatCurrency(totalValueGroup)}</span>
+                                        <span className={`block text-[11px] font-bold ${profitGroup >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                            {profitGroup >= 0 ? '+' : '-'}{formatPercent(profitPercentGroup)}
+                                        </span>
+                                    </span>
+                                </button>
+
+                                {!isCollapsed && groupItems.map((asset) => {
+                                    const totalProfit = asset.totalValue - asset.totalCost;
+                                    const profitPercent = asset.totalCost > 0 ? (totalProfit / asset.totalCost) * 100 : 0;
+                                    const isProfitable = totalProfit >= 0;
+                                    return (
+                                        <div key={asset.id} className="flex items-center justify-between px-4 py-3 bg-base">
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-bold text-slate-200 text-sm">{asset.ticker}</p>
+                                                <p className="text-[10px] text-slate-500 truncate">
+                                                    {asset.quantity} un · PM {formatCurrency(asset.averagePrice, asset.currency)}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <div className="text-right">
+                                                    <p className="font-bold text-white text-sm">{formatCurrency(asset.totalValue, 'BRL')}</p>
+                                                    <p className={`text-[11px] font-bold flex items-center justify-end gap-0.5 ${isProfitable ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                        {isProfitable ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                                                        {isProfitable ? '+' : '-'}{formatPercent(profitPercent)}
+                                                    </p>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <button
+                                                        onClick={() => setHistoryTicker(asset.ticker)}
+                                                        aria-label={`Histórico de ${asset.ticker}`}
+                                                        className="p-2 text-slate-600 hover:text-blue-400 transition-colors"
+                                                    >
+                                                        <History size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={async () => {
+                                                            const ok = await confirm({
+                                                                title: 'Remover ativo',
+                                                                message: `Remover ${asset.ticker} e todo o histórico de transações? Esta ação não pode ser desfeita.`,
+                                                                confirmText: 'Remover',
+                                                                isDestructive: true,
+                                                            });
+                                                            if (ok) removeAsset(asset.id);
+                                                        }}
+                                                        aria-label={`Remover ${asset.ticker}`}
+                                                        className="p-2 text-slate-600 hover:text-red-500 transition-colors"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-[900px]">
                         <thead>
-                            <tr className="bg-[#0B101A] border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500">
+                            <tr className="bg-card border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500">
                                 <th className="p-4 font-bold">Ativo</th>
                                 <th className="p-4 font-bold text-right">Preço Médio</th>
                                 <th className="p-4 font-bold text-right">Preço Atual</th>
@@ -89,7 +172,7 @@ export const AssetList = () => {
                                 return (
                                     <React.Fragment key={type}>
                                         <tr 
-                                            className="bg-[#0F131E] border-y border-slate-800/50 cursor-pointer hover:bg-[#161b28] transition-colors"
+                                            className="bg-panel border-y border-slate-800/50 cursor-pointer hover:bg-[#161b28] transition-colors"
                                             onClick={() => toggleGroup(type)}
                                         >
                                             <td colSpan={7} className="px-4 py-3">
@@ -210,9 +293,15 @@ export const AssetList = () => {
                                                             >
                                                                 <History size={16} />
                                                             </button>
-                                                            <button 
-                                                                onClick={() => {
-                                                                    if(confirm(`Remover ${asset.ticker} e todo o histórico?`)) removeAsset(asset.id);
+                                                            <button
+                                                                onClick={async () => {
+                                                                    const ok = await confirm({
+                                                                        title: 'Remover ativo',
+                                                                        message: `Remover ${asset.ticker} e todo o histórico de transações? Esta ação não pode ser desfeita.`,
+                                                                        confirmText: 'Remover',
+                                                                        isDestructive: true,
+                                                                    });
+                                                                    if (ok) removeAsset(asset.id);
                                                                 }}
                                                                 className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
                                                                 title="Remover Ativo"

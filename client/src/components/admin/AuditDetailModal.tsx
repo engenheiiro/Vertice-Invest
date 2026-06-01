@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Calculator, Search, List, Activity, DollarSign, BarChart2, Shield, Target, Zap, Filter, RefreshCw } from 'lucide-react';
 import { ResearchReport, RankingItem } from '../../services/research';
+import { formatCurrency as fmtCurrency } from '../../utils/format';
 
 interface AuditDetailModalProps {
     isOpen: boolean;
@@ -44,7 +45,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
         <div className="relative z-[100]" role="dialog" aria-modal="true">
             <div className="fixed inset-0 bg-black/95 backdrop-blur-md animate-fade-in" onClick={onClose} />
             <div className="fixed inset-0 z-10 flex items-center justify-center p-4">
-                <div className="w-full max-w-7xl bg-[#080C14] border border-slate-700 rounded-3xl flex items-center justify-center h-48 shadow-2xl animate-fade-in">
+                <div className="w-full max-w-7xl bg-base border border-slate-700 rounded-3xl flex items-center justify-center h-48 shadow-2xl animate-fade-in">
                     <div className="flex flex-col items-center gap-3">
                         <RefreshCw size={22} className="animate-spin text-blue-500" />
                         <p className="text-sm font-bold text-slate-400">Carregando auditoria...</p>
@@ -58,7 +59,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
     // Helpers
     const formatCurrency = (val: number | undefined | null) => {
         if (val === undefined || val === null || isNaN(val)) return '-';
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+        return fmtCurrency(val);
     };
 
     const getRiskColor = (profile: string) => {
@@ -79,10 +80,10 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
             
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
-                    <div className="relative w-full max-w-7xl bg-[#080C14] border border-slate-700 rounded-3xl overflow-hidden shadow-2xl animate-fade-in flex flex-col max-h-[95vh]">
+                    <div className="relative w-full max-w-7xl bg-base border border-slate-700 rounded-3xl overflow-hidden shadow-2xl animate-fade-in flex flex-col max-h-[95vh]">
                         
                         {/* HEADER */}
-                        <div className="p-6 border-b border-slate-800 bg-[#0B101A] flex items-center justify-between">
+                        <div className="p-6 border-b border-slate-800 bg-card flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 bg-blue-600/20 rounded-xl flex items-center justify-center text-blue-500 border border-blue-600/30">
                                     <Search size={20} />
@@ -100,7 +101,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                         </div>
 
                         {/* CONTROLES */}
-                        <div className="bg-[#0F131E] border-b border-slate-800 p-3 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div className="bg-panel border-b border-slate-800 p-3 flex flex-col md:flex-row justify-between items-center gap-4">
                             <div className="flex bg-slate-900/50 p-1 rounded-lg border border-slate-800">
                                 <button 
                                     onClick={() => setViewMode('TOP10')} 
@@ -132,7 +133,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                         {/* TABELA */}
                         <div className="p-0 overflow-y-auto custom-scrollbar flex-1 bg-[#05070A]">
                             <table className="w-full text-left border-collapse">
-                                <thead className="sticky top-0 z-10 bg-[#0B101A] border-b border-slate-800 text-[9px] font-black uppercase text-slate-500">
+                                <thead className="sticky top-0 z-10 bg-card border-b border-slate-800 text-[9px] font-black uppercase text-slate-500">
                                     <tr>
                                         <th className="p-4 w-12 text-center">#</th>
                                         <th className="p-4">Ativo</th>
@@ -211,7 +212,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                             </table>
                         </div>
 
-                        <div className="p-4 border-t border-slate-800 bg-[#0B101A] flex gap-6 overflow-x-auto no-scrollbar">
+                        <div className="p-4 border-t border-slate-800 bg-card flex gap-6 overflow-x-auto no-scrollbar">
                             <div className="flex items-center gap-2 text-[9px] text-slate-500 shrink-0">
                                 <Calculator size={10} className="text-emerald-500" />
                                 <span className="font-bold">GRAHAM:</span> <span>Valor Intrínseco (22.5 * LPA * VPA)</span>
@@ -224,8 +225,8 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
 
                         {/* PANEL DE DETALHES (AUDIT LOG) */}
                         {selectedAsset && (
-                            <div className="absolute inset-y-0 right-0 w-full md:w-96 bg-[#0B101A] border-l border-slate-700 shadow-2xl animate-slide-in-right z-20 flex flex-col">
-                                <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-[#0F131E]">
+                            <div className="absolute inset-y-0 right-0 w-full md:w-96 bg-card border-l border-slate-700 shadow-2xl animate-slide-in-right z-20 flex flex-col">
+                                <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-panel">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 bg-blue-600/20 rounded-xl flex items-center justify-center text-blue-400 border border-blue-500/30 font-black">
                                             {selectedAsset.ticker.slice(0, 2)}
@@ -365,7 +366,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                                     </div>
                                 </div>
 
-                                <div className="p-6 border-t border-slate-800 bg-[#0F131E]">
+                                <div className="p-6 border-t border-slate-800 bg-panel">
                                     <div className="flex items-center justify-between mb-2">
                                         <span className="text-[10px] font-black text-slate-500 uppercase">Score Final</span>
                                         <span className="text-2xl font-black text-white">{selectedAsset.score}</span>

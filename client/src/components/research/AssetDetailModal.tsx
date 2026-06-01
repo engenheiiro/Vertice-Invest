@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { X, Shield, Activity, Target, Zap, TrendingUp, AlertTriangle, AlertOctagon, ThumbsUp, ThumbsDown, BarChart2, DollarSign, Database, ArrowUpCircle } from 'lucide-react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { RankingItem } from '../../services/research';
+import { formatCompact as fmtCompact, type Currency } from '../../utils/format';
 
 interface AssetDetailModalProps {
     isOpen: boolean;
@@ -40,9 +41,9 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
     const s = m.structural || { quality: 50, valuation: 50, risk: 50 };
     const type = asset.type || 'STOCK';
 
-    const formatCurrency = (val: number | undefined | null, currency: 'BRL' | 'USD' = 'BRL') => {
+    const formatCurrency = (val: number | undefined | null, currency: Currency = 'BRL') => {
         if (val === undefined || val === null || isNaN(val)) return '-';
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency, notation: 'compact' }).format(val);
+        return fmtCompact(val, currency);
     };
 
     const formatMoneyShort = (val: number | undefined | null, currency: 'BRL' | 'USD' = 'BRL') => {
@@ -153,7 +154,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
 
         if (type === 'STOCK_US') {
             return (
-                <div className="mb-8 bg-[#0B101A] p-4 rounded-xl border border-slate-800/50">
+                <div className="mb-8 bg-card p-4 rounded-xl border border-slate-800/50">
                     <div className="flex items-center gap-2 mb-5 pb-2 border-b border-slate-800">
                         <Database size={16} className="text-blue-500" />
                         <h4 className="text-xs font-bold text-white uppercase tracking-wide">Financials (USD)</h4>
@@ -171,7 +172,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
         }
 
         return (
-            <div className="mb-8 bg-[#0B101A] p-4 rounded-xl border border-slate-800/50">
+            <div className="mb-8 bg-card p-4 rounded-xl border border-slate-800/50">
                 <div className="flex items-center gap-2 mb-5 pb-2 border-b border-slate-800">
                     <Database size={16} className="text-blue-500" />
                     <h4 className="text-xs font-bold text-white uppercase tracking-wide">Financials (LTM)</h4>
@@ -204,10 +205,10 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
-                    <div className="relative w-full max-w-5xl bg-[#080C14] border border-slate-700 rounded-3xl overflow-hidden shadow-2xl animate-fade-in flex flex-col md:flex-row max-h-[90vh]">
+                    <div className="relative w-full max-w-5xl bg-base border border-slate-700 rounded-3xl overflow-hidden shadow-2xl animate-fade-in flex flex-col md:flex-row max-h-[90vh]">
                         
                         {/* SIDEBAR - IDENTIDADE E SCORES */}
-                        <div className="w-full md:w-[320px] bg-[#0B101A] border-r border-slate-800 p-6 flex flex-col overflow-y-auto">
+                        <div className="w-full md:w-[320px] bg-card border-r border-slate-800 p-6 flex flex-col overflow-y-auto">
                             <div className="mb-6">
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-[10px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded uppercase">{asset.type}</span>
@@ -334,8 +335,8 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                         </div>
 
                         {/* MAIN CONTENT - SCROLLABLE */}
-                        <div className="flex-1 bg-[#080C14] flex flex-col overflow-hidden">
-                            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-[#0B101A]">
+                        <div className="flex-1 bg-base flex flex-col overflow-hidden">
+                            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-card">
                                 <h3 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
                                     <Activity size={16} className="text-blue-500" /> Dossiê do Investidor
                                 </h3>

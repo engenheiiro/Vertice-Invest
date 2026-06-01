@@ -11,6 +11,7 @@ import { InstantReportModal } from '../components/dashboard/InstantReportModal';
 import { useWallet } from '../contexts/WalletContext';
 import { useDemo } from '../contexts/DemoContext';
 import { Lock } from 'lucide-react';
+import { formatCurrency as fmtCurrency } from '../utils/format';
 
 export const Dashboard = () => {
   const {
@@ -33,10 +34,7 @@ export const Dashboard = () => {
   const [reportDate, setReportDate] = useState('');
   const [isReportLoading, setIsReportLoading] = useState(false);
 
-  const formatCurrency = (val: number) => {
-      if (isPrivacyMode) return 'R$ ••••••••';
-      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-  };
+  const formatCurrency = (val: number) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
 
   const handleGenerateReport = async () => {
       setIsReportModalOpen(true);
@@ -62,12 +60,12 @@ export const Dashboard = () => {
   const isProjected = dividends === 0 && kpis.projectedDividends > 0;
 
   return (
-    <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
+    <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
       
       <Header />
       <MarketStatusBar indices={marketIndices} />
 
-      <main className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in relative">
+      <main id="main-content" tabIndex={-1} className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in relative">
         
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             

@@ -158,24 +158,24 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
 
     if (isLoading) {
         return (
-            <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-[480px]">
-                <div className="p-4 border-b border-slate-800 bg-[#0B101A]">
+            <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-[480px]">
+                <div className="p-4 border-b border-slate-800 bg-card">
                     <h3 className="font-bold text-slate-200 text-xs uppercase tracking-wider flex items-center gap-2">
                         <Radar size={14} className="text-purple-500 animate-spin-slow" /> Radar Alfa
                     </h3>
                 </div>
                 <div className="flex-1 p-3 space-y-3 bg-gradient-to-b from-[#080C14] to-[#05070a]">
-                    {[...Array(3)].map((_, i) => <div key={i} className="p-4 rounded-xl border border-slate-800 bg-[#0F131E] animate-pulse h-24" />)}
+                    {[...Array(3)].map((_, i) => <div key={i} className="p-4 rounded-xl border border-slate-800 bg-panel animate-pulse h-24" />)}
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="bg-[#080C14] border border-slate-800 rounded-2xl flex flex-col h-[480px] relative group">
+        <div className="bg-base border border-slate-800 rounded-2xl flex flex-col h-[480px] relative group">
 
             {/* Header */}
-            <div className="p-4 border-b border-slate-800 bg-[#0B101A] flex flex-col gap-2 rounded-t-2xl">
+            <div className="p-4 border-b border-slate-800 bg-card flex flex-col gap-2 rounded-t-2xl">
 
                 {/* Linha 1: Título + Tooltip + Lock */}
                 <div className="flex items-center justify-between">
@@ -185,9 +185,9 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
 
                         <div className="group/tooltip relative flex items-center z-50">
                             <Info size={12} className="text-slate-600 cursor-help hover:text-blue-400 transition-colors" />
-                            <div className="absolute left-0 top-6 w-64 p-4 bg-[#0F1729] border border-slate-700 rounded-xl shadow-2xl z-50 opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none text-left">
+                            <div className="absolute left-0 top-6 w-64 p-4 bg-elevated border border-slate-700 rounded-xl shadow-2xl z-50 opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none text-left">
                                 <p className="text-[10px] text-slate-300 leading-relaxed mb-2">
-                                    Scanner quantitativo que detecta anomalias técnicas a cada <strong>15 minutos</strong>. Apenas sinais <strong className="text-[#D4AF37]">GOLD</strong>. Saída automática em +5% (alvo) ou -3% (stop).
+                                    Scanner quantitativo que detecta anomalias técnicas a cada <strong>15 minutos</strong>. Apenas sinais <strong className="text-gold">GOLD</strong>. Saída automática em +5% (alvo) ou -3% (stop).
                                 </p>
                                 <div className="space-y-1.5">
                                     <div className="flex items-center gap-2 text-[10px]">
@@ -245,7 +245,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                                 <button key={type} onClick={() => setFilter(type)} className={`px-1.5 py-0.5 text-[8px] font-bold rounded transition-colors ${filter === type ? activeClass : 'text-slate-500 hover:text-slate-300'}`}>{label}</button>
                             ))}
                         </div>
-                        <span className="flex items-center gap-1 px-2 py-1 rounded text-[8px] font-bold border bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30">
+                        <span className="flex items-center gap-1 px-2 py-1 rounded text-[8px] font-bold border bg-gold/10 text-gold border-gold/30">
                             <Medal size={8} /> GOLD
                         </span>
                     </div>
@@ -257,7 +257,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
 
                 {/* Paywall para não-PRO */}
                 {!hasAccess && (
-                    <div className="absolute inset-0 z-20 backdrop-blur-md bg-[#02040a]/60 flex flex-col items-center justify-center p-6 text-center rounded-b-2xl">
+                    <div className="absolute inset-0 z-20 backdrop-blur-md bg-deep/60 flex flex-col items-center justify-center p-6 text-center rounded-b-2xl">
                         <div className="w-14 h-14 bg-blue-600/20 rounded-2xl flex items-center justify-center mb-4 border border-blue-500/30 shadow-2xl shadow-blue-500/20">
                             <Crown size={24} className="text-blue-400" fill="currentColor" />
                         </div>
@@ -283,7 +283,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                         <div
                             key={signal.id || idx}
                             onClick={() => handleSignalClick(signal.ticker)}
-                            className={`p-3.5 rounded-xl border transition-all relative overflow-hidden bg-[#0F131E] ${urgency.border} ${hasAccess ? 'cursor-pointer hover:brightness-110' : 'opacity-50 pointer-events-none grayscale'}`}
+                            className={`p-3.5 rounded-xl border transition-all relative overflow-hidden bg-panel ${urgency.border} ${hasAccess ? 'cursor-pointer hover:brightness-110' : 'opacity-50 pointer-events-none grayscale'}`}
                         >
                             {/* Linha superior: ticker + badges */}
                             <div className="flex items-start justify-between mb-2">
@@ -300,7 +300,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                                             {urgency.label}
                                         </span>
                                         {/* Badge qualidade — todos os sinais são GOLD */}
-                                        <span className="text-[7px] font-black px-1.5 py-0.5 rounded border uppercase flex items-center gap-0.5 bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30">
+                                        <span className="text-[7px] font-black px-1.5 py-0.5 rounded border uppercase flex items-center gap-0.5 bg-gold/10 text-gold border-gold/30">
                                             <Medal size={7} /> Ouro
                                         </span>
                                     </div>
@@ -355,7 +355,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
 
             {/* Footer */}
             {hasAccess && (
-                <div className="p-3 border-t border-slate-800 bg-[#0B101A] rounded-b-2xl">
+                <div className="p-3 border-t border-slate-800 bg-card rounded-b-2xl">
                     <button
                         onClick={() => navigate('/radar')}
                         className="w-full flex items-center justify-center gap-2 py-2 text-[10px] font-bold text-slate-400 hover:text-white uppercase tracking-wider transition-colors hover:bg-slate-800 rounded-lg"

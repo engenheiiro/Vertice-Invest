@@ -91,7 +91,7 @@ export const Landing = () => {
       description="Plataforma de análise quantitativa de Ações, FIIs e Criptomoedas. Rankings fundamentalistas, sinais técnicos, carteira inteligente e aporte automático para investidores brasileiros."
       jsonLd={jsonLd}
     />
-    <div className="min-h-screen bg-[#02040a] text-white selection:bg-blue-500 selection:text-white overflow-x-hidden font-sans">
+    <div className="min-h-screen bg-deep text-white selection:bg-blue-500 selection:text-white overflow-x-hidden font-sans">
       
       {/* NAVBAR */}
       <nav className={`fixed top-0 w-full z-50 transition-all duration-300 border-b ${scrolled ? 'bg-[#03060D]/90 backdrop-blur-xl border-slate-800/60 py-3' : 'bg-transparent border-transparent py-4'}`}>
@@ -118,7 +118,7 @@ export const Landing = () => {
       {/* HERO SECTION */}
       <section className="relative pt-20 pb-12 lg:pt-24 lg:pb-20 px-6 overflow-hidden min-h-[70vh] flex flex-col justify-center">
         <div id="hero-background" className="absolute inset-0 z-0 pointer-events-none">
-            <div className="absolute inset-0 bg-[#02040a]"></div>
+            <div className="absolute inset-0 bg-deep"></div>
             <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-blue-900/20 rounded-full blur-[120px] opacity-40 animate-pulse-slow"></div>
             <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-indigo-900/10 rounded-full blur-[100px] opacity-30"></div>
             <div className="absolute top-[20%] right-[10%] w-[300px] h-[300px] bg-emerald-500/5 rounded-full blur-[80px]"></div>
@@ -157,7 +157,7 @@ export const Landing = () => {
                   <BrainCircuit size={18} />
                   Criar Conta Grátis
                 </Link>
-                <Link to="/login" className="px-6 py-3 bg-[#0F1729]/50 hover:bg-[#1E293B] border border-slate-800 hover:border-slate-700 backdrop-blur-md text-slate-300 text-sm font-semibold rounded-xl transition-all flex items-center justify-center">
+                <Link to="/login" className="px-6 py-3 bg-elevated/50 hover:bg-[#1E293B] border border-slate-800 hover:border-slate-700 backdrop-blur-md text-slate-300 text-sm font-semibold rounded-xl transition-all flex items-center justify-center">
                   Fazer Login
                 </Link>
               </div>
@@ -224,7 +224,7 @@ export const Landing = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2 bg-[#080C14] border border-slate-800 rounded-2xl p-5 relative overflow-hidden group hover:border-blue-900/50 transition-colors flex flex-col justify-between min-h-[280px]">
+                <div className="md:col-span-2 bg-base border border-slate-800 rounded-2xl p-5 relative overflow-hidden group hover:border-blue-900/50 transition-colors flex flex-col justify-between min-h-[280px]">
                     <div className="absolute -bottom-10 -right-10 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none z-0">
                         <BrainCircuit size={300} />
                     </div>
@@ -247,7 +247,7 @@ export const Landing = () => {
                 </div>
 
                 <div className="md:col-span-1 flex flex-col gap-4">
-                    <div className="flex-1 bg-[#080C14] border border-slate-800 rounded-2xl p-5 hover:border-emerald-900/50 transition-colors group flex flex-col justify-center min-h-[132px]">
+                    <div className="flex-1 bg-base border border-slate-800 rounded-2xl p-5 hover:border-emerald-900/50 transition-colors group flex flex-col justify-center min-h-[132px]">
                         <div className="flex items-center justify-between mb-2">
                             <div className="w-8 h-8 bg-emerald-900/30 rounded-lg flex items-center justify-center text-emerald-400">
                                 <Globe size={18} />
@@ -260,7 +260,7 @@ export const Landing = () => {
                         </p>
                     </div>
 
-                    <div className="flex-1 bg-[#080C14] border border-slate-800 rounded-2xl p-5 hover:border-purple-900/50 transition-colors group flex flex-col justify-center min-h-[132px]">
+                    <div className="flex-1 bg-base border border-slate-800 rounded-2xl p-5 hover:border-purple-900/50 transition-colors group flex flex-col justify-center min-h-[132px]">
                         <div className="flex items-center justify-between mb-2">
                             <div className="w-8 h-8 bg-purple-900/30 rounded-lg flex items-center justify-center text-purple-400">
                                 <GraduationCap size={18} />
@@ -274,7 +274,7 @@ export const Landing = () => {
                     </div>
                 </div>
 
-                <div className="md:col-span-3 bg-[#080C14] border border-slate-800 rounded-2xl p-5 relative overflow-hidden hover:border-indigo-900/50 transition-colors">
+                <div className="md:col-span-3 bg-base border border-slate-800 rounded-2xl p-5 relative overflow-hidden hover:border-indigo-900/50 transition-colors">
                      <div className="relative z-10 flex flex-col md:flex-row items-center gap-8 justify-between">
                         <div className="max-w-xl w-full">
                              <div className="flex items-center gap-3 mb-3">
@@ -351,7 +351,7 @@ export const Landing = () => {
       </section>
 
       {/* STEPS */}
-      <section className="py-20 bg-[#02040a] relative overflow-hidden">
+      <section className="py-20 bg-deep relative overflow-hidden">
         <div className="max-w-6xl mx-auto px-6 relative z-10">
              <div className="text-center mb-16">
                 <h2 className="text-2xl md:text-3xl font-bold mb-3">Sua jornada para a elite</h2>
@@ -367,7 +367,7 @@ export const Landing = () => {
       </section>
 
       {/* TESTIMONIALS */}
-      <section className="py-20 bg-[#080C14] border-y border-slate-800">
+      <section className="py-20 bg-base border-y border-slate-800">
           <div className="max-w-6xl mx-auto px-6">
               <h2 className="text-2xl md:text-3xl font-bold mb-12 text-center">Quem usa, recomenda</h2>
               <div className="grid md:grid-cols-3 gap-6">
@@ -379,7 +379,7 @@ export const Landing = () => {
       </section>
 
       {/* FAQ */}
-      <section className="py-20 bg-[#02040a]">
+      <section className="py-20 bg-deep">
           <div className="max-w-2xl mx-auto px-6">
               <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">Perguntas Frequentes</h2>
               <div className="space-y-3">
@@ -406,7 +406,7 @@ export const Landing = () => {
       </section>
 
       {/* FOOTER */}
-      <footer className="py-10 border-t border-slate-900 bg-[#02040a] text-slate-500 text-sm">
+      <footer className="py-10 border-t border-slate-900 bg-deep text-slate-500 text-sm">
         <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-4 gap-8 mb-8">
             <div className="col-span-2">
                 <div className="flex items-center gap-2 mb-3">
@@ -475,7 +475,7 @@ const NeuralGrid = () => {
 
 const StepCard = ({ number, title, desc }: { number: string, title: string, desc: string }) => (
     <div className="relative z-10 flex flex-col items-center text-center">
-        <div className="w-14 h-14 rounded-2xl bg-[#0F1729] border border-slate-800 flex items-center justify-center text-xl font-bold text-blue-500 shadow-xl mb-4 group hover:scale-110 transition-transform duration-300">
+        <div className="w-14 h-14 rounded-2xl bg-elevated border border-slate-800 flex items-center justify-center text-xl font-bold text-blue-500 shadow-xl mb-4 group hover:scale-110 transition-transform duration-300">
             {number}
         </div>
         <h3 className="text-lg font-bold text-white mb-1.5">{title}</h3>
@@ -486,7 +486,7 @@ const StepCard = ({ number, title, desc }: { number: string, title: string, desc
 interface ResultCardProps { ticker: string; type: string; date: string; returnVal: string; desc: string; delay: number; }
 const ResultCard = ({ ticker, type, date, returnVal, desc, delay }: ResultCardProps) => (
     <div 
-        className="bg-[#080C14] border border-slate-800 p-6 rounded-xl relative overflow-hidden group hover:border-slate-700 transition-colors"
+        className="bg-base border border-slate-800 p-6 rounded-xl relative overflow-hidden group hover:border-slate-700 transition-colors"
         style={{ animationDelay: `${delay}ms` }}
     >
         <div className="flex justify-between items-start mb-4">
@@ -513,7 +513,7 @@ const ResultCard = ({ ticker, type, date, returnVal, desc, delay }: ResultCardPr
 
 interface TestimonialCardProps { name: string; role: string; text: string; image: string; }
 const TestimonialCard = ({ name, role, text, image }: TestimonialCardProps) => (
-    <div className="bg-[#02040a] border border-slate-800 p-6 rounded-xl relative">
+    <div className="bg-deep border border-slate-800 p-6 rounded-xl relative">
         <Quote className="text-blue-900/40 absolute top-4 right-4" size={40} />
         <div className="flex items-center gap-3 mb-4">
             <img src={image} alt={name} className="w-10 h-10 rounded-full border border-slate-700 object-cover" />

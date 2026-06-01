@@ -231,10 +231,10 @@ export const RadarPage = () => {
     const formatCurrency = (val?: number) => val ? `R$ ${val.toFixed(2)}` : '-';
 
     return (
-        <div className="min-h-screen bg-[#02040a] text-white font-sans selection:bg-blue-500/30">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
 
-            <main className="max-w-[1200px] mx-auto p-4 md:p-6 animate-fade-in space-y-8">
+            <main id="main-content" tabIndex={-1} className="max-w-[1200px] mx-auto p-4 md:p-6 animate-fade-in space-y-8">
 
                 {/* ── Cabeçalho ── */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -252,7 +252,7 @@ export const RadarPage = () => {
                     </div>
 
                     {/* Status de scan */}
-                    <div className="bg-[#080C14] border border-slate-800 rounded-xl px-4 py-3 flex items-center gap-3 shrink-0">
+                    <div className="bg-base border border-slate-800 rounded-xl px-4 py-3 flex items-center gap-3 shrink-0">
                         <FreshnessDot lastScanAt={meta?.lastScanAt || null} />
                         <div className="text-right">
                             <p className="text-[10px] text-slate-500 uppercase font-bold">Última varredura</p>
@@ -290,7 +290,7 @@ export const RadarPage = () => {
                 {/* ── SEÇÃO 3: Estatísticas ── */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Card win rate */}
-                    <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-5 flex flex-col">
+                    <div className="bg-base border border-slate-800 rounded-2xl p-5 flex flex-col">
                         <div className="flex justify-between items-start mb-3">
                             <div>
                                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -340,7 +340,7 @@ export const RadarPage = () => {
                     </div>
 
                     {/* Card concentração setorial */}
-                    <div className="md:col-span-2 bg-[#080C14] border border-slate-800 rounded-2xl p-5 flex flex-col">
+                    <div className="md:col-span-2 bg-base border border-slate-800 rounded-2xl p-5 flex flex-col">
                         <div className="flex justify-between items-start mb-4">
                             <div>
                                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -409,7 +409,7 @@ export const RadarPage = () => {
                         </div>
 
                         {/* Qualidade fixa: apenas GOLD */}
-                        <span className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold border bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30">
+                        <span className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold border bg-gold/10 text-gold border-gold/30">
                             <Medal size={10} /> Apenas GOLD
                         </span>
                     </div>
@@ -417,11 +417,11 @@ export const RadarPage = () => {
                     {isLoading ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {[...Array(3)].map((_, i) => (
-                                <div key={i} className="h-40 rounded-2xl bg-[#080C14] border border-slate-800 animate-pulse" />
+                                <div key={i} className="h-40 rounded-2xl bg-base border border-slate-800 animate-pulse" />
                             ))}
                         </div>
                     ) : activeSignals.length === 0 ? (
-                        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-10 text-center">
+                        <div className="bg-base border border-slate-800 rounded-2xl p-10 text-center">
                             <Radar size={40} className="text-slate-700 mx-auto mb-3" />
                             <p className="text-sm font-bold text-slate-500">Nenhuma anomalia detectada no momento.</p>
                             <p className="text-xs text-slate-600 mt-1.5 flex items-center justify-center gap-1">
@@ -437,7 +437,7 @@ export const RadarPage = () => {
                                 return (
                                     <div
                                         key={signal._id}
-                                        className={`bg-[#0B101A] border rounded-2xl p-4 flex flex-col gap-3 transition-all ${urgency.border}`}
+                                        className={`bg-card border rounded-2xl p-4 flex flex-col gap-3 transition-all ${urgency.border}`}
                                     >
                                         {/* Linha 1: ticker + qualidade */}
                                         <div className="flex items-start justify-between">
@@ -453,7 +453,7 @@ export const RadarPage = () => {
                                                     <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border uppercase ${urgency.badge}`}>
                                                         {urgency.label}
                                                     </span>
-                                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded border uppercase flex items-center gap-0.5 bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30">
+                                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded border uppercase flex items-center gap-0.5 bg-gold/10 text-gold border-gold/30">
                                                         <Medal size={9} /> Ouro
                                                     </span>
                                                     <SignalValueTag type={signal.type} value={signal.value} />
@@ -520,11 +520,11 @@ export const RadarPage = () => {
                         </div>
                     </div>
 
-                    <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+                    <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse min-w-[860px]">
                                 <thead>
-                                    <tr className="bg-[#0B101A] border-b border-slate-800 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                    <tr className="bg-card border-b border-slate-800 text-[10px] font-black text-slate-500 uppercase tracking-widest">
                                         <th className="p-4">Data</th>
                                         <th className="p-4">Ativo</th>
                                         <th className="p-4">Sinal</th>

@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDemo } from '../../contexts/DemoContext';
 import { DEMO_TRANSACTIONS } from '../../data/DEMO_DATA';
+import { formatCurrency as fmtCurrency } from '../../utils/format';
 
 interface Transaction {
     _id: string;
@@ -66,12 +67,11 @@ export const CashFlowHistory = () => {
         }
     };
 
-    const formatCurrency = (val: number) => 
-        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    const formatCurrency = (val: number) => fmtCurrency(val);
 
     return (
-        <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden min-h-[500px] flex flex-col">
-            <div className="p-5 border-b border-slate-800 bg-[#0B101A] flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden min-h-[500px] flex flex-col">
+            <div className="p-5 border-b border-slate-800 bg-card flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800 text-blue-500">
                         <FileText size={20} />
@@ -166,7 +166,7 @@ export const CashFlowHistory = () => {
                 )}
 
                 {data?.pagination?.hasMore && !isDemoMode && (
-                    <div className="p-4 border-t border-slate-800 bg-[#0B101A] text-center">
+                    <div className="p-4 border-t border-slate-800 bg-card text-center">
                         <button 
                             onClick={loadMore}
                             disabled={isFetching}

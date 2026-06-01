@@ -30,7 +30,7 @@ export const ModulePlaceholder: React.FC<ModulePlaceholderProps> = ({
     if (!hasAccess) {
         return (
             <div className="min-h-[80vh] flex items-center justify-center p-6">
-                <div className="max-w-md w-full bg-[#080C14] border border-slate-800 rounded-2xl p-8 text-center relative overflow-hidden">
+                <div className="max-w-md w-full bg-base border border-slate-800 rounded-2xl p-8 text-center relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/10 rounded-full blur-[40px] pointer-events-none"></div>
                     
                     <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-slate-800 shadow-xl">
@@ -65,7 +65,7 @@ export const ModulePlaceholder: React.FC<ModulePlaceholderProps> = ({
     // --- TELA DE "EM BREVE" (ACESSO PERMITIDO) ---
     return (
         <div className="min-h-[80vh] flex flex-col items-center justify-center text-center p-6 animate-fade-in">
-            <div className="w-20 h-20 bg-[#0B101A] rounded-3xl flex items-center justify-center mb-6 border border-slate-800 shadow-2xl shadow-blue-900/10 relative">
+            <div className="w-20 h-20 bg-card rounded-3xl flex items-center justify-center mb-6 border border-slate-800 shadow-2xl shadow-blue-900/10 relative">
                 <div className="absolute inset-0 bg-blue-500/5 rounded-3xl animate-pulse"></div>
                 <div className="relative text-blue-500">
                     {icon}

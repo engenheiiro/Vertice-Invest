@@ -5,6 +5,7 @@ import { RankingItem } from '../../services/research';
 import { AssetDetailModal } from './AssetDetailModal';
 import { useWallet } from '../../contexts/WalletContext';
 import { useNavigate } from 'react-router-dom';
+import { formatCompact as fmtCompact } from '../../utils/format';
 
 interface TopPicksCardProps {
     picks: RankingItem[];
@@ -92,14 +93,14 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
 
     const getTierBadge = (tier?: string) => {
         // Usa tier vindo do backend, ou infere se não existir (compatibilidade)
-        if (tier === 'GOLD') return <span title="Top Tier (Rodada 1)" className="text-[#D4AF37]"><Medal size={12} fill="currentColor" /></span>;
+        if (tier === 'GOLD') return <span title="Top Tier (Rodada 1)" className="text-gold"><Medal size={12} fill="currentColor" /></span>;
         if (tier === 'SILVER') return <span title="Mid Tier (Rodada 2)" className="text-slate-300"><Medal size={12} fill="currentColor" /></span>;
         if (tier === 'BRONZE') return <span title="Backfill (Rodada 3)" className="text-amber-700"><Medal size={12} fill="currentColor" /></span>;
         return null;
     };
 
     const getRankStyle = (pos: number) => {
-        if (pos === 1) return 'bg-[#D4AF37]/20 text-[#D4AF37] border-[#D4AF37]/50 shadow-[0_0_10px_rgba(212,175,55,0.2)]';
+        if (pos === 1) return 'bg-gold/20 text-gold border-gold/50 shadow-[0_0_10px_rgba(212,175,55,0.2)]';
         if (pos === 2) return 'bg-slate-300/20 text-slate-300 border-slate-400/50';
         if (pos === 3) return 'bg-amber-700/20 text-amber-600 border-amber-700/50';
         return 'bg-slate-900 text-slate-600 border-slate-800';
@@ -107,14 +108,13 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
 
     const formatCurrency = (val: number) => {
         if (!val && val !== 0) return '-';
-        if (isPrivacyMode) return '••••';
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: "compact" }).format(val);
+        return fmtCompact(val, 'BRL', { privacy: isPrivacyMode });
     };
 
     return (
         <div className="max-w-7xl mx-auto animate-fade-in space-y-6 pb-20">
             {/* Header com Filtros de Perfil */}
-            <div className="bg-[#080C14] border border-slate-800 rounded-3xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg">
+            <div className="bg-base border border-slate-800 rounded-3xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
                         <Target size={20} className="text-slate-400" />
@@ -145,7 +145,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 
                 {/* 1. RESUMO */}
-                <div className="lg:col-span-4 bg-[#080C14] border border-slate-800 rounded-3xl p-6 relative overflow-hidden flex flex-col justify-between shadow-2xl min-h-[240px]">
+                <div className="lg:col-span-4 bg-base border border-slate-800 rounded-3xl p-6 relative overflow-hidden flex flex-col justify-between shadow-2xl min-h-[240px]">
                     <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
                         <Trophy size={120} className="text-white" />
                     </div>
@@ -164,11 +164,11 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                         <span className="text-sm text-slate-500 font-medium normal-case block mt-1">{RISK_LABELS[riskFilter]} Selection</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 mt-4">
-                        <div className="bg-[#0B101A] border border-slate-800 p-2.5 rounded-xl text-center">
+                        <div className="bg-card border border-slate-800 p-2.5 rounded-xl text-center">
                             <p className="text-[8px] text-slate-500 font-bold uppercase mb-0.5">Score</p>
                             <p className={`text-sm font-black ${getScoreTextColor(stats.avgScore)}`}>{stats.avgScore}</p>
                         </div>
-                        <div className="bg-[#0B101A] border border-slate-800 p-2.5 rounded-xl text-center">
+                        <div className="bg-card border border-slate-800 p-2.5 rounded-xl text-center">
                             <p className="text-[8px] text-slate-500 font-bold uppercase mb-0.5">{assetClass === 'CRYPTO' ? 'Avg Cap' : 'Yield 12m'}</p>
                             {assetClass === 'CRYPTO' ? (
                                 <p className="text-sm font-black text-emerald-400">
@@ -178,7 +178,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                                 <p className="text-sm font-black text-emerald-400">{stats.avgDy}%</p>
                             )}
                         </div>
-                        <div className="bg-[#0B101A] border border-slate-800 p-2.5 rounded-xl text-center">
+                        <div className="bg-card border border-slate-800 p-2.5 rounded-xl text-center">
                             <p className="text-[8px] text-slate-500 font-bold uppercase mb-0.5">Ativos</p>
                             <p className="text-sm font-black text-white">{stats.count}</p>
                         </div>
@@ -186,7 +186,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                 </div>
 
                 {/* 2. MINHA CARTEIRA */}
-                <div className="lg:col-span-4 bg-[#080C14] border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
+                <div className="lg:col-span-4 bg-base border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
                     <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0 border-b border-slate-800/50 pb-2">
                         <Wallet size={14} className="text-emerald-500" />
                         <h3 className="text-[10px] font-black text-white uppercase tracking-widest">Minha Alocação</h3>
@@ -197,7 +197,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                 </div>
 
                 {/* 3. ALOCAÇÃO IDEAL */}
-                <div className="lg:col-span-4 bg-[#080C14] border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
+                <div className="lg:col-span-4 bg-base border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
                     <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0 border-b border-slate-800/50 pb-2">
                         <PieChart size={14} className="text-purple-500" />
                         <h3 className="text-[10px] font-black text-white uppercase tracking-widest">Exposição Ideal</h3>
@@ -234,7 +234,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                         const rebalanceDelta = currentValue - idealValue; 
 
                         return (
-                            <div key={idx} onClick={() => setSelectedAsset(pick)} className="bg-[#080C14] border border-slate-800 rounded-2xl p-4 hover:border-slate-600 hover:bg-[#0F131E] transition-all cursor-pointer group relative overflow-hidden">
+                            <div key={idx} onClick={() => setSelectedAsset(pick)} className="bg-base border border-slate-800 rounded-2xl p-4 hover:border-slate-600 hover:bg-panel transition-all cursor-pointer group relative overflow-hidden">
                                 
                                 <div className="flex flex-col xl:flex-row gap-6 items-center">
                                     {/* SEÇÃO 1: IDENTIDADE E SCORES */}

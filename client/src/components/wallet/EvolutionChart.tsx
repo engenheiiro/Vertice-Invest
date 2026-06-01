@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Legend } from 'recharts';
 import { BarChart3 } from 'lucide-react';
+import { formatCurrency as fmtCurrency } from '../../utils/format';
 
 // Custom Tick para exibir o ponto pulsante no dia LIVE
 const CustomXAxisTick = (props: any) => {
@@ -47,10 +48,7 @@ export const EvolutionChart = React.memo(() => {
         return `R$ ${val.toFixed(0)}`;
     };
 
-    const formatTooltipCurrency = (val: number) => {
-        if (isPrivacyMode) return 'R$ ••••••';
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-    };
+    const formatTooltipCurrency = (val: number) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
 
     const chartData = useMemo(() => {
         // Data de hoje normalizada (sem horas) para comparação
@@ -239,7 +237,7 @@ export const EvolutionChart = React.memo(() => {
 
     if (kpis.totalEquity === 0 && chartData.length === 0) {
         return (
-            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col items-center justify-center text-center relative overflow-hidden group">
+            <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col items-center justify-center text-center relative overflow-hidden group">
                 <BarChart3 className="text-slate-700 mb-4" size={48} />
                 <h3 className="text-slate-300 font-bold text-sm">Sem dados históricos</h3>
                 <p className="text-slate-600 text-xs">O gráfico será gerado após o primeiro aporte.</p>
@@ -248,7 +246,7 @@ export const EvolutionChart = React.memo(() => {
     }
 
     return (
-        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
+        <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
             
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 z-10 relative">
                 <div>
@@ -314,7 +312,7 @@ export const EvolutionChart = React.memo(() => {
                                     const isLive = data.isLive;
                                     
                                     return (
-                                        <div className="bg-[#0F1729] border border-slate-700 rounded-xl p-3 shadow-2xl z-50 min-w-[180px]">
+                                        <div className="bg-elevated border border-slate-700 rounded-xl p-3 shadow-2xl z-50 min-w-[180px]">
                                             <div className="flex justify-between items-center border-b border-slate-800 pb-1 mb-2">
                                                 <p className="text-slate-400 text-[10px] font-bold uppercase">{displayLabel}</p>
                                                 {isLive && <span className="text-[9px] text-red-500 font-black animate-pulse flex items-center gap-1">● LIVE</span>}

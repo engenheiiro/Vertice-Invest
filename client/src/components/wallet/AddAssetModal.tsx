@@ -15,6 +15,7 @@ import {
     validateTransaction,
     type AssetFormState,
 } from '../../utils/assetTransaction';
+import { formatCurrency as fmtCurrency } from '../../utils/format';
 
 interface AddAssetModalProps {
     isOpen: boolean;
@@ -218,7 +219,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         <select
                             value={form.ticker}
                             onChange={handleSellAssetSelect}
-                            className="w-full bg-[#0B101A] text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-[#0F1729] transition-all duration-300 shadow-sm"
+                            className="w-full bg-card text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-elevated transition-all duration-300 shadow-sm"
                         >
                             <option value="">Selecione um ativo...</option>
                             {availableAssets.map(a => (
@@ -282,7 +283,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         id="asset-search-listbox"
                         role="listbox"
                         aria-label="Resultados da busca"
-                        className="absolute top-full left-0 right-0 mt-1 bg-[#0F1729] border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar animate-fade-in"
+                        className="absolute top-full left-0 right-0 mt-1 bg-elevated border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar animate-fade-in"
                     >
                         {search.searchResults.map((result, idx) => (
                             <div
@@ -455,19 +456,17 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
         const isDollarized = form.type === 'CRYPTO' || form.type === 'STOCK_US';
         const totalNative = qtyNum * priceNum;
-        const fmt = (v: number, currency: 'BRL' | 'USD') =>
-            new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(v);
 
         return (
-            <div className="col-span-2 mt-2 flex items-baseline justify-between rounded-lg bg-[#0B101A] border border-slate-800 px-3 py-2 animate-fade-in">
+            <div className="col-span-2 mt-2 flex items-baseline justify-between rounded-lg bg-card border border-slate-800 px-3 py-2 animate-fade-in">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                     {transactionType === 'BUY' ? 'Total da Compra' : 'Total da Venda'}
                 </span>
                 <span className="text-sm font-bold text-emerald-400 font-mono">
-                    {isDollarized ? fmt(totalNative, 'USD') : fmt(totalNative, 'BRL')}
+                    {fmtCurrency(totalNative, isDollarized ? 'USD' : 'BRL')}
                     {isDollarized && usdRate > 0 && (
                         <span className="ml-2 text-[11px] font-medium text-slate-400">
-                            ≈ {fmt(totalNative * usdRate, 'BRL')}
+                            ≈ {fmtCurrency(totalNative * usdRate, 'BRL')}
                         </span>
                     )}
                 </span>
@@ -485,8 +484,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4 text-center">
-                    <div className="relative transform overflow-hidden rounded-2xl bg-[#080C14] border border-slate-800 text-left shadow-2xl transition-all w-full max-w-lg animate-fade-in my-auto max-h-[90vh] flex flex-col">
-                        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-[#0B101A] shrink-0">
+                    <div className="relative transform overflow-hidden rounded-2xl bg-base border border-slate-800 text-left shadow-2xl transition-all w-full max-w-lg animate-fade-in my-auto max-h-[90vh] flex flex-col">
+                        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-card shrink-0">
                             <h2 id="modal-title" className="text-lg font-bold text-white flex items-center gap-2">
                                 <PlusCircle size={18} className="text-blue-500" />
                                 Nova Transação
@@ -496,7 +495,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-2 p-1 bg-[#0F131E] border-b border-slate-800">
+                        <div className="grid grid-cols-2 p-1 bg-panel border-b border-slate-800">
                             <button
                                 onClick={() => setTransactionType('BUY')}
                                 className={`flex items-center justify-center gap-2 py-3 text-xs font-bold uppercase tracking-wider transition-all rounded-lg ${
@@ -528,7 +527,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                             <select
                                                 value={form.type}
                                                 onChange={handleTypeSelectChange}
-                                                className="w-full bg-[#0B101A] text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-[#0F1729] transition-all duration-300 shadow-sm"
+                                                className="w-full bg-card text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-elevated transition-all duration-300 shadow-sm"
                                             >
                                                 <option value="STOCK">Ações Brasil (B3)</option>
                                                 <option value="FII">Fundos Imobiliários (FIIs)</option>
@@ -557,7 +556,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                         value={form.name}
                                         onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
                                         containerClassName="mb-0"
-                                        className="bg-[#0B101A] text-slate-300 border-slate-800 focus:border-slate-600 px-4 py-3"
+                                        className="bg-card text-slate-300 border-slate-800 focus:border-slate-600 px-4 py-3"
                                     />
                                 )}
 

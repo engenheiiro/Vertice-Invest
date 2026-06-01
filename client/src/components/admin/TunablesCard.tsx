@@ -65,7 +65,7 @@ export const TunablesCard = () => {
     };
 
     return (
-        <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
+        <div className="bg-base border border-slate-800 rounded-2xl p-6 shadow-lg">
             <div className="flex items-center gap-2 mb-4">
                 <SlidersHorizontal size={18} className="text-blue-500" />
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider">Parâmetros do Sistema</h3>
@@ -96,7 +96,7 @@ export const TunablesCard = () => {
                                 max={t.max}
                                 value={draft[t.key] ?? ''}
                                 onChange={(e) => setDraft((d) => ({ ...d, [t.key]: Number(e.target.value) }))}
-                                className="w-full bg-[#0B101A] border border-slate-800 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-blue-600 focus:outline-none"
+                                className="w-full bg-card border border-slate-800 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-blue-600 focus:outline-none"
                             />
                             <p className="text-[9px] text-slate-600 mt-0.5">
                                 Faixa {t.min}–{t.max} · padrão {t.default}

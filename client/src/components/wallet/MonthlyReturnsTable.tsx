@@ -135,7 +135,7 @@ export const MonthlyReturnsTable = () => {
 
     if (isLoading && !isDemoMode) {
         return (
-            <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 h-[200px] flex items-center justify-center">
+            <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[200px] flex items-center justify-center">
                 <Loader2 className="animate-spin text-blue-500" />
             </div>
         );
@@ -146,8 +146,8 @@ export const MonthlyReturnsTable = () => {
     }
 
     return (
-        <div className="bg-[#080C14] border border-slate-800 rounded-2xl overflow-hidden shadow-sm hover:border-slate-700 transition-colors animate-fade-in">
-            <div className="p-5 border-b border-slate-800 bg-[#0B101A] flex items-center gap-2">
+        <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden shadow-sm hover:border-slate-700 transition-colors animate-fade-in">
+            <div className="p-5 border-b border-slate-800 bg-card flex items-center gap-2">
                 <Calendar size={16} className="text-blue-500" />
                 <h3 className="font-bold text-slate-200 text-sm">Rentabilidade Mensal</h3>
             </div>
@@ -156,7 +156,7 @@ export const MonthlyReturnsTable = () => {
             <div className="hidden md:block overflow-x-auto custom-scrollbar">
                 <table className="w-full text-center border-collapse text-xs">
                     <thead>
-                        <tr className="bg-[#0F131E] text-slate-500 font-bold border-b border-slate-800">
+                        <tr className="bg-panel text-slate-500 font-bold border-b border-slate-800">
                             <th className="p-3 text-left pl-6">Ano</th>
                             <th className="p-3">Jan</th>
                             <th className="p-3">Fev</th>
@@ -177,7 +177,7 @@ export const MonthlyReturnsTable = () => {
                     <tbody className="divide-y divide-slate-800/50">
                         {tableData.map((row) => (
                             <tr key={row.year} className="hover:bg-slate-800/20 transition-colors group">
-                                <td className="p-3 text-left pl-6 font-bold text-white bg-[#0B101A] border-r border-slate-800/50">
+                                <td className="p-3 text-left pl-6 font-bold text-white bg-card border-r border-slate-800/50">
                                     {row.year}
                                 </td>
                                 {row.months.map((m, idx) => (
@@ -200,7 +200,7 @@ export const MonthlyReturnsTable = () => {
             {/* Cards por ano — mobile (md:hidden) */}
             <div className="md:hidden p-3 space-y-3">
                 {tableData.map((row) => (
-                    <div key={row.year} className="bg-[#0B101A] border border-slate-800 rounded-xl p-4">
+                    <div key={row.year} className="bg-card border border-slate-800 rounded-xl p-4">
                         <div className="flex items-center justify-between mb-3">
                             <span className="font-bold text-white">{row.year}</span>
                             <div className="flex gap-3 text-right">
@@ -228,7 +228,7 @@ export const MonthlyReturnsTable = () => {
                 ))}
             </div>
 
-            <div className="p-3 bg-[#0B101A] border-t border-slate-800 text-[10px] text-slate-500 text-center flex items-center justify-center gap-1.5">
+            <div className="p-3 bg-card border-t border-slate-800 text-[10px] text-slate-500 text-center flex items-center justify-center gap-1.5">
                 <AlertCircle size={10} />
                 <span>Valores baseados na cota diária da carteira (TWRR). Rentabilidade passada não garante futuro.</span>
             </div>

@@ -75,7 +75,7 @@ export const InstallPrompt: React.FC = () => {
 
   return (
     <div className="md:hidden fixed bottom-0 inset-x-0 z-[90] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-      <div className="bg-[#0B101A] border border-blue-500/30 rounded-2xl shadow-2xl p-4 flex items-start gap-3">
+      <div className="bg-card border border-blue-500/30 rounded-2xl shadow-2xl p-4 flex items-start gap-3">
         <div className="w-10 h-10 shrink-0 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
           <Download size={20} className="text-blue-400" />
         </div>

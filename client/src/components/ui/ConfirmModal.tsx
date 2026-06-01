@@ -25,7 +25,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4 text-center">
-                    <div className="relative transform overflow-hidden rounded-2xl bg-[#080C14] border border-slate-800 text-left shadow-2xl transition-all w-full max-w-sm animate-fade-in border-t-4 border-t-red-500">
+                    <div className="relative transform overflow-hidden rounded-2xl bg-base border border-slate-800 text-left shadow-2xl transition-all w-full max-w-sm animate-fade-in border-t-4 border-t-red-500">
                         
                         <div className="p-6">
                             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-900/20 mb-4">
@@ -41,7 +41,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                             </div>
                         </div>
                         
-                        <div className="bg-[#0F131E] px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+                        <div className="bg-panel px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
                             <button
                                 type="button"
                                 className={`inline-flex w-full justify-center rounded-xl px-3 py-2 text-sm font-bold text-white shadow-sm sm:w-auto transition-all ${isDestructive ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'}`}
