@@ -13,8 +13,8 @@
 | Fase 0 — Segurança crítica | 5 | 5 ✅ |
 | Bugs (B) | 12 | 12 ✅ |
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
-| Implementações (I) | 3 | 14 |
-| Segurança (S) | 11 | 12 |
+| Implementações (I) | 4 | 14 |
+| Segurança (S) | 12 | 12 ✅ |
 | Infra/DevOps (D) | 7 | 13 |
 | Testes (T) | 11 | 12 |
 | Acessibilidade/UX (A) | 0 | 12 |
@@ -98,7 +98,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [ ] **I8** — Lazy-load das abas da Wallet via `React.lazy` · `client/src/pages/Wallet.tsx`
 - [ ] **I9** — Validação Zod centralizada em todas as rotas de escrita + sanitização · `validateResource.js`, `schemas/`
 - [x] **I10** — Validação de assinatura do webhook MP endurecida: **fail-closed** em produção sem secret + comparação **constant-time** (`crypto.timingSafeEqual`) · `server/controllers/webhookController.js` (HMAC já existia)
-- [ ] **I11** — Transações atômicas (`mongoose.session`) nas mutações de carteira · `server/controllers/walletController.js`
+- [x] **I11** — Transações atômicas nas mutações de carteira: `addAssetTransaction`/`removeAsset`/`resetWallet` já usavam `mongoose.startSession()` + commit/abort. **Fechada a brecha do `deleteTransaction`** — agora o delete da transação e o `recalculatePosition` rodam na MESMA sessão (recálculo que falha reverte o delete, sem posição inconsistente); `rebuildUserHistory` segue como pós-commit best-effort. 3 testes (commit/abort/404) · `server/controllers/walletController.js`, `tests/wallet_delete_transaction.spec.js`
 - [ ] **I12** — Skeleton screens padronizados + estados erro/loading granulares por query
 - [ ] **I13** — Painel admin de configuração (editar `SystemConfig` sem deploy) — depende de M9
 - [ ] **I14** — MFA/2FA opcional (TOTP) · `authController.js`, models
@@ -117,7 +117,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [x] **S8** — 🟡 Middleware `sanitizeInput` (`middleware/sanitize.js`) montado após o parse do JSON: remove de body/query/params chaves com `$` (operadores Mongo), `.` (dotted-path) e `__proto__`/`constructor`/`prototype` (prototype pollution), em objetos aninhados, com limite de profundidade (anti-DoS). Valores preservados. XSS: defesa primária é o escape de saída do React. 6 testes · `server/middleware/sanitize.js`
 - [x] **S9** — 🟡 PII (email) removido de **todos** os logs: downgrade no `authMiddleware` (já no M10) + 4 spots restantes (`researchController` admin x2, `subscriptionController`, `webhookController`) agora logam `user._id` em vez de email. Verificado: 0 emails em logs (exceto o envio legítimo no `emailService`)
 - [x] **S10** — 🟡 `@google/genai` saiu de `*` (perigoso — permitia major quebrado) para `^1.38.0`; `axios` floor elevado de `^1.6.0` para `^1.7.0`. Versões instaladas já satisfazem (sem reinstalação) · `server/package.json`
-- [ ] **S11** — 🟠 Criptografia em repouso (Atlas) + revisão LGPD de dados enviados ao Gemini
+- [x] **S11** — 🟠 Criptografia em repouso confirmada no Atlas (encryption at rest padrão do cluster) + revisão LGPD: dados enviados ao Gemini são apenas tickers/métricas de mercado, **sem PII**. Tratado pelo usuário no painel.
 - [x] **S12** — 🟡 `.github/dependabot.yml` (PRs semanais de update/segurança nos 3 manifestos + GitHub Actions) + step `npm audit --audit-level=high` no CI (informativo, `continue-on-error` — não bloqueia o build) · `.github/dependabot.yml`, `ci.yml`
 
 ---

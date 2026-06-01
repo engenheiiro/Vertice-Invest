@@ -804,13 +804,28 @@ export const getAssetTransactions = async (req, res, next) => {
 };
 
 export const deleteTransaction = async (req, res, next) => {
+    const session = await mongoose.startSession();
     try {
-        const tx = await AssetTransaction.findOneAndDelete({ _id: req.params.id, user: req.user.id });
-        if (!tx) return res.status(404).json({ message: "Transação não encontrada" });
-        await financialService.recalculatePosition(req.user.id, tx.ticker);
-        try { await financialService.rebuildUserHistory(req.user.id); } catch (e) {}
+        session.startTransaction();
+        const userId = req.user.id;
+        const tx = await AssetTransaction.findOneAndDelete({ _id: req.params.id, user: userId }, { session });
+        if (!tx) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(404).json({ message: "Transação não encontrada" });
+        }
+        // Recalcula a posição na MESMA transação: se o recálculo falhar (ex.: saldo
+        // insuficiente), o delete é revertido — sem estado financeiro inconsistente.
+        await financialService.recalculatePosition(userId, tx.ticker, null, session);
+        await session.commitTransaction();
+        session.endSession();
+        try { await financialService.rebuildUserHistory(userId); } catch (e) {}
         res.json({ message: "Transação removida." });
-    } catch (error) { next(error); }
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        next(error);
+    }
 };
 
 export const getWalletDividends = async (req, res, next) => {
