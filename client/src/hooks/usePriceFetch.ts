@@ -90,7 +90,10 @@ export function usePriceFetch({ isOpen, form, setForm }: UsePriceFetchArgs) {
           setPriceSource('manual');
         }
       } catch (err) {
+        // (A11) falha na cotação degrada visivelmente para entrada manual
+        // (em vez de ficar em estado indefinido silencioso).
         console.error('Erro ao buscar preço', err);
+        setPriceSource('manual');
       } finally {
         setIsFetchingPrice(false);
       }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { walletService } from '../services/wallet';
+import { useToast } from '../contexts/ToastContext';
 import type { AssetFormState } from '../utils/assetTransaction';
 import type { AssetType } from '../contexts/WalletContext';
 
@@ -15,6 +16,7 @@ interface UseAssetSearchArgs {
  * fechamento ao clicar fora. `containerRef` deve envolver o campo de ticker.
  */
 export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearchArgs) {
+  const { addToast } = useToast();
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -58,7 +60,10 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
             setShowDropdown(false);
           }
         } catch {
-          console.error('Erro busca');
+          // (A11) erro de busca agora é visível ao usuário, não mais silencioso.
+          setSearchResults([]);
+          setShowDropdown(false);
+          addToast('Não foi possível buscar o ativo. Verifique sua conexão.', 'error');
         } finally {
           setIsSearching(false);
         }

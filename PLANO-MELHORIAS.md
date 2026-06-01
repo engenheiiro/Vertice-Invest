@@ -17,7 +17,7 @@
 | Segurança (S) | 12 | 12 ✅ |
 | Infra/DevOps (D) | 11 | 13 |
 | Testes (T) | 11 | 12 |
-| Acessibilidade/UX (A) | 9 | 12 |
+| Acessibilidade/UX (A) | 10 | 12 |
 
 ---
 
@@ -172,7 +172,7 @@ Hoje: ~4 specs no backend e **1 teste no frontend** para 67 componentes.
 - [ ] **A8** — Auditoria de contraste WCAG AA (slate-600 sobre `#080C14`, badges)
 - [x] **A9** — Satisfeito: `Modal` restaura o foco ao elemento anterior ao fechar; toggle de senha do `Input` com `aria-label` dinâmico + `aria-pressed`
 - [ ] **A10** — Navegação por teclado em dropdowns (setas) + ordem de tab explícita
-- [ ] **A11** — Estados de erro visíveis (substituir `catch` silenciosos por toast/Alert)
+- [x] **A11** — Erros antes silenciosos agora são visíveis: falha na **busca de ativo** (`useAssetSearch`) dispara um toast de erro (antes só `console.error`); falha na **cotação** (`usePriceFetch`) degrada visivelmente para entrada manual (`priceSource='manual'`) em vez de estado indefinido. Mutações de carteira já tinham toast (B9) · `client/src/hooks/useAssetSearch.ts`, `usePriceFetch.ts`
 - [x] **A12** — Documentação de onboarding na raiz: `README.md` (stack, quickstart, scripts, env, testes), `CONTRIBUTING.md` (fluxo, convenções ESM/Zod/logger, Conventional Commits, husky, testes) e `ARCHITECTURE.md` (camadas do backend, pipeline quantitativo, modelos, segurança em camadas, frontend, CI). Complementam o `CLAUDE.md` existente · raiz
 
 ---
