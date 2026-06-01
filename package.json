@@ -10,6 +10,8 @@
     "setup": "npm install && npm install --prefix client && npm install --prefix server",
     "build": "npm run build:client",
     "build:client": "npm install --prefix client --include=dev && npm run build --prefix client",
+    "build:server": "npm run build --prefix server",
+    "build:all": "npm run build:server && npm run build:client",
     "start": "node server/index.js",
     "seed:admin": "node server/scripts/seedAdmin.js",
     "list:users": "node server/scripts/listUsers.js",

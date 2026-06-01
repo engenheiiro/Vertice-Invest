@@ -50,5 +50,8 @@ jobs:
       - name: Test frontend
         run: npm run test --prefix client -- run
 
+      - name: Build server (validação de sintaxe)
+        run: npm run build:server
+
       - name: Build client
         run: npm run build:client
