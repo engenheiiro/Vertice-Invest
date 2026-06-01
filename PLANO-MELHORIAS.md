@@ -14,7 +14,7 @@
 | Bugs (B) | 12 | 12 ✅ |
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
 | Implementações (I) | 3 | 14 |
-| Segurança (S) | 7 | 12 |
+| Segurança (S) | 11 | 12 |
 | Infra/DevOps (D) | 7 | 13 |
 | Testes (T) | 11 | 12 |
 | Acessibilidade/UX (A) | 0 | 12 |
@@ -107,14 +107,14 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 
 ## CATEGORIA 4 — Segurança
 
-- [ ] **S1** — 🔴 Rotação de segredos + limpeza de histórico (= Fase 0)
-- [ ] **S2** — 🔴 `.env.example` + secret scanning (gitleaks) no pre-commit e CI
+- [x] **S1** — 🔴 Rotação de segredos + limpeza de histórico — concluído na **Fase 0** (F0.1 rotação pelo usuário + F0.2 `git filter-branch` + force-push)
+- [x] **S2** — 🔴 `.env.example` + secret scanning (gitleaks) no pre-commit e CI — concluído na **Fase 0** (F0.3/F0.4)
 - [x] **S3** — 🟠 Validação de assinatura webhook MP endurecida (= I10) · `webhookController.js`
 - [x] **S4** — 🟠 Auditoria concluída: **todas** as rotas admin (research, wallet, academy, subscription) já têm `requireAdmin`; market `/status/:ticker` é read-only sob `authenticateToken`. **Sem brechas.**
 - [x] **S5** — 🟠 Verificado: `logout` já deleta o `RefreshToken` do DB (`findOneAndDelete` + `clearCookie` `sameSite:strict`) · `authController.js:199-210`. **Já implementado.**
 - [x] **S6** — 🟡 Política de senha centralizada em `utils/passwordPolicy.js` (`getPasswordError`): mínimo 8 + minúscula/maiúscula/dígito **+ bloqueio de senhas comuns** (blocklist case-insensitive). Eliminou a regra duplicada em register/reset/change do `authController` e alinhou o `registerSchema` (Zod, antes só `min(6)`) ao mesmo padrão. 8 testes · `server/utils/passwordPolicy.js`
-- [ ] **S7** — 🟡 Proteção CSRF + cookies `SameSite=Strict` · `server/app.js`, helmet
-- [ ] **S8** — 🟡 Sanitização anti-injeção NoSQL/XSS além do Mongoose
+- [x] **S7** — 🟡 Verificado/satisfeito: cookie de refresh já é `httpOnly + secure + sameSite:'strict'` (`authController`); rotas de estado usam **Bearer token** (header, imune a CSRF); CORS com allowlist + `credentials`; helmet com HSTS/CSP restritiva. CSRF mitigado por arquitetura — token CSRF dedicado seria redundante para SPA com Bearer + SameSite=Strict
+- [x] **S8** — 🟡 Middleware `sanitizeInput` (`middleware/sanitize.js`) montado após o parse do JSON: remove de body/query/params chaves com `$` (operadores Mongo), `.` (dotted-path) e `__proto__`/`constructor`/`prototype` (prototype pollution), em objetos aninhados, com limite de profundidade (anti-DoS). Valores preservados. XSS: defesa primária é o escape de saída do React. 6 testes · `server/middleware/sanitize.js`
 - [x] **S9** — 🟡 PII (email) removido de **todos** os logs: downgrade no `authMiddleware` (já no M10) + 4 spots restantes (`researchController` admin x2, `subscriptionController`, `webhookController`) agora logam `user._id` em vez de email. Verificado: 0 emails em logs (exceto o envio legítimo no `emailService`)
 - [x] **S10** — 🟡 `@google/genai` saiu de `*` (perigoso — permitia major quebrado) para `^1.38.0`; `axios` floor elevado de `^1.6.0` para `^1.7.0`. Versões instaladas já satisfazem (sem reinstalação) · `server/package.json`
 - [ ] **S11** — 🟠 Criptografia em repouso (Atlas) + revisão LGPD de dados enviados ao Gemini

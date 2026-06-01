@@ -12,6 +12,7 @@ import * as Sentry from "@sentry/node";
 import { fileURLToPath } from 'url';
 import logger from './config/logger.js';
 import { initScheduler } from './services/schedulerService.js';
+import { sanitizeInput } from './middleware/sanitize.js'; // (S8) anti-injeção NoSQL
 
 // Rotas
 import authRoutes from './routes/authRoutes.js';
@@ -61,6 +62,9 @@ app.use(cookieParser());
 // Limite generoso o suficiente para payloads legítimos (ex.: rankings com 100+
 // ativos e auditLog completo), mantendo proteção contra corpos abusivos.
 app.use(express.json({ limit: '1mb' }));
+// (S8) Sanitiza inputs (remove operadores Mongo/prototype pollution das chaves)
+// logo após o parse do corpo e antes de qualquer rota.
+app.use(sanitizeInput);
 
 const ALLOWED_ORIGINS = [process.env.CLIENT_URL, 'http://localhost:5173'].filter(Boolean);
 app.use(cors({
