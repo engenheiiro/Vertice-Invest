@@ -14,7 +14,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export const AssetList = () => {
-    const { assets, removeAsset, kpis, targetAllocation, isPrivacyMode, usdRate } = useWallet();
+    const { assets, removeAsset, kpis, targetAllocation, isPrivacyMode } = useWallet();
     const [historyTicker, setHistoryTicker] = useState<string | null>(null);
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
@@ -132,17 +132,18 @@ export const AssetList = () => {
                                         </tr>
 
                                         {!isCollapsed && groupItems.map((asset) => {
-                                            const unitProfit = asset.currentPrice - asset.averagePrice;
                                             const isUSD = asset.type === 'STOCK_US' || asset.currency === 'USD';
-                                            const rate = usdRate || 5.75;
 
-                                            let profitPercent = 0;
-                                            if (asset.averagePrice > 0) {
-                                                profitPercent = (unitProfit / asset.averagePrice) * 100;
-                                            }
-
-                                            const totalProfit = unitProfit * asset.quantity * (isUSD ? rate : 1);
-                                            const isProfitable = unitProfit >= 0;
+                                            // Resultado da posição = saldo atual − custo (ambos já em BRL e
+                                            // convertidos no backend). Mesma fórmula do cabeçalho da classe,
+                                            // mantendo a linha consistente com o grupo. Recalcular por
+                                            // (currentPrice − averagePrice) zerava o CASH, pois o backend
+                                            // força currentPrice = 1 para Caixa/Reserva.
+                                            const totalProfit = asset.totalValue - asset.totalCost;
+                                            const profitPercent = asset.totalCost > 0
+                                                ? (totalProfit / asset.totalCost) * 100
+                                                : 0;
+                                            const isProfitable = totalProfit >= 0;
                                             
                                             // % da Classe
                                             const percentOfClass = totalValueGroup > 0 ? (asset.totalValue / totalValueGroup) * 100 : 0;

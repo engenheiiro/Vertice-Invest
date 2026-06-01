@@ -9,7 +9,7 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
-import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, calculateSharpeRatio, calculateBeta } from '../utils/mathUtils.js';
+import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, calculateSharpeRatio, calculateBeta, safeValue, safePrice, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { countBusinessDays, isBusinessDay } from '../utils/dateUtils.js';
 import logger from '../config/logger.js';
 import { HISTORICAL_CDI_RATES, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
@@ -32,8 +32,8 @@ const getDailyFactorForDate = (date, currentConfigRate) => {
 
 // HELPER: Calcula KPIs em tempo real (versão leve do getWalletData)
 const calculateLiveKPIS = async (userId, currentCdi) => {
-    const activeAssets = await UserAsset.find({ user: userId, quantity: { $gt: 0.000001 } });
-    
+    const activeAssets = await UserAsset.find({ user: userId, quantity: { $gt: QUANTITY_EPSILON } });
+
     if (activeAssets.length === 0) return null;
 
     // Refresh rápido nos ativos voláteis
@@ -79,7 +79,7 @@ const calculateLiveKPIS = async (userId, currentCdi) => {
         }
 
         const qty = asset.quantity;
-        const val = asset.type === 'CASH' ? qty : safeMult(qty, currentPrice);
+        const val = asset.type === 'CASH' ? qty : safeValue(qty, currentPrice);
         
         totalEquity += safeMult(val, multiplier);
         totalInvested += safeMult(asset.totalCost, multiplier);
@@ -96,8 +96,8 @@ export const getWalletData = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const userAssets = await UserAsset.find({ user: userId });
-        const activeAssets = userAssets.filter(a => a.quantity > 0.000001);
-        const closedAssets = userAssets.filter(a => a.quantity <= 0.000001);
+        const activeAssets = userAssets.filter(a => a.quantity > QUANTITY_EPSILON);
+        const closedAssets = userAssets.filter(a => a.quantity <= QUANTITY_EPSILON);
 
         // Auto-Heal se não houver ativos mas houver transações (reconstrução forçada)
         if (activeAssets.length === 0) {
@@ -108,7 +108,7 @@ export const getWalletData = async (req, res, next) => {
                 for (const ticker of distinctTickers) {
                     await financialService.recalculatePosition(userId, ticker);
                 }
-                const healedAssets = await UserAsset.find({ user: userId, quantity: { $gt: 0.000001 } });
+                const healedAssets = await UserAsset.find({ user: userId, quantity: { $gt: QUANTITY_EPSILON } });
                 if (healedAssets.length > 0) {
                     return getWalletData(req, res, next);
                 }
@@ -265,7 +265,7 @@ export const getWalletData = async (req, res, next) => {
                     const boughtToday = asset.taxLots && asset.taxLots.length > 0 && asset.taxLots.every(lot => new Date(lot.date).toISOString().split('T')[0] === todayStr);
                     
                     if (boughtToday && asset.quantity > 0) {
-                        const averagePrice = safeDiv(asset.totalCost, asset.quantity);
+                        const averagePrice = safePrice(asset.totalCost, asset.quantity);
                         if (averagePrice > 0) {
                             dayChangePct = ((currentPrice / averagePrice) - 1) * 100;
                         }
@@ -280,17 +280,17 @@ export const getWalletData = async (req, res, next) => {
             const currentMultiplier = isDollarized ? usdRate : 1;
             const prevMultiplier = isDollarized ? (usdRate / (1 + usdChange/100)) : 1;
 
-            const valueBase = asset.type === 'CASH' ? asset.quantity : safeMult(asset.quantity, currentPrice);
-            const totalValueBr = asset.type === 'CASH' 
+            const valueBase = asset.type === 'CASH' ? asset.quantity : safeValue(asset.quantity, currentPrice);
+            const totalValueBr = asset.type === 'CASH'
                 ? safeMult(safeMult(asset.quantity, currentPrice), currentMultiplier)
                 : safeMult(valueBase, currentMultiplier);
 
             const totalCostBr = safeMult(asset.totalCost, currentMultiplier);
-            
+
             // Cálculo robusto da variação diária em BRL
             // Considera tanto a variação do ativo quanto a variação cambial
             const priceStart = currentPrice / (1 + dayChangePct/100);
-            const valueStartBr = safeMult(safeMult(asset.quantity, priceStart), prevMultiplier);
+            const valueStartBr = safeMult(safeValue(asset.quantity, priceStart), prevMultiplier);
 
             const dayChangeValueBr = safeSub(totalValueBr, valueStartBr);
             const combinedChangePct = valueStartBr > 0 ? ((totalValueBr / valueStartBr) - 1) * 100 : 0;
@@ -314,7 +314,7 @@ export const getWalletData = async (req, res, next) => {
                 name: assetMap.get(asset.ticker)?.name || asset.ticker,
                 type: asset.type,
                 quantity: asset.quantity,
-                averagePrice: asset.quantity > 0 ? safeDiv(asset.totalCost, asset.quantity) : 0,
+                averagePrice: asset.quantity > 0 ? safePrice(asset.totalCost, asset.quantity) : 0,
                 currentPrice: asset.type === 'CASH' ? 1 : currentPrice,
                 currency: asset.currency,
                 totalValue: safeCurrency(totalValueBr), 

@@ -24,6 +24,43 @@ export const safeDiv = (a, b) => {
     return safeFloat(safeFloat(a) / safeFloat(b));
 };
 
+/**
+ * QUANTIDADE de ativos exige mais precisão que dinheiro: cripto vai até 8 casas
+ * decimais (1 satoshi = 0.00000001 BTC). safeFloat arredonda a 4 casas e zera
+ * 0.0000028 BTC, fazendo a carteira parecer vazia. Use estes helpers SEMPRE que
+ * o número for uma quantidade de cotas/unidades (não valor monetário).
+ */
+export const QUANTITY_EPSILON = 1e-9; // abaixo disto a posição é considerada zerada
+
+export const safeQuantity = (value) => {
+    if (!value || isNaN(value)) return 0;
+    return parseFloat(Number(value).toFixed(8));
+};
+
+export const addQty = (a, b) => safeQuantity(safeQuantity(a) + safeQuantity(b));
+export const subQty = (a, b) => safeQuantity(safeQuantity(a) - safeQuantity(b));
+
+/**
+ * Valor monetário = quantidade (8 casas) × preço. Diferente de safeMult, NÃO
+ * trunca a quantidade a 4 casas antes de multiplicar — preserva cripto.
+ */
+export const safeValue = (quantity, price) => {
+    const q = safeQuantity(quantity);
+    const p = safeFloat(price);
+    if (!q || !p) return 0;
+    return safeCurrency(q * p);
+};
+
+/**
+ * Preço médio = custo ÷ quantidade (8 casas). Evita o div/0 que safeDiv causa ao
+ * truncar quantidades de cripto a 4 casas (0.0000028 → 0).
+ */
+export const safePrice = (totalCost, quantity) => {
+    const q = safeQuantity(quantity);
+    if (!q) return 0;
+    return safeFloat(safeFloat(totalCost) / q);
+};
+
 export const calculatePercent = (current, initial) => {
     if (initial === 0) return 0;
     const diff = safeSub(current, initial);

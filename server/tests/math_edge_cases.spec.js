@@ -14,6 +14,11 @@ import {
   calculateStdDev,
   calculateSharpeRatio,
   calculateBeta,
+  safeQuantity,
+  addQty,
+  subQty,
+  safeValue,
+  safePrice,
 } from '../utils/mathUtils.js';
 
 describe('safeFloat / safeCurrency — valores degenerados', () => {
@@ -24,6 +29,33 @@ describe('safeFloat / safeCurrency — valores degenerados', () => {
   });
   it('safeCurrency elimina erro de ponto flutuante (0.1 + 0.2)', () => {
     expect(safeCurrency(0.1 + 0.2)).toBe(0.3);
+  });
+});
+
+describe('quantidade de cripto — alta precisão (8 casas)', () => {
+  it('safeQuantity preserva 0.0000028 BTC (safeFloat zeraria a 4 casas)', () => {
+    // O bug original: safeFloat(0.0000028) = 0 → carteira de cripto zerava.
+    expect(safeFloat(0.0000028)).toBe(0); // comportamento monetário (4 casas)
+    expect(safeQuantity(0.0000028)).toBe(0.0000028); // quantidade (8 casas)
+  });
+  it('safeQuantity arredonda a 8 casas e zera degenerados', () => {
+    expect(safeQuantity(0.123456789)).toBe(0.12345679);
+    expect(safeQuantity(null)).toBe(0);
+    expect(safeQuantity(NaN)).toBe(0);
+  });
+  it('addQty/subQty acumulam sem truncar a quantidade', () => {
+    expect(addQty(0.0000028, 0.0000012)).toBe(0.000004);
+    expect(subQty(0.0000028, 0.0000028)).toBe(0);
+  });
+  it('safeValue = quantidade × preço, preservando cripto', () => {
+    // 0.0000028 BTC a R$ 600.000 ≈ R$ 1,68 (safeMult daria 0).
+    expect(safeValue(0.0000028, 600000)).toBe(1.68);
+    expect(safeValue(0.05, 100000)).toBe(5000);
+  });
+  it('safePrice = custo ÷ quantidade sem div/0 da cripto', () => {
+    // safeDiv(1.68, 0.0000028) daria 0 (trunca o divisor a 0).
+    expect(safePrice(1.68, 0.0000028)).toBe(600000);
+    expect(safePrice(100, 0)).toBe(0);
   });
 });
 

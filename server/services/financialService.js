@@ -12,7 +12,7 @@ import AuditLog from '../models/AuditLog.js'; // Novo
 import { marketDataService } from './marketDataService.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { externalMarketService } from './externalMarketService.js';
-import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz } from '../utils/mathUtils.js';
+import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz, safeQuantity, addQty, subQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js'; 
 import logger from '../config/logger.js';
 
@@ -274,8 +274,8 @@ export const financialService = {
                         dayFlowAdjusted -= trueAdjustedFlow * txUsdRate;
                     }
                     
-                    if (portfolio[tx.ticker].qty < 0.000001) {
-                        portfolio[tx.ticker].qty = 0; 
+                    if (portfolio[tx.ticker].qty < QUANTITY_EPSILON) {
+                        portfolio[tx.ticker].qty = 0;
                         portfolio[tx.ticker].cost = 0;
                         if(fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker].currentValue = 0;
                     }
@@ -540,37 +540,38 @@ export const financialService = {
         let firstBuyDate = null;
 
         for (const tx of transactions) {
-            const txQty = safeFloat(tx.quantity);
+            // Quantidade em 8 casas (cripto); valor monetário continua em 2/4 casas.
+            const txQty = safeQuantity(tx.quantity);
             const txPrice = safeFloat(tx.price);
-            const txTotal = safeMult(txQty, txPrice); 
+            const txTotal = safeCurrency(txQty * txPrice);
 
             if (tx.type === 'BUY') {
-                quantity = safeAdd(quantity, txQty);
+                quantity = addQty(quantity, txQty);
                 totalCost = safeAdd(totalCost, txTotal);
                 taxLots.push({ quantity: txQty, price: txPrice, date: tx.date });
-                if (!firstBuyDate) firstBuyDate = tx.date; 
+                if (!firstBuyDate) firstBuyDate = tx.date;
             } else if (tx.type === 'SELL') {
-                const currentAvg = quantity > 0 ? safeDiv(totalCost, quantity) : 0;
-                const costOfSoldShares = safeMult(txQty, currentAvg);
+                const currentAvg = quantity > 0 ? safeFloat(totalCost / quantity) : 0;
+                const costOfSoldShares = safeCurrency(txQty * currentAvg);
                 const profit = safeSub(txTotal, costOfSoldShares);
-                
+
                 realizedProfit = safeAdd(realizedProfit, profit);
-                quantity = safeSub(quantity, txQty);
+                quantity = subQty(quantity, txQty);
                 totalCost = safeSub(totalCost, costOfSoldShares);
-                
+
                 let remainingToSell = txQty;
                 let fifoCostOfSoldShares = 0; // NOVO
 
-                while (remainingToSell > 0.000001 && taxLots.length > 0) {
-                    const oldestLot = taxLots[0]; 
+                while (remainingToSell > QUANTITY_EPSILON && taxLots.length > 0) {
+                    const oldestLot = taxLots[0];
                     if (oldestLot.quantity > remainingToSell) {
-                        fifoCostOfSoldShares = safeAdd(fifoCostOfSoldShares, safeMult(remainingToSell, oldestLot.price));
-                        oldestLot.quantity = safeSub(oldestLot.quantity, remainingToSell);
+                        fifoCostOfSoldShares = safeAdd(fifoCostOfSoldShares, safeCurrency(remainingToSell * oldestLot.price));
+                        oldestLot.quantity = subQty(oldestLot.quantity, remainingToSell);
                         remainingToSell = 0;
                     } else {
-                        fifoCostOfSoldShares = safeAdd(fifoCostOfSoldShares, safeMult(oldestLot.quantity, oldestLot.price));
-                        remainingToSell = safeSub(remainingToSell, oldestLot.quantity);
-                        taxLots.shift(); 
+                        fifoCostOfSoldShares = safeAdd(fifoCostOfSoldShares, safeCurrency(oldestLot.quantity * oldestLot.price));
+                        remainingToSell = subQty(remainingToSell, oldestLot.quantity);
+                        taxLots.shift();
                     }
                 }
 
@@ -586,11 +587,11 @@ export const financialService = {
             let mergedCost = 0;
             
             lotsToMerge.forEach(l => {
-                mergedQty = safeAdd(mergedQty, l.quantity);
-                mergedCost = safeAdd(mergedCost, safeMult(l.quantity, l.price));
+                mergedQty = addQty(mergedQty, l.quantity);
+                mergedCost = safeAdd(mergedCost, safeCurrency(l.quantity * l.price));
             });
-            
-            const mergedPrice = mergedQty > 0 ? safeDiv(mergedCost, mergedQty) : 0;
+
+            const mergedPrice = mergedQty > 0 ? safeFloat(mergedCost / mergedQty) : 0;
             
             taxLots = [{
                 date: lotsToMerge[lotsToMerge.length - 1].date,
@@ -600,8 +601,8 @@ export const financialService = {
             }, ...keptLots];
         }
 
-        if (quantity < -0.000001) throw new Error(`Saldo insuficiente para ${ticker}.`);
-        if (quantity <= 0.000001) { quantity = 0; totalCost = 0; taxLots = []; }
+        if (quantity < -QUANTITY_EPSILON) throw new Error(`Saldo insuficiente para ${ticker}.`);
+        if (quantity <= QUANTITY_EPSILON) { quantity = 0; totalCost = 0; taxLots = []; }
 
         let assetQuery = UserAsset.findOne({ user: userId, ticker });
         if (session) assetQuery.session(session);
