@@ -5,6 +5,7 @@ import Transaction from '../models/Transaction.js';
 import logger from '../config/logger.js';
 import { paymentService } from '../services/paymentService.js';
 import { TEST_PLAN_MAP } from '../config/subscription.js';
+import { invalidateUser } from '../utils/userCache.js'; // (I6) bust de cache de plano
 
 // --- MELHORIA 3: VALIDAÇÃO DE ASSINATURA HMAC ---
 const isValidSignature = (req) => {
@@ -134,6 +135,7 @@ export const handleMercadoPagoWebhook = async (req, res) => {
                     user.mpSubscriptionId = resourceId.toString();
 
                     await user.save();
+                    invalidateUser(user._id); // (I6) plano mudou → derruba cache do authMiddleware
 
                     await Transaction.create({
                         user: user._id,

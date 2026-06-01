@@ -9,6 +9,7 @@ import AuditLog from '../models/AuditLog.js';
 import { sendResetPasswordEmail } from '../services/emailService.js';
 import logger from '../config/logger.js';
 import { getPasswordError } from '../utils/passwordPolicy.js'; // (S6) política de senha
+import { invalidateUser } from '../utils/userCache.js'; // (I6) bust de cache no update de perfil
 
 // Configurações
 const ACCESS_TOKEN_EXPIRATION = '15m';
@@ -269,7 +270,8 @@ export const updateProfile = async (req, res, next) => {
         }
 
         const updatedUser = await User.findByIdAndUpdate(userId, { name, cpf: cleanCpf }, { new: true });
-        
+        invalidateUser(userId); // (I6) nome em cache mudou → invalida
+
         // [SEGURANÇA] Usa o sanitizador
         res.json({ 
             message: "Perfil atualizado.", 

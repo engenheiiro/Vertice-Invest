@@ -13,7 +13,7 @@
 | Fase 0 — Segurança crítica | 5 | 5 ✅ |
 | Bugs (B) | 12 | 12 ✅ |
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
-| Implementações (I) | 7 | 14 |
+| Implementações (I) | 8 | 14 |
 | Segurança (S) | 12 | 12 ✅ |
 | Infra/DevOps (D) | 7 | 13 |
 | Testes (T) | 11 | 12 |
@@ -93,7 +93,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [ ] **I3** — Cache Redis para market data + macro (TTL alinhado ao fechamento) · `marketDataService.js`, `macroDataService.js`
 - [ ] **I4** — Circuit breaker + retry/backoff para integrações externas · `server/services/*`
 - [x] **I5** — Rate limiting **por usuário** (não por IP) em `middleware/rateLimiters.js`: chave `u:<id>` (fallback IP), via factory `createUserLimiter`. `walletWriteLimiter` (50/15min) substitui o `writeLimiter` por-IP da carteira — corrige injustiça atrás de NAT e evasão por troca de IP. `researchHeavyLimiter` (20/15min) nas rotas caras de research (full-pipeline, crunch, enhance, narrative, syncs, cleanup) e `researchReadLimiter` (300/15min) nas leituras agregadas (latest/macro/signals). Montados após `authenticateToken` (req.user garantido). 3 testes (teto/429, isolamento mesmo-IP, fallback IP) · `server/middleware/rateLimiters.js`, `walletRoutes.js`, `researchRoutes.js`, `tests/rate_limiters.spec.js`
-- [ ] **I6** — Cache do plano/assinatura (TTL 5–10min) em vez de hit no DB por request · `server/middleware/authMiddleware.js`
+- [x] **I6** — Cache em memória do usuário (plano/role/assinatura) no `authMiddleware` (TTL 5min, env `PLAN_CACHE_TTL_MS`) — corta o `User.findById` que rodava em **todo** request autenticado. `utils/userCache.js` (Map + TTL + teto anti-leak). Correção: cache hit de **plano pago vencido** (`isExpiredPaid`) força o caminho de DB para rebaixar+persistir — nunca vaza acesso. Invalidação explícita nos pontos de mutação: checkout (`subscriptionController`), webhook MP (`webhookController`), edição de perfil (`authController`) e `clearUserCache()` pós-downgrade em massa do scheduler. 8 testes (cache + middleware) · `server/utils/userCache.js`, `authMiddleware.js`, `tests/user_cache.spec.js`, `tests/auth_middleware_cache.spec.js`
 - [ ] **I7** — OpenAPI/Swagger documentando endpoints `/api`
 - [x] **I8** — Lazy-load das abas da Wallet via `React.lazy` + `Suspense`. OVERVIEW (aba default) segue eager para não piscar fallback no load; PERFORMANCE/DIVIDENDS/STATEMENT viraram chunks separados (`PerformanceChart` 7.85kB, `DividendDashboard` 8.34kB, `MonthlyReturnsTable` 5.57kB, `CashFlowHistory` 5.20kB — ~27kB raw/~10kB gzip adiados do bundle inicial), carregados sob demanda com fallback de esqueleto. `tsc` limpo, build OK · `client/src/pages/Wallet.tsx`
 - [x] **I9** — Validação Zod centralizada nas rotas de escrita da carteira via `validate(schema)` (já usado em auth): novo `schemas/walletSchemas.js` cobre `POST /add` (ticker/quantity≠0/price≥0/type∈enum, coerção de strings), `PUT /:id` (tags ≤20), `DELETE /:id` e `DELETE /transactions/:id` (ObjectId 24-hex) e `POST /fix-splits`. Gate puro — não muta `req.body`, então a lógica dos handlers é preservada. Sanitização anti-injeção é o S8 (global). Writes de research são admin-gated e majoritariamente sem body (triggers). 13 testes · `server/schemas/walletSchemas.js`, `walletRoutes.js`, `tests/wallet_schemas.spec.js`

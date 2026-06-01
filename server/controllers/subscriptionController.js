@@ -6,6 +6,7 @@ import UsageLog from '../models/UsageLog.js';
 import logger from '../config/logger.js';
 import { PLANS, LIMITS_CONFIG, TEST_PLAN_MAP } from '../config/subscription.js';
 import { paymentService } from '../services/paymentService.js';
+import { invalidateUser } from '../utils/userCache.js'; // (I6) bust de cache de plano
 
 const getMonthKey = () => {
     const now = new Date();
@@ -209,8 +210,9 @@ export const syncPayment = async (req, res, next) => {
             user.subscriptionStatus = 'ACTIVE';
             user.validUntil = newValidUntil;
             user.mpSubscriptionId = paymentId.toString();
-            
+
             await user.save();
+            invalidateUser(user._id); // (I6) plano mudou → derruba cache do authMiddleware
 
             // Salva Transação se não existir
             const existingTx = await Transaction.findOne({ gatewayId: paymentId.toString() });

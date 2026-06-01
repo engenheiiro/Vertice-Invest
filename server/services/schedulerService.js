@@ -9,6 +9,7 @@ import { syncService } from './syncService.js';
 import { holidayService } from './holidayService.js';
 import { financialService } from './financialService.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
+import { clearUserCache } from '../utils/userCache.js'; // (I6) limpa cache pós-downgrade em massa
 import { signalEngine } from './engines/signalEngine.js';
 import MarketAsset from '../models/MarketAsset.js';
 import User from '../models/User.js';
@@ -319,14 +320,16 @@ export const initScheduler = () => {
     cron.schedule('0 3 * * *', async () => {
         try {
             const now = new Date();
-            await User.updateMany(
-                { 
+            const res = await User.updateMany(
+                {
                     plan: { $ne: 'GUEST' },
-                    role: { $ne: 'ADMIN' }, 
-                    validUntil: { $lt: now } 
+                    role: { $ne: 'ADMIN' },
+                    validUntil: { $lt: now }
                 },
                 { $set: { plan: 'GUEST', subscriptionStatus: 'PAST_DUE' } }
             );
+            // (I6) Reflete o downgrade em massa no cache do authMiddleware.
+            if (res?.modifiedCount > 0) clearUserCache();
         } catch (error) {
             logger.error(`❌ Erro Check Expiração: ${error.message}`);
         }
