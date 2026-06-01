@@ -142,7 +142,8 @@ const DashboardCard = ({ label, value, icon, subLabel, subContent, badge, glow, 
                             {icon}
                         </div>
                         <div className="flex items-center gap-1">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
+                            {/* (A6) o nome da métrica é o heading do card (não o número) */}
+                            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</h3>
                             {tooltipText && (
                                 <div className="group/info relative flex items-center">
                                     <Info size={10} className="text-slate-600 cursor-help hover:text-blue-400 transition-colors" />
@@ -158,7 +159,8 @@ const DashboardCard = ({ label, value, icon, subLabel, subContent, badge, glow, 
                 </div>
 
                 <div className="mt-2 mb-4">
-                    <h3 className="text-2xl font-bold text-white tracking-tight truncate">{value}</h3>
+                    {/* (A6) valor como parágrafo (o heading é o nome da métrica acima) */}
+                    <p className="text-2xl font-bold text-white tracking-tight truncate">{value}</p>
                 </div>
             </div>
 

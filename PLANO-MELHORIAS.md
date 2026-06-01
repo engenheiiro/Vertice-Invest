@@ -17,7 +17,7 @@
 | Segurança (S) | 12 | 12 ✅ |
 | Infra/DevOps (D) | 11 | 13 |
 | Testes (T) | 11 | 12 |
-| Acessibilidade/UX (A) | 6 | 12 |
+| Acessibilidade/UX (A) | 8 | 12 |
 
 ---
 
@@ -167,8 +167,8 @@ Hoje: ~4 specs no backend e **1 teste no frontend** para 67 componentes.
 - [x] **A3** — Satisfeito pelo primitivo `Modal` (M11): focus trap com ciclo de Tab, fechar com `Escape` e clique no backdrop, restauração de foco ao fechar. Migração dos modais legados ao primitivo é incremental
 - [x] **A4** — Satisfeito pelo `Modal` (M11): `role="dialog"` + `aria-modal` + `aria-labelledby` apontando para o título (`useId`)
 - [x] **A5** — Satisfeito pelo primitivo `Input`: erro com `role="alert"` (live region assertiva) + `aria-invalid` + `aria-errormessage` ligando campo↔mensagem
-- [ ] **A6** — Hierarquia semântica de headings nos cards de KPI · `EquitySummary.tsx`
-- [ ] **A7** — HTML semântico (`section`/`article`/`aside`) no lugar de `div` genérica
+- [x] **A6** — Heading dos cards de KPI corrigido: o **nome da métrica** virou `<h3>` (antes era o número que tinha o heading, sem contexto); valor passou a `<p>`. Aparência idêntica (classes Tailwind) · `EquitySummary.tsx`
+- [x] **A7** — Landmarks: páginas já usam `<main>` e o `Header` usa `<nav>`; grid de KPIs da carteira agora é `<section aria-label="Resumo patrimonial">`. Sectioning mais fino é incremental · `WalletSummary.tsx`
 - [ ] **A8** — Auditoria de contraste WCAG AA (slate-600 sobre `#080C14`, badges)
 - [x] **A9** — Satisfeito: `Modal` restaura o foco ao elemento anterior ao fechar; toggle de senha do `Input` com `aria-label` dinâmico + `aria-pressed`
 - [ ] **A10** — Navegação por teclado em dropdowns (setas) + ordem de tab explícita

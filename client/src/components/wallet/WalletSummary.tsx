@@ -38,8 +38,9 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            
+        // (A7) região nomeada para os indicadores patrimoniais (landmark)
+        <section aria-label="Resumo patrimonial" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+
             {/* 1. PATRIMÔNIO LÍQUIDO */}
             <DashboardCard 
                 label="PATRIMÔNIO LÍQUIDO"
@@ -134,7 +135,7 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                 glow="gold"
             />
 
-        </div>
+        </section>
     );
 };
 
