@@ -3,6 +3,7 @@ import winston from 'winston';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { getRequestId } from '../utils/requestContext.js'; // (D12) correlation id
 
 // Define caminhos absolutos para evitar confusão de diretório
 const __filename = fileURLToPath(import.meta.url);
@@ -45,11 +46,15 @@ winston.addColors(colors);
 
 const consoleFormat = winston.format.printf(({ level, message, timestamp }) => {
   const time = timestamp.split(' ')[1];
-  return `[${time}] ${level}: ${message}`;
+  const rid = getRequestId();
+  // (D12) Prefixo curto do correlation id para leitura rápida no console.
+  return `[${time}]${rid ? ` [${rid.slice(0, 8)}]` : ''} ${level}: ${message}`;
 });
 
 const fileFormat = winston.format.printf(({ level, message, timestamp, stack }) => {
-  return `${timestamp} [${level.toUpperCase()}]: ${message} ${stack ? `\nSTACK: ${stack}` : ''}`;
+  const rid = getRequestId();
+  // (D12) Correlation id completo nos arquivos (para grep/agregação).
+  return `${timestamp} [${level.toUpperCase()}]${rid ? ` [req:${rid}]` : ''}: ${message} ${stack ? `\nSTACK: ${stack}` : ''}`;
 });
 
 const format = winston.format.combine(

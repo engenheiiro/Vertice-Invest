@@ -14,6 +14,7 @@ import swaggerUi from 'swagger-ui-express';
 import logger from './config/logger.js';
 import { initScheduler } from './services/schedulerService.js';
 import { sanitizeInput } from './middleware/sanitize.js'; // (S8) anti-injeção NoSQL
+import { correlationId } from './middleware/correlationId.js'; // (D12) correlation id
 import { swaggerSpec } from './config/swagger.js'; // (I7) OpenAPI/Swagger
 
 // Rotas
@@ -33,6 +34,21 @@ const app = express();
 
 // --- CORREÇÃO RENDER / PROXY ---
 app.set('trust proxy', 1);
+
+// (D12) Primeiro middleware: atribui/propaga o correlation id para toda a
+// cadeia (logs e header de resposta). Precisa vir antes de tudo.
+app.use(correlationId);
+
+// (D12) Log de conclusão da requisição (método, rota, status, duração) no nível
+// `http` — sai em dev, silencioso em produção. Pula probes/docs para não poluir.
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    if (req.path === '/api/health' || req.path.startsWith('/api/docs')) return;
+    logger.http(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
+  });
+  next();
+});
 
 initScheduler();
 

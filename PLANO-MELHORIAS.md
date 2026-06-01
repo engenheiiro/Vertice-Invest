@@ -15,7 +15,7 @@
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
 | Implementações (I) | 14 | 14 ✅ |
 | Segurança (S) | 12 | 12 ✅ |
-| Infra/DevOps (D) | 7 | 13 |
+| Infra/DevOps (D) | 8 | 13 |
 | Testes (T) | 11 | 12 |
 | Acessibilidade/UX (A) | 0 | 12 |
 
@@ -135,7 +135,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [ ] **D9** — Branch protection no `main` (PR + CI verde)
 - [ ] **D10** — Script de build do server + `build:all` no raiz · `/package.json`
 - [ ] **D11** — Sourcemaps de produção (upload p/ Sentry, não público) · `client/vite.config.ts`
-- [ ] **D12** — Logging estruturado JSON + correlation IDs (`x-request-id`) · `server/config/logger.js`
+- [x] **D12** — Correlation IDs (`x-request-id`) via `AsyncLocalStorage`: middleware `correlationId` (gera UUID ou reusa o header recebido, devolve no header da resposta e roda a cadeia no contexto) + `utils/requestContext.js`. O `logger` carimba **automaticamente** toda linha com o id (curto no console, completo nos arquivos) — sem alterar os call sites. Inclui log de conclusão de request (método/rota/status/duração, nível `http`, pula health/docs). JSON estruturado completo adiado para manter os logs legíveis; o id já permite rastrear a requisição inteira. 5 testes · `server/middleware/correlationId.js`, `utils/requestContext.js`, `config/logger.js`, `app.js`
 - [ ] **D13** — Investigar bundle/`dist` de 16MB do client
 
 ---
