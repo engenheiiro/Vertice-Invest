@@ -1,15 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Header } from '../components/dashboard/Header';
 import { WalletSummary } from '../components/wallet/WalletSummary';
 import { AssetList } from '../components/wallet/AssetList';
 import { AddAssetModal } from '../components/wallet/AddAssetModal';
+// Aba default (OVERVIEW): import estático para não piscar fallback no load inicial.
 import { EvolutionChart } from '../components/wallet/EvolutionChart';
-import { PerformanceChart } from '../components/wallet/PerformanceChart'; 
-import { MonthlyReturnsTable } from '../components/wallet/MonthlyReturnsTable'; 
-import { DividendDashboard } from '../components/wallet/DividendDashboard'; 
-import { CashFlowHistory } from '../components/wallet/CashFlowHistory'; 
 import { AllocationChart } from '../components/wallet/AllocationChart';
+// (I8) Abas secundárias: lazy — só baixam o chunk (recharts etc.) quando abertas.
+const PerformanceChart = lazy(() => import('../components/wallet/PerformanceChart').then(m => ({ default: m.PerformanceChart })));
+const MonthlyReturnsTable = lazy(() => import('../components/wallet/MonthlyReturnsTable').then(m => ({ default: m.MonthlyReturnsTable })));
+const DividendDashboard = lazy(() => import('../components/wallet/DividendDashboard').then(m => ({ default: m.DividendDashboard })));
+const CashFlowHistory = lazy(() => import('../components/wallet/CashFlowHistory').then(m => ({ default: m.CashFlowHistory })));
 import { SmartContributionModal } from '../components/wallet/SmartContributionModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2, DollarSign } from 'lucide-react';
@@ -159,27 +161,33 @@ export const Wallet = () => {
                         )}
 
                         {activeTab === 'PERFORMANCE' && (
-                            <div className="animate-fade-in">
-                                <div className="grid grid-cols-1 gap-6 mb-8">
-                                    <PerformanceChart />
-                                    <MonthlyReturnsTable />
+                            <Suspense fallback={<TabFallback />}>
+                                <div className="animate-fade-in">
+                                    <div className="grid grid-cols-1 gap-6 mb-8">
+                                        <PerformanceChart />
+                                        <MonthlyReturnsTable />
+                                    </div>
+                                    <div className="p-6 bg-slate-900/30 border border-slate-800 rounded-xl text-center text-slate-500 text-xs">
+                                        * O benchmark comparativo considera a data do primeiro aporte como base 100.
+                                    </div>
                                 </div>
-                                <div className="p-6 bg-slate-900/30 border border-slate-800 rounded-xl text-center text-slate-500 text-xs">
-                                    * O benchmark comparativo considera a data do primeiro aporte como base 100.
-                                </div>
-                            </div>
+                            </Suspense>
                         )}
 
                         {activeTab === 'DIVIDENDS' && (
-                            <div className="animate-fade-in">
-                                <DividendDashboard />
-                            </div>
+                            <Suspense fallback={<TabFallback />}>
+                                <div className="animate-fade-in">
+                                    <DividendDashboard />
+                                </div>
+                            </Suspense>
                         )}
 
                         {activeTab === 'STATEMENT' && (
-                            <div className="animate-fade-in max-w-4xl mx-auto">
-                                <CashFlowHistory />
-                            </div>
+                            <Suspense fallback={<TabFallback />}>
+                                <div className="animate-fade-in max-w-4xl mx-auto">
+                                    <CashFlowHistory />
+                                </div>
+                            </Suspense>
                         )}
                     </div>
                 )}
@@ -211,6 +219,14 @@ export const Wallet = () => {
         </div>
     );
 };
+
+// (I8) Fallback enquanto o chunk da aba é baixado — mesmo esqueleto do loading geral.
+const TabFallback = () => (
+    <div className="animate-pulse space-y-6">
+        <div className="h-64 bg-slate-800/30 rounded-2xl"></div>
+        <div className="h-40 bg-slate-800/30 rounded-2xl"></div>
+    </div>
+);
 
 const TabButton = ({ active, onClick, icon, label, id }: any) => (
     <button
