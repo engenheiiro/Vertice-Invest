@@ -10,9 +10,11 @@ import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import * as Sentry from "@sentry/node";
 import { fileURLToPath } from 'url';
+import swaggerUi from 'swagger-ui-express';
 import logger from './config/logger.js';
 import { initScheduler } from './services/schedulerService.js';
 import { sanitizeInput } from './middleware/sanitize.js'; // (S8) anti-injeção NoSQL
+import { swaggerSpec } from './config/swagger.js'; // (I7) OpenAPI/Swagger
 
 // Rotas
 import authRoutes from './routes/authRoutes.js';
@@ -37,6 +39,12 @@ initScheduler();
 if (process.env.SENTRY_DSN) {
     Sentry.addIntegration(Sentry.expressIntegration({ app }));
 }
+
+// (I7) Documentação interativa da API em /api/docs. Montada ANTES do helmet
+// porque a Swagger UI usa scripts/estilos inline que a CSP estrita bloquearia.
+// Também expõe o JSON cru do spec em /api/docs.json para tooling.
+app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { customSiteTitle: 'Vértice Invest API' }));
 
 app.use(helmet({
   hsts: process.env.NODE_ENV === 'production'
