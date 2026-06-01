@@ -13,7 +13,7 @@
 | Fase 0 — Segurança crítica | 5 | 5 ✅ |
 | Bugs (B) | 12 | 12 ✅ |
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
-| Implementações (I) | 6 | 14 |
+| Implementações (I) | 7 | 14 |
 | Segurança (S) | 12 | 12 ✅ |
 | Infra/DevOps (D) | 7 | 13 |
 | Testes (T) | 11 | 12 |
@@ -96,7 +96,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [ ] **I6** — Cache do plano/assinatura (TTL 5–10min) em vez de hit no DB por request · `server/middleware/authMiddleware.js`
 - [ ] **I7** — OpenAPI/Swagger documentando endpoints `/api`
 - [x] **I8** — Lazy-load das abas da Wallet via `React.lazy` + `Suspense`. OVERVIEW (aba default) segue eager para não piscar fallback no load; PERFORMANCE/DIVIDENDS/STATEMENT viraram chunks separados (`PerformanceChart` 7.85kB, `DividendDashboard` 8.34kB, `MonthlyReturnsTable` 5.57kB, `CashFlowHistory` 5.20kB — ~27kB raw/~10kB gzip adiados do bundle inicial), carregados sob demanda com fallback de esqueleto. `tsc` limpo, build OK · `client/src/pages/Wallet.tsx`
-- [ ] **I9** — Validação Zod centralizada em todas as rotas de escrita + sanitização · `validateResource.js`, `schemas/`
+- [x] **I9** — Validação Zod centralizada nas rotas de escrita da carteira via `validate(schema)` (já usado em auth): novo `schemas/walletSchemas.js` cobre `POST /add` (ticker/quantity≠0/price≥0/type∈enum, coerção de strings), `PUT /:id` (tags ≤20), `DELETE /:id` e `DELETE /transactions/:id` (ObjectId 24-hex) e `POST /fix-splits`. Gate puro — não muta `req.body`, então a lógica dos handlers é preservada. Sanitização anti-injeção é o S8 (global). Writes de research são admin-gated e majoritariamente sem body (triggers). 13 testes · `server/schemas/walletSchemas.js`, `walletRoutes.js`, `tests/wallet_schemas.spec.js`
 - [x] **I10** — Validação de assinatura do webhook MP endurecida: **fail-closed** em produção sem secret + comparação **constant-time** (`crypto.timingSafeEqual`) · `server/controllers/webhookController.js` (HMAC já existia)
 - [x] **I11** — Transações atômicas nas mutações de carteira: `addAssetTransaction`/`removeAsset`/`resetWallet` já usavam `mongoose.startSession()` + commit/abort. **Fechada a brecha do `deleteTransaction`** — agora o delete da transação e o `recalculatePosition` rodam na MESMA sessão (recálculo que falha reverte o delete, sem posição inconsistente); `rebuildUserHistory` segue como pós-commit best-effort. 3 testes (commit/abort/404) · `server/controllers/walletController.js`, `tests/wallet_delete_transaction.spec.js`
 - [ ] **I12** — Skeleton screens padronizados + estados erro/loading granulares por query
