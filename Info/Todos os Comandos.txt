@@ -107,3 +107,13 @@ npm run lint
 
 # Gera os arquivos estáticos otimizados do React para produção
 npm run build
+
+# Valida o backend (node --check em todos os arquivos-fonte) — gate de sintaxe/import.
+# Backend é Node ESM puro (sem bundle); este comando pega erro antes do deploy.
+npm run build:server
+
+# Build completo: valida o server + gera o build do client.
+npm run build:all
+
+# Typecheck do client (tsc) + validação do server. Roda no CI.
+npm run typecheck

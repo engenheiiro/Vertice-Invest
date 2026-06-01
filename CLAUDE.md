@@ -32,9 +32,14 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 | Setores macro | `server/config/sectorTaxonomy.js` |
 | Constantes financeiras | `server/config/financialConstants.js` |
 | Matemática financeira segura | `server/utils/mathUtils.js` |
-| Middleware JWT + downgrade de plano | `server/middleware/authMiddleware.js` |
+| Middleware JWT + downgrade + cache de plano | `server/middleware/authMiddleware.js`, `utils/userCache.js` |
 | Guards de rota (auth/admin) | `client/src/components/auth/ProtectedRoute.tsx`, `AdminRoute.tsx` |
 | Séries temporais (worker) | `server/services/workers/timeSeriesWorker.js` |
+| MFA/2FA (TOTP) | `server/controllers/mfaController.js`, `utils/mfa.js` |
+| Rate limiting por usuário | `server/middleware/rateLimiters.js` |
+| Tunables editáveis (admin, sem deploy) | `server/services/configService.js` |
+| Resiliência (retry + circuit breaker) | `server/utils/resilience.js` |
+| Correlation id (logs/tracing) | `server/middleware/correlationId.js`, `utils/requestContext.js` |
 
 ---
 
@@ -80,7 +85,7 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 5. **ES Modules:** backend usa `import/export`. Nunca `require()`.
 6. **Secrets:** nunca hardcode. Usar variáveis do `.env`.
 7. **Matemática financeira:** sempre usar `safeFloat()`, `safeCurrency()`, `safeAdd/Sub/Mult/Div()` de `mathUtils.js`. Nunca operar com floats brutos em valores monetários.
-8. **Rate limiting em novas rotas:** usar `writeLimiter` (50 ops/15min) em todo POST/PUT/DELETE de wallet. Rotas de auth já têm `authLimiter` (20/15min). Geral: `apiLimiter` (3000/15min).
+8. **Rate limiting em novas rotas:** usar os limiters **por usuário** de `middleware/rateLimiters.js` (`walletWriteLimiter` 50/15min em POST/PUT/DELETE de wallet; `researchHeavyLimiter` 20/15min em rotas caras). Auth já tem `authLimiter` (20/15min); geral `apiLimiter` (3000/15min). Validar escrita com schema Zod (`validate`).
 
 ---
 
@@ -162,8 +167,10 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < BLACK (3). Definido em `server
 
 ## API (Base URL `/api`)
 
-- **Auth:** `POST /register`, `/login`, `/logout`, `/refresh`, `/forgot-password`, `/reset-password`, `PUT /me`, `POST /tutorial-seen`
-- **Research:** `GET /research/latest?assetClass`, `/research/macro`, `/research/signals`, `/research/discard-logs`, `/research/accuracy` · `POST /research/full-pipeline`, `/research/sync-market`, `/research/sync-macro`, `/research/publish`, `/research/crunch`
+- **Auth:** `POST /register`, `/login` (aceita `mfaToken`; responde `{mfaRequired:true}` se MFA ativo), `/logout`, `/refresh`, `/forgot-password`, `/reset-password`, `PUT /me`, `POST /tutorial-seen`
+- **MFA (auth):** `GET /mfa/status` · `POST /mfa/setup`, `/mfa/enable`, `/mfa/disable`
+- **Research:** `GET /research/latest?assetClass`, `/research/macro`, `/research/signals`, `/research/discard-logs`, `/research/accuracy`, `/research/config/tunables` (admin) · `POST /research/full-pipeline`, `/research/sync-market`, `/research/sync-macro`, `/research/publish`, `/research/crunch` · `PUT /research/config/tunables` (admin)
+- **Docs:** `GET /api/docs` (Swagger UI), `/api/docs.json` (OpenAPI) · `GET /api/health`
 - **Wallet:** `GET /wallet`, `/wallet/history`, `/wallet/dividends`, `/wallet/cashflow`, `/wallet/transactions/:ticker`, `/wallet/performance` · `POST /wallet/add` · `PUT /wallet/:id` · `DELETE /wallet/:id`
 - **Market:** `GET /market/quote?ticker`, `/market/price?ticker`, `/market/landing`
 - **Subscription:** `GET /subscription/status`, `/subscription/check-access` · `POST /subscription/checkout`, `/subscription/register-usage`
