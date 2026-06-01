@@ -13,7 +13,7 @@
 | Fase 0 — Segurança crítica | 5 | 5 ✅ |
 | Bugs (B) | 12 | 12 ✅ |
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
-| Implementações (I) | 13 | 14 |
+| Implementações (I) | 14 | 14 ✅ |
 | Segurança (S) | 12 | 12 ✅ |
 | Infra/DevOps (D) | 7 | 13 |
 | Testes (T) | 11 | 12 |
@@ -100,7 +100,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [x] **I10** — Validação de assinatura do webhook MP endurecida: **fail-closed** em produção sem secret + comparação **constant-time** (`crypto.timingSafeEqual`) · `server/controllers/webhookController.js` (HMAC já existia)
 - [x] **I11** — Transações atômicas nas mutações de carteira: `addAssetTransaction`/`removeAsset`/`resetWallet` já usavam `mongoose.startSession()` + commit/abort. **Fechada a brecha do `deleteTransaction`** — agora o delete da transação e o `recalculatePosition` rodam na MESMA sessão (recálculo que falha reverte o delete, sem posição inconsistente); `rebuildUserHistory` segue como pós-commit best-effort. 3 testes (commit/abort/404) · `server/controllers/walletController.js`, `tests/wallet_delete_transaction.spec.js`
 - [x] **I12** — Vocabulário de skeletons compostos no `components/ui/Skeleton` (sobre o base do M11): `SkeletonCard`, `SkeletonChart`, `SkeletonKpiGrid`, `SkeletonTableRows`, todos com `role="status"` + `aria-label` (A11y). Adotados nos pontos de maior tráfego — `WalletSummary` (grid de KPIs), página `Wallet` (loading geral) e o `TabFallback` do lazy-load (I8) — substituindo `div animate-pulse` ad-hoc. Migração dos demais loaders é incremental. 6 testes · `client/src/components/ui/Skeleton.tsx`, `WalletSummary.tsx`, `pages/Wallet.tsx`, `tests Skeleton.test.tsx`
-- [ ] **I13** — Painel admin de configuração (editar `SystemConfig` sem deploy) — depende de M9
+- [x] **I13** — Painel admin para editar tunables operacionais em runtime, sem deploy. `services/configService.js` mantém um snapshot em memória (TTL 60s) lido de SystemConfig (`key APP_TUNABLES`), com **guarda de `mongoose.readyState`**: desconectado → devolve os defaults do M9 (engines em teste inalteradas). Tunables: `maxCryptoPerProfile`, `marketCacheMinutes`, `defaultSelicFallback` (com validação de faixa). Consumidores ligados ao valor dinâmico: `portfolioEngine` (cap de cripto, via `getTunablesSync`) e `marketDataService` (janela de cache). Endpoints admin `GET/PUT /research/config/tunables` + UI `TunablesCard` na aba Ferramentas do AdminPanel (editar/restaurar padrão/salvar). 5 testes · `server/services/configService.js`, `controllers/configController.js`, `client/.../admin/TunablesCard.tsx`
 - [x] **I14** — MFA/2FA opcional por TOTP (compatível com Google Authenticator/Authy), **opt-in** — login de quem não ativou é inalterado. Backend: `utils/mfa.js` (otplib v13 `generateSecret`/`verifySync` window±1 + backup codes hash SHA-256 de consumo único), `mfaController.js` (setup→QR, enable→confirma+devolve backup codes 1x, disable→por código ou senha), gate no `login` (`mfaRequired` sem emitir tokens; aceita TOTP ou backup code), campos `mfaEnabled/mfaSecret/mfaPendingSecret/mfaBackupCodes` (sensíveis `select:false`) no `User`, rotas `/mfa/*` autenticadas. Frontend: passo de código no `Login`, fluxo real (QR + ativar + backup codes + desativar) na `SecuritySection` (antes mock), métodos no `authService`. 11 testes backend (TOTP round-trip + gate de login) · `server/utils/mfa.js`, `controllers/mfaController.js`, `models/User.js`, `client/.../SecuritySection.tsx`, `pages/Login.tsx`
 
 ---

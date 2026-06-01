@@ -7,6 +7,7 @@ import { authService } from '../../services/auth';
 import { subscriptionService } from '../../services/subscription';
 import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, ShieldCheck, BarChart3, Layers, Globe, Zap, Search, Play, Server, Clock, TrendingUp, TrendingDown, Minus, HardDrive, Scissors, Settings, Database, Trash2, ShieldAlert, Target, ClipboardList, MessageSquare, Share2, Send, Copy, X } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
+import { TunablesCard } from '../../components/admin/TunablesCard'; // (I13)
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
 interface AssetClassOption {
@@ -977,6 +978,8 @@ export const AdminPanel = () => {
                 {activeTab === 'ferramentas' && (
                     <>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                            {/* (I13) Parâmetros operacionais editáveis sem deploy */}
+                            <TunablesCard />
                             {/* Configuração Radar */}
                             <div className="bg-[#080C14] border border-slate-800 rounded-2xl p-6 shadow-lg">
                                 <div className="flex items-center gap-2 mb-4">

@@ -5,9 +5,9 @@ import AssetHistory from '../models/AssetHistory.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { externalMarketService } from './externalMarketService.js';
 // (M9) Janela de cache e fallback de Selic centralizados em financialConstants.
-import { MARKET_CACHE_DURATION_MINUTES, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
+import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
+import { getTunablesSync } from './configService.js'; // (I13) tunables editáveis pelo admin
 
-const CACHE_DURATION_MINUTES = MARKET_CACHE_DURATION_MINUTES;
 const MAX_FAILURES_BEFORE_BLACKLIST = 10;
 
 const FALLBACK_MACRO = {
@@ -71,7 +71,9 @@ export const marketDataService = {
 
         const cleanTickers = [...new Set(tickers.map(t => this.normalizeSymbol(t)))];
         const now = new Date();
-        const threshold = new Date(now.getTime() - CACHE_DURATION_MINUTES * 60 * 1000);
+        // (I13) Janela de cache editável em runtime (fallback p/ default do M9).
+        const cacheMinutes = getTunablesSync().marketCacheMinutes;
+        const threshold = new Date(now.getTime() - cacheMinutes * 60 * 1000);
 
         try {
             const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker updatedAt lastPrice change isActive failCount');

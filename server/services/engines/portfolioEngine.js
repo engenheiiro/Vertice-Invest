@@ -1,8 +1,9 @@
 
 import { getMacroSector } from '../../config/sectorTaxonomy.js';
 import { getFiiManager } from '../../config/fiiManagerMap.js';
-// (M9) Threshold global e cap de cripto centralizados em financialConstants.
-import { BUY_THRESHOLD, MAX_CRYPTO_PER_PROFILE } from '../../config/financialConstants.js';
+// (M9) Threshold global centralizado em financialConstants.
+import { BUY_THRESHOLD } from '../../config/financialConstants.js';
+import { getTunablesSync } from '../configService.js'; // (I13) cap de cripto editável pelo admin
 
 // Composite estrutural = média de quality, valuation e risk (0–100 cada).
 // Usado como critério de desempate quando dois ativos têm o mesmo score de perfil.
@@ -23,6 +24,8 @@ export const portfolioEngine = {
     performCompetitiveDraft(allAssets) {
         const finalPortfolio = [];
         const usedTickers = new Set();
+        // (I13) Cap de cripto editável em runtime (fallback p/ default do M9).
+        const MAX_CRYPTO_PER_PROFILE = getTunablesSync().maxCryptoPerProfile;
 
         const runDraftCycle = (profile, scoreKey, count) => {
             const TARGET_COUNT = count;
