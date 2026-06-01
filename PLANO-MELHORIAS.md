@@ -13,7 +13,7 @@
 | Fase 0 — Segurança crítica | 5 | 5 ✅ |
 | Bugs (B) | 12 | 12 ✅ |
 | Melhorias/Refatorações (M) | 14 | 14 ✅ |
-| Implementações (I) | 8 | 14 |
+| Implementações (I) | 9 | 14 |
 | Segurança (S) | 12 | 12 ✅ |
 | Infra/DevOps (D) | 7 | 13 |
 | Testes (T) | 11 | 12 |
@@ -91,7 +91,7 @@ Confirmado: `.env` foi removido do tracking (commit `e23da24`), **mas permanece 
 - [x] **I1** — `ErrorBoundary` global criado (reporta ao Sentry + fallback amigável com reload) envolvendo todo o app · `client/src/components/ErrorBoundary.tsx`, `client/src/App.tsx`
 - [x] **I2** — Health check `/api/health` (status, estado do Mongo, uptime) em `server/app.js`, montado **antes do rate limiter** para não estrangular probes; retorna 503 se Mongo desconectado
 - [ ] **I3** — Cache Redis para market data + macro (TTL alinhado ao fechamento) · `marketDataService.js`, `macroDataService.js`
-- [ ] **I4** — Circuit breaker + retry/backoff para integrações externas · `server/services/*`
+- [x] **I4** — `utils/resilience.js`: `withRetry` (backoff exponencial + jitter, `shouldRetry`) e `CircuitBreaker` (CLOSED/OPEN/HALF_OPEN, fast-fail no cooldown, fallback opcional). Integrado no `externalMarketService`: breakers por provedor (`yahoo` thr=4, `google-finance` thr=8, `brapi` thr=5) — quando um terceiro cai, o lote para de bater nele a cada ticker (pula o provedor morto em vez de esperar o timeout); Yahoo primário com 1 retry sob breaker (circuito aberto → cai no Protocolo de Emergência Google já existente). 9 testes do core de resiliência · `server/utils/resilience.js`, `services/externalMarketService.js`, `tests/resilience.spec.js`
 - [x] **I5** — Rate limiting **por usuário** (não por IP) em `middleware/rateLimiters.js`: chave `u:<id>` (fallback IP), via factory `createUserLimiter`. `walletWriteLimiter` (50/15min) substitui o `writeLimiter` por-IP da carteira — corrige injustiça atrás de NAT e evasão por troca de IP. `researchHeavyLimiter` (20/15min) nas rotas caras de research (full-pipeline, crunch, enhance, narrative, syncs, cleanup) e `researchReadLimiter` (300/15min) nas leituras agregadas (latest/macro/signals). Montados após `authenticateToken` (req.user garantido). 3 testes (teto/429, isolamento mesmo-IP, fallback IP) · `server/middleware/rateLimiters.js`, `walletRoutes.js`, `researchRoutes.js`, `tests/rate_limiters.spec.js`
 - [x] **I6** — Cache em memória do usuário (plano/role/assinatura) no `authMiddleware` (TTL 5min, env `PLAN_CACHE_TTL_MS`) — corta o `User.findById` que rodava em **todo** request autenticado. `utils/userCache.js` (Map + TTL + teto anti-leak). Correção: cache hit de **plano pago vencido** (`isExpiredPaid`) força o caminho de DB para rebaixar+persistir — nunca vaza acesso. Invalidação explícita nos pontos de mutação: checkout (`subscriptionController`), webhook MP (`webhookController`), edição de perfil (`authController`) e `clearUserCache()` pós-downgrade em massa do scheduler. 8 testes (cache + middleware) · `server/utils/userCache.js`, `authMiddleware.js`, `tests/user_cache.spec.js`, `tests/auth_middleware_cache.spec.js`
 - [ ] **I7** — OpenAPI/Swagger documentando endpoints `/api`

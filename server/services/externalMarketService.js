@@ -1,13 +1,22 @@
 
 import YahooFinance from 'yahoo-finance2';
-import axios from 'axios'; 
+import axios from 'axios';
 import * as cheerio from 'cheerio'; // Necessário para o scraping
 import logger from '../config/logger.js';
+import { createCircuitBreaker, withRetry } from '../utils/resilience.js'; // (I4)
 
 // Instancia a classe com supressão de avisos
-const yahooFinance = new YahooFinance({ 
-    suppressNotices: ['yahooSurvey', 'ripHistorical'] 
+const yahooFinance = new YahooFinance({
+    suppressNotices: ['yahooSurvey', 'ripHistorical']
 });
+
+// (I4) Circuit breakers por provedor. Quando um serviço cai, paramos de bater
+// nele a cada ticker do lote (fast-fail) até o cooldown — acelera o batch e
+// reduz pressão sobre o terceiro. Limiares mais altos no Google porque ele é
+// chamado por-ticker (mais ruído tolerável antes de abrir).
+const yahooBreaker = createCircuitBreaker({ name: 'yahoo', failureThreshold: 4, cooldownMs: 30_000 });
+const googleBreaker = createCircuitBreaker({ name: 'google-finance', failureThreshold: 8, cooldownMs: 60_000 });
+const brapiBreaker = createCircuitBreaker({ name: 'brapi', failureThreshold: 5, cooldownMs: 60_000 });
 
 // Configuração para Scraping Google Finance
 const GOOGLE_FINANCE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -44,11 +53,15 @@ export const externalMarketService = {
             }
 
             const url = `https://www.google.com/finance/quote/${googleTicker}${exchange}`;
-            
-            const response = await axios.get(url, {
-                headers: { 'User-Agent': GOOGLE_FINANCE_UA },
-                timeout: 3000 // Timeout curto para não travar o fluxo
-            });
+
+            // (I4) Via circuit breaker: se o Google estiver fora, fast-fail (null)
+            // sem esperar o timeout em cada ticker do lote.
+            const response = await googleBreaker.exec(
+                () => axios.get(url, {
+                    headers: { 'User-Agent': GOOGLE_FINANCE_UA },
+                    timeout: 3000 // Timeout curto para não travar o fluxo
+                }),
+            );
 
             const $ = cheerio.load(response.data);
             
@@ -117,8 +130,9 @@ export const externalMarketService = {
             const cleanTicker = ticker.replace('.SA', '').trim();
             const token = process.env.BRAPI_TOKEN ? `&token=${process.env.BRAPI_TOKEN}` : '';
             const url = `https://brapi.dev/api/quote/${cleanTicker}?range=1d&interval=1d&fundamental=false${token}`;
-            
-            const response = await axios.get(url, { timeout: 4000 }); 
+
+            // (I4) Brapi via circuit breaker — fast-fail quando o serviço cai.
+            const response = await brapiBreaker.exec(() => axios.get(url, { timeout: 4000 }));
             
             if (response.data && response.data.results && response.data.results.length > 0) {
                 const data = response.data.results[0];
@@ -163,7 +177,12 @@ export const externalMarketService = {
         try {
             // TENTATIVA 1: YAHOO FINANCE (Principal)
             // validateResult: false suprime erros de schema para tickers com dados parciais (ex: BRK.B, BF.B)
-            const results = await yahooFinance.quote(yahooTickers, {}, { validateResult: false });
+            // (I4) 1 retry com backoff para falha transitória, sob circuit breaker.
+            // Circuito aberto → lança e cai no catch (Protocolo de Emergência Google).
+            const results = await yahooBreaker.exec(() => withRetry(
+                () => yahooFinance.quote(yahooTickers, {}, { validateResult: false }),
+                { retries: 1, baseDelayMs: 300 },
+            ));
             const validResults = Array.isArray(results) ? results : [results];
             
             const mappedResults = validResults.map(item => {

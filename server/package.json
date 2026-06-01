@@ -10,7 +10,7 @@
     "test:wallet": "vitest run tests/wallet_snapshot.spec.js",
     "test:regression": "vitest run tests/quant_regression.spec.js",
     "test:all": "vitest run",
-    "test:ci": "vitest run tests/financial_regression.spec.js tests/math_edge_cases.spec.js tests/wallet_snapshot.spec.js tests/critical_improvements.spec.js tests/quant_regression.spec.js tests/scoring_engine.spec.js tests/scoring_parity.spec.js tests/portfolio_engine.spec.js tests/market_data_service.spec.js tests/fundamentus_parse.spec.js tests/research_delta.spec.js tests/pipeline_integration.spec.js tests/password_policy.spec.js tests/sanitize.spec.js tests/wallet_delete_transaction.spec.js tests/rate_limiters.spec.js tests/wallet_schemas.spec.js tests/user_cache.spec.js tests/auth_middleware_cache.spec.js --coverage",
+    "test:ci": "vitest run tests/financial_regression.spec.js tests/math_edge_cases.spec.js tests/wallet_snapshot.spec.js tests/critical_improvements.spec.js tests/quant_regression.spec.js tests/scoring_engine.spec.js tests/scoring_parity.spec.js tests/portfolio_engine.spec.js tests/market_data_service.spec.js tests/fundamentus_parse.spec.js tests/research_delta.spec.js tests/pipeline_integration.spec.js tests/password_policy.spec.js tests/sanitize.spec.js tests/wallet_delete_transaction.spec.js tests/rate_limiters.spec.js tests/wallet_schemas.spec.js tests/user_cache.spec.js tests/auth_middleware_cache.spec.js tests/resilience.spec.js --coverage",
     "test:stress": "node server/scripts/stressTest2020.js",
     "test:fundamentus": "node tests/test_fundamentus.js",
     "sync:prod": "node server/scripts/syncProdData.js",
