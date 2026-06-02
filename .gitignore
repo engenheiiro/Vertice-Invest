@@ -92,3 +92,6 @@ typings/
 # Dist folder
 dist/
 dist-ssr/
+
+# Relatorios gerados por scripts (radar/ranking) — artefatos, nao versionar
+reports/*_latest.txt
