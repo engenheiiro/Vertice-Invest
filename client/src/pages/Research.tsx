@@ -80,7 +80,10 @@ export const Research = () => {
 
     useEffect(() => {
         fetchReport();
-    }, [selectedAsset, viewMode]);
+        // Inclui o plano: ao fazer upgrade (refresh no foco da aba), o gate libera o
+        // ativo e o relatório precisa ser buscado — sem isso ficava "Análise não encontrada".
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedAsset, viewMode, user?.plan]);
 
     const hasAccessToSelected = checkAccess(selectedAsset);
     const requiredPlanLabel = ASSETS.find(a => a.id === selectedAsset)?.minPlan || 'PRO';
