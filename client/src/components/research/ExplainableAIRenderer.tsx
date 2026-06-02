@@ -7,6 +7,8 @@ import React, { useMemo } from 'react';
 
 const SECTION_STYLES: Record<string, { label: string; color: string; border: string; bg: string }> = {
   '📊': { label: '📊', color: 'text-blue-400', border: 'border-blue-900/40', bg: 'bg-blue-900/10' },
+  '🟦': { label: '🟦', color: 'text-blue-400', border: 'border-blue-900/40', bg: 'bg-blue-900/10' },
+  '📈': { label: '📈', color: 'text-emerald-400', border: 'border-emerald-900/40', bg: 'bg-emerald-900/10' },
   '🏆': { label: '🏆', color: 'text-emerald-400', border: 'border-emerald-900/40', bg: 'bg-emerald-900/10' },
   '🔄': { label: '🔄', color: 'text-purple-400', border: 'border-purple-900/40', bg: 'bg-purple-900/10' },
   '⚠️': { label: '⚠️', color: 'text-yellow-400', border: 'border-yellow-900/40', bg: 'bg-yellow-900/10' },
@@ -36,9 +38,11 @@ const renderLine = (line: string, i: number): React.ReactNode => {
   const t = line.trim();
   if (!t) return <div key={i} className="h-2" />;
 
-  // Cabeçalho de seção: ## 📊 Cenário Macro
-  if (t.startsWith('## ')) {
-    const heading = t.replace(/^## /, '');
+  // Cabeçalho de seção: aceita qualquer nível de markdown (##, ###, …).
+  // Ex.: "### 🟦 Cenário Macro" — antes só "## " era reconhecido e os demais
+  // vazavam como texto literal com os '#' à mostra.
+  if (/^#{1,6}\s/.test(t)) {
+    const heading = t.replace(/^#{1,6}\s+/, '');
     const style = getSectionStyle(heading);
     return (
       <div

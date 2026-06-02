@@ -209,8 +209,14 @@ export const Research = () => {
                                 </div>
                             )}
                         </div>
-                    ) : (
+                    ) : report.isRankingPublished ? (
                         <ResearchViewer report={report!} view="RANKING" />
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-20 bg-base border border-dashed border-slate-800 rounded-3xl text-center">
+                            <Info size={48} className="text-slate-700 mb-4" />
+                            <h3 className="text-xl font-black text-slate-500 uppercase">Ranking ainda não publicado</h3>
+                            <p className="text-slate-600 text-sm mt-2 max-w-sm">O admin ainda não publicou o Top 10 desta categoria.</p>
+                        </div>
                     )}
                 </div>
                 

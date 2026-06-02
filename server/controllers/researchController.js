@@ -323,7 +323,9 @@ export const getLatestReport = async (req, res, next) => {
         const report = await MarketAnalysis.findOne({
             assetClass,
             strategy,
-            $or: [{ isRankingPublished: true }, { isMorningCallPublished: true }]
+            // Visível se QUALQUER seção foi publicada. Sem o flag de Explainable AI aqui,
+            // um relatório publicado só com a IA (sem ranking) ficava invisível ao usuário.
+            $or: [{ isRankingPublished: true }, { isMorningCallPublished: true }, { isExplainableAIPublished: true }]
         }).select('-content.fullAuditLog').sort({ createdAt: -1 });
 
         if (!report) return res.status(404).json({ message: "Indisponível" });
