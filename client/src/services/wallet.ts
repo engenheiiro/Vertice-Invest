@@ -35,6 +35,15 @@ export const walletService = {
         return await response.json();
     },
 
+    async updateTargets(targetAllocation: Record<string, number>, targetReserve: number) {
+        const response = await authService.api('/api/wallet/targets', {
+            method: 'PUT',
+            body: JSON.stringify({ targetAllocation, targetReserve })
+        });
+        if (!response.ok) throw new Error("Falha ao salvar carteira ideal");
+        return await response.json();
+    },
+
     async resetWallet() {
         const response = await authService.api('/api/wallet/reset', {
             method: 'POST'

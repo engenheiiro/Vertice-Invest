@@ -95,6 +95,14 @@ const calculateLiveKPIS = async (userId, currentCdi) => {
 export const getWalletData = async (req, res, next) => {
     try {
         const userId = req.user.id;
+
+        // Carteira ideal (alocação-alvo) persistida no usuário — acompanha a resposta.
+        const userPrefs = await User.findById(userId).select('targetAllocation targetReserve').lean();
+        const targets = {
+            targetAllocation: userPrefs?.targetAllocation || { STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10, FIXED_INCOME: 0 },
+            targetReserve: typeof userPrefs?.targetReserve === 'number' ? userPrefs.targetReserve : 10000,
+        };
+
         const userAssets = await UserAsset.find({ user: userId });
         const activeAssets = userAssets.filter(a => a.quantity > QUANTITY_EPSILON);
         const closedAssets = userAssets.filter(a => a.quantity <= QUANTITY_EPSILON);
@@ -128,6 +136,7 @@ export const getWalletData = async (req, res, next) => {
                     sharpeRatio: 0,
                     beta: 0
                 },
+                ...targets,
                 meta: { usdRate: emptyUsdRate }
             });
         }
@@ -454,6 +463,7 @@ export const getWalletData = async (req, res, next) => {
                 sharpeRatio: safeFloat(sharpeRatio),
                 beta: safeFloat(beta)
             },
+            ...targets,
             meta: { usdRate, lastUpdate: new Date() }
         });
     } catch (error) {
@@ -761,6 +771,39 @@ export const resetWallet = async (req, res, next) => {
         res.json({ message: "Carteira resetada." });
     } catch (error) {
         await session.abortTransaction(); session.endSession(); next(error);
+    }
+};
+
+// PUT /wallet/targets — salva a carteira ideal (alocação-alvo + reserva) do usuário.
+export const updateWalletTargets = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { targetAllocation, targetReserve } = req.body;
+
+        const update = {};
+        if (targetAllocation !== undefined) {
+            update.targetAllocation = {
+                STOCK: safeFloat(targetAllocation.STOCK || 0),
+                FII: safeFloat(targetAllocation.FII || 0),
+                STOCK_US: safeFloat(targetAllocation.STOCK_US || 0),
+                CRYPTO: safeFloat(targetAllocation.CRYPTO || 0),
+                FIXED_INCOME: safeFloat(targetAllocation.FIXED_INCOME || 0),
+            };
+        }
+        if (targetReserve !== undefined) {
+            update.targetReserve = Math.max(0, safeFloat(targetReserve));
+        }
+
+        const updated = await User.findByIdAndUpdate(userId, { $set: update }, { new: true })
+            .select('targetAllocation targetReserve').lean();
+
+        res.json({
+            message: 'Carteira ideal atualizada.',
+            targetAllocation: updated?.targetAllocation,
+            targetReserve: updated?.targetReserve,
+        });
+    } catch (error) {
+        next(error);
     }
 };
 

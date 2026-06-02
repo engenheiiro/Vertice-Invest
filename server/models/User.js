@@ -47,6 +47,20 @@ const UserSchema = new mongoose.Schema({
   // --- Onboarding ---
   hasSeenTutorial: { type: Boolean, default: false },
 
+  // --- Carteira Ideal (alocação-alvo definida pelo usuário) ---
+  // Percentuais por classe de ativo (somam ~100% nos investimentos) + reserva em valor fixo (R$).
+  targetAllocation: {
+    type: new mongoose.Schema({
+      STOCK: { type: Number, default: 0 },
+      FII: { type: Number, default: 0 },
+      STOCK_US: { type: Number, default: 0 },
+      CRYPTO: { type: Number, default: 0 },
+      FIXED_INCOME: { type: Number, default: 0 },
+    }, { _id: false }),
+    default: () => ({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10, FIXED_INCOME: 0 }),
+  },
+  targetReserve: { type: Number, default: 10000 },
+
   // --- Integração Mercado Pago ---
   mpCustomerId: { type: String },      // ID do cliente no MP
   mpSubscriptionId: { type: String },  // ID da assinatura recorrente (preapproval_id)

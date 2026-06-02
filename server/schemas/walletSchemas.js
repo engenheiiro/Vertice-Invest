@@ -44,6 +44,21 @@ export const idParamSchema = z.object({
   params: z.object({ id: objectId }),
 });
 
+// PUT /wallet/targets — salvar carteira ideal (alocação-alvo + reserva).
+const allocPct = z.coerce.number().finite('Percentual inválido').min(0).max(100).optional();
+export const updateTargetsSchema = z.object({
+  body: z.object({
+    targetAllocation: z.object({
+      STOCK: allocPct,
+      FII: allocPct,
+      STOCK_US: allocPct,
+      CRYPTO: allocPct,
+      FIXED_INCOME: allocPct,
+    }).optional(),
+    targetReserve: z.coerce.number().finite('Valor inválido').nonnegative('Reserva não pode ser negativa').optional(),
+  }),
+});
+
 // POST /wallet/fix-splits — ação corporativa manual.
 export const corporateActionSchema = z.object({
   body: z.object({

@@ -110,6 +110,16 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         staleTime: STALE_TIME.MEDIUM,
     });
 
+    // --- HIDRATA CARTEIRA IDEAL DO SERVIDOR ---
+    // O backend retorna targetAllocation/targetReserve persistidos no usuário.
+    // Sincroniza sempre que a carteira recarregar (login, refresh, troca de conta).
+    useEffect(() => {
+        if (isDemoMode) return;
+        const data = walletQuery.data;
+        if (data?.targetAllocation) setTargetAllocation(data.targetAllocation);
+        if (typeof data?.targetReserve === 'number') setTargetReserve(data.targetReserve);
+    }, [walletQuery.data, isDemoMode]);
+
     // --- FORCE REFRESH ON MOUNT ---
     useEffect(() => {
         if (user?.id) {
@@ -170,9 +180,16 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         await resetWalletMutation.mutateAsync();
     };
 
-    const updateTargets = (newTargets: AllocationMap, newReserveTarget: number) => {
+    const updateTargets = async (newTargets: AllocationMap, newReserveTarget: number) => {
+        // Atualização otimista (UI responde na hora); persiste no backend logo em seguida.
         setTargetAllocation(newTargets);
         setTargetReserve(newReserveTarget);
+        if (isDemoMode) return; // Demo não persiste
+        try {
+            await walletService.updateTargets(newTargets as Record<string, number>, newReserveTarget);
+        } catch (err: any) {
+            addToast(err?.message || 'Erro ao salvar carteira ideal.', 'error');
+        }
     };
 
     // --- STATES & MEMOIZED CALCULATIONS ---

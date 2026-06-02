@@ -7,8 +7,9 @@ import {
     addAssetTransaction, 
     removeAsset, 
     updateAsset, 
-    searchAssets, 
+    searchAssets,
     resetWallet,
+    updateWalletTargets,
     getAssetTransactions,
     deleteTransaction,
     getWalletPerformance, 
@@ -26,6 +27,7 @@ import {
     updateAssetSchema,
     idParamSchema,
     corporateActionSchema,
+    updateTargetsSchema,
 } from '../schemas/walletSchemas.js';
 
 const router = express.Router();
@@ -43,6 +45,8 @@ router.get('/search', searchAssets);
 // Rotas de Escrita Protegidas — (I9) validação Zod após limiter, antes do handler.
 router.post('/add', writeLimiter, validate(addTransactionSchema), addAssetTransaction);
 router.post('/reset', writeLimiter, resetWallet);
+// Carteira ideal (alocação-alvo) — antes de '/:id' para não cair no matcher de param.
+router.put('/targets', writeLimiter, validate(updateTargetsSchema), updateWalletTargets);
 router.delete('/:id', writeLimiter, validate(idParamSchema), removeAsset);
 router.put('/:id', writeLimiter, validate(updateAssetSchema), updateAsset);
 
