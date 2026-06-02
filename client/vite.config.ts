@@ -69,6 +69,9 @@ export default defineConfig({
         // Nunca interceptar /api no fallback de navegação (são respostas de API, não páginas).
         navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
+        // skipWaiting + clientsClaim + registerType:'autoUpdate' = o novo SW assume
+        // imediatamente e a página recarrega sozinha, sem o usuário precisar dar refresh.
+        skipWaiting: true,
         clientsClaim: true,
         runtimeCaching: [
           {

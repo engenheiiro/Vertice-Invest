@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { authService } from '../services/auth';
 
@@ -35,7 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
   const queryClient = useQueryClient();
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     try {
         const response = await authService.api('/api/subscription/status');
         if (!response.ok) {
@@ -55,7 +55,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Não derruba a sessão (mantém dados anteriores), mas torna a falha visível (Sentry capta console.error).
         console.error('[Auth] Falha ao atualizar perfil/assinatura:', err);
     }
-  };
+  }, [queryClient]);
+
+  // Re-sincroniza plano/assinatura quando a aba volta ao foco.
+  // Sem isso, após comprar um plano (retorno do Mercado Pago) o usuário precisava
+  // deslogar/logar para o upgrade refletir. Throttle de 20s evita martelar a API.
+  const lastRefreshRef = useRef(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    const maybeRefresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastRefreshRef.current < 20_000) return;
+      lastRefreshRef.current = now;
+      refreshProfile();
+    };
+    window.addEventListener('focus', maybeRefresh);
+    document.addEventListener('visibilitychange', maybeRefresh);
+    return () => {
+      window.removeEventListener('focus', maybeRefresh);
+      document.removeEventListener('visibilitychange', maybeRefresh);
+    };
+  }, [user?.id, refreshProfile]);
 
   const updateUserTutorialStatus = () => {
       if (user) {
