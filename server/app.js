@@ -120,20 +120,63 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const authLimiter = rateLimit({
+// Mensagem de bloqueio com o tempo REAL restante (não um "15 min" fixo, que
+// confundia quem caía no limite por outra rota). `hint` aponta a saída útil.
+const buildLimitHandler = (hint = '') => (req, res, _next, options) => {
+  const resetTime = req.rateLimit?.resetTime;
+  const mins = resetTime
+    ? Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 60000))
+    : 15;
+  res.status(options.statusCode).json({
+    message: `Muitas tentativas. Tente novamente em ${mins} ${mins === 1 ? 'minuto' : 'minutos'}.${hint ? ` ${hint}` : ''}`,
+  });
+};
+
+// Login: defesa contra força-bruta de senha. Conta APENAS tentativas que
+// FALHARAM (skipSuccessfulRequests) — quem acerta a senha não é penalizado;
+// quem fica chutando, sim. Bucket próprio, separado da recuperação de conta.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: buildLimitHandler('Se esqueceu a senha, use "Esqueci minha senha".'),
+});
+
+// Cadastro: barra criação em massa a partir de um IP. Conta todas as requisições
+// (cadastro bem-sucedido é justamente o que queremos limitar). Bucket próprio
+// para que uma rajada de logins falhos não bloqueie quem quer se registrar.
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: buildLimitHandler(),
+});
+
+// Recuperação de conta (forgot/reset): bucket SEPARADO do login — falhas de
+// login não podem trancar quem está tentando recuperar o acesso. Conta tudo
+// (forgot-password responde 200 mesmo p/ e-mail inexistente, por anti-enumeração,
+// então pular sucessos abriria espaço p/ spam de e-mail). Limite generoso p/ humano.
+const recoveryLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { message: 'Muitas tentativas. Tente novamente em 15 minutos.' },
+  handler: buildLimitHandler(),
 });
 
 app.use('/api/', apiLimiter);
-app.use('/api/login', authLimiter);
-app.use('/api/register', authLimiter);
-app.use('/api/forgot-password', authLimiter);
-app.use('/api/reset-password', authLimiter);
-app.use('/api/refresh', authLimiter);
+app.use('/api/login', loginLimiter);
+app.use('/api/register', registerLimiter);
+app.use('/api/forgot-password', recoveryLimiter);
+app.use('/api/reset-password', recoveryLimiter);
+// `/api/refresh` NÃO entra em limiter de auth: é operação normal de sessão (o
+// interceptor do front chama a cada 401) e era a maior causa de bloqueio
+// acidental — drenava o balde compartilhado em background. Fica sob o apiLimiter
+// geral (3000/15min), que já barra qualquer loop descontrolado e torna inviável
+// força-bruta sobre o refresh token (string aleatória longa, validada no banco).
 
 app.use('/api', authRoutes);
 app.use('/api/subscription', subscriptionRoutes);
