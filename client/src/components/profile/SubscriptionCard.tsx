@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { CreditCard, CheckCircle2, ArrowRight, CalendarClock, Crown } from 'lucide-react';
+import { CreditCard, CheckCircle2, ArrowRight, CalendarClock, Crown, AlertTriangle } from 'lucide-react';
 import { useAuth, UserPlan } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -23,12 +23,23 @@ export const SubscriptionCard = () => {
 
     const formatDate = (dateStr?: string) => {
         if (!dateStr) return 'Indeterminado';
-        return new Date(dateStr).toLocaleDateString('pt-BR', { 
-            day: '2-digit', 
-            month: 'long', 
-            year: 'numeric' 
+        return new Date(dateStr).toLocaleDateString('pt-BR', {
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric'
         });
     };
+
+    const getDaysLeft = (dateStr?: string): number | null => {
+        if (!dateStr) return null;
+        const diff = new Date(dateStr).getTime() - Date.now();
+        return Math.ceil(diff / 86_400_000);
+    };
+
+    const daysLeft = isPaidPlan ? getDaysLeft(user?.validUntil) : null;
+    const expiryBadge = daysLeft !== null && daysLeft <= 7
+        ? { label: daysLeft <= 0 ? 'Expirado' : `Expira em ${daysLeft} dia${daysLeft === 1 ? '' : 's'}`, urgent: daysLeft <= 3 }
+        : null;
 
     return (
         <div className="bg-gradient-to-br from-[#080C14] to-[#0A101F] border border-slate-800 rounded-2xl p-6 relative overflow-hidden group">
@@ -59,11 +70,23 @@ export const SubscriptionCard = () => {
                 <div className="text-left md:text-right bg-slate-900/50 p-3 rounded-xl border border-slate-800/50 w-full md:w-auto">
                     <p className="text-2xl font-mono text-white">R$ {currentPlan.price}<span className="text-sm text-slate-500">/mês</span></p>
                     {isPaidPlan && user?.validUntil ? (
-                        <div className="flex items-center justify-start md:justify-end gap-1.5 mt-1 text-emerald-400">
-                            <CalendarClock size={12} />
-                            <p className="text-[10px] font-bold uppercase tracking-wide">
-                                Válido até {formatDate(user.validUntil)}
-                            </p>
+                        <div className="flex flex-col items-start md:items-end gap-1 mt-1">
+                            <div className="flex items-center gap-1.5 text-emerald-400">
+                                <CalendarClock size={12} />
+                                <p className="text-[10px] font-bold uppercase tracking-wide">
+                                    Válido até {formatDate(user.validUntil)}
+                                </p>
+                            </div>
+                            {expiryBadge && (
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    expiryBadge.urgent
+                                        ? 'bg-red-950/60 text-red-400 border border-red-800/60'
+                                        : 'bg-yellow-950/60 text-yellow-400 border border-yellow-800/60'
+                                }`}>
+                                    <AlertTriangle size={9} />
+                                    {expiryBadge.label}
+                                </span>
+                            )}
                         </div>
                     ) : (
                         <p className="text-[10px] text-slate-500 mt-1">Gratuito vitalício</p>

@@ -1,6 +1,6 @@
 
 import express from 'express';
-import { register, login, refreshToken, logout, forgotPassword, resetPassword, updateProfile, changePassword, markTutorialSeen } from '../controllers/authController.js';
+import { register, login, refreshToken, logout, forgotPassword, resetPassword, updateProfile, changePassword, markTutorialSeen, deactivateAccount } from '../controllers/authController.js';
 import { getMfaStatus, setupMfa, enableMfa, disableMfa } from '../controllers/mfaController.js'; // (I14)
 import validate from '../middleware/validateResource.js';
 import { registerSchema, loginSchema } from '../schemas/authSchemas.js';
@@ -19,7 +19,8 @@ router.post('/reset-password', resetPassword);
 // Rotas Protegidas (Perfil)
 router.put('/me', authenticateToken, updateProfile);
 router.post('/change-password', authenticateToken, changePassword);
-router.post('/tutorial-seen', authenticateToken, markTutorialSeen); // Nova rota
+router.post('/tutorial-seen', authenticateToken, markTutorialSeen);
+router.post('/me/deactivate', authenticateToken, deactivateAccount);
 
 // (I14) MFA / 2FA — todas exigem sessão autenticada.
 router.get('/mfa/status', authenticateToken, getMfaStatus);

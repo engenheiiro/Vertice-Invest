@@ -11,6 +11,7 @@ import logger from '../config/logger.js';
 import { getPasswordError } from '../utils/passwordPolicy.js'; // (S6) política de senha
 import { invalidateUser } from '../utils/userCache.js'; // (I6) bust de cache no update de perfil
 import { verifyTotp, consumeBackupCode } from '../utils/mfa.js'; // (I14) MFA no login
+import { decrypt } from '../utils/encryption.js'; // (S) descriptografa mfaSecret em repouso
 
 // Configurações
 const ACCESS_TOKEN_EXPIRATION = '15m';
@@ -136,7 +137,7 @@ export const login = async (req, res, next) => {
             return res.status(200).json({ mfaRequired: true });
         }
 
-        let mfaOk = verifyTotp(mfaToken, user.mfaSecret);
+        let mfaOk = verifyTotp(mfaToken, decrypt(user.mfaSecret));
         if (!mfaOk) {
             // Fallback: código de backup (consumo único).
             const { ok, remaining } = consumeBackupCode(mfaToken, user.mfaBackupCodes);
@@ -341,6 +342,34 @@ export const markTutorialSeen = async (req, res, next) => {
     try {
         await User.findByIdAndUpdate(req.user.id, { hasSeenTutorial: true });
         res.status(200).json({ success: true });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const deactivateAccount = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { password } = req.body;
+
+        if (!password) return res.status(400).json({ message: "Confirmação de senha obrigatória." });
+
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) return res.status(401).json({ message: "Senha incorreta." });
+
+        user.isActive = false;
+        user.deactivatedAt = new Date();
+        await user.save();
+
+        // Remove todos os refresh tokens — invalida todas as sessões ativas
+        await RefreshToken.deleteMany({ user: userId });
+        invalidateUser(userId);
+
+        logAudit(req, 'ACCOUNT_DEACTIVATED', 'Conta desativada pelo usuário', user._id, user.email);
+        res.status(200).json({ message: "Conta desativada com sucesso." });
     } catch (error) {
         next(error);
     }

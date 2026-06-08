@@ -75,7 +75,11 @@ const UserSchema = new mongoose.Schema({
   mfaPendingSecret: { type: String, select: false },   // durante o setup, antes de confirmar
   mfaBackupCodes: { type: [String], select: false, default: [] }, // códigos de recuperação (hash)
 
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+
+  // --- Desativação de Conta (soft-delete) ---
+  isActive: { type: Boolean, default: true },
+  deactivatedAt: { type: Date }
 });
 
 const User = mongoose.models.User || mongoose.model('User', UserSchema);

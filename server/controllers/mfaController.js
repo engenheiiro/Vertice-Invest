@@ -10,6 +10,7 @@ import User from '../models/User.js';
 import logger from '../config/logger.js';
 import { invalidateUser } from '../utils/userCache.js';
 import { generateMfaSecret, buildOtpAuthUrl, verifyTotp, generateBackupCodes } from '../utils/mfa.js';
+import { encrypt, decrypt } from '../utils/encryption.js';
 
 export const getMfaStatus = async (req, res, next) => {
   try {
@@ -26,12 +27,12 @@ export const setupMfa = async (req, res, next) => {
     if (user.mfaEnabled) return res.status(400).json({ message: 'MFA já está ativo.' });
 
     const secret = generateMfaSecret();
-    user.mfaPendingSecret = secret;
+    user.mfaPendingSecret = encrypt(secret);
     await user.save();
 
     const otpauth = buildOtpAuthUrl(user.email, secret);
     const qr = await qrcode.toDataURL(otpauth);
-    // Retorna o segredo (entrada manual) + QR. Ainda NÃO ativa — falta confirmar.
+    // Retorna o segredo em claro (entrada manual no app) + QR. Ainda NÃO ativa — falta confirmar.
     res.json({ secret, otpauth, qr });
   } catch (e) { next(e); }
 };
@@ -43,11 +44,12 @@ export const enableMfa = async (req, res, next) => {
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado.' });
     if (user.mfaEnabled) return res.status(400).json({ message: 'MFA já está ativo.' });
     if (!user.mfaPendingSecret) return res.status(400).json({ message: 'Inicie a configuração do MFA primeiro.' });
-    if (!verifyTotp(token, user.mfaPendingSecret)) {
+    if (!verifyTotp(token, decrypt(user.mfaPendingSecret))) {
       return res.status(400).json({ message: 'Código inválido. Verifique o app e tente de novo.' });
     }
 
     const { plain, hashed } = generateBackupCodes(8);
+    // mfaPendingSecret já está criptografado — move diretamente para mfaSecret
     user.mfaSecret = user.mfaPendingSecret;
     user.mfaPendingSecret = undefined;
     user.mfaEnabled = true;
@@ -70,7 +72,7 @@ export const disableMfa = async (req, res, next) => {
 
     // Confirmação: código TOTP válido OU a senha da conta.
     let authorized = false;
-    if (token && verifyTotp(token, user.mfaSecret)) authorized = true;
+    if (token && verifyTotp(token, decrypt(user.mfaSecret))) authorized = true;
     else if (password && await bcrypt.compare(password, user.password)) authorized = true;
     if (!authorized) return res.status(400).json({ message: 'Confirmação inválida (código ou senha).' });
 

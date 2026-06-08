@@ -31,10 +31,14 @@ export const authenticateToken = async (req, res, next) => {
     }
 
     // Busca o usuário atualizado no banco para checar validade (Crítico para expiração)
-    const user = await User.findById(decoded.id).select('name email role plan subscriptionStatus validUntil');
+    const user = await User.findById(decoded.id).select('name email role plan subscriptionStatus validUntil isActive');
 
     if (!user) {
         return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    if (user.isActive === false) {
+        return res.status(401).json({ message: "Conta desativada." });
     }
 
     // --- LÓGICA DE EXPIRAÇÃO (GUARDIÃO) ---

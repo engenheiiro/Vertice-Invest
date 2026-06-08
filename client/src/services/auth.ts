@@ -266,5 +266,14 @@ export const authService = {
         const data = await response.json();
         throw new Error(data.message || "Falha ao redefinir senha");
     }
+  },
+
+  async deactivateAccount(password: string): Promise<void> {
+    const response = await this.api('/api/me/deactivate', {
+      method: 'POST',
+      body: JSON.stringify({ password })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Falha ao desativar conta");
   }
 };

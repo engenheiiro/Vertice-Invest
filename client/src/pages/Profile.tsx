@@ -1,13 +1,40 @@
-import React, { Suspense } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import React, { Suspense, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Loader2, Eye, EyeOff } from 'lucide-react';
 import { Header } from '../components/dashboard/Header';
 import { ProfileIdentity } from '../components/profile/ProfileIdentity';
 import { ProfileSettings } from '../components/profile/ProfileSettings';
 import { SecuritySection } from '../components/profile/SecuritySection';
 import { SubscriptionCard } from '../components/profile/SubscriptionCard';
+import { useAuth } from '../contexts/AuthContext';
+import { authService } from '../services/auth';
+import { useToast } from '../contexts/ToastContext';
 
 export const Profile = () => {
+    const { logout } = useAuth();
+    const { addToast } = useToast();
+    const navigate = useNavigate();
+
+    const [showDeactivate, setShowDeactivate] = useState(false);
+    const [deactivatePassword, setDeactivatePassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [isDeactivating, setIsDeactivating] = useState(false);
+
+    const handleDeactivate = async () => {
+        if (!deactivatePassword) return;
+        setIsDeactivating(true);
+        try {
+            await authService.deactivateAccount(deactivatePassword);
+            addToast('Conta desativada. Até logo!', 'success');
+            await logout();
+            navigate('/login');
+        } catch (err: any) {
+            addToast(err.message || 'Erro ao desativar conta.', 'error');
+        } finally {
+            setIsDeactivating(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
@@ -42,13 +69,56 @@ export const Profile = () => {
                         {/* Segurança */}
                         <SecuritySection />
 
-                        {/* Danger Zone (Mock) */}
+                        {/* Danger Zone */}
                         <div className="p-6 rounded-2xl border border-red-900/30 bg-red-950/10">
                             <h4 className="text-sm font-bold text-red-500 mb-1">Zona de Perigo</h4>
                             <p className="text-xs text-slate-500 mb-4">Ações irreversíveis relacionadas à sua conta.</p>
-                            <button className="px-4 py-2 border border-red-900/50 text-red-500 text-xs font-bold rounded-lg hover:bg-red-950/30 transition-colors">
-                                Desativar Conta
-                            </button>
+
+                            {!showDeactivate ? (
+                                <button
+                                    onClick={() => setShowDeactivate(true)}
+                                    className="px-4 py-2 border border-red-900/50 text-red-500 text-xs font-bold rounded-lg hover:bg-red-950/30 transition-colors"
+                                >
+                                    Desativar Conta
+                                </button>
+                            ) : (
+                                <div className="space-y-3 border border-red-900/40 rounded-xl p-4 bg-red-950/20 animate-fade-in">
+                                    <p className="text-xs text-red-400 font-semibold">Confirme sua senha para desativar a conta. Esta ação encerrará todas as sessões ativas.</p>
+                                    <div className="relative">
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            value={deactivatePassword}
+                                            onChange={e => setDeactivatePassword(e.target.value)}
+                                            placeholder="Sua senha atual"
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-red-700 pr-10"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(v => !v)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                                            tabIndex={-1}
+                                        >
+                                            {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                                        </button>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={handleDeactivate}
+                                            disabled={!deactivatePassword || isDeactivating}
+                                            className="flex items-center gap-1.5 px-4 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-colors"
+                                        >
+                                            {isDeactivating && <Loader2 size={12} className="animate-spin" />}
+                                            Confirmar Desativação
+                                        </button>
+                                        <button
+                                            onClick={() => { setShowDeactivate(false); setDeactivatePassword(''); }}
+                                            className="px-4 py-2 border border-slate-700 text-slate-400 text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                     </div>
