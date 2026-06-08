@@ -37,3 +37,16 @@ export const MARKET_CACHE_DURATION_MINUTES = Number(process.env.MARKET_CACHE_MIN
 
 // Selic/CDI de fallback quando não há valor no SystemConfig nem na API do BC.
 export const DEFAULT_SELIC_FALLBACK = Number(process.env.DEFAULT_SELIC_FALLBACK) || 11.25;
+
+// Alíquotas de IR sobre ganho de capital, por classe de ativo. Usadas APENAS pelo
+// Rebalanceamento IA para ESTIMAR o impacto fiscal de uma venda sugerida — não
+// substituem apuração fiscal real (não modelam isenção mensal de Ações até R$20k
+// nem de Cripto até R$35k, nem a tabela regressiva da Renda Fixa).
+export const CAPITAL_GAINS_TAX = {
+    STOCK: 0.15,      // Ações BR: 15% sobre o ganho
+    FII: 0.20,        // FIIs: 20% sobre o ganho (sem isenção)
+    STOCK_US: 0.15,   // Exterior: 15% (faixa base de ganho de capital)
+    CRYPTO: 0.15,     // Cripto: 15% (isento até R$35k/mês de vendas — não modelado)
+    FIXED_INCOME: 0,  // Renda Fixa: IR retido na fonte — não estimado aqui
+    CASH: 0,
+};

@@ -13,6 +13,7 @@ const MonthlyReturnsTable = lazy(() => import('../components/wallet/MonthlyRetur
 const DividendDashboard = lazy(() => import('../components/wallet/DividendDashboard').then(m => ({ default: m.DividendDashboard })));
 const CashFlowHistory = lazy(() => import('../components/wallet/CashFlowHistory').then(m => ({ default: m.CashFlowHistory })));
 import { SmartContributionModal } from '../components/wallet/SmartContributionModal';
+import { RebalanceModal } from '../components/wallet/RebalanceModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { SkeletonChart, SkeletonTableRows, EmptyState, Button } from '../components/ui'; // (I12) skeletons padronizados + (U3) empty state
 import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2, DollarSign } from 'lucide-react';
@@ -33,6 +34,7 @@ export const Wallet = () => {
     
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
+    const [isRebalanceModalOpen, setIsRebalanceModalOpen] = useState(false);
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
     const [limitModalOpen, setLimitModalOpen] = useState(false);
     const [limitMessage, setLimitMessage] = useState('');
@@ -65,14 +67,17 @@ export const Wallet = () => {
     // CHECK DE PERMISSÃO: REBALANCEAMENTO (BLACK)
     const handleRebalance = () => {
         const plan = user?.plan || 'GUEST';
-        // Apenas para exemplo, usando lógica direta pois rebalance é feature flag simples
         if (plan !== 'BLACK') {
             setLimitMessage("O Rebalanceamento Automático com IA é um recurso exclusivo do plano Black Elite.");
             setLimitModalOpen(true);
             return;
         }
-        // Feature ainda em desenvolvimento — comunica honestamente em vez de simular.
-        addToast('Rebalanceamento com IA está em desenvolvimento e chega em breve. 🚧', 'info');
+        // Demo usa dados mock — o plano depende da carteira real, então não chama a API.
+        if (isDemoMode) {
+            addToast('O Rebalanceamento IA usa os dados reais da sua carteira.', 'info');
+            return;
+        }
+        setIsRebalanceModalOpen(true);
     };
 
     return (
@@ -213,6 +218,7 @@ export const Wallet = () => {
                 
                 <AddAssetModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
                 <SmartContributionModal isOpen={isSmartModalOpen} onClose={() => setIsSmartModalOpen(false)} />
+                <RebalanceModal isOpen={isRebalanceModalOpen} onClose={() => setIsRebalanceModalOpen(false)} />
                 
                 <ConfirmModal 
                     isOpen={limitModalOpen} 

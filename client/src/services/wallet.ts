@@ -91,5 +91,18 @@ export const walletService = {
         const response = await authService.api(`/api/wallet/cashflow?page=${page}&limit=${limit}&filterType=${filterType}`);
         if (!response.ok) throw new Error("Falha ao buscar extrato");
         return await response.json();
+    },
+
+    // Rebalanceamento IA (BLACK): gera o plano de ordens para o perfil escolhido.
+    async getRebalancePlan(riskProfile: 'DEFENSIVE' | 'MODERATE' | 'BOLD' = 'MODERATE') {
+        const response = await authService.api('/api/wallet/rebalance', {
+            method: 'POST',
+            body: JSON.stringify({ riskProfile })
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || "Falha ao gerar o rebalanceamento");
+        }
+        return await response.json();
     }
 };

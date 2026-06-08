@@ -20,7 +20,8 @@ import {
     getSnapshotHealth,
     forceSnapshot // Importado
 } from '../controllers/walletController.js';
-import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
+import { authenticateToken, requireAdmin, requireBlackPlan } from '../middleware/authMiddleware.js';
+import { researchHeavyLimiter } from '../middleware/rateLimiters.js';
 import validate from '../middleware/validateResource.js';
 import {
     addTransactionSchema,
@@ -29,6 +30,8 @@ import {
     corporateActionSchema,
     updateTargetsSchema,
 } from '../schemas/walletSchemas.js';
+import { rebalanceSchema } from '../schemas/rebalanceSchemas.js';
+import { generateRebalancePlan } from '../controllers/rebalanceController.js';
 
 const router = express.Router();
 
@@ -57,6 +60,10 @@ router.delete('/transactions/:id', writeLimiter, validate(idParamSchema), delete
 // Rotas de Inteligência
 router.get('/performance', getWalletPerformance);
 router.get('/dividends', getWalletDividends);
+
+// Rebalanceamento IA (BLACK): read-only, gera plano de ordens. Cadeia:
+// authenticateToken (router.use) → requireBlackPlan → limiter pesado → validate → handler.
+router.post('/rebalance', requireBlackPlan, researchHeavyLimiter, validate(rebalanceSchema), generateRebalancePlan);
 
 // Extrato de Conta Corrente (Cash Flow)
 router.get('/cashflow', getCashFlow);
