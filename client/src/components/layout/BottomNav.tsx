@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutGrid, PieChart, BrainCircuit, Radar, MoreHorizontal,
-  BarChart3, Calculator, GraduationCap, Crown, User as UserIcon, Settings, LogOut, X,
+  BarChart3, Calculator, GraduationCap, Crown, User as UserIcon, Settings, LogOut, X, Target,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -30,6 +30,7 @@ export const BottomNav: React.FC = () => {
   const isActive = (to: string) => path === to || path.startsWith(`${to}/`);
 
   const secondary = [
+    { to: '/goals', label: 'Metas', icon: Target },
     { to: '/indicators', label: 'Indicadores', icon: BarChart3 },
     { to: '/calculadora', label: 'Calculadora', icon: Calculator },
     { to: '/courses', label: 'Cursos', icon: GraduationCap },

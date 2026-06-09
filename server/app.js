@@ -22,7 +22,8 @@ import authRoutes from './routes/authRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import researchRoutes from './routes/researchRoutes.js';
 import walletRoutes from './routes/walletRoutes.js';
-import marketRoutes from './routes/marketRoutes.js'; 
+import goalsRoutes from './routes/goalsRoutes.js';
+import marketRoutes from './routes/marketRoutes.js';
 import webhookRoutes from './routes/webhookRoutes.js'; // Nova Rota
 import academyRoutes from './routes/academyRoutes.js';
 import sitemapRouter from './routes/sitemapRouter.js';
@@ -182,6 +183,7 @@ app.use('/api', authRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/research', researchRoutes);
 app.use('/api/wallet', walletRoutes);
+app.use('/api/goals', goalsRoutes);
 app.use('/api/market', marketRoutes);
 app.use('/api/webhooks', webhookRoutes); // Registro dos Webhooks
 app.use('/api/academy', academyRoutes);
