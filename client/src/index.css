@@ -8,6 +8,7 @@
   }
   html {
     scroll-behavior: smooth;
+    background-color: #02040a;
   }
   /*
    * Trava de overflow horizontal (mobile).

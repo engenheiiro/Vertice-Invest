@@ -4,8 +4,12 @@ import InvestmentGoal from '../models/InvestmentGoal.js';
 import GoalContribution from '../models/GoalContribution.js';
 import AssetTransaction from '../models/AssetTransaction.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
+import UserAsset from '../models/UserAsset.js';
+import SystemConfig from '../models/SystemConfig.js';
+import { marketDataService } from '../services/marketDataService.js';
+import { accrueFixedIncomeValue, brazilToday } from '../utils/fixedIncome.js';
 import { monthsRemaining, requiredMonthly, decomposeProgress, fv, annualToMonthly, computeStreak } from '../utils/goalMath.js';
-import { safeCurrency, safeFloat, safeSub } from '../utils/mathUtils.js';
+import { safeCurrency, safeFloat, safeSub, safeMult, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import logger from '../config/logger.js';
 
 const MS_DAY = 24 * 60 * 60 * 1000;
@@ -29,6 +33,55 @@ const monthsBetween = (a, b) => (b.getTime() - a.getTime()) / (30.4375 * MS_DAY)
 // Patrimônio espelhado da carteira = último snapshot diário do usuário.
 const getLatestSnapshot = async (userId) => {
     return WalletSnapshot.findOne({ user: userId }).sort({ date: -1 }).lean();
+};
+
+// Verifica se um snapshot é de hoje (fuso UTC é suficiente para esta heurística).
+const isSnapshotFromToday = (snapshot) => {
+    if (!snapshot?.date) return false;
+    const d = new Date(snapshot.date);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+};
+
+/**
+ * Retorna o patrimônio atual da carteira ao vivo.
+ * Se o snapshot mais recente é de hoje, usa-o (rápido). Caso contrário,
+ * recalcula em tempo real a partir de UserAsset — mesma lógica do schedulerService —
+ * para que metas reflitam imediatamente qualquer adição de ativo no dia.
+ */
+const getLiveWalletEquity = async (userId) => {
+    const snapshot = await getLatestSnapshot(userId);
+    if (isSnapshotFromToday(snapshot)) return { equity: snapshot.totalEquity, snapshot };
+
+    try {
+        const assets = await UserAsset.find({ user: userId, quantity: { $gt: QUANTITY_EPSILON } });
+        if (assets.length === 0) return { equity: snapshot?.totalEquity || 0, snapshot };
+
+        const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean();
+        const cdi = config?.cdi || 11.25;
+        const usdRate = config?.dollar || 5.75;
+        const calcDate = brazilToday();
+
+        const tickers = assets.filter((a) => !['CASH', 'FIXED_INCOME'].includes(a.type)).map((a) => a.ticker);
+        if (tickers.length > 0) await marketDataService.refreshQuotesBatch(tickers);
+
+        let totalEquity = 0;
+        for (const asset of assets) {
+            const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1;
+            let val;
+            if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
+                val = accrueFixedIncomeValue(asset, { cdiRate: cdi, calcDate });
+            } else {
+                const mData = await marketDataService.getMarketDataByTicker(asset.ticker);
+                val = safeValue(asset.quantity, mData.price || 0);
+            }
+            totalEquity += safeMult(val, multiplier);
+        }
+        return { equity: safeCurrency(totalEquity), snapshot };
+    } catch (e) {
+        logger.warn(`getLiveWalletEquity fallback to snapshot: ${e.message}`);
+        return { equity: snapshot?.totalEquity || 0, snapshot };
+    }
 };
 
 /**
@@ -226,11 +279,10 @@ const buildTrajectory = (goal, snapshots, contributions, projection) => {
 export const listGoals = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const [goals, snapshot] = await Promise.all([
+        const [goals, { equity: walletEquity, snapshot }] = await Promise.all([
             InvestmentGoal.find({ user: userId, status: { $ne: 'ARCHIVED' } }).sort({ createdAt: 1 }),
-            getLatestSnapshot(userId),
+            getLiveWalletEquity(userId),
         ]);
-        const walletEquity = snapshot?.totalEquity || 0;
 
         const result = [];
         for (const goal of goals) {
@@ -252,8 +304,7 @@ export const getGoal = async (req, res, next) => {
         const goal = await InvestmentGoal.findOne({ _id: req.params.id, user: userId });
         if (!goal) return res.status(404).json({ message: 'Meta não encontrada.' });
 
-        const snapshot = await getLatestSnapshot(userId);
-        const walletEquity = snapshot?.totalEquity || 0;
+        const { equity: walletEquity, snapshot } = await getLiveWalletEquity(userId);
 
         // Histórico patrimonial p/ a trajetória (ordem cronológica).
         const snapshots = await WalletSnapshot.find({ user: userId }).sort({ date: 1 }).lean();
@@ -343,10 +394,10 @@ export const createGoal = async (req, res, next) => {
         const userId = req.user.id;
         const { name, icon, color, targetAmount, monthlyTarget, expectedAnnualRate, startDate, targetDate, mirrorWallet, manualBalance } = req.body;
 
-        const snapshot = await getLatestSnapshot(userId);
         const useMirror = mirrorWallet !== undefined ? mirrorWallet : true;
+        const { equity: liveEquity, snapshot } = await getLiveWalletEquity(userId);
         // Baseline da curva "Plano": valor da meta no momento da criação.
-        const startValue = safeCurrency((useMirror ? (snapshot?.totalEquity || 0) : 0) + (manualBalance || 0));
+        const startValue = safeCurrency((useMirror ? liveEquity : 0) + (manualBalance || 0));
 
         const goal = await InvestmentGoal.create({
             user: userId,
@@ -363,7 +414,7 @@ export const createGoal = async (req, res, next) => {
             startValue,
         });
 
-        const projection = computeGoalProjection(goal, snapshot?.totalEquity || 0);
+        const projection = computeGoalProjection(goal, liveEquity);
         res.status(201).json({ goal: { ...goal.toObject(), ...projection } });
     } catch (error) {
         logger.error(`Erro ao criar meta: ${error.message}`);
@@ -389,8 +440,8 @@ export const updateGoal = async (req, res, next) => {
         goal.updatedAt = Date.now();
         await goal.save();
 
-        const snapshot = await getLatestSnapshot(userId);
-        const projection = computeGoalProjection(goal, snapshot?.totalEquity || 0);
+        const { equity: walletEquity } = await getLiveWalletEquity(userId);
+        const projection = computeGoalProjection(goal, walletEquity);
         res.json({ goal: { ...goal.toObject(), ...projection } });
     } catch (error) {
         logger.error(`Erro ao atualizar meta: ${error.message}`);
@@ -423,8 +474,7 @@ export const addContribution = async (req, res, next) => {
         const value = safeCurrency(amount);
 
         // "Adiantou X meses": meses antes vs. depois do aporte (com patrimônio atual).
-        const snapshot = await getLatestSnapshot(userId);
-        const walletEquity = snapshot?.totalEquity || 0;
+        const { equity: walletEquity } = await getLiveWalletEquity(userId);
         const before = computeGoalProjection(goal, walletEquity);
 
         await GoalContribution.create({ user: userId, goal: goal._id, amount: value, date: date || Date.now(), note });
@@ -463,8 +513,8 @@ export const deleteContribution = async (req, res, next) => {
         goal.updatedAt = Date.now();
         await goal.save();
 
-        const snapshot = await getLatestSnapshot(userId);
-        const projection = computeGoalProjection(goal, snapshot?.totalEquity || 0);
+        const { equity: walletEquity } = await getLiveWalletEquity(userId);
+        const projection = computeGoalProjection(goal, walletEquity);
         res.json({ goal: { ...goal.toObject(), ...projection } });
     } catch (error) {
         logger.error(`Erro ao remover aporte: ${error.message}`);
