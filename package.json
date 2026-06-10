@@ -20,6 +20,7 @@
     "seed:market": "node server/scripts/seedMarketData.js",
     "sync:prod": "node server/scripts/syncProdData.js",
     "sync:dividends": "node server/scripts/syncDividends.js",
+    "rebuild:history": "node server/scripts/rebuildAllHistory.js",
     "scan:radar": "node server/scripts/runRadarScanner.js",
     "radar:report": "node server/scripts/generateRadarReport.js",
     "sync:TimeSeriesWorker": "node server/scripts/syncTimeSeries.js",
