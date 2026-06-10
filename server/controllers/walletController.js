@@ -9,7 +9,7 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
-import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, calculateSharpeRatio, calculateBeta, safeValue, safePrice, QUANTITY_EPSILON } from '../utils/mathUtils.js';
+import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, calculateSharpeRatio, calculateBeta, safeValue, safePrice, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
 import { countBusinessDays, isBusinessDay } from '../utils/dateUtils.js';
 import logger from '../config/logger.js';
 import { HISTORICAL_CDI_RATES, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
@@ -371,60 +371,28 @@ export const getWalletData = async (req, res, next) => {
             .limit(30)
             .lean();
             
-        let lastSnapshot = null;
+        // Âncora via regra única compartilhada (paridade KPI × gráfico).
+        const lastSnapshot = selectAnchorSnapshot(snapshots);
 
-        // Heurística de Auto-Cura e Qualidade de Dados
-        if (snapshots.length > 0) {
-            if (snapshots.length === 1) {
-                lastSnapshot = snapshots[0];
-            } else {
-                for (let i = 0; i < snapshots.length; i++) {
-                    const snap = snapshots[i];
-                    const isResetValue = Math.abs((snap.quotaPrice || 100) - 100) < 0.1;
-                    
-                    if (isResetValue) {
-                        const hasValidHistory = snapshots.slice(i + 1).some(old => Math.abs((old.quotaPrice || 100) - 100) > 1);
-                        if (hasValidHistory) {
-                            continue; // Pula snapshot corrompido
-                        }
-                    }
-                    lastSnapshot = snap;
-                    break;
-                }
-            }
-            if (!lastSnapshot) lastSnapshot = snapshots[0];
-        }
-        
         if (lastSnapshot && lastSnapshot.quotaPrice) {
             // Se o snapshot encontrado for muito antigo (> 3 dias), a qualidade cai para Estimada
             const diffDays = (now.getTime() - new Date(lastSnapshot.date).getTime()) / (1000 * 3600 * 24);
             if (diffDays > 3) dataQuality = 'ESTIMATED';
 
             const snapshotDate = new Date(lastSnapshot.date);
-            snapshotDate.setHours(23, 59, 59, 999); 
-            
+            snapshotDate.setHours(23, 59, 59, 999);
+
             const txs = await AssetTransaction.find({ user: userId, date: { $gt: snapshotDate } });
-            
+
             let periodFlow = 0;
             txs.forEach(tx => {
                 if(tx.type === 'BUY') periodFlow += tx.totalValue;
                 else if(tx.type === 'SELL') periodFlow -= tx.totalValue;
             });
 
-            const v0 = lastSnapshot.totalEquity;
-            const v1 = safeTotalEquity;
-            const f = periodFlow;
-            
-            // Uso do Helper Centralizado de Math
-            const periodReturn = calculateDailyDietz(v0, v1, f);
-            
-            let liveQuotaPrice = lastSnapshot.quotaPrice;
-            if (periodReturn > -0.8 && periodReturn < 1.0) {
-                liveQuotaPrice = lastSnapshot.quotaPrice * (1 + periodReturn);
-            } else {
-                dataQuality = 'ESTIMATED';
-            }
-            
+            // Fonte única da cota live (utils/mathUtils.computeLiveQuota) — mesmo
+            // cálculo que getWalletPerformance usa no ponto live.
+            const liveQuotaPrice = computeLiveQuota(lastSnapshot, safeTotalEquity, periodFlow);
             weightedRentability = ((liveQuotaPrice / 100) - 1) * 100;
         } else {
             weightedRentability = totalResultPercent;
@@ -496,30 +464,13 @@ export const getWalletPerformance = async (req, res, next) => {
             const liveData = await calculateLiveKPIS(userId, config?.cdi || 11.25);
 
             if (liveData && liveData.totalEquity > 0) {
-                let validPrevQuota = 100;
-                let validPrevEquity = 0;
-                let validPrevSnap = null;
+                // Mesma âncora do KPI (getWalletData): regra única compartilhada.
+                const anchor = selectAnchorSnapshot([...history].reverse());
 
-                for (let i = history.length - 1; i >= 0; i--) {
-                    const snap = history[i];
-                    if (snap.quotaPrice && Math.abs(snap.quotaPrice - 100) > 0.01) {
-                        validPrevQuota = snap.quotaPrice;
-                        validPrevEquity = snap.totalEquity;
-                        validPrevSnap = snap;
-                        break;
-                    }
-                    if (i === 0) {
-                        validPrevQuota = snap.quotaPrice || 100;
-                        validPrevEquity = snap.totalEquity;
-                        validPrevSnap = snap;
-                    }
-                }
-
-                // Calcula fluxo de caixa desde o último snapshot (aportes/resgates)
-                // Necessário para Modified Dietz — sem isso, aportes inflam o retorno live
+                // Fluxo de caixa desde o âncora (aportes/resgates) — Modified Dietz.
                 let periodFlow = 0;
-                if (validPrevSnap) {
-                    const anchorDate = new Date(validPrevSnap.date);
+                if (anchor) {
+                    const anchorDate = new Date(anchor.date);
                     anchorDate.setHours(23, 59, 59, 999);
                     const txsSince = await AssetTransaction.find({
                         user: userId,
@@ -531,13 +482,8 @@ export const getWalletPerformance = async (req, res, next) => {
                     });
                 }
 
-                let liveQuotaPrice = validPrevQuota;
-                if (validPrevEquity > 0 || periodFlow > 0) {
-                    const periodReturn = calculateDailyDietz(validPrevEquity, liveData.totalEquity, periodFlow);
-                    if (periodReturn > -0.8 && periodReturn < 1.0) {
-                        liveQuotaPrice = validPrevQuota * (1 + periodReturn);
-                    }
-                }
+                // Fonte única da cota live — idêntica ao KPI (weightedRentability).
+                const liveQuotaPrice = computeLiveQuota(anchor, liveData.totalEquity, periodFlow);
 
                 history.push({
                     date: today,
@@ -545,7 +491,7 @@ export const getWalletPerformance = async (req, res, next) => {
                     totalInvested: liveData.totalInvested,
                     totalDividends: liveData.totalDividends,
                     quotaPrice: liveQuotaPrice,
-                    isLive: true 
+                    isLive: true
                 });
             }
         }
@@ -579,22 +525,24 @@ export const getWalletPerformance = async (req, res, next) => {
         const walletReturns = [];
         const marketReturns = [];
 
+        // Benchmarks cashflow-aware (modo R$): o capital cresce pelo índice e
+        // recebe os MESMOS aportes/resgates nas datas reais — comparável à
+        // carteira (que também inclui os aportes). Semente = invested inicial.
+        let cdiVal = 0, ipcaVal = 0, ibovVal = 0;
+        let prevInvested = history[0]?.totalInvested || 0;
+        let prevIbovForVal = baseIbov;
+
         const result = history.map((point, index) => {
             const dateStr = point.date.toISOString().split('T')[0];
             const currentDate = new Date(point.date);
             currentDate.setHours(0,0,0,0);
 
             const daysDelta = countBusinessDays(previousDate, currentDate);
-            
-            if (daysDelta > 0) {
-                // CDI
-                const factorCDI = getDailyFactorForDate(currentDate, currentRate);
-                accumulatedCDI *= Math.pow(factorCDI, daysDelta);
 
-                // IPCA+6%
-                const factorIPCA = Math.pow(1 + (totalIpcaRate / 100), 1/252);
-                accumulatedIPCA *= Math.pow(factorIPCA, daysDelta);
-            }
+            const periodFactorCDI = daysDelta > 0 ? Math.pow(getDailyFactorForDate(currentDate, currentRate), daysDelta) : 1;
+            const periodFactorIPCA = daysDelta > 0 ? Math.pow(Math.pow(1 + (totalIpcaRate / 100), 1/252), daysDelta) : 1;
+            accumulatedCDI *= periodFactorCDI;
+            accumulatedIPCA *= periodFactorIPCA;
             previousDate = currentDate;
 
             // IBOV Acumulado
@@ -606,7 +554,20 @@ export const getWalletPerformance = async (req, res, next) => {
 
             const ibovPercent = baseIbov && currentIbov ? ((currentIbov / baseIbov) - 1) * 100 : 0;
             const walletTWRR = point.quotaPrice ? ((point.quotaPrice/100)-1)*100 : 0;
-            
+
+            // --- Valores cashflow-aware dos benchmarks (modo R$) ---
+            const periodFactorIbov = (prevIbovForVal > 0 && currentIbov) ? (currentIbov / prevIbovForVal) : 1;
+            const flow = (point.totalInvested || 0) - prevInvested;
+            if (index === 0) {
+                cdiVal = ipcaVal = ibovVal = point.totalInvested || 0;
+            } else {
+                cdiVal = benchmarkStep(cdiVal, periodFactorCDI, flow);
+                ipcaVal = benchmarkStep(ipcaVal, periodFactorIPCA, flow);
+                ibovVal = benchmarkStep(ibovVal, periodFactorIbov, flow);
+            }
+            prevInvested = point.totalInvested || 0;
+            if (currentIbov) prevIbovForVal = currentIbov;
+
             // Coleta de retornos diários (para Beta/Sharpe)
             if (index > 0) {
                 const prevPoint = history[index-1];
@@ -615,16 +576,13 @@ export const getWalletPerformance = async (req, res, next) => {
                 const dailyWalletReturn = ((currQuota / prevQuota) - 1) * 100;
                 walletReturns.push(dailyWalletReturn);
 
-                // Market Return do dia
-                // (Precisaríamos do valor absoluto anterior do Ibov, mas como temos percentual acumulado, podemos derivar ou pegar do map)
-                // Simplificação: Pegamos variação do ibovPercent atual vs anterior
                 const prevIbovVal = (index === 1 && !history[0].isLive) ? baseIbov : (ibovMap.get(history[index-1].date.toISOString().split('T')[0]) || baseIbov);
                 const dailyMarketReturn = prevIbovVal > 0 ? ((currentIbov / prevIbovVal) - 1) * 100 : 0;
                 marketReturns.push(dailyMarketReturn);
             }
 
-            const walletROI = point.totalInvested > 0 
-                ? ((point.totalEquity - point.totalInvested + point.totalDividends) / point.totalInvested) * 100 
+            const walletROI = point.totalInvested > 0
+                ? ((point.totalEquity - point.totalInvested + point.totalDividends) / point.totalInvested) * 100
                 : 0;
 
             return {
@@ -632,20 +590,19 @@ export const getWalletPerformance = async (req, res, next) => {
                 wallet: walletTWRR,
                 walletRoi: walletROI,
                 equity: point.totalEquity ?? 0,
+                invested: point.totalInvested ?? 0,
                 cdi: (accumulatedCDI - 1) * 100,
                 ipca: (accumulatedIPCA - 1) * 100,
-                ibov: ibovPercent
+                ibov: ibovPercent,
+                cdiValue: safeCurrency(cdiVal),
+                ipcaValue: safeCurrency(ipcaVal),
+                ibovValue: safeCurrency(ibovVal),
             };
         });
 
-        const cleanedResult = result.filter((r, idx) => {
-            if (idx === 0) return true;
-            if (Math.abs(r.wallet) < 0.001 && Math.abs(result[idx-1].wallet) > 1) return false;
-            return true;
-        });
-        
+        // Forward-fill do Ibov % quando faltar cotação no dia (feriado/sem dado).
         let lastKnownIbov = 0;
-        cleanedResult.forEach(r => {
+        result.forEach(r => {
             if (r.ibov !== 0) lastKnownIbov = r.ibov;
             else r.ibov = lastKnownIbov;
         });
@@ -655,7 +612,7 @@ export const getWalletPerformance = async (req, res, next) => {
         const beta = calculateBeta(walletReturns, marketReturns);
 
         res.json({
-            history: cleanedResult,
+            history: result,
             stats: {
                 sharpe: safeFloat(sharpe),
                 beta: safeFloat(beta)
@@ -876,11 +833,41 @@ export const deleteTransaction = async (req, res, next) => {
     }
 };
 
+// Throttle do self-heal de dividendos (1h por usuário) — evita re-scraping a
+// cada poll do Cofre enquanto os dados ainda estão zerados.
+const DIVIDEND_HEAL_TTL = 60 * 60 * 1000;
+const dividendHealAt = new Map();
+
 export const getWalletDividends = async (req, res, next) => {
     try {
-        const data = await financialService.calculateUserDividends(req.user.id);
+        const userId = req.user.id;
+        const data = await financialService.calculateUserDividends(userId);
         const history = Array.from(data.dividendMap.entries()).map(([month, val]) => ({ month, value: val.total, breakdown: val.breakdown })).sort((a, b) => a.month.localeCompare(b.month));
         res.json({ history, provisioned: data.provisioned, totalAllTime: data.totalAllTime, projectedMonthly: data.projectedMonthly });
+
+        // Self-heal: se o usuário tem ativos pagadores mas TUDO está zerado, é
+        // sinal de que faltou sincronizar proventos e/ou popular dy. Dispara em
+        // background (sem travar a resposta) sincronização de DividendEvent +
+        // refresh de fundamentos (dy/preço). Throttle por usuário evita repetição.
+        const isEmpty = data.totalAllTime === 0 && data.projectedMonthly === 0 && (data.provisioned?.length || 0) === 0;
+        if (isEmpty) {
+            const last = dividendHealAt.get(userId) || 0;
+            if (Date.now() - last > DIVIDEND_HEAL_TTL) {
+                dividendHealAt.set(userId, Date.now());
+                (async () => {
+                    try {
+                        const eligible = await UserAsset.find({ user: userId, quantity: { $gt: QUANTITY_EPSILON } }).select('ticker type').lean();
+                        const payers = eligible.filter(a => !['CRYPTO', 'CASH', 'FIXED_INCOME'].includes(a.type));
+                        if (payers.length === 0) return;
+                        await marketDataService.refreshFundamentals(payers.map(a => a.ticker));
+                        await financialService.syncDividends(payers.map(a => ({ ticker: a.ticker, type: a.type })));
+                        logger.info(`[Dividends] Self-heal concluído p/ ${userId} (${payers.length} ativos).`);
+                    } catch (e) {
+                        logger.warn(`[Dividends] Self-heal falhou p/ ${userId}: ${e.message}`);
+                    }
+                })();
+            }
+        }
     } catch (error) { next(error); }
 };
 

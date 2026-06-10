@@ -5,8 +5,12 @@ import { PortfolioItem } from '../../hooks/useDashboardData';
 import { useFeatureAccess } from '../../hooks/useFeatureAccess';
 import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
+import { SmartContributionModal } from '../wallet/SmartContributionModal';
+import { RebalanceModal } from '../wallet/RebalanceModal';
+import { ConfirmModal } from '../ui/ConfirmModal';
 
 interface AssetTableProps {
     items: PortfolioItem[];
@@ -25,17 +29,45 @@ const GROUP_NAMES: Record<string, string> = {
 };
 
 export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false, isResearchLoading = false }) => {
-    const { hasPlan } = useFeatureAccess();
+    const { hasPlan, limitFor } = useFeatureAccess();
     const { isPrivacyMode } = useWallet();
     const { isDemoMode } = useDemo();
+    const { addToast } = useToast();
     const navigate = useNavigate();
-    
+
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+    const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
+    const [isRebalanceModalOpen, setIsRebalanceModalOpen] = useState(false);
+    const [limitModalOpen, setLimitModalOpen] = useState(false);
+    const [limitMessage, setLimitMessage] = useState('');
 
     const isPro = hasPlan('PRO');
     const isBlack = hasPlan('BLACK');
 
     const formatCurrency = (val: number) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
+
+    // Abre o modal no próprio Terminal (mesma lógica/gating da Carteira).
+    const handleOpenSmartContribution = () => {
+        if (limitFor('smart_contribution') === 0) {
+            setLimitMessage('O Aporte Inteligente é um recurso exclusivo dos planos Pro e Black.');
+            setLimitModalOpen(true);
+            return;
+        }
+        setIsSmartModalOpen(true);
+    };
+
+    const handleRebalance = () => {
+        if (!hasPlan('BLACK')) {
+            setLimitMessage('O Rebalanceamento Automático com IA é um recurso exclusivo do plano Black Elite.');
+            setLimitModalOpen(true);
+            return;
+        }
+        if (isDemoMode) {
+            addToast('O Rebalanceamento IA usa os dados reais da sua carteira.', 'info');
+            return;
+        }
+        setIsRebalanceModalOpen(true);
+    };
 
     const toggleGroup = (groupName: string) => {
         setCollapsedGroups(prev => ({
@@ -62,26 +94,29 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                 </h3>
                 
                 <div className="flex gap-2">
-                    <button 
-                        onClick={() => navigate('/wallet')} 
+                    <button
+                        onClick={handleOpenSmartContribution}
                         className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors border flex items-center gap-1.5 ${
-                            isPro 
-                            ? 'bg-blue-600/10 text-blue-400 border-blue-600/30 hover:bg-blue-600/20' 
-                            : 'bg-slate-800 text-slate-500 border-slate-700 opacity-50 cursor-not-allowed'
+                            isPro
+                            ? 'bg-blue-600/10 text-blue-400 border-blue-600/30 hover:bg-blue-600/20'
+                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
                         }`}
                         title={isPro ? "Aporte Inteligente" : "Exclusivo Pro"}
                     >
+                        {!isPro && <Lock size={11} />}
                         <TrendingUp size={12} /> Aporte Inteligente
                     </button>
 
-                    <button 
+                    <button
+                        onClick={handleRebalance}
                         className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors border flex items-center gap-1.5 ${
-                            isBlack 
-                            ? 'bg-gold/10 text-gold border-gold/30 hover:bg-gold/20' 
-                            : 'bg-slate-800 text-slate-500 border-slate-700 opacity-50 cursor-not-allowed'
+                            isBlack
+                            ? 'bg-gold/10 text-gold border-gold/30 hover:bg-gold/20'
+                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
                         }`}
                         title={isBlack ? "Rebalanceamento Automático" : "Exclusivo Black"}
                     >
+                        {!isBlack && <Lock size={11} />}
                         <RefreshCw size={12} /> Rebalanceamento IA
                     </button>
                 </div>
@@ -336,6 +371,19 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                     ))
                 )}
             </div>
+
+            {/* Modais (createPortal) — reusam a lógica da Carteira, no próprio Terminal. */}
+            <SmartContributionModal isOpen={isSmartModalOpen} onClose={() => setIsSmartModalOpen(false)} />
+            <RebalanceModal isOpen={isRebalanceModalOpen} onClose={() => setIsRebalanceModalOpen(false)} />
+            <ConfirmModal
+                isOpen={limitModalOpen}
+                onClose={() => setLimitModalOpen(false)}
+                onConfirm={() => navigate('/pricing')}
+                title="Acesso Restrito"
+                message={`${limitMessage}\n\nDeseja fazer um upgrade agora?`}
+                confirmText="Ver Planos"
+                isDestructive={false}
+            />
         </div>
     );
 };

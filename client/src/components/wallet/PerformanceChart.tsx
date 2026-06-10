@@ -12,9 +12,14 @@ interface PerformancePoint {
     wallet: number;
     walletRoi: number;
     equity?: number;
+    invested?: number;
     cdi: number;
     ibov: number;
     ipca?: number;
+    // Valores cashflow-aware (R$) calculados no backend.
+    cdiValue?: number;
+    ipcaValue?: number;
+    ibovValue?: number;
 }
 
 
@@ -89,17 +94,19 @@ export const PerformanceChart = React.memo(() => {
     }, [data, timeRange]);
 
     // --- DADOS PARA MODO R$ ---
+    // "Minha Carteira" usa o patrimônio REAL (p.equity) — bate com o KPI no
+    // último ponto. Benchmarks usam os valores cashflow-aware do backend
+    // (cdiValue/ipcaValue/ibovValue): mesmo capital + aportes, crescido pelo índice.
     const displayData = useMemo(() => {
         if (viewMode === 'pct') return filteredData;
-        const initialEquity = filteredData[0]?.equity ?? 0;
         return filteredData.map(p => ({
             ...p,
-            walletBRL: initialEquity * (1 + (metricMode === 'TWRR' ? p.wallet : p.walletRoi) / 100),
-            cdiBRL:    initialEquity * (1 + p.cdi / 100),
-            ipcaBRL:   initialEquity * (1 + (p.ipca ?? 0) / 100),
-            ibovBRL:   initialEquity * (1 + p.ibov / 100),
+            walletBRL: p.equity ?? 0,
+            cdiBRL:    p.cdiValue ?? 0,
+            ipcaBRL:   p.ipcaValue ?? 0,
+            ibovBRL:   p.ibovValue ?? 0,
         }));
-    }, [filteredData, viewMode, metricMode]);
+    }, [filteredData, viewMode]);
 
     // --- GERAÇÃO DE TICKS DO EIXO X ---
     const xAxisTicks = useMemo(() => {

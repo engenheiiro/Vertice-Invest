@@ -133,6 +133,68 @@ export const calculateSharpeRatio = (walletReturns, riskFreeRate) => {
 };
 
 /**
+ * Seleciona o snapshot-âncora para o cálculo de cota "live" (TWRR).
+ *
+ * Regra ÚNICA usada pelo KPI (getWalletData) e pelo gráfico (getWalletPerformance)
+ * para que ambos partam do MESMO ponto e produzam o mesmo TWRR no ponto live.
+ * Caminha do mais recente para o mais antigo; pula um snapshot "resetado"
+ * (quota ~100) APENAS se existir histórico mais antigo com cota válida (>1 de 100).
+ *
+ * @param {Array} snapshotsDesc snapshots ordenados do MAIS RECENTE para o mais antigo
+ */
+export const selectAnchorSnapshot = (snapshotsDesc) => {
+    if (!Array.isArray(snapshotsDesc) || snapshotsDesc.length === 0) return null;
+    if (snapshotsDesc.length === 1) return snapshotsDesc[0];
+
+    for (let i = 0; i < snapshotsDesc.length; i++) {
+        const snap = snapshotsDesc[i];
+        const isReset = Math.abs((snap.quotaPrice || 100) - 100) < 0.1;
+        if (isReset) {
+            const hasValidHistory = snapshotsDesc
+                .slice(i + 1)
+                .some((old) => Math.abs((old.quotaPrice || 100) - 100) > 1);
+            if (hasValidHistory) continue; // pula snapshot corrompido
+        }
+        return snap;
+    }
+    return snapshotsDesc[0];
+};
+
+/**
+ * Calcula a cota (TWRR) "live" a partir de um snapshot-âncora, o patrimônio
+ * atual e o fluxo de caixa do período (aportes − resgates). Fonte ÚNICA da
+ * verdade: KPI e gráfico chamam esta função com o MESMO âncora/fluxo, então o
+ * último ponto do gráfico passa a ser idêntico ao TWRR do KPI.
+ *
+ * @param {Object|null} baseSnapshot âncora com { quotaPrice, totalEquity }
+ * @param {number} liveEquity patrimônio atual (V1)
+ * @param {number} periodFlow fluxo líquido desde o âncora (BUY − SELL)
+ */
+export const computeLiveQuota = (baseSnapshot, liveEquity, periodFlow) => {
+    const prevQuota = baseSnapshot && baseSnapshot.quotaPrice ? baseSnapshot.quotaPrice : 100;
+    const prevEquity = baseSnapshot ? (baseSnapshot.totalEquity || 0) : 0;
+    const flow = periodFlow || 0;
+
+    if (prevEquity <= 0 && flow <= 0) return prevQuota;
+
+    const periodReturn = calculateDailyDietz(prevEquity, liveEquity, flow);
+    // Circuit breaker: ignora variações absurdas (dados ruins) mantendo a cota.
+    if (periodReturn > -0.8 && periodReturn < 1.0) {
+        return prevQuota * (1 + periodReturn);
+    }
+    return prevQuota;
+};
+
+/**
+ * Passo de um benchmark "cashflow-aware": o valor anterior cresce pelo fator do
+ * período e recebe o fluxo de caixa (aporte/resgate) do período. Permite comparar
+ * o índice (CDI/IPCA/Ibov) com a carteira real, que também recebe os aportes.
+ */
+export const benchmarkStep = (prevValue, periodFactor, flow) => {
+    return safeCurrency((prevValue || 0) * (periodFactor || 1) + (flow || 0));
+};
+
+/**
  * Calcula o Beta da carteira em relação ao Benchmark.
  * Beta = Covariância(R_carteira, R_mercado) / Variância(R_mercado)
  */

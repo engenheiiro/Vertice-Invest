@@ -66,6 +66,37 @@ export const marketDataService = {
         }
     },
 
+    /**
+     * Refresh sob demanda de fundamentos (dy/lastPrice) de tickers específicos
+     * — usado pelo self-heal do Cofre de Dividendos quando a projeção está zerada
+     * por falta de `dy`. Faz 1 request ao Fundamentus (mapa completo) e atualiza
+     * só os tickers pedidos. Import dinâmico evita ciclo de dependência.
+     */
+    async refreshFundamentals(tickers) {
+        if (!tickers || tickers.length === 0) return;
+        const clean = [...new Set(tickers.map(t => this.normalizeSymbol(t)))];
+        try {
+            const { fundamentusService } = await import('./fundamentusService.js');
+            const [stocksMap, fiiMap] = await Promise.all([
+                fundamentusService.getStocksMap().catch(() => new Map()),
+                fundamentusService.getFIIsMap().catch(() => new Map()),
+            ]);
+            const operations = [];
+            for (const ticker of clean) {
+                const data = stocksMap.get(ticker) || fiiMap.get(ticker);
+                if (!data) continue;
+                const set = { updatedAt: new Date() };
+                if (Number(data.dy) >= 0) set.dy = Number(data.dy) || 0;
+                if (Number(data.price) > 0) set.lastPrice = Number(data.price);
+                operations.push({ updateOne: { filter: { ticker }, update: { $set: set } } });
+            }
+            if (operations.length > 0) await MarketAsset.bulkWrite(operations);
+            logger.info(`[Fundamentals] Refresh sob demanda: ${operations.length}/${clean.length} tickers.`);
+        } catch (e) {
+            logger.warn(`[Fundamentals] Refresh sob demanda falhou: ${e.message}`);
+        }
+    },
+
     async refreshQuotesBatch(tickers, force = false) {
         if (!tickers || tickers.length === 0) return;
 
