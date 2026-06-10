@@ -4,7 +4,7 @@ import TreasuryBond from '../models/TreasuryBond.js';
 import QuantSignal from '../models/QuantSignal.js';
 import MarketAsset from '../models/MarketAsset.js';
 import SystemConfig from '../models/SystemConfig.js';
-import AlgorithmPerformance from '../models/AlgorithmPerformance.js';
+import RecommendedPortfolioCurve from '../models/RecommendedPortfolioCurve.js';
 import DiscardLog from '../models/DiscardLog.js'; // Novo
 import { aiResearchService } from '../services/aiResearchService.js';
 import { aiEnhancementService } from '../services/aiEnhancementService.js';
@@ -18,14 +18,39 @@ import logger from '../config/logger.js';
 
 // ... (Outros controllers mantidos)
 
+// Curva contínua da "Carteira Recomendada" (backtest event-driven).
+// Mantém a rota /accuracy e o shape de array de pontos esperado pelo front,
+// mas agora lê RecommendedPortfolioCurve e recorta/rebaseia para a janela pedida.
 export const getAlgorithmAccuracy = async (req, res, next) => {
     try {
-        const { assetClass, days } = req.query;
-        const query = {};
-        if (assetClass) query.assetClass = assetClass;
-        if (days) query.lookbackWindow = parseInt(days);
-        const stats = await AlgorithmPerformance.find(query).sort({ date: 1 }).limit(30);
-        res.json(stats);
+        const { assetClass, days, profile } = req.query;
+        const window = Math.max(1, parseInt(days) || 30);
+
+        const curve = await RecommendedPortfolioCurve.findOne({
+            assetClass: assetClass || 'BRASIL_10',
+            profile: profile || 'MODERATE',
+        }).lean();
+
+        if (!curve || !curve.points?.length) return res.json([]);
+
+        // Últimos (window+1) pontos diários e rebase para o início da janela:
+        // retorno na janela = (1 + cumBase) / (1 + cumStart) - 1, em pontos percentuais.
+        const slice = curve.points.slice(-(window + 1));
+        const start = slice[0];
+        const rebase = (cur = 0, st = 0) => ((1 + cur) / (1 + st) - 1) * 100;
+
+        const out = slice.map(p => ({
+            date: p.date,
+            equityReturn: rebase(p.equityReturn, start.equityReturn),
+            ibovReturn: rebase(p.ibovReturn, start.ibovReturn),
+            spxReturn: rebase(p.spxReturn, start.spxReturn),
+            cdiReturn: rebase(p.cdiReturn, start.cdiReturn),
+            ifixReturn: rebase(p.ifixReturn, start.ifixReturn),
+            holdingsCount: p.holdingsCount,
+            lastRebalanceDate: p.lastRebalanceDate,
+        }));
+
+        res.json(out);
     } catch (error) { next(error); }
 };
 
@@ -316,7 +341,7 @@ export const getLatestReport = async (req, res, next) => {
             const isAdmin = req.user?.role === 'ADMIN';
             const hasAccess = isAdmin || (LIMITS_CONFIG['research_global']?.[userPlan] > 0);
             if (!hasAccess) {
-                return res.status(403).json({ message: 'Plano BLACK necessário para Ativos Globais.' });
+                return res.status(403).json({ message: 'Ativos Globais disponível nos planos Elite e Black.' });
             }
         }
 

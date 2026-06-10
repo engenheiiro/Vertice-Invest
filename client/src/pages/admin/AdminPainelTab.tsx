@@ -146,8 +146,8 @@ export const AdminPainelTab: React.FC<Props> = ({
             <div className="bg-base border border-slate-800 rounded-2xl p-6 mb-6 shadow-lg">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <div>
-                        <h3 className="text-base font-bold text-white flex items-center gap-2"><Target size={18} className="text-purple-500" />Precisão do Algoritmo (Backtest Contínuo)</h3>
-                        <p className="text-xs text-slate-500">Retorno médio das Top Picks vs IBOV · CDI · IFIX</p>
+                        <h3 className="text-base font-bold text-white flex items-center gap-2"><Target size={18} className="text-purple-500" />Carteira Recomendada (Backtest Contínuo)</h3>
+                        <p className="text-xs text-slate-500">Valorização de uma carteira que segue a Research (entradas/saídas a cada publicação) vs IBOV · CDI · IFIX</p>
                     </div>
                     <div className="flex gap-2">
                         <select value={accuracyAsset} onChange={(e) => setAccuracyAsset(e.target.value)} className="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1 outline-none">
@@ -179,9 +179,13 @@ export const AdminPainelTab: React.FC<Props> = ({
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                                     <XAxis dataKey="formattedDate" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={20} />
                                     <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} unit="%" />
-                                    <Tooltip contentStyle={{ backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px' }} itemStyle={{ fontWeight: 'bold' }} formatter={(value: number, name: string) => [`${value >= 0 ? '+' : ''}${value.toFixed(2)}%`, name]} labelFormatter={(label) => `📅 ${label}`} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px' }} itemStyle={{ fontWeight: 'bold' }} formatter={(value: number, name: string) => [`${value >= 0 ? '+' : ''}${value.toFixed(2)}%`, name]} labelFormatter={(label, payload) => {
+                                        const p: any = payload?.[0]?.payload;
+                                        const reb = p?.lastRebalanceDate ? new Date(p.lastRebalanceDate).toLocaleDateString('pt-BR') : null;
+                                        return `📅 ${label}${p?.holdingsCount ? ` · ${p.holdingsCount} ativos` : ''}${reb ? ` · rebal. ${reb}` : ''}`;
+                                    }} />
                                     <Legend iconType="circle" wrapperStyle={{ fontSize: '11px' }} />
-                                    <Area type="monotone" dataKey="avgReturn" name="Carteira (Algo)" stroke="#3B82F6" fillOpacity={1} fill="url(#colorAvg)" strokeWidth={2.5} dot={false} />
+                                    <Area type="monotone" dataKey="equityReturn" name="Carteira Recomendada" stroke="#3B82F6" fillOpacity={1} fill="url(#colorAvg)" strokeWidth={2.5} dot={false} />
                                     <Area type="monotone" dataKey="ibovReturn" name="IBOV" stroke="#F97316" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />
                                     <Area type="monotone" dataKey="cdiReturn" name="CDI" stroke="#10B981" fill="transparent" strokeDasharray="3 3" strokeWidth={1.5} dot={false} />
                                     {hasIfixData && <Area type="monotone" dataKey="ifixReturn" name="IFIX" stroke="#A78BFA" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />}
@@ -192,7 +196,7 @@ export const AdminPainelTab: React.FC<Props> = ({
                     })() : (
                         <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-500">
                             <Target size={24} className="opacity-30" />
-                            <p className="text-xs">Sem dados de backtest. Rode o <span className="text-blue-400 font-bold">sync:prod</span> para acumular dados.</p>
+                            <p className="text-xs">Sem curva para esta classe. É preciso ≥1 publicação da Research; a curva é gerada nas rotinas diárias (09:00/18:30).</p>
                         </div>
                     )}
                 </div>

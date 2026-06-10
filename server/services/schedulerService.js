@@ -281,11 +281,11 @@ export const initScheduler = () => {
             const syncResult = await syncService.performFullSync();
             if (syncResult.success) {
                 await aiResearchService.runBatchAnalysis(null);
-                // Auditoria de precisão (não-crítica)
+                // Carteira Recomendada — curva contínua event-driven (não-crítica)
                 try {
-                    const { runBacktestAnalysis } = await import('../scripts/runBacktestEngine.js');
-                    await runBacktestAnalysis();
-                } catch (e) { logger.warn(`⚠️ BacktestAnalysis (manhã): ${e.message}`); }
+                    const { buildRecommendedPortfolioCurves } = await import('../scripts/recommendedPortfolioEngine.js');
+                    await buildRecommendedPortfolioCurves();
+                } catch (e) { logger.warn(`⚠️ Carteira Recomendada (manhã): ${e.message}`); }
             }
         } catch (e) {
             logger.error(`❌ Rotina Manhã V3: ${e.message}`);
@@ -302,9 +302,9 @@ export const initScheduler = () => {
                 await timeSeriesWorker.run();
                 await aiResearchService.runBatchAnalysis(null);
                 try {
-                    const { runBacktestAnalysis } = await import('../scripts/runBacktestEngine.js');
-                    await runBacktestAnalysis();
-                } catch (e) { logger.warn(`⚠️ BacktestAnalysis (tarde): ${e.message}`); }
+                    const { buildRecommendedPortfolioCurves } = await import('../scripts/recommendedPortfolioEngine.js');
+                    await buildRecommendedPortfolioCurves();
+                } catch (e) { logger.warn(`⚠️ Carteira Recomendada (tarde): ${e.message}`); }
             }
         } catch (e) {
             logger.error(`❌ Rotina Tarde V3: ${e.message}`);

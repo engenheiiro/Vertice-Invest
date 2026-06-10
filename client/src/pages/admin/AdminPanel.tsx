@@ -105,10 +105,13 @@ export const AdminPanel = () => {
             setAccuracyData(data.map((d: any) => ({
                 ...d,
                 formattedDate: new Date(d.date).toLocaleDateString('pt-BR'),
+                equityReturn: d.equityReturn ?? d.avgReturn ?? 0,
                 ibovReturn: d.ibovReturn ?? d.benchmarkReturn ?? 0,
                 spxReturn: d.spxReturn ?? 0,
                 cdiReturn: d.cdiReturn ?? 0,
                 ifixReturn: d.ifixReturn ?? 0,
+                holdingsCount: d.holdingsCount ?? 0,
+                lastRebalanceDate: d.lastRebalanceDate ?? null,
             })));
         } catch (e) { console.error("Erro accuracy", e); }
     };
