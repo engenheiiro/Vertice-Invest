@@ -4,6 +4,7 @@ import { walletService } from '../../services/wallet';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { TrendingUp, RefreshCw } from 'lucide-react';
 import { useDemo } from '../../contexts/DemoContext';
+import { useWallet } from '../../contexts/WalletContext';
 import { DEMO_PERFORMANCE } from '../../data/DEMO_DATA';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
 
@@ -42,6 +43,7 @@ export const PerformanceChart = React.memo(() => {
     const [viewMode, setViewMode] = useState<'pct' | 'brl'>('pct');
 
     const { isDemoMode } = useDemo();
+    const { kpis } = useWallet();
 
     const loadPerformance = async () => {
         setIsLoading(true);
@@ -72,10 +74,29 @@ export const PerformanceChart = React.memo(() => {
         loadPerformance();
     }, [isDemoMode]);
 
+    // --- RECONCILIAÇÃO COM OS KPIs ---
+    // O último ponto representa "agora". O ponto live do backend pode divergir
+    // do patrimônio/TWRR autoritativos (calculado por outro caminho). Ancoramos
+    // o fim da série nos KPIs da carteira para o gráfico SEMPRE bater com os
+    // cards de Patrimônio Líquido e Rentabilidade Real.
+    const reconciledData = useMemo(() => {
+        if (isDemoMode || data.length === 0 || !kpis || kpis.totalEquity <= 0) return data;
+        const out = data.slice();
+        const i = out.length - 1;
+        out[i] = {
+            ...out[i],
+            equity: kpis.totalEquity,
+            wallet: kpis.weightedRentability,
+            walletRoi: typeof kpis.totalResultPercent === 'number' ? kpis.totalResultPercent : out[i].walletRoi,
+        };
+        return out;
+    }, [data, kpis, isDemoMode]);
+
     // --- FILTRAGEM DE DADOS (TIME RANGE) ---
     const filteredData = useMemo(() => {
-        if (!data || data.length === 0) return [];
-        if (timeRange === 'ALL') return data;
+        const base = reconciledData;
+        if (!base || base.length === 0) return [];
+        if (timeRange === 'ALL') return base;
 
         const now = new Date();
         const cutoffDate = new Date();
@@ -90,8 +111,8 @@ export const PerformanceChart = React.memo(() => {
             cutoffDate.setHours(0, 0, 0, 0);
         }
 
-        return data.filter(point => new Date(point.date) >= cutoffDate);
-    }, [data, timeRange]);
+        return base.filter(point => new Date(point.date) >= cutoffDate);
+    }, [reconciledData, timeRange]);
 
     // --- DADOS PARA MODO R$ ---
     // "Minha Carteira" usa o patrimônio REAL (p.equity) — bate com o KPI no
