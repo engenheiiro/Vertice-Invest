@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useQueryClient } from '@tanstack/react-query';
 import { authService } from '../services/auth';
 
-export type UserPlan = 'GUEST' | 'ESSENTIAL' | 'PRO' | 'BLACK';
+export type UserPlan = 'GUEST' | 'ESSENTIAL' | 'PRO' | 'ELITE' | 'BLACK';
 export type SubscriptionStatus = 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'TRIAL';
 export type UserRole = 'USER' | 'ADMIN';
 

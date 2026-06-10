@@ -111,13 +111,14 @@ export const AdminFerramentasTab: React.FC<Props> = ({
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider">Testar Pagamento (R$0,50)</h3>
             </div>
             <p className="text-[10px] text-slate-400 mb-4">Gera um checkout real no Mercado Pago com valor mínimo. O webhook ativa o plano correto ao aprovar.</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                     { key: 'ESSENTIAL', label: 'Essential', color: 'blue' },
                     { key: 'PRO', label: 'Pro', color: 'emerald' },
-                    { key: 'BLACK', label: 'Black', color: 'purple' },
+                    { key: 'ELITE', label: 'Elite', color: 'purple' },
+                    { key: 'BLACK', label: 'Black', color: 'gold' },
                 ].map(({ key, label, color }) => (
-                    <button key={key} onClick={() => onTestPayment(key)} disabled={testPaymentLoading !== null} className={`py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${color === 'blue' ? 'bg-blue-900/20 border-blue-700/40 text-blue-400 hover:bg-blue-900/40' : ''} ${color === 'emerald' ? 'bg-emerald-900/20 border-emerald-700/40 text-emerald-400 hover:bg-emerald-900/40' : ''} ${color === 'purple' ? 'bg-purple-900/20 border-purple-700/40 text-purple-400 hover:bg-purple-900/40' : ''} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    <button key={key} onClick={() => onTestPayment(key)} disabled={testPaymentLoading !== null} className={`py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${color === 'blue' ? 'bg-blue-900/20 border-blue-700/40 text-blue-400 hover:bg-blue-900/40' : ''} ${color === 'emerald' ? 'bg-emerald-900/20 border-emerald-700/40 text-emerald-400 hover:bg-emerald-900/40' : ''} ${color === 'purple' ? 'bg-purple-900/20 border-purple-700/40 text-purple-400 hover:bg-purple-900/40' : ''} ${color === 'gold' ? 'bg-gold/10 border-gold/40 text-gold hover:bg-gold/20' : ''} disabled:opacity-50 disabled:cursor-not-allowed`}>
                         {testPaymentLoading === key ? <RefreshCw size={13} className="animate-spin" /> : null}
                         {label}
                     </button>

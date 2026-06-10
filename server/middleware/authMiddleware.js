@@ -90,15 +90,16 @@ export const requireAdmin = (req, res, next) => {
     }
 };
 
-// Middleware 3: Restringe a rota ao plano BLACK (recursos institucionais como o
-// Rebalanceamento IA). ADMIN passa para facilitar QA/suporte — mesmo critério de
-// isenção usado na lógica de expiração acima.
-export const requireBlackPlan = (req, res, next) => {
-    if (req.user && (req.user.plan === 'BLACK' || req.user.role === 'ADMIN')) {
+// Middleware 3: Restringe a rota aos planos com "poder de IA" (ELITE e BLACK) —
+// recursos como o Rebalanceamento IA. ADMIN passa para facilitar QA/suporte —
+// mesmo critério de isenção usado na lógica de expiração acima.
+const REBALANCE_PLANS = ['ELITE', 'BLACK'];
+export const requireElitePlan = (req, res, next) => {
+    if (req.user && (REBALANCE_PLANS.includes(req.user.plan) || req.user.role === 'ADMIN')) {
         return next();
     }
     return res.status(403).json({
-        message: "Rebalanceamento com IA é um recurso exclusivo do plano Black Elite.",
-        requiredPlan: 'BLACK',
+        message: "Rebalanceamento com IA é um recurso exclusivo dos planos Elite e Black.",
+        requiredPlan: 'ELITE',
     });
 };

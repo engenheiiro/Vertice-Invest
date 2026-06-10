@@ -31,8 +31,9 @@ export const Checkout = () => {
     const getPlanDetails = () => {
         switch(plan) {
             case 'ESSENTIAL': return { name: 'Essential', price: '39,90' };
-            case 'PRO': return { name: 'Vértice Pro', price: '119,90' };
-            case 'BLACK': return { name: 'Black Elite', price: '349,90' };
+            case 'PRO': return { name: 'Vértice Pro', price: '89,90' };
+            case 'ELITE': return { name: 'Vértice Elite', price: '120,00' };
+            case 'BLACK': return { name: 'Vértice Black', price: '299,00' };
             default: return { name: 'Plano Desconhecido', price: '0,00' };
         }
     };

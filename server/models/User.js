@@ -34,7 +34,7 @@ const UserSchema = new mongoose.Schema({
   // --- Sistema de Assinatura ---
   plan: { 
     type: String, 
-    enum: ['GUEST', 'ESSENTIAL', 'PRO', 'BLACK'], 
+    enum: ['GUEST', 'ESSENTIAL', 'PRO', 'ELITE', 'BLACK'],
     default: 'ESSENTIAL'
   },
   subscriptionStatus: {

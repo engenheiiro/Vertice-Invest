@@ -42,7 +42,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
     const [limitMessage, setLimitMessage] = useState('');
 
     const isPro = hasPlan('PRO');
-    const isBlack = hasPlan('BLACK');
+    const canRebalance = hasPlan('ELITE'); // Rebalanceamento IA: ELITE e Black
 
     const formatCurrency = (val: number) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
 
@@ -57,8 +57,8 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
     };
 
     const handleRebalance = () => {
-        if (!hasPlan('BLACK')) {
-            setLimitMessage('O Rebalanceamento Automático com IA é um recurso exclusivo do plano Black Elite.');
+        if (!hasPlan('ELITE')) {
+            setLimitMessage('O Rebalanceamento Automático com IA é um recurso exclusivo dos planos Elite e Black.');
             setLimitModalOpen(true);
             return;
         }
@@ -110,13 +110,13 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                     <button
                         onClick={handleRebalance}
                         className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors border flex items-center gap-1.5 ${
-                            isBlack
+                            canRebalance
                             ? 'bg-gold/10 text-gold border-gold/30 hover:bg-gold/20'
                             : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
                         }`}
-                        title={isBlack ? "Rebalanceamento Automático" : "Exclusivo Black"}
+                        title={canRebalance ? "Rebalanceamento Automático" : "Exclusivo Elite e Black"}
                     >
-                        {!isBlack && <Lock size={11} />}
+                        {!canRebalance && <Lock size={11} />}
                         <RefreshCw size={12} /> Rebalanceamento IA
                     </button>
                 </div>

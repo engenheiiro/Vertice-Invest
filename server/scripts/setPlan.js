@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-const VALID_PLANS = ['GUEST', 'ESSENTIAL', 'PRO', 'BLACK'];
+const VALID_PLANS = ['GUEST', 'ESSENTIAL', 'PRO', 'ELITE', 'BLACK'];
 
 const setPlan = async () => {
   const [email, plan, daysArg] = process.argv.slice(2);

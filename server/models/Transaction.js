@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const TransactionSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  plan: { type: String, enum: ['ESSENTIAL', 'PRO', 'BLACK'], required: true },
+  plan: { type: String, enum: ['ESSENTIAL', 'PRO', 'ELITE', 'BLACK'], required: true },
   amount: { type: Number, required: true },
   currency: { type: String, default: 'BRL' },
   status: { type: String, enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED'], default: 'PENDING' },

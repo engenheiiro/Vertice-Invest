@@ -106,10 +106,10 @@ export const registerUsage = async (req, res, next) => {
 export const createTestCheckoutSession = async (req, res, next) => {
     try {
         const { planKey } = req.body;
-        const TESTABLE_PLANS = ['ESSENTIAL', 'PRO', 'BLACK'];
+        const TESTABLE_PLANS = ['ESSENTIAL', 'PRO', 'ELITE', 'BLACK'];
 
         if (!TESTABLE_PLANS.includes(planKey)) {
-            return res.status(400).json({ message: "Plano inválido para teste. Use ESSENTIAL, PRO ou BLACK." });
+            return res.status(400).json({ message: "Plano inválido para teste. Use ESSENTIAL, PRO, ELITE ou BLACK." });
         }
 
         // Usa a mesma função do fluxo real — apenas com a variante _TEST (R$0,50, mesmos dias)

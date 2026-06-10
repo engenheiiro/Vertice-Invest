@@ -64,11 +64,11 @@ export const Wallet = () => {
         setIsSmartModalOpen(true);
     };
 
-    // CHECK DE PERMISSÃO: REBALANCEAMENTO (BLACK)
+    // CHECK DE PERMISSÃO: REBALANCEAMENTO (ELITE+)
     const handleRebalance = () => {
         const plan = user?.plan || 'GUEST';
-        if (plan !== 'BLACK') {
-            setLimitMessage("O Rebalanceamento Automático com IA é um recurso exclusivo do plano Black Elite.");
+        if (plan !== 'BLACK' && plan !== 'ELITE') {
+            setLimitMessage("O Rebalanceamento Automático com IA é um recurso exclusivo dos planos Elite e Black.");
             setLimitModalOpen(true);
             return;
         }
@@ -124,7 +124,7 @@ export const Wallet = () => {
                         
                         {/* Botão Rebalanceamento (Black) */}
                         <button className="flex items-center gap-2 px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-gradient-to-r from-[#D4AF37] via-[#F2D06B] to-[#D4AF37] text-black hover:brightness-110 shadow-lg shadow-[#D4AF37]/20 border-none whitespace-nowrap transition-all active:scale-95" onClick={handleRebalance}>
-                            {user?.plan !== 'BLACK' ? <Lock size={12} className="text-black/80" /> : <RefreshCw size={16} className="text-black/80" />} 
+                            {(user?.plan !== 'BLACK' && user?.plan !== 'ELITE') ? <Lock size={12} className="text-black/80" /> : <RefreshCw size={16} className="text-black/80" />}
                             Rebalanceamento IA
                         </button>
                         

@@ -1,6 +1,6 @@
 import React from 'react';
 import { UserPlan } from '../../contexts/AuthContext';
-import { Crown, Zap, Shield } from 'lucide-react';
+import { Crown, Zap, Shield, Gem } from 'lucide-react';
 
 interface PlanBadgeProps {
   plan: UserPlan;
@@ -13,6 +13,7 @@ export const PlanBadge: React.FC<PlanBadgeProps> = ({ plan, className = '', show
     GUEST: "bg-slate-800 text-slate-400 border-slate-700",
     ESSENTIAL: "bg-emerald-900/30 text-emerald-400 border-emerald-900/50 shadow-[0_0_10px_rgba(16,185,129,0.1)]",
     PRO: "bg-blue-900/30 text-blue-400 border-blue-900/50 shadow-[0_0_10px_rgba(59,130,246,0.2)]",
+    ELITE: "bg-purple-900/30 text-purple-400 border-purple-900/50 shadow-[0_0_12px_rgba(168,85,247,0.2)]",
     BLACK: "bg-gradient-to-r from-slate-900 via-[#1a1a1a] to-slate-900 text-gold border-gold/30 shadow-[0_0_15px_rgba(212,175,55,0.15)]"
   };
 
@@ -20,13 +21,15 @@ export const PlanBadge: React.FC<PlanBadgeProps> = ({ plan, className = '', show
     GUEST: "Visitante",
     ESSENTIAL: "Essential",
     PRO: "Pro Member",
-    BLACK: "Black Elite"
+    ELITE: "Elite",
+    BLACK: "Black"
   };
 
   const icons = {
     GUEST: <Shield size={10} />,
     ESSENTIAL: <Shield size={10} />,
     PRO: <Zap size={10} fill="currentColor" />,
+    ELITE: <Gem size={10} fill="currentColor" />,
     BLACK: <Crown size={10} fill="currentColor" />
   };
 

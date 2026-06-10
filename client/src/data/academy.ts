@@ -31,7 +31,7 @@ export const COURSES = [
         title: "Masterclass & Estudos de Caso",
         description: "Asset Allocation avançado, Estratégia Barbell, Psicologia Financeira e análise de grandes crises históricas.",
         thumbnail: "/assets/academy/courses/black.png",
-        requiredPlan: "BLACK",
+        requiredPlan: "ELITE",
         category: "Trilhas de Formação",
         order: 4
     }

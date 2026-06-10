@@ -15,7 +15,7 @@ const ASSETS = [
     { id: 'STOCK', label: 'Ações BR', color: 'bg-blue-600', minPlan: 'PRO' },
     { id: 'FII', label: 'FIIs', color: 'bg-indigo-600', minPlan: 'PRO' },
     { id: 'CRYPTO', label: 'Cripto', color: 'bg-purple-600', minPlan: 'PRO' },
-    { id: 'STOCK_US', label: 'Exterior', color: 'bg-slate-700', minPlan: 'BLACK' },
+    { id: 'STOCK_US', label: 'Exterior', color: 'bg-slate-700', minPlan: 'ELITE' },
 ];
 
 export const Research = () => {
@@ -37,7 +37,7 @@ export const Research = () => {
         if (isAdmin) return true;
         const asset = ASSETS.find(a => a.id === assetId);
         if (!asset || !user) return false;
-        const planLevels: Record<string, number> = { 'GUEST': 0, 'ESSENTIAL': 1, 'PRO': 2, 'BLACK': 3 };
+        const planLevels: Record<string, number> = { 'GUEST': 0, 'ESSENTIAL': 1, 'PRO': 2, 'ELITE': 3, 'BLACK': 4 };
         const userLevel = planLevels[user.plan || 'GUEST'] || 0;
         const requiredLevel = planLevels[asset.minPlan];
         return userLevel >= requiredLevel;

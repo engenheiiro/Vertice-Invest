@@ -12,13 +12,15 @@ const PLAN_LEVELS: Record<string, number> = {
     'GUEST': 0,
     'ESSENTIAL': 1,
     'PRO': 2,
-    'BLACK': 3
+    'ELITE': 3,
+    'BLACK': 4
 };
 
 const PLAN_COLORS: Record<string, string> = {
     'GUEST': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
     'ESSENTIAL': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
     'PRO': 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    'ELITE': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
     'BLACK': 'bg-zinc-800/80 text-zinc-300 border-zinc-600'
 };
 

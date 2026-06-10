@@ -7,8 +7,8 @@ const CourseSchema = new mongoose.Schema({
   thumbnail: { type: String }, // URL for the Netflix-style cover
   requiredPlan: { 
     type: String, 
-    enum: ['GUEST', 'ESSENTIAL', 'PRO', 'BLACK'], 
-    default: 'GUEST' 
+    enum: ['GUEST', 'ESSENTIAL', 'PRO', 'ELITE', 'BLACK'],
+    default: 'GUEST'
   },
   category: { type: String, required: true }, // e.g., "Fundamentos", "Renda Fixa"
   isLocked: { type: Boolean, default: false },

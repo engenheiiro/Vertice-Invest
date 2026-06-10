@@ -59,14 +59,16 @@ export const sendResetPasswordEmail = async (to, token, origin) => {
 
 const PLAN_LABELS = {
   ESSENTIAL: 'Essential — R$ 39,90/mês',
-  PRO: 'Pro — R$ 119,90/mês',
-  BLACK: 'Black — R$ 349,90/mês',
+  PRO: 'Pro — R$ 89,90/mês',
+  ELITE: 'Elite — R$ 120,00/mês',
+  BLACK: 'Black — R$ 299,00/mês',
 };
 
 const PLAN_FEATURES = {
   ESSENTIAL: ['Carteira & Brasil 10', 'Sinais Radar Alpha', 'Histórico de dividendos'],
   PRO: ['Tudo do Essential', 'Research STOCK/FII/Cripto', 'Radar Alpha & Aporte Inteligente'],
-  BLACK: ['Tudo do Pro', 'Ativos Globais', 'Rebalanceamento com IA exclusivo'],
+  ELITE: ['Tudo do Pro', 'Ativos Globais', 'Rebalanceamento com IA', 'Masterclass completa'],
+  BLACK: ['Tudo do Elite', 'Concierge WhatsApp 24h', 'Carteira Private', 'Gestão Tributária (IR)'],
 };
 
 export const sendCheckoutConfirmationEmail = async (to, plan, validUntil) => {

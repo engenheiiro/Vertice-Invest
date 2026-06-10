@@ -9,7 +9,8 @@ const PLAN_LEVELS: Record<string, number> = {
     'GUEST': 0,
     'ESSENTIAL': 1,
     'PRO': 2,
-    'BLACK': 3
+    'ELITE': 3,
+    'BLACK': 4
 };
 
 const LessonCard = ({ lesson, onClick, isLocked: propIsLocked }: { lesson: any, onClick: () => void, isLocked?: boolean }) => {

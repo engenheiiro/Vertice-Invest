@@ -13,7 +13,8 @@ const PLAN_LEVELS = {
     'GUEST': 0,
     'ESSENTIAL': 1,
     'PRO': 2,
-    'BLACK': 3
+    'ELITE': 3,
+    'BLACK': 4
 };
 
 // Helper para identificar o usuário mesmo se o middleware falhar (emergência dev)
@@ -268,6 +269,13 @@ const getCourseTheme = (plan) => {
                 accent: rgb(0.85, 0.7, 0.2),   // Ouro
                 text: rgb(1, 1, 1),
                 secondary: rgb(0.6, 0.5, 0.1)
+            };
+        case 'ELITE':
+            return {
+                primary: rgb(0.12, 0.05, 0.2),  // Roxo profundo
+                accent: rgb(0.65, 0.45, 0.95),  // Roxo/Violeta
+                text: rgb(1, 1, 1),
+                secondary: rgb(0.4, 0.25, 0.6)
             };
         case 'PRO':
             return {
@@ -556,7 +564,7 @@ export const seedAcademy = async (req, res) => {
                 title: "Masterclass & Estudos de Caso",
                 description: "Asset Allocation, Barbell, anatomia de fraudes e finanças comportamentais.",
                 thumbnail: "/assets/academy/courses/black.png",
-                requiredPlan: "BLACK",
+                requiredPlan: "ELITE",
                 category: "Masterclass",
                 isLocked: true,
                 order: 4

@@ -18,6 +18,7 @@ export const ProfileIdentity = () => {
         GUEST: "from-slate-800 to-slate-900",
         ESSENTIAL: "from-emerald-900/40 to-slate-900",
         PRO: "from-blue-900/40 to-indigo-900/40",
+        ELITE: "from-purple-900/40 to-indigo-900/40",
         BLACK: "from-[#1a1a1a] via-slate-900 to-[#D4AF37]/10"
     };
 
@@ -42,6 +43,7 @@ export const ProfileIdentity = () => {
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
                         {user?.name}
                         {userPlan === 'BLACK' && <ShieldCheck size={16} className="text-gold" />}
+                        {userPlan === 'ELITE' && <ShieldCheck size={16} className="text-purple-400" />}
                         {userPlan === 'PRO' && <ShieldCheck size={16} className="text-blue-500" />}
                     </h2>
                     <p className="text-slate-400 text-sm">{user?.email}</p>
@@ -62,14 +64,15 @@ export const ProfileIdentity = () => {
                         <div className="flex justify-between items-center mb-1">
                             <span className="text-[10px] text-slate-500 uppercase font-bold">Nível de Acesso</span>
                             <span className="text-[10px] text-slate-400 font-mono font-bold">
-                                {userPlan === 'BLACK' ? 'MAX' : userPlan === 'PRO' ? 'HIGH' : 'STD'}
+                                {userPlan === 'BLACK' ? 'MAX' : userPlan === 'ELITE' ? 'ELITE' : userPlan === 'PRO' ? 'HIGH' : 'STD'}
                             </span>
                         </div>
                         <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                             <div 
                                 className={`h-full rounded-full transition-all duration-500 ${
-                                    userPlan === 'BLACK' ? 'bg-gold w-full' : 
-                                    userPlan === 'PRO' ? 'bg-blue-500 w-[75%]' : 
+                                    userPlan === 'BLACK' ? 'bg-gold w-full' :
+                                    userPlan === 'ELITE' ? 'bg-purple-500 w-[88%]' :
+                                    userPlan === 'PRO' ? 'bg-blue-500 w-[75%]' :
                                     'bg-emerald-500 w-[40%]'
                                 }`}
                             ></div>

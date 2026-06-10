@@ -12,8 +12,9 @@ export const SubscriptionCard = () => {
     const planDetails: Record<UserPlan, { name: string; price: string; features: string[] }> = {
         GUEST: { name: 'Visitante', price: '0,00', features: ['Acesso Limitado', 'Cotações com Delay', 'Comunidade (Leitura)'] },
         ESSENTIAL: { name: 'Essential', price: '39,90', features: ['Carteira Brasil 10', 'Cursos Básicos', 'Sinais com Delay'] },
-        PRO: { name: 'Vértice Pro', price: '119,90', features: ['Neural Engine Tempo Real', 'Todas as Carteiras', 'Morning Call Exclusivo'] },
-        BLACK: { name: 'Black Elite', price: '349,90', features: ['Concierge 24/7', 'Carteira Private', 'Gestão Tributária'] }
+        PRO: { name: 'Vértice Pro', price: '89,90', features: ['Neural Engine Tempo Real', 'Todas as Carteiras', 'Morning Call Exclusivo'] },
+        ELITE: { name: 'Vértice Elite', price: '120,00', features: ['Tudo do Pro', 'Ativos Globais', 'Rebalanceamento IA', 'Masterclass'] },
+        BLACK: { name: 'Vértice Black', price: '299,00', features: ['Concierge 24/7', 'Carteira Private', 'Gestão Tributária'] }
     };
 
     const userPlan = user?.plan && planDetails[user.plan] ? user.plan : 'GUEST';
@@ -45,12 +46,14 @@ export const SubscriptionCard = () => {
         <div className="bg-gradient-to-br from-[#080C14] to-[#0A101F] border border-slate-800 rounded-2xl p-6 relative overflow-hidden group">
             {/* Efeitos de Fundo */}
             {userPlan === 'PRO' && <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full blur-[80px] pointer-events-none"></div>}
+            {userPlan === 'ELITE' && <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/5 rounded-full blur-[80px] pointer-events-none"></div>}
             {userPlan === 'BLACK' && <div className="absolute top-0 right-0 w-64 h-64 bg-gold/5 rounded-full blur-[80px] pointer-events-none"></div>}
 
             <div className="flex flex-col md:flex-row justify-between items-start mb-6 relative z-10 gap-4">
                 <div>
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-bold text-white uppercase tracking-wider mb-2 ${
-                        userPlan === 'BLACK' ? 'bg-gold/20 text-gold border border-gold/30' : 
+                        userPlan === 'BLACK' ? 'bg-gold/20 text-gold border border-gold/30' :
+                        userPlan === 'ELITE' ? 'bg-purple-600/20 text-purple-300 border border-purple-500/40' :
                         userPlan === 'PRO' ? 'bg-blue-600 border border-blue-500' : 'bg-slate-700 text-slate-300 border border-slate-600'
                     }`}>
                         {userPlan === 'BLACK' && <Crown size={10} fill="currentColor" />}
