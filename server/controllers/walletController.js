@@ -11,6 +11,7 @@ import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, calculateSharpeRatio, calculateBeta, safeValue, safePrice, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
 import { countBusinessDays, isBusinessDay } from '../utils/dateUtils.js';
+import { accrueFixedIncomeValue, fixedIncomeDailyFactor, brazilToday, brazilDateOnly } from '../utils/fixedIncome.js';
 import logger from '../config/logger.js';
 import { HISTORICAL_CDI_RATES, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { runDailySnapshot } from '../services/schedulerService.js'; // Importado
@@ -50,37 +51,21 @@ const calculateLiveKPIS = async (userId, currentCdi) => {
 
     const usdConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
     const usdRate = usdConfig?.dollar || 5.75;
+    const calcDate = brazilToday();
 
     for (const asset of activeAssets) {
-        let currentPrice = 0;
         const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1;
 
+        let val;
         if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
-            const rawRate = asset.fixedIncomeRate > 0 ? asset.fixedIncomeRate : 100;
-            const selicDailyFactor = Math.pow(1 + (currentCdi / 100), 1 / 252);
-            let effectiveDailyFactor = 1;
-            if (rawRate > 50) effectiveDailyFactor = ((selicDailyFactor - 1) * (rawRate/100)) + 1;
-            else effectiveDailyFactor = Math.pow(1 + (rawRate / 100), 1 / 252);
-
-            let startDate = new Date(asset.startDate || asset.createdAt);
-            startDate.setHours(0,0,0,0);
-            const calcDate = new Date();
-            calcDate.setHours(0,0,0,0);
-            
-            const businessDays = countBusinessDays(startDate, calcDate);
-            const compoundFactor = Math.pow(effectiveDailyFactor, businessDays);
-            
-            const avgPrice = safeDiv(asset.totalCost, asset.quantity);
-            currentPrice = asset.type === 'CASH' ? compoundFactor : safeMult(avgPrice, compoundFactor);
-
+            // Fonte única de accrual (idêntica ao getWalletData) — antes este
+            // caminho ignorava o rendimento (val = qty), divergindo do KPI.
+            val = accrueFixedIncomeValue(asset, { cdiRate: currentCdi, calcDate });
         } else {
             const mData = await marketDataService.getMarketDataByTicker(asset.ticker);
-            currentPrice = mData.price || 0;
+            val = safeValue(asset.quantity, mData.price || 0);
         }
 
-        const qty = asset.quantity;
-        const val = asset.type === 'CASH' ? qty : safeValue(qty, currentPrice);
-        
         totalEquity += safeMult(val, multiplier);
         totalInvested += safeMult(asset.totalCost, multiplier);
     }
@@ -183,68 +168,14 @@ export const getWalletData = async (req, res, next) => {
             let dayChangePct = 0; 
 
             if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
-                const rawRate = asset.fixedIncomeRate > 0 ? asset.fixedIncomeRate : (asset.type === 'CASH' ? 100 : 100);
-                const selicDailyFactor = Math.pow(1 + (currentCdi / 100), 1 / 252);
-                let effectiveDailyFactor = 1;
+                // Accrual via fonte única (utils/fixedIncome) — idêntico ao
+                // calculateLiveKPIS, garantindo KPI e ponto live do gráfico iguais.
+                const effectiveDailyFactor = fixedIncomeDailyFactor(asset.fixedIncomeRate, currentCdi);
+                dayChangePct = isTodayBusinessDay ? (effectiveDailyFactor - 1) * 100 : 0;
 
-                if (rawRate > 50) { 
-                    const percentOfCdi = rawRate / 100;
-                    effectiveDailyFactor = ((selicDailyFactor - 1) * percentOfCdi) + 1;
-                } else { 
-                    effectiveDailyFactor = Math.pow(1 + (rawRate / 100), 1 / 252);
-                }
-
-                if (isTodayBusinessDay) {
-                    dayChangePct = (effectiveDailyFactor - 1) * 100;
-                } else {
-                    dayChangePct = 0;
-                }
-
-                const getBrazilDateString = (d) => {
-                    const dateObj = new Date(d);
-                    // Se a data for exatamente meia-noite UTC, provavelmente é uma data "pura" vinda do input (YYYY-MM-DD)
-                    // Nesses casos, evitamos o shift do fuso horário para não retroceder um dia.
-                    if (dateObj.getUTCHours() === 0 && dateObj.getUTCMinutes() === 0 && dateObj.getUTCSeconds() === 0) {
-                        return dateObj.toISOString().split('T')[0];
-                    }
-                    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(dateObj);
-                };
-                const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-                const calcDate = new Date(todayStr + 'T00:00:00.000Z');
-
-                let totalCurrentValue = 0;
-                let totalQuantity = 0;
-                
-                if (asset.taxLots && asset.taxLots.length > 0) {
-                    for (const lot of asset.taxLots) {
-                        const lotDateStr = getBrazilDateString(new Date(lot.date));
-                        const lotStartDate = new Date(lotDateStr + 'T00:00:00.000Z');
-                        const businessDays = countBusinessDays(lotStartDate, calcDate);
-                        let compoundFactor = Math.pow(effectiveDailyFactor, businessDays);
-                        if (!isFinite(compoundFactor) || compoundFactor < 1) compoundFactor = 1;
-                        
-                        if (asset.type === 'CASH') {
-                            totalCurrentValue += lot.quantity * compoundFactor;
-                        } else {
-                            totalCurrentValue += lot.quantity * lot.price * compoundFactor;
-                        }
-                        totalQuantity += lot.quantity;
-                    }
-                } else {
-                    const startDateStr = getBrazilDateString(new Date(asset.startDate || asset.createdAt));
-                    const startDate = new Date(startDateStr + 'T00:00:00.000Z');
-                    const businessDays = countBusinessDays(startDate, calcDate);
-                    let compoundFactor = Math.pow(effectiveDailyFactor, businessDays);
-                    if (!isFinite(compoundFactor) || compoundFactor < 1) compoundFactor = 1;
-
-                    const avgPriceFallback = safeDiv(asset.totalCost, asset.quantity);
-                    if (asset.type === 'CASH') {
-                        totalCurrentValue = asset.quantity * compoundFactor;
-                    } else {
-                        totalCurrentValue = asset.quantity * avgPriceFallback * compoundFactor;
-                    }
-                    totalQuantity = asset.quantity;
-                }
+                const calcDate = brazilToday();
+                const totalCurrentValue = accrueFixedIncomeValue(asset, { cdiRate: currentCdi, calcDate });
+                const totalQuantity = asset.quantity;
 
                 if (totalQuantity > 0) {
                     currentPrice = totalCurrentValue / totalQuantity;
@@ -252,12 +183,15 @@ export const getWalletData = async (req, res, next) => {
                     currentPrice = asset.type === 'CASH' ? 1 : safeDiv(asset.totalCost, asset.quantity);
                 }
 
-                // Ajuste para ativos comprados HOJE (evita variação irreal no dia da compra)
-                const boughtToday = asset.taxLots && asset.taxLots.length > 0 && asset.taxLots.every(lot => getBrazilDateString(new Date(lot.date)) === todayStr);
-                
-                if (boughtToday) {
-                    dayChangePct = 0;
-                }
+                // Ativo comprado HOJE: zera a variação do dia (evita variação irreal).
+                const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+                const lotDayStr = (d) => {
+                    const o = new Date(d);
+                    if (o.getUTCHours() === 0 && o.getUTCMinutes() === 0 && o.getUTCSeconds() === 0) return o.toISOString().split('T')[0];
+                    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(o);
+                };
+                const boughtToday = asset.taxLots && asset.taxLots.length > 0 && asset.taxLots.every(lot => lotDayStr(lot.date) === todayStr);
+                if (boughtToday) dayChangePct = 0;
 
             } else {
                 const cached = assetMap.get(asset.ticker);
@@ -455,10 +389,13 @@ export const getWalletPerformance = async (req, res, next) => {
             return res.json([]);
         }
 
-        const today = new Date();
+        // "Hoje" no fuso de São Paulo (mesma referência do KPI) — evita que o
+        // relógio UTC do servidor anexe um ponto "do dia seguinte" e acumule um
+        // dia extra de CDI no benchmark.
+        const today = brazilToday();
         const todayStr = today.toISOString().split('T')[0];
         const lastSnapshot = history[history.length - 1];
-        const lastSnapshotDate = lastSnapshot.date.toISOString().split('T')[0];
+        const lastSnapshotDate = brazilDateOnly(lastSnapshot.date).toISOString().split('T')[0];
 
         if (lastSnapshotDate !== todayStr) {
             const liveData = await calculateLiveKPIS(userId, config?.cdi || 11.25);

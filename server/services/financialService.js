@@ -13,7 +13,8 @@ import { marketDataService } from './marketDataService.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { externalMarketService } from './externalMarketService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz, safeQuantity, addQty, subQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
-import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js'; 
+import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
+import { isBusinessDay } from '../utils/dateUtils.js';
 import logger from '../config/logger.js';
 
 export const financialService = {
@@ -294,9 +295,11 @@ export const financialService = {
                 let totalInvested = 0;
                 let hasPosition = false;
 
+                // Renda fixa só rende em dia útil. Antes usava !isWeekend, que
+                // aplicava CDI também em FERIADOS (ex.: Corpus Christi) — divergindo
+                // do KPI/benchmark (que usam countBusinessDays, pulando feriados).
                 const isMapFactor = dailyFactorsMap.has(cursorIso);
-                const isWeekend = cursor.getDay() === 0 || cursor.getDay() === 6;
-                const shouldApplyRates = isMapFactor || !isWeekend;
+                const shouldApplyRates = isMapFactor || isBusinessDay(cursor);
                 
                 if (shouldApplyRates) {
                     for (const ticker in fixedIncomeState) {
