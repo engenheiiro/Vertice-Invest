@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
+import { vitePrerenderPlugin } from 'vite-prerender-plugin';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -129,6 +130,10 @@ export default defineConfig({
           sourcemaps: { filesToDeleteAfterUpload: ['./dist/**/*.map'] },
         })]
       : []),
+    ...vitePrerenderPlugin({
+      prerenderScript: path.resolve(__dirname, 'src/prerender.tsx'),
+      renderTarget: '#root',
+    }),
     stripPublicSourcemaps(),
   ],
   resolve: {

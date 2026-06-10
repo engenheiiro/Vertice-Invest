@@ -1,0 +1,1175 @@
+================================================================================
+  VÉRTICE INVEST — PLANO DE INSTAGRAM: MÊS 1
+  Documento de trabalho | Atualizar mês a mês
+  Data de criação: Junho 2026
+================================================================================
+
+--------------------------------------------------------------------------------
+  ÍNDICE
+--------------------------------------------------------------------------------
+  1. Resumo Estratégico
+  2. Análise de Público-Alvo
+  3. Identidade Visual (guia para geração de imagens)
+  4. Pilares de Conteúdo
+  5. Calendário de 30 Dias — Posts do Feed
+  6. Legendas Completas (por post)
+  7. Guia de Stories (estrutura diária)
+  8. Guia de Reels (1 por semana)
+  9. Melhores Horários e Dias
+  10. Hashtags (por categoria)
+  11. Públicos para Impulsionar (Meta Ads)
+  12. Prompts de IA para Geração de Imagens
+  13. Métricas e KPIs do Mês
+  14. Checklist Diário de Crescimento
+  15. Orientações para o Mês 2
+
+================================================================================
+  1. RESUMO ESTRATÉGICO
+================================================================================
+
+PRODUTO
+  Nome: Vértice Invest
+  URL: verticeinvest.com.br
+  Tagline: "O Fim da Incerteza Financeira"
+  Proposta: Plataforma de análise quantitativa com IA para ações, FIIs, cripto
+             e ativos globais. Modelos: Graham, Bazin, PEG. 3 perfis de risco.
+
+PLANOS
+  ESSENTIAL   R$ 39,90/mês  — Iniciante: carteira, Brasil 10, Academy, sinais
+  PRO         R$ 119,90/mês — Ativo: Radar Alpha, Aporte Inteligente, Research
+  BLACK ELITE R$ 349,90/mês — Institucional: Rebalanceamento, Ativos Globais, Concierge
+
+OBJETIVO DO MÊS 1
+  - Estabelecer autoridade educacional (não vender diretamente)
+  - Ganhar os primeiros 500-1.000 seguidores orgânicos
+  - Gerar tráfego qualificado para verticeinvest.com.br
+  - Construir audiência para impulsionamento pago no mês 2
+
+POSICIONAMENTO NO INSTAGRAM
+  Tom: Educativo, direto, inteligente — sem ser arrogante
+  Abordagem: Topo de funil (mês 1) → Meio de funil (mês 2) → Conversão (mês 3)
+  Formato dominante: Posts estáticos carrossel (maior save/share no nicho financeiro)
+
+FREQUÊNCIA
+  Feed: 4 posts/semana (Terça, Quarta, Quinta, Sexta)
+  Stories: Diariamente (5-8 stories)
+  Reels: 1 por semana (Terça ou Quarta)
+  Lives: Não obrigatório no mês 1 — considerar no mês 2
+
+
+================================================================================
+  2. ANÁLISE DE PÚBLICO-ALVO
+================================================================================
+
+PERSONA PRIMÁRIA — "O Curioso Financeiro"
+  Idade: 25-35 anos
+  Gênero: Majoritariamente masculino (60%), mas crescente feminino (40%)
+  Localização: São Paulo, Rio de Janeiro, Minas Gerais, Paraná
+  Situação: Tem renda estável, investe pouco ou nada, quer começar com segurança
+  Dores:
+    - Não sabe por onde começar
+    - Tem medo de perder dinheiro
+    - Não tem tempo para analisar ativos
+    - Desconfia de "gurus" do Instagram
+  Aspirações:
+    - Renda passiva no longo prazo
+    - Independência financeira
+    - Entender o mercado financeiro
+  Onde está no Instagram: Segue perfis de educação financeira, economia, notícias
+  Conteúdo que engaja: Comparativos, "sabia que...", listas, erros a evitar
+
+PERSONA SECUNDÁRIA — "O Investidor Ativo"
+  Idade: 30-45 anos
+  Gênero: 70% masculino
+  Situação: Já investe em ações/FIIs, usa corretora, mas analisa manualmente
+  Dores:
+    - Gasta horas analisando fundamentos
+    - Carteira desorganizada
+    - Sem visão de risco real
+    - Quer saber onde colocar o próximo aporte
+  Aspirações:
+    - Automatizar análise fundamentalista
+    - Vencer o Ibovespa no longo prazo
+    - Ter mais tempo livre
+  Conteúdo que engaja: Dados, metodologias, comparativos técnicos, resultados
+
+PERSONA TERCIÁRIA — "O Profissional Ocupado"
+  Idade: 35-50 anos
+  Situação: Alta renda, pouco tempo, busca plataforma premium que decida por ele
+  Interesse no plano BLACK ELITE
+
+
+================================================================================
+  3. IDENTIDADE VISUAL (GUIA PARA GERAÇÃO DE IMAGENS)
+================================================================================
+
+CORES OBRIGATÓRIAS
+  Fundo principal:   #F5F0E8 (creme/off-white quente)
+  Texto headline:    #0B1628 (dark navy)
+  Accent primário:   #2563EB (azul brand)
+  Accent secundário: #1D4ED8 (azul escuro)
+  Positivo/check:    #10B981 (emerald — para "vantagens Vértice")
+  Negativo/x:        #6B7280 (cinza — para "desvantagens concorrente")
+  CTA pill:          #166534 (verde escuro) ou #1E3A5F (navy)
+  Texto CTA:         #FFFFFF
+
+TIPOGRAFIA
+  Headline: Fonte bold, extra-large, sem serifa (Inter, Plus Jakarta Sans, Montserrat)
+  Subtítulo: Medium, azul brand
+  Corpo: Regular, dark navy, legível
+  Disclaimer rodapé: Small, cinza claro
+
+ELEMENTOS FIXOS EM TODO POST
+  - Logo Vértice Invest no topo centro
+  - Disclaimer no rodapé: "Conteúdo educativo. Não é recomendação de investimento."
+  - Dimensão: 1080×1080px (feed) ou 1080×1350px (portrait feed)
+
+ÍCONES
+  - Estilo: outline, monocromático
+  - Checkmark azul: vantagem
+  - X cinza/vermelho: desvantagem
+  - Ícones financeiros: gráfico de barras, moeda, calendário, relógio
+
+FORMATOS DE LAYOUT (reutilizar os 4 mapeados)
+  A) COMPARATIVO 2 colunas: concorrente (cinza, negativo) | Vértice (azul, positivo)
+  B) PERGUNTA EDUCACIONAL: headline grande + 2 cards lado a lado (X vs Y)
+  C) TIMELINE / FLUXO: 3 passos horizontais com ícones e setas
+  D) LISTA DE ITENS: ícone + texto + valor (como gastos cotidianos)
+
+
+================================================================================
+  4. PILARES DE CONTEÚDO
+================================================================================
+
+PILAR 1 — EDUCAÇÃO FINANCEIRA (40% dos posts)
+  Objetivo: Ser a referência educacional do nicho
+  Formatos: Carrossel explicativo, post estático com pergunta/resposta
+  Exemplos de tema:
+    - O que é P/L, DY, ROE, Beta, Graham, Bazin
+    - Diferença entre poupar e investir
+    - Como funciona a renda passiva
+    - O que são FIIs e por que os brasileiros amam
+    - Juros compostos na prática
+
+PILAR 2 — REALIDADE DO INVESTIDOR (25% dos posts)
+  Objetivo: Criar identificação e gatilho emocional
+  Formatos: Post estático com headline de impacto + lista de realidades
+  Exemplos de tema:
+    - "Seu dinheiro está dormindo"
+    - "Você gasta mais com delivery do que investe por mês"
+    - "Depois eu invisto (o custo da procrastinação)"
+    - "Você já investe, só não percebe"
+    - "Quanto a inflação corroeu sua reserva em 2 anos"
+
+PILAR 3 — PROVA DE CONCEITO (25% dos posts)
+  Objetivo: Mostrar como a IA da Vértice resolve o problema
+  Formatos: Comparativo, fluxo técnico, números reais
+  Exemplos de tema:
+    - "Como analisamos 500+ ativos com IA"
+    - "Graham + Bazin + PEG: as 3 fórmulas por trás do score"
+    - "O que é o Brasil 10 e como ele é montado"
+    - "3 perfis de risco: qual é o seu?"
+    - "Radar Alpha: como identificamos sinais antes do mercado"
+
+PILAR 4 — PRODUTO / CTA (10% dos posts)
+  Objetivo: Apresentar o produto com leveza, sem pressão
+  Formatos: Comparativo com concorrentes, benefícios do plano
+  Exemplos de tema:
+    - "Plataforma de dados vs. Plataforma de decisão" (como imagem 1)
+    - "O que você tem no plano ESSENTIAL"
+    - "Por que cancelar outras assinaturas e ficar com a Vértice"
+    - "Comece hoje. O primeiro mês muda tudo."
+
+
+================================================================================
+  5. CALENDÁRIO DE 30 DIAS — POSTS DO FEED
+================================================================================
+
+  SEMANA 1 — TEMA: "FUNDAMENTOS"
+  Objetivo: Criar vocabulário comum, ganhar primeiros seguidores
+
+  DIA 1 | TERÇA | Pilar 1 (Educação)
+    Formato: Post estático tipo pergunta
+    Tema: "Poupar vs. Investir — você sabe a diferença?"
+    Horário: 19h
+
+  DIA 2 | QUARTA | Pilar 2 (Realidade)
+    Formato: Lista com ícones + valores (formato imagem 4)
+    Tema: "Você já investe, só não percebe."
+    Horário: 12h
+
+  DIA 3 | QUINTA | Pilar 1 (Educação)
+    Formato: Timeline 3 passos (formato imagem 3)
+    Tema: "P/L, DY, ROE: traduzindo o financês de uma vez"
+    Horário: 19h
+
+  DIA 4 | SEXTA | Pilar 4 (Produto)
+    Formato: Comparativo 2 colunas (formato imagem 1)
+    Tema: "Plataforma de dados vs. Plataforma de decisão"
+    Horário: 8h
+
+  ─────────────────────────────────────────────────────
+
+  SEMANA 2 — TEMA: "ERROS E MITOS"
+  Objetivo: Criar urgência, identificação com a dor
+
+  DIA 5 | TERÇA | Pilar 2 (Realidade)
+    Formato: Timeline urgência (formato imagem 3)
+    Tema: "Depois eu invisto... essa frase pode custar caro."
+    Horário: 19h
+
+  DIA 6 | QUARTA | Pilar 1 (Educação)
+    Formato: Post estático com pergunta + resposta
+    Tema: "Mito: preciso de R$1.000 para começar a investir."
+    Horário: 12h
+
+  DIA 7 | QUINTA | Pilar 1 (Educação)
+    Formato: Post comparativo X vs ✓
+    Tema: "O que é diversificação de verdade (e o que não é)"
+    Horário: 19h
+
+  DIA 8 | SEXTA | Pilar 2 (Realidade)
+    Formato: Pergunta com 2 cards (formato imagem 2)
+    Tema: "Seu dinheiro está trabalhando ou dormindo?"
+    Horário: 8h
+
+  ─────────────────────────────────────────────────────
+
+  SEMANA 3 — TEMA: "A SOLUÇÃO VÉRTICE"
+  Objetivo: Apresentar o produto como resposta natural às dores
+
+  DIA 9 | TERÇA | Pilar 3 (Prova de Conceito)
+    Formato: Fluxo técnico / infográfico
+    Tema: "Como nossa IA analisa 500+ ativos por dia"
+    Horário: 19h
+
+  DIA 10 | QUARTA | Pilar 3 (Prova de Conceito)
+    Formato: Post estático com lista de vantagens
+    Tema: "Brasil 10: os melhores ativos do país, selecionados pela IA"
+    Horário: 12h
+
+  DIA 11 | QUINTA | Pilar 3 (Prova de Conceito)
+    Formato: 3 cards lado a lado (DEFENSIVO / MODERADO / ARROJADO)
+    Tema: "3 perfis de risco. Qual é o seu?"
+    Horário: 19h
+
+  DIA 12 | SEXTA | Pilar 4 (Produto)
+    Formato: Comparativo 2 colunas
+    Tema: "IA quantitativa para todos, não só para instituições"
+    Horário: 8h
+
+  ─────────────────────────────────────────────────────
+
+  SEMANA 4 — TEMA: "PRÓXIMO PASSO"
+  Objetivo: Conversão suave — visita ao site, cadastro
+
+  DIA 13 | TERÇA | Pilar 1 (Educação)
+    Formato: Timeline / fluxo
+    Tema: "Juros compostos: por que o tempo é mais importante que o valor"
+    Horário: 19h
+
+  DIA 14 | QUARTA | Pilar 2 (Realidade)
+    Formato: Post estático impacto
+    Tema: "Quanto R$300/mês vira em 10 anos com boa alocação"
+    Horário: 12h
+
+  DIA 15 | QUINTA | Pilar 4 (Produto / CTA)
+    Formato: Lista de benefícios
+    Tema: "O que você desbloqueia no plano ESSENTIAL por R$39,90"
+    Horário: 19h
+
+  DIA 16 | SEXTA | Pilar 2 + CTA
+    Formato: Post urgência + CTA claro
+    Tema: "Comece hoje. Não amanhã. Não semana que vem."
+    Horário: 8h
+
+
+================================================================================
+  6. LEGENDAS COMPLETAS (POR POST)
+================================================================================
+
+  ─────────────────────────────────────────────────────
+  POST 1 — "Poupar vs. Investir"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  Poupar e investir são a mesma coisa?
+  A resposta pode estar te custando dinheiro todo mês.
+
+  [CORPO]
+  Poupar é guardar dinheiro. Ponto.
+  O dinheiro fica parado, e a inflação faz o resto — corroendo seu poder de compra
+  silenciosamente enquanto você dorme.
+
+  Investir é colocar esse dinheiro para trabalhar por você.
+  Com consistência e estratégia, até R$100/mês se transforma em patrimônio real.
+
+  A diferença não é o valor. É a decisão.
+
+  [CTA]
+  Salva esse post e começa hoje.
+  Link na bio para analisar seus primeiros ativos com IA.
+
+  #educacaofinanceira #investimentos #iniciante #rendapassiva #verticeinvest
+
+  ─────────────────────────────────────────────────────
+  POST 2 — "Você já investe, só não percebe"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  Você já investe. Só que está investindo no negócio errado.
+
+  [CORPO]
+  Delivery toda semana: R$ 80
+  Assinaturas que você esqueceu: R$ 60
+  Compra por impulso que arrependeu: R$ 150
+
+  Total: R$ 290/mês que poderiam estar em ações ou FIIs gerando renda passiva.
+
+  O problema não é gastar.
+  É não saber para onde seu dinheiro está indo — e o que ele poderia estar fazendo.
+
+  [CTA]
+  Marca aquele amigo que precisa ver isso 👇
+  Começa grátis em verticeinvest.com.br
+
+  #conscienciafinanceira #financaspessoais #rendapassiva #fiis #acoes
+
+  ─────────────────────────────────────────────────────
+  POST 3 — "P/L, DY, ROE: traduzindo o financês"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  P/L. DY. ROE. Beta.
+  Parece outro idioma — mas esses 4 números dizem tudo sobre um ativo.
+
+  [CORPO]
+  P/L (Preço/Lucro): quanto o mercado paga por cada R$1 de lucro da empresa.
+  Quanto menor, mais barato o ativo está.
+
+  DY (Dividend Yield): o percentual de dividendos pagos em relação ao preço.
+  É o "salário" que o ativo te paga.
+
+  ROE (Return on Equity): a eficiência da empresa em gerar lucro com seu patrimônio.
+  Empresas boas têm ROE alto e consistente.
+
+  Beta: o quanto o ativo oscila em relação ao mercado.
+  Beta < 1 = mais estável. Beta > 1 = mais volátil.
+
+  A Vértice usa todos esses indicadores (e mais 12) para ranquear cada ativo
+  automaticamente. Sem planilha. Sem achismo.
+
+  [CTA]
+  Salva pra não esquecer. E testa grátis no link da bio.
+
+  #fundamentalista #analise #acoes #fiis #educacaofinanceira #verticeinvest
+
+  ─────────────────────────────────────────────────────
+  POST 4 — "Plataforma de dados vs. Plataforma de decisão"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  Ter dados é diferente de saber o que fazer com eles.
+
+  [CORPO]
+  Muitos apps te jogam números na cara.
+  Cabe a você analisar, interpretar e decidir.
+
+  A Vértice foi construída diferente:
+  ✅ IA quantitativa com Graham, Bazin e PEG
+  ✅ Ações, FIIs, Cripto e Ativos Globais
+  ✅ 3 perfis de risco personalizados
+  ✅ Aporte Inteligente — o próximo passo calculado pra você
+  ✅ Radar Alpha — sinais em tempo real
+
+  Uma plataforma de decisão, não de dados.
+
+  [CTA]
+  Acessa verticeinvest.com.br e vê a diferença na prática.
+  Primeiro acesso grátis.
+
+  #investimentos #ia #fintech #aporteintelgente #verticeinvest
+
+  ─────────────────────────────────────────────────────
+  POST 5 — "Depois eu invisto"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  "Depois eu invisto."
+  Essa frase já te custou mais do que você imagina.
+
+  [CORPO]
+  Hoje → "Vou esperar sobrar dinheiro."
+  6 meses depois → "Ainda não comecei, mas vou."
+  1 ano depois → "Perdi tempo e oportunidade."
+
+  No mercado financeiro, tempo é mais valioso que capital.
+  R$500 investidos hoje valem muito mais do que R$1.000 investidos em 2 anos.
+
+  É a magia dos juros compostos.
+  E ela começa no dia que você decide — não no dia que sobrar.
+
+  [CTA]
+  O melhor momento para começar foi ontem.
+  O segundo melhor é agora. Link na bio.
+
+  #juroscompostos #procrastinacao #independenciafinanceira #investimentos
+
+  ─────────────────────────────────────────────────────
+  POST 6 — "Mito: preciso de R$1.000 para começar"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  MITO: você precisa de muito dinheiro para investir.
+  REALIDADE: você precisa de consistência.
+
+  [CORPO]
+  R$50/mês por 20 anos com 1% ao mês = R$49.000+
+  R$100/mês por 20 anos com 1% ao mês = R$98.000+
+  R$300/mês por 20 anos com 1% ao mês = R$294.000+
+
+  O número que importa não é o valor do aporte.
+  É o número de meses que você vai manter.
+
+  Tem FIIs negociados a R$12. Tem ações a R$18.
+  Dá pra começar com o que você tem. O importante é começar.
+
+  [CTA]
+  Descobre quais ativos cabem no seu bolso hoje.
+  Link na bio — análise gratuita.
+
+  #rendapassiva #fiis #acoes #educacaofinanceira #investidorbrasil
+
+  ─────────────────────────────────────────────────────
+  POST 7 — "O que é diversificação de verdade"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  Ter 10 ações diferentes não é diversificação.
+  Se forem do mesmo setor, o risco é o mesmo.
+
+  [CORPO]
+  Diversificar de verdade é distribuir risco entre:
+  ✅ Classes de ativos (ações, FIIs, cripto, renda fixa)
+  ✅ Setores diferentes (financeiro, energia, saúde, tech)
+  ✅ Geografias diferentes (Brasil + internacional)
+  ✅ Perfis de risco (defensivo + moderado + arrojado)
+
+  A Vértice monta essa distribuição automaticamente para você
+  com base no seu perfil e no cenário macroeconômico atual.
+
+  [CTA]
+  Quer ver como ficaria sua carteira ideal?
+  Testa no link da bio.
+
+  #diversificacao #carteiradeacoes #gestaoderisco #investimentos #verticeinvest
+
+  ─────────────────────────────────────────────────────
+  POST 8 — "Dinheiro trabalhando ou dormindo?"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  Seu dinheiro está trabalhando ou dormindo?
+
+  [CORPO]
+  Dinheiro dormindo:
+  ✗ Perde poder de compra com a inflação
+  ✗ Não gera renda
+  ✗ Depende só do seu esforço para crescer
+
+  Dinheiro investido com estratégia:
+  ✅ Pode gerar renda passiva todo mês
+  ✅ Acompanha oportunidades de mercado
+  ✅ Trabalha enquanto você dorme
+
+  Investir não é especular.
+  É colocar seu dinheiro para participar da economia.
+
+  [CTA]
+  Siga a Vértice Invest e aprenda a decidir melhor.
+  Análise gratuita no link da bio.
+
+  #rendapassiva #educacaofinanceira #liberdadefinanceira #investimentos
+
+  ─────────────────────────────────────────────────────
+  POST 9 — "Como nossa IA analisa 500+ ativos"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  Analisar uma ação leva em média 3 horas.
+  Nossa IA faz isso com 500+ ativos em menos de 20 minutos.
+
+  [CORPO]
+  O processo por trás do ranking Vértice:
+
+  1️⃣ Coleta de dados fundamentalistas em tempo real
+     (P/L, ROE, DY, Beta, liquidez, market cap)
+
+  2️⃣ Aplicação dos modelos quantitativos
+     (Graham, Bazin, PEG — os mesmos usados por grandes fundos)
+
+  3️⃣ Score de 0 a 100 por perfil de risco
+     (Defensivo, Moderado, Arrojado)
+
+  4️⃣ Ranking atualizado com sinal COMPRAR ou AGUARDAR
+
+  Resultado: você sabe exatamente onde cada ativo está
+  — sem planilha, sem horas de análise, sem achismo.
+
+  [CTA]
+  Veja o ranking completo em verticeinvest.com.br
+
+  #ia #analisefundamentalista #acoes #graham #bazin #verticeinvest
+
+  ─────────────────────────────────────────────────────
+  POST 10 — "Brasil 10"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  E se você pudesse ter só os 10 melhores ativos do Brasil?
+
+  [CORPO]
+  O Brasil 10 é exatamente isso.
+
+  Toda semana, nossa IA seleciona:
+  ✅ Top 5 ações brasileiras por score DEFENSIVO
+  ✅ Top 5 FIIs por score DEFENSIVO
+
+  Critérios: qualidade fundamentalista, valuation justo,
+  baixo risco, liquidez adequada e distribuição de dividendos consistente.
+
+  Sem viés humano. Sem emoção.
+  Só o que os dados dizem.
+
+  Disponível a partir do plano ESSENTIAL (R$39,90/mês).
+
+  [CTA]
+  Confere quais são os 10 ativos desta semana.
+  Link na bio.
+
+  #brasil10 #acoes #fiis #investimentos #rendapassiva #verticeinvest
+
+  ─────────────────────────────────────────────────────
+  POST 11 — "3 perfis de risco"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  Nem todo investidor é igual. Por que sua carteira seria?
+
+  [CORPO]
+  DEFENSIVO 🛡️
+  Para quem prioriza segurança e preservação de capital.
+  Ativos: ações blue-chip + FIIs bem geridos + renda fixa
+  Ideal para: iniciantes e quem está próximo da aposentadoria
+
+  MODERADO ⚖️
+  Equilíbrio entre crescimento e segurança.
+  Ativos: mix de setores com potencial de valorização
+  Ideal para: quem tem horizonte de 3-10 anos
+
+  ARROJADO ⚡
+  Para quem tolera volatilidade em busca de retorno maior.
+  Ativos: crescimento, cripto, ativos globais
+  Ideal para: quem tem longo prazo e alta tolerância a risco
+
+  A Vértice identifica automaticamente os melhores ativos
+  para cada perfil — com score próprio por categoria.
+
+  [CTA]
+  Qual é o seu perfil? Descobre em verticeinvest.com.br
+
+  #perfilderisico #investimentos #carteiradeacoes #planejamentofinanceiro
+
+  ─────────────────────────────────────────────────────
+  POST 12 — "IA quantitativa para todos"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  Grandes fundos usam IA quantitativa há décadas.
+  Agora você também pode.
+
+  [CORPO]
+  Por muito tempo, análise quantitativa era exclusiva
+  de gestoras com equipes de 50 analistas e supercomputadores.
+
+  A Vértice democratizou isso.
+
+  Os mesmos modelos usados por fundos institucionais —
+  Graham, Bazin, PEG, análise técnica de volume e RSI —
+  agora disponíveis para qualquer investidor pessoa física.
+
+  Ações, FIIs, Cripto, Ativos Globais.
+  Tudo em um único lugar.
+  A partir de R$39,90/mês.
+
+  [CTA]
+  Invista com a inteligência de um fundo. Custo de um café por dia.
+  verticeinvest.com.br
+
+  #analisequantitativa #ia #investimentos #democratizacao #verticeinvest
+
+  ─────────────────────────────────────────────────────
+  POST 13 — "Juros compostos e o tempo"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  Einstein (dizem) chamou os juros compostos de
+  "a oitava maravilha do mundo."
+  Depois de ver esses números, você vai entender por quê.
+
+  [CORPO]
+  R$300/mês investidos com 1% ao mês:
+
+  Em 5 anos: R$24.000 viram ~R$24.671
+  Em 10 anos: R$36.000 viram ~R$69.000
+  Em 20 anos: R$72.000 viram ~R$294.000
+  Em 30 anos: R$108.000 viram ~R$1.050.000+
+
+  O segredo não é o valor. É o tempo.
+  E cada mês que você adia, esse número encolhe.
+
+  [CTA]
+  Comece hoje. Não quando sobrar.
+  Link na bio para seu primeiro aporte com estratégia.
+
+  #juroscompostos #rendapassiva #independenciafinanceira #investimentos
+
+  ─────────────────────────────────────────────────────
+  POST 14 — "Quanto R$300/mês vira"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  R$300 por mês parece pouco?
+  Deixa os números falarem.
+
+  [CORPO]
+  Com uma carteira bem alocada e consistência:
+
+  Ano 1:  R$3.600 investidos → ~R$3.800 (+ dividendos)
+  Ano 3:  R$10.800 investidos → ~R$12.500
+  Ano 5:  R$18.000 investidos → ~R$23.000
+  Ano 10: R$36.000 investidos → ~R$70.000+
+
+  E se os dividendos forem reinvestidos?
+  O número dobra.
+
+  R$300/mês é 1 janta fora por semana.
+  É 3 assinaturas de streaming.
+  É 1 decisão de prioridade.
+
+  [CTA]
+  Sua carteira ideal começa em verticeinvest.com.br
+  Análise gratuita de hoje.
+
+  #patrimoniofinanceiro #dividendos #rendapassiva #investimentos #verticeinvest
+
+  ─────────────────────────────────────────────────────
+  POST 15 — "O que você tem no ESSENTIAL"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  Por R$39,90 por mês — menos de R$1,35 por dia —
+  isso é tudo que você desbloqueia:
+
+  [CORPO]
+  ✅ Carteira completa com KPIs em tempo real
+  ✅ Brasil 10 — os melhores ativos da semana
+  ✅ Sinais de mercado com delay
+  ✅ Academy — cursos de educação financeira
+  ✅ Dashboard macroeconômico (SELIC, IPCA, Ibov, Dólar)
+  ✅ Histórico de patrimônio com gráfico TWRR
+  ✅ Suporte por email
+
+  Tudo isso sem planilha.
+  Sem horas de análise.
+  Sem achismo.
+
+  [CTA]
+  Teste o ESSENTIAL agora: verticeinvest.com.br/planos
+  Cancela quando quiser.
+
+  #planoessential #verticeinvest #investimentos #gestaopatrimonial #fintech
+
+  ─────────────────────────────────────────────────────
+  POST 16 — "Comece hoje"
+  ─────────────────────────────────────────────────────
+  [HOOK]
+  Hoje. Não amanhã. Não na segunda-feira. Hoje.
+
+  [CORPO]
+  Amanhã vira semana que vem.
+  Semana que vem vira mês que vem.
+  Mês que vem vira ano que vem.
+  Ano que vem vira "se tivesse começado antes..."
+
+  No mercado financeiro, o único recurso que você não recupera
+  é o tempo.
+
+  12.000+ investidores já usam a Vértice para tomar decisões
+  mais claras. E o ponto de partida deles foi exatamente o mesmo:
+  a decisão de começar.
+
+  [CTA]
+  Crie sua conta grátis agora.
+  👉 verticeinvest.com.br
+
+  #comecechorado #investimentos #decisaofinanceira #liberdadefinanceira #verticeinvest
+
+
+================================================================================
+  7. GUIA DE STORIES (ESTRUTURA DIÁRIA)
+================================================================================
+
+SEGUNDA-FEIRA (preparação da semana)
+  Story 1: Frase motivacional curta (quote financeiro)
+  Story 2: Poll "Você investiu semana passada?" (sim/não)
+  Story 3: Preview do que vem no feed essa semana
+
+TERÇA-FEIRA (dia do post)
+  Story 1: Teaser do post do dia ("você sabe a diferença entre X e Y?")
+  Story 2: Compartilhar o post no stories com CTA "veja no feed"
+  Story 3: Pergunta aberta (caixa de texto) sobre o tema do post
+  Story 4: Responder 1-2 respostas em público (engajamento)
+
+QUARTA-FEIRA (dia do post)
+  Story 1: Dado de mercado do dia (ex: "Ibovespa hoje: +1,2%")
+  Story 2: Post compartilhado com CTA
+  Story 3: Quiz rápido (enquete de 2 opções sobre o tema)
+
+QUINTA-FEIRA (dia do post)
+  Story 1: "Você sabia que..." (fato sobre o tema do post)
+  Story 2: Post compartilhado
+  Story 3: Countdown ou contagem regressiva para algum evento
+
+SEXTA-FEIRA (dia do post + encerramento semana)
+  Story 1: Post compartilhado
+  Story 2: Resumo da semana ("3 coisas que aprendemos essa semana")
+  Story 3: CTA: "Link na bio para analisar seus ativos"
+  Story 4: Bastidores — mostre o processo/produto de forma autêntica
+
+SÁBADO (leve / engajamento)
+  Story 1: Pergunta de fim de semana ("o que você faz com o dinheiro sobrando?")
+  Story 2: Meme financeiro (leveza — pode usar formato menos formal)
+  Story 3: Poll estilo "prefiro: ação X vs FII Y"
+
+DOMINGO (descanso / preparação)
+  Story 1 (opcional): Reflexão de domingo / frase motivacional
+  — Não é obrigatório postar domingo
+
+
+================================================================================
+  8. GUIA DE REELS (1 POR SEMANA)
+================================================================================
+
+FORMATO IDEAL PARA REELS FINANCEIROS NO BRASIL
+  Duração: 30-60 segundos
+  Gancho nos primeiros 3 segundos: texto na tela + voz
+  Legenda em tela: toda narração deve aparecer em texto (a maioria assiste sem som)
+  Música: trending no Instagram (não financeira — use o que está em alta)
+  Corte rápido: cenas de 2-4 segundos cada
+  CTA final: "Link na bio para ver completo"
+
+REEL SEMANA 1 — "3 conceitos que todo investidor precisa saber"
+  Roteiro (narrado + texto em tela):
+  [0s] "Se você não entende esses 3 conceitos, está investindo no escuro."
+  [5s] "Número 1: P/L. É quanto o mercado paga por cada R$1 de lucro."
+         "Quanto menor, mais barato o ativo está."
+  [15s] "Número 2: DY. É o dividendo que o ativo te paga anualmente."
+         "É como um salário que o ativo deposita na sua conta."
+  [25s] "Número 3: ROE. É a eficiência da empresa em gerar lucro."
+         "Empresas consistentes têm ROE acima de 15%."
+  [40s] "A Vértice usa esses 3 + mais 12 indicadores para ranquear
+          os melhores ativos pra você. Automaticamente."
+  [55s] "Link na bio. Começa grátis."
+
+REEL SEMANA 2 — "5 erros do iniciante"
+  [0s] "5 erros que todo iniciante comete (e como evitar)"
+  [3s] "Erro 1: investir sem perfil de risco definido"
+  [10s] "Erro 2: concentrar tudo em 1 ativo"
+  [17s] "Erro 3: olhar o preço, não o valuation"
+  [24s] "Erro 4: vender na queda por pânico"
+  [31s] "Erro 5: esperar o 'momento certo' para começar"
+  [38s] "O certo é começar com estratégia."
+  [45s] "CTA: veja como na bio"
+
+REEL SEMANA 3 — "Como a Vértice funciona em 60s"
+  [0s] "Você analisa uma ação em 3 horas. Nossa IA analisa 500 em 20 minutos."
+  [5s] "Veja como funciona:"
+  [10s] "1 - Coleta dados de todas as ações, FIIs e criptos do mercado"
+  [18s] "2 - Aplica modelos Graham, Bazin e PEG em cada um"
+  [26s] "3 - Gera um score de 0 a 100 por perfil de risco"
+  [34s] "4 - Você recebe o ranking com sinal COMPRAR ou AGUARDAR"
+  [42s] "Zero planilha. Zero achismo. Pura matemática."
+  [50s] "Testa grátis: verticeinvest.com.br"
+
+REEL SEMANA 4 — "Quanto R$100/mês vira em 10 anos"
+  [0s] "R$100 por mês parece pouco?"
+  [3s] "Com 1% ao mês, em 10 anos..."
+  [8s] "... você investe R$12.000 e tem R$23.000+"
+  [14s] "Com R$300/mês no mesmo período:"
+  [18s] "... R$36.000 investidos viram R$69.000+"
+  [24s] "E se reinvestir os dividendos?"
+  [27s] "O número quase dobra."
+  [32s] "O segredo não é o valor. É a consistência."
+  [40s] "Começa hoje. Link na bio."
+
+
+================================================================================
+  9. MELHORES HORÁRIOS E DIAS
+================================================================================
+
+DADOS BRASIL — NICHO FINANCEIRO / EDUCAÇÃO
+
+  TERÇA-FEIRA
+    Melhor horário: 19h-21h (saída do trabalho, home, relaxamento)
+    Por quê: Terças são o pico de engajamento para conteúdo informativo no Brasil
+    Alternativa: 12h-13h (almoço)
+
+  QUARTA-FEIRA
+    Melhor horário: 12h-14h (almoço de trabalho)
+    Por quê: Meio da semana — atenção alta para tomada de decisão
+    Alternativa: 19h-20h
+
+  QUINTA-FEIRA
+    Melhor horário: 19h-21h
+    Por quê: Próximo do fim de semana — humor favorável, decisões de consumo
+    Alternativa: 8h-9h (antes do trabalho)
+
+  SEXTA-FEIRA
+    Melhor horário: 7h-9h (antes do trabalho ou no trajeto)
+    Por quê: Sextas cedo geram mais shares — pessoas querem compartilhar com colegas
+    Alternativa: 12h
+
+  SÁBADO (stories apenas)
+    Melhor horário: 10h-12h (tarde da manhã do fim de semana)
+
+  OBSERVAÇÕES IMPORTANTES
+  - Nunca poste nos primeiros 15 minutos de uma hora cheia (concorrência de conteúdo)
+  - Poste no horário exato — não programe com margem de erro
+  - Responda TODOS os comentários nas primeiras 2 horas do post (impacto no algoritmo)
+  - Use o Insights do Instagram para confirmar os horários do SEU público
+    (após 30 dias, você terá dados reais para ajustar)
+
+
+================================================================================
+  10. HASHTAGS (POR CATEGORIA)
+================================================================================
+
+HASHTAGS GRANDES (500k+ posts) — use 3-4 por post
+  #investimentos #educacaofinanceira #rendapassiva #financaspessoais
+  #liberdadefinanceira #dinheiro #independenciafinanceira #bolsadevalores
+
+HASHTAGS MÉDIAS (50k-500k posts) — use 4-5 por post
+  #acoes #fiis #investidorbrasil #mercadofinanceiro #criptomoeda
+  #analisefundamentalista #carteiradeacoes #dividendos #planejamentofinanceiro
+
+HASHTAGS PEQUENAS (< 50k posts) — use 3-4 por post (mais chance de ranquear)
+  #verticeinvest #brasil10 #aporteintelgente #radaralpha #iafinanceira
+  #analisequantitativa #graham #bazin #scorefinanceiro
+
+HASHTAGS DE NICHO (para posts específicos)
+  Ações:     #acoes #acaobrasil #ibovespa #b3 #bolsa
+  FIIs:      #fiis #fundoimobiliario #fundosimobiliarios #rendapassivafii
+  Cripto:    #bitcoin #crypto #criptomoedas #btc #eth
+  Educação:  #aprendainvestir #comecaagora #iniciante #juroscompostos
+  Produto:   #fintech #plataformafinanceira #iafinanceira #tecnologia
+
+TEMPLATE DE HASHTAGS POR POST (copie e cole)
+  Posts educacionais:
+    #investimentos #educacaofinanceira #rendapassiva #acoes #fiis
+    #iniciante #planejamentofinanceiro #liberdadefinanceira #verticeinvest
+    #mercadofinanceiro #dividendos #independenciafinanceira #bolsadevalores
+
+  Posts de produto:
+    #verticeinvest #iafinanceira #analisequantitativa #fintech #brasil10
+    #investimentos #acoes #fiis #criptomoeda #aporteintelgente
+    #radaralpha #plataformafinanceira #tecnologia #rendapassiva
+
+  Posts de realidade/identificação:
+    #educacaofinanceira #financaspessoais #dinheiro #conscienciafinanceira
+    #investimentos #liberdadefinanceira #juroscompostos #rendapassiva
+    #verticeinvest #comecaagora #independenciafinanceira
+
+
+================================================================================
+  11. PÚBLICOS PARA IMPULSIONAR (META ADS)
+================================================================================
+
+NOTA: Use impulsionamento a partir da semana 3, quando já tiver posts com
+engajamento orgânico para usar como prova social. Budget sugerido para o mês 1:
+R$300-500 total (R$10-15/dia por 30 dias).
+
+PÚBLICO 1 — "INICIANTE FINANCEIRO" (topo de funil)
+  Idade: 22-35 anos
+  Gênero: Todos
+  Localização: Brasil (foco: SP, RJ, MG, PR, RS)
+  Interesses:
+    - Educação financeira
+    - Investimentos
+    - Renda passiva
+    - Bolsa de valores
+    - Tesouro direto
+    - Nubank / Inter / XP Investimentos
+  Comportamentos:
+    - Usuários de apps financeiros
+    - Compras online frequentes
+  Objetivo do anúncio: Alcance / Seguidores
+  Posts para impulsionar: Posts 1, 2, 5, 6 (educacionais e de identificação)
+
+PÚBLICO 2 — "INVESTIDOR ATIVO" (meio de funil)
+  Idade: 28-45 anos
+  Gênero: Majoritariamente masculino
+  Localização: SP, RJ, MG
+  Interesses:
+    - Análise fundamentalista
+    - FIIs (fundos imobiliários)
+    - Ações brasileiras
+    - Bloomberg / InfoMoney / Empiricus
+    - BTG Pactual / Modalmais
+  Comportamentos:
+    - Interesse em finanças pessoais
+    - Alto poder aquisitivo
+  Objetivo do anúncio: Tráfego para verticeinvest.com.br
+  Posts para impulsionar: Posts 4, 9, 10, 12
+
+PÚBLICO 3 — "PROFISSIONAL DE RENDA ALTA" (fundo de funil / BLACK)
+  Idade: 35-55 anos
+  Gênero: Todos
+  Renda: Alta (segmentação por comportamento de compra)
+  Interesses:
+    - Gestão de patrimônio
+    - Fundos de investimento
+    - Assessoria financeira
+    - Private banking
+  Objetivo do anúncio: Conversão (cadastro no site)
+  Posts para impulsionar: Posts 12, 15
+
+LOOKALIKE (a partir do mês 2)
+  - Criar audiência personalizada com quem visitou verticeinvest.com.br
+  - Criar lookalike 1% dessa audiência
+  - Usar para escalar o que funcionou organicamente
+
+
+================================================================================
+  12. PROMPTS DE IA PARA GERAÇÃO DE IMAGENS
+================================================================================
+
+PROMPT BASE (use em todos os posts — adapte a parte entre [])
+  "Create a clean, modern financial infographic in the style of a Brazilian fintech
+  Instagram post. Background: warm cream/off-white (#F5F0E8). Text color: dark navy
+  (#0B1628). Accent: brand blue (#2563EB). Logo placeholder at top center with
+  'VÉRTICE INVEST' text. Small disclaimer at bottom: 'Conteúdo educativo. Não é
+  recomendação de investimento.' Font: bold sans-serif. Style: minimal, professional,
+  no gradients, flat design. [SPECIFIC CONTENT HERE]"
+
+─────────────────────────────────────────────────────
+
+  POST 1 — "Poupar vs. Investir"
+  [Adicione ao prompt base:]
+  "Large bold headline at top: 'Poupar é diferente de Investir.' Below, two side-by-side
+  cards. Left card (gray, label 'POUPAR'): piggy bank icon, text 'dinheiro parado',
+  'perde para a inflação'. Right card (blue, label 'INVESTIR'): chart icon going up,
+  text 'dinheiro trabalhando', 'gera renda passiva'. Bottom pill button in dark green:
+  'Comece em verticeinvest.com.br'"
+
+  POST 2 — "Você já investe, só não percebe"
+  [Adicione ao prompt base:]
+  "Large bold headline: 'Você já investe, só não percebe.' Below, a vertical list of
+  3 items, each with: small circular icon on left, description text in center, bold
+  blue price on right. Item 1: delivery scooter icon, 'Delivery no fim de semana',
+  'R$ 80'. Item 2: subscription/play icon, 'Assinaturas esquecidas', 'R$ 60'.
+  Item 3: shopping bag icon, 'Compra por impulso', 'R$ 150'. Bottom: bold text
+  'O problema não é gastar. É não saber para onde seu dinheiro está indo.' with
+  graduation cap icon."
+
+  POST 3 — "P/L, DY, ROE"
+  [Adicione ao prompt base:]
+  "Large headline: 'P/L. DY. ROE. Traduzido.' Below, 3 definition cards arranged
+  vertically. Each card has: blue label (P/L / DY / ROE), short bold definition,
+  one-line explanation. Clean divider lines between cards. Bottom CTA pill."
+
+  POST 4 — "Plataforma de dados vs. decisão"
+  [Adicione ao prompt base:]
+  "Large headline at top: 'Plataforma de dados vs. Plataforma de decisão.'
+  Two-column comparison. Left column (gray, rounded card): title 'Outras plataformas',
+  5 items with gray warning circles, each starting with a limitation.
+  Right column (blue border, rounded card): title 'Vértice Invest' in bold,
+  5 items with blue checkmarks: 'IA quantitativa: Graham, Bazin, PEG',
+  'Ações, FIIs, Cripto e Ativos Globais', '3 perfis de risco personalizados',
+  'Aporte Inteligente com IA', 'Radar Alpha — sinais em tempo real'.
+  'VS' badge in center between columns. Bottom CTA green pill."
+
+  POST 5 — "Depois eu invisto"
+  [Adicione ao prompt base:]
+  "Large headline: 'Depois eu invisto...' with subtitle 'Essa frase pode custar caro.'
+  Subtitle has yellow/orange highlight behind it. Below: horizontal timeline with 3 nodes
+  connected by arrows. Node 1 (left, calendar+clock icon): label 'HOJE', quote text
+  'Vou esperar sobrar'. Node 2 (center, clock icon): label '6 MESES DEPOIS', quote
+  'Ainda não comecei'. Node 3 (right, declining chart icon): label '1 ANO DEPOIS',
+  quote 'Perdi tempo e oportunidade'. Bottom bold text: 'No mercado financeiro,
+  tempo também é capital.'"
+
+  POST 6 — "Mito vs. Realidade"
+  [Adicione ao prompt base:]
+  "Large headline with two lines: red/gray badge 'MITO:' then text 'preciso de muito
+  dinheiro para começar' crossed out. Below, blue badge 'REALIDADE:' then text
+  'você precisa de consistência.' Below that, 3 rows showing progression:
+  'R$50/mês por 20 anos → R$49.000+', 'R$100/mês por 20 anos → R$98.000+',
+  'R$300/mês por 20 anos → R$294.000+'. Each row uses a simple left-to-right arrow.
+  Bottom: 'O que importa não é o valor. É a consistência.'"
+
+  POST 8 — "Trabalhando ou dormindo?"
+  [Adicione ao prompt base:]
+  "Large question headline: 'Seu dinheiro está trabalhando ou dormindo?' Two side-by-side
+  comparison cards. Left card (gray): sleeping money bag with ZZZ, title 'Dinheiro parado',
+  3 items with X icons: 'perde poder de compra', 'não gera renda', 'depende só do seu
+  esforço'. Right card (blue): upward chart with money, title 'Dinheiro investido com
+  estratégia', 3 items with checkmarks: 'pode gerar renda', 'acompanha oportunidades',
+  'trabalha no longo prazo'. Bottom: arrow icon + bold text 'Investir é colocar seu
+  dinheiro para participar do jogo.'"
+
+  POST 9 — "Como a IA funciona"
+  [Adicione ao prompt base:]
+  "Large headline: 'Como analisamos 500+ ativos em 20 minutos.' Below, vertical flow
+  of 4 steps, each with: numbered circle (1,2,3,4) in blue, step title in bold navy,
+  short description in smaller text. Step 1: 'Coleta de dados fundamentalistas'.
+  Step 2: 'Modelos quantitativos (Graham, Bazin, PEG)'. Step 3: 'Score 0 a 100 por
+  perfil'. Step 4: 'Ranking com COMPRAR ou AGUARDAR'. Connecting line between steps
+  on the left. Bottom pill: 'Ver ranking em verticeinvest.com.br'"
+
+  POST 11 — "3 perfis de risco"
+  [Adicione ao prompt base:]
+  "Large headline: '3 perfis de risco. 1 plataforma.' Below, 3 side-by-side cards.
+  Card 1 (blue, shield icon): 'DEFENSIVO', 3 bullet points about safety. Card 2
+  (indigo, scale/balance icon): 'MODERADO', 3 bullet points about balance. Card 3
+  (purple, lightning icon): 'ARROJADO', 3 bullet points about growth. Each card
+  has a small icon and 'Ideal para:' line. Bottom CTA."
+
+  POSTS GENÉRICOS DE DADOS/LISTAS
+  [Adicione ao prompt base:]
+  "Vertical list format. Large bold headline at top. Below: 4-5 list items, each row
+  with: small icon in circle on left, bold item title, description in smaller text.
+  Horizontal divider between items. Bottom: bold summary statement + CTA pill."
+
+─────────────────────────────────────────────────────
+  FERRAMENTAS RECOMENDADAS PARA GERAÇÃO
+─────────────────────────────────────────────────────
+  1. Canva AI (mais fácil — mantém a identidade visual, edite os templates)
+  2. Adobe Firefly (alta qualidade, uso comercial seguro)
+  3. DALL-E 3 via ChatGPT (bom para layouts simples)
+  4. Midjourney v6 (melhor qualidade, mais complexo de usar)
+
+  DICA: Crie 1 template no Canva com a identidade visual correta e use ele
+  como base para todos os posts — troque apenas o texto e os ícones.
+  Isso garante consistência e é muito mais rápido do que gerar do zero cada vez.
+
+
+================================================================================
+  13. MÉTRICAS E KPIs DO MÊS
+================================================================================
+
+MÉTRICAS DE CRESCIMENTO (acompanhar semanalmente)
+  ┌─────────────────────────────────┬──────────┬──────────┬──────────┬──────────┐
+  │ Métrica                         │ Sem. 1   │ Sem. 2   │ Sem. 3   │ Sem. 4   │
+  ├─────────────────────────────────┼──────────┼──────────┼──────────┼──────────┤
+  │ Seguidores totais               │          │          │          │          │
+  │ Novos seguidores (semana)       │          │          │          │          │
+  │ Alcance orgânico (posts)        │          │          │          │          │
+  │ Impressões totais               │          │          │          │          │
+  │ Taxa de engajamento (%)         │          │          │          │          │
+  │ Saves por post (média)          │          │          │          │          │
+  │ Compartilhamentos por post      │          │          │          │          │
+  │ Cliques no link da bio          │          │          │          │          │
+  │ Visitas ao perfil               │          │          │          │          │
+  └─────────────────────────────────┴──────────┴──────────┴──────────┴──────────┘
+
+MÉTRICAS DE CONTEÚDO (por post)
+  - Alcance: quantas pessoas viram
+  - Impressões: quantas vezes foi mostrado
+  - Taxa de engajamento: (likes + comments + saves + shares) / alcance × 100
+  - Meta de taxa de engajamento no nicho financeiro: 3-6%
+  - Posts com engajamento > 5%: candidatos a impulsionar no mês 2
+
+MÉTRICAS DE CONVERSÃO (no site — use Google Analytics)
+  - Sessões vindas do Instagram (utm_source=instagram)
+  - Cadastros vindos do Instagram
+  - Tempo no site de visitantes do Instagram
+  - Taxa de rejeição dos visitantes do Instagram
+
+METAS DO MÊS 1
+  Seguidores: 300-800 (orgânico)
+  Taxa de engajamento média: 4-6%
+  Cliques no link da bio: 150+
+  Posts com save alto (>20 saves): pelo menos 3
+  Reel com maior alcance: 1.000+ visualizações
+
+SINAIS DE QUE ESTÁ FUNCIONANDO (bons indicadores)
+  ✅ Crescimento consistente semana a semana
+  ✅ Saves > likes em posts educacionais (sinal de autoridade)
+  ✅ Comentários fazendo perguntas (audiência engajada)
+  ✅ Perfis de nicho financeiro seguindo você
+  ✅ Compartilhamentos em stories de outros usuários
+
+
+================================================================================
+  14. CHECKLIST DIÁRIO DE CRESCIMENTO
+================================================================================
+
+  TODA MANHÃ (10-15 minutos)
+  □ Postar story do dia (seguindo a estrutura da seção 7)
+  □ Responder TODOS os DMs recebidos
+  □ Curtir e responder comentários do post mais recente
+  □ Visitar 10-15 perfis do nicho e comentar de forma genuína
+
+  NOS DIAS DE POST (30 minutos extras)
+  □ Publicar no horário correto (não antes, não depois)
+  □ Adicionar legenda completa com hashtags corretos
+  □ Compartilhar nos stories com CTA de engajamento
+  □ Responder TODOS os comentários nas primeiras 2 horas
+  □ Salvar o post também nos destaques se for evergreen
+
+  TODA SEMANA (30 minutos — idealmente domingo)
+  □ Analisar Insights do Instagram (quais posts performaram melhor)
+  □ Anotar métricas na tabela da seção 13
+  □ Ajustar horário de postagem com base nos dados reais de audiência
+  □ Planejar os stories da semana seguinte
+  □ Verificar se há trending audio para Reels
+
+  TODO MÊS (1 hora)
+  □ Revisar todas as métricas do mês
+  □ Identificar os 3 posts de maior engajamento
+  □ Identificar os 3 posts de menor engajamento (entender o porquê)
+  □ Ajustar pilares de conteúdo para o próximo mês
+  □ Planejar calendário do mês 2
+  □ Decidir quais posts impulsionar com budget
+  □ Atualizar este documento com aprendizados
+
+  DICAS ADICIONAIS DE CRESCIMENTO ORGÂNICO
+  → Siga e interaja com perfis complementares (não concorrentes diretos):
+    contas de educação financeira, economia, contabilidade, empreendedorismo
+  → Colabore com outros criadores (posts de parceria, menções)
+  → Apareça nos Reels — rostos geram 2x mais engajamento que só texto
+  → Use a caixa de perguntas nos stories semanalmente — gera material para posts
+  → Marque verticeinvest.com.br na bio com destaque
+
+
+================================================================================
+  15. ORIENTAÇÕES PARA O MÊS 2
+================================================================================
+
+O QUE AVALIAR ANTES DE PLANEJAR O MÊS 2
+  1. Quais formatos tiveram maior alcance? (carrossel, estático, reels?)
+  2. Quais temas geraram mais saves e comentários?
+  3. Qual pilar teve menor engajamento? (reduzir ou reformatar)
+  4. Horários funcionaram? (ajustar conforme Insights reais)
+  5. Seguidores são do público correto? (verificar dados demográficos)
+
+MUDANÇAS ESPERADAS PARA O MÊS 2
+  - Começar a impulsionar os 3 melhores posts do mês 1
+  - Introduzir depoimentos / prova social (se houver usuários)
+  - Aumentar frequência de Reels (2/semana se o mês 1 performou bem)
+  - Iniciar parcerias com influencers financeiros pequenos (micro: 5k-50k)
+  - Aprofundar conteúdo de produto (mês 1 educa, mês 2 converte mais)
+
+ESTRUTURA DE ACOMPANHAMENTO (preencher mês a mês)
+  ┌──────────────┬────────┬────────┬────────┬────────┬────────┐
+  │ Indicador    │ Mês 1  │ Mês 2  │ Mês 3  │ Mês 4  │ Mês 5  │
+  ├──────────────┼────────┼────────┼────────┼────────┼────────┤
+  │ Seguidores   │        │        │        │        │        │
+  │ Alcance/mês  │        │        │        │        │        │
+  │ Eng. médio % │        │        │        │        │        │
+  │ Cliques/bio  │        │        │        │        │        │
+  │ Cadastros    │        │        │        │        │        │
+  │ Budget Ads   │        │        │        │        │        │
+  └──────────────┴────────┴────────┴────────┴────────┴────────┘
+
+================================================================================
+  FIM DO DOCUMENTO — VÉRTICE INVEST | PLANO INSTAGRAM MÊS 1
+  Próxima revisão: início do Mês 2
+  Contato técnico: verticeinvest.com.br
+================================================================================
