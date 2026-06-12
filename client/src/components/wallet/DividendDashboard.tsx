@@ -6,6 +6,7 @@ import { Coins, CalendarCheck, TrendingUp, CheckCircle2, Clock, Calculator } fro
 import { useDemo } from '../../contexts/DemoContext';
 import { DEMO_DIVIDENDS } from '../../data/DEMO_DATA';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
+import AssetLogo from '../common/AssetLogo';
 
 interface DividendData {
     history: { 
@@ -216,9 +217,7 @@ export const DividendDashboard = () => {
                             return (
                                 <div key={idx} className="flex items-center justify-between p-3 bg-panel rounded-xl border border-slate-800/50">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-300 border border-slate-700">
-                                            {item.ticker ? item.ticker.substring(0, 4) : 'DIV'}
-                                        </div>
+                                        <AssetLogo ticker={item.ticker || 'DIV'} name={item.ticker} size={32} />
                                         <div>
                                             <p className="text-xs font-bold text-white">{item.ticker}</p>
                                             <p className="text-[10px] text-slate-500">

@@ -3,7 +3,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Trophy, BarChart2, Layers, Shield, Target, Zap, Minus, Wallet, PieChart, PlusCircle, Crown, Medal } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 import { AssetDetailModal } from './AssetDetailModal';
-import { useWallet } from '../../contexts/WalletContext';
+import { useWallet, AssetType } from '../../contexts/WalletContext';
+import AssetLogo from '../common/AssetLogo';
 import { useNavigate } from 'react-router-dom';
 import { formatCompact as fmtCompact } from '../../utils/format';
 
@@ -241,10 +242,11 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                                     <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 items-center">
                                         
                                         {/* Ticker & Info */}
-                                        <div className="lg:col-span-3 flex items-center gap-4">
+                                        <div className="lg:col-span-3 flex items-center gap-3">
                                             <div className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg border shrink-0 ${getRankStyle(pick.visualPosition)}`}>
                                                 <span className="font-black text-sm leading-none">{pick.visualPosition}</span>
                                             </div>
+                                            <AssetLogo ticker={pick.ticker} type={pick.type as AssetType} name={pick.name} size={36} />
                                             <div className="min-w-0">
                                                 <div className="flex items-center mb-1 gap-2">
                                                     <h4 className="text-base font-black text-white tracking-tight">{pick.ticker}</h4>

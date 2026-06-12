@@ -1,0 +1,174 @@
+===============================================================
+  GUIA YOUTUBE — VÉRTICE INVEST
+  Referência para produção e publicação de vídeos
+===============================================================
+
+
+---------------------------------------------------------------
+1. PROMPT DE THUMBNAIL (IA — Midjourney / Leonardo AI / Flux)
+---------------------------------------------------------------
+
+** Com rosto (recomendado para mais cliques): **
+
+YouTube thumbnail, young Brazilian man, late 20s, short dark brown hair,
+light beard stubble, blue-gray eyes, wearing a dark button-up shirt,
+confident serious expression with slight eyebrow raise, positioned on the
+left side of the frame pointing toward the right, dark financial platform UI
+on the right side showing glowing emerald green charts and dashboards with
+stock data, bold white text "MUITO MELHOR DO QUE" at top, then on the next
+line the word "INVESTIDOR10" in large bright red color, below in bright
+yellow bold text "CONHEÇA ESSA NOVA PLATAFORMA", deep navy/black background,
+green neon data accents, dramatic cinematic lighting, professional YouTube
+thumbnail style, high contrast, 16:9 ratio, 4K sharp
+
+-- Instruções por ferramenta --
+- Midjourney  → adicionar ao final: --ar 16:9 --v 6 --cref [URL da sua foto]
+- Leonardo AI → usar "Face Reference" com upload da foto (maior fidelidade)
+- Kling AI / Flux → aceita reference image para manter identidade do rosto
+
+** Somente dashboard (sem rosto): **
+
+YouTube thumbnail, dark financial dashboard background with glowing green data
+charts and stock market graphs, split composition: left side shows a generic
+outdated interface with a red X, right side shows a sleek modern dark platform
+UI with emerald green accents glowing, bold white text "MUITO MELHOR DO QUE
+INVESTIDOR10" at the top in large aggressive font, below in slightly smaller
+text "CONHEÇA ESSA NOVA PLATAFORMA", dramatic lighting, high contrast,
+professional financial tech aesthetic, deep navy/black background (#080C14),
+emerald green (#34d399) accent colors, cinematic thumbnail style, 16:9 ratio,
+ultra sharp, 4K
+
+
+---------------------------------------------------------------
+2. TÍTULO DO VÍDEO
+---------------------------------------------------------------
+
+Testei a MELHOR plataforma de investimentos do Brasil (você não conhece)
+
+-- Variações para teste A/B --
+- MUITO MELHOR QUE O INVESTIDOR10? Conheça essa plataforma de investimentos
+- Essa plataforma de análise de ações É MELHOR que o Investidor10
+- Testei a MELHOR plataforma de investimentos do Brasil (você não conhece)
+
+
+---------------------------------------------------------------
+3. DESCRIÇÃO COMPLETA
+---------------------------------------------------------------
+
+Plataforma de investimentos brasileira com ranking de ações, FIIs e análise
+fundamentalista — e pouquíssima gente conhece ainda.
+
+Você provavelmente usa o Investidor10 ou o Status Invest pra analisar ações.
+Eu também usava — até encontrar essa plataforma que mudou completamente como
+eu invisto.
+
+O que você vai ver nesse vídeo:
+⚡ Como funciona o ranking de ativos (Ações, FIIs e Cripto)
+📊 Dashboard com SELIC, IPCA, Ibovespa e dólar em tempo real
+💼 Carteira inteligente com análise de performance
+🎯 Sinais técnicos de RSI, Volume e Suporte
+🏆 Brasil 10 — Carteiras Recomendadas
+🤖 Aporte Inteligente com sugestão baseada no seu perfil
+
+Acesse a plataforma gratuitamente:
+🔗 verticeinvest.com.br
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📌 TIMESTAMPS
+00:00 - Introdução
+01:03 - Terminal
+01:49 - Carteira
+02:01 - Aporte Inteligente
+02:35 - Porcentagem da Carteira e Balanceamento IA
+03:55 - Balanceamento IA (Detalhado)
+06:40 - Cadastrar Ativo
+07:40 - Meta
+09:42 - Research e Carteiras Recomendadas
+10:57 - Indicadores
+11:23 - Calculadora de Impostos
+12:07 - Cursos
+12:23 - Planos
+14:13 - Considerações Finais
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Se esse vídeo te ajudou, deixa o like e se inscreve — posto conteúdo sobre
+investimentos, análise de ativos e ferramentas que realmente funcionam.
+
+#investimentos #acoes #FIIs #plataformadeinvestimentos #investidor10
+#analisedeacoes #rendavariavel #verticeinvest #dividendos
+#bolsadevalores #educacaofinanceira #mercadofinanceiro
+
+
+---------------------------------------------------------------
+4. TAGS (cole todas de uma vez no campo de tags)
+---------------------------------------------------------------
+
+investimentos, renda extra, canal de finanças, FIIs, investidor10,
+status invest, carteira de investimentos, como investir em ações,
+dividendos, B3, sinais de compra, tesouro direto, melhores ações 2026,
+como investir, como começar a investir, bolsa de valores,
+educação financeira, finanças pessoais, mercado financeiro,
+ganhar dinheiro, independência financeira, buy and hold
+
+-- Lógica das tags --
+- Manter tags com score 58+: investimentos, renda extra, canal de finanças,
+  FIIs, investidor10, como investir em ações, sinais de compra, como investir
+- Competidores (investidor10, status invest) atraem audiência que busca alternativas
+- Termos amplos (educação financeira, finanças pessoais, bolsa de valores)
+  são os mais buscados no nicho BR — canais como Me Poupe e Primo Rico dominam
+
+
+---------------------------------------------------------------
+5. CONFIGURAÇÕES AO PUBLICAR
+---------------------------------------------------------------
+
+- Categoria: Finanças e Negócios
+- Idioma: Português (Brasil)
+- Adicionar capítulos via timestamps na descrição
+- Adicionar Cards e Tela Final com CTA para o site ou inscrição no canal
+
+
+---------------------------------------------------------------
+6. ESTRATÉGIA DE PUBLICAÇÃO
+---------------------------------------------------------------
+
+UPLOAD E PUBLICAÇÃO:
+- Subir o vídeo como PRIVADO antecipadamente
+- Configurar tudo com calma (título, descrição, tags, thumbnail, capítulos)
+- Usar o AGENDAMENTO para definir data e hora exatas de publicação
+- O algoritmo conta a partir do momento em que fica PÚBLICO — não do upload
+
+MELHOR HORÁRIO (nicho finanças BR):
+- Dias: terça a quinta (evitar segunda de manhã e fim de semana)
+- Horário: 18h–21h (pico de audiência)
+
+JANELA CRÍTICA — PRIMEIRAS 24–48 HORAS:
+- O YouTube decide se recomenda o vídeo com base nas primeiras 24–48h
+- Métricas observadas: CTR da thumbnail, watch time, likes/comentários
+- Compartilhar imediatamente em todos os grupos e stories ao publicar
+
+TURBINAR (impulsionamento pago):
+- Fazer nas primeiras 24–48 horas, não depois
+- Views pagas nas primeiras horas somam com orgânicas e sinalizam ao algoritmo
+- Turbinar após 1 semana: o vídeo já está "frio" — o algoritmo ignorará o boost
+
+
+---------------------------------------------------------------
+7. CHECKLIST PRÉ-PUBLICAÇÃO
+---------------------------------------------------------------
+
+[ ] Thumbnail gerada e testada (CTR visual)
+[ ] Título com palavra-chave principal
+[ ] Primeiros 200 caracteres da descrição têm palavras-chave (não só gancho)
+[ ] Timestamps adicionados (mínimo 10 segundos por capítulo, sem duplicatas)
+[ ] Tags inseridas (22 tags, todas com score 58+)
+[ ] Categoria: Finanças e Negócios
+[ ] Agendado para horário de pico (ter–qui, 18h–21h)
+[ ] Impulsionamento preparado para ativar nas primeiras 24h
+
+
+===============================================================
+  Atualizado em: junho/2026
+===============================================================

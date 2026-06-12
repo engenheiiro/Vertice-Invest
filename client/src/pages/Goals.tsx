@@ -1,14 +1,57 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Target, Loader2, Sparkles } from 'lucide-react';
+import { Plus, Target, Loader2, Sparkles, ArrowRight, ArrowDown } from 'lucide-react';
 import { Header } from '../components/dashboard/Header';
 import { useWallet } from '../contexts/WalletContext';
-import { goalsService } from '../services/goals';
+import { goalsService, type Goal } from '../services/goals';
 import { STALE_TIME } from '../config/queryConfig';
 import { formatCurrency } from '../utils/format';
 import { GoalCard } from '../components/goals/GoalCard';
 import { CreateGoalModal } from '../components/goals/CreateGoalModal';
 import { GoalDetailModal } from '../components/goals/GoalDetailModal';
+
+/** Constrói cadeias de metas sequenciais a partir do campo previousGoalId. */
+function buildChains(goals: Goal[]): Goal[][] {
+  const idSet = new Set(goals.map((g) => g._id));
+  const processed = new Set<string>();
+  const result: Goal[][] = [];
+
+  const getNext = (id: string) => goals.find((g) => g.previousGoalId === id);
+
+  for (const goal of goals) {
+    if (processed.has(goal._id)) continue;
+    // Raiz = sem previousGoalId válido no conjunto atual
+    if (goal.previousGoalId && idSet.has(goal.previousGoalId)) continue;
+
+    const chain: Goal[] = [goal];
+    let current = goal;
+    let next: Goal | undefined;
+    while ((next = getNext(current._id)) !== undefined) {
+      chain.push(next);
+      current = next;
+    }
+    chain.forEach((g) => processed.add(g._id));
+    result.push(chain);
+  }
+
+  // Órfãos (previousGoalId aponta para meta arquivada/excluída)
+  for (const goal of goals) {
+    if (!processed.has(goal._id)) result.push([goal]);
+  }
+
+  return result;
+}
+
+const ChainArrow: React.FC = () => (
+  <>
+    <div className="hidden sm:flex items-center justify-center shrink-0 px-1 text-slate-600">
+      <ArrowRight size={18} />
+    </div>
+    <div className="sm:hidden flex items-center justify-center py-0.5 text-slate-600">
+      <ArrowDown size={18} />
+    </div>
+  </>
+);
 
 export const Goals: React.FC = () => {
   const { isPrivacyMode } = useWallet();
@@ -23,12 +66,52 @@ export const Goals: React.FC = () => {
 
   const goals = data?.goals || [];
 
+  const chains = useMemo(() => buildChains(goals), [goals]);
+
   const summary = useMemo(() => {
-    const totalTarget = goals.reduce((acc, g) => acc + g.targetAmount, 0);
-    const totalCurrent = goals.reduce((acc, g) => acc + g.currentValue, 0);
     const active = goals.filter((g) => g.status === 'ACTIVE').length;
+    let totalCurrent = 0;
+    let totalTarget = 0;
+    for (const chain of chains) {
+      // currentValue: todas as metas com mirrorWallet compartilham o mesmo patrimônio —
+      // conta uma vez (da última meta, que é o alvo atual da jornada).
+      totalCurrent += chain[chain.length - 1].currentValue;
+      // target: apenas o alvo final da jornada, não a soma dos marcos intermediários.
+      totalTarget += chain[chain.length - 1].targetAmount;
+    }
     return { totalTarget, totalCurrent, active };
-  }, [goals]);
+  }, [chains, goals]);
+
+  // Agrupa chains em "render items": cadeias (≥2) ficam em linha própria;
+  // metas isoladas são agrupadas em lotes de até 3 para manter o grid.
+  const renderItems = useMemo(() => {
+    type Item =
+      | { type: 'chain'; goals: Goal[] }
+      | { type: 'singles'; goals: Goal[] };
+
+    const items: Item[] = [];
+    let buffer: Goal[] = [];
+
+    const flushBuffer = () => {
+      if (buffer.length === 0) return;
+      for (let i = 0; i < buffer.length; i += 3) {
+        items.push({ type: 'singles', goals: buffer.slice(i, i + 3) });
+      }
+      buffer = [];
+    };
+
+    for (const chain of chains) {
+      if (chain.length === 1) {
+        buffer.push(chain[0]);
+      } else {
+        flushBuffer();
+        items.push({ type: 'chain', goals: chain });
+      }
+    }
+    flushBuffer();
+
+    return items;
+  }, [chains]);
 
   return (
     <div className="min-h-screen bg-deep text-white pb-24 md:pb-8">
@@ -91,10 +174,27 @@ export const Goals: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {goals.map((goal) => (
-              <GoalCard key={goal._id} goal={goal} privacy={isPrivacyMode} onClick={() => setSelectedId(goal._id)} />
-            ))}
+          <div className="flex flex-col gap-4">
+            {renderItems.map((item, idx) =>
+              item.type === 'singles' ? (
+                <div key={idx} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {item.goals.map((goal) => (
+                    <GoalCard key={goal._id} goal={goal} privacy={isPrivacyMode} onClick={() => setSelectedId(goal._id)} />
+                  ))}
+                </div>
+              ) : (
+                <div key={item.goals[0]._id} className="flex flex-col sm:flex-row items-stretch gap-0">
+                  {item.goals.map((goal, i) => (
+                    <React.Fragment key={goal._id}>
+                      {i > 0 && <ChainArrow />}
+                      <div className="flex-1 min-w-0">
+                        <GoalCard goal={goal} privacy={isPrivacyMode} onClick={() => setSelectedId(goal._id)} />
+                      </div>
+                    </React.Fragment>
+                  ))}
+                </div>
+              ),
+            )}
           </div>
         )}
       </main>

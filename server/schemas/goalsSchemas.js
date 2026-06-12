@@ -32,6 +32,7 @@ export const createGoalSchema = z.object({
     targetDate: z.coerce.date({ invalid_type_error: 'Data inválida' }).optional(),
     mirrorWallet: z.coerce.boolean().optional(),
     manualBalance: z.coerce.number().finite('Saldo inválido').nonnegative().optional(),
+    previousGoalId: objectId.nullable().optional(),
   }),
 });
 
@@ -49,6 +50,7 @@ export const updateGoalSchema = z.object({
     mirrorWallet: z.coerce.boolean().optional(),
     status: z.enum(['ACTIVE', 'ACHIEVED', 'ARCHIVED']).optional(),
     lastCelebratedMilestone: z.coerce.number().int('Marco inválido').min(0).max(100).optional(),
+    previousGoalId: objectId.nullable().optional(),
   }),
 });
 

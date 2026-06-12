@@ -302,6 +302,10 @@ export const initScheduler = () => {
                 await timeSeriesWorker.run();
                 await aiResearchService.runBatchAnalysis(null);
                 try {
+                    const { runBacktestAnalysis } = await import('../scripts/runBacktestEngine.js');
+                    await runBacktestAnalysis();
+                } catch (e) { logger.warn(`⚠️ runBacktestAnalysis (tarde): ${e.message}`); }
+                try {
                     const { buildRecommendedPortfolioCurves } = await import('../scripts/recommendedPortfolioEngine.js');
                     await buildRecommendedPortfolioCurves();
                 } catch (e) { logger.warn(`⚠️ Carteira Recomendada (tarde): ${e.message}`); }

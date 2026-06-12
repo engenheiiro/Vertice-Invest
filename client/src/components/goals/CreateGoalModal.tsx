@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Sparkles, Wallet, TrendingUp } from 'lucide-react';
+import { Sparkles, Wallet, TrendingUp, Link2 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -42,11 +42,21 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
   const [mirrorWallet, setMirrorWallet] = useState(goal ? goal.mirrorWallet : true);
   const [targetDate, setTargetDate] = useState(goal?.targetDate ? new Date(goal.targetDate).toISOString().slice(0, 10) : '');
   const [manualBalance, setManualBalance] = useState('');
+  const [previousGoalId, setPreviousGoalId] = useState<string>(goal?.previousGoalId || '');
 
   // Sugestão de taxa: CDI atual (macro) e TWRR real da carteira.
   const { data: macro } = useQuery({ queryKey: ['macroData'], queryFn: researchService.getMacroData, staleTime: STALE_TIME.LONG });
+  // Metas existentes para o seletor de encadeamento (usa cache da página de Metas).
+  const { data: goalsData } = useQuery({ queryKey: ['goals'], queryFn: goalsService.getGoals, staleTime: STALE_TIME.REALTIME });
   const cdiRate = macro?.cdi?.value || macro?.selic?.value || null;
   const twrr = kpis.weightedRentability || null;
+
+  // Metas que já têm outra meta apontando para elas (não podem ser "previous" de mais ninguém).
+  const allGoals = goalsData?.goals || [];
+  const alreadyFollowed = new Set(allGoals.filter((g) => g.previousGoalId).map((g) => g.previousGoalId!));
+  const eligiblePrevious = allGoals.filter(
+    (g) => g._id !== goal?._id && !alreadyFollowed.has(g._id),
+  );
 
   const mutation = useMutation({
     mutationFn: (payload: any) => (isEdit ? goalsService.updateGoal(goal!._id, payload) : goalsService.createGoal(payload)),
@@ -90,6 +100,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
       expectedAnnualRate: parseFloat(rate) || 0,
       mirrorWallet,
       targetDate: targetDate || null,
+      previousGoalId: previousGoalId || null,
     };
     if (!isEdit && num(manualBalance) > 0) payload.manualBalance = num(manualBalance);
     mutation.mutate(payload);
@@ -167,6 +178,32 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
             ) : null}
           </div>
         </div>
+
+        {/* Encadeamento sequencial */}
+        {eligiblePrevious.length > 0 && (
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1.5">
+              <Link2 size={12} /> Continuação de (opcional)
+            </label>
+            <select
+              value={previousGoalId}
+              onChange={(e) => setPreviousGoalId(e.target.value)}
+              className="w-full bg-base border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">Nenhuma — meta independente</option>
+              {eligiblePrevious.map((g) => (
+                <option key={g._id} value={g._id}>
+                  {g.name} — {formatCurrency(g.targetAmount)}
+                </option>
+              ))}
+            </select>
+            {previousGoalId && (
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                Esta meta será exibida como próximo passo da jornada selecionada.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Prazo opcional */}
         <div>

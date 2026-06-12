@@ -31,7 +31,19 @@ export function usePriceFetch({ isOpen, form, setForm }: UsePriceFetchArgs) {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       });
-      setForm((prev) => ({ ...prev, price: fmtPrice }));
+      setForm((prev) => {
+        const next = { ...prev, price: fmtPrice };
+        // Autofill do nome real (vindo da cotação) sem sobrescrever o que o
+        // usuário digitou — só quando está vazio ou ainda é o próprio ticker.
+        const incoming = (data.name || '').trim();
+        const current = (prev.name || '').trim();
+        const tickerUp = (prev.ticker || '').trim().toUpperCase();
+        if (incoming && incoming.toUpperCase() !== tickerUp &&
+            (!current || current.toUpperCase() === tickerUp)) {
+          next.name = incoming;
+        }
+        return next;
+      });
       setPriceSource('historical');
       setSuggestedPrice(data.price);
       if (data.isLive) setIsCurrentPrice(true);
@@ -74,7 +86,7 @@ export function usePriceFetch({ isOpen, form, setForm }: UsePriceFetchArgs) {
         if (form.date === today) {
           const quote = await marketService.getCurrentQuote(form.ticker);
           if (quote && quote.price > 0) {
-            priceData = { price: quote.price, isLive: true };
+            priceData = { price: quote.price, isLive: true, name: quote.name };
           }
         } else if (form.date < today) {
           const history = await marketService.getHistoricalPrice(form.ticker, form.date, form.type);

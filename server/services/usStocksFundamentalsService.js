@@ -15,6 +15,7 @@ const QUOTESUMMARY_MODULES = [
     'defaultKeyStatistics',
     'financialData',
     'assetProfile',
+    'price', // nome da empresa (longName/shortName) — assetProfile NÃO tem longName
 ];
 
 function extractFundamentals(ticker, data) {
@@ -22,6 +23,7 @@ function extractFundamentals(ticker, data) {
     const ks = data.defaultKeyStatistics || {};
     const fd = data.financialData || {};
     const ap = data.assetProfile || {};
+    const pr = data.price || {};
 
     const pl = sd.trailingPE || ks.forwardPE || null;
     const pvp = ks.priceToBook || null;
@@ -40,7 +42,9 @@ function extractFundamentals(ticker, data) {
     const vpa = ks.bookValue || null;
     const lpa = ks.trailingEps || ks.forwardEps || null;
     const sector = ap.sector || null;
-    const name = ap.longName || ap.companyOfficers?.[0]?.name || ticker;
+    // Nome da empresa vem do módulo `price` (longName/shortName). NUNCA usar
+    // companyOfficers — isso retornava o nome do CEO (ex.: "Mr. Timothy D. Cook").
+    const name = pr.longName || pr.shortName || null;
 
     // PEG ratio: P/E ÷ earnings growth
     let peg = null;

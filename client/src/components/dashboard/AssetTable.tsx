@@ -11,6 +11,9 @@ import { formatCurrency as fmtCurrency } from '../../utils/format';
 import { SmartContributionModal } from '../wallet/SmartContributionModal';
 import { RebalanceModal } from '../wallet/RebalanceModal';
 import { ConfirmModal } from '../ui/ConfirmModal';
+import AssetLogo from '../common/AssetLogo';
+import type { AssetType } from '../../contexts/WalletContext';
+import { getAssetSubtitle } from '../../utils/assetDisplay';
 
 interface AssetTableProps {
     items: PortfolioItem[];
@@ -78,12 +81,17 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
 
     const groupedItems = items.reduce((acc, item) => {
         const type = item.type || 'OUTROS';
-        const groupName = GROUP_NAMES[type] || 'Outros';
-
-        if (!acc[groupName]) acc[groupName] = [];
-        acc[groupName].push(item);
+        if (!acc[type]) acc[type] = [];
+        acc[type].push(item);
         return acc;
     }, {} as Record<string, PortfolioItem[]>);
+
+    // Mesma ordem da aba Carteira: Ações Brasil, FIIs, Exterior, Renda Fixa, Cripto, Caixa.
+    const TYPE_ORDER = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
+    const orderedGroups: [string, PortfolioItem[]][] = [
+        ...TYPE_ORDER.filter((t) => groupedItems[t]),
+        ...Object.keys(groupedItems).filter((t) => !TYPE_ORDER.includes(t)),
+    ].map((type) => [GROUP_NAMES[type] || 'Outros', groupedItems[type]]);
 
     return (
         <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-full min-h-[400px]">
@@ -152,7 +160,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                 </tr>
                             ))
                         ) : (
-                            Object.entries(groupedItems).map(([group, groupItems]) => (
+                            orderedGroups.map(([group, groupItems]) => (
                                 <React.Fragment key={group}>
                                     <tr 
                                         className="bg-panel border-y border-slate-800/50 cursor-pointer hover:bg-[#161b28] transition-colors"
@@ -192,9 +200,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-3">
-                                                            <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300 border border-slate-700">
-                                                                {item.ticker.substring(0,2)}
-                                                            </div>
+                                                            <AssetLogo ticker={item.ticker} type={item.type as AssetType} name={item.name} size={32} />
                                                             <div>
                                                                 <div className="flex items-center gap-1.5">
                                                                     <p className="font-bold text-slate-200">{item.ticker}</p>
@@ -204,7 +210,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                                         </span>
                                                                     )}
                                                                 </div>
-                                                                <p className="text-[10px] text-slate-500">{item.name}</p>
+                                                                <p className="text-[10px] text-slate-500">{getAssetSubtitle(item)}</p>
                                                             </div>
                                                         </div>
                                                     )}

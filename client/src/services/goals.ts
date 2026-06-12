@@ -14,6 +14,7 @@ export interface Goal {
     startValue: number;
     achievedAt?: string | null;
     lastCelebratedMilestone: number;
+    previousGoalId?: string | null;
     mirrorWallet: boolean;
     manualBalance: number;
     status: 'ACTIVE' | 'ACHIEVED' | 'ARCHIVED';
@@ -81,6 +82,7 @@ export interface CreateGoalPayload {
     targetDate?: string | null;
     mirrorWallet?: boolean;
     manualBalance?: number;
+    previousGoalId?: string | null;
 }
 
 export const goalsService = {

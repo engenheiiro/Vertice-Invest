@@ -11,6 +11,7 @@ import { aiEnhancementService } from '../services/aiEnhancementService.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { macroDataService } from '../services/macroDataService.js';
 import { syncService } from '../services/syncService.js';
+import { backfillSectors } from '../services/sectorBackfillService.js';
 import { signalEngine } from '../services/engines/signalEngine.js';
 import { LIMITS_CONFIG } from '../config/subscription.js';
 import { V2_SIGNAL_START_DATE } from '../config/financialConstants.js';
@@ -225,6 +226,19 @@ export const resetAssetHealth = async (req, res, next) => {
 };
 
 export const triggerMarketSync = async (req, res, next) => { try { const result = await syncService.performFullSync(); res.json({ message: "Sincronização iniciada.", details: result }); } catch (error) { next(error); } };
+
+export const backfillSectorsHandler = async (req, res, next) => {
+    try {
+        const dryRun = req.query.dry === 'true' || req.body?.dryRun === true;
+        const result = await backfillSectors({ dryRun });
+        res.json({
+            message: dryRun ? "Dry run de setores concluído." : "Setores corrigidos.",
+            scanned: result.scanned,
+            updated: result.updated,
+            changes: result.changes.slice(0, 200) // evita payload gigante
+        });
+    } catch (error) { next(error); }
+};
 export const triggerMacroSync = async (req, res, next) => { try { const result = await macroDataService.performMacroSync(); res.json({ message: "Macro atualizado.", data: result }); } catch (error) { next(error); } };
 
 export const runFullPipeline = async (req, res, next) => {
@@ -244,6 +258,10 @@ export const runFullPipeline = async (req, res, next) => {
             const { runBacktestAnalysis } = await import('../scripts/runBacktestEngine.js');
             await runBacktestAnalysis();
         } catch (e) { logger.warn(`⚠️ runBacktestAnalysis no pipeline: ${e.message}`); }
+        try {
+            const { buildRecommendedPortfolioCurves } = await import('../scripts/recommendedPortfolioEngine.js');
+            await buildRecommendedPortfolioCurves();
+        } catch (e) { logger.warn(`⚠️ Carteira Recomendada no pipeline: ${e.message}`); }
         res.json({ message: "Pipeline V3 completo." });
     } catch (error) { next(error); }
 };

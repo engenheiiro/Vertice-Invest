@@ -23,7 +23,8 @@ import {
     syncTimeSeries,
     getPublishStatus,
     generateExplainableAI,
-    runStorageCleanupHandler
+    runStorageCleanupHandler,
+    backfillSectorsHandler
 } from '../controllers/researchController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 import { researchHeavyLimiter, researchReadLimiter } from '../middleware/rateLimiters.js';
@@ -49,6 +50,7 @@ router.get('/history', requireAdmin, listReports);
 router.get('/details/:id', requireAdmin, getReportDetails);
 
 router.post('/sync-market', researchHeavyLimiter, requireAdmin, triggerMarketSync);
+router.post('/backfill-sectors', researchHeavyLimiter, requireAdmin, backfillSectorsHandler);
 router.post('/sync-macro', researchHeavyLimiter, requireAdmin, triggerMacroSync);
 router.post('/sync-time-series', researchHeavyLimiter, requireAdmin, syncTimeSeries);
 router.post('/config/backtest', requireAdmin, updateBacktestConfig);

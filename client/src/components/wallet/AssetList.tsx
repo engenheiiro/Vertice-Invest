@@ -5,11 +5,13 @@ import { TrendingUp, TrendingDown, Trash2, Folder, PieChart, History, ChevronDow
 import { AssetTransactionsModal } from './AssetTransactionsModal';
 import { formatCurrency as fmtCurrency, type Currency } from '../../utils/format';
 import { useConfirm } from '../../hooks/useConfirm';
+import AssetLogo from '../common/AssetLogo';
+import { getAssetSubtitle } from '../../utils/assetDisplay';
 
 const TYPE_LABELS: Record<string, string> = {
     STOCK: 'Ações Brasil',
     FII: 'Fundos Imobiliários',
-    STOCK_US: 'Exterior (Stocks/REITs)',
+    STOCK_US: 'Exterior',
     CRYPTO: 'Criptoativos',
     FIXED_INCOME: 'Renda Fixa',
     CASH: 'Caixa / Reserva'
@@ -93,11 +95,14 @@ export const AssetList = () => {
                                     const isProfitable = totalProfit >= 0;
                                     return (
                                         <div key={asset.id} className="flex items-center justify-between px-4 py-3 bg-base">
-                                            <div className="min-w-0 flex-1">
-                                                <p className="font-bold text-slate-200 text-sm">{asset.ticker}</p>
-                                                <p className="text-[10px] text-slate-500 truncate">
-                                                    {asset.quantity} un · PM {formatCurrency(asset.averagePrice, asset.currency)}
-                                                </p>
+                                            <div className="min-w-0 flex-1 flex items-center gap-3">
+                                                <AssetLogo ticker={asset.ticker} type={asset.type} name={asset.name} size={32} />
+                                                <div className="min-w-0">
+                                                    <p className="font-bold text-slate-200 text-sm">{asset.ticker}</p>
+                                                    <p className="text-[10px] text-slate-500 truncate">
+                                                        {asset.quantity} un · PM {formatCurrency(asset.averagePrice, asset.currency)}
+                                                    </p>
+                                                </div>
                                             </div>
                                             <div className="flex items-center gap-2 shrink-0">
                                                 <div className="text-right">
@@ -235,15 +240,10 @@ export const AssetList = () => {
                                                 <tr key={asset.id} className="hover:bg-slate-800/30 transition-colors border-b border-slate-800/30 last:border-0 group animate-fade-in">
                                                     <td className="p-4 pl-8">
                                                         <div className="flex items-center gap-3">
-                                                            <div className={`w-8 h-8 rounded bg-slate-800 flex items-center justify-center font-bold text-xs border border-slate-700 ${
-                                                                asset.type === 'CRYPTO' ? 'text-purple-400' :
-                                                                asset.type === 'STOCK_US' ? 'text-blue-400' : 'text-slate-300'
-                                                            }`}>
-                                                                {asset.ticker.substring(0, 2)}
-                                                            </div>
+                                                            <AssetLogo ticker={asset.ticker} type={asset.type} name={asset.name} size={32} />
                                                             <div>
                                                                 <p className="font-bold text-slate-200">{asset.ticker}</p>
-                                                                <p className="text-[10px] text-slate-500">{asset.name}</p>
+                                                                <p className="text-[10px] text-slate-500">{getAssetSubtitle(asset)}</p>
                                                             </div>
                                                         </div>
                                                     </td>

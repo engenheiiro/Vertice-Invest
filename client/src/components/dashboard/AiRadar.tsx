@@ -4,6 +4,8 @@ import { Radar, Zap, Lock, Shield, Activity, Crown, Info, History, Medal, Trendi
 import { AiSignal, RadarMeta } from '../../hooks/useDashboardData';
 import { useNavigate } from 'react-router-dom';
 import { useFeatureAccess } from '../../hooks/useFeatureAccess';
+import AssetLogo from '../common/AssetLogo';
+import type { AssetType } from '../../contexts/WalletContext';
 
 interface AiRadarProps {
     signals: AiSignal[];
@@ -287,7 +289,9 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                         >
                             {/* Linha superior: ticker + badges */}
                             <div className="flex items-start justify-between mb-2">
-                                <div className="flex flex-col gap-1.5">
+                                <div className="flex items-start gap-2.5 min-w-0">
+                                    <AssetLogo ticker={signal.ticker} type={signal.assetType as AssetType} size={32} className="mt-0.5" />
+                                    <div className="flex flex-col gap-1.5 min-w-0">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                         {/* Dot de urgência */}
                                         <span className={`w-1.5 h-1.5 rounded-full ${urgency.dot} shrink-0`} />
@@ -307,6 +311,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                                     <div className="flex items-center gap-1.5">
                                         {getRiskProfileBadge(signal.riskProfile)}
                                         <SignalValueBadge signalType={signal.signalType} value={signal.value} />
+                                    </div>
                                     </div>
                                 </div>
 

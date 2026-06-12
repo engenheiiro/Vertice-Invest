@@ -1,12 +1,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Trash2, Calendar, TrendingUp, TrendingDown, History, Loader2 } from 'lucide-react';
+import { X, Trash2, Calendar, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { walletService } from '../../services/wallet';
 import { useWallet } from '../../contexts/WalletContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../hooks/useConfirm';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
+import AssetLogo from '../common/AssetLogo';
 
 interface Transaction {
     _id: string;
@@ -30,7 +31,8 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
     const [hasMore, setHasMore] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     
-    const { refreshWallet } = useWallet();
+    const { refreshWallet, assets } = useWallet();
+    const assetType = assets.find((a) => a.ticker === ticker)?.type;
     const { addToast } = useToast();
     const confirm = useConfirm();
 
@@ -113,9 +115,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
                         {/* Header */}
                         <div className="p-5 border-b border-slate-800 bg-card flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
-                                    <History size={20} className="text-blue-500" />
-                                </div>
+                                <AssetLogo ticker={ticker} type={assetType} size={40} />
                                 <div>
                                     <h2 className="text-lg font-bold text-white tracking-tight">Extrato: {ticker}</h2>
                                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">

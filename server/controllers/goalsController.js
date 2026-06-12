@@ -392,7 +392,7 @@ export const getGoal = async (req, res, next) => {
 export const createGoal = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const { name, icon, color, targetAmount, monthlyTarget, expectedAnnualRate, startDate, targetDate, mirrorWallet, manualBalance } = req.body;
+        const { name, icon, color, targetAmount, monthlyTarget, expectedAnnualRate, startDate, targetDate, mirrorWallet, manualBalance, previousGoalId } = req.body;
 
         const useMirror = mirrorWallet !== undefined ? mirrorWallet : true;
         const { equity: liveEquity, snapshot } = await getLiveWalletEquity(userId);
@@ -412,6 +412,7 @@ export const createGoal = async (req, res, next) => {
             mirrorWallet: useMirror,
             manualBalance: safeCurrency(manualBalance || 0),
             startValue,
+            previousGoalId: previousGoalId || null,
         });
 
         const projection = computeGoalProjection(goal, liveEquity);
@@ -429,7 +430,7 @@ export const updateGoal = async (req, res, next) => {
         const goal = await InvestmentGoal.findOne({ _id: req.params.id, user: userId });
         if (!goal) return res.status(404).json({ message: 'Meta não encontrada.' });
 
-        const fields = ['name', 'icon', 'color', 'mirrorWallet', 'status', 'lastCelebratedMilestone'];
+        const fields = ['name', 'icon', 'color', 'mirrorWallet', 'status', 'lastCelebratedMilestone', 'previousGoalId'];
         for (const f of fields) {
             if (req.body[f] !== undefined) goal[f] = req.body[f];
         }

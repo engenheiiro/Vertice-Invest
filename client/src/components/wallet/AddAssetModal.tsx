@@ -16,6 +16,7 @@ import {
     type AssetFormState,
 } from '../../utils/assetTransaction';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
+import AssetLogo from '../common/AssetLogo';
 
 interface AddAssetModalProps {
     isOpen: boolean;
@@ -298,12 +299,17 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                 }}
                                 className={`p-3 cursor-pointer border-b border-slate-800/50 last:border-0 flex justify-between items-center transition-colors ${idx === search.activeIndex ? 'bg-slate-800' : 'hover:bg-slate-800'}`}
                             >
-                                <div>
-                                    <p className="text-xs font-bold text-white uppercase flex items-center gap-2">
-                                        {result.ticker}
-                                        {result.isManual && <Edit3 size={10} className="text-blue-400" />}
-                                    </p>
-                                    <p className="text-[10px] text-slate-400 truncate max-w-[200px]">{result.name}</p>
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    {!result.isTreasury && result.type !== 'FIXED_INCOME' && (
+                                        <AssetLogo ticker={result.ticker} type={result.type as AssetType} name={result.name} size={28} />
+                                    )}
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-bold text-white uppercase flex items-center gap-2">
+                                            {result.ticker}
+                                            {result.isManual && <Edit3 size={10} className="text-blue-400" />}
+                                        </p>
+                                        <p className="text-[10px] text-slate-400 truncate max-w-[200px]">{result.name}</p>
+                                    </div>
                                 </div>
                                 <div className="text-right shrink-0">
                                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${result.isTreasury ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-700/30' : 'bg-slate-700 text-slate-300'}`}>

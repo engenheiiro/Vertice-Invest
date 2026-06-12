@@ -7,7 +7,8 @@ import { macroDataService } from './macroDataService.js';
 import { externalMarketService } from './externalMarketService.js';
 import { marketDataService } from './marketDataService.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
-import { SECTOR_OVERRIDES } from '../config/sectorOverrides.js';
+import { resolveSector, deriveFiiSubType } from '../utils/sectorResolver.js';
+import { backfillSectors } from './sectorBackfillService.js';
 
 // Mapa de Correção de Erros da Fonte Externa (Fundamentus/Scraping)
 const KNOWN_TYPOS = {
@@ -46,17 +47,6 @@ export const syncService = {
             const processedTickers = new Set();
             let typosFixedCount = 0; // Contador para Monitor de Qualidade
 
-            const deriveFiiSubType = (sector) => {
-                if (!sector) return null;
-                const s = sector.toLowerCase();
-                if (s.includes('papel') || s.includes('crédito') || s.includes('recebíveis') || s.includes('cri')) return 'PAPEL';
-                if (s.includes('fundo de fundo') || s.includes('fof')) return 'FOF';
-                if (s.includes('híbrido') || s.includes('hibrido')) return 'HIBRIDO';
-                if (s.includes('desenvolvimento') || s.includes('residencial')) return 'DESENVOLVIMENTO';
-                if (s.includes('fiagro')) return 'FIAGRO';
-                return 'TIJOLO';
-            };
-
             const pushOp = (rawTicker, data, type) => {
                 // 1. CAMADA DE SANITIZAÇÃO (CORREÇÃO DE TYPOS)
                 let ticker = rawTicker;
@@ -74,10 +64,9 @@ export const syncService = {
                 // Filtro de liquidez mínima para não sujar o banco com lixo
                 if (liquidity < 5000) return;
 
-                let finalSector = SECTOR_OVERRIDES[ticker];
-                if (!finalSector) {
-                    finalSector = data.sector || 'Outros';
-                }
+                // Resolução resiliente: override exato → override por base (ações)
+                // → setor do scraping (FIIs) → default por tipo.
+                const finalSector = resolveSector({ ticker, type, scrapedSector: data.sector });
 
                 const updateFields = {
                     lastPrice: Number(data.price) || 0,
@@ -204,6 +193,15 @@ export const syncService = {
 
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
+
+                // Backfill de setores: corrige setores incorretos/ausentes em
+                // TODO o acervo (inclusive ativos fora do scraping). Idempotente.
+                try {
+                    const bf = await backfillSectors();
+                    if (bf.updated > 0) logger.info(`🩹 [Sync] Setores corrigidos no backfill: ${bf.updated}`);
+                } catch (err) {
+                    logger.error(`❌ [Sync] Backfill de setores falhou: ${err.message}`);
+                }
 
                 // SALVA ESTATÍSTICAS DE QUALIDADE
                 await SystemConfig.findOneAndUpdate(

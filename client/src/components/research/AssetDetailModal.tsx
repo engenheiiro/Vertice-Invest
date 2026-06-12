@@ -5,6 +5,8 @@ import { X, Shield, Activity, Target, Zap, TrendingUp, AlertTriangle, AlertOctag
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { RankingItem } from '../../services/research';
 import { formatCompact as fmtCompact, type Currency } from '../../utils/format';
+import AssetLogo from '../common/AssetLogo';
+import type { AssetType } from '../../contexts/WalletContext';
 
 interface AssetDetailModalProps {
     isOpen: boolean;
@@ -215,7 +217,9 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                     <span className="text-[10px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded uppercase">{asset.sector || 'Geral'}</span>
                                 </div>
                                 <div className="flex items-center justify-between mb-1">
-                                    <div className="flex flex-col">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <AssetLogo ticker={asset.ticker} type={type as AssetType} name={asset.name} size={48} />
+                                        <div className="flex flex-col min-w-0">
                                         <h2 className="text-4xl font-black text-white tracking-tighter">{asset.ticker}</h2>
                                         <div className="flex gap-2 mt-1">
                                             {asset.riskProfile === 'DEFENSIVE' && (
@@ -233,6 +237,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                                     <Zap size={8} /> Arrojado
                                                 </span>
                                             )}
+                                        </div>
                                         </div>
                                     </div>
                                     <div className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center font-black text-xl shadow-lg shadow-black/20 ${

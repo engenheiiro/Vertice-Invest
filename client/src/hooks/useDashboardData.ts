@@ -15,6 +15,7 @@ export interface PortfolioItem {
     avgPrice: number;
     currentPrice: number;
     type: string;
+    sector?: string;
     aiScore: number;
     aiSentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
 }
@@ -243,6 +244,7 @@ export const useDashboardData = () => {
                 avgPrice: asset.averagePrice,
                 currentPrice: asset.currentPrice,
                 type: asset.type,
+                sector: asset.sector,
                 aiScore: researchData ? researchData.score : 0,
                 aiSentiment: sentiment
             };

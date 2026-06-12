@@ -31,6 +31,9 @@ const InvestmentGoalSchema = new mongoose.Schema({
   // Dinheiro acumulado FORA da carteira (somatório dos aportes manuais).
   manualBalance: { type: Number, default: 0 },
 
+  // Encadeamento sequencial: aponta para a meta "anterior" nesta jornada.
+  previousGoalId: { type: mongoose.Schema.Types.ObjectId, ref: 'InvestmentGoal', default: null },
+
   status: { type: String, enum: ['ACTIVE', 'ACHIEVED', 'ARCHIVED'], default: 'ACTIVE' },
   achievedAt: { type: Date }, // quando cruzou o alvo (vira a "Data real")
   // Maior marco (25/50/75/100) já comemorado — evita repetir a celebração.

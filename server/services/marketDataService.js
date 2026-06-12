@@ -32,7 +32,20 @@ export const marketDataService = {
     async getMarketDataByTicker(ticker) {
         try {
             const cleanTicker = this.normalizeSymbol(ticker);
-            const asset = await MarketAsset.findOne({ ticker: cleanTicker });
+            let asset = await MarketAsset.findOne({ ticker: cleanTicker });
+
+            // Self-heal do nome: se o nome ainda for o próprio ticker (ações BR não
+            // enriquecidas), busca o nome real no Yahoo via refresh e relê. Assim o
+            // autofill de "Nome do Ativo" recebe o nome correto na hora.
+            if (asset && ['STOCK', 'FII', 'STOCK_US'].includes(asset.type)) {
+                const nm = (asset.name || '').trim();
+                if (!nm || nm.toUpperCase() === cleanTicker.toUpperCase()) {
+                    try {
+                        await this.refreshQuotesBatch([cleanTicker], true);
+                        asset = await MarketAsset.findOne({ ticker: cleanTicker });
+                    } catch { /* mantém o asset atual em caso de falha */ }
+                }
+            }
 
             if (asset && asset.lastPrice > 0) {
                 return {
@@ -107,7 +120,7 @@ export const marketDataService = {
         const threshold = new Date(now.getTime() - cacheMinutes * 60 * 1000);
 
         try {
-            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker updatedAt lastPrice change isActive failCount');
+            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker name type updatedAt lastPrice change isActive failCount');
             
             const toUpdate = [];
             const assetMap = new Map();
@@ -159,6 +172,17 @@ export const marketDataService = {
                     if (currentAsset && (currentAsset.type === 'CRYPTO' || currentAsset.type === 'STOCK_US')) {
                         if (quote.marketCap) updatePayload.marketCap = quote.marketCap;
                         if (quote.volume) updatePayload.liquidity = quote.volume;
+                    }
+
+                    // Enriquece o nome real (Yahoo longName/shortName) quando o
+                    // atual está vazio ou é o próprio ticker. Não sobrescreve um
+                    // nome já bom (ex.: override curado).
+                    const realName = (quote.name || '').trim();
+                    if (realName && realName.toUpperCase() !== ticker.toUpperCase()) {
+                        const currentName = (currentAsset?.name || '').trim();
+                        if (!currentName || currentName.toUpperCase() === ticker.toUpperCase()) {
+                            updatePayload.name = realName;
+                        }
                     }
 
                     operations.push({
