@@ -15,6 +15,7 @@
     "test:fundamentus": "node tests/test_fundamentus.js",
     "sync:prod": "node server/scripts/syncProdData.js",
     "sync:TimeSeriesWorker": "node scripts/syncTimeSeries.js",
+    "backfill:sectors": "node scripts/backfillSectors.js",
     "lint": "node --check index.js",
     "build": "node scripts/build.js",
     "backtest:portfolio": "node scripts/seedPortfolioBacktest.js"
