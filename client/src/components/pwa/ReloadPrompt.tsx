@@ -11,7 +11,17 @@ export const ReloadPrompt: React.FC = () => {
   const {
     needRefresh: [needRefresh],
     updateServiceWorker,
-  } = useRegisterSW();
+  } = useRegisterSW({
+    // Verifica novos builds periodicamente (a cada 60s) além da checagem no load.
+    // Garante que abas/PWA instalado de longa duração peguem o deploy sem o usuário
+    // precisar fechar e reabrir.
+    onRegisteredSW(_swUrl, registration) {
+      if (!registration) return;
+      setInterval(() => {
+        registration.update().catch(() => {});
+      }, 60 * 1000);
+    },
+  });
 
   useEffect(() => {
     if (needRefresh) {

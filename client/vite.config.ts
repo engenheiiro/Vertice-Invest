@@ -39,7 +39,11 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' (não 'autoUpdate'): ao detectar novo build, o virtual module marca
+      // needRefresh=true → o <ReloadPrompt> aplica o SW e recarrega a página. Em
+      // 'autoUpdate' o needRefresh nunca dispara e a aba aberta ficava presa no build
+      // antigo até o usuário navegar várias vezes (logout/login repetidos).
+      registerType: 'prompt',
       // Não cria SW em `vite dev` (evita cache atrapalhar o HMR/desktop em desenvolvimento).
       devOptions: { enabled: false },
       includeAssets: ['icons/apple-touch-icon.png', 'og-image.png'],
@@ -70,10 +74,10 @@ export default defineConfig({
         // Nunca interceptar /api no fallback de navegação (são respostas de API, não páginas).
         navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
-        // skipWaiting + clientsClaim + registerType:'autoUpdate' = o novo SW assume
-        // imediatamente e a página recarrega sozinha, sem o usuário precisar dar refresh.
-        skipWaiting: true,
-        clientsClaim: true,
+        // SEM skipWaiting/clientsClaim: no fluxo 'prompt' o SW novo fica em "waiting"
+        // até o <ReloadPrompt> chamar updateServiceWorker(true), que envia SKIP_WAITING
+        // e recarrega no controllerchange. Forçar skipWaiting aqui pularia o waiting e
+        // o needRefresh nunca dispararia (a página não recarregaria).
         runtimeCaching: [
           {
             // Auth e escrita: SEMPRE rede, nunca cache (dados sensíveis / mutações).

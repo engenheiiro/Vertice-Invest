@@ -192,9 +192,25 @@ app.use(sitemapRouter);
 
 const distPath = path.resolve(__dirname, '../client/dist');
 if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
+  // Cache-Control consciente do build:
+  // - index.html / service worker / manifest → no-cache (revalida sempre): o navegador
+  //   pega o build novo no próximo request após o deploy (sem ficar preso na versão antiga).
+  // - assets com hash no nome (/assets/*) → immutable por 1 ano (o hash muda a cada build).
+  app.use(express.static(distPath, {
+    setHeaders: (res, filePath) => {
+      const base = path.basename(filePath);
+      const noRevalidate = ['index.html', 'sw.js', 'registerSW.js', 'manifest.webmanifest'];
+      if (noRevalidate.includes(base)) {
+        res.setHeader('Cache-Control', 'no-cache');
+      } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  }));
   app.get('*', (req, res) => {
     if (!req.path.startsWith('/api')) {
+      // O shell SPA nunca deve ser cacheado sem revalidação, senão referencia chunks antigos.
+      res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(distPath, 'index.html'));
     }
   });
