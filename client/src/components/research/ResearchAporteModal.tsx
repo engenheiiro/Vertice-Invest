@@ -66,6 +66,21 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
 
     const MAX_PER_SECTOR = 2;
 
+    // Posição do ativo dentro do ranking filtrado por perfil (não posição global).
+    const profilePositionMap = useMemo(() => {
+        const sorted = ranking
+            .filter(r => r.action === 'BUY' && r.riskProfile === profile)
+            .sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                const ca = (a.metrics?.structural ? (a.metrics.structural.quality + a.metrics.structural.valuation + a.metrics.structural.risk) / 3 : 0);
+                const cb = (b.metrics?.structural ? (b.metrics.structural.quality + b.metrics.structural.valuation + b.metrics.structural.risk) / 3 : 0);
+                return cb - ca;
+            });
+        const map = new Map<string, number>();
+        sorted.forEach((r, i) => map.set(r.ticker, i + 1));
+        return map;
+    }, [ranking, profile]);
+
     const { allocations, leftover, invested, sectorCount } = useMemo(() => {
         const value = parseFloat((amount || '').replace(',', '.'));
         if (!value || value <= 0) return { allocations: [] as Allocation[], leftover: 0, invested: 0, sectorCount: 0 };
@@ -278,8 +293,8 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                                     >
                                                         <div className="min-w-0">
                                                             <div className="flex items-center gap-1.5">
-                                                                {item.position != null && (
-                                                                    <span className={`text-[10px] font-black tabular-nums ${rankColor}`}>#{item.position}</span>
+                                                                {profilePositionMap.has(item.ticker) && (
+                                                                    <span className={`text-[10px] font-black tabular-nums ${rankColor}`}>#{profilePositionMap.get(item.ticker)}</span>
                                                                 )}
                                                                 <span className="text-sm font-black text-white">{item.ticker}</span>
                                                                 <span className="text-[9px] font-bold text-slate-500">Score {item.score}</span>
@@ -346,8 +361,8 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                                         >
                                                             <Plus size={9} />
                                                             {ticker}
-                                                            {meta?.position != null && (
-                                                                <span className="text-slate-700">#{meta.position}</span>
+                                                            {profilePositionMap.has(ticker) && (
+                                                                <span className="text-slate-700">#{profilePositionMap.get(ticker)}</span>
                                                             )}
                                                         </button>
                                                     );
