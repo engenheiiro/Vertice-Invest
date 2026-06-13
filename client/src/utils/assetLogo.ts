@@ -1,18 +1,23 @@
 import type { AssetType } from '../contexts/WalletContext';
+import { API_URL } from '../config';
 
 /**
- * Deriva a URL da logo de um ativo a partir do ticker + tipo, usando CDNs gratuitos.
+ * Deriva a URL da logo de um ativo a partir do ticker + tipo.
  *
- * Fontes (todas gratuitas, sem chave):
- * - STOCK (B3)  → icons.brapi.dev/icons/{TICKER}.svg
- * - FII         → não há CDN público por ticker; tenta pasta self-host opcional
- *                 (/logos/fii/{TICKER}.png) e, se ausente, cai nas iniciais.
- * - CRYPTO      → cryptocurrency-icons via jsDelivr (por símbolo, sem mapeamento)
- * - STOCK_US    → assets.parqet.com/logos/symbol/{TICKER} (keyless)
- * - FIXED_INCOME / CASH → sem logo (null)
+ * As imagens são servidas pelo NOSSO backend (`/api/market/logo/{ticker}?type=...`),
+ * que baixa da CDN apropriada (brapi/jsDelivr/Parqet) server-to-server e cacheia no
+ * MongoDB. Isso evita o bloqueio das CDNs (hotlink/referer/CORS) que ocorria ao buscar
+ * direto pelo navegador em produção. `API_URL` é "" → caminho relativo (proxy do Vite
+ * em dev, same-origin em prod).
+ *
+ * Cobertura por tipo:
+ * - STOCK (B3)  → backend → icons.brapi.dev
+ * - CRYPTO      → backend → cryptocurrency-icons (jsDelivr)
+ * - STOCK_US    → backend → assets.parqet.com
+ * - FII / FIXED_INCOME / CASH → sem logo (null) → iniciais/rótulo/cofrinho
  *
  * Nenhuma destas chamadas é bloqueante: o <AssetLogo> sempre tem fallback para
- * o avatar de iniciais caso a imagem não carregue ou a URL seja null.
+ * o avatar de iniciais caso a imagem não carregue (404 do backend) ou a URL seja null.
  */
 
 /** Normaliza um ticker para uso em URL: maiúsculo, sem espaços/sufixos de cotação. */
@@ -31,19 +36,23 @@ export function getAssetLogoUrl(ticker: string, type?: AssetType): string | null
   const symbol = normalizeTicker(ticker);
   if (!symbol) return null;
 
+  // URL do proxy de logos no nosso backend (cacheado no MongoDB).
+  const proxy = (t: string) =>
+    `${API_URL}/api/market/logo/${encodeURIComponent(symbol)}?type=${t}`;
+
   switch (type) {
     case 'STOCK':
-      return `https://icons.brapi.dev/icons/${symbol}.svg`;
+      return proxy('STOCK');
 
     case 'FII':
       // FIIs brasileiros não têm logo em nenhum CDN público → usa iniciais.
       return null;
 
     case 'CRYPTO':
-      return `https://cdn.jsdelivr.net/npm/cryptocurrency-icons@latest/svg/color/${symbol.toLowerCase()}.svg`;
+      return proxy('CRYPTO');
 
     case 'STOCK_US':
-      return `https://assets.parqet.com/logos/symbol/${symbol}`;
+      return proxy('STOCK_US');
 
     case 'FIXED_INCOME':
     case 'CASH':
@@ -51,7 +60,7 @@ export function getAssetLogoUrl(ticker: string, type?: AssetType): string | null
 
     default:
       // Tipo desconhecido: tenta tratar como ação B3 (fonte mais provável neste app).
-      return `https://icons.brapi.dev/icons/${symbol}.svg`;
+      return proxy('STOCK');
   }
 }
 

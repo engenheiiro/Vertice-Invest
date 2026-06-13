@@ -26,6 +26,7 @@
     "sync:TimeSeriesWorker": "node server/scripts/syncTimeSeries.js",
     "migrate:fix": "node server/scripts/migrateHardcodedData.js",
     "backfill:sectors": "node server/scripts/backfillSectors.js",
+    "backfill:logos": "node server/scripts/backfillLogos.js",
     "test": "npm test --prefix server -- run && npm test --prefix client -- run",
     "test:backtest": "node server/scripts/runBacktestEngine.js",
     "test:client": "npm run test --prefix client",

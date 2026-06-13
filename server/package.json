@@ -16,6 +16,7 @@
     "sync:prod": "node server/scripts/syncProdData.js",
     "sync:TimeSeriesWorker": "node scripts/syncTimeSeries.js",
     "backfill:sectors": "node scripts/backfillSectors.js",
+    "backfill:logos": "node scripts/backfillLogos.js",
     "lint": "node --check index.js",
     "build": "node scripts/build.js",
     "backtest:portfolio": "node scripts/seedPortfolioBacktest.js"

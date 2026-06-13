@@ -18,23 +18,26 @@ describe('normalizeTicker', () => {
 });
 
 describe('getAssetLogoUrl', () => {
-  it('usa brapi (/icons/{T}.svg) para ações BR', () => {
+  it('aponta para o proxy do backend (type=STOCK) para ações BR', () => {
     expect(getAssetLogoUrl('PETR4', 'STOCK')).toBe(
-      'https://icons.brapi.dev/icons/PETR4.svg'
+      '/api/market/logo/PETR4?type=STOCK'
     );
   });
   it('retorna null para FIIs (sem CDN público) → fallback de iniciais', () => {
     expect(getAssetLogoUrl('MXRF11', 'FII')).toBeNull();
   });
-  it('usa cryptocurrency-icons (símbolo minúsculo) para cripto', () => {
+  it('aponta para o proxy do backend (type=CRYPTO) para cripto', () => {
     expect(getAssetLogoUrl('BTC', 'CRYPTO')).toBe(
-      'https://cdn.jsdelivr.net/npm/cryptocurrency-icons@latest/svg/color/btc.svg'
+      '/api/market/logo/BTC?type=CRYPTO'
     );
   });
-  it('usa Parqet (keyless) para ações US', () => {
+  it('aponta para o proxy do backend (type=STOCK_US) para ações US', () => {
     expect(getAssetLogoUrl('AAPL', 'STOCK_US')).toBe(
-      'https://assets.parqet.com/logos/symbol/AAPL'
+      '/api/market/logo/AAPL?type=STOCK_US'
     );
+  });
+  it('trata tipo desconhecido como ação B3 (type=STOCK)', () => {
+    expect(getAssetLogoUrl('PETR4')).toBe('/api/market/logo/PETR4?type=STOCK');
   });
   it('retorna null para renda fixa e caixa', () => {
     expect(getAssetLogoUrl('TESOURO SELIC', 'FIXED_INCOME')).toBeNull();

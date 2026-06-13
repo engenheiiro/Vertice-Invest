@@ -1,5 +1,6 @@
 
 import { marketDataService } from '../services/marketDataService.js';
+import { logoService } from '../services/logoService.js';
 import AssetHistory from '../models/AssetHistory.js';
 import SystemConfig from '../models/SystemConfig.js';
 import MarketAsset from '../models/MarketAsset.js';
@@ -33,6 +34,36 @@ export const getCurrentQuote = async (req, res, next) => {
 
         const data = await marketDataService.getMarketDataByTicker(ticker);
         res.json(data);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Serve a logo de um ativo a partir do cache no BD (busca-e-cacheia na 1ª vez).
+ * Rota PÚBLICA: <img> não envia header Authorization. Quando não há logo, responde
+ * 404 — o componente <AssetLogo> trata via onError e cai nas iniciais.
+ */
+export const getAssetLogo = async (req, res, next) => {
+    try {
+        const { ticker } = req.params;
+        const { type } = req.query;
+        if (!ticker) return res.status(400).end();
+
+        const logo = await logoService.getOrFetch(ticker, type);
+        if (!logo) return res.status(404).end();
+
+        const etag = `"${ticker.toUpperCase()}-${type || ''}-${logo.bytes}"`;
+        // Logo é praticamente imutável → cache agressivo no navegador/CDN.
+        res.set('Cache-Control', 'public, max-age=604800, immutable');
+        res.set('ETag', etag);
+
+        if (req.headers['if-none-match'] === etag) {
+            return res.status(304).end();
+        }
+
+        res.set('Content-Type', logo.contentType);
+        return res.send(logo.data);
     } catch (error) {
         next(error);
     }
