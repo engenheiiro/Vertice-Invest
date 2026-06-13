@@ -64,8 +64,6 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
         return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
     }, [isOpen]);
 
-    const MAX_PER_SECTOR = 2;
-
     // Posição visual do ativo — espelha exatamente o TopPicksCard:
     // todos os ativos do perfil (BUY e WAIT), ordenados por score, top 10.
     const profilePositionMap = useMemo(() => {
@@ -93,13 +91,7 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                 return cb - ca;
             });
 
-        // Cap de MAX_PER_SECTOR ativos por setor para garantir diversificação.
-        const perSector: Record<string, number> = {};
-        const buys = sorted.filter(item => {
-            const sec = (item.sector || 'GERAL').toUpperCase();
-            perSector[sec] = (perSector[sec] || 0) + 1;
-            return perSector[sec] <= MAX_PER_SECTOR;
-        });
+        const buys = sorted;
 
         if (buys.length === 0) return { allocations: [] as Allocation[], leftover: value, invested: 0, sectorCount: 0 };
 
