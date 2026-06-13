@@ -212,7 +212,7 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                         <div className="p-6 overflow-y-auto">
                             <p className="text-[11px] text-slate-500 mb-4 flex items-center gap-2">
                                 <Info size={14} className="text-slate-600 shrink-0" />
-                                Distribui pelos <strong className="text-emerald-400">COMPRAR</strong> do perfil, por score, em {unitLabel}{isFractional ? ' (fracionável)' : ' inteiras'}. Clique em um ativo para excluí-lo.
+                                Ativos <strong className="text-emerald-400">COMPRAR</strong> distribuídos por score em {unitLabel}{isFractional ? ' (fracionável)' : ' inteiras'}. Clique para excluir.
                             </p>
 
                             {/* Seletor de perfil */}
@@ -268,7 +268,10 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                             </div>
 
                                             <div className="space-y-2">
-                                                {allocations.map(({ item, shares, cost }) => (
+                                                {allocations.map(({ item, shares, cost }, idx) => {
+                                                    const rank = idx + 1;
+                                                    const rankColor = rank === 1 ? 'text-yellow-400' : rank === 2 ? 'text-slate-300' : rank === 3 ? 'text-amber-600' : 'text-slate-600';
+                                                    return (
                                                     <div
                                                         key={item.ticker}
                                                         className="group flex items-center justify-between p-3 rounded-xl bg-[#0B101A] border border-slate-800 hover:border-slate-700 transition-colors"
@@ -276,7 +279,7 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                                         <div className="min-w-0">
                                                             <div className="flex items-center gap-1.5">
                                                                 {item.position != null && (
-                                                                    <span className="text-[9px] font-black text-slate-600 tabular-nums">#{item.position}</span>
+                                                                    <span className={`text-[10px] font-black tabular-nums ${rankColor}`}>#{item.position}</span>
                                                                 )}
                                                                 <span className="text-sm font-black text-white">{item.ticker}</span>
                                                                 <span className="text-[9px] font-bold text-slate-500">Score {item.score}</span>
@@ -299,7 +302,8 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                                             </button>
                                                         </div>
                                                     </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
 
                                             {/* Totais */}
