@@ -125,6 +125,7 @@ export interface ResearchReport {
     comparisonReport?: ComparisonReport;
     explainableAIPrompt?: string;
     generatedExplainableAI?: string;
+    generatedExplainableAIByProfile?: { DEFENSIVE?: string; MODERATE?: string; BOLD?: string };
     generatedBy?: string;
     content: {
         morningCall: string;

@@ -1,0 +1,616 @@
+================================================================
+PLANO COMPLETO DE MELHORIAS — VÉRTICE INVEST
+================================================================
+
+----------------------------------------------------------------
+CONTEXTO (por que este plano existe)
+----------------------------------------------------------------
+Pedido: um plano de melhoria que cubra TODAS as áreas do projeto,
+explicado para quem não programa, com 10 ações por categoria, sem
+inventar problema que não existe ("falso positivo"), dizendo a
+COMPLEXIDADE e QUAL IA usar (Opus 4.8 ou Sonnet 4.6) para economizar
+tokens.
+
+O projeto inteiro foi varrido (backend, frontend e infraestrutura) e
+as alegações mais graves foram verificadas à mão. Isso já derrubou 2
+falsos positivos:
+
+  [X] "Segredos vazaram no histórico do Git" -> FALSO. O arquivo .env
+      nunca foi enviado ao Git. Não há vazamento.
+  [!] "useCallback não é usado" -> FALSO. É usado em 5 arquivos.
+
+DIAGNÓSTICO GERAL: o Vértice é um projeto maduro e bem cuidado
+(nota geral ~B+). Tem segurança forte (JWT, 2FA, criptografia, rate
+limit), CI/CD com GitHub Actions, linter, Husky, documentação boa e
+39 testes no backend. Os pontos fracos reais são: poucos testes no
+frontend, sem Docker/deploy automatizado, alguns "remendos" de código
+e falta de monitoramento de métricas. Não é um projeto em crise — é um
+projeto bom que pode virar excelente.
+
+----------------------------------------------------------------
+COMO LER ESTE PLANO (legenda)
+----------------------------------------------------------------
+Cada ação tem dois marcadores.
+
+COMPLEXIDADE (quanto trabalho dá):
+  [BAIXA]  algumas horas, mexe em poucos arquivos, baixo risco.
+  [MEDIA]  de meio dia a 1 dia, exige cuidado/teste.
+  [ALTA]   vários dias, mexe em muita coisa ou em lógica delicada.
+
+QUAL IA USAR (para gastar token só onde precisa):
+  [SONNET] Sonnet 4.6 — tarefa mecânica, repetitiva, com padrão claro
+           (testes seguindo um modelo, aria-label, atualizar
+           dependência, documentação, config). A MAIORIA. Use por padrão.
+  [OPUS]   Opus 4.8 — lógica complexa, dinheiro/finanças, arquitetura,
+           segurança crítica, bug difícil. Use só quando errar custa caro.
+
+REGRA DE BOLSO: se a tarefa é "siga este padrão e repita" -> Sonnet.
+Se é "pense, decida e não pode errar" -> Opus.
+
+----------------------------------------------------------------
+PRIORIDADE SUGERIDA (se você só puder fazer uma parte)
+----------------------------------------------------------------
+1ª ONDA (agora): Testes do frontend + 3 correções de robustez do backend
+   Por quê: maior risco atual — bugs silenciosos em telas críticas
+   (carteira, pagamento).
+
+2ª ONDA: Performance + Acessibilidade + TypeScript
+   Por quê: app mais rápido, inclusivo e seguro contra erros de código.
+
+3ª ONDA: DevOps (Docker/deploy) + Observabilidade
+   Por quê: profissionaliza a operação e o "ligar/desligar" do sistema.
+
+4ª ONDA: Funcionalidades novas (engines, indicadores)
+   Por quê: crescimento de produto, depois da base blindada.
+
+
+================================================================
+1. SEGURANÇA
+================================================================
+1.1  Bucket de rate-limit próprio para /refresh
+     Hoje o "renovar login" divide o limite com tudo. Em pico, pode
+     travar usuários. Dar uma "fila própria" a ele.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+
+1.2  Validar tunables de admin com Zod
+     O painel admin altera parâmetros sem validar o formato. Adicionar
+     checagem para impedir valor inválido/malicioso.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+
+1.3  Rate-limit nas rotas de admin
+     As rotas de configuração não têm limite de chamadas. Adicionar um
+     limite (ex.: 10/hora).
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+
+1.4  Token CSRF explícito nas ações sensíveis
+     Hoje a proteção é indireta (cookie HttpOnly). Adicionar token
+     anti-falsificação nas ações de escrita por garantia.
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+
+1.5  Rotacionar segredos por precaução
+     Não houve vazamento, mas trocar chaves de API/MongoDB
+     periodicamente é boa higiene. Documentar o procedimento.
+     [BAIXA] [SONNET] [IGNORADO]
+
+1.6  Versionar chaves de criptografia
+     A criptografia do 2FA assume sempre a mesma chave. Permitir
+     "chave v1, v2..." para trocar sem quebrar usuários.
+     [MEDIA] [OPUS]
+
+1.7  Verificar invalidação de cache no webhook de pagamento
+     Quando o Mercado Pago muda o plano, confirmar que o cache do
+     usuário é limpo na hora (senão ele fica com plano antigo por 5 min).
+     [BAIXA] [OPUS]
+
+1.8  Timeout em transações do banco
+     Operações longas no MongoDB podem travar. Definir tempo-limite
+     (ex.: 30s).
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+
+1.9  Auditoria de dependências bloqueante em release
+     Hoje o npm audit no CI só avisa. Fazer ele BLOQUEAR publicação se
+     houver falha grave conhecida.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+
+1.10 Revisão de segurança automatizada no PR
+     Rodar o /security-review em mudanças sensíveis (auth, pagamento)
+     antes de juntar ao código principal.
+     [MEDIA] [OPUS]
+
+
+================================================================
+2. TESTES E QUALIDADE AUTOMATIZADA
+================================================================
+(MAIOR LACUNA REAL DO PROJETO. Backend tem 39 testes; frontend cobre
+<5%. Telas críticas como o modal de adicionar ativo, ~700 linhas, não
+têm nenhum teste.)
+
+2.1  Testar o modal "Adicionar Ativo"
+     É a tela mais complexa e sem teste. Cobrir compra/venda.
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → assetTransaction.test.ts: +9 novos casos (makeReserveTicker x6,
+       CASH saque, ticker lowercase, STOCK_US USD). Total 22 testes.
+     → AddAssetModal.test.tsx (novo, 17 testes): visibilidade, BUY/SELL
+       toggle, submit disabled/enabled, dropdown de venda, payload correto
+       em compra e venda (qty negativa), erro data futura, erro de rede,
+       CASH nome obrigatório, CASH sem reservas.
+
+2.2  Testar a página Carteira (Wallet)
+     Garantir que KPIs, abas e cálculos não quebrem no futuro.
+     [MEDIA] [SONNET]
+
+2.3  Testar a página Dashboard
+     Tela inicial com muitos dados; proteger contra regressões.
+     [MEDIA] [SONNET]
+
+2.4  Testar a página Research
+     Relatórios e ranking — proteger a leitura por perfil.
+     [MEDIA] [SONNET]
+
+2.5  Testes do fluxo de login/registro/2FA no frontend
+     Simular usuário logando, errando senha, usando 2FA.
+     [MEDIA] [SONNET]
+
+2.6  Testes de integração ponta-a-ponta (Playwright)
+     Robô que abre o site e clica como usuário real
+     (login -> carteira -> adicionar ativo).
+     [ALTA] [OPUS]
+
+2.7  Completar testes do signalEngine (filtro macro)
+     O motor de sinais tem parte não testada (veto em dia de crash).
+     [MEDIA] [OPUS]
+
+2.8  Subir cobertura do mathUtils
+     A matemática do dinheiro tem só 25% das funções testadas — crítico.
+     [MEDIA] [OPUS]
+
+2.9  Testes de "casos extremos" (edge cases)
+     Hoje os testes cobrem o "caminho feliz". Adicionar valores
+     negativos, vazios, zerados.
+     [MEDIA] [SONNET]
+
+2.10 Relatório de cobertura no PR
+     Mostrar automaticamente quanto do código novo está testado.
+     [BAIXA] [SONNET]
+
+
+================================================================
+3. UI / DESIGN / EXPERIÊNCIA
+================================================================
+3.1  Feedback "salvando..." em ações lentas
+     O spinner some na hora; o usuário não sabe se salvou.
+     [BAIXA] [SONNET]
+
+3.2  Quebrar modais gigantes em etapas
+     Modal de adicionar ativo (700 linhas) é confuso. Dividir em passos.
+     [MEDIA] [OPUS]
+
+3.3  Texto maior/claro nas confirmações de exclusão
+     Confirmações destrutivas têm texto pequeno. Destacar o
+     "isso não pode ser desfeito".
+     [BAIXA] [SONNET]
+
+3.4  Mensagens de erro mais humanas
+     Trocar erros técnicos por frases que o usuário entende.
+     [BAIXA] [SONNET]
+
+3.5  Padronizar estados vazios com CTA
+     Toda lista vazia com ícone + explicação + botão de ação.
+     [BAIXA] [SONNET]
+
+3.6  Revisar responsividade no celular
+     Conferir telas densas (carteira, research) em telas pequenas.
+     [MEDIA] [SONNET]
+
+3.7  Skeleton (esqueleto de carregamento) em todas as telas
+     Onde ainda há "tela em branco", colocar o esqueleto animado.
+     [BAIXA] [SONNET]
+
+3.8  Modo claro (light mode) opcional
+     Hoje só existe tema escuro. Avaliar tema claro.
+     [ALTA] [OPUS]
+
+3.9  Microanimações de transição entre páginas
+     Suavizar troca de telas (respeitando "reduzir movimento").
+     [BAIXA] [SONNET]
+
+3.10 Storybook (catálogo visual de componentes)
+     Página interna que mostra botões/cards isolados — mantém consistência.
+     [MEDIA] [SONNET]
+
+
+================================================================
+4. ACESSIBILIDADE (a11y)
+================================================================
+(Boa base — ARIA, navegação por teclado, "pular para conteúdo" — mas
+sem auditoria automática.)
+
+4.1  Adicionar auditoria automática (axe-core)
+     Robô que verifica regras de acessibilidade a cada build.
+     [MEDIA] [SONNET]
+
+4.2  scope nas tabelas
+     Tabelas de ativos/retornos precisam marcar cabeçalhos para
+     leitores de tela.
+     [BAIXA] [SONNET]
+
+4.3  aria-describedby nas confirmações
+     Ligar o título do modal ao texto explicativo.
+     [BAIXA] [SONNET]
+
+4.4  Conferir contraste de cores (WCAG AA)
+     Garantir que textos/cores passem no padrão de contraste.
+     [BAIXA] [SONNET]
+
+4.5  Navegação completa por teclado nos modais
+     Abrir, navegar e fechar sem mouse ("foco preso" dentro do modal).
+     [MEDIA] [SONNET]
+
+4.6  Rótulos claros em todos os campos de formulário
+     Todo input com label associado e erro lido em voz alta.
+     [BAIXA] [SONNET]
+
+4.7  Textos alternativos revisados em gráficos
+     Gráficos (recharts) precisam de descrição textual alternativa.
+     [MEDIA] [SONNET]
+
+4.8  Tamanho de toque mínimo no mobile
+     Botões pequenos demais para o dedo — garantir área mínima.
+     [BAIXA] [SONNET]
+
+4.9  Testar com leitor de tela real
+     Passar por NVDA/VoiceOver nas telas principais e corrigir.
+     [MEDIA] [OPUS]
+
+4.10 Lighthouse CI (nota de acessibilidade no PR)
+     Acompanhar a nota de acessibilidade automaticamente.
+     [MEDIA] [SONNET]
+
+
+================================================================
+5. PERFORMANCE
+================================================================
+5.1  useCallback/React.memo nos componentes pesados
+     Modal de ativo e tabela re-desenham a cada tecla. Memorizar.
+     [MEDIA] [OPUS]
+
+5.2  useMemo na filtragem da AssetTable
+     A tabela filtra a lista a cada render; calcular só quando muda.
+     [BAIXA] [SONNET]
+
+5.3  Promise.allSettled nas cotações
+     Se 1 cotação falha, toda a busca falha. Trocar para "cada uma por si".
+     [MEDIA] [OPUS]
+
+5.4  Paralelizar consultas em getWalletData
+     Algumas consultas ao banco são sequenciais; rodar juntas.
+     [MEDIA] [OPUS]
+
+5.5  Analisador de tamanho do bundle
+     Ferramenta que mostra o que deixa o site pesado para baixar.
+     [BAIXA] [SONNET]
+
+5.6  Imagens em WebP/AVIF
+     Formatos modernos carregam mais rápido.
+     [BAIXA] [SONNET]
+
+5.7  TTL (expiração) em coleções que só crescem
+     MarketAnalysis cresce para sempre. Apagar registros antigos.
+     [BAIXA] [SONNET]
+
+5.8  Revisar consultas N+1 restantes
+     Encontrar onde o código faz "1 consulta por item" em vez de 1 só.
+     [MEDIA] [OPUS]
+
+5.9  Lighthouse CI de performance
+     Acompanhar velocidade de carregamento a cada mudança.
+     [MEDIA] [SONNET]
+
+5.10 Debounce nas buscas de ativos
+     Cada tecla pode disparar uma chamada. Esperar o usuário parar de
+     digitar antes de buscar (gratuito, só código).
+     [BAIXA] [SONNET]
+
+
+================================================================
+6. BACKEND E ARQUITETURA
+================================================================
+6.1  Tratador de erros estruturado
+     Hoje o erro só devolve a mensagem. Padronizar com
+     código + mensagem + detalhe.
+     [MEDIA] [OPUS]
+
+6.2  Contador de segurança na recursão de getWalletData
+     A função se chama de novo após "auto-curar"; adicionar limite para
+     nunca entrar em loop.
+     [BAIXA] [OPUS]
+
+6.3  Quebrar getWalletData (~300 linhas) em partes
+     Função gigante e difícil de testar; dividir em funções menores.
+     [MEDIA] [OPUS]
+
+6.4  Quebrar rebuildUserHistory (~200 linhas)
+     Mesma ideia, na função que reconstrói o histórico da carteira.
+     [MEDIA] [OPUS]
+
+6.5  Tornar explícitas as "falhas silenciosas"
+     Alguns serviços engolem erro sem avisar. Ou avisa, ou comenta
+     claramente que é proposital.
+     [BAIXA] [OPUS]
+
+6.6  Logs estruturados (em vez de texto solto)
+     Padronizar logs em formato de dados (facilita busca).
+     [MEDIA] [SONNET]
+
+6.7  Versionar os "raspadores" (scraping) frágeis
+     Fundamentus/FII quebram se o site mudar o HTML. Isolar e versionar.
+     [MEDIA] [OPUS]
+
+6.8  Completar a documentação Swagger da API
+     Várias rotas não estão documentadas no /api/docs. Anotar todas.
+     [MEDIA] [SONNET]
+
+6.9  Circuit breaker na conexão do MongoDB
+     Se o banco fica lento, os pedidos acumulam. Adicionar "disjuntor".
+     [MEDIA] [OPUS]
+
+6.10 Normalizar tratamento de datas
+     Há mistura de Date/string/timezone. Centralizar num utilitário único.
+     [MEDIA] [OPUS]
+
+
+================================================================
+7. ENGINES FINANCEIRAS E FUNCIONALIDADES
+================================================================
+(O coração do produto — scoring, carteira, sinais — está robusto e
+bem testado. Aqui são EVOLUÇÕES, não correções.)
+
+7.1  Novos indicadores no signalEngine (MACD, Estocástico)
+     Hoje só há RSI. Adicionar mais sinais técnicos.
+     [ALTA] [OPUS]
+
+7.2  Detecção de divergências nos sinais
+     Identificar quando preço e indicador "discordam" (sinal de virada).
+     [ALTA] [OPUS]
+
+7.3  Filtro por volume nos sinais
+     Considerar volume negociado para validar o sinal.
+     [MEDIA] [OPUS]
+
+7.4  Múltiplos prazos (timeframes) nos sinais
+     Analisar diário/semanal, não só um período fixo.
+     [ALTA] [OPUS]
+
+7.5  Backtest visível ao usuário
+     Mostrar como a recomendação teria performado no passado.
+     [ALTA] [OPUS]
+
+7.6  Explicações de IA mais ricas (já existe base)
+     Ampliar narrativas "por que comprar/aguardar" por ativo.
+     [MEDIA] [OPUS]
+
+7.7  Alertas personalizados (preço/RSI atingiu X)
+     Usuário define gatilho e recebe aviso.
+     [ALTA] [OPUS]
+
+7.8  Comparador de ativos lado a lado
+     Tela para comparar 2-3 ativos em métricas-chave.
+     [MEDIA] [SONNET]
+
+7.9  Simulador de aporte ("e se eu investir R$ X")
+     Projeção de impacto do aporte na carteira/metas.
+     [MEDIA] [OPUS]
+
+7.10 Exportar relatórios em PDF (lib já existe)
+     Gerar PDF da carteira/research (já há pdf-lib no projeto).
+     [MEDIA] [SONNET]
+
+
+================================================================
+8. DEVOPS / INFRAESTRUTURA / CI-CD
+================================================================
+(CI/CD existe e é bom. Faltam containerização e deploy automático.)
+
+8.1  Criar Dockerfile (client e server)
+     "Empacotar" o app para rodar igual em qualquer lugar.
+     [MEDIA] [OPUS]
+
+8.2  docker-compose para ambiente local
+     Subir app + banco com um comando só.
+     [MEDIA] [SONNET]
+
+8.3  Pipeline de deploy automático
+     Ao aprovar o código, publicar sozinho. Tier gratuito: Vercel/Netlify
+     (frontend) e Render free / Fly.io free (backend).
+     [MEDIA] [OPUS]
+
+8.4  Ambiente de homologação (staging)
+     Um "site de testes" idêntico ao real, antes de ir pro ar (mesmos
+     tiers gratuitos).
+     [MEDIA] [OPUS]
+
+8.5  Variáveis de ambiente por ambiente (dev/stage/prod)
+     Separar configs para não misturar teste com produção.
+     [BAIXA] [SONNET]
+
+8.6  Script de backup do MongoDB documentado
+     Procedimento de cópia/restauração escrito e testado.
+     [MEDIA] [OPUS]
+
+8.7  Plano de recuperação de desastre (DR)
+     "O que fazer se cair tudo" — passo a passo documentado.
+     [MEDIA] [OPUS]
+
+8.8  Versionamento/changelog automático
+     Gerar histórico de versões a partir dos commits.
+     [BAIXA] [SONNET]
+
+8.9  Cache de build no CI
+     Acelerar o CI reaproveitando instalações entre execuções.
+     [BAIXA] [SONNET]
+
+8.10 Scripts npm/Makefile unificados
+     Um comando único para tarefas comuns (seed, sync, backup). Grátis.
+     [BAIXA] [SONNET]
+
+
+================================================================
+9. OBSERVABILIDADE / MONITORAMENTO
+================================================================
+(Tem Sentry + logs Winston + correlation ID. Falta métricas e health
+check público.)
+
+9.1  Endpoint /health público
+     Rota simples que diz "estou vivo" para monitores externos.
+     [BAIXA] [SONNET]
+
+9.2  Monitor de uptime (plano gratuito)
+     Avisa por e-mail se o site cair. UptimeRobot tem tier gratuito.
+     [BAIXA] [SONNET]
+
+9.3  Métricas de latência/erro (Prometheus + Grafana)
+     Painel com "quão rápido" e "quantos erros". Prometheus e Grafana
+     são gratuitos e open-source (auto-hospedados).
+     [ALTA] [OPUS]
+
+9.4  Dashboard de saúde dos dados
+     Já há rotas admin de diagnóstico; montar um painel visual.
+     [MEDIA] [SONNET]
+
+9.5  Alertas no Sentry por volume de erro
+     Avisar quando erros dispararem acima do normal.
+     [BAIXA] [SONNET]
+
+9.6  Logs de performance das rotas lentas
+     Marcar e registrar as requisições que demoram demais.
+     [MEDIA] [OPUS]
+
+9.7  Rastreamento de jobs agendados (cron)
+     Confirmar que os snapshots diários rodaram (e avisar se falharem).
+     [MEDIA] [OPUS]
+
+9.8  Métrica de uso por funcionalidade/plano
+     Já existe UsageLog; transformar em relatório de negócio.
+     [MEDIA] [SONNET]
+
+9.9  Alerta de circuit breaker aberto
+     Avisar quando uma fonte externa (Yahoo) for desligada por falha.
+     [BAIXA] [OPUS]
+
+9.10 Painel de status público (status page)
+     Página que mostra ao usuário se o sistema está operacional.
+     [MEDIA] [SONNET]
+
+
+================================================================
+10. QUALIDADE DE CÓDIGO / TYPESCRIPT / DOCUMENTAÇÃO
+================================================================
+10.1 Eliminar os ~20 "any" do TypeScript
+     "any" desliga a proteção contra erros. Criar tipos de verdade.
+     [MEDIA] [OPUS]
+
+10.2 error: unknown nos catch
+     Trocar catch (error: any) por unknown (forma segura).
+     [BAIXA] [SONNET]
+
+10.3 Error boundary por página no frontend
+     Hoje um erro derruba o app todo; isolar por tela.
+     [MEDIA] [SONNET]
+
+10.4 Rollback de estado em erro de carteira
+     Se a API falha, o estado da tela fica inconsistente; reverter.
+     [MEDIA] [OPUS]
+
+10.5 Retry com backoff nas chamadas de API do frontend
+     Tentar de novo, com espera crescente, em conexão instável.
+     [MEDIA] [SONNET]
+
+10.6 Padronizar JSDoc nos serviços principais
+     Comentários de documentação consistentes nas funções-chave.
+     [BAIXA] [SONNET]
+
+10.7 Atualizar dependências "envelhecidas"
+     cheerio (release candidate), otplib, etc. — subir para estável.
+     [BAIXA] [SONNET]
+
+10.8 Remover pnpm-lock.yaml órfão
+     O projeto usa npm; o lock do pnpm confunde e pode dar conflito.
+     [BAIXA] [SONNET]
+
+10.9 Guia CONTRIBUTING com checklist de PR
+     Lista do que conferir antes de enviar código (já há base).
+     [BAIXA] [SONNET]
+
+10.10 Comentários TODO/FIXME viram issues rastreáveis
+     Os poucos "TODO" do código viram tarefas registradas.
+     [BAIXA] [SONNET]
+
+
+================================================================
+RESUMO: QUANTO CADA IA SERIA USADA
+================================================================
+[SONNET] Sonnet 4.6 (maioria, ~65%): testes seguindo padrão,
+  acessibilidade, documentação, configs, atualização de dependências,
+  UI repetitiva, docker-compose. É AQUI QUE VOCÊ ECONOMIZA TOKENS.
+
+[OPUS] Opus 4.8 (~35%, só o crítico): lógica financeira (engines,
+  sinais), arquitetura (tratador de erros, refatorações grandes),
+  segurança (CSRF, criptografia versionada), bugs delicados de estado,
+  decisões de infra.
+
+ESTRATÉGIA DE ECONOMIA: comece cada tarefa no Sonnet. Se travar, exigir
+raciocínio financeiro/arquitetural, ou envolver dinheiro/segurança,
+promova para Opus. Nunca use Opus para "adicionar 10 testes iguais" ou
+"colocar aria-label".
+
+
+================================================================
+COMO VERIFICAR QUE CADA ONDA FUNCIONOU (testes de ponta a ponta)
+================================================================
+1. Backend: rodar "npm run test:ci" (na raiz e em /server) — 39 testes verdes.
+2. Frontend: rodar "npm test" em /client — novos testes passando.
+3. Lint/tipos: "npm run lint" (ESLint) e "npm run lint" do client
+   (tsc --noEmit) sem erros.
+4. App de verdade: subir com "npm run dev" na raiz e validar:
+   login -> carteira -> adicionar ativo -> research -> logout.
+5. CI: abrir um PR e confirmar pipeline (lint -> typecheck -> test ->
+   build) verde.
+6. Acessibilidade/Performance: rodar Lighthouse/axe nas telas principais
+   e comparar a nota antes/depois.
+
+
+================================================================
+CUSTO: TUDO GRATUITO
+================================================================
+Todas as ~100 ações usam APENAS ferramentas gratuitas/open-source ou
+tiers gratuitos:
+
+  Software livre (custo zero): Docker, Prometheus, Grafana, Playwright,
+  axe-core, Lighthouse, Storybook, ESLint, Vitest.
+
+  Serviços com plano gratuito suficiente: Sentry (já usado), UptimeRobot,
+  Vercel/Netlify (frontend), Render free / Fly.io free (backend).
+
+  Removidos por implicarem custo:
+    [X] Redis gerenciado    -> trocado por "debounce" (grátis)
+    [X] Datadog             -> trocado por Prometheus+Grafana (grátis)
+    [X] Terraform/nuvem paga -> trocado por scripts npm (grátis)
+
+Os únicos "custos" reais são SEU TEMPO e OS TOKENS DE IA — e o plano já
+indica usar Sonnet (mais barato) na maioria das tarefas.
+
+
+================================================================
+OBSERVAÇÃO FINAL SOBRE ESCOPO
+================================================================
+Este documento é um MAPA, não uma tarefa única. São ~100 ações.
+NÃO se implementa tudo de uma vez. O caminho recomendado é executar por
+ONDAS (tabela de prioridade no topo), uma categoria por vez, validando
+com os testes antes de seguir.
+
+Para começar, escolha uma categoria/onda e a implementação detalhada
+daquele bloco será feita.
+
+================================================================
+Gerado por Claude Code — base do diagnóstico verificada à mão.
+================================================================

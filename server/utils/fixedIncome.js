@@ -48,6 +48,39 @@ export const fixedIncomeDailyFactor = (fixedIncomeRate, cdiRate) => {
 };
 
 /**
+ * Taxa anual efetiva (% a.a.) de um título pós-fixado/indexado, somando o índice
+ * vivo ao spread contratado. Ex.: Tesouro Selic "SELIC + 0,08%" → selic + 0.0843.
+ *
+ * Retorna `null` quando o ativo não declara índice (PRE/manual): nesse caso o
+ * `fixedIncomeRate` já é a taxa cheia e o caminho legado (prefixado/%CDI) vale.
+ * SELIC é aproximada por `cdi + 0.10` quando não informada (CDI ≈ SELIC − 0,10).
+ */
+export const effectiveAnnualRate = (asset, { cdiRate = 0, selic, ipca } = {}) => {
+    const idx = (asset?.fixedIncomeIndex || '').toUpperCase();
+    if (!idx) return null;
+    const spread = Number(asset.fixedIncomeSpread) || 0;
+    const cdi = Number(cdiRate) || 0;
+    const selicRate = (selic != null && selic > 0) ? Number(selic) : cdi + 0.10;
+    const ipcaRate = (ipca != null && ipca > 0) ? Number(ipca) : 0;
+    if (idx === 'SELIC') return selicRate + spread;
+    if (idx === 'CDI') return cdi + spread;
+    if (idx === 'IPCA') return ipcaRate + spread;
+    return null; // PRE/PREFIXADO e desconhecidos caem no caminho legado
+};
+
+/**
+ * Fator diário ciente do índice. Se o ativo tem índice (SELIC/CDI/IPCA), compõe
+ * a taxa efetiva (índice vivo + spread); senão usa o caminho legado por
+ * `fixedIncomeRate` (>50 = %CDI, ≤50 = prefixado a.a.). Garante que Tesouro
+ * Selic renda SELIC+spread em vez de só o spread como prefixado.
+ */
+export const assetDailyFactor = (asset, macro = {}) => {
+    const eff = effectiveAnnualRate(asset, macro);
+    if (eff !== null) return Math.pow(1 + (eff / 100), 1 / 252);
+    return fixedIncomeDailyFactor(asset?.fixedIncomeRate, macro.cdiRate);
+};
+
+/**
  * Valor acumulado de um ativo CASH/FIXED_INCOME numa data, compondo CADA lote
  * desde sua data de compra pelos dias úteis (réplica exata da lógica de
  * getWalletData, agora compartilhada). Lote comprado HOJE rende 0 (dias úteis = 0).
@@ -56,8 +89,8 @@ export const fixedIncomeDailyFactor = (fixedIncomeRate, cdiRate) => {
  * @param {Object} opts  { cdiRate, calcDate }
  * @returns {number} valor acumulado (na moeda do ativo; multiplicador cambial é aplicado pelo chamador)
  */
-export const accrueFixedIncomeValue = (asset, { cdiRate, calcDate }) => {
-    const dailyFactor = fixedIncomeDailyFactor(asset.fixedIncomeRate, cdiRate);
+export const accrueFixedIncomeValue = (asset, { cdiRate, selic, ipca, calcDate }) => {
+    const dailyFactor = assetDailyFactor(asset, { cdiRate, selic, ipca });
     const isCash = asset.type === 'CASH';
 
     const lots = (asset.taxLots && asset.taxLots.length > 0)

@@ -15,6 +15,7 @@ import logger from './config/logger.js';
 import { initScheduler } from './services/schedulerService.js';
 import { sanitizeInput } from './middleware/sanitize.js'; // (S8) anti-injeção NoSQL
 import { correlationId } from './middleware/correlationId.js'; // (D12) correlation id
+import { csrfProtection } from './middleware/csrf.js'; // (1.4) CSRF double-submit
 import { swaggerSpec } from './config/swagger.js'; // (I7) OpenAPI/Swagger
 
 // Rotas
@@ -26,6 +27,7 @@ import goalsRoutes from './routes/goalsRoutes.js';
 import marketRoutes from './routes/marketRoutes.js';
 import webhookRoutes from './routes/webhookRoutes.js'; // Nova Rota
 import academyRoutes from './routes/academyRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 import sitemapRouter from './routes/sitemapRouter.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -97,7 +99,10 @@ app.use(cors({
     if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
     return callback(new Error('Origem não permitida por CORS'));
   },
-  credentials: true
+  credentials: true,
+  // (1.4) Libera o header CSRF no preflight (as mutações já são preflighted por
+  // usarem Content-Type: application/json).
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 }));
 
 // Health check (liveness/readiness) — antes do rate limiter para não ser
@@ -168,16 +173,46 @@ const recoveryLimiter = rateLimit({
   handler: buildLimitHandler(),
 });
 
+// Renovação de sessão: bucket DEDICADO para não drenar o apiLimiter geral.
+// O interceptor do front dispara em cada 401 (pode ter concorrência de tabs),
+// por isso o limite é generoso o suficiente para não penalizar uso legítimo,
+// mas isola o orçamento de refresh do orçamento compartilhado das demais rotas.
+// Força-bruta não é relevante aqui: o refresh token é uma string aleatória longa
+// validada no banco — esgotar 120 tentativas em 15min não serve para nada.
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: buildLimitHandler(),
+});
+
 app.use('/api/', apiLimiter);
 app.use('/api/login', loginLimiter);
 app.use('/api/register', registerLimiter);
 app.use('/api/forgot-password', recoveryLimiter);
 app.use('/api/reset-password', recoveryLimiter);
-// `/api/refresh` NÃO entra em limiter de auth: é operação normal de sessão (o
-// interceptor do front chama a cada 401) e era a maior causa de bloqueio
-// acidental — drenava o balde compartilhado em background. Fica sob o apiLimiter
-// geral (3000/15min), que já barra qualquer loop descontrolado e torna inviável
-// força-bruta sobre o refresh token (string aleatória longa, validada no banco).
+app.use('/api/refresh', refreshLimiter);
+
+// (1.4) Proteção CSRF (double-submit). Aplicada às mutações autenticadas; as
+// rotas de bootstrap de sessão (sem Bearer ainda) e os webhooks servidor-a-
+// servidor são isentos. `/login` e `/refresh` EMITEM o token (no controller),
+// mas não o exigem como header. Métodos seguros (GET/HEAD) passam direto.
+const CSRF_EXEMPT_PREFIXES = [
+  '/api/login',
+  '/api/register',
+  '/api/forgot-password',
+  '/api/reset-password',
+  '/api/refresh',
+  '/api/logout',
+  '/api/webhooks',
+];
+app.use((req, res, next) => {
+  if (CSRF_EXEMPT_PREFIXES.some((p) => req.path === p || req.path.startsWith(`${p}/`))) {
+    return next();
+  }
+  return csrfProtection(req, res, next);
+});
 
 app.use('/api', authRoutes);
 app.use('/api/subscription', subscriptionRoutes);
@@ -187,6 +222,7 @@ app.use('/api/goals', goalsRoutes);
 app.use('/api/market', marketRoutes);
 app.use('/api/webhooks', webhookRoutes); // Registro dos Webhooks
 app.use('/api/academy', academyRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.use(sitemapRouter);
 

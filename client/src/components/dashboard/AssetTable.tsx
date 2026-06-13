@@ -21,6 +21,10 @@ interface AssetTableProps {
     isResearchLoading?: boolean;
 }
 
+/** Título exibido: cofrinhos (CASH) mostram o nome; demais, o ticker. */
+const itemTitle = (item: PortfolioItem): string =>
+    item.type === 'CASH' ? (item.name || 'Reserva') : item.ticker;
+
 const GROUP_NAMES: Record<string, string> = {
     'STOCK': 'Ações Brasil',
     'FII': 'Fundos Imobiliários',
@@ -203,7 +207,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                             <AssetLogo ticker={item.ticker} type={item.type as AssetType} name={item.name} size={32} />
                                                             <div>
                                                                 <div className="flex items-center gap-1.5">
-                                                                    <p className="font-bold text-slate-200">{item.ticker}</p>
+                                                                    <p className="font-bold text-slate-200">{itemTitle(item)}</p>
                                                                     {isChampion && (
                                                                         <span title="Campeã: Retorno > 15%" className="text-gold animate-pulse">
                                                                             <Medal size={12} fill="currentColor" />
@@ -327,7 +331,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                 </div>
                                                 <div className="min-w-0">
                                                     <div className="flex items-center gap-1.5">
-                                                        <p className="font-bold text-slate-200">{isDemoMode ? '••••' : item.ticker}</p>
+                                                        <p className="font-bold text-slate-200">{isDemoMode ? '••••' : itemTitle(item)}</p>
                                                         {isChampion && !isDemoMode && (
                                                             <span title="Campeã: Retorno > 15%" className="text-gold">
                                                                 <Medal size={12} fill="currentColor" />

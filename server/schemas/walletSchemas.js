@@ -27,6 +27,9 @@ export const addTransactionSchema = z.object({
       .nonnegative('Preço não pode ser negativo'),
     date: z.coerce.date({ invalid_type_error: 'Data inválida' }).optional(),
     fixedIncomeRate: z.coerce.number().finite('Taxa inválida').optional(),
+    // Pós-fixados/indexados: índice + spread a.a. sobre o índice (Tesouro Selic/IPCA).
+    fixedIncomeIndex: z.enum(['SELIC', 'CDI', 'IPCA', 'PRE']).optional(),
+    fixedIncomeSpread: z.coerce.number().finite('Spread inválido').optional(),
     name: z.string().trim().max(120, 'Nome muito longo').optional(),
   }),
 });

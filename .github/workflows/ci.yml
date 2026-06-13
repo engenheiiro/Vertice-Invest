@@ -29,10 +29,11 @@ jobs:
       - name: Install (root + client + server)
         run: npm run setup
 
-      # (S12) Auditoria de dependências — informativa (não bloqueia o build;
-      # Dependabot abre PRs de correção). Surfaceia vulnerabilidades >= high.
+      # (S12) Auditoria de dependências — bloqueia publicação se houver
+      # vulnerabilidade >= high em qualquer workspace (root / client / server).
+      # Para falsos positivos pontuais, use `npm audit --audit-level=critical`
+      # ou adicione uma exceção em .nsprc / overrides no package.json.
       - name: Security audit (npm)
-        continue-on-error: true
         run: |
           echo "::group::root"  && npm audit --audit-level=high; echo "::endgroup::"
           echo "::group::client" && npm audit --audit-level=high --prefix client; echo "::endgroup::"

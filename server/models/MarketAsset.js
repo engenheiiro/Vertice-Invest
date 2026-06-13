@@ -33,6 +33,12 @@ const MarketAssetSchema = new mongoose.Schema({
   debtToEquity: { type: Number, default: 0 },
   netDebt: { type: Number, default: 0 },
   payout: { type: Number, default: 0 },
+  // Financials LTM (engenharia reversa Fundamentus) — cacheados para preencher
+  // lacunas no modal "Financials (LTM)" e carregados como carry-forward.
+  netRevenue: { type: Number, default: 0 },
+  netIncome: { type: Number, default: 0 },
+  totalAssets: { type: Number, default: 0 },
+  patrimLiq: { type: Number, default: 0 },
   
   // Indicadores FIIs
   vacancy: { type: Number, default: 0 },

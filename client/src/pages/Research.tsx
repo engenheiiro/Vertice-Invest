@@ -5,7 +5,8 @@ import { researchService, ResearchReport, RankingItem } from '../services/resear
 import { ResearchViewer } from '../components/research/ResearchViewer';
 import { AssetDetailModal } from '../components/research/AssetDetailModal'; // Importado
 import { ExplainableAIRenderer } from '../components/research/ExplainableAIRenderer';
-import { Bot, Newspaper, Trophy, Lock, Crown, Info, RefreshCcw } from 'lucide-react';
+import { ResearchAporteModal } from '../components/research/ResearchAporteModal';
+import { Bot, Newspaper, Trophy, Lock, Crown, Info, RefreshCcw, Calculator } from 'lucide-react';
 import { SkeletonCard, SkeletonTableRows } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -30,6 +31,10 @@ export const Research = () => {
     
     // Estado para controle do modal de asset direto
     const [directAsset, setDirectAsset] = useState<RankingItem | null>(null);
+    // Modal "Aporte Inteligente" por ativo (distribui valor entre os COMPRAR).
+    const [showAporte, setShowAporte] = useState(false);
+    // Perfil selecionado na aba "Relatório Semanal" (narrativa por perfil).
+    const [analysisProfile, setAnalysisProfile] = useState<'DEFENSIVE' | 'MODERATE' | 'BOLD'>('DEFENSIVE');
 
     const isAdmin = user?.role === 'ADMIN';
 
@@ -148,7 +153,17 @@ export const Research = () => {
                                 </button>
                             </div>
 
-                            <button 
+                            {viewMode === 'RANKING' && report?.isRankingPublished && (report?.content?.ranking?.some(r => r.action === 'BUY')) && (
+                                <button
+                                    onClick={() => setShowAporte(true)}
+                                    className="bg-base border border-blue-900/40 px-4 py-3 rounded-2xl hover:bg-blue-900/20 text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-2 text-xs font-black whitespace-nowrap"
+                                    title="Aporte Inteligente: distribui um valor entre os ativos COMPRAR"
+                                >
+                                    <Calculator size={16} /> Aporte
+                                </button>
+                            )}
+
+                            <button
                                 onClick={fetchReport}
                                 disabled={isLoading || !hasAccessToSelected}
                                 className="bg-base border border-slate-800 p-3 rounded-2xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
@@ -186,19 +201,52 @@ export const Research = () => {
                             <p className="text-slate-600 text-sm mt-2 max-w-sm">Use o painel admin para gerar o relatório inaugural desta categoria.</p>
                         </div>
                     ) : viewMode === 'ANALYSIS' ? (
+                        (() => {
+                            const byProfile = report.generatedExplainableAIByProfile || {};
+                            const PROFILES = [
+                                { id: 'DEFENSIVE', label: 'Defensivo' },
+                                { id: 'MODERATE', label: 'Moderado' },
+                                { id: 'BOLD', label: 'Arrojado' },
+                            ] as const;
+                            const profilesWithText = PROFILES.filter(p => (byProfile[p.id] || '').trim());
+                            const effectiveProfile = profilesWithText.some(p => p.id === analysisProfile)
+                                ? analysisProfile
+                                : (profilesWithText[0]?.id ?? analysisProfile);
+                            const activeText = profilesWithText.length > 0
+                                ? (byProfile[effectiveProfile] || '')
+                                : (report.generatedExplainableAI || '');
+                            return (
                         <div className="animate-fade-in space-y-8 pb-20">
                             {/* Análise Explainable IA */}
-                            {report.isExplainableAIPublished && report.generatedExplainableAI ? (
+                            {report.isExplainableAIPublished && activeText ? (
                                 <div className="bg-base border border-indigo-900/30 rounded-3xl overflow-hidden shadow-xl">
-                                    <div className="p-6 border-b border-slate-800">
-                                        <h2 className="text-lg font-black text-white flex items-center gap-3">
-                                            <Bot size={20} className="text-indigo-400" />
-                                            Análise Explainable IA
-                                        </h2>
-                                        <p className="text-slate-500 text-xs mt-1">Gerado por inteligência artificial com base nos dados quantitativos</p>
+                                    <div className="p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                        <div>
+                                            <h2 className="text-lg font-black text-white flex items-center gap-3">
+                                                <Bot size={20} className="text-indigo-400" />
+                                                Análise Explainable IA
+                                            </h2>
+                                            <p className="text-slate-500 text-xs mt-1">Gerado por inteligência artificial com base nos dados quantitativos</p>
+                                        </div>
+                                        {/* Seletor de perfil (só quando há narrativa por perfil) */}
+                                        {profilesWithText.length > 1 && (
+                                            <div className="flex bg-base border border-slate-800 p-1 rounded-xl gap-1 shrink-0">
+                                                {profilesWithText.map(p => (
+                                                    <button
+                                                        key={p.id}
+                                                        onClick={() => setAnalysisProfile(p.id)}
+                                                        className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${
+                                                            effectiveProfile === p.id ? 'bg-indigo-900/40 text-indigo-300' : 'text-slate-500 hover:text-slate-300'
+                                                        }`}
+                                                    >
+                                                        {p.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="p-6">
-                                        <ExplainableAIRenderer text={report.generatedExplainableAI} />
+                                        <ExplainableAIRenderer text={activeText} />
                                     </div>
                                 </div>
                             ) : null}
@@ -212,6 +260,8 @@ export const Research = () => {
                                 </div>
                             )}
                         </div>
+                            );
+                        })()
                     ) : report.isRankingPublished ? (
                         <ResearchViewer report={report!} view="RANKING" />
                     ) : (
@@ -225,10 +275,19 @@ export const Research = () => {
                 
                 {/* Modal de Link Direto (Renderizado se houver ativo selecionado via state) */}
                 {directAsset && (
-                    <AssetDetailModal 
-                        isOpen={!!directAsset} 
-                        onClose={() => setDirectAsset(null)} 
-                        asset={directAsset} 
+                    <AssetDetailModal
+                        isOpen={!!directAsset}
+                        onClose={() => setDirectAsset(null)}
+                        asset={directAsset}
+                    />
+                )}
+
+                {report?.content?.ranking && (
+                    <ResearchAporteModal
+                        isOpen={showAporte}
+                        onClose={() => setShowAporte(false)}
+                        ranking={report.content.ranking}
+                        assetClass={selectedAsset}
                     />
                 )}
 

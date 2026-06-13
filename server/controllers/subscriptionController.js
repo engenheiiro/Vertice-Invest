@@ -243,7 +243,7 @@ export const confirmPayment = async (req, res, next) => {
     // Mock legacy - mantido para não quebrar testes
     const session = await mongoose.startSession();
     try {
-        session.startTransaction();
+        session.startTransaction({ maxCommitTimeMS: 30_000 });
         const { planId } = req.body;
         if (!PLANS[planId]) throw new Error("Plano inválido");
         await session.commitTransaction();

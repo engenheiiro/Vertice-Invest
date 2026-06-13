@@ -244,10 +244,10 @@ export const Pricing = () => {
                         * A assinatura é renovada automaticamente. O pagamento é processado de forma segura pelo{' '}
                         <strong>Mercado Pago</strong>.
                     </p>
-                    <div className="flex gap-2 opacity-50">
-                        <img src="https://img.icons8.com/color/48/visa.png" alt="Visa" className="h-6" />
-                        <img src="https://img.icons8.com/color/48/mastercard.png" alt="Mastercard" className="h-6" />
-                        <img src="https://img.icons8.com/color/48/pix.png" alt="Pix" className="h-6" />
+                    <div className="flex gap-2 opacity-60">
+                        <img src="/assets/payment/visa.svg" alt="Visa" className="h-6" />
+                        <img src="/assets/payment/mastercard.svg" alt="Mastercard" className="h-6" />
+                        <img src="/assets/payment/pix.svg" alt="Pix" className="h-6" />
                     </div>
                 </div>
             </div>

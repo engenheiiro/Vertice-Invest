@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   getLocalDateString,
+  makeReserveTicker,
   parseCurrencyToFloat,
   validateTransaction,
   type AssetFormState,
@@ -24,6 +25,32 @@ const makeForm = (over: Partial<AssetFormState> = {}): AssetFormState => ({
 // Asset parcial suficiente para os checks de saldo (só lê ticker/quantity).
 const ownedAsset = (ticker: string, quantity: number): Asset =>
   ({ ticker, quantity } as Asset);
+
+describe('makeReserveTicker', () => {
+  it('gera ticker a partir do nome simples', () => {
+    expect(makeReserveTicker('Viagem', [])).toBe('RESERVA-VIAGEM');
+  });
+
+  it('remove acentos e normaliza para maiúsculas', () => {
+    expect(makeReserveTicker('Férias', [])).toBe('RESERVA-FERIAS');
+  });
+
+  it('substitui espaços por hífens', () => {
+    expect(makeReserveTicker('Fundo Especial', [])).toBe('RESERVA-FUNDO-ESPECIAL');
+  });
+
+  it('adiciona sufixo -2 em colisão com ticker existente', () => {
+    expect(makeReserveTicker('Viagem', ['RESERVA-VIAGEM'])).toBe('RESERVA-VIAGEM-2');
+  });
+
+  it('incrementa sufixo até encontrar ticker livre', () => {
+    expect(makeReserveTicker('Viagem', ['RESERVA-VIAGEM', 'RESERVA-VIAGEM-2'])).toBe('RESERVA-VIAGEM-3');
+  });
+
+  it('usa "RESERVA" para nome vazio', () => {
+    expect(makeReserveTicker('', [])).toBe('RESERVA');
+  });
+});
 
 describe('parseCurrencyToFloat', () => {
   it('converte formato pt-BR com milhar e decimal', () => {
@@ -117,5 +144,17 @@ describe('validateTransaction — payloads válidos', () => {
     expect(payload?.fixedIncomeRate).toBe(110.5);
     expect(payload?.name).toBe('CDB XP'); // name vazio → usa ticker (uppercased)
     expect(payload?.ticker).toBe('CDB XP');
+  });
+
+  it('ticker em minúsculo é normalizado para maiúsculas no payload', () => {
+    const { payload } = validateTransaction(makeForm({ ticker: 'petr4' }), 'BUY', []);
+    expect(payload?.ticker).toBe('PETR4');
+  });
+
+  it('CASH (saque) vira quantity negativa e price=1', () => {
+    const form = makeForm({ type: 'CASH', ticker: 'RESERVA', price: '300,00', quantity: '' });
+    const { payload } = validateTransaction(form, 'SELL', [ownedAsset('RESERVA', 1000)]);
+    expect(payload?.quantity).toBe(-300);
+    expect(payload?.price).toBe(1);
   });
 });

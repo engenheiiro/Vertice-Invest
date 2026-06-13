@@ -3,6 +3,8 @@ import { countBusinessDays } from '../utils/dateUtils.js';
 import {
     fixedIncomeDailyFactor,
     accrueFixedIncomeValue,
+    effectiveAnnualRate,
+    assetDailyFactor,
     brazilToday,
     brazilDateOnly,
 } from '../utils/fixedIncome.js';
@@ -78,6 +80,48 @@ describe('accrueFixedIncomeValue (FIXED_INCOME)', () => {
         const asset = { type: 'FIXED_INCOME', quantity: 10, totalCost: 1000, fixedIncomeRate: 12, taxLots: [{ date: lotDate, quantity: 10, price: 100 }] };
         const expected = 10 * 100 * Math.pow(rateDaily, bd);
         expect(accrueFixedIncomeValue(asset, { cdiRate: CDI, calcDate })).toBeCloseTo(expected, 4);
+    });
+});
+
+describe('renda fixa indexada (SELIC/CDI/IPCA + spread)', () => {
+    const SELIC = 15.0;
+    const IPCA = 4.5;
+
+    it('Tesouro Selic rende SELIC + spread, não só o spread', () => {
+        const asset = { fixedIncomeIndex: 'SELIC', fixedIncomeSpread: 0.0843 };
+        const eff = effectiveAnnualRate(asset, { cdiRate: CDI, selic: SELIC, ipca: IPCA });
+        expect(eff).toBeCloseTo(SELIC + 0.0843, 6);
+        // fator diário deve refletir ~15% a.a., NÃO ~0,08% a.a.
+        const f = assetDailyFactor(asset, { cdiRate: CDI, selic: SELIC, ipca: IPCA });
+        expect(f).toBeCloseTo(Math.pow(1 + (SELIC + 0.0843) / 100, 1 / 252), 10);
+        expect(f).toBeGreaterThan(Math.pow(1.0008, 1 / 252)); // muito acima de só o spread
+    });
+
+    it('SELIC ausente é aproximada por CDI + 0,10', () => {
+        const asset = { fixedIncomeIndex: 'SELIC', fixedIncomeSpread: 0 };
+        expect(effectiveAnnualRate(asset, { cdiRate: CDI })).toBeCloseTo(CDI + 0.10, 6);
+    });
+
+    it('IPCA+ rende IPCA + spread', () => {
+        const asset = { fixedIncomeIndex: 'IPCA', fixedIncomeSpread: 6.0 };
+        expect(effectiveAnnualRate(asset, { cdiRate: CDI, ipca: IPCA })).toBeCloseTo(IPCA + 6.0, 6);
+    });
+
+    it('sem índice → null (cai no caminho legado)', () => {
+        expect(effectiveAnnualRate({ fixedIncomeRate: 12 }, { cdiRate: CDI })).toBeNull();
+        // assetDailyFactor sem índice == caminho prefixado legado
+        expect(assetDailyFactor({ fixedIncomeRate: 12 }, { cdiRate: CDI }))
+            .toBeCloseTo(fixedIncomeDailyFactor(12, CDI), 12);
+    });
+
+    it('accrueFixedIncomeValue usa o índice quando presente', () => {
+        const calcDate = new Date('2026-06-17T00:00:00.000Z');
+        const lotDate = new Date('2026-06-15T00:00:00.000Z');
+        const bd = countBusinessDays(lotDate, calcDate);
+        const asset = { type: 'FIXED_INCOME', quantity: 10, totalCost: 1000, fixedIncomeIndex: 'SELIC', fixedIncomeSpread: 0.0843, taxLots: [{ date: lotDate, quantity: 10, price: 100 }] };
+        const dailyF = Math.pow(1 + (SELIC + 0.0843) / 100, 1 / 252);
+        const expected = 10 * 100 * Math.pow(dailyF, bd);
+        expect(accrueFixedIncomeValue(asset, { cdiRate: CDI, selic: SELIC, ipca: IPCA, calcDate })).toBeCloseTo(expected, 4);
     });
 });
 

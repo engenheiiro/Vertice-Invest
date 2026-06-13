@@ -1,5 +1,6 @@
 
 import mongoose from 'mongoose';
+import { runTransaction } from '../utils/dbTransaction.js';
 import AssetTransaction from '../models/AssetTransaction.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
 import UserAsset from '../models/UserAsset.js';
@@ -85,6 +86,7 @@ export const financialService = {
 
             const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
             const currentCdiRate = sysConfig?.cdi || DEFAULT_SELIC_FALLBACK;
+            const currentIpcaRate = (sysConfig?.ipca && sysConfig.ipca > 0) ? sysConfig.ipca : 4.5;
             const currentUsdRate = sysConfig?.dollar || 5.75;
 
             // G1 FIX: Load historical USD/BRL rates for per-date conversion
@@ -224,9 +226,11 @@ export const financialService = {
                         portfolio[tx.ticker] = { qty: 0, cost: 0 };
                         const meta = assetMetadataMap.get(tx.ticker);
                         if (meta && (meta.type === 'FIXED_INCOME' || meta.type === 'CASH')) {
-                            fixedIncomeState[tx.ticker] = { 
-                                currentValue: 0, 
-                                rate: meta.fixedIncomeRate > 0 ? meta.fixedIncomeRate : (meta.type === 'CASH' ? 100 : 10) 
+                            fixedIncomeState[tx.ticker] = {
+                                currentValue: 0,
+                                rate: meta.fixedIncomeRate > 0 ? meta.fixedIncomeRate : (meta.type === 'CASH' ? 100 : 10),
+                                index: meta.fixedIncomeIndex || null,
+                                spread: meta.fixedIncomeSpread || 0,
                             };
                         }
                     }
@@ -256,7 +260,7 @@ export const financialService = {
                         portfolio[tx.ticker].qty += tx.quantity;
                         portfolio[tx.ticker].cost += tx.totalValue;
                         if (isFixed) {
-                            if (!fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker] = { currentValue: 0, rate: meta?.fixedIncomeRate || 100 };
+                            if (!fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker] = { currentValue: 0, rate: meta?.fixedIncomeRate || 100, index: meta?.fixedIncomeIndex || null, spread: meta?.fixedIncomeSpread || 0 };
                             fixedIncomeState[tx.ticker].currentValue += tx.totalValue;
                         }
                         dayFlowNominal += tx.totalValue * txUsdRate;
@@ -306,11 +310,21 @@ export const financialService = {
                         if (portfolio[ticker].qty > 0) {
                             const state = fixedIncomeState[ticker];
                             let dailyFactor = 1;
-                            // Threshold > 50 = % do CDI (ex: 110 = 110% CDI); <= 50 = prefixada a.a.
-                            // Alinhado com walletController.js
-                            if (state.rate > 50) dailyFactor = 1 + ((cdiDailyFactor - 1) * (state.rate / 100));
-                            else dailyFactor = Math.pow(1 + (state.rate / 100), 1/252);
-                            
+                            // Indexados (Selic/CDI/IPCA): índice + spread. Selic usa o CDI
+                            // histórico do dia + gap SELIC-CDI (~0,10) + spread; IPCA usa o
+                            // IPCA corrente + spread (sem série diária no rebuild).
+                            if (state.index === 'SELIC' || state.index === 'CDI') {
+                                const extraAnnual = (state.index === 'SELIC' ? 0.10 : 0) + (state.spread || 0);
+                                dailyFactor = cdiDailyFactor * Math.pow(1 + (extraAnnual / 100), 1/252);
+                            } else if (state.index === 'IPCA') {
+                                dailyFactor = Math.pow(1 + ((currentIpcaRate + (state.spread || 0)) / 100), 1/252);
+                            } else if (state.rate > 50) {
+                                // Legado: > 50 = % do CDI (ex: 110 = 110% CDI); <= 50 = prefixada a.a.
+                                dailyFactor = 1 + ((cdiDailyFactor - 1) * (state.rate / 100));
+                            } else {
+                                dailyFactor = Math.pow(1 + (state.rate / 100), 1/252);
+                            }
+
                             state.currentValue *= dailyFactor;
                         }
                     }
@@ -384,21 +398,13 @@ export const financialService = {
             }
 
             if (snapshots.length > 0) {
-                const session = await mongoose.startSession();
-                try {
-                    session.startTransaction();
+                await runTransaction(async (session) => {
                     await WalletSnapshot.deleteMany({ user: userId }).session(session);
                     const CHUNK_SIZE = 5000;
                     for (let i = 0; i < snapshots.length; i += CHUNK_SIZE) {
                         await WalletSnapshot.insertMany(snapshots.slice(i, i + CHUNK_SIZE), { session });
                     }
-                    await session.commitTransaction();
-                } catch (writeErr) {
-                    await session.abortTransaction();
-                    throw writeErr;
-                } finally {
-                    session.endSession();
-                }
+                });
             }
             
             const duration = ((Date.now() - startTime) / 1000).toFixed(2);

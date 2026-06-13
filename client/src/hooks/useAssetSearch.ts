@@ -89,6 +89,8 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
     const finalName = result.name || result.ticker;
     const finalType = result.type ? (result.type as AssetType) : form.type;
     const finalQty = finalType === 'FIXED_INCOME' ? '1' : form.quantity;
+    // Índice do título (SELIC/CDI/IPCA/PRE) para accrual pós-fixado correto.
+    const finalIndex = result.index ? String(result.index).toUpperCase() : undefined;
 
     setForm((prev) => ({
       ...prev,
@@ -97,6 +99,7 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
       type: finalType,
       rate: rateVal,
       quantity: finalQty,
+      fixedIncomeIndex: finalIndex,
     }));
 
     setShowDropdown(false);

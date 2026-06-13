@@ -6,6 +6,7 @@ import MarketAsset from '../models/MarketAsset.js';
 import SystemConfig from '../models/SystemConfig.js';
 import RecommendedPortfolioCurve from '../models/RecommendedPortfolioCurve.js';
 import DiscardLog from '../models/DiscardLog.js'; // Novo
+import { createBroadcast } from '../services/notificationService.js';
 import { aiResearchService } from '../services/aiResearchService.js';
 import { aiEnhancementService } from '../services/aiEnhancementService.js';
 import { marketDataService } from '../services/marketDataService.js';
@@ -287,11 +288,32 @@ export const publishContent = async (req, res, next) => {
         const { analysisId, type } = req.body;
         const analysis = await MarketAnalysis.findById(analysisId);
         if (!analysis) return res.status(404).json({ message: "Not found" });
+
+        const rankingWasAlreadyPublished = analysis.isRankingPublished;
+
         if (type === 'RANKING' || type === 'BOTH' || type === 'ALL') analysis.isRankingPublished = true;
         if (type === 'MORNING_CALL' || type === 'BOTH' || type === 'ALL') analysis.isMorningCallPublished = true;
         if (type === 'REPORT' || type === 'ALL') analysis.isReportPublished = true;
         if (type === 'EXPLAINABLE_AI' || type === 'ALL') analysis.isExplainableAIPublished = true;
         await analysis.save();
+
+        // Dispara broadcast apenas quando o ranking passa a publicado pela primeira vez
+        if (!rankingWasAlreadyPublished && analysis.isRankingPublished) {
+            const assetClass = analysis.assetClass || '';
+            const assetClassLabels = {
+                STOCK: 'Ações BR', FII: 'FIIs', CRYPTO: 'Cripto',
+                STOCK_US: 'Ações EUA', BRASIL_10: 'Brasil 10',
+            };
+            const label = assetClassLabels[assetClass] || assetClass;
+            // Fire-and-forget — não bloqueia a resposta
+            createBroadcast({
+                type: 'RANKING_PUBLISHED',
+                title: 'Novo ranking publicado',
+                message: `Novo ranking de ${label} está disponível. Confira as recomendações atualizadas.`,
+                relatedAssetClass: assetClass,
+            });
+        }
+
         if (res) res.json({ message: "Publicado." });
     } catch (error) { next(error); }
 };
@@ -324,27 +346,44 @@ export const getPublishStatus = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
+const PROFILE_LABEL_PT = { DEFENSIVE: 'Defensivo', MODERATE: 'Moderado', BOLD: 'Arrojado' };
+
 export const generateExplainableAI = async (req, res, next) => {
     try {
-        const { analysisId, customText } = req.body;
+        const { analysisId, customText, profile } = req.body;
         if (!analysisId) return res.status(400).json({ message: "analysisId obrigatório." });
         const analysis = await MarketAnalysis.findById(analysisId);
         if (!analysis) return res.status(404).json({ message: "Análise não encontrada." });
 
+        // Perfil opcional: grava a narrativa específica do perfil; sem perfil usa o campo único (legado/fallback).
+        const validProfile = ['DEFENSIVE', 'MODERATE', 'BOLD'].includes(profile) ? profile : null;
+        const saveText = (text) => {
+            if (validProfile) {
+                if (!analysis.generatedExplainableAIByProfile) analysis.generatedExplainableAIByProfile = {};
+                analysis.generatedExplainableAIByProfile[validProfile] = text;
+                analysis.markModified('generatedExplainableAIByProfile');
+            } else {
+                analysis.generatedExplainableAI = text;
+            }
+        };
+
         if (customText) {
-            analysis.generatedExplainableAI = customText;
+            saveText(customText);
             await analysis.save();
-            return res.json({ generatedExplainableAI: customText });
+            return res.json({ generatedExplainableAI: customText, profile: validProfile });
         }
 
         if (!analysis.explainableAIPrompt) return res.status(400).json({ message: "Prompt não gerado ainda. Rode o sync primeiro." });
         if (!process.env.API_KEY) return res.status(503).json({ message: "API_KEY não configurada." });
         const { GoogleGenAI } = await import('@google/genai');
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const response = await ai.models.generateContent({ model: 'gemini-2.0-flash-exp', contents: analysis.explainableAIPrompt });
-        analysis.generatedExplainableAI = response.text;
+        const prompt = validProfile
+            ? `${analysis.explainableAIPrompt}\n\nIMPORTANTE: Escreva a análise focada exclusivamente no perfil ${PROFILE_LABEL_PT[validProfile]}, destacando os ativos e a tese adequados a esse perfil de risco.`
+            : analysis.explainableAIPrompt;
+        const response = await ai.models.generateContent({ model: 'gemini-2.0-flash-exp', contents: prompt });
+        saveText(response.text);
         await analysis.save();
-        res.json({ generatedExplainableAI: response.text });
+        res.json({ generatedExplainableAI: response.text, profile: validProfile });
     } catch (error) { next(error); }
 };
 

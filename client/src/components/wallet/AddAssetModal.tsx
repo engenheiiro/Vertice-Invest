@@ -44,6 +44,9 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     const [priceWarning, setPriceWarning] = useState<string | null>(null);
 
     const [form, setForm] = useState<AssetFormState>(INITIAL_FORM);
+    // Tracks the "total value" input for fractional dollar-denominated assets
+    // (CRYPTO and STOCK_US). String so we can display a clean empty state.
+    const [totalValueInput, setTotalValueInput] = useState('');
 
     // CASH (Reserva/Caixa): qual "cofrinho" a transação afeta.
     // '' = nenhum selecionado · NEW_RESERVE = criar um novo · senão = ticker do existente.
@@ -65,6 +68,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             setTransactionType('BUY');
             setCashSelection(NEW_RESERVE);
             setForm({ ...INITIAL_FORM, date: getLocalDateString() });
+            setTotalValueInput('');
             priceFetch.reset();
             search.reset();
         } else {
@@ -133,6 +137,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             );
         }
 
+        setTotalValueInput('');
         setForm(prev => ({
             ...prev,
             type: newType,
@@ -141,6 +146,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             rate: defaultRate,
             quantity: defaultQty,
             price: '',
+            fixedIncomeIndex: undefined,
         }));
     };
 
@@ -182,6 +188,29 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         const val = e.target.value;
         if (val.includes('-')) return;
         setForm(prev => ({ ...prev, quantity: val }));
+        // User is typing quantity directly — clear the value input so both
+        // don't fight each other (only one direction is active at a time).
+        setTotalValueInput('');
+    };
+
+    /**
+     * Handler for the "Valor (US$)" input on fractional dollar-denominated assets.
+     * Computes quantity = typedValue / unitPrice and updates `form.quantity`.
+     * Only fires on explicit user interaction — no effect watching both fields.
+     */
+    const handleTotalValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const raw = e.target.value;
+        if (raw.includes('-')) return;
+        setTotalValueInput(raw);
+        const valueNum = parseFloat(raw.replace(',', '.'));
+        const priceNum = parseCurrencyToFloat(form.price);
+        if (isFinite(valueNum) && valueNum > 0 && isFinite(priceNum) && priceNum > 0) {
+            const derivedQty = valueNum / priceNum;
+            // Up to 8 decimal places, trailing zeros stripped.
+            setForm(prev => ({ ...prev, quantity: parseFloat(derivedQty.toFixed(8)).toString() }));
+        } else {
+            setForm(prev => ({ ...prev, quantity: '' }));
+        }
     };
 
     const handleCurrencyChange = (formattedValue: string) => {
@@ -459,6 +488,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         }
 
         if (form.type === 'FIXED_INCOME') {
+            const isIndexedFixedIncome = ['SELIC', 'CDI', 'IPCA'].includes(form.fixedIncomeIndex || '');
             return (
                 <>
                     <div className="relative">
@@ -474,7 +504,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
                     <div className="relative">
                         <Input
-                            label="Rentabilidade"
+                            label={isIndexedFixedIncome ? `Spread sobre ${form.fixedIncomeIndex} (% a.a.)` : "Rentabilidade"}
                             placeholder="Ex: 11,50 ou 115"
                             value={form.rate}
                             onChange={(e) => setForm(prev => ({ ...prev, rate: e.target.value }))}
@@ -482,18 +512,26 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         />
                         <Percent className="absolute right-3 top-9 text-slate-600 pointer-events-none" size={16} />
                     </div>
+                    {isIndexedFixedIncome && (
+                        <p className="text-[10px] text-emerald-400/90 -mt-1">
+                            Rende <strong>{form.fixedIncomeIndex} + {form.rate || '0'}%</strong> a.a. (índice vivo + spread), não apenas o spread.
+                        </p>
+                    )}
                 </>
             );
         }
+
+        // CRYPTO and STOCK_US support fractional shares/coins and USD pricing.
+        const isFractional = form.type === 'CRYPTO' || form.type === 'STOCK_US';
 
         return (
             <>
                 <div className="relative">
                     <Input
-                        label={form.type === 'CRYPTO' ? "Quantidade" : "Quantidade (Cotas)"}
+                        label={isFractional ? "Quantidade" : "Quantidade (Cotas)"}
                         type="number"
-                        step={form.type === 'CRYPTO' ? "0.00000001" : "1"}
-                        placeholder={form.type === 'CRYPTO' ? "0.005" : "100"}
+                        step={isFractional ? "0.00000001" : "1"}
+                        placeholder={isFractional ? "0.005" : "100"}
                         value={form.quantity}
                         onChange={handleQuantityChange}
                         containerClassName="mb-0"
@@ -546,6 +584,26 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         </div>
                     )}
                 </div>
+
+                {isFractional && (
+                    <div className="col-span-2 relative">
+                        <Input
+                            label="Valor Total (US$)"
+                            type="number"
+                            step="0.01"
+                            placeholder="Ex: 150.00"
+                            value={totalValueInput}
+                            onChange={handleTotalValueChange}
+                            containerClassName="mb-0"
+                            min="0"
+                            className="px-4 py-3 pr-10 text-emerald-400 font-bold"
+                        />
+                        <DollarSign className="absolute right-3 top-9 text-slate-600 pointer-events-none" size={16} />
+                        <p className="text-[10px] text-slate-500 mt-1 ml-1">
+                            Preencha o valor total em US$ para calcular a quantidade automaticamente — ou edite a quantidade diretamente acima.
+                        </p>
+                    </div>
+                )}
 
                 {renderTransactionTotal()}
             </>

@@ -247,9 +247,9 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                                                 <span className="font-black text-sm leading-none">{pick.visualPosition}</span>
                                             </div>
                                             <AssetLogo ticker={pick.ticker} type={pick.type as AssetType} name={pick.name} size={36} />
-                                            <div className="min-w-0">
-                                                <div className="flex items-center mb-1 gap-2">
-                                                    <h4 className="text-base font-black text-white tracking-tight">{pick.ticker}</h4>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center flex-wrap mb-1 gap-x-2 gap-y-1">
+                                                    <h4 className="text-base font-black text-white tracking-tight shrink-0">{pick.ticker}</h4>
                                                     {getRiskBadge(pick.riskProfile)}
                                                     {/* Badge de Dividend Aristocrat e Tier */}
                                                     {(pick as any).isDividendAristocrat && (
@@ -261,7 +261,6 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold uppercase border border-slate-700">{pick.sector || 'Geral'}</span>
-                                                    <p className="text-[10px] text-slate-500 font-medium truncate hidden sm:block">{pick.name}</p>
                                                 </div>
                                             </div>
                                         </div>

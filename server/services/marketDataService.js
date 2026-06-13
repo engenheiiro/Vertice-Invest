@@ -458,6 +458,11 @@ export const marketDataService = {
                         debtToEquity: asset.debtToEquity || 0,
                         netDebt: asset.netDebt || 0,
                         payout: asset.payout || 0,
+                        // Financials LTM (cacheados): preenchem o modal "Financials (LTM)".
+                        netRevenue: asset.netRevenue || 0,
+                        netIncome: asset.netIncome || 0,
+                        totalAssets: asset.totalAssets || 0,
+                        patrimLiq: asset.patrimLiq || 0,
                         vacancy: asset.vacancy || 0,
                         capRate: asset.capRate || 0,
                         qtdImoveis: asset.qtdImoveis || 0,

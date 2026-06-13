@@ -42,4 +42,13 @@ export const researchReadLimiter = createUserLimiter({
   message: 'Muitas requisições. Aguarde alguns minutos.',
 });
 
+// Rotas de configuração e diagnóstico exclusivas de admin: 60/15min por usuário.
+// Isolado do researchHeavyLimiter para que operações de config não consumam
+// o orçamento de pipeline/sync e vice-versa.
+export const adminLimiter = createUserLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: 'Muitas operações de administração. Aguarde alguns minutos.',
+});
+
 export { createUserLimiter };

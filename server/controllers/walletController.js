@@ -1,5 +1,6 @@
 
 import mongoose from 'mongoose';
+import { runTransaction, txError } from '../utils/dbTransaction.js';
 import User from '../models/User.js';
 import UserAsset from '../models/UserAsset.js';
 import AssetTransaction from '../models/AssetTransaction.js';
@@ -11,7 +12,7 @@ import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, calculateSharpeRatio, calculateBeta, safeValue, safePrice, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
 import { countBusinessDays, isBusinessDay } from '../utils/dateUtils.js';
-import { accrueFixedIncomeValue, fixedIncomeDailyFactor, brazilToday, brazilDateOnly } from '../utils/fixedIncome.js';
+import { accrueFixedIncomeValue, fixedIncomeDailyFactor, assetDailyFactor, brazilToday, brazilDateOnly } from '../utils/fixedIncome.js';
 import logger from '../config/logger.js';
 import { HISTORICAL_CDI_RATES, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { runDailySnapshot } from '../services/schedulerService.js'; // Importado
@@ -51,6 +52,8 @@ const calculateLiveKPIS = async (userId, currentCdi) => {
 
     const usdConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
     const usdRate = usdConfig?.dollar || 5.75;
+    const selic = usdConfig?.selic;
+    const ipca = usdConfig?.ipca;
     const calcDate = brazilToday();
 
     for (const asset of activeAssets) {
@@ -60,7 +63,7 @@ const calculateLiveKPIS = async (userId, currentCdi) => {
         if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
             // Fonte única de accrual (idêntica ao getWalletData) — antes este
             // caminho ignorava o rendimento (val = qty), divergindo do KPI.
-            val = accrueFixedIncomeValue(asset, { cdiRate: currentCdi, calcDate });
+            val = accrueFixedIncomeValue(asset, { cdiRate: currentCdi, selic, ipca, calcDate });
         } else {
             const mData = await marketDataService.getMarketDataByTicker(asset.ticker);
             val = safeValue(asset.quantity, mData.price || 0);
@@ -146,6 +149,7 @@ export const getWalletData = async (req, res, next) => {
         const usdRate = safeFloat(config?.dollar || 5.75);
         const usdChange = safeFloat(config?.dollarChange || 0);
         let currentCdi = (config?.cdi && config.cdi > 0) ? safeFloat(config.cdi) : ((config?.selic && config.selic > 0) ? safeFloat(config.selic) : 11.25);
+        const macroRates = { cdiRate: currentCdi, selic: config?.selic, ipca: config?.ipca };
 
         const { totalAllTime: totalDividends, projectedMonthly } = await financialService.calculateUserDividends(userId);
 
@@ -170,11 +174,11 @@ export const getWalletData = async (req, res, next) => {
             if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
                 // Accrual via fonte única (utils/fixedIncome) — idêntico ao
                 // calculateLiveKPIS, garantindo KPI e ponto live do gráfico iguais.
-                const effectiveDailyFactor = fixedIncomeDailyFactor(asset.fixedIncomeRate, currentCdi);
+                const effectiveDailyFactor = assetDailyFactor(asset, macroRates);
                 dayChangePct = isTodayBusinessDay ? (effectiveDailyFactor - 1) * 100 : 0;
 
                 const calcDate = brazilToday();
-                const totalCurrentValue = accrueFixedIncomeValue(asset, { cdiRate: currentCdi, calcDate });
+                const totalCurrentValue = accrueFixedIncomeValue(asset, { ...macroRates, calcDate });
                 const totalQuantity = asset.quantity;
 
                 if (totalQuantity > 0) {
@@ -571,49 +575,65 @@ export const getWalletHistory = async (req, res, next) => {
 };
 
 export const addAssetTransaction = async (req, res, next) => {
-    const session = await mongoose.startSession();
+    const userId = req.user.id;
+    const { ticker, type, quantity, price, date, fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread, name } = req.body;
+    const txDate = date ? new Date(date) : new Date();
+    const transactionType = quantity >= 0 ? 'BUY' : 'SELL';
+    let updatedAsset;
     try {
-        session.startTransaction();
-        const userId = req.user.id;
-        const { ticker, type, quantity, price, date, fixedIncomeRate, name } = req.body;
         if (!ticker || quantity === undefined || price === undefined) throw new Error("Dados incompletos.");
-        const txDate = date ? new Date(date) : new Date();
-        const now = new Date();
-        const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
+        const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
         if (txDate > todayEnd) throw new Error("Data futura não permitida.");
-        const transactionType = quantity >= 0 ? 'BUY' : 'SELL';
-        const newTx = new AssetTransaction({
-            user: userId, ticker: ticker.toUpperCase(), type: transactionType,
-            quantity: Math.abs(parseFloat(quantity)), price: Math.abs(parseFloat(price)),
-            totalValue: Math.abs(parseFloat(quantity)) * Math.abs(parseFloat(price)),
-            date: txDate, notes: name ? `Nome: ${name}` : ''
-        });
-        await newTx.save({ session });
-        const updatedAsset = await financialService.recalculatePosition(userId, ticker.toUpperCase(), type, session);
-        if (updatedAsset && (type === 'FIXED_INCOME' || type === 'CASH')) {
-            if (fixedIncomeRate) updatedAsset.fixedIncomeRate = fixedIncomeRate;
-            if (name) updatedAsset.name = name; 
-            if (transactionType === 'BUY' && (!updatedAsset.startDate || new Date(date) < updatedAsset.startDate)) {
-                updatedAsset.startDate = new Date(date);
+        await runTransaction(async (session) => {
+            const newTx = new AssetTransaction({
+                user: userId, ticker: ticker.toUpperCase(), type: transactionType,
+                quantity: Math.abs(parseFloat(quantity)), price: Math.abs(parseFloat(price)),
+                totalValue: Math.abs(parseFloat(quantity)) * Math.abs(parseFloat(price)),
+                date: txDate, notes: name ? `Nome: ${name}` : ''
+            });
+            await newTx.save({ session });
+            updatedAsset = await financialService.recalculatePosition(userId, ticker.toUpperCase(), type, session);
+            if (updatedAsset && (type === 'FIXED_INCOME' || type === 'CASH')) {
+                if (fixedIncomeRate) updatedAsset.fixedIncomeRate = fixedIncomeRate;
+                // Pós-fixados/indexados (Selic/CDI/IPCA): o rendimento é índice vivo +
+                // spread, não a taxa cheia. Persiste índice+spread p/ accrual correto
+                // (corrige o bug do Tesouro Selic render só o spread como prefixado).
+                if (type === 'FIXED_INCOME') {
+                    let idx = fixedIncomeIndex;
+                    let spread = fixedIncomeSpread;
+                    if (!idx) {
+                        // Fonte autoritativa: descobre o índice pelo título no catálogo.
+                        const safeTitle = String(ticker).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const bond = await TreasuryBond.findOne({ title: new RegExp(`^${safeTitle}$`, 'i') }).session(session);
+                        if (bond?.index) { idx = bond.index; if (spread == null) spread = bond.rate; }
+                    }
+                    if (idx === 'SELIC' || idx === 'CDI' || idx === 'IPCA') {
+                        updatedAsset.fixedIncomeIndex = idx;
+                        updatedAsset.fixedIncomeSpread = Number(spread) || 0;
+                    } else if (idx === 'PRE') {
+                        updatedAsset.fixedIncomeIndex = 'PRE';
+                    }
+                }
+                if (name) updatedAsset.name = name;
+                if (transactionType === 'BUY' && (!updatedAsset.startDate || new Date(date) < updatedAsset.startDate)) {
+                    updatedAsset.startDate = new Date(date);
+                }
+                await updatedAsset.save({ session });
             }
-            await updatedAsset.save({ session });
-        }
-        const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-        const isRetroactive = txDate < yesterday;
-        await session.commitTransaction();
-        session.endSession();
-        if (isRetroactive) {
-            try { await financialService.rebuildUserHistory(userId); } catch (err) {}
-        }
-        // Ingestão de proventos do ticker em background (não bloqueia a resposta).
-        // Garante que compras novas já apareçam com proventos sem rodar o script.
-        if (transactionType === 'BUY' && !['CRYPTO', 'FIXED_INCOME', 'CASH'].includes(type)) {
-            financialService.syncDividends([{ ticker: ticker.toUpperCase(), type }]).catch(() => {});
-        }
-        res.status(201).json({ message: "Transação registrada.", asset: updatedAsset });
+        });
     } catch (error) {
-        await session.abortTransaction(); session.endSession(); next(error);
+        return next(error);
     }
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    if (txDate < yesterday) {
+        try { await financialService.rebuildUserHistory(userId); } catch (err) {}
+    }
+    // Ingestão de proventos do ticker em background (não bloqueia a resposta).
+    // Garante que compras novas já apareçam com proventos sem rodar o script.
+    if (transactionType === 'BUY' && !['CRYPTO', 'FIXED_INCOME', 'CASH'].includes(type)) {
+        financialService.syncDividends([{ ticker: ticker.toUpperCase(), type }]).catch(() => {});
+    }
+    res.status(201).json({ message: "Transação registrada.", asset: updatedAsset });
 };
 
 export const updateAsset = async (req, res, next) => {
@@ -637,38 +657,35 @@ export const updateAsset = async (req, res, next) => {
 };
 
 export const removeAsset = async (req, res, next) => {
-    const session = await mongoose.startSession();
+    const userId = req.user.id;
+    const assetId = req.params.id;
     try {
-        session.startTransaction();
-        const userId = req.user.id;
-        const assetId = req.params.id;
-        const asset = await UserAsset.findOne({ _id: assetId, user: userId });
-        if (!asset) throw new Error("Ativo não encontrado");
-        await AssetTransaction.deleteMany({ user: userId, ticker: asset.ticker }).session(session);
-        await UserAsset.deleteOne({ _id: assetId }).session(session);
-        await session.commitTransaction();
-        session.endSession();
-        try { await financialService.rebuildUserHistory(userId); } catch (e) {}
-        res.json({ message: "Ativo removido." });
+        await runTransaction(async (session) => {
+            const asset = await UserAsset.findOne({ _id: assetId, user: userId });
+            if (!asset) throw txError(404, "Ativo não encontrado");
+            await AssetTransaction.deleteMany({ user: userId, ticker: asset.ticker }).session(session);
+            await UserAsset.deleteOne({ _id: assetId }).session(session);
+        });
     } catch (error) {
-        await session.abortTransaction(); session.endSession(); next(error);
+        if (error.httpStatus) return res.status(error.httpStatus).json({ message: error.message });
+        return next(error);
     }
+    try { await financialService.rebuildUserHistory(userId); } catch (e) {}
+    res.json({ message: "Ativo removido." });
 };
 
 export const resetWallet = async (req, res, next) => {
-    const session = await mongoose.startSession();
+    const userId = req.user.id;
     try {
-        session.startTransaction();
-        const userId = req.user.id;
-        await UserAsset.deleteMany({ user: userId }).session(session);
-        await AssetTransaction.deleteMany({ user: userId }).session(session);
-        await WalletSnapshot.deleteMany({ user: userId }).session(session);
-        await session.commitTransaction();
-        session.endSession();
-        res.json({ message: "Carteira resetada." });
+        await runTransaction(async (session) => {
+            await UserAsset.deleteMany({ user: userId }).session(session);
+            await AssetTransaction.deleteMany({ user: userId }).session(session);
+            await WalletSnapshot.deleteMany({ user: userId }).session(session);
+        });
     } catch (error) {
-        await session.abortTransaction(); session.endSession(); next(error);
+        return next(error);
     }
+    res.json({ message: "Carteira resetada." });
 };
 
 // PUT /wallet/targets — salva a carteira ideal (alocação-alvo + reserva) do usuário.
@@ -749,28 +766,23 @@ export const getAssetTransactions = async (req, res, next) => {
 };
 
 export const deleteTransaction = async (req, res, next) => {
-    const session = await mongoose.startSession();
+    const userId = req.user.id;
+    let txTicker;
     try {
-        session.startTransaction();
-        const userId = req.user.id;
-        const tx = await AssetTransaction.findOneAndDelete({ _id: req.params.id, user: userId }, { session });
-        if (!tx) {
-            await session.abortTransaction();
-            session.endSession();
-            return res.status(404).json({ message: "Transação não encontrada" });
-        }
-        // Recalcula a posição na MESMA transação: se o recálculo falhar (ex.: saldo
-        // insuficiente), o delete é revertido — sem estado financeiro inconsistente.
-        await financialService.recalculatePosition(userId, tx.ticker, null, session);
-        await session.commitTransaction();
-        session.endSession();
-        try { await financialService.rebuildUserHistory(userId); } catch (e) {}
-        res.json({ message: "Transação removida." });
+        await runTransaction(async (session) => {
+            const tx = await AssetTransaction.findOneAndDelete({ _id: req.params.id, user: userId }, { session });
+            if (!tx) throw txError(404, "Transação não encontrada");
+            txTicker = tx.ticker;
+            // Recalcula a posição na MESMA transação: se o recálculo falhar (ex.: saldo
+            // insuficiente), o delete é revertido — sem estado financeiro inconsistente.
+            await financialService.recalculatePosition(userId, tx.ticker, null, session);
+        });
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-        next(error);
+        if (error.httpStatus) return res.status(error.httpStatus).json({ message: error.message });
+        return next(error);
     }
+    try { await financialService.rebuildUserHistory(userId); } catch (e) {}
+    res.json({ message: "Transação removida." });
 };
 
 // Throttle do self-heal de dividendos (1h por usuário) — evita re-scraping a

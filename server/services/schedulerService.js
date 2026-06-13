@@ -12,11 +12,13 @@ import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9
 import { clearUserCache } from '../utils/userCache.js'; // (I6) limpa cache pós-downgrade em massa
 import { signalEngine } from './engines/signalEngine.js';
 import MarketAsset from '../models/MarketAsset.js';
+import MarketAnalysis from '../models/MarketAnalysis.js';
 import User from '../models/User.js';
 import UserAsset from '../models/UserAsset.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
-import AssetTransaction from '../models/AssetTransaction.js'; 
+import AssetTransaction from '../models/AssetTransaction.js';
 import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
+import { createBroadcast } from './notificationService.js';
 import { calculateDailyDietz } from '../utils/mathUtils.js';
 import { isBusinessDay, countBusinessDays } from '../utils/dateUtils.js';
 
@@ -219,6 +221,46 @@ export const runDailySnapshot = async (force = false) => {
     }
 };
 
+// --- AUTO-PUBLISH SEMANAL (Reutilizável) ---
+// Publica automaticamente o ranking + Explainable IA mais recente de cada classe,
+// uma vez por semana, para os períodos em que o admin não publica manualmente.
+// A geração diária (09:00/18:30) permanece intacta — isto só PUBLICA o que já existe.
+const AUTO_PUBLISH_CLASSES = ['BRASIL_10', 'STOCK', 'FII', 'CRYPTO', 'STOCK_US'];
+const ASSET_CLASS_LABELS = {
+    STOCK: 'Ações BR', FII: 'FIIs', CRYPTO: 'Cripto',
+    STOCK_US: 'Ações EUA', BRASIL_10: 'Brasil 10',
+};
+
+export const runWeeklyAutoPublish = async () => {
+    logger.info("📢 Auto-publish semanal — publicando rankings mais recentes");
+    const published = [];
+    for (const assetClass of AUTO_PUBLISH_CLASSES) {
+        try {
+            const latest = await MarketAnalysis.findOne({ assetClass, strategy: 'BUY_HOLD' }).sort({ createdAt: -1 });
+            if (!latest) continue;
+            const wasPublished = latest.isRankingPublished;
+            latest.isRankingPublished = true;
+            latest.isExplainableAIPublished = true;
+            latest.isReportPublished = true;
+            await latest.save();
+            if (!wasPublished) {
+                published.push(assetClass);
+                const label = ASSET_CLASS_LABELS[assetClass] || assetClass;
+                createBroadcast({
+                    type: 'RANKING_PUBLISHED',
+                    title: 'Novo ranking publicado',
+                    message: `Novo ranking de ${label} está disponível. Confira as recomendações atualizadas.`,
+                    relatedAssetClass: assetClass,
+                });
+            }
+        } catch (e) {
+            logger.error(`❌ Auto-publish (${assetClass}): ${e.message}`);
+        }
+    }
+    logger.info(`📢 Auto-publish semanal concluído. Novas publicações: ${published.length ? published.join(', ') : 'nenhuma'}`);
+    return { published };
+};
+
 export const initScheduler = () => {
     logger.info("⏰ Scheduler Service Inicializado");
 
@@ -312,6 +354,16 @@ export const initScheduler = () => {
             }
         } catch (e) {
             logger.error(`❌ Rotina Tarde V3: ${e.message}`);
+        }
+    });
+
+    // 5c. Auto-publish semanal (Segunda 09:30) — publica o ranking + Explainable IA
+    // mais recente de cada classe automaticamente, para semanas sem publicação manual.
+    cron.schedule('30 9 * * 1', async () => {
+        try {
+            await runWeeklyAutoPublish();
+        } catch (e) {
+            logger.error(`❌ Auto-publish semanal: ${e.message}`);
         }
     });
 

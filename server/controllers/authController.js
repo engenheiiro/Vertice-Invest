@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
+import { runTransaction, txError } from '../utils/dbTransaction.js';
 import User from '../models/User.js';
 import RefreshToken from '../models/RefreshToken.js';
 import AuditLog from '../models/AuditLog.js';
@@ -12,6 +13,7 @@ import { getPasswordError } from '../utils/passwordPolicy.js'; // (S6) política
 import { invalidateUser } from '../utils/userCache.js'; // (I6) bust de cache no update de perfil
 import { verifyTotp, consumeBackupCode } from '../utils/mfa.js'; // (I14) MFA no login
 import { decrypt } from '../utils/encryption.js'; // (S) descriptografa mfaSecret em repouso
+import { issueCsrfToken, clearCsrfToken } from '../middleware/csrf.js'; // (1.4) CSRF double-submit
 
 // Configurações
 const ACCESS_TOKEN_EXPIRATION = '15m';
@@ -60,52 +62,41 @@ const sanitizeUser = (user) => {
 };
 
 export const register = async (req, res, next) => {
-  const session = await mongoose.startSession();
-  
+  const { name, email, password } = req.body;
+  let newUserId;
   try {
-    session.startTransaction();
-
-    const { name, email, password } = req.body;
-
     if (!name || name.length < 2) throw new Error("Nome muito curto.");
     const pwError = getPasswordError(password);
     if (pwError) throw new Error(pwError);
 
-    const userExists = await User.findOne({ email }).session(session);
-    
-    if (userExists) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(409).json({ message: "Este email já está cadastrado." });
-    }
+    await runTransaction(async (session) => {
+      const userExists = await User.findOne({ email }).session(session);
+      if (userExists) throw txError(409, "Este email já está cadastrado.");
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
 
-    const newUser = new User({ 
-      name, 
-      email, 
-      password: hashedPassword,
-      role: 'USER', 
-      plan: 'GUEST', 
-      subscriptionStatus: 'ACTIVE',
-      validUntil: null,
-      hasSeenTutorial: false 
+      const newUser = new User({
+        name,
+        email,
+        password: hashedPassword,
+        role: 'USER',
+        plan: 'GUEST',
+        subscriptionStatus: 'ACTIVE',
+        validUntil: null,
+        hasSeenTutorial: false
+      });
+
+      await newUser.save({ session });
+      newUserId = newUser._id;
     });
-    
-    await newUser.save({ session });
-
-    await session.commitTransaction();
-    session.endSession();
-
-    logAudit(req, 'REGISTER_SUCCESS', 'Nova conta criada', newUser._id, email);
-    res.status(201).json({ message: "Conta criada com sucesso!" });
-
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-    next(error);
+    if (error.httpStatus) return res.status(error.httpStatus).json({ message: error.message });
+    return next(error);
   }
+
+  logAudit(req, 'REGISTER_SUCCESS', 'Nova conta criada', newUserId, email);
+  res.status(201).json({ message: "Conta criada com sucesso!" });
 };
 
 export const login = async (req, res, next) => {
@@ -184,6 +175,9 @@ export const login = async (req, res, next) => {
       maxAge: REFRESH_TOKEN_EXPIRATION_DAYS * 24 * 60 * 60 * 1000,
     });
 
+    // (1.4) Novo token CSRF a cada login — rotaciona junto com a sessão.
+    issueCsrfToken(req, res, { rotate: true });
+
     logAudit(req, 'LOGIN_SUCCESS', 'Login via Senha', user._id, email);
     
     // [SEGURANÇA] Retorna apenas dados sanitizados
@@ -221,6 +215,10 @@ export const refreshToken = async (req, res, next) => {
       { expiresIn: ACCESS_TOKEN_EXPIRATION }
     );
 
+    // (1.4) Auto-cura: emite o cookie CSRF se a sessão (anterior ao deploy)
+    // ainda não tem um. Mantém o existente para não invalidar requests em voo.
+    issueCsrfToken(req, res);
+
     res.status(200).json({ accessToken: newAccessToken });
 
   } catch (error) {
@@ -235,6 +233,7 @@ export const logout = async (req, res, next) => {
        await RefreshToken.findOneAndDelete({ token: hashToken(cookies.jwt) });
        res.clearCookie('jwt', { httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production' });
     }
+    clearCsrfToken(res); // (1.4) limpa o token CSRF junto com a sessão
     res.status(200).json({ message: "Logout realizado." });
   } catch (error) {
     next(error);

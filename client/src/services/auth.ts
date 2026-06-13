@@ -21,6 +21,22 @@ interface AuthResponse {
   mfaRequired?: boolean; // (I14) senha OK, falta o segundo fator
 }
 
+// (1.4) Double-submit CSRF: lê o cookie legível `csrfToken` e o reenvia no
+// header em mutações. O servidor compara header × cookie.
+const CSRF_COOKIE = 'csrfToken';
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
+
+const getCookie = (name: string): string | null => {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+};
+
+// Header CSRF pronto para spread em fetches que não passam pelo wrapper `api()`.
+const csrfHeader = (): Record<string, string> => {
+  const token = getCookie(CSRF_COOKIE);
+  return token ? { 'X-CSRF-Token': token } : {};
+};
+
 let isRefreshing = false;
 let refreshSubscribers: ((token: string) => void)[] = [];
 
@@ -34,6 +50,9 @@ const onRrefreshed = (token: string) => {
 };
 
 export const authService = {
+  // (1.4) Header CSRF para fetches diretos (fora do wrapper `api()`).
+  csrfHeader,
+
   // Wrapper para chamadas autenticadas
   async api(endpoint: string, options: RequestInit = {}) {
     const token = localStorage.getItem('accessToken');
@@ -43,6 +62,14 @@ export const authService = {
       headers.set('Authorization', `Bearer ${token}`);
     }
     headers.set('Content-Type', 'application/json');
+
+    // (1.4) Anexa o token CSRF nas mutações (o retry pós-refresh reutiliza este
+    // mesmo objeto `headers`, então o token segue junto na repetição).
+    const method = (options.method || 'GET').toUpperCase();
+    if (MUTATING_METHODS.has(method)) {
+      const csrfToken = getCookie(CSRF_COOKIE);
+      if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
+    }
 
     let response;
     try {

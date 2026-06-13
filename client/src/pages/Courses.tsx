@@ -73,7 +73,7 @@ export const Courses = () => {
         const fetchCourses = async () => {
             try {
                 setLoading(true);
-                const token = localStorage.getItem('token');
+                const token = localStorage.getItem('accessToken');
                 const res = await fetch('/api/academy/courses', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -97,7 +97,7 @@ export const Courses = () => {
         if (selectedCourseId) {
             const fetchCourseDetails = async () => {
                 try {
-                    const token = localStorage.getItem('token');
+                    const token = localStorage.getItem('accessToken');
                     const res = await fetch(`/api/academy/courses/${selectedCourseId}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });

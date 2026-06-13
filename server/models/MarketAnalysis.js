@@ -85,6 +85,13 @@ const MarketAnalysisSchema = new mongoose.Schema({
   comparisonReport: { type: mongoose.Schema.Types.Mixed, default: null },
   explainableAIPrompt: { type: String, default: '' },
   generatedExplainableAI: { type: String, default: '' },
+  // Narrativa Explainable IA por perfil (Defensivo/Moderado/Arrojado). Permite
+  // texto aprimorado específico por perfil; o campo único acima é o fallback.
+  generatedExplainableAIByProfile: {
+    DEFENSIVE: { type: String, default: '' },
+    MODERATE: { type: String, default: '' },
+    BOLD: { type: String, default: '' },
+  },
 
   content: {
     morningCall: { type: String, default: "" },

@@ -3,13 +3,14 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck, LayoutGrid, PieChart, BrainCircuit,
   GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
-  Eye, EyeOff, Play, Radar, Calculator, Target
+  Eye, EyeOff, Play, Radar, Calculator, Target, ChevronRight
 } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext'; // Importar DemoContext
 import { PlanBadge } from '../ui/PlanBadge';
+import { NotificationBell } from './NotificationBell';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuth();
@@ -130,8 +131,13 @@ export const Header: React.FC = () => {
                </button>
            )}
 
+           {/* Notification Bell */}
+           <NotificationBell />
+
+           <div className="h-4 w-px bg-slate-800 hidden sm:block"></div>
+
            {/* Privacy Toggle Button */}
-           <button 
+           <button
              onClick={togglePrivacyMode}
              className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
              title={isPrivacyMode ? "Mostrar Valores" : "Ocultar Valores"}
@@ -150,12 +156,22 @@ export const Header: React.FC = () => {
                 </span>
               </div>
 
-              <Link to="/profile" className="hidden sm:block text-right group cursor-pointer">
-                  <p className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors flex items-center justify-end gap-1.5 whitespace-nowrap">
-                      {user?.name}
-                      <UserIcon size={10} className="text-slate-500 group-hover:text-blue-500 transition-colors" />
-                  </p>
-                  <p className="text-[10px] text-emerald-500 font-mono">ONLINE</p>
+              <Link
+                to="/profile"
+                title="Abrir meu perfil"
+                aria-label="Abrir meu perfil"
+                className="hidden sm:flex items-center gap-2 group cursor-pointer pl-1 pr-2 py-1 rounded-lg border border-transparent hover:border-slate-700 hover:bg-slate-800/60 transition-colors"
+              >
+                  <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-600/40 flex items-center justify-center text-blue-300 group-hover:bg-blue-600/30 transition-colors shrink-0">
+                      <span className="text-[11px] font-black uppercase">{user?.name?.trim()?.charAt(0) || <UserIcon size={12} />}</span>
+                  </div>
+                  <div className="text-right leading-tight">
+                      <p className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors whitespace-nowrap">
+                          {user?.name}
+                      </p>
+                      <p className="text-[10px] text-emerald-500 font-mono">ONLINE</p>
+                  </div>
+                  <ChevronRight size={14} className="text-slate-600 group-hover:text-blue-400 transition-colors shrink-0" />
               </Link>
               
               <button

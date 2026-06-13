@@ -21,7 +21,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
     const filteredAudit = React.useMemo(() => {
         if (!asset?.auditLog) return [];
 
-        const universalCategories = ['Qualidade', 'Valuation', 'Risco', 'Dados e Confiança'];
+        const universalCategories = ['Qualidade', 'Valuation', 'Risco', 'Dados e Confiança', 'Confiança'];
         const profileCategoryMap: Record<string, string> = {
             'DEFENSIVE': 'Perfil Defensivo',
             'MODERATE': 'Perfil Moderado',
@@ -436,7 +436,14 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                                         </div>
                                                     ))}
                                                     {filteredAudit.filter(l => l.points < 0).length === 0 && (
-                                                        <div className="text-[10px] text-slate-600 italic p-4 text-center border border-dashed border-slate-800 rounded-xl">Sem penalidades registradas.</div>
+                                                        <div className="text-[10px] text-slate-600 italic p-4 text-center border border-dashed border-slate-800 rounded-xl">
+                                                            Sem penalidades registradas.
+                                                            {asset.score < 100 && (
+                                                                <p className="mt-1 text-slate-700 not-italic">
+                                                                    Pontuação abaixo de 100 indica critérios bônus não conquistados (ex.: crescimento acelerado, liquidez excepcional), não penalidades aplicadas.
+                                                                </p>
+                                                            )}
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>

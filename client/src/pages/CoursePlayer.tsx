@@ -6,6 +6,7 @@ const Player = ReactPlayer as any;
 import { COURSES, LESSONS } from '../data/academy';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { authService } from '../services/auth';
 
 export const CoursePlayer = () => {
     const { courseId } = useParams();
@@ -41,7 +42,7 @@ export const CoursePlayer = () => {
         const fetchCourseData = async () => {
             try {
                 setLoading(true);
-                const token = localStorage.getItem('token');
+                const token = localStorage.getItem('accessToken');
                 
                 // Buscar dados do curso e aulas do servidor
                 console.log(`Fetching data for course: ${courseId}`);
@@ -132,14 +133,16 @@ export const CoursePlayer = () => {
         // Mark as completed if watched 90%
         if (state.played > 0.9 && !completedLessons.includes(currentLesson._id)) {
             console.log(`Marking lesson ${currentLesson._id} as completed (90% watched)`);
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem('accessToken');
             try {
                 const res = await fetch('/api/academy/progress', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
+                        'Authorization': `Bearer ${token}`,
+                        ...authService.csrfHeader() // (1.4) double-submit CSRF
                     },
+                    credentials: 'include',
                     body: JSON.stringify({
                         lessonId: currentLesson._id,
                         watchTime: state.playedSeconds || 0,
@@ -169,7 +172,7 @@ export const CoursePlayer = () => {
         try {
             setQuizLoading(true);
             setQuizError('');
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem('accessToken');
             const res = await fetch(`/api/academy/quiz/${courseId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -198,13 +201,15 @@ export const CoursePlayer = () => {
         setQuizSubmitting(true);
         setQuizError('');
         try {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem('accessToken');
             const res = await fetch('/api/academy/quiz/submit', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    ...authService.csrfHeader() // (1.4) double-submit CSRF
                 },
+                credentials: 'include',
                 body: JSON.stringify({
                     courseId,
                     answers: quizAnswers
@@ -231,7 +236,7 @@ export const CoursePlayer = () => {
         console.log(`Attempting to download certificate. Lessons: ${lessons.length}, Completed: ${completedLessons.length}`);
         setDownloading(true);
         try {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem('accessToken');
             const response = await fetch(`/api/academy/certificate/${courseId}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -387,14 +392,16 @@ export const CoursePlayer = () => {
                                     {!completedLessons.includes(currentLesson?._id) && (
                                         <button 
                                             onClick={async () => {
-                                                const token = localStorage.getItem('token');
+                                                const token = localStorage.getItem('accessToken');
                                                 try {
                                                     await fetch('/api/academy/progress', {
                                                         method: 'POST',
                                                         headers: {
                                                             'Content-Type': 'application/json',
-                                                            'Authorization': `Bearer ${token}`
+                                                            'Authorization': `Bearer ${token}`,
+                                                            ...authService.csrfHeader() // (1.4) double-submit CSRF
                                                         },
+                                                        credentials: 'include',
                                                         body: JSON.stringify({
                                                             lessonId: currentLesson._id,
                                                             watchTime: currentLesson.duration,

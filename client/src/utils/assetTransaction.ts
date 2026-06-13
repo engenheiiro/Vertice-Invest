@@ -8,6 +8,9 @@ export interface AssetFormState {
   price: string;
   rate: string;
   date: string;
+  // Renda fixa pós-fixada/indexada: índice de referência (SELIC/CDI/IPCA/PRE).
+  // Quando definido, `rate` representa o spread a.a. sobre o índice.
+  fixedIncomeIndex?: string;
 }
 
 export interface TransactionPayload {
@@ -21,6 +24,8 @@ export interface TransactionPayload {
   sector: string;
   date: string;
   fixedIncomeRate: number;
+  fixedIncomeIndex?: string;
+  fixedIncomeSpread?: number;
 }
 
 export interface ValidationResult {
@@ -127,6 +132,9 @@ export function validateTransaction(
 
   const finalRate = form.rate ? parseFloat(form.rate.replace(',', '.')) : 0;
   const finalTicker = form.ticker.toUpperCase();
+  // Pós-fixado/indexado: a taxa digitada é o spread sobre o índice (SELIC/CDI/IPCA).
+  const idx = form.fixedIncomeIndex;
+  const isIndexed = idx === 'SELIC' || idx === 'CDI' || idx === 'IPCA';
 
   return {
     payload: {
@@ -140,6 +148,7 @@ export function validateTransaction(
       sector: 'General',
       date: form.date,
       fixedIncomeRate: finalRate,
+      ...(isIndexed ? { fixedIncomeIndex: idx, fixedIncomeSpread: finalRate } : {}),
     },
   };
 }

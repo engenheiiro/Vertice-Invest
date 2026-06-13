@@ -28,8 +28,12 @@ const UserAssetSchema = new mongoose.Schema({
   currency: { type: String, default: 'BRL' },
   
   // Campos para Renda Fixa (Mantidos para Fallback)
-  startDate: { type: Date }, 
-  fixedIncomeRate: { type: Number, default: 0 }, // Taxa anual contratada
+  startDate: { type: Date },
+  fixedIncomeRate: { type: Number, default: 0 }, // Taxa anual contratada (prefixado: taxa cheia; legado: %CDI quando >50)
+  // Pós-fixados/indexados: o rendimento é índice vivo + spread (não a taxa cheia).
+  // Ex.: Tesouro Selic "SELIC + 0,08%" → fixedIncomeIndex='SELIC', fixedIncomeSpread=0.0843.
+  fixedIncomeIndex: { type: String, enum: ['SELIC', 'CDI', 'IPCA', 'PRE', null], default: null },
+  fixedIncomeSpread: { type: Number, default: 0 }, // Spread a.a. sobre o índice (%)
   
   // --- Feature: Tags Personalizadas ---
   tags: { type: [String], default: [] }, // Ex: ["Aposentadoria", "Viagem", "Risco"]

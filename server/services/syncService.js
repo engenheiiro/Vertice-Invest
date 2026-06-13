@@ -72,9 +72,8 @@ export const syncService = {
                     lastPrice: Number(data.price) || 0,
                     dy: Number(data.dy) || 0,
                     p_vp: Number(data.pvp) || 0,
-                    marketCap: Number(data.marketCap) || 0,
                     liquidity: liquidity,
-                    
+
                     pl: Number(data.pl) || 0,
                     roe: Number(data.roe) || 0,
                     roic: Number(data.roic) || 0,
@@ -82,8 +81,6 @@ export const syncService = {
                     evEbitda: Number(data.evEbitda) || 0,
                     revenueGrowth: Number(data.cresRec5a) || 0,
                     debtToEquity: Number(data.divBrutaPatrim) || 0,
-                    netDebt: Number(data.netDebt) || 0,
-                    payout: Number(data.payout) || 0,
 
                     vacancy: Number(data.vacancy) || 0,
                     capRate: Number(data.capRate) || 0,
@@ -94,11 +91,28 @@ export const syncService = {
                     lastFundamentalsDate: timestamp,
                     lastAnalysisDate: timestamp,
                     updatedAt: timestamp,
-                    
+
                     // Se o Fundamentus tem dados, o ativo está vivo. Reseta falhas.
                     isActive: true,
                     failCount: 0
                 };
+
+                // Financials LTM derivados (engenharia reversa): 0 = não foi possível
+                // calcular. Carry-forward — só sobrescreve quando o novo valor é
+                // significativo, evitando que um scrape parcial zere dados bons
+                // (corrige lacunas intermitentes no modal "Financials (LTM)").
+                const ltmFields = {
+                    marketCap: Number(data.marketCap) || 0,
+                    netDebt: Number(data.netDebt) || 0,
+                    netRevenue: Number(data.netRevenue) || 0,
+                    netIncome: Number(data.netIncome) || 0,
+                    totalAssets: Number(data.totalAssets) || 0,
+                    patrimLiq: Number(data.patrimLiq) || 0,
+                    payout: Number(data.payout) || 0,
+                };
+                for (const [k, v] of Object.entries(ltmFields)) {
+                    if (v !== 0) updateFields[k] = v;
+                }
 
                 operations.push({
                     updateOne: {
