@@ -64,12 +64,18 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
         return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
     }, [isOpen]);
 
-    // Posição visual do ativo — espelha exatamente o TopPicksCard:
-    // todos os ativos do perfil (BUY e WAIT), ordenados por score, top 10.
+    // Posição visual do ativo — mesma ordenação do sorted (score + composite estrutural).
     const profilePositionMap = useMemo(() => {
+        const structuralComposite = (r: RankingItem) =>
+            r.metrics?.structural
+                ? (r.metrics.structural.quality + r.metrics.structural.valuation + r.metrics.structural.risk) / 3
+                : 0;
         const sorted = ranking
             .filter(r => r.riskProfile === profile)
-            .sort((a, b) => b.score - a.score)
+            .sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                return structuralComposite(b) - structuralComposite(a);
+            })
             .slice(0, 10);
         const map = new Map<string, number>();
         sorted.forEach((r, i) => map.set(r.ticker, i + 1));
@@ -272,8 +278,11 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                             </div>
 
                                             <div className="space-y-2">
-                                                {allocations.map(({ item, shares, cost }, idx) => {
-                                                    const rank = idx + 1;
+                                                {allocations
+                                                    .slice()
+                                                    .sort((a, b) => (profilePositionMap.get(a.item.ticker) ?? 999) - (profilePositionMap.get(b.item.ticker) ?? 999))
+                                                    .map(({ item, shares, cost }, idx) => {
+                                                    const rank = profilePositionMap.get(item.ticker) ?? idx + 1;
                                                     const rankColor = rank === 1 ? 'text-yellow-400' : rank === 2 ? 'text-slate-300' : rank === 3 ? 'text-amber-600' : 'text-slate-600';
                                                     return (
                                                     <div
