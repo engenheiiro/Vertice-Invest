@@ -31,11 +31,12 @@ export const addTransactionSchema = z.object({
   }),
 });
 
-// PUT /wallet/:id — atualizar tags do ativo.
+// PUT /wallet/:id — atualizar tags e/ou nome do ativo (ex.: renomear cofrinho).
 export const updateAssetSchema = z.object({
   params: z.object({ id: objectId }),
   body: z.object({
     tags: z.array(z.string().trim().max(40, 'Tag muito longa')).max(20, 'Máximo de 20 tags').optional(),
+    name: z.string().trim().min(1, 'Nome não pode ser vazio').max(120, 'Nome muito longo').optional(),
   }),
 });
 

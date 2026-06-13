@@ -4,6 +4,9 @@ import mongoose from 'mongoose';
 const UserAssetSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   ticker: { type: String, required: true, uppercase: true },
+  // Nome amigável (ex.: nome do "cofrinho" de uma Reserva/Caixa, ou nome do título
+  // de Renda Fixa). Para ativos de mercado o nome vem da cotação ao vivo.
+  name: { type: String },
   type: { type: String, required: true },
   quantity: { type: Number, required: true, default: 0 },
   totalCost: { type: Number, required: true, default: 0 },

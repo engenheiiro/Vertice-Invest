@@ -66,6 +66,7 @@ interface WalletContextType {
     togglePrivacyMode: () => void;
     refreshWallet: () => void;
     addAsset: (asset: any) => Promise<void>;
+    updateAsset: (id: string, data: { name?: string; tags?: string[] }) => Promise<void>;
     removeAsset: (id: string) => Promise<void>;
     resetWallet: () => Promise<void>;
     updateTargets: (newTargets: AllocationMap, newReserveTarget: number) => void;
@@ -141,6 +142,16 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         // Feedback de sucesso/erro do "add" é tratado no AddAssetModal (evita toast duplicado).
     });
 
+    const updateAssetMutation = useMutation({
+        mutationFn: ({ id, data }: { id: string; data: { name?: string; tags?: string[] } }) =>
+            walletService.updateAsset(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
+            queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
+        },
+        onError: (err: any) => addToast(err?.message || 'Erro ao atualizar ativo.', 'error')
+    });
+
     const removeAssetMutation = useMutation({
         mutationFn: walletService.removeAsset,
         onSuccess: () => {
@@ -168,6 +179,11 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const addAsset = async (newAsset: any) => {
         if (isDemoMode) return; // Bloqueia ações no demo
         await addAssetMutation.mutateAsync(newAsset);
+    };
+
+    const updateAsset = async (id: string, data: { name?: string; tags?: string[] }) => {
+        if (isDemoMode) return;
+        await updateAssetMutation.mutateAsync({ id, data });
     };
 
     const removeAsset = async (id: string) => {
@@ -230,9 +246,10 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             isPrivacyMode: isDemoMode ? false : isPrivacyMode, // Demo sempre visível
             togglePrivacyMode,
             refreshWallet: () => queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] }),
-            addAsset, 
-            removeAsset, 
-            resetWallet, 
+            addAsset,
+            updateAsset,
+            removeAsset,
+            resetWallet,
             updateTargets
         }}>
             {children}

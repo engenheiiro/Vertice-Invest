@@ -17,6 +17,7 @@ interface Transaction {
     totalValue: number;
     date: string;
     isCashOp: boolean;
+    cashName?: string;
 }
 
 type FilterType = 'ALL' | 'CASH' | 'TRADE';
@@ -110,13 +111,14 @@ export const CashFlowHistory = () => {
                     <div className="divide-y divide-slate-800/50">
                         {transactions.map((tx) => {
                             const isBuy = tx.type === 'BUY';
-                            const isCash = tx.isCashOp || tx.ticker === 'RESERVA'; 
-                            
+                            const isCash = tx.isCashOp || tx.ticker === 'RESERVA';
+
                             let title = '';
                             let subtitle = '';
-                            
+
                             if (isCash) {
-                                title = isBuy ? 'Aporte na Reserva' : 'Resgate / Uso';
+                                const cofre = tx.cashName || 'Reserva';
+                                title = isBuy ? `Aporte em ${cofre}` : `Resgate de ${cofre}`;
                                 subtitle = 'Movimentação de Caixa';
                             } else {
                                 title = `${isBuy ? 'Compra' : 'Venda'} de ${tx.ticker}`;

@@ -37,6 +37,28 @@ export const getLocalDateString = (): string => {
   return `${year}-${month}-${day}`;
 };
 
+/**
+ * Gera um ticker interno único para um novo "cofrinho" de Reserva/Caixa a partir
+ * do nome escolhido pelo usuário. O ticker é só uma chave estável (não é exibido —
+ * a UI mostra o nome); por isso pode ser renomeado sem afetar o ticker.
+ * Ex.: "Viagem Europa" → "RESERVA-VIAGEM-EUROPA" (sufixo -2, -3… em colisão).
+ */
+export const makeReserveTicker = (name: string, existingTickers: string[]): string => {
+  const base = (name || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // remove acentos
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 24);
+  const root = base ? `RESERVA-${base}` : 'RESERVA';
+  const taken = new Set(existingTickers.map((t) => t.toUpperCase()));
+  if (!taken.has(root)) return root;
+  let i = 2;
+  while (taken.has(`${root}-${i}`)) i++;
+  return `${root}-${i}`;
+};
+
 /** Converte string monetária pt-BR (`1.234,56`) em float. `NaN` se vazio/ inválido. */
 export const parseCurrencyToFloat = (value: string): number => {
   if (!value) return NaN;
@@ -73,7 +95,8 @@ export function validateTransaction(
     finalPrice = 1;
 
     if (transactionType === 'SELL') {
-      const owned = assets.find((a) => a.ticker === 'RESERVA');
+      // Saque sai do cofrinho selecionado (form.ticker), não mais de um 'RESERVA' fixo.
+      const owned = assets.find((a) => a.ticker === form.ticker);
       if (!owned || owned.quantity < finalQty) {
         const disponivel = owned
           ? owned.quantity.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })

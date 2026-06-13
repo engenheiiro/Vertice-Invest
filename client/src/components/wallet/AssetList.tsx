@@ -1,12 +1,17 @@
 
 import React, { useState } from 'react';
 import { useWallet, AssetType, Asset } from '../../contexts/WalletContext';
-import { TrendingUp, TrendingDown, Trash2, Folder, PieChart, History, ChevronDown, ChevronRight, EyeOff } from 'lucide-react';
+import { TrendingUp, TrendingDown, Trash2, Folder, PieChart, History, ChevronDown, ChevronRight, EyeOff, Pencil } from 'lucide-react';
 import { AssetTransactionsModal } from './AssetTransactionsModal';
+import { RenameReserveModal } from './RenameReserveModal';
 import { formatCurrency as fmtCurrency, type Currency } from '../../utils/format';
 import { useConfirm } from '../../hooks/useConfirm';
 import AssetLogo from '../common/AssetLogo';
 import { getAssetSubtitle } from '../../utils/assetDisplay';
+
+/** Título exibido na lista: cofrinhos (CASH) mostram o nome; demais, o ticker. */
+const assetTitle = (asset: Asset): string =>
+    asset.type === 'CASH' ? (asset.name || 'Reserva') : asset.ticker;
 
 const TYPE_LABELS: Record<string, string> = {
     STOCK: 'Ações Brasil',
@@ -21,6 +26,7 @@ export const AssetList = () => {
     const { assets, removeAsset, kpis, targetAllocation, isPrivacyMode } = useWallet();
     const confirm = useConfirm();
     const [historyTicker, setHistoryTicker] = useState<string | null>(null);
+    const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
     const formatCurrency = (val: number | null | undefined, currency: Currency = 'BRL') =>
@@ -98,9 +104,11 @@ export const AssetList = () => {
                                             <div className="min-w-0 flex-1 flex items-center gap-3">
                                                 <AssetLogo ticker={asset.ticker} type={asset.type} name={asset.name} size={32} />
                                                 <div className="min-w-0">
-                                                    <p className="font-bold text-slate-200 text-sm">{asset.ticker}</p>
+                                                    <p className="font-bold text-slate-200 text-sm truncate">{assetTitle(asset)}</p>
                                                     <p className="text-[10px] text-slate-500 truncate">
-                                                        {asset.quantity} un · PM {formatCurrency(asset.averagePrice, asset.currency)}
+                                                        {asset.type === 'CASH'
+                                                            ? 'Caixa / Reserva'
+                                                            : `${asset.quantity} un · PM ${formatCurrency(asset.averagePrice, asset.currency)}`}
                                                     </p>
                                                 </div>
                                             </div>
@@ -113,9 +121,18 @@ export const AssetList = () => {
                                                     </p>
                                                 </div>
                                                 <div className="flex flex-col">
+                                                    {asset.type === 'CASH' && (
+                                                        <button
+                                                            onClick={() => setRenameTarget({ id: asset.id, name: asset.name || '' })}
+                                                            aria-label={`Renomear ${assetTitle(asset)}`}
+                                                            className="p-2 text-slate-600 hover:text-emerald-400 transition-colors"
+                                                        >
+                                                            <Pencil size={16} />
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => setHistoryTicker(asset.ticker)}
-                                                        aria-label={`Histórico de ${asset.ticker}`}
+                                                        aria-label={`Histórico de ${assetTitle(asset)}`}
                                                         className="p-2 text-slate-600 hover:text-blue-400 transition-colors"
                                                     >
                                                         <History size={16} />
@@ -242,7 +259,7 @@ export const AssetList = () => {
                                                         <div className="flex items-center gap-3">
                                                             <AssetLogo ticker={asset.ticker} type={asset.type} name={asset.name} size={32} />
                                                             <div>
-                                                                <p className="font-bold text-slate-200">{asset.ticker}</p>
+                                                                <p className="font-bold text-slate-200">{assetTitle(asset)}</p>
                                                                 <p className="text-[10px] text-slate-500">{getAssetSubtitle(asset)}</p>
                                                             </div>
                                                         </div>
@@ -286,7 +303,16 @@ export const AssetList = () => {
                                                     </td>
                                                     <td className="p-4 text-center">
                                                         <div className="flex items-center justify-center gap-1">
-                                                            <button 
+                                                            {asset.type === 'CASH' && (
+                                                                <button
+                                                                    onClick={() => setRenameTarget({ id: asset.id, name: asset.name || '' })}
+                                                                    className="p-2 text-slate-600 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                                                                    title="Renomear Reserva"
+                                                                >
+                                                                    <Pencil size={16} />
+                                                                </button>
+                                                            )}
+                                                            <button
                                                                 onClick={() => setHistoryTicker(asset.ticker)}
                                                                 className="p-2 text-slate-600 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
                                                                 title="Ver Histórico"
@@ -321,10 +347,17 @@ export const AssetList = () => {
                 </div>
             </div>
 
-            <AssetTransactionsModal 
-                isOpen={!!historyTicker} 
-                ticker={historyTicker || ''} 
-                onClose={() => setHistoryTicker(null)} 
+            <AssetTransactionsModal
+                isOpen={!!historyTicker}
+                ticker={historyTicker || ''}
+                onClose={() => setHistoryTicker(null)}
+            />
+
+            <RenameReserveModal
+                isOpen={!!renameTarget}
+                assetId={renameTarget?.id || null}
+                currentName={renameTarget?.name || ''}
+                onClose={() => setRenameTarget(null)}
             />
         </>
     );

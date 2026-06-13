@@ -27,6 +27,18 @@ export const walletService = {
         return await response.json();
     },
 
+    async updateAsset(id: string, data: { name?: string; tags?: string[] }) {
+        const response = await authService.api(`/api/wallet/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || "Falha ao atualizar ativo");
+        }
+        return await response.json();
+    },
+
     async removeAsset(id: string) {
         const response = await authService.api(`/api/wallet/${id}`, {
             method: 'DELETE'

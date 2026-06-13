@@ -254,7 +254,8 @@ export const getWalletData = async (req, res, next) => {
             return {
                 id: asset._id,
                 ticker: asset.ticker,
-                name: assetMap.get(asset.ticker)?.name || asset.ticker,
+                // Nome ao vivo (mercado) → nome salvo (cofrinho/renda fixa) → ticker.
+                name: assetMap.get(asset.ticker)?.name || asset.name || asset.ticker,
                 type: asset.type,
                 quantity: asset.quantity,
                 averagePrice: asset.quantity > 0 ? safePrice(asset.totalCost, asset.quantity) : 0,
@@ -618,13 +619,15 @@ export const addAssetTransaction = async (req, res, next) => {
 export const updateAsset = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { tags } = req.body;
+        const { tags, name } = req.body;
         const userId = req.user.id;
 
         const asset = await UserAsset.findOne({ _id: id, user: userId });
         if (!asset) return res.status(404).json({ message: "Ativo não encontrado" });
 
         if (tags !== undefined) asset.tags = tags;
+        // Renomear cofrinho (Reserva/Caixa) ou título de Renda Fixa.
+        if (name !== undefined) asset.name = String(name).trim();
 
         await asset.save();
         res.json({ message: "Ativo atualizado.", asset });
@@ -811,12 +814,26 @@ export const getWalletDividends = async (req, res, next) => {
 export const getCashFlow = async (req, res, next) => {
     try {
         const { page = 1, limit = 20, filterType } = req.query;
-        const query = { user: req.user.id };
-        if (filterType === 'CASH') query.ticker = 'RESERVA';
-        else if (filterType === 'TRADE') query.ticker = { $ne: 'RESERVA' };
+        const userId = req.user.id;
+
+        // Cofrinhos (Reserva/Caixa) do usuário: cada um é um UserAsset type=CASH com
+        // ticker próprio. Mapa ticker→nome para rotular o extrato e set para filtrar.
+        const cashAssets = await UserAsset.find({ user: userId, type: 'CASH' }).select('ticker name').lean();
+        const cashTickers = cashAssets.map(a => a.ticker);
+        const cashNameByTicker = new Map(cashAssets.map(a => [a.ticker, a.name || 'Reserva']));
+
+        const query = { user: userId };
+        if (filterType === 'CASH') query.ticker = { $in: cashTickers };
+        else if (filterType === 'TRADE') query.ticker = { $nin: cashTickers };
         const transactions = await AssetTransaction.find(query).sort({ date: -1, createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
         const total = await AssetTransaction.countDocuments(query);
-        res.json({ transactions: transactions.map(t => ({ ...t.toObject(), isCashOp: t.ticker === 'RESERVA' })), pagination: { total, hasMore: page * limit < total } });
+        res.json({
+            transactions: transactions.map(t => {
+                const isCashOp = cashNameByTicker.has(t.ticker);
+                return { ...t.toObject(), isCashOp, cashName: isCashOp ? cashNameByTicker.get(t.ticker) : undefined };
+            }),
+            pagination: { total, hasMore: page * limit < total }
+        });
     } catch (error) { next(error); }
 };
 

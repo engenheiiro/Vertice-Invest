@@ -32,7 +32,10 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     
     const { refreshWallet, assets } = useWallet();
-    const assetType = assets.find((a) => a.ticker === ticker)?.type;
+    const asset = assets.find((a) => a.ticker === ticker);
+    const assetType = asset?.type;
+    // Cofrinhos (CASH) exibem o nome amigável; demais ativos, o próprio ticker.
+    const displayName = asset?.type === 'CASH' ? (asset.name || 'Reserva') : ticker;
     const { addToast } = useToast();
     const confirm = useConfirm();
 
@@ -117,7 +120,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
                             <div className="flex items-center gap-3">
                                 <AssetLogo ticker={ticker} type={assetType} size={40} />
                                 <div>
-                                    <h2 className="text-lg font-bold text-white tracking-tight">Extrato: {ticker}</h2>
+                                    <h2 className="text-lg font-bold text-white tracking-tight">Extrato: {displayName}</h2>
                                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
                                         Histórico de Movimentações
                                     </p>

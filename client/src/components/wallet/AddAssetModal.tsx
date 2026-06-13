@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, PlusCircle, DollarSign, BarChart2, Tag, ArrowUpCircle, ArrowDownCircle, Search, Loader2, Clock, CheckCircle2, TrendingUp, Percent, Edit3, ShieldCheck } from 'lucide-react';
+import { X, PlusCircle, DollarSign, BarChart2, Tag, ArrowUpCircle, ArrowDownCircle, Search, Loader2, Clock, CheckCircle2, TrendingUp, Percent, Edit3, ShieldCheck, PiggyBank } from 'lucide-react';
 import { Input } from '../ui/Input';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { Button } from '../ui/Button';
@@ -13,6 +13,7 @@ import {
     getLocalDateString,
     parseCurrencyToFloat,
     validateTransaction,
+    makeReserveTicker,
     type AssetFormState,
 } from '../../utils/assetTransaction';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
@@ -44,6 +45,12 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
     const [form, setForm] = useState<AssetFormState>(INITIAL_FORM);
 
+    // CASH (Reserva/Caixa): qual "cofrinho" a transação afeta.
+    // '' = nenhum selecionado · NEW_RESERVE = criar um novo · senão = ticker do existente.
+    const NEW_RESERVE = '__NEW__';
+    const [cashSelection, setCashSelection] = useState<string>(NEW_RESERVE);
+    const reserves = assets.filter(a => a.type === 'CASH');
+
     // Concerns extraídas (M3): busca de preço e autocomplete de ticker.
     const priceFetch = usePriceFetch({ isOpen, form, setForm });
     const search = useAssetSearch({ form, transactionType, setForm });
@@ -56,6 +63,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             setValidationError('');
             setPriceWarning(null);
             setTransactionType('BUY');
+            setCashSelection(NEW_RESERVE);
             setForm({ ...INITIAL_FORM, date: getLocalDateString() });
             priceFetch.reset();
             search.reset();
@@ -108,25 +116,45 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
         let defaultRate = '';
         let defaultQty = '';
-        let defaultTicker = '';
+        const defaultTicker = '';
 
         if (newType === 'FIXED_INCOME') {
             defaultRate = '10,00';
             defaultQty = '1';
         } else if (newType === 'CASH') {
-            defaultTicker = 'RESERVA';
+            // Sem ticker fixo: o cofrinho é resolvido no submit (novo ou existente).
             defaultQty = '';
+            // Aporte: se já houver cofrinhos, deixa escolher; senão, cria um novo.
+            // Saque: sempre escolhe um existente.
+            setCashSelection(
+                transactionType === 'SELL'
+                    ? (reserves[0]?.ticker || '')
+                    : (reserves.length > 0 ? '' : NEW_RESERVE)
+            );
         }
 
         setForm(prev => ({
             ...prev,
             type: newType,
             ticker: defaultTicker,
+            name: '',
             rate: defaultRate,
             quantity: defaultQty,
             price: '',
         }));
     };
+
+    // Ao alternar Comprar/Sacar dentro de CASH, mantém a seleção coerente:
+    // saque exige um cofrinho existente (NEW_RESERVE não faz sentido).
+    useEffect(() => {
+        if (form.type !== 'CASH') return;
+        if (transactionType === 'SELL') {
+            setCashSelection(prev => (prev === NEW_RESERVE || !prev) ? (reserves[0]?.ticker || '') : prev);
+        } else {
+            setCashSelection(prev => prev || (reserves.length > 0 ? '' : NEW_RESERVE));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [transactionType, form.type]);
 
     const handleTickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value.toUpperCase();
@@ -165,7 +193,35 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         e.preventDefault();
         setValidationError('');
 
-        const { error, payload } = validateTransaction(form, transactionType, assets);
+        // Resolve o cofrinho (CASH) antes de validar: define ticker/nome conforme
+        // a escolha (novo cofrinho → gera ticker; existente → usa o ticker dele).
+        let workingForm = form;
+        if (form.type === 'CASH') {
+            if (transactionType === 'SELL') {
+                const target = reserves.find(r => r.ticker === cashSelection);
+                if (!target) {
+                    setValidationError('Selecione de qual reserva deseja sacar.');
+                    return;
+                }
+                workingForm = { ...form, ticker: target.ticker, name: target.name || '' };
+            } else if (cashSelection === NEW_RESERVE || reserves.length === 0) {
+                const nm = form.name.trim();
+                if (!nm) {
+                    setValidationError('Dê um nome ao seu cofrinho (ex: Reserva de Emergência).');
+                    return;
+                }
+                const newTicker = makeReserveTicker(nm, reserves.map(r => r.ticker));
+                workingForm = { ...form, ticker: newTicker, name: nm };
+            } else if (cashSelection) {
+                const target = reserves.find(r => r.ticker === cashSelection);
+                workingForm = { ...form, ticker: cashSelection, name: target?.name || '' };
+            } else {
+                setValidationError('Selecione um cofrinho ou crie um novo.');
+                return;
+            }
+        }
+
+        const { error, payload } = validateTransaction(workingForm, transactionType, assets);
         if (error || !payload) {
             setValidationError(error || 'Erro de validação.');
             return;
@@ -198,15 +254,62 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
     const renderTickerField = () => {
         if (form.type === 'CASH') {
+            const isNew = cashSelection === NEW_RESERVE;
+            const noReserves = reserves.length === 0;
+
             return (
-                <div className="opacity-80 pointer-events-none">
-                     <Input label="Ativo (Automático)" value="RESERVA / CAIXA" readOnly containerClassName="mb-0" />
-                     <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-emerald-900/20 border border-emerald-900/50 rounded-lg">
+                <div className="space-y-3 mb-1">
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">
+                            {transactionType === 'BUY' ? 'Cofrinho (Reserva)' : 'Sacar de qual reserva?'}
+                        </label>
+
+                        {transactionType === 'SELL' && noReserves ? (
+                            <p className="text-[11px] text-red-500 font-bold ml-1 py-2">
+                                Você ainda não possui reservas para sacar.
+                            </p>
+                        ) : (
+                            <div className="relative">
+                                <select
+                                    value={cashSelection}
+                                    onChange={(e) => setCashSelection(e.target.value)}
+                                    className="w-full bg-card text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-elevated transition-all duration-300 shadow-sm"
+                                >
+                                    {transactionType === 'BUY' && reserves.length > 0 && (
+                                        <option value="">Selecione um cofrinho...</option>
+                                    )}
+                                    {reserves.map(r => (
+                                        <option key={r.ticker} value={r.ticker}>
+                                            {r.name || 'Reserva'}
+                                        </option>
+                                    ))}
+                                    {transactionType === 'BUY' && (
+                                        <option value={NEW_RESERVE}>➕ Criar novo cofrinho</option>
+                                    )}
+                                </select>
+                                <PiggyBank className="absolute right-3 top-3.5 text-slate-600 pointer-events-none" size={16} />
+                            </div>
+                        )}
+                    </div>
+
+                    {transactionType === 'BUY' && (isNew || noReserves) && (
+                        <Input
+                            label="Nome do Cofrinho"
+                            placeholder="Ex: Reserva de Emergência, Viagem, Carro novo..."
+                            value={form.name}
+                            onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
+                            containerClassName="mb-0"
+                            className="px-4 py-3"
+                            maxLength={120}
+                        />
+                    )}
+
+                    <div className="flex items-center gap-2 px-3 py-2 bg-emerald-900/20 border border-emerald-900/50 rounded-lg">
                         <ShieldCheck size={14} className="text-emerald-500" />
                         <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">
                             Rentabilidade: 100% do CDI (Padrão)
                         </span>
-                     </div>
+                    </div>
                 </div>
             );
         }
