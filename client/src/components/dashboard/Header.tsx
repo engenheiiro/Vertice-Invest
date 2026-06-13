@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  ShieldCheck, LayoutGrid, PieChart, BrainCircuit,
+  ShieldCheck, LayoutGrid, PieChart, Bot,
   GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
   Eye, EyeOff, Play, Radar, Calculator, Target, ChevronRight
 } from 'lucide-react';
@@ -81,7 +81,7 @@ export const Header: React.FC = () => {
                  <NavLink icon={<Target size={14} />} label="Metas" active={activeTab === 'goals'} />
               </Link>
               <Link to="/research">
-                 <NavLink icon={<BrainCircuit size={14} />} label="Research" active={activeTab === 'research'} />
+                 <NavLink icon={<Bot size={14} />} label="Research" active={activeTab === 'research'} />
               </Link>
               <Link to="/radar">
                  <NavLink icon={<Radar size={14} />} label="Radar" active={activeTab === 'radar'} />
@@ -115,11 +115,11 @@ export const Header: React.FC = () => {
            </div>
         </div>
 
-        <div className="flex items-center gap-4">
-           
+        <div className="flex items-center gap-2">
+
            {/* Botão de Teste de Tutorial (Apenas Admin) */}
            {isAdmin && (
-               <button 
+               <button
                    onClick={() => {
                        navigate('/dashboard'); // Garante que está no dashboard
                        setTimeout(startDemo, 100);
@@ -131,30 +131,30 @@ export const Header: React.FC = () => {
                </button>
            )}
 
-           {/* Notification Bell */}
-           <NotificationBell />
+           {/* Notification Bell + Privacy Toggle — agrupados sem divisor */}
+           <div className="flex items-center gap-1">
+               <NotificationBell />
+               <button
+                 onClick={togglePrivacyMode}
+                 className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                 title={isPrivacyMode ? "Mostrar Valores" : "Ocultar Valores"}
+               >
+                 {isPrivacyMode ? <EyeOff size={16} /> : <Eye size={16} />}
+               </button>
+           </div>
 
            <div className="h-4 w-px bg-slate-800 hidden sm:block"></div>
 
-           {/* Privacy Toggle Button */}
-           <button
-             onClick={togglePrivacyMode}
-             className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
-             title={isPrivacyMode ? "Mostrar Valores" : "Ocultar Valores"}
-           >
-             {isPrivacyMode ? <EyeOff size={16} /> : <Eye size={16} />}
-           </button>
-
-           <div className="h-4 w-px bg-slate-800 hidden sm:block"></div>
-
-           {/* Relógio & User Info */}
+           {/* User Info */}
            <div className="flex items-center gap-3">
+              {/* Relógio desativado — manter código para reativação futura
               <div className="hidden xl:flex items-center gap-2 text-slate-400 bg-slate-900/50 px-2 py-1 rounded border border-slate-800/50">
                 <Clock size={12} />
                 <span className="text-[10px] font-mono font-medium">
                     {time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
+              */}
 
               <Link
                 to="/profile"

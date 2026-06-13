@@ -62,6 +62,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
+            document.documentElement.style.overflow = 'hidden';
             setStatus('idle');
             setValidationError('');
             setPriceWarning(null);
@@ -72,9 +73,10 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             priceFetch.reset();
             search.reset();
         } else {
-            document.body.style.overflow = 'unset';
+            document.body.style.overflow = '';
+            document.documentElement.style.overflow = '';
         }
-        return () => { document.body.style.overflow = 'unset'; };
+        return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
 
@@ -513,8 +515,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         <Percent className="absolute right-3 top-9 text-slate-600 pointer-events-none" size={16} />
                     </div>
                     {isIndexedFixedIncome && (
-                        <p className="text-[10px] text-emerald-400/90 -mt-1">
-                            Rende <strong>{form.fixedIncomeIndex} + {form.rate || '0'}%</strong> a.a. (índice vivo + spread), não apenas o spread.
+                        <p className="text-[10px] text-emerald-400/90 -mt-1 whitespace-nowrap">
+                            Rende <strong>{form.fixedIncomeIndex} + {form.rate || '0'}% a.a.</strong> — índice vivo + spread, não só o spread.
                         </p>
                     )}
                 </>

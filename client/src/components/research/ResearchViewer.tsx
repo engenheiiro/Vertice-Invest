@@ -7,9 +7,10 @@ import { ShieldCheck, Share2, Zap, AlignLeft } from 'lucide-react';
 interface ResearchViewerProps {
     report: ResearchReport;
     view: 'ANALYSIS' | 'RANKING';
+    onAporte?: () => void;
 }
 
-export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view }) => {
+export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view, onAporte }) => {
     
     // Renderizador seguro de Markdown Básico
     const renderMarkdown = (text: string) => {
@@ -62,7 +63,7 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view }) 
     };
 
     if (view === 'RANKING') {
-        return <TopPicksCard picks={report.content?.ranking || []} assetClass={report.assetClass} />;
+        return <TopPicksCard picks={report.content?.ranking || []} assetClass={report.assetClass} onAporte={onAporte} />;
     }
 
     return (

@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Trophy, BarChart2, Layers, Shield, Target, Zap, Minus, Wallet, PieChart, PlusCircle, Crown, Medal } from 'lucide-react';
+import { Trophy, BarChart2, Layers, Shield, Target, Zap, Minus, Wallet, PieChart, PlusCircle, Crown, Medal, Calculator } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 import { AssetDetailModal } from './AssetDetailModal';
 import { useWallet, AssetType } from '../../contexts/WalletContext';
@@ -11,6 +11,7 @@ import { formatCompact as fmtCompact } from '../../utils/format';
 interface TopPicksCardProps {
     picks: RankingItem[];
     assetClass: string;
+    onAporte?: () => void;
 }
 
 type RiskFilter = 'DEFENSIVE' | 'MODERATE' | 'BOLD';
@@ -26,7 +27,7 @@ const COLORS = [
     '#EF4444', '#84CC16', '#14B8A6', '#F97316', '#A855F7', '#0EA5E9'
 ];
 
-export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass }) => {
+export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, onAporte }) => {
     const { assets, kpis, isPrivacyMode } = useWallet();
     const navigate = useNavigate();
     const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
@@ -125,7 +126,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                         <p className="text-[10px] text-slate-500">Selecione o nível de risco para gerar o Top 10 específico.</p>
                     </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 no-scrollbar w-full md:w-auto pb-2 md:pb-0">
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar min-w-0 pb-2 md:pb-0">
                     {Object.entries(RISK_LABELS).map(([key, label]) => {
                         if (isBrasil10 && key !== 'DEFENSIVE') return null;
                         return (
@@ -133,12 +134,23 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                                 key={key}
                                 onClick={() => setRiskFilter(key as RiskFilter)}
                                 disabled={isBrasil10}
-                                className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition-all border ${riskFilter === key ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/20' : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300 hover:bg-slate-800'} ${isBrasil10 ? 'cursor-default' : 'cursor-pointer'}`}
+                                className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition-all border shrink-0 ${riskFilter === key ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/20' : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300 hover:bg-slate-800'} ${isBrasil10 ? 'cursor-default' : 'cursor-pointer'}`}
                             >
                                 {label}
                             </button>
                         );
                     })}
+                    {onAporte && picks.some(p => p.action === 'BUY') && (
+                        <div className="flex items-center gap-2 pl-2 border-l border-slate-700/60 shrink-0">
+                            <button
+                                onClick={onAporte}
+                                className="flex items-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold bg-blue-900/20 border border-blue-800/50 text-blue-400 hover:bg-blue-900/40 hover:text-blue-300 transition-all"
+                                title="Aporte Inteligente: distribui um valor entre os ativos COMPRAR"
+                            >
+                                <Calculator size={13} /> Aporte
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -248,16 +260,16 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass })
                                             </div>
                                             <AssetLogo ticker={pick.ticker} type={pick.type as AssetType} name={pick.name} size={36} />
                                             <div className="min-w-0 flex-1">
-                                                <div className="flex items-center flex-wrap mb-1 gap-x-2 gap-y-1">
-                                                    <h4 className="text-base font-black text-white tracking-tight shrink-0">{pick.ticker}</h4>
-                                                    {getRiskBadge(pick.riskProfile)}
-                                                    {/* Badge de Dividend Aristocrat e Tier */}
-                                                    {(pick as any).isDividendAristocrat && (
-                                                        <span title="Dividend Aristocrat: Crescimento Consistente" className="text-emerald-400">
-                                                            <Crown size={12} fill="currentColor" />
-                                                        </span>
-                                                    )}
-                                                    {getTierBadge((pick as any).tier)}
+                                                <div className="flex items-center gap-1 mb-1">
+                                                    <h4 className="text-base font-black text-white tracking-tight">{pick.ticker}</h4>
+                                                    <div className="flex items-center gap-1 shrink-0">
+                                                        {(pick as any).isDividendAristocrat && (
+                                                            <span title="Dividend Aristocrat: Crescimento Consistente" className="text-emerald-400">
+                                                                <Crown size={12} fill="currentColor" />
+                                                            </span>
+                                                        )}
+                                                        {getTierBadge((pick as any).tier)}
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold uppercase border border-slate-700">{pick.sector || 'Geral'}</span>

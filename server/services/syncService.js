@@ -1,4 +1,5 @@
 
+import YahooFinance from 'yahoo-finance2';
 import logger from '../config/logger.js';
 import MarketAsset from '../models/MarketAsset.js';
 import SystemConfig from '../models/SystemConfig.js';
@@ -9,6 +10,81 @@ import { marketDataService } from './marketDataService.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { resolveSector, deriveFiiSubType } from '../utils/sectorResolver.js';
 import { backfillSectors } from './sectorBackfillService.js';
+
+const yahooFinanceLTM = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
+const LTM_BATCH_SIZE = 10;
+const LTM_BATCH_DELAY_MS = 400;
+const LTM_TICKER_TIMEOUT_MS = 8000;
+
+async function fetchYahooLTM(ticker) {
+    try {
+        const data = await Promise.race([
+            yahooFinanceLTM.quoteSummary(`${ticker}.SA`, {
+                modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail']
+            }, { validateResult: false }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), LTM_TICKER_TIMEOUT_MS))
+        ]);
+        const fd = data.financialData || {};
+        const ks = data.defaultKeyStatistics || {};
+        const sd = data.summaryDetail || {};
+        const shares = ks.sharesOutstanding || 0;
+        return {
+            marketCap: sd.marketCap || null,
+            netRevenue: fd.totalRevenue || null,
+            netIncome: fd.netIncomeToCommon || null,
+            netDebt: (fd.totalDebt && fd.totalCash != null) ? (fd.totalDebt - fd.totalCash) : null,
+            patrimLiq: (ks.bookValue && shares) ? ks.bookValue * shares : null,
+        };
+    } catch {
+        return null;
+    }
+}
+
+async function enrichBRStocksLTM() {
+    // Só enriquece ativos STOCK BR (sem sufixo .SA no banco, mas com sufixo na busca)
+    // onde algum campo LTM ainda é zero ou ausente.
+    const candidates = await MarketAsset.find({
+        type: 'STOCK',
+        $or: [{ netRevenue: { $in: [0, null] } }, { netIncome: { $in: [0, null] } }]
+    }).select('ticker netRevenue netIncome netDebt patrimLiq marketCap').lean();
+
+    if (candidates.length === 0) return;
+
+    logger.info(`ℹ️ [Sync] Etapa 4.5: Enriquecendo LTM de ${candidates.length} ações BR via Yahoo Finance...`);
+    const bulkOps = [];
+
+    for (let i = 0; i < candidates.length; i += LTM_BATCH_SIZE) {
+        const batch = candidates.slice(i, i + LTM_BATCH_SIZE);
+        const results = await Promise.allSettled(batch.map(a => fetchYahooLTM(a.ticker)));
+
+        for (let j = 0; j < results.length; j++) {
+            if (results[j].status !== 'fulfilled' || !results[j].value) continue;
+            const asset = batch[j];
+            const ltm = results[j].value;
+            const $set = {};
+            // Só atualiza o campo se ainda estava zerado/ausente E o Yahoo retornou valor
+            if ((!asset.marketCap) && ltm.marketCap) $set.marketCap = ltm.marketCap;
+            if ((!asset.netRevenue) && ltm.netRevenue) $set.netRevenue = ltm.netRevenue;
+            if ((!asset.netIncome) && ltm.netIncome) $set.netIncome = ltm.netIncome;
+            if ((!asset.netDebt && asset.netDebt !== 0) && ltm.netDebt != null) $set.netDebt = ltm.netDebt;
+            if ((!asset.patrimLiq) && ltm.patrimLiq) $set.patrimLiq = ltm.patrimLiq;
+            if (Object.keys($set).length > 0) {
+                bulkOps.push({ updateOne: { filter: { ticker: asset.ticker }, update: { $set } } });
+            }
+        }
+
+        if (i + LTM_BATCH_SIZE < candidates.length) {
+            await new Promise(r => setTimeout(r, LTM_BATCH_DELAY_MS));
+        }
+    }
+
+    if (bulkOps.length > 0) {
+        await MarketAsset.bulkWrite(bulkOps);
+        logger.info(`✅ [Sync] Etapa 4.5: LTM enriquecido para ${bulkOps.length} ações BR.`);
+    } else {
+        logger.info(`ℹ️ [Sync] Etapa 4.5: Nenhum campo LTM novo encontrado via Yahoo Finance.`);
+    }
+}
 
 // Mapa de Correção de Erros da Fonte Externa (Fundamentus/Scraping)
 const KNOWN_TYPOS = {
@@ -281,6 +357,26 @@ export const syncService = {
                     }
                 } catch (err) {
                     logger.error(`❌ [Sync] Etapa 4 falhou: ${err.message}`);
+                }
+
+                // Etapa 4.5: Enriquecimento LTM via Yahoo Finance para ações BR (1x/dia)
+                try {
+                    const macroConfig4 = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
+                    const lastLTMEnrich = macroConfig4?.lastBRLTMEnrichSync;
+                    const shouldEnrich = !lastLTMEnrich ||
+                        Date.now() - new Date(lastLTMEnrich).getTime() > 23 * 60 * 60 * 1000;
+                    if (shouldEnrich) {
+                        await enrichBRStocksLTM();
+                        await SystemConfig.findOneAndUpdate(
+                            { key: 'MACRO_INDICATORS' },
+                            { $set: { lastBRLTMEnrichSync: new Date() } },
+                            { upsert: true }
+                        );
+                    } else {
+                        logger.info("ℹ️ [Sync] Etapa 4.5: LTM BR — já enriquecido nas últimas 23h, pulando.");
+                    }
+                } catch (err) {
+                    logger.error(`❌ [Sync] Etapa 4.5 falhou: ${err.message}`);
                 }
 
                 return { success: true, count: operations.length };

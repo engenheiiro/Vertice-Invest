@@ -30,11 +30,13 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
+            document.documentElement.style.overflow = 'hidden';
             calculateDistribution();
         } else {
-            document.body.style.overflow = 'unset';
+            document.body.style.overflow = '';
+            document.documentElement.style.overflow = '';
         }
-        return () => { document.body.style.overflow = 'unset'; };
+        return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
     }, [amount, prioritizeReserve, isOpen]);
 
     const calculateDistribution = () => {

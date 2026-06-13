@@ -6,7 +6,7 @@ import { ResearchViewer } from '../components/research/ResearchViewer';
 import { AssetDetailModal } from '../components/research/AssetDetailModal'; // Importado
 import { ExplainableAIRenderer } from '../components/research/ExplainableAIRenderer';
 import { ResearchAporteModal } from '../components/research/ResearchAporteModal';
-import { Bot, Newspaper, Trophy, Lock, Crown, Info, RefreshCcw, Calculator } from 'lucide-react';
+import { Bot, Newspaper, Trophy, Lock, Crown, Info, RefreshCcw } from 'lucide-react';
 import { SkeletonCard, SkeletonTableRows } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -97,10 +97,11 @@ export const Research = () => {
         <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
 
-            <main id="main-content" tabIndex={-1} className="max-w-[1600px] mx-auto p-4 md:p-8">
+            <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto p-4 md:p-8">
                 
-                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-12">
-                    <div>
+                <div className="flex items-center justify-between gap-8 mb-12">
+                    {/* Título original */}
+                    <div className="shrink-0">
                         <h1 className="text-4xl font-black text-white tracking-tighter flex items-center gap-4">
                             <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/20">
                                 <Bot size={28} />
@@ -112,66 +113,55 @@ export const Research = () => {
                         </p>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-center">
-                        <div className="flex bg-base border border-slate-800 p-1.5 rounded-2xl overflow-x-auto no-scrollbar gap-1 shadow-inner w-full sm:w-auto">
+                    {/* Controles — tudo em uma linha */}
+                    <div className="flex items-center gap-2">
+                        <div className="flex bg-base border border-slate-800 p-1 rounded-xl overflow-x-auto no-scrollbar gap-0.5 shadow-inner">
                             {ASSETS.map(asset => {
                                 const allowed = checkAccess(asset.id);
                                 return (
                                     <button
                                         key={asset.id}
                                         onClick={() => setSelectedAsset(asset.id)}
-                                        className={`px-5 py-2.5 rounded-xl text-xs font-black whitespace-nowrap transition-all flex items-center gap-2 ${
-                                            selectedAsset === asset.id 
-                                                ? `${asset.color} text-white shadow-xl` 
+                                        className={`px-3.5 py-2 rounded-lg text-xs font-black whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                                            selectedAsset === asset.id
+                                                ? `${asset.color} text-white shadow-lg`
                                                 : 'text-slate-500 hover:text-slate-300'
                                         } ${!allowed ? 'opacity-50 grayscale' : ''}`}
                                     >
                                         {asset.label}
-                                        {!allowed && <Lock size={12} />}
+                                        {!allowed && <Lock size={11} />}
                                     </button>
                                 );
                             })}
                         </div>
 
-                        <div className="flex gap-2">
-                            <div className="flex bg-base border border-slate-800 p-1.5 rounded-2xl gap-1 shadow-inner">
-                                <button 
-                                    onClick={() => setViewMode('RANKING')}
-                                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
-                                        viewMode === 'RANKING' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500'
-                                    }`}
-                                >
-                                    <Trophy size={16} /> Top 10
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('ANALYSIS')}
-                                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
-                                        viewMode === 'ANALYSIS' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500'
-                                    }`}
-                                >
-                                    <Newspaper size={16} /> Relatório Semanal
-                                </button>
-                            </div>
-
-                            {viewMode === 'RANKING' && report?.isRankingPublished && (report?.content?.ranking?.some(r => r.action === 'BUY')) && (
-                                <button
-                                    onClick={() => setShowAporte(true)}
-                                    className="bg-base border border-blue-900/40 px-4 py-3 rounded-2xl hover:bg-blue-900/20 text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-2 text-xs font-black whitespace-nowrap"
-                                    title="Aporte Inteligente: distribui um valor entre os ativos COMPRAR"
-                                >
-                                    <Calculator size={16} /> Aporte
-                                </button>
-                            )}
-
+                        <div className="flex bg-base border border-slate-800 p-1 rounded-xl gap-0.5 shadow-inner shrink-0">
                             <button
-                                onClick={fetchReport}
-                                disabled={isLoading || !hasAccessToSelected}
-                                className="bg-base border border-slate-800 p-3 rounded-2xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
-                                title="Atualizar Dados"
+                                onClick={() => setViewMode('RANKING')}
+                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-black whitespace-nowrap transition-all ${
+                                    viewMode === 'RANKING' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+                                }`}
                             >
-                                <RefreshCcw size={18} className={isLoading ? 'animate-spin' : ''} />
+                                <Trophy size={14} /> Top 10
+                            </button>
+                            <button
+                                onClick={() => setViewMode('ANALYSIS')}
+                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-black whitespace-nowrap transition-all ${
+                                    viewMode === 'ANALYSIS' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+                                }`}
+                            >
+                                <Newspaper size={14} /> Semanal
                             </button>
                         </div>
+
+                        <button
+                            onClick={fetchReport}
+                            disabled={isLoading || !hasAccessToSelected}
+                            className="bg-base border border-slate-800 p-2.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50 shrink-0"
+                            title="Atualizar Dados"
+                        >
+                            <RefreshCcw size={16} className={isLoading ? 'animate-spin' : ''} />
+                        </button>
                     </div>
                 </div>
 
@@ -263,7 +253,7 @@ export const Research = () => {
                             );
                         })()
                     ) : report.isRankingPublished ? (
-                        <ResearchViewer report={report!} view="RANKING" />
+                        <ResearchViewer report={report!} view="RANKING" onAporte={() => setShowAporte(true)} />
                     ) : (
                         <div className="flex flex-col items-center justify-center py-20 bg-base border border-dashed border-slate-800 rounded-3xl text-center">
                             <Info size={48} className="text-slate-700 mb-4" />

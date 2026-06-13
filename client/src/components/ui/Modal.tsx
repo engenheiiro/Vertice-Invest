@@ -42,7 +42,9 @@ export const Modal = ({
     const previouslyFocused = document.activeElement as HTMLElement | null;
     // Bloqueia scroll do body enquanto o modal está aberto.
     const prevOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
 
     const focusables = () =>
       panelRef.current
@@ -80,6 +82,7 @@ export const Modal = ({
     return () => {
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = prevOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
       previouslyFocused?.focus?.();
     };
   }, [isOpen, onClose]);

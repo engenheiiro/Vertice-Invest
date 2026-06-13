@@ -56,6 +56,10 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
         return `${symbol} ${val.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
     };
 
+    // LTM: zero significa dado não disponível (engenharia reversa falhou), exibe '-'.
+    const fmtLtm = (val: number | undefined | null, currency: 'BRL' | 'USD' = 'BRL') =>
+        (!val) ? '-' : formatMoneyShort(val, currency);
+
     const formatPercent = (val: number | undefined | null) => {
         if (val === undefined || val === null) return '-';
         return `${val.toFixed(2)}%`;
@@ -180,12 +184,12 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                     <h4 className="text-xs font-bold text-white uppercase tracking-wide">Financials (LTM)</h4>
                 </div>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                    <DetailRow label="Valor de Mercado" value={formatMoneyShort(m.marketCap)} status='info' />
-                    <DetailRow label="Dívida Líquida" value={formatMoneyShort(m.netDebt)} status={m.netDebt && m.netDebt > (m.marketCap || 0) ? 'warning' : 'neutral'} />
-                    <DetailRow label="Receita Líquida" value={formatMoneyShort(m.netRevenue)} status='neutral' />
-                    <DetailRow label="Lucro Líquido" value={formatMoneyShort(m.netIncome)} status={m.netIncome && m.netIncome > 0 ? 'good' : 'bad'} />
-                    <DetailRow label="Patrimônio Líquido" value={formatMoneyShort(m.patrimLiq)} status='neutral' />
-                    <DetailRow label="Ativos Totais" value={formatMoneyShort(m.totalAssets)} status='neutral' />
+                    <DetailRow label="Valor de Mercado" value={fmtLtm(m.marketCap)} status='info' />
+                    <DetailRow label="Dívida Líquida" value={fmtLtm(m.netDebt)} status={m.netDebt && m.netDebt > (m.marketCap || 0) ? 'warning' : 'neutral'} />
+                    <DetailRow label="Receita Líquida" value={fmtLtm(m.netRevenue)} status='neutral' />
+                    <DetailRow label="Lucro Líquido" value={fmtLtm(m.netIncome)} status={m.netIncome && m.netIncome > 0 ? 'good' : 'bad'} />
+                    <DetailRow label="Patrimônio Líquido" value={fmtLtm(m.patrimLiq)} status='neutral' />
+                    <DetailRow label="Ativos Totais" value={fmtLtm(m.totalAssets)} status='neutral' />
                 </div>
             </div>
         );

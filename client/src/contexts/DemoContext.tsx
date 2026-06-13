@@ -44,13 +44,15 @@ export const DemoProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const startDemo = () => {
         setIsDemoMode(true);
         setCurrentStep(0);
-        document.body.style.overflow = 'hidden'; 
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
     };
 
     const stopDemo = () => {
         setIsDemoMode(false);
         setCurrentStep(0);
-        document.body.style.overflow = 'unset';
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
         
         // Marca como visto no BANCO DE DADOS
         if (user?.id && !user.hasSeenTutorial) {

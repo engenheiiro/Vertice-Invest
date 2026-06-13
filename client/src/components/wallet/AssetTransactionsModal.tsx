@@ -47,10 +47,12 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
             setHasMore(false);
             loadTransactions(1, true);
             document.body.style.overflow = 'hidden';
+            document.documentElement.style.overflow = 'hidden';
         } else {
-            document.body.style.overflow = 'unset';
+            document.body.style.overflow = '';
+            document.documentElement.style.overflow = '';
         }
-        return () => { document.body.style.overflow = 'unset'; };
+        return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
     }, [isOpen, ticker]);
 
     const loadTransactions = async (pageNum: number, isInitial = false) => {

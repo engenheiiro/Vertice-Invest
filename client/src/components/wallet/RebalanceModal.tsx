@@ -87,11 +87,13 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
+            document.documentElement.style.overflow = 'hidden';
             fetchPlan(riskProfile);
         } else {
-            document.body.style.overflow = 'unset';
+            document.body.style.overflow = '';
+            document.documentElement.style.overflow = '';
         }
-        return () => { document.body.style.overflow = 'unset'; };
+        return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, riskProfile]);
 
