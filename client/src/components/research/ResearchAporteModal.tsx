@@ -64,18 +64,12 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
         return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
     }, [isOpen]);
 
-    // Posição visual do ativo — mesma ordenação do sorted (score + composite estrutural).
+    // Posição visual — espelha TopPicksCard: sort por score, empates preservam
+    // a ordem original do backend (sort estável, sem tiebreaker adicional).
     const profilePositionMap = useMemo(() => {
-        const structuralComposite = (r: RankingItem) =>
-            r.metrics?.structural
-                ? (r.metrics.structural.quality + r.metrics.structural.valuation + r.metrics.structural.risk) / 3
-                : 0;
         const sorted = ranking
             .filter(r => r.riskProfile === profile)
-            .sort((a, b) => {
-                if (b.score !== a.score) return b.score - a.score;
-                return structuralComposite(b) - structuralComposite(a);
-            })
+            .sort((a, b) => b.score - a.score)
             .slice(0, 10);
         const map = new Map<string, number>();
         sorted.forEach((r, i) => map.set(r.ticker, i + 1));
@@ -90,12 +84,7 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
             .filter(r => r.action === 'BUY' && (r.currentPrice || 0) > 0
                 && (availableProfiles.length === 0 || r.riskProfile === profile)
                 && !excludedTickers.has(r.ticker))
-            .sort((a, b) => {
-                if (b.score !== a.score) return b.score - a.score;
-                const ca = (a.metrics?.structural ? (a.metrics.structural.quality + a.metrics.structural.valuation + a.metrics.structural.risk) / 3 : 0);
-                const cb = (b.metrics?.structural ? (b.metrics.structural.quality + b.metrics.structural.valuation + b.metrics.structural.risk) / 3 : 0);
-                return cb - ca;
-            });
+            .sort((a, b) => b.score - a.score);
 
         const buys = sorted;
 
