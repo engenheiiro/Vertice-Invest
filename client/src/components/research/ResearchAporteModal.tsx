@@ -66,16 +66,13 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
 
     const MAX_PER_SECTOR = 2;
 
-    // Posição do ativo dentro do ranking filtrado por perfil (não posição global).
+    // Posição visual do ativo — espelha exatamente o TopPicksCard:
+    // todos os ativos do perfil (BUY e WAIT), ordenados por score, top 10.
     const profilePositionMap = useMemo(() => {
         const sorted = ranking
-            .filter(r => r.action === 'BUY' && r.riskProfile === profile)
-            .sort((a, b) => {
-                if (b.score !== a.score) return b.score - a.score;
-                const ca = (a.metrics?.structural ? (a.metrics.structural.quality + a.metrics.structural.valuation + a.metrics.structural.risk) / 3 : 0);
-                const cb = (b.metrics?.structural ? (b.metrics.structural.quality + b.metrics.structural.valuation + b.metrics.structural.risk) / 3 : 0);
-                return cb - ca;
-            });
+            .filter(r => r.riskProfile === profile)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 10);
         const map = new Map<string, number>();
         sorted.forEach((r, i) => map.set(r.ticker, i + 1));
         return map;
