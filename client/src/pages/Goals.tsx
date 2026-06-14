@@ -9,6 +9,7 @@ import { formatCurrency } from '../utils/format';
 import { GoalCard } from '../components/goals/GoalCard';
 import { CreateGoalModal } from '../components/goals/CreateGoalModal';
 import { GoalDetailModal } from '../components/goals/GoalDetailModal';
+import { EmptyState, SkeletonCard, SkeletonKpiGrid } from '../components/ui';
 
 /** Constrói cadeias de metas sequenciais a partir do campo previousGoalId. */
 function buildChains(goals: Goal[]): Goal[][] {
@@ -153,25 +154,26 @@ export const Goals: React.FC = () => {
 
         {/* Conteúdo */}
         {isLoading ? (
-          <div className="py-20 flex items-center justify-center">
-            <Loader2 className="animate-spin text-slate-500" size={28} />
+          <div className="space-y-4" role="status" aria-label="Carregando metas">
+            <SkeletonKpiGrid count={3} />
+            <SkeletonCard className="h-48" />
+            <SkeletonCard className="h-48" />
           </div>
         ) : goals.length === 0 ? (
-          <div className="text-center py-16 px-4 bg-card border border-slate-800 rounded-2xl">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
-              <Sparkles className="text-emerald-400" size={30} />
-            </div>
-            <h2 className="text-lg font-bold text-slate-100">Crie sua primeira meta</h2>
-            <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
-              Defina um alvo (ex: <span className="text-slate-300 font-semibold">o primeiro milhão</span>), um aporte mensal,
-              e acompanhe quanto falta — atualizando sozinho conforme você investe.
-            </p>
-            <button
-              onClick={() => setCreateOpen(true)}
-              className="mt-5 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl px-5 py-2.5 text-sm transition-colors"
-            >
-              <Plus size={16} /> Nova meta
-            </button>
+          <div className="bg-card border border-slate-800 rounded-2xl">
+            <EmptyState
+              icon={<Sparkles size={28} className="text-emerald-400" />}
+              title="Crie sua primeira meta"
+              description="Defina um alvo (ex: o primeiro milhão), um aporte mensal, e acompanhe quanto falta — atualizando sozinho conforme você investe."
+              action={
+                <button
+                  onClick={() => setCreateOpen(true)}
+                  className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl px-5 py-2.5 text-sm transition-colors"
+                >
+                  <Plus size={16} /> Nova meta
+                </button>
+              }
+            />
           </div>
         ) : (
           <div className="flex flex-col gap-4">

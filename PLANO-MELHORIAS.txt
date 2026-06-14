@@ -274,7 +274,11 @@ têm nenhum teste.)
 ================================================================
 3.1  Feedback "salvando..." em ações lentas
      O spinner some na hora; o usuário não sabe se salvou.
-     [BAIXA] [SONNET]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → Button.tsx já possuía status (idle/loading/success/error) com "Processando..."
+       + spinner; verificado em todos os formulários críticos (Login, Register,
+       ForgotPassword, AddAssetModal, ContributionModal, CreateGoalModal,
+       ProfileSettings, SecuritySection/MFA). Cobertura completa.
 
 3.2  Quebrar modais gigantes em etapas
      Modal de adicionar ativo (700 linhas) é confuso. Dividir em passos.
@@ -283,23 +287,48 @@ têm nenhum teste.)
 3.3  Texto maior/claro nas confirmações de exclusão
      Confirmações destrutivas têm texto pequeno. Destacar o
      "isso não pode ser desfeito".
-     [BAIXA] [SONNET]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → ConfirmModal.tsx: quando isDestructive=true, mensagem passa de text-sm/
+       slate-400 para text-sm/slate-300 (mais visível); adicionado badge vermelho
+       "Esta ação não pode ser desfeita" fixo; ícone destrutivo maior (h-14 w-14);
+       border-t muda para blue ou red conforme contexto; botões reordenados
+       (Cancelar primeiro em mobile, Confirmar primeiro em desktop).
 
 3.4  Mensagens de erro mais humanas
      Trocar erros técnicos por frases que o usuário entende.
-     [BAIXA] [SONNET]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → client/src/utils/errorMessages.ts (novo): função friendlyError() mapeia
+       status HTTP (400–504), padrões de texto (network error, timeout, email
+       duplicado, senha incorreta, JWT, CPF, rate limit, not found, unauthorized).
+       Aplicada em Dashboard.tsx (catch do Morning Call) e importada em Research.tsx.
 
 3.5  Padronizar estados vazios com CTA
      Toda lista vazia com ícone + explicação + botão de ação.
-     [BAIXA] [SONNET]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → Goals.tsx: estado vazio inline convertido para o componente EmptyState
+       (ícone Sparkles + descrição + botão "Nova meta") — mesma experiência de
+       Wallet.tsx que já usava EmptyState. Componente EmptyState já usado em
+       Wallet, Research (Análise não encontrada) e agora Goals.
 
 3.6  Revisar responsividade no celular
      Conferir telas densas (carteira, research) em telas pequenas.
-     [MEDIA] [SONNET]
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Research.tsx: header flex-row → flex-col/md:flex-row; h1 text-4xl →
+       text-2xl/md:text-4xl; ícone com variantes sm/md; ASSETS pills com w-full
+       em mobile (overflow-x-auto); mb-12 → mb-8/md:mb-12.
+     → Wallet.tsx: botões de ação com gap-2/md:gap-3; labels "Nova Transação",
+       "Aporte Inteligente", "Rebalanceamento IA" hidden em sm (hidden sm:inline)
+       — ícone visível em telas pequenas; min-w-[44px] garante área de toque
+       mínima; aria-label no botão de reset.
 
 3.7  Skeleton (esqueleto de carregamento) em todas as telas
      Onde ainda há "tela em branco", colocar o esqueleto animado.
-     [BAIXA] [SONNET]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → Goals.tsx: spinner Loader2 substituído por SkeletonKpiGrid(3) +
+       SkeletonCard(2) com role="status" aria-label="Carregando metas".
+     → Indicators.tsx: adicionado bloco de skeleton (SkeletonKpiGrid(7) +
+       SkeletonCard x2) visível apenas no carregamento inicial (!data); conteúdo
+       principal fica hidden durante esse período — evita grid com zeros piscando.
 
 3.8  Modo claro (light mode) opcional
      Hoje só existe tema escuro. Avaliar tema claro.
@@ -307,11 +336,27 @@ têm nenhum teste.)
 
 3.9  Microanimações de transição entre páginas
      Suavizar troca de telas (respeitando "reduzir movimento").
-     [BAIXA] [SONNET]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → tailwind.config.js: animação page-enter (slide-up 16px + fade, 0.35s
+       cubic-bezier easing) + keyframe pageEnter.
+     → client/src/components/layout/PageTransition.tsx (novo): wrapper que
+       re-dispara animate-page-enter no change de pathname via useLocation;
+       respeita prefers-reduced-motion (não anima se preferência ativa).
+     → App.tsx: Outlet dentro de <PageTransition> — todas as páginas protegidas
+       recebem a transição automaticamente.
 
 3.10 Storybook (catálogo visual de componentes)
      Página interna que mostra botões/cards isolados — mantém consistência.
-     [MEDIA] [SONNET]
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Instalado storybook@10.4.4 + @storybook/react-vite + addon-essentials +
+       addon-a11y. Scripts storybook/build-storybook adicionados ao package.json.
+     → .storybook/main.ts: framework react-vite, addons [essentials, a11y].
+     → .storybook/preview.tsx: importa index.css (Tailwind), backgrounds dark/card.
+     → 4 stories criadas cobrindo os primitivos do design system:
+       Button.stories.tsx (7 variantes: primary/outline/ghost/loading/success/
+       error/disabled), EmptyState.stories.tsx (3 cenários reais), Skeleton.stories
+       .tsx (7 variantes: linha/círculo/texto/card/gráfico/kpi-grid/tabela),
+       ConfirmModal.stories.tsx (informativo e destrutivo).
 
 
 ================================================================

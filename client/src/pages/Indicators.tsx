@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Header } from '../components/dashboard/Header';
 import { researchService } from '../services/research';
+import { SkeletonKpiGrid, SkeletonCard } from '../components/ui';
 import { Activity, TrendingUp, TrendingDown, ShieldCheck, Database, ArrowUpDown, Target, Percent, ChevronUp, ChevronDown, Landmark, Filter, Clock } from 'lucide-react';
 
 type SortKey = 'title' | 'type' | 'rate' | 'minInvestment' | 'maturityDate';
@@ -83,6 +84,18 @@ export const Indicators = () => {
             <Header />
 
             <main id="main-content" tabIndex={-1} className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in">
+                {/* Skeleton de carregamento inicial */}
+                {isLoading && !data && (
+                    <div className="space-y-6" role="status" aria-label="Carregando indicadores">
+                        <SkeletonKpiGrid count={7} />
+                        <SkeletonCard className="h-56" />
+                        <SkeletonCard className="h-56" />
+                    </div>
+                )}
+
+                {/* Conteúdo principal — oculto enquanto carrega pela primeira vez */}
+                <div className={isLoading && !data ? 'hidden' : ''}>
+
                 {/* Header e Grid de Indicadores */}
                 <div className="flex items-center justify-between mb-8">
                     <div>
@@ -274,6 +287,7 @@ export const Indicators = () => {
                     )}
                 </div>
 
+                </div> {/* fim div conteúdo principal */}
             </main>
         </div>
     );

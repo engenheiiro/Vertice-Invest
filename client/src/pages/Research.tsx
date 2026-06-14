@@ -8,6 +8,7 @@ import { ExplainableAIRenderer } from '../components/research/ExplainableAIRende
 import { ResearchAporteModal } from '../components/research/ResearchAporteModal';
 import { Bot, Newspaper, Trophy, Lock, Crown, Info, RefreshCcw } from 'lucide-react';
 import { SkeletonCard, SkeletonTableRows } from '../components/ui';
+import { friendlyError } from '../utils/errorMessages';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -99,30 +100,31 @@ export const Research = () => {
 
             <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto p-4 md:p-8">
                 
-                <div className="flex items-center justify-between gap-8 mb-12">
-                    {/* Título original */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 md:mb-12">
+                    {/* Título */}
                     <div className="shrink-0">
-                        <h1 className="text-4xl font-black text-white tracking-tighter flex items-center gap-4">
-                            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/20">
-                                <Bot size={28} />
+                        <h1 className="text-2xl md:text-4xl font-black text-white tracking-tighter flex items-center gap-3 md:gap-4">
+                            <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/20 shrink-0">
+                                <Bot size={22} className="md:hidden" />
+                                <Bot size={28} className="hidden md:block" />
                             </div>
                             RESEARCH CENTER
                         </h1>
-                        <p className="text-slate-500 text-sm font-medium mt-2">
+                        <p className="text-slate-500 text-xs md:text-sm font-medium mt-1 md:mt-2">
                             {isAdmin ? 'ADMIN ACCESS: Todas as categorias liberadas' : `Plano Ativo: ${user?.plan || 'INICIANTE'}`}
                         </p>
                     </div>
 
-                    {/* Controles — tudo em uma linha */}
-                    <div className="flex items-center gap-2">
-                        <div className="flex bg-base border border-slate-800 p-1 rounded-xl overflow-x-auto no-scrollbar gap-0.5 shadow-inner">
+                    {/* Controles */}
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex bg-base border border-slate-800 p-1 rounded-xl overflow-x-auto no-scrollbar gap-0.5 shadow-inner w-full md:w-auto">
                             {ASSETS.map(asset => {
                                 const allowed = checkAccess(asset.id);
                                 return (
                                     <button
                                         key={asset.id}
                                         onClick={() => setSelectedAsset(asset.id)}
-                                        className={`px-3.5 py-2 rounded-lg text-xs font-black whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                                        className={`px-3 md:px-3.5 py-2 rounded-lg text-xs font-black whitespace-nowrap transition-all flex items-center gap-1.5 ${
                                             selectedAsset === asset.id
                                                 ? `${asset.color} text-white shadow-lg`
                                                 : 'text-slate-500 hover:text-slate-300'
@@ -159,6 +161,7 @@ export const Research = () => {
                             disabled={isLoading || !hasAccessToSelected}
                             className="bg-base border border-slate-800 p-2.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50 shrink-0"
                             title="Atualizar Dados"
+                            aria-label="Atualizar dados"
                         >
                             <RefreshCcw size={16} className={isLoading ? 'animate-spin' : ''} />
                         </button>

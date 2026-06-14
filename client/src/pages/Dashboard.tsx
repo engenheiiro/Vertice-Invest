@@ -12,6 +12,7 @@ import { useWallet } from '../contexts/WalletContext';
 import { useDemo } from '../contexts/DemoContext';
 import { Lock } from 'lucide-react';
 import { formatCurrency as fmtCurrency } from '../utils/format';
+import { friendlyError } from '../utils/errorMessages';
 
 export const Dashboard = () => {
   const {
@@ -50,7 +51,7 @@ export const Dashboard = () => {
               setReportDate(new Date().toLocaleDateString('pt-BR'));
           }
       } catch (e) {
-          setReportText("Erro ao conectar com o Neural Engine.");
+          setReportText(friendlyError(e));
       } finally {
           setIsReportLoading(false);
       }

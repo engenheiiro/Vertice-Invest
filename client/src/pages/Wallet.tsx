@@ -111,25 +111,25 @@ export const Wallet = () => {
                         </div>
                     </div>
                     
-                    <div id="tour-wallet-actions" className={`flex flex-wrap items-center gap-3 transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
-                        <button className="flex items-center gap-2 px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95" onClick={() => setIsAddModalOpen(true)}>
-                            <PlusCircle size={16} /> Nova Transação
+                    <div id="tour-wallet-actions" className={`flex flex-wrap items-center gap-2 md:gap-3 transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
+                        <button className="flex items-center gap-2 px-4 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={() => setIsAddModalOpen(true)}>
+                            <PlusCircle size={16} /> <span className="hidden sm:inline">Nova Transação</span>
                         </button>
-                        
+
                         {/* Botão Aporte Inteligente */}
-                        <button className="flex items-center gap-2 px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95" onClick={handleOpenSmartContribution}>
+                        <button className="flex items-center gap-2 px-4 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={handleOpenSmartContribution}>
                             {(user?.plan === 'GUEST' || user?.plan === 'ESSENTIAL') && <Lock size={12} />}
-                            <TrendingUp size={16} /> Aporte Inteligente
+                            <TrendingUp size={16} /> <span className="hidden sm:inline">Aporte Inteligente</span>
                         </button>
-                        
+
                         {/* Botão Rebalanceamento (Black) */}
-                        <button className="flex items-center gap-2 px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-gradient-to-r from-[#D4AF37] via-[#F2D06B] to-[#D4AF37] text-black hover:brightness-110 shadow-lg shadow-[#D4AF37]/20 border-none whitespace-nowrap transition-all active:scale-95" onClick={handleRebalance}>
+                        <button className="flex items-center gap-2 px-4 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-gradient-to-r from-[#D4AF37] via-[#F2D06B] to-[#D4AF37] text-black hover:brightness-110 shadow-lg shadow-[#D4AF37]/20 border-none whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={handleRebalance}>
                             {(user?.plan !== 'BLACK' && user?.plan !== 'ELITE') ? <Lock size={12} className="text-black/80" /> : <RefreshCw size={16} className="text-black/80" />}
-                            Rebalanceamento IA
+                            <span className="hidden sm:inline">Rebalanceamento IA</span>
                         </button>
-                        
+
                         <div className="w-px h-8 bg-slate-800 hidden lg:block mx-1"></div>
-                        <button onClick={() => assets.length > 0 && setIsResetModalOpen(true)} className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all border ${assets.length === 0 ? 'opacity-50 cursor-not-allowed border-slate-800 text-slate-600' : 'bg-red-900/10 border-red-900/30 text-red-500 hover:bg-red-900/30 hover:text-red-400 hover:border-red-800'}`} title="Resetar Carteira" disabled={assets.length === 0}>
+                        <button onClick={() => assets.length > 0 && setIsResetModalOpen(true)} className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all border min-w-[44px] ${assets.length === 0 ? 'opacity-50 cursor-not-allowed border-slate-800 text-slate-600' : 'bg-red-900/10 border-red-900/30 text-red-500 hover:bg-red-900/30 hover:text-red-400 hover:border-red-800'}`} title="Resetar Carteira" aria-label="Resetar Carteira" disabled={assets.length === 0}>
                             <Trash2 size={16} />
                         </button>
                     </div>

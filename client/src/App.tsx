@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import { ShieldCheck } from 'lucide-react';
 
 import { AuthLayout } from './components/layout/AuthLayout';
+import { PageTransition } from './components/layout/PageTransition';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AdminRoute } from './components/auth/AdminRoute'; 
@@ -72,7 +73,9 @@ const ProtectedAppLayout = () => {
         <WalletProvider>
           <TutorialOverlay />
           <Suspense fallback={<PageLoader />}>
-            <Outlet />
+            <PageTransition>
+              <Outlet />
+            </PageTransition>
           </Suspense>
           <BottomNav />
         </WalletProvider>
