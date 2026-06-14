@@ -35,27 +35,25 @@ const getLatestSnapshot = async (userId) => {
     return WalletSnapshot.findOne({ user: userId }).sort({ date: -1 }).lean();
 };
 
-// Verifica se um snapshot é de hoje (fuso UTC é suficiente para esta heurística).
-const isSnapshotFromToday = (snapshot) => {
-    if (!snapshot?.date) return false;
-    const d = new Date(snapshot.date);
-    const now = new Date();
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-};
-
 /**
  * Retorna o patrimônio atual da carteira ao vivo.
- * Se o snapshot mais recente é de hoje, usa-o (rápido). Caso contrário,
- * recalcula em tempo real a partir de UserAsset — mesma lógica do schedulerService —
- * para que metas reflitam imediatamente qualquer adição de ativo no dia.
+ * Recalcula sempre em tempo real a partir de UserAsset — mesma lógica do
+ * walletController/schedulerService — para que a meta reflita imediatamente
+ * qualquer adição/alteração de ativo no dia. O snapshot mais recente é usado
+ * apenas como fallback (carteira sem ativos ou erro de cotação).
+ *
+ * NÃO usar o snapshot de hoje como atalho: ele é gerado uma vez por dia
+ * (scheduler), então ativos adicionados depois ficariam invisíveis na meta
+ * até o snapshot do dia seguinte, divergindo da página de Carteira.
  */
 const getLiveWalletEquity = async (userId) => {
     const snapshot = await getLatestSnapshot(userId);
-    if (isSnapshotFromToday(snapshot)) return { equity: snapshot.totalEquity, snapshot };
 
     try {
         const assets = await UserAsset.find({ user: userId, quantity: { $gt: QUANTITY_EPSILON } });
-        if (assets.length === 0) return { equity: snapshot?.totalEquity || 0, snapshot };
+        // Carteira vazia (reset ou remoção de todos os ativos) = patrimônio 0.
+        // Não cair no snapshot aqui, senão a meta manteria um valor fantasma.
+        if (assets.length === 0) return { equity: 0, snapshot };
 
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean();
         const cdi = config?.cdi || 11.25;

@@ -197,15 +197,50 @@ têm nenhum teste.)
 2.6  Testes de integração ponta-a-ponta (Playwright)
      Robô que abre o site e clica como usuário real
      (login -> carteira -> adicionar ativo).
-     [ALTA] [OPUS]
+     [ALTA] [OPUS] [IMPLEMENTADO]
+     → client/playwright.config.ts (novo): testDir ./e2e, projeto chromium,
+       webServer faz `npm run build && npm run preview` (porta 4173) — valida o
+       MESMO bundle de produção. CI=1 ativa retries:1 e forbidOnly.
+     → client/e2e/wallet-flow.spec.ts (novo, 1 jornada E2E): login (e-mail/senha)
+       → /dashboard → /wallet → "Nova Transação" → compra de PETR4. Afirma o
+       payload do POST /api/wallet/add (ticker/type/quantity/price/currency) e o
+       toast de sucesso. Backend 100% interceptado no browser (page.route): roda
+       OFFLINE, sem MongoDB nem Express — bom para CI. user.hasSeenTutorial=true
+       no mock evita o modo demo (que bloquearia addAsset).
+     → client/package.json: scripts test:e2e e test:e2e:install; devDependency
+       @playwright/test ^1.60.
+     → eslint.config.js: bloco para client/e2e/**/*.ts (parser TS, fora de src).
+     → .gitignore: playwright-report/, test-results/, playwright/.cache/.
+     → .github/workflows/ci.yml: novo job "e2e" (instala chromium + roda
+       test:e2e; sobe playwright-report como artefato 14 dias).
+     → Verificação local: 1 passed (chromium).
 
 2.7  Completar testes do signalEngine (filtro macro)
      O motor de sinais tem parte não testada (veto em dia de crash).
-     [MEDIA] [OPUS]
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → tests/signal_macro_filter.spec.js (novo, 27 testes): cobre a defesa macro
+       antes não testada. isValidCorrelation — crash IBOV<-2.5% veta tudo exceto
+       RSI_OVERSOLD; crash S&P<-2.5% idem p/ STOCK_US; vetos setoriais (petróleo
+       <-1.5% em petroleiras, IBOV<-2.0% em VALE) e seus limiares. getMacroContext
+       — detecção de crash, limiar -2.5% exato NÃO é crash, falha de rede →
+       contexto neutro, índices ausentes → zeros. Auxiliares puros: _rsiUrgency,
+       _grahamUrgency, calculateRSI (série curta→null, só ganhos→100, sobrevenda
+       <30) e determineRiskProfile (FII/defensivo/alavancado/small-large cap/US).
+       externalMarketService mockado → determinístico, sem rede/DB.
 
 2.8  Subir cobertura do mathUtils
      A matemática do dinheiro tem só 25% das funções testadas — crítico.
-     [MEDIA] [OPUS]
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → tests/math_safe_arithmetic.spec.js (novo, 21 testes): fecha a lacuna nas
+       funções BASE do dinheiro que NÃO tinham teste direto — safeAdd/safeSub/
+       safeMult (fundação da Regra 7 do CLAUDE.md). Cobre erro de ponto flutuante
+       (0.1+0.2, 0.1*3), negativos/zeros, degenerados (null/NaN), arredondamento
+       a 4 casas e truncamento de operando antes da multiplicação. Complemento de
+       safeFloat/safeCurrency (2 vs 4 casas, meio-centavo) e composição encadeada
+       (custo total Σ qty×preço; resultado patrimônio−custo). QUANTITY_EPSILON
+       (=1e-9, abaixo de 1 satoshi). Soma-se a math_edge_cases + wallet_performance
+       _math (que já cobriam Dietz/TWRR/risco/anchor/quota): mathUtils agora com
+       todas as funções exportadas exercitadas.
 
 2.9  Testes de "casos extremos" (edge cases)
      Hoje os testes cobrem o "caminho feliz". Adicionar valores

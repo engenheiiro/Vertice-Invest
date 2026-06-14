@@ -372,7 +372,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             );
         }
 
-        let placeholder = "Ex: PETR4";
+        let placeholder = "Ex: PETR4, VALE3, ITUB4";
+        if (form.type === 'FII') placeholder = "Ex: MXRF11, HGLG11, KNRI11";
         if (form.type === 'CRYPTO') placeholder = "Ex: BTC, ETH";
         if (form.type === 'STOCK_US') placeholder = "Ex: AAPL, NVDA, MSFT, GOOGL";
         if (form.type === 'FIXED_INCOME') placeholder = "Busque: Tesouro Selic, NTN-B, CDB, LCI...";

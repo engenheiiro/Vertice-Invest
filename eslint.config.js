@@ -66,6 +66,20 @@ export default tseslint.config(
     },
   },
 
+  // --- E2E (Playwright, TypeScript fora de client/src) ---
+  {
+    files: ['client/e2e/**/*.ts'],
+    extends: [...tseslint.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+
   // --- Testes (Vitest) ---
   {
     files: ['**/*.{test,spec}.{js,ts,tsx}', 'server/tests/**/*.js'],

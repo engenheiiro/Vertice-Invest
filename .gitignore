@@ -93,6 +93,11 @@ typings/
 dist/
 dist-ssr/
 
+# Playwright (E2E) — relatórios e artefatos de execução
+playwright-report/
+test-results/
+playwright/.cache/
+
 # Relatorios gerados por scripts (radar/ranking) — artefatos, nao versionar
 reports/*_latest.txt
 

@@ -138,6 +138,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             queryClient.invalidateQueries({ queryKey: ['dividends'] });
             queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
             queryClient.invalidateQueries({ queryKey: ['dashboardResearch'] });
+            queryClient.invalidateQueries({ queryKey: ['goals'] });
         }
         // Feedback de sucesso/erro do "add" é tratado no AddAssetModal (evita toast duplicado).
     });
@@ -158,6 +159,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
+            queryClient.invalidateQueries({ queryKey: ['goals'] });
             addToast('Ativo removido da carteira.', 'success');
         },
         onError: (err: any) => addToast(err?.message || 'Erro ao remover ativo.', 'error')
@@ -170,6 +172,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['dividends'] });
             queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
+            queryClient.invalidateQueries({ queryKey: ['goals'] });
             addToast('Carteira resetada com sucesso.', 'success');
         },
         onError: (err: any) => addToast(err?.message || 'Erro ao resetar carteira.', 'error')
