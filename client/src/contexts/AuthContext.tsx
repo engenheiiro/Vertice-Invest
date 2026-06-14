@@ -14,8 +14,13 @@ export interface User {
   plan: UserPlan;
   subscriptionStatus: SubscriptionStatus;
   role: UserRole;
-  validUntil?: string; // Data ISO da validade da assinatura
-  hasSeenTutorial?: boolean; 
+  validUntil?: string;
+  hasSeenTutorial?: boolean;
+  cpf?: string;
+  phone?: string;
+  occupation?: string;
+  mfaEnabled?: boolean;
+  marketingOptIn?: boolean;
 }
 
 interface AuthContextType {

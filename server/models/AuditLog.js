@@ -7,7 +7,8 @@ const AuditLogSchema = new mongoose.Schema({
   ipAddress: { type: String },
   userAgent: { type: String },
   details: { type: String },
-  timestamp: { type: Date, default: Date.now }
+  // TTL: 730 dias (2 anos) — retenção mínima razoável para auditoria (Art. 15-16 LGPD)
+  timestamp: { type: Date, default: Date.now, expires: '730d' }
 });
 
 const AuditLog = mongoose.model('AuditLog', AuditLogSchema);

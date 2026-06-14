@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, Link } from 'react-router-dom';
 import { ShieldCheck, Sparkles, GraduationCap, Lock, PieChart, BrainCircuit, Layers, Activity } from 'lucide-react';
 
 export const AuthLayout: React.FC = () => {
   const [activeSlide, setActiveSlide] = useState(0);
   const location = useLocation();
 
-  const isWideContent = location.pathname === '/terms';
+  const isWideContent = location.pathname === '/terms' || location.pathname === '/privacy';
 
   const slides = [
     {
@@ -136,10 +136,15 @@ export const AuthLayout: React.FC = () => {
             </div>
             
             <div className="mt-4 lg:mt-6 pt-3 text-center border-t border-slate-50">
-                <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest flex items-center justify-center gap-1.5">
+                <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest flex items-center justify-center gap-1.5 mb-1.5">
                     <Lock size={9} />
                     Ambiente Seguro SSL • 256-bit
                 </p>
+                <div className="flex items-center justify-center gap-3">
+                    <Link to="/terms" className="text-[8px] text-slate-400 hover:text-slate-600 transition-colors">Termos de Uso</Link>
+                    <span className="text-slate-300 text-[8px]">•</span>
+                    <Link to="/privacy" className="text-[8px] text-slate-400 hover:text-slate-600 transition-colors">Política de Privacidade</Link>
+                </div>
             </div>
         </div>
 

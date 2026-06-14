@@ -6,7 +6,7 @@
  * ENCRYPTION_KEY deve ser 64 chars hex (= 32 bytes).
  * Gerar com: openssl rand -hex 32
  */
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'crypto';
 
 const ALGO = 'aes-256-gcm';
 
@@ -41,4 +41,20 @@ export const decrypt = (ciphertext) => {
   decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
   const decrypted = Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]);
   return decrypted.toString('utf8');
+};
+
+/**
+ * Blind index — HMAC-SHA256 determinístico de um valor sensível.
+ *
+ * A criptografia AES-GCM usa IV aleatório, então o ciphertext de um mesmo CPF
+ * é sempre diferente — inviável para busca de unicidade. O blind index resolve
+ * isso: gera um hash estável (mesma entrada → mesma saída) que pode ser indexado
+ * e consultado, sem revelar o valor original (chaveado com ENCRYPTION_KEY).
+ *
+ * Usado p/ enforçar unicidade de CPF (campo cpfHash) sem armazenar o CPF em claro.
+ */
+export const blindIndex = (plaintext) => {
+  if (!plaintext) return plaintext;
+  const key = getKey();
+  return createHmac('sha256', key).update(String(plaintext)).digest('hex');
 };

@@ -7,13 +7,36 @@ import { runTransaction, txError } from '../utils/dbTransaction.js';
 import User from '../models/User.js';
 import RefreshToken from '../models/RefreshToken.js';
 import AuditLog from '../models/AuditLog.js';
+import UserAsset from '../models/UserAsset.js';
+import AssetTransaction from '../models/AssetTransaction.js';
+import WalletSnapshot from '../models/WalletSnapshot.js';
+import UsageLog from '../models/UsageLog.js';
+import InvestmentGoal from '../models/InvestmentGoal.js';
+import GoalContribution from '../models/GoalContribution.js';
+import QuizAttempt from '../models/QuizAttempt.js';
+import UserProgress from '../models/UserProgress.js';
+import Transaction from '../models/Transaction.js';
+import Notification from '../models/Notification.js';
+import { paymentService } from '../services/paymentService.js';
 import { sendResetPasswordEmail } from '../services/emailService.js';
 import logger from '../config/logger.js';
 import { getPasswordError } from '../utils/passwordPolicy.js'; // (S6) política de senha
 import { invalidateUser } from '../utils/userCache.js'; // (I6) bust de cache no update de perfil
 import { verifyTotp, consumeBackupCode } from '../utils/mfa.js'; // (I14) MFA no login
-import { decrypt } from '../utils/encryption.js'; // (S) descriptografa mfaSecret em repouso
+import { encrypt, decrypt, blindIndex } from '../utils/encryption.js'; // (S) cripto em repouso: mfaSecret + CPF
 import { issueCsrfToken, clearCsrfToken } from '../middleware/csrf.js'; // (1.4) CSRF double-submit
+import { validateCpf } from '../utils/cpfUtils.js';
+
+// Mascara e-mail para logs de auditoria — ex: j***@gmail.com
+const maskEmail = (email) => {
+  if (!email || typeof email !== 'string') return '[no-email]';
+  const [user, domain] = email.split('@');
+  if (!domain) return '[masked]';
+  return `${user.charAt(0)}***@${domain}`;
+};
+
+// Versão do consentimento — incrementar ao alterar Termos ou Política de Privacidade
+const CONSENT_VERSION = '1.0';
 
 // Configurações
 const ACCESS_TOKEN_EXPIRATION = '15m';
@@ -56,13 +79,17 @@ const sanitizeUser = (user) => {
         subscriptionStatus: user.subscriptionStatus,
         validUntil: user.validUntil,
         hasSeenTutorial: user.hasSeenTutorial,
-        cpf: user.cpf,
+        // CPF cifrado em repouso — decrypt() trata valores legados em claro (sem ':').
+        cpf: user.cpf ? decrypt(user.cpf) : user.cpf,
+        phone: user.phone,
+        occupation: user.occupation,
+        marketingOptIn: user.marketingOptIn,
         mfaEnabled: !!user.mfaEnabled // (I14) p/ a UI refletir o status
     };
 };
 
 export const register = async (req, res, next) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, acceptedTerms, acceptedPrivacy, marketingOptIn } = req.body;
   let newUserId;
   try {
     if (!name || name.length < 2) throw new Error("Nome muito curto.");
@@ -75,6 +102,7 @@ export const register = async (req, res, next) => {
 
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
+      const now = new Date();
 
       const newUser = new User({
         name,
@@ -84,7 +112,12 @@ export const register = async (req, res, next) => {
         plan: 'GUEST',
         subscriptionStatus: 'ACTIVE',
         validUntil: null,
-        hasSeenTutorial: false
+        hasSeenTutorial: false,
+        // Consentimento LGPD — timestamps registrados no servidor (Art. 7, 8)
+        termsAcceptedAt: acceptedTerms ? now : undefined,
+        privacyAcceptedAt: acceptedPrivacy ? now : undefined,
+        consentVersion: (acceptedTerms && acceptedPrivacy) ? CONSENT_VERSION : undefined,
+        marketingOptIn: !!marketingOptIn,
       });
 
       await newUser.save({ session });
@@ -108,14 +141,14 @@ export const login = async (req, res, next) => {
     const invalidMsg = "Credenciais inválidas.";
 
     if (!user) {
-        logAudit(req, 'LOGIN_FAILED', 'Usuário não encontrado', null, email);
+        logAudit(req, 'LOGIN_FAILED', 'Usuário não encontrado', null, maskEmail(email));
         return res.status(401).json({ message: invalidMsg });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-        logAudit(req, 'LOGIN_FAILED', 'Senha incorreta', user._id, email);
+        logAudit(req, 'LOGIN_FAILED', 'Senha incorreta', user._id, maskEmail(email));
         return res.status(401).json({ message: invalidMsg });
     }
 
@@ -141,7 +174,7 @@ export const login = async (req, res, next) => {
         }
 
         if (!mfaOk) {
-            logAudit(req, 'LOGIN_FAILED', 'Segundo fator inválido', user._id, email);
+            logAudit(req, 'LOGIN_FAILED', 'Segundo fator inválido', user._id, maskEmail(email));
             return res.status(401).json({ message: invalidMsg });
         }
     }
@@ -291,15 +324,36 @@ export const resetPassword = async (req, res, next) => {
 export const updateProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const { name, cpf } = req.body;
+        const { name, cpf, phone, occupation } = req.body;
         const cleanCpf = cpf ? cpf.replace(/\D/g, '') : null;
 
+        // $set ignora chaves undefined (deixa o campo inalterado quando vazio).
+        const set = { name, phone: phone || undefined, occupation: occupation || undefined };
+        const unset = {};
+
         if (cleanCpf) {
-            const existing = await User.findOne({ cpf: cleanCpf });
+            if (!validateCpf(cleanCpf)) return res.status(400).json({ message: "CPF inválido." });
+            // Unicidade via blind index (CPF cifrado não é comparável diretamente).
+            const cpfHash = blindIndex(cleanCpf);
+            const existing = await User.findOne({ cpfHash }).select('_id');
             if (existing && existing._id.toString() !== userId) return res.status(409).json({ message: "CPF já utilizado." });
+            set.cpf = encrypt(cleanCpf); // cifra em repouso (AES-256-GCM)
+            set.cpfHash = cpfHash;
+        } else if (cpf !== undefined) {
+            // Campo enviado vazio → titular quer remover o CPF. $unset evita deixar
+            // cpfHash=null (que colidiria no índice único sparse entre vários usuários).
+            unset.cpf = 1;
+            unset.cpfHash = 1;
         }
 
-        const updatedUser = await User.findByIdAndUpdate(userId, { name, cpf: cleanCpf }, { new: true });
+        const updateOps = { $set: set };
+        if (Object.keys(unset).length) updateOps.$unset = unset;
+
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            updateOps,
+            { new: true }
+        );
         invalidateUser(userId); // (I6) nome em cache mudou → invalida
 
         // [SEGURANÇA] Usa o sanitizador
@@ -369,6 +423,147 @@ export const deactivateAccount = async (req, res, next) => {
 
         logAudit(req, 'ACCOUNT_DEACTIVATED', 'Conta desativada pelo usuário', user._id, user.email);
         res.status(200).json({ message: "Conta desativada com sucesso." });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Exportação/portabilidade de dados pessoais (Art. 18 II/V LGPD)
+export const exportData = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+
+        const user = await User.findById(userId).lean();
+        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
+
+        // Remove campos sensíveis/internos antes de exportar (cpfHash é índice interno)
+        const { password, resetPasswordToken, resetPasswordExpires,
+                mfaSecret, mfaPendingSecret, mfaBackupCodes, cpfHash, ...safeUser } = user;
+
+        // Devolve o CPF em claro ao próprio titular (decrypt trata legados sem ':').
+        if (safeUser.cpf) safeUser.cpf = decrypt(safeUser.cpf);
+
+        const [
+            userAssets,
+            assetTransactions,
+            walletSnapshots,
+            investmentGoals,
+            goalContributions,
+            quizAttempts,
+            userProgress,
+            usageLogs,
+        ] = await Promise.all([
+            UserAsset.find({ user: userId }).lean(),
+            AssetTransaction.find({ user: userId }).lean(),
+            WalletSnapshot.find({ user: userId }).lean(),
+            InvestmentGoal.find({ user: userId }).lean(),
+            GoalContribution.find({ user: userId }).lean(),
+            // QuizAttempt e UserProgress referenciam o usuário por `userId` (não `user`)
+            QuizAttempt.find({ userId: userId }).lean(),
+            UserProgress.find({ userId: userId }).lean(),
+            UsageLog.find({ user: userId }).lean(),
+        ]);
+
+        logAudit(req, 'DATA_EXPORT', 'Exportação de dados pessoais solicitada', userId, user.email);
+
+        res.setHeader('Content-Disposition', `attachment; filename="vertice-meus-dados-${Date.now()}.json"`);
+        res.setHeader('Content-Type', 'application/json');
+        res.json({
+            exportedAt: new Date().toISOString(),
+            user: safeUser,
+            userAssets,
+            assetTransactions,
+            walletSnapshots,
+            investmentGoals,
+            goalContributions,
+            quizAttempts,
+            userProgress,
+            usageLogs,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Exclusão definitiva / direito ao esquecimento (Art. 18 VI; 16 LGPD)
+// IRREVERSÍVEL: apaga em cascata todos os dados do titular, cancela a assinatura
+// recorrente no Mercado Pago e anonimiza a trilha de auditoria (retida sem PII por
+// obrigação legal/segurança). Exige confirmação de senha (+ MFA, se ativo).
+export const deleteAccount = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { password, mfaToken } = req.body;
+
+        if (!password) return res.status(400).json({ message: "Confirmação de senha obrigatória." });
+
+        // Carrega campos de MFA (select:false) para o gate de segundo fator.
+        const user = await User.findById(userId).select('+mfaSecret +mfaBackupCodes');
+        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            logAudit(req, 'ACCOUNT_DELETE_FAILED', 'Senha incorreta na exclusão de conta', user._id, maskEmail(user.email));
+            return res.status(401).json({ message: "Senha incorreta." });
+        }
+
+        // Segundo fator obrigatório quando a conta tem MFA ativo.
+        if (user.mfaEnabled) {
+            if (!mfaToken) {
+                return res.status(401).json({ message: "Código de autenticação (2FA) obrigatório.", mfaRequired: true });
+            }
+            let mfaOk = verifyTotp(mfaToken, decrypt(user.mfaSecret));
+            if (!mfaOk) {
+                const { ok } = consumeBackupCode(mfaToken, user.mfaBackupCodes);
+                mfaOk = ok;
+            }
+            if (!mfaOk) {
+                logAudit(req, 'ACCOUNT_DELETE_FAILED', 'Segundo fator inválido na exclusão', user._id, maskEmail(user.email));
+                return res.status(401).json({ message: "Código de autenticação inválido." });
+            }
+        }
+
+        const emailForLog = maskEmail(user.email);
+
+        // Cancela a assinatura recorrente no Mercado Pago (best-effort, fora da transação:
+        // é uma chamada externa que não deve abortar a exclusão dos dados).
+        if (user.mpSubscriptionId) {
+            await paymentService.cancelSubscription(user.mpSubscriptionId);
+        }
+
+        // Exclusão em cascata atômica. Operações SEQUENCIAIS: uma sessão de transação
+        // do MongoDB não permite operações concorrentes (nada de Promise.all aqui).
+        await runTransaction(async (session) => {
+            await UserAsset.deleteMany({ user: userId }, { session });
+            await AssetTransaction.deleteMany({ user: userId }, { session });
+            await WalletSnapshot.deleteMany({ user: userId }, { session });
+            await InvestmentGoal.deleteMany({ user: userId }, { session });
+            await GoalContribution.deleteMany({ user: userId }, { session });
+            await UsageLog.deleteMany({ user: userId }, { session });
+            await Transaction.deleteMany({ user: userId }, { session });
+            await RefreshToken.deleteMany({ user: userId }, { session });
+            // QuizAttempt/UserProgress referenciam o titular por `userId`.
+            await QuizAttempt.deleteMany({ userId: userId }, { session });
+            await UserProgress.deleteMany({ userId: userId }, { session });
+            // Notificações pessoais: apaga. Broadcasts: remove o id da lista de leitura.
+            await Notification.deleteMany({ user: userId }, { session });
+            await Notification.updateMany({ readBy: userId }, { $pull: { readBy: userId } }, { session });
+            // Auditoria: anonimiza (mantém a trilha de segurança sem identificar o titular).
+            // O IP/userAgent permanecem sob legítimo interesse de segurança (Art. 7 IX).
+            await AuditLog.updateMany({ user: userId }, { $set: { user: null, email: null } }, { session });
+            // Por fim, remove o documento do usuário.
+            await User.deleteOne({ _id: userId }, { session });
+        });
+
+        invalidateUser(userId);
+
+        // Encerra a sessão atual (cookies de refresh e CSRF).
+        res.clearCookie('jwt', { httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production' });
+        clearCsrfToken(res);
+
+        // Trilha final anônima — não vincula ao usuário já excluído.
+        logAudit(req, 'ACCOUNT_DELETED', `Conta excluída definitivamente (titular: ${emailForLog})`, null, null);
+
+        res.status(200).json({ message: "Conta e dados excluídos permanentemente." });
     } catch (error) {
         next(error);
     }

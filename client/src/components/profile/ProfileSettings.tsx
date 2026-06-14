@@ -22,9 +22,9 @@ export const ProfileSettings = () => {
         if (user) {
             setFormData({
                 name: user.name || '',
-                phone: '', // Telefone e ocupação não estão no user context por padrão, idealmente viriam da API
-                occupation: '',
-                cpf: (user as any).cpf || ''
+                phone: user.phone || '',
+                occupation: user.occupation || '',
+                cpf: user.cpf || ''
             });
         }
     }, [user]);
@@ -81,7 +81,8 @@ export const ProfileSettings = () => {
             await authService.updateProfile({
                 name: formData.name,
                 cpf: formData.cpf,
-                // phone e occupation seriam enviados se o backend suportasse
+                phone: formData.phone,
+                occupation: formData.occupation,
             });
             
             await refreshProfile(); // Atualiza contexto

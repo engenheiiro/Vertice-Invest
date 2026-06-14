@@ -29,6 +29,8 @@ export const Register = () => {
     confirmPassword: ''
   });
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [termsError, setTermsError] = useState('');
   const [serverError, setServerError] = useState('');
   const [status, setStatus] = useState<ButtonStatus>('idle');
@@ -46,8 +48,8 @@ export const Register = () => {
     e.preventDefault();
     setServerError('');
     const isValid = validate();
-    const hasTermsError = !acceptedTerms;
-    if (hasTermsError) setTermsError('Você deve aceitar os termos');
+    const hasTermsError = !acceptedTerms || !acceptedPrivacy;
+    if (hasTermsError) setTermsError('Você deve aceitar os Termos e a Política de Privacidade');
     else setTermsError('');
     if (!isValid || hasTermsError) return;
 
@@ -57,7 +59,10 @@ export const Register = () => {
       await authService.register({
         name: formData.name,
         email: formData.email,
-        password: formData.password
+        password: formData.password,
+        acceptedTerms,
+        acceptedPrivacy,
+        marketingOptIn,
       });
 
       setStatus('success');
@@ -173,34 +178,78 @@ export const Register = () => {
               </div>
             )}
 
-            <div className="mt-2 flex items-start gap-2">
-                <div className="flex items-center h-5">
-                    <input
-                        id="terms"
-                        name="terms"
-                        type="checkbox"
-                        checked={acceptedTerms}
-                        onChange={(e) => {
-                            setAcceptedTerms(e.target.checked);
-                            if (e.target.checked) setTermsError('');
-                        }}
-                        disabled={status === 'loading' || status === 'success'}
-                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600 transition-colors cursor-pointer"
-                    />
-                </div>
-                <div className="text-[11px] leading-tight">
-                    <div className="flex flex-wrap gap-1">
-                        <label htmlFor="terms" className="font-medium text-slate-600 cursor-pointer select-none">
-                            Li e concordo com os
-                        </label>
+            <div className="mt-2 space-y-2">
+                {/* Termos de Uso — obrigatório */}
+                <div className="flex items-start gap-2">
+                    <div className="flex items-center h-5 mt-px">
+                        <input
+                            id="terms"
+                            name="terms"
+                            type="checkbox"
+                            checked={acceptedTerms}
+                            onChange={(e) => {
+                                setAcceptedTerms(e.target.checked);
+                                if (e.target.checked && acceptedPrivacy) setTermsError('');
+                            }}
+                            disabled={status === 'loading' || status === 'success'}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600 transition-colors cursor-pointer"
+                        />
+                    </div>
+                    <label htmlFor="terms" className="text-[11px] leading-tight font-medium text-slate-600 cursor-pointer select-none">
+                        Li e aceito os{' '}
                         <Link to="/terms" className="text-blue-600 hover:underline font-bold hover:text-blue-800 transition-colors">
                             Termos de Uso
                         </Link>
-                    </div>
-                    {termsError && (
-                        <p className="text-red-500 font-bold mt-0.5 animate-fade-in">{termsError}</p>
-                    )}
+                        {' '}*
+                    </label>
                 </div>
+
+                {/* Política de Privacidade — obrigatório */}
+                <div className="flex items-start gap-2">
+                    <div className="flex items-center h-5 mt-px">
+                        <input
+                            id="privacy"
+                            name="privacy"
+                            type="checkbox"
+                            checked={acceptedPrivacy}
+                            onChange={(e) => {
+                                setAcceptedPrivacy(e.target.checked);
+                                if (e.target.checked && acceptedTerms) setTermsError('');
+                            }}
+                            disabled={status === 'loading' || status === 'success'}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600 transition-colors cursor-pointer"
+                        />
+                    </div>
+                    <label htmlFor="privacy" className="text-[11px] leading-tight font-medium text-slate-600 cursor-pointer select-none">
+                        Li e aceito a{' '}
+                        <Link to="/privacy" className="text-blue-600 hover:underline font-bold hover:text-blue-800 transition-colors">
+                            Política de Privacidade
+                        </Link>
+                        {' '}*
+                    </label>
+                </div>
+
+                {/* Marketing — opcional */}
+                <div className="flex items-start gap-2">
+                    <div className="flex items-center h-5 mt-px">
+                        <input
+                            id="marketing"
+                            name="marketing"
+                            type="checkbox"
+                            checked={marketingOptIn}
+                            onChange={(e) => setMarketingOptIn(e.target.checked)}
+                            disabled={status === 'loading' || status === 'success'}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600 transition-colors cursor-pointer"
+                        />
+                    </div>
+                    <label htmlFor="marketing" className="text-[11px] leading-tight text-slate-500 cursor-pointer select-none">
+                        Aceito receber comunicações e novidades por e-mail (opcional)
+                    </label>
+                </div>
+
+                {termsError && (
+                    <p className="text-red-500 text-[10px] font-bold animate-fade-in">{termsError}</p>
+                )}
             </div>
         </div>
 

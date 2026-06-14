@@ -116,5 +116,24 @@ export const paymentService = {
             logger.error(`Erro status Pagamento MP: ${error.message}`);
             return null;
         }
+    },
+
+    /**
+     * Cancela uma assinatura recorrente no Mercado Pago (best-effort).
+     * Usado na exclusão de conta (LGPD Art. 18 VI) para interromper cobranças.
+     * Nunca lança: a falha de cancelamento não deve bloquear a exclusão dos dados.
+     */
+    async cancelSubscription(subscriptionId) {
+        if (!client || !subscriptionId) return false;
+        try {
+            const { PreApproval } = await import('mercadopago');
+            const preApproval = new PreApproval(client);
+            await preApproval.update({ id: subscriptionId, body: { status: 'cancelled' } });
+            logger.info(`🔕 Assinatura MP cancelada: ${subscriptionId}`);
+            return true;
+        } catch (error) {
+            logger.error(`⚠️ Falha ao cancelar assinatura MP ${subscriptionId}: ${error.message}`);
+            return false;
+        }
     }
 };

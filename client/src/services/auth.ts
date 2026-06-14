@@ -12,6 +12,9 @@ interface RegisterData {
   name: string;
   email: string;
   password: string;
+  acceptedTerms?: boolean;
+  acceptedPrivacy?: boolean;
+  marketingOptIn?: boolean;
 }
 
 interface AuthResponse {
@@ -302,5 +305,36 @@ export const authService = {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || "Falha ao desativar conta");
+  },
+
+  async deleteAccount(password: string, mfaToken?: string): Promise<void> {
+    const response = await this.api('/api/me', {
+      method: 'DELETE',
+      body: JSON.stringify({ password, mfaToken })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      // 401 + mfaRequired: a conta tem 2FA e o código não foi informado
+      const err: any = new Error(data.message || "Falha ao excluir conta");
+      err.mfaRequired = data.mfaRequired;
+      throw err;
+    }
+  },
+
+  async exportData(): Promise<void> {
+    const response = await this.api('/api/me/export', { method: 'GET' });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.message || 'Erro ao exportar dados');
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vertice-meus-dados.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 };

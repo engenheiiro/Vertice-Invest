@@ -95,3 +95,8 @@ dist-ssr/
 
 # Relatorios gerados por scripts (radar/ranking) — artefatos, nao versionar
 reports/*_latest.txt
+
+# Documentos de governança LGPD — contêm PII do Controlador (CPF/endereço).
+# Mantidos localmente, fora do versionamento, para não expor dados sensíveis.
+docs/lgpd/
+PLANO-LGPD.txt

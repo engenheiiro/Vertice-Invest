@@ -13,14 +13,20 @@ const UserSchema = new mongoose.Schema({
     // e domínios/labels malformados). A validação primária ocorre via Zod (authSchemas).
     match: [/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/, 'Formato de email inválido']
   },
-  // CPF: Armazenar apenas números (11 dígitos). Sparse permite que usuários antigos fiquem sem CPF temporariamente.
-  cpf: { 
-    type: String, 
-    unique: true, 
-    sparse: true,
+  // CPF cifrado em repouso (AES-256-GCM via utils/encryption — Art. 6 VII / 46 LGPD).
+  // O valor armazenado é o ciphertext "iv:tag:data", NÃO os dígitos em claro.
+  // A unicidade é garantida pelo blind index `cpfHash` (não por este campo).
+  cpf: {
+    type: String,
     trim: true,
-    minlength: 11,
-    maxlength: 14 
+  },
+  // Blind index do CPF: HMAC-SHA256 determinístico (utils/encryption.blindIndex).
+  // Permite checar unicidade/buscar sem expor o CPF. select:false → não retorna por padrão.
+  cpfHash: {
+    type: String,
+    unique: true,
+    sparse: true,
+    select: false,
   },
   password: { type: String, required: true },
   
@@ -79,7 +85,17 @@ const UserSchema = new mongoose.Schema({
 
   // --- Desativação de Conta (soft-delete) ---
   isActive: { type: Boolean, default: true },
-  deactivatedAt: { type: Date }
+  deactivatedAt: { type: Date },
+
+  // --- Consentimento LGPD (Art. 7, 8) ---
+  termsAcceptedAt: { type: Date },
+  privacyAcceptedAt: { type: Date },
+  consentVersion: { type: String },
+  marketingOptIn: { type: Boolean, default: false },
+
+  // --- Perfil Adicional ---
+  phone: { type: String, trim: true },
+  occupation: { type: String, trim: true },
 });
 
 const User = mongoose.models.User || mongoose.model('User', UserSchema);

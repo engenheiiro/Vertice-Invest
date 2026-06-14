@@ -14,12 +14,22 @@ if (env?.VITE_SENTRY_DSN) {
       dsn: env.VITE_SENTRY_DSN,
       integrations: [
         Sentry.browserTracingIntegration(),
-        Sentry.replayIntegration(),
+        Sentry.replayIntegration({
+          maskAllText: true,
+          blockAllMedia: true,
+        }),
       ],
       tracePropagationTargets: ["localhost", /^https:\/\/yourserver\.io\/api/],
-      tracesSampleRate: 1.0, 
-      replaysSessionSampleRate: 0.1, 
-      replaysOnErrorSampleRate: 1.0, 
+      tracesSampleRate: 1.0,
+      replaysSessionSampleRate: 0.1,
+      replaysOnErrorSampleRate: 1.0,
+      beforeSend(event) {
+        if (event.request?.cookies) delete event.request.cookies;
+        if (event.request?.headers?.['Authorization']) {
+          event.request.headers['Authorization'] = '[Filtered]';
+        }
+        return event;
+      },
     });
     console.log("✅ Sentry Frontend Inicializado");
   } catch (e) {

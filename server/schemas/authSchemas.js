@@ -19,7 +19,12 @@ export const registerSchema = z.object({
       .superRefine((val, ctx) => {
         const err = getPasswordError(val);
         if (err) ctx.addIssue({ code: z.ZodIssueCode.custom, message: err });
-      })
+      }),
+
+    // Consentimento LGPD (Art. 7, 8) — booleans enviados pelo frontend
+    acceptedTerms: z.boolean().optional(),
+    acceptedPrivacy: z.boolean().optional(),
+    marketingOptIn: z.boolean().optional(),
   })
 });
 

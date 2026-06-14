@@ -20,11 +20,13 @@ import { ReloadPrompt } from './components/pwa/ReloadPrompt';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Terms } from './pages/Terms';
+import { Privacy } from './pages/Privacy';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
-import { Landing } from './pages/Landing'; 
+import { Landing } from './pages/Landing';
 import { Checkout } from './pages/Checkout';
 import { CheckoutSuccess } from './pages/CheckoutSuccess';
+import { CookieNotice } from './components/ui/CookieNotice';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
 const Profile = lazy(() => import('./pages/Profile').then(module => ({ default: module.Profile })));
@@ -88,6 +90,7 @@ export default function App() {
       <InstallPrompt />
       <AuthProvider>
         <BrowserRouter>
+          <CookieNotice />
           <Routes>
             <Route path="/" element={<Landing />} />
 
@@ -95,6 +98,7 @@ export default function App() {
               <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
               <Route path="/register" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
               <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
             </Route>

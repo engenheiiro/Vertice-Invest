@@ -51,4 +51,19 @@ export const adminLimiter = createUserLimiter({
   message: 'Muitas operações de administração. Aguarde alguns minutos.',
 });
 
+// Exportação de dados pessoais (Art. 18 LGPD): 3 exportações por hora por usuário.
+export const dataExportLimiter = createUserLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  message: 'Limite de exportações atingido. Tente novamente em 1 hora.',
+});
+
+// Exclusão de conta (Art. 18 VI LGPD): 5 tentativas por hora por usuário.
+// Limite apertado — também freia brute-force de senha pela rota de exclusão.
+export const accountDeleteLimiter = createUserLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: 'Muitas tentativas de exclusão. Tente novamente em 1 hora.',
+});
+
 export { createUserLimiter };

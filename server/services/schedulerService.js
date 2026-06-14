@@ -18,6 +18,7 @@ import UserAsset from '../models/UserAsset.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
 import AssetTransaction from '../models/AssetTransaction.js';
 import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
+import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
 import { calculateDailyDietz } from '../utils/mathUtils.js';
 import { isBusinessDay, countBusinessDays } from '../utils/dateUtils.js';
@@ -464,6 +465,21 @@ export const initScheduler = () => {
             await runStorageCleanup();
         } catch (error) {
             logger.error(`❌ [Scheduler] Cleanup de armazenamento: ${error.message}`);
+        }
+    });
+
+    // 13. RETENÇÃO LGPD (Diário 02:30 — complementa TTL do MongoDB, Art. 15-16)
+    // O TTL index em RefreshToken.expiryDate e AuditLog.timestamp já limpa automaticamente.
+    // Este job é belt-and-suspenders: remove RefreshTokens expirados não capturados pelo TTL
+    // (ex.: atraso do processo TTL do MongoDB em coleções grandes).
+    cron.schedule('30 2 * * *', async () => {
+        try {
+            const result = await RefreshToken.deleteMany({ expiryDate: { $lt: new Date() } });
+            if (result.deletedCount > 0) {
+                logger.info(`🧹 [LGPD] Retenção: ${result.deletedCount} RefreshToken(s) expirado(s) removido(s).`);
+            }
+        } catch (error) {
+            logger.error(`❌ [LGPD] Cleanup RefreshToken: ${error.message}`);
         }
     });
 };
