@@ -4,7 +4,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js",
+    "start": "node --max-old-space-size=400 index.js",
     "dev": "npx nodemon index.js --ignore logs/ --ignore **/*.log --ignore crash-report.txt",
     "test": "vitest",
     "test:wallet": "vitest run tests/wallet_snapshot.spec.js",

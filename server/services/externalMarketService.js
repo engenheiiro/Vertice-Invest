@@ -25,6 +25,31 @@ const GOOGLE_FINANCE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit
 // Listados aqui para eliminar ruído de warn no log — o fallback já os trata corretamente.
 const PREFER_GOOGLE_TICKERS = new Set(['B3SA3', 'CVBI11', 'MALL11', 'QAGR11', 'RRCI11', 'RVBI11']);
 
+// (MEM) Limite de scrapes simultâneos do Google Finance. Cada cheerio.load() de
+// uma página do Google constrói uma árvore DOM de vários MB; sem este teto, um
+// Promise.all do universo inteiro mantinha N árvores na memória de uma vez e
+// estourava o heap em instâncias de 512 MB. Pool pequeno = pico de memória limitado.
+const GOOGLE_FALLBACK_CONCURRENCY = 4;
+
+/**
+ * (MEM) Executa `worker` sobre `items` com no máximo `limit` tarefas simultâneas,
+ * preservando a ordem dos resultados. Substitui `Promise.all(items.map(...))`
+ * quando cada tarefa aloca muita memória (scraping/parse de HTML).
+ */
+const mapWithConcurrency = async (items, limit, worker) => {
+    const results = new Array(items.length);
+    let cursor = 0;
+    const runner = async () => {
+        while (cursor < items.length) {
+            const index = cursor++;
+            results[index] = await worker(items[index], index);
+        }
+    };
+    const pool = Array.from({ length: Math.min(limit, items.length) }, runner);
+    await Promise.all(pool);
+    return results;
+};
+
 export const externalMarketService = {
     
     // Helper: Scraper do Google Finance (Fallback Secundário)
@@ -213,8 +238,9 @@ export const externalMarketService = {
                     logger.warn(`⚠️ [MarketService] Yahoo falhou para ${unexpectedFails.length} ativos: [${unexpectedFails.join(', ')}]. Tentando Google Finance Fallback...`);
                 }
                 
-                // Executa em paralelo mas limitado para não ser bloqueado
-                const fallbackPromises = failedTickers.map(async (ticker) => {
+                // (MEM) Concorrência limitada: cada scrape carrega uma árvore cheerio
+                // pesada. Promise.all sem teto mantinha todas em memória de uma vez.
+                const fallbackRaw = await mapWithConcurrency(failedTickers, GOOGLE_FALLBACK_CONCURRENCY, async (ticker) => {
                     const googleData = await this.fetchFromGoogleFinance(ticker);
                     if (googleData) {
                         logger.info(`✅ [Fallback] Google Finance recuperou cotação para ${ticker}: ${googleData.price}`);
@@ -232,7 +258,7 @@ export const externalMarketService = {
                     return null;
                 });
 
-                const fallbackResults = (await Promise.all(fallbackPromises)).filter(Boolean);
+                const fallbackResults = fallbackRaw.filter(Boolean);
                 return [...mappedResults, ...fallbackResults];
             }
 
@@ -242,13 +268,12 @@ export const externalMarketService = {
             logger.error(`❌ Erro Crítico Yahoo Finance (Batch): ${error.message}`);
             // Se o Yahoo caiu completamente, tenta Google um por um (lento mas resiliente)
             logger.warn("⚠️ Ativando Protocolo de Emergência: Fallback Total Google Finance.");
-            
-            const emergencyResults = [];
-            for (const t of tickers) {
-                const gData = await this.fetchFromGoogleFinance(t);
-                if (gData) emergencyResults.push(gData);
-            }
-            return emergencyResults;
+
+            // (MEM) Mesmo no modo de emergência usamos pool limitado em vez de varrer
+            // o lote inteiro: protege o heap (árvores cheerio) quando o Yahoo cai e
+            // TODOS os tickers caem no scraping de uma vez.
+            const emergencyRaw = await mapWithConcurrency(tickers, GOOGLE_FALLBACK_CONCURRENCY, (t) => this.fetchFromGoogleFinance(t));
+            return emergencyRaw.filter(Boolean);
         }
     },
 
