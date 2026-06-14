@@ -171,6 +171,25 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],
-    exclude: ['node_modules', 'dist']
+    exclude: ['node_modules', 'dist'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary', 'json', 'lcov'],
+      // Arquivos com lógica de negócio que devem ser monitorados
+      include: [
+        'src/utils/**/*.ts',
+        'src/hooks/**/*.ts',
+        'src/services/**/*.ts',
+        'src/contexts/**/*.tsx',
+        'src/pages/**/*.tsx',
+      ],
+      exclude: [
+        'src/**/*.test.*',
+        'src/**/*.spec.*',
+        'src/test/**',
+        'src/main.tsx',
+        'src/prerender.tsx',
+      ],
+    },
   }
 });

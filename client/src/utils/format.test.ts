@@ -69,3 +69,54 @@ describe('formatQuantity', () => {
     expect(formatQuantity(0.0000028, { privacy: true })).toBe(PRIVACY_MASK_SHORT);
   });
 });
+
+// ─── Edge cases ───────────────────────────────────────────────────────────────
+
+describe('formatCurrency — edge cases', () => {
+  it('trata Infinity como 0', () => {
+    expect(norm(formatCurrency(Infinity))).toBe('R$ 0,00');
+  });
+  it('formata valores negativos corretamente', () => {
+    expect(norm(formatCurrency(-500))).toBe('-R$ 500,00');
+  });
+  it('formata zero explícito sem sinal', () => {
+    expect(norm(formatCurrency(0))).toBe('R$ 0,00');
+  });
+});
+
+describe('formatPercent — edge cases', () => {
+  it('trata Infinity como 0%', () => {
+    expect(formatPercent(Infinity)).toBe('0,00%');
+  });
+  it('formata percentual negativo', () => {
+    expect(formatPercent(-33.33)).toBe('-33,33%');
+  });
+  it('sign: true com zero não adiciona prefixo +', () => {
+    expect(formatPercent(0, { sign: true })).toBe('0,00%');
+  });
+  it('sign: true com negativo mantém o sinal correto', () => {
+    expect(formatPercent(-5, { sign: true })).toBe('-5,00%');
+  });
+});
+
+describe('formatCompact — edge cases', () => {
+  // notation:'compact' com maximumFractionDigits:1 não força casas em inteiros pequenos
+  it('valor abaixo de 1.000 não recebe decimais desnecessários', () => {
+    expect(norm(formatCompact(999))).toBe('R$ 999');
+  });
+  it('trata Infinity como 0 (sem decimais em compacto)', () => {
+    expect(norm(formatCompact(Infinity))).toBe('R$ 0');
+  });
+});
+
+describe('formatQuantity — edge cases', () => {
+  it('trata zero explícito', () => {
+    expect(formatQuantity(0)).toBe('0');
+  });
+  it('respeita maxDecimals personalizado', () => {
+    expect(formatQuantity(1.23456789, { maxDecimals: 2 })).toBe('1,23');
+  });
+  it('trata Infinity como 0', () => {
+    expect(formatQuantity(Infinity)).toBe('0');
+  });
+});

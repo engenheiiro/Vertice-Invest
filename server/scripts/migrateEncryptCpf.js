@@ -27,8 +27,9 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const dryRun = process.argv.includes('--dry');
 
-// Já cifrado? formato "iv:tag:data" (3 partes hex separadas por ':').
-const isEncrypted = (value) => typeof value === 'string' && value.split(':').length === 3;
+// Já cifrado? formato legado "iv:tag:data" (3 partes) ou versionado "keyId:iv:tag:data" (4 partes).
+const isEncrypted = (value) =>
+  typeof value === 'string' && (value.split(':').length === 3 || value.split(':').length === 4);
 
 const dropLegacyCpfIndex = async () => {
     try {

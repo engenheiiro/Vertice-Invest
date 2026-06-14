@@ -48,8 +48,16 @@ jobs:
       - name: Test backend (com cobertura)
         run: npm run test:ci --prefix server
 
-      - name: Test frontend
-        run: npm run test --prefix client -- run
+      - name: Test frontend (com cobertura)
+        run: npm run test:coverage --prefix client
+
+      - name: Upload cobertura frontend
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-frontend
+          path: client/coverage/
+          retention-days: 14
 
       - name: Build server (validação de sintaxe)
         run: npm run build:server

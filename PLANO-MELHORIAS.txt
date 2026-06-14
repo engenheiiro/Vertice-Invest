@@ -95,12 +95,30 @@ PRIORIDADE SUGERIDA (se você só puder fazer uma parte)
 1.6  Versionar chaves de criptografia
      A criptografia do 2FA assume sempre a mesma chave. Permitir
      "chave v1, v2..." para trocar sem quebrar usuários.
-     [MEDIA] [OPUS]
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → utils/encryption.js: registro de chaves versionadas. ENCRYPTION_KEY = v1
+       (compatível com tudo já cifrado); chaves extras via ENCRYPTION_KEYS
+       ("v2=<hex>;v3=<hex>"); chave de cifragem ativa via ENCRYPTION_KEY_ACTIVE
+       (default v1). Ciphertext novo autodescritivo "<keyId>:iv:tag:data";
+       legado de 3 partes decifra com v1; texto sem ":" segue como claro.
+       blindIndex FIXO em v1 (estável entre rotações → preserva unicidade do CPF).
+       Novo reencrypt() (decrypt→encrypt na chave ativa) para scripts de rotação.
+       _resetKeyRegistry() exposto p/ testes.
+     → .env.example: documenta ENCRYPTION_KEYS e ENCRYPTION_KEY_ACTIVE + rotação.
+     → tests/encryption.spec.js (novo, 12 testes): round-trip versionado, claro
+       legado, ciphertext legado 3-partes, rotação v1→v2 (decifra ambos),
+       reencrypt v1→v2, blind index estável pós-rotação, validações de config.
 
 1.7  Verificar invalidação de cache no webhook de pagamento
      Quando o Mercado Pago muda o plano, confirmar que o cache do
      usuário é limpo na hora (senão ele fica com plano antigo por 5 min).
-     [BAIXA] [OPUS]
+     [BAIXA] [OPUS] [IMPLEMENTADO]
+     → Verificação: controllers/webhookController.js já chama invalidateUser(user._id)
+       logo após user.save() no caminho 'approved' (linha ~139). Chave casa com
+       authMiddleware (ambos normalizam o id via String()) — sem plano obsoleto.
+     → tests/webhook_cache_invalidation.spec.js (novo, 3 testes, regressão):
+       aprovado → invalidateUser('user-1') 1x; idempotência (já processado) →
+       não invalida; status pending → não invalida.
 
 1.8  Timeout em transações do banco
      Operações longas no MongoDB podem travar. Definir tempo-limite
@@ -115,7 +133,10 @@ PRIORIDADE SUGERIDA (se você só puder fazer uma parte)
 1.10 Revisão de segurança automatizada no PR
      Rodar o /security-review em mudanças sensíveis (auth, pagamento)
      antes de juntar ao código principal.
-     [MEDIA] [OPUS]
+     [MEDIA] [OPUS] [IGNORADO]
+     → Requer ANTHROPIC_API_KEY como secret do repositório — não será configurado.
+       Alternativa manual: rodar /code-review ou /security-review localmente
+       no Claude Code antes de abrir PRs em áreas sensíveis.
 
 
 ================================================================
@@ -137,19 +158,41 @@ têm nenhum teste.)
 
 2.2  Testar a página Carteira (Wallet)
      Garantir que KPIs, abas e cálculos não quebrem no futuro.
-     [MEDIA] [SONNET]
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Wallet.test.tsx (novo, 17 testes): render, skeleton de loading, empty state,
+       troca de abas (OVERVIEW/PERFORMANCE/DIVIDENDS/STATEMENT), controle de acesso
+       ao Aporte Inteligente (GUEST/ESSENTIAL bloqueados, PRO libera), controle de
+       acesso ao Rebalanceamento IA (non-BLACK bloqueado, BLACK abre modal,
+       demo-mode dispara toast), reset de carteira (desabilitado sem ativos,
+       confirm modal, chamada a resetWallet()).
 
 2.3  Testar a página Dashboard
      Tela inicial com muitos dados; proteger contra regressões.
-     [MEDIA] [SONNET]
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Dashboard.test.tsx (novo, 7 testes): render sem erro, modal de relatório
+       fechado por padrão, verificação de chamada a researchService.getLatest,
+       isLoading sem crash, lógica displayDividends (dividendos reais vs projeção,
+       modo privacidade mascara valor).
 
 2.4  Testar a página Research
      Relatórios e ranking — proteger a leitura por perfil.
-     [MEDIA] [SONNET]
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Research.test.tsx (novo, 12 testes): título RESEARCH CENTER, 5 botões de
+       ativo, seleção inicial BRASIL_10, controle de acesso por plano (GUEST sem
+       BRASIL_10, ESSENTIAL com BRASIL_10 mas sem STOCK, PRO com STOCK, ELITE com
+       STOCK_US), bypass de ADMIN (plano GUEST + role ADMIN = acesso total),
+       skeleton de loading, deep link via location.state (abre AssetDetailModal
+       se ticker encontrado no ranking).
 
 2.5  Testes do fluxo de login/registro/2FA no frontend
      Simular usuário logando, errando senha, usando 2FA.
-     [MEDIA] [SONNET]
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Login.test.tsx (novo, 12 testes): render dos campos e botão, validação de
+       email/senha vazios (não chama API), login bem-sucedido (chama login() e
+       navega /dashboard), erro de servidor (mensagem exibida), erro sem mensagem
+       (fallback genérico), mfaRequired (exibe campo de código, oculta email/senha),
+       código 2FA curto (<6 dígitos = erro, API não chamada), login 2FA completo
+       (mfaToken no payload, navega /dashboard), botão Voltar restaura formulário.
 
 2.6  Testes de integração ponta-a-ponta (Playwright)
      Robô que abre o site e clica como usuário real
@@ -167,11 +210,28 @@ têm nenhum teste.)
 2.9  Testes de "casos extremos" (edge cases)
      Hoje os testes cobrem o "caminho feliz". Adicionar valores
      negativos, vazios, zerados.
-     [MEDIA] [SONNET]
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → kpiCalculations.test.ts: +8 casos (custo zero sem NaN, resultado negativo,
+       soma de múltiplas posições, weightedRentability 0 cai para fallback,
+       weightedRentability positivo preservado, sharpe/beta preservados, carteira
+       vazia → AUDITED, vazia com dividendos preserva totalDividends).
+     → format.test.ts: +12 casos (formatCurrency: Infinity→0, negativo, zero;
+       formatPercent: Infinity→0%, negativo, sign+zero sem prefixo, sign+negativo;
+       formatCompact: abaixo de 1.000 sem notação compacta, Infinity→0;
+       formatQuantity: zero, maxDecimals custom, Infinity→0).
 
 2.10 Relatório de cobertura no PR
      Mostrar automaticamente quanto do código novo está testado.
-     [BAIXA] [SONNET]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → client/package.json: novo script "test:coverage" (vitest run --coverage).
+     → client/package.json: @vitest/coverage-v8 ^1.0.0 adicionado a devDependencies.
+     → client/vite.config.ts: bloco coverage (provider v8, reporters text-summary/
+       json/lcov, inclui src/utils, hooks, services, contexts, pages; exclui testes
+       e arquivos de bootstrap).
+     → .github/workflows/ci.yml: passo "Test frontend" substituído por
+       "Test frontend (com cobertura)" usando npm run test:coverage; passo
+       "Upload cobertura frontend" salva client/coverage/ como artefato
+       retention 14 dias (visível na aba Artifacts de cada workflow run).
 
 
 ================================================================

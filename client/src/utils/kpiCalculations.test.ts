@@ -59,3 +59,54 @@ describe('computeWalletKpis — com posições', () => {
     expect(k.dataQuality).toBe('ESTIMATED');
   });
 });
+
+// ─── Edge cases ───────────────────────────────────────────────────────────────
+
+describe('computeWalletKpis — edge cases', () => {
+  it('custo zero não gera NaN/Infinity em resultPercent', () => {
+    const k = computeWalletKpis([pos(500, 0)]);
+    expect(Number.isFinite(k.totalResultPercent)).toBe(true);
+    expect(k.totalResultPercent).toBe(0);
+  });
+
+  it('resultado negativo quando equity < invested', () => {
+    const k = computeWalletKpis([pos(800, 1000)]);
+    expect(k.totalResult).toBe(-200);
+    expect(k.totalResultPercent).toBeCloseTo(-20);
+  });
+
+  it('múltiplas posições: soma equity e invested corretamente', () => {
+    const k = computeWalletKpis([pos(300, 200), pos(700, 800), pos(1000, 1000)]);
+    expect(k.totalEquity).toBe(2000);
+    expect(k.totalInvested).toBe(2000);
+    expect(k.totalResult).toBe(0);
+  });
+
+  it('weightedRentability do servidor igual a 0 é respeitado (break-even)', () => {
+    const k = computeWalletKpis([pos(1100, 1000)], { weightedRentability: 0 });
+    expect(k.weightedRentability).toBe(0);
+  });
+
+  it('weightedRentability positivo do servidor é usado diretamente', () => {
+    const k = computeWalletKpis([pos(1000, 1000)], { weightedRentability: 8.5 });
+    expect(k.weightedRentability).toBe(8.5);
+  });
+
+  it('sharpeRatio e beta vindos do servidor são preservados', () => {
+    const k = computeWalletKpis([pos(1000, 1000)], { sharpeRatio: 1.8, beta: 0.75 });
+    expect(k.sharpeRatio).toBe(1.8);
+    expect(k.beta).toBe(0.75);
+  });
+
+  it('carteira vazia retorna dataQuality AUDITED, não ESTIMATED', () => {
+    const k = computeWalletKpis([], {});
+    expect(k.dataQuality).toBe('AUDITED');
+  });
+
+  it('carteira vazia com dividendos e projeção do servidor os preserva', () => {
+    const k = computeWalletKpis([], { totalDividends: 450, projectedDividends: 120 });
+    expect(k.totalDividends).toBe(450);
+    expect(k.projectedDividends).toBe(120);
+    expect(k.totalEquity).toBe(0);
+  });
+});
