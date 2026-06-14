@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply antialiased text-slate-900 bg-white;
+    @apply antialiased text-slate-100 bg-base;
   }
   html {
     scroll-behavior: smooth;

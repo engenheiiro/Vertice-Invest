@@ -25,7 +25,7 @@ export default {
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out forwards',
-        'page-enter': 'pageEnter 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards',
+        'page-enter': 'pageEnter 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards',
         'shake': 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both',
         'scroll': 'scroll 40s linear infinite',
         'shimmer': 'shimmer 2s linear infinite',
@@ -38,8 +38,8 @@ export default {
         // Transição de entrada de página: slide-up suave com fade (respeita
         // prefers-reduced-motion via CSS).
         pageEnter: {
-          'from': { opacity: '0', transform: 'translateY(16px)' },
-          'to': { opacity: '1', transform: 'translateY(0)' },
+          'from': { transform: 'translateY(8px)' },
+          'to': { transform: 'translateY(0)' },
         },
         shake: {
           '10%, 90%': { transform: 'translate3d(-1px, 0, 0)' },
