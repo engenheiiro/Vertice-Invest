@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { syncService } from '../services/syncService.js';
 import { aiResearchService } from '../services/aiResearchService.js';
 import { signalEngine } from '../services/engines/signalEngine.js';
+import { timeSeriesWorker } from '../services/workers/timeSeriesWorker.js';
 import { runBacktestAnalysis } from './runBacktestEngine.js';
 
 // Configuração de ambiente para rodar via terminal
@@ -35,7 +36,14 @@ const syncProd = async () => {
 
         if (result.success) {
             console.log(`info: ℹ️ Sync Mercado OK (${result.count} ativos).`);
-            
+
+            // 1.5 Séries temporais ANTES do ranking: recalcula beta/volatility/SMA/EMA
+            // a partir do histórico. O scoringEngine usa beta/volatility no gate de
+            // elegibilidade e nos scores, então isto precisa rodar antes do batch
+            // (mesma ordem da rotina das 18:30).
+            console.log("info: 📈 Recalculando séries temporais (beta/volatility/SMA/EMA)...");
+            await timeSeriesWorker.run();
+
             // 2. Processamento de Inteligência (Centralizado)
             await aiResearchService.runBatchAnalysis(null);
             console.log("info: ℹ️ Processamento IA finalizado.");
