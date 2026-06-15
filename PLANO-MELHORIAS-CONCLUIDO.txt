@@ -1,0 +1,341 @@
+================================================================
+PLANO DE MELHORIAS — VÉRTICE INVEST — HISTÓRICO DO QUE JÁ FOI FEITO
+================================================================
+
+Este arquivo é o ARQUIVO MORTO do PLANO-MELHORIAS.txt: guarda o que já
+foi ENTREGUE [IMPLEMENTADO] ou DECIDIDO NÃO FAZER [IGNORADO], para
+manter o plano principal limpo (só com o que falta).
+
+A numeração é a MESMA do PLANO-MELHORIAS.txt — o número 3.4 aqui é o
+mesmo item 3.4 de lá. Itens que ainda faltam continuam no arquivo
+principal.
+
+Atualizado em: 2026-06-15.
+
+LEGENDA:
+  [BAIXA]/[MEDIA]/[ALTA] = complexidade.
+  [SONNET]/[OPUS]        = qual IA foi usada.
+  [IMPLEMENTADO]         = entregue e verificado.
+  [IGNORADO]             = avaliado e decidido NÃO fazer (motivo abaixo).
+
+
+================================================================
+1. SEGURANÇA
+================================================================
+1.1  Bucket de rate-limit próprio para /refresh
+     Hoje o "renovar login" divide o limite com tudo. Em pico, pode
+     travar usuários. Dar uma "fila própria" a ele.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+
+1.2  Validar tunables de admin com Zod
+     O painel admin altera parâmetros sem validar o formato. Adicionar
+     checagem para impedir valor inválido/malicioso.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+
+1.3  Rate-limit nas rotas de admin
+     As rotas de configuração não têm limite de chamadas. Adicionar um
+     limite (ex.: 10/hora).
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+
+1.4  Token CSRF explícito nas ações sensíveis
+     Hoje a proteção é indireta (cookie HttpOnly). Adicionar token
+     anti-falsificação nas ações de escrita por garantia.
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+
+1.5  Rotacionar segredos por precaução
+     Não houve vazamento, mas trocar chaves de API/MongoDB
+     periodicamente é boa higiene. Documentar o procedimento.
+     [BAIXA] [SONNET] [IGNORADO]
+
+1.6  Versionar chaves de criptografia
+     A criptografia do 2FA assume sempre a mesma chave. Permitir
+     "chave v1, v2..." para trocar sem quebrar usuários.
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → utils/encryption.js: registro de chaves versionadas. ENCRYPTION_KEY = v1
+       (compatível com tudo já cifrado); chaves extras via ENCRYPTION_KEYS
+       ("v2=<hex>;v3=<hex>"); chave de cifragem ativa via ENCRYPTION_KEY_ACTIVE
+       (default v1). Ciphertext novo autodescritivo "<keyId>:iv:tag:data";
+       legado de 3 partes decifra com v1; texto sem ":" segue como claro.
+       blindIndex FIXO em v1 (estável entre rotações → preserva unicidade do CPF).
+       Novo reencrypt() (decrypt→encrypt na chave ativa) para scripts de rotação.
+       _resetKeyRegistry() exposto p/ testes.
+     → .env.example: documenta ENCRYPTION_KEYS e ENCRYPTION_KEY_ACTIVE + rotação.
+     → tests/encryption.spec.js (novo, 12 testes): round-trip versionado, claro
+       legado, ciphertext legado 3-partes, rotação v1→v2 (decifra ambos),
+       reencrypt v1→v2, blind index estável pós-rotação, validações de config.
+
+1.7  Verificar invalidação de cache no webhook de pagamento
+     Quando o Mercado Pago muda o plano, confirmar que o cache do
+     usuário é limpo na hora (senão ele fica com plano antigo por 5 min).
+     [BAIXA] [OPUS] [IMPLEMENTADO]
+     → Verificação: controllers/webhookController.js já chama invalidateUser(user._id)
+       logo após user.save() no caminho 'approved' (linha ~139). Chave casa com
+       authMiddleware (ambos normalizam o id via String()) — sem plano obsoleto.
+     → tests/webhook_cache_invalidation.spec.js (novo, 3 testes, regressão):
+       aprovado → invalidateUser('user-1') 1x; idempotência (já processado) →
+       não invalida; status pending → não invalida.
+
+1.8  Timeout em transações do banco
+     Operações longas no MongoDB podem travar. Definir tempo-limite
+     (ex.: 30s).
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+
+1.9  Auditoria de dependências bloqueante em release
+     Hoje o npm audit no CI só avisa. Fazer ele BLOQUEAR publicação se
+     houver falha grave conhecida.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+
+1.10 Revisão de segurança automatizada no PR
+     Rodar o /security-review em mudanças sensíveis (auth, pagamento)
+     antes de juntar ao código principal.
+     [MEDIA] [OPUS] [IGNORADO]
+     → Requer ANTHROPIC_API_KEY como secret do repositório — não será configurado.
+       Alternativa manual: rodar /code-review ou /security-review localmente
+       no Claude Code antes de abrir PRs em áreas sensíveis.
+
+1.11 Tornar o repositório do GitHub privado
+     Proteger o código fechando a visibilidade do repositório.
+     [MEDIA] [OPUS] [IGNORADO]
+     → Decisão do dono (2026-06-15): manter o repositório PÚBLICO.
+     → Verificação feita antes da decisão: (b) Actions/minutos liberado
+       (CI roda ~30s–1m20s, folgado nos 2.000 min/mês do tier grátis);
+       (c) links públicos/badges/raw liberado (README sem badge de CI, sem
+       raw.githubusercontent, sem GitHub Pages). O único ponto que ficaria
+       pendente de confirmação era (a) o deploy do Render (via GitHub App,
+       sem render.yaml no repo). Como decidiu-se não fechar, nada a fazer.
+
+
+================================================================
+2. TESTES E QUALIDADE AUTOMATIZADA
+================================================================
+(MAIOR LACUNA REAL DO PROJETO no diagnóstico inicial. Backend tinha 39
+testes; frontend cobria <5%. Esta seção foi 100% concluída.)
+
+2.1  Testar o modal "Adicionar Ativo"
+     É a tela mais complexa e sem teste. Cobrir compra/venda.
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → assetTransaction.test.ts: +9 novos casos (makeReserveTicker x6,
+       CASH saque, ticker lowercase, STOCK_US USD). Total 22 testes.
+     → AddAssetModal.test.tsx (novo, 17 testes): visibilidade, BUY/SELL
+       toggle, submit disabled/enabled, dropdown de venda, payload correto
+       em compra e venda (qty negativa), erro data futura, erro de rede,
+       CASH nome obrigatório, CASH sem reservas.
+
+2.2  Testar a página Carteira (Wallet)
+     Garantir que KPIs, abas e cálculos não quebrem no futuro.
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Wallet.test.tsx (novo, 17 testes): render, skeleton de loading, empty state,
+       troca de abas (OVERVIEW/PERFORMANCE/DIVIDENDS/STATEMENT), controle de acesso
+       ao Aporte Inteligente (GUEST/ESSENTIAL bloqueados, PRO libera), controle de
+       acesso ao Rebalanceamento IA (non-BLACK bloqueado, BLACK abre modal,
+       demo-mode dispara toast), reset de carteira (desabilitado sem ativos,
+       confirm modal, chamada a resetWallet()).
+
+2.3  Testar a página Dashboard
+     Tela inicial com muitos dados; proteger contra regressões.
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Dashboard.test.tsx (novo, 7 testes): render sem erro, modal de relatório
+       fechado por padrão, verificação de chamada a researchService.getLatest,
+       isLoading sem crash, lógica displayDividends (dividendos reais vs projeção,
+       modo privacidade mascara valor).
+
+2.4  Testar a página Research
+     Relatórios e ranking — proteger a leitura por perfil.
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Research.test.tsx (novo, 12 testes): título RESEARCH CENTER, 5 botões de
+       ativo, seleção inicial BRASIL_10, controle de acesso por plano (GUEST sem
+       BRASIL_10, ESSENTIAL com BRASIL_10 mas sem STOCK, PRO com STOCK, ELITE com
+       STOCK_US), bypass de ADMIN (plano GUEST + role ADMIN = acesso total),
+       skeleton de loading, deep link via location.state (abre AssetDetailModal
+       se ticker encontrado no ranking).
+
+2.5  Testes do fluxo de login/registro/2FA no frontend
+     Simular usuário logando, errando senha, usando 2FA.
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Login.test.tsx (novo, 12 testes): render dos campos e botão, validação de
+       email/senha vazios (não chama API), login bem-sucedido (chama login() e
+       navega /dashboard), erro de servidor (mensagem exibida), erro sem mensagem
+       (fallback genérico), mfaRequired (exibe campo de código, oculta email/senha),
+       código 2FA curto (<6 dígitos = erro, API não chamada), login 2FA completo
+       (mfaToken no payload, navega /dashboard), botão Voltar restaura formulário.
+
+2.6  Testes de integração ponta-a-ponta (Playwright)
+     Robô que abre o site e clica como usuário real
+     (login -> carteira -> adicionar ativo).
+     [ALTA] [OPUS] [IMPLEMENTADO]
+     → client/playwright.config.ts (novo): testDir ./e2e, projeto chromium,
+       webServer faz `npm run build && npm run preview` (porta 4173) — valida o
+       MESMO bundle de produção. CI=1 ativa retries:1 e forbidOnly.
+     → client/e2e/wallet-flow.spec.ts (novo, 1 jornada E2E): login (e-mail/senha)
+       → /dashboard → /wallet → "Nova Transação" → compra de PETR4. Afirma o
+       payload do POST /api/wallet/add (ticker/type/quantity/price/currency) e o
+       toast de sucesso. Backend 100% interceptado no browser (page.route): roda
+       OFFLINE, sem MongoDB nem Express — bom para CI. user.hasSeenTutorial=true
+       no mock evita o modo demo (que bloquearia addAsset).
+     → client/package.json: scripts test:e2e e test:e2e:install; devDependency
+       @playwright/test ^1.60.
+     → eslint.config.js: bloco para client/e2e/**/*.ts (parser TS, fora de src).
+     → .gitignore: playwright-report/, test-results/, playwright/.cache/.
+     → .github/workflows/ci.yml: novo job "e2e" (instala chromium + roda
+       test:e2e; sobe playwright-report como artefato 14 dias).
+     → Verificação local: 1 passed (chromium).
+
+2.7  Completar testes do signalEngine (filtro macro)
+     O motor de sinais tem parte não testada (veto em dia de crash).
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → tests/signal_macro_filter.spec.js (novo, 27 testes): cobre a defesa macro
+       antes não testada. isValidCorrelation — crash IBOV<-2.5% veta tudo exceto
+       RSI_OVERSOLD; crash S&P<-2.5% idem p/ STOCK_US; vetos setoriais (petróleo
+       <-1.5% em petroleiras, IBOV<-2.0% em VALE) e seus limiares. getMacroContext
+       — detecção de crash, limiar -2.5% exato NÃO é crash, falha de rede →
+       contexto neutro, índices ausentes → zeros. Auxiliares puros: _rsiUrgency,
+       _grahamUrgency, calculateRSI (série curta→null, só ganhos→100, sobrevenda
+       <30) e determineRiskProfile (FII/defensivo/alavancado/small-large cap/US).
+       externalMarketService mockado → determinístico, sem rede/DB.
+
+2.8  Subir cobertura do mathUtils
+     A matemática do dinheiro tem só 25% das funções testadas — crítico.
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → tests/math_safe_arithmetic.spec.js (novo, 21 testes): fecha a lacuna nas
+       funções BASE do dinheiro que NÃO tinham teste direto — safeAdd/safeSub/
+       safeMult (fundação da Regra 7 do CLAUDE.md). Cobre erro de ponto flutuante
+       (0.1+0.2, 0.1*3), negativos/zeros, degenerados (null/NaN), arredondamento
+       a 4 casas e truncamento de operando antes da multiplicação. Complemento de
+       safeFloat/safeCurrency (2 vs 4 casas, meio-centavo) e composição encadeada
+       (custo total Σ qty×preço; resultado patrimônio−custo). QUANTITY_EPSILON
+       (=1e-9, abaixo de 1 satoshi). Soma-se a math_edge_cases + wallet_performance
+       _math (que já cobriam Dietz/TWRR/risco/anchor/quota): mathUtils agora com
+       todas as funções exportadas exercitadas.
+
+2.9  Testes de "casos extremos" (edge cases)
+     Hoje os testes cobrem o "caminho feliz". Adicionar valores
+     negativos, vazios, zerados.
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → kpiCalculations.test.ts: +8 casos (custo zero sem NaN, resultado negativo,
+       soma de múltiplas posições, weightedRentability 0 cai para fallback,
+       weightedRentability positivo preservado, sharpe/beta preservados, carteira
+       vazia → AUDITED, vazia com dividendos preserva totalDividends).
+     → format.test.ts: +12 casos (formatCurrency: Infinity→0, negativo, zero;
+       formatPercent: Infinity→0%, negativo, sign+zero sem prefixo, sign+negativo;
+       formatCompact: abaixo de 1.000 sem notação compacta, Infinity→0;
+       formatQuantity: zero, maxDecimals custom, Infinity→0).
+
+2.10 Relatório de cobertura no PR
+     Mostrar automaticamente quanto do código novo está testado.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → client/package.json: novo script "test:coverage" (vitest run --coverage).
+     → client/package.json: @vitest/coverage-v8 ^1.0.0 adicionado a devDependencies.
+     → client/vite.config.ts: bloco coverage (provider v8, reporters text-summary/
+       json/lcov, inclui src/utils, hooks, services, contexts, pages; exclui testes
+       e arquivos de bootstrap).
+     → .github/workflows/ci.yml: passo "Test frontend" substituído por
+       "Test frontend (com cobertura)" usando npm run test:coverage; passo
+       "Upload cobertura frontend" salva client/coverage/ como artefato
+       retention 14 dias (visível na aba Artifacts de cada workflow run).
+
+
+================================================================
+3. UI / DESIGN / EXPERIÊNCIA (itens já concluídos)
+================================================================
+(Os itens pendentes desta seção — 3.2, 3.8 e os novos 3.11+ — seguem no
+PLANO-MELHORIAS.txt.)
+
+3.1  Feedback "salvando..." em ações lentas
+     O spinner some na hora; o usuário não sabe se salvou.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → Button.tsx já possuía status (idle/loading/success/error) com "Processando..."
+       + spinner; verificado em todos os formulários críticos (Login, Register,
+       ForgotPassword, AddAssetModal, ContributionModal, CreateGoalModal,
+       ProfileSettings, SecuritySection/MFA). Cobertura completa.
+
+3.3  Texto maior/claro nas confirmações de exclusão
+     Confirmações destrutivas têm texto pequeno. Destacar o
+     "isso não pode ser desfeito".
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → ConfirmModal.tsx: quando isDestructive=true, mensagem passa de text-sm/
+       slate-400 para text-sm/slate-300 (mais visível); adicionado badge vermelho
+       "Esta ação não pode ser desfeita" fixo; ícone destrutivo maior (h-14 w-14);
+       border-t muda para blue ou red conforme contexto; botões reordenados
+       (Cancelar primeiro em mobile, Confirmar primeiro em desktop).
+
+3.4  Mensagens de erro mais humanas
+     Trocar erros técnicos por frases que o usuário entende.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → client/src/utils/errorMessages.ts (novo): função friendlyError() mapeia
+       status HTTP (400–504), padrões de texto (network error, timeout, email
+       duplicado, senha incorreta, JWT, CPF, rate limit, not found, unauthorized).
+       Aplicada em Dashboard.tsx (catch do Morning Call) e importada em Research.tsx.
+
+3.5  Padronizar estados vazios com CTA
+     Toda lista vazia com ícone + explicação + botão de ação.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → Goals.tsx: estado vazio inline convertido para o componente EmptyState
+       (ícone Sparkles + descrição + botão "Nova meta") — mesma experiência de
+       Wallet.tsx que já usava EmptyState. Componente EmptyState já usado em
+       Wallet, Research (Análise não encontrada) e agora Goals.
+
+3.6  Revisar responsividade no celular
+     Conferir telas densas (carteira, research) em telas pequenas.
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Research.tsx: header flex-row → flex-col/md:flex-row; h1 text-4xl →
+       text-2xl/md:text-4xl; ícone com variantes sm/md; ASSETS pills com w-full
+       em mobile (overflow-x-auto); mb-12 → mb-8/md:mb-12.
+     → Wallet.tsx: botões de ação com gap-2/md:gap-3; labels "Nova Transação",
+       "Aporte Inteligente", "Rebalanceamento IA" hidden em sm (hidden sm:inline)
+       — ícone visível em telas pequenas; min-w-[44px] garante área de toque
+       mínima; aria-label no botão de reset.
+
+3.7  Skeleton (esqueleto de carregamento) em todas as telas
+     Onde ainda há "tela em branco", colocar o esqueleto animado.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → Goals.tsx: spinner Loader2 substituído por SkeletonKpiGrid(3) +
+       SkeletonCard(2) com role="status" aria-label="Carregando metas".
+     → Indicators.tsx: adicionado bloco de skeleton (SkeletonKpiGrid(7) +
+       SkeletonCard x2) visível apenas no carregamento inicial (!data); conteúdo
+       principal fica hidden durante esse período — evita grid com zeros piscando.
+
+3.9  Microanimações de transição entre páginas
+     Suavizar troca de telas (respeitando "reduzir movimento").
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → tailwind.config.js: animação page-enter (slide-up 16px + fade, 0.35s
+       cubic-bezier easing) + keyframe pageEnter.
+     → client/src/components/layout/PageTransition.tsx (novo): wrapper que
+       re-dispara animate-page-enter no change de pathname via useLocation;
+       respeita prefers-reduced-motion (não anima se preferência ativa).
+     → App.tsx: Outlet dentro de <PageTransition> — todas as páginas protegidas
+       recebem a transição automaticamente.
+
+3.10 Storybook (catálogo visual de componentes)
+     Página interna que mostra botões/cards isolados — mantém consistência.
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Instalado storybook@10.4.4 + @storybook/react-vite + addon-essentials +
+       addon-a11y. Scripts storybook/build-storybook adicionados ao package.json.
+     → .storybook/main.ts: framework react-vite, addons [essentials, a11y].
+     → .storybook/preview.tsx: importa index.css (Tailwind), backgrounds dark/card.
+     → 4 stories criadas cobrindo os primitivos do design system:
+       Button.stories.tsx (7 variantes: primary/outline/ghost/loading/success/
+       error/disabled), EmptyState.stories.tsx (3 cenários reais), Skeleton.stories
+       .tsx (7 variantes: linha/círculo/texto/card/gráfico/kpi-grid/tabela),
+       ConfirmModal.stories.tsx (informativo e destrutivo).
+
+
+3.13 Fotos de usuários não aparecem (landing + cadastro)  [NOVO]
+     Depoimentos Ricardo/Amanda/Carlos (Landing.tsx:374-376) e os
+     avatares de "Comunidade Premium" na tela de cadastro
+     (AuthLayout.tsx:117-121) usavam URLs externas do Unsplash sem
+     fallback — quebravam e sumiam.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → 6 fotos reais (banco randomuser.me) baixadas para
+       client/public/assets/testimonials/ (ricardo.jpg, amanda.jpg,
+       carlos.jpg, user1.jpg, user2.jpg, user3.jpg).
+     → Landing.tsx: TestimonialCard convertido para function body com
+       useState(false); ao falhar o load da imagem, exibe <div>
+       circular com as iniciais do nome (ex: "RS", "AL", "CM") em azul.
+       Imagens apontam para /assets/testimonials/*.jpg.
+     → AuthLayout.tsx: imgs da "Comunidade Premium" apontam para
+       /assets locais; onError oculta com display:none sem quebrar layout.
+
+
+================================================================
+FIM DO HISTÓRICO — 29 itens arquivados (1.1–1.10, 2.1–2.10, 3.1/3.3–3.7/3.9/3.10/3.13)
+================================================================

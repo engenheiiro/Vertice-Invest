@@ -115,9 +115,9 @@ export const AuthLayout: React.FC = () => {
 
             <div className="relative z-10 hidden lg:flex items-center gap-3 opacity-90">
                 <div className="flex -space-x-3">
-                   <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=56&h=56" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-base object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
-                   <img src="https://images.unsplash.com/photo-1573496359-136d4755f357?auto=format&fit=crop&w=56&h=56" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-base object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
-                   <img src="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=56&h=56" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-base object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" />
+                   <img src="/assets/testimonials/user1.jpg" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-base object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" onError={e => { e.currentTarget.style.display = 'none'; }} />
+                   <img src="/assets/testimonials/user2.jpg" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-base object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" onError={e => { e.currentTarget.style.display = 'none'; }} />
+                   <img src="/assets/testimonials/user3.jpg" alt="User" loading="lazy" className="w-7 h-7 rounded-full border-2 border-base object-cover grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all" onError={e => { e.currentTarget.style.display = 'none'; }} />
                 </div>
                 <div>
                    <p className="text-[9px] text-slate-300 font-bold uppercase tracking-wide">Comunidade Premium</p>
