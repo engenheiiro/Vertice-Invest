@@ -26,6 +26,12 @@ import { isBusinessDay, countBusinessDays } from '../utils/dateUtils.js';
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 
+// (TZ) Todos os crons rodam em horário de Brasília. Sem o timezone explícito,
+// node-cron usa o fuso do servidor (UTC no Render), fazendo '30 18' disparar
+// às 15:30 BRT em vez de 18:30. Wrapper centraliza isso em todas as chamadas.
+const SCHEDULER_TZ = 'America/Sao_Paulo';
+const schedule = (expression, fn) => cron.schedule.call(cron, expression, fn, { timezone: SCHEDULER_TZ });
+
 // --- LÓGICA DE SNAPSHOT ISOLADA (Reutilizável) ---
 export const runDailySnapshot = async (force = false) => {
     const today = new Date();
@@ -266,7 +272,7 @@ export const initScheduler = () => {
     logger.info("⏰ Scheduler Service Inicializado");
 
     // 1. Sync Leve: Macroeconomia (A cada 15 minutos)
-    cron.schedule('5,20,35,50 * * * *', async () => {
+    schedule('5,20,35,50 * * * *', async () => {
         try {
             await macroDataService.performMacroSync();
         } catch (error) {
@@ -275,7 +281,7 @@ export const initScheduler = () => {
     });
 
     // 2. Sync Preços (Yahoo/Brapi 15min)
-    cron.schedule('*/15 * * * *', async () => {
+    schedule('*/15 * * * *', async () => {
         try {
             const assets = await MarketAsset.find({ 
                 isActive: true,
@@ -300,7 +306,7 @@ export const initScheduler = () => {
     });
 
     // 3. RADAR ALPHA 3.1
-    cron.schedule('2,17,32,47 * * * *', async () => {
+    schedule('2,17,32,47 * * * *', async () => {
         try {
             await signalEngine.runScanner();
         } catch (e) {
@@ -309,7 +315,7 @@ export const initScheduler = () => {
     });
 
     // 4. BACKTEST INTRADAY
-    cron.schedule('5,35 * * * *', async () => {
+    schedule('5,35 * * * *', async () => {
         try {
             await signalEngine.runBacktest();
         } catch (e) {
@@ -318,7 +324,7 @@ export const initScheduler = () => {
     });
 
     // 5a. Sync Manhã (09:00) — dados do pregão anterior consolidados, antes de abrir
-    cron.schedule('0 9 * * *', async () => {
+    schedule('0 9 * * *', async () => {
         logger.info("⏰ Rotina Diária V3 — Manhã (09:00)");
         try {
             const syncResult = await syncService.performFullSync();
@@ -336,7 +342,7 @@ export const initScheduler = () => {
     });
 
     // 5b. Sync Tarde/Pós-Mercado (18:30) — B3 fecha às 17:30, dados completos do dia
-    cron.schedule('30 18 * * *', async () => {
+    schedule('30 18 * * *', async () => {
         logger.info("⏰ Rotina Diária V3 — Pós-Mercado (18:30)");
         try {
             const syncResult = await syncService.performFullSync();
@@ -360,7 +366,7 @@ export const initScheduler = () => {
 
     // 5c. Auto-publish semanal (Segunda 09:30) — publica o ranking + Explainable IA
     // mais recente de cada classe automaticamente, para semanas sem publicação manual.
-    cron.schedule('30 9 * * 1', async () => {
+    schedule('30 9 * * 1', async () => {
         try {
             await runWeeklyAutoPublish();
         } catch (e) {
@@ -369,12 +375,12 @@ export const initScheduler = () => {
     });
 
     // 6. Snapshot Patrimonial Inteligente (23:59)
-    cron.schedule('59 23 * * *', async () => {
+    schedule('59 23 * * *', async () => {
         await runDailySnapshot(false); // false = não força, respeita feriados
     });
 
     // 7. Verificação de Assinaturas (Diário 03:00 AM)
-    cron.schedule('0 3 * * *', async () => {
+    schedule('0 3 * * *', async () => {
         try {
             const now = new Date();
             const res = await User.updateMany(
@@ -394,7 +400,7 @@ export const initScheduler = () => {
 
     // 7.1 Sync de Proventos (Diário 04:00 AM) — popula DividendEvent dos tickers
     // que aparecem nas carteiras, mantendo os proventos atualizados.
-    cron.schedule('0 4 * * *', async () => {
+    schedule('0 4 * * *', async () => {
         try {
             const assets = await UserAsset.find({
                 type: { $nin: ['CRYPTO', 'FIXED_INCOME', 'CASH'] },
@@ -408,12 +414,12 @@ export const initScheduler = () => {
     });
 
     // 8. Sync Feriados (Anual)
-    cron.schedule('0 6 1 1 *', async () => {
+    schedule('0 6 1 1 *', async () => {
         await holidayService.sync();
     });
 
     // 9. Fundamentals S&P 500 (dias úteis 07:30 — antes do pipeline de análise)
-    cron.schedule('30 7 * * 1-5', async () => {
+    schedule('30 7 * * 1-5', async () => {
         try {
             logger.info("⏰ [Scheduler] Sync Fundamentals S&P 500...");
             await usStocksFundamentalsService.syncUSStocksFundamentals();
@@ -429,7 +435,7 @@ export const initScheduler = () => {
     });
 
     // 10. Taxa USD/BRL histórica (toda segunda-feira 06:00 — antes dos outros syncs)
-    cron.schedule('0 6 * * 1', async () => {
+    schedule('0 6 * * 1', async () => {
         try {
             logger.info("⏰ [Scheduler] Sync taxa USD/BRL histórica...");
             await macroDataService.syncHistoricalUSDRate();
@@ -442,7 +448,7 @@ export const initScheduler = () => {
     // 11. REATIVAÇÃO AUTOMÁTICA DE ATIVOS INATIVOS (Toda segunda-feira 05:00)
     // Tenta reobter cotação de ativos que foram desativados por falhas consecutivas.
     // Se a cotação voltar, o ativo é reativado automaticamente sem intervenção manual.
-    cron.schedule('0 5 * * 1', async () => {
+    schedule('0 5 * * 1', async () => {
         try {
             logger.info("🔄 [Scheduler] Iniciando reativação automática de ativos inativos...");
             const result = await marketDataService.tryReactivateAssets();
@@ -459,7 +465,7 @@ export const initScheduler = () => {
     });
 
     // 12. LIMPEZA DE ARMAZENAMENTO (Domingo 01:00 — janela de menor tráfego)
-    cron.schedule('0 1 * * 0', async () => {
+    schedule('0 1 * * 0', async () => {
         try {
             const { runStorageCleanup } = await import('./cleanupService.js');
             await runStorageCleanup();
@@ -472,7 +478,7 @@ export const initScheduler = () => {
     // O TTL index em RefreshToken.expiryDate e AuditLog.timestamp já limpa automaticamente.
     // Este job é belt-and-suspenders: remove RefreshTokens expirados não capturados pelo TTL
     // (ex.: atraso do processo TTL do MongoDB em coleções grandes).
-    cron.schedule('30 2 * * *', async () => {
+    schedule('30 2 * * *', async () => {
         try {
             const result = await RefreshToken.deleteMany({ expiryDate: { $lt: new Date() } });
             if (result.deletedCount > 0) {
