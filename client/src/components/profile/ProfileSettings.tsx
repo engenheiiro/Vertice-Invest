@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { authService } from '../../services/auth';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { CheckCircle2, AlertCircle, User } from 'lucide-react';
 
 export const ProfileSettings = () => {
     const { user, refreshProfile } = useAuth();
@@ -97,7 +97,10 @@ export const ProfileSettings = () => {
 
     return (
         <div className="bg-base border border-slate-800 rounded-2xl p-6">
-            <h3 className="text-base font-bold text-white mb-1">Informações Pessoais</h3>
+            <div className="flex items-center gap-2 mb-1">
+                <User size={16} className="text-blue-500" />
+                <h3 className="text-base font-bold text-white">Informações Pessoais</h3>
+            </div>
             <p className="text-xs text-slate-500 mb-6">Atualize seus dados de identificação e contato.</p>
 
             {msg && (

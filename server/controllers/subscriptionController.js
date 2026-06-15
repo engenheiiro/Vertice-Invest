@@ -258,11 +258,13 @@ export const confirmPayment = async (req, res, next) => {
 
 export const getSubscriptionStatus = async (req, res, next) => {
     try {
-        const user = await User.findById(req.user.id).select('plan subscriptionStatus validUntil mpSubscriptionId');
+        const user = await User.findById(req.user.id).select('plan subscriptionStatus validUntil mpSubscriptionId bannerColor');
         const lastTransaction = await Transaction.findOne({ user: req.user.id }).sort({ createdAt: -1 });
 
         res.json({
-            current: user,
+            // paymentMethod (3.22): método do último pagamento (CREDIT_CARD|PIX|CRYPTO),
+            // exposto p/ a UI escolher o ícone. null quando ainda não houve transação.
+            current: { ...user.toObject(), paymentMethod: lastTransaction?.method || null },
             lastPayment: lastTransaction
         });
     } catch (error) {

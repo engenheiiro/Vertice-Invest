@@ -83,6 +83,7 @@ const sanitizeUser = (user) => {
         cpf: user.cpf ? decrypt(user.cpf) : user.cpf,
         phone: user.phone,
         occupation: user.occupation,
+        bannerColor: user.bannerColor,
         marketingOptIn: user.marketingOptIn,
         mfaEnabled: !!user.mfaEnabled // (I14) p/ a UI refletir o status
     };
@@ -324,12 +325,25 @@ export const resetPassword = async (req, res, next) => {
 export const updateProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const { name, cpf, phone, occupation } = req.body;
+        const { name, cpf, phone, occupation, bannerColor } = req.body;
         const cleanCpf = cpf ? cpf.replace(/\D/g, '') : null;
 
         // $set ignora chaves undefined (deixa o campo inalterado quando vazio).
         const set = { name, phone: phone || undefined, occupation: occupation || undefined };
         const unset = {};
+
+        // Banner de perfil (3.20): só aceita presets conhecidos; '' remove a escolha
+        // (volta ao gradiente padrão do plano).
+        const BANNER_PRESETS = ['ocean', 'emerald', 'royal', 'sunset', 'gold', 'graphite'];
+        if (bannerColor !== undefined) {
+            if (bannerColor === '' || bannerColor === null) {
+                unset.bannerColor = 1;
+            } else if (BANNER_PRESETS.includes(bannerColor)) {
+                set.bannerColor = bannerColor;
+            } else {
+                return res.status(400).json({ message: "Banner inválido." });
+            }
+        }
 
         if (cleanCpf) {
             if (!validateCpf(cleanCpf)) return res.status(400).json({ message: "CPF inválido." });

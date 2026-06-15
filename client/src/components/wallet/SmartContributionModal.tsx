@@ -149,7 +149,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                             </button>
                         </div>
 
-                        <div className="p-6">
+                        <div className="p-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                             <div className="mb-6 space-y-4">
                                 <Input
                                     label="Valor do Aporte (R$)"

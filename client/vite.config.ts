@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
 import { vitePrerenderPlugin } from 'vite-prerender-plugin';
+import { visualizer } from 'rollup-plugin-visualizer';
+import { ViteImageOptimizer } from 'vite-plugin-image-optimizer';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -38,6 +40,16 @@ const stripPublicSourcemaps = () => ({
 export default defineConfig({
   plugins: [
     react(),
+    // (5.6) Otimização de imagens no build (sharp/svgo): comprime PNG/JPG/SVG do
+    // bundle e do /public — incl. og-image.png (827KB → bem menor). Só roda em
+    // `vite build` (apply:'build' interno), não afeta o dev/HMR.
+    ViteImageOptimizer({
+      png: { quality: 80 },
+      jpeg: { quality: 80 },
+      jpg: { quality: 80 },
+      webp: { quality: 80 },
+      avif: { quality: 70 },
+    }),
     VitePWA({
       // 'prompt' (não 'autoUpdate'): ao detectar novo build, o virtual module marca
       // needRefresh=true → o <ReloadPrompt> aplica o SW e recarrega a página. Em
@@ -139,6 +151,16 @@ export default defineConfig({
       renderTarget: '#root',
     }),
     stripPublicSourcemaps(),
+    // (5.5) Analisador de bundle: gera dist/stats.html (treemap com gzip/brotli)
+    // só quando ANALYZE=true (`npm run analyze`). Não roda no build normal.
+    ...(process.env.ANALYZE
+      ? [visualizer({
+          filename: 'dist/stats.html',
+          gzipSize: true,
+          brotliSize: true,
+          template: 'treemap',
+        }) as any]
+      : []),
   ],
   resolve: {
     alias: {

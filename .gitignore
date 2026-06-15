@@ -93,6 +93,10 @@ typings/
 dist/
 dist-ssr/
 
+# Arquivos temporários do Vite ao carregar a config (vite.config.ts.timestamp-*.mjs)
+vite.config.ts.timestamp-*.mjs
+vite.config.js.timestamp-*.mjs
+
 # Playwright (E2E) — relatórios e artefatos de execução
 playwright-report/
 test-results/

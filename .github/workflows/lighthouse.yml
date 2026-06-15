@@ -1,0 +1,40 @@
+name: Lighthouse CI
+
+# (5.9) Acompanha as notas de performance/acessibilidade/SEO do build do client
+# a cada PR. Modo "warn" (ver .lighthouserc.json): não bloqueia o merge, só
+# reporta — o relatório completo fica num link público temporário no log.
+on:
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+concurrency:
+  group: lhci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    name: lighthouse (landing)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (root + client + server)
+        run: npm run setup
+
+      - name: Build client
+        run: npm run build:client
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          configPath: ./.lighthouserc.json
+          uploadArtifacts: true
+          temporaryPublicStorage: true

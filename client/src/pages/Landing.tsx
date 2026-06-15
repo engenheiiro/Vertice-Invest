@@ -2,13 +2,14 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageMeta } from '../components/seo/PageMeta';
-import { 
-  ShieldCheck, BrainCircuit, 
+import {
+  ShieldCheck, BrainCircuit, Bot,
   ChevronRight, Activity, Globe, Cpu, ChevronDown, CheckCircle2,
   GraduationCap, LayoutDashboard, Quote, Calculator, BarChart3,
   Lock, TrendingUp, DollarSign
 } from 'lucide-react';
 import { API_URL } from '../config';
+import { useTheme } from '../contexts/ThemeContext';
 import PerformanceCard from '../components/dashboard/PerformanceCard';
 
 interface LandingTicker {
@@ -32,6 +33,7 @@ interface LandingMarketData {
 }
 
 export const Landing = () => {
+  const { theme } = useTheme();
   const [scrolled, setScrolled] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [marketData, setMarketData] = useState<LandingMarketData | null>(null);
@@ -107,7 +109,7 @@ export const Landing = () => {
               Acessar Conta
             </Link>
             <Link to="/register">
-              <button className="px-4 py-1.5 bg-white text-slate-950 text-[10px] font-bold uppercase tracking-wider rounded-full hover:bg-blue-50 transition-colors flex items-center gap-2 shadow-lg shadow-white/5">
+              <button className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-full transition-colors flex items-center gap-2 shadow-lg ${theme === 'light' ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20' : 'bg-white text-slate-950 hover:bg-blue-50 shadow-white/5'}`}>
                 Começar Agora
               </button>
             </Link>
@@ -135,7 +137,7 @@ export const Landing = () => {
                 Vértice AI Research 2.4
               </div>
               
-              <h1 className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.1] tracking-tight">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.1] tracking-tight text-white">
                 O Fim da <br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400">Incerteza Financeira</span>
               </h1>
@@ -154,7 +156,7 @@ export const Landing = () => {
               <div className="flex flex-col sm:flex-row gap-3 pt-2 justify-center lg:justify-start">
                 <Link to="/register" className="group relative px-6 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl shadow-[0_0_40px_-10px_rgba(37,99,235,0.5)] transition-all hover:scale-[1.02] flex items-center justify-center gap-2 overflow-hidden">
                   <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
-                  <BrainCircuit size={18} />
+                  <Bot size={18} />
                   Criar Conta Grátis
                 </Link>
                 <Link to="/login" className="px-6 py-3 bg-elevated/50 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 backdrop-blur-md text-slate-300 text-sm font-semibold rounded-xl transition-all flex items-center justify-center">
@@ -165,7 +167,7 @@ export const Landing = () => {
               <div className="pt-2 flex flex-wrap items-center justify-center lg:justify-start gap-4 text-[10px] md:text-xs text-slate-500 font-medium">
                 <span className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-blue-500" /> Sem cartão de crédito</span>
                 <span className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-blue-500" /> Setup em 2 min</span>
-                <span className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-blue-500" /> Segurança Bancária</span>
+                <span className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-blue-500" /> Cancele quando quiser</span>
               </div>
             </div>
 
@@ -354,7 +356,7 @@ export const Landing = () => {
       <section className="py-20 bg-deep relative overflow-hidden">
         <div className="max-w-6xl mx-auto px-6 relative z-10">
              <div className="text-center mb-16">
-                <h2 className="text-2xl md:text-3xl font-bold mb-3">Sua jornada para a elite</h2>
+                <h2 className="text-2xl md:text-3xl font-bold mb-3 text-white">Sua jornada para a elite</h2>
              </div>
              
              <div className="grid md:grid-cols-3 gap-8 md:gap-12 relative">
@@ -369,7 +371,7 @@ export const Landing = () => {
       {/* TESTIMONIALS */}
       <section className="py-20 bg-base border-y border-slate-800">
           <div className="max-w-6xl mx-auto px-6">
-              <h2 className="text-2xl md:text-3xl font-bold mb-12 text-center">Quem usa, recomenda</h2>
+              <h2 className="text-2xl md:text-3xl font-bold mb-12 text-center text-white">Quem usa, recomenda</h2>
               <div className="grid md:grid-cols-3 gap-6">
                   <TestimonialCard name="Ricardo S." role="Designer Gráfico" image="/assets/testimonials/ricardo.jpg" text="A clareza que o Neural Engine traz é absurda. Deixei de operar com base em 'dicas' e passei a seguir dados." />
                   <TestimonialCard name="Amanda L." role="Veterinária" image="/assets/testimonials/amanda.jpg" text="Não tenho tempo para analisar balanços. A gestão 360 faz tudo por mim." />
@@ -381,7 +383,7 @@ export const Landing = () => {
       {/* FAQ */}
       <section className="py-20 bg-deep">
           <div className="max-w-2xl mx-auto px-6">
-              <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">Perguntas Frequentes</h2>
+              <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center text-white">Perguntas Frequentes</h2>
               <div className="space-y-3">
                   <FaqItem question="A Vértice é uma corretora?" answer="Não. Somos uma casa de research e tecnologia." isOpen={openFaq === 0} onClick={() => toggleFaq(0)} />
                   <FaqItem question="Quanto custa o acesso?" answer="Oferecemos um plano gratuito e o Plano Pro." isOpen={openFaq === 1} onClick={() => toggleFaq(1)} />
@@ -397,7 +399,7 @@ export const Landing = () => {
               <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white">Pronto para elevar seu nível?</h2>
               <p className="text-slate-400 mb-8 text-base">Junte-se a mais de 12.000 investidores.</p>
               <Link to="/register">
-                  <button className="px-8 py-4 bg-white text-slate-900 font-bold text-sm md:text-base rounded-full hover:bg-blue-50 hover:scale-105 transition-all shadow-2xl shadow-white/10">
+                  <button className={`px-8 py-4 font-bold text-sm md:text-base rounded-full hover:scale-105 transition-all shadow-2xl ${theme === 'light' ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20' : 'bg-white text-slate-900 hover:bg-blue-50 shadow-white/10'}`}>
                       Criar Conta Gratuitamente
                   </button>
               </Link>
@@ -437,7 +439,7 @@ export const Landing = () => {
             </div>
         </div>
         <div className="max-w-6xl mx-auto px-6 pt-6 border-t border-slate-900 text-center text-[10px]">
-            <p>© {new Date().getFullYear()} Vértice Invest Tecnologia Ltda. CNPJ 00.000.000/0001-00.</p>
+            <p>© {new Date().getFullYear()} Vértice Invest Tecnologia Ltda.</p>
         </div>
       </footer>
     </div>
@@ -485,8 +487,8 @@ const StepCard = ({ number, title, desc }: { number: string, title: string, desc
 
 interface ResultCardProps { ticker: string; type: string; date: string; returnVal: string; desc: string; delay: number; }
 const ResultCard = ({ ticker, type, date, returnVal, desc, delay }: ResultCardProps) => (
-    <div 
-        className="bg-base border border-slate-800 p-6 rounded-xl relative overflow-hidden group hover:border-slate-700 transition-colors"
+    <div
+        className="bg-base border border-slate-800 p-6 rounded-2xl relative overflow-hidden group hover:border-slate-700 transition-colors"
         style={{ animationDelay: `${delay}ms` }}
     >
         <div className="flex justify-between items-start mb-4">
@@ -516,7 +518,7 @@ const TestimonialCard = ({ name, role, text, image }: TestimonialCardProps) => {
     const [imgError, setImgError] = useState(false);
     const initials = name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
     return (
-        <div className="bg-deep border border-slate-800 p-6 rounded-xl relative">
+        <div className="bg-card border border-slate-800 p-6 rounded-2xl relative">
             <Quote className="text-blue-900/40 absolute top-4 right-4" size={40} />
             <div className="flex items-center gap-3 mb-4">
                 {imgError ? (
@@ -537,7 +539,7 @@ const TestimonialCard = ({ name, role, text, image }: TestimonialCardProps) => {
 };
 
 const FaqItem = ({ question, answer, isOpen, onClick }: { question: string, answer: string, isOpen: boolean, onClick: () => void }) => (
-    <div className="border border-slate-800 rounded-xl bg-deep overflow-hidden">
+    <div className="border border-slate-800 rounded-2xl bg-card overflow-hidden">
         <button onClick={onClick} className="w-full px-5 py-3 text-left flex items-center justify-between font-semibold text-sm text-slate-200 hover:text-white transition-colors">
             {question}
             <ChevronDown size={16} className={`transition-transform duration-300 ${isOpen ? 'rotate-180 text-blue-500' : 'text-slate-600'}`} />

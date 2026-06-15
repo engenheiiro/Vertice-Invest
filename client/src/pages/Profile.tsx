@@ -1,6 +1,6 @@
 import React, { Suspense, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Eye, EyeOff, Download, Sun, Moon } from 'lucide-react';
+import { ArrowLeft, Loader2, Eye, EyeOff, Download, Sun, Moon, Palette, Database, AlertTriangle } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { Header } from '../components/dashboard/Header';
 import { ProfileIdentity } from '../components/profile/ProfileIdentity';
@@ -112,7 +112,10 @@ export const Profile = () => {
 
                         {/* Aparência */}
                         <div className="p-6 rounded-2xl border border-slate-800 bg-card">
-                            <h4 className="text-sm font-bold text-white mb-1">Aparência</h4>
+                            <div className="flex items-center gap-2 mb-1">
+                                <Palette size={16} className="text-blue-500" />
+                                <h4 className="text-sm font-bold text-white">Aparência</h4>
+                            </div>
                             <p className="text-xs text-slate-500 mb-4">
                                 Alterne entre o tema escuro (padrão) e o tema claro.
                             </p>
@@ -142,7 +145,10 @@ export const Profile = () => {
 
                         {/* Dados e Privacidade (LGPD Art. 18) */}
                         <div className="p-6 rounded-2xl border border-slate-800 bg-card">
-                            <h4 className="text-sm font-bold text-white mb-1">Dados e Privacidade</h4>
+                            <div className="flex items-center gap-2 mb-1">
+                                <Database size={16} className="text-blue-500" />
+                                <h4 className="text-sm font-bold text-white">Dados e Privacidade</h4>
+                            </div>
                             <p className="text-xs text-slate-500 mb-4">
                                 Conforme a LGPD (Art. 18), você pode exportar uma cópia de todos os seus dados pessoais armazenados na plataforma.
                             </p>
@@ -162,17 +168,32 @@ export const Profile = () => {
 
                         {/* Danger Zone */}
                         <div className="p-6 rounded-2xl border border-red-900/30 bg-red-950/10">
-                            <h4 className="text-sm font-bold text-red-500 mb-1">Zona de Perigo</h4>
+                            <div className="flex items-center gap-2 mb-1">
+                                <AlertTriangle size={16} className="text-red-500" />
+                                <h4 className="text-sm font-bold text-red-500">Zona de Perigo</h4>
+                            </div>
                             <p className="text-xs text-slate-500 mb-4">Ações irreversíveis relacionadas à sua conta.</p>
 
-                            {!showDeactivate ? (
-                                <button
-                                    onClick={() => setShowDeactivate(true)}
-                                    className="px-4 py-2 border border-red-900/50 text-red-500 text-xs font-bold rounded-lg hover:bg-red-950/30 transition-colors"
-                                >
-                                    Desativar Conta
-                                </button>
-                            ) : (
+                            {/* Gatilhos lado a lado: empilham no mobile, lado a lado no desktop.
+                                A linha some quando um fluxo abre — o formulário ocupa a largura toda. */}
+                            {!showDeactivate && !showDelete && (
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <button
+                                        onClick={() => setShowDeactivate(true)}
+                                        className="flex-1 text-center px-4 py-2 border border-red-900/50 text-red-500 text-xs font-bold rounded-lg hover:bg-red-950/30 transition-colors"
+                                    >
+                                        Desativar Conta
+                                    </button>
+                                    <button
+                                        onClick={() => setShowDelete(true)}
+                                        className="flex-1 text-center px-4 py-2 border border-red-900/50 text-red-500 text-xs font-bold rounded-lg hover:bg-red-950/30 transition-colors"
+                                    >
+                                        Excluir Conta Permanentemente
+                                    </button>
+                                </div>
+                            )}
+
+                            {showDeactivate && (
                                 <div className="space-y-3 border border-red-900/40 rounded-xl p-4 bg-red-950/20 animate-fade-in">
                                     <p className="text-xs text-red-400 font-semibold">Confirme sua senha para desativar a conta. Esta ação encerrará todas as sessões ativas.</p>
                                     <div className="relative">
@@ -212,15 +233,7 @@ export const Profile = () => {
                             )}
 
                             {/* Exclusão definitiva — LGPD Art. 18 VI (direito ao esquecimento) */}
-                            <div className="mt-5 pt-5 border-t border-red-900/30">
-                                {!showDelete ? (
-                                    <button
-                                        onClick={() => setShowDelete(true)}
-                                        className="px-4 py-2 border border-red-900/50 text-red-500 text-xs font-bold rounded-lg hover:bg-red-950/30 transition-colors"
-                                    >
-                                        Excluir Conta Permanentemente
-                                    </button>
-                                ) : (
+                            {showDelete && (
                                     <div className="space-y-3 border border-red-900/40 rounded-xl p-4 bg-red-950/20 animate-fade-in">
                                         <p className="text-xs text-red-400 font-semibold">
                                             Esta ação é <span className="underline">irreversível</span>. Todos os seus dados
@@ -281,8 +294,7 @@ export const Profile = () => {
                                             </button>
                                         </div>
                                     </div>
-                                )}
-                            </div>
+                            )}
                         </div>
 
                     </div>

@@ -96,6 +96,14 @@ const UserSchema = new mongoose.Schema({
   // --- Perfil Adicional ---
   phone: { type: String, trim: true },
   occupation: { type: String, trim: true },
+
+  // Preset de gradiente do banner de perfil escolhido pelo usuário (3.20).
+  // Guarda só a REFERÊNCIA do preset (não a imagem). Vazio → usa o gradiente
+  // padrão do plano como fallback. Allowlist validada no updateProfile.
+  bannerColor: {
+    type: String,
+    enum: ['ocean', 'emerald', 'royal', 'sunset', 'gold', 'graphite'],
+  },
 });
 
 const User = mongoose.models.User || mongoose.model('User', UserSchema);

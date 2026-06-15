@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { PieChart, TrendingUp, RefreshCw, Folder, ChevronDown, ChevronRight, Lock, Medal } from 'lucide-react';
 import { PortfolioItem } from '../../hooks/useDashboardData';
 import { useFeatureAccess } from '../../hooks/useFeatureAccess';
@@ -83,19 +83,23 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
         }));
     };
 
-    const groupedItems = items.reduce((acc, item) => {
+    // (5.2) Agrupamento + ordenação só recalculam quando `items` muda — antes
+    // rodavam o reduce/sort a cada render (toggle de grupo, abrir modal, etc.).
+    const groupedItems = useMemo(() => items.reduce((acc, item) => {
         const type = item.type || 'OUTROS';
         if (!acc[type]) acc[type] = [];
         acc[type].push(item);
         return acc;
-    }, {} as Record<string, PortfolioItem[]>);
+    }, {} as Record<string, PortfolioItem[]>), [items]);
 
     // Mesma ordem da aba Carteira: Ações Brasil, FIIs, Exterior, Renda Fixa, Cripto, Caixa.
-    const TYPE_ORDER = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
-    const orderedGroups: [string, PortfolioItem[]][] = [
-        ...TYPE_ORDER.filter((t) => groupedItems[t]),
-        ...Object.keys(groupedItems).filter((t) => !TYPE_ORDER.includes(t)),
-    ].map((type) => [GROUP_NAMES[type] || 'Outros', groupedItems[type]]);
+    const orderedGroups: [string, PortfolioItem[]][] = useMemo(() => {
+        const TYPE_ORDER = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
+        return [
+            ...TYPE_ORDER.filter((t) => groupedItems[t]),
+            ...Object.keys(groupedItems).filter((t) => !TYPE_ORDER.includes(t)),
+        ].map((type) => [GROUP_NAMES[type] || 'Outros', groupedItems[type]]);
+    }, [groupedItems]);
 
     return (
         <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-full min-h-[400px]">

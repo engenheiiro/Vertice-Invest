@@ -336,6 +336,193 @@ PLANO-MELHORIAS.txt.)
        /assets locais; onError oculta com display:none sem quebrar layout.
 
 
+3.8  Modo claro (light mode) opcional
+     Base já existia (ThemeContext + CSS vars + toggle no Header/Profile).
+     Concluído com 3.12 (refino da landing) + 3.15 (claro vira padrão).
+     [ALTA] [OPUS] [IMPLEMENTADO]
+     → Arquitetura de tokens em index.css (:root dark / [data-theme=light])
+       já remapeia text-white, text-slate-*, chips coloridos, bordas e
+       surfaces. Light agora é o padrão e a landing foi auditada (ver 3.15/3.12).
+
+
+3.11 Aporte Inteligente corta em telas menores  [NOVO]
+     No notebook o modal de Aporte Inteligente cortava o conteúdo sem
+     barra de rolagem.
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → SmartContributionModal.tsx:152: o div de conteúdo (<div className="p-6">)
+       ganhou "flex-1 min-h-0 overflow-y-auto custom-scrollbar", copiando o
+       padrão que já funciona em AddAssetModal.tsx:691. O painel já tinha
+       max-h-[90vh] flex flex-col, então o corpo agora rola entre header e
+       footer fixos. Verificado em ~768px de altura.
+
+
+3.12 Refinar o tema claro na landing page  [NOVO]
+     A landing tinha cores presas no escuro que não respondiam ao tema claro.
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Auditoria seção a seção: features, testimonials, footer, ticker e
+       chips já adaptavam via tokens (bg-deep/bg-base) + overrides
+       [data-theme=light] do index.css (text-white→escuro, slate→claro).
+     → Aresta real corrigida: os 2 CTAs com bg-white sólido (navbar
+       "Começar Agora" e CTA final "Criar Conta Gratuitamente") ficavam
+       brancos invisíveis sobre o fundo claro — bg-white sólido não é
+       remapeado pelos overrides. Agora usam useTheme(): no claro viram
+       bg-blue-600 text-white (CTA azul de marca); no escuro mantêm o
+       bg-white original. Nenhuma mudança no visual escuro.
+     → Refino (2ª passada, feedback do usuário): títulos sem classe de cor
+       (herança não entregava o override) ficavam brancos sobre fundo claro.
+       Adicionado text-white explícito em "O Fim da" (hero), "Sua jornada
+       para a elite", "Quem usa, recomenda" e "Perguntas Frequentes" → o
+       override [data-theme=light] .text-white→#0f172a age direto no elemento
+       (escuro no claro, branco no escuro).
+     → Sombra dos cards: testimonials/FAQ/results eram bg-deep/bg-base
+       rounded-xl → fora da auto-elevação do index.css (que só pega
+       base/card/panel + rounded-2xl/3xl). Migrados p/ bg-card/bg-base
+       rounded-2xl → ganham a sombra clara automática e, no escuro, ficam
+       levemente acima da seção (card lighter than section).
+     → PerformanceCard (barras "Acumulado 12m"): competidores usavam
+       bg-slate-700, que no claro cai p/ ~#e2e8f0 e sumia sobre a track
+       quase branca. Agora a cor do competidor é theme-aware (bg-slate-400
+       sólido no claro, visível; bg-slate-700 no escuro).
+
+
+3.14 Tirar o ícone de cérebro do "Criar Conta Grátis"  [NOVO]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → Landing.tsx: <BrainCircuit size={18}/> do botão do hero trocado por
+       <Bot size={18}/> (combina com o tema de IA). Import Bot adicionado;
+       BrainCircuit mantido (ainda usado no card de features).
+
+
+3.15 Tema claro como padrão do site  [NOVO]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → ThemeContext.tsx: default sem preferência salva agora é 'light'
+       (createContext e useState: stored === 'dark' ? 'dark' : 'light').
+       Quem já escolheu um tema mantém a escolha (localStorage 'vertice-theme').
+     → index.html: script anti-FOUC aplica data-theme="light" por padrão e
+       só mantém escuro se localStorage === 'dark' (inclui fallback no catch).
+     → Feito depois de 3.12 para não expor arestas do tema claro.
+
+
+3.16 Trocar o badge "Segurança Bancária" na landing  [NOVO]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → Landing.tsx (hero): badge "Segurança Bancária" → "Cancele quando
+       quiser" (claim honesto, alinhado ao CTA do rodapé).
+     → Bônus (feedback): removido o CNPJ placeholder "00.000.000/0001-00"
+       do rodapé da landing.
+
+
+3.18 "Recursos Ativos" com descrições corretas  [NOVO]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → SubscriptionCard.tsx: planDetails.features reescritas com as vantagens
+       REAIS por tier, derivadas de PLAN_ACCESS/PLAN_EXCLUSIVE
+       (constants/subscription + Pricing). Cada plano herda o anterior
+       ("Tudo do Essential/Pro/Elite") e lista só o que agrega. Layout
+       (grid 2 col) intacto.
+
+
+3.19 "Renovação em" + preço (corrigir desproporção)  [NOVO]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → SubscriptionCard.tsx: removido o badge solto "Renovação em {dia}" do
+       lado do status; validade + renovação agrupadas num único bloco coeso
+       (md:min-w-[200px]) com linhas "Válido até" / "Renova dia" alinhadas.
+     → Feedback do usuário: o preço grande ("R$ X/mês") foi REMOVIDO desse
+       bloco (intimidava); o preço fica no /pricing. Plano gratuito mostra
+       "Plano Gratuito / Acesso vitalício".
+     → Status virou chip colorido (ACTIVE=verde c/ pulse, TRIAL=azul,
+       PAST_DUE=amarelo, CANCELED=vermelho) — classes de chip já têm override
+       de tema claro, bonito nos dois temas. Idem em ProfileIdentity.
+
+
+3.20 Trocar o banner do perfil  [NOVO]
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → Backend: User.bannerColor (enum de presets), updateProfile valida
+       contra allowlist ('' faz $unset → volta ao padrão do plano),
+       sanitizeUser e getSubscriptionStatus passam a expor o campo.
+     → Frontend: ProfileIdentity com seletor de 6 presets de gradiente
+       (ocean/emerald/royal/sunset/gold/graphite) + "Padrão do plano".
+       Aplica via authService.updateProfile + refreshProfile. Gradiente por
+       plano mantido como fallback. Sem upload (3.17 fora deste lote).
+     → Feedback: botão da paleta usa text-[#fff] literal (o banner é sempre
+       escuro e o override de tema claro inverteria text-white → some).
+
+
+3.22 Ícone do método de pagamento (Banco/Cartão)  [NOVO]
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → getSubscriptionStatus expõe current.paymentMethod (= método da última
+       Transaction: CREDIT_CARD|PIX|CRYPTO). AuthContext.User ganhou o campo.
+     → SubscriptionCard mapeia método → ícone+rótulo (CreditCard/Cartão,
+       QrCode/Pix, Bitcoin/Cripto); sem transação cai no CreditCard +
+       "Mercado Pago (Pré-pago)". Só a referência do método vai ao BD.
+
+
+--- Ajustes de UX por feedback (mesmo lote) ---
+   → Zona de Perigo (Profile.tsx): os dois gatilhos ("Desativar Conta" e
+     "Excluir Conta Permanentemente") agora ficam numa linha responsiva
+     (flex-col no mobile, flex-row no desktop, flex-1). Ao abrir um fluxo a
+     linha some e o formulário ocupa a largura toda.
+   → Ícones nos títulos de seção do perfil para consistência com
+     "Segurança & Acesso" (Lock): Informações Pessoais (User), Aparência
+     (Palette), Dados e Privacidade (Database), Zona de Perigo (AlertTriangle).
+
+
 ================================================================
-FIM DO HISTÓRICO — 29 itens arquivados (1.1–1.10, 2.1–2.10, 3.1/3.3–3.7/3.9/3.10/3.13)
+5. PERFORMANCE (itens já concluídos)
+================================================================
+5.2  useMemo na filtragem da AssetTable
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → AssetTable.tsx: o reduce de agrupamento (groupedItems) e a ordenação
+       (orderedGroups) passaram a useMemo([items]). Antes recalculavam a cada
+       render (toggle de grupo, abrir modal de aporte/rebalanceamento etc.).
+
+
+5.5  Analisador de tamanho do bundle
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → rollup-plugin-visualizer (devDep) em vite.config.ts, ativado só por
+       ANALYZE=true (gera dist/stats.html — treemap com gzip/brotli). Script
+       `npm run analyze` (client) via cross-env (cross-plataforma). Build
+       normal não é afetado.
+
+
+5.6  Imagens em WebP/AVIF
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → vite-plugin-image-optimizer (+ sharp/svgo) comprime PNG/JPG/SVG do
+       bundle e do /public no build. Ganhos reais medidos: og-image.png
+       807KB→71KB (-92%); imagens de marketing Feed/Story ~1,4MB→~300-490KB
+       (-70 a -81%). Imagens que cresceriam são puladas (mantém original).
+       Suporta saída webp/avif p/ assets futuros importados pelo bundler.
+       Só roda em `vite build` (não afeta dev/HMR).
+     → Nota: og-image mantém PNG (compatibilidade de preview social/OG); os
+       depoimentos já eram <6KB (ganho marginal).
+
+
+5.7  TTL (expiração) em coleções que só crescem
+     [BAIXA] [SONNET] [IMPLEMENTADO]
+     → MarketAnalysis.js: índice TTL parcial em createdAt (90 dias) com
+       partialFilterExpression { isRankingPublished: false } — expira só
+       rascunhos/runs não publicados; relatórios publicados (histórico
+       canônico de ranking/accuracy) são preservados. DiscardLog (7d) e
+       QuantSignal (30d) já tinham TTL.
+
+
+5.9  Lighthouse CI de performance
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → .github/workflows/lighthouse.yml: builda o client e roda
+       treosh/lighthouse-ci-action@v12 a cada PR. .lighthouserc.json serve
+       client/dist (staticDistDir, preset desktop, 3 runs) e usa asserts em
+       modo "warn" (perf 0.8 / a11y 0.9 / best-practices 0.9 / seo 0.9) —
+       acompanha a nota sem bloquear o merge; relatório em link público temp.
+
+
+5.10 Debounce nas buscas de ativos
+     [BAIXA] [SONNET] [IMPLEMENTADO/VERIFICADO]
+     → Já estava implementado nos hooks extraídos do AddAssetModal:
+       useAssetSearch (autocomplete de ticker, debounce 300ms + clear no
+       teardown) e usePriceFetch (cotação automática, debounce 600ms + cache
+       de sessão). Nenhuma outra busca de ativo dispara API por tecla
+       (Calculator/Research usam <select> ou filtro client-side). Verificado.
+
+
+================================================================
+FIM DO HISTÓRICO — 45 itens arquivados (1.1–1.10, 2.1–2.10,
+3.1/3.3–3.20 e 3.22 exceto 3.2/3.17/3.21,
+5.2/5.5/5.6/5.7/5.9/5.10)
 ================================================================

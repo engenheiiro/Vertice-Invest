@@ -2,8 +2,10 @@
 import React, { useState } from 'react';
 import { BarChart3, Calculator, DollarSign, BrainCircuit } from 'lucide-react';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const PerformanceCard = ({ macro, isLoading }: { macro: any, isLoading: boolean }) => {
+  const { theme } = useTheme();
   const [viewMode, setViewMode] = useState<'chart' | 'simulator'>('chart');
   const [investmentValue, setInvestmentValue] = useState<string>('10000');
   
@@ -15,11 +17,14 @@ const PerformanceCard = ({ macro, isLoading }: { macro: any, isLoading: boolean 
   const ibovReturn = Number(macro?.ibov || 15.5);
   const iaReturn = 88.60; 
 
-  // ESTRATÉGIA VISUAL: Competidores uniformizados em cinza (bg-slate-700) para destacar o produto (IA Vértice)
+  // ESTRATÉGIA VISUAL: Competidores uniformizados em cinza para destacar o produto (IA Vértice).
+  // No tema claro o bg-slate-700 cai p/ ~#e2e8f0 (override) e some sobre a track quase branca;
+  // usamos slate-400 sólido no claro p/ manter o cinza "secundário" mas visível.
+  const competitorBar = theme === 'light' ? 'bg-slate-400' : 'bg-slate-700';
   const data = [
-    { label: 'CDI', value: cdiAnnualRate, color: 'bg-slate-700', text: 'text-slate-500' },
-    { label: 'S&P 500', value: spxReturn, color: 'bg-slate-700', text: 'text-slate-500' },
-    { label: 'Ibovespa', value: ibovReturn, color: 'bg-slate-700', text: 'text-slate-500' },
+    { label: 'CDI', value: cdiAnnualRate, color: competitorBar, text: 'text-slate-500' },
+    { label: 'S&P 500', value: spxReturn, color: competitorBar, text: 'text-slate-500' },
+    { label: 'Ibovespa', value: ibovReturn, color: competitorBar, text: 'text-slate-500' },
     { label: 'IA Vértice', value: iaReturn, color: 'bg-gradient-to-r from-blue-600 to-indigo-500', text: 'text-white', glow: true },
   ].sort((a, b) => a.value - b.value); // Mantém a ordenação do menor para o maior
 

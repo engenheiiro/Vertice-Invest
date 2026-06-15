@@ -105,5 +105,17 @@ const MarketAnalysisSchema = new mongoose.Schema({
 
 MarketAnalysisSchema.index({ assetClass: 1, strategy: 1, createdAt: -1 });
 
+// (5.7) TTL: a coleção crescia para sempre (o pipeline grava uma análise por run).
+// Expira apenas RASCUNHOS não publicados após 90 dias — relatórios publicados
+// (isRankingPublished:true) são o histórico canônico (ranking/accuracy) e ficam.
+// partialFilterExpression mantém o TTL restrito aos não publicados.
+MarketAnalysisSchema.index(
+  { createdAt: 1 },
+  {
+    expireAfterSeconds: 60 * 60 * 24 * 90,
+    partialFilterExpression: { isRankingPublished: false },
+  }
+);
+
 const MarketAnalysis = mongoose.models.MarketAnalysis || mongoose.model('MarketAnalysis', MarketAnalysisSchema);
 export default MarketAnalysis;

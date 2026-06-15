@@ -58,13 +58,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <!-- Anti-FOUC: aplica data-theme antes do React hidratar para evitar flash de tema errado -->
+    <!-- Anti-FOUC: aplica data-theme antes do React hidratar para evitar flash de tema errado.
+         Padrão = claro; só mantém escuro se o usuário escolheu 'dark' explicitamente. -->
     <script>
       (function () {
         try {
           var t = localStorage.getItem('vertice-theme');
-          if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
-        } catch (_) {}
+          if (t !== 'dark') document.documentElement.setAttribute('data-theme', 'light');
+        } catch (_) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
       })();
     </script>
     <div id="root"></div>

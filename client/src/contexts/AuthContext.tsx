@@ -21,7 +21,12 @@ export interface User {
   occupation?: string;
   mfaEnabled?: boolean;
   marketingOptIn?: boolean;
+  bannerColor?: BannerPreset;
+  paymentMethod?: PaymentMethod | null;
 }
+
+export type BannerPreset = 'ocean' | 'emerald' | 'royal' | 'sunset' | 'gold' | 'graphite';
+export type PaymentMethod = 'CREDIT_CARD' | 'PIX' | 'CRYPTO';
 
 interface AuthContextType {
   user: User | null;
