@@ -29,7 +29,7 @@
     "tailwindcss": "^3.3.6",
     "typescript": "^5.2.2",
     "vertice-invest-root": "file:..",
-    "vite": "^5.0.0"
+    "vite": "^8.0.16"
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^5.2.1",
