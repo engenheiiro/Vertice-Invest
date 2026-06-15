@@ -341,7 +341,14 @@ export const initScheduler = () => {
         logger.info("⏰ Rotina Diária V3 — Manhã (09:00)");
         try {
             const syncResult = await syncService.performFullSync();
-            if (syncResult.success) {
+            // Resiliência: 403/IP no Fundamentus não deve abortar o research.
+            // Fundamentos são trimestrais (já no banco) e preços seguem frescos
+            // via crons leves — então roda o ranking com os dados em cache.
+            const scrapingBlocked = !syncResult.success && syncResult.error === 'Scraping blocked.';
+            if (scrapingBlocked) {
+                logger.warn("⚠️ Fundamentus bloqueado (403). Rodando research com fundamentos em cache.");
+            }
+            if (syncResult.success || scrapingBlocked) {
                 await aiResearchService.runBatchAnalysis(null);
                 // Carteira Recomendada — curva contínua event-driven (não-crítica)
                 try {
@@ -359,7 +366,13 @@ export const initScheduler = () => {
         logger.info("⏰ Rotina Diária V3 — Pós-Mercado (18:30)");
         try {
             const syncResult = await syncService.performFullSync();
-            if (syncResult.success) {
+            // Resiliência: 403/IP no Fundamentus não deve abortar o research
+            // (fundamentos trimestrais em cache + preços frescos via crons leves).
+            const scrapingBlocked = !syncResult.success && syncResult.error === 'Scraping blocked.';
+            if (scrapingBlocked) {
+                logger.warn("⚠️ Fundamentus bloqueado (403). Rodando research com fundamentos em cache.");
+            }
+            if (syncResult.success || scrapingBlocked) {
                 // TimeSeriesWorker aqui: dados de fechamento disponíveis (Beta/SMA/EMA corretos)
                 await timeSeriesWorker.run();
                 await aiResearchService.runBatchAnalysis(null);
