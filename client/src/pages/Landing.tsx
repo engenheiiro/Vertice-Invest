@@ -371,9 +371,9 @@ export const Landing = () => {
           <div className="max-w-6xl mx-auto px-6">
               <h2 className="text-2xl md:text-3xl font-bold mb-12 text-center">Quem usa, recomenda</h2>
               <div className="grid md:grid-cols-3 gap-6">
-                  <TestimonialCard name="Ricardo S." role="Designer Gráfico" image="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&w=150&h=150" text="A clareza que o Neural Engine traz é absurda. Deixei de operar com base em 'dicas' e passei a seguir dados." />
-                  <TestimonialCard name="Amanda L." role="Veterinária" image="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150" text="Não tenho tempo para analisar balanços. A gestão 360 faz tudo por mim." />
-                  <TestimonialCard name="Carlos M." role="Servidor Público" image="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150" text="A interface é incrível e a segurança dos dados me convenceu." />
+                  <TestimonialCard name="Ricardo S." role="Designer Gráfico" image="/assets/testimonials/ricardo.jpg" text="A clareza que o Neural Engine traz é absurda. Deixei de operar com base em 'dicas' e passei a seguir dados." />
+                  <TestimonialCard name="Amanda L." role="Veterinária" image="/assets/testimonials/amanda.jpg" text="Não tenho tempo para analisar balanços. A gestão 360 faz tudo por mim." />
+                  <TestimonialCard name="Carlos M." role="Servidor Público" image="/assets/testimonials/carlos.jpg" text="A interface é incrível e a segurança dos dados me convenceu." />
               </div>
           </div>
       </section>
@@ -512,19 +512,29 @@ const ResultCard = ({ ticker, type, date, returnVal, desc, delay }: ResultCardPr
 );
 
 interface TestimonialCardProps { name: string; role: string; text: string; image: string; }
-const TestimonialCard = ({ name, role, text, image }: TestimonialCardProps) => (
-    <div className="bg-deep border border-slate-800 p-6 rounded-xl relative">
-        <Quote className="text-blue-900/40 absolute top-4 right-4" size={40} />
-        <div className="flex items-center gap-3 mb-4">
-            <img src={image} alt={name} className="w-10 h-10 rounded-full border border-slate-700 object-cover" />
-            <div>
-                <p className="font-bold text-white text-sm">{name}</p>
-                <p className="text-xs text-blue-500">{role}</p>
+const TestimonialCard = ({ name, role, text, image }: TestimonialCardProps) => {
+    const [imgError, setImgError] = useState(false);
+    const initials = name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
+    return (
+        <div className="bg-deep border border-slate-800 p-6 rounded-xl relative">
+            <Quote className="text-blue-900/40 absolute top-4 right-4" size={40} />
+            <div className="flex items-center gap-3 mb-4">
+                {imgError ? (
+                    <div className="w-10 h-10 rounded-full border border-slate-700 bg-blue-900/40 flex items-center justify-center text-blue-400 font-bold text-sm flex-shrink-0">
+                        {initials}
+                    </div>
+                ) : (
+                    <img src={image} alt={name} className="w-10 h-10 rounded-full border border-slate-700 object-cover flex-shrink-0" onError={() => setImgError(true)} />
+                )}
+                <div>
+                    <p className="font-bold text-white text-sm">{name}</p>
+                    <p className="text-xs text-blue-500">{role}</p>
+                </div>
             </div>
+            <p className="text-slate-400 text-sm leading-relaxed italic">"{text}"</p>
         </div>
-        <p className="text-slate-400 text-sm leading-relaxed italic">"{text}"</p>
-    </div>
-);
+    );
+};
 
 const FaqItem = ({ question, answer, isOpen, onClick }: { question: string, answer: string, isOpen: boolean, onClick: () => void }) => (
     <div className="border border-slate-800 rounded-xl bg-deep overflow-hidden">
