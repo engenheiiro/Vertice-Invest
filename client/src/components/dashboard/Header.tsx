@@ -3,19 +3,19 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck, LayoutGrid, PieChart, Bot,
   GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
-  Eye, EyeOff, Play, Radar, Calculator, Target, ChevronRight
+  Eye, EyeOff, Radar, Calculator, Target, ChevronRight, Sun, Moon
 } from 'lucide-react';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
-import { useDemo } from '../../contexts/DemoContext'; // Importar DemoContext
 import { PlanBadge } from '../ui/PlanBadge';
 import { NotificationBell } from './NotificationBell';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuth();
   const { isPrivacyMode, togglePrivacyMode } = useWallet();
-  const { startDemo } = useDemo(); // Hook do Demo
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [time, setTime] = useState(new Date());
@@ -58,7 +58,7 @@ export const Header: React.FC = () => {
     >
       Pular para o conteúdo
     </a>
-    <nav className="border-b border-slate-800/60 bg-[#03060D]/80 backdrop-blur-md sticky top-0 z-50 pt-[env(safe-area-inset-top)]">
+    <nav className="border-b border-slate-800/60 bg-deep/80 backdrop-blur-md sticky top-0 z-50 pt-[env(safe-area-inset-top)]">
       <div className="max-w-[1600px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-6">
            <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/dashboard')}>
@@ -117,21 +117,7 @@ export const Header: React.FC = () => {
 
         <div className="flex items-center gap-2">
 
-           {/* Botão de Teste de Tutorial (Apenas Admin) */}
-           {isAdmin && (
-               <button
-                   onClick={() => {
-                       navigate('/dashboard'); // Garante que está no dashboard
-                       setTimeout(startDemo, 100);
-                   }}
-                   className="hidden md:flex items-center gap-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors"
-                   title="Iniciar Modo Demonstração (Admin)"
-               >
-                   <Play size={10} fill="currentColor" /> Simular Tutorial
-               </button>
-           )}
-
-           {/* Notification Bell + Privacy Toggle — agrupados sem divisor */}
+           {/* Notification Bell + Privacy Toggle + Theme Toggle */}
            <div className="flex items-center gap-1">
                <NotificationBell />
                <button
@@ -140,6 +126,13 @@ export const Header: React.FC = () => {
                  title={isPrivacyMode ? "Mostrar Valores" : "Ocultar Valores"}
                >
                  {isPrivacyMode ? <EyeOff size={16} /> : <Eye size={16} />}
+               </button>
+               <button
+                 onClick={toggleTheme}
+                 className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                 title={theme === 'dark' ? "Ativar modo claro" : "Ativar modo escuro"}
+               >
+                 {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
                </button>
            </div>
 

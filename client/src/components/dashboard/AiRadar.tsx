@@ -166,7 +166,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                         <Radar size={14} className="text-purple-500 animate-spin-slow" /> Radar Alfa
                     </h3>
                 </div>
-                <div className="flex-1 p-3 space-y-3 bg-gradient-to-b from-[#080C14] to-[#05070a]">
+                <div className="flex-1 p-3 space-y-3 bg-gradient-to-b from-base to-deep">
                     {[...Array(3)].map((_, i) => <div key={i} className="p-4 rounded-xl border border-slate-800 bg-panel animate-pulse h-24" />)}
                 </div>
             </div>
@@ -255,7 +255,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
             </div>
 
             {/* Conteúdo */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2.5 custom-scrollbar bg-gradient-to-b from-[#080C14] to-[#05070a] relative rounded-b-2xl">
+            <div className="flex-1 overflow-y-auto p-3 space-y-2.5 custom-scrollbar bg-gradient-to-b from-base to-deep relative rounded-b-2xl">
 
                 {/* Paywall para não-PRO */}
                 {!hasAccess && (

@@ -1,6 +1,7 @@
 import React, { Suspense, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Eye, EyeOff, Download } from 'lucide-react';
+import { ArrowLeft, Loader2, Eye, EyeOff, Download, Sun, Moon } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 import { Header } from '../components/dashboard/Header';
 import { ProfileIdentity } from '../components/profile/ProfileIdentity';
 import { ProfileSettings } from '../components/profile/ProfileSettings';
@@ -14,6 +15,7 @@ export const Profile = () => {
     const { user, logout } = useAuth();
     const { addToast } = useToast();
     const navigate = useNavigate();
+    const { theme, toggleTheme } = useTheme();
 
     const [showDeactivate, setShowDeactivate] = useState(false);
     const [deactivatePassword, setDeactivatePassword] = useState('');
@@ -108,8 +110,38 @@ export const Profile = () => {
                         {/* Segurança */}
                         <SecuritySection />
 
+                        {/* Aparência */}
+                        <div className="p-6 rounded-2xl border border-slate-800 bg-card">
+                            <h4 className="text-sm font-bold text-white mb-1">Aparência</h4>
+                            <p className="text-xs text-slate-500 mb-4">
+                                Alterne entre o tema escuro (padrão) e o tema claro.
+                            </p>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={theme === 'dark' ? undefined : toggleTheme}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold border transition-colors ${
+                                        theme === 'dark'
+                                            ? 'bg-slate-800 border-slate-600 text-white'
+                                            : 'bg-transparent border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                                    }`}
+                                >
+                                    <Moon size={14} /> Escuro
+                                </button>
+                                <button
+                                    onClick={theme === 'light' ? undefined : toggleTheme}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold border transition-colors ${
+                                        theme === 'light'
+                                            ? 'bg-blue-600 border-blue-500 text-white'
+                                            : 'bg-transparent border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                                    }`}
+                                >
+                                    <Sun size={14} /> Claro
+                                </button>
+                            </div>
+                        </div>
+
                         {/* Dados e Privacidade (LGPD Art. 18) */}
-                        <div className="p-6 rounded-2xl border border-slate-800 bg-[#0B101A]">
+                        <div className="p-6 rounded-2xl border border-slate-800 bg-card">
                             <h4 className="text-sm font-bold text-white mb-1">Dados e Privacidade</h4>
                             <p className="text-xs text-slate-500 mb-4">
                                 Conforme a LGPD (Art. 18), você pode exportar uma cópia de todos os seus dados pessoais armazenados na plataforma.

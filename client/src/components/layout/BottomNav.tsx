@@ -93,7 +93,7 @@ export const BottomNav: React.FC = () => {
       )}
 
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#03060D]/95 backdrop-blur-md border-t border-slate-800/60 pb-[env(safe-area-inset-bottom)]"
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-deep/95 backdrop-blur-md border-t border-slate-800/60 pb-[env(safe-area-inset-bottom)]"
         aria-label="Navegação principal"
       >
         <div className="flex items-stretch justify-around h-16">

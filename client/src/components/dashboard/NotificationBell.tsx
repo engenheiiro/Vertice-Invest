@@ -110,7 +110,7 @@ export const NotificationBell: React.FC = () => {
         {hasUnread ? <BellRing size={16} className="text-blue-400" /> : <Bell size={16} />}
 
         {hasUnread && (
-          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-blue-500 ring-1 ring-[#03060D]" />
+          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-blue-500 ring-1 ring-deep" />
         )}
       </button>
 
@@ -120,7 +120,7 @@ export const NotificationBell: React.FC = () => {
           <div
             ref={panelRef}
             style={panelStyle}
-            className="z-[100] w-80 rounded-xl border border-slate-700/60 bg-[#0F131E] shadow-2xl shadow-black/60 backdrop-blur-md overflow-hidden"
+            className="z-[100] w-80 rounded-xl border border-slate-700/60 bg-panel shadow-2xl shadow-black/60 backdrop-blur-md overflow-hidden"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">

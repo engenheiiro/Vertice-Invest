@@ -357,7 +357,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8">
                                 
                                 {/* CABEÇALHO DO BOLETIM */}
-                                <div className="bg-[#0D121F] rounded-2xl p-6 border border-slate-700/50 relative overflow-hidden group">
+                                <div className="bg-card rounded-2xl p-6 border border-slate-700/50 relative overflow-hidden group">
                                     <div className="flex items-center justify-between relative z-10">
                                         <div>
                                             <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Resultado da Avaliação IA</h4>

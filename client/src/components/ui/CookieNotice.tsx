@@ -25,7 +25,7 @@ export const CookieNotice: React.FC = () => {
     <div
       role="dialog"
       aria-label="Aviso sobre cookies"
-      className="fixed bottom-4 left-4 right-4 md:left-auto md:right-6 md:max-w-sm z-[200] bg-[#0B101A] border border-slate-700/60 rounded-xl shadow-2xl shadow-black/60 p-4 animate-fade-in"
+      className="fixed bottom-4 left-4 right-4 md:left-auto md:right-6 md:max-w-sm z-[200] bg-card border border-slate-700/60 rounded-xl shadow-2xl shadow-black/60 p-4 animate-fade-in"
     >
       <div className="flex items-start gap-3">
         <Cookie size={18} className="text-blue-400 shrink-0 mt-0.5" />

@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useWallet, AssetType, AllocationMap } from '../../contexts/WalletContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { Settings, Check, X, DollarSign } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
@@ -31,6 +32,10 @@ const ORDERED_TYPES: AssetType[] = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 
 export const AllocationChart = React.memo(() => {
     const { assets, kpis, targetAllocation, targetReserve, updateTargets } = useWallet();
     const { addToast } = useToast();
+    const { theme } = useTheme();
+    const chartTooltipStyle = theme === 'light'
+        ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '10px', color: '#0f172a' }
+        : { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '10px' };
     const [viewMode, setViewMode] = useState<'CURRENT' | 'IDEAL'>('CURRENT');
     const [isEditing, setIsEditing] = useState(false);
     
@@ -158,10 +163,9 @@ export const AllocationChart = React.memo(() => {
                                     <Cell key={`cell-${index}`} fill={entry.color} />
                                 ))}
                             </Pie>
-                            <Tooltip 
+                            <Tooltip
                                 formatter={(value: number) => `${value.toFixed(1)}%`}
-                                contentStyle={{ backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '10px' }}
-                                itemStyle={{ color: '#fff' }}
+                                contentStyle={chartTooltipStyle}
                             />
                         </PieChart>
                     </ResponsiveContainer>

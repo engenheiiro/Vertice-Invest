@@ -12,12 +12,14 @@ export default {
       // Tokens do design system Vértice (M12). Consolidam os tons de fundo que
       // antes apareciam como hex soltos (#080C14, #0B101A, #0F131E, ...).
       // Uso: bg-base, bg-card, bg-panel, bg-deep, bg-elevated, text-gold.
+      // Valores via CSS custom properties → suportam tema claro/escuro em runtime
+      // sem rebuild. Formato "R G B" permite opacity modifiers (bg-base/80).
       colors: {
-        base: '#080C14', // fundo principal da aplicação
-        deep: '#02040a', // fundo mais profundo (listas/áreas internas)
-        card: '#0B101A', // superfície de cards
-        panel: '#0F131E', // modais / painéis
-        elevated: '#0F1729', // hover de inputs e dropdowns
+        base:     'rgb(var(--tw-color-base)     / <alpha-value>)',
+        deep:     'rgb(var(--tw-color-deep)     / <alpha-value>)',
+        card:     'rgb(var(--tw-color-card)     / <alpha-value>)',
+        panel:    'rgb(var(--tw-color-panel)    / <alpha-value>)',
+        elevated: 'rgb(var(--tw-color-elevated) / <alpha-value>)',
         gold: {
           DEFAULT: '#D4AF37', // dourado de marca (Vértice)
           light: '#F2D06B',

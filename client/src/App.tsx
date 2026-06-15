@@ -12,6 +12,7 @@ import { WalletProvider } from './contexts/WalletContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ConfirmProvider } from './hooks/useConfirm';
 import { DemoProvider } from './contexts/DemoContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { TutorialOverlay } from './components/tutorial/TutorialOverlay';
 import { BottomNav } from './components/layout/BottomNav';
 import { InstallPrompt } from './components/pwa/InstallPrompt';
@@ -83,6 +84,7 @@ const ProtectedAppLayout = () => {
 
 export default function App() {
   return (
+    <ThemeProvider>
     <ErrorBoundary>
     <ToastProvider>
       <ConfirmProvider>
@@ -133,5 +135,6 @@ export default function App() {
       </ConfirmProvider>
     </ToastProvider>
     </ErrorBoundary>
+    </ThemeProvider>
   );
 }

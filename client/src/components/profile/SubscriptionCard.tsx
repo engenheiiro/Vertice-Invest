@@ -43,7 +43,7 @@ export const SubscriptionCard = () => {
         : null;
 
     return (
-        <div className="bg-gradient-to-br from-[#080C14] to-[#0A101F] border border-slate-800 rounded-2xl p-6 relative overflow-hidden group">
+        <div className="bg-gradient-to-br from-base to-card border border-slate-800 rounded-2xl p-6 relative overflow-hidden group">
             {/* Efeitos de Fundo */}
             {userPlan === 'PRO' && <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full blur-[80px] pointer-events-none"></div>}
             {userPlan === 'ELITE' && <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/5 rounded-full blur-[80px] pointer-events-none"></div>}

@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import { walletService } from '../../services/wallet';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { TrendingUp, RefreshCw } from 'lucide-react';
@@ -41,6 +42,10 @@ export const PerformanceChart = React.memo(() => {
     const [metricMode, setMetricMode] = useState<'TWRR' | 'ROI'>('TWRR');
     const [timeRange, setTimeRange] = useState<'1M' | '12M' | 'YTD' | 'ALL'>('ALL');
     const [viewMode, setViewMode] = useState<'pct' | 'brl'>('pct');
+    const { theme } = useTheme();
+    const chartTooltipStyle = theme === 'light'
+        ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '12px', zIndex: 100, color: '#0f172a' }
+        : { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px', zIndex: 100 };
 
     const { isDemoMode } = useDemo();
     const { kpis } = useWallet();
@@ -334,8 +339,8 @@ export const PerformanceChart = React.memo(() => {
                         />
 
                         <Tooltip
-                            contentStyle={{ backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px', zIndex: 100 }}
-                            itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+                            contentStyle={chartTooltipStyle}
+                            itemStyle={{ fontWeight: 'bold' }}
                             labelStyle={{ color: '#94a3b8', marginBottom: '5px' }}
                             formatter={(value: number, name: string) => {
                                 const label = LABEL_MAP[name] ?? name;

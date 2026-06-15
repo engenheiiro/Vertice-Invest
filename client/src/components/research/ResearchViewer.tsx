@@ -71,7 +71,7 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view, on
             <div className="bg-base border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative">
                 
                 {/* Header Decorativo */}
-                <div className="h-48 bg-gradient-to-r from-blue-900/20 to-[#080C14] border-b border-slate-800/50 p-8 flex flex-col justify-end relative overflow-hidden">
+                <div className="h-48 bg-gradient-to-r from-blue-900/20 to-base border-b border-slate-800/50 p-8 flex flex-col justify-end relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-8 opacity-5 transform rotate-12">
                         <AlignLeft size={180} className="text-white" />
                     </div>

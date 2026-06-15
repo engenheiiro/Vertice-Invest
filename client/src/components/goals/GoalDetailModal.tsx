@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -58,6 +59,10 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
   const { addToast } = useToast();
   const confirm = useConfirm();
   const queryClient = useQueryClient();
+  const { theme: uiTheme } = useTheme();
+  const chartTooltipStyle = uiTheme === 'light'
+    ? { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, color: '#0f172a' }
+    : { background: '#0B101A', border: '1px solid #1e293b', borderRadius: 8, fontSize: 12 };
   const [contribOpen, setContribOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [whatIfPmt, setWhatIfPmt] = useState<number | null>(null);
@@ -269,7 +274,7 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
                     <XAxis dataKey="t" tickFormatter={fmtAxis} tick={{ fontSize: 9, fill: '#64748b' }} interval="preserveStartEnd" minTickGap={28} />
                     <YAxis tick={{ fontSize: 9, fill: '#64748b' }} width={48} tickFormatter={(v) => formatCompact(v, null)} />
                     <Tooltip
-                      contentStyle={{ background: '#0B101A', border: '1px solid #1e293b', borderRadius: 8, fontSize: 12 }}
+                      contentStyle={chartTooltipStyle}
                       labelStyle={{ color: '#94a3b8' }}
                       labelFormatter={(t) => new Date(t).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
                       formatter={(value: number, key: string) => [formatCurrency(value), key === 'real' ? 'Real' : key === 'planned' ? 'Plano' : 'Projeção']}

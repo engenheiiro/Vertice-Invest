@@ -195,10 +195,10 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
             <div className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity" onClick={onClose}></div>
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4 sm:p-0">
-                    <div className="relative transform overflow-hidden rounded-2xl bg-[#0F131E] border border-slate-800 text-left shadow-2xl transition-all w-full max-w-lg animate-fade-in my-auto max-h-[90vh] flex flex-col">
+                    <div className="relative transform overflow-hidden rounded-2xl bg-panel border border-slate-800 text-left shadow-2xl transition-all w-full max-w-lg animate-fade-in my-auto max-h-[90vh] flex flex-col">
 
                         {/* Header */}
-                        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-[#0B101A] shrink-0">
+                        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-card shrink-0">
                             <h2 className="text-lg font-bold text-white flex items-center gap-2">
                                 <Calculator size={18} className="text-blue-400" />
                                 Aporte Inteligente
@@ -276,7 +276,7 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                                     return (
                                                     <div
                                                         key={item.ticker}
-                                                        className="group flex items-center justify-between p-3 rounded-xl bg-[#0B101A] border border-slate-800 hover:border-slate-700 transition-colors"
+                                                        className="group flex items-center justify-between p-3 rounded-xl bg-card border border-slate-800 hover:border-slate-700 transition-colors"
                                                     >
                                                         <div className="min-w-0">
                                                             <div className="flex items-center gap-1.5">
@@ -361,7 +361,7 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                             )}
                         </div>
 
-                        <div className="p-5 border-t border-slate-800 bg-[#0B101A] flex justify-end rounded-b-2xl shrink-0">
+                        <div className="p-5 border-t border-slate-800 bg-card flex justify-end rounded-b-2xl shrink-0">
                             <Button onClick={onClose} variant="outline" className="w-auto px-6">Fechar</Button>
                         </div>
                     </div>

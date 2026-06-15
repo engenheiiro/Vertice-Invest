@@ -194,7 +194,7 @@ export const AssetList = () => {
                                 return (
                                     <React.Fragment key={type}>
                                         <tr 
-                                            className="bg-panel border-y border-slate-800/50 cursor-pointer hover:bg-[#161b28] transition-colors"
+                                            className="bg-panel border-y border-slate-800/50 cursor-pointer hover:bg-elevated transition-colors"
                                             onClick={() => toggleGroup(type)}
                                         >
                                             <td colSpan={7} className="px-4 py-3">

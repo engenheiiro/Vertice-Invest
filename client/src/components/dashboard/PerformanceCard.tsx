@@ -33,7 +33,7 @@ const PerformanceCard = ({ macro, isLoading }: { macro: any, isLoading: boolean 
   const formatCurrency = (val: number) => fmtCurrency(val);
 
   return (
-    <div className="bg-[#03060D]/80 backdrop-blur-xl border border-slate-800 p-6 rounded-3xl shadow-2xl relative overflow-hidden group w-full transition-all duration-500">
+    <div className="bg-deep/80 backdrop-blur-xl border border-slate-800 p-6 rounded-3xl shadow-2xl relative overflow-hidden group w-full transition-all duration-500">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
         <div className="relative z-10">
             <div className="flex justify-between items-start mb-6">

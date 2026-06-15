@@ -51,7 +51,7 @@ export const AuthLayout: React.FC = () => {
 
   return (
     // MUDANÇA: h-screen e overflow-hidden garantem que não haja scroll na página
-    <div className="h-screen w-full bg-[#03060D] relative flex items-center justify-center p-4 font-sans selection:bg-blue-600 selection:text-white overflow-hidden">
+    <div className="h-screen w-full bg-deep relative flex items-center justify-center p-4 font-sans selection:bg-blue-600 selection:text-white overflow-hidden">
       
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
          <div className="absolute top-[-20%] left-[-10%] w-[80vw] h-[80vw] bg-blue-900/10 rounded-full blur-[150px]"></div>
@@ -67,7 +67,7 @@ export const AuthLayout: React.FC = () => {
         
         {/* Coluna da Esquerda (Carrossel) */}
         <div className="w-full lg:w-[45%] xl:w-[50%] bg-base relative p-6 lg:p-8 xl:p-12 flex flex-col justify-between text-white overflow-hidden border-b lg:border-b-0 lg:border-r border-slate-800 min-h-[220px] lg:min-h-auto">
-            <div className="absolute inset-0 bg-gradient-to-b from-[#0F1729] to-[#080C14] z-0"></div>
+            <div className="absolute inset-0 bg-gradient-to-b from-elevated to-base z-0"></div>
             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full blur-[60px] z-0"></div>
             
             <div className="relative z-10 flex items-center gap-2.5">

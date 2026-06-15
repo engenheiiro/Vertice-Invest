@@ -415,7 +415,7 @@ export const Calculator: React.FC = () => {
   ] : [];
 
   return (
-    <div className="min-h-screen bg-base text-white">
+    <div className="min-h-screen bg-deep text-white">
       <Header />
 
       <main id="main-content" tabIndex={-1} className="max-w-[1400px] mx-auto px-4 md:px-6 py-8">

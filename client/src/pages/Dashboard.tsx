@@ -97,7 +97,7 @@ export const Dashboard = () => {
                 </div>
 
                 {/* ID para o Tutorial: tour-dividends */}
-                <div id="tour-dividends" className={`bg-gradient-to-b from-[#0F1729] to-[#080C14] border border-slate-800 rounded-2xl p-5 relative overflow-hidden group transition-opacity duration-500 ${isDemoMode && 'relative z-[100] ring-2 ring-[#D4AF37] shadow-[0_0_30px_-5px_rgba(212,175,55,0.3)]'}`}>
+                <div id="tour-dividends" className={`bg-gradient-to-b from-elevated to-base border border-slate-800 rounded-2xl p-5 relative overflow-hidden group transition-opacity duration-500 ${isDemoMode && 'relative z-[100] ring-2 ring-[#D4AF37] shadow-[0_0_30px_-5px_rgba(212,175,55,0.3)]'}`}>
                     <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                     <div className="relative z-10">
                         <div className="flex justify-between items-start mb-3">

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import { RefreshCw, ShieldCheck, ShieldAlert, Activity, Clock, Target, Globe, Database, Zap, Play, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
@@ -59,6 +60,10 @@ export const AdminPainelTab: React.FC<Props> = ({
     onResetHealth, onForceSnapshot, onSyncTimeSeries, onMacroSync, onSyncData, onRetryMacro,
 }) => {
     const isMacroDataValid = macroData && macroData.selic && macroData.ibov;
+    const { theme } = useTheme();
+    const chartTooltipStyle = theme === 'light'
+        ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '12px', color: '#0f172a' }
+        : { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px' };
 
     return (
         <>
@@ -179,7 +184,7 @@ export const AdminPainelTab: React.FC<Props> = ({
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                                     <XAxis dataKey="formattedDate" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={20} />
                                     <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} unit="%" />
-                                    <Tooltip contentStyle={{ backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px' }} itemStyle={{ fontWeight: 'bold' }} formatter={(value: number, name: string) => [`${value >= 0 ? '+' : ''}${value.toFixed(2)}%`, name]} labelFormatter={(label, payload) => {
+                                    <Tooltip contentStyle={chartTooltipStyle} itemStyle={{ fontWeight: 'bold' }} formatter={(value: number, name: string) => [`${value >= 0 ? '+' : ''}${value.toFixed(2)}%`, name]} labelFormatter={(label, payload) => {
                                         const p: any = payload?.[0]?.payload;
                                         const reb = p?.lastRebalanceDate ? new Date(p.lastRebalanceDate).toLocaleDateString('pt-BR') : null;
                                         return `📅 ${label}${p?.holdingsCount ? ` · ${p.holdingsCount} ativos` : ''}${reb ? ` · rebal. ${reb}` : ''}`;

@@ -134,7 +134,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
                         </div>
 
                         {/* Listagem */}
-                        <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#05070A] p-4">
+                        <div className="flex-1 overflow-y-auto custom-scrollbar bg-deep p-4">
                             {isLoading ? (
                                 <div className="flex items-center justify-center py-10">
                                     <Loader2 className="animate-spin text-blue-500" />

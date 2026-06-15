@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useTheme } from '../contexts/ThemeContext';
 import { Header } from '../components/dashboard/Header';
 import { researchService } from '../services/research';
 import {
@@ -150,6 +151,10 @@ const SignalValueTag: React.FC<{ type: string; value?: number }> = ({ type, valu
 export const RadarPage = () => {
     const [signals, setSignals] = useState<QuantSignalHistory[]>([]);
     const [meta, setMeta] = useState<RadarMeta | null>(null);
+    const { theme } = useTheme();
+    const chartTooltipStyle = theme === 'light'
+        ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '12px', color: '#0f172a' }
+        : { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px', color: '#fff' };
     const [stats, setStats] = useState<RadarStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
@@ -361,7 +366,7 @@ export const RadarPage = () => {
                                             {activeHeatmapData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                                         </Pie>
                                         <Tooltip
-                                            contentStyle={{ backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px', color: '#fff' }}
+                                            contentStyle={chartTooltipStyle}
                                             formatter={(value: any, name: any, props: any) => [
                                                 `${value} Sinais${sectorView === 'CLOSED' ? ` · Ret: ${props.payload.avgReturn}%` : ''}`,
                                                 name

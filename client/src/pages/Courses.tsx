@@ -17,7 +17,7 @@ const LessonCard = ({ lesson, onClick, isLocked: propIsLocked }: { lesson: any, 
     const isLocked = true; // Bloqueio global para manutenção
     return (
         <div 
-            className={`relative min-w-[260px] md:min-w-[280px] aspect-[2/3] rounded-xl overflow-hidden cursor-pointer group bg-[#0a0a0a] border border-white/5 flex flex-col transition-all duration-300 ${isLocked ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:scale-[1.02] hover:shadow-xl hover:shadow-blue-500/10'}`}
+            className={`relative min-w-[260px] md:min-w-[280px] aspect-[2/3] rounded-xl overflow-hidden cursor-pointer group bg-deep border border-white/5 flex flex-col transition-all duration-300 ${isLocked ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:scale-[1.02] hover:shadow-xl hover:shadow-blue-500/10'}`}
             onClick={() => !isLocked && onClick()}
         >
         <div className="absolute inset-0 w-full h-full">
@@ -139,8 +139,8 @@ export const Courses = () => {
                         className="w-full h-full object-cover opacity-40 transition-all duration-1000"
                         referrerPolicy="no-referrer"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#02040a] via-[#02040a]/80 to-transparent"></div>
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#02040a] via-[#02040a]/50 to-transparent"></div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-deep via-deep/80 to-transparent"></div>
+                    <div className="absolute inset-0 bg-gradient-to-r from-deep via-deep/50 to-transparent"></div>
                 </div>
 
                 <div className="relative z-10 max-w-[1600px] w-full px-6 md:px-12 flex flex-col items-start">

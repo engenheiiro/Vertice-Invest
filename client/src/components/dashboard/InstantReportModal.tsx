@@ -82,7 +82,7 @@ export const InstantReportModal: React.FC<InstantReportModalProps> = ({ isOpen, 
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-[#05070A]">
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-deep">
                             {renderContent()}
                         </div>
 

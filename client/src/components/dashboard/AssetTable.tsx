@@ -167,7 +167,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                             orderedGroups.map(([group, groupItems]) => (
                                 <React.Fragment key={group}>
                                     <tr 
-                                        className="bg-panel border-y border-slate-800/50 cursor-pointer hover:bg-[#161b28] transition-colors"
+                                        className="bg-panel border-y border-slate-800/50 cursor-pointer hover:bg-elevated transition-colors"
                                         onClick={() => toggleGroup(group)}
                                     >
                                         <td colSpan={7} className="px-4 py-2">

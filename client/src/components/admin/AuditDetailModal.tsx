@@ -131,7 +131,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                         </div>
 
                         {/* TABELA */}
-                        <div className="p-0 overflow-y-auto custom-scrollbar flex-1 bg-[#05070A]">
+                        <div className="p-0 overflow-y-auto custom-scrollbar flex-1 bg-deep">
                             <table className="w-full text-left border-collapse">
                                 <thead className="sticky top-0 z-10 bg-card border-b border-slate-800 text-[9px] font-black uppercase text-slate-500">
                                     <tr>
@@ -243,7 +243,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
 
                                 <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                                     {/* NOTA FINAL (ESTILO PROVA) */}
-                                    <div className="bg-[#0D121F] rounded-2xl p-6 border border-slate-700 relative overflow-hidden group">
+                                    <div className="bg-card rounded-2xl p-6 border border-slate-700 relative overflow-hidden group">
                                         <div className="absolute top-0 right-0 p-4">
                                             <div className={`w-16 h-16 rounded-full border-4 flex items-center justify-center font-black text-2xl rotate-12 shadow-2xl transition-transform group-hover:scale-110 ${
                                                 selectedAsset.score >= 90 ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' :

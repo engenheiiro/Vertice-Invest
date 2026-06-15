@@ -94,7 +94,7 @@ export const Landing = () => {
     <div className="min-h-screen bg-deep text-white selection:bg-blue-500 selection:text-white overflow-x-hidden font-sans">
       
       {/* NAVBAR */}
-      <nav className={`fixed top-0 w-full z-50 transition-all duration-300 border-b ${scrolled ? 'bg-[#03060D]/90 backdrop-blur-xl border-slate-800/60 py-3' : 'bg-transparent border-transparent py-4'}`}>
+      <nav className={`fixed top-0 w-full z-50 transition-all duration-300 border-b ${scrolled ? 'bg-deep/90 backdrop-blur-xl border-slate-800/60 py-3' : 'bg-transparent border-transparent py-4'}`}>
         <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center rounded-lg shadow-lg shadow-blue-600/20">
@@ -157,7 +157,7 @@ export const Landing = () => {
                   <BrainCircuit size={18} />
                   Criar Conta Grátis
                 </Link>
-                <Link to="/login" className="px-6 py-3 bg-elevated/50 hover:bg-[#1E293B] border border-slate-800 hover:border-slate-700 backdrop-blur-md text-slate-300 text-sm font-semibold rounded-xl transition-all flex items-center justify-center">
+                <Link to="/login" className="px-6 py-3 bg-elevated/50 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 backdrop-blur-md text-slate-300 text-sm font-semibold rounded-xl transition-all flex items-center justify-center">
                   Fazer Login
                 </Link>
               </div>
@@ -179,9 +179,9 @@ export const Landing = () => {
       </section>
 
       {/* TICKER SECTION */}
-      <div className="w-full bg-[#03060D] border-y border-slate-900 overflow-hidden py-2.5 flex relative z-10">
-        <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-[#03060D] to-transparent z-10"></div>
-        <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-[#03060D] to-transparent z-10"></div>
+      <div className="w-full bg-deep border-y border-slate-900 overflow-hidden py-2.5 flex relative z-10">
+        <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-deep to-transparent z-10"></div>
+        <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-deep to-transparent z-10"></div>
         
         <div className="flex animate-scroll whitespace-nowrap gap-12 text-slate-500 text-[10px] md:text-xs font-mono uppercase tracking-widest opacity-70 hover:opacity-100 transition-opacity">
           {loading ? (
@@ -237,7 +237,7 @@ export const Landing = () => {
                             Nossa IA "lê" o sentimento global analisando notícias e fluxos institucionais em tempo real.
                         </p>
                     </div>
-                    <div className="mt-4 relative h-24 w-full bg-[#03060D]/50 rounded-xl border border-slate-800/60 overflow-hidden flex items-center justify-center z-10 backdrop-blur-sm">
+                    <div className="mt-4 relative h-24 w-full bg-deep/50 rounded-xl border border-slate-800/60 overflow-hidden flex items-center justify-center z-10 backdrop-blur-sm">
                         <NeuralGrid />
                         <div className="absolute bottom-2 right-2 flex items-center gap-2 px-2 py-0.5 bg-black/60 rounded border border-slate-800 backdrop-blur-sm z-20">
                              <Activity size={10} className="text-blue-400" />
@@ -325,7 +325,7 @@ export const Landing = () => {
       </section>
 
       {/* RESULTS */}
-      <section className="py-20 bg-gradient-to-b from-[#02040a] to-[#050810] border-t border-slate-900 relative">
+      <section className="py-20 bg-gradient-to-b from-deep to-deep border-t border-slate-900 relative">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-1 bg-gradient-to-r from-transparent via-blue-900/50 to-transparent"></div>
           <div className="max-w-6xl mx-auto px-6">
              <div className="flex flex-col md:flex-row items-end justify-between mb-12 gap-6">
@@ -527,7 +527,7 @@ const TestimonialCard = ({ name, role, text, image }: TestimonialCardProps) => (
 );
 
 const FaqItem = ({ question, answer, isOpen, onClick }: { question: string, answer: string, isOpen: boolean, onClick: () => void }) => (
-    <div className="border border-slate-800 rounded-xl bg-[#03060D] overflow-hidden">
+    <div className="border border-slate-800 rounded-xl bg-deep overflow-hidden">
         <button onClick={onClick} className="w-full px-5 py-3 text-left flex items-center justify-between font-semibold text-sm text-slate-200 hover:text-white transition-colors">
             {question}
             <ChevronDown size={16} className={`transition-transform duration-300 ${isOpen ? 'rotate-180 text-blue-500' : 'text-slate-600'}`} />

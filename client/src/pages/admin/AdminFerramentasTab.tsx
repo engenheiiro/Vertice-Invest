@@ -1,6 +1,8 @@
 import React from 'react';
-import { Settings, HardDrive, Scissors, ShieldAlert, ClipboardList, Search, RefreshCw, Zap, Trash2 } from 'lucide-react';
+import { Settings, HardDrive, Scissors, ShieldAlert, ClipboardList, Search, RefreshCw, Zap, Trash2, Play } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { TunablesCard } from '../../components/admin/TunablesCard';
+import { useDemo } from '../../contexts/DemoContext';
 
 interface CacheData {
     ticker: string;
@@ -37,7 +39,16 @@ export const AdminFerramentasTab: React.FC<Props> = ({
     splitTicker, setSplitTicker, isFixingSplit,
     testPaymentLoading, discardLogs, isLoadingLogs,
     onSaveBacktestConfig, onClearRadarHistory, onCacheSearch, onFixSplit, onTestPayment, onLoadDiscardLogs,
-}) => (
+}) => {
+    const navigate = useNavigate();
+    const { startDemo } = useDemo();
+
+    const handleSimulateTutorial = () => {
+        navigate('/dashboard');
+        setTimeout(startDemo, 100);
+    };
+
+    return (
     <>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             {/* Parâmetros operacionais editáveis */}
@@ -102,6 +113,19 @@ export const AdminFerramentasTab: React.FC<Props> = ({
                     <button type="submit" disabled={isFixingSplit || !splitTicker} className="px-3 py-2 bg-yellow-600/20 text-yellow-500 border border-yellow-600/30 rounded-xl hover:text-white hover:bg-yellow-600/40 transition-colors"><Zap size={16} /></button>
                 </form>
             </div>
+
+            {/* Simular Tutorial (Onboarding) */}
+            <div className="bg-base border border-slate-800 rounded-2xl p-6 shadow-lg">
+                <div className="flex items-center gap-2 mb-4">
+                    <Play size={18} className="text-blue-500" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Simular Tutorial</h3>
+                </div>
+                <p className="text-[10px] text-slate-400 mb-4">Inicia o tour de onboarding (modo demonstração) a partir do Terminal, como um novo usuário veria.</p>
+                <button onClick={handleSimulateTutorial} className="w-full py-2 bg-blue-600/10 border border-blue-600/30 text-blue-400 hover:bg-blue-600/20 hover:text-blue-300 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all">
+                    <Play size={14} fill="currentColor" />
+                    Iniciar Demonstração
+                </button>
+            </div>
         </div>
 
         {/* Testar Pagamento */}
@@ -144,7 +168,7 @@ export const AdminFerramentasTab: React.FC<Props> = ({
                             <th className="p-3 font-bold text-slate-500 uppercase">Detalhe</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/50 bg-[#05070A]">
+                    <tbody className="divide-y divide-slate-800/50 bg-deep">
                         {discardLogs.length === 0 ? (
                             <tr><td colSpan={4} className="p-8 text-center text-slate-500">Nenhum descarte recente.</td></tr>
                         ) : (
@@ -162,4 +186,5 @@ export const AdminFerramentasTab: React.FC<Props> = ({
             </div>
         </div>
     </>
-);
+    );
+};
