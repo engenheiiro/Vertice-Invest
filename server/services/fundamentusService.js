@@ -153,11 +153,13 @@ export const fundamentusService = {
             return dataMap;
 
         } catch (error) {
-            // Log mais detalhado do erro
+            // Não-fatal: o IP do Render é bloqueado pelo Fundamentus (403). A rotina
+            // segue com fundamentos em cache + refresh manual (sync:prod). Por isso é
+            // warn, não error (evita ruído/alerta para uma condição esperada e tratada).
             if (error.response) {
-                logger.error(`❌ Erro Scraping Ações: ${error.message} | Status: ${error.response.status}`);
+                logger.warn(`⚠️ Scraping Ações indisponível: ${error.message} | Status: ${error.response.status} (usando cache)`);
             } else {
-                logger.error(`❌ Erro Scraping Ações: ${error.message}`);
+                logger.warn(`⚠️ Scraping Ações indisponível: ${error.message} (usando cache)`);
             }
             return new Map();
         }
@@ -226,10 +228,11 @@ export const fundamentusService = {
             return dataMap;
 
         } catch (error) {
+            // Não-fatal (ver getStocksMap): 403 do Render → segue com cache + sync:prod manual.
             if (error.response) {
-                logger.error(`❌ Erro Scraping FIIs: ${error.message} | Status: ${error.response.status}`);
+                logger.warn(`⚠️ Scraping FIIs indisponível: ${error.message} | Status: ${error.response.status} (usando cache)`);
             } else {
-                logger.error(`❌ Erro Scraping FIIs: ${error.message}`);
+                logger.warn(`⚠️ Scraping FIIs indisponível: ${error.message} (usando cache)`);
             }
             return new Map();
         }
