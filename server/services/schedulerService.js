@@ -32,6 +32,19 @@ import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 const SCHEDULER_TZ = 'America/Sao_Paulo';
 const schedule = (expression, fn) => cron.schedule.call(cron, expression, fn, { timezone: SCHEDULER_TZ });
 
+// (EXTERNAL_SCHEDULER) Os jobs pesados (sync pós-mercado + snapshot) podem ser
+// rodados por Render Cron Jobs — independentes do web service, que hiberna e
+// perde execuções. Defina EXTERNAL_SCHEDULER=true no web service para desativar
+// essas rotinas in-app e evitar execução dupla. Default = roda in-app (atual).
+const EXTERNAL_SCHEDULER = process.env.EXTERNAL_SCHEDULER === 'true';
+const scheduleHeavy = (expression, fn) => {
+    if (EXTERNAL_SCHEDULER) {
+        logger.info(`⏭️ Cron pesado '${expression}' desativado in-app (EXTERNAL_SCHEDULER=true → Render Cron Job).`);
+        return null;
+    }
+    return schedule(expression, fn);
+};
+
 // --- LÓGICA DE SNAPSHOT ISOLADA (Reutilizável) ---
 export const runDailySnapshot = async (force = false) => {
     const today = new Date();
@@ -342,7 +355,7 @@ export const initScheduler = () => {
     });
 
     // 5b. Sync Tarde/Pós-Mercado (18:30) — B3 fecha às 17:30, dados completos do dia
-    schedule('30 18 * * *', async () => {
+    scheduleHeavy('30 18 * * *', async () => {
         logger.info("⏰ Rotina Diária V3 — Pós-Mercado (18:30)");
         try {
             const syncResult = await syncService.performFullSync();
@@ -478,7 +491,7 @@ export const initScheduler = () => {
     // O TTL index em RefreshToken.expiryDate e AuditLog.timestamp já limpa automaticamente.
     // Este job é belt-and-suspenders: remove RefreshTokens expirados não capturados pelo TTL
     // (ex.: atraso do processo TTL do MongoDB em coleções grandes).
-    schedule('30 2 * * *', async () => {
+    scheduleHeavy('30 2 * * *', async () => {
         try {
             const result = await RefreshToken.deleteMany({ expiryDate: { $lt: new Date() } });
             if (result.deletedCount > 0) {
