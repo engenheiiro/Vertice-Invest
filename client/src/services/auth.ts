@@ -225,6 +225,27 @@ export const authService = {
       return resData;
   },
 
+  // (3.17) Atualiza a foto de perfil (data-URL já redimensionada no cliente).
+  async updateAvatar(avatar: string) {
+      const response = await this.api('/api/me/avatar', {
+          method: 'PUT',
+          body: JSON.stringify({ avatar })
+      });
+      const resData = await response.json();
+      if (!response.ok) throw new Error(resData.message || "Erro ao atualizar foto");
+      if (resData.user) localStorage.setItem('user', JSON.stringify(resData.user));
+      return resData;
+  },
+
+  // (3.17) Remove a foto de perfil.
+  async removeAvatar() {
+      const response = await this.api('/api/me/avatar', { method: 'DELETE' });
+      const resData = await response.json();
+      if (!response.ok) throw new Error(resData.message || "Erro ao remover foto");
+      if (resData.user) localStorage.setItem('user', JSON.stringify(resData.user));
+      return resData;
+  },
+
   async markTutorialSeen() {
       await this.api('/api/tutorial-seen', { method: 'POST' });
   },

@@ -55,7 +55,8 @@ const MarketAssetSchema = new mongoose.Schema({
   
   // --- Controle de Saúde do Ativo ---
   isActive: { type: Boolean, default: true },
-  failCount: { type: Number, default: 0 }, // Contador de falhas consecutivas de sync
+  failCount: { type: Number, default: 0 }, // Dias distintos com falha de cotação (não falhas por request)
+  lastFailDate: { type: Date, default: null }, // Último dia em que uma falha foi contabilizada — gate de 1 falha/dia
 
   // --- Qualidade e Atualidade dos Dados ---
   // Data em que os dados fundamentalistas foram coletados pela última vez.

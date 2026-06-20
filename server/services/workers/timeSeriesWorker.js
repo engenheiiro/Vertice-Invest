@@ -96,37 +96,43 @@ export const timeSeriesWorker = {
 
             for (let i = 0; i < totalAssets; i += BATCH_SIZE) {
                 const batch = assets.slice(i, i + BATCH_SIZE);
-                
+                const now = new Date();
+
+                // Carrega o histórico de todo o lote em uma única query. O .lean() evita
+                // hidratar o array grande de candles quando só vamos ler (e renovar
+                // lastUpdated em massa via updateMany), reduzindo overhead no caminho quente.
+                const batchTickers = batch.map(a => a.ticker);
+                const histDocs = await AssetHistory.find({ ticker: { $in: batchTickers } }).lean();
+                const histByTicker = new Map(histDocs.map(d => [d.ticker, d]));
+
+                let batchDidFetch = false;  // só dorme entre lotes que realmente bateram no Yahoo
+                const touchTickers = [];    // frescos: renova lastUpdated em massa, sem .save() por doc
+
                 await Promise.all(batch.map(async (asset) => {
-                    let historyEntry = await AssetHistory.findOne({ ticker: asset.ticker });
-                    
+                    let historyEntry = histByTicker.get(asset.ticker) || null;
+
                     // Se não tem histórico ou está desatualizado (> 7 dias), tenta buscar
-                    const now = new Date();
                     const isStale = historyEntry && (now - new Date(historyEntry.lastUpdated)) > 7 * 24 * 60 * 60 * 1000;
-                    
+
                     if (!historyEntry || isStale || !historyEntry.history || historyEntry.history.length < 20) {
+                        batchDidFetch = true;
                         try {
                             const externalHistory = await externalMarketService.getFullHistory(asset.ticker, asset.type);
                             if (externalHistory && externalHistory.length > 0) {
-                                if (historyEntry) {
-                                    historyEntry.history = externalHistory;
-                                    historyEntry.lastUpdated = now;
-                                    await historyEntry.save();
-                                } else {
-                                    historyEntry = await AssetHistory.create({
-                                        ticker: asset.ticker,
-                                        history: externalHistory,
-                                        lastUpdated: now
-                                    });
-                                }
+                                await AssetHistory.updateOne(
+                                    { ticker: asset.ticker },
+                                    { $set: { history: externalHistory, lastUpdated: now } },
+                                    { upsert: true }
+                                );
+                                // Reaproveita o array recém-buscado para o cálculo, sem reler do banco.
+                                historyEntry = { ticker: asset.ticker, history: externalHistory, lastUpdated: now };
                             }
                         } catch (e) {
                             logger.warn(`[TimeSeriesWorker] Falha ao buscar histórico para ${asset.ticker}`);
                         }
                     } else {
                         // "Touch" para que o monitor de admin veja que o cálculo foi renovado hoje
-                        historyEntry.lastUpdated = now;
-                        await historyEntry.save();
+                        touchTickers.push(asset.ticker);
                     }
 
                     if (!historyEntry || !historyEntry.history || historyEntry.history.length < 20) return;
@@ -137,7 +143,7 @@ export const timeSeriesWorker = {
 
                     const sma200 = calculateSMA(prices, 200);
                     const ema50 = calculateEMA(prices.slice(0, 50), 50); // Passa os últimos 50 dias
-                    
+
                     // Volatilidade baseada nos últimos 252 dias úteis (1 ano)
                     const volatilityPrices = prices.slice(0, 252);
                     const volatility = calculateVolatility(volatilityPrices);
@@ -147,9 +153,12 @@ export const timeSeriesWorker = {
                         // Alinha retornos do ativo com IBOV por data, evitando desalinhamento
                         // causado por dias com preço=0 (gaps) que encurtam a série do ativo mas
                         // não a do IBOV, corrompendo a covariância e zerando o beta.
-                        const sortedForBeta = historyEntry.history
+                        // sortedHistory já está newest→oldest; filtrar e inverter evita um
+                        // segundo sort O(n log n) sobre a mesma série (reverse opera sobre
+                        // o array novo do filter, sem mutar a série original).
+                        const sortedForBeta = sortedHistory
                             .filter(h => h.close > 0 && isFinite(h.close))
-                            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // oldest→newest
+                            .reverse(); // → oldest→newest
 
                         const alignedAssetReturns = [];
                         const alignedIbovReturns = [];
@@ -183,11 +192,22 @@ export const timeSeriesWorker = {
                     });
                 }));
 
+                // Renova lastUpdated dos ativos frescos em uma única operação por lote.
+                if (touchTickers.length > 0) {
+                    await AssetHistory.updateMany(
+                        { ticker: { $in: touchTickers } },
+                        { $set: { lastUpdated: now } }
+                    );
+                }
+
                 processedCount += batch.length;
                 logger.info(`[TimeSeriesWorker] Processando lote... ${processedCount}/${totalAssets} ativos.`);
-                
-                // Rate limit protection entre lotes
-                await new Promise(r => setTimeout(r, 1000));
+
+                // Rate limit protection — só pausa entre lotes que dispararam busca externa no Yahoo.
+                // Em runs "quentes" (tudo fresco) não há throttle a aplicar, eliminando o piso ocioso.
+                if (batchDidFetch) {
+                    await new Promise(r => setTimeout(r, 1000));
+                }
             }
 
             if (operations.length > 0) {
@@ -197,13 +217,13 @@ export const timeSeriesWorker = {
                 // Atualiza estatísticas no SystemConfig
                 await SystemConfig.findOneAndUpdate(
                     { key: 'MACRO_INDICATORS' },
-                    { 
-                        $set: { 
+                    {
+                        $set: {
                             lastTimeSeriesStats: {
                                 assetsProcessed: operations.length,
                                 timestamp: new Date()
                             }
-                        } 
+                        }
                     },
                     { upsert: true }
                 );

@@ -98,6 +98,87 @@ describe('scoringEngine.processAsset — gates de descarte', () => {
     });
 });
 
+// FII saudável e líquido, com dado-base completo (patrimônio presente).
+const makeFii = (overrides = {}) => ({
+    ticker: 'TEST11',
+    type: 'FII',
+    name: 'FII Teste',
+    sector: 'Logística',
+    fiiSubType: 'TIJOLO',
+    price: 100,
+    dbFlags: { isBlacklisted: false, isTier1: false },
+    metrics: {
+        ticker: 'TEST11', price: 100, pl: 0, pvp: 0.92, roe: 0, netMargin: 0,
+        evEbitda: 0, revenueGrowth: 0, debtToEquity: 0, payout: 0, dy: 11,
+        marketCap: 2000000000, avgLiquidity: 5000000, vacancy: 3, capRate: 9,
+        qtdImoveis: 25, volatility: 12, beta: 0.4, sector: 'Logística', fiiSubType: 'TIJOLO',
+        // FIIs não têm essas métricas de empresa — estruturalmente ausentes.
+        _missing: { roe: true, netMargin: true, revenueGrowth: true, marketCap: false },
+        _staleDays: 20,
+    },
+    ...overrides,
+});
+
+describe('scoringEngine — confiança de FII (anti-compressão em 85)', () => {
+    it('FII com dados aplicáveis completos NÃO é teto-limitado em 85 (pode exceder)', () => {
+        const res = scoringEngine.processAsset(makeFii(), DEFAULT_CONTEXT);
+        expect(res._discarded).toBeUndefined();
+        const best = Math.max(res.scores.DEFENSIVE, res.scores.MODERATE, res.scores.BOLD);
+        // Antes do fix, revenueGrowth/roe ausentes derrubavam a confiança a 60 → teto 85.
+        expect(best).toBeGreaterThan(85);
+    });
+
+    it('não credita "Crescimento/Rentabilidade Ausentes" na confiança de FII (inaplicável)', () => {
+        const res = scoringEngine.processAsset(makeFii(), DEFAULT_CONTEXT);
+        const conf = res.auditLog.filter(a => a.category === 'Dados e Confiança').map(a => a.factor);
+        expect(conf).not.toContain('Dados de Crescimento Ausentes');
+        expect(conf).not.toContain('Dados de Rentabilidade Ausentes');
+    });
+
+    it('ações continuam penalizadas por dados de empresa ausentes (teto preservado)', () => {
+        const stock = makeStock({
+            metrics: {
+                ...makeStock().metrics,
+                _missing: { revenueGrowth: true, roe: true, netMargin: true, payout: false, marketCap: false },
+            },
+        });
+        const res = scoringEngine.processAsset(stock, DEFAULT_CONTEXT);
+        const conf = res.auditLog.filter(a => a.category === 'Dados e Confiança').map(a => a.factor);
+        expect(conf).toContain('Dados de Crescimento Ausentes');
+        // confidence 60 → teto 85 para ação com dados de empresa faltando
+        expect(Math.max(res.scores.DEFENSIVE, res.scores.MODERATE, res.scores.BOLD)).toBeLessThanOrEqual(85);
+    });
+});
+
+describe('scoringEngine — guarda de tendência de baixa (anti value-trap)', () => {
+    // Mesma ação, variando só o desvio preço×SMA200. Em downtrend forte deve perder
+    // pontos de perfil (e cair para WAIT); em uptrend não recebe penalidade.
+    const trendStock = (price, sma200) => makeStock({
+        metrics: { ...makeStock().metrics, sma200, ema50: sma200, price },
+        price,
+    });
+
+    it('penaliza ação barata em downtrend severo (>25% abaixo da SMA200)', () => {
+        const up = scoringEngine.processAsset(trendStock(40, 38), DEFAULT_CONTEXT);     // +5% acima
+        const down = scoringEngine.processAsset(trendStock(28, 40), DEFAULT_CONTEXT);   // -30% abaixo
+        expect(down.scores.MODERATE).toBeLessThan(up.scores.MODERATE);
+        const factors = down.auditLog.map(a => a.factor);
+        expect(factors.some(f => f.includes('Tendência de Baixa'))).toBe(true);
+    });
+
+    it('NÃO penaliza ação em tendência de alta (preço acima da SMA200)', () => {
+        const res = scoringEngine.processAsset(trendStock(45, 38), DEFAULT_CONTEXT);
+        const factors = res.auditLog.map(a => a.factor);
+        expect(factors.some(f => f.includes('Tendência de Baixa'))).toBe(false);
+    });
+
+    it('downtrend leve (<8% abaixo) não dispara penalidade', () => {
+        const res = scoringEngine.processAsset(trendStock(37, 39), DEFAULT_CONTEXT); // -5%
+        const factors = res.auditLog.map(a => a.factor);
+        expect(factors.some(f => f.includes('Tendência de Baixa'))).toBe(false);
+    });
+});
+
 describe('scoringEngine.processAsset — saída de ativo saudável', () => {
     it('não descarta e produz scores por perfil + auditLog + structural', () => {
         const res = scoringEngine.processAsset(makeStock(), DEFAULT_CONTEXT);

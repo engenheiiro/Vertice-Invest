@@ -26,7 +26,7 @@ concluída. O que resta abaixo é evolução: acessibilidade, performance,
 arquitetura, DevOps, observabilidade, qualidade de código, novas
 funcionalidades — e os ajustes pontuais solicitados.
 
-Atualizado em: 2026-06-15.
+Atualizado em: 2026-06-17.
 
 ----------------------------------------------------------------
 COMO LER ESTE PLANO (legenda)
@@ -57,9 +57,9 @@ PRIORIDADE SUGERIDA
    → Ver PLANO-MELHORIAS-CONCLUIDO.txt.
 
 PRÓXIMO FOCO sugerido (pedidos do usuário): tema claro + correções de
-   UI/perfil CONCLUÍDOS (3.8/3.11/3.12/3.14/3.15/3.16/3.18/3.19/3.20/3.22
-   — ver CONCLUIDO). Restam os maiores: upload de avatar (3.17), novos
-   campos pessoais + CEP (3.21) e Automação de IR (7.11).
+   UI/perfil CONCLUÍDOS — incluindo upload de avatar (3.17) e novos campos
+   pessoais + CEP (3.21), entregues em 2026-06-16 (ver CONCLUIDO). O pedido
+   maior que resta é a Automação de IR (7.11).
 
 2ª ONDA: Performance + Acessibilidade + TypeScript.
 3ª ONDA: DevOps (Docker/deploy) + Observabilidade.
@@ -82,41 +82,15 @@ Seção — ✔ Concluída (2.1–2.10). Ver PLANO-MELHORIAS-CONCLUIDO.txt.
 ================================================================
 3. UI / DESIGN / EXPERIÊNCIA
 ================================================================
-(Itens 3.1, 3.3–3.20 e 3.22 — exceto 3.2, 3.17 e 3.21 — já concluídos.
+(Itens 3.1, 3.3–3.22 — exceto 3.2 — já concluídos.
  Ver arquivo CONCLUIDO.)
 
 3.2  Quebrar modais gigantes em etapas
      Modal de adicionar ativo (700 linhas) é confuso. Dividir em passos.
      [MEDIA] [OPUS]
 
-3.17 Upload de foto de perfil  [NOVO]
-     Hoje "Editar Avatar" (ProfileIdentity.tsx:84-86) é placeholder sem
-     ação; não há campo no User nem endpoint, e o avatar é só as
-     iniciais (linhas 37–40). Plano:
-       • Backend: campo "avatar" em server/models/User.js + endpoint
-         POST /api/auth/avatar. Decidir armazenamento (recomendado:
-         redimensionar/comprimir no cliente e guardar data-URL pequena
-         no Mongo, ou storage externo).
-       • Frontend: input de arquivo com preview/resize e exibição do
-         avatar no lugar das iniciais.
-     OPUS pela decisão de armazenamento e validação (tipo/tamanho/segurança).
-     [MEDIA] [OPUS]
-
-3.21 Novos campos em "Informações Pessoais"  [NOVO]
-     Em ProfileSettings.tsx + server/models/User.js + authController.js
-     updateProfile (324-367). Adicionar:
-       (a) Principal Corretora — select com a lista + "Outra":
-           XP Investimentos, BTG Pactual, Rico, Clear, Inter,
-           Nubank/NuInvest, Itaú/Íon, Toro, Genial, Ágora, Modalmais,
-           Guide, Órama, Santander Corretora, Caixa Corretora.
-       (b) Cidade via CEP — input de CEP com autopreenchimento (ViaCEP,
-           grátis); preencher o máximo possível do endereço.
-       (c) Data de Nascimento.
-       (d) Salário atual.
-     Backend: novos campos no User, validação com schema. LGPD —
-     avaliar cifrar salário/nascimento como o CPF já é (utils/encryption.js).
-     OPUS por dados sensíveis + integração de CEP.
-     [MEDIA] [OPUS]
+(3.17 upload de avatar e 3.21 novos campos pessoais + CEP — CONCLUÍDOS
+ em 2026-06-16. Ver PLANO-MELHORIAS-CONCLUIDO.txt.)
 
 
 ================================================================
@@ -174,66 +148,18 @@ sem auditoria automática.)
      Modal de ativo e tabela re-desenham a cada tecla. Memorizar.
      [MEDIA] [OPUS]
 
-(5.2, 5.5, 5.6, 5.7, 5.9, 5.10 já concluídos — ver arquivo CONCLUIDO.)
-
-5.3  Promise.allSettled nas cotações
-     Se 1 cotação falha, toda a busca falha. Trocar para "cada uma por si".
-     [MEDIA] [OPUS]
-
-5.4  Paralelizar consultas em getWalletData
-     Algumas consultas ao banco são sequenciais; rodar juntas.
-     [MEDIA] [OPUS]
-
-5.8  Revisar consultas N+1 restantes
-     Encontrar onde o código faz "1 consulta por item" em vez de 1 só.
-     [MEDIA] [OPUS]
+(5.2–5.10 já concluídos — ver arquivo CONCLUIDO. 5.3/5.4/5.8 entregues
+ em 2026-06-17.)
 
 
 ================================================================
 6. BACKEND E ARQUITETURA
 ================================================================
-6.1  Tratador de erros estruturado
-     Hoje o erro só devolve a mensagem. Padronizar com
-     código + mensagem + detalhe.
-     [MEDIA] [OPUS]
-
-6.2  Contador de segurança na recursão de getWalletData
-     A função se chama de novo após "auto-curar"; adicionar limite para
-     nunca entrar em loop.
-     [BAIXA] [OPUS]
-
-6.3  Quebrar getWalletData (~300 linhas) em partes
-     Função gigante e difícil de testar; dividir em funções menores.
-     [MEDIA] [OPUS]
-
-6.4  Quebrar rebuildUserHistory (~200 linhas)
-     Mesma ideia, na função que reconstrói o histórico da carteira.
-     [MEDIA] [OPUS]
-
-6.5  Tornar explícitas as "falhas silenciosas"
-     Alguns serviços engolem erro sem avisar. Ou avisa, ou comenta
-     claramente que é proposital.
-     [BAIXA] [OPUS]
-
-6.6  Logs estruturados (em vez de texto solto)
-     Padronizar logs em formato de dados (facilita busca).
-     [MEDIA] [SONNET]
-
-6.7  Versionar os "raspadores" (scraping) frágeis
-     Fundamentus/FII quebram se o site mudar o HTML. Isolar e versionar.
-     [MEDIA] [OPUS]
-
-6.8  Completar a documentação Swagger da API
-     Várias rotas não estão documentadas no /api/docs. Anotar todas.
-     [MEDIA] [SONNET]
-
-6.9  Circuit breaker na conexão do MongoDB
-     Se o banco fica lento, os pedidos acumulam. Adicionar "disjuntor".
-     [MEDIA] [OPUS]
-
-6.10 Normalizar tratamento de datas
-     Há mistura de Date/string/timezone. Centralizar num utilitário único.
-     [MEDIA] [OPUS]
+Seção — ✔ Concluída (6.1–6.10), toda em 2026-06-17: tratador de erros
+estruturado, limite de recursão, quebra do getWalletData, quebra do
+rebuildUserHistory, falhas silenciosas explícitas, logs estruturados,
+raspadores Fundamentus versionados, Swagger completo, circuit breaker do
+MongoDB e normalização de datas. Ver PLANO-MELHORIAS-CONCLUIDO.txt.
 
 
 ================================================================
@@ -246,13 +172,8 @@ bem testado. Aqui são EVOLUÇÕES, não correções.)
      Hoje só há RSI. Adicionar mais sinais técnicos.
      [ALTA] [OPUS]
 
-7.2  Detecção de divergências nos sinais
-     Identificar quando preço e indicador "discordam" (sinal de virada).
-     [ALTA] [OPUS]
-
-7.3  Filtro por volume nos sinais
-     Considerar volume negociado para validar o sinal.
-     [MEDIA] [OPUS]
+(7.2 Detecção de divergências e 7.3 Filtro por volume — CONCLUÍDOS em
+ 2026-06-17. Ver PLANO-MELHORIAS-CONCLUIDO.txt.)
 
 7.4  Múltiplos prazos (timeframes) nos sinais
      Analisar diário/semanal, não só um período fixo.
@@ -261,6 +182,10 @@ bem testado. Aqui são EVOLUÇÕES, não correções.)
 7.5  Backtest visível ao usuário
      Mostrar como a recomendação teria performado no passado.
      [ALTA] [OPUS]
+     (Nota: o backtest da Carteira Recomendada JÁ EXISTE — curva
+      RecommendedPortfolioCurve exposta no painel admin via /research/accuracy.
+      Decisão de 2026-06-17: manter SÓ no admin por enquanto; não expor ao
+      usuário ainda.)
 
 7.6  Explicações de IA mais ricas (já existe base)
      Ampliar narrativas "por que comprar/aguardar" por ativo.

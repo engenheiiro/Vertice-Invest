@@ -63,6 +63,9 @@ const getLiveWalletEquity = async (userId) => {
         const tickers = assets.filter((a) => !['CASH', 'FIXED_INCOME'].includes(a.type)).map((a) => a.ticker);
         if (tickers.length > 0) await marketDataService.refreshQuotesBatch(tickers);
 
+        // (5.8) Cotações em lote (1 query) em vez de um findOne por ativo (N+1).
+        const marketMap = await marketDataService.getMarketDataMap(tickers);
+
         let totalEquity = 0;
         for (const asset of assets) {
             const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1;
@@ -70,8 +73,8 @@ const getLiveWalletEquity = async (userId) => {
             if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
                 val = accrueFixedIncomeValue(asset, { cdiRate: cdi, calcDate });
             } else {
-                const mData = await marketDataService.getMarketDataByTicker(asset.ticker);
-                val = safeValue(asset.quantity, mData.price || 0);
+                const mData = marketMap.get(asset.ticker);
+                val = safeValue(asset.quantity, mData?.price || 0);
             }
             totalEquity += safeMult(val, multiplier);
         }

@@ -1,9 +1,44 @@
-import React, { useState } from 'react';
-import { ShieldCheck, Calendar, MapPin, User, Palette, Check, RotateCcw } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { ShieldCheck, Calendar, MapPin, Palette, Check, RotateCcw, Camera, Trash2, Loader2 } from 'lucide-react';
 import { useAuth, UserPlan, BannerPreset } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { authService } from '../../services/auth';
 import { PlanBadge } from '../ui/PlanBadge';
+
+// (3.17) Redimensiona/comprime a imagem escolhida para um quadrado 256×256
+// (crop "cover") e devolve uma data-URL pequena. Prefere WebP; cai para JPEG
+// se o navegador não suportar WebP no canvas. O resize no cliente mantém o
+// payload enviado ao backend pequeno (sem libs externas).
+const AVATAR_SIZE = 256;
+const resizeToDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Falha ao ler a imagem.'));
+        reader.onload = () => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('Imagem inválida.'));
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = AVATAR_SIZE;
+                canvas.height = AVATAR_SIZE;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return reject(new Error('Canvas indisponível.'));
+                // Crop "cover": usa o menor lado para preencher o quadrado sem distorcer.
+                const side = Math.min(img.width, img.height);
+                const sx = (img.width - side) / 2;
+                const sy = (img.height - side) / 2;
+                ctx.drawImage(img, sx, sy, side, side, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
+                let url = canvas.toDataURL('image/webp', 0.82);
+                if (!url.startsWith('data:image/webp')) url = canvas.toDataURL('image/jpeg', 0.82);
+                resolve(url);
+            };
+            img.src = reader.result as string;
+        };
+        reader.readAsDataURL(file);
+    });
+
+const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+const MAX_ORIGINAL_BYTES = 8 * 1024 * 1024; // 8MB — teto do arquivo de origem
 
 // Presets de banner escolhíveis (3.20). As chaves espelham a allowlist do
 // backend (User.bannerColor / updateProfile). Strings de classe completas p/
@@ -22,6 +57,49 @@ export const ProfileIdentity = () => {
     const { addToast } = useToast();
     const [pickerOpen, setPickerOpen] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleAvatarPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = ''; // permite re-selecionar o mesmo arquivo
+        if (!file) return;
+
+        if (!ACCEPTED_TYPES.includes(file.type)) {
+            addToast('Formato inválido. Use PNG, JPEG ou WebP.', 'error');
+            return;
+        }
+        if (file.size > MAX_ORIGINAL_BYTES) {
+            addToast('Imagem muito grande (máx. 8MB).', 'error');
+            return;
+        }
+
+        setUploadingAvatar(true);
+        try {
+            const dataUrl = await resizeToDataUrl(file);
+            await authService.updateAvatar(dataUrl);
+            await refreshProfile();
+            addToast('Foto de perfil atualizada.', 'success');
+        } catch (err: any) {
+            addToast(err?.message || 'Não foi possível atualizar a foto.', 'error');
+        } finally {
+            setUploadingAvatar(false);
+        }
+    };
+
+    const handleAvatarRemove = async () => {
+        if (uploadingAvatar) return;
+        setUploadingAvatar(true);
+        try {
+            await authService.removeAvatar();
+            await refreshProfile();
+            addToast('Foto de perfil removida.', 'success');
+        } catch (err: any) {
+            addToast(err?.message || 'Não foi possível remover a foto.', 'error');
+        } finally {
+            setUploadingAvatar(false);
+        }
+    };
 
     // Fallback seguro
     const userPlan = user?.plan || 'GUEST';
@@ -117,10 +195,32 @@ export const ProfileIdentity = () => {
             </div>
 
             <div className="px-6 relative flex-1 flex flex-col">
-                <div className="w-20 h-20 rounded-xl bg-card border-4 border-base -mt-10 flex items-center justify-center text-xl font-bold text-slate-300 shadow-xl relative overflow-hidden group-hover:border-slate-700 transition-colors">
-                    <span className="z-10">{initials}</span>
-                    <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                </div>
+                <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingAvatar}
+                    aria-label={user?.avatar ? 'Trocar foto de perfil' : 'Adicionar foto de perfil'}
+                    className="w-20 h-20 rounded-xl bg-card border-4 border-base -mt-10 flex items-center justify-center text-xl font-bold text-slate-300 shadow-xl relative overflow-hidden group-hover:border-slate-700 transition-colors cursor-pointer disabled:cursor-wait"
+                >
+                    {user?.avatar ? (
+                        <img src={user.avatar} alt="Foto de perfil" className="absolute inset-0 w-full h-full object-cover" />
+                    ) : (
+                        <span className="z-10">{initials}</span>
+                    )}
+                    {/* Overlay de ação no hover (ou enquanto envia) */}
+                    <div className={`absolute inset-0 bg-black/55 flex items-center justify-center transition-opacity ${uploadingAvatar ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}>
+                        {uploadingAvatar
+                            ? <Loader2 size={18} className="text-white animate-spin" />
+                            : <Camera size={18} className="text-white" />}
+                    </div>
+                </button>
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleAvatarPick}
+                    className="hidden"
+                />
 
                 <div className="mt-4 mb-6">
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -135,7 +235,7 @@ export const ProfileIdentity = () => {
                 <div className="space-y-4 flex-1">
                     <div className="flex items-center gap-3 text-slate-400 text-xs">
                         <MapPin size={14} />
-                        <span>Brasil</span>
+                        <span>{user?.city ? `${user.city}${user.state ? `/${user.state}` : ''}` : 'Brasil'}</span>
                     </div>
                     <div className="flex items-center gap-3 text-slate-400 text-xs">
                         <Calendar size={14} />
@@ -169,10 +269,26 @@ export const ProfileIdentity = () => {
                     </div>
                 </div>
 
-                <div className="py-6 mt-auto">
-                    <button className="w-full py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2">
-                        <User size={14} /> Editar Avatar
+                <div className="py-6 mt-auto flex gap-2">
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingAvatar}
+                        className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-wait"
+                    >
+                        {uploadingAvatar
+                            ? <><Loader2 size={14} className="animate-spin" /> Enviando…</>
+                            : <><Camera size={14} /> {user?.avatar ? 'Trocar Foto' : 'Adicionar Foto'}</>}
                     </button>
+                    {user?.avatar && (
+                        <button
+                            onClick={handleAvatarRemove}
+                            disabled={uploadingAvatar}
+                            aria-label="Remover foto de perfil"
+                            className="px-3 py-2 bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-900/50 text-slate-400 hover:text-red-400 text-xs font-bold rounded-lg transition-colors flex items-center justify-center disabled:opacity-50"
+                        >
+                            <Trash2 size={14} />
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

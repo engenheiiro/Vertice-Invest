@@ -21,8 +21,10 @@ const AlgorithmPerformanceSchema = new mongoose.Schema({
   topPicksSnapshot: [{
     ticker: String,
     startPrice: Number,
-    currentPrice: Number,
-    returnPercent: Number
+    currentPrice: Number, // preço de saída: hoje (se ainda publicado) ou último preço em que esteve no ranking
+    returnPercent: Number,
+    exited: { type: Boolean, default: false }, // true = saiu do ranking publicado antes de hoje (rotacionado)
+    benchmarkReturn: { type: Number, default: 0 } // benchmark no MESMO período de permanência do pick
   }],
   
   // Métricas de Qualidade

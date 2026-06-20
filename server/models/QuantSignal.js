@@ -10,7 +10,7 @@ const QuantSignalSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['RSI_OVERSOLD', 'VOLUME_SPIKE', 'DEEP_VALUE', 'SUPPORT_ZONE']
+    enum: ['RSI_OVERSOLD', 'VOLUME_SPIKE', 'DEEP_VALUE', 'SUPPORT_ZONE', 'BULLISH_DIVERGENCE']
   },
 
   quality: { type: String, enum: ['GOLD', 'SILVER'], default: 'GOLD' },
@@ -18,6 +18,10 @@ const QuantSignalSchema = new mongoose.Schema({
 
   value: { type: Number, required: true },
   message: { type: String, required: true },
+
+  // Razão volume atual / média 20 pregões no momento do sinal (filtro 7.3).
+  // null quando o histórico não tem dados de volume suficientes.
+  volumeRatio: { type: Number },
 
   // --- CAMPOS DE AUDITORIA E BACKTEST ---
   priceAtSignal: { type: Number, required: true },

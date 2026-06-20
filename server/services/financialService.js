@@ -15,22 +15,19 @@ import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9
 import { externalMarketService } from './externalMarketService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz, safeQuantity, addQty, subQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
-import { isBusinessDay } from '../utils/dateUtils.js';
+import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
 import logger from '../config/logger.js';
 
 export const financialService = {
     
+    // (6.10) Delegam ao utilitário único de datas (utils/dateUtils.js) — mantidos
+    // como métodos para preservar todos os call sites internos (this.toDateKey).
     toDateKey(date) {
-        if (!date) return null;
-        const d = new Date(date);
-        if (isNaN(d.getTime())) return null;
-        return d.toISOString().split('T')[0];
+        return toDateKeyUtil(date);
     },
 
     normalizeDate(date) {
-        const d = new Date(date);
-        d.setHours(0, 0, 0, 0);
-        return d;
+        return startOfDay(date);
     },
 
     normalizeTickerForHistory(ticker) {
@@ -67,9 +64,321 @@ export const financialService = {
         return { close: 0, adjClose: 0 };
     },
 
+    /**
+     * Carrega o histórico USD/BRL e devolve um resolvedor de taxa por data.
+     * Para datas sem cotação, faz busca binária pela taxa mais recente <= alvo,
+     * evitando cair na taxa ATUAL em datas passadas com gaps (P&L histórico).
+     */
+    async _loadUsdRateResolver(currentUsdRate) {
+        // G1 FIX: Load historical USD/BRL rates for per-date conversion
+        const usdHistoryDoc = await AssetHistory.findOne({ ticker: 'USD-BRL' }).lean();
+        const usdRateByDate = new Map();
+        if (usdHistoryDoc?.history) {
+            usdHistoryDoc.history.forEach(h => {
+                if (h.date && (h.close || h.adjClose) > 0) {
+                    usdRateByDate.set(h.date, h.adjClose || h.close);
+                }
+            });
+        }
+        // Série ordenada (asc) para busca da taxa histórica mais próxima — evita
+        // cair na taxa ATUAL para datas passadas com gaps > 7 dias (P&L histórico).
+        const usdSorted = [...usdRateByDate.entries()]
+            .map(([d, r]) => [new Date(d).getTime(), r])
+            .filter(([t]) => !Number.isNaN(t))
+            .sort((a, b) => a[0] - b[0]);
+
+        return (dateStr) => {
+            if (usdRateByDate.has(dateStr)) return usdRateByDate.get(dateStr);
+            if (usdSorted.length === 0) return currentUsdRate; // sem histórico: último recurso
+            const targetMs = new Date(dateStr).getTime();
+            // taxa mais recente em data <= alvo (busca binária)
+            let lo = 0, hi = usdSorted.length - 1, best = -1;
+            while (lo <= hi) {
+                const mid = (lo + hi) >> 1;
+                if (usdSorted[mid][0] <= targetMs) { best = mid; lo = mid + 1; }
+                else hi = mid - 1;
+            }
+            // alvo anterior a todo o histórico → usa a 1ª taxa conhecida (não a atual)
+            return best >= 0 ? usdSorted[best][1] : usdSorted[0][1];
+        };
+    },
+
+    /**
+     * Monta o cache de preços (Map ticker → Map data→{close,adjClose}) para os
+     * tickers de renda variável. Faz fallback para externalMarketService quando
+     * o histórico local é curto, persistindo o resultado em AssetHistory.
+     */
+    async _loadPriceCacheMap(uniqueTickers, assetMetadataMap) {
+        const priceCacheMap = new Map();
+
+        await Promise.all(uniqueTickers.map(async (ticker) => {
+            const assetMeta = assetMetadataMap.get(ticker);
+            if (assetMeta?.type === 'FIXED_INCOME' || assetMeta?.type === 'CASH' || ticker === 'RESERVA') return;
+
+            try {
+                const searchTicker = this.normalizeTickerForHistory(ticker);
+                let history = await marketDataService.getBenchmarkHistory(ticker);
+
+                if (!history || history.length < 5) {
+                    const info = await MarketAsset.findOne({ ticker });
+                    const type = info?.type || 'STOCK';
+                    try {
+                        const extHistory = await externalMarketService.getFullHistory(searchTicker, type);
+                        if (extHistory && extHistory.length > 0) {
+                            await AssetHistory.updateOne(
+                                { ticker: ticker.toUpperCase() },
+                                { history: extHistory, lastUpdated: new Date() },
+                                { upsert: true }
+                            );
+                            history = extHistory;
+                        }
+                    } catch (err) {
+                        // Fallback externo é best-effort: sem histórico, o ativo é
+                        // marcado pelo último preço conhecido/custo no loop. Logamos
+                        // em debug para a falha não ficar invisível.
+                        logger.debug(`[History] Fallback externo falhou para ${ticker}: ${err.message}`);
+                    }
+                }
+
+                if (history && history.length > 0) {
+                    priceCacheMap.set(ticker, this.indexHistoryByDate(history));
+                }
+            } catch (e) {
+                logger.warn(`Histórico falhou para ${ticker}: ${e.message}`);
+            }
+        }));
+
+        return priceCacheMap;
+    },
+
+    /** Indexa todos os proventos dos tickers por data (chave toDateKey). */
+    async _loadDividendDateMap(uniqueTickers) {
+        const allDividends = await DividendEvent.find({ ticker: { $in: uniqueTickers } }).sort({ date: 1 });
+        const dividendDateMap = new Map();
+        allDividends.forEach(div => {
+            const dKey = this.toDateKey(div.date);
+            if (!dividendDateMap.has(dKey)) dividendDateMap.set(dKey, []);
+            dividendDateMap.get(dKey).push(div);
+        });
+        return dividendDateMap;
+    },
+
+    /**
+     * Fatores diários do CDI. Devolve o Map de fatores acumulados da série SELIC
+     * (também usado como flag de dia útil em `_accrueDailyFixedIncome`) e um
+     * fallback prefixado por ano para datas sem série no banco.
+     */
+    async _loadCdiFactors(startDate, today, currentCdiRate) {
+        const dbIndices = await EconomicIndex.find({
+            series: 'SELIC',
+            date: { $gte: startDate }
+        }).lean();
+
+        const dailyFactorsMap = new Map();
+        dbIndices.forEach(idx => {
+            const key = this.toDateKey(idx.date);
+            if (key) dailyFactorsMap.set(key, idx.accumulatedFactor);
+        });
+
+        const cdiFactorsCacheFallback = {};
+        const currentYear = today.getFullYear();
+        for (let y = startDate.getFullYear(); y <= currentYear; y++) {
+            let rate = HISTORICAL_CDI_RATES[y] || 10.0;
+            if (y === currentYear) rate = currentCdiRate;
+            cdiFactorsCacheFallback[y] = Math.pow(1 + (rate / 100), 1/252);
+        }
+
+        return { dailyFactorsMap, cdiFactorsCacheFallback };
+    },
+
+    /**
+     * Aplica as transações cujo dia <= cursor, mutando `portfolio` e
+     * `fixedIncomeState` in-place. Devolve o novo `txIndex` e o fluxo de caixa
+     * ajustado do dia (para o Modified Dietz). A aritmética é idêntica à original.
+     */
+    _applyDayTransactions(ctx) {
+        const {
+            txs, cursorIso, portfolio, fixedIncomeState,
+            assetMetadataMap, priceCacheMap, lastKnownPrices, getUsdRateForDate,
+        } = ctx;
+        let txIndex = ctx.txIndex;
+        let dayFlowAdjusted = 0;
+
+        while (txIndex < txs.length) {
+            const tx = txs[txIndex];
+            const txDateIso = this.toDateKey(tx.date);
+            if (txDateIso > cursorIso) break;
+
+            if (!portfolio[tx.ticker]) {
+                portfolio[tx.ticker] = { qty: 0, cost: 0 };
+                const meta = assetMetadataMap.get(tx.ticker);
+                if (meta && (meta.type === 'FIXED_INCOME' || meta.type === 'CASH')) {
+                    fixedIncomeState[tx.ticker] = {
+                        currentValue: 0,
+                        rate: meta.fixedIncomeRate > 0 ? meta.fixedIncomeRate : (meta.type === 'CASH' ? 100 : 10),
+                        index: meta.fixedIncomeIndex || null,
+                        spread: meta.fixedIncomeSpread || 0,
+                    };
+                }
+            }
+
+            let txAdjPrice = tx.price;
+            let trueAdjustedFlow = tx.totalValue; // Fluxo ajustado real
+            const meta = assetMetadataMap.get(tx.ticker);
+            const isFixed = meta?.type === 'FIXED_INCOME' || meta?.type === 'CASH';
+            const txIsDollarized = meta?.type === 'STOCK_US' || meta?.type === 'CRYPTO' || meta?.currency === 'USD';
+            const txUsdRate = txIsDollarized ? getUsdRateForDate(cursorIso) : 1;
+
+            if (!isFixed) {
+                const pMap = priceCacheMap.get(tx.ticker);
+                const pData = this.findPriceInMap(pMap, cursorIso);
+                if (pData.adjClose > 0) {
+                    txAdjPrice = pData.adjClose;
+                    if (pData.close > 0) {
+                        const ratio = pData.adjClose / pData.close;
+                        trueAdjustedFlow = tx.totalValue * ratio;
+                    } else {
+                        trueAdjustedFlow = tx.quantity * txAdjPrice;
+                    }
+                }
+            }
+
+            if (tx.type === 'BUY') {
+                portfolio[tx.ticker].qty += tx.quantity;
+                portfolio[tx.ticker].cost += tx.totalValue;
+                if (isFixed) {
+                    if (!fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker] = { currentValue: 0, rate: meta?.fixedIncomeRate || 100, index: meta?.fixedIncomeIndex || null, spread: meta?.fixedIncomeSpread || 0 };
+                    fixedIncomeState[tx.ticker].currentValue += tx.totalValue;
+                }
+                dayFlowAdjusted += trueAdjustedFlow * txUsdRate;
+
+                if (!lastKnownPrices[tx.ticker]) lastKnownPrices[tx.ticker] = { close: tx.price, adjClose: txAdjPrice };
+
+            } else if (tx.type === 'SELL') {
+                const currentAvg = portfolio[tx.ticker].qty > 0 ? portfolio[tx.ticker].cost / portfolio[tx.ticker].qty : 0;
+                portfolio[tx.ticker].qty -= tx.quantity;
+                portfolio[tx.ticker].cost -= (tx.quantity * currentAvg);
+                if (isFixed) {
+                    fixedIncomeState[tx.ticker].currentValue = Math.max(0, fixedIncomeState[tx.ticker].currentValue - tx.totalValue);
+                }
+                dayFlowAdjusted -= trueAdjustedFlow * txUsdRate;
+            }
+
+            if (portfolio[tx.ticker].qty < QUANTITY_EPSILON) {
+                portfolio[tx.ticker].qty = 0;
+                portfolio[tx.ticker].cost = 0;
+                if (fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker].currentValue = 0;
+            }
+            txIndex++;
+        }
+
+        return { txIndex, dayFlowAdjusted };
+    },
+
+    /**
+     * Acumula juros da renda fixa do dia (mutando `fixedIncomeState`). Renda fixa
+     * só rende em dia útil. Antes usava !isWeekend, que aplicava CDI também em
+     * FERIADOS (ex.: Corpus Christi) — divergindo do KPI/benchmark (que usam
+     * countBusinessDays, pulando feriados).
+     */
+    _accrueDailyFixedIncome(ctx) {
+        const { cursor, cursorIso, portfolio, fixedIncomeState, dailyFactorsMap, cdiDailyFactor, currentIpcaRate } = ctx;
+        const isMapFactor = dailyFactorsMap.has(cursorIso);
+        const shouldApplyRates = isMapFactor || isBusinessDay(cursor);
+        if (!shouldApplyRates) return;
+
+        for (const ticker in fixedIncomeState) {
+            if (portfolio[ticker].qty > 0) {
+                const state = fixedIncomeState[ticker];
+                let dailyFactor = 1;
+                // Indexados (Selic/CDI/IPCA): índice + spread. Selic usa o CDI
+                // histórico do dia + gap SELIC-CDI (~0,10) + spread; IPCA usa o
+                // IPCA corrente + spread (sem série diária no rebuild).
+                if (state.index === 'SELIC' || state.index === 'CDI') {
+                    const extraAnnual = (state.index === 'SELIC' ? 0.10 : 0) + (state.spread || 0);
+                    dailyFactor = cdiDailyFactor * Math.pow(1 + (extraAnnual / 100), 1/252);
+                } else if (state.index === 'IPCA') {
+                    dailyFactor = Math.pow(1 + ((currentIpcaRate + (state.spread || 0)) / 100), 1/252);
+                } else if (state.rate > 50) {
+                    // Legado: > 50 = % do CDI (ex: 110 = 110% CDI); <= 50 = prefixada a.a.
+                    dailyFactor = 1 + ((cdiDailyFactor - 1) * (state.rate / 100));
+                } else {
+                    dailyFactor = Math.pow(1 + (state.rate / 100), 1/252);
+                }
+
+                state.currentValue *= dailyFactor;
+            }
+        }
+    },
+
+    /**
+     * Marca a carteira a mercado no dia (atualizando `lastKnownPrices`). Devolve
+     * patrimônio nominal/ajustado, total investido (a custo) e se há posição.
+     * Renda fixa é marcada pelo valor acumulado; renda variável pelo preço do dia
+     * com fallback ao último preço conhecido. Aritmética idêntica à original.
+     */
+    _markPortfolioToMarket(ctx) {
+        const { cursorIso, portfolio, fixedIncomeState, assetMetadataMap, priceCacheMap, lastKnownPrices, usdRateForDay } = ctx;
+        let totalEquityNominal = 0;
+        let totalEquityAdjusted = 0;
+        let totalInvested = 0;
+        let hasPosition = false;
+
+        for (const ticker in portfolio) {
+            const pos = portfolio[ticker];
+            if (pos.qty <= 0) continue;
+            hasPosition = true;
+
+            const meta = assetMetadataMap.get(ticker);
+            const isDollarized = meta?.type === 'STOCK_US' || meta?.type === 'CRYPTO' || meta?.currency === 'USD';
+            const fxRate = isDollarized ? usdRateForDay : 1;
+
+            totalInvested += pos.cost * fxRate;
+
+            let markClose = 0;
+            let markAdjClose = 0;
+
+            if (fixedIncomeState[ticker]) {
+                const val = fixedIncomeState[ticker].currentValue;
+                const unitPrice = val / pos.qty;
+                markClose = unitPrice;
+                markAdjClose = unitPrice;
+            } else {
+                const pMap = priceCacheMap.get(ticker);
+                const pData = this.findPriceInMap(pMap, cursorIso);
+
+                if (pData.close > 0) {
+                    markClose = pData.close;
+                    markAdjClose = pData.adjClose;
+                    lastKnownPrices[ticker] = pData;
+                } else {
+                    markClose = lastKnownPrices[ticker]?.close || (pos.cost / pos.qty);
+                    markAdjClose = lastKnownPrices[ticker]?.adjClose || markClose;
+                }
+            }
+
+            totalEquityNominal += pos.qty * markClose * fxRate;
+            totalEquityAdjusted += pos.qty * markAdjClose * fxRate;
+        }
+
+        return { totalEquityNominal, totalEquityAdjusted, totalInvested, hasPosition };
+    },
+
+    /** Substitui os snapshots do usuário pelos recém-calculados (em transação, em lotes). */
+    async _persistSnapshots(userId, snapshots) {
+        if (snapshots.length === 0) return;
+        await runTransaction(async (session) => {
+            await WalletSnapshot.deleteMany({ user: userId }).session(session);
+            const CHUNK_SIZE = 5000;
+            for (let i = 0; i < snapshots.length; i += CHUNK_SIZE) {
+                await WalletSnapshot.insertMany(snapshots.slice(i, i + CHUNK_SIZE), { session });
+            }
+        });
+    },
+
     async rebuildUserHistory(userId) {
         const startTime = Date.now();
-        
+
         try {
             // Log de Auditoria Inicial
             await AuditLog.create({
@@ -89,124 +398,35 @@ export const financialService = {
             const currentIpcaRate = (sysConfig?.ipca && sysConfig.ipca > 0) ? sysConfig.ipca : 4.5;
             const currentUsdRate = sysConfig?.dollar || 5.75;
 
-            // G1 FIX: Load historical USD/BRL rates for per-date conversion
-            const usdHistoryDoc = await AssetHistory.findOne({ ticker: 'USD-BRL' }).lean();
-            const usdRateByDate = new Map();
-            if (usdHistoryDoc?.history) {
-                usdHistoryDoc.history.forEach(h => {
-                    if (h.date && (h.close || h.adjClose) > 0) {
-                        usdRateByDate.set(h.date, h.adjClose || h.close);
-                    }
-                });
-            }
-            // Série ordenada (asc) para busca da taxa histórica mais próxima — evita
-            // cair na taxa ATUAL para datas passadas com gaps > 7 dias (P&L histórico).
-            const usdSorted = [...usdRateByDate.entries()]
-                .map(([d, r]) => [new Date(d).getTime(), r])
-                .filter(([t]) => !Number.isNaN(t))
-                .sort((a, b) => a[0] - b[0]);
-
-            const getUsdRateForDate = (dateStr) => {
-                if (usdRateByDate.has(dateStr)) return usdRateByDate.get(dateStr);
-                if (usdSorted.length === 0) return currentUsdRate; // sem histórico: último recurso
-                const targetMs = new Date(dateStr).getTime();
-                // taxa mais recente em data <= alvo (busca binária)
-                let lo = 0, hi = usdSorted.length - 1, best = -1;
-                while (lo <= hi) {
-                    const mid = (lo + hi) >> 1;
-                    if (usdSorted[mid][0] <= targetMs) { best = mid; lo = mid + 1; }
-                    else hi = mid - 1;
-                }
-                // alvo anterior a todo o histórico → usa a 1ª taxa conhecida (não a atual)
-                return best >= 0 ? usdSorted[best][1] : usdSorted[0][1];
-            };
-
             const uniqueTickers = [...new Set(txs.map(t => t.ticker))];
-            
-            const priceCacheMap = new Map(); 
-            const assetMetadataMap = new Map(); 
 
+            const assetMetadataMap = new Map();
             const userAssets = await UserAsset.find({ user: userId });
             userAssets.forEach(ua => assetMetadataMap.set(ua.ticker, ua));
 
-            await Promise.all(uniqueTickers.map(async (ticker) => {
-                const assetMeta = assetMetadataMap.get(ticker);
-                if (assetMeta?.type === 'FIXED_INCOME' || assetMeta?.type === 'CASH' || ticker === 'RESERVA') return; 
-
-                try {
-                    const searchTicker = this.normalizeTickerForHistory(ticker);
-                    let history = await marketDataService.getBenchmarkHistory(ticker);
-                    
-                    if (!history || history.length < 5) {
-                        const info = await MarketAsset.findOne({ ticker });
-                        const type = info?.type || 'STOCK';
-                        try {
-                            const extHistory = await externalMarketService.getFullHistory(searchTicker, type);
-                            if (extHistory && extHistory.length > 0) {
-                                await AssetHistory.updateOne(
-                                    { ticker: ticker.toUpperCase() },
-                                    { history: extHistory, lastUpdated: new Date() },
-                                    { upsert: true }
-                                );
-                                history = extHistory;
-                            }
-                        } catch (err) { }
-                    }
-                    
-                    if (history && history.length > 0) {
-                        priceCacheMap.set(ticker, this.indexHistoryByDate(history));
-                    }
-                } catch (e) {
-                    logger.warn(`Histórico falhou para ${ticker}: ${e.message}`);
-                }
-            }));
+            // Carregamento de contexto (cada fonte isolada num helper testável).
+            const getUsdRateForDate = await this._loadUsdRateResolver(currentUsdRate);
+            const priceCacheMap = await this._loadPriceCacheMap(uniqueTickers, assetMetadataMap);
+            const dividendDateMap = await this._loadDividendDateMap(uniqueTickers);
 
             const startDate = new Date(txs[0].date);
-            startDate.setHours(12, 0, 0, 0); 
+            startDate.setHours(12, 0, 0, 0);
             const today = new Date();
             today.setHours(12, 0, 0, 0);
 
+            const { dailyFactorsMap, cdiFactorsCacheFallback } = await this._loadCdiFactors(startDate, today, currentCdiRate);
+
+            // Estado mutável acumulado ao longo do loop diário.
             const snapshots = [];
-            const portfolio = {}; 
+            const portfolio = {};
             const fixedIncomeState = {};
+            const lastKnownPrices = {};
+            let accumulatedDividends = 0;
+            let currentQuota = 100.0;
+            let previousEquityAdjusted = 0;
+            let txIndex = 0;
 
             let cursor = new Date(startDate);
-            let txIndex = 0;
-            
-            const allDividends = await DividendEvent.find({ ticker: { $in: uniqueTickers } }).sort({ date: 1 });
-            const dividendDateMap = new Map();
-            allDividends.forEach(div => {
-                const dKey = this.toDateKey(div.date);
-                if (!dividendDateMap.has(dKey)) dividendDateMap.set(dKey, []);
-                dividendDateMap.get(dKey).push(div);
-            });
-
-            let accumulatedDividends = 0;
-            let currentQuota = 100.0; 
-            let previousEquityNominal = 0;
-            let previousEquityAdjusted = 0; 
-            const lastKnownPrices = {}; 
-
-            const dbIndices = await EconomicIndex.find({ 
-                series: 'SELIC', 
-                date: { $gte: startDate } 
-            }).lean();
-            
-            const dailyFactorsMap = new Map();
-            dbIndices.forEach(idx => {
-                const key = this.toDateKey(idx.date);
-                if (key) dailyFactorsMap.set(key, idx.accumulatedFactor);
-            });
-
-            const cdiFactorsCacheFallback = {};
-            const currentYear = today.getFullYear();
-            
-            for (let y = startDate.getFullYear(); y <= currentYear; y++) {
-                let rate = HISTORICAL_CDI_RATES[y] || 10.0; 
-                if (y === currentYear) rate = currentCdiRate;
-                cdiFactorsCacheFallback[y] = Math.pow(1 + (rate / 100), 1/252);
-            }
-
             while (cursor <= today) {
                 const cursorIso = this.toDateKey(cursor);
                 let cdiDailyFactor = dailyFactorsMap.get(cursorIso);
@@ -214,79 +434,15 @@ export const financialService = {
                     cdiDailyFactor = cdiFactorsCacheFallback[cursor.getFullYear()] || 1.0003;
                 }
 
-                let dayFlowNominal = 0;
-                let dayFlowAdjusted = 0;
-                
-                while (txIndex < txs.length) {
-                    const tx = txs[txIndex];
-                    const txDateIso = this.toDateKey(tx.date);
-                    if (txDateIso > cursorIso) break; 
+                // 1) Movimentações do dia → posição + fluxo de caixa ajustado.
+                const dayTx = this._applyDayTransactions({
+                    txs, txIndex, cursorIso, portfolio, fixedIncomeState,
+                    assetMetadataMap, priceCacheMap, lastKnownPrices, getUsdRateForDate,
+                });
+                txIndex = dayTx.txIndex;
+                const dayFlowAdjusted = dayTx.dayFlowAdjusted;
 
-                    if (!portfolio[tx.ticker]) {
-                        portfolio[tx.ticker] = { qty: 0, cost: 0 };
-                        const meta = assetMetadataMap.get(tx.ticker);
-                        if (meta && (meta.type === 'FIXED_INCOME' || meta.type === 'CASH')) {
-                            fixedIncomeState[tx.ticker] = {
-                                currentValue: 0,
-                                rate: meta.fixedIncomeRate > 0 ? meta.fixedIncomeRate : (meta.type === 'CASH' ? 100 : 10),
-                                index: meta.fixedIncomeIndex || null,
-                                spread: meta.fixedIncomeSpread || 0,
-                            };
-                        }
-                    }
-                    
-                    let txAdjPrice = tx.price;
-                    let trueAdjustedFlow = tx.totalValue; // Fluxo ajustado real
-                    const meta = assetMetadataMap.get(tx.ticker);
-                    const isFixed = meta?.type === 'FIXED_INCOME' || meta?.type === 'CASH';
-                    const txIsDollarized = meta?.type === 'STOCK_US' || meta?.type === 'CRYPTO' || meta?.currency === 'USD';
-                    const txUsdRate = txIsDollarized ? getUsdRateForDate(cursorIso) : 1;
-
-                    if (!isFixed) {
-                        const pMap = priceCacheMap.get(tx.ticker);
-                        const pData = this.findPriceInMap(pMap, cursorIso);
-                        if (pData.adjClose > 0) {
-                            txAdjPrice = pData.adjClose;
-                            if (pData.close > 0) {
-                                const ratio = pData.adjClose / pData.close;
-                                trueAdjustedFlow = tx.totalValue * ratio;
-                            } else {
-                                trueAdjustedFlow = tx.quantity * txAdjPrice;
-                            }
-                        }
-                    }
-
-                    if (tx.type === 'BUY') {
-                        portfolio[tx.ticker].qty += tx.quantity;
-                        portfolio[tx.ticker].cost += tx.totalValue;
-                        if (isFixed) {
-                            if (!fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker] = { currentValue: 0, rate: meta?.fixedIncomeRate || 100, index: meta?.fixedIncomeIndex || null, spread: meta?.fixedIncomeSpread || 0 };
-                            fixedIncomeState[tx.ticker].currentValue += tx.totalValue;
-                        }
-                        dayFlowNominal += tx.totalValue * txUsdRate;
-                        dayFlowAdjusted += trueAdjustedFlow * txUsdRate;
-
-                        if (!lastKnownPrices[tx.ticker]) lastKnownPrices[tx.ticker] = { close: tx.price, adjClose: txAdjPrice };
-
-                    } else if (tx.type === 'SELL') {
-                        const currentAvg = portfolio[tx.ticker].qty > 0 ? portfolio[tx.ticker].cost / portfolio[tx.ticker].qty : 0;
-                        portfolio[tx.ticker].qty -= tx.quantity;
-                        portfolio[tx.ticker].cost -= (tx.quantity * currentAvg);
-                        if (isFixed) {
-                            fixedIncomeState[tx.ticker].currentValue = Math.max(0, fixedIncomeState[tx.ticker].currentValue - tx.totalValue);
-                        }
-                        dayFlowNominal -= tx.totalValue * txUsdRate;
-                        dayFlowAdjusted -= trueAdjustedFlow * txUsdRate;
-                    }
-                    
-                    if (portfolio[tx.ticker].qty < QUANTITY_EPSILON) {
-                        portfolio[tx.ticker].qty = 0;
-                        portfolio[tx.ticker].cost = 0;
-                        if(fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker].currentValue = 0;
-                    }
-                    txIndex++;
-                }
-
+                // 2) Proventos do dia (sobre a posição já atualizada).
                 const dayDividends = dividendDateMap.get(cursorIso) || [];
                 for (const div of dayDividends) {
                     if (portfolio[div.ticker] && portfolio[div.ticker].qty > 0) {
@@ -294,91 +450,30 @@ export const financialService = {
                     }
                 }
 
-                let totalEquityNominal = 0;
-                let totalEquityAdjusted = 0;
-                let totalInvested = 0;
-                let hasPosition = false;
+                // 3) Juros da renda fixa do dia.
+                this._accrueDailyFixedIncome({
+                    cursor, cursorIso, portfolio, fixedIncomeState,
+                    dailyFactorsMap, cdiDailyFactor, currentIpcaRate,
+                });
 
-                // Renda fixa só rende em dia útil. Antes usava !isWeekend, que
-                // aplicava CDI também em FERIADOS (ex.: Corpus Christi) — divergindo
-                // do KPI/benchmark (que usam countBusinessDays, pulando feriados).
-                const isMapFactor = dailyFactorsMap.has(cursorIso);
-                const shouldApplyRates = isMapFactor || isBusinessDay(cursor);
-                
-                if (shouldApplyRates) {
-                    for (const ticker in fixedIncomeState) {
-                        if (portfolio[ticker].qty > 0) {
-                            const state = fixedIncomeState[ticker];
-                            let dailyFactor = 1;
-                            // Indexados (Selic/CDI/IPCA): índice + spread. Selic usa o CDI
-                            // histórico do dia + gap SELIC-CDI (~0,10) + spread; IPCA usa o
-                            // IPCA corrente + spread (sem série diária no rebuild).
-                            if (state.index === 'SELIC' || state.index === 'CDI') {
-                                const extraAnnual = (state.index === 'SELIC' ? 0.10 : 0) + (state.spread || 0);
-                                dailyFactor = cdiDailyFactor * Math.pow(1 + (extraAnnual / 100), 1/252);
-                            } else if (state.index === 'IPCA') {
-                                dailyFactor = Math.pow(1 + ((currentIpcaRate + (state.spread || 0)) / 100), 1/252);
-                            } else if (state.rate > 50) {
-                                // Legado: > 50 = % do CDI (ex: 110 = 110% CDI); <= 50 = prefixada a.a.
-                                dailyFactor = 1 + ((cdiDailyFactor - 1) * (state.rate / 100));
-                            } else {
-                                dailyFactor = Math.pow(1 + (state.rate / 100), 1/252);
-                            }
-
-                            state.currentValue *= dailyFactor;
-                        }
-                    }
-                }
-
+                // 4) Marcação a mercado.
                 const usdRateForDay = getUsdRateForDate(cursorIso);
+                const { totalEquityNominal, totalEquityAdjusted, totalInvested, hasPosition } =
+                    this._markPortfolioToMarket({
+                        cursorIso, portfolio, fixedIncomeState, assetMetadataMap,
+                        priceCacheMap, lastKnownPrices, usdRateForDay,
+                    });
 
-                for (const ticker in portfolio) {
-                    const pos = portfolio[ticker];
-                    if (pos.qty <= 0) continue;
-                    hasPosition = true;
-
-                    const meta = assetMetadataMap.get(ticker);
-                    const isDollarized = meta?.type === 'STOCK_US' || meta?.type === 'CRYPTO' || meta?.currency === 'USD';
-                    const fxRate = isDollarized ? usdRateForDay : 1;
-
-                    totalInvested += pos.cost * fxRate;
-
-                    let markClose = 0;
-                    let markAdjClose = 0;
-
-                    if (fixedIncomeState[ticker]) {
-                        const val = fixedIncomeState[ticker].currentValue;
-                        const unitPrice = val / pos.qty;
-                        markClose = unitPrice;
-                        markAdjClose = unitPrice;
-                    } else {
-                        const pMap = priceCacheMap.get(ticker);
-                        const pData = this.findPriceInMap(pMap, cursorIso);
-
-                        if (pData.close > 0) {
-                            markClose = pData.close;
-                            markAdjClose = pData.adjClose;
-                            lastKnownPrices[ticker] = pData;
-                        } else {
-                            markClose = lastKnownPrices[ticker]?.close || (pos.cost / pos.qty);
-                            markAdjClose = lastKnownPrices[ticker]?.adjClose || markClose;
-                        }
-                    }
-
-                    totalEquityNominal += pos.qty * markClose * fxRate;
-                    totalEquityAdjusted += pos.qty * markAdjClose * fxRate;
-                }
-
-                // USO DO HELPER MATHUTILS (Modified Dietz)
+                // 5) Cota TWRR (Modified Dietz diário).
                 if (previousEquityAdjusted > 0 || dayFlowAdjusted > 0) {
                     const dailyReturn = calculateDailyDietz(previousEquityAdjusted, totalEquityAdjusted, dayFlowAdjusted);
-                    
+
                     // Proteção contra spikes absurdos (ex: dados sujos)
                     if (dailyReturn > -0.5 && dailyReturn < 0.5) {
                         currentQuota = currentQuota * (1 + dailyReturn);
                     }
                 }
-                
+
                 if (hasPosition || totalInvested > 0 || accumulatedDividends > 0) {
                     snapshots.push({
                         user: userId,
@@ -391,24 +486,17 @@ export const financialService = {
                         quotaPrice: safeFloat(currentQuota)
                     });
                 }
-                
-                previousEquityNominal = totalEquityNominal;
+
                 previousEquityAdjusted = totalEquityAdjusted;
                 cursor.setDate(cursor.getDate() + 1);
             }
 
-            if (snapshots.length > 0) {
-                await runTransaction(async (session) => {
-                    await WalletSnapshot.deleteMany({ user: userId }).session(session);
-                    const CHUNK_SIZE = 5000;
-                    for (let i = 0; i < snapshots.length; i += CHUNK_SIZE) {
-                        await WalletSnapshot.insertMany(snapshots.slice(i, i + CHUNK_SIZE), { session });
-                    }
-                });
-            }
-            
+            await this._persistSnapshots(userId, snapshots);
+
             const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-            logger.info(`✅ [History] Reconstrução V4.7 (Precision) concluída em ${duration}s.`);
+            logger.info(`✅ [History] Reconstrução V4.7 (Precision) concluída em ${duration}s.`, {
+                source: 'rebuildUserHistory', userId: String(userId), durationSec: Number(duration), snapshots: snapshots.length,
+            });
 
         } catch (error) {
             logger.error(`❌ [Engine] Erro Fatal no Rebuild: ${error.message}`);

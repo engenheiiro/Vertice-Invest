@@ -15,18 +15,30 @@ const resolvePapel = (fiiSubType, sector) => {
     return PAPEL_SECTOR_HINTS.some(h => s.includes(h));
 };
 
-const calculateConfidenceScore = (m) => {
+const calculateConfidenceScore = (m, type) => {
     let confidence = 100;
     const audit = [];
+    const isFII = type === 'FII';
 
-    // Usa _missing para distinguir dado ausente de dado genuinamente ruim
-    if (m._missing?.revenueGrowth) {
-        confidence -= 25;
-        audit.push({ factor: 'Dados de Crescimento Ausentes', points: -25, type: 'penalty', category: 'Confiança' });
-    }
-    if (m._missing?.roe || m._missing?.netMargin) {
+    // Métricas de EMPRESA (crescimento de receita, ROE, margem líquida) só fazem sentido
+    // para ações. Em FIIs elas são estruturalmente inaplicáveis — não são "dados ausentes".
+    // Cobrá-las da confiança travava TODO bom FII em confidence 60 → maxScoreAllowed 85,
+    // comprimindo dezenas de FIIs no mesmo teto. Para FII a confiança vem de dados APLICÁVEIS
+    // (patrimônio/valor de mercado, liquidez, recência).
+    if (!isFII) {
+        // Usa _missing para distinguir dado ausente de dado genuinamente ruim
+        if (m._missing?.revenueGrowth) {
+            confidence -= 25;
+            audit.push({ factor: 'Dados de Crescimento Ausentes', points: -25, type: 'penalty', category: 'Confiança' });
+        }
+        if (m._missing?.roe || m._missing?.netMargin) {
+            confidence -= 15;
+            audit.push({ factor: 'Dados de Rentabilidade Ausentes', points: -15, type: 'penalty', category: 'Confiança' });
+        }
+    } else if (m._missing?.marketCap) {
+        // FII sem patrimônio/valor de mercado: dado-base ausente → confiança reduzida.
         confidence -= 15;
-        audit.push({ factor: 'Dados de Rentabilidade Ausentes', points: -15, type: 'penalty', category: 'Confiança' });
+        audit.push({ factor: 'Patrimônio/Valor de Mercado Ausente', points: -15, type: 'penalty', category: 'Confiança' });
     }
     if (m.avgLiquidity < 1000000) {
         confidence -= 30;
@@ -360,6 +372,31 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
             audit.DEFENSIVE.push({ factor: `Sobrevalorizado (preço ${pct}% acima do Preço Justo)`, points: -defPenalty, type: 'penalty' });
         }
 
+        // ── PENALIDADE DE TENDÊNCIA DE BAIXA (momentum) ──────────────────────────
+        // Ações muito baratas em queda ESTRUTURAL (preço bem abaixo da SMA200) eram
+        // "value traps": o scoring premiava P/L e ROE e ignorava o downtrend, então a
+        // carteira acumulava facas caindo (LAVV3/AZZA3/VULC3 caíram -20% a -40% sendo
+        // re-selecionadas o tempo todo). Aqui o desvio negativo da SMA200 vira penalidade
+        // graduada — sinal de momentum que faltava. Defensivo/Moderado levam cheio (não
+        // devem segurar faca caindo); Arrojado tolera um pouco mais (apostas de reversão).
+        if (m.sma200 > 0 && asset.price > 0) {
+            const devSMA = (asset.price - m.sma200) / m.sma200;
+            let trendPenalty = 0;
+            if (devSMA < -0.25) trendPenalty = 20;       // >25% abaixo: downtrend severo
+            else if (devSMA < -0.15) trendPenalty = 12;  // 15–25% abaixo
+            else if (devSMA < -0.08) trendPenalty = 6;   // 8–15% abaixo
+            if (trendPenalty > 0) {
+                const pctBelow = (Math.abs(devSMA) * 100).toFixed(0);
+                const boldTrend = Math.round(trendPenalty * 0.7);
+                defScore -= trendPenalty;
+                modScore -= trendPenalty;
+                boldScore -= boldTrend;
+                audit.DEFENSIVE.push({ factor: `Tendência de Baixa (preço ${pctBelow}% abaixo da SMA200)`, points: -trendPenalty, type: 'penalty' });
+                audit.MODERATE.push({ factor: `Tendência de Baixa (preço ${pctBelow}% abaixo da SMA200)`, points: -trendPenalty, type: 'penalty' });
+                audit.BOLD.push({ factor: `Tendência de Baixa (preço ${pctBelow}% abaixo da SMA200)`, points: -boldTrend, type: 'penalty' });
+            }
+        }
+
     }
     return { defScore, modScore, boldScore };
 };
@@ -539,7 +576,7 @@ const calculateProfileScores = (asset, valuationData, context) => {
 
     let defScore = 0, modScore = 0, boldScore = 0;
     const audit = { DEFENSIVE: [], MODERATE: [], BOLD: [], CONFIDENCE: [] };
-    const { confidence, audit: confAudit } = calculateConfidenceScore(m);
+    const { confidence, audit: confAudit } = calculateConfidenceScore(m, type);
     audit.CONFIDENCE = confAudit;
 
     if (type === 'STOCK' || type === 'STOCK_US') {
@@ -552,7 +589,8 @@ const calculateProfileScores = (asset, valuationData, context) => {
 
     // Aplica penalidades de confiança diretamente nos scores de perfil (apenas STOCK/STOCK_US)
     // para que o audit log "Dados e Confiança" reflita deduções reais (não cosmético).
-    // FIIs: revenueGrowth e roe/netMargin são estruturalmente ausentes → não aplicar a penalidade.
+    // FIIs: a confiança já é calculada só sobre dados aplicáveis (ver calculateConfidenceScore);
+    // o teto graduado (maxScoreAllowed) basta — não se subtrai duas vezes.
     // CRYPTO: usa suas próprias penalidades de liquidez dentro do bloco acima.
     if ((type === 'STOCK' || type === 'STOCK_US') && confidence < 100) {
         const confPenalty = 100 - confidence;

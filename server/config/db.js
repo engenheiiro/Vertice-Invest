@@ -1,6 +1,7 @@
 
 import mongoose from 'mongoose';
 import logger from './logger.js';
+import { attachMongoBreaker } from '../middleware/mongoCircuitBreaker.js';
 
 const connectDB = async () => {
   const MONGO_URI = process.env.MONGO_URI;
@@ -23,10 +24,14 @@ const connectDB = async () => {
     family: 4 // Força IPv4 para evitar problemas de resolução DNS IPv6 em alguns ambientes
   };
 
+  // (6.9) Liga o circuit breaker aos eventos da conexão ANTES de conectar, para
+  // não perder o primeiro 'connected'/'error'.
+  attachMongoBreaker();
+
   try {
     const conn = await mongoose.connect(MONGO_URI, connectOptions);
     logger.info(`🗄️ [Database] MongoDB Conectado: ${conn.connection.host}`);
-    
+
     mongoose.connection.on('error', err => {
       logger.error(`🔥 Erro de runtime no MongoDB: ${err.message}`);
     });

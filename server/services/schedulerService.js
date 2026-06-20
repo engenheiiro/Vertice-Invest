@@ -21,7 +21,7 @@ import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
 import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
 import { calculateDailyDietz } from '../utils/mathUtils.js';
-import { isBusinessDay, countBusinessDays } from '../utils/dateUtils.js';
+import { isBusinessDay, countBusinessDays, dateKeyToUtcDate } from '../utils/dateUtils.js';
 
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
@@ -98,7 +98,7 @@ export const runDailySnapshot = async (force = false) => {
                         let accruedValue = 0;
                         if (asset.taxLots && asset.taxLots.length > 0) {
                             for (const lot of asset.taxLots) {
-                                const lotDate = new Date(new Date(lot.date).toISOString().split('T')[0] + 'T00:00:00.000Z');
+                                const lotDate = dateKeyToUtcDate(lot.date);
                                 const bDays = countBusinessDays(lotDate, calcDate);
                                 const factor = Math.max(1, Math.pow(effectiveDailyFactor, bDays));
                                 accruedValue += asset.type === 'CASH'
@@ -107,7 +107,7 @@ export const runDailySnapshot = async (force = false) => {
                             }
                         } else {
                             // Fallback sem tax lots
-                            const startDate = new Date(new Date(asset.startDate || asset.updatedAt).toISOString().split('T')[0] + 'T00:00:00.000Z');
+                            const startDate = dateKeyToUtcDate(asset.startDate || asset.updatedAt);
                             const bDays = countBusinessDays(startDate, calcDate);
                             const factor = Math.max(1, Math.pow(effectiveDailyFactor, bDays));
                             const avgPrice = asset.quantity > 0 ? asset.totalCost / asset.quantity : 0;

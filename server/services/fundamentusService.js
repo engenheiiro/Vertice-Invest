@@ -3,6 +3,11 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import iconv from 'iconv-lite';
 import logger from '../config/logger.js';
+import {
+    FUNDAMENTUS_STOCKS_LAYOUT,
+    FUNDAMENTUS_FIIS_LAYOUT,
+    validateFundamentusLayout,
+} from '../config/scraperSchemas.js';
 
 // Headers completos mimetizando um navegador Chrome Desktop Real
 const HEADERS = {
@@ -46,23 +51,34 @@ export const fundamentusService = {
             const $ = cheerio.load(decodedData);
             const dataMap = new Map();
 
-            $('table#resultado tbody tr').each((i, el) => {
+            const layout = FUNDAMENTUS_STOCKS_LAYOUT;
+            const col = layout.columns;
+            // (6.7) Detecta proativamente mudança de estrutura do site (índices
+            // de coluna defasados → dados zerados sem erro).
+            const check = validateFundamentusLayout($, layout);
+            if (!check.ok) {
+                logger.warn('⚠️ [Fundamentus] Layout de AÇÕES possivelmente desatualizado', {
+                    source: 'fundamentus', kind: 'STOCK', schemaVersion: check.version, mismatches: check.mismatches,
+                });
+            }
+
+            $(`${layout.table} tbody tr`).each((i, el) => {
                 try {
                     const tds = $(el).find('td');
-                    const ticker = $(tds[0]).text().trim().toUpperCase();
-                    
+                    const ticker = $(tds[col.ticker]).text().trim().toUpperCase();
+
                     // Validação básica para ignorar linhas quebradas
                     if (!ticker || ticker.length < 4) return;
 
                     // Extração Básica
-                    const price = parseBrFloat($(tds[1]).text());
-                    const pl = parseBrFloat($(tds[2]).text());
-                    const pvp = parseBrFloat($(tds[3]).text());
-                    const psr = parseBrFloat($(tds[4]).text());
-                    const pAtivo = parseBrFloat($(tds[6]).text());
-                    const pEbit = parseBrFloat($(tds[8]).text());
-                    const evEbit = parseBrFloat($(tds[10]).text());
-                    const patrimLiq = parseBrFloat($(tds[18]).text());
+                    const price = parseBrFloat($(tds[col.price]).text());
+                    const pl = parseBrFloat($(tds[col.pl]).text());
+                    const pvp = parseBrFloat($(tds[col.pvp]).text());
+                    const psr = parseBrFloat($(tds[col.psr]).text());
+                    const pAtivo = parseBrFloat($(tds[col.pAtivo]).text());
+                    const pEbit = parseBrFloat($(tds[col.pEbit]).text());
+                    const evEbit = parseBrFloat($(tds[col.evEbit]).text());
+                    const patrimLiq = parseBrFloat($(tds[col.patrimLiq]).text());
 
                     // --- ENGENHARIA REVERSA DE DADOS FINANCEIROS ---
                     // Cálculos baseados na consistência matemática dos múltiplos
@@ -101,7 +117,7 @@ export const fundamentusService = {
 
                     // 6. Payout (Dividendos / Lucro Líquido)
                     // Matematicamente: Payout = DY * PL
-                    const dy = parseBrFloat($(tds[5]).text());
+                    const dy = parseBrFloat($(tds[col.dy]).text());
                     let payout = 0;
                     if (dy > 0 && pl > 0) {
                         payout = dy * pl;
@@ -115,20 +131,20 @@ export const fundamentusService = {
                         psr: psr,
                         dy: dy,
                         pAtivo: pAtivo,
-                        pCapGiro: parseBrFloat($(tds[7]).text()),
+                        pCapGiro: parseBrFloat($(tds[col.pCapGiro]).text()),
                         pEbit: pEbit,
-                        pAtivCircLiq: parseBrFloat($(tds[9]).text()),
+                        pAtivCircLiq: parseBrFloat($(tds[col.pAtivCircLiq]).text()),
                         evEbit: evEbit,
-                        evEbitda: parseBrFloat($(tds[11]).text()),
-                        mrgEbit: parseBrFloat($(tds[12]).text()),
-                        netMargin: parseBrFloat($(tds[13]).text()),
-                        currentRatio: parseBrFloat($(tds[14]).text()),
-                        roic: parseBrFloat($(tds[15]).text()),
-                        roe: parseBrFloat($(tds[16]).text()),
-                        liq2m: parseBrFloat($(tds[17]).text()),
+                        evEbitda: parseBrFloat($(tds[col.evEbitda]).text()),
+                        mrgEbit: parseBrFloat($(tds[col.mrgEbit]).text()),
+                        netMargin: parseBrFloat($(tds[col.netMargin]).text()),
+                        currentRatio: parseBrFloat($(tds[col.currentRatio]).text()),
+                        roic: parseBrFloat($(tds[col.roic]).text()),
+                        roe: parseBrFloat($(tds[col.roe]).text()),
+                        liq2m: parseBrFloat($(tds[col.liq2m]).text()),
                         patrimLiq: patrimLiq,
-                        divBrutaPatrim: parseBrFloat($(tds[19]).text()),
-                        cresRec5a: parseBrFloat($(tds[20]).text()),
+                        divBrutaPatrim: parseBrFloat($(tds[col.divBrutaPatrim]).text()),
+                        cresRec5a: parseBrFloat($(tds[col.cresRec5a]).text()),
                         
                         // Dados Enriquecidos Calculados
                         marketCap,
@@ -149,18 +165,18 @@ export const fundamentusService = {
                 logger.warn(`⚠️ [Fundamentus][TEST] ${msg}`); // não falha o teste, mas torna a regressão visível
             }
 
-            logger.info(`✅ Fundamentus: ${dataMap.size} ações processadas com dados completos.`);
+            logger.info(`✅ Fundamentus: ${dataMap.size} ações processadas com dados completos.`, {
+                source: 'fundamentus', kind: 'STOCK', count: dataMap.size, schemaVersion: layout.version,
+            });
             return dataMap;
 
         } catch (error) {
             // Não-fatal: o IP do Render é bloqueado pelo Fundamentus (403). A rotina
             // segue com fundamentos em cache + refresh manual (sync:prod). Por isso é
             // warn, não error (evita ruído/alerta para uma condição esperada e tratada).
-            if (error.response) {
-                logger.warn(`⚠️ Scraping Ações indisponível: ${error.message} | Status: ${error.response.status} (usando cache)`);
-            } else {
-                logger.warn(`⚠️ Scraping Ações indisponível: ${error.message} (usando cache)`);
-            }
+            logger.warn(`⚠️ Scraping Ações indisponível: ${error.message} (usando cache)`, {
+                source: 'fundamentus', kind: 'STOCK', status: error.response?.status ?? null,
+            });
             return new Map();
         }
     },
@@ -180,17 +196,27 @@ export const fundamentusService = {
             const $ = cheerio.load(decodedData);
             const dataMap = new Map();
 
-            $('table#tabelaResultado tbody tr').each((i, el) => {
+            const layout = FUNDAMENTUS_FIIS_LAYOUT;
+            const col = layout.columns;
+            // (6.7) Alerta proativo de mudança de estrutura do site.
+            const check = validateFundamentusLayout($, layout);
+            if (!check.ok) {
+                logger.warn('⚠️ [Fundamentus] Layout de FIIs possivelmente desatualizado', {
+                    source: 'fundamentus', kind: 'FII', schemaVersion: check.version, mismatches: check.mismatches,
+                });
+            }
+
+            $(`${layout.table} tbody tr`).each((i, el) => {
                 try {
                     const tds = $(el).find('td');
-                    const ticker = $(tds[0]).text().trim().toUpperCase();
+                    const ticker = $(tds[col.ticker]).text().trim().toUpperCase();
 
                     if (!ticker || ticker.length < 4) return;
 
-                    const price = parseBrFloat($(tds[2]).text());
-                    const pvp = parseBrFloat($(tds[5]).text());
-                    const ffoYield = parseBrFloat($(tds[3]).text());
-                    const marketCap = parseBrFloat($(tds[6]).text()); // FII já tem market cap direto na tabela (Valor de Mercado)
+                    const price = parseBrFloat($(tds[col.price]).text());
+                    const pvp = parseBrFloat($(tds[col.pvp]).text());
+                    const ffoYield = parseBrFloat($(tds[col.ffoYield]).text());
+                    const marketCap = parseBrFloat($(tds[col.marketCap]).text()); // FII já tem market cap direto na tabela (Valor de Mercado)
 
                     // Campos Derivados
                     const vpCota = (pvp > 0 && price > 0) ? (price / pvp) : 0;
@@ -198,18 +224,18 @@ export const fundamentusService = {
 
                     dataMap.set(ticker, {
                         ticker,
-                        sector: $(tds[1]).text().trim(),
+                        sector: $(tds[col.segment]).text().trim(),
                         price: price,
                         ffoYield: ffoYield,
-                        dy: parseBrFloat($(tds[4]).text()),
+                        dy: parseBrFloat($(tds[col.dy]).text()),
                         pvp: pvp,
                         marketCap: marketCap,
-                        liquidity: parseBrFloat($(tds[7]).text()),
-                        qtdImoveis: parseBrFloat($(tds[8]).text()),
-                        priceM2: parseBrFloat($(tds[9]).text()),
-                        rentM2: parseBrFloat($(tds[10]).text()),
-                        capRate: parseBrFloat($(tds[11]).text()),
-                        vacancy: parseBrFloat($(tds[12]).text()),
+                        liquidity: parseBrFloat($(tds[col.liquidity]).text()),
+                        qtdImoveis: parseBrFloat($(tds[col.qtdImoveis]).text()),
+                        priceM2: parseBrFloat($(tds[col.priceM2]).text()),
+                        rentM2: parseBrFloat($(tds[col.rentM2]).text()),
+                        capRate: parseBrFloat($(tds[col.capRate]).text()),
+                        vacancy: parseBrFloat($(tds[col.vacancy]).text()),
                         vpCota: parseFloat(vpCota.toFixed(2)),
                         ffoCota: parseFloat(ffoCota.toFixed(2))
                     });
@@ -224,16 +250,16 @@ export const fundamentusService = {
                 logger.warn(`⚠️ [Fundamentus][TEST] ${msg}`); // não falha o teste, mas torna a regressão visível
             }
 
-            logger.info(`✅ Fundamentus: ${dataMap.size} FIIs processados com dados completos.`);
+            logger.info(`✅ Fundamentus: ${dataMap.size} FIIs processados com dados completos.`, {
+                source: 'fundamentus', kind: 'FII', count: dataMap.size, schemaVersion: layout.version,
+            });
             return dataMap;
 
         } catch (error) {
             // Não-fatal (ver getStocksMap): 403 do Render → segue com cache + sync:prod manual.
-            if (error.response) {
-                logger.warn(`⚠️ Scraping FIIs indisponível: ${error.message} | Status: ${error.response.status} (usando cache)`);
-            } else {
-                logger.warn(`⚠️ Scraping FIIs indisponível: ${error.message} (usando cache)`);
-            }
+            logger.warn(`⚠️ Scraping FIIs indisponível: ${error.message} (usando cache)`, {
+                source: 'fundamentus', kind: 'FII', status: error.response?.status ?? null,
+            });
             return new Map();
         }
     }

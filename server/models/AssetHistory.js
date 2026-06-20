@@ -8,7 +8,8 @@ const AssetHistorySchema = new mongoose.Schema({
   history: [{
     date: { type: String, required: true }, // Formato YYYY-MM-DD
     close: Number,
-    adjClose: Number
+    adjClose: Number,
+    volume: Number // Volume negociado no dia — usado pelo filtro de volume dos sinais (7.3)
   }]
 });
 

@@ -23,6 +23,17 @@ export interface User {
   marketingOptIn?: boolean;
   bannerColor?: BannerPreset;
   paymentMethod?: PaymentMethod | null;
+  // (3.17) foto de perfil (data-URL) — ausente → fallback de iniciais.
+  avatar?: string;
+  // (3.21) novos campos de perfil.
+  brokerage?: string;
+  cep?: string;
+  street?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  birthDate?: string; // YYYY-MM-DD
+  salary?: string | number;
 }
 
 export type BannerPreset = 'ocean' | 'emerald' | 'royal' | 'sunset' | 'gold' | 'graphite';

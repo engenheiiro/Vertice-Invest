@@ -10,7 +10,7 @@ A numeração é a MESMA do PLANO-MELHORIAS.txt — o número 3.4 aqui é o
 mesmo item 3.4 de lá. Itens que ainda faltam continuam no arquivo
 principal.
 
-Atualizado em: 2026-06-15.
+Atualizado em: 2026-06-17.
 
 LEGENDA:
   [BAIXA]/[MEDIA]/[ALTA] = complexidade.
@@ -454,6 +454,45 @@ PLANO-MELHORIAS.txt.)
        "Mercado Pago (Pré-pago)". Só a referência do método vai ao BD.
 
 
+3.17 Upload de foto de perfil  [NOVO]
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → Decisão de armazenamento: data-URL pequena no Mongo (sem storage
+       externo). A imagem é redimensionada/comprimida NO CLIENTE para um
+       quadrado 256×256 (crop "cover" via canvas) e exportada em WebP 0.82
+       (fallback JPEG) — payload típico ~5-20KB, bem abaixo do limite de
+       1mb do express.json.
+     → Backend: User.avatar (String). Endpoints PUT /api/me/avatar e
+       DELETE /api/me/avatar (authController.updateAvatar/removeAvatar).
+       Validação defensiva no servidor (nunca confia no cliente): regex de
+       data-URL image/(png|jpeg|webp);base64 + teto de tamanho (400K chars
+       → 413). Rate limiter dedicado avatarUploadLimiter (20/15min) por
+       conta do payload maior. Zod avatarSchema na rota. sanitizeUser passa
+       a expor avatar; audit log AVATAR_UPDATED/REMOVED.
+     → Frontend: ProfileIdentity com <input type=file> oculto, resize no
+       cliente (resizeToDataUrl), preview no círculo do avatar (img cobre as
+       iniciais), overlay de câmera/spinner no hover, botões "Adicionar/
+       Trocar Foto" + remover. authService.updateAvatar/removeAvatar
+       atualizam o localStorage; refreshProfile reflete no contexto.
+
+3.21 Novos campos em "Informações Pessoais"  [NOVO]
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → Decisão LGPD: birthDate e salary são CIFRADOS em repouso
+       (AES-256-GCM via utils/encryption), mesma postura do CPF — guardados
+       como ciphertext "keyId:iv:tag:data" e devolvidos em claro só ao
+       titular (sanitizeUser/exportData). Endereço e corretora ficam em
+       claro (PII de baixo grau, como phone/occupation).
+     → Backend: User ganhou brokerage, cep, street, neighborhood, city,
+       state, birthDate, salary. updateProfile valida cada um (corretora
+       texto livre ≤80; data real não-futura e idade ≤120; salário número
+       ≥0; '' → $unset). Zod updateProfileSchema na rota PUT /me (antes sem
+       schema). exportData decifra birthDate/salary.
+     → Frontend: ProfileSettings com select de corretora (lista conhecida +
+       "Outra" → campo livre), CEP com autopreenchimento via ViaCEP
+       (gratuito, client-side, CORS liberado) preenchendo logradouro/bairro/
+       cidade/UF, Data de Nascimento (type=date) e Salário (type=number).
+       ProfileIdentity mostra cidade/UF no lugar de "Brasil" quando houver.
+
+
 --- Ajustes de UX por feedback (mesmo lote) ---
    → Zona de Perigo (Profile.tsx): os dois gatilhos ("Desativar Conta" e
      "Excluir Conta Permanentemente") agora ficam numa linha responsiva
@@ -521,8 +560,288 @@ PLANO-MELHORIAS.txt.)
        (Calculator/Research usam <select> ou filtro client-side). Verificado.
 
 
+5.3  Promise.allSettled nas cotações  (entregue 2026-06-17)
+     Se 1 cotação falha, toda a busca falha. Trocar para "cada uma por si".
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → Núcleo: novo marketDataService.getMarketDataMap(tickers) resolve N
+       tickers em ≤2 queries e cada ticker é INDEPENDENTE — um símbolo sem
+       dado vira { price: 0 } e nunca derruba os demais (substitui o
+       Promise.all(map(getMarketDataByTicker)) que poderia abortar em bloco).
+       Falha total de DB ainda devolve uma chave por ticker (price 0).
+     → walletController.getWalletData: o lote de leituras passou a usar
+       Promise.allSettled — se o cálculo de dividendos (ou macro/snapshots)
+       falhar, a carteira renderiza com degradação graciosa (totalDividends=0,
+       config null → defaults) em vez de responder 500.
+     → tests/market_data_service.spec.js: +6 testes de getMarketDataMap
+       (chave original vs normalizada, fallback de histórico em 1 query,
+       ticker desconhecido isolado, resiliência a falha total de DB).
+
+5.4  Paralelizar consultas em getWalletData  (entregue 2026-06-17)
+     Algumas consultas ao banco são sequenciais; rodar juntas.
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → walletController.getWalletData: (1) userPrefs (User.findById) +
+       userAssets (UserAsset.find) agora em Promise.all no topo — antes
+       sequenciais. (2) Quatro leituras independentes — cotações em lote,
+       macro (SystemConfig), dividendos (calculateUserDividends) e os 30
+       snapshots do TWRR/Sharpe — unificadas num único Promise.allSettled;
+       o WalletSnapshot.find que vivia ~150 linhas abaixo foi hasteado para
+       esse lote (mesma query, agora paralela). txs do Modified Dietz segue
+       depois pois depende do snapshot-âncora.
+     → calculateLiveKPIS: dividendos + macro + cotações em lote (Promise.all).
+
+5.8  Revisar consultas N+1 restantes  (entregue 2026-06-17)
+     Encontrar onde o código faz "1 consulta por item" em vez de 1 só.
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → Padrão N+1 eliminado em 4 caminhos de request que faziam um
+       MarketAsset.findOne por ativo dentro de loop (1 refresh em lote + N
+       findOne = N+1): getWalletData e calculateLiveKPIS (walletController),
+       getLiveWalletEquity (goalsController) e computeWalletValuation
+       (rebalanceService). Todos passaram a usar getMarketDataMap — UMA query
+       em MarketAsset (+ 1 fallback em AssetHistory só p/ quem não tem preço),
+       com lookup O(1) por Map. scheduler(job diário em background) e scripts
+       offline foram deixados como estão (fora do caminho de request).
+
+
 ================================================================
-FIM DO HISTÓRICO — 45 itens arquivados (1.1–1.10, 2.1–2.10,
-3.1/3.3–3.20 e 3.22 exceto 3.2/3.17/3.21,
-5.2/5.5/5.6/5.7/5.9/5.10)
+6. BACKEND E ARQUITETURA (itens já concluídos)
+================================================================
+(Seção 6 totalmente concluída — 6.1 a 6.10.)
+
+6.1  Tratador de erros estruturado  (entregue 2026-06-17)
+     Hoje o erro só devolve a mensagem. Padronizar com
+     código + mensagem + detalhe.
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → server/utils/AppError.js (novo): classe de erro com { status, code,
+       details }. code default derivado do status (STATUS_CODE map). Atalhos
+       AppError.badRequest/unauthorized/forbidden/notFound/conflict.
+     → server/middleware/errorHandler.js (novo): substitui o handler inline de
+       app.js. buildErrorResponse(err, requestId) é PURO (testável) e devolve
+       { status, body }. Body padronizado:
+         { message, error: { code, message, details?, requestId? } }
+       message no topo mantém COMPAT (todo o frontend lê data.message). Infere
+       status/code de erros nativos: Mongoose ValidationError (400 + detalhes
+       por campo), CastError (400 INVALID_ID), duplicate key 11000 (409
+       DUPLICATE_KEY + campos), JWT (401). Honra o legado err.httpStatus
+       (txError) e err.status/statusCode. requestId vem do correlation id (D12).
+       5xx loga em error (com stack), 4xx em warn.
+     → app.js: importa e usa errorHandler no lugar do handler antigo.
+     → walletController.addAssetTransaction: throws de validação migrados de
+       new Error(...) (que viravam 500) para AppError.badRequest(...) (400).
+     → tests/error_handler.spec.js (novo, 8 testes): AppError, httpStatus legado,
+       duplicate key, ValidationError com detalhes, JWT, fallback 500, mensagem
+       padrão, middleware escrevendo status+body. Adicionado ao test:ci.
+
+6.2  Contador de segurança na recursão de getWalletData  (entregue 2026-06-17)
+     A função se chama de novo após "auto-curar"; adicionar limite para
+     nunca entrar em loop.
+     [BAIXA] [OPUS] [IMPLEMENTADO]
+     → walletController.getWalletData ganhou um 4º parâmetro interno _depth=0 e
+       a constante MAX_WALLET_HEAL_DEPTH=1. Após o auto-heal reconstruir
+       posições, só recursa se _depth < limite; ao atingir o teto loga warn e
+       renderiza o estado atual em vez de recursar — impossível entrar em loop
+       infinito mesmo que o recálculo reporte sucesso sem estabilizar.
+
+6.3  Quebrar getWalletData (~300 linhas) em partes  (entregue 2026-06-17)
+     Função gigante e difícil de testar; dividir em funções menores.
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → walletController: getWalletData passou de ~300 linhas para um
+       orquestrador enxuto + 5 helpers de responsabilidade única, com a MESMA
+       aritmética financeira (ordem de safeAdd preservada):
+         loadWalletState(userId) — prefs+holdings (Promise.all), targets,
+           active/closed; autoHealPositions(userId) — reconstrói e devolve os
+           curados ou null; buildEmptyWalletResponse(targets) — carteira vazia;
+         fetchWalletMarketContext(userId, liveTickers) — o lote Promise.allSettled
+           (cotações/macro/dividendos/snapshots); processWalletAsset(asset, ctx)
+           — resolve preço/variação de 1 ativo e devolve o card + contribuições
+           p/ os totais; computeWalletMetrics({...}) — TWRR live + Sharpe.
+       Cada helper é pequeno e testável isoladamente. Validado: 245→253 testes
+       verdes (suíte de carteira/financeira inclusa) sem mudança de saída.
+
+6.4  Quebrar rebuildUserHistory (~200 linhas)  (entregue 2026-06-17)
+     Mesma ideia, na função que reconstrói o histórico da carteira.
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → financialService: rebuildUserHistory (~346 linhas) virou um orquestrador
+       enxuto + 7 helpers de responsabilidade única, com a MESMA aritmética
+       financeira (ordem de operações e fatores preservados):
+         _loadUsdRateResolver(currentUsdRate) — carrega USD/BRL e devolve o
+           resolvedor de taxa por data (busca binária <= alvo);
+         _loadPriceCacheMap(tickers, metaMap) — cache de preços por ticker, com
+           fallback ao externalMarketService e upsert em AssetHistory;
+         _loadDividendDateMap(tickers) — proventos indexados por data;
+         _loadCdiFactors(startDate, today, cdi) — Map de fatores SELIC do banco
+           (também flag de dia útil) + fallback prefixado por ano;
+         _applyDayTransactions(ctx) — aplica as movimentações do dia (muta
+           portfolio/fixedIncomeState) e devolve txIndex + fluxo ajustado;
+         _accrueDailyFixedIncome(ctx) — juros da renda fixa só em dia útil;
+         _markPortfolioToMarket(ctx) — marcação a mercado → patrimônio
+           nominal/ajustado, investido e hasPosition;
+         _persistSnapshots(userId, snaps) — troca transacional em lotes de 5000.
+       O loop diário agora lê em 5 passos numerados. Removidas 2 variáveis mortas
+       (dayFlowNominal e previousEquityNominal eram acumuladas e nunca lidas).
+       Validado: 253 testes verdes + node --check sem mudança de saída.
+
+6.5  Tornar explícitas as "falhas silenciosas"  (entregue 2026-06-17)
+     Alguns serviços engolem erro sem avisar. Ou avisa, ou comenta
+     claramente que é proposital.
+     [BAIXA] [OPUS] [IMPLEMENTADO]
+     → Eliminados os catch/`.catch()` vazios que sumiam com o erro. Agora cada um
+       OU loga OU tem comentário explicando que o silêncio é proposital:
+         walletController: os 3 rebuildUserHistory pós-commit (add/remove ativo,
+           remove transação) e os 2 background ops (refreshQuotesBatch,
+           syncDividends) passaram a logar warn com contexto (user/ticker) — a
+           transação principal já commitou, então é best-effort, mas visível.
+         rebalanceService.refreshQuotesBatch e configService.getTunablesSync
+           (refresh de tunables em background) idem → logger.warn.
+         authController.logAudit e financialService (fallback externo de
+           histórico) → comentário "proposital" + logger.debug (não podem
+           derrubar auth/rebuild; ruído mínimo).
+
+6.6  Logs estruturados (em vez de texto solto)  (entregue 2026-06-17)
+     Padronizar logs em formato de dados (facilita busca).
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → config/logger.js: o Winston ganhou logs estruturados sem quebrar os ~500
+       call sites antigos (que passam só string):
+         • injectRequestId promove o correlation id (D12) a CAMPO (info.requestId),
+           não só prefixo de texto.
+         • Call sites podem passar metadados no 2º arg: logger.info(msg, { source,
+           count, ... }). No console/arquivos de texto vira " | key=value"; no
+           novo transport JSON vira campo de 1ª classe.
+         • Novo transport combined.json.log (winston.format.json) — 1 linha/evento,
+           pronto para jq/Loki/Datadog. Mantidos error.log e combined.log legíveis.
+       → Padrão já adotado nos logs de maior valor: scraper Fundamentus
+         (source/kind/count/schemaVersion/status) e rebuildUserHistory
+         (durationSec/snapshots/userId). Demais logs migram incrementalmente.
+     → tests/logger_structured.spec.js (3 testes): transport JSON presente,
+       aceita metadados, compat com string pura. Adicionado ao test:ci.
+
+6.7  Versionar os "raspadores" (scraping) frágeis  (entregue 2026-06-17)
+     Fundamentus/FII quebram se o site mudar o HTML. Isolar e versionar.
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → config/scraperSchemas.js (novo): isola e VERSIONA o conhecimento frágil de
+       layout do Fundamentus (ordem das colunas). FUNDAMENTUS_STOCKS_LAYOUT e
+       FUNDAMENTUS_FIIS_LAYOUT trazem { version, source, table, columns (nome→
+       índice), headerSignature }. validateFundamentusLayout($, layout) lê o
+       cabeçalho real e devolve { ok, version, mismatches }.
+     → fundamentusService: getStocksMap/getFIIsMap não usam mais índices mágicos
+       ($(tds[18])) e sim nomes do schema ($(tds[col.patrimLiq])). Antes de raspar,
+       validam o layout e logam warn estruturado se a estrutura divergir — troca a
+       falha SILENCIOSA (dados zerados) por um alerta acionável. Bump de `version`
+       quando o site mudar.
+     → tests/scraper_schema.spec.js (5 testes): cabeçalho válido (tolera acento/
+       caixa), colunas-chave fora do lugar e tabela ausente. Adicionado ao test:ci.
+
+6.8  Completar a documentação Swagger da API  (entregue 2026-06-17)
+     Várias rotas não estão documentadas no /api/docs. Anotar todas.
+     [MEDIA] [SONNET] [IMPLEMENTADO]
+     → config/swagger.js: o paths passou de ~14 para ~70 endpoints, cobrindo TODAS
+       as rotas reais (conferidas em routes/*.js): auth completo (forgot/reset
+       password, avatar, change-password, deactivate, export/delete LGPD), MFA,
+       wallet (history/search/dividends/cashflow/rebalance/transactions/admin),
+       research leitura + bloco "Research (Admin)", market (landing/logo/price/
+       status), subscription (return/confirm/sync/check-access/register-usage),
+       goals (CRUD + contributions), academy (cursos/lições/quiz/certificado),
+       notifications e webhooks. Novas tags por área; rotas públicas (sem JWT)
+       marcadas com security: [] (login, forgot-password, market/landing,
+       academy/courses, webhooks…). Prefixos batem com os mounts do app.js.
+     → tests/swagger.spec.js: +3 testes (cobertura de todas as áreas, tags por
+       área, security:[] nas públicas). 8 testes verdes.
+
+6.9  Circuit breaker na conexão do MongoDB  (entregue 2026-06-17)
+     Se o banco fica lento, os pedidos acumulam. Adicionar "disjuntor".
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → middleware/mongoCircuitBreaker.js (novo): "disjuntor" que faz FAIL-FAST.
+       Quando a conexão não está em `connected` (readyState !== 1) OU o circuito
+       está aberto, as rotas de dados respondem 503 + Retry-After NA HORA, em vez
+       de enfileirar até o serverSelectionTimeout (30s) e esgotar pool/memória.
+       Reaproveita o CircuitBreaker de utils/resilience (threshold 3, cooldown
+       15s) ligado aos eventos da conexão (disconnected/error → falha;
+       connected/reconnected → fecha). Decisão isolada em shouldRejectRequest()
+       (pura/testável).
+     → config/db.js: attachMongoBreaker() ligado ANTES do connect.
+     → app.js: app.use('/api', mongoCircuitBreaker) depois do /api/health (que
+       precisa responder com o banco fora) e antes das rotas; /api/health agora
+       expõe dbBreaker (CLOSED|OPEN|HALF_OPEN).
+     → tests/mongo_circuit_breaker.spec.js (7 testes): decisão pura, middleware
+       (next vs 503+Retry-After) e abertura por limiar de falhas. Adicionado ao
+       test:ci.
+
+6.10 Normalizar tratamento de datas  (entregue 2026-06-17)
+     Há mistura de Date/string/timezone. Centralizar num utilitário único.
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → utils/dateUtils.js: centraliza os helpers antes duplicados/ad-hoc, com a
+       CONVENÇÃO de fuso documentada:
+         toDateKey(date) — chave `YYYY-MM-DD` (base UTC, via toISOString; null em
+           entrada inválida) p/ comparar/agrupar/indexar por dia;
+         startOfDay(date) — meia-noite LOCAL (novo Date);
+         dateKeyToUtcDate(date) — chave → Date de meia-noite UTC estável.
+     → Adoção nos caminhos críticos, SEM mudar semântica (helpers replicam o
+       comportamento antigo):
+         financialService.toDateKey/normalizeDate agora delegam ao util (removida
+           a 2ª cópia da lógica); todos os `this.toDateKey` internos preservados;
+         walletController: 7 sites de `x.toISOString().split('T')[0]` → toDateKey
+           e setHours(0,0,0,0) → startOfDay;
+         schedulerService: `new Date(x.toISOString().split('T')[0]+'T00:00:00Z')`
+           → dateKeyToUtcDate(x).
+       Demais serviços (externalMarketService etc.) migram incrementalmente.
+     → tests/date_utils.spec.js (6 testes): equivalência com o padrão antigo,
+       null-safety, startOfDay imutável, dateKeyToUtcDate. Adicionado ao test:ci.
+
+
+================================================================
+7. ENGINES FINANCEIRAS E FUNCIONALIDADES
+================================================================
+7.2  Detecção de divergências nos sinais  (entregue 2026-06-17)
+     Identificar quando preço e indicador "discordam" (sinal de virada).
+     [ALTA] [OPUS] [IMPLEMENTADO]
+     → services/engines/signalEngine.js: novo conjunto de funções PURAS
+       (testáveis, sem rede/DB):
+         _rsiSeries(closes, period) — série de RSI "dia a dia" alinhada ao
+           histórico (mais recente→antigo); out[i] = RSI sobre closes[i..i+period].
+         detectBullishDivergence(closes, period, opts) — divergência ALTISTA:
+           o PREÇO faz fundo mais baixo enquanto o RSI faz fundo mais ALTO
+           (momentum de baixa enfraquece) → possível virada. Detecta pivôs de
+           baixa (mínimos locais, wing=2) dentro do lookback (40), exige
+           separação mínima (3 pregões), fundo recente fresco (≤6 pregões) e
+           preço já reagindo acima do fundo, com RSI recente em zona fraca (<45).
+         _divergenceUrgency(rsi) — urgência por força da sobrevenda no fundo
+           recente (CRITICAL <25, HIGH <35, MEDIUM demais).
+     → runScanner CHECK 3: novo sinal BULLISH_DIVERGENCE, com as MESMAS travas
+       de qualidade do RSI (margem líquida > -5, confirmação de volume, bloqueio
+       de downtrend severo < 85% da SMA200 e filtro de correlação macro).
+     → models/QuantSignal.js: enum de `type` ganhou 'BULLISH_DIVERGENCE'.
+     → Frontend: Radar.tsx (rótulo "Divergência Altista" + tag de RSI),
+       AiRadar.tsx (badge de RSI) e useDashboardData.ts (tipos + score =
+       100 - RSI, igual ao RSI_OVERSOLD).
+     → tests/signal_divergence_volume.spec.js: cobre detecção (positivo),
+       série curta/entrada inválida/monotônica/sem lower-low (negativos) e
+       _rsiSeries. Adicionado à suíte (404 testes verdes no server).
+
+7.3  Filtro por volume nos sinais  (entregue 2026-06-17)
+     Considerar volume negociado para validar o sinal.
+     [MEDIA] [OPUS] [IMPLEMENTADO]
+     → ANTES o histórico não persistia volume (AssetHistory só guardava
+       date/close/adjClose), então a "confirmação de volume" do runScanner era
+       um no-op silencioso (volume sempre undefined → não bloqueava nada).
+       Corrigido na raiz:
+         models/AssetHistory.js: subdoc `history` ganhou o campo `volume`.
+         externalMarketService.getFullHistory: passou a mapear `volume`
+           (day.volume) vindo do Yahoo, antes descartado.
+     → services/engines/signalEngine.js: extraído _volumeStats(history,
+       multiplier=1.2, lookback=20) — função PURA que devolve
+       { hasData, currentVolume, avgVolume, ratio, confirmed }. Exige volume
+       atual ≥ 1.2× a média dos últimos 20 pregões; quando NÃO há dados
+       suficientes (histórico legado), degrada com segurança (confirmed=true,
+       não bloqueia). Aplicado aos sinais RSI_OVERSOLD e BULLISH_DIVERGENCE.
+     → models/QuantSignal.js: novo campo `volumeRatio` (razão no momento do
+       sinal; null quando sem dados) gravado nos upserts.
+     → tests/signal_divergence_volume.spec.js: cobre confirmação, não-confirmação,
+       ausência de dados (não bloqueia) e descarte de volumes inválidos/zerados.
+
+(7.1, 7.4–7.6 e 7.9 seguem pendentes no PLANO-MELHORIAS.txt.)
+
+
+================================================================
+FIM DO HISTÓRICO — 55 itens arquivados (1.1–1.10, 2.1–2.10,
+3.1/3.3–3.22 exceto 3.2,
+5.2/5.3/5.4/5.5/5.6/5.7/5.8/5.9/5.10, 6.1/6.2/6.3, 7.2/7.3)
 ================================================================

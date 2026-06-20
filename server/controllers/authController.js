@@ -38,6 +38,21 @@ const maskEmail = (email) => {
 // Versão do consentimento — incrementar ao alterar Termos ou Política de Privacidade
 const CONSENT_VERSION = '1.0';
 
+// (3.17) Avatar: limites de validação do data-URL recebido. A imagem já chega
+// redimensionada (256×256) e comprimida pelo cliente; estes tetos são a defesa
+// do servidor contra payloads abusivos. ~300KB de base64 cobre folgadamente
+// um JPEG/WebP 256×256, abaixo do limite de 1mb do express.json (app.js).
+const AVATAR_MAX_LENGTH = 400_000; // chars da data-URL
+const AVATAR_DATAURL_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+
+// (3.21a) Corretoras conhecidas. O usuário pode escolher uma delas ou "Outra"
+// (texto livre) — por isso o backend valida só comprimento, não a allowlist.
+const KNOWN_BROKERAGES = [
+  'XP Investimentos', 'BTG Pactual', 'Rico', 'Clear', 'Inter',
+  'Nubank/NuInvest', 'Itaú/Íon', 'Toro', 'Genial', 'Ágora', 'Modalmais',
+  'Guide', 'Órama', 'Santander Corretora', 'Caixa Corretora',
+];
+
 // Configurações
 const ACCESS_TOKEN_EXPIRATION = '15m';
 const REFRESH_TOKEN_EXPIRATION_DAYS = 7;
@@ -64,7 +79,11 @@ const logAudit = async (req, action, details, userId = null, email = null) => {
             ipAddress: Array.isArray(ip) ? ip[0] : ip,
             userAgent: req.headers['user-agent']
         }).catch(err => logger.error(`Erro log: ${err.message}`));
-    } catch (e) {}
+    } catch (e) {
+        // Proposital: a auditoria NUNCA pode derrubar o fluxo de auth. Falha ao
+        // montar o registro (ex.: headers ausentes) é só logada em debug.
+        logger.debug(`[Audit] Falha ao registrar auditoria (${action}): ${e.message}`);
+    }
 };
 
 // Sanitizador de Usuário (DTO - Data Transfer Object)
@@ -85,7 +104,19 @@ const sanitizeUser = (user) => {
         occupation: user.occupation,
         bannerColor: user.bannerColor,
         marketingOptIn: user.marketingOptIn,
-        mfaEnabled: !!user.mfaEnabled // (I14) p/ a UI refletir o status
+        mfaEnabled: !!user.mfaEnabled, // (I14) p/ a UI refletir o status
+        // (3.17) foto de perfil — data-URL pequena (ou ausente → iniciais).
+        avatar: user.avatar,
+        // (3.21) novos campos de perfil. brokerage/endereço em claro;
+        // birthDate/salary cifrados em repouso → devolvidos em claro ao titular.
+        brokerage: user.brokerage,
+        cep: user.cep,
+        street: user.street,
+        neighborhood: user.neighborhood,
+        city: user.city,
+        state: user.state,
+        birthDate: user.birthDate ? decrypt(user.birthDate) : user.birthDate,
+        salary: user.salary ? decrypt(user.salary) : user.salary,
     };
 };
 
@@ -325,12 +356,65 @@ export const resetPassword = async (req, res, next) => {
 export const updateProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const { name, cpf, phone, occupation, bannerColor } = req.body;
+        const {
+            name, cpf, phone, occupation, bannerColor,
+            // (3.21) novos campos de perfil
+            brokerage, cep, street, neighborhood, city, state, birthDate, salary,
+        } = req.body;
         const cleanCpf = cpf ? cpf.replace(/\D/g, '') : null;
 
         // $set ignora chaves undefined (deixa o campo inalterado quando vazio).
         const set = { name, phone: phone || undefined, occupation: occupation || undefined };
         const unset = {};
+
+        // (3.21a) Corretora — texto livre (lista conhecida + "Outra"). Só valida
+        // tamanho. '' → remove a escolha.
+        if (brokerage !== undefined) {
+            const b = typeof brokerage === 'string' ? brokerage.trim() : '';
+            if (b === '') unset.brokerage = 1;
+            else if (b.length > 80) return res.status(400).json({ message: "Corretora inválida." });
+            else set.brokerage = b;
+        }
+
+        // (3.21b) Endereço (ViaCEP) — campos em claro. Helper: '' → $unset.
+        const addressFields = { cep, street, neighborhood, city, state };
+        for (const [key, raw] of Object.entries(addressFields)) {
+            if (raw === undefined) continue;
+            const v = typeof raw === 'string' ? raw.trim() : '';
+            if (v === '') unset[key] = 1;
+            else if (v.length > 120) return res.status(400).json({ message: "Endereço inválido." });
+            else set[key] = v;
+        }
+
+        // (3.21c) Data de nascimento — cifrada em repouso. Aceita YYYY-MM-DD,
+        // valida que é data real e plausível (não futura, idade ≤ 120 anos).
+        if (birthDate !== undefined) {
+            const v = typeof birthDate === 'string' ? birthDate.trim() : '';
+            if (v === '') {
+                unset.birthDate = 1;
+            } else {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return res.status(400).json({ message: "Data de nascimento inválida." });
+                const d = new Date(`${v}T00:00:00Z`);
+                const now = new Date();
+                const min = new Date(); min.setUTCFullYear(now.getUTCFullYear() - 120);
+                if (Number.isNaN(d.getTime()) || v !== d.toISOString().slice(0, 10) || d > now || d < min) {
+                    return res.status(400).json({ message: "Data de nascimento inválida." });
+                }
+                set.birthDate = encrypt(v); // cifra em repouso (AES-256-GCM)
+            }
+        }
+
+        // (3.21d) Salário atual — cifrado em repouso. Número não-negativo.
+        if (salary !== undefined) {
+            const v = (salary === null || salary === '') ? '' : salary;
+            if (v === '') {
+                unset.salary = 1;
+            } else {
+                const n = Number(v);
+                if (!Number.isFinite(n) || n < 0 || n > 1e12) return res.status(400).json({ message: "Salário inválido." });
+                set.salary = encrypt(String(n)); // cifra em repouso (AES-256-GCM)
+            }
+        }
 
         // Banner de perfil (3.20): só aceita presets conhecidos; '' remove a escolha
         // (volta ao gradiente padrão do plano).
@@ -375,6 +459,56 @@ export const updateProfile = async (req, res, next) => {
             message: "Perfil atualizado.", 
             user: sanitizeUser(updatedUser)
         });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// (3.17) Atualiza a foto de perfil. Recebe uma data-URL de imagem já
+// redimensionada/comprimida pelo cliente (256×256). O servidor valida mime e
+// tamanho — nunca confia no cliente — e guarda a string no documento do usuário.
+export const updateAvatar = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { avatar } = req.body;
+
+        if (typeof avatar !== 'string' || !avatar) {
+            return res.status(400).json({ message: "Imagem ausente." });
+        }
+        if (avatar.length > AVATAR_MAX_LENGTH) {
+            return res.status(413).json({ message: "Imagem muito grande. Tente outra foto." });
+        }
+        if (!AVATAR_DATAURL_RE.test(avatar)) {
+            return res.status(400).json({ message: "Formato inválido. Envie PNG, JPEG ou WebP." });
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { $set: { avatar } },
+            { new: true }
+        );
+        invalidateUser(userId);
+
+        logAudit(req, 'AVATAR_UPDATED', 'Foto de perfil atualizada', userId, updatedUser?.email);
+        res.json({ message: "Foto atualizada.", user: sanitizeUser(updatedUser) });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// (3.17) Remove a foto de perfil — volta ao fallback de iniciais.
+export const removeAvatar = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { $unset: { avatar: 1 } },
+            { new: true }
+        );
+        invalidateUser(userId);
+
+        logAudit(req, 'AVATAR_REMOVED', 'Foto de perfil removida', userId, updatedUser?.email);
+        res.json({ message: "Foto removida.", user: sanitizeUser(updatedUser) });
     } catch (error) {
         next(error);
     }
@@ -454,8 +588,10 @@ export const exportData = async (req, res, next) => {
         const { password, resetPasswordToken, resetPasswordExpires,
                 mfaSecret, mfaPendingSecret, mfaBackupCodes, cpfHash, ...safeUser } = user;
 
-        // Devolve o CPF em claro ao próprio titular (decrypt trata legados sem ':').
+        // Devolve dados cifrados em claro ao próprio titular (decrypt trata legados sem ':').
         if (safeUser.cpf) safeUser.cpf = decrypt(safeUser.cpf);
+        if (safeUser.birthDate) safeUser.birthDate = decrypt(safeUser.birthDate);
+        if (safeUser.salary) safeUser.salary = decrypt(safeUser.salary);
 
         const [
             userAssets,

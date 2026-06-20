@@ -2,6 +2,7 @@
 import YahooFinance from 'yahoo-finance2';
 import MarketAsset from '../models/MarketAsset.js';
 import { SP500_STOCKS } from '../config/sp500List.js';
+import { toYahooSymbol } from './externalMarketService.js';
 import logger from '../config/logger.js';
 
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
@@ -36,8 +37,13 @@ function extractFundamentals(ticker, data) {
     const earningsGrowth = fd.earningsGrowth ? fd.earningsGrowth * 100 : null;
     // Yahoo Finance retorna debtToEquity em formato percentual (ex: 47.49 = 47.49% = ratio 0.4749)
     const debtToEquity = fd.debtToEquity != null ? fd.debtToEquity / 100 : null;
-    const avgLiquidity = sd.averageVolume || ks.averageDailyVolume10Day || null;
     const lastPrice = fd.currentPrice || sd.regularMarketPrice || null;
+    // Liquidez em VALOR financeiro (US$/dia), não em nº de ações — alinha com a
+    // liquidez dos ativos BR (Liq.2meses, em R$) que o scoringEngine compara contra
+    // o piso de 1M. Sem isso, ações caras de baixo giro de papéis (AZO ~$3000,
+    // <1M ações/dia mas >$2bi/dia em valor) levavam -30 de confiança indevidamente.
+    const avgVolumeShares = sd.averageVolume || ks.averageDailyVolume10Day || null;
+    const avgLiquidity = (avgVolumeShares && lastPrice) ? avgVolumeShares * lastPrice : null;
     const payoutRatio = sd.payoutRatio ? sd.payoutRatio * 100 : null;
     const vpa = ks.bookValue || null;
     const lpa = ks.trailingEps || ks.forwardEps || null;
@@ -61,7 +67,8 @@ function extractFundamentals(ticker, data) {
 async function fetchFundamentalsForTicker(ticker) {
     try {
         const data = await Promise.race([
-            yahooFinance.quoteSummary(ticker, { modules: QUOTESUMMARY_MODULES }, { validateResult: false }),
+            // Ticker canônico (BRK.B) → símbolo do Yahoo (BRK-B); mantém `ticker` como chave do DB.
+            yahooFinance.quoteSummary(toYahooSymbol(ticker), { modules: QUOTESUMMARY_MODULES }, { validateResult: false }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), TICKER_TIMEOUT_MS))
         ]);
         return { ticker, data, ok: true };

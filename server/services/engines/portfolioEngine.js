@@ -1,5 +1,5 @@
 
-import { getMacroSector } from '../../config/sectorTaxonomy.js';
+import { getConcentrationKey } from '../../config/sectorTaxonomy.js';
 import { getFiiManager } from '../../config/fiiManagerMap.js';
 // (M9) Threshold global centralizado em financialConstants.
 import { BUY_THRESHOLD } from '../../config/financialConstants.js';
@@ -21,117 +21,87 @@ const sortByScoreThenComposite = (scoreKey) => (a, b) => {
 };
 
 export const portfolioEngine = {
-    performCompetitiveDraft(allAssets) {
+    // options.trace (opcional): array coletor. Quando presente, cada candidato
+    // AVALIADO no draft registra { profile, tier, ticker, score, composite, key,
+    // outcome } — diagnóstico para entender por que um ativo entrou/foi barrado
+    // pelo cap de concentração. Sem custo em produção (só coleta se passado).
+    performCompetitiveDraft(allAssets, options = {}) {
         const finalPortfolio = [];
         const usedTickers = new Set();
+        const trace = options.trace || null;
         // (I13) Cap de cripto editável em runtime (fallback p/ default do M9).
         const MAX_CRYPTO_PER_PROFILE = getTunablesSync().maxCryptoPerProfile;
 
         const runDraftCycle = (profile, scoreKey, count) => {
             const TARGET_COUNT = count;
             const profileAssets = [];
-
-            // --- TIER GOLD (Elite) ---
-            let candidates = allAssets
-                .filter(a => !usedTickers.has(a.ticker) && a.scores[scoreKey] >= 55)
-                .sort(sortByScoreThenComposite(scoreKey));
-
             const sectorCounts = {};
-            // Cap global: máximo 3 ativos por macro-setor por perfil (30% de 10 slots).
-            // DEFENSIVO usa o mesmo limite que os demais — sem exceção por perfil.
-            const MAX_PER_SECTOR_STRICT = profile === 'DEFENSIVE' ? 3 : 2;
-            const MAX_PER_SECTOR_FLEX = 3;
             let cryptoCount = 0;
 
-            for (const asset of candidates) {
-                if (profileAssets.length >= TARGET_COUNT) break;
+            // Cap global por BALDE DE CONCENTRAÇÃO por perfil. Para ações/ETFs o balde
+            // é o macro-setor (risco sistêmico correlacionado); para FIIs é o SEGMENTO
+            // (shopping ≠ logística ≠ papel ≠ fiagro), permitindo diversificar uma
+            // carteira 100% FII em vez de colapsá-la em ~3 macro-setores.
+            const MAX_PER_SECTOR_STRICT = profile === 'DEFENSIVE' ? 3 : 2;
+            const MAX_PER_SECTOR_FLEX = 3;
 
-                const sector = getMacroSector(asset.sector);
+            // Tenta encaixar um candidato respeitando o cap do balde corrente.
+            const tryAdd = (asset, tier, sectorCap, thesis) => {
+                const key = getConcentrationKey(asset);
                 const isCrypto = asset.type === 'CRYPTO';
-                const currentCount = sectorCounts[sector] || 0;
+                const currentCount = sectorCounts[key] || 0;
+                const canAdd = isCrypto
+                    ? (cryptoCount < MAX_CRYPTO_PER_PROFILE)
+                    : (currentCount < sectorCap);
 
-                const canAdd = isCrypto ? (cryptoCount < MAX_CRYPTO_PER_PROFILE) : (currentCount < MAX_PER_SECTOR_STRICT);
                 if (canAdd) {
                     profileAssets.push({
                         ...asset,
                         riskProfile: profile,
                         score: asset.scores[scoreKey],
                         action: asset.scores[scoreKey] >= BUY_THRESHOLD ? 'BUY' : 'WAIT',
-                        tier: 'GOLD',
-                        thesis: `${profile}: Top Pick (Score ${asset.scores[scoreKey]})`
+                        tier,
+                        thesis,
                     });
                     usedTickers.add(asset.ticker);
                     if (isCrypto) cryptoCount++;
-                    else sectorCounts[sector] = currentCount + 1;
+                    else sectorCounts[key] = currentCount + 1;
                 }
-            }
 
-            // --- TIER SILVER (Flex) ---
-            if (profileAssets.length < TARGET_COUNT) {
-                candidates = allAssets
-                    .filter(a => !usedTickers.has(a.ticker) && a.scores[scoreKey] >= 40)
+                if (trace) {
+                    trace.push({
+                        profile, tier, ticker: asset.ticker,
+                        score: asset.scores[scoreKey],
+                        composite: Number(structuralComposite(asset).toFixed(2)),
+                        key,
+                        outcome: canAdd ? 'SELECTED' : (isCrypto ? 'BLOCKED_CRYPTO_CAP' : 'BLOCKED_SECTOR_CAP'),
+                    });
+                }
+                return canAdd;
+            };
+
+            const fillTier = (minScore, op, sectorCap, tier, thesisFn) => {
+                if (profileAssets.length >= TARGET_COUNT) return;
+                const candidates = allAssets
+                    .filter(a => !usedTickers.has(a.ticker) && (op === 'gt' ? a.scores[scoreKey] > minScore : a.scores[scoreKey] >= minScore))
                     .sort(sortByScoreThenComposite(scoreKey));
-
                 for (const asset of candidates) {
                     if (profileAssets.length >= TARGET_COUNT) break;
-
-                    const sector = getMacroSector(asset.sector);
-                    const isCrypto = asset.type === 'CRYPTO';
-                    const currentCount = sectorCounts[sector] || 0;
-
-                    const canAdd = isCrypto ? (cryptoCount < MAX_CRYPTO_PER_PROFILE) : (currentCount < MAX_PER_SECTOR_FLEX);
-                    if (canAdd) {
-                        profileAssets.push({
-                            ...asset,
-                            riskProfile: profile,
-                            score: asset.scores[scoreKey],
-                            action: asset.scores[scoreKey] >= BUY_THRESHOLD ? 'BUY' : 'WAIT',
-                            tier: 'SILVER',
-                            thesis: `${profile}: Oportunidade Secundária`
-                        });
-                        usedTickers.add(asset.ticker);
-                        if (isCrypto) cryptoCount++;
-                        else sectorCounts[sector] = currentCount + 1;
-                    }
+                    tryAdd(asset, tier, sectorCap, thesisFn(asset));
                 }
-            }
+            };
 
-            // --- TIER BRONZE (Backfill) ---
-            if (profileAssets.length < TARGET_COUNT) {
-                candidates = allAssets
-                    .filter(a => !usedTickers.has(a.ticker) && a.scores[scoreKey] > 30)
-                    .sort(sortByScoreThenComposite(scoreKey));
-
-                for (const asset of candidates) {
-                    if (profileAssets.length >= TARGET_COUNT) break;
-
-                    const sector = getMacroSector(asset.sector);
-                    const isCrypto = asset.type === 'CRYPTO';
-                    const currentCount = sectorCounts[sector] || 0;
-
-                    const canAdd = isCrypto ? (cryptoCount < MAX_CRYPTO_PER_PROFILE) : (currentCount < MAX_PER_SECTOR_FLEX);
-                    if (canAdd) {
-                        profileAssets.push({
-                            ...asset,
-                            riskProfile: profile,
-                            score: asset.scores[scoreKey],
-                            action: asset.scores[scoreKey] >= BUY_THRESHOLD ? 'BUY' : 'WAIT',
-                            tier: 'BRONZE',
-                            thesis: `Inclusão Tática: Diversificação para atingir alocação.`
-                        });
-                        usedTickers.add(asset.ticker);
-                        if (isCrypto) cryptoCount++;
-                        else sectorCounts[sector] = currentCount + 1;
-                    }
-                }
-            }
+            // GOLD (Elite, score ≥ 55) → SILVER (Flex, ≥ 40) → BRONZE (Backfill, > 30)
+            fillTier(55, 'gte', MAX_PER_SECTOR_STRICT, 'GOLD', (a) => `${profile}: Top Pick (Score ${a.scores[scoreKey]})`);
+            fillTier(40, 'gte', MAX_PER_SECTOR_FLEX, 'SILVER', () => `${profile}: Oportunidade Secundária`);
+            fillTier(30, 'gt', MAX_PER_SECTOR_FLEX, 'BRONZE', () => `Inclusão Tática: Diversificação para atingir alocação.`);
 
             finalPortfolio.push(...profileAssets);
         };
 
-        runDraftCycle('DEFENSIVE', 'DEFENSIVE', 10); 
-        runDraftCycle('MODERATE', 'MODERATE', 10);   
-        runDraftCycle('BOLD', 'BOLD', 10);           
+        runDraftCycle('DEFENSIVE', 'DEFENSIVE', 10);
+        runDraftCycle('MODERATE', 'MODERATE', 10);
+        runDraftCycle('BOLD', 'BOLD', 10);
 
         return finalPortfolio;
     },
@@ -152,7 +122,8 @@ export const portfolioEngine = {
             const sectorCounts = {};
             const managerCounts = {};
             return assets.map(asset => {
-                const macroSector = getMacroSector(asset.sector);
+                // Mesmo balde de concentração do draft: FII por segmento, ação por macro-setor.
+                const macroSector = getConcentrationKey(asset);
                 const isFII = asset.type === 'FII';
                 const managerProxy = isFII ? getFiiManager(asset.ticker) : 'N/A';
 

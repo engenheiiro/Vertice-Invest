@@ -111,6 +111,105 @@ export const signalEngine = {
         return 'MEDIUM';
     },
 
+    // Determina urgência da divergência altista pela força da sobrevenda
+    // no fundo recente: RSI mais baixo => virada potencialmente mais forte.
+    _divergenceUrgency(rsi) {
+        if (rsi < 25) return 'CRITICAL';
+        if (rsi < 35) return 'HIGH';
+        return 'MEDIUM';
+    },
+
+    // --- FILTRO POR VOLUME (7.3) ---
+    // Estatísticas de volume a partir do histórico (mais recente → mais antigo).
+    // `confirmed` exige volume atual >= `multiplier`× a média dos últimos
+    // `lookback` pregões. Quando não há dados de volume suficientes (histórico
+    // legado, sem o campo), retorna { hasData: false, confirmed: true } para
+    // degradar com segurança — o sinal NÃO é bloqueado por ausência de dado.
+    _volumeStats(history, multiplier = 1.2, lookback = 20) {
+        const volumes = (history || [])
+            .map(h => h.volume)
+            .filter(v => Number.isFinite(v) && v > 0);
+
+        if (volumes.length < lookback) {
+            return { hasData: false, currentVolume: volumes[0] || 0, avgVolume: 0, ratio: null, confirmed: true };
+        }
+
+        const avgVolume = volumes.slice(0, lookback).reduce((a, b) => a + b, 0) / lookback;
+        const currentVolume = volumes[0] || 0;
+        const ratio = avgVolume > 0 ? currentVolume / avgVolume : null;
+        const confirmed = ratio !== null ? ratio >= multiplier : true;
+
+        return { hasData: true, currentVolume, avgVolume, ratio, confirmed };
+    },
+
+    // --- DETECÇÃO DE DIVERGÊNCIAS (7.2) ---
+    // Série de RSI alinhada ao histórico (mais recente → mais antigo).
+    // out[i] = RSI "no dia i" (calculado sobre closes[i..i+period]); null onde
+    // não há dados suficientes para fechar a janela.
+    _rsiSeries(closes, period = 14) {
+        const out = new Array(closes.length).fill(null);
+        for (let i = 0; i + period < closes.length; i++) {
+            out[i] = this.calculateRSI(closes.slice(i), period);
+        }
+        return out;
+    },
+
+    // Divergência altista: o PREÇO faz um fundo mais baixo enquanto o RSI faz
+    // um fundo mais ALTO (o momentum de baixa enfraquece) — sinal clássico de
+    // possível virada. `closes` ordenado do mais recente para o mais antigo.
+    // Retorna detalhes do par de fundos ou null se não houver divergência.
+    detectBullishDivergence(closes, period = 14, opts = {}) {
+        const wing = opts.wing ?? 2;                 // pregões de cada lado p/ confirmar o pivô
+        const minSeparation = opts.minSeparation ?? 3; // distância mínima entre os dois fundos
+        const maxLookback = opts.maxLookback ?? 40;  // janela de busca de pivôs
+        const rsiZone = opts.rsiZone ?? 45;          // fundo recente precisa estar em zona fraca
+        const maxRecentAge = opts.maxRecentAge ?? 6; // frescor: pivô recente precisa estar perto de hoje
+
+        if (!Array.isArray(closes)) return null;
+        const minLen = period + wing + minSeparation + 2;
+        if (closes.length < minLen) return null;
+
+        const rsi = this._rsiSeries(closes, period);
+
+        // Coleta pivôs de baixa (mínimos locais) dentro da janela de lookback.
+        const pivots = [];
+        const limit = Math.min(closes.length - wing, maxLookback);
+        for (let i = wing; i < limit; i++) {
+            if (rsi[i] == null) continue;
+            let isLow = true;
+            for (let k = 1; k <= wing; k++) {
+                if (!(closes[i] < closes[i - k]) || !(closes[i] < closes[i + k])) { isLow = false; break; }
+            }
+            if (isLow) pivots.push(i);
+        }
+
+        if (pivots.length < 2) return null;
+
+        const recent = pivots[0];               // menor índice = pivô mais recente
+        if (recent > maxRecentAge) return null;       // pivô recente precisa ser fresco
+        if (!(closes[0] > closes[recent])) return null; // preço já reagindo acima do fundo
+
+        let older = null;
+        for (let j = 1; j < pivots.length; j++) {
+            if (pivots[j] - recent >= minSeparation) { older = pivots[j]; break; }
+        }
+        if (older === null) return null;
+
+        const priceLowerLow = closes[recent] < closes[older];
+        const rsiHigherLow = rsi[recent] > rsi[older];
+
+        if (priceLowerLow && rsiHigherLow && rsi[recent] < rsiZone) {
+            return {
+                rsiAtLow: rsi[recent],
+                priorRsiLow: rsi[older],
+                priceLow: closes[recent],
+                priorPriceLow: closes[older],
+                barsBetween: older - recent,
+            };
+        }
+        return null;
+    },
+
     // --- SCANNER PRINCIPAL ---
 
     async runScanner() {
@@ -180,15 +279,11 @@ export const signalEngine = {
                     const currentPrice = asset.lastPrice;
                     const riskProfile = this.determineRiskProfile(asset);
 
-                    // Confirmação de volume: volume atual >= 1.2x média dos últimos 20 pregões
-                    const volumes = history.map(h => h.volume).filter(v => v > 0);
-                    const avgVolume20 = volumes.length >= 20
-                        ? volumes.slice(0, 20).reduce((a, b) => a + b, 0) / 20
-                        : 0;
-                    const currentVolume = volumes[0] || 0;
-                    const hasVolumeConfirmation = avgVolume20 > 0
-                        ? currentVolume >= avgVolume20 * 1.2
-                        : true;
+                    // Confirmação de volume (7.3): volume atual >= 1.2x média dos
+                    // últimos 20 pregões. Degrada com segurança se não houver dado.
+                    const volume = this._volumeStats(history);
+                    const hasVolumeConfirmation = volume.confirmed;
+                    const volumeRatio = volume.ratio;
 
                     // --- CHECK 1: RSI OVERSOLD (GOLD only: RSI < 30 + reversão + volume) ---
                     if (asset.netMargin > -5) {
@@ -217,7 +312,7 @@ export const signalEngine = {
                                         updateOne: {
                                             filter: { ticker: asset.ticker, type: 'RSI_OVERSOLD', status: 'ACTIVE' },
                                             update: {
-                                                $set: { quality, value: rsi, message, urgencyLevel, timestamp: new Date() },
+                                                $set: { quality, value: rsi, message, urgencyLevel, volumeRatio, timestamp: new Date() },
                                                 $setOnInsert: {
                                                     ticker: asset.ticker,
                                                     type: 'RSI_OVERSOLD',
@@ -232,6 +327,46 @@ export const signalEngine = {
                                         }
                                     });
                                 }
+                            }
+                        }
+                    }
+
+                    // --- CHECK 3: DIVERGÊNCIA ALTISTA (preço faz fundo mais baixo, RSI faz fundo mais alto) ---
+                    // Filtra por mesma trava de qualidade do RSI: margem saudável, volume
+                    // confirmando e sem downtrend severo. Sinal de virada antecipada.
+                    if (asset.netMargin > -5 && hasVolumeConfirmation) {
+                        const divergence = this.detectBullishDivergence(closes, 14);
+                        const trendBlock = asset.sma200 > 0 && currentPrice < asset.sma200 * 0.85;
+
+                        if (divergence && !trendBlock) {
+                            const correlationCheck = this.isValidCorrelation(asset.ticker, 'RSI_OVERSOLD', macroContext, asset.type);
+
+                            if (!correlationCheck.valid) {
+                                correlationBlocks++;
+                            } else {
+                                const quality = 'GOLD';
+                                const urgencyLevel = this._divergenceUrgency(divergence.rsiAtLow);
+                                const message = `Divergência Altista: preço em novo fundo, mas RSI subindo (${divergence.rsiAtLow.toFixed(0)} vs ${divergence.priorRsiLow.toFixed(0)}). Possível virada.`;
+
+                                processedPairs.add(`${asset.ticker}-BULLISH_DIVERGENCE`);
+                                upsertOps.push({
+                                    updateOne: {
+                                        filter: { ticker: asset.ticker, type: 'BULLISH_DIVERGENCE', status: 'ACTIVE' },
+                                        update: {
+                                            $set: { quality, value: divergence.rsiAtLow, message, urgencyLevel, volumeRatio, timestamp: new Date() },
+                                            $setOnInsert: {
+                                                ticker: asset.ticker,
+                                                type: 'BULLISH_DIVERGENCE',
+                                                assetType: asset.type,
+                                                riskProfile,
+                                                sector: asset.sector || 'Outros',
+                                                priceAtSignal: currentPrice,
+                                                status: 'ACTIVE'
+                                            }
+                                        },
+                                        upsert: true
+                                    }
+                                });
                             }
                         }
                     }

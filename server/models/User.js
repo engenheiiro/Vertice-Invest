@@ -97,6 +97,30 @@ const UserSchema = new mongoose.Schema({
   phone: { type: String, trim: true },
   occupation: { type: String, trim: true },
 
+  // Foto de perfil (3.17). Guarda uma data-URL pequena (imagem já
+  // redimensionada/comprimida no cliente p/ 256×256). String vazia/ausente →
+  // a UI cai no fallback de iniciais. Validação de mime/tamanho no controller.
+  avatar: { type: String },
+
+  // Principal corretora (3.21a). Texto livre — o frontend oferece um select
+  // com as corretoras conhecidas + "Outra"; aqui guardamos o rótulo escolhido.
+  brokerage: { type: String, trim: true },
+
+  // Endereço (3.21b). Preenchido via ViaCEP no cliente. PII de baixo grau,
+  // mantido em claro (mesma postura de phone/occupation).
+  cep: { type: String, trim: true },
+  street: { type: String, trim: true },        // logradouro
+  neighborhood: { type: String, trim: true },  // bairro
+  city: { type: String, trim: true },
+  state: { type: String, trim: true },         // UF
+
+  // Dados sensíveis (3.21c/d) — cifrados em repouso (AES-256-GCM via
+  // utils/encryption), mesma postura do CPF (Art. 6 VII / 46 LGPD). O valor
+  // armazenado é o ciphertext "keyId:iv:tag:data", NÃO o valor em claro.
+  // birthDate guarda a data ISO (YYYY-MM-DD) cifrada; salary, o número cifrado.
+  birthDate: { type: String },
+  salary: { type: String },
+
   // Preset de gradiente do banner de perfil escolhido pelo usuário (3.20).
   // Guarda só a REFERÊNCIA do preset (não a imagem). Vazio → usa o gradiente
   // padrão do plano como fallback. Allowlist validada no updateProfile.

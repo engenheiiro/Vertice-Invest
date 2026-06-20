@@ -228,18 +228,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-bo
 {
   "auditLog": [
     {
-      "category": "Dados e Confiança",
-      "factor": "Dados de Crescimento Ausentes",
-      "points": -25,
-      "type": "penalty",
-    },
-    {
-      "category": "Dados e Confiança",
-      "factor": "Dados de Rentabilidade Ausentes",
-      "points": -15,
-      "type": "penalty",
-    },
-    {
       "category": "Perfil Defensivo",
       "factor": "Score Base (FII Defensivo)",
       "points": 40,
@@ -386,9 +374,9 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-bo
   ],
   "isDividendAristocrat": false,
   "scores": {
-    "BOLD": 85,
+    "BOLD": 100,
     "DEFENSIVE": 78,
-    "MODERATE": 85,
+    "MODERATE": 95,
   },
   "structural": {
     "quality": 80,
@@ -403,18 +391,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-bo
 exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-negative-spread 1`] = `
 {
   "auditLog": [
-    {
-      "category": "Dados e Confiança",
-      "factor": "Dados de Crescimento Ausentes",
-      "points": -25,
-      "type": "penalty",
-    },
-    {
-      "category": "Dados e Confiança",
-      "factor": "Dados de Rentabilidade Ausentes",
-      "points": -15,
-      "type": "penalty",
-    },
     {
       "category": "Perfil Defensivo",
       "factor": "Score Base (FII Defensivo)",
@@ -556,18 +532,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-pa
 {
   "auditLog": [
     {
-      "category": "Dados e Confiança",
-      "factor": "Dados de Crescimento Ausentes",
-      "points": -25,
-      "type": "penalty",
-    },
-    {
-      "category": "Dados e Confiança",
-      "factor": "Dados de Rentabilidade Ausentes",
-      "points": -15,
-      "type": "penalty",
-    },
-    {
       "category": "Perfil Defensivo",
       "factor": "Score Base (FII Defensivo)",
       "points": 40,
@@ -684,7 +648,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-pa
   "isDividendAristocrat": false,
   "scores": {
     "BOLD": 60,
-    "DEFENSIVE": 85,
+    "DEFENSIVE": 92,
     "MODERATE": 73,
   },
   "structural": {
@@ -700,18 +664,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-pa
 exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-tijolo-defensive 1`] = `
 {
   "auditLog": [
-    {
-      "category": "Dados e Confiança",
-      "factor": "Dados de Crescimento Ausentes",
-      "points": -25,
-      "type": "penalty",
-    },
-    {
-      "category": "Dados e Confiança",
-      "factor": "Dados de Rentabilidade Ausentes",
-      "points": -15,
-      "type": "penalty",
-    },
     {
       "category": "Perfil Defensivo",
       "factor": "Score Base (FII Defensivo)",
@@ -847,7 +799,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-ti
   "isDividendAristocrat": false,
   "scores": {
     "BOLD": 50,
-    "DEFENSIVE": 85,
+    "DEFENSIVE": 97,
     "MODERATE": 72,
   },
   "structural": {
@@ -863,18 +815,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-ti
 exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-tijolo-high-vacancy 1`] = `
 {
   "auditLog": [
-    {
-      "category": "Dados e Confiança",
-      "factor": "Dados de Crescimento Ausentes",
-      "points": -25,
-      "type": "penalty",
-    },
-    {
-      "category": "Dados e Confiança",
-      "factor": "Dados de Rentabilidade Ausentes",
-      "points": -15,
-      "type": "penalty",
-    },
     {
       "category": "Perfil Defensivo",
       "factor": "Ineligível para Carteira Defensiva FII",
@@ -1395,6 +1335,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "type": "base",
     },
     {
+      "category": "Perfil Defensivo",
+      "factor": "Tendência de Baixa (preço 21% abaixo da SMA200)",
+      "points": -12,
+      "type": "penalty",
+    },
+    {
       "category": "Perfil Moderado",
       "factor": "Score Base (Mid/Large Cap)",
       "points": 40,
@@ -1407,10 +1353,22 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "type": "bonus",
     },
     {
+      "category": "Perfil Moderado",
+      "factor": "Tendência de Baixa (preço 21% abaixo da SMA200)",
+      "points": -12,
+      "type": "penalty",
+    },
+    {
       "category": "Perfil Arrojado",
       "factor": "Base Arrojada",
       "points": 35,
       "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Tendência de Baixa (preço 21% abaixo da SMA200)",
+      "points": -8,
+      "type": "penalty",
     },
     {
       "category": "Qualidade",
@@ -1503,9 +1461,9 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
   ],
   "isDividendAristocrat": false,
   "scores": {
-    "BOLD": 35,
-    "DEFENSIVE": 30,
-    "MODERATE": 50,
+    "BOLD": 27,
+    "DEFENSIVE": 18,
+    "MODERATE": 38,
   },
   "structural": {
     "quality": 90,
@@ -1557,6 +1515,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "type": "penalty",
     },
     {
+      "category": "Perfil Defensivo",
+      "factor": "Tendência de Baixa (preço 34% abaixo da SMA200)",
+      "points": -20,
+      "type": "penalty",
+    },
+    {
       "category": "Perfil Moderado",
       "factor": "Score Base (Mid/Large Cap)",
       "points": 40,
@@ -1593,6 +1557,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "type": "penalty",
     },
     {
+      "category": "Perfil Moderado",
+      "factor": "Tendência de Baixa (preço 34% abaixo da SMA200)",
+      "points": -20,
+      "type": "penalty",
+    },
+    {
       "category": "Perfil Arrojado",
       "factor": "Base Arrojada",
       "points": 35,
@@ -1614,6 +1584,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "category": "Perfil Arrojado",
       "factor": "Payout Insustentável (160.0%)",
       "points": -20,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Tendência de Baixa (preço 34% abaixo da SMA200)",
+      "points": -14,
       "type": "penalty",
     },
     {
@@ -1711,9 +1687,9 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
   "bullThesis": [],
   "isDividendAristocrat": false,
   "scores": {
-    "BOLD": 47,
-    "DEFENSIVE": 62,
-    "MODERATE": 57,
+    "BOLD": 33,
+    "DEFENSIVE": 42,
+    "MODERATE": 37,
   },
   "structural": {
     "quality": 60,
@@ -1903,6 +1879,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "type": "penalty",
     },
     {
+      "category": "Perfil Defensivo",
+      "factor": "Tendência de Baixa (preço 79% abaixo da SMA200)",
+      "points": -20,
+      "type": "penalty",
+    },
+    {
       "category": "Perfil Moderado",
       "factor": "Score Base (Small Cap)",
       "points": 25,
@@ -1912,6 +1894,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "category": "Perfil Moderado",
       "factor": "Sobrevalorizado (preço 49% acima do Preço Justo)",
       "points": -40,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Tendência de Baixa (preço 79% abaixo da SMA200)",
+      "points": -20,
       "type": "penalty",
     },
     {
@@ -1930,6 +1918,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "category": "Perfil Arrojado",
       "factor": "Sobrevalorizado (preço 49% acima do Preço Justo)",
       "points": -40,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Tendência de Baixa (preço 79% abaixo da SMA200)",
+      "points": -14,
       "type": "penalty",
     },
     {

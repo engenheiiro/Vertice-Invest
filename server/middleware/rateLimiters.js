@@ -66,4 +66,12 @@ export const accountDeleteLimiter = createUserLimiter({
   message: 'Muitas tentativas de exclusão. Tente novamente em 1 hora.',
 });
 
+// (3.17) Upload de avatar: payload maior (data-URL ~até 300KB). 20/15min por
+// usuário — generoso para ajustes de foto, apertado o bastante contra abuso.
+export const avatarUploadLimiter = createUserLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: 'Muitas atualizações de foto. Aguarde alguns minutos.',
+});
+
 export { createUserLimiter };

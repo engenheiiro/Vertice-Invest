@@ -21,6 +21,16 @@ const brapiBreaker = createCircuitBreaker({ name: 'brapi', failureThreshold: 5, 
 // Configuração para Scraping Google Finance
 const GOOGLE_FINANCE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+// Ações com classe (ex.: BRK.B, BF.B) usam PONTO no ticker canônico (DB/S&P list),
+// mas o Yahoo Finance exige HÍFEN (BRK-B). Sem essa conversão o Yahoo responde
+// "No data found / delisted" e o ativo nunca recebe cotação/histórico/fundamentos.
+const US_CLASS_DOT_RE = /^[A-Z]{1,4}\.[A-Z]$/;   // BRK.B, BF.B (não casa PETR4.SA)
+const US_CLASS_DASH_RE = /^[A-Z]{1,4}-[A-Z]$/;   // BRK-B (não casa BTC-USD)
+// Ticker canônico (DB) → símbolo aceito pelo Yahoo.
+export const toYahooSymbol = (sym) => (US_CLASS_DOT_RE.test(sym) ? sym.replace('.', '-') : sym);
+// Símbolo do Yahoo → ticker canônico (DB), revertendo só a classe US (preserva BTC-USD).
+export const fromYahooSymbol = (sym) => (US_CLASS_DASH_RE.test(sym) ? sym.replace('-', '.') : sym);
+
 // Tickers que falham consistentemente no Yahoo Finance mas são recuperados pelo Google.
 // Listados aqui para eliminar ruído de warn no log — o fallback já os trata corretamente.
 const PREFER_GOOGLE_TICKERS = new Set(['B3SA3', 'CVBI11', 'MALL11', 'QAGR11', 'RRCI11', 'RVBI11']);
@@ -161,8 +171,12 @@ export const externalMarketService = {
             
             if (response.data && response.data.results && response.data.results.length > 0) {
                 const data = response.data.results[0];
+                // Preço ausente/zero não é recuperação: a Brapi às vezes devolve
+                // regularMarketPrice = 0 para tickers ilíquidos/suspensos. Tratar como
+                // falha evita gravar lastPrice=0 e logar "recuperou cotação: 0".
+                if (!(data.regularMarketPrice > 0)) return null;
                 return {
-                    ticker: ticker.replace('.SA', ''), 
+                    ticker: ticker.replace('.SA', ''),
                     price: data.regularMarketPrice,
                     change: data.regularMarketChangePercent,
                     name: data.longName || cleanTicker,
@@ -196,7 +210,8 @@ export const externalMarketService = {
 
             const isB3Format = /^[A-Z]{4}\d{1,2}$/.test(cleanT);
             if (isB3Format && !cleanT.endsWith('.SA')) return `${cleanT}.SA`;
-            return cleanT; 
+            // Ação com classe (BRK.B) → formato do Yahoo (BRK-B).
+            return toYahooSymbol(cleanT);
         });
 
         try {
@@ -214,6 +229,7 @@ export const externalMarketService = {
                 let symbol = item.symbol;
                 if (symbol.endsWith('.SA')) symbol = symbol.replace('.SA', '');
                 if (symbol.endsWith('-USD')) symbol = symbol.replace('-USD', '');
+                else symbol = fromYahooSymbol(symbol); // BRK-B → BRK.B (canônico no DB)
                 const changePct = item.regularMarketChangePercent || item.changePercent || 0;
 
                 return {
@@ -312,7 +328,7 @@ export const externalMarketService = {
                 period1: period1,
                 period2: period2,
                 interval: '1d'
-            });
+            }, { validateResult: false });
 
             if (!result || !result.quotes || result.quotes.length < 10) {
                 logger.warn("⚠️ SPX Chart: Dados insuficientes (Length < 10). Usando Fallback 32.50%.");
@@ -376,7 +392,7 @@ export const externalMarketService = {
                 period1: period1,
                 period2: period2,
                 interval: '1d'
-            });
+            }, { validateResult: false });
 
             if (!result || !result.quotes || result.quotes.length < 10) {
                 logger.warn("⚠️ IBOV Chart: Dados insuficientes. Usando Fallback 15.50%.");
@@ -430,7 +446,9 @@ export const externalMarketService = {
         } else if (type === 'CRYPTO' && !symbol.includes('-')) {
             symbol = `${symbol}-USD`;
         } else if (type === 'STOCK_US') {
-            // US stocks: symbol passed as-is (AAPL, MSFT, etc.) — Yahoo Finance accepts without suffix
+            // US stocks vão quase sem ajuste (AAPL, MSFT). Exceção: ações com classe
+            // (BRK.B) precisam do hífen do Yahoo (BRK-B), senão "No data found".
+            symbol = toYahooSymbol(symbol);
             logger.debug(`[getFullHistory] STOCK_US: ${symbol}`);
         }
         // For USD-BRL exchange rate history
@@ -448,7 +466,10 @@ export const externalMarketService = {
                 interval: '1d'
             };
 
-            const result = await yahooFinance.chart(symbol, queryOptions);
+            // validateResult:false silencia os avisos verbosos da lib quando o Yahoo
+            // devolve meta incompleto (currency null / sem regularMarketPrice) — payload
+            // de quotes ainda vem íntegro e já filtramos close>0 abaixo.
+            const result = await yahooFinance.chart(symbol, queryOptions, { validateResult: false });
 
             if (!result || !result.quotes || !Array.isArray(result.quotes)) return null;
 
@@ -457,7 +478,8 @@ export const externalMarketService = {
                 .map(day => ({
                     date: day.date.toISOString().split('T')[0],
                     close: day.close,
-                    adjClose: day.adjclose || day.close
+                    adjClose: day.adjclose || day.close,
+                    volume: day.volume || 0
                 }));
 
         } catch (error) {
@@ -487,7 +509,7 @@ export const externalMarketService = {
                 period2: today,
                 interval: '1d',
                 events: 'dividends',
-            });
+            }, { validateResult: false });
 
             const divs = result?.events?.dividends || [];
             return divs

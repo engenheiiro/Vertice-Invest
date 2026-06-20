@@ -79,8 +79,14 @@ export const computeWalletValuation = async (userId) => {
         .filter((a) => a.type !== 'FIXED_INCOME' && a.type !== 'CASH')
         .map((a) => a.ticker);
     if (liveTickers.length > 0) {
-        await marketDataService.refreshQuotesBatch(liveTickers).catch(() => {});
+        // Best-effort: o plano segue com o cache atual se o refresh falhar — mas
+        // logamos a falha em vez de silenciá-la.
+        await marketDataService.refreshQuotesBatch(liveTickers)
+            .catch(err => logger.warn(`[Rebalance] Refresh de cotações falhou: ${err.message}`));
     }
+
+    // (5.8) Cotações em lote (1 query) em vez de um findOne por ativo (N+1).
+    const marketMap = await marketDataService.getMarketDataMap(liveTickers);
 
     const valueByClass = Object.fromEntries(ALL_CLASSES.map((c) => [c, 0]));
     const assets = [];
@@ -95,7 +101,7 @@ export const computeWalletValuation = async (userId) => {
             valueNative = v;
             priceNative = unitPrice;
         } else {
-            const mData = await marketDataService.getMarketDataByTicker(asset.ticker);
+            const mData = marketMap.get(asset.ticker);
             priceNative = safeFloat(mData?.price || 0);
             valueNative = safeValue(asset.quantity, priceNative);
         }

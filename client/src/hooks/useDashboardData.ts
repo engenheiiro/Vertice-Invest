@@ -24,7 +24,7 @@ export interface AiSignal {
     id: string;
     ticker: string;
     type: 'OPPORTUNITY' | 'RISK' | 'NEUTRAL' | 'DELAYED';
-    signalType?: 'RSI_OVERSOLD' | 'DEEP_VALUE' | 'SUPPORT_ZONE' | 'VOLUME_SPIKE';
+    signalType?: 'RSI_OVERSOLD' | 'DEEP_VALUE' | 'SUPPORT_ZONE' | 'VOLUME_SPIKE' | 'BULLISH_DIVERGENCE';
     assetType: string;
     message: string;
     time: string;
@@ -67,7 +67,7 @@ interface QuantSignal {
     ticker: string;
     assetType: string;
     riskProfile: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
-    type: 'RSI_OVERSOLD' | 'VOLUME_SPIKE' | 'DEEP_VALUE' | 'SUPPORT_ZONE';
+    type: 'RSI_OVERSOLD' | 'VOLUME_SPIKE' | 'DEEP_VALUE' | 'SUPPORT_ZONE' | 'BULLISH_DIVERGENCE';
     quality?: 'GOLD' | 'SILVER';
     urgencyLevel?: 'CRITICAL' | 'HIGH' | 'MEDIUM';
     value: number;
@@ -175,6 +175,7 @@ export const useDashboardData = () => {
 
             let score = 75;
             if (sig.type === 'RSI_OVERSOLD') score = Math.round(100 - sig.value);
+            if (sig.type === 'BULLISH_DIVERGENCE') score = Math.round(100 - sig.value);
             if (sig.type === 'DEEP_VALUE') score = 95;
             if (sig.type === 'SUPPORT_ZONE') score = 80;
             if (sig.quality === 'SILVER') score -= 10;

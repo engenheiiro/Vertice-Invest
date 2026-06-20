@@ -107,7 +107,7 @@ const getRiskProfileBadge = (profile?: string) => {
 // Exibe o valor técnico principal do sinal (RSI ou desconto Graham)
 const SignalValueBadge: React.FC<{ signalType?: string; value?: number }> = ({ signalType, value }) => {
     if (!value) return null;
-    if (signalType === 'RSI_OVERSOLD') {
+    if (signalType === 'RSI_OVERSOLD' || signalType === 'BULLISH_DIVERGENCE') {
         return (
             <span className="text-[8px] font-bold font-mono bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded border border-slate-700">
                 RSI {value.toFixed(0)}

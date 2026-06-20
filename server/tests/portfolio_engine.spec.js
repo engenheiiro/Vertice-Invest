@@ -85,6 +85,43 @@ describe('portfolioEngine.performCompetitiveDraft', () => {
         expect(draftedCryptos.every((a) => a.riskProfile === 'BOLD')).toBe(true);
     });
 
+    // Diversificação fina de FII: o cap de concentração do draft é por SEGMENTO
+    // (shopping ≠ logística ≠ papel…), não por macro-setor. Antes, todos os FIIs de
+    // tijolo colapsavam em REAL_ESTATE e a carteira travava em ~3 nomes.
+    const makeFii = (ticker, sector, d) => ({
+        ticker, type: 'FII', sector,
+        scores: { DEFENSIVE: d, MODERATE: 0, BOLD: 0 },
+        metrics: { structural: { quality: 60, valuation: 60, risk: 60 } },
+    });
+
+    it('FIIs de segmentos distintos NÃO competem pelo mesmo cap (diversifica)', () => {
+        // 6 FIIs, todos D=85, segmentos diferentes — todos cabem (cap é por segmento).
+        const fiis = [
+            makeFii('AAAA11', 'Shoppings', 85),
+            makeFii('BBBB11', 'Logística', 85),
+            makeFii('CCCC11', 'Papel', 85),
+            makeFii('DDDD11', 'Fiagro', 85),
+            makeFii('EEEE11', 'Híbrido', 85),
+            makeFii('FFFF11', 'Lajes Corporativas', 85),
+        ];
+        const result = portfolioEngine.performCompetitiveDraft(fiis);
+        const def = result.filter(r => r.riskProfile === 'DEFENSIVE');
+        expect(def.length).toBe(6); // antes: limitado a 3 (todos viravam REAL_ESTATE)
+    });
+
+    it('FIIs do MESMO segmento respeitam o cap de 3 no perfil DEFENSIVE', () => {
+        const fiis = ['P1', 'P2', 'P3', 'P4'].map((t, i) => makeFii(`PAP${t}11`, 'Papel', 85 - i));
+        const trace = [];
+        const result = portfolioEngine.performCompetitiveDraft(fiis, { trace });
+        const def = result.filter(r => r.riskProfile === 'DEFENSIVE');
+        expect(def.length).toBe(3); // 4º Papel barrado pelo cap do segmento
+
+        // O trace (instrumentação) registra o bloqueio com a chave de concentração fina.
+        const blocked = trace.find(e => e.outcome === 'BLOCKED_SECTOR_CAP');
+        expect(blocked).toBeTruthy();
+        expect(blocked.key).toBe('FII_PAPEL');
+    });
+
     it('marca BUY para score >= 70 e WAIT abaixo disso', () => {
         const assets = [
             {

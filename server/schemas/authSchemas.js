@@ -28,6 +28,37 @@ export const registerSchema = z.object({
   })
 });
 
+// Esquema de atualização de perfil (PUT /me). Todos os campos são opcionais
+// (PATCH-like) — '' é aceito p/ sinalizar "remover" no controller. A validação
+// fina de CPF/data/salário/banner permanece no controller (regras de negócio).
+export const updateProfileSchema = z.object({
+  body: z.object({
+    name: z.string().min(2, "Nome deve ter no mínimo 2 caracteres").max(120).trim().optional(),
+    cpf: z.string().max(20).optional(),
+    phone: z.string().max(30).optional(),
+    occupation: z.string().max(80).optional(),
+    bannerColor: z.string().max(20).optional(),
+    // (3.21) novos campos
+    brokerage: z.string().max(80).optional(),
+    cep: z.string().max(20).optional(),
+    street: z.string().max(120).optional(),
+    neighborhood: z.string().max(120).optional(),
+    city: z.string().max(120).optional(),
+    state: z.string().max(120).optional(),
+    birthDate: z.string().max(10).optional(),
+    // salary chega como número (ou string numérica) do formulário.
+    salary: z.union([z.number(), z.string().max(20)]).nullable().optional(),
+  })
+});
+
+// (3.17) Avatar: só o campo da imagem (data-URL). Tamanho/mime validados no
+// controller; aqui garantimos apenas o tipo string e um teto bruto.
+export const avatarSchema = z.object({
+  body: z.object({
+    avatar: z.string().max(500_000),
+  })
+});
+
 // Esquema de Login
 export const loginSchema = z.object({
   body: z.object({

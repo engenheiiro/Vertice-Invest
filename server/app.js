@@ -16,6 +16,8 @@ import { initScheduler } from './services/schedulerService.js';
 import { sanitizeInput } from './middleware/sanitize.js'; // (S8) anti-injeção NoSQL
 import { correlationId } from './middleware/correlationId.js'; // (D12) correlation id
 import { csrfProtection } from './middleware/csrf.js'; // (1.4) CSRF double-submit
+import { errorHandler } from './middleware/errorHandler.js'; // (6.1) erro estruturado
+import { mongoCircuitBreaker, getMongoBreakerState } from './middleware/mongoCircuitBreaker.js'; // (6.9) disjuntor do MongoDB
 import { swaggerSpec } from './config/swagger.js'; // (I7) OpenAPI/Swagger
 
 // Rotas
@@ -114,6 +116,7 @@ app.get('/api/health', (req, res) => {
   res.status(healthy ? 200 : 503).json({
     status: healthy ? 'ok' : 'degraded',
     mongo: MONGO_STATES[state] ?? 'unknown',
+    dbBreaker: getMongoBreakerState().circuit, // (6.9) CLOSED | OPEN | HALF_OPEN
     uptime: Math.round(process.uptime()),
     timestamp: new Date().toISOString(),
   });
@@ -214,6 +217,11 @@ app.use((req, res, next) => {
   return csrfProtection(req, res, next);
 });
 
+// (6.9) Disjuntor do MongoDB: fail-fast 503 nas rotas de dados quando o banco
+// está fora, evitando acúmulo de requests presas no timeout. Vem depois do
+// /api/health (que precisa responder com o banco fora) e antes das rotas.
+app.use('/api', mongoCircuitBreaker);
+
 app.use('/api', authRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/research', researchRoutes);
@@ -260,9 +268,7 @@ if (process.env.SENTRY_DSN) {
   Sentry.setupExpressErrorHandler(app);
 }
 
-app.use((err, req, res, next) => {
-  logger.error(`Erro: ${err.message}`);
-  res.status(err.status || 500).json({ message: err.message || "Erro interno no servidor." });
-});
+// (6.1) Tratador de erros estruturado (código + mensagem + detalhe + requestId).
+app.use(errorHandler);
 
 export default app;

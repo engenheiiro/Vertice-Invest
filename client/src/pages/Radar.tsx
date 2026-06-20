@@ -131,9 +131,19 @@ const getRiskBadge = (profile?: string) => {
     return null;
 };
 
+// Rótulo amigável do tipo de sinal (fallback: troca _ por espaço)
+const signalTypeLabel = (type: string) => {
+    if (type === 'RSI_OVERSOLD') return 'RSI Sobrevenda';
+    if (type === 'DEEP_VALUE') return 'Deep Value';
+    if (type === 'BULLISH_DIVERGENCE') return 'Divergência Altista';
+    if (type === 'SUPPORT_ZONE') return 'Zona de Suporte';
+    if (type === 'VOLUME_SPIKE') return 'Pico de Volume';
+    return type.replace(/_/g, ' ');
+};
+
 const SignalValueTag: React.FC<{ type: string; value?: number }> = ({ type, value }) => {
     if (!value) return null;
-    if (type === 'RSI_OVERSOLD') return (
+    if (type === 'RSI_OVERSOLD' || type === 'BULLISH_DIVERGENCE') return (
         <span className="text-[9px] font-bold font-mono bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded border border-slate-700">
             RSI {value.toFixed(0)}
         </span>
@@ -559,7 +569,7 @@ export const RadarPage = () => {
                                                 </td>
                                                 <td className="p-4">
                                                     <span className="block font-bold text-slate-200 text-[11px]">
-                                                        {signal.type.replace(/_/g, ' ')}
+                                                        {signalTypeLabel(signal.type)}
                                                     </span>
                                                     {signal.urgencyLevel && (
                                                         <span className={`text-[8px] font-bold px-1 py-0.5 rounded border ${getUrgencyStyle(signal.urgencyLevel).badge}`}>

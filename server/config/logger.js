@@ -44,46 +44,96 @@ const colors = {
 
 winston.addColors(colors);
 
-const consoleFormat = winston.format.printf(({ level, message, timestamp }) => {
-  const time = timestamp.split(' ')[1];
+// (6.6) Logs estruturados.
+// Os call sites podem passar metadados como 2º argumento:
+//   logger.info('Scraping concluído', { source: 'fundamentus', count: 350 })
+// Esses campos viram colunas pesquisáveis no transport JSON (combined.json.log)
+// e aparecem de forma legível (key=value) no console e nos logs de texto.
+
+// Campos estruturais do winston/logger que NÃO são metadados de negócio.
+const RESERVED = new Set(['level', 'message', 'timestamp', 'stack', 'requestId']);
+
+// Extrai os metadados (2º arg) e os formata como " | key=value" para os logs de
+// texto. Objetos aninhados são serializados em JSON compacto.
+const formatMeta = (info) => {
+  const keys = Object.keys(info).filter((k) => !RESERVED.has(k));
+  if (keys.length === 0) return '';
+  const pairs = keys.map((k) => {
+    const v = info[k];
+    return `${k}=${v !== null && typeof v === 'object' ? JSON.stringify(v) : v}`;
+  });
+  return ` | ${pairs.join(' ')}`;
+};
+
+// (D12 + 6.6) Promove o correlation id a CAMPO estruturado (info.requestId),
+// não apenas a um prefixo de texto — assim ele é filtrável no JSON.
+const injectRequestId = winston.format((info) => {
   const rid = getRequestId();
-  // (D12) Prefixo curto do correlation id para leitura rápida no console.
-  return `[${time}]${rid ? ` [${rid.slice(0, 8)}]` : ''} ${level}: ${message}`;
+  if (rid) info.requestId = rid;
+  return info;
 });
 
-const fileFormat = winston.format.printf(({ level, message, timestamp, stack }) => {
-  const rid = getRequestId();
-  // (D12) Correlation id completo nos arquivos (para grep/agregação).
-  return `${timestamp} [${level.toUpperCase()}]${rid ? ` [req:${rid}]` : ''}: ${message} ${stack ? `\nSTACK: ${stack}` : ''}`;
-});
-
-const format = winston.format.combine(
+// Campos comuns a todos os transports (id de request, timestamp, stack de erro).
+const baseFields = winston.format.combine(
+  injectRequestId(),
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   winston.format.errors({ stack: true }),
+);
+
+const consoleFormat = winston.format.printf((info) => {
+  const time = (info.timestamp || '').split(' ')[1] || info.timestamp;
+  // (D12) Prefixo curto do correlation id para leitura rápida no console.
+  const rid = info.requestId ? ` [${info.requestId.slice(0, 8)}]` : '';
+  return `[${time}]${rid} ${info.level}: ${info.message}${formatMeta(info)}`;
+});
+
+const fileFormat = winston.format.printf((info) => {
+  // (D12) Correlation id completo nos arquivos (para grep/agregação).
+  const rid = info.requestId ? ` [req:${info.requestId}]` : '';
+  return `${info.timestamp} [${info.level.toUpperCase()}]${rid}: ${info.message}${formatMeta(info)}${info.stack ? `\nSTACK: ${info.stack}` : ''}`;
+});
+
+// Console — legível e colorido.
+const consoleCombined = winston.format.combine(
+  baseFields,
   winston.format.colorize({ all: true }),
   consoleFormat
 );
 
+// Arquivos de texto — legíveis, sem cor.
 const fileFormatCombined = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-  winston.format.errors({ stack: true }),
+  baseFields,
   winston.format.uncolorize(),
   fileFormat
 );
 
+// (6.6) Arquivo ESTRUTURADO em JSON — uma linha por evento, pronta para busca e
+// agregação (jq, Loki, Datadog, etc.). requestId e os metadados do 2º arg viram
+// campos de primeira classe.
+const jsonCombined = winston.format.combine(
+  baseFields,
+  winston.format.json()
+);
+
 const transports = [
-  new winston.transports.Console(),
-  new winston.transports.File({ 
-    filename: path.join(logDir, 'error.log'), 
+  new winston.transports.Console({ format: consoleCombined }),
+  new winston.transports.File({
+    filename: path.join(logDir, 'error.log'),
     level: 'error',
     format: fileFormatCombined,
-    maxsize: 5242880, 
+    maxsize: 5242880,
     maxFiles: 5,
   }),
-  new winston.transports.File({ 
+  new winston.transports.File({
     filename: path.join(logDir, 'combined.log'),
     format: fileFormatCombined,
-    maxsize: 5242880, 
+    maxsize: 5242880,
+    maxFiles: 5,
+  }),
+  new winston.transports.File({
+    filename: path.join(logDir, 'combined.json.log'),
+    format: jsonCombined,
+    maxsize: 5242880,
     maxFiles: 5,
   }),
 ];
@@ -91,10 +141,9 @@ const transports = [
 const logger = winston.createLogger({
   level: level(),
   levels,
-  format,
   transports,
 });
 
 // Exporta o caminho do diretório para uso em caso de pânico no index.js
-export { logDir }; 
+export { logDir };
 export default logger;

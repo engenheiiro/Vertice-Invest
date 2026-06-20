@@ -9,6 +9,12 @@ import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { getTunablesSync } from './configService.js'; // (I13) tunables editáveis pelo admin
 
 const MAX_FAILURES_BEFORE_BLACKLIST = 10;
+// (Robustez) Ativos grandes/líquidos nunca são desativados automaticamente: falha
+// prolongada de cotação aqui indica problema de integração (provedor fora do ar,
+// símbolo mudou), não delisting. Evita que uma janela de instabilidade do Yahoo
+// derrube blue chips (PETR4, VALE3...) do ranking, como já ocorreu.
+const LARGE_ASSET_MARKETCAP = 1_000_000_000; // R$ 1B
+const LARGE_ASSET_LIQUIDITY = 1_000_000;     // R$ 1M/dia
 
 const FALLBACK_MACRO = {
     selic: { value: DEFAULT_SELIC_FALLBACK },
@@ -80,6 +86,79 @@ export const marketDataService = {
     },
 
     /**
+     * (5.8) Versão em LOTE de getMarketDataByTicker — resolve N tickers com no
+     * máximo 2 queries (1 em MarketAsset + 1 fallback em AssetHistory para os que
+     * não têm lastPrice), em vez do padrão N+1 (1 findOne por ativo). Cada ticker
+     * resolve de forma independente: um ticker sem dado vira `{ price: 0, ... }`
+     * e NUNCA derruba os demais ("cada uma por si" — 5.3).
+     *
+     * A chave do Map devolvido é o ticker ORIGINAL passado pelo chamador (para que
+     * `map.get(asset.ticker)` funcione direto), enquanto a query usa o símbolo
+     * normalizado. Não faz o self-heal de nome por item (caro, N requests) — isso
+     * fica a cargo do refreshQuotesBatch já disparado antes do read.
+     */
+    async getMarketDataMap(tickers) {
+        const map = new Map();
+        if (!tickers || tickers.length === 0) return map;
+
+        const pairs = tickers.map(t => ({ original: t, clean: this.normalizeSymbol(t) }));
+        const cleanList = [...new Set(pairs.map(p => p.clean).filter(Boolean))];
+        if (cleanList.length === 0) return map;
+
+        try {
+            const assets = await MarketAsset.find({ ticker: { $in: cleanList } })
+                .select('ticker name sector lastPrice change dy');
+            const byTicker = new Map(assets.map(a => [a.ticker, a]));
+
+            const missingClean = new Set();
+            for (const { original, clean } of pairs) {
+                const asset = byTicker.get(clean);
+                if (asset && asset.lastPrice > 0) {
+                    map.set(original, {
+                        price: asset.lastPrice,
+                        change: asset.change || 0,
+                        name: asset.name,
+                        sector: asset.sector,
+                        dy: asset.dy || 0,
+                    });
+                } else {
+                    missingClean.add(clean);
+                }
+            }
+
+            // Fallback de histórico em UMA query (evita o N+1 de AssetHistory).
+            let histByTicker = new Map();
+            if (missingClean.size > 0) {
+                const histories = await AssetHistory.find({ ticker: { $in: [...missingClean] } })
+                    .select('ticker history');
+                histByTicker = new Map(histories.map(h => [h.ticker, h]));
+            }
+
+            for (const { original, clean } of pairs) {
+                if (map.has(original)) continue;
+                const hist = histByTicker.get(clean);
+                let resolved = { price: 0, change: 0, name: original, sector: 'Outros' };
+                if (hist && Array.isArray(hist.history) && hist.history.length > 0) {
+                    const sorted = [...hist.history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                    const lastClose = sorted[0].close || sorted[0].adjClose;
+                    if (lastClose > 0) {
+                        resolved = { price: lastClose, change: 0, name: original, sector: 'Outros', isFallback: true };
+                    }
+                }
+                map.set(original, resolved);
+            }
+        } catch (error) {
+            logger.warn(`[MarketData] getMarketDataMap falhou: ${error.message}`);
+            // Garante chave para todo ticker pedido mesmo em falha total de DB.
+            for (const { original } of pairs) {
+                if (!map.has(original)) map.set(original, { price: 0, change: 0, name: original, sector: 'Outros' });
+            }
+        }
+
+        return map;
+    },
+
+    /**
      * Refresh sob demanda de fundamentos (dy/lastPrice) de tickers específicos
      * — usado pelo self-heal do Cofre de Dividendos quando a projeção está zerada
      * por falta de `dy`. Faz 1 request ao Fundamentus (mapa completo) e atualiza
@@ -120,7 +199,7 @@ export const marketDataService = {
         const threshold = new Date(now.getTime() - cacheMinutes * 60 * 1000);
 
         try {
-            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker name type updatedAt lastPrice change isActive failCount');
+            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker name type updatedAt lastPrice change isActive failCount lastFailDate marketCap liquidity');
             
             const toUpdate = [];
             const assetMap = new Map();
@@ -166,12 +245,20 @@ export const marketDataService = {
                         change: newChange, 
                         updatedAt: now,
                         isActive: true,
-                        failCount: 0 // Reset do contador de falhas em caso de sucesso
+                        failCount: 0, // Reset do contador de falhas em caso de sucesso
+                        lastFailDate: null
                     };
                     
                     if (currentAsset && (currentAsset.type === 'CRYPTO' || currentAsset.type === 'STOCK_US')) {
                         if (quote.marketCap) updatePayload.marketCap = quote.marketCap;
-                        if (quote.volume) updatePayload.liquidity = quote.volume;
+                        if (quote.volume) {
+                            // STOCK_US: liquidez em VALOR (US$/dia = volume × preço), consistente
+                            // com a liquidez financeira dos ativos BR e com o sync de fundamentos US.
+                            // Evita penalizar ações caras de baixo giro de papéis no scoringEngine.
+                            updatePayload.liquidity = currentAsset.type === 'STOCK_US'
+                                ? quote.volume * newPrice
+                                : quote.volume;
+                        }
                     }
 
                     // Enriquece o nome real (Yahoo longName/shortName) quando o
@@ -202,14 +289,26 @@ export const marketDataService = {
                 if (!successfulTickers.has(requestedTicker)) {
                     const asset = assetMap.get(requestedTicker);
                     if (asset) {
+                        // Gate de 1 falha/dia: uma rajada de instabilidade do provedor
+                        // (Yahoo fora do ar por minutos, várias requests no mesmo dia) não
+                        // deve inflar failCount. Agora ele significa "dias distintos com falha".
+                        const todayKey = new Date().toISOString().slice(0, 10);
+                        const lastFailKey = asset.lastFailDate ? new Date(asset.lastFailDate).toISOString().slice(0, 10) : null;
+                        if (lastFailKey === todayKey) return; // já contabilizou falha hoje
+
                         // Coerção defensiva: evita que failCount corrompido (string/NaN)
                         // gere contagem inválida; teto de 999 previne overflow lógico.
                         const currentFail = Number.isFinite(asset.failCount) ? asset.failCount : 0;
                         const newFailCount = Math.min(currentFail + 1, 999);
-                        const shouldDeactivate = newFailCount >= MAX_FAILURES_BEFORE_BLACKLIST;
-                        
+
+                        // Protege blue chips: ativos grandes/líquidos seguem contando falhas
+                        // (para alerta), mas nunca são desativados automaticamente.
+                        const isLargeAsset = (asset.marketCap || 0) >= LARGE_ASSET_MARKETCAP || (asset.liquidity || 0) >= LARGE_ASSET_LIQUIDITY;
+                        const shouldDeactivate = newFailCount >= MAX_FAILURES_BEFORE_BLACKLIST && !isLargeAsset;
+
                         const updatePayload = {
-                            failCount: newFailCount
+                            failCount: newFailCount,
+                            lastFailDate: new Date()
                         };
 
                         if (shouldDeactivate) {
@@ -352,7 +451,7 @@ export const marketDataService = {
                     operations.push({
                         updateOne: {
                             filter: { ticker: this.normalizeSymbol(quote.ticker) },
-                            update: { $set: { isActive: true, failCount: 0, lastPrice: quote.price, change: quote.change || 0, updatedAt: new Date() } }
+                            update: { $set: { isActive: true, failCount: 0, lastFailDate: null, lastPrice: quote.price, change: quote.change || 0, updatedAt: new Date() } }
                         }
                     });
                     reactivatedCount++;

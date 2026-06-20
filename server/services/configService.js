@@ -67,7 +67,11 @@ export const getTunables = async () => {
 
 // Síncrono — devolve o snapshot atual; se expirado, dispara refresh em background.
 export const getTunablesSync = () => {
-  if (Date.now() - loadedAt > TTL_MS) refreshTunables().catch(() => {});
+  // Refresh em background (não-bloqueante): o caller usa o snapshot atual neste
+  // tick e pega o novo no próximo. Falha é logada, não silenciada.
+  if (Date.now() - loadedAt > TTL_MS) {
+    refreshTunables().catch(err => logger.warn(`[Config] Refresh de tunables em background falhou: ${err.message}`));
+  }
   return snapshot;
 };
 
