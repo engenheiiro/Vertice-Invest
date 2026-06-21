@@ -10,6 +10,7 @@ import { marketDataService } from '../services/marketDataService.js';
 import { accrueFixedIncomeValue, brazilToday } from '../utils/fixedIncome.js';
 import { monthsRemaining, requiredMonthly, decomposeProgress, fv, annualToMonthly, computeStreak } from '../utils/goalMath.js';
 import { safeCurrency, safeFloat, safeSub, safeMult, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
+import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import logger from '../config/logger.js';
 
 const MS_DAY = 24 * 60 * 60 * 1000;
@@ -56,7 +57,7 @@ const getLiveWalletEquity = async (userId) => {
         if (assets.length === 0) return { equity: 0, snapshot };
 
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean();
-        const cdi = config?.cdi || 11.25;
+        const cdi = config?.cdi || DEFAULT_SELIC_FALLBACK;
         const usdRate = config?.dollar || 5.75;
         const calcDate = brazilToday();
 

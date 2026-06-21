@@ -369,7 +369,7 @@ export const getWalletData = async (req, res, next, _depth = 0) => {
 
         const usdRate = safeFloat(config?.dollar || 5.75);
         const usdChange = safeFloat(config?.dollarChange || 0);
-        const currentCdi = (config?.cdi && config.cdi > 0) ? safeFloat(config.cdi) : ((config?.selic && config.selic > 0) ? safeFloat(config.selic) : 11.25);
+        const currentCdi = (config?.cdi && config.cdi > 0) ? safeFloat(config.cdi) : ((config?.selic && config.selic > 0) ? safeFloat(config.selic) : DEFAULT_SELIC_FALLBACK);
         const macroRates = { cdiRate: currentCdi, selic: config?.selic, ipca: config?.ipca };
 
         const totalRealizedProfit = closedAssets.reduce((acc, curr) => {
@@ -471,7 +471,7 @@ export const getWalletPerformance = async (req, res, next) => {
         const lastSnapshotDate = toDateKey(brazilDateOnly(lastSnapshot.date));
 
         if (lastSnapshotDate !== todayStr) {
-            const liveData = await calculateLiveKPIS(userId, config?.cdi || 11.25);
+            const liveData = await calculateLiveKPIS(userId, config?.cdi || DEFAULT_SELIC_FALLBACK);
 
             if (liveData && liveData.totalEquity > 0) {
                 // Mesma âncora do KPI (getWalletData): regra única compartilhada.
@@ -519,7 +519,7 @@ export const getWalletPerformance = async (req, res, next) => {
              baseIbov = fallback ? (fallback.close || fallback.adjClose) : 120000;
         }
 
-        const currentRate = config?.cdi || 11.15;
+        const currentRate = config?.cdi || DEFAULT_SELIC_FALLBACK;
         let accumulatedCDI = 1.0;
         let accumulatedIPCA = 1.0; // IPCA + 6%
         let previousDate = startOfDay(history[0].date);
