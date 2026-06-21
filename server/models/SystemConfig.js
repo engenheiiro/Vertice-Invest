@@ -5,12 +5,23 @@ const SystemConfigSchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true, default: 'MACRO_INDICATORS' },
   
   // Indicadores Macro
-  selic: { type: Number, required: true, default: 11.25 },
+  selic: { type: Number, required: true, default: 14.25 },
   ipca: { type: Number, required: true, default: 4.50 },
-  cdi: { type: Number, required: true, default: 11.15 }, 
-  cdiReturn12m: { type: Number, default: 11.15 }, 
-  riskFree: { type: Number, required: true, default: 11.25 },
+  cdi: { type: Number, required: true, default: 14.15 },
+  cdiReturn12m: { type: Number, default: 14.15 },
+  riskFree: { type: Number, required: true, default: 14.25 },
   ntnbLong: { type: Number, required: true, default: 6.30 },
+
+  // Observabilidade das taxas oficiais: quando true, ao menos uma métrica
+  // (SELIC/IPCA/CDI) veio do fallback hardcoded — BCB e fonte secundária falharam.
+  ratesStale: { type: Boolean, default: false },
+  // Fonte efetiva de cada taxa nesta sincronização: 'BCB' | 'BrasilAPI' | 'IBGE' | 'fallback'.
+  ratesSources: {
+    selic: { type: String, default: null },
+    ipca: { type: String, default: null },
+  },
+  // Último instante em que TODAS as taxas vieram de fonte real (sem fallback).
+  ratesUpdatedAt: { type: Date, default: null },
   
   dollar: { type: Number, default: 5.75 },
   dollarChange: { type: Number, default: 0 },

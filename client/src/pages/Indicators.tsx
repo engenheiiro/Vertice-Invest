@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Header } from '../components/dashboard/Header';
 import { researchService } from '../services/research';
 import { SkeletonKpiGrid, SkeletonCard } from '../components/ui';
-import { Activity, TrendingUp, TrendingDown, ShieldCheck, Database, ArrowUpDown, Target, Percent, ChevronUp, ChevronDown, Landmark, Filter, Clock } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, ShieldCheck, Database, ArrowUpDown, Target, Percent, ChevronUp, ChevronDown, Landmark, Filter, Clock, AlertTriangle } from 'lucide-react';
 
 type SortKey = 'title' | 'type' | 'rate' | 'minInvestment' | 'maturityDate';
 type FilterType = 'ALL' | 'IPCA' | 'PREFIXADO' | 'SELIC' | 'OUTROS';
@@ -79,6 +79,19 @@ export const Indicators = () => {
 
     const fmtCurrency = (val: number) => val ? `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-';
 
+    // Guardas de confiabilidade. ratesSources informa a fonte de cada taxa
+    // ('BCB' | 'Brapi' | 'IBGE' | 'fallback'); só marcamos como suspeita a métrica
+    // que realmente caiu no fallback hardcoded. CDI é derivado da SELIC.
+    const ratesSources = data?.ratesSources || {};
+    const selicStale = ratesSources.selic === 'fallback';
+    const ipcaStale = ratesSources.ipca === 'fallback';
+    const staleMetrics: string[] = [];
+    if (selicStale) staleMetrics.push('SELIC', 'CDI');
+    if (ipcaStale) staleMetrics.push('IPCA');
+    // isPanelStale = painel sem atualização há mais de 1h (cron de macro pode estar parado).
+    const lastUpdatedMs = data?.lastUpdated ? new Date(data.lastUpdated).getTime() : null;
+    const isPanelStale = lastUpdatedMs ? (Date.now() - lastUpdatedMs) > 60 * 60 * 1000 : false;
+
     return (
         <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
@@ -115,14 +128,31 @@ export const Indicators = () => {
                     </div>
                 </div>
 
+                {/* Aviso de confiabilidade dos dados */}
+                {(staleMetrics.length > 0 || isPanelStale) && (
+                    <div className="mb-6 flex items-start gap-3 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4">
+                        <AlertTriangle size={18} className="text-yellow-400 mt-0.5 shrink-0" />
+                        <div className="text-sm text-yellow-200/90 space-y-1">
+                            {staleMetrics.length > 0 && (
+                                <p>
+                                    <span className="font-bold">{staleMetrics.join(', ')} em fallback.</span> Nem o Banco Central nem a fonte secundária responderam — esses valores usam o último fallback conhecido, não dados oficiais. Os demais indicadores são reais.
+                                </p>
+                            )}
+                            {isPanelStale && (
+                                <p>Painel sem atualização há mais de 1 hora. A sincronização automática pode estar interrompida.</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* Resto do componente mantido... */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 mb-10">
-                    <IndicatorCard label="SELIC" value={data?.selic?.value} suffix="%" desc="Meta BCB" color="text-emerald-400" icon={<Target size={16} />} />
-                    <IndicatorCard label="CDI" value={data?.cdi?.value} suffix="%" desc="Taxa DI" color="text-emerald-400" icon={<TrendingUp size={16} />} />
-                    <IndicatorCard label="IPCA (12m)" value={data?.ipca?.value} suffix="%" desc="Inflação" color="text-yellow-400" icon={<Percent size={16} />} />
-                    
+                    <IndicatorCard label="SELIC" value={data?.selic?.value} suffix="%" desc="Meta BCB" color="text-emerald-400" icon={<Target size={16} />} stale={selicStale} />
+                    <IndicatorCard label="CDI" value={data?.cdi?.value} suffix="%" desc="Taxa DI (≈ Selic − 0,10)" color="text-emerald-400" icon={<TrendingUp size={16} />} stale={selicStale} />
+                    <IndicatorCard label="IPCA (12m)" value={data?.ipca?.value} suffix="%" desc="Inflação" color="text-yellow-400" icon={<Percent size={16} />} stale={ipcaStale} />
+
                     <IndicatorCard label="Ibovespa" value={data?.ibov?.value} isCurrency={false} desc="Pts" change={data?.ibov?.change} />
-                    <IndicatorCard label="Dólar PTAX" value={data?.usd?.value} isCurrency={true} desc="BRL/USD" change={data?.usd?.change} />
+                    <IndicatorCard label="Dólar Comercial" value={data?.usd?.value} isCurrency={true} desc="BRL/USD" change={data?.usd?.change} />
                     <IndicatorCard label="S&P 500" value={data?.spx?.value} isCurrency={false} desc="US Pts" change={data?.spx?.change} />
                     <IndicatorCard label="Bitcoin" value={data?.btc?.value} isCurrency={true} currencyPrefix="$" desc="USD" color="text-purple-400" change={data?.btc?.change} />
                 </div>
@@ -307,10 +337,10 @@ const SortableHeader = ({ label, sortKey, currentSort, onSort, align, icon }: an
     </th>
 );
 
-const IndicatorCard = ({ label, value, suffix = '', desc, color = 'text-white', icon, isCurrency, currencyPrefix = 'R$', change }: any) => {
+const IndicatorCard = ({ label, value, suffix = '', desc, color = 'text-white', icon, isCurrency, currencyPrefix = 'R$', change, stale = false }: any) => {
     let ChangeIcon = null;
     let changeColor = 'text-slate-500';
-    
+
     if (change > 0) {
         ChangeIcon = TrendingUp;
         changeColor = 'text-emerald-500';
@@ -320,9 +350,12 @@ const IndicatorCard = ({ label, value, suffix = '', desc, color = 'text-white', 
     }
 
     return (
-        <div className="bg-base border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition-colors relative overflow-hidden group">
+        <div className={`bg-base border p-5 rounded-2xl flex flex-col justify-between transition-colors relative overflow-hidden group ${stale ? 'border-yellow-500/40' : 'border-slate-800 hover:border-slate-700'}`}>
             <div className="flex justify-between items-start mb-2 relative z-10">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    {label}
+                    {stale && <AlertTriangle size={10} className="text-yellow-400" aria-label="Dado em fallback (BCB indisponível)" />}
+                </span>
                 {icon && <div className="text-slate-600">{icon}</div>}
             </div>
             

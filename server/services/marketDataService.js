@@ -18,7 +18,7 @@ const LARGE_ASSET_LIQUIDITY = 1_000_000;     // R$ 1M/dia
 
 const FALLBACK_MACRO = {
     selic: { value: DEFAULT_SELIC_FALLBACK },
-    cdi: { value: 11.15 },
+    cdi: { value: Math.max(0, DEFAULT_SELIC_FALLBACK - 0.10) },
     ipca: { value: 4.50 },
     riskFree: { value: DEFAULT_SELIC_FALLBACK },
     ntnbLong: { value: 6.30 },
@@ -26,6 +26,9 @@ const FALLBACK_MACRO = {
     usd: { value: 5.75, change: 0 },
     spx: { value: 5200, change: 0 },
     btc: { value: 65000, change: 0 },
+    ratesStale: true,
+    ratesSources: { selic: 'fallback', ipca: 'fallback' },
+    ratesUpdatedAt: null,
     lastUpdated: new Date()
 };
 
@@ -418,6 +421,12 @@ export const marketDataService = {
                     ibov: { value: config.ibov || 128000, change: config.ibovChange || 0 },
                     spx: { value: config.spx || 5800, change: config.spxChange || 0 },
                     btc: { value: config.btc || 90000, change: config.btcChange || 0 },
+                    // Observabilidade: ratesSources informa a fonte efetiva de cada taxa
+                    // ('BCB' | 'BrasilAPI' | 'IBGE' | 'fallback'); ratesStale=true se alguma caiu
+                    // no fallback hardcoded. ratesUpdatedAt = último fetch 100% real.
+                    ratesStale: !!config.ratesStale,
+                    ratesSources: (config.ratesSources && (config.ratesSources.selic || config.ratesSources.ipca)) ? config.ratesSources : null,
+                    ratesUpdatedAt: config.ratesUpdatedAt || null,
                     lastUpdated: config.lastUpdated
                 };
             }

@@ -42,36 +42,117 @@ const BASE_HEADERS = {
 export const macroDataService = {
     
     // --- 1. INDICADORES MACRO (OFICIAIS) ---
+    // Cadeia de fontes por métrica: BCB (primária) -> secundária -> fallback hardcoded.
+    //   SELIC: BCB série 432 -> BrasilAPI /taxas (tokenless)
+    //   IPCA 12m: BCB série 13522 -> BrasilAPI /taxas -> IBGE SIDRA (ambas tokenless)
+    // isFallback só fica true quando TODAS as fontes de alguma métrica falham.
     async updateOfficialRates() {
+        let selicVal = await this._fetchBcbSeries(SERIES_BCB.SELIC_META, 'SELIC');
+        let ipcaVal = await this._fetchBcbSeries(SERIES_BCB.IPCA_12M, 'IPCA');
+
+        let selicSource = selicVal != null ? 'BCB' : null;
+        let ipcaSource = ipcaVal != null ? 'BCB' : null;
+
+        // Secundária unificada: BrasilAPI entrega Selic e IPCA numa única chamada (tokenless).
+        if (selicVal == null || ipcaVal == null) {
+            const brasilApi = await this.fetchRatesFromBrasilApi();
+            if (selicVal == null && brasilApi.selic != null) { selicVal = brasilApi.selic; selicSource = 'BrasilAPI'; }
+            if (ipcaVal == null && brasilApi.ipca != null) { ipcaVal = brasilApi.ipca; ipcaSource = 'BrasilAPI'; }
+        }
+
+        // Terciária para IPCA: IBGE SIDRA (fonte autoritativa do índice, tokenless).
+        if (ipcaVal == null) {
+            ipcaVal = await this.fetchIpcaFromIbge();
+            if (ipcaVal != null) ipcaSource = 'IBGE';
+        }
+
+        // Fallback hardcoded apenas para o que ainda faltar
+        let selicIsFallback = false;
+        let ipcaIsFallback = false;
+        if (selicVal == null) {
+            selicVal = DEFAULT_SELIC_FALLBACK;
+            selicIsFallback = true;
+            logger.warn(`⚠️ [Macro] SELIC: BCB e fonte secundária falharam. Fallback hardcoded ${selicVal}%.`);
+        }
+        if (ipcaVal == null) {
+            ipcaVal = 4.50;
+            ipcaIsFallback = true;
+            logger.warn(`⚠️ [Macro] IPCA: BCB e fonte secundária falharam. Fallback hardcoded ${ipcaVal}%.`);
+        }
+
+        logger.info(`📊 [Macro] Taxas oficiais: SELIC ${selicVal}% (${selicSource || 'fallback'}) · IPCA 12m ${ipcaVal}% (${ipcaSource || 'fallback'}).`);
+
+        return {
+            selic: selicVal,
+            ipca: ipcaVal,
+            cdi: Math.max(0, selicVal - 0.10),
+            cdi12m: Math.max(0, selicVal - 0.10),
+            isFallback: selicIsFallback || ipcaIsFallback,
+            sources: { selic: selicSource || 'fallback', ipca: ipcaSource || 'fallback' }
+        };
+    },
+
+    // Primária: lê o último valor de uma série SGS do BCB. Retorna número ou null.
+    async _fetchBcbSeries(serie, label) {
         try {
-            const selicRes = await axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.SELIC_META}/dados/ultimos/1?formato=json`, { 
-                headers: BASE_HEADERS, 
+            const res = await axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${serie}/dados/ultimos/1?formato=json`, {
+                headers: BASE_HEADERS,
                 httpsAgent: bcbAgent,
                 timeout: 5000
             });
-            const selicVal = selicRes.data[0]?.valor ? parseFloat(selicRes.data[0].valor) : DEFAULT_SELIC_FALLBACK;
-            
-            let ipcaVal = 4.50;
-            try {
-                const ipcaRes = await axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.IPCA_12M}/dados/ultimos/1?formato=json`, { 
-                    headers: BASE_HEADERS, 
-                    httpsAgent: bcbAgent,
-                    timeout: 5000 
-                });
-                if (ipcaRes.data[0]?.valor) ipcaVal = parseFloat(ipcaRes.data[0].valor);
-            } catch (e) {
-                logger.debug(`[Macro] IPCA indisponível, usando default ${ipcaVal}: ${e.message}`);
-            }
+            const raw = Array.isArray(res.data) && res.data[0]?.valor;
+            const val = raw ? parseFloat(String(raw).replace(',', '.')) : NaN;
+            if (val > 0 && val < 50) return val;
+            logger.warn(`⚠️ [Macro] ${label}: BCB respondeu sem valor válido. Tentando fonte secundária...`);
+            return null;
+        } catch (e) {
+            logger.warn(`⚠️ [Macro] ${label} via BCB falhou (${e.message}). Tentando fonte secundária...`);
+            return null;
+        }
+    },
 
-            return { 
-                selic: selicVal, 
-                ipca: ipcaVal, 
-                cdi: Math.max(0, selicVal - 0.10),
-                cdi12m: Math.max(0, selicVal - 0.10)
+    // Secundária unificada SELIC + IPCA: BrasilAPI /api/taxas/v1 (tokenless).
+    // Retorna { selic, ipca } com cada campo número ou null.
+    async fetchRatesFromBrasilApi() {
+        try {
+            const res = await axios.get('https://brasilapi.com.br/api/taxas/v1', { headers: BASE_HEADERS, timeout: 6000 });
+            const list = Array.isArray(res.data) ? res.data : [];
+            const pick = (nome) => {
+                const item = list.find(r => String(r.nome).toUpperCase() === nome);
+                const val = item ? parseFloat(String(item.valor).replace(',', '.')) : NaN;
+                return (val > 0 && val < 50) ? val : null;
             };
+            const selic = pick('SELIC');
+            const ipca = pick('IPCA');
+            if (selic != null || ipca != null) {
+                logger.info(`🔁 [Macro] Taxas da fonte secundária (BrasilAPI): SELIC ${selic ?? 'n/d'}% · IPCA ${ipca ?? 'n/d'}%.`);
+            }
+            return { selic, ipca };
+        } catch (e) {
+            logger.debug(`[Macro] BrasilAPI taxas indisponível: ${e.message}`);
+            return { selic: null, ipca: null };
+        }
+    },
 
-        } catch (error) {
-            return { selic: DEFAULT_SELIC_FALLBACK, ipca: 4.50, cdi: 11.15, cdi12m: 11.15 };
+    // Secundária IPCA 12m: IBGE SIDRA (tabela 1737, variável 2265 — tokenless). Retorna número ou null.
+    async fetchIpcaFromIbge() {
+        try {
+            const url = 'https://servicodados.ibge.gov.br/api/v3/agregados/1737/periodos/-1/variaveis/2265?localidades=N1[all]';
+            const res = await axios.get(url, { headers: BASE_HEADERS, timeout: 8000 });
+            const serie = res.data?.[0]?.resultados?.[0]?.series?.[0]?.serie;
+            if (serie && typeof serie === 'object') {
+                const values = Object.values(serie).filter(v => v != null && v !== '...');
+                const raw = values[values.length - 1];
+                const val = raw != null ? parseFloat(String(raw).replace(',', '.')) : NaN;
+                if (val > 0 && val < 50) {
+                    logger.info(`🔁 [Macro] IPCA 12m obtido da fonte secundária (IBGE): ${val}%.`);
+                    return val;
+                }
+            }
+            return null;
+        } catch (e) {
+            logger.debug(`[Macro] IBGE IPCA indisponível: ${e.message}`);
+            return null;
         }
     },
 
@@ -562,11 +643,19 @@ export const macroDataService = {
         if (official) {
             config.selic = official.selic;
             config.ipca = official.ipca;
-            config.cdi = official.cdi; 
+            config.cdi = official.cdi;
             if (official.cdi12m) {
-                config.cdiReturn12m = official.cdi12m; 
+                config.cdiReturn12m = official.cdi12m;
             }
-            config.riskFree = official.selic; 
+            config.riskFree = official.selic;
+
+            // Observabilidade: marca a fonte efetiva de cada taxa e se houve fallback.
+            // ratesUpdatedAt só é carimbado quando NADA veio do fallback hardcoded.
+            config.ratesStale = !!official.isFallback;
+            config.ratesSources = official.sources || { selic: null, ipca: null };
+            if (!official.isFallback) {
+                config.ratesUpdatedAt = new Date();
+            }
         }
         
         if (currencies) {
