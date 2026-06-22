@@ -245,10 +245,10 @@ export const runDailySnapshot = async (force = false) => {
 // Publica automaticamente o ranking + Explainable IA mais recente de cada classe,
 // uma vez por semana, para os períodos em que o admin não publica manualmente.
 // A geração diária (09:00/18:30) permanece intacta — isto só PUBLICA o que já existe.
-const AUTO_PUBLISH_CLASSES = ['BRASIL_10', 'STOCK', 'FII', 'CRYPTO', 'STOCK_US'];
+const AUTO_PUBLISH_CLASSES = ['BRASIL_10', 'STOCK', 'FII', 'CRYPTO', 'STOCK_US', 'REIT', 'ETF'];
 const ASSET_CLASS_LABELS = {
     STOCK: 'Ações BR', FII: 'FIIs', CRYPTO: 'Cripto',
-    STOCK_US: 'Ações EUA', BRASIL_10: 'Brasil 10',
+    STOCK_US: 'Ações EUA', REIT: 'REITs', ETF: 'ETFs', BRASIL_10: 'Brasil 10',
 };
 
 export const runWeeklyAutoPublish = async () => {
@@ -300,7 +300,7 @@ export const initScheduler = () => {
                 isActive: true,
                 $or: [
                     { liquidity: { $gt: 10000 } },
-                    { type: { $in: ['CRYPTO', 'STOCK_US'] } }
+                    { type: { $in: ['CRYPTO', 'STOCK_US', 'ETF'] } }
                 ]
             }).select('ticker');
             

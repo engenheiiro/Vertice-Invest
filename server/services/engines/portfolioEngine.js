@@ -30,6 +30,10 @@ export const portfolioEngine = {
         const usedTickers = new Set();
         const trace = options.trace || null;
         // (I13) Cap de cripto editável em runtime (fallback p/ default do M9).
+        // relaxCryptoCap: no ranking DEDICADO de cripto, o cap de ~3 (pensado p/ não
+        // concentrar cripto numa carteira MISTA) esvaziaria a lista — então o teto vira
+        // o alvo do perfil. O Defensivo segue limitado pelo gate isEligibleForDefensive
+        // (BTC/ETH ou ≥US$50B), então só Moderado/Arrojado de fato enchem.
         const MAX_CRYPTO_PER_PROFILE = getTunablesSync().maxCryptoPerProfile;
 
         const runDraftCycle = (profile, scoreKey, count) => {
@@ -42,8 +46,13 @@ export const portfolioEngine = {
             // é o macro-setor (risco sistêmico correlacionado); para FIIs é o SEGMENTO
             // (shopping ≠ logística ≠ papel ≠ fiagro), permitindo diversificar uma
             // carteira 100% FII em vez de colapsá-la em ~3 macro-setores.
-            const MAX_PER_SECTOR_STRICT = profile === 'DEFENSIVE' ? 3 : 2;
-            const MAX_PER_SECTOR_FLEX = 3;
+            // relaxSectorConcentration: para rankings MONO-SETOR (ex.: REIT, onde todo o
+            // universo cai em REAL_ESTATE), o cap por balde colapsaria a lista — então o
+            // cap vira o próprio alvo (sem teto efetivo) e os ativos competem só por score.
+            const MAX_PER_SECTOR_STRICT = options.relaxSectorConcentration ? TARGET_COUNT : (profile === 'DEFENSIVE' ? 3 : 2);
+            const MAX_PER_SECTOR_FLEX = options.relaxSectorConcentration ? TARGET_COUNT : 3;
+            // Cap de cripto efetivo (relaxado no ranking dedicado de cripto).
+            const cryptoCap = options.relaxCryptoCap ? TARGET_COUNT : MAX_CRYPTO_PER_PROFILE;
 
             // Tenta encaixar um candidato respeitando o cap do balde corrente.
             const tryAdd = (asset, tier, sectorCap, thesis) => {
@@ -51,7 +60,7 @@ export const portfolioEngine = {
                 const isCrypto = asset.type === 'CRYPTO';
                 const currentCount = sectorCounts[key] || 0;
                 const canAdd = isCrypto
-                    ? (cryptoCount < MAX_CRYPTO_PER_PROFILE)
+                    ? (cryptoCount < cryptoCap)
                     : (currentCount < sectorCap);
 
                 if (canAdd) {
@@ -106,8 +115,11 @@ export const portfolioEngine = {
         return finalPortfolio;
     },
 
-    applyConcentrationPenalty(portfolio) {
+    applyConcentrationPenalty(portfolio, options = {}) {
         if (!portfolio || portfolio.length === 0) return portfolio;
+        // Em rankings mono-setor (REIT), a penalidade setorial puniria toda a lista —
+        // desligada quando relaxSectorConcentration. A de gestora (FII) não se aplica aqui.
+        const relax = !!options.relaxSectorConcentration;
 
         // Penalidade aplicada por perfil de risco para evitar que a escolha do DEFENSIVO
         // contamine os contadores setoriais do MODERADO e ARROJADO.
@@ -129,11 +141,13 @@ export const portfolioEngine = {
 
                 let penalty = 0;
 
-                // 1. Penalidade por Concentração Setorial
-                const sCount = sectorCounts[macroSector] || 0;
-                if (sCount >= 3) penalty += 15; // A partir do 4º ativo no mesmo macro-setor
-                else if (sCount >= 2) penalty += 5;  // A partir do 3º ativo
-                sectorCounts[macroSector] = sCount + 1;
+                // 1. Penalidade por Concentração Setorial (desligada em ranking mono-setor)
+                if (!relax) {
+                    const sCount = sectorCounts[macroSector] || 0;
+                    if (sCount >= 3) penalty += 15; // A partir do 4º ativo no mesmo macro-setor
+                    else if (sCount >= 2) penalty += 5;  // A partir do 3º ativo
+                    sectorCounts[macroSector] = sCount + 1;
+                }
 
                 // 2. Penalidade por Concentração de Gestora (FIIs)
                 if (isFII) {

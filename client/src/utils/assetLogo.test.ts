@@ -39,6 +39,13 @@ describe('getAssetLogoUrl', () => {
   it('trata tipo desconhecido como ação B3 (type=STOCK)', () => {
     expect(getAssetLogoUrl('PETR4')).toBe('/api/market/logo/PETR4?type=STOCK');
   });
+  it('ETF nacional (BRL ou sem moeda) usa a fonte B3 (type=STOCK)', () => {
+    expect(getAssetLogoUrl('BOVA11', 'ETF')).toBe('/api/market/logo/BOVA11?type=STOCK');
+    expect(getAssetLogoUrl('BOVA11', 'ETF', 'BRL')).toBe('/api/market/logo/BOVA11?type=STOCK');
+  });
+  it('ETF internacional (USD) usa a fonte US (type=STOCK_US)', () => {
+    expect(getAssetLogoUrl('VOO', 'ETF', 'USD')).toBe('/api/market/logo/VOO?type=STOCK_US');
+  });
   it('retorna null para renda fixa e caixa', () => {
     expect(getAssetLogoUrl('TESOURO SELIC', 'FIXED_INCOME')).toBeNull();
     expect(getAssetLogoUrl('CAIXA', 'CASH')).toBeNull();

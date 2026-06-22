@@ -7,6 +7,8 @@ const ASSET_CLASSES = [
     { id: 'STOCK', label: 'Ações Brasil', icon: <BarChart3 size={18} className="text-blue-500" />, desc: 'B3: Ibovespa & Small Caps' },
     { id: 'FII', label: 'Fundos Imobiliários', icon: <Layers size={18} className="text-indigo-500" />, desc: 'IFIX: Tijolo, Papel & Fiagros' },
     { id: 'STOCK_US', label: 'Mercado Global', icon: <Globe size={18} className="text-cyan-500" />, desc: 'NYSE & NASDAQ (Stocks)' },
+    { id: 'REIT', label: 'REITs (US)', icon: <Globe size={18} className="text-teal-500" />, desc: 'Imobiliário US (O, PLD, AMT...)' },
+    { id: 'ETF', label: 'ETFs', icon: <Layers size={18} className="text-teal-400" />, desc: 'Cestas B3 + Internacionais' },
     { id: 'CRYPTO', label: 'Criptoativos', icon: <Zap size={18} className="text-purple-500" />, desc: 'Top Cap & Projetos DeFi' },
 ];
 

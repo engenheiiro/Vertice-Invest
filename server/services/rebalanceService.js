@@ -18,19 +18,29 @@ import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from './marketDataService.js';
 import { countBusinessDays } from '../utils/dateUtils.js';
 import { safeFloat, safeCurrency, safeDiv, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
+import {
+    FI_SUB_KEYS, US_SUB_KEYS, SUB_LABELS,
+    fixedIncomeSubKey, usSubKeyOf, hasSubMetas,
+    currentValueBySub, splitNeedBySubMeta, subGaps,
+} from '../utils/subAllocation.js';
 import { BUY_THRESHOLD, CAPITAL_GAINS_TAX, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import logger from '../config/logger.js';
 
 const ENGINE_CLASSES = ['STOCK', 'FII', 'STOCK_US', 'CRYPTO'];
-const RISK_CLASSES = ['STOCK', 'FII', 'STOCK_US', 'CRYPTO', 'FIXED_INCOME'];
+// ETF e OURO são classes-alvo da Carteira Ideal sem MarketAnalysis própria: seus
+// candidatos de compra vêm do ranking STOCK_US (sub-tipos ETF/GOLD), derivados em
+// loadEngineData. OURO permanece por compatibilidade (não é mais oferecido na UI).
+const RISK_CLASSES = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'CRYPTO', 'FIXED_INCOME', 'OURO'];
 const ALL_CLASSES = [...RISK_CLASSES, 'CASH'];
 
 const CLASS_LABELS = {
     STOCK: 'Ações BR',
     FII: 'FIIs',
     STOCK_US: 'Exterior',
+    ETF: 'ETFs',
     CRYPTO: 'Cripto',
     FIXED_INCOME: 'Renda Fixa',
+    OURO: 'Ouro',
     CASH: 'Reserva',
 };
 
@@ -115,6 +125,9 @@ export const computeWalletValuation = async (userId) => {
             ticker: asset.ticker,
             type: asset.type,
             sector: asset.type === 'FIXED_INCOME' ? 'Renda Fixa' : asset.type === 'CASH' ? 'Caixa' : null,
+            // Sub-tipos da ramificação (Carteira Ideal): permitem quebrar o gap da classe.
+            fixedIncomeIndex: asset.fixedIncomeIndex || null,
+            usSubType: asset.usSubType || null,
             quantity: asset.quantity,
             currency: asset.currency,
             valueBr,
@@ -174,7 +187,9 @@ const compoundFixedIncome = (asset, currentCdi) => {
 
 export const loadEngineData = async (riskProfile) => {
     const scoreByTicker = {};
-    const idealBuysByClass = Object.fromEntries(ENGINE_CLASSES.map((c) => [c, []]));
+    // ETF e OURO não têm MarketAnalysis própria — derivados do ranking STOCK_US
+    // (sub-tipos ETF e GOLD, respectivamente).
+    const idealBuysByClass = Object.fromEntries([...ENGINE_CLASSES, 'ETF', 'OURO'].map((c) => [c, []]));
     const coveredClasses = [];
     let dataAsOf = null;
 
@@ -209,18 +224,32 @@ export const loadEngineData = async (riskProfile) => {
         }
 
         const ranking = analysis.content?.ranking || [];
-        idealBuysByClass[assetClass] = ranking
-            .filter((r) => r.riskProfile === riskProfile && r.action === 'BUY')
-            .map((r) => ({
-                ticker: r.ticker,
-                name: r.name,
-                sector: r.sector,
-                type: r.type,
-                score: r.score,
-                currentPrice: r.currentPrice,
-                targetPrice: r.targetPrice,
-                bull: r.bullThesis || [],
-            }));
+        const mapItem = (r) => ({
+            ticker: r.ticker,
+            name: r.name,
+            sector: r.sector,
+            type: r.type,
+            usSubType: r.usSubType || null,
+            score: r.score,
+            currentPrice: r.currentPrice,
+            targetPrice: r.targetPrice,
+            bull: r.bullThesis || [],
+        });
+        const buys = ranking.filter((r) => r.riskProfile === riskProfile && r.action === 'BUY');
+
+        if (assetClass === 'STOCK_US') {
+            // Exterior cede ETFs (classe ETF) e ouro (classe OURO, lastreada em ETF)
+            // aos seus baldes próprios; o que sobra (ações/REIT/dólar) fica em STOCK_US.
+            idealBuysByClass['STOCK_US'] = buys.filter((r) => r.usSubType !== 'GOLD' && r.usSubType !== 'ETF').map(mapItem);
+            const goldBuys = buys.filter((r) => r.usSubType === 'GOLD').map(mapItem);
+            idealBuysByClass['OURO'] = goldBuys;
+            if (goldBuys.length && !coveredClasses.includes('OURO')) coveredClasses.push('OURO');
+            const etfBuys = buys.filter((r) => r.usSubType === 'ETF').map(mapItem);
+            idealBuysByClass['ETF'] = etfBuys;
+            if (etfBuys.length && !coveredClasses.includes('ETF')) coveredClasses.push('ETF');
+        } else {
+            idealBuysByClass[assetClass] = buys.map(mapItem);
+        }
     }
 
     return { scoreByTicker, idealBuysByClass, coveredClasses, dataAsOf };
@@ -271,6 +300,7 @@ export const buildRebalancePlan = ({
     valuation,
     targetAllocation,
     targetReserve,
+    targetSubAllocation = {},
     scoreByTicker,
     idealBuysByClass,
     coveredClasses,
@@ -369,10 +399,16 @@ export const buildRebalancePlan = ({
                 reasons.push(`Reduzir excesso (mantém posição, score ${Math.round(h.score)})`);
             }
 
+            // Rótulo de sub-tipo (ramificação) para RF/Exterior — espelha o lado compra.
+            let subLabel = null;
+            if (gap.class === 'FIXED_INCOME') subLabel = SUB_LABELS.FIXED_INCOME[fixedIncomeSubKey(h.fixedIncomeIndex)];
+            else if (gap.class === 'STOCK_US') subLabel = SUB_LABELS.STOCK_US[usSubKeyOf(h.usSubType)];
+
             sells.push({
                 ticker: h.ticker,
                 class: h.class || h.type,
                 type: h.type,
+                subLabel,
                 amount,
                 quantity,
                 positionValue: h.valueBr,
@@ -393,6 +429,13 @@ export const buildRebalancePlan = ({
 
         // Reserva e Renda Fixa não têm ranking de tickers → sugestão genérica.
         if (gap.class === 'CASH' || gap.class === 'FIXED_INCOME') {
+            // Ramificação: se a Renda Fixa tem sub-metas, quebra o aporte por sub-tipo
+            // (IPCA / Pós-fixado / Prefixado) para o usuário saber quanto vai em cada um.
+            let subBreakdown = null;
+            if (gap.class === 'FIXED_INCOME' && hasSubMetas(targetSubAllocation.FIXED_INCOME)) {
+                subBreakdown = splitNeedBySubMeta(need, targetSubAllocation.FIXED_INCOME, FI_SUB_KEYS)
+                    .map((x) => ({ ...x, label: SUB_LABELS.FIXED_INCOME[x.sub] }));
+            }
             buys.push({
                 ticker: null,
                 label: gap.label,
@@ -401,9 +444,12 @@ export const buildRebalancePlan = ({
                 kind: 'GENERIC',
                 amount: safeCurrency(need),
                 quantity: null,
+                subBreakdown,
                 reasons: [
                     `${gap.label} ${gap.currentPct.toFixed(0)}% abaixo da meta de ${gap.targetPct.toFixed(0)}%`,
-                    gap.class === 'CASH' ? 'Reforçar reserva de emergência' : 'Aportar em Renda Fixa (escolha o título)',
+                    gap.class === 'CASH' ? 'Reforçar reserva de emergência'
+                        : subBreakdown ? 'Aportar em Renda Fixa por sub-meta (escolha os títulos)'
+                        : 'Aportar em Renda Fixa (escolha o título)',
                 ],
             });
             continue;
@@ -418,6 +464,7 @@ export const buildRebalancePlan = ({
                 score: a.score,
                 priceBr: a.priceBr,
                 bull: a.bull,
+                usSubType: a.usSubType || null,
             }));
 
         const ideal = covered.has(gap.class) ? idealBuysByClass[gap.class] || [] : [];
@@ -427,8 +474,10 @@ export const buildRebalancePlan = ({
                 ticker: r.ticker,
                 kind: 'NEW',
                 score: r.score,
-                priceBr: safeFloat((r.currentPrice || 0) * (gap.class === 'STOCK_US' || gap.class === 'CRYPTO' ? usdRate : 1)),
+                // Candidatos de OURO/ETF vêm do ranking STOCK_US (preço em USD) → converte.
+                priceBr: safeFloat((r.currentPrice || 0) * (gap.class === 'STOCK_US' || gap.class === 'CRYPTO' || gap.class === 'OURO' || gap.class === 'ETF' ? usdRate : 1)),
                 bull: r.bull,
+                usSubType: r.usSubType || null,
             }));
 
         // Dedup (reforço tem prioridade), ordena por score desc, limita o nº de tickers.
@@ -460,9 +509,25 @@ export const buildRebalancePlan = ({
             continue;
         }
 
-        const scoreSum = candidates.reduce((acc, c) => acc + (c.score ?? 0), 0) || candidates.length;
+        // Ramificação do Exterior: enviesa o peso de cada candidato pelo sub-gap do seu
+        // sub-tipo (REIT/ETF/STOCK/Dólar) — prioriza o sub-tipo mais defasado da meta.
+        // Sem sub-metas (ou sem sub-gap positivo entre os candidatos) → peso só por score.
+        let subWeightByTicker = null;
+        if (gap.class === 'STOCK_US' && hasSubMetas(targetSubAllocation.STOCK_US)) {
+            const currentBySub = currentValueBySub(enriched, 'STOCK_US');
+            const gapsBySub = subGaps(gap.idealValue, currentBySub, targetSubAllocation.STOCK_US, US_SUB_KEYS);
+            const biased = candidates.map((c) => (c.score ?? 0) * gapsBySub[usSubKeyOf(c.usSubType)]);
+            if (biased.some((w) => w > 0)) {
+                subWeightByTicker = new Map(candidates.map((c, i) => [c.ticker, biased[i]]));
+            }
+        }
+
+        const weightOf = (c) => (subWeightByTicker ? subWeightByTicker.get(c.ticker) || 0 : (c.score ?? 0));
+        const rawWeightSum = candidates.reduce((acc, c) => acc + weightOf(c), 0);
+        // Sem pesos válidos (todos 0) → rateio igualitário; senão respeita o zero (sub-tipo no alvo).
+        const weightSum = rawWeightSum > 0 ? rawWeightSum : candidates.length;
         for (const c of candidates) {
-            const weight = (c.score ?? 0) / scoreSum || 1 / candidates.length;
+            const weight = rawWeightSum > 0 ? weightOf(c) / weightSum : 1 / candidates.length;
             const amount = safeCurrency(need * weight);
             if (amount <= 0) continue;
             const quantity = c.priceBr > 0 ? safeFloat(amount / c.priceBr) : null;
@@ -471,6 +536,7 @@ export const buildRebalancePlan = ({
             reasons.push(`${gap.label} ${gap.currentPct.toFixed(0)}% abaixo da meta de ${gap.targetPct.toFixed(0)}%`);
             const tier = tierFromScore(c.score);
             reasons.push(`${tier ? tier + ' · ' : ''}COMPRAR (score ${Math.round(c.score ?? 0)})`);
+            if (gap.class === 'STOCK_US' && c.usSubType) reasons.push(`Reforça ${SUB_LABELS.STOCK_US[usSubKeyOf(c.usSubType)]} (sub-meta)`);
             if (c.bull?.[0]) reasons.push(c.bull[0]);
 
             buys.push({
@@ -479,6 +545,7 @@ export const buildRebalancePlan = ({
                 type: gap.class,
                 kind: c.kind,
                 tier,
+                subLabel: gap.class === 'STOCK_US' ? SUB_LABELS.STOCK_US[usSubKeyOf(c.usSubType)] : null,
                 amount,
                 quantity,
                 score: c.score,
@@ -516,17 +583,19 @@ export const rebalanceService = {
     async generatePlan(userId, riskProfile = 'MODERATE') {
         const [valuation, prefs, engine] = await Promise.all([
             computeWalletValuation(userId),
-            User.findById(userId).select('targetAllocation targetReserve').lean(),
+            User.findById(userId).select('targetAllocation targetReserve targetSubAllocation').lean(),
             loadEngineData(riskProfile),
         ]);
 
         const targetAllocation = prefs?.targetAllocation || { STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10, FIXED_INCOME: 0 };
         const targetReserve = typeof prefs?.targetReserve === 'number' ? prefs.targetReserve : 10000;
+        const targetSubAllocation = prefs?.targetSubAllocation || {};
 
         const plan = buildRebalancePlan({
             valuation,
             targetAllocation,
             targetReserve,
+            targetSubAllocation,
             scoreByTicker: engine.scoreByTicker,
             idealBuysByClass: engine.idealBuysByClass,
             coveredClasses: engine.coveredClasses,

@@ -21,7 +21,7 @@ import { researchService } from '../services/research';
 
 vi.mock('../contexts/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../services/research', () => ({
-  researchService: { getLatest: vi.fn() },
+  researchService: { getLatest: vi.fn(), getFixedIncomeData: vi.fn() },
 }));
 
 const mockNavigate = vi.fn();
@@ -44,6 +44,9 @@ vi.mock('../components/research/ExplainableAIRenderer', () => ({
 }));
 vi.mock('../components/research/ResearchAporteModal', () => ({
   ResearchAporteModal: () => null,
+}));
+vi.mock('../components/research/TreasuryPanel', () => ({
+  TreasuryPanel: () => <div data-testid="treasury-panel" />,
 }));
 vi.mock('../components/ui', () => ({
   SkeletonCard: ({ className }: any) => <div data-testid="skeleton-card" className={className} />,
@@ -78,13 +81,15 @@ describe('render básico', () => {
     expect(screen.getByText('RESEARCH CENTER')).toBeInTheDocument();
   });
 
-  it('renderiza os 5 botões de ativo', () => {
+  it('renderiza os 7 botões de ativo (inclui ETFs e Renda Fixa)', () => {
     renderResearch();
     expect(screen.getByText('Brasil 10 (Mix)')).toBeInTheDocument();
     expect(screen.getByText('Ações BR')).toBeInTheDocument();
     expect(screen.getByText('FIIs')).toBeInTheDocument();
     expect(screen.getByText('Cripto')).toBeInTheDocument();
     expect(screen.getByText('Exterior')).toBeInTheDocument();
+    expect(screen.getByText('ETFs')).toBeInTheDocument();
+    expect(screen.getByText('Renda Fixa')).toBeInTheDocument();
   });
 
   it('inicia com Brasil 10 selecionado (bg-emerald-600)', () => {
@@ -142,6 +147,22 @@ describe('controle de acesso por plano', () => {
     expect(vi.mocked(researchService.getLatest)).not.toHaveBeenCalled();
   });
 
+  it('plano PRO acessa a aba ETFs (minPlan: PRO)', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: makeUser('PRO') } as any);
+    renderResearch();
+
+    await waitFor(() =>
+      expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledTimes(1)
+    );
+
+    vi.mocked(researchService.getLatest).mockClear();
+    fireEvent.click(screen.getByText('ETFs'));
+
+    await waitFor(() =>
+      expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledWith('ETF', 'BUY_HOLD')
+    );
+  });
+
   it('plano ELITE não acessa Exterior (minPlan: ELITE)', async () => {
     vi.mocked(useAuth).mockReturnValue({ user: makeUser('ELITE') } as any);
     renderResearch();
@@ -156,6 +177,60 @@ describe('controle de acesso por plano', () => {
     await waitFor(() =>
       expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledWith('STOCK_US', 'BUY_HOLD')
     );
+  });
+});
+
+// ─── Aba Exterior ──────────────────────────────────────────────────────────────
+// O sub-toggle Ações/REITs migrou para a barra "Perfil da Carteira" (TopPicksCard);
+// o comportamento do toggle é coberto em TopPicksCard.test.tsx. Aqui basta garantir
+// que a aba Exterior busca o ranking de Ações US.
+
+describe('Exterior', () => {
+  it('a aba Exterior busca o ranking STOCK_US', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: makeUser('ELITE') } as any);
+    renderResearch();
+
+    await waitFor(() =>
+      expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledTimes(1)
+    );
+
+    fireEvent.click(screen.getByText('Exterior'));
+    await waitFor(() =>
+      expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledWith('STOCK_US', 'BUY_HOLD')
+    );
+  });
+});
+
+// ─── Aba Renda Fixa (Tesouro) ─────────────────────────────────────────────────
+
+describe('aba Renda Fixa', () => {
+  it('ESSENTIAL acessa Renda Fixa e renderiza o TreasuryPanel (sem buscar ranking)', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: makeUser('ESSENTIAL') } as any);
+    renderResearch();
+
+    // Carregamento inicial de BRASIL_10
+    await waitFor(() =>
+      expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledTimes(1)
+    );
+
+    vi.mocked(researchService.getLatest).mockClear();
+    fireEvent.click(screen.getByText('Renda Fixa'));
+
+    // Painel informativo aparece e nenhum getLatest é disparado (não há ranking)
+    await waitFor(() =>
+      expect(screen.getByTestId('treasury-panel')).toBeInTheDocument()
+    );
+    expect(vi.mocked(researchService.getLatest)).not.toHaveBeenCalled();
+  });
+
+  it('GUEST não acessa Renda Fixa (ESSENTIAL required) — exibe bloqueio', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: makeUser('GUEST') } as any);
+    renderResearch();
+    fireEvent.click(screen.getByText('Renda Fixa'));
+    await waitFor(() =>
+      expect(screen.getByText(/Conteúdo Exclusivo/i)).toBeInTheDocument()
+    );
+    expect(screen.queryByTestId('treasury-panel')).not.toBeInTheDocument();
   });
 });
 

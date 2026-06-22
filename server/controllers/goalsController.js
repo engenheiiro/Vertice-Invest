@@ -466,6 +466,20 @@ export const deleteGoal = async (req, res, next) => {
     }
 };
 
+// DELETE /goals — remove TODAS as metas do usuário (e seus aportes manuais).
+// Espelha o "Resetar Carteira": ação destrutiva, confirmada no front.
+export const clearAllGoals = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { deletedCount } = await InvestmentGoal.deleteMany({ user: userId });
+        await GoalContribution.deleteMany({ user: userId });
+        res.json({ message: 'Todas as metas removidas.', deletedCount: deletedCount || 0 });
+    } catch (error) {
+        logger.error(`Erro ao limpar metas: ${error.message}`);
+        next(error);
+    }
+};
+
 // POST /goals/:id/contributions — registra aporte manual e devolve a meta recalculada.
 export const addContribution = async (req, res, next) => {
     try {

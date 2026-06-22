@@ -32,7 +32,7 @@ export function normalizeTicker(ticker: string): string {
 /**
  * Retorna a URL da logo ou null quando não há fonte adequada para o tipo.
  */
-export function getAssetLogoUrl(ticker: string, type?: AssetType): string | null {
+export function getAssetLogoUrl(ticker: string, type?: AssetType, currency?: 'BRL' | 'USD'): string | null {
   const symbol = normalizeTicker(ticker);
   if (!symbol) return null;
 
@@ -53,6 +53,11 @@ export function getAssetLogoUrl(ticker: string, type?: AssetType): string | null
 
     case 'STOCK_US':
       return proxy('STOCK_US');
+
+    case 'ETF':
+      // ETF é classe unificada: nacional (BRL → fonte B3) vs internacional (USD →
+      // fonte US). Sem moeda, assume B3 (caso nacional, o mais comum).
+      return proxy(currency === 'USD' ? 'STOCK_US' : 'STOCK');
 
     case 'FIXED_INCOME':
     case 'CASH':

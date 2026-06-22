@@ -10,6 +10,7 @@ import { marketDataService } from './marketDataService.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { resolveSector, deriveFiiSubType } from '../utils/sectorResolver.js';
 import { backfillSectors } from './sectorBackfillService.js';
+import { classifyUsAsset } from '../utils/usClassification.js';
 
 const yahooFinanceLTM = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 const LTM_BATCH_SIZE = 10;
@@ -277,9 +278,10 @@ export const syncService = {
                 });
             }
 
-            // Etapa 3.5: Seed inicial S&P 500 (cria registros se não existirem)
-            logger.info("ℹ️ [Sync] Etapa 3.5: Seed S&P 500 (se necessário)");
+            // Etapa 3.5: Seed inicial S&P 500 + ETFs nacionais (cria registros se não existirem)
+            logger.info("ℹ️ [Sync] Etapa 3.5: Seed S&P 500 + ETFs nacionais (se necessário)");
             await usStocksFundamentalsService.seedSP500Assets();
+            await usStocksFundamentalsService.seedBrEtfAssets();
 
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
@@ -291,6 +293,30 @@ export const syncService = {
                     if (bf.updated > 0) logger.info(`🩹 [Sync] Setores corrigidos no backfill: ${bf.updated}`);
                 } catch (err) {
                     logger.error(`❌ [Sync] Backfill de setores falhou: ${err.message}`);
+                }
+
+                // Backfill de sub-tipo de Exterior (STOCK_US): STOCK | ETF | REIT | DOLLAR.
+                // Idempotente; só grava quando a classificação heurística muda. O sub-tipo
+                // alimenta os sub-filtros do Research e o viés por sub-meta do rebalance (PR3).
+                try {
+                    const usAssets = await MarketAsset.find({ type: 'STOCK_US' })
+                        .select('ticker sector name currency usSubType type').lean();
+                    const usOps = [];
+                    for (const a of usAssets) {
+                        const sub = classifyUsAsset({
+                            ticker: a.ticker, sector: a.sector, type: a.type,
+                            currency: a.currency, name: a.name,
+                        });
+                        if (sub && sub !== a.usSubType) {
+                            usOps.push({ updateOne: { filter: { ticker: a.ticker }, update: { $set: { usSubType: sub } } } });
+                        }
+                    }
+                    if (usOps.length > 0) {
+                        await MarketAsset.bulkWrite(usOps);
+                        logger.info(`🩹 [Sync] Sub-tipos de Exterior classificados: ${usOps.length}`);
+                    }
+                } catch (err) {
+                    logger.error(`❌ [Sync] Backfill de usSubType (Exterior) falhou: ${err.message}`);
                 }
 
                 // SALVA ESTATÍSTICAS DE QUALIDADE
@@ -347,6 +373,8 @@ export const syncService = {
                     if (shouldSyncFundamentals) {
                         logger.info("ℹ️ [Sync] Etapa 4: Fundamentals S&P 500 (sincronização diária)");
                         await usStocksFundamentalsService.syncUSStocksFundamentals();
+                        // ETFs nacionais (B3) — dy/marketCap via Yahoo .SA (o seed não traz fundamentos)
+                        await usStocksFundamentalsService.syncBrEtfFundamentals();
                         await SystemConfig.findOneAndUpdate(
                             { key: 'MACRO_INDICATORS' },
                             { $set: { lastUSFundamentalsSync: new Date() } },

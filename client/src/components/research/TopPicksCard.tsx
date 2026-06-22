@@ -12,6 +12,9 @@ interface TopPicksCardProps {
     picks: RankingItem[];
     assetClass: string;
     onAporte?: () => void;
+    // Exterior: alterna entre os rankings independentes Ações (STOCK_US) e REITs.
+    // Quando presente, os chips Ações/REITs aparecem na barra "Perfil da Carteira".
+    onExteriorViewChange?: (view: 'STOCK' | 'REIT') => void;
 }
 
 type RiskFilter = 'DEFENSIVE' | 'MODERATE' | 'BOLD';
@@ -22,24 +25,49 @@ const RISK_LABELS: Record<RiskFilter, string> = {
     'BOLD': 'Arrojado'
 };
 
+// Sub-filtro da aba "ETFs": separa o universo nacional (B3) do internacional (US).
+// Sem "Todos" — a aba sempre mostra um mercado por vez (default Internacional).
+type EtfOriginFilter = 'BR' | 'US';
+
+const ETF_ORIGIN_LABELS: Record<EtfOriginFilter, string> = {
+    'BR': 'Nacional',
+    'US': 'Internacional',
+};
+
+// Chips Ações/REITs do Exterior (rankings independentes selecionados via callback).
+const EXTERIOR_VIEWS: Array<{ key: 'STOCK' | 'REIT'; label: string }> = [
+    { key: 'STOCK', label: 'Ações' },
+    { key: 'REIT', label: 'REITs' },
+];
+
 const COLORS = [
     '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#6366F1', '#D4AF37',
     '#EF4444', '#84CC16', '#14B8A6', '#F97316', '#A855F7', '#0EA5E9'
 ];
 
-export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, onAporte }) => {
+export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, onAporte, onExteriorViewChange }) => {
     const { assets, kpis, isPrivacyMode } = useWallet();
     const navigate = useNavigate();
     const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
     const [riskFilter, setRiskFilter] = useState<RiskFilter>('DEFENSIVE');
+    const [etfOrigin, setEtfOrigin] = useState<EtfOriginFilter>('US');
 
     const isBrasil10 = assetClass === 'BRASIL_10';
+    // Exterior (STOCK_US) e REIT já vêm como rankings puros do backend; o badge de
+    // sub-tipo ainda aparece nas linhas para contexto.
+    const isStockUS = assetClass === 'STOCK_US' || assetClass === 'REIT';
+    const isEtf = assetClass === 'ETF';
+    // Qual chip de Exterior está ativo deriva da classe do ranking carregado.
+    const exteriorActive: 'STOCK' | 'REIT' = assetClass === 'REIT' ? 'REIT' : 'STOCK';
 
     useEffect(() => {
         if (isBrasil10) {
             setRiskFilter('DEFENSIVE');
         }
     }, [assetClass, isBrasil10]);
+
+    // Reseta o sub-filtro de origem (default Internacional) ao trocar de classe.
+    useEffect(() => { setEtfOrigin('US'); }, [assetClass]);
 
     const filteredPicks = useMemo(() => {
         let filtered = picks;
@@ -52,6 +80,15 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
             filtered = picks.filter(p => p.riskProfile === 'BOLD');
         }
 
+        // Sub-filtro da aba ETFs: nacional = type 'ETF' (B3); internacional = o resto
+        // (STOCK_US/usSubType ETF). A união BR+US preserva o type original do ativo.
+        if (isEtf) {
+            filtered = filtered.filter(p => {
+                const isNacional = p.type === 'ETF';
+                return etfOrigin === 'BR' ? isNacional : !isNacional;
+            });
+        }
+
         return filtered
             .sort((a, b) => b.score - a.score)
             .slice(0, 10)
@@ -59,7 +96,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                 ...item,
                 visualPosition: idx + 1
             }));
-    }, [picks, riskFilter]);
+    }, [picks, riskFilter, isEtf, etfOrigin]);
 
     const stats = useMemo(() => {
         if (!filteredPicks.length) return { avgScore: 0, avgDy: 0, count: 0 };
@@ -140,6 +177,34 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                             </button>
                         );
                     })}
+                    {isStockUS && onExteriorViewChange && (
+                        <div className="flex items-center gap-1.5 pl-2 border-l border-slate-700/60 shrink-0">
+                            {EXTERIOR_VIEWS.map(({ key, label }) => (
+                                <button
+                                    key={key}
+                                    onClick={() => onExteriorViewChange(key)}
+                                    className={`whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold transition-all border shrink-0 ${exteriorActive === key ? 'bg-cyan-700 border-cyan-600 text-white shadow-lg shadow-cyan-900/20' : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300 hover:bg-slate-800'}`}
+                                    title={`Exterior: ${label}`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    {isEtf && (
+                        <div className="flex items-center gap-1.5 pl-2 border-l border-slate-700/60 shrink-0">
+                            {(Object.keys(ETF_ORIGIN_LABELS) as EtfOriginFilter[]).map((key) => (
+                                <button
+                                    key={key}
+                                    onClick={() => setEtfOrigin(key)}
+                                    className={`whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold transition-all border shrink-0 ${etfOrigin === key ? 'bg-teal-600 border-teal-500 text-white shadow-lg shadow-teal-900/20' : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300 hover:bg-slate-800'}`}
+                                    title={`Filtrar ETFs: ${ETF_ORIGIN_LABELS[key]}`}
+                                >
+                                    {ETF_ORIGIN_LABELS[key]}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     {onAporte && picks.some(p => p.action === 'BUY') && (
                         <div className="flex items-center gap-2 pl-2 border-l border-slate-700/60 shrink-0">
                             <button
@@ -254,7 +319,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                                     <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 items-center">
                                         
                                         {/* Ticker & Info */}
-                                        <div className="lg:col-span-3 flex items-center gap-3">
+                                        <div className="lg:col-span-4 flex items-center gap-3">
                                             <div className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg border shrink-0 ${getRankStyle(pick.visualPosition)}`}>
                                                 <span className="font-black text-sm leading-none">{pick.visualPosition}</span>
                                             </div>
@@ -271,14 +336,16 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                                                         {getTierBadge((pick as any).tier)}
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold uppercase border border-slate-700">{pick.sector || 'Geral'}</span>
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    {/* Único badge de setor/segmento, em linha única (sem quebra). O sub-tipo
+                                                        Stocks/REITs/ETFs deixou de ser badge: o ranking já é puro por classe. */}
+                                                    <span className="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold uppercase border border-slate-700 whitespace-nowrap truncate max-w-full" title={pick.sector || 'Geral'}>{pick.sector || 'Geral'}</span>
                                                 </div>
                                             </div>
                                         </div>
 
                                         {/* Dados Financeiros REORDENADOS: Preço -> Teto -> Yield */}
-                                        <div className="lg:col-span-9 flex flex-col sm:flex-row items-center gap-6 w-full">
+                                        <div className="lg:col-span-8 flex flex-col sm:flex-row items-center gap-6 w-full">
                                             
                                             <div className="flex gap-6 shrink-0">
                                                 {/* 1. Preço Atual */}

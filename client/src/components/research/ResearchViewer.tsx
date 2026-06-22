@@ -8,9 +8,10 @@ interface ResearchViewerProps {
     report: ResearchReport;
     view: 'ANALYSIS' | 'RANKING';
     onAporte?: () => void;
+    onExteriorViewChange?: (view: 'STOCK' | 'REIT') => void;
 }
 
-export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view, onAporte }) => {
+export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view, onAporte, onExteriorViewChange }) => {
     
     // Renderizador seguro de Markdown Básico
     const renderMarkdown = (text: string) => {
@@ -63,7 +64,7 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view, on
     };
 
     if (view === 'RANKING') {
-        return <TopPicksCard picks={report.content?.ranking || []} assetClass={report.assetClass} onAporte={onAporte} />;
+        return <TopPicksCard picks={report.content?.ranking || []} assetClass={report.assetClass} onAporte={onAporte} onExteriorViewChange={onExteriorViewChange} />;
     }
 
     return (

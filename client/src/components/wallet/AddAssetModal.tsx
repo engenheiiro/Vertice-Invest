@@ -45,8 +45,14 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
     const [form, setForm] = useState<AssetFormState>(INITIAL_FORM);
     // Tracks the "total value" input for fractional dollar-denominated assets
-    // (CRYPTO and STOCK_US). String so we can display a clean empty state.
+    // (CRYPTO, STOCK_US, ETF internacional). String so we can display a clean empty state.
     const [totalValueInput, setTotalValueInput] = useState('');
+    // ETF é classe unificada: nacionais (B3, R$) e internacionais (Exterior, US$).
+    // O mercado define a moeda e se o ativo aceita fração (US$).
+    const [etfMarket, setEtfMarket] = useState<'BR' | 'US'>('BR');
+
+    // Ativo dolarizado: Exterior, cripto ou ETF internacional.
+    const isDollarAsset = form.type === 'STOCK_US' || form.type === 'CRYPTO' || (form.type === 'ETF' && etfMarket === 'US');
 
     // CASH (Reserva/Caixa): qual "cofrinho" a transação afeta.
     // '' = nenhum selecionado · NEW_RESERVE = criar um novo · senão = ticker do existente.
@@ -68,6 +74,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             setPriceWarning(null);
             setTransactionType('BUY');
             setCashSelection(NEW_RESERVE);
+            setEtfMarket('BR');
             setForm({ ...INITIAL_FORM, date: getLocalDateString() });
             setTotalValueInput('');
             priceFetch.reset();
@@ -140,6 +147,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         }
 
         setTotalValueInput('');
+        setEtfMarket('BR');
         setForm(prev => ({
             ...prev,
             type: newType,
@@ -149,6 +157,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             quantity: defaultQty,
             price: '',
             fixedIncomeIndex: undefined,
+            usSubType: undefined,
+            currency: undefined,
         }));
     };
 
@@ -174,6 +184,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         const selectedTicker = e.target.value;
         const asset = assets.find(a => a.ticker === selectedTicker);
         if (asset) {
+            // ETF: alinha o mercado (moeda) ao ativo vendido para não distorcer a baixa.
+            if (asset.type === 'ETF') setEtfMarket(asset.currency === 'USD' ? 'US' : 'BR');
             setForm(prev => ({
                 ...prev,
                 ticker: selectedTicker,
@@ -252,7 +264,9 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             }
         }
 
-        const { error, payload } = validateTransaction(workingForm, transactionType, assets);
+        // Moeda explícita: Exterior/cripto/ETF-internacional em US$; demais em R$.
+        const submitForm = { ...workingForm, currency: (isDollarAsset ? 'USD' : 'BRL') as 'BRL' | 'USD' };
+        const { error, payload } = validateTransaction(submitForm, transactionType, assets);
         if (error || !payload) {
             setValidationError(error || 'Erro de validação.');
             return;
@@ -376,6 +390,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         if (form.type === 'FII') placeholder = "Ex: MXRF11, HGLG11, KNRI11";
         if (form.type === 'CRYPTO') placeholder = "Ex: BTC, ETH";
         if (form.type === 'STOCK_US') placeholder = "Ex: AAPL, NVDA, MSFT, GOOGL";
+        if (form.type === 'ETF') placeholder = etfMarket === 'US' ? "Ex: VOO, IVV, QQQ, VT" : "Ex: BOVA11, IVVB11, SMAL11";
         if (form.type === 'FIXED_INCOME') placeholder = "Busque: Tesouro Selic, NTN-B, CDB, LCI...";
 
         return (
@@ -396,13 +411,13 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                         containerClassName="mb-0"
                         className="uppercase font-mono tracking-wider px-4 py-3 pr-16"
                     />
-                    {form.type === 'STOCK_US' && (
+                    {(form.type === 'STOCK_US' || (form.type === 'ETF' && etfMarket === 'US')) && (
                         <span className="absolute right-3 top-9 text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded">
                             USD
                         </span>
                     )}
                 </div>
-                {form.type === 'STOCK_US' && (
+                {(form.type === 'STOCK_US' || (form.type === 'ETF' && etfMarket === 'US')) && (
                     <p className="text-[10px] text-blue-400/60 mt-1 ml-1">
                         Valores em dólar. Convertido para R$ pela cotação do dia.
                     </p>
@@ -524,8 +539,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             );
         }
 
-        // CRYPTO and STOCK_US support fractional shares/coins and USD pricing.
-        const isFractional = form.type === 'CRYPTO' || form.type === 'STOCK_US';
+        // CRYPTO, STOCK_US and international ETFs support fractional shares and USD pricing.
+        const isFractional = isDollarAsset;
 
         return (
             <>
@@ -624,7 +639,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         const priceNum = parseCurrencyToFloat(form.price);
         if (!isFinite(qtyNum) || qtyNum <= 0 || !isFinite(priceNum) || priceNum <= 0) return null;
 
-        const isDollarized = form.type === 'CRYPTO' || form.type === 'STOCK_US';
+        const isDollarized = isDollarAsset;
         const totalNative = qtyNum * priceNum;
 
         return (
@@ -702,6 +717,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                                 <option value="STOCK">Ações Brasil (B3)</option>
                                                 <option value="FII">Fundos Imobiliários (FIIs)</option>
                                                 <option value="STOCK_US">Ações Exterior (USD)</option>
+                                                <option value="ETF">ETFs (Nacionais / Internacionais)</option>
                                                 <option value="CRYPTO">Criptomoedas</option>
                                                 <option value="FIXED_INCOME">Renda Fixa / Tesouro Direto</option>
                                                 <option value="CASH">Reserva / Caixa</option>
@@ -728,6 +744,65 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                         containerClassName="mb-0"
                                         className="bg-card text-slate-300 border-slate-800 focus:border-slate-600 px-4 py-3"
                                     />
+                                )}
+
+                                {/* ETF: mercado (B3 em R$ ou Exterior em US$). Define moeda e fração. */}
+                                {form.type === 'ETF' && transactionType === 'BUY' && (
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">
+                                            Mercado do ETF
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {([['BR', 'Brasil (R$)'], ['US', 'Exterior (US$)']] as const).map(([mkt, label]) => (
+                                                <button
+                                                    key={mkt}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (etfMarket === mkt) return;
+                                                        setEtfMarket(mkt);
+                                                        setTotalValueInput('');
+                                                        setForm(prev => ({ ...prev, price: '', quantity: '' }));
+                                                        priceFetch.reset();
+                                                    }}
+                                                    className={`py-2.5 rounded-xl text-xs font-bold border transition-all ${
+                                                        etfMarket === mkt
+                                                            ? 'bg-blue-600 border-blue-500 text-white shadow-lg'
+                                                            : 'bg-card border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                                                    }`}
+                                                >
+                                                    {label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 ml-1">
+                                            Ex.: BOVA11/IVVB11 (B3) ou VOO/QQQ (Exterior). Ouro lastreado (GLD/GOLD11) também entra como ETF.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Exterior: sub-tipo (ramificação). Vazio = classificação automática. */}
+                                {form.type === 'STOCK_US' && transactionType === 'BUY' && (
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">
+                                            Tipo (Exterior)
+                                        </label>
+                                        <div className="relative">
+                                            <select
+                                                value={form.usSubType || ''}
+                                                onChange={(e) => setForm(prev => ({ ...prev, usSubType: e.target.value || undefined }))}
+                                                className="w-full bg-card text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-elevated transition-all duration-300 shadow-sm"
+                                            >
+                                                <option value="">Automático (detectar)</option>
+                                                <option value="STOCK">Stock (ação)</option>
+                                                <option value="REIT">REIT (imobiliário)</option>
+                                                <option value="DOLLAR">Dólar (caixa/exposição)</option>
+                                            </select>
+                                            <Tag className="absolute right-3 top-3.5 text-slate-600 pointer-events-none" size={14} />
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 ml-1">
+                                            Usado para ramificar sua Carteira Ideal. Deixe em "Automático" para o sistema detectar.
+                                        </p>
+                                    </div>
                                 )}
 
                                 <div className="grid grid-cols-2 gap-4">

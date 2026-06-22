@@ -17,8 +17,10 @@ const TYPE_LABELS: Record<string, string> = {
     STOCK: 'Ações Brasil',
     FII: 'Fundos Imobiliários',
     STOCK_US: 'Exterior',
+    ETF: 'ETFs',
     CRYPTO: 'Criptoativos',
     FIXED_INCOME: 'Renda Fixa',
+    OURO: 'Ouro',
     CASH: 'Caixa / Reserva'
 };
 
@@ -48,7 +50,8 @@ export const AssetList = () => {
         return acc;
     }, {} as Record<string, Asset[]>);
 
-    const typeOrder = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
+    // OURO mantido no fim para exibir holdings legados de ouro (não cadastrável mais).
+    const typeOrder = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
     const visibleTypes = typeOrder.filter(type => groupedAssets[type] && groupedAssets[type].length > 0);
 
     return (
@@ -102,7 +105,7 @@ export const AssetList = () => {
                                     return (
                                         <div key={asset.id} className="flex items-center justify-between px-4 py-3 bg-base">
                                             <div className="min-w-0 flex-1 flex items-center gap-3">
-                                                <AssetLogo ticker={asset.ticker} type={asset.type} name={asset.name} size={32} />
+                                                <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} size={32} />
                                                 <div className="min-w-0">
                                                     <p className="font-bold text-slate-200 text-sm truncate">{assetTitle(asset)}</p>
                                                     <p className="text-[10px] text-slate-500 truncate">
@@ -257,7 +260,7 @@ export const AssetList = () => {
                                                 <tr key={asset.id} className="hover:bg-slate-800/30 transition-colors border-b border-slate-800/30 last:border-0 group animate-fade-in">
                                                     <td className="p-4 pl-8">
                                                         <div className="flex items-center gap-3">
-                                                            <AssetLogo ticker={asset.ticker} type={asset.type} name={asset.name} size={32} />
+                                                            <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} size={32} />
                                                             <div>
                                                                 <p className="font-bold text-slate-200">{assetTitle(asset)}</p>
                                                                 <p className="text-[10px] text-slate-500">{getAssetSubtitle(asset)}</p>

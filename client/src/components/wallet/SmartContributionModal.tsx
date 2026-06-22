@@ -4,28 +4,37 @@ import { createPortal } from 'react-dom';
 import { X, Calculator, Target, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { useWallet, AssetType } from '../../contexts/WalletContext';
+import { useWallet, AssetType, FixedIncomeSubKey, UsSubKey } from '../../contexts/WalletContext';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
+import { computeSubAllocationReal, splitContributionBySubMeta, hasSubTargets, SUB_LABELS } from '../../utils/allocation';
 
 interface SmartContributionModalProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
+interface SubLine { sub: string; label: string; amount: number; }
+interface Suggestion { type: AssetType; amount: number; percentage: number; children?: SubLine[]; }
+
 const LABELS: Record<string, string> = {
     STOCK: 'Ações BR',
     FII: 'FIIs',
     STOCK_US: 'Exterior',
+    ETF: 'ETFs',
     CRYPTO: 'Cripto',
     FIXED_INCOME: 'Renda Fixa',
+    OURO: 'Ouro',
     CASH: 'Reserva'
 };
 
+const FI_KEYS: FixedIncomeSubKey[] = ['IPCA', 'POS', 'PRE'];
+const US_KEYS: UsSubKey[] = ['STOCK', 'REIT', 'DOLLAR'];
+
 export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ isOpen, onClose }) => {
-    const { assets, targetAllocation, targetReserve, usdRate } = useWallet();
+    const { assets, targetAllocation, targetReserve, targetSubAllocation, usdRate } = useWallet();
     const [amount, setAmount] = useState('');
     const [prioritizeReserve, setPrioritizeReserve] = useState(true);
-    const [suggestions, setSuggestions] = useState<{ type: AssetType, amount: number, percentage: number }[]>([]);
+    const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 
     useEffect(() => {
         if (isOpen) {
@@ -47,9 +56,9 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
         }
 
         let remainingContribution = contribution;
-        const newSuggestions: { type: AssetType, amount: number, percentage: number }[] = [];
+        const newSuggestions: Suggestion[] = [];
 
-        const currentValues: Record<string, number> = { STOCK: 0, FII: 0, STOCK_US: 0, CRYPTO: 0, FIXED_INCOME: 0, CASH: 0 };
+        const currentValues: Record<string, number> = { STOCK: 0, FII: 0, STOCK_US: 0, ETF: 0, CRYPTO: 0, FIXED_INCOME: 0, OURO: 0, CASH: 0 };
         assets.forEach(asset => {
             const val = asset.quantity * asset.currentPrice * (asset.currency === 'USD' ? (usdRate || 5.75) : 1);
             currentValues[asset.type] = (currentValues[asset.type] || 0) + val;
@@ -67,7 +76,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
         }
 
         if (remainingContribution > 0) {
-            const riskAssets = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO'] as AssetType[];
+            const riskAssets = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'FIXED_INCOME', 'CRYPTO'] as AssetType[];
             const currentRiskEquity = riskAssets.reduce((acc, type) => acc + currentValues[type], 0);
             const projectedRiskEquity = currentRiskEquity + remainingContribution;
 
@@ -98,9 +107,25 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
             }
         }
 
-        const finalSuggestions = newSuggestions.map(s => ({
+        // Ramificação: subdivide o aporte de RF/Exterior pelas sub-metas (linhas-filhas),
+        // um nível abaixo da mesma lógica de gap. Reusa a sub-alocação REAL da carteira.
+        const subReal = computeSubAllocationReal(assets);
+        const childrenFor = (s: Suggestion): SubLine[] | undefined => {
+            if (s.type === 'FIXED_INCOME' && hasSubTargets(targetSubAllocation.FIXED_INCOME)) {
+                const split = splitContributionBySubMeta(s.amount, subReal.FIXED_INCOME.value, targetSubAllocation.FIXED_INCOME, FI_KEYS);
+                return FI_KEYS.map(k => ({ sub: k, label: SUB_LABELS.FIXED_INCOME[k], amount: split[k] })).filter(c => c.amount > 0.005);
+            }
+            if (s.type === 'STOCK_US' && hasSubTargets(targetSubAllocation.STOCK_US)) {
+                const split = splitContributionBySubMeta(s.amount, subReal.STOCK_US.value, targetSubAllocation.STOCK_US, US_KEYS);
+                return US_KEYS.map(k => ({ sub: k, label: SUB_LABELS.STOCK_US[k], amount: split[k] })).filter(c => c.amount > 0.005);
+            }
+            return undefined;
+        };
+
+        const finalSuggestions: Suggestion[] = newSuggestions.map(s => ({
             ...s,
-            percentage: (s.amount / contribution) * 100
+            percentage: (s.amount / contribution) * 100,
+            children: childrenFor(s),
         })).sort((a, b) => b.amount - a.amount);
 
         setSuggestions(finalSuggestions);
@@ -191,21 +216,37 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                                     </div>
 
                                     {suggestions.map((item) => (
-                                        <div key={item.type} className="flex items-center justify-between p-3 rounded-xl bg-card border border-slate-800 animate-fade-in">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`p-2 rounded-lg bg-slate-800/50 border border-slate-700 ${item.type === 'CASH' ? 'text-gold' : 'text-blue-400'}`}>
-                                                    <Target size={16} />
+                                        <div key={item.type} className="p-3 rounded-xl bg-card border border-slate-800 animate-fade-in">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`p-2 rounded-lg bg-slate-800/50 border border-slate-700 ${item.type === 'CASH' ? 'text-gold' : 'text-blue-400'}`}>
+                                                        <Target size={16} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-bold text-white">{LABELS[item.type]}</p>
+                                                        <p className="text-[10px] text-slate-500">{item.percentage.toFixed(1)}% do aporte</p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-white">{LABELS[item.type]}</p>
-                                                    <p className="text-[10px] text-slate-500">{item.percentage.toFixed(1)}% do aporte</p>
+                                                <div className="text-right">
+                                                    <p className="text-sm font-bold text-emerald-400 flex items-center gap-1 justify-end">
+                                                        + {formatCurrency(item.amount)}
+                                                    </p>
                                                 </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-sm font-bold text-emerald-400 flex items-center gap-1 justify-end">
-                                                    + {formatCurrency(item.amount)}
-                                                </p>
-                                            </div>
+
+                                            {/* Linhas-filhas: quanto vai em cada sub-tipo (ramificação) */}
+                                            {item.children && item.children.length > 0 && (
+                                                <div className="mt-2.5 pt-2.5 border-t border-slate-800/70 space-y-1.5 pl-1">
+                                                    {item.children.map((c) => (
+                                                        <div key={c.sub} className="flex items-center justify-between text-[11px]">
+                                                            <span className="text-slate-400 flex items-center gap-1.5">
+                                                                <span className="text-slate-600">→</span> {c.label}
+                                                            </span>
+                                                            <span className="font-semibold text-emerald-400/90">+ {formatCurrency(c.amount)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                     {suggestions.length === 0 && <p className="text-center text-xs text-slate-500 py-4">Sem sugestões. Sua carteira está equilibrada.</p>}

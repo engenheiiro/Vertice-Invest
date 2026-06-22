@@ -11,6 +11,8 @@ import {
 interface AssetLogoProps {
   ticker: string;
   type?: AssetType;
+  /** Moeda do ativo — desambigua a fonte de logo de ETF (BRL=B3, USD=US). */
+  currency?: 'BRL' | 'USD';
   /** Nome do ativo (usado no alt da imagem e p/ rotular renda fixa). */
   name?: string;
   /** URL explícita (gancho futuro: backend pode popular logoUrl). Tem prioridade. */
@@ -33,13 +35,14 @@ interface AssetLogoProps {
 export default function AssetLogo({
   ticker,
   type,
+  currency,
   name,
   logoUrl,
   size = 32,
   rounded = 'lg',
   className = '',
 }: AssetLogoProps) {
-  const src = logoUrl || getAssetLogoUrl(ticker, type);
+  const src = logoUrl || getAssetLogoUrl(ticker, type, currency);
   const [failed, setFailed] = useState(false);
 
   // Reseta o estado de erro quando a fonte muda (ex.: lista reciclando itens).

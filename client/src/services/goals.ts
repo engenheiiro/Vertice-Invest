@@ -127,6 +127,12 @@ export const goalsService = {
         if (!response.ok) throw new Error('Falha ao remover meta');
     },
 
+    async clearAllGoals(): Promise<{ deletedCount: number }> {
+        const response = await authService.api('/api/goals', { method: 'DELETE' });
+        if (!response.ok) throw new Error('Falha ao limpar metas');
+        return await response.json();
+    },
+
     async addContribution(
         id: string,
         data: { amount: number; date?: string; note?: string },

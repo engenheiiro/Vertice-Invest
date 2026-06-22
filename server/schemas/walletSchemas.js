@@ -10,7 +10,7 @@ import { z } from 'zod';
 // ObjectId do Mongo: 24 hex. Evita CastError feio em rotas /:id.
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido');
 
-const ASSET_TYPES = ['STOCK', 'FII', 'STOCK_US', 'CRYPTO', 'FIXED_INCOME', 'CASH'];
+const ASSET_TYPES = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'CRYPTO', 'FIXED_INCOME', 'CASH', 'OURO'];
 
 // POST /wallet/add — registrar transação (BUY/SELL definido pelo sinal de quantity).
 export const addTransactionSchema = z.object({
@@ -31,15 +31,22 @@ export const addTransactionSchema = z.object({
     fixedIncomeIndex: z.enum(['SELIC', 'CDI', 'IPCA', 'PRE']).optional(),
     fixedIncomeSpread: z.coerce.number().finite('Spread inválido').optional(),
     name: z.string().trim().max(120, 'Nome muito longo').optional(),
+    // Sub-tipo de Exterior escolhido manualmente no cadastro (Stocks/ETF/REIT/Dólar/Ouro).
+    usSubType: z.enum(['STOCK', 'ETF', 'REIT', 'DOLLAR', 'GOLD']).optional(),
+    // Moeda do lançamento — autoritativa p/ a classe ETF (nacional R$ vs internacional US$),
+    // onde o mesmo tipo pode ser BRL ou USD. Sem ela, cai no default por tipo/MarketAsset.
+    currency: z.enum(['BRL', 'USD']).optional(),
   }),
 });
 
-// PUT /wallet/:id — atualizar tags e/ou nome do ativo (ex.: renomear cofrinho).
+// PUT /wallet/:id — atualizar tags, nome e/ou sub-tipo de Exterior do ativo.
 export const updateAssetSchema = z.object({
   params: z.object({ id: objectId }),
   body: z.object({
     tags: z.array(z.string().trim().max(40, 'Tag muito longa')).max(20, 'Máximo de 20 tags').optional(),
     name: z.string().trim().min(1, 'Nome não pode ser vazio').max(120, 'Nome muito longo').optional(),
+    // Override manual do sub-tipo de Exterior (Stocks/ETF/REIT/Dólar/Ouro).
+    usSubType: z.enum(['STOCK', 'ETF', 'REIT', 'DOLLAR', 'GOLD'], { errorMap: () => ({ message: 'Sub-tipo inválido' }) }).optional(),
   }),
 });
 
@@ -48,18 +55,46 @@ export const idParamSchema = z.object({
   params: z.object({ id: objectId }),
 });
 
-// PUT /wallet/targets — salvar carteira ideal (alocação-alvo + reserva).
+// PUT /wallet/targets — salvar carteira ideal (alocação-alvo + reserva + sub-metas).
 const allocPct = z.coerce.number().finite('Percentual inválido').min(0).max(100).optional();
+
+// Sub-meta de uma classe: percentuais RELATIVOS à fatia da classe (somam ~100%
+// DENTRO da classe). Se TODAS as sub-chaves forem 0, considera-se "sem sub-meta"
+// (comportamento legado, classe em bloco) e a soma 100% NÃO é exigida.
+const subAllocSum100 = (label) => (obj) => {
+  if (!obj) return true;
+  const sum = Object.values(obj).reduce((a, v) => a + (Number(v) || 0), 0);
+  return sum === 0 || Math.abs(sum - 100) <= 0.5;
+};
+
+const fixedIncomeSub = z
+  .object({ IPCA: allocPct, POS: allocPct, PRE: allocPct })
+  .refine(subAllocSum100('FIXED_INCOME'), { message: 'Sub-metas de Renda Fixa devem somar 100%' })
+  .optional();
+
+// Exterior ramifica em Stocks/REITs/Dólar. ETFs deixaram de ser sub-tipo do Exterior
+// e viraram CLASSE própria (nacionais + internacionais) — ver ASSET_TYPES 'ETF'.
+const stockUsSub = z
+  .object({ STOCK: allocPct, REIT: allocPct, DOLLAR: allocPct })
+  .refine(subAllocSum100('STOCK_US'), { message: 'Sub-metas do Exterior devem somar 100%' })
+  .optional();
+
 export const updateTargetsSchema = z.object({
   body: z.object({
     targetAllocation: z.object({
       STOCK: allocPct,
       FII: allocPct,
       STOCK_US: allocPct,
+      ETF: allocPct,
       CRYPTO: allocPct,
       FIXED_INCOME: allocPct,
+      OURO: allocPct,
     }).optional(),
     targetReserve: z.coerce.number().finite('Valor inválido').nonnegative('Reserva não pode ser negativa').optional(),
+    targetSubAllocation: z.object({
+      FIXED_INCOME: fixedIncomeSub,
+      STOCK_US: stockUsSub,
+    }).optional(),
   }),
 });
 

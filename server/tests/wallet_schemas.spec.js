@@ -7,6 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   addTransactionSchema,
   updateAssetSchema,
+  updateTargetsSchema,
   idParamSchema,
   corporateActionSchema,
 } from '../schemas/walletSchemas.js';
@@ -67,6 +68,101 @@ describe('updateAssetSchema', () => {
   it('rejeita mais de 20 tags', () => {
     const tags = Array.from({ length: 21 }, (_, i) => `t${i}`);
     expect(updateAssetSchema.safeParse({ params: { id: VALID_ID }, body: { tags }, query: {} }).success).toBe(false);
+  });
+  it('aceita usSubType válido (override de Exterior)', () => {
+    const r = updateAssetSchema.safeParse({ params: { id: VALID_ID }, body: { usSubType: 'REIT' }, query: {} });
+    expect(r.success).toBe(true);
+  });
+  it('rejeita usSubType inválido', () => {
+    expect(updateAssetSchema.safeParse({ params: { id: VALID_ID }, body: { usSubType: 'BOND' }, query: {} }).success).toBe(false);
+  });
+});
+
+describe('addTransactionSchema — usSubType (Exterior)', () => {
+  it('aceita usSubType válido', () => {
+    expect(parseBody(addTransactionSchema, { ticker: 'O', quantity: 1, price: 50, type: 'STOCK_US', usSubType: 'REIT' }).success).toBe(true);
+  });
+  it('rejeita usSubType inválido', () => {
+    expect(parseBody(addTransactionSchema, { ticker: 'O', quantity: 1, price: 50, type: 'STOCK_US', usSubType: 'CRYPTO' }).success).toBe(false);
+  });
+});
+
+describe('updateTargetsSchema — sub-metas (ramificação)', () => {
+  it('aceita corpo sem sub-metas (legado)', () => {
+    const r = parseBody(updateTargetsSchema, { targetReserve: 5000 });
+    expect(r.success).toBe(true);
+  });
+
+  it('aceita sub-metas que somam 100% dentro da classe', () => {
+    const r = parseBody(updateTargetsSchema, {
+      targetSubAllocation: {
+        FIXED_INCOME: { IPCA: 68, POS: 32, PRE: 0 },
+        STOCK_US: { STOCK: 50, REIT: 30, DOLLAR: 20 },
+      },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('aceita sub-metas TODAS zeradas (sem ramificação)', () => {
+    const r = parseBody(updateTargetsSchema, {
+      targetSubAllocation: { FIXED_INCOME: { IPCA: 0, POS: 0, PRE: 0 } },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejeita sub-metas com valores que não somam 100%', () => {
+    const r = parseBody(updateTargetsSchema, {
+      targetSubAllocation: { FIXED_INCOME: { IPCA: 50, POS: 30, PRE: 0 } },
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it('rejeita sub-meta acima de 100%', () => {
+    const r = parseBody(updateTargetsSchema, {
+      targetSubAllocation: { STOCK_US: { STOCK: 120, REIT: 0, DOLLAR: 0 } },
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it('aceita classe ETF na alocação-alvo (somando 100%)', () => {
+    const r = parseBody(updateTargetsSchema, {
+      targetAllocation: { STOCK: 40, FII: 20, STOCK_US: 20, ETF: 15, CRYPTO: 5, FIXED_INCOME: 0 },
+    });
+    expect(r.success).toBe(true);
+    expect(r.data.body.targetAllocation.ETF).toBe(15);
+  });
+
+  it('aceita classe OURO na alocação-alvo (somando 100%)', () => {
+    const r = parseBody(updateTargetsSchema, {
+      targetAllocation: { STOCK: 40, FII: 25, STOCK_US: 20, CRYPTO: 5, FIXED_INCOME: 0, OURO: 10 },
+    });
+    expect(r.success).toBe(true);
+    expect(r.data.body.targetAllocation.OURO).toBe(10);
+  });
+
+  it('rejeita OURO acima de 100%', () => {
+    const r = parseBody(updateTargetsSchema, { targetAllocation: { OURO: 120 } });
+    expect(r.success).toBe(false);
+  });
+});
+
+describe('addTransactionSchema — classe OURO', () => {
+  it('aceita type OURO (legado)', () => {
+    expect(parseBody(addTransactionSchema, { ticker: 'GOLD11', quantity: 10, price: 12, type: 'OURO' }).success).toBe(true);
+  });
+});
+
+describe('addTransactionSchema — classe ETF', () => {
+  it('aceita type ETF nacional', () => {
+    expect(parseBody(addTransactionSchema, { ticker: 'BOVA11', quantity: 10, price: 120, type: 'ETF' }).success).toBe(true);
+  });
+  it('aceita type ETF internacional com moeda USD (toggle Exterior)', () => {
+    const r = parseBody(addTransactionSchema, { ticker: 'VOO', quantity: 1, price: 500, type: 'ETF', currency: 'USD' });
+    expect(r.success).toBe(true);
+    expect(r.data.body.currency).toBe('USD');
+  });
+  it('rejeita moeda inválida', () => {
+    expect(parseBody(addTransactionSchema, { ticker: 'VOO', quantity: 1, price: 500, type: 'ETF', currency: 'EUR' }).success).toBe(false);
   });
 });
 

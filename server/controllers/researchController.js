@@ -15,6 +15,7 @@ import { syncService } from '../services/syncService.js';
 import { backfillSectors } from '../services/sectorBackfillService.js';
 import { signalEngine } from '../services/engines/signalEngine.js';
 import { LIMITS_CONFIG } from '../config/subscription.js';
+import { normalizeTreasuryBonds } from '../utils/fixedIncomeView.js';
 import { V2_SIGNAL_START_DATE } from '../config/financialConstants.js';
 import logger from '../config/logger.js';
 
@@ -72,6 +73,27 @@ export const getMacroData = async (req, res, next) => {
         const indicators = await marketDataService.getMacroIndicators();
         const bonds = await TreasuryBond.find({}).sort({ type: 1, rate: 1 });
         res.json({ ...indicators, bonds: bonds });
+    } catch (error) { next(error); }
+};
+
+// Vitrine informativa de Renda Fixa (Tesouro Direto). NÃO é ranking competitivo —
+// renda fixa não compete por score como ação/FII. Lê os TreasuryBond já sincronizados
+// e cruza com o macro (IPCA/Selic/CDI) para estimar retorno nominal, real e vs CDI.
+export const getFixedIncomeData = async (req, res, next) => {
+    try {
+        const indicators = await marketDataService.getMacroIndicators();
+        const ipca = Number(indicators?.ipca?.value) || 0;
+        const selic = Number(indicators?.selic?.value) || 0;
+        const cdi = Number(indicators?.cdi?.value) > 0 ? Number(indicators.cdi.value) : selic;
+
+        const bonds = await TreasuryBond.find({}).sort({ type: 1, rate: 1 }).lean();
+        const normalized = normalizeTreasuryBonds(bonds, { ipca, selic, cdi });
+
+        res.json({
+            macro: { ipca, selic, cdi },
+            bonds: normalized,
+            updatedAt: bonds[0]?.updatedAt || null,
+        });
     } catch (error) { next(error); }
 };
 
@@ -302,7 +324,7 @@ export const publishContent = async (req, res, next) => {
             const assetClass = analysis.assetClass || '';
             const assetClassLabels = {
                 STOCK: 'Ações BR', FII: 'FIIs', CRYPTO: 'Cripto',
-                STOCK_US: 'Ações EUA', BRASIL_10: 'Brasil 10',
+                STOCK_US: 'Ações EUA', REIT: 'REITs', ETF: 'ETFs', BRASIL_10: 'Brasil 10',
             };
             const label = assetClassLabels[assetClass] || assetClass;
             // Fire-and-forget — não bloqueia a resposta
@@ -320,7 +342,7 @@ export const publishContent = async (req, res, next) => {
 
 export const getPublishStatus = async (req, res, next) => {
     try {
-        const classes = ['STOCK', 'FII', 'CRYPTO', 'BRASIL_10', 'STOCK_US'];
+        const classes = ['STOCK', 'FII', 'CRYPTO', 'BRASIL_10', 'STOCK_US', 'REIT', 'ETF'];
         const status = await Promise.all(classes.map(async (assetClass) => {
             const latest = await MarketAnalysis.findOne({ assetClass, strategy: 'BUY_HOLD' })
                 .sort({ createdAt: -1 })
@@ -393,7 +415,8 @@ export const getLatestReport = async (req, res, next) => {
     try {
         const { assetClass, strategy } = req.query;
 
-        if (assetClass === 'STOCK_US') {
+        // REIT é gerado do universo do Exterior (STOCK_US) → mesmo gate de plano (Elite/Black).
+        if (assetClass === 'STOCK_US' || assetClass === 'REIT') {
             const userPlan = req.user?.plan || 'GUEST';
             const isAdmin = req.user?.role === 'ADMIN';
             const hasAccess = isAdmin || (LIMITS_CONFIG['research_global']?.[userPlan] > 0);

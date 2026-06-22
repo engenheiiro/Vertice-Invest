@@ -4,6 +4,7 @@ import MarketAsset from '../models/MarketAsset.js';
 import AssetHistory from '../models/AssetHistory.js'; 
 import SystemConfig from '../models/SystemConfig.js';
 import { externalMarketService } from './externalMarketService.js';
+import { reitSegmentPT } from '../utils/reitSegment.js';
 // (M9) Janela de cache e fallback de Selic centralizados em financialConstants.
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { getTunablesSync } from './configService.js'; // (I13) tunables editáveis pelo admin
@@ -46,7 +47,7 @@ export const marketDataService = {
             // Self-heal do nome: se o nome ainda for o próprio ticker (ações BR não
             // enriquecidas), busca o nome real no Yahoo via refresh e relê. Assim o
             // autofill de "Nome do Ativo" recebe o nome correto na hora.
-            if (asset && ['STOCK', 'FII', 'STOCK_US'].includes(asset.type)) {
+            if (asset && ['STOCK', 'FII', 'STOCK_US', 'ETF'].includes(asset.type)) {
                 const nm = (asset.name || '').trim();
                 if (!nm || nm.toUpperCase() === cleanTicker.toUpperCase()) {
                     try {
@@ -252,13 +253,13 @@ export const marketDataService = {
                         lastFailDate: null
                     };
                     
-                    if (currentAsset && (currentAsset.type === 'CRYPTO' || currentAsset.type === 'STOCK_US')) {
+                    if (currentAsset && (currentAsset.type === 'CRYPTO' || currentAsset.type === 'STOCK_US' || currentAsset.type === 'ETF')) {
                         if (quote.marketCap) updatePayload.marketCap = quote.marketCap;
                         if (quote.volume) {
-                            // STOCK_US: liquidez em VALOR (US$/dia = volume × preço), consistente
+                            // STOCK_US/ETF: liquidez em VALOR (moeda/dia = volume × preço), consistente
                             // com a liquidez financeira dos ativos BR e com o sync de fundamentos US.
-                            // Evita penalizar ações caras de baixo giro de papéis no scoringEngine.
-                            updatePayload.liquidity = currentAsset.type === 'STOCK_US'
+                            // Evita penalizar ativos caros de baixo giro de papéis no scoringEngine.
+                            updatePayload.liquidity = (currentAsset.type === 'STOCK_US' || currentAsset.type === 'ETF')
                                 ? quote.volume * newPrice
                                 : quote.volume;
                         }
@@ -492,21 +493,36 @@ export const marketDataService = {
         const isBrasil = assetClass === 'STOCK' || assetClass === 'FII' || assetClass === 'BRASIL_10';
         const isCrypto = assetClass === 'CRYPTO';
         const isStockUS = assetClass === 'STOCK_US';
+        // Classe ETF (unificada): ETFs nacionais (type 'ETF') + internacionais
+        // (STOCK_US com usSubType 'ETF'/'GOLD' — ouro é investido via ETF, PR8).
+        const isEtf = assetClass === 'ETF';
+        // Classe REIT (independente): REITs individuais do Exterior (STOCK_US/usSubType 'REIT').
+        const isReit = assetClass === 'REIT';
         const results = [];
 
-        if (isBrasil || isCrypto || isStockUS) {
-            let queryType;
+        if (isBrasil || isCrypto || isStockUS || isEtf || isReit) {
+            // Filtro por tipo: BRASIL_10 = STOCK+FII; ETF = union BR+internacional(+ouro);
+            // REIT = só REITs individuais; STOCK_US (Exterior) = ações puras (sem REIT/ETF/
+            // GOLD/DOLLAR, que têm rankings/baldes próprios); demais = direto.
+            let typeFilter;
             if (assetClass === 'BRASIL_10') {
-                queryType = { $in: ['STOCK', 'FII'] };
+                typeFilter = { type: { $in: ['STOCK', 'FII'] } };
+            } else if (isEtf) {
+                typeFilter = { $or: [{ type: 'ETF' }, { type: 'STOCK_US', usSubType: { $in: ['ETF', 'GOLD'] } }] };
+            } else if (isReit) {
+                typeFilter = { type: 'STOCK_US', usSubType: 'REIT' };
+            } else if (isStockUS) {
+                // $nin também casa usSubType ausente/null → tratado como ação (STOCK).
+                typeFilter = { type: 'STOCK_US', usSubType: { $nin: ['REIT', 'ETF', 'GOLD', 'DOLLAR'] } };
             } else {
-                queryType = { $in: [assetClass] };
+                typeFilter = { type: { $in: [assetClass] } };
             }
 
             // Sem filtro de liquidez aqui — scoringEngine.js gera DiscardLog para tickers insuficientes
             const extraFilter = {};
-            
+
             const dbAssets = await MarketAsset.find({
-                type: queryType,
+                ...typeFilter,
                 isIgnored: false,
                 isBlacklisted: false,
                 isActive: true,
@@ -542,12 +558,19 @@ export const marketDataService = {
                     ? Math.floor((Date.now() - new Date(asset.lastFundamentalsDate).getTime()) / (1000 * 60 * 60 * 24))
                     : null;
 
+                // REITs do Exterior: setor de EXIBIÇÃO vira o sub-segmento fino (Varejo,
+                // Industrial/Logística, Saúde…) p/ diversificar o donut — o `sector` no
+                // banco segue "Real Estate" (classificação intacta).
+                const isReitDisplay = asset.type === 'STOCK_US' && asset.usSubType === 'REIT';
+                const displaySector = isReitDisplay ? reitSegmentPT(asset.industry) : asset.sector;
+
                 results.push({
                     ticker: asset.ticker,
                     type: asset.type,
                     name: asset.name || asset.ticker,
-                    sector: asset.sector,
+                    sector: displaySector,
                     fiiSubType: asset.fiiSubType || null,
+                    usSubType: asset.usSubType || null,
                     price: asset.lastPrice || 0,
                     dbFlags: { isBlacklisted: asset.isBlacklisted, isTier1: asset.isTier1 },
                     metrics: {

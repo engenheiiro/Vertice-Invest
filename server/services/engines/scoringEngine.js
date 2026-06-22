@@ -15,17 +15,28 @@ const resolvePapel = (fiiSubType, sector) => {
     return PAPEL_SECTOR_HINTS.some(h => s.includes(h));
 };
 
-const calculateConfidenceScore = (m, type) => {
+// Sub-tipo efetivo de um ativo do Exterior (STOCK_US). Fora do Exterior → null.
+// Ausente cai em STOCK (mesmo balde padrão da classificação).
+const usSubOf = (asset) => (asset && asset.type === 'STOCK_US') ? (asset.usSubType || 'STOCK') : null;
+// Exterior que NÃO é ação individual (ETF/REIT/Ouro): não tem fundamentos de empresa.
+const isUsNonStock = (sub) => sub === 'ETF' || sub === 'REIT' || sub === 'GOLD';
+
+const calculateConfidenceScore = (m, type, usSubType = null) => {
     let confidence = 100;
     const audit = [];
     const isFII = type === 'FII';
+    // ETF/REIT/Ouro do Exterior não têm métricas de EMPRESA (ROE, margem, crescimento).
+    // Cobrá-las da confiança capava injustamente o score em 70/85. Trata como o FII:
+    // confiança só sobre dados aplicáveis (liquidez, recência).
+    // ETF nacional (type 'ETF') também não tem fundamentos de empresa → mesmo tratamento.
+    const usNonStock = (type === 'STOCK_US' && isUsNonStock(usSubType)) || type === 'ETF';
 
     // Métricas de EMPRESA (crescimento de receita, ROE, margem líquida) só fazem sentido
     // para ações. Em FIIs elas são estruturalmente inaplicáveis — não são "dados ausentes".
     // Cobrá-las da confiança travava TODO bom FII em confidence 60 → maxScoreAllowed 85,
     // comprimindo dezenas de FIIs no mesmo teto. Para FII a confiança vem de dados APLICÁVEIS
     // (patrimônio/valor de mercado, liquidez, recência).
-    if (!isFII) {
+    if (!isFII && !usNonStock) {
         // Usa _missing para distinguir dado ausente de dado genuinamente ruim
         if (m._missing?.revenueGrowth) {
             confidence -= 25;
@@ -35,7 +46,7 @@ const calculateConfidenceScore = (m, type) => {
             confidence -= 15;
             audit.push({ factor: 'Dados de Rentabilidade Ausentes', points: -15, type: 'penalty', category: 'Confiança' });
         }
-    } else if (m._missing?.marketCap) {
+    } else if (isFII && m._missing?.marketCap) {
         // FII sem patrimônio/valor de mercado: dado-base ausente → confiança reduzida.
         confidence -= 15;
         audit.push({ factor: 'Patrimônio/Valor de Mercado Ausente', points: -15, type: 'penalty', category: 'Confiança' });
@@ -118,13 +129,34 @@ const isEligibleForDefensive = (asset, context) => {
     return true;
 };
 
-const calculateIntrinsicValue = (m, type, price, context) => {
+const calculateIntrinsicValue = (m, type, price, context, usSubType = null) => {
     const { MACRO } = context;
     let fairPrice = price;
     let method = "Mercado";
     let grahamPrice = 0;
     let bazinPrice = 0;
     let pegRatio = null;
+
+    // Exterior não-ação (ETF/REIT/Ouro): não cabe Graham/Bazin de empresa.
+    const usSub = type === 'STOCK_US' ? (usSubType || 'STOCK') : null;
+    // ETF nacional (classe própria): referência é o mercado, sem valor intrínseco de empresa.
+    if (type === 'ETF') {
+        return { fairPrice: safeVal(price), method: 'Mercado', grahamPrice: 0, bazinPrice: 0, pegRatio: null };
+    }
+    if (type === 'STOCK_US' && usSub === 'REIT') {
+        // REIT é veículo de renda: preço justo por Bazin (dividendo / yield-alvo 6%).
+        if (m.dy > 0) {
+            const dividendPerShare = price * (Math.min(m.dy, 14) / 100);
+            bazinPrice = dividendPerShare / 0.06;
+        }
+        fairPrice = bazinPrice > 0 ? Math.min(bazinPrice, price * 2.5) : price;
+        method = bazinPrice > 0 ? 'Bazin (REIT)' : 'Mercado';
+        return { fairPrice: safeVal(fairPrice), method, grahamPrice: 0, bazinPrice: safeVal(bazinPrice), pegRatio: null };
+    }
+    if (type === 'STOCK_US' && (usSub === 'ETF' || usSub === 'GOLD')) {
+        // Cesta/commodity: sem valor intrínseco de empresa — referência é o mercado.
+        return { fairPrice: safeVal(price), method: 'Mercado', grahamPrice: 0, bazinPrice: 0, pegRatio: null };
+    }
 
     if (type === 'STOCK' || type === 'STOCK_US') {
         if (m.pl > 0 && m.pl < 80 && m.pvp > 0) {
@@ -398,6 +430,25 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
         }
 
     }
+
+    // ── TETO ESPECULATIVO — somente Exterior (STOCK_US) ──────────────────────────
+    // PEG/Hyper Growth/Upside cravavam 100 no Arrojado para teses SEM LUCRO (ex.: biotechs
+    // TARS margem −9% / ARQT margem −0,6%): PEG e crescimento são sinais inválidos quando o
+    // lucro é negativo, então elas encabeçavam o ranking acima de nomes lucrativos (TGTX
+    // margem +66%, SMCI). Empresa sem lucro é APOSTA: segue elegível como COMPRAR no
+    // Arrojado, mas com teto — não simula convicção máxima nem ofusca quem dá lucro.
+    // Escopo estrito a STOCK_US (margem líquida conhecida e ≤ 0): NÃO toca o BR `STOCK`,
+    // nem ETF/REIT/Ouro (que usam scorers próprios).
+    if (asset.type === 'STOCK_US' && !m._missing?.netMargin && m.netMargin <= 0) {
+        const SPEC_BOLD_CAP = 82, SPEC_MOD_CAP = 72, SPEC_DEF_CAP = 55;
+        if (boldScore > SPEC_BOLD_CAP) {
+            audit.BOLD.push({ factor: 'Teto Especulativo US (empresa sem lucro)', points: SPEC_BOLD_CAP - boldScore, type: 'penalty' });
+            boldScore = SPEC_BOLD_CAP;
+        }
+        modScore = Math.min(modScore, SPEC_MOD_CAP);
+        defScore = Math.min(defScore, SPEC_DEF_CAP);
+    }
+
     return { defScore, modScore, boldScore };
 };
 
@@ -569,18 +620,117 @@ const scoreCryptoProfiles = (asset, audit) => {
     return { defScore, modScore, boldScore };
 };
 
+// Exterior — ETF (cesta de índice/setorial). Sem fundamentos de empresa: pontua por
+// liquidez/AUM, yield, tendência de longo prazo e volatilidade. Diversificação
+// inerente da cesta favorece o perfil defensivo.
+const scoreEtfProfiles = (asset, audit) => {
+    const m = asset.metrics;
+    const price = asset.price;
+    const aboveTrend = m.sma200 > 0 && price > m.sma200;
+    let defScore = 45, modScore = 50, boldScore = 45;
+    audit.DEFENSIVE.push({ factor: 'Base ETF (cesta diversificada)', points: 45, type: 'base' });
+    audit.MODERATE.push({ factor: 'Base ETF', points: 50, type: 'base' });
+    audit.BOLD.push({ factor: 'Base ETF', points: 45, type: 'base' });
+
+    if (m.avgLiquidity > 50000000) { defScore += 12; modScore += 10; boldScore += 6; audit.DEFENSIVE.push({ factor: 'Liquidez/AUM Alta (>50M)', points: 12, type: 'bonus' }); }
+    else if (m.avgLiquidity > 5000000) { defScore += 6; modScore += 5; audit.DEFENSIVE.push({ factor: 'Liquidez Boa (>5M)', points: 6, type: 'bonus' }); }
+    else if (m.avgLiquidity < 1000000) { defScore -= 10; modScore -= 8; boldScore -= 6; audit.DEFENSIVE.push({ factor: 'Liquidez Baixa (<1M)', points: -10, type: 'penalty' }); }
+
+    if (m.dy >= 3) { defScore += 12; modScore += 8; audit.DEFENSIVE.push({ factor: `ETF de Renda (DY ${m.dy.toFixed(1)}%)`, points: 12, type: 'bonus' }); }
+    else if (m.dy >= 1.5) { defScore += 6; modScore += 4; audit.DEFENSIVE.push({ factor: `Yield Moderado (${m.dy.toFixed(1)}%)`, points: 6, type: 'bonus' }); }
+
+    if (aboveTrend) { defScore += 4; modScore += 10; boldScore += 12; audit.MODERATE.push({ factor: 'Tendência de Alta (Preço > SMA200)', points: 10, type: 'bonus' }); }
+    else if (m.sma200 > 0) { modScore -= 6; boldScore -= 8; audit.MODERATE.push({ factor: 'Tendência de Baixa (Preço < SMA200)', points: -6, type: 'penalty' }); }
+
+    if (m.volatility > 0) {
+        if (m.volatility < 18) { defScore += 10; audit.DEFENSIVE.push({ factor: 'Volatilidade Baixa (<18%)', points: 10, type: 'bonus' }); }
+        else if (m.volatility > 35) { defScore -= 12; boldScore += 6; audit.DEFENSIVE.push({ factor: 'Volatilidade Alta (>35%)', points: -12, type: 'penalty' }); }
+    }
+    return { defScore, modScore, boldScore };
+};
+
+// Exterior — REIT (fundo imobiliário US). Veículo de renda: pontua por dividend yield,
+// alavancagem, liquidez e tendência. Espelha a lógica do FII (yield + risco), sem
+// exigir métricas de empresa.
+const scoreReitProfiles = (asset, audit) => {
+    const m = asset.metrics;
+    const price = asset.price;
+    const aboveTrend = m.sma200 > 0 && price > m.sma200;
+    let defScore = 40, modScore = 45, boldScore = 40;
+    audit.DEFENSIVE.push({ factor: 'Base REIT', points: 40, type: 'base' });
+    audit.MODERATE.push({ factor: 'Base REIT', points: 45, type: 'base' });
+    audit.BOLD.push({ factor: 'Base REIT', points: 40, type: 'base' });
+
+    // Faixa de yield: o yield US é estruturalmente menor que o BR — um REIT sólido de
+    // ~4% (vs 3,5% e 5%) merece reconhecimento intermediário (+18) em vez de cair no +15.
+    if (m.dy >= 5) { defScore += 22; modScore += 22; boldScore += 18; audit.DEFENSIVE.push({ factor: `Yield Alto (${m.dy.toFixed(1)}%)`, points: 22, type: 'bonus' }); }
+    else if (m.dy >= 4) { defScore += 18; modScore += 18; boldScore += 14; audit.DEFENSIVE.push({ factor: `Yield Forte (${m.dy.toFixed(1)}%)`, points: 18, type: 'bonus' }); }
+    else if (m.dy >= 3.5) { defScore += 15; modScore += 15; boldScore += 10; audit.DEFENSIVE.push({ factor: `Yield Saudável (${m.dy.toFixed(1)}%)`, points: 15, type: 'bonus' }); }
+    else if (m.dy >= 2) { defScore += 8; modScore += 8; audit.DEFENSIVE.push({ factor: `Yield Moderado (${m.dy.toFixed(1)}%)`, points: 8, type: 'bonus' }); }
+    else { defScore -= 5; audit.DEFENSIVE.push({ factor: 'Yield Baixo para REIT', points: -5, type: 'penalty' }); }
+
+    if (m.debtToEquity > 0) {
+        if (m.debtToEquity > 2.0) { defScore -= 12; modScore -= 8; audit.DEFENSIVE.push({ factor: 'Alavancagem Alta (D/E > 2)', points: -12, type: 'penalty' }); }
+        else if (m.debtToEquity < 1.0) { defScore += 6; audit.DEFENSIVE.push({ factor: 'Alavancagem Conservadora (D/E < 1)', points: 6, type: 'bonus' }); }
+    }
+
+    // Blue-chip REIT: liquidez profunda (>200M/dia) + alavancagem sob controle (D/E ≤ 1,5).
+    if (m.avgLiquidity > 200000000 && m.debtToEquity > 0 && m.debtToEquity <= 1.5) {
+        defScore += 4; modScore += 4; audit.DEFENSIVE.push({ factor: 'REIT Blue-chip (liquidez + alavancagem sob controle)', points: 4, type: 'bonus' });
+    }
+
+    if (m.avgLiquidity > 20000000) { defScore += 8; modScore += 6; audit.DEFENSIVE.push({ factor: 'Liquidez Alta (>20M)', points: 8, type: 'bonus' }); }
+    else if (m.avgLiquidity < 1000000) { defScore -= 10; modScore -= 8; audit.DEFENSIVE.push({ factor: 'Liquidez Baixa (<1M)', points: -10, type: 'penalty' }); }
+
+    if (aboveTrend) { modScore += 8; boldScore += 12; audit.MODERATE.push({ factor: 'Tendência de Alta (Preço > SMA200)', points: 8, type: 'bonus' }); }
+    else if (m.sma200 > 0) { modScore -= 6; boldScore -= 6; audit.MODERATE.push({ factor: 'Tendência de Baixa (Preço < SMA200)', points: -6, type: 'penalty' }); }
+    return { defScore, modScore, boldScore };
+};
+
+// Exterior — Ouro (ETF de ouro). Hedge / reserva de valor: estável, sem yield.
+// Defensivo moderado-alto (proteção); arrojado baixo (sem prêmio de risco/crescimento).
+// Momentum (preço vs SMA200) e liquidez do veículo ajustam os perfis de risco.
+const scoreCommodityProfiles = (asset, audit) => {
+    const m = asset.metrics;
+    const price = asset.price;
+    const aboveTrend = m.sma200 > 0 && price > m.sma200;
+    let defScore = 60, modScore = 55, boldScore = 40;
+    audit.DEFENSIVE.push({ factor: 'Ouro: hedge / reserva de valor', points: 60, type: 'base' });
+    audit.MODERATE.push({ factor: 'Ouro: proteção de portfólio', points: 55, type: 'base' });
+    audit.BOLD.push({ factor: 'Ouro: baixo prêmio de risco', points: 40, type: 'base' });
+
+    if (aboveTrend) { defScore += 8; modScore += 12; boldScore += 12; audit.MODERATE.push({ factor: 'Momentum Positivo (Preço > SMA200)', points: 12, type: 'bonus' }); }
+    else if (m.sma200 > 0) { modScore -= 6; boldScore -= 8; audit.MODERATE.push({ factor: 'Momentum Negativo (Preço < SMA200)', points: -6, type: 'penalty' }); }
+
+    if (m.avgLiquidity > 20000000) { defScore += 6; modScore += 4; audit.DEFENSIVE.push({ factor: 'Liquidez Alta (>20M)', points: 6, type: 'bonus' }); }
+    else if (m.avgLiquidity < 1000000) { defScore -= 10; modScore -= 8; boldScore -= 6; audit.DEFENSIVE.push({ factor: 'Liquidez Baixa (<1M)', points: -10, type: 'penalty' }); }
+
+    if (m.volatility > 0 && m.volatility < 20) { defScore += 6; audit.DEFENSIVE.push({ factor: 'Volatilidade Controlada (<20%)', points: 6, type: 'bonus' }); }
+    return { defScore, modScore, boldScore };
+};
+
 // (M1) Orquestrador: confiança, dispatch por tipo (helpers acima) e clamp final.
 const calculateProfileScores = (asset, valuationData, context) => {
     const m = asset.metrics;
     const type = asset.type;
 
+    const usSub = usSubOf(asset);
+    // Exterior ação individual (STOCK ou sub-tipo STOCK) usa o caminho de ação.
+    const isPlainStock = type === 'STOCK' || (type === 'STOCK_US' && (!usSub || usSub === 'STOCK'));
+
     let defScore = 0, modScore = 0, boldScore = 0;
     const audit = { DEFENSIVE: [], MODERATE: [], BOLD: [], CONFIDENCE: [] };
-    const { confidence, audit: confAudit } = calculateConfidenceScore(m, type);
+    const { confidence, audit: confAudit } = calculateConfidenceScore(m, type, asset.usSubType);
     audit.CONFIDENCE = confAudit;
 
-    if (type === 'STOCK' || type === 'STOCK_US') {
+    if (isPlainStock) {
         ({ defScore, modScore, boldScore } = scoreStockProfiles(asset, valuationData, context, audit));
+    } else if ((type === 'STOCK_US' && usSub === 'ETF') || type === 'ETF') {
+        ({ defScore, modScore, boldScore } = scoreEtfProfiles(asset, audit));
+    } else if (type === 'STOCK_US' && usSub === 'REIT') {
+        ({ defScore, modScore, boldScore } = scoreReitProfiles(asset, audit));
+    } else if (type === 'STOCK_US' && usSub === 'GOLD') {
+        ({ defScore, modScore, boldScore } = scoreCommodityProfiles(asset, audit));
     } else if (type === 'FII') {
         ({ defScore, modScore, boldScore } = scoreFiiProfiles(asset, context, audit));
     } else if (type === 'CRYPTO') {
@@ -592,7 +742,9 @@ const calculateProfileScores = (asset, valuationData, context) => {
     // FIIs: a confiança já é calculada só sobre dados aplicáveis (ver calculateConfidenceScore);
     // o teto graduado (maxScoreAllowed) basta — não se subtrai duas vezes.
     // CRYPTO: usa suas próprias penalidades de liquidez dentro do bloco acima.
-    if ((type === 'STOCK' || type === 'STOCK_US') && confidence < 100) {
+    // Só ação individual sofre a dedução direta (ETF/REIT/Ouro seguem o modelo do
+    // FII: confiança já restrita a dados aplicáveis; o teto graduado basta).
+    if (isPlainStock && confidence < 100) {
         const confPenalty = 100 - confidence;
         defScore -= confPenalty;
         modScore -= confPenalty;
@@ -608,6 +760,16 @@ const calculateProfileScores = (asset, valuationData, context) => {
         modScore += 5;
         audit.DEFENSIVE.push({ factor: 'Dividend Aristocrat Bonus', points: 10, type: 'bonus' });
         audit.MODERATE.push({ factor: 'Dividend Aristocrat Bonus', points: 5, type: 'bonus' });
+    }
+
+    // Bônus de qualidade US (escopado a ações STOCK_US; NÃO afeta o BR `STOCK`).
+    // O "Dividend Aristocrat" só vale p/ STOCK BR; nomes defensivos US de qualidade
+    // (bom yield + rentabilidade + margem) ficavam presos em 58–67 sem reconhecimento.
+    if (type === 'STOCK_US' && isPlainStock && m.dy > 3 && m.roe > 12 && m.netMargin > 10) {
+        defScore += 8;
+        modScore += 4;
+        audit.DEFENSIVE.push({ factor: 'Qualidade US (yield + ROE + margem)', points: 8, type: 'bonus' });
+        audit.MODERATE.push({ factor: 'Qualidade US', points: 4, type: 'bonus' });
     }
 
     // Cap graduado: salto binário 59→70/60→100 substituído por escada para evitar que
@@ -629,13 +791,48 @@ const calculateStructuralScores = (asset, context) => {
     const m = asset.metrics;
     const type = asset.type;
     const ticker = asset.ticker;
+    const usSub = usSubOf(asset);
+    const isPlainStock = type === 'STOCK' || (type === 'STOCK_US' && (!usSub || usSub === 'STOCK'));
     const isPapel = resolvePapel(asset.fiiSubType, asset.sector);
+    const clamp = (x) => Math.min(100, Math.max(0, x));
+    const aboveTrend = m.sma200 > 0 && asset.price > m.sma200;
     const audit = { QUALITY: [], VALUATION: [], RISK: [] };
     let quality = 0; audit.QUALITY.push({ factor: 'Base de Qualidade', points: 0, type: 'base' });
     let valuation = 0; audit.VALUATION.push({ factor: 'Base de Valuation', points: 0, type: 'base' });
     let risk = 0;
 
-    if (type === 'STOCK' || type === 'STOCK_US') {
+    if ((type === 'STOCK_US' && usSub === 'ETF') || type === 'ETF') {
+        let q = 55; if (m.avgLiquidity > 50000000) q += 20; else if (m.avgLiquidity > 5000000) q += 10; if (m.dy >= 2) q += 10;
+        quality = clamp(q); audit.QUALITY.push({ factor: 'ETF: liquidez/AUM e renda', points: q - 0, type: 'bonus' });
+        let v = 50;
+        if (m.sma200 > 0) { const dev = (asset.price - m.sma200) / m.sma200; if (dev < -0.1) v += 20; else if (dev < 0) v += 10; else if (dev > 0.3) v -= 15; }
+        if (m.dy >= 3) v += 10;
+        valuation = clamp(v); audit.VALUATION.push({ factor: 'ETF: posição vs média e yield', points: v, type: 'bonus' });
+        let r = 55; if (m.avgLiquidity > 20000000) r += 20; else if (m.avgLiquidity < 1000000) r -= 20;
+        if (m.volatility > 0) { if (m.volatility < 18) r += 15; else if (m.volatility > 35) r -= 20; }
+        risk = clamp(r); audit.RISK.push({ factor: 'ETF: liquidez e volatilidade', points: r, type: 'base' });
+        return { quality, valuation, risk, audit };
+    }
+    if (type === 'STOCK_US' && usSub === 'REIT') {
+        let q = 45; if (m.dy >= 4) q += 25; else if (m.dy >= 2.5) q += 12; if (m.debtToEquity > 0 && m.debtToEquity < 1.5) q += 10;
+        quality = clamp(q); audit.QUALITY.push({ factor: 'REIT: yield e alavancagem', points: q, type: 'bonus' });
+        let v = 40; if (m.dy >= 5) v += 40; else if (m.dy >= 3.5) v += 25; else if (m.dy >= 2) v += 10; if (m.pvp > 0 && m.pvp < 1) v += 10;
+        valuation = clamp(v); audit.VALUATION.push({ factor: 'REIT: dividend yield', points: v, type: 'bonus' });
+        let r = 50; if (m.avgLiquidity > 20000000) r += 20; else if (m.avgLiquidity < 1000000) r -= 20; if (m.debtToEquity > 2) r -= 20; if (aboveTrend) r += 10;
+        risk = clamp(r); audit.RISK.push({ factor: 'REIT: liquidez, dívida e tendência', points: r, type: 'base' });
+        return { quality, valuation, risk, audit };
+    }
+    if (type === 'STOCK_US' && usSub === 'GOLD') {
+        let q = 60; if (aboveTrend) q += 12; if (m.avgLiquidity > 20000000) q += 8;
+        quality = clamp(q); audit.QUALITY.push({ factor: 'Ouro: tendência e liquidez', points: q, type: 'bonus' });
+        let v = 50; if (m.sma200 > 0) { const dev = (asset.price - m.sma200) / m.sma200; if (dev < -0.1) v += 20; else if (dev > 0.3) v -= 15; }
+        valuation = clamp(v); audit.VALUATION.push({ factor: 'Ouro: posição vs média histórica', points: v, type: 'bonus' });
+        let r = 65; if (m.volatility > 0 && m.volatility < 20) r += 10; else if (m.volatility > 40) r -= 15; if (m.avgLiquidity < 1000000) r -= 20;
+        risk = clamp(r); audit.RISK.push({ factor: 'Ouro: hedge de baixa correlação', points: r, type: 'base' });
+        return { quality, valuation, risk, audit };
+    }
+
+    if (isPlainStock) {
         // --- QUALITY SCORE ---
         let qScore = 0;
         if (m.roe > 15) { qScore += 25; audit.QUALITY.push({ factor: 'ROE Elevado (>15%)', points: 25, type: 'bonus' }); }
@@ -936,10 +1133,15 @@ export const scoringEngine = {
         if (asset.price <= 0.01 && asset.type !== 'CRYPTO') return { _discarded: true, reason: "Preço de Centavos", details: `< 0.01` };
         // FIIs precisam de liquidez maior que ações para execução real sem slippage.
         const liquidityFloor = asset.type === 'FII' ? 500000 : 200000;
-        if (asset.metrics.avgLiquidity < liquidityFloor && asset.type !== 'CRYPTO') return { _discarded: true, reason: "Liquidez Insuficiente", details: `${asset.metrics.avgLiquidity} (Mínimo: ${asset.type === 'FII' ? '500k' : '200k'})` };
+        // ETF (classe nacional B3): as fontes de cotação frequentemente NÃO retornam
+        // volume utilizável p/ tickers .SA, deixando avgLiquidity=0 mesmo em ETFs
+        // líquidos (BOVA11 etc.). Descartar por liquidez excluiria todo o universo
+        // nacional do ranking — o scoreEtfProfiles/confiança já tratam liquidez baixa
+        // de forma graduada. CRYPTO e ETF ficam isentos deste corte.
+        if (asset.metrics.avgLiquidity < liquidityFloor && asset.type !== 'CRYPTO' && asset.type !== 'ETF') return { _discarded: true, reason: "Liquidez Insuficiente", details: `${asset.metrics.avgLiquidity} (Mínimo: ${asset.type === 'FII' ? '500k' : '200k'})` };
         if (asset.dbFlags && asset.dbFlags.isBlacklisted) return { _discarded: true, reason: "Blacklist Manual", details: "Banido pelo Admin" }; 
 
-        const valuationData = calculateIntrinsicValue(asset.metrics, asset.type, asset.price, context);
+        const valuationData = calculateIntrinsicValue(asset.metrics, asset.type, asset.price, context, asset.usSubType);
         const profileResult = calculateProfileScores(asset, valuationData, context);
         const structuralResult = calculateStructuralScores(asset, context);
         const thesisData = generateDynamicTheses(asset.metrics, asset.type, asset.ticker, context, valuationData, asset.price, asset.sector, asset.fiiSubType);
@@ -965,6 +1167,7 @@ export const scoringEngine = {
             name: asset.name,
             sector: asset.sector,
             type: asset.type,
+            usSubType: asset.usSubType || null,
             currentPrice: asset.price,
             targetPrice: valuationData.fairPrice,
             metrics: { 

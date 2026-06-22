@@ -97,14 +97,18 @@ const MAX_WALLET_HEAL_DEPTH = 1;
 const loadWalletState = async (userId) => {
     // (5.4) Preferências e holdings dependem só do userId → buscadas em paralelo.
     const [userPrefs, userAssets] = await Promise.all([
-        User.findById(userId).select('targetAllocation targetReserve').lean(),
+        User.findById(userId).select('targetAllocation targetReserve targetSubAllocation').lean(),
         UserAsset.find({ user: userId }),
     ]);
 
-    // Carteira ideal (alocação-alvo) persistida no usuário — acompanha a resposta.
+    // Carteira ideal (alocação-alvo + sub-metas) persistida no usuário — acompanha a resposta.
     const targets = {
         targetAllocation: userPrefs?.targetAllocation || { STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10, FIXED_INCOME: 0 },
         targetReserve: typeof userPrefs?.targetReserve === 'number' ? userPrefs.targetReserve : 10000,
+        targetSubAllocation: userPrefs?.targetSubAllocation || {
+            FIXED_INCOME: { IPCA: 0, POS: 0, PRE: 0 },
+            STOCK_US: { STOCK: 0, ETF: 0, REIT: 0, DOLLAR: 0 },
+        },
     };
 
     const activeAssets = userAssets.filter(a => a.quantity > QUANTITY_EPSILON);
@@ -270,7 +274,11 @@ const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroRates, i
         profitPercent: safeFloat(profitPercent),
         sector: assetMap.get(asset.ticker)?.sector || (asset.type === 'FIXED_INCOME' ? 'Renda Fixa' : asset.type === 'CASH' ? 'Caixa' : 'Outros'),
         dayChangePct: safeFloat(combinedChangePct),
-        tags: asset.tags // Return tags
+        tags: asset.tags, // Return tags
+        // Sub-tipos usados pela ramificação da Carteira Ideal (real vs meta):
+        // RF → índice (IPCA/SELIC/CDI/PRE); Exterior → usSubType (STOCK/ETF/REIT/DOLLAR).
+        fixedIncomeIndex: asset.fixedIncomeIndex || null,
+        usSubType: asset.usSubType || null,
     };
 
     return { processed, totalValueBr, totalCostBr, dayChangeValueBr };
@@ -642,7 +650,7 @@ export const getWalletHistory = async (req, res, next) => {
 
 export const addAssetTransaction = async (req, res, next) => {
     const userId = req.user.id;
-    const { ticker, type, quantity, price, date, fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread, name } = req.body;
+    const { ticker, type, quantity, price, date, fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread, name, usSubType, currency } = req.body;
     const txDate = date ? new Date(date) : new Date();
     const transactionType = quantity >= 0 ? 'BUY' : 'SELL';
     let updatedAsset;
@@ -658,7 +666,7 @@ export const addAssetTransaction = async (req, res, next) => {
                 date: txDate, notes: name ? `Nome: ${name}` : ''
             });
             await newTx.save({ session });
-            updatedAsset = await financialService.recalculatePosition(userId, ticker.toUpperCase(), type, session);
+            updatedAsset = await financialService.recalculatePosition(userId, ticker.toUpperCase(), type, session, currency);
             if (updatedAsset && (type === 'FIXED_INCOME' || type === 'CASH')) {
                 if (fixedIncomeRate) updatedAsset.fixedIncomeRate = fixedIncomeRate;
                 // Pós-fixados/indexados (Selic/CDI/IPCA): o rendimento é índice vivo +
@@ -684,6 +692,13 @@ export const addAssetTransaction = async (req, res, next) => {
                 if (transactionType === 'BUY' && (!updatedAsset.startDate || new Date(date) < updatedAsset.startDate)) {
                     updatedAsset.startDate = new Date(date);
                 }
+                await updatedAsset.save({ session });
+            }
+            // Exterior: override manual do sub-tipo no cadastro. A auto-heurística
+            // já rodou em recalculatePosition; aqui o usuário tem a última palavra.
+            if (updatedAsset && type === 'STOCK_US' && usSubType) {
+                updatedAsset.usSubType = usSubType;
+                updatedAsset.usSubTypeManual = true;
                 await updatedAsset.save({ session });
             }
         });
@@ -713,7 +728,7 @@ export const addAssetTransaction = async (req, res, next) => {
 export const updateAsset = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { tags, name } = req.body;
+        const { tags, name, usSubType } = req.body;
         const userId = req.user.id;
 
         const asset = await UserAsset.findOne({ _id: id, user: userId });
@@ -722,6 +737,12 @@ export const updateAsset = async (req, res, next) => {
         if (tags !== undefined) asset.tags = tags;
         // Renomear cofrinho (Reserva/Caixa) ou título de Renda Fixa.
         if (name !== undefined) asset.name = String(name).trim();
+        // Override manual do sub-tipo de Exterior — só faz sentido para STOCK_US.
+        // Marca usSubTypeManual para que a auto-heurística não sobrescreva depois.
+        if (usSubType !== undefined && asset.type === 'STOCK_US') {
+            asset.usSubType = usSubType;
+            asset.usSubTypeManual = true;
+        }
 
         await asset.save();
         res.json({ message: "Ativo atualizado.", asset });
@@ -771,7 +792,7 @@ export const resetWallet = async (req, res, next) => {
 export const updateWalletTargets = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const { targetAllocation, targetReserve } = req.body;
+        const { targetAllocation, targetReserve, targetSubAllocation } = req.body;
 
         const update = {};
         if (targetAllocation !== undefined) {
@@ -786,14 +807,32 @@ export const updateWalletTargets = async (req, res, next) => {
         if (targetReserve !== undefined) {
             update.targetReserve = Math.max(0, safeFloat(targetReserve));
         }
+        if (targetSubAllocation !== undefined) {
+            const fi = targetSubAllocation.FIXED_INCOME || {};
+            const us = targetSubAllocation.STOCK_US || {};
+            update.targetSubAllocation = {
+                FIXED_INCOME: {
+                    IPCA: safeFloat(fi.IPCA || 0),
+                    POS: safeFloat(fi.POS || 0),
+                    PRE: safeFloat(fi.PRE || 0),
+                },
+                STOCK_US: {
+                    STOCK: safeFloat(us.STOCK || 0),
+                    ETF: safeFloat(us.ETF || 0),
+                    REIT: safeFloat(us.REIT || 0),
+                    DOLLAR: safeFloat(us.DOLLAR || 0),
+                },
+            };
+        }
 
         const updated = await User.findByIdAndUpdate(userId, { $set: update }, { new: true })
-            .select('targetAllocation targetReserve').lean();
+            .select('targetAllocation targetReserve targetSubAllocation').lean();
 
         res.json({
             message: 'Carteira ideal atualizada.',
             targetAllocation: updated?.targetAllocation,
             targetReserve: updated?.targetReserve,
+            targetSubAllocation: updated?.targetSubAllocation,
         });
     } catch (error) {
         next(error);

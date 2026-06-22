@@ -8,6 +8,7 @@ import {
     listReports,
     getReportDetails,
     getMacroData,
+    getFixedIncomeData,
     enhanceWithAI,
     triggerMarketSync,
     triggerMacroSync,
@@ -39,6 +40,7 @@ router.use(authenticateToken);
 // (I5) Leituras agregadas (hit a cada load do dashboard): 300/15min por usuário.
 router.get('/latest', researchReadLimiter, getLatestReport);
 router.get('/macro', researchReadLimiter, getMacroData);
+router.get('/fixed-income', researchReadLimiter, getFixedIncomeData);
 router.get('/signals', researchReadLimiter, getQuantSignals);
 router.get('/radar-stats', getRadarStats);
 

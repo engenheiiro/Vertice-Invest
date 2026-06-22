@@ -16,6 +16,9 @@ interface AssetDetailModalProps {
 
 type MetricStatus = 'good' | 'bad' | 'neutral' | 'warning' | 'info';
 
+// Rótulo do sub-tipo de Exterior (STOCK_US) exibido como badge no cabeçalho.
+const US_SUB_BADGE: Record<string, string> = { STOCK: 'Stock', ETF: 'ETF', REIT: 'REIT', DOLLAR: 'Dólar', GOLD: 'Ouro' };
+
 export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onClose, asset }) => {
     // Hooks PRIMEIRO (regras de hooks): memo null-safe; o guard de render vem depois.
     const filteredAudit = React.useMemo(() => {
@@ -219,6 +222,11 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-[10px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded uppercase">{asset.type}</span>
                                     <span className="text-[10px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded uppercase">{asset.sector || 'Geral'}</span>
+                                    {asset.type === 'STOCK_US' && asset.usSubType && (
+                                        <span className="text-[10px] font-bold bg-indigo-900/30 text-indigo-300 px-2 py-0.5 rounded uppercase border border-indigo-900/50">
+                                            {US_SUB_BADGE[asset.usSubType] || asset.usSubType}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="flex items-center justify-between mb-1">
                                     <div className="flex items-center gap-3 min-w-0">

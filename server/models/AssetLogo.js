@@ -15,7 +15,7 @@ const AssetLogoSchema = new mongoose.Schema({
   ticker: { type: String, required: true, uppercase: true, trim: true },
   type: {
     type: String,
-    enum: ['STOCK', 'FII', 'STOCK_US', 'CRYPTO', 'FIXED_INCOME', 'CASH'],
+    enum: ['STOCK', 'FII', 'STOCK_US', 'ETF', 'CRYPTO', 'FIXED_INCOME', 'CASH', 'OURO'],
     required: true,
   },
   status: { type: String, enum: ['OK', 'MISSING'], required: true },

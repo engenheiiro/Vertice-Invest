@@ -13,7 +13,8 @@ export interface RankingItem {
     ticker: string;
     name: string;
     sector?: string;
-    type?: string; 
+    type?: string;
+    usSubType?: 'STOCK' | 'ETF' | 'REIT' | 'DOLLAR' | 'GOLD' | null;
     action: 'BUY' | 'SELL' | 'WAIT';
     currentPrice: number; 
     targetPrice: number;
@@ -110,6 +111,25 @@ export interface PublishStatus {
     hasGeneratedExplainableAI: boolean;
     latestId: string | null;
     readyToPublish: boolean;
+}
+
+export interface TreasuryBondItem {
+    title: string;
+    type: 'PREFIXADO' | 'IPCA' | 'SELIC' | 'RENDAMAIS' | 'EDUCA';
+    index: string;
+    rate: number;
+    maturityDate: string | null;
+    minInvestment: number;
+    unitPrice: number;
+    nominalEstimate: number;  // rendimento nominal anual estimado (%)
+    realEstimate: number;     // acima da inflação (%)
+    vsCdi: number | null;     // pontos percentuais vs CDI
+}
+
+export interface FixedIncomeResponse {
+    macro: { ipca: number; selic: number; cdi: number };
+    bonds: TreasuryBondItem[];
+    updatedAt: string | null;
 }
 
 export interface ResearchReport {
@@ -224,6 +244,12 @@ export const researchService = {
 
     async getMacroData() {
         const response = await authService.api('/api/research/macro');
+        if (!response.ok) return null;
+        return await response.json();
+    },
+
+    async getFixedIncomeData(): Promise<FixedIncomeResponse | null> {
+        const response = await authService.api('/api/research/fixed-income');
         if (!response.ok) return null;
         return await response.json();
     },

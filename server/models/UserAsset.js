@@ -34,7 +34,13 @@ const UserAssetSchema = new mongoose.Schema({
   // Ex.: Tesouro Selic "SELIC + 0,08%" → fixedIncomeIndex='SELIC', fixedIncomeSpread=0.0843.
   fixedIncomeIndex: { type: String, enum: ['SELIC', 'CDI', 'IPCA', 'PRE', null], default: null },
   fixedIncomeSpread: { type: Number, default: 0 }, // Spread a.a. sobre o índice (%)
-  
+
+  // --- Sub-tipo de ativo do Exterior (ramificação STOCK_US) ---
+  // STOCK | ETF | REIT | DOLLAR. null = não classificado (auto-heurística decide).
+  // usSubTypeManual=true: usuário definiu manualmente; a heurística NÃO sobrescreve.
+  usSubType: { type: String, enum: ['STOCK', 'ETF', 'REIT', 'DOLLAR', 'GOLD', null], default: null },
+  usSubTypeManual: { type: Boolean, default: false },
+
   // --- Feature: Tags Personalizadas ---
   tags: { type: [String], default: [] }, // Ex: ["Aposentadoria", "Viagem", "Risco"]
 

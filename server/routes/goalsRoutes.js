@@ -9,6 +9,7 @@ import {
     createGoal,
     updateGoal,
     deleteGoal,
+    clearAllGoals,
     addContribution,
     deleteContribution,
 } from '../controllers/goalsController.js';
@@ -29,6 +30,7 @@ router.use(authenticateToken);
 const writeLimiter = walletWriteLimiter;
 
 router.get('/', listGoals);
+router.delete('/', writeLimiter, clearAllGoals);
 router.post('/', writeLimiter, validate(createGoalSchema), createGoal);
 router.get('/:id', validate(goalIdParamSchema), getGoal);
 router.put('/:id', writeLimiter, validate(updateGoalSchema), updateGoal);

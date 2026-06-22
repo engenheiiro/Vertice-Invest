@@ -9,6 +9,7 @@ const TYPE_FALLBACK: Record<string, string> = {
   STOCK: 'Ação',
   FII: 'FII',
   STOCK_US: 'Stock US',
+  ETF: 'ETF',
   CRYPTO: 'Criptoativo',
   FIXED_INCOME: 'Renda Fixa',
   CASH: 'Caixa / Reserva',

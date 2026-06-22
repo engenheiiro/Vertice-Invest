@@ -4,15 +4,18 @@ import mongoose from 'mongoose';
 const MarketAssetSchema = new mongoose.Schema({
   ticker: { type: String, required: true, unique: true, uppercase: true, trim: true },
   name: { type: String, required: true },
-  type: { 
-    type: String, 
-    enum: ['STOCK', 'FII', 'STOCK_US', 'CRYPTO', 'FIXED_INCOME', 'CASH'], 
-    required: true 
+  type: {
+    type: String,
+    enum: ['STOCK', 'FII', 'STOCK_US', 'ETF', 'CRYPTO', 'FIXED_INCOME', 'CASH', 'OURO'],
+    required: true
   },
   currency: { type: String, enum: ['BRL', 'USD'], default: 'BRL' },
   
   // --- Metadados de Análise ---
-  sector: { type: String, default: 'Geral' }, 
+  sector: { type: String, default: 'Geral' },
+  // Indústria fina do Yahoo (ex.: "REIT - Retail") — usada p/ sub-segmentar REITs na UI
+  // sem alterar o `sector` (que a classificação usa p/ identificar REAL_ESTATE).
+  industry: { type: String, default: null },
   isIgnored: { type: Boolean, default: false }, 
   isBlacklisted: { type: Boolean, default: false }, 
   isTier1: { type: Boolean, default: false }, 
@@ -68,6 +71,14 @@ const MarketAssetSchema = new mongoose.Schema({
   fiiSubType: {
     type: String,
     enum: ['TIJOLO', 'PAPEL', 'HIBRIDO', 'FOF', 'DESENVOLVIMENTO', null],
+    default: null
+  },
+
+  // Para Exterior (STOCK_US): sub-tipo do ativo internacional, usado para ramificar
+  // o ranking (Stocks/ETFs/REITs) e a Carteira Ideal. null = não classificado.
+  usSubType: {
+    type: String,
+    enum: ['STOCK', 'ETF', 'REIT', 'DOLLAR', 'GOLD', null],
     default: null
   },
 

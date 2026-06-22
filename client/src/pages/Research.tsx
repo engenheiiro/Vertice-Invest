@@ -6,6 +6,7 @@ import { ResearchViewer } from '../components/research/ResearchViewer';
 import { AssetDetailModal } from '../components/research/AssetDetailModal'; // Importado
 import { ExplainableAIRenderer } from '../components/research/ExplainableAIRenderer';
 import { ResearchAporteModal } from '../components/research/ResearchAporteModal';
+import { TreasuryPanel } from '../components/research/TreasuryPanel';
 import { Bot, Newspaper, Trophy, Lock, Crown, Info, RefreshCcw } from 'lucide-react';
 import { SkeletonCard, SkeletonTableRows } from '../components/ui';
 import { friendlyError } from '../utils/errorMessages';
@@ -18,6 +19,8 @@ const ASSETS = [
     { id: 'FII', label: 'FIIs', color: 'bg-indigo-600', minPlan: 'PRO' },
     { id: 'CRYPTO', label: 'Cripto', color: 'bg-purple-600', minPlan: 'PRO' },
     { id: 'STOCK_US', label: 'Exterior', color: 'bg-slate-700', minPlan: 'ELITE' },
+    { id: 'ETF', label: 'ETFs', color: 'bg-teal-600', minPlan: 'PRO' },
+    { id: 'FIXED_INCOME', label: 'Renda Fixa', color: 'bg-emerald-700', minPlan: 'ESSENTIAL' },
 ];
 
 export const Research = () => {
@@ -26,6 +29,9 @@ export const Research = () => {
     const location = useLocation(); // Hook de location para pegar state
     
     const [selectedAsset, setSelectedAsset] = useState('BRASIL_10');
+    // Dentro do Exterior, alterna entre dois rankings INDEPENDENTES: Ações US (STOCK_US)
+    // e REITs (classe própria). Não é filtro client-side — troca a fonte buscada.
+    const [exteriorView, setExteriorView] = useState<'STOCK' | 'REIT'>('STOCK');
     const [viewMode, setViewMode] = useState<'ANALYSIS' | 'RANKING'>('RANKING');
     const [report, setReport] = useState<ResearchReport | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -38,6 +44,11 @@ export const Research = () => {
     const [analysisProfile, setAnalysisProfile] = useState<'DEFENSIVE' | 'MODERATE' | 'BOLD'>('DEFENSIVE');
 
     const isAdmin = user?.role === 'ADMIN';
+    // Renda Fixa é uma vitrine informativa (Tesouro) — não usa MarketAnalysis/ranking.
+    const isFixedIncome = selectedAsset === 'FIXED_INCOME';
+    const isExterior = selectedAsset === 'STOCK_US';
+    // Classe efetivamente buscada: no Exterior, o sub-toggle pode apontar para REIT.
+    const effectiveAsset = isExterior && exteriorView === 'REIT' ? 'REIT' : selectedAsset;
 
     const checkAccess = (assetId: string) => {
         if (isAdmin) return true;
@@ -50,6 +61,12 @@ export const Research = () => {
     };
 
     const fetchReport = async () => {
+        // Renda Fixa não tem relatório de ranking — o TreasuryPanel busca seus próprios dados.
+        if (isFixedIncome) {
+            setIsLoading(false);
+            setReport(null);
+            return;
+        }
         if (!checkAccess(selectedAsset)) {
             setIsLoading(false);
             setReport(null);
@@ -60,7 +77,7 @@ export const Research = () => {
         try {
             const strategy = 'BUY_HOLD';
             try {
-                const data = await researchService.getLatest(selectedAsset, strategy);
+                const data = await researchService.getLatest(effectiveAsset, strategy);
                 setReport(data);
 
                 // LÓGICA DE LINK DIRETO (DEEP LINKING VIA STATE)
@@ -88,8 +105,12 @@ export const Research = () => {
         fetchReport();
         // Inclui o plano: ao fazer upgrade (refresh no foco da aba), o gate libera o
         // ativo e o relatório precisa ser buscado — sem isso ficava "Análise não encontrada".
+        // exteriorView troca a fonte (STOCK_US ↔ REIT) dentro do Exterior.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedAsset, viewMode, user?.plan]);
+    }, [selectedAsset, exteriorView, viewMode, user?.plan]);
+
+    // Ao sair do Exterior, volta o sub-toggle para Ações (evita herdar REIT noutra aba).
+    useEffect(() => { if (!isExterior) setExteriorView('STOCK'); }, [isExterior]);
 
     const hasAccessToSelected = checkAccess(selectedAsset);
     const requiredPlanLabel = ASSETS.find(a => a.id === selectedAsset)?.minPlan || 'PRO';
@@ -137,7 +158,7 @@ export const Research = () => {
                             })}
                         </div>
 
-                        <div className="flex bg-base border border-slate-800 p-1 rounded-xl gap-0.5 shadow-inner shrink-0">
+                        <div className={`flex bg-base border border-slate-800 p-1 rounded-xl gap-0.5 shadow-inner shrink-0 ${isFixedIncome ? 'hidden' : ''}`}>
                             <button
                                 onClick={() => setViewMode('RANKING')}
                                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-black whitespace-nowrap transition-all ${
@@ -156,15 +177,17 @@ export const Research = () => {
                             </button>
                         </div>
 
-                        <button
-                            onClick={fetchReport}
-                            disabled={isLoading || !hasAccessToSelected}
-                            className="bg-base border border-slate-800 p-2.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50 shrink-0"
-                            title="Atualizar Dados"
-                            aria-label="Atualizar dados"
-                        >
-                            <RefreshCcw size={16} className={isLoading ? 'animate-spin' : ''} />
-                        </button>
+                        {!isFixedIncome && (
+                            <button
+                                onClick={fetchReport}
+                                disabled={isLoading || !hasAccessToSelected}
+                                className="bg-base border border-slate-800 p-2.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50 shrink-0"
+                                title="Atualizar Dados"
+                                aria-label="Atualizar dados"
+                            >
+                                <RefreshCcw size={16} className={isLoading ? 'animate-spin' : ''} />
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -187,6 +210,8 @@ export const Research = () => {
                                 Fazer Upgrade
                             </button>
                         </div>
+                    ) : isFixedIncome ? (
+                        <TreasuryPanel />
                     ) : !report ? (
                         <div className="flex flex-col items-center justify-center py-20 bg-base border border-dashed border-slate-800 rounded-3xl text-center">
                             <Info size={48} className="text-slate-700 mb-4" />
@@ -256,7 +281,12 @@ export const Research = () => {
                             );
                         })()
                     ) : report.isRankingPublished ? (
-                        <ResearchViewer report={report!} view="RANKING" onAporte={() => setShowAporte(true)} />
+                        <ResearchViewer
+                            report={report!}
+                            view="RANKING"
+                            onAporte={() => setShowAporte(true)}
+                            onExteriorViewChange={isExterior ? setExteriorView : undefined}
+                        />
                     ) : (
                         <div className="flex flex-col items-center justify-center py-20 bg-base border border-dashed border-slate-800 rounded-3xl text-center">
                             <Info size={48} className="text-slate-700 mb-4" />
@@ -280,7 +310,7 @@ export const Research = () => {
                         isOpen={showAporte}
                         onClose={() => setShowAporte(false)}
                         ranking={report.content.ranking}
-                        assetClass={selectedAsset}
+                        assetClass={effectiveAsset}
                     />
                 )}
 

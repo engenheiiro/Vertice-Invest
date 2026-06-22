@@ -179,6 +179,8 @@ export const externalMarketService = {
                     ticker: ticker.replace('.SA', ''),
                     price: data.regularMarketPrice,
                     change: data.regularMarketChangePercent,
+                    // Volume p/ liquidez de ETFs B3 (.SA): o Yahoo costuma devolver 0 aqui.
+                    volume: data.regularMarketVolume || 0,
                     name: data.longName || cleanTicker,
                     source: 'BRAPI_FALLBACK'
                 };
@@ -437,7 +439,9 @@ export const externalMarketService = {
     async getFullHistory(ticker, type) {
         let symbol = ticker.trim().toUpperCase();
 
-        if (type === 'STOCK' || type === 'FII' || type === 'INDEX') {
+        if (type === 'STOCK' || type === 'FII' || type === 'INDEX' || type === 'ETF') {
+            // ETF cobre nacionais (BOVA11/IVVB11 → .SA) e internacionais (VOO/QQQ →
+            // sem sufixo). O regex B3 garante o .SA só para o formato brasileiro.
             if (!symbol.startsWith('^') && !symbol.endsWith('.SA')) {
                 if (/^[A-Z]{4}\d{1,2}$/.test(symbol)) {
                     symbol = `${symbol}.SA`;
@@ -497,8 +501,9 @@ export const externalMarketService = {
         if (['CRYPTO', 'FIXED_INCOME', 'CASH'].includes(type)) return [];
 
         let symbol = ticker.trim().toUpperCase();
-        // B3 (ações/FIIs) precisam do sufixo .SA; STOCK_US vai como está.
-        if ((type === 'STOCK' || type === 'FII') && !symbol.endsWith('.SA') && /^[A-Z]{4}\d{1,2}$/.test(symbol)) {
+        // B3 (ações/FIIs/ETFs nacionais) precisam do sufixo .SA; STOCK_US e ETFs
+        // internacionais (sem formato B3) vão como está.
+        if ((type === 'STOCK' || type === 'FII' || type === 'ETF') && !symbol.endsWith('.SA') && /^[A-Z]{4}\d{1,2}$/.test(symbol)) {
             symbol = `${symbol}.SA`;
         }
 

@@ -183,6 +183,9 @@ export const getConcentrationKey = (asset) => {
     if (!asset) return 'OUTROS';
     if (asset.type === 'FII') return getFiiSegment(asset.sector);
     if (asset.type === 'CRYPTO') return 'CRYPTO';
+    // ETF nacional (classe própria): concentra pelo TEMA/índice do ETF (ex. "Índice
+    // Amplo", "Cripto", "Ouro") em vez de cair em OUTROS, evitando comprimir o ranking.
+    if (asset.type === 'ETF') return asset.sector || 'ETF';
     return getMacroSector(asset.sector);
 };
 

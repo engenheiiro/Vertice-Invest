@@ -16,6 +16,8 @@ import { externalMarketService } from './externalMarketService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz, safeQuantity, addQty, subQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
+import { classifyUsAsset } from '../utils/usClassification.js';
+import { isGoldTicker } from '../utils/goldClassification.js';
 import logger from '../config/logger.js';
 
 export const financialService = {
@@ -623,7 +625,7 @@ export const financialService = {
         return { dividendMap, provisioned, totalAllTime, projectedMonthly };
     },
 
-    async recalculatePosition(userId, ticker, forcedType = null, session = null) {
+    async recalculatePosition(userId, ticker, forcedType = null, session = null, forcedCurrency = null) {
         // ... (Mantém inalterado)
         const query = AssetTransaction.find({ user: userId, ticker }).sort({ date: 1, createdAt: 1 });
         if (session) query.session(session);
@@ -705,14 +707,33 @@ export const financialService = {
         if (session) assetQuery.session(session);
         let asset = await assetQuery;
 
+        let marketInfo = null;
         if (!asset) {
             if (transactions.length > 0) {
-                const marketInfo = await MarketAsset.findOne({ ticker });
+                marketInfo = await MarketAsset.findOne({ ticker });
+                // Ouro não é mais classe própria na carteira: entra como ETF lastreado
+                // (GLD/IAU/GOLD11…). Se o usuário não escolheu o tipo explicitamente
+                // (forcedType), instrumentos de ouro caem na classe ETF.
+                const goldDefault = isGoldTicker(ticker) ? 'ETF' : null;
                 asset = new UserAsset({
                     user: userId, ticker,
-                    type: forcedType || marketInfo?.type || 'STOCK',
-                    currency: marketInfo?.currency || 'BRL'
+                    type: forcedType || goldDefault || marketInfo?.type || 'STOCK',
+                    // Moeda explícita do cadastro tem prioridade (ETF nacional R$ vs
+                    // internacional US$); senão herda do MarketAsset; senão BRL.
+                    currency: forcedCurrency || marketInfo?.currency || 'BRL'
                 });
+
+                // Rede de segurança: ticker sem registro de mercado (ex.: ETF nacional
+                // fora da lista curada, ou ativo digitado direto) ganha um stub para o
+                // refresh de cotações ter um documento para atualizar — senão ficaria
+                // com preço 0 no total da carteira. Caixa/Renda Fixa não têm cotação.
+                if (!marketInfo && !['CASH', 'FIXED_INCOME'].includes(asset.type)) {
+                    await MarketAsset.updateOne(
+                        { ticker },
+                        { $setOnInsert: { ticker, name: asset.name || ticker, type: asset.type, currency: asset.currency || 'BRL', isActive: true } },
+                        { upsert: true, session }
+                    ).catch(() => {});
+                }
             } else { return null; }
         } else if (forcedType && asset.type !== forcedType) {
             asset.type = forcedType;
@@ -729,7 +750,28 @@ export const financialService = {
             asset.startDate = firstBuyDate;
         }
 
-        await asset.save({ session }); 
+        // Exterior: auto-classifica o sub-tipo (Stocks/ETF/REIT/Dólar) quando o
+        // usuário não definiu manualmente. Override manual permanece intocado.
+        if (asset.type === 'STOCK_US') {
+            if (!asset.usSubTypeManual) {
+                if (!marketInfo) {
+                    marketInfo = await MarketAsset.findOne({ ticker }).select('sector currency name').lean().catch(() => null);
+                }
+                asset.usSubType = classifyUsAsset({
+                    ticker,
+                    sector: marketInfo?.sector,
+                    type: asset.type,
+                    currency: asset.currency || marketInfo?.currency,
+                    name: asset.name || marketInfo?.name,
+                });
+            }
+        } else if (asset.usSubType) {
+            // Mudou de classe: o sub-tipo de Exterior deixa de fazer sentido.
+            asset.usSubType = null;
+            asset.usSubTypeManual = false;
+        }
+
+        await asset.save({ session });
         return asset;
     },
 

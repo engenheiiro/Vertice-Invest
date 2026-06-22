@@ -9,7 +9,10 @@ import { DEMO_ASSETS, DEMO_KPIS, DEMO_HISTORY } from '../data/DEMO_DATA'; // Imp
 import { STALE_TIME } from '../config/queryConfig';
 import { computeWalletKpis } from '../utils/kpiCalculations';
 
-export type AssetType = 'STOCK' | 'FII' | 'CRYPTO' | 'STOCK_US' | 'FIXED_INCOME' | 'CASH';
+// ETF: classe própria para fundos de índice nacionais (BRL) e internacionais (USD).
+// OURO mantido só por compatibilidade com carteiras antigas (não oferecido na UI;
+// ouro entra como ETF lastreado, ex. GLD/GOLD11).
+export type AssetType = 'STOCK' | 'FII' | 'CRYPTO' | 'STOCK_US' | 'ETF' | 'FIXED_INCOME' | 'CASH' | 'OURO';
 
 export interface Asset {
     id: string;
@@ -26,7 +29,10 @@ export interface Asset {
     name?: string;
     sector?: string;
     fixedIncomeRate?: number;
-    dayChangePct?: number; 
+    dayChangePct?: number;
+    // Sub-tipos usados pela ramificação da Carteira Ideal (real vs meta):
+    fixedIncomeIndex?: 'SELIC' | 'CDI' | 'IPCA' | 'PRE' | null;
+    usSubType?: 'STOCK' | 'REIT' | 'DOLLAR' | null;
 }
 
 export interface WalletKPIs {
@@ -53,23 +59,39 @@ export interface HistoryPoint {
 
 export type AllocationMap = Partial<Record<AssetType, number>>;
 
+// Sub-metas (ramificação) por classe. Percentuais RELATIVOS à fatia da classe
+// (somam ~100% DENTRO da classe). Tudo 0 = sem sub-meta (classe em bloco).
+export type FixedIncomeSubKey = 'IPCA' | 'POS' | 'PRE';
+// Exterior ramifica em Stocks/REITs/Dólar. ETFs viraram CLASSE própria (AssetType 'ETF').
+export type UsSubKey = 'STOCK' | 'REIT' | 'DOLLAR';
+export interface SubAllocationMap {
+    FIXED_INCOME: Record<FixedIncomeSubKey, number>;
+    STOCK_US: Record<UsSubKey, number>;
+}
+
+export const DEFAULT_SUB_ALLOCATION: SubAllocationMap = {
+    FIXED_INCOME: { IPCA: 0, POS: 0, PRE: 0 },
+    STOCK_US: { STOCK: 0, REIT: 0, DOLLAR: 0 },
+};
+
 interface WalletContextType {
     assets: Asset[];
     kpis: WalletKPIs;
     history: HistoryPoint[];
     targetAllocation: AllocationMap;
     targetReserve: number;
+    targetSubAllocation: SubAllocationMap;
     usdRate: number;
     isLoading: boolean;
     isRefreshing: boolean;
-    isPrivacyMode: boolean; 
+    isPrivacyMode: boolean;
     togglePrivacyMode: () => void;
     refreshWallet: () => void;
     addAsset: (asset: any) => Promise<void>;
-    updateAsset: (id: string, data: { name?: string; tags?: string[] }) => Promise<void>;
+    updateAsset: (id: string, data: { name?: string; tags?: string[]; usSubType?: UsSubKey }) => Promise<void>;
     removeAsset: (id: string) => Promise<void>;
     resetWallet: () => Promise<void>;
-    updateTargets: (newTargets: AllocationMap, newReserveTarget: number) => void;
+    updateTargets: (newTargets: AllocationMap, newReserveTarget: number, newSubAllocation?: SubAllocationMap) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -82,6 +104,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     
     const [targetAllocation, setTargetAllocation] = useState<AllocationMap>({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10 });
     const [targetReserve, setTargetReserve] = useState(10000);
+    const [targetSubAllocation, setTargetSubAllocation] = useState<SubAllocationMap>(DEFAULT_SUB_ALLOCATION);
 
     const [isPrivacyMode, setIsPrivacyMode] = useState(() => {
         const saved = localStorage.getItem('isPrivacyMode');
@@ -119,6 +142,12 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         const data = walletQuery.data;
         if (data?.targetAllocation) setTargetAllocation(data.targetAllocation);
         if (typeof data?.targetReserve === 'number') setTargetReserve(data.targetReserve);
+        if (data?.targetSubAllocation) {
+            setTargetSubAllocation({
+                FIXED_INCOME: { ...DEFAULT_SUB_ALLOCATION.FIXED_INCOME, ...data.targetSubAllocation.FIXED_INCOME },
+                STOCK_US: { ...DEFAULT_SUB_ALLOCATION.STOCK_US, ...data.targetSubAllocation.STOCK_US },
+            });
+        }
     }, [walletQuery.data, isDemoMode]);
 
     // --- FORCE REFRESH ON MOUNT ---
@@ -144,7 +173,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     });
 
     const updateAssetMutation = useMutation({
-        mutationFn: ({ id, data }: { id: string; data: { name?: string; tags?: string[] } }) =>
+        mutationFn: ({ id, data }: { id: string; data: { name?: string; tags?: string[]; usSubType?: UsSubKey } }) =>
             walletService.updateAsset(id, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
@@ -184,7 +213,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         await addAssetMutation.mutateAsync(newAsset);
     };
 
-    const updateAsset = async (id: string, data: { name?: string; tags?: string[] }) => {
+    const updateAsset = async (id: string, data: { name?: string; tags?: string[]; usSubType?: UsSubKey }) => {
         if (isDemoMode) return;
         await updateAssetMutation.mutateAsync({ id, data });
     };
@@ -199,13 +228,14 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         await resetWalletMutation.mutateAsync();
     };
 
-    const updateTargets = async (newTargets: AllocationMap, newReserveTarget: number) => {
+    const updateTargets = async (newTargets: AllocationMap, newReserveTarget: number, newSubAllocation?: SubAllocationMap) => {
         // Atualização otimista (UI responde na hora); persiste no backend logo em seguida.
         setTargetAllocation(newTargets);
         setTargetReserve(newReserveTarget);
+        if (newSubAllocation) setTargetSubAllocation(newSubAllocation);
         if (isDemoMode) return; // Demo não persiste
         try {
-            await walletService.updateTargets(newTargets as Record<string, number>, newReserveTarget);
+            await walletService.updateTargets(newTargets as Record<string, number>, newReserveTarget, newSubAllocation);
         } catch (err: any) {
             addToast(err?.message || 'Erro ao salvar carteira ideal.', 'error');
         }
@@ -240,9 +270,10 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         <WalletContext.Provider value={{ 
             assets, 
             kpis, 
-            history, 
-            targetAllocation, 
-            targetReserve, 
+            history,
+            targetAllocation,
+            targetReserve,
+            targetSubAllocation,
             usdRate,
             isLoading, 
             isRefreshing,

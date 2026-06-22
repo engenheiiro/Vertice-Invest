@@ -7,7 +7,10 @@ const RankingItemSchema = new mongoose.Schema({
   ticker: String,
   name: String,
   sector: String,
-  type: String, 
+  type: String,
+  // Sub-tipo de Exterior (STOCK_US): STOCK | ETF | REIT | DOLLAR. Propagado do
+  // MarketAsset para permitir sub-filtros no Research e viés por sub-meta no rebalance.
+  usSubType: { type: String, enum: ['STOCK', 'ETF', 'REIT', 'DOLLAR', 'GOLD', null], default: null },
   action: { type: String, enum: ['BUY', 'WAIT', 'SELL'] },
   currentPrice: Number, 
   targetPrice: Number,

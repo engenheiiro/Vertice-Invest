@@ -23,6 +23,7 @@ interface ClassGap {
     gapValue: number;
     coverage: 'full' | 'allocation-only';
 }
+interface SubLine { sub: string; label: string; amount: number; }
 interface Trade {
     ticker: string | null;
     label?: string;
@@ -30,6 +31,8 @@ interface Trade {
     type: string;
     kind?: 'REINFORCE' | 'NEW' | 'GENERIC';
     tier?: string | null;
+    subLabel?: string | null;
+    subBreakdown?: SubLine[] | null;
     amount: number;
     quantity: number | null;
     positionValue?: number;
@@ -107,7 +110,8 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
             p.sells.forEach(s => {
                 const qty = s.quantity ? ` (${formatQuantity(s.quantity)} un.)` : '';
                 const tax = s.estTax ? ` | IR est. ${formatCurrency(s.estTax)}` : '';
-                lines.push(`• ${s.ticker}${qty} — ${formatCurrency(s.amount)}${tax}`);
+                const sub = s.subLabel ? ` [${s.subLabel}]` : '';
+                lines.push(`• ${s.ticker}${sub}${qty} — ${formatCurrency(s.amount)}${tax}`);
                 lines.push(`  ${s.reasons.join(' · ')}`);
             });
             lines.push('');
@@ -117,8 +121,10 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
             p.buys.forEach(b => {
                 const label = b.ticker || b.label || b.class;
                 const qty = b.quantity ? ` (${formatQuantity(b.quantity)} un.)` : '';
-                lines.push(`• ${label}${qty} — ${formatCurrency(b.amount)}`);
+                const sub = b.ticker && b.subLabel ? ` [${b.subLabel}]` : '';
+                lines.push(`• ${label}${sub}${qty} — ${formatCurrency(b.amount)}`);
                 lines.push(`  ${b.reasons.join(' · ')}`);
+                (b.subBreakdown || []).forEach(c => lines.push(`    → ${c.label}: ${formatCurrency(c.amount)}`));
             });
             lines.push('');
         }
@@ -180,9 +186,8 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
                             <div className="flex items-center gap-2">
                                 {PROFILES.map(p => {
                                     const active = riskProfile === p.key;
-                                    const activeCls = p.color === 'purple'
-                                        ? 'bg-purple-500/15 text-purple-300 border-purple-500/40'
-                                        : 'bg-blue-500/15 text-blue-300 border-blue-500/40';
+                                    // Verde padrão do site nos botões de perfil (consistência com os chips do Exterior).
+                                    const activeCls = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40';
                                     return (
                                         <button
                                             key={p.key}
@@ -334,6 +339,10 @@ const TradeCard: React.FC<{ trade: Trade; side: 'buy' | 'sell' }> = ({ trade, si
             <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-black text-white">{label}</span>
+                    {/* Sub-tipo (ramificação) — só em itens com ticker (Exterior/RF) */}
+                    {trade.ticker && trade.subLabel && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-indigo-500/15 text-indigo-300 border-indigo-500/30">{trade.subLabel}</span>
+                    )}
                     {trade.tier && (
                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-gold/10 text-gold border-gold/30">{trade.tier}</span>
                     )}
@@ -356,6 +365,17 @@ const TradeCard: React.FC<{ trade: Trade; side: 'buy' | 'sell' }> = ({ trade, si
                     <li key={i} className="text-[10px] text-slate-400 leading-relaxed">• {r}</li>
                 ))}
             </ul>
+            {/* Quebra por sub-tipo (ramificação) — ex.: Renda Fixa por IPCA/Pós/Pré */}
+            {trade.subBreakdown && trade.subBreakdown.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-slate-800/60 space-y-1">
+                    {trade.subBreakdown.map((c) => (
+                        <div key={c.sub} className="flex items-center justify-between text-[10px]">
+                            <span className="text-slate-400 flex items-center gap-1.5"><span className="text-slate-600">→</span> {c.label}</span>
+                            <span className="font-semibold text-emerald-400/90">{formatCurrency(c.amount)}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
             {isSell && (trade.estTax ?? 0) > 0 && (
                 <p className="text-[10px] text-yellow-400/90 mt-1.5 flex items-center gap-1">
                     ⚠ IR estimado: {formatCurrency(trade.estTax)}

@@ -11,6 +11,11 @@ export interface AssetFormState {
   // Renda fixa pós-fixada/indexada: índice de referência (SELIC/CDI/IPCA/PRE).
   // Quando definido, `rate` representa o spread a.a. sobre o índice.
   fixedIncomeIndex?: string;
+  // Exterior (STOCK_US): sub-tipo manual (Stocks/REIT/Dólar). Vazio = auto.
+  usSubType?: string;
+  // Moeda explícita do lançamento. Para a classe ETF (nacional R$ vs internacional US$)
+  // o modal define isto; quando ausente, cai no default por tipo.
+  currency?: 'BRL' | 'USD';
 }
 
 export interface TransactionPayload {
@@ -26,6 +31,7 @@ export interface TransactionPayload {
   fixedIncomeRate: number;
   fixedIncomeIndex?: string;
   fixedIncomeSpread?: number;
+  usSubType?: string;
 }
 
 export interface ValidationResult {
@@ -144,11 +150,13 @@ export function validateTransaction(
       quantity: finalQty,
       price: finalPrice,
       averagePrice: finalPrice,
-      currency: form.type === 'STOCK_US' ? 'USD' : 'BRL',
+      currency: form.currency || (form.type === 'STOCK_US' ? 'USD' : 'BRL'),
       sector: 'General',
       date: form.date,
       fixedIncomeRate: finalRate,
       ...(isIndexed ? { fixedIncomeIndex: idx, fixedIncomeSpread: finalRate } : {}),
+      // Override de sub-tipo só faz sentido para Exterior; vazio = backend classifica.
+      ...(form.type === 'STOCK_US' && form.usSubType ? { usSubType: form.usSubType } : {}),
     },
   };
 }

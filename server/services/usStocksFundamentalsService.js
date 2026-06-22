@@ -2,8 +2,14 @@
 import YahooFinance from 'yahoo-finance2';
 import MarketAsset from '../models/MarketAsset.js';
 import { SP500_STOCKS } from '../config/sp500List.js';
-import { toYahooSymbol } from './externalMarketService.js';
+import { US_ETF_LIST } from '../config/usEtfList.js';
+import { BR_ETF_LIST } from '../config/brEtfList.js';
+import { toYahooSymbol, externalMarketService } from './externalMarketService.js';
 import logger from '../config/logger.js';
+
+// Universo completo do Exterior: ações do S&P 500 + ETFs/REITs/Ouro curados.
+// Mapa ticker→sub-tipo (dica inicial; a heurística classifyUsAsset confirma no sync).
+const US_UNIVERSE = [...SP500_STOCKS, ...US_ETF_LIST];
 
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 
@@ -28,7 +34,13 @@ function extractFundamentals(ticker, data) {
 
     const pl = sd.trailingPE || ks.forwardPE || null;
     const pvp = ks.priceToBook || null;
-    const dy = sd.dividendYield ? sd.dividendYield * 100 : 0;
+    // DY ciente de fundo: ETFs/REITs frequentemente NÃO expõem `summaryDetail.dividendYield`
+    // (campo de ação) — o yield do fundo vem em `yield` ou `trailingAnnualDividendYield`.
+    // Sem este fallback, todo ETF saía com dy=0 (VOO/SCHD/VYM zerados).
+    // Number.isFinite descarta null/undefined E NaN — o Yahoo às vezes devolve NaN nesses
+    // campos, e um NaN aqui quebrava o cast Mongoose do `dy` (abortava todo o sync).
+    const dyRaw = [sd.dividendYield, sd.yield, sd.trailingAnnualDividendYield].find(Number.isFinite);
+    const dy = Number.isFinite(dyRaw) ? dyRaw * 100 : 0;
     const beta = ks.beta || sd.beta || null;
     const marketCap = sd.marketCap || ks.enterpriseValue || null;
     const roe = fd.returnOnEquity ? fd.returnOnEquity * 100 : null;
@@ -48,6 +60,7 @@ function extractFundamentals(ticker, data) {
     const vpa = ks.bookValue || null;
     const lpa = ks.trailingEps || ks.forwardEps || null;
     const sector = ap.sector || null;
+    const industry = ap.industry || null;
     // Nome da empresa vem do módulo `price` (longName/shortName). NUNCA usar
     // companyOfficers — isso retornava o nome do CEO (ex.: "Mr. Timothy D. Cook").
     const name = pr.longName || pr.shortName || null;
@@ -60,7 +73,7 @@ function extractFundamentals(ticker, data) {
 
     return {
         pl, pvp, dy, beta, marketCap, roe, netMargin, revenueGrowth, earningsGrowth,
-        debtToEquity, avgLiquidity, lastPrice, payoutRatio, vpa, lpa, sector, name, peg,
+        debtToEquity, avgLiquidity, lastPrice, payoutRatio, vpa, lpa, sector, industry, name, peg,
     };
 }
 
@@ -84,7 +97,7 @@ async function sleep(ms) {
 export const usStocksFundamentalsService = {
 
     async syncUSStocksFundamentals(tickerList = null) {
-        const targets = tickerList ?? SP500_STOCKS.map(s => s.ticker);
+        const targets = tickerList ?? US_UNIVERSE.map(s => s.ticker);
         logger.info(`🌎 [US Fundamentals] Iniciando sync para ${targets.length} ativos...`);
 
         let processed = 0;
@@ -107,10 +120,10 @@ export const usStocksFundamentalsService = {
 
                 const fundamentals = extractFundamentals(ticker, data);
 
-                // Get sector from SP500_STOCKS config if Yahoo didn't return it
-                const sp500Entry = SP500_STOCKS.find(s => s.ticker === ticker);
-                const sector = fundamentals.sector || sp500Entry?.sector || 'Technology';
-                const name = fundamentals.name || sp500Entry?.name || ticker;
+                // Get sector/name from the curated universe if Yahoo didn't return it
+                const universeEntry = US_UNIVERSE.find(s => s.ticker === ticker);
+                const sector = fundamentals.sector || universeEntry?.sector || 'Technology';
+                const name = fundamentals.name || universeEntry?.name || ticker;
 
                 const updatePayload = {
                     type: 'STOCK_US',
@@ -120,6 +133,7 @@ export const usStocksFundamentalsService = {
                     isActive: true,
                     lastFundamentalsDate: new Date(),
                 };
+                if (fundamentals.industry) updatePayload.industry = fundamentals.industry;
 
                 if (fundamentals.lastPrice > 0) updatePayload.lastPrice = fundamentals.lastPrice;
                 if (fundamentals.pl !== null) updatePayload.pl = fundamentals.pl;
@@ -167,11 +181,11 @@ export const usStocksFundamentalsService = {
         return { processed, failed, total: targets.length };
     },
 
-    // Seed inicial: cria os registros básicos dos 500 ativos caso não existam
+    // Seed inicial: cria os registros básicos do universo (S&P 500 + ETFs/REITs/Ouro).
     async seedSP500Assets() {
-        logger.info(`🌱 [US Seed] Populando ${SP500_STOCKS.length} ativos do S&P 500...`);
+        logger.info(`🌱 [US Seed] Populando ${US_UNIVERSE.length} ativos do Exterior (S&P 500 + ETFs/REITs/Ouro)...`);
 
-        const ops = SP500_STOCKS.map(stock => ({
+        const ops = US_UNIVERSE.map(stock => ({
             updateOne: {
                 filter: { ticker: stock.ticker },
                 update: {
@@ -181,6 +195,8 @@ export const usStocksFundamentalsService = {
                         type: 'STOCK_US',
                         currency: 'USD',
                         sector: stock.sector,
+                        // usSubType é dica inicial; o backfill (classifyUsAsset) confirma no sync.
+                        ...(stock.usSubType ? { usSubType: stock.usSubType } : {}),
                         isActive: true,
                         isBlacklisted: false,
                         isTier1: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'JPM', 'V'].includes(stock.ticker),
@@ -193,6 +209,113 @@ export const usStocksFundamentalsService = {
         const result = await MarketAsset.bulkWrite(ops);
         logger.info(`✅ [US Seed] ${result.upsertedCount} novos ativos criados, ${result.matchedCount} já existentes.`);
         return result;
+    },
+
+    // Seed inicial dos ETFs NACIONAIS (B3, BRL) — classe própria `ETF`.
+    // Espelha seedSP500Assets, mas com type:'ETF'/currency:'BRL'. As cotações são
+    // mantidas pelo refresh normal (Yahoo .SA), igual a Ações/FIIs.
+    async seedBrEtfAssets() {
+        logger.info(`🌱 [BR ETF Seed] Populando ${BR_ETF_LIST.length} ETFs nacionais (B3)...`);
+
+        const ops = BR_ETF_LIST.map(etf => ({
+            updateOne: {
+                filter: { ticker: etf.ticker },
+                update: {
+                    $setOnInsert: {
+                        ticker: etf.ticker,
+                        name: etf.name,
+                        type: 'ETF',
+                        currency: 'BRL',
+                        sector: etf.sector,
+                        isActive: true,
+                        isBlacklisted: false,
+                    }
+                },
+                upsert: true
+            }
+        }));
+
+        const result = await MarketAsset.bulkWrite(ops);
+        logger.info(`✅ [BR ETF Seed] ${result.upsertedCount} novos ETFs criados, ${result.matchedCount} já existentes.`);
+        return result;
+    },
+
+    // Fundamentos dos ETFs NACIONAIS (B3) via Yahoo no símbolo `.SA`. Reaproveita
+    // extractFundamentals (agora ciente de fundo → `yield`/`trailingAnnualDividendYield`),
+    // populando sobretudo o `dy` — que o seed básico não traz e o Fundamentus não cobre.
+    // Preserva type:'ETF'/currency:'BRL'/sector da lista curada.
+    async syncBrEtfFundamentals() {
+        const list = BR_ETF_LIST;
+        logger.info(`🌎 [BR ETF Fundamentals] Iniciando sync para ${list.length} ETFs (.SA)...`);
+        let processed = 0, failed = 0;
+        const bulkOps = [];
+
+        for (let i = 0; i < list.length; i += BATCH_SIZE) {
+            const batch = list.slice(i, i + BATCH_SIZE);
+            const results = await Promise.allSettled(batch.map(async (etf) => {
+                try {
+                    const data = await Promise.race([
+                        yahooFinance.quoteSummary(`${etf.ticker}.SA`, { modules: QUOTESUMMARY_MODULES }, { validateResult: false }),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), TICKER_TIMEOUT_MS)),
+                    ]);
+                    return { etf, data, ok: true };
+                } catch (err) {
+                    return { etf, ok: false, error: err.message };
+                }
+            }));
+
+            for (const r of results) {
+                if (r.status !== 'fulfilled') continue;
+                const { etf, ok, data, error } = r.value;
+                if (!ok) { failed++; logger.debug(`[BR ETF Fundamentals] Falhou ${etf.ticker}: ${error}`); continue; }
+
+                const f = extractFundamentals(etf.ticker, data);
+                const updatePayload = { type: 'ETF', currency: 'BRL', sector: etf.sector, isActive: true, lastFundamentalsDate: new Date() };
+                if (f.lastPrice > 0) updatePayload.lastPrice = f.lastPrice;
+                if (f.beta != null) updatePayload.beta = f.beta;
+                if (f.marketCap) updatePayload.marketCap = f.marketCap;
+
+                // Liquidez + preço de fallback via Brapi (Yahoo costuma dar volume/preço
+                // 0 p/ ETF .SA). Busca única, reusada para liquidez E para o cálculo de DY.
+                let liquidity = f.avgLiquidity || 0;
+                let price = f.lastPrice || 0;
+                if (!liquidity || !price) {
+                    const brapi = await externalMarketService.fetchFromBrapi(`${etf.ticker}.SA`);
+                    if (brapi?.price > 0 && !price) price = brapi.price;
+                    if (brapi?.volume > 0 && brapi.price > 0 && !liquidity) liquidity = brapi.volume * brapi.price;
+                }
+                if (liquidity) updatePayload.liquidity = liquidity;
+
+                // DY: Yahoo .SA raramente devolve yield de fundo (vinha 0 até em DIVO11,
+                // um ETF de dividendos). Fallback: soma dos proventos dos últimos 12 meses
+                // ÷ preço. ETFs de acumulação (IVVB11/NASD11) não distribuem → dy 0 correto.
+                let dy = (f.dy != null && f.dy > 0) ? f.dy : 0;
+                if (!dy && price > 0) {
+                    const hist = await externalMarketService.getDividendsHistory(etf.ticker, 'ETF');
+                    if (hist.length) {
+                        const cutoff = new Date();
+                        cutoff.setFullYear(cutoff.getFullYear() - 1);
+                        const ttm = hist.filter(d => d.date >= cutoff).reduce((s, d) => s + d.amount, 0);
+                        if (ttm > 0) dy = (ttm / price) * 100;
+                    }
+                }
+                // Fallback final: seed curado p/ ETFs distribuidores (DIVO11/BOVA11/SMAL11).
+                // Yahoo não traz yield de fundo .SA e a Brapi cobra dividendos; a fonte viva
+                // acima tem precedência — o seed só entra se nada vivo respondeu. Ver brEtfList.
+                if (!dy && etf.seedYield > 0) dy = etf.seedYield;
+                updatePayload.dy = dy;
+
+                bulkOps.push({ updateOne: { filter: { ticker: etf.ticker }, update: { $set: updatePayload }, upsert: true } });
+                processed++;
+            }
+
+            if (bulkOps.length >= 50) await MarketAsset.bulkWrite(bulkOps.splice(0, bulkOps.length));
+            if (i + BATCH_SIZE < list.length) await sleep(BATCH_DELAY_MS);
+        }
+
+        if (bulkOps.length > 0) await MarketAsset.bulkWrite(bulkOps);
+        logger.info(`✅ [BR ETF Fundamentals] Concluído: ${processed} atualizados, ${failed} falhas de ${list.length}.`);
+        return { processed, failed, total: list.length };
     },
 
     // Fetch dividends history for a US stock and return array of {date, value}

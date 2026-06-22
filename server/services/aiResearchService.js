@@ -243,9 +243,33 @@ export const aiResearchService = {
                 DiscardLog.insertMany(discardOperations).catch(e => logger.error(`Erro salvando discard logs: ${e.message}`));
             }
 
-            let ranking = portfolioEngine.performCompetitiveDraft(processedAssets);
-            ranking = portfolioEngine.applyConcentrationPenalty(ranking);
-            
+            // Opções de draft por classe:
+            // - REIT é mono-setor (todo o universo cai em REAL_ESTATE) → relaxa cap/penalidade.
+            // - CRYPTO dedicado → relaxa o cap de cripto/perfil (Defensivo segue limitado pelo gate).
+            const draftOptions = assetClass === 'REIT' ? { relaxSectorConcentration: true }
+                : assetClass === 'CRYPTO' ? { relaxCryptoCap: true }
+                : {};
+
+            // draft + penalidade de concentração sobre um conjunto de ativos já processados.
+            const draftAndPenalize = (assets, opts = draftOptions) =>
+                portfolioEngine.applyConcentrationPenalty(
+                    portfolioEngine.performCompetitiveDraft(assets, opts),
+                    opts
+                );
+
+            let ranking;
+            if (assetClass === 'ETF') {
+                // ETF roda DOIS drafts independentes (nacional B3 vs internacional/ouro) para
+                // que o universo BR tenha seu próprio top-10 por perfil e nunca seja espremido
+                // pelos ETFs US (que pontuam mais alto). Os dois são concatenados e o sort
+                // global abaixo só define a posição ordinal — o front fatia por origem.
+                const brAssets = processedAssets.filter(a => a.type === 'ETF');
+                const usAssets = processedAssets.filter(a => a.type !== 'ETF');
+                ranking = [...draftAndPenalize(brAssets), ...draftAndPenalize(usAssets)];
+            } else {
+                ranking = draftAndPenalize(processedAssets);
+            }
+
             // Ordenação Global por Score. Empates (pós-penalidade de concentração) desempatados
             // pelo composite estrutural para evitar que ordem de inserção do draft determine posição.
             ranking.sort((a, b) => {
@@ -336,6 +360,14 @@ export const aiResearchService = {
         const stockUsData = await this.calculateRanking('STOCK_US', strat);
         await saveAnalysis('STOCK_US', stockUsData.ranking, stockUsData.fullList);
 
+        logger.info("ℹ️ [AI Research] Processando REITs (imobiliário US)...");
+        const reitData = await this.calculateRanking('REIT', strat);
+        await saveAnalysis('REIT', reitData.ranking, reitData.fullList);
+
+        logger.info("ℹ️ [AI Research] Processando ETFs (nacionais + internacionais)...");
+        const etfData = await this.calculateRanking('ETF', strat);
+        await saveAnalysis('ETF', etfData.ranking, etfData.fullList);
+
         logger.info("ℹ️ [AI Research] Processando Brasil 10...");
         
         const getTop5Defensive = (fullList) => {
@@ -377,6 +409,7 @@ export const aiResearchService = {
                 FII:       { ranking: fiiData.ranking,       fullList: fiiData.fullList         },
                 CRYPTO:    { ranking: cryptoData.ranking,    fullList: cryptoData.fullList      },
                 STOCK_US:  { ranking: stockUsData.ranking,   fullList: stockUsData.fullList     },
+                ETF:       { ranking: etfData.ranking,       fullList: etfData.fullList         },
             };
 
             // Coleta discard logs do run atual (últimos 10 min) para incluir no relatório

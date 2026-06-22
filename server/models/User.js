@@ -60,12 +60,47 @@ const UserSchema = new mongoose.Schema({
       STOCK: { type: Number, default: 0 },
       FII: { type: Number, default: 0 },
       STOCK_US: { type: Number, default: 0 },
+      ETF: { type: Number, default: 0 },
       CRYPTO: { type: Number, default: 0 },
       FIXED_INCOME: { type: Number, default: 0 },
+      // OURO mantido por compatibilidade com carteiras antigas; não é mais oferecido
+      // na UI (ouro entra como ETF lastreado, ex. GLD/GOLD11).
+      OURO: { type: Number, default: 0 },
     }, { _id: false }),
-    default: () => ({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10, FIXED_INCOME: 0 }),
+    default: () => ({ STOCK: 40, FII: 30, STOCK_US: 20, ETF: 0, CRYPTO: 10, FIXED_INCOME: 0, OURO: 0 }),
   },
   targetReserve: { type: Number, default: 10000 },
+
+  // --- Sub-metas de alocação (ramificação dentro de uma classe) ---
+  // Percentuais RELATIVOS à fatia da classe pai (somam ~100% DENTRO da classe).
+  // Ex.: Renda Fixa = 37% do total; IPCA 68% → 0,37 × 0,68 = 25,16% do total.
+  // Campo OPCIONAL: sub-metas zeradas = comportamento legado (classe tratada em bloco).
+  // RF: POS = pós-fixado (Tesouro Selic/CDI). Exterior: DOLLAR = caixa/exposição em dólar.
+  targetSubAllocation: {
+    type: new mongoose.Schema({
+      FIXED_INCOME: {
+        type: new mongoose.Schema({
+          IPCA: { type: Number, default: 0 },
+          POS: { type: Number, default: 0 },
+          PRE: { type: Number, default: 0 },
+        }, { _id: false }),
+        default: () => ({ IPCA: 0, POS: 0, PRE: 0 }),
+      },
+      STOCK_US: {
+        type: new mongoose.Schema({
+          STOCK: { type: Number, default: 0 },
+          ETF: { type: Number, default: 0 },
+          REIT: { type: Number, default: 0 },
+          DOLLAR: { type: Number, default: 0 },
+        }, { _id: false }),
+        default: () => ({ STOCK: 0, ETF: 0, REIT: 0, DOLLAR: 0 }),
+      },
+    }, { _id: false }),
+    default: () => ({
+      FIXED_INCOME: { IPCA: 0, POS: 0, PRE: 0 },
+      STOCK_US: { STOCK: 0, ETF: 0, REIT: 0, DOLLAR: 0 },
+    }),
+  },
 
   // --- Integração Mercado Pago ---
   mpCustomerId: { type: String },      // ID do cliente no MP

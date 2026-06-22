@@ -1,15 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Plus, Target, Loader2, Sparkles, ArrowRight, ArrowDown } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, Target, Sparkles, ArrowRight, ArrowDown, Trash2 } from 'lucide-react';
 import { Header } from '../components/dashboard/Header';
 import { useWallet } from '../contexts/WalletContext';
+import { useToast } from '../contexts/ToastContext';
 import { goalsService, type Goal } from '../services/goals';
 import { STALE_TIME } from '../config/queryConfig';
 import { formatCurrency } from '../utils/format';
 import { GoalCard } from '../components/goals/GoalCard';
 import { CreateGoalModal } from '../components/goals/CreateGoalModal';
 import { GoalDetailModal } from '../components/goals/GoalDetailModal';
-import { EmptyState, SkeletonCard, SkeletonKpiGrid } from '../components/ui';
+import { ConfirmModal, EmptyState, SkeletonCard, SkeletonKpiGrid } from '../components/ui';
 
 /** Constrói cadeias de metas sequenciais a partir do campo previousGoalId. */
 function buildChains(goals: Goal[]): Goal[][] {
@@ -56,13 +57,25 @@ const ChainArrow: React.FC = () => (
 
 export const Goals: React.FC = () => {
   const { isPrivacyMode } = useWallet();
+  const { addToast } = useToast();
+  const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [clearOpen, setClearOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['goals'],
     queryFn: goalsService.getGoals,
     staleTime: STALE_TIME.REALTIME,
+  });
+
+  const clearAllMutation = useMutation({
+    mutationFn: goalsService.clearAllGoals,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      addToast('Todas as metas foram removidas.', 'success');
+    },
+    onError: (err: any) => addToast(err?.message || 'Erro ao limpar metas.', 'error'),
   });
 
   const goals = data?.goals || [];
@@ -126,12 +139,24 @@ export const Goals: React.FC = () => {
             </h1>
             <p className="text-sm text-slate-500 mt-1">Planeje, acompanhe e acelere seus objetivos patrimoniais.</p>
           </div>
-          <button
-            onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl px-4 py-2.5 text-sm transition-colors shrink-0"
-          >
-            <Plus size={16} /> <span className="hidden sm:inline">Nova meta</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {goals.length > 0 && (
+              <button
+                onClick={() => setClearOpen(true)}
+                className="flex items-center justify-center w-10 h-10 rounded-xl transition-all border bg-red-900/10 border-red-900/30 text-red-500 hover:bg-red-900/30 hover:text-red-400 hover:border-red-800 min-w-[44px]"
+                title="Limpar todas as metas"
+                aria-label="Limpar todas as metas"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+            <button
+              onClick={() => setCreateOpen(true)}
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl px-4 py-2.5 text-sm transition-colors"
+            >
+              <Plus size={16} /> <span className="hidden sm:inline">Nova meta</span>
+            </button>
+          </div>
         </div>
 
         {/* Resumo */}
@@ -205,6 +230,15 @@ export const Goals: React.FC = () => {
       {selectedId && (
         <GoalDetailModal isOpen={!!selectedId} onClose={() => setSelectedId(null)} goalId={selectedId} privacy={isPrivacyMode} />
       )}
+      <ConfirmModal
+        isOpen={clearOpen}
+        onClose={() => setClearOpen(false)}
+        onConfirm={() => clearAllMutation.mutate()}
+        title="Excluir Todas as Metas?"
+        message="ATENÇÃO: Esta ação é irreversível. Todas as metas e seus aportes manuais serão apagados."
+        isDestructive
+        confirmText="Sim, Excluir Tudo"
+      />
     </div>
   );
 };

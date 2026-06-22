@@ -27,7 +27,7 @@ export const walletService = {
         return await response.json();
     },
 
-    async updateAsset(id: string, data: { name?: string; tags?: string[] }) {
+    async updateAsset(id: string, data: { name?: string; tags?: string[]; usSubType?: string }) {
         const response = await authService.api(`/api/wallet/${id}`, {
             method: 'PUT',
             body: JSON.stringify(data)
@@ -47,10 +47,10 @@ export const walletService = {
         return await response.json();
     },
 
-    async updateTargets(targetAllocation: Record<string, number>, targetReserve: number) {
+    async updateTargets(targetAllocation: Record<string, number>, targetReserve: number, targetSubAllocation?: unknown) {
         const response = await authService.api('/api/wallet/targets', {
             method: 'PUT',
-            body: JSON.stringify({ targetAllocation, targetReserve })
+            body: JSON.stringify({ targetAllocation, targetReserve, targetSubAllocation })
         });
         if (!response.ok) throw new Error("Falha ao salvar carteira ideal");
         return await response.json();
