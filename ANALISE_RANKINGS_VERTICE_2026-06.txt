@@ -1,0 +1,619 @@
+================================================================================
+ANÁLISE PROFUNDA DO SISTEMA DE GERAÇÃO DE RANKINGS — VÉRTICE INVEST
+Data: 2026-06-23  |  Escopo: Ações BR, FIIs, ETFs, Stocks, REITs, Cripto
+Foco especial: perfis Defensivo / Moderado / Arrojado e a filosofia Buy & Hold
+================================================================================
+
+COMO LER ESTE DOCUMENTO
+  - PARTE 1 é para qualquer pessoa, sem termos técnicos.
+  - PARTE 2 é para a equipe técnica e para a própria IA evoluir o sistema.
+  - Todo achado técnico aponta para o arquivo e a linha onde a evidência está
+    (ex.: scoringEngine.js:244). Nada aqui é "achismo": os pontos críticos foram
+    lidos diretamente no código-fonte, não apenas em resumos.
+
+ÍNDICE
+  PARTE 1 — RESUMO EXECUTIVO PARA LEIGOS
+    1.1  Como o sistema funciona hoje (em linguagem simples)
+    1.2  O que já está bom
+    1.3  Os principais problemas encontrados
+    1.4  O que propomos melhorar e por quê
+    1.5  Que benefício o investidor sente
+  PARTE 2 — ANÁLISE TÉCNICA COMPLETA
+    2.1  Arquitetura do pipeline
+    2.2  Scores estruturais (QUALITY / VALUATION / RISK)
+    2.3  Scores de perfil (DEFENSIVE / MODERATE / BOLD) por classe
+    2.4  Gates, confidence cap, draft competitivo e concentração
+    2.5  Coleta e tratamento de dados por classe
+    2.6  Diagnóstico (achados com evidência)
+    2.7  Plano de refinamento por classe (direção + tabela antes/depois)
+    2.8  Revisão dos 3 perfis vs. intenção declarada
+    2.9  Estratégias de validação / como evitar falsos positivos
+    2.10 Roadmap de implementação priorizado
+    2.11 Apêndice: constantes, tunáveis e glossário
+
+
+================================================================================
+PARTE 1 — RESUMO EXECUTIVO PARA LEIGOS
+================================================================================
+
+1.1  COMO O SISTEMA FUNCIONA HOJE (EM LINGUAGEM SIMPLES)
+
+Pense no Vértice como um avaliador automático de investimentos. Todo dia ele:
+
+  1) Coleta dados de cada ativo (preço, dividendos, dívida, lucro, etc.) de
+     fontes públicas na internet.
+  2) Dá três "notas de 0 a 100" para cada ativo, uma para cada tipo de
+     investidor:
+        - Defensivo  -> quer segurança e renda, para guardar por muitos anos.
+        - Moderado   -> quer equilíbrio entre crescer e se proteger.
+        - Arrojado   -> aceita mais risco em troca de crescer mais rápido.
+  3) Monta três "times" (carteiras) de até 10 ativos, um para cada perfil,
+     escolhendo os melhores e evitando concentrar demais no mesmo setor.
+  4) Quem tira nota 70 ou mais ganha o selo "COMPRAR"; abaixo de 70, "AGUARDAR".
+
+A nota de cada ativo é a soma de vários "bônus" e "penalidades". Por exemplo, um
+bom dividendo soma pontos; uma dívida alta tira pontos; um preço em queda
+prolongada tira pontos.
+
+1.2  O QUE JÁ ESTÁ BOM
+
+  - O sistema é transparente: para cada ativo existe um "extrato" mostrando
+    exatamente quais fatores somaram e subtraíram pontos.
+  - Há proteções inteligentes já implementadas: ele evita "facas caindo" (ações
+    despencando), limita empresas sem lucro lá fora, e não deixa um setor dominar
+    a carteira.
+  - A coleta de dados tem "planos B": se uma fonte cai, ele tenta outra.
+  - FIIs são tratados com cuidado por segmento (shopping é diferente de logística,
+    que é diferente de papel).
+
+1.3  OS PRINCIPAIS PROBLEMAS ENCONTRADOS
+
+  (1) O perfil Defensivo, hoje, às vezes PUNE as melhores empresas de longo prazo.
+      O cálculo de "preço justo" usa fórmulas clássicas (Graham/Bazin) que acham
+      "caras" justamente as empresas de altíssima qualidade — e acham "baratas"
+      empresas cíclicas que podem estar no melhor momento (e prestes a piorar).
+      Para quem quer segurar por décadas, isso é o oposto do desejado.
+
+  (2) O sistema enxerga só "a foto de hoje", não "o filme".
+      Ele olha o dividendo e o lucro atuais, mas quase não olha o histórico:
+      "essa empresa paga dividendo consistente há 10 anos?" — isso quase não pesa.
+
+  (3) O dividendo pesa demais (e pode virar armadilha).
+      Um dividendo alto soma pontos em três lugares ao mesmo tempo. Empresas que
+      pagam muito hoje, mas de forma insustentável, podem subir no ranking.
+
+  (4) Um erro técnico pode excluir bons fundos imobiliários de "papel" do perfil
+      Defensivo, por uma falha de classificação (detalhe na Parte 2).
+
+  (5) O ranking de cripto é pouco "fino": muitos ativos empatam na mesma nota,
+      e a cripto não passa pelos mesmos freios de qualidade dos demais.
+
+  (6) ETFs e ativos do exterior dependem de uma fonte única e às vezes incompleta,
+      o que pode distorcer suas notas por problema de dado (não de mérito real).
+
+  (7) Algumas proteções somem silenciosamente quando falta um dado (ex.: histórico
+      de preço curto), justo quando seriam mais necessárias.
+
+  (8) A carteira sempre mostra 10 nomes, mesmo quando só 3 ou 4 são "COMPRAR" de
+      verdade — o restante entra como "completar a lista".
+
+1.4  O QUE PROPOMOS MELHORAR E POR QUÊ
+
+  - Reequilibrar o Defensivo para premiar DURABILIDADE e CONSISTÊNCIA (track
+    record), e reduzir o peso do "desconto contábil" que prejudica boas empresas.
+  - Adicionar memória de histórico: consistência de dividendos e de rentabilidade.
+  - Reduzir a tripla contagem do dividendo e reforçar o filtro anti-armadilha.
+  - Corrigir o erro de classificação dos fundos de papel.
+  - Tornar o ranking de cripto mais granular e sujeito a freios de qualidade.
+  - Tratar "dado ausente" como ausente (e não como "ruim"), para não penalizar
+    ativos por falha de fonte.
+  - Avisar quando uma proteção não pôde ser aplicada por falta de dado.
+
+  Importante: nesta entrega NÃO alteramos o sistema. Este é um diagnóstico com um
+  plano. Cada mudança vem com o "porquê" e, onde a evidência permite, com números
+  sugeridos de "antes -> depois".
+
+1.5  QUE BENEFÍCIO O INVESTIDOR SENTE
+
+  - Carteiras Defensivas mais coerentes com "guardar por décadas": empresas sólidas
+    e duráveis no topo, menos cíclicas disfarçadas de barganha.
+  - Menos "falsos positivos" (ativos que parecem ótimos no número, mas são frágeis).
+  - Rankings mais estáveis e confiáveis, menos sensíveis a falhas de dados.
+  - Mais clareza sobre o nível de convicção de cada recomendação.
+
+
+================================================================================
+PARTE 2 — ANÁLISE TÉCNICA COMPLETA
+================================================================================
+
+NOTA DE MÉTODO
+  Convergência de três varreduras independentes do código + verificação direta,
+  linha a linha, de scoringEngine.js e portfolioEngine.js. Os achados marcados
+  como "VERIFICADO" foram lidos no fonte. Os marcados "A CONFIRMAR" são hipóteses
+  que ainda precisam de checagem empírica antes de virar mudança.
+
+--------------------------------------------------------------------------------
+2.1  ARQUITETURA DO PIPELINE
+--------------------------------------------------------------------------------
+
+Fluxo de geração (aiResearchService.js):
+  coleta (marketDataService / fundamentusService / macroDataService)
+    -> scoringEngine.processAsset(asset, context)      [por ativo]
+    -> portfolioEngine.performCompetitiveDraft(...)     [DEF -> MOD -> BOLD]
+    -> portfolioEngine.applyConcentrationPenalty(...)
+    -> sort global (b.score - a.score; desempate = composite estrutural)
+    -> delta de posição vs. último MarketAnalysis salvo
+    -> persiste MarketAnalysis no MongoDB
+
+Casos especiais:
+  - "Brasil 10": top 5 STOCK + top 5 FII por score DEFENSIVE, SEM draft competitivo.
+  - ETF: dois drafts independentes (ETF-BR e ETF-US/Exterior), concatenados.
+  - REIT: draft com relaxSectorConcentration = true (universo mono-setor).
+  - CRYPTO: draft com relaxCryptoCap = true (ranking dedicado).
+
+processAsset (scoringEngine.js:1128) executa, por ativo:
+  1) Cortes de descarte (stablecoin, preço de centavos, liquidez, blacklist).
+  2) calculateIntrinsicValue -> preço justo + método (Graham/Bazin/VP/Mercado).
+  3) calculateProfileScores -> scores {DEFENSIVE, MODERATE, BOLD} + audit.
+  4) calculateStructuralScores -> {quality, valuation, risk} + audit.
+  5) generateDynamicTheses -> bullThesis[] / bearThesis[].
+  Saída: RankingItem com scores, auditLog[], targetPrice, teses.
+
+Regra global verificada: BUY_THRESHOLD = 70 (financialConstants.js). Score >= 70
+vira "BUY"; abaixo, "WAIT". Aplicado no draft (portfolioEngine.js:71) e após a
+penalidade de concentração (:164).
+
+--------------------------------------------------------------------------------
+2.2  SCORES ESTRUTURAIS (QUALITY / VALUATION / RISK) — calculateStructuralScores
+     (scoringEngine.js:790)
+--------------------------------------------------------------------------------
+
+Estes 3 scores (0–100) NÃO ordenam o ranking diretamente; servem de DESEMPATE
+(composite = média dos três, portfolioEngine.js:11) e alimentam o frontend.
+
+AÇÃO BR / STOCK_US-ação (scoringEngine.js:835):
+  QUALITY:  ROE>15 +25 | >10 +15; Margem>10 +25 | >5 +15 (banco/holding = N/A);
+            D/P<1.0 +25 | <2.0 +15 | senão -10; RevGrowth>10 +25 | >5 +10;
+            Payout>100 -30 | 40–85 +15 | <20 -5.
+  VALUATION: P/L<10 +30 | <15 +15; P/VP<1.5 +30 | <2.5 +15; EV/EBITDA<8 +20;
+             DY>6 +20; + spread earnings-yield vs NTN-B: >4% +20 | >0 +10 | <0 -20.
+  RISK (maior=mais seguro): base 50; mktCap>10B +20 | <500M -20; liq>5M +10 |
+       <100k -20; DL/EBITDA>3.5 -40 | >2.5 -15 | <1.0 +10 (fallback D/P>3 -40).
+
+FII (scoringEngine.js:945):
+  QUALITY base 40; Tijolo: vacância>10 -3/ponto, <5 +20; imóveis>10 +20 | >5 +10 |
+          ==1 -30; Papel: liq>5M +30 | >1M +15; spread DY−NTN-B>2 +20.
+  VALUATION: spread vs NTN-B com requiredSpread (Papel 3.0 / Tijolo 2.0):
+             >=req+2 +90 | >=req +70 | >=0 +40 | <0 +0; P/VP<0.90 +10 | >1.10 -20.
+  RISK base 50; liq tiers >10M +30 | >5M +25 | >2M +20 | >1M +10; Tijolo vacância>20
+       -40, imóveis==1 -50 | <3 -20; Papel P/VP>1.15 -40.
+
+CRYPTO (scoringEngine.js:1014):
+  QUALITY 40; BTC/ETH +40 | mktCap>20B +20 | >5B +10; liq>1B +10; preço>SMA200 +10.
+  VALUATION 50; BTC/ETH +10; desvio SMA200: <-20% +30 | <0 +15 | >+50% -20 | >+20% -10.
+  RISK 50; mktCap>50B +20 | <1B -30; VMC 0.02–0.15 +15 | >0.5 -20 | <0.005 -30;
+       liq>1B +10 | <50M -20; vol>100 -30 | >70 -15 | <40 +15.
+
+ETF / REIT / OURO (scoringEngine.js:804–833): scorers próprios e simplificados
+  (sem fundamentos de empresa), baseados em liquidez/AUM, DY, dívida (REIT),
+  posição vs SMA200 e volatilidade.
+
+--------------------------------------------------------------------------------
+2.3  SCORES DE PERFIL (DEFENSIVE / MODERATE / BOLD) — POR CLASSE
+     calculateProfileScores (scoringEngine.js:713) -> dispatch por tipo
+--------------------------------------------------------------------------------
+
+São ESTES scores que ordenam o ranking. Clamp final:
+  finalScore = min(maxScoreAllowed, max(10, raw))   (scoringEngine.js:781)
+
+AÇÃO BR / STOCK_US-ação (scoreStockProfiles, :220):
+  upside = (fairPrice / price) − 1, com fairPrice de Graham/Bazin (:223).
+  DEFENSIVE (se isEligibleForDefensive; senão base 30):
+    base 40; mktCap>10B +10 | >2B +4;
+    DY>=10 +22 | >=8 +16 | >=6 +10 | >=4 +5;
+    ROE>=20 +15 | >=15 +10 | >=12 +5;
+    upside>=30% +15 | >=20% +10 | >=15% +5 | >=10% +3;
+    P/VP>3 -10 | >2 -5; beta<0.70 +5 | >=1.5 -15 | >1.2 -8;
+    vol>40 -20 | >30 -10; payout>150 -30 | >100 -20 | 30–85 +5;
+    DL/EBITDA>3.5 -15 | >2.5 -8 (não-financeiro).
+  MODERATE (se mktCap>2B; senão base 25):
+    base 40; RevGrowth(efetivo)>30 +22 | >20 +16 | >10 +10 | >5 +4;
+    ROE>20 +15 | >15 +10 | >12 +7 | >10 +3;
+    upside>40% +20 | >30% +15 | >20% +10 | >10% +5;
+    margem<5 -15; ROE<Selic−0.5 -10/-20; payout>100 -10.
+  BOLD:
+    base 35; (se RevGrowth>10) PEG<0.5 +30 | <1.0 +22 | <1.5 +12 | <2.0 +5;
+    RevGrowth>40 +25 | >25 +15 | >15 +8;
+    upside>80% +30 | >50% +20 | >30% +10 | >20% +5;
+    vol>60 -20 | >45 -10; payout>100 -20.
+  COMUNS A TODOS:
+    Sobrevalorização (se grahamPrice>0 OU bazinPrice>0 e upside<-10%):
+      <-25% -> -40 (BOLD/MOD), -20 (DEF); senão -25/-25/-10  (:389).
+    Tendência de baixa (se sma200>0): desvio<-25% -20 | <-15% -12 | <-8% -6;
+      BOLD leva 70% disso  (:414).
+    Teto especulativo STOCK_US sem lucro: BOLD<=82, MOD<=72, DEF<=55  (:442).
+  BÔNUS pós-scorer (antes do cap de confiança):
+    Dividend Aristocrat (só STOCK): DEF +10, MOD +5  (:757).
+    Qualidade US (só STOCK_US-ação, DY>3 & ROE>12 & margem>10): DEF +8, MOD +4 (:768).
+
+FII (scoreFiiProfiles, :456): yieldSpread = DY − NTNB_LONG.
+  DEFENSIVE (se elegível; senão base 25): base 40; spread>=5 +22 | >=3 +18 |
+    >=1.5 +12 | >=0.5 +5 | <0 -10; P/VP por faixa (Papel/Tijolo) +15/+10/+5/-5;
+    beta<0.40 +12 | <0.70 +7 | >0.90 -15; Tier1 +8; liq>5M +6 | >2M +3;
+    diversificação Tijolo >20 +6 | >10 +3.
+  MODERATE: base 45; spread tiers +25/+18/+10/+4/-10; deságio P/VP; cap rate
+    (Tijolo) vs NTN-B; vacância>15 -8 | >10 -4.
+  BOLD: base 35; spread>=7 +35 | >=5 +25 | >=3 +15 | >=1 +7; deságio P/VP forte;
+    cap rate agressivo.
+
+CRYPTO (scoreCryptoProfiles, :594):
+  BTC/ETH -> DEF 90; mktCap>20B -> MOD 90; 2B–20B -> BOLD 90; senão BOLD 95.
+  liq<50M -> -30/-20/-10; liq>1B -> +10/+10 (DEF/MOD).
+  OBS: volatilidade NÃO entra aqui (só no estrutural). Cripto NUNCA é capada por
+  confiança (maxScoreAllowed=100 sempre, :777).
+
+ETF (scoreEtfProfiles, :626): base 45/50/45; liq, DY, tendência SMA200, vol.
+REIT (scoreReitProfiles, :655): base 40/45/40; DY (5/4/3.5/2 -> +22/+18/+15/+8),
+  D/E, liquidez, tendência.
+OURO (scoreCommodityProfiles, :693): base 60/55/40; momentum, liquidez, vol baixa.
+
+--------------------------------------------------------------------------------
+2.4  GATES, CONFIDENCE CAP, DRAFT E CONCENTRAÇÃO
+--------------------------------------------------------------------------------
+
+isEligibleForDefensive (scoringEngine.js:84) — VERIFICADO:
+  liq>=200k (todos).
+  STOCK: mktCap>=1B; beta<1.5; setor seguro (substring) OU DY>=6 & PL<=10;
+         ROE>=5 (se presente); margem>=3 (se presente); payout<=200; D/E<=4 (não-fin).
+  FII:   mktCap>=500M; DY<=18; vacância<=12; (se NÃO 'Papel') imóveis>=2; liq>=1M.
+  STOCK_US: mktCap>=10B; beta<1.8; ROE>=5 (se presente); setor defensivo US OU
+            DY>=1.5/PL<=30.
+  CRYPTO: BTC/ETH OU mktCap>=US$50B; liq>=US$500M.
+
+Confidence (calculateConfidenceScore, :24): base 100.
+  STOCK/STOCK_US-ação: −25 sem RevGrowth; −15 sem ROE/margem.
+  FII: −15 sem patrimônio. FII/ETF/REIT/Ouro: métricas de empresa NÃO cobradas.
+  Todos: liq<1M −30; stale>180d −30 | >90d −15 | data desconhecida −5.
+  Cap graduado (:777): CRYPTO=100; conf>=80 ->100; >=60 ->85; senão 70.
+  Dedução direta adicional SÓ para ação individual (:747): score −= (100−conf).
+
+Draft (performCompetitiveDraft, portfolioEngine.js:39):
+  Tiers em sequência: GOLD (>=55) -> SILVER (>=40) -> BRONZE (>30), até 10/perfil.
+  Cap por balde de concentração (getConcentrationKey): FII=segmento fino,
+  ação/ETF=macro-setor, cripto=balde único. DEF 3/setor; MOD/BOLD 2 (strict) e 3
+  (flex). relaxSectorConcentration e relaxCryptoCap zeram o teto efetivo.
+  Desempate: sortByScoreThenComposite (score, depois composite estrutural).
+
+Penalidade de concentração (applyConcentrationPenalty, :118), por perfil:
+  3º+ no mesmo macro-setor -15; 2º+ -5 (desligada se relax). 3º+ FII da mesma
+  gestora -20 (getFiiManager). Recalcula action após penalidade.
+
+Planos (subscription.js) — VERIFICADO: GUEST<ESSENTIAL<PRO<ELITE<BLACK.
+  research_br10: ESSENTIAL+ (Brasil 10, e STOCK/FII via UI a partir de PRO).
+  research_general: PRO+ (CRYPTO, ETF).  research_global: ELITE+ (STOCK_US, REIT).
+  ATENÇÃO: o CLAUDE.md lista "BLACK" onde o código real usa "ELITE" — doc desatualizada.
+
+--------------------------------------------------------------------------------
+2.5  COLETA E TRATAMENTO DE DADOS POR CLASSE
+--------------------------------------------------------------------------------
+
+AÇÕES BR (STOCK):
+  Fonte: scraping Fundamentus (resultado.php) + enriquecimento Yahoo (.SA) LTM.
+  Frequência: scrape diário 18:30 (cron '30 18 * * *'); cotações a cada 15 min.
+  Derivações: marketCap = patrimLiq × pvp; netIncome = mktCap/pl; payout = dy×pl.
+  Validação: KNOWN_TYPOS; parseBrFloat; piso de liquidez 5k no sync; _missing
+    flags (pl, mktCap, roe, netMargin, revenueGrowth, evEbitda); _staleDays.
+  LIMITE: Fundamentus bloqueia o IP da Render em produção -> opera em cache + sync
+    manual. Risco de fundamentos defasados, contido só pela penalidade de staleness.
+
+FIIs (FII):
+  Fonte: Fundamentus (fii_resultado.php) + Yahoo. fiiSubType via sectorResolver.
+  Campos: dy, pvp, ffoYield, vacancy, qtdImoveis, capRate, vpCota.
+  LIMITE: sub-tipo Tijolo/Papel é derivado de string de setor; risco de
+    misclassificação (ver achado D).
+
+EXTERIOR — STOCK_US / REIT / ETF-US / OURO:
+  Fonte: Yahoo quoteSummary (FONTE ÚNICA de fundamentos; preço tem fallback
+    Google/Brapi, fundamentos não). DY com cascata dividendYield->yield->trailing.
+  Liquidez: armazenada em VALOR (volume × preço), :262.
+  LIMITE: sem fallback de fundamentos; REIT idealmente exigiria FFO/AFFO, hoje
+    usa DY + D/E como proxy.
+
+ETF-BR (ETF):
+  Fonte: Yahoo (.SA) + Brapi (suplemento de liquidez); DY com cascata
+    Yahoo->Brapi(TTM)->valor curado->0.
+  LIMITE: Yahoo .SA frequentemente retorna volume 0 para ETFs líquidos -> ETF é
+    ISENTO de descarte por liquidez (:1141), mas AINDA sofre penalidades de
+    liquidez no score (ver achado F).
+
+CRYPTO:
+  Fonte: Yahoo (TICKER-USD). Liquidez = quote.volume CRU (:264, syncService:268).
+  VERIFICADO: o Yahoo reporta volume de cripto como notional em USD, então os
+  thresholds (50M/1B) são dimensionalmente consistentes — NÃO há mismatch de unidade.
+  Stablecoins (USDT/USDC/DAI/...) descartadas (:1130).
+
+MACRO (SELIC, IPCA, CDI, NTN-B, Ibov, USD, BTC):
+  Cadeia: BCB -> BrasilAPI -> IBGE -> fallback hardcoded. NTN-B: Tesouro
+  Transparente -> Investidor10 -> 6.00. Flags ratesStale / ratesSources /
+  ratesUpdatedAt. Fallback Selic atual 14,25.
+  LIMITE: as flags existem mas o scoring NÃO as lê (ver achado I).
+
+Resiliência (resilience.js): withRetry + CircuitBreaker (Yahoo/Google/Brapi) para
+  evitar timeouts em cascata.
+
+--------------------------------------------------------------------------------
+2.6  DIAGNÓSTICO — ACHADOS COM EVIDÊNCIA
+--------------------------------------------------------------------------------
+
+Severidade: [ALTA] impacta diretamente a qualidade das recomendações;
+            [MÉDIA] distorção relevante mas contida; [BAIXA] higiene/robustez.
+
+--- A. [ALTA] VIÉS ANTI-QUALIDADE NO DEFENSIVO (crítico para Buy & Hold) -------
+Evidência: calculateIntrinsicValue (:161–196) define fairPrice por Graham
+(√22.5·LPA·VPA) + Bazin (div/6%); o upside daí gera até +15 no DEFENSIVE (:255) e,
+quando negativo, ainda dispara a penalidade "Sobrevalorizado" (:389).
+Problema: Graham penaliza estruturalmente compounders de alto ROE e alto P/VP
+(ex.: WEGE3): preço justo fica baixo -> upside negativo -> a empresa MAIS durável
+leva penalidade, enquanto cíclicas baratas (P/L e P/VP baixos no topo do ciclo)
+ganham upside e sobem. Isso é o oposto da intenção do perfil Defensivo (durar
+décadas). É a distorção mais importante do sistema.
+
+--- B. [ALTA] SNAPSHOT BIAS: O SISTEMA VÊ A FOTO, NÃO O FILME ------------------
+Evidência: ROE, netMargin, payout, dy são valores correntes do Fundamentus. As
+únicas dimensões temporais são SMA200 (momentum) e revenueGrowth (CAGR 5a, :308).
+Problema: não há consistência plurianual de lucro/dividendo, anos ininterruptos de
+pagamento, nem fluxo de caixa livre. No topo do ciclo, ROE alto + P/L baixo fazem
+uma cíclica parecer barganha defensiva. Para B&H, falta a dimensão "track record",
+que é exatamente o que distingue uma boa posição permanente.
+
+--- C. [MÉDIA] DIVIDEND YIELD CONTADO TRÊS VEZES (risco de yield-trap) ---------
+Evidência: DY soma no perfil DEFENSIVE (+22, :244), no VALUATION estrutural (+20,
+:885) e dirige o Bazin -> upside (+15).
+Mitigantes existentes: cap do Bazin em 14% (:168), penalidades de payout (:275).
+Problema: uma empresa com DY 9% em deterioração ainda empilha bônus de yield em
+múltiplos lugares. A sobreponderação favorece pagadores altos sobre pagadores
+sustentáveis.
+
+--- D. [ALTA] BUG: CLASSIFICAÇÃO DE FII DE PAPEL NO GATE DEFENSIVO -------------
+Evidência: isEligibleForDefensive usa `!asset.sector.includes('Papel')` (:110) —
+string crua — enquanto o restante do motor usa resolvePapel(fiiSubType, sector)
+com hints ['papel','recebív'] (:11).
+Problema: um FII de papel rotulado "Recebíveis"/"CRI" (sem a palavra exata "Papel"
+e com qtdImoveis = 0) é tratado como Tijolo e VETADO do Defensivo pela regra
+qtdImoveis < 2. Isso exclui indevidamente FIIs de papel legítimos — justamente
+ativos de renda recorrente que o Defensivo deveria considerar. Bug concreto.
+
+--- E. [MÉDIA] CRIPTO: SCORE DE PERFIL QUASE BINÁRIO E SEM TRAVA DE CONFIANÇA --
+Evidência: scoreCryptoProfiles (:594) atribui base 90/90/90/95 por faixa de
+marketCap e só ajusta por liquidez; volatilidade não entra no score que ordena.
+maxScoreAllowed da cripto é sempre 100 (:777).
+Problema: o BOLD de cripto ordena quase só por faixa de marketCap — muitos ativos
+empatam em 90, decididos apenas pelo desempate estrutural — e cruzam o limiar de
+BUY (>=70) com diferenciação fraca. Sem qualquer trava de confiança/qualidade,
+sobe o risco de falso positivo. (Unidade de liquidez: VERIFICADA como consistente.)
+
+--- F. [MÉDIA] ETF/REIT APOIADOS NOS DADOS MAIS FRACOS -------------------------
+Evidência: scoreEtfProfiles penaliza liq<1M (-10, :637) e o RISK estrutural de ETF
+penaliza liq<1M (-20, :811); ao mesmo tempo, ETF-BR frequentemente chega com
+avgLiquidity = 0 por falha do Yahoo .SA (comentário :1136). ETF é isento de
+DESCARTE por liquidez, mas não das PENALIDADES.
+Problema: ativos perfeitamente líquidos (BOVA11) podem ser penalizados por um
+problema de fonte, não de mérito. REIT/STOCK_US têm fonte única (Yahoo) para
+fundamentos, sem fallback.
+
+--- G. [MÉDIA] DEGRADAÇÃO SILENCIOSA QUANDO FALTA SMA200 -----------------------
+Evidência: a trava anti value-trap (penalidade de tendência) só age `if (m.sma200
+> 0)` (:414). O mesmo padrão aparece em ETF/REIT/Ouro.
+Problema: ativo novo, histórico curto ou falha do timeSeriesWorker -> sem sma200 ->
+a proteção desaparece sem aviso, exatamente onde o Defensivo mais precisa dela.
+Não há flag indicando "proteção não aplicada".
+
+--- H. [BAIXA] CLASSIFICAÇÃO SETORIAL POR SUBSTRING, DUPLICADA E FRÁGIL --------
+Evidência: listas `sector.includes('Banco'|'Gás'|'Saúde'|...)` repetidas em
+:93, :104, :228, :281, :844, :916, em vez de reusar sectorTaxonomy.js
+(getMacroSector / getConcentrationKey já existem e são usadas no draft).
+Problema: 'Gás' casa utilities de gás E E&P de óleo&gás; 'Energia' é ambíguo. Há
+risco de uma cíclica passar pelo gate de "setor seguro" do Defensivo. Além disso,
+as listas podem divergir entre si ao longo do tempo (risco de manutenção).
+
+--- I. [MÉDIA] MACRO STALE NÃO REDUZ CONFIANÇA --------------------------------
+Evidência: existem ratesStale/ratesSources, mas o scoring lê apenas os números de
+SELIC/NTNB (:206, :333, :459, :890).
+Problema: com BCB fora do ar e fallback ativo, TODO o ranking (spread de FII,
+ROE-vs-Selic, earnings-yield vs Tesouro) desloca sem nenhuma redução de confiança
+nem aviso. A observabilidade existe mas não é consumida pela decisão.
+
+--- J. [BAIXA] BACKFILL BRONZE INFLA A "CARTEIRA" -----------------------------
+Evidência: fillTier(30, 'gt', ...) (:106) completa até 10 nomes com score > 30,
+rotulados "Inclusão Tática" e action WAIT.
+Problema: a carteira de 10 pode ter poucos BUY reais; visualmente sugere mais
+convicção do que existe (mitigado pelo selo WAIT, mas o formato "Top 10" é forte).
+
+--- K. [BAIXA] SOBREVALORIZAÇÃO NÃO ALCANÇA GROWTH CARO ------------------------
+Evidência: a penalidade de sobrevalorização exige grahamPrice>0 OU bazinPrice>0
+(:388). Growth sem dividendo e com P/L>=80 não calcula Graham -> fairPrice = price
+-> upside ~0 -> nunca recebe penalidade de sobrepreço; resta só a trava SMA200.
+
+PONTOS BONS (registrados para equilíbrio):
+  - Anti-compressão por bases reduzidas + tiers progressivos (evita empates em 100).
+  - Guarda SMA200 anti value-trap (quando o dado existe).
+  - Teto especulativo para STOCK_US sem lucro (:442).
+  - Confiança de FII restrita a dados aplicáveis (não cobra ROE/margem de FII).
+  - Cadeia macro multi-fonte com observabilidade (ratesSources).
+  - Concentração de FII por segmento fino (não colapsa em 3 macro-setores).
+  - Circuit breakers e retry na coleta.
+
+--------------------------------------------------------------------------------
+2.7  PLANO DE REFINAMENTO POR CLASSE (direção + antes/depois)
+--------------------------------------------------------------------------------
+
+Convenção: "ANTES -> DEPOIS" só onde a evidência no código sustenta o número.
+Onde não há base suficiente, fica DIREÇÃO + critério de calibragem (a definir na
+implementação, com backtest). Nada de número inventado.
+
+===== AÇÕES BRASILEIRAS (e STOCK_US-ação) =====
+DIREÇÃO: realinhar o DEFENSIVE para durabilidade/consistência e reduzir a
+dependência de "desconto contábil" (Graham/Bazin) que pune qualidade.
+  1) Reduzir o peso do upside no DEFENSIVE.
+       ANTES: upside>=30 +15 | >=20 +10 | >=15 +5 | >=10 +3   (:255)
+       DEPOIS (sugerido): +8 | +5 | +3 | +0  (upside deixa de ser pilar do perfil
+       que deveria priorizar permanência).
+  2) Adicionar dimensão de CONSISTÊNCIA (nova) ao DEFENSIVE/MODERATE:
+       DIREÇÃO: bônus por histórico (proxies já existentes: revenueGrowth 5a > 0
+       sustentado; payout 30–85 estável; ROE acima de um piso por vários períodos).
+       Requer série temporal de fundamentos (ver Roadmap) — número a calibrar.
+  3) Substituir o gate de setor por getMacroSector (sectorTaxonomy.js) em vez de
+       substring (achado H). Sem mudança de pontuação; muda a robustez do gate.
+  4) Estender a penalidade de sobrevalorização a growth caro (achado K):
+       DIREÇÃO: quando Graham/Bazin não se aplicam, usar múltiplos relativos
+       (P/L ou EV/EBITDA vs. mediana do setor) como teto. Número a calibrar.
+  5) Atenuar a tripla contagem de DY (achado C): manter DY no perfil, mas reduzir
+       o reforço via Bazin no DEFENSIVE (já coberto pelo item 1, que corta upside).
+
+===== FIIs =====
+  1) CORRIGIR o gate de papel (achado D, [ALTA]):
+       ANTES: `!asset.sector.includes('Papel')` (:110)
+       DEPOIS: `!resolvePapel(asset.fiiSubType, asset.sector)` (reusar :11).
+       Efeito: FIIs de papel "Recebíveis/CRI" deixam de ser vetados por qtdImoveis.
+  2) Reforço anti yield-trap no DEFENSIVE: combinar DY alto + P/VP alto + (Tijolo)
+       vacância como sinal de armadilha, com penalidade dedicada. Número a calibrar.
+
+===== ETFs (BR e US) =====
+  1) Tratar avgLiquidity = 0 como AUSENTE, não como "baixo" (achado F):
+       DIREÇÃO: se a fonte não retornou volume, NÃO aplicar a penalidade de
+       liquidez (nem no perfil :637, nem no estrutural :811); marcar _missing.
+  2) Onde disponível, priorizar TER/tracking error/AUM reais em vez de só liquidez.
+  3) Manter a separação ETF-BR vs ETF-US já existente (dois drafts).
+
+===== STOCKS (Exterior) =====
+  1) Aplicar os itens de Ações BR (consistência, sobrepreço de growth) ao caminho
+       STOCK_US-ação, que compartilha scoreStockProfiles.
+  2) Fonte secundária de fundamentos US (hoje Yahoo é única) — robustez de dados.
+
+===== REITs =====
+  1) Usar FFO/AFFO quando disponível em vez de só DY + D/E (modelo de renda correto
+       para REIT). Requer campo de dado novo — DIREÇÃO, sem número agora.
+  2) Fonte secundária de fundamentos (mesma lacuna do STOCK_US).
+
+===== CRIPTO =====
+  1) Dar VARIÂNCIA real ao score de perfil (achado E):
+       DIREÇÃO: incorporar volatilidade e desvio de SMA200 ao score que ordena
+       (hoje só no estrutural). Reduz empates em 90.
+  2) Reintroduzir uma trava de qualidade/confiança no BOLD (hoje cap sempre 100):
+       DIREÇÃO: cap brando para small caps de baixa liquidez/alta volatilidade.
+
+===== TRANSVERSAL =====
+  - Descontar confiança quando ratesStale = true (achado I): penalidade leve de
+    confiança e/ou aviso no relatório.
+  - Flag/penalidade quando sma200 ausente (achado G): registrar "proteção de
+    tendência não aplicada" no auditLog.
+  - Unificar classificação setorial em sectorTaxonomy.js (achado H).
+  - Revisar backfill BRONZE (achado J): ou não completar 10 à força, ou separar
+    visualmente "carteira" (BUY) de "observação" (WAIT).
+
+--------------------------------------------------------------------------------
+2.8  REVISÃO DOS 3 PERFIS vs. INTENÇÃO DECLARADA
+--------------------------------------------------------------------------------
+
+DEFENSIVO  (intenção: segurança, consistência, qualidade, sobrevivência, B&H)
+  Hoje: gate sólido (mktCap, beta, payout, liquidez) + bônus de DY/ROE/upside.
+  Desvio: o upside Graham/Bazin e a penalidade de sobrepreço punem qualidade
+  durável (A); ausência de track record (B); DY sobreponderado (C).
+  Conclusão: o gate está coerente, mas a PONTUAÇÃO interna desvia da intenção.
+  Realinhamento: itens 1–5 de "Ações BR".
+
+MODERADO  (intenção: equilíbrio crescimento/qualidade/risco controlado)
+  Hoje: base exige mktCap>2B; combina crescimento, ROE, upside, freios de margem e
+  ROE-vs-Selic. É o perfil mais coerente com sua intenção.
+  Desvio menor: mid caps de qualidade (1–2B) caem para base 25; herda o viés de
+  upside. Realinhamento: revisar o piso de 2B e aplicar os itens de consistência.
+
+ARROJADO  (intenção: crescimento, expansão, valorização, mais risco)
+  Hoje: PEG, hyper-growth, upside, com teto especulativo p/ STOCK_US sem lucro.
+  Coerente em ações. Em cripto, porém, é grosseiro (E) e sem freio de confiança.
+  Realinhamento: itens de Cripto.
+
+--------------------------------------------------------------------------------
+2.9  ESTRATÉGIAS DE VALIDAÇÃO / COMO EVITAR FALSOS POSITIVOS
+--------------------------------------------------------------------------------
+
+  - Rastreabilidade: toda conclusão deste documento referencia file:line ou regra
+    documentada. Hipóteses estão marcadas "A CONFIRMAR".
+  - Segunda verificação independente: os achados A, C, D, E, G, K foram lidos
+    diretamente em scoringEngine.js / portfolioEngine.js, não apenas em resumo.
+  - Antes de aplicar QUALQUER mudança de peso:
+      (a) Usar portfolioEngine.performCompetitiveDraft com options.trace (já
+          implementado, :24) para auditar por que cada ativo entrou/saiu.
+      (b) Rodar ranking ANTES e DEPOIS em dev e comparar o diff de posições; medir
+          quantos BUY mudaram e em quais perfis.
+      (c) Checar casos-âncora conhecidos: um compounder de qualidade (deve subir no
+          Defensivo após item A1/A2); uma cíclica barata no topo (não deve liderar
+          o Defensivo); um FII de papel "Recebíveis" (deve passar a ser elegível
+          após o item D).
+  - Evitar correlação enganosa: separar SEMPRE "ativo penalizado por mérito" de
+    "ativo penalizado por dado ausente/ruim" (achados F e G).
+  - Macro: antes de confiar num ranking, conferir ratesStale/ratesSources.
+
+--------------------------------------------------------------------------------
+2.10 ROADMAP DE IMPLEMENTAÇÃO PRIORIZADO
+--------------------------------------------------------------------------------
+
+FASE 1 — Correções de baixo risco e alto valor (sem nova fonte de dado):
+  - D: corrigir gate de papel de FII (1 linha; risco baixo; corrige exclusão real).
+  - H: unificar gate setorial via getMacroSector (refactor sem mudar pontuação).
+  - F: tratar avgLiquidity=0 como ausente em ETF (remove distorção de fonte).
+  - I: descontar confiança / avisar quando ratesStale.
+  - G: registrar no auditLog quando sma200 ausente.
+  Validação: trace + diff de ranking antes/depois.
+
+FASE 2 — Reequilíbrio do Defensivo (mudança de pesos; risco médio):
+  - A1: reduzir peso do upside no DEFENSIVE.
+  - C: atenuar tripla contagem de DY (consequência de A1).
+  - K: estender penalidade de sobrepreço a growth caro (múltiplos relativos).
+  - E: granularidade + trava no BOLD de cripto.
+  Validação: casos-âncora + backtest de estabilidade do ranking.
+
+FASE 3 — Novas dimensões (requer série temporal de fundamentos; risco maior):
+  - B/A2: consistência de lucro/dividendo (track record) p/ DEFENSIVE/MODERATE.
+  - REIT: FFO/AFFO. STOCK_US/REIT: fonte secundária de fundamentos.
+  Pré-requisito: persistir histórico de fundamentos (hoje só preço tem histórico).
+
+OBSERVAÇÃO: estas fases são um plano. Nenhuma alteração foi feita nesta entrega.
+A FASE 1 é a candidata natural a um primeiro PR, por ser de baixo risco.
+
+--------------------------------------------------------------------------------
+2.11 APÊNDICE
+--------------------------------------------------------------------------------
+
+CONSTANTES HARDCODED (exigem deploy):
+  BUY_THRESHOLD 70; Graham 22.5; Bazin 6%; cap fairPrice 2.5×; cap Bazin DY 14%;
+  tiers de draft 55/40/30; alvo 10/perfil; tetos especulativos US 82/72/55;
+  listas de "setor seguro" (substring).
+
+TUNÁVEIS (configService.js, admin, sem deploy):
+  maxCryptoPerProfile (3), marketCacheMinutes (20), defaultSelicFallback (14,25).
+
+GLOSSÁRIO RÁPIDO:
+  Graham/Bazin = fórmulas clássicas de "preço justo" (uma por ativos, outra por
+    dividendos). | upside = quanto o preço justo está acima do preço atual.
+  SMA200 = média do preço dos últimos 200 dias (tendência de longo prazo).
+  spread vs NTN-B = quanto o yield do ativo supera o título público IPCA+.
+  PEG = P/L dividido pelo crescimento (barato vs. quanto cresce).
+  confidence cap = teto de nota imposto quando faltam dados.
+  draft = processo de montar a carteira escolhendo os melhores por perfil.
+  composite estrutural = média de quality+valuation+risk, usada como desempate.
+
+ARQUIVOS-CHAVE:
+  server/services/engines/scoringEngine.js     (scores, gates, confiança)
+  server/services/engines/portfolioEngine.js   (draft, concentração)
+  server/services/aiResearchService.js          (orquestração)
+  server/services/marketDataService.js          (cotações, cache, liquidez)
+  server/services/fundamentusService.js         (scraping BR)
+  server/services/macroDataService.js           (SELIC/IPCA/NTN-B, fallbacks)
+  server/config/sectorTaxonomy.js               (macro-setor, segmento, concentração)
+  server/config/financialConstants.js           (BUY_THRESHOLD, fallbacks)
+  server/config/subscription.js                 (planos: GUEST<ESSENTIAL<PRO<ELITE<BLACK)
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

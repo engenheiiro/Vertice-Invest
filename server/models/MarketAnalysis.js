@@ -23,7 +23,7 @@ const RankingItemSchema = new mongoose.Schema({
   auditLog: [{
     factor: String,
     points: Number,
-    type: { type: String, enum: ['base', 'bonus', 'penalty'] },
+    type: { type: String, enum: ['base', 'bonus', 'penalty', 'info'] },
     category: String
   }],
   bullThesis: [String], 

@@ -15,13 +15,31 @@ const resolvePapel = (fiiSubType, sector) => {
     return PAPEL_SECTOR_HINTS.some(h => s.includes(h));
 };
 
+// (H) Classificação setorial centralizada — antes havia ~5 cópias divergentes de
+// "é setor financeiro?" espalhadas (algumas com Holding, outras com Financials/Insurance).
+// FIN_CORE é o núcleo idêntico a TODOS os sites; cada chamada declara seus extras de forma
+// explícita, então a divergência legada fica visível e editável num só lugar — SEM mudar
+// pontuação (cada site reproduz exatamente o conjunto de keywords que já usava).
+const FIN_CORE = ['Banco', 'Segur', 'Financeiro'];
+const isFinancialSector = (sector, extra = []) => {
+    if (!sector) return false;
+    return [...FIN_CORE, ...extra].some(k => sector.includes(k));
+};
+
+// (H) Setores considerados "seguros" para o gate Defensivo (BR). Mantido como lista única
+// de substrings (NÃO migrado para getMacroSector: Telecom→TECNOLOGIA / Alimentos→CONSUMO
+// arrastariam setores não-defensivos inteiros para "seguro", mudando a semântica).
+const DEFENSIVE_SAFE_SECTORS_BR = ['Banco', 'Segur', 'Elétric', 'Eletric', 'Saneamento', 'Água', 'Telecom', 'Energia', 'Transmissão', 'Financeiro', 'Alimentos', 'Saúde', 'Gás', 'Holding', 'Bebidas'];
+// Setores defensivos do Exterior (GICS, em inglês) para o gate Defensivo de STOCK_US.
+const DEFENSIVE_SAFE_SECTORS_US = ['Consumer Staples', 'Utilities', 'Healthcare', 'Financials'];
+
 // Sub-tipo efetivo de um ativo do Exterior (STOCK_US). Fora do Exterior → null.
 // Ausente cai em STOCK (mesmo balde padrão da classificação).
 const usSubOf = (asset) => (asset && asset.type === 'STOCK_US') ? (asset.usSubType || 'STOCK') : null;
 // Exterior que NÃO é ação individual (ETF/REIT/Ouro): não tem fundamentos de empresa.
 const isUsNonStock = (sub) => sub === 'ETF' || sub === 'REIT' || sub === 'GOLD';
 
-const calculateConfidenceScore = (m, type, usSubType = null) => {
+const calculateConfidenceScore = (m, type, usSubType = null, ratesStale = false) => {
     let confidence = 100;
     const audit = [];
     const isFII = type === 'FII';
@@ -54,6 +72,16 @@ const calculateConfidenceScore = (m, type, usSubType = null) => {
     if (m.avgLiquidity < 1000000) {
         confidence -= 30;
         audit.push({ factor: 'Liquidez Abaixo do Ideal (<1M/dia)', points: -30, type: 'penalty', category: 'Confiança' });
+    }
+
+    // (I) Macro defasado: quando a cadeia de taxas (BCB→BrasilAPI→IBGE) caiu e o sistema
+    // opera com SELIC/NTN-B de fallback, os bônus dependentes de juros (spread de FII,
+    // ROE-vs-Selic, earnings-yield) são calculados sobre uma taxa possivelmente incorreta.
+    // Desconta confiança e avisa — só para BR (STOCK/FII), que usam essas taxas. É uniforme,
+    // então preserva a ordenação dentro da classe; mexe apenas no limiar BUY/WAIT marginal.
+    if (ratesStale && (type === 'STOCK' || type === 'FII')) {
+        confidence -= 10;
+        audit.push({ factor: 'Indicadores Macro Defasados (taxas em fallback)', points: -10, type: 'penalty', category: 'Confiança' });
     }
 
     // Penalidade de staleness: dados desatualizados reduzem a confiança da análise
@@ -90,9 +118,8 @@ const isEligibleForDefensive = (asset, context) => {
         // O scoring já penaliza -15 pts para beta ≥1.5, mas o gate evita que ativos com
         // muitos bônus de DY/ROE compensem essa fraqueza estrutural e entrem no DEFENSIVE.
         if (m.beta >= 1.5) return false;
-        const safeSectorsKeywords = ['Banco', 'Segur', 'Elétric', 'Eletric', 'Saneamento', 'Água', 'Telecom', 'Energia', 'Transmissão', 'Financeiro', 'Alimentos', 'Saúde', 'Gás', 'Holding', 'Bebidas'];
         const sector = asset.sector || '';
-        const isSafeSector = safeSectorsKeywords.some(keyword => sector.includes(keyword));
+        const isSafeSector = DEFENSIVE_SAFE_SECTORS_BR.some(keyword => sector.includes(keyword));
         if (!isSafeSector) {
             if (m.dy < 6.0 || m.pl > 10) return false;
         }
@@ -101,22 +128,25 @@ const isEligibleForDefensive = (asset, context) => {
         if (!m._missing?.netMargin && m.netMargin < 3) return false;
         // Payout insustentável (>200%) é incompatível com perfil defensivo — dividendo vem do capital.
         if (!m._missing?.payout && m.payout > 200) return false;
-        const isFinancial = sector.includes('Banco') || sector.includes('Segur') || sector.includes('Financeiro');
+        const isFinancial = isFinancialSector(sector);
         if (m.debtToEquity > 4.0 && !isFinancial) return false;
     } else if (asset.type === 'FII') {
         if (m.marketCap < 500000000) return false; 
         if (m.dy > 18.0) return false; 
         if (m.vacancy > 12) return false; // Reduzido de 15 para 12 para ser mais defensivo
-        if (!asset.sector.includes('Papel') && m.qtdImoveis < 2) return false; // Mono-ativos são vetados do perfil Defensivo
+        // FII de Papel não tem imóveis (qtdImoveis=0): a guarda de mono-ativo só vale para tijolo.
+        // Usa resolvePapel (fiiSubType explícito OU hints 'papel'/'recebív') em vez de substring crua
+        // 'Papel' — senão um FII de papel rotulado "Recebíveis"/"CRI" seria vetado indevidamente.
+        const isPapelFII = resolvePapel(asset.fiiSubType, asset.sector);
+        if (!isPapelFII && m.qtdImoveis < 2) return false; // Mono-ativos de tijolo são vetados do perfil Defensivo
         if (m.avgLiquidity < 1000000) return false; 
     } else if (asset.type === 'STOCK_US') {
         // US stocks: exige market cap mínimo de $10B USD e setor defensivo (Consumer Staples, Utilities, Healthcare, Financials)
         if (m.marketCap < 10_000_000_000) return false;
         if (m.beta >= 1.8) return false;
         if (!m._missing?.roe && m.roe < 5) return false;
-        const usDefensiveSectors = ['Consumer Staples', 'Utilities', 'Healthcare', 'Financials'];
         const sector = asset.sector || '';
-        const isSafeUSSector = usDefensiveSectors.some(s => sector.includes(s));
+        const isSafeUSSector = DEFENSIVE_SAFE_SECTORS_US.some(s => sector.includes(s));
         if (!isSafeUSSector) {
             // Fora dos setores defensivos: exige DY razoável ou P/E moderado
             if (m.dy < 1.5 && (m.pl === 0 || m.pl > 30)) return false;
@@ -225,8 +255,8 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
     {
         // Setor financeiro pode apresentar crescimento de receita artificialmente alto por
         // base-year ou reestruturações. Aplica teto de 30% para evitar PEG/Hyper Growth indevidos.
-        const isFinancialSector = asset.sector?.includes('Banco') || asset.sector?.includes('Segur') || asset.sector?.includes('Financeiro') || asset.sector?.includes('Holding') || asset.sector?.includes('Financials') || asset.sector?.includes('Financial');
-        const effectiveRevenueGrowth = (isFinancialSector && m.revenueGrowth > 30) ? 0 : m.revenueGrowth;
+        const isFinancialSec = isFinancialSector(asset.sector, ['Holding', 'Financials', 'Financial']);
+        const effectiveRevenueGrowth = (isFinancialSec && m.revenueGrowth > 30) ? 0 : m.revenueGrowth;
 
         // ── DEFENSIVO ────────────────────────────────────────────────────────────
         // Base reduzida 60→40: bônus progressivos diferenciam ações medianas de elite.
@@ -278,7 +308,7 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
 
             // Alavancagem: empresa com dívida crítica não é defensiva, mesmo com bons dividendos.
             // Reutiliza o mesmo cálculo derivado usado no structural Risk score.
-            const isFinancialSectorForLev = asset.sector?.includes('Banco') || asset.sector?.includes('Segur') || asset.sector?.includes('Financeiro') || asset.sector?.includes('Financials') || asset.sector?.includes('Financial');
+            const isFinancialSectorForLev = isFinancialSector(asset.sector, ['Financials', 'Financial']);
             if (!isFinancialSectorForLev) {
                 const ev = (m.marketCap || 0) + (m.netDebt || 0);
                 if (m.evEbitda > 0 && ev > 0) {
@@ -323,7 +353,7 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
             else if (upside > 0.10) { modScore += 5; audit.MODERATE.push({ factor: 'Upside Positivo (>10%)', points: 5, type: 'bonus' }); }
 
             // Bancos e holdings: margem contábil incomparável — não penalizar
-            const hasAnomalousMargin = m.netMargin > 100 || (isFinancialSector && m.netMargin === 0);
+            const hasAnomalousMargin = m.netMargin > 100 || (isFinancialSec && m.netMargin === 0);
             if (!hasAnomalousMargin && !m._missing?.netMargin && m.netMargin < 5) {
                 modScore -= 15;
                 audit.MODERATE.push({ factor: 'Margem Líquida Baixa (<5%)', points: -15, type: 'penalty' });
@@ -331,7 +361,7 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
 
             // ROE < Selic com buffer de 0.5% para evitar penalizar casos borderline
             const selic = MACRO.SELIC || 14.75;
-            if (!isFinancialSector && !m._missing?.roe && m.roe > 0 && m.roe < (selic - 0.5)) {
+            if (!isFinancialSec && !m._missing?.roe && m.roe > 0 && m.roe < (selic - 0.5)) {
                 const roePenalty = m.roe < selic / 2 ? 20 : 10;
                 modScore -= roePenalty;
                 audit.MODERATE.push({ factor: `ROE Abaixo da Selic (${m.roe.toFixed(1)}% < ${selic.toFixed(1)}%)`, points: -roePenalty, type: 'penalty' });
@@ -427,6 +457,14 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
                 audit.MODERATE.push({ factor: `Tendência de Baixa (preço ${pctBelow}% abaixo da SMA200)`, points: -trendPenalty, type: 'penalty' });
                 audit.BOLD.push({ factor: `Tendência de Baixa (preço ${pctBelow}% abaixo da SMA200)`, points: -boldTrend, type: 'penalty' });
             }
+        } else {
+            // (G) SMA200 ausente (ativo novo, histórico curto ou falha do worker de séries):
+            // a trava anti-value-trap não pôde agir. Registra para não degradar em silêncio —
+            // exatamente onde o Defensivo mais depende dela.
+            const note = { factor: 'Tendência (SMA200) indisponível — guarda de momentum inativa', points: 0, type: 'info' };
+            audit.DEFENSIVE.push({ ...note });
+            audit.MODERATE.push({ ...note });
+            audit.BOLD.push({ ...note });
         }
 
     }
@@ -634,7 +672,10 @@ const scoreEtfProfiles = (asset, audit) => {
 
     if (m.avgLiquidity > 50000000) { defScore += 12; modScore += 10; boldScore += 6; audit.DEFENSIVE.push({ factor: 'Liquidez/AUM Alta (>50M)', points: 12, type: 'bonus' }); }
     else if (m.avgLiquidity > 5000000) { defScore += 6; modScore += 5; audit.DEFENSIVE.push({ factor: 'Liquidez Boa (>5M)', points: 6, type: 'bonus' }); }
-    else if (m.avgLiquidity < 1000000) { defScore -= 10; modScore -= 8; boldScore -= 6; audit.DEFENSIVE.push({ factor: 'Liquidez Baixa (<1M)', points: -10, type: 'penalty' }); }
+    // avgLiquidity=0 em ETF-BR é tipicamente falha de fonte (Yahoo .SA), não baixa liquidez real.
+    // Só penaliza quando o dado está PRESENTE (>0) e baixo; ausente (0) não desconta.
+    else if (m.avgLiquidity > 0 && m.avgLiquidity < 1000000) { defScore -= 10; modScore -= 8; boldScore -= 6; audit.DEFENSIVE.push({ factor: 'Liquidez Baixa (<1M)', points: -10, type: 'penalty' }); }
+    else if (m.avgLiquidity === 0) { audit.DEFENSIVE.push({ factor: 'Liquidez/AUM não reportada pela fonte (sem penalidade)', points: 0, type: 'info' }); }
 
     if (m.dy >= 3) { defScore += 12; modScore += 8; audit.DEFENSIVE.push({ factor: `ETF de Renda (DY ${m.dy.toFixed(1)}%)`, points: 12, type: 'bonus' }); }
     else if (m.dy >= 1.5) { defScore += 6; modScore += 4; audit.DEFENSIVE.push({ factor: `Yield Moderado (${m.dy.toFixed(1)}%)`, points: 6, type: 'bonus' }); }
@@ -720,7 +761,8 @@ const calculateProfileScores = (asset, valuationData, context) => {
 
     let defScore = 0, modScore = 0, boldScore = 0;
     const audit = { DEFENSIVE: [], MODERATE: [], BOLD: [], CONFIDENCE: [] };
-    const { confidence, audit: confAudit } = calculateConfidenceScore(m, type, asset.usSubType);
+    const ratesStale = !!context?.MACRO?.RATES_STALE;
+    const { confidence, audit: confAudit } = calculateConfidenceScore(m, type, asset.usSubType, ratesStale);
     audit.CONFIDENCE = confAudit;
 
     if (isPlainStock) {
@@ -808,7 +850,8 @@ const calculateStructuralScores = (asset, context) => {
         if (m.sma200 > 0) { const dev = (asset.price - m.sma200) / m.sma200; if (dev < -0.1) v += 20; else if (dev < 0) v += 10; else if (dev > 0.3) v -= 15; }
         if (m.dy >= 3) v += 10;
         valuation = clamp(v); audit.VALUATION.push({ factor: 'ETF: posição vs média e yield', points: v, type: 'bonus' });
-        let r = 55; if (m.avgLiquidity > 20000000) r += 20; else if (m.avgLiquidity < 1000000) r -= 20;
+        // avgLiquidity=0 = não reportada pela fonte (não baixa liquidez real) → sem penalidade.
+        let r = 55; if (m.avgLiquidity > 20000000) r += 20; else if (m.avgLiquidity > 0 && m.avgLiquidity < 1000000) r -= 20;
         if (m.volatility > 0) { if (m.volatility < 18) r += 15; else if (m.volatility > 35) r -= 20; }
         risk = clamp(r); audit.RISK.push({ factor: 'ETF: liquidez e volatilidade', points: r, type: 'base' });
         return { quality, valuation, risk, audit };
@@ -841,7 +884,7 @@ const calculateStructuralScores = (asset, context) => {
         
         // Holdings (>100%) e bancos (0%) têm margens contabilmente incomparáveis com empresas industriais.
         // Tratar como dado ausente evita bônus indevido para ITSA4 (200%) e penalidade falsa para BBDC4 (0%).
-        const isFinancialForQuality = asset.sector?.includes('Banco') || asset.sector?.includes('Segur') || asset.sector?.includes('Financeiro') || asset.sector?.includes('Holding');
+        const isFinancialForQuality = isFinancialSector(asset.sector, ['Holding']);
         const netMarginForScoring = (m.netMargin > 100 || (isFinancialForQuality && m.netMargin === 0)) ? null : m.netMargin;
         if (netMarginForScoring !== null) {
             if (netMarginForScoring > 10) { qScore += 25; audit.QUALITY.push({ factor: 'Margem Líquida Robusta (>10%)', points: 25, type: 'bonus' }); }
@@ -913,7 +956,7 @@ const calculateStructuralScores = (asset, context) => {
         else if (m.avgLiquidity < 100000) { rScore -= 20; audit.RISK.push({ factor: 'Liquidez Crítica (<100k)', points: -20, type: 'penalty' }); }
 
         // --- REFINAMENTO: Penalidade por dívida alta (DL/EBITDA) ---
-        const isFinancial = asset.sector?.includes('Banco') || asset.sector?.includes('Segur') || asset.sector?.includes('Financeiro') || asset.sector?.includes('Financial') || asset.sector?.includes('Insurance') || asset.sector?.includes('Holding');
+        const isFinancial = isFinancialSector(asset.sector, ['Financial', 'Insurance', 'Holding']);
         if (!isFinancial) {
             // Cálculo de EBITDA Derivado: EV = MarketCap + NetDebt. EV/EBITDA = EV / EBITDA => EBITDA = EV / (EV/EBITDA)
             const ev = (m.marketCap || 0) + (m.netDebt || 0);

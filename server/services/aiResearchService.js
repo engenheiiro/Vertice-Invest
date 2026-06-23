@@ -210,9 +210,14 @@ export const aiResearchService = {
                     SELIC: macroConfig.selic,
                     IPCA: macroConfig.ipca,
                     RISK_FREE: macroConfig.riskFree,
-                    NTNB_LONG: macroConfig.ntnbLong
+                    NTNB_LONG: macroConfig.ntnbLong,
+                    // (I) Observabilidade macro → confiança: taxas em fallback descontam confiança
+                    // de ativos BR sensíveis a juros (ver calculateConfidenceScore).
+                    RATES_STALE: !!macroConfig.ratesStale
                 } : {
-                    SELIC: DEFAULT_SELIC_FALLBACK, IPCA: 4.50, RISK_FREE: DEFAULT_SELIC_FALLBACK, NTNB_LONG: 6.30
+                    // Sem MACRO_INDICATORS no banco: opera 100% em fallback → stale por definição.
+                    SELIC: DEFAULT_SELIC_FALLBACK, IPCA: 4.50, RISK_FREE: DEFAULT_SELIC_FALLBACK, NTNB_LONG: 6.30,
+                    RATES_STALE: true
                 }
             };
 
