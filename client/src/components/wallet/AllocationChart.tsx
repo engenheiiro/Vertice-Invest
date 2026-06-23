@@ -7,7 +7,7 @@ import { Button } from '../ui/Button';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatCompact as fmtCompact } from '../../utils/format';
 import { useToast } from '../../contexts/ToastContext';
-import { computeSubAllocationReal, hasSubTargets } from '../../utils/allocation';
+import { computeSubAllocationReal, hasSubTargets, resolveAllocClass } from '../../utils/allocation';
 
 // Cores
 const COLORS: Record<AssetType, string> = {
@@ -37,30 +37,39 @@ const LABELS: Record<AssetType, string> = {
 const ORDERED_TYPES: AssetType[] = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
 
 // Classes que admitem ramificação (sub-metas), com suas sub-chaves e rótulos.
-const RAMIFIABLE: AssetType[] = ['FIXED_INCOME', 'STOCK_US'];
+const RAMIFIABLE: AssetType[] = ['FIXED_INCOME', 'STOCK_US', 'ETF'];
 const SUB_KEYS: Record<string, string[]> = {
     FIXED_INCOME: ['IPCA', 'POS', 'PRE'],
     STOCK_US: ['STOCK', 'REIT', 'DOLLAR'],
+    ETF: ['BR', 'US'],
 };
 const SUB_LABELS: Record<string, Record<string, string>> = {
     FIXED_INCOME: { IPCA: 'IPCA', POS: 'Pós-fixado', PRE: 'Prefixado' },
     STOCK_US: { STOCK: 'Stocks', REIT: 'REITs', DOLLAR: 'Dólar' },
+    ETF: { BR: 'Nacional', US: 'Internacional' },
 };
 
 // Clona profundo a estrutura de sub-metas (evita mutação do estado do contexto).
 const cloneSub = (s: SubAllocationMap): SubAllocationMap => ({
     FIXED_INCOME: { ...DEFAULT_SUB_ALLOCATION.FIXED_INCOME, ...s.FIXED_INCOME },
     STOCK_US: { ...DEFAULT_SUB_ALLOCATION.STOCK_US, ...s.STOCK_US },
+    ETF: { ...DEFAULT_SUB_ALLOCATION.ETF, ...s.ETF },
 });
 
-export const AllocationChart = React.memo(() => {
+interface AllocationChartProps {
+    /** View inicial do toggle Atual/Ideal. 'IDEAL' é útil em carteira vazia,
+     * quando o usuário quer definir a alocação-alvo antes de cadastrar ativos. */
+    initialViewMode?: 'CURRENT' | 'IDEAL';
+}
+
+export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: AllocationChartProps) => {
     const { assets, kpis, targetAllocation, targetReserve, targetSubAllocation, updateTargets } = useWallet();
     const { addToast } = useToast();
     const { theme } = useTheme();
     const chartTooltipStyle = theme === 'light'
         ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '10px', color: '#0f172a' }
         : { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '10px' };
-    const [viewMode, setViewMode] = useState<'CURRENT' | 'IDEAL'>('CURRENT');
+    const [viewMode, setViewMode] = useState<'CURRENT' | 'IDEAL'>(initialViewMode);
     const [isEditing, setIsEditing] = useState(false);
 
     const [tempTargets, setTempTargets] = useState<AllocationMap>(targetAllocation);
@@ -71,10 +80,13 @@ export const AllocationChart = React.memo(() => {
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
     // 1. Calcular Valores Atuais
+    // Bucketiza pela classe EFETIVA: ETFs internacionais (STOCK_US + usSubType ETF/GOLD)
+    // contam na classe ETF, não em Exterior (ver resolveAllocClass).
     const currentValues = useMemo(() => {
         const vals: Record<string, number> = { STOCK: 0, FII: 0, STOCK_US: 0, ETF: 0, CRYPTO: 0, FIXED_INCOME: 0, OURO: 0, CASH: 0 };
         assets.forEach(asset => {
-            vals[asset.type] = (vals[asset.type] || 0) + asset.totalValue;
+            const cls = resolveAllocClass(asset);
+            vals[cls] = (vals[cls] || 0) + asset.totalValue;
         });
         return vals;
     }, [assets]);

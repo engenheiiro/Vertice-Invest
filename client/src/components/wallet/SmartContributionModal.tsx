@@ -4,9 +4,9 @@ import { createPortal } from 'react-dom';
 import { X, Calculator, Target, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { useWallet, AssetType, FixedIncomeSubKey, UsSubKey } from '../../contexts/WalletContext';
+import { useWallet, AssetType, FixedIncomeSubKey, UsSubKey, EtfSubKey } from '../../contexts/WalletContext';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
-import { computeSubAllocationReal, splitContributionBySubMeta, hasSubTargets, SUB_LABELS } from '../../utils/allocation';
+import { computeSubAllocationReal, splitContributionBySubMeta, hasSubTargets, resolveAllocClass, SUB_LABELS } from '../../utils/allocation';
 
 interface SmartContributionModalProps {
     isOpen: boolean;
@@ -29,6 +29,7 @@ const LABELS: Record<string, string> = {
 
 const FI_KEYS: FixedIncomeSubKey[] = ['IPCA', 'POS', 'PRE'];
 const US_KEYS: UsSubKey[] = ['STOCK', 'REIT', 'DOLLAR'];
+const ETF_KEYS: EtfSubKey[] = ['BR', 'US'];
 
 export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ isOpen, onClose }) => {
     const { assets, targetAllocation, targetReserve, targetSubAllocation, usdRate } = useWallet();
@@ -61,7 +62,9 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
         const currentValues: Record<string, number> = { STOCK: 0, FII: 0, STOCK_US: 0, ETF: 0, CRYPTO: 0, FIXED_INCOME: 0, OURO: 0, CASH: 0 };
         assets.forEach(asset => {
             const val = asset.quantity * asset.currentPrice * (asset.currency === 'USD' ? (usdRate || 5.75) : 1);
-            currentValues[asset.type] = (currentValues[asset.type] || 0) + val;
+            // Classe efetiva: ETFs internacionais contam na classe ETF (não em Exterior).
+            const cls = resolveAllocClass(asset);
+            currentValues[cls] = (currentValues[cls] || 0) + val;
         });
 
         const currentReserve = currentValues['CASH'];
@@ -118,6 +121,10 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
             if (s.type === 'STOCK_US' && hasSubTargets(targetSubAllocation.STOCK_US)) {
                 const split = splitContributionBySubMeta(s.amount, subReal.STOCK_US.value, targetSubAllocation.STOCK_US, US_KEYS);
                 return US_KEYS.map(k => ({ sub: k, label: SUB_LABELS.STOCK_US[k], amount: split[k] })).filter(c => c.amount > 0.005);
+            }
+            if (s.type === 'ETF' && hasSubTargets(targetSubAllocation.ETF)) {
+                const split = splitContributionBySubMeta(s.amount, subReal.ETF.value, targetSubAllocation.ETF, ETF_KEYS);
+                return ETF_KEYS.map(k => ({ sub: k, label: SUB_LABELS.ETF[k], amount: split[k] })).filter(c => c.amount > 0.005);
             }
             return undefined;
         };

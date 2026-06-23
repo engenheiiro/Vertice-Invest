@@ -89,16 +89,24 @@ const UserSchema = new mongoose.Schema({
       STOCK_US: {
         type: new mongoose.Schema({
           STOCK: { type: Number, default: 0 },
-          ETF: { type: Number, default: 0 },
           REIT: { type: Number, default: 0 },
           DOLLAR: { type: Number, default: 0 },
         }, { _id: false }),
-        default: () => ({ STOCK: 0, ETF: 0, REIT: 0, DOLLAR: 0 }),
+        default: () => ({ STOCK: 0, REIT: 0, DOLLAR: 0 }),
+      },
+      // ETF ramifica em Nacional (BR) e Internacional (US, inclui ouro lastreado).
+      ETF: {
+        type: new mongoose.Schema({
+          BR: { type: Number, default: 0 },
+          US: { type: Number, default: 0 },
+        }, { _id: false }),
+        default: () => ({ BR: 0, US: 0 }),
       },
     }, { _id: false }),
     default: () => ({
       FIXED_INCOME: { IPCA: 0, POS: 0, PRE: 0 },
-      STOCK_US: { STOCK: 0, ETF: 0, REIT: 0, DOLLAR: 0 },
+      STOCK_US: { STOCK: 0, REIT: 0, DOLLAR: 0 },
+      ETF: { BR: 0, US: 0 },
     }),
   },
 

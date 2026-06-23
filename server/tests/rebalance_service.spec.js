@@ -189,7 +189,7 @@ describe('buildRebalancePlan', () => {
         expect(plan.sells.some((s) => s.class === 'OURO')).toBe(false);
     });
 
-    it('meta de ETF subalocada gera compra de ETF (candidato do ranking STOCK_US sub-tipo ETF)', () => {
+    it('meta de ETF subalocada gera compra de ETF internacional (sub US convertido p/ BRL)', () => {
         const valuation = {
             totalEquity: 10000,
             usdRate: 5,
@@ -205,7 +205,8 @@ describe('buildRebalancePlan', () => {
             targetAllocation: { STOCK: 50, FII: 40, STOCK_US: 0, ETF: 10, CRYPTO: 0, FIXED_INCOME: 0 },
             idealBuysByClass: {
                 STOCK: [], FII: [], STOCK_US: [], CRYPTO: [],
-                // Candidato de ETF vem do ranking STOCK_US (USD) com sub-tipo ETF.
+                // Candidato de ETF internacional (ranking ETF): type STOCK_US + usSubType ETF
+                // → etfSub 'US' derivado → preço em USD convertido p/ BRL.
                 ETF: [{ ticker: 'VOO', name: 'Vanguard S&P 500', sector: 'ETF', type: 'STOCK_US', usSubType: 'ETF', score: 80, currentPrice: 100, bull: ['Mercado amplo'] }],
             },
             coveredClasses: ['STOCK', 'FII', 'ETF'],

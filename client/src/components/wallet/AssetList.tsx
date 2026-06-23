@@ -8,6 +8,7 @@ import { formatCurrency as fmtCurrency, type Currency } from '../../utils/format
 import { useConfirm } from '../../hooks/useConfirm';
 import AssetLogo from '../common/AssetLogo';
 import { getAssetSubtitle } from '../../utils/assetDisplay';
+import { resolveAllocClass } from '../../utils/allocation';
 
 /** Título exibido na lista: cofrinhos (CASH) mostram o nome; demais, o ticker. */
 const assetTitle = (asset: Asset): string =>
@@ -44,9 +45,12 @@ export const AssetList = () => {
         setCollapsedGroups(prev => ({ ...prev, [type]: !prev[type] }));
     };
 
+    // Agrupa pela classe EFETIVA: ETFs internacionais (STOCK_US + usSubType ETF/GOLD)
+    // listam sob "ETFs", coerente com a Distribuição e o % ideal por grupo.
     const groupedAssets = assets.reduce((acc, asset) => {
-        if (!acc[asset.type]) acc[asset.type] = [];
-        acc[asset.type].push(asset);
+        const cls = resolveAllocClass(asset);
+        if (!acc[cls]) acc[cls] = [];
+        acc[cls].push(asset);
         return acc;
     }, {} as Record<string, Asset[]>);
 

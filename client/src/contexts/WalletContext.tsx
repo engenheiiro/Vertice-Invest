@@ -32,7 +32,8 @@ export interface Asset {
     dayChangePct?: number;
     // Sub-tipos usados pela ramificação da Carteira Ideal (real vs meta):
     fixedIncomeIndex?: 'SELIC' | 'CDI' | 'IPCA' | 'PRE' | null;
-    usSubType?: 'STOCK' | 'REIT' | 'DOLLAR' | null;
+    // ETF/GOLD: holdings de Exterior que são ETFs internacionais (reclassificados na classe ETF).
+    usSubType?: 'STOCK' | 'REIT' | 'DOLLAR' | 'ETF' | 'GOLD' | null;
 }
 
 export interface WalletKPIs {
@@ -64,14 +65,18 @@ export type AllocationMap = Partial<Record<AssetType, number>>;
 export type FixedIncomeSubKey = 'IPCA' | 'POS' | 'PRE';
 // Exterior ramifica em Stocks/REITs/Dólar. ETFs viraram CLASSE própria (AssetType 'ETF').
 export type UsSubKey = 'STOCK' | 'REIT' | 'DOLLAR';
+// ETF ramifica em Nacional (BR) e Internacional (US, inclui ouro lastreado).
+export type EtfSubKey = 'BR' | 'US';
 export interface SubAllocationMap {
     FIXED_INCOME: Record<FixedIncomeSubKey, number>;
     STOCK_US: Record<UsSubKey, number>;
+    ETF: Record<EtfSubKey, number>;
 }
 
 export const DEFAULT_SUB_ALLOCATION: SubAllocationMap = {
     FIXED_INCOME: { IPCA: 0, POS: 0, PRE: 0 },
     STOCK_US: { STOCK: 0, REIT: 0, DOLLAR: 0 },
+    ETF: { BR: 0, US: 0 },
 };
 
 interface WalletContextType {
@@ -146,6 +151,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             setTargetSubAllocation({
                 FIXED_INCOME: { ...DEFAULT_SUB_ALLOCATION.FIXED_INCOME, ...data.targetSubAllocation.FIXED_INCOME },
                 STOCK_US: { ...DEFAULT_SUB_ALLOCATION.STOCK_US, ...data.targetSubAllocation.STOCK_US },
+                ETF: { ...DEFAULT_SUB_ALLOCATION.ETF, ...data.targetSubAllocation.ETF },
             });
         }
     }, [walletQuery.data, isDemoMode]);
