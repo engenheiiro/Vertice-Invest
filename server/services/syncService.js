@@ -11,6 +11,7 @@ import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { resolveSector, deriveFiiSubType } from '../utils/sectorResolver.js';
 import { backfillSectors } from './sectorBackfillService.js';
 import { classifyUsAsset } from '../utils/usClassification.js';
+import { appendSnapshots } from './fundamentalHistoryService.js';
 
 const yahooFinanceLTM = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 const LTM_BATCH_SIZE = 10;
@@ -110,6 +111,8 @@ export const syncService = {
 
             logger.info("ℹ️ [Sync] Etapa 2: Fundamentos (Scraping)");
             const operations = [];
+            // (Fase 3) Leituras de fundamentos a anexar na série temporal (track record).
+            const snapshotRecords = [];
             const timestamp = new Date();
 
             const stocksMap = await fundamentusService.getStocksMap();
@@ -198,14 +201,27 @@ export const syncService = {
                             $set: updateFields,
                             $setOnInsert: {
                                 name: ticker, // Usa o ticker como nome se não tiver outro
-                                type, 
+                                type,
                                 currency: 'BRL',
-                                isIgnored: false, 
+                                isIgnored: false,
                                 isBlacklisted: false
                             }
                         },
                         upsert: true
                     }
+                });
+
+                // (Fase 3) Coleta a leitura de fundamentos para a série temporal (track record).
+                // payout vem por carry-forward em ltmFields; aqui usamos o dado bruto do scrape.
+                snapshotRecords.push({
+                    ticker,
+                    type,
+                    roe: updateFields.roe,
+                    netMargin: updateFields.netMargin,
+                    payout: Number(data.payout) || 0,
+                    dy: updateFields.dy,
+                    revenueGrowth: updateFields.revenueGrowth,
+                    pl: updateFields.pl,
                 });
             };
 
@@ -285,6 +301,15 @@ export const syncService = {
 
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
+
+                // (Fase 3) Anexa a leitura mensal de fundamentos à série temporal (track record).
+                // Idempotente por mês; falha aqui não pode derrubar o sync.
+                try {
+                    const snap = await appendSnapshots(snapshotRecords, timestamp);
+                    if (snap.appended > 0) logger.info(`🗂️ [Sync] Snapshots de fundamentos atualizados: ${snap.appended}`);
+                } catch (err) {
+                    logger.error(`❌ [Sync] Append de snapshots de fundamentos falhou: ${err.message}`);
+                }
 
                 // Backfill de setores: corrige setores incorretos/ausentes em
                 // TODO o acervo (inclusive ativos fora do scraping). Idempotente.

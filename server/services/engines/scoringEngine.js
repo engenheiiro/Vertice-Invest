@@ -328,6 +328,28 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
                     }
                 }
             }
+
+            // ── (Fase 3 / achado B-A2) CONSISTÊNCIA / TRACK RECORD ───────────────────
+            // Só age quando há série temporal de fundamentos suficiente (m.trackRecord != null);
+            // dormente até a coleta acumular (não há histórico retroativo). Premia CONTINUIDADE
+            // — sustentou rentabilidade e pagou dividendo ao longo de períodos distintos — e não
+            // o instante atual, que já é pontuado acima (evita o double-count que a Fase 2 corrigiu
+            // no DY). Magnitude pequena e CALIBRÁVEL por backtest quando houver profundidade de
+            // série (ANALISE_RANKINGS_VERTICE_2026-06.txt §2.7 Ações BR item 2; §2.10 Fase 3).
+            const tr = m.trackRecord;
+            if (tr) {
+                if (tr.roeConsistency >= 0.8) {
+                    defScore += 4;
+                    audit.DEFENSIVE.push({ factor: `Rentabilidade Consistente (ROE sólido em ${Math.round(tr.roeConsistency * 100)}% dos períodos)`, points: 4, type: 'bonus' });
+                } else if (tr.roeConsistency >= 0.6) {
+                    defScore += 2;
+                    audit.DEFENSIVE.push({ factor: 'Rentabilidade Majoritariamente Consistente (track record)', points: 2, type: 'bonus' });
+                }
+                if (m.dy > 0 && tr.dividendConsistency >= 0.8) {
+                    defScore += 3;
+                    audit.DEFENSIVE.push({ factor: `Pagador Consistente de Dividendos (${Math.round(tr.dividendConsistency * 100)}% dos períodos)`, points: 3, type: 'bonus' });
+                }
+            }
         } else {
             defScore = 30;
             audit.DEFENSIVE.push({ factor: 'Ineligível para Carteira Defensiva', points: 30, type: 'base' });
@@ -376,6 +398,13 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
             if (!m._missing?.payout && m.payout > 100) {
                 modScore -= 10;
                 audit.MODERATE.push({ factor: `Payout Insustentável (${m.payout.toFixed(1)}%)`, points: -10, type: 'penalty' });
+            }
+
+            // (Fase 3 / achado B-A2) Crescimento de receita SUSTENTADO ao longo do tempo
+            // (não só o CAGR corrente). Dormente até haver série; magnitude calibrável.
+            if (m.trackRecord && m.trackRecord.revenuePositive >= 0.8) {
+                modScore += 3;
+                audit.MODERATE.push({ factor: `Crescimento de Receita Sustentado (${Math.round(m.trackRecord.revenuePositive * 100)}% dos períodos)`, points: 3, type: 'bonus' });
             }
         } else {
             modScore = 25;
@@ -574,6 +603,14 @@ const scoreFiiProfiles = (asset, context, audit) => {
             if (!isPapel) {
                 if (m.qtdImoveis > 20) { defScore += 6; audit.DEFENSIVE.push({ factor: 'Alta Diversificação (>20 imóveis)', points: 6, type: 'bonus' }); }
                 else if (m.qtdImoveis > 10) { defScore += 3; audit.DEFENSIVE.push({ factor: 'Boa Diversificação (>10 imóveis)', points: 3, type: 'bonus' }); }
+            }
+
+            // (Fase 3 / achado B-A2) Distribuição CONSISTENTE ao longo do tempo — o sinal
+            // mais relevante para um FII de renda em Buy & Hold. Dormente até haver série
+            // de fundamentos suficiente; magnitude pequena e calibrável.
+            if (m.trackRecord && m.trackRecord.dividendConsistency >= 0.8) {
+                defScore += 4;
+                audit.DEFENSIVE.push({ factor: `Distribuição Consistente (${Math.round(m.trackRecord.dividendConsistency * 100)}% dos períodos)`, points: 4, type: 'bonus' });
             }
         } else {
             defScore = 25;

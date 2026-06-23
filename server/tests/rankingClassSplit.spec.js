@@ -19,6 +19,10 @@ vi.mock('../models/MarketAsset.js', () => ({
 }));
 vi.mock('../models/AssetHistory.js', () => ({ default: { find: vi.fn(), findOne: vi.fn(), create: vi.fn() } }));
 vi.mock('../models/SystemConfig.js', () => ({ default: { findOne: vi.fn() } }));
+// (Fase 3) getMarketData passou a carregar a série de fundamentos via .find().select().lean().
+vi.mock('../models/FundamentalSnapshot.js', () => ({
+  default: { find: vi.fn(() => ({ select: () => ({ lean: () => Promise.resolve([]) }) })) },
+}));
 vi.mock('../config/logger.js', () => ({
   default: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
 }));

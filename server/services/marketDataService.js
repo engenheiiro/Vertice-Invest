@@ -1,10 +1,12 @@
 
 import logger from '../config/logger.js';
 import MarketAsset from '../models/MarketAsset.js';
-import AssetHistory from '../models/AssetHistory.js'; 
+import AssetHistory from '../models/AssetHistory.js';
 import SystemConfig from '../models/SystemConfig.js';
+import FundamentalSnapshot from '../models/FundamentalSnapshot.js';
 import { externalMarketService } from './externalMarketService.js';
 import { reitSegmentPT } from '../utils/reitSegment.js';
+import { summarizeTrackRecord } from '../utils/trackRecord.js';
 // (M9) Janela de cache e fallback de Selic centralizados em financialConstants.
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { getTunablesSync } from './configService.js'; // (I13) tunables editáveis pelo admin
@@ -529,6 +531,19 @@ export const marketDataService = {
                 ...extraFilter
             });
 
+            // (Fase 3) Carrega a série temporal de fundamentos (track record) em um único
+            // find e resume por ticker. Vazio/insuficiente → summarizeTrackRecord = null →
+            // o scoringEngine não aplica bônus (dimensão DORMENTE até a série acumular).
+            let trackByTicker = new Map();
+            try {
+                const snaps = await FundamentalSnapshot
+                    .find({ ticker: { $in: dbAssets.map(a => a.ticker) } })
+                    .select('ticker history').lean();
+                trackByTicker = new Map(snaps.map(s => [s.ticker, summarizeTrackRecord(s.history)]));
+            } catch (e) {
+                logger.warn(`[MarketData] Falha ao carregar track record: ${e.message}`);
+            }
+
             for (const asset of dbAssets) {
                 // Filtro de liquidez removido daqui e centralizado no scoringEngine.js para gerar DiscardLog
 
@@ -608,6 +623,9 @@ export const marketDataService = {
                         _missing,
                         _staleDays,
                         dataCompleteness,
+                        // (Fase 3) Resumo de track record (consistência ao longo do tempo) ou
+                        // null quando não há série suficiente. Consumido pelo scoringEngine.
+                        trackRecord: trackByTicker.get(asset.ticker) || null,
                         structural: {
                             quality: 50,
                             valuation: 50,
