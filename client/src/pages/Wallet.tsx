@@ -155,17 +155,27 @@ export const Wallet = () => {
                     <div id="tour-wallet-content" className={`transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
                         {activeTab === 'OVERVIEW' && (
                             assets.length === 0 && !isLoading ? (
-                                <div className="bg-base border border-slate-800 rounded-2xl animate-fade-in">
-                                    <EmptyState
-                                        icon={<PieChart size={28} />}
-                                        title="Sua carteira está vazia"
-                                        description="Adicione seu primeiro ativo para acompanhar patrimônio, rentabilidade, proventos e alocação em tempo real."
-                                        action={
-                                            <Button onClick={() => setIsAddModalOpen(true)} className="!w-auto px-6 gap-2">
-                                                <Plus size={16} /> Adicionar primeiro ativo
-                                            </Button>
-                                        }
-                                    />
+                                // Carteira vazia: ainda assim exibimos a Distribuição (em modo Ideal)
+                                // para o usuário definir sua alocação-alvo ANTES de cadastrar ativos.
+                                // Mantém a MESMA ordem do layout com ativos (Evolução à esquerda /
+                                // Distribuição à direita): aqui o EmptyState ocupa a coluna larga.
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+                                    <div className="lg:col-span-2 bg-base border border-slate-800 rounded-2xl flex">
+                                        <EmptyState
+                                            className="h-full w-full"
+                                            icon={<PieChart size={28} />}
+                                            title="Sua carteira está vazia"
+                                            description="Defina sua alocação ideal na engrenagem ao lado e adicione seu primeiro ativo para acompanhar patrimônio, rentabilidade e proventos em tempo real."
+                                            action={
+                                                <Button onClick={() => setIsAddModalOpen(true)} className="!w-auto px-6 gap-2">
+                                                    <Plus size={16} /> Adicionar primeiro ativo
+                                                </Button>
+                                            }
+                                        />
+                                    </div>
+                                    <div className="lg:col-span-1">
+                                        <AllocationChart initialViewMode="IDEAL" />
+                                    </div>
                                 </div>
                             ) : (
                                 <>
