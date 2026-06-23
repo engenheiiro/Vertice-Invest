@@ -281,11 +281,16 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
             else if (m.roe >= 15) { defScore += 10; audit.DEFENSIVE.push({ factor: 'ROE Robusto (≥15%)', points: 10, type: 'bonus' }); }
             else if (m.roe >= 12) { defScore += 5; audit.DEFENSIVE.push({ factor: 'ROE Saudável (≥12%)', points: 5, type: 'bonus' }); }
 
-            // Upside tiers
-            if (upside >= 0.30) { defScore += 15; audit.DEFENSIVE.push({ factor: 'Upside Forte (>30%)', points: 15, type: 'bonus' }); }
-            else if (upside >= 0.20) { defScore += 10; audit.DEFENSIVE.push({ factor: 'Upside Moderado (>20%)', points: 10, type: 'bonus' }); }
-            else if (upside >= 0.15) { defScore += 5; audit.DEFENSIVE.push({ factor: 'Upside Positivo (>15%)', points: 5, type: 'bonus' }); }
-            else if (upside >= 0.10) { defScore += 3; audit.DEFENSIVE.push({ factor: 'Upside Leve (>10%)', points: 3, type: 'bonus' }); }
+            // Upside tiers — (Fase 2 / achado A1) peso REDUZIDO no DEFENSIVO.
+            // O upside deriva de Graham/Bazin, que estruturalmente acham "caras" as
+            // compounders de alta qualidade (alto ROE / alto P/VP) e "baratas" cíclicas no
+            // topo do ciclo. Como pilar de um perfil Buy & Hold de décadas isso é
+            // contraproducente: premiava barganha contábil em vez de durabilidade. O bônus
+            // máximo cai de +15 → +8 e o tier marginal (>10%) deixa de pontuar (+3 → +0).
+            // Ver ANALISE_RANKINGS_VERTICE_2026-06.txt §2.6 achado A e §2.7 Ações BR item 1.
+            if (upside >= 0.30) { defScore += 8; audit.DEFENSIVE.push({ factor: 'Upside Forte (>30%)', points: 8, type: 'bonus' }); }
+            else if (upside >= 0.20) { defScore += 5; audit.DEFENSIVE.push({ factor: 'Upside Moderado (>20%)', points: 5, type: 'bonus' }); }
+            else if (upside >= 0.15) { defScore += 3; audit.DEFENSIVE.push({ factor: 'Upside Positivo (>15%)', points: 3, type: 'bonus' }); }
 
             // P/VP penalties: novo tier intermediário
             if (m.pvp > 3.0) { defScore -= 10; audit.DEFENSIVE.push({ factor: 'P/VP Muito Esticado (>3.0)', points: -10, type: 'penalty' }); }
@@ -432,6 +437,26 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
             audit.BOLD.push({ factor: `Sobrevalorizado (preço ${pct}% acima do Preço Justo)`, points: -boldModPenalty, type: 'penalty' });
             audit.MODERATE.push({ factor: `Sobrevalorizado (preço ${pct}% acima do Preço Justo)`, points: -boldModPenalty, type: 'penalty' });
             audit.DEFENSIVE.push({ factor: `Sobrevalorizado (preço ${pct}% acima do Preço Justo)`, points: -defPenalty, type: 'penalty' });
+        }
+
+        // ── (Fase 2 / achado K) SOBREPREÇO DE GROWTH CARO — sem âncora de valor ──────
+        // Quando NÃO há preço justo significativo (sem LPA/VPA positivos para Graham e sem
+        // dividendo para Bazin), o teto de preço sumia: uma ação de P/L extremo passava sem
+        // qualquer penalidade de sobrepreço, restando só a guarda de SMA200 (achado K).
+        // Aqui o múltiplo ABSOLUTO extremo vira penalidade graduada, mutuamente exclusiva
+        // com a sobrevalorização acima (só dispara quando aquela não pôde agir). Direção
+        // espelha a sobrevalorização — Defensivo/Moderado levam cheio; Arrojado tolera
+        // growth. Limiar P/L≥80 é o citado no próprio achado K; só age com P/L presente.
+        if (!hasMeaningfulFairPrice && m.pl > 0 && !m._missing?.pl) {
+            let defK = 0, modK = 0, boldK = 0, band = '';
+            if (m.pl >= 80) { defK = 20; modK = 15; boldK = 8; band = '≥80'; }
+            else if (m.pl >= 50) { defK = 10; modK = 8; boldK = 4; band = '≥50'; }
+            if (defK > 0) {
+                defScore -= defK; modScore -= modK; boldScore -= boldK;
+                audit.DEFENSIVE.push({ factor: `Múltiplo Caro sem Âncora de Valor (P/L ${band})`, points: -defK, type: 'penalty' });
+                audit.MODERATE.push({ factor: `Múltiplo Caro sem Âncora de Valor (P/L ${band})`, points: -modK, type: 'penalty' });
+                audit.BOLD.push({ factor: `Múltiplo Caro sem Âncora de Valor (P/L ${band})`, points: -boldK, type: 'penalty' });
+            }
         }
 
         // ── PENALIDADE DE TENDÊNCIA DE BAIXA (momentum) ──────────────────────────
@@ -636,6 +661,8 @@ const scoreCryptoProfiles = (asset, audit) => {
         const isBlueChip = ['BTC', 'ETH'].includes(asset.ticker);
         const isTop10 = m.marketCap > 20000000000;
         const isMidCap = m.marketCap > 2000000000 && m.marketCap <= 20000000000;
+        // Perfil "primário" da faixa (recebe a base 90/95) — destino das notas de variância.
+        const primary = isBlueChip ? 'DEFENSIVE' : isTop10 ? 'MODERATE' : 'BOLD';
 
         if (isBlueChip) {
             defScore = 90; audit.DEFENSIVE.push({ factor: 'Crypto Blue Chip', points: 90, type: 'base' });
@@ -646,13 +673,60 @@ const scoreCryptoProfiles = (asset, audit) => {
         } else {
             boldScore = 95; audit.BOLD.push({ factor: 'Crypto Small Cap (Assimetria)', points: 95, type: 'base' });
         }
-        
+
         if (m.avgLiquidity < 50000000) {
             defScore -= 30; modScore -= 20; boldScore -= 10;
             audit.BOLD.push({ factor: 'Baixa Liquidez Crypto', points: -10, type: 'penalty' });
         } else if (m.avgLiquidity > 1000000000) {
             defScore += 10; modScore += 10;
             audit.MODERATE.push({ factor: 'Alta Liquidez Institucional', points: 10, type: 'bonus' });
+        }
+
+        // ── (Fase 2 / achado E) VARIÂNCIA DE QUALIDADE NO SCORE QUE ORDENA ──────────
+        // Antes a cripto pontuava só por faixa de marketCap + liquidez: dezenas de ativos
+        // empatavam em 90 e cruzavam o BUY (≥70) sem diferenciação real. Volatilidade e
+        // desvio da SMA200 — já usados no score ESTRUTURAL — passam a ajustar também o
+        // score de PERFIL (que ordena). Bandas de volatilidade espelham o RISK estrutural
+        // de cripto (40/70/100) para consistência. Notas vão ao perfil primário da faixa.
+        const cVol = m.volatility || 0;
+        if (cVol > 0) {
+            if (cVol < 40) {
+                defScore += 6; modScore += 6; boldScore += 6;
+                audit[primary].push({ factor: 'Volatilidade Baixa (<40%)', points: 6, type: 'bonus' });
+            } else if (cVol > 100) {
+                defScore -= 12; modScore -= 10; boldScore -= 8;
+                audit[primary].push({ factor: 'Volatilidade Extrema (>100%)', points: -8, type: 'penalty' });
+            } else if (cVol > 70) {
+                defScore -= 6; modScore -= 5; boldScore -= 4;
+                audit[primary].push({ factor: 'Volatilidade Elevada (>70%)', points: -4, type: 'penalty' });
+            }
+        }
+        if (m.sma200 > 0 && asset.price > 0) {
+            const devSma = (asset.price - m.sma200) / m.sma200;
+            if (devSma >= 0) {
+                defScore += 4; modScore += 4; boldScore += 4;
+                audit[primary].push({ factor: 'Acima da Tendência (Preço ≥ SMA200)', points: 4, type: 'bonus' });
+            } else if (devSma < -0.30) {
+                defScore -= 8; modScore -= 6; boldScore -= 5;
+                audit[primary].push({ factor: 'Forte Queda (Preço >30% abaixo da SMA200)', points: -5, type: 'penalty' });
+            } else if (devSma < -0.10) {
+                defScore -= 4; modScore -= 3; boldScore -= 2;
+                audit[primary].push({ factor: 'Abaixo da Tendência (Preço < SMA200)', points: -2, type: 'penalty' });
+            }
+        }
+
+        // ── (Fase 2 / achado E2) TRAVA BRANDA NO BOLD DE SMALL CAP ──────────────────
+        // Cripto nunca é capada por confiança (maxScoreAllowed=100 sempre). Uma small cap
+        // (não blue chip / não top-10 / não mid) de baixa liquidez OU volatilidade extrema
+        // é APOSTA, não convicção: limita o BOLD a 80 — ainda elegível a COMPRAR, sem cravar
+        // nota máxima. Análogo ao teto especulativo de STOCK_US sem lucro (SPEC_BOLD_CAP).
+        const isSmallCap = !isBlueChip && !isTop10 && !isMidCap;
+        if (isSmallCap && (m.avgLiquidity < 50000000 || cVol > 100)) {
+            const CRYPTO_SPEC_CAP = 80;
+            if (boldScore > CRYPTO_SPEC_CAP) {
+                audit.BOLD.push({ factor: 'Teto Especulativo Cripto (small cap arriscada)', points: CRYPTO_SPEC_CAP - boldScore, type: 'penalty' });
+                boldScore = CRYPTO_SPEC_CAP;
+            }
         }
     }
     return { defScore, modScore, boldScore };

@@ -16,6 +16,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
       "type": "base",
     },
     {
+      "category": "Perfil Defensivo",
+      "factor": "Acima da Tendência (Preço ≥ SMA200)",
+      "points": 4,
+      "type": "bonus",
+    },
+    {
       "category": "Perfil Moderado",
       "factor": "Alta Liquidez Institucional",
       "points": 10,
@@ -47,7 +53,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
   "scores": {
     "BOLD": 10,
     "DEFENSIVE": 100,
-    "MODERATE": 10,
+    "MODERATE": 14,
   },
   "structural": {
     "quality": 100,
@@ -81,6 +87,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
       "type": "bonus",
     },
     {
+      "category": "Perfil Moderado",
+      "factor": "Acima da Tendência (Preço ≥ SMA200)",
+      "points": 4,
+      "type": "bonus",
+    },
+    {
       "category": "Qualidade",
       "factor": "Base de Qualidade",
       "points": 0,
@@ -103,7 +115,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
   "isDividendAristocrat": false,
   "scores": {
     "BOLD": 10,
-    "DEFENSIVE": 10,
+    "DEFENSIVE": 14,
     "MODERATE": 100,
   },
   "structural": {
@@ -132,6 +144,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
       "type": "base",
     },
     {
+      "category": "Perfil Arrojado",
+      "factor": "Acima da Tendência (Preço ≥ SMA200)",
+      "points": 4,
+      "type": "bonus",
+    },
+    {
       "category": "Qualidade",
       "factor": "Base de Qualidade",
       "points": 0,
@@ -151,7 +169,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
   ],
   "isDividendAristocrat": false,
   "scores": {
-    "BOLD": 90,
+    "BOLD": 94,
     "DEFENSIVE": 10,
     "MODERATE": 10,
   },
@@ -187,6 +205,24 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
       "type": "penalty",
     },
     {
+      "category": "Perfil Arrojado",
+      "factor": "Volatilidade Extrema (>100%)",
+      "points": -8,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Acima da Tendência (Preço ≥ SMA200)",
+      "points": 4,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Teto Especulativo Cripto (small cap arriscada)",
+      "points": -1,
+      "type": "penalty",
+    },
+    {
       "category": "Qualidade",
       "factor": "Base de Qualidade",
       "points": 0,
@@ -210,7 +246,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
   ],
   "isDividendAristocrat": false,
   "scores": {
-    "BOLD": 85,
+    "BOLD": 80,
     "DEFENSIVE": 10,
     "MODERATE": 10,
   },
@@ -1157,7 +1193,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     {
       "category": "Perfil Defensivo",
       "factor": "Upside Positivo (>15%)",
-      "points": 5,
+      "points": 3,
       "type": "bonus",
     },
     {
@@ -1312,7 +1348,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
   "isDividendAristocrat": true,
   "scores": {
     "BOLD": 47,
-    "DEFENSIVE": 90,
+    "DEFENSIVE": 88,
     "MODERATE": 70,
   },
   "structural": {
@@ -1505,7 +1541,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     {
       "category": "Perfil Defensivo",
       "factor": "Upside Forte (>30%)",
-      "points": 15,
+      "points": 8,
       "type": "bonus",
     },
     {
@@ -1688,7 +1724,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
   "isDividendAristocrat": false,
   "scores": {
     "BOLD": 33,
-    "DEFENSIVE": 42,
+    "DEFENSIVE": 35,
     "MODERATE": 37,
   },
   "structural": {
@@ -2077,7 +2113,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     {
       "category": "Perfil Defensivo",
       "factor": "Upside Positivo (>15%)",
-      "points": 5,
+      "points": 3,
       "type": "bonus",
     },
     {
