@@ -1,415 +1,147 @@
-
-import React, { useEffect, useState, useLayoutEffect } from 'react';
+import React, { useState, useLayoutEffect, useEffect, useRef, useCallback } from 'react';
 import { useDemo } from '../../contexts/DemoContext';
-import { X, ChevronRight, Check, Zap, TrendingUp, Shield, BarChart3, Lock, Navigation, MousePointerClick, Eye, Trophy, Radar, PieChart, Layout, Coins, FileText, Settings } from 'lucide-react';
+import { X, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { DASHBOARD_STEPS, WALLET_STEPS, TutorialStep } from './tutorialSteps';
 
-// --- PASSOS DO DASHBOARD ---
-const DASHBOARD_STEPS = [
-    {
-        title: "Bem-vindo à Elite",
-        content: (
-            <>
-                <p className="mb-3">
-                    Bem-vindo à elite da análise de dados. Está na hora de você <span className="text-emerald-400 font-bold">aumentar seu patrimônio</span>.
-                </p>
-                <p className="mb-3">
-                    Deixe de depender de <span className="text-yellow-400 font-bold">vídeos</span> ou <span className="text-yellow-400 font-bold">casas de análises</span> com <span className="text-red-500 font-bold">interesses comerciais</span>.
-                </p>
-                <p className="text-xs text-slate-300 italic border-t border-slate-700 pt-2 mt-2">
-                    Um bom investidor precisa saber as ferramentas que tem, <span className="text-white font-bold underline decoration-blue-500">não pule</span>!
-                </p>
-            </>
-        ),
-        highlightId: null, 
-        icon: <Zap className="text-blue-500" size={24} />,
-        badge: "VÉRTICE INVEST"
-    },
-    {
-        title: "Simulação de Carteira",
-        content: (
-            <>
-                <p className="mb-3">
-                    O que você verá ao fundo é uma carteira preenchida com os ativos que nossa <span className="text-blue-400 font-bold">IA</span> recomenda para você.
-                </p>
-                <p className="mb-3">
-                    Ela mostra como estaria seu patrimônio <span className="text-emerald-400 font-bold">HOJE</span> se você tivesse começado a investir com a gente em <span className="text-blue-400 font-bold">2024</span>, comprando apenas <strong>1 cota</strong> de cada ativo que indicamos na carteira.
-                </p>
-                <p>
-                    Mas antes, vou te mostrar a estrutura do nosso site:
-                </p>
-            </>
-        ),
-        highlightId: null, 
-        icon: <Eye className="text-emerald-400" size={24} />,
-        badge: "DEMO MODE"
-    },
-    {
-        title: "Navegação Estratégica",
-        content: (
-            <>
-                Aqui no topo você tem acesso a todos os módulos do ecossistema:
-                <ul className="list-disc pl-4 mt-2 space-y-1">
-                    <li><strong className="text-emerald-400">Terminal:</strong> Seu cockpit de comando geral (onde estamos).</li>
-                    <li><strong className="text-blue-400">Carteira:</strong> Gestão profunda de ativos e rebalanceamento.</li>
-                    <li><strong className="text-purple-400">Research:</strong> Relatórios detalhados da nossa IA.</li>
-                    <li><strong className="text-pink-400">Indicadores:</strong> Monitoramento Macro (Selic, IPCA, Bonds).</li>
-                    <li><strong className="text-gold">Cursos:</strong> Acesso à Vértice Academy.</li>
-                </ul>
-            </>
-        ),
-        highlightId: 'tour-nav-links',
-        icon: <Navigation className="text-indigo-400" size={24} />,
-        badge: "MENU PRINCIPAL"
-    },
-    {
-        title: "Patrimônio vs. Benchmark",
-        content: (
-            <>
-                Acompanhe sua evolução contra o mercado. A maioria das <span className="text-red-400 font-bold">carteiras da internet</span> luta para empatar com o CDI. Aqui, buscamos superar o <span className="text-blue-400 font-bold">Ibovespa</span> e o <span className="text-yellow-400 font-bold">S&P 500</span> através de alocação tática inteligente.
-            </>
-        ),
-        highlightId: 'tour-equity',
-        icon: <TrendingUp className="text-emerald-500" size={24} />,
-        badge: "PERFORMANCE REAL"
-    },
-    {
-        title: "Resultado Comprovado",
-        content: (
-            <>
-                <p className="mb-4">
-                    Veja nos painéis destacados o poder da tecnologia: nossa IA entregou uma rentabilidade superior a <span className="text-emerald-400 font-black text-lg">+88%</span>.
-                </p>
-                <p>
-                    Isso foi feito comprando ativos que nossa IA classifica como <span className="text-blue-400 font-bold">ultra seguros</span>, eliminando o risco de perda a longo prazo. É a inteligência artificial trabalhando pela sua aposentadoria.
-                </p>
-            </>
-        ),
-        highlightId: 'tour-equity', 
-        icon: <Trophy className="text-yellow-400" size={24} />,
-        badge: "CASE DE SUCESSO"
-    },
-    {
-        title: "Radar Alpha",
-        content: (
-            <>
-                <p className="mb-3">
-                    Enquanto você dorme, nossa <span className="text-purple-400 font-bold">IA monitora o mercado</span> em tempo real.
-                </p>
-                <p>
-                    O Radar Alpha identifica oportunidades de <span className="text-emerald-400 font-bold">Compra</span> e alertas de <span className="text-red-400 font-bold">Risco</span> baseados em fluxo institucional e assimetria de preço, antes que virem notícia.
-                </p>
-            </>
-        ),
-        highlightId: 'tour-radar',
-        icon: <Radar className="text-purple-500" size={24} />,
-        badge: "INTELIGÊNCIA 24/7"
-    },
-    {
-        title: "Curadoria Quantitativa",
-        content: (
-            <>
-                <p className="mb-3">
-                    Esqueça a análise subjetiva. Nossa tabela classifica ativos por <strong className="text-blue-400">Score de Qualidade (0-100)</strong>. 
-                </p>
-                <p className="mb-3">
-                    O algoritmo penaliza <span className="text-red-400 font-bold">Riscos Ocultos</span> e <span className="text-emerald-400 font-bold">Premia Consistência</span> de balanço e fluxo de caixa.
-                </p>
-                <div className="mt-4 p-2 bg-slate-800/50 border border-slate-700 rounded-lg flex items-center gap-2">
-                    <Lock size={12} className="text-slate-400" />
-                    <p className="text-[10px] text-slate-400 italic">
-                        Nomes dos ativos ocultos nesta demonstração para proteção da estratégia.
-                    </p>
-                </div>
-            </>
-        ),
-        highlightId: 'tour-allocation',
-        icon: <BarChart3 className="text-indigo-500" size={24} />,
-        badge: "SELEÇÃO IA"
-    },
-    {
-        title: "Previsibilidade de Renda",
-        content: (
-            <>
-                Diferente de outras plataformas que focam apenas na cotação, focamos na sua <span className="text-emerald-400 font-bold">Liberdade Financeira</span>.
-                <br/><br/>
-                O <strong className="text-gold">Cofre de Dividendos</strong> projeta exatamente quanto vai cair na sua conta, filtrando <span className="text-red-400 font-bold">Yield Traps</span> (armadilhas de dividendos).
-            </>
-        ),
-        highlightId: 'tour-dividends',
-        icon: <Lock className="text-gold" size={24} />,
-        badge: "CASH FLOW"
-    },
-    {
-        title: "Próximos Passos",
-        content: (
-            <>
-                Demonstração da sessão <span className="text-emerald-400 font-bold">Terminal</span> concluída. Agora é com você:
-                <br/><br/>
-                Gostaria de continuar a demonstração, seguindo para a aba <span className="text-emerald-400 font-bold">Carteira</span>?
-            </>
-        ),
-        highlightId: null,
-        isFinal: true,
-        icon: <MousePointerClick className="text-white" size={24} />,
-        badge: "DECISÃO"
-    }
-];
-
-// --- PASSOS DA CARTEIRA ---
-const WALLET_STEPS = [
-    {
-        title: "Módulo de Gestão",
-        content: (
-            <>
-                <p className="mb-3">
-                    Bem-vindo à sua <strong>Carteira</strong>.
-                </p>
-                <p>
-                    Diferente do <span className="text-emerald-400 font-bold">Terminal</span> (focado em dados de mercado), aqui é onde você <strong>age</strong>. É o seu centro de controle operacional para aportes, rebalanceamento e controle tributário.
-                </p>
-            </>
-        ),
-        highlightId: 'tour-wallet-intro',
-        icon: <Layout className="text-emerald-500" size={24} />,
-        badge: "VISÃO GERAL"
-    },
-    {
-        title: "Dados Unificados",
-        content: (
-            <>
-                Os mesmos indicadores essenciais que você vê no Terminal aparecem aqui, mas consolidados para auditoria.
-                <br/><br/>
-                Acompanhe <span className="text-emerald-400 font-bold">Patrimônio</span>, <span className="text-purple-400 font-bold">Custo</span> e <span className="text-yellow-400 font-bold">Resultado</span> em um único bloco.
-            </>
-        ),
-        highlightId: 'tour-wallet-kpis',
-        icon: <TrendingUp className="text-blue-500" size={24} />,
-        badge: "AUDITORIA"
-    },
-    {
-        title: "Ferramentas de Ação",
-        content: (
-            <>
-                Aqui você opera sua estratégia:
-                <ul className="list-disc pl-4 mt-3 space-y-2 text-xs">
-                    <li><strong className="text-emerald-400">Nova Transação:</strong> Registro manual rápido.</li>
-                    <li><strong className="text-blue-400">Aporte Inteligente:</strong> Algoritmo que diz onde investir dinheiro novo para manter o equilíbrio.</li>
-                    <li><strong className="text-gold">Rebalanceamento IA:</strong> (Black) Automação de venda e compra.</li>
-                </ul>
-            </>
-        ),
-        highlightId: 'tour-wallet-actions',
-        icon: <Zap className="text-yellow-400" size={24} />,
-        badge: "EXECUÇÃO"
-    },
-    {
-        title: "Estratégia e Alocação",
-        content: (
-            <>
-                <p className="mb-3">
-                    À esquerda, veja sua <strong>Evolução Patrimonial</strong>. À direita, o gráfico de <strong>Distribuição</strong>.
-                </p>
-                <p className="flex items-center gap-2 p-2 bg-slate-800 rounded border border-slate-700">
-                    <Settings size={14} className="text-slate-400" />
-                    <span className="text-[10px]">
-                        Você pode clicar na engrenagem do gráfico de Distribuição para definir manualmente a <strong className="text-white">% Ideal</strong> que deseja para cada classe de ativo.
-                    </span>
-                </p>
-            </>
-        ),
-        highlightId: 'tour-wallet-charts',
-        icon: <PieChart className="text-indigo-500" size={24} />,
-        badge: "ESTRATÉGIA"
-    },
-    {
-        title: "Rentabilidade Detalhada",
-        content: (
-            <>
-                Na aba <strong>Rentabilidade</strong>, você encontra um gráfico comparativo avançado.
-                <br/><br/>
-                Ele mostra o retorno real da sua carteira (cotas) comparado contra o <span className="text-yellow-400 font-bold">CDI</span> e o <span className="text-slate-400 font-bold">Ibovespa</span>, além de uma tabela mês a mês.
-            </>
-        ),
-        highlightId: 'tour-tab-performance',
-        icon: <BarChart3 className="text-emerald-500" size={24} />,
-        badge: "PERFORMANCE"
-    },
-    {
-        title: "Controle de Proventos",
-        content: (
-            <>
-                A aba <strong>Proventos</strong> organiza todos os dividendos recebidos e provisionados.
-                <br/><br/>
-                Veja o histórico mensal em barras e a lista futura de pagamentos confirmados.
-            </>
-        ),
-        highlightId: 'tour-tab-dividends',
-        icon: <Coins className="text-gold" size={24} />,
-        badge: "RENDA PASSIVA"
-    },
-    {
-        title: "Extrato Completo",
-        content: (
-            <>
-                Por fim, a aba <strong>Extrato</strong> funciona como sua conta corrente de investimentos.
-                <br/><br/>
-                Cada compra, venda, aporte ou recebimento de dividendo fica registrado aqui de forma imutável para sua conferência.
-            </>
-        ),
-        highlightId: 'tour-tab-statement',
-        icon: <FileText className="text-blue-400" size={24} />,
-        badge: "HISTÓRICO"
-    },
-    {
-        title: "Detalhamento de Ativos",
-        content: (
-            <>
-                Abaixo dos gráficos, você tem a lista completa dos seus ativos, separados por classe (Ações, FIIs, etc).
-                <br/><br/>
-                Você pode expandir cada grupo para ver preço médio, cotação atual e o <strong>IA Score</strong> individual.
-            </>
-        ),
-        highlightId: 'tour-wallet-list',
-        icon: <Layout className="text-slate-400" size={24} />,
-        badge: "INVENTÁRIO"
-    },
-    {
-        title: "Tour Concluído",
-        content: (
-            <>
-                Você agora domina as principais ferramentas da plataforma Vértice Invest.
-                <br/><br/>
-                O <strong>Modo Demonstração</strong> será encerrado para que você possa começar a construir seu próprio legado.
-            </>
-        ),
-        highlightId: null,
-        isFinal: true,
-        icon: <Check className="text-white" size={24} />,
-        badge: "PRONTO PARA AÇÃO"
-    }
-];
+type Placement = 'bottom' | 'top' | 'center' | 'left-side' | 'right-side';
 
 export const TutorialOverlay: React.FC = () => {
-    const { isDemoMode, currentStep, nextStep, skipTutorial, resetStep } = useDemo();
+    const { isDemoMode, currentStep, nextStep, prevStep, skipTutorial, resetStep } = useDemo();
     const navigate = useNavigate();
     const location = useLocation();
-    
+    const isMobile = useIsMobile();
+
     // Seleciona os passos baseados na rota atual
     const steps = location.pathname === '/wallet' ? WALLET_STEPS : DASHBOARD_STEPS;
-    
+
     // Proteção contra índice inválido ao trocar de rota
     const safeStepIndex = Math.min(currentStep, steps.length - 1);
-    const step = steps[safeStepIndex];
+    const rawStep: TutorialStep | undefined = steps[safeStepIndex];
 
+    // Resolve alvo/conteúdo efetivos por viewport (variante mobile do passo de navegação)
+    const effectiveHighlightId = rawStep
+        ? (isMobile && rawStep.mobileHighlightId ? rawStep.mobileHighlightId : rawStep.highlightId)
+        : null;
+    const effectiveContent = rawStep
+        ? (isMobile && rawStep.mobileContent ? rawStep.mobileContent : rawStep.content)
+        : null;
+
+    const cardRef = useRef<HTMLDivElement | null>(null);
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
-    const [cardPosition, setCardPosition] = useState<{ top: number, left: number, placement: 'bottom' | 'top' | 'center' | 'left-side' | 'right-side' }>({ top: 0, left: 0, placement: 'center' });
+    const [cardPosition, setCardPosition] = useState<{ top: number, left: number, placement: Placement }>({ top: 0, left: 0, placement: 'center' });
 
     useLayoutEffect(() => {
-        if (!isDemoMode) return;
+        if (!isDemoMode || !rawStep) return;
 
         const updatePosition = () => {
-            if (step && step.highlightId) {
-                const element = document.getElementById(step.highlightId);
-                if (element) {
-                    const rect = element.getBoundingClientRect();
-                    setTargetRect(rect);
+            const targetId = effectiveHighlightId;
+            const element = targetId ? document.getElementById(targetId) : null;
+            const rect = element?.getBoundingClientRect();
 
-                    const cardWidth = 420; 
-                    const cardHeight = 250; 
-                    const spaceBelow = window.innerHeight - rect.bottom;
-                    const spaceRight = window.innerWidth - rect.right;
-                    
-                    let top = rect.bottom + 24;
-                    let left = rect.left;
-                    let placement: 'bottom' | 'top' | 'center' | 'left-side' | 'right-side' = 'bottom';
-
-                    // Lógica Especial para Radar Alpha (Forçar Esquerda)
-                    if (step.highlightId === 'tour-radar') {
-                        left = rect.left - cardWidth - 24;
-                        top = rect.top; 
-                        placement = 'left-side';
-                        
-                        if (left < 10) {
-                            left = rect.left;
-                            top = rect.bottom + 24;
-                            placement = 'bottom';
-                        }
-                    } 
-                    // Lógica Especial para Abas da Carteira (Forçar Ao Lado/Direita se possível)
-                    else if (step.highlightId?.startsWith('tour-tab-')) {
-                        // Tenta posicionar à direita primeiro
-                        if (spaceRight > cardWidth + 20) {
-                            left = rect.left; // Alinha com o início, mas joga pra baixo se não der
-                            // Se for mobile/tablet, prefere bottom
-                            if (window.innerWidth < 1024) {
-                                placement = 'bottom';
-                            } else {
-                                // Desktop: Tenta posicionar levemente deslocado para não cobrir
-                                top = rect.bottom + 12; 
-                                placement = 'bottom';
-                            }
-                        } else {
-                            placement = 'bottom';
-                        }
-                    }
-                    else {
-                        // Lógica Padrão Inteligente
-                        if (rect.left > window.innerWidth / 2) {
-                            left = rect.right - cardWidth;
-                            if (left < 20) left = 20;
-                            
-                            // Sidebar estreita à direita -> Card à esquerda
-                            if (rect.width < 350 && rect.left > cardWidth) {
-                                 left = rect.left - cardWidth - 24;
-                                 top = rect.top; 
-                                 placement = 'left-side';
-                            }
-                        } else {
-                            if (left + cardWidth > window.innerWidth) {
-                                left = window.innerWidth - cardWidth - 20;
-                            }
-                        }
-
-                        if (placement !== 'left-side') {
-                            if (spaceBelow < cardHeight + 40) {
-                                top = rect.top - cardHeight - 24;
-                                placement = 'top';
-                            }
-                        }
-                    }
-
-                    // Clamp para dentro da viewport — evita corte em telas pequenas (notebook)
-                    left = Math.max(10, Math.min(left, window.innerWidth - cardWidth - 10));
-                    top = Math.max(10, Math.min(top, window.innerHeight - cardHeight - 10));
-
-                    setCardPosition({ top, left, placement });
-                } else {
-                    setTargetRect(null);
-                    setCardPosition({ top: 0, left: 0, placement: 'center' });
-                }
-            } else {
+            // Guard: sem alvo, ou alvo oculto (display:none -> rect zerado) => card centralizado
+            if (!element || !rect || rect.width < 1 || rect.height < 1) {
                 setTargetRect(null);
                 setCardPosition({ top: 0, left: 0, placement: 'center' });
+                return;
             }
+
+            setTargetRect(rect);
+
+            // Mede o card de verdade (a altura varia muito conforme o conteúdo)
+            const cardWidth = cardRef.current?.offsetWidth || Math.min(window.innerWidth * 0.9, 420);
+            const cardHeight = cardRef.current?.offsetHeight || 250;
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const spaceRight = window.innerWidth - rect.right;
+
+            let top = rect.bottom + 24;
+            let left = rect.left;
+            let placement: Placement = 'bottom';
+
+            // Barra de navegação inferior fixa (mobile): card SEMPRE acima do alvo
+            if (targetId === 'tour-nav-mobile') {
+                left = rect.left;
+                top = rect.top - cardHeight - 24;
+                placement = 'top';
+            }
+            // Lógica Especial para Radar Alpha (Forçar Esquerda)
+            else if (targetId === 'tour-radar') {
+                left = rect.left - cardWidth - 24;
+                top = rect.top;
+                placement = 'left-side';
+
+                if (left < 10) {
+                    left = rect.left;
+                    top = rect.bottom + 24;
+                    placement = 'bottom';
+                }
+            }
+            // Lógica Especial para Abas da Carteira (preferir abaixo)
+            else if (targetId?.startsWith('tour-tab-')) {
+                if (spaceRight > cardWidth + 20 && window.innerWidth >= 1024) {
+                    top = rect.bottom + 12;
+                }
+                placement = 'bottom';
+            }
+            else {
+                // Lógica Padrão Inteligente
+                if (rect.left > window.innerWidth / 2) {
+                    left = rect.right - cardWidth;
+                    if (left < 20) left = 20;
+
+                    // Sidebar estreita à direita -> Card à esquerda
+                    if (rect.width < 350 && rect.left > cardWidth) {
+                        left = rect.left - cardWidth - 24;
+                        top = rect.top;
+                        placement = 'left-side';
+                    }
+                } else {
+                    if (left + cardWidth > window.innerWidth) {
+                        left = window.innerWidth - cardWidth - 20;
+                    }
+                }
+
+                if (placement !== 'left-side') {
+                    if (spaceBelow < cardHeight + 40) {
+                        top = rect.top - cardHeight - 24;
+                        placement = 'top';
+                    }
+                }
+            }
+
+            // Clamp para dentro da viewport — evita corte em telas pequenas (notebook/mobile)
+            left = Math.max(10, Math.min(left, window.innerWidth - cardWidth - 10));
+            top = Math.max(10, Math.min(top, window.innerHeight - cardHeight - 10));
+
+            setCardPosition({ top, left, placement });
         };
 
-        // Força atualização imediata e com delay para garantir renderização do DOM
+        // Rola o alvo até o centro da viewport antes de medir (alvos abaixo da dobra)
+        const targetEl = effectiveHighlightId ? document.getElementById(effectiveHighlightId) : null;
+        if (targetEl) {
+            targetEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+
+        // Atualiza imediatamente e após a renderização/scroll suave assentar
         updatePosition();
-        const timer = setTimeout(updatePosition, 100);
-        
+        const t1 = setTimeout(updatePosition, 100);
+        const t2 = setTimeout(updatePosition, 400);
+
         window.addEventListener('resize', updatePosition);
         window.addEventListener('scroll', updatePosition, true);
 
         return () => {
-            clearTimeout(timer);
+            clearTimeout(t1);
+            clearTimeout(t2);
             window.removeEventListener('resize', updatePosition);
             window.removeEventListener('scroll', updatePosition, true);
         };
-    }, [safeStepIndex, isDemoMode, step?.highlightId, location.pathname]);
+    }, [safeStepIndex, isDemoMode, effectiveHighlightId, location.pathname]);
 
-    const handleNext = () => {
-        if (step.isFinal) {
+    const handleNext = useCallback(() => {
+        if (!rawStep) return;
+        if (rawStep.isFinal) {
             if (location.pathname === '/wallet') {
                 // Fim do tour da carteira -> Encerra Demo
                 skipTutorial();
@@ -422,23 +154,45 @@ export const TutorialOverlay: React.FC = () => {
         } else {
             nextStep();
         }
-    };
+    }, [rawStep, location.pathname, skipTutorial, navigate, resetStep, nextStep]);
 
-    if (!isDemoMode || !step) return null;
+    // Navegação por teclado (Esc fecha, setas/Enter navegam)
+    useEffect(() => {
+        if (!isDemoMode) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                skipTutorial();
+            } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
+                e.preventDefault();
+                handleNext();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                if (safeStepIndex > 0) prevStep();
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [isDemoMode, handleNext, prevStep, skipTutorial, safeStepIndex]);
+
+    if (!isDemoMode || !rawStep) return null;
+
+    const isFinal = !!rawStep.isFinal;
+    const canGoBack = safeStepIndex > 0;
 
     return (
         <div className="fixed inset-0 z-[9999] overflow-hidden pointer-events-none font-sans">
-            
+
             {/* BACKDROP INTELIGENTE */}
             {targetRect ? (
-                <div 
+                <div
                     className="absolute transition-all duration-700 ease-[cubic-bezier(0.25,0.1,0.25,1)] border border-blue-500/30 rounded-xl shadow-[0_0_40px_rgba(59,130,246,0.2)] animate-pulse bg-transparent"
                     style={{
                         top: targetRect.top - 4,
                         left: targetRect.left - 4,
                         width: targetRect.width + 8,
                         height: targetRect.height + 8,
-                        boxShadow: '0 0 0 9999px rgba(2, 4, 10, 0.45)' 
+                        boxShadow: '0 0 0 9999px rgba(2, 4, 10, 0.45)'
                     }}
                 />
             ) : (
@@ -446,15 +200,19 @@ export const TutorialOverlay: React.FC = () => {
             )}
 
             {/* CARD DE CONTEÚDO */}
-            <div 
+            <div
+                ref={cardRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label={`Tutorial: ${rawStep.title}`}
                 className={`pointer-events-auto absolute transition-all duration-700 ease-[cubic-bezier(0.25,0.1,0.25,1)] w-[90%] max-w-[420px] flex flex-col ${cardPosition.placement === 'center' ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2' : ''}`}
                 style={cardPosition.placement !== 'center' ? { top: cardPosition.top, left: cardPosition.left } : {}}
             >
                 <div className="bg-elevated border border-slate-700/60 rounded-2xl shadow-2xl relative overflow-hidden group">
-                    
+
                     {/* Barra de Progresso Superior */}
                     <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
-                        <div 
+                        <div
                             className="h-full bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 transition-all duration-500"
                             style={{ width: `${((safeStepIndex + 1) / steps.length) * 100}%` }}
                         ></div>
@@ -468,19 +226,20 @@ export const TutorialOverlay: React.FC = () => {
                         <div className="flex justify-between items-start mb-5">
                             <div className="flex items-center gap-3">
                                 <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-700 shadow-sm">
-                                    {step.icon}
+                                    {rawStep.icon}
                                 </div>
                                 <div>
                                     <span className="text-[10px] font-black uppercase tracking-widest text-blue-400 block mb-0.5">
-                                        {step.badge}
+                                        {rawStep.badge}
                                     </span>
-                                    <h3 className="text-lg font-bold text-white tracking-tight leading-none">{step.title}</h3>
+                                    <h3 className="text-lg font-bold text-white tracking-tight leading-none">{rawStep.title}</h3>
                                 </div>
                             </div>
-                            <button 
+                            <button
                                 onClick={skipTutorial}
                                 className="text-slate-500 hover:text-white transition-colors p-1.5 hover:bg-slate-800 rounded-lg"
                                 title="Fechar Tutorial"
+                                aria-label="Fechar Tutorial"
                             >
                                 <X size={18} />
                             </button>
@@ -488,49 +247,60 @@ export const TutorialOverlay: React.FC = () => {
 
                         {/* Conteúdo */}
                         <div className="text-sm text-slate-300 leading-relaxed mb-6 border-l-2 border-slate-700 pl-4">
-                            {step.content}
+                            {effectiveContent}
                         </div>
 
                         {/* Footer / Ações */}
                         <div className="flex items-center justify-between pt-4 border-t border-slate-800/50">
-                            <div className="flex gap-1.5">
-                                {steps.map((_, i) => (
-                                    <div 
-                                        key={i} 
-                                        className={`h-1.5 rounded-full transition-all duration-300 ${i === safeStepIndex ? 'w-6 bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'w-1.5 bg-slate-700'}`} 
-                                    />
-                                ))}
+                            <div className="flex items-center gap-3">
+                                {canGoBack && (
+                                    <button
+                                        onClick={prevStep}
+                                        className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-white transition-colors px-1 py-1 rounded-lg"
+                                        aria-label="Passo anterior"
+                                    >
+                                        <ChevronLeft size={14} /> Voltar
+                                    </button>
+                                )}
+                                <div className="flex gap-1.5">
+                                    {steps.map((_, i) => (
+                                        <div
+                                            key={i}
+                                            className={`h-1.5 rounded-full transition-all duration-300 ${i === safeStepIndex ? 'w-6 bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'w-1.5 bg-slate-700'}`}
+                                        />
+                                    ))}
+                                </div>
                             </div>
 
-                            <button 
+                            <button
                                 onClick={handleNext}
                                 className={`
                                     flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-lg active:scale-95
-                                    ${step.isFinal 
-                                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-900/20' 
+                                    ${isFinal
+                                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-900/20'
                                         : 'bg-white text-slate-950 hover:bg-blue-50 shadow-white/10'
                                     }
                                 `}
                             >
-                                {step.isFinal ? (location.pathname === '/wallet' ? 'Concluir Demo' : 'Sim, continuar') : 'Próximo'}
-                                {step.isFinal ? <Check size={14} /> : <ChevronRight size={14} />}
+                                {isFinal ? (location.pathname === '/wallet' ? 'Concluir Demo' : 'Sim, continuar') : 'Próximo'}
+                                {isFinal ? <Check size={14} /> : <ChevronRight size={14} />}
                             </button>
                         </div>
                     </div>
                 </div>
-                
+
                 {/* Seta Indicativa */}
                 {cardPosition.placement !== 'center' && cardPosition.placement !== 'left-side' && (
-                    <div 
+                    <div
                         className={`absolute w-4 h-4 bg-elevated border-l border-t border-slate-700/60 transform rotate-45 left-8
                         ${cardPosition.placement === 'bottom' ? '-top-2 border-b-0 border-r-0 bg-elevated' : '-bottom-2 border-l-0 border-t-0 border-r border-b border-slate-700/60 bg-elevated'}
                         `}
                     ></div>
                 )}
-                
+
                 {/* Seta Indicativa Lateral (Direita do card) */}
                 {cardPosition.placement === 'left-side' && (
-                    <div 
+                    <div
                         className="absolute top-8 -right-2 w-4 h-4 bg-elevated border-t border-r border-slate-700/60 transform rotate-45"
                     ></div>
                 )}

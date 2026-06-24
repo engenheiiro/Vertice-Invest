@@ -5,6 +5,7 @@ import {
   BarChart3, Calculator, GraduationCap, Crown, User as UserIcon, Settings, LogOut, X, Target,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDemo } from '../../contexts/DemoContext';
 
 /**
  * (M1/M2) Barra de navegação inferior — só no mobile (`md:hidden`).
@@ -24,6 +25,7 @@ export const BottomNav: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { isDemoMode } = useDemo();
   const [moreOpen, setMoreOpen] = useState(false);
 
   const path = location.pathname;
@@ -93,7 +95,8 @@ export const BottomNav: React.FC = () => {
       )}
 
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-deep/95 backdrop-blur-md border-t border-slate-800/60 pb-[env(safe-area-inset-bottom)]"
+        id="tour-nav-mobile"
+        className={`md:hidden fixed bottom-0 inset-x-0 bg-deep/95 backdrop-blur-md border-t border-slate-800/60 pb-[env(safe-area-inset-bottom)] ${isDemoMode ? 'z-[100]' : 'z-50'}`}
         aria-label="Navegação principal"
       >
         <div className="flex items-stretch justify-around h-16">

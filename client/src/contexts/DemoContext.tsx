@@ -44,16 +44,14 @@ export const DemoProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const startDemo = () => {
         setIsDemoMode(true);
         setCurrentStep(0);
-        document.body.style.overflow = 'hidden';
-        document.documentElement.style.overflow = 'hidden';
+        // NÃO travamos o scroll: o overlay precisa rolar o alvo até a viewport
+        // (scrollIntoView) e mantém o card "colado" via listeners de scroll/resize.
     };
 
     const stopDemo = () => {
         setIsDemoMode(false);
         setCurrentStep(0);
-        document.body.style.overflow = '';
-        document.documentElement.style.overflow = '';
-        
+
         // Marca como visto no BANCO DE DADOS
         if (user?.id && !user.hasSeenTutorial) {
             authService.markTutorialSeen().catch(err => console.error("Falha ao salvar status do tutorial:", err));

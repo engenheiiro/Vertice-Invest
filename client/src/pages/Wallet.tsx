@@ -24,6 +24,7 @@ import { useDemo } from '../contexts/DemoContext';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { FEATURE_LIMITS } from '../constants/subscription';
+import { WALLET_STEPS } from '../components/tutorial/tutorialSteps';
 
 export const Wallet = () => {
     const { user } = useAuth();
@@ -42,13 +43,12 @@ export const Wallet = () => {
     const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PERFORMANCE' | 'DIVIDENDS' | 'STATEMENT'>('OVERVIEW');
 
     // --- AUTOMAÇÃO DO TUTORIAL ---
+    // A aba ativa é derivada do metadado `tab` do passo atual (sem número mágico),
+    // de modo que reordenar/editar WALLET_STEPS não quebra a sincronização.
     useEffect(() => {
         if (!isDemoMode) return;
-        if (currentStep <= 3) setActiveTab('OVERVIEW');
-        else if (currentStep === 4) setActiveTab('PERFORMANCE');
-        else if (currentStep === 5) setActiveTab('DIVIDENDS');
-        else if (currentStep === 6) setActiveTab('STATEMENT');
-        else if (currentStep >= 7) setActiveTab('OVERVIEW');
+        const stepIndex = Math.min(currentStep, WALLET_STEPS.length - 1);
+        setActiveTab(WALLET_STEPS[stepIndex]?.tab ?? 'OVERVIEW');
     }, [isDemoMode, currentStep]);
 
     // CHECK DE PERMISSÃO: APORTE INTELIGENTE
