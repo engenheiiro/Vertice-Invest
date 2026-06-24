@@ -103,12 +103,11 @@ const loadWalletState = async (userId) => {
 
     // Carteira ideal (alocação-alvo + sub-metas) persistida no usuário — acompanha a resposta.
     const targets = {
-        targetAllocation: userPrefs?.targetAllocation || { STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10, FIXED_INCOME: 0 },
+        targetAllocation: userPrefs?.targetAllocation || { STOCK: 40, FII: 30, STOCK_US: 20, ETF: 0, CRYPTO: 10, FIXED_INCOME: 0 },
         targetReserve: typeof userPrefs?.targetReserve === 'number' ? userPrefs.targetReserve : 10000,
         targetSubAllocation: userPrefs?.targetSubAllocation || {
             FIXED_INCOME: { IPCA: 0, POS: 0, PRE: 0 },
-            STOCK_US: { STOCK: 0, REIT: 0, DOLLAR: 0 },
-            ETF: { BR: 0, US: 0 },
+            STOCK_US: { STOCK: 0, REIT: 0, ETF: 0, DOLLAR: 0 },
         },
     };
 
@@ -801,6 +800,7 @@ export const updateWalletTargets = async (req, res, next) => {
                 STOCK: safeFloat(targetAllocation.STOCK || 0),
                 FII: safeFloat(targetAllocation.FII || 0),
                 STOCK_US: safeFloat(targetAllocation.STOCK_US || 0),
+                ETF: safeFloat(targetAllocation.ETF || 0),
                 CRYPTO: safeFloat(targetAllocation.CRYPTO || 0),
                 FIXED_INCOME: safeFloat(targetAllocation.FIXED_INCOME || 0),
             };
@@ -811,7 +811,6 @@ export const updateWalletTargets = async (req, res, next) => {
         if (targetSubAllocation !== undefined) {
             const fi = targetSubAllocation.FIXED_INCOME || {};
             const us = targetSubAllocation.STOCK_US || {};
-            const etf = targetSubAllocation.ETF || {};
             update.targetSubAllocation = {
                 FIXED_INCOME: {
                     IPCA: safeFloat(fi.IPCA || 0),
@@ -821,11 +820,8 @@ export const updateWalletTargets = async (req, res, next) => {
                 STOCK_US: {
                     STOCK: safeFloat(us.STOCK || 0),
                     REIT: safeFloat(us.REIT || 0),
+                    ETF: safeFloat(us.ETF || 0),
                     DOLLAR: safeFloat(us.DOLLAR || 0),
-                },
-                ETF: {
-                    BR: safeFloat(etf.BR || 0),
-                    US: safeFloat(etf.US || 0),
                 },
             };
         }

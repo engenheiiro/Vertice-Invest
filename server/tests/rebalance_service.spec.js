@@ -189,7 +189,7 @@ describe('buildRebalancePlan', () => {
         expect(plan.sells.some((s) => s.class === 'OURO')).toBe(false);
     });
 
-    it('meta de ETF subalocada gera compra de ETF internacional (sub US convertido p/ BRL)', () => {
+    it('meta de ETF nacional subalocada gera compra de ETF nacional (BRL, sem conversão)', () => {
         const valuation = {
             totalEquity: 10000,
             usdRate: 5,
@@ -205,18 +205,46 @@ describe('buildRebalancePlan', () => {
             targetAllocation: { STOCK: 50, FII: 40, STOCK_US: 0, ETF: 10, CRYPTO: 0, FIXED_INCOME: 0 },
             idealBuysByClass: {
                 STOCK: [], FII: [], STOCK_US: [], CRYPTO: [],
-                // Candidato de ETF internacional (ranking ETF): type STOCK_US + usSubType ETF
-                // → etfSub 'US' derivado → preço em USD convertido p/ BRL.
-                ETF: [{ ticker: 'VOO', name: 'Vanguard S&P 500', sector: 'ETF', type: 'STOCK_US', usSubType: 'ETF', score: 80, currentPrice: 100, bull: ['Mercado amplo'] }],
+                // Classe ETF = só fundos NACIONAIS (type 'ETF', BRL) — sem conversão de moeda.
+                ETF: [{ ticker: 'BOVA11', name: 'iShares Ibovespa', sector: 'ETF', type: 'ETF', usSubType: null, score: 80, currentPrice: 100, bull: ['Mercado amplo'] }],
             },
             coveredClasses: ['STOCK', 'FII', 'ETF'],
         });
         const etfBuy = plan.buys.find((b) => b.class === 'ETF');
         expect(etfBuy).toBeTruthy();
-        expect(etfBuy.ticker).toBe('VOO');
+        expect(etfBuy.ticker).toBe('BOVA11');
         expect(etfBuy.amount).toBeCloseTo(1000, 0);
+        // BRL, sem conversão (100) → 1000 / 100 = 10 cotas.
+        expect(etfBuy.quantity).toBeCloseTo(10, 1);
+    });
+
+    it('ETF internacional é candidato do Exterior (USD convertido p/ BRL), não da classe ETF', () => {
+        const valuation = {
+            totalEquity: 10000,
+            usdRate: 5,
+            valueByClass: { STOCK: 5000, FII: 5000, STOCK_US: 0, ETF: 0, CRYPTO: 0, FIXED_INCOME: 0, CASH: 0 },
+            assets: [
+                holding({ ticker: 'AAAA3', type: 'STOCK', valueBr: 5000, priceBr: 50, priceNative: 50 }),
+                holding({ ticker: 'CCCC11', type: 'FII', valueBr: 5000, priceBr: 100, priceNative: 100 }),
+            ],
+        };
+        const plan = build({
+            valuation,
+            // STOCK 50 (ok), FII 40 (sobra 10%), Exterior 10 (falta 10%).
+            targetAllocation: { STOCK: 50, FII: 40, STOCK_US: 10, ETF: 0, CRYPTO: 0, FIXED_INCOME: 0 },
+            idealBuysByClass: {
+                STOCK: [], FII: [], CRYPTO: [], ETF: [],
+                // ETF internacional (type STOCK_US + usSubType ETF) é candidato do Exterior (USD).
+                STOCK_US: [{ ticker: 'VOO', name: 'Vanguard S&P 500', sector: 'ETF', type: 'STOCK_US', usSubType: 'ETF', score: 80, currentPrice: 100, bull: ['Mercado amplo'] }],
+            },
+            coveredClasses: ['STOCK', 'FII', 'STOCK_US'],
+        });
+        const buy = plan.buys.find((b) => b.class === 'STOCK_US');
+        expect(buy).toBeTruthy();
+        expect(buy.ticker).toBe('VOO');
         // Preço convertido para BRL (100 USD × 5 = 500) → 1000 / 500 = 2 cotas.
-        expect(etfBuy.quantity).toBeCloseTo(2, 1);
+        expect(buy.quantity).toBeCloseTo(2, 1);
+        expect(plan.buys.some((b) => b.class === 'ETF')).toBe(false);
     });
 });
 

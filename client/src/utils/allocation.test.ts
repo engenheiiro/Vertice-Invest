@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeSubAllocationReal, fixedIncomeSubKey, usSubKeyOf, etfSubKeyOf, resolveAllocClass, hasSubTargets, splitContributionBySubMeta } from './allocation';
+import { computeSubAllocationReal, fixedIncomeSubKey, usSubKeyOf, hasSubTargets, splitContributionBySubMeta } from './allocation';
 import type { Asset } from '../contexts/WalletContext';
 
 const mkAsset = (partial: Partial<Asset>): Asset => ({
@@ -28,28 +28,12 @@ describe('fixedIncomeSubKey', () => {
 });
 
 describe('usSubKeyOf', () => {
-    it('usa o sub-tipo quando válido; cai em STOCK caso contrário', () => {
+    it('usa o sub-tipo quando válido; ETF e ouro lastreado → ETF; senão STOCK', () => {
         expect(usSubKeyOf({ usSubType: 'REIT' })).toBe('REIT');
+        expect(usSubKeyOf({ usSubType: 'ETF' })).toBe('ETF');
+        expect(usSubKeyOf({ usSubType: 'GOLD' })).toBe('ETF'); // ouro lastreado conta como ETF do Exterior
         expect(usSubKeyOf({ usSubType: null })).toBe('STOCK');
         expect(usSubKeyOf({ usSubType: undefined })).toBe('STOCK');
-    });
-});
-
-describe('etfSubKeyOf / resolveAllocClass', () => {
-    it('ETF nacional (type ETF) → BR; internacional (STOCK_US + ETF/GOLD) → US', () => {
-        expect(etfSubKeyOf({ type: 'ETF', usSubType: null })).toBe('BR');
-        expect(etfSubKeyOf({ type: 'STOCK_US', usSubType: 'ETF' })).toBe('US');
-        expect(etfSubKeyOf({ type: 'STOCK_US', usSubType: 'GOLD' })).toBe('US'); // ouro lastreado
-        expect(etfSubKeyOf({ type: 'STOCK_US', usSubType: 'STOCK' })).toBe(null);
-        expect(etfSubKeyOf({ type: 'STOCK', usSubType: null })).toBe(null);
-    });
-
-    it('reclassifica ETF internacional de Exterior para a classe ETF', () => {
-        expect(resolveAllocClass({ type: 'ETF', usSubType: null })).toBe('ETF');
-        expect(resolveAllocClass({ type: 'STOCK_US', usSubType: 'ETF' })).toBe('ETF');
-        expect(resolveAllocClass({ type: 'STOCK_US', usSubType: 'GOLD' })).toBe('ETF');
-        expect(resolveAllocClass({ type: 'STOCK_US', usSubType: 'STOCK' })).toBe('STOCK_US');
-        expect(resolveAllocClass({ type: 'FII', usSubType: null })).toBe('FII');
     });
 });
 
@@ -66,27 +50,23 @@ describe('computeSubAllocationReal', () => {
         const r = computeSubAllocationReal([]);
         expect(r.FIXED_INCOME.total).toBe(0);
         expect(r.STOCK_US.total).toBe(0);
-        expect(r.ETF.total).toBe(0);
         expect(r.FIXED_INCOME.pct.IPCA).toBe(0);
     });
 
-    it('agrupa ETFs em Nacional/Internacional e tira os internacionais do Exterior', () => {
+    it('ETFs internacionais e ouro lastreado contam no Exterior (sub-tipo ETF); nacional fica fora', () => {
         const assets = [
-            mkAsset({ type: 'ETF', ticker: 'BOVA11', totalValue: 600 }),              // nacional → BR
-            mkAsset({ type: 'STOCK_US', usSubType: 'ETF', ticker: 'VOO', totalValue: 300 }),  // internacional → US
-            mkAsset({ type: 'STOCK_US', usSubType: 'GOLD', ticker: 'GLD', totalValue: 100 }), // ouro lastreado → US
-            mkAsset({ type: 'STOCK_US', usSubType: 'STOCK', ticker: 'AAPL', totalValue: 500 }), // fica no Exterior
+            mkAsset({ type: 'ETF', ticker: 'BOVA11', totalValue: 600 }),                      // nacional: classe própria
+            mkAsset({ type: 'STOCK_US', usSubType: 'ETF', ticker: 'VOO', totalValue: 300 }),  // internacional → ETF
+            mkAsset({ type: 'STOCK_US', usSubType: 'GOLD', ticker: 'GLD', totalValue: 100 }), // ouro lastreado → ETF
+            mkAsset({ type: 'STOCK_US', usSubType: 'STOCK', ticker: 'AAPL', totalValue: 500 }), // Stocks
         ];
         const r = computeSubAllocationReal(assets);
-        // ETF: BR 600, US 400 (VOO 300 + GLD 100)
-        expect(r.ETF.total).toBe(1000);
-        expect(r.ETF.value.BR).toBe(600);
-        expect(r.ETF.value.US).toBe(400);
-        expect(r.ETF.pct.BR).toBeCloseTo(60, 5);
-        expect(r.ETF.pct.US).toBeCloseTo(40, 5);
-        // Exterior NÃO conta os ETFs internacionais: só AAPL (Stocks).
-        expect(r.STOCK_US.total).toBe(500);
+        // Exterior: Stocks 500 + ETF 400 (VOO 300 + GLD 100). ETF nacional (BOVA11) não entra.
+        expect(r.STOCK_US.total).toBe(900);
         expect(r.STOCK_US.value.STOCK).toBe(500);
+        expect(r.STOCK_US.value.ETF).toBe(400);
+        expect(r.STOCK_US.pct.STOCK).toBeCloseTo(500 / 9, 5);
+        expect(r.STOCK_US.pct.ETF).toBeCloseTo(400 / 9, 5);
     });
 
     it('agrupa Renda Fixa por índice e calcula % dentro da classe', () => {

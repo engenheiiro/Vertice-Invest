@@ -7,7 +7,7 @@ import { Button } from '../ui/Button';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatCompact as fmtCompact } from '../../utils/format';
 import { useToast } from '../../contexts/ToastContext';
-import { computeSubAllocationReal, hasSubTargets, resolveAllocClass } from '../../utils/allocation';
+import { computeSubAllocationReal, hasSubTargets } from '../../utils/allocation';
 
 // Cores
 const COLORS: Record<AssetType, string> = {
@@ -32,28 +32,25 @@ const LABELS: Record<AssetType, string> = {
     CASH: 'Reserva'
 };
 
-// Ouro deixou de ser classe da Carteira Ideal (entra como ETF lastreado). ETFs
-// (nacionais + internacionais) são classe própria.
+// Ouro deixou de ser classe da Carteira Ideal (entra como ETF lastreado). ETF é classe
+// própria só para fundos NACIONAIS; ETFs internacionais contam no Exterior (sub-tipo ETF).
 const ORDERED_TYPES: AssetType[] = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
 
 // Classes que admitem ramificação (sub-metas), com suas sub-chaves e rótulos.
-const RAMIFIABLE: AssetType[] = ['FIXED_INCOME', 'STOCK_US', 'ETF'];
+const RAMIFIABLE: AssetType[] = ['FIXED_INCOME', 'STOCK_US'];
 const SUB_KEYS: Record<string, string[]> = {
     FIXED_INCOME: ['IPCA', 'POS', 'PRE'],
-    STOCK_US: ['STOCK', 'REIT', 'DOLLAR'],
-    ETF: ['BR', 'US'],
+    STOCK_US: ['STOCK', 'REIT', 'ETF', 'DOLLAR'],
 };
 const SUB_LABELS: Record<string, Record<string, string>> = {
     FIXED_INCOME: { IPCA: 'IPCA', POS: 'Pós-fixado', PRE: 'Prefixado' },
-    STOCK_US: { STOCK: 'Stocks', REIT: 'REITs', DOLLAR: 'Dólar' },
-    ETF: { BR: 'Nacional', US: 'Internacional' },
+    STOCK_US: { STOCK: 'Stocks', REIT: 'REITs', ETF: 'ETFs', DOLLAR: 'Dólar' },
 };
 
 // Clona profundo a estrutura de sub-metas (evita mutação do estado do contexto).
 const cloneSub = (s: SubAllocationMap): SubAllocationMap => ({
     FIXED_INCOME: { ...DEFAULT_SUB_ALLOCATION.FIXED_INCOME, ...s.FIXED_INCOME },
     STOCK_US: { ...DEFAULT_SUB_ALLOCATION.STOCK_US, ...s.STOCK_US },
-    ETF: { ...DEFAULT_SUB_ALLOCATION.ETF, ...s.ETF },
 });
 
 interface AllocationChartProps {
@@ -79,14 +76,12 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
     const [expandedEdit, setExpandedEdit] = useState<Record<string, boolean>>({});
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
-    // 1. Calcular Valores Atuais
-    // Bucketiza pela classe EFETIVA: ETFs internacionais (STOCK_US + usSubType ETF/GOLD)
-    // contam na classe ETF, não em Exterior (ver resolveAllocClass).
+    // 1. Calcular Valores Atuais — bucketiza pela classe (type). ETF nacional é classe
+    // própria; ETFs internacionais têm type STOCK_US e contam no Exterior.
     const currentValues = useMemo(() => {
         const vals: Record<string, number> = { STOCK: 0, FII: 0, STOCK_US: 0, ETF: 0, CRYPTO: 0, FIXED_INCOME: 0, OURO: 0, CASH: 0 };
         assets.forEach(asset => {
-            const cls = resolveAllocClass(asset);
-            vals[cls] = (vals[cls] || 0) + asset.totalValue;
+            vals[asset.type] = (vals[asset.type] || 0) + asset.totalValue;
         });
         return vals;
     }, [assets]);

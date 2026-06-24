@@ -72,17 +72,11 @@ const fixedIncomeSub = z
   .refine(subAllocSum100('FIXED_INCOME'), { message: 'Sub-metas de Renda Fixa devem somar 100%' })
   .optional();
 
-// Exterior ramifica em Stocks/REITs/Dólar. ETFs deixaram de ser sub-tipo do Exterior
-// e viraram CLASSE própria (nacionais + internacionais) — ver ASSET_TYPES 'ETF'.
+// Exterior ramifica em Stocks/REITs/ETFs/Dólar. ETFs internacionais (e ouro lastreado)
+// contam aqui no sub-tipo ETF; a classe própria 'ETF' (ASSET_TYPES) é só p/ nacionais.
 const stockUsSub = z
-  .object({ STOCK: allocPct, REIT: allocPct, DOLLAR: allocPct })
+  .object({ STOCK: allocPct, REIT: allocPct, ETF: allocPct, DOLLAR: allocPct })
   .refine(subAllocSum100('STOCK_US'), { message: 'Sub-metas do Exterior devem somar 100%' })
-  .optional();
-
-// ETF ramifica em Nacional (BR) e Internacional (US, inclui ouro lastreado).
-const etfSub = z
-  .object({ BR: allocPct, US: allocPct })
-  .refine(subAllocSum100('ETF'), { message: 'Sub-metas de ETFs devem somar 100%' })
   .optional();
 
 export const updateTargetsSchema = z.object({
@@ -100,7 +94,6 @@ export const updateTargetsSchema = z.object({
     targetSubAllocation: z.object({
       FIXED_INCOME: fixedIncomeSub,
       STOCK_US: stockUsSub,
-      ETF: etfSub,
     }).optional(),
   }),
 });
