@@ -162,7 +162,14 @@ export const portfolioEngine = {
                         ...asset,
                         score: newScore,
                         action: newScore >= BUY_THRESHOLD ? 'BUY' : 'WAIT',
-                        thesis: `${asset.thesis} | [Penalidade Concentração: -${penalty}]`
+                        thesis: `${asset.thesis} | [Penalidade Concentração: -${penalty}]`,
+                        // Registra a penalidade no audit (categoria universal 'Risco', sempre
+                        // visível no modal) para que a Auditoria Completa reflita a dedução —
+                        // antes ela só ia para o thesis e ficava invisível no breakdown.
+                        auditLog: [
+                            ...(asset.auditLog || []),
+                            { factor: 'Penalidade de Concentração', points: -penalty, type: 'penalty', category: 'Risco' }
+                        ]
                     };
                 }
 

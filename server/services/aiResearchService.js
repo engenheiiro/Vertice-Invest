@@ -168,6 +168,34 @@ const buildExplainableAIPrompt = (assetClass, newRanking, comparisonReport, macr
     return prompt;
 };
 
+// Exportado para teste. Brasil 10 não usa draft competitivo: pega o top 5 por score
+// DEFENSIVO de um conjunto já processado (STOCK ou FII), forçando perfil DEFENSIVE.
+// O score já vem capado pelo scoringEngine (maxScoreAllowed); aqui não há penalidade
+// de concentração (por design — é uma lista curinga, não uma carteira).
+export const getTop5Defensive = (processedAssets) => {
+    return (processedAssets || [])
+        .map(a => ({
+            ...a,
+            score: a.scores['DEFENSIVE'],
+            riskProfile: 'DEFENSIVE',
+            action: 'WAIT', // redefinido por buildBrasil10 conforme o threshold
+            tier: 'GOLD',
+            thesis: `Brasil 10: Score Defensivo ${a.scores['DEFENSIVE']}`
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+};
+
+// Exportado para teste. Monta o Brasil 10 (≤5 STOCK + ≤5 FII) a partir dos universos
+// já processados, reaplica action pelo threshold global e ordena/posiciona. Função pura
+// (sem I/O); o delta de posição é aplicado por quem chama via calculateRankingDelta.
+export const buildBrasil10 = (stockProcessed, fiiProcessed) => {
+    const merged = [...getTop5Defensive(stockProcessed), ...getTop5Defensive(fiiProcessed)]
+        .map(item => ({ ...item, action: item.score >= BUY_THRESHOLD ? 'BUY' : 'WAIT' }))
+        .sort((a, b) => b.score - a.score);
+    return merged.map((item, idx) => ({ ...item, position: idx + 1 }));
+};
+
 const normalize = (ticker) => {
     if (!ticker) return '';
     return ticker.toUpperCase().replace('.SA', '').replace(/[^A-Z0-9]/g, '').trim();
@@ -303,7 +331,7 @@ export const aiResearchService = {
             // (incluindo penalidades de concentração). A auditoria deve refletir exatamente
             // os mesmos valores para evitar inconsistência entre as duas abas.
             const rankingProfileMap = new Map(
-                ranking.map(r => [r.ticker, { riskProfile: r.riskProfile, score: r.score, action: r.action }])
+                ranking.map(r => [r.ticker, { riskProfile: r.riskProfile, score: r.score, action: r.action, auditLog: r.auditLog }])
             );
 
             const fullList = processedAssets.map(asset => {
@@ -314,6 +342,10 @@ export const aiResearchService = {
                         riskProfile: inRanking.riskProfile,
                         score: inRanking.score,
                         action: inRanking.action,
+                        // O auditLog do item do ranking inclui a penalidade de concentração
+                        // (quando houve); o asset original em processedAssets não a tem. Usa o
+                        // do ranking para a Auditoria Completa reconciliar com o score exibido.
+                        auditLog: inRanking.auditLog || asset.auditLog,
                         thesis: `Audit: Score ${inRanking.score} em ${inRanking.riskProfile}`
                     };
                 }
@@ -374,34 +406,8 @@ export const aiResearchService = {
         await saveAnalysis('ETF', etfData.ranking, etfData.fullList);
 
         logger.info("ℹ️ [AI Research] Processando Brasil 10...");
-        
-        const getTop5Defensive = (fullList) => {
-            return fullList
-                .map(a => ({
-                    ...a,
-                    score: a.scores['DEFENSIVE'], 
-                    riskProfile: 'DEFENSIVE',     
-                    action: 'WAIT', // Será redefinido abaixo
-                    tier: 'GOLD', 
-                    thesis: `Brasil 10: Score Defensivo ${a.scores['DEFENSIVE']}`
-                }))
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 5); 
-        };
 
-        const top5Stocks = getTop5Defensive(stockData.processedAssets);
-        const top5FIIs = getTop5Defensive(fiiData.processedAssets);
-        
-        let brasil10List = [...top5Stocks, ...top5FIIs];
-        
-        // Re-aplica a ação baseada no threshold global de 70
-        brasil10List = brasil10List.map(item => ({
-            ...item,
-            action: item.score >= BUY_THRESHOLD ? 'BUY' : 'WAIT'
-        }));
-        brasil10List.sort((a, b) => b.score - a.score);
-
-        brasil10List = brasil10List.map((item, idx) => ({ ...item, position: idx + 1 }));
+        let brasil10List = buildBrasil10(stockData.processedAssets, fiiData.processedAssets);
         brasil10List = await calculateRankingDelta(brasil10List, 'BRASIL_10', strat);
 
         await saveAnalysis('BRASIL_10', brasil10List, brasil10List);

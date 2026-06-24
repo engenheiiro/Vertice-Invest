@@ -150,6 +150,28 @@ describe('scoringEngine — confiança de FII (anti-compressão em 85)', () => {
     });
 });
 
+describe('scoringEngine — teto de confiança registrado no auditLog', () => {
+    // Quando o teto graduado (maxScoreAllowed < 100) de fato reduz o score do perfil,
+    // a dedução precisa aparecer no auditLog para a Auditoria Completa reconciliar.
+    it('FII com confiança <60 (liquidez <1M + dados muito stale) capa o score e grava o fator de teto', () => {
+        // -30 (liquidez <1M) -30 (stale >180d) → confiança 40 → maxScoreAllowed 70.
+        const fii = makeFii({ metrics: { ...makeFii().metrics, avgLiquidity: 900000, _staleDays: 200 } });
+        const res = scoringEngine.processAsset(fii, DEFAULT_CONTEXT);
+        expect(res._discarded).toBeUndefined();
+        const best = Math.max(res.scores.DEFENSIVE, res.scores.MODERATE, res.scores.BOLD);
+        expect(best).toBeLessThanOrEqual(70);
+        const capEntries = res.auditLog.filter(a => a.factor.startsWith('Teto por Confiança'));
+        expect(capEntries.length).toBeGreaterThan(0);
+        expect(capEntries.every(a => a.points < 0 && a.type === 'penalty')).toBe(true);
+    });
+
+    it('ativo com dados completos (teto 100) NÃO recebe fator de teto de confiança', () => {
+        const res = scoringEngine.processAsset(makeFii(), DEFAULT_CONTEXT);
+        const capEntries = res.auditLog.filter(a => a.factor.startsWith('Teto por Confiança'));
+        expect(capEntries.length).toBe(0);
+    });
+});
+
 describe('scoringEngine — guarda de tendência de baixa (anti value-trap)', () => {
     // Mesma ação, variando só o desvio preço×SMA200. Em downtrend forte deve perder
     // pontos de perfil (e cair para WAIT); em uptrend não recebe penalidade.

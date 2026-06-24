@@ -931,10 +931,28 @@ const calculateProfileScores = (asset, valuationData, context) => {
         : confidence >= 80 ? 100
         : confidence >= 60 ? 85
         : 70;
+
+    // Clamp final por perfil. Quando o TETO de confiança (maxScoreAllowed) de fato
+    // reduz o score, registra a dedução no audit do perfil correspondente para que a
+    // Auditoria Completa reconcilie com o score exibido (antes o teto era invisível).
+    const clampProfile = (raw, profileKey) => {
+        const floored = Math.max(10, raw);
+        const capped = Math.min(maxScoreAllowed, floored);
+        // Só registra quando o teto é REALMENTE por confiança (< 100). O teto de 100 é
+        // a normalização padrão e não é uma dedução de confiança — não vira fator de audit.
+        if (maxScoreAllowed < 100 && capped < floored) {
+            audit[profileKey].push({
+                factor: `Teto por Confiança de Dados (máx. ${maxScoreAllowed})`,
+                points: capped - floored,
+                type: 'penalty'
+            });
+        }
+        return capped;
+    };
     const finalScores = {
-        DEFENSIVE: Math.min(maxScoreAllowed, Math.max(10, defScore)),
-        MODERATE: Math.min(maxScoreAllowed, Math.max(10, modScore)),
-        BOLD: Math.min(maxScoreAllowed, Math.max(10, boldScore))
+        DEFENSIVE: clampProfile(defScore, 'DEFENSIVE'),
+        MODERATE: clampProfile(modScore, 'MODERATE'),
+        BOLD: clampProfile(boldScore, 'BOLD')
     };
 
     return { scores: finalScores, audit, isAristocrat };

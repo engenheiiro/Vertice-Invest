@@ -49,6 +49,33 @@ describe('portfolioEngine.applyConcentrationPenalty', () => {
         expect(result[3].action).toBe('WAIT');
     });
 
+    it('grava a penalidade de concentração no auditLog (categoria Risco, sempre visível)', () => {
+        const portfolio = ['A3', 'B3', 'C3'].map((t) =>
+            makeScored({ ticker: t, sector: 'Bancos', score: 80 })
+        );
+        const result = portfolioEngine.applyConcentrationPenalty(portfolio);
+
+        // 1º e 2º não penalizados → sem entrada de penalidade no audit
+        expect((result[0].auditLog || []).some((a) => a.factor === 'Penalidade de Concentração')).toBe(false);
+        // 3º penalizado (-5) → entrada negativa em categoria universal 'Risco'
+        const pen = (result[2].auditLog || []).find((a) => a.factor === 'Penalidade de Concentração');
+        expect(pen).toBeTruthy();
+        expect(pen.points).toBe(-5);
+        expect(pen.type).toBe('penalty');
+        expect(pen.category).toBe('Risco');
+    });
+
+    it('preserva o auditLog pré-existente ao anexar a penalidade', () => {
+        const base = [{ factor: 'Base de Qualidade', points: 0, type: 'base', category: 'Qualidade' }];
+        const portfolio = ['A3', 'B3', 'C3', 'D3'].map((t) =>
+            makeScored({ ticker: t, sector: 'Bancos', score: 80, auditLog: [...base] })
+        );
+        const result = portfolioEngine.applyConcentrationPenalty(portfolio);
+        const fourth = result[3]; // -15
+        expect(fourth.auditLog[0].factor).toBe('Base de Qualidade');
+        expect(fourth.auditLog.some((a) => a.factor === 'Penalidade de Concentração' && a.points === -15)).toBe(true);
+    });
+
     it('isola contadores por perfil de risco (não contamina entre perfis)', () => {
         const portfolio = [
             makeScored({ ticker: 'A3', sector: 'Bancos', riskProfile: 'DEFENSIVE', score: 80 }),
