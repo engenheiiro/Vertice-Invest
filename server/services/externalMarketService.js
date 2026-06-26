@@ -101,9 +101,11 @@ export const externalMarketService = {
             const $ = cheerio.load(response.data);
             
             // Seletor da classe de preço (Isso muda periodicamente, precisa de manutenção)
-            // Classe comum em 2024/2025: .YMlKec.fxKbKc
-            let priceText = $('.YMlKec.fxKbKc').first().text();
-            
+            // .YMlKec.fxKbKc parou de existir; preço atual fica em .N6SYTe (container
+            // único da cotação principal — confirmado verificando que não aparece em
+            // tabelas de índices/sidebar, que reciclam o mesmo atributo jsname="Pdsbrc").
+            let priceText = $('.N6SYTe').first().text();
+
             // Fallback seletor genérico via atributo data
             if (!priceText) {
                 priceText = $('[data-last-price]').attr('data-last-price');
