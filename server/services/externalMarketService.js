@@ -72,16 +72,23 @@ export const externalMarketService = {
             let googleTicker = ticker;
             let exchange = '';
 
-            // Lógica B3
+            // Lógica B3 — aceita TANTO o formato Yahoo (PETR4.SA) quanto o ticker cru
+            // do banco (PETR4). Sem o segundo ramo, o ticker cru caía no ramo US e
+            // recebia ':NASDAQ', fazendo o Google devolver página vazia: era a causa
+            // de "Recuperados 0/N via Google/Brapi" quando o Yahoo estava fora — o
+            // fallback de B3 nunca chegava à bolsa certa (:BVMF).
             if (ticker.endsWith('.SA')) {
                 googleTicker = ticker.replace('.SA', '');
                 exchange = ':BVMF';
-            } 
+            }
+            else if (/^[A-Z]{4}\d{1,2}$/.test(ticker)) {
+                googleTicker = ticker;
+                exchange = ':BVMF';
+            }
             // Lógica Crypto
             else if (ticker.endsWith('-USD')) {
-                googleTicker = ticker.replace('-USD', '-USD'); // Google costuma usar USD
                 exchange = ''; // Crypto geralmente é global no Google
-            } 
+            }
             // Lógica US Stock (Simplificada, assume NASDAQ/NYSE se não tiver sufixo)
             else if (!ticker.includes('.')) {
                 // Tenta NASDAQ por padrão para tech, mas isso é falível sem saber a bolsa exata.
@@ -292,7 +299,11 @@ export const externalMarketService = {
             return mappedResults;
 
         } catch (error) {
-            logger.error(`❌ Erro Crítico Yahoo Finance (Batch): ${error.message}`);
+            // "fetch failed" do undici embrulha a causa real (ENOTFOUND/ECONNRESET/
+            // 429/crumb). Sem expor error.cause, o log do servidor não distingue
+            // "rede caiu" de "Yahoo rate-limitou o IP do datacenter" — diagnóstico cego.
+            const cause = error?.cause ? ` | causa: ${error.cause.code || error.cause.message || error.cause}` : '';
+            logger.error(`❌ Erro Crítico Yahoo Finance (Batch): ${error.message}${cause}`);
             // Se o Yahoo caiu completamente, tenta Google (e Brapi p/ B3) um por um
             logger.warn("⚠️ Ativando Protocolo de Emergência: Fallback Total Google Finance.");
 
