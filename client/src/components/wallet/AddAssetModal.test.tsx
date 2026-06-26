@@ -1,8 +1,10 @@
 /**
  * Testes de componente para AddAssetModal.
  *
- * Cobre os dois fluxos principais (compra e venda), as validações de erro
- * mais críticas e o comportamento especial do modo CASH (cofrinhos).
+ * O modal é um formulário de tela única, dividido em seções (Operação,
+ * Ativo, Valores) — todos os campos ficam visíveis ao mesmo tempo, sem
+ * navegação por etapas. Cobre os dois fluxos principais (compra e venda),
+ * as validações de erro mais críticas e o modo CASH (cofrinhos).
  *
  * Estratégia de mock:
  *  - useWallet / useToast: funções simples de vi.fn() retornando stubs
@@ -99,6 +101,17 @@ describe('visibilidade', () => {
     expect(screen.getByText('Nova Transação')).toBeInTheDocument();
   });
 
+  it('exibe as três seções do formulário na mesma tela', () => {
+    renderModal();
+    // Seções visíveis simultaneamente — sem navegação por etapas.
+    expect(screen.getByRole('heading', { name: 'Operação' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Ativo' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Valores' })).toBeInTheDocument();
+    // Campos de seções diferentes coexistem na tela.
+    expect(screen.getByLabelText(/Código \/ Ticker/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Quantidade/i)).toBeInTheDocument();
+  });
+
   it('fecha o modal ao clicar no botão X', () => {
     const { onClose } = renderModal();
     fireEvent.click(screen.getByRole('button', { name: /Fechar/i }));
@@ -163,8 +176,8 @@ describe('modo venda (SELL)', () => {
     renderModal();
     fireEvent.click(screen.getByRole('button', { name: /Vender/i }));
 
-    // Input de busca deve desaparecer
-    expect(screen.queryByPlaceholderText('Ex: PETR4')).not.toBeInTheDocument();
+    // Campo de busca (compra) deve desaparecer no modo venda
+    expect(screen.queryByLabelText(/Código \/ Ticker/i)).not.toBeInTheDocument();
     // Dropdown com o ativo da carteira
     expect(screen.getByRole('option', { name: /PETR4/ })).toBeInTheDocument();
   });

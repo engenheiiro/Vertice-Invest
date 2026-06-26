@@ -9,24 +9,22 @@ Mapa de melhorias do projeto, explicado para quem não programa, com
 COMPLEXIDADE e QUAL IA usar (Opus 4.8 ou Sonnet 4.6) para economizar
 tokens.
 
-Este arquivo agora contém APENAS o que ainda FALTA fazer. Tudo que já
-foi entregue ([IMPLEMENTADO]) ou decidido não fazer ([IGNORADO]) foi
-movido para:
+Este arquivo contém APENAS o que ainda FALTA fazer. Itens já entregues
+foram REMOVIDOS daqui (não há mais arquivo de histórico separado). Por
+isso a numeração tem LACUNAS: se um número não aparece (ex.: 3.1, 4.6,
+9.1), é porque aquele item já foi concluído.
 
-  >>> PLANO-MELHORIAS-CONCLUIDO.txt  (histórico, 29 itens) <<<
+Os pedidos novos do usuário foram DISTRIBUÍDOS nas categorias e numerados
+a partir de .11 (ex.: 7.11) — marcados com [NOVO].
 
-A numeração é compartilhada entre os dois arquivos: o item 3.4 está lá
-porque já foi feito; 3.2 e 3.8 estão aqui porque faltam. Os pedidos
-novos do usuário foram DISTRIBUÍDOS nas categorias e numerados a partir
-de .11 (ex.: 1.11, 3.11–3.22, 7.11) — marcados com [NOVO].
+DIAGNÓSTICO GERAL: o Vértice é um projeto maduro e bem cuidado, já no
+release V2.0.0. As ondas de testes de frontend, robustez/segurança de
+backend, refinamento de rankings (Fases 1–3), tutorial, light mode e
+macro multi-fonte estão concluídas. O que resta abaixo é evolução:
+acessibilidade, performance, arquitetura, DevOps, observabilidade,
+qualidade de código e novas funcionalidades.
 
-DIAGNÓSTICO GERAL: o Vértice é um projeto maduro e bem cuidado. A 1ª
-onda (testes de frontend + robustez de backend/segurança) está
-concluída. O que resta abaixo é evolução: acessibilidade, performance,
-arquitetura, DevOps, observabilidade, qualidade de código, novas
-funcionalidades — e os ajustes pontuais solicitados.
-
-Atualizado em: 2026-06-17.
+Atualizado em: 2026-06-26.
 
 ----------------------------------------------------------------
 COMO LER ESTE PLANO (legenda)
@@ -54,12 +52,10 @@ Se é "pense, decida e não pode errar" -> Opus.
 PRIORIDADE SUGERIDA
 ----------------------------------------------------------------
 1ª ONDA (concluída): Testes do frontend + robustez/segurança do backend.
-   → Ver PLANO-MELHORIAS-CONCLUIDO.txt.
 
-PRÓXIMO FOCO sugerido (pedidos do usuário): tema claro + correções de
-   UI/perfil CONCLUÍDOS — incluindo upload de avatar (3.17) e novos campos
-   pessoais + CEP (3.21), entregues em 2026-06-16 (ver CONCLUIDO). O pedido
-   maior que resta é a Automação de IR (7.11).
+PRÓXIMO FOCO sugerido: o maior pedido que resta é a Automação de IR
+   (7.11) — recurso novo que aproveita base já pronta (taxLots FIFO,
+   realizedProfit, snapshots e dividendos).
 
 2ª ONDA: Performance + Acessibilidade + TypeScript.
 3ª ONDA: DevOps (Docker/deploy) + Observabilidade.
@@ -69,97 +65,97 @@ PRÓXIMO FOCO sugerido (pedidos do usuário): tema claro + correções de
 ================================================================
 1. SEGURANÇA
 ================================================================
-Seção — ✔ Concluída (1.1–1.10) + 1.11 decidido NÃO fazer ([IGNORADO]:
-repo segue público). Ver PLANO-MELHORIAS-CONCLUIDO.txt.
+Seção — ✔ Concluída (1.1–1.11).
 
 
 ================================================================
 2. TESTES E QUALIDADE AUTOMATIZADA
 ================================================================
-Seção — ✔ Concluída (2.1–2.10). Ver PLANO-MELHORIAS-CONCLUIDO.txt.
+Seção — ✔ Concluída (2.1–2.10).
 
 
 ================================================================
 3. UI / DESIGN / EXPERIÊNCIA
 ================================================================
-(Itens 3.1, 3.3–3.22 — exceto 3.2 — já concluídos.
- Ver arquivo CONCLUIDO.)
+Seção — ✔ Concluída (3.1–3.22).
 
-3.2  Quebrar modais gigantes em etapas
-     Modal de adicionar ativo (700 linhas) é confuso. Dividir em passos.
-     [MEDIA] [OPUS]
-
-(3.17 upload de avatar e 3.21 novos campos pessoais + CEP — CONCLUÍDOS
- em 2026-06-16. Ver PLANO-MELHORIAS-CONCLUIDO.txt.)
+(3.2 Quebrar modais gigantes em etapas — concluído: o AddAssetModal
+ deixou de ser um componente monolítico de ~836 linhas. O orquestrador
+ mantém todo o estado/lógica financeira e a UI foi quebrada em seções
+ extraídas para components/wallet/add-asset/ (OperationSection /
+ AssetSection / ValuesSection + types). Optou-se por TELA ÚNICA em
+ seções (Operação · Ativo · Valores) em vez de wizard com navegação:
+ ação de alta frequência (lançar ativos) não deve cobrar cliques extras
+ de "Próximo"; o ganho de manutenção vem da extração, não do stepping.
+ 25 testes do modal verdes.)
 
 
 ================================================================
 4. ACESSIBILIDADE (a11y)
 ================================================================
-(Boa base — ARIA, navegação por teclado, "pular para conteúdo" — mas
-sem auditoria automática.)
+(Boa base — ARIA, navegação por teclado, "pular para conteúdo", labels
+de formulário associados e Lighthouse CI no PR.)
 
-4.1  Adicionar auditoria automática (axe-core)
-     Robô que verifica regras de acessibilidade a cada build.
+4.1  Teste axe-core standalone no CI
+     O addon de a11y do Storybook já roda axe no preview. Falta um teste
+     axe automatizado no Vitest/CI que quebre o build em violação.
      [MEDIA] [SONNET]
 
 4.2  scope nas tabelas
-     Tabelas de ativos/retornos precisam marcar cabeçalhos para
-     leitores de tela.
+     Tabelas de ativos/retornos (AssetList.tsx) usam <th> sem scope.
+     Marcar cabeçalhos (scope="col"/"row") para leitores de tela.
      [BAIXA] [SONNET]
 
 4.3  aria-describedby nas confirmações
-     Ligar o título do modal ao texto explicativo.
+     Ligar o título do modal ao texto explicativo e às mensagens de erro
+     (hoje o erro tem role="alert" mas não está ligado por
+     aria-describedby ao input).
      [BAIXA] [SONNET]
 
 4.4  Conferir contraste de cores (WCAG AA)
-     Garantir que textos/cores passem no padrão de contraste.
+     Garantir que textos/cores passem no padrão de contraste. Atenção:
+     agora há LIGHT MODE padrão — conferir contraste nos DOIS temas.
      [BAIXA] [SONNET]
 
 4.5  Navegação completa por teclado nos modais
-     Abrir, navegar e fechar sem mouse ("foco preso" dentro do modal).
+     Abrir, navegar e fechar sem mouse. Hoje há role="dialog"/aria-modal,
+     mas falta "foco preso" (focus trap) e handler de Esc no AddAssetModal.
      [MEDIA] [SONNET]
-
-4.6  Rótulos claros em todos os campos de formulário
-     Todo input com label associado e erro lido em voz alta.
-     [BAIXA] [SONNET]
 
 4.7  Textos alternativos revisados em gráficos
      Gráficos (recharts) precisam de descrição textual alternativa.
      [MEDIA] [SONNET]
 
 4.8  Tamanho de toque mínimo no mobile
-     Botões pequenos demais para o dedo — garantir área mínima.
+     Maioria dos alvos atende ~44px só via padding (py-3/py-3.5). Garantir
+     área mínima explícita (min-h-[44px]) nos botões pequenos.
      [BAIXA] [SONNET]
 
 4.9  Testar com leitor de tela real
      Passar por NVDA/VoiceOver nas telas principais e corrigir.
      [MEDIA] [OPUS]
 
-4.10 Lighthouse CI (nota de acessibilidade no PR)
-     Acompanhar a nota de acessibilidade automaticamente.
-     [MEDIA] [SONNET]
-
 
 ================================================================
 5. PERFORMANCE
 ================================================================
 5.1  useCallback/React.memo nos componentes pesados
-     Modal de ativo e tabela re-desenham a cada tecla. Memorizar.
+     Os gráficos (AllocationChart, EvolutionChart) JÁ estão memoizados.
+     Falta memorizar o AddAssetModal.tsx (re-desenha a cada tecla) e o
+     AssetList.tsx (re-desenha a cada update do pai).
      [MEDIA] [OPUS]
 
-(5.2–5.10 já concluídos — ver arquivo CONCLUIDO. 5.3/5.4/5.8 entregues
- em 2026-06-17.)
+(5.2–5.10 já concluídos.)
 
 
 ================================================================
 6. BACKEND E ARQUITETURA
 ================================================================
-Seção — ✔ Concluída (6.1–6.10), toda em 2026-06-17: tratador de erros
-estruturado, limite de recursão, quebra do getWalletData, quebra do
-rebuildUserHistory, falhas silenciosas explícitas, logs estruturados,
-raspadores Fundamentus versionados, Swagger completo, circuit breaker do
-MongoDB e normalização de datas. Ver PLANO-MELHORIAS-CONCLUIDO.txt.
+Seção — ✔ Concluída (6.1–6.10): tratador de erros estruturado, limite de
+recursão, quebra do getWalletData, quebra do rebuildUserHistory, falhas
+silenciosas explícitas, logs estruturados, raspadores Fundamentus
+versionados, Swagger completo, circuit breaker do MongoDB e normalização
+de datas.
 
 
 ================================================================
@@ -169,14 +165,14 @@ MongoDB e normalização de datas. Ver PLANO-MELHORIAS-CONCLUIDO.txt.
 bem testado. Aqui são EVOLUÇÕES, não correções.)
 
 7.1  Novos indicadores no signalEngine (MACD, Estocástico)
-     Hoje só há RSI. Adicionar mais sinais técnicos.
+     Hoje o signalEngine só calcula RSI. Adicionar mais sinais técnicos.
      [ALTA] [OPUS]
 
-(7.2 Detecção de divergências e 7.3 Filtro por volume — CONCLUÍDOS em
- 2026-06-17. Ver PLANO-MELHORIAS-CONCLUIDO.txt.)
+(7.2 Detecção de divergências e 7.3 Filtro por volume — concluídos.)
 
 7.4  Múltiplos prazos (timeframes) nos sinais
-     Analisar diário/semanal, não só um período fixo.
+     Hoje o período é fixo (RSI 14, janela de 60 dias). Analisar
+     diário/semanal, não só um período fixo.
      [ALTA] [OPUS]
 
 7.5  Backtest visível ao usuário
@@ -184,27 +180,31 @@ bem testado. Aqui são EVOLUÇÕES, não correções.)
      [ALTA] [OPUS]
      (Nota: o backtest da Carteira Recomendada JÁ EXISTE — curva
       RecommendedPortfolioCurve exposta no painel admin via /research/accuracy.
-      Decisão de 2026-06-17: manter SÓ no admin por enquanto; não expor ao
-      usuário ainda.)
+      Decisão: manter SÓ no admin por enquanto; não expor ao usuário ainda.)
 
-7.6  Explicações de IA mais ricas (já existe base)
-     Ampliar narrativas "por que comprar/aguardar" por ativo.
-     [MEDIA] [OPUS]
+(7.6 Explicações de IA mais ricas — concluído: generateDynamicTheses
+ bull/bear no scoringEngine + narrativa Gemini no aiResearchService.)
 
 7.7  Alertas personalizados (preço/RSI atingiu X)
-     Usuário define gatilho e recebe aviso.
+     Usuário define gatilho e recebe aviso. Hoje só há sinais
+     automáticos do sistema (QuantSignal); não há modelo de alerta
+     definido pelo usuário.
      [ALTA] [OPUS]
 
 7.8  Comparador de ativos lado a lado
-     Tela para comparar 2-3 ativos em métricas-chave.
+     Tela para comparar 2-3 ativos em métricas-chave. Inexistente hoje.
      [MEDIA] [SONNET]
 
 7.9  Simulador de aporte ("e se eu investir R$ X")
-     Projeção de impacto do aporte na carteira/metas.
+     PROJEÇÃO de impacto do aporte na carteira/metas (retorno/composição
+     futura). NÃO confundir com o "Aporte Inteligente"
+     (SmartContributionModal), que já existe mas é ALOCAÇÃO por gaps, não
+     projeção.
      [MEDIA] [OPUS]
 
-7.10 Exportar relatórios em PDF (lib já existe)
-     Gerar PDF da carteira/research (já há pdf-lib no projeto).
+7.10 Exportar relatórios em PDF
+     Gerar PDF da carteira/research. Hoje não há lib de PDF no client
+     (pdf-lib/jsPDF) — incluir uma.
      [MEDIA] [SONNET]
 
 7.11 Automação de Imposto de Renda  [NOVO]
@@ -215,15 +215,16 @@ bem testado. Aqui são EVOLUÇÕES, não correções.)
        • Lucros/prejuízos realizados por mês (renda variável).
        • Dividendos/JCP recebidos.
        • DARF quando aplicável (venda de ações > R$ 20k/mês, alíquotas).
-     Exportável em PDF (já há pdf-lib — ver 7.10). OPUS por envolver
-     regras fiscais e dinheiro.
+     Exportável em PDF (ver 7.10 — lib de PDF a incluir). OPUS por
+     envolver regras fiscais e dinheiro. MAIOR PENDÊNCIA do plano.
      [ALTA] [OPUS]
 
 
 ================================================================
 8. DEVOPS / INFRAESTRUTURA / CI-CD
 ================================================================
-(CI/CD existe e é bom. Faltam containerização e deploy automático.)
+(CI/CD existe e é bom — ci.yml, lighthouse.yml, secret-scan.yml e ~36
+scripts npm na raiz. Faltam containerização e deploy automático.)
 
 8.1  Criar Dockerfile (client e server)
      "Empacotar" o app para rodar igual em qualquer lugar.
@@ -235,7 +236,8 @@ bem testado. Aqui são EVOLUÇÕES, não correções.)
 
 8.3  Pipeline de deploy automático
      Ao aprovar o código, publicar sozinho. Tier gratuito: Vercel/Netlify
-     (frontend) e Render free / Fly.io free (backend).
+     (frontend) e Render free / Fly.io free (backend). Hoje os workflows
+     fazem só quality gate (lint/typecheck/test/build), sem deploy.
      [MEDIA] [OPUS]
 
 8.4  Ambiente de homologação (staging)
@@ -244,11 +246,13 @@ bem testado. Aqui são EVOLUÇÕES, não correções.)
      [MEDIA] [OPUS]
 
 8.5  Variáveis de ambiente por ambiente (dev/stage/prod)
-     Separar configs para não misturar teste com produção.
+     Hoje há um único .env (+ .env.example). Separar configs por ambiente
+     para não misturar teste com produção.
      [BAIXA] [SONNET]
 
 8.6  Script de backup do MongoDB documentado
-     Procedimento de cópia/restauração escrito e testado.
+     Procedimento de cópia/restauração (mongodump/restore) escrito e
+     testado. O runSnapshotJob.js faz snapshot patrimonial — NÃO é backup.
      [MEDIA] [OPUS]
 
 8.7  Plano de recuperação de desastre (DR)
@@ -260,23 +264,16 @@ bem testado. Aqui são EVOLUÇÕES, não correções.)
      [BAIXA] [SONNET]
 
 8.9  Cache de build no CI
-     Acelerar o CI reaproveitando instalações entre execuções.
-     [BAIXA] [SONNET]
-
-8.10 Scripts npm/Makefile unificados
-     Um comando único para tarefas comuns (seed, sync, backup). Grátis.
+     Acelerar o CI reaproveitando instalações entre execuções (hoje só
+     há cache de npm no setup-node, sem actions/cache de build).
      [BAIXA] [SONNET]
 
 
 ================================================================
 9. OBSERVABILIDADE / MONITORAMENTO
 ================================================================
-(Tem Sentry + logs Winston + correlation ID. Falta métricas e health
-check público.)
-
-9.1  Endpoint /health público
-     Rota simples que diz "estou vivo" para monitores externos.
-     [BAIXA] [SONNET]
+(Tem Sentry + logs Winston + correlation ID + /api/health público +
+rastreamento de snapshots diários. Falta métricas e alertas externos.)
 
 9.2  Monitor de uptime (plano gratuito)
      Avisa por e-mail se o site cair. UptimeRobot tem tier gratuito.
@@ -296,19 +293,19 @@ check público.)
      [BAIXA] [SONNET]
 
 9.6  Logs de performance das rotas lentas
-     Marcar e registrar as requisições que demoram demais.
-     [MEDIA] [OPUS]
-
-9.7  Rastreamento de jobs agendados (cron)
-     Confirmar que os snapshots diários rodaram (e avisar se falharem).
+     Já há log HTTP de todas as requests. Falta um THRESHOLD: marcar/alertar
+     só as requisições que passam de X ms, em vez de logar tudo.
      [MEDIA] [OPUS]
 
 9.8  Métrica de uso por funcionalidade/plano
-     Já existe UsageLog; transformar em relatório de negócio.
+     Já existe UsageLog e endpoints por-usuário. Falta um endpoint admin
+     de relatório agregado (totais por feature/plano).
      [MEDIA] [SONNET]
 
 9.9  Alerta de circuit breaker aberto
-     Avisar quando uma fonte externa (Yahoo) for desligada por falha.
+     Já há logger.warn ao abrir (resilience.js). Falta alerta OUTBOUND
+     (Sentry/e-mail/webhook) quando uma fonte externa (Yahoo) for
+     desligada por falha.
      [BAIXA] [OPUS]
 
 9.10 Painel de status público (status page)
@@ -319,20 +316,24 @@ check público.)
 ================================================================
 10. QUALIDADE DE CÓDIGO / TYPESCRIPT / DOCUMENTAÇÃO
 ================================================================
-10.1 Eliminar os ~20 "any" do TypeScript
-     "any" desliga a proteção contra erros. Criar tipos de verdade.
+10.1 Eliminar os "any" do TypeScript em código funcional
+     Há ~174 ocorrências de ": any"/"as any", mas a MAIORIA está em
+     testes/mocks (*.test.tsx). Focar em eliminar "any" no código de
+     produção (services/contexts/componentes) — criar tipos de verdade.
      [MEDIA] [OPUS]
 
 10.2 error: unknown nos catch
-     Trocar catch (error: any) por unknown (forma segura).
+     Trocar catch (error: any) por unknown (forma segura) no client.
      [BAIXA] [SONNET]
 
 10.3 Error boundary por página no frontend
-     Hoje um erro derruba o app todo; isolar por tela.
+     Já há ErrorBoundary GLOBAL envolvendo o App. Falta isolar por
+     rota/página para que um erro não derrube o app todo.
      [MEDIA] [SONNET]
 
 10.4 Rollback de estado em erro de carteira
-     Se a API falha, o estado da tela fica inconsistente; reverter.
+     Se a API falha, o estado da tela fica inconsistente; reverter (hoje
+     não há optimistic update nem rollback no WalletContext).
      [MEDIA] [OPUS]
 
 10.5 Retry com backoff nas chamadas de API do frontend
@@ -340,23 +341,28 @@ check público.)
      [MEDIA] [SONNET]
 
 10.6 Padronizar JSDoc nos serviços principais
-     Comentários de documentação consistentes nas funções-chave.
+     Só ~4 services têm JSDoc. Padronizar nos serviços-chave
+     (aiResearchService, marketDataService, scoringEngine, signalEngine,
+     schedulerService).
      [BAIXA] [SONNET]
 
 10.7 Atualizar dependências "envelhecidas"
-     cheerio (release candidate), otplib, etc. — subir para estável.
+     cheerio ainda em ^1.0.0-rc.12 (release candidate) — subir para
+     estável. (otplib já está estável.)
      [BAIXA] [SONNET]
 
 10.8 Remover pnpm-lock.yaml órfão
-     O projeto usa npm; o lock do pnpm confunde e pode dar conflito.
+     O projeto usa npm; o pnpm-lock.yaml na raiz ainda existe, confunde
+     e pode dar conflito.
      [BAIXA] [SONNET]
 
 10.9 Guia CONTRIBUTING com checklist de PR
-     Lista do que conferir antes de enviar código (já há base).
+     O CONTRIBUTING.md já existe (workflow, convenções, commits, hooks).
+     Falta um CHECKLIST de PR ("o que conferir antes de enviar").
      [BAIXA] [SONNET]
 
 10.10 Comentários TODO/FIXME viram issues rastreáveis
-     Os poucos "TODO" do código viram tarefas registradas.
+     Os ~16 "TODO/FIXME" do código viram tarefas registradas.
      [BAIXA] [SONNET]
 
 
@@ -414,8 +420,7 @@ OBSERVAÇÃO FINAL SOBRE ESCOPO
 Este documento é um MAPA, não uma tarefa única. NÃO se implementa tudo
 de uma vez. O caminho recomendado é executar por ONDAS (tabela de
 prioridade no topo), uma categoria/item por vez, validando com os testes
-antes de seguir. O histórico do que já foi entregue está em
-PLANO-MELHORIAS-CONCLUIDO.txt.
+antes de seguir.
 
 ================================================================
 Gerado por Claude Code — base do diagnóstico verificada à mão.
