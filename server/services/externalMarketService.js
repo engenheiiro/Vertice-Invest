@@ -14,7 +14,10 @@ const yahooFinance = new YahooFinance({
 // nele a cada ticker do lote (fast-fail) até o cooldown — acelera o batch e
 // reduz pressão sobre o terceiro. Limiares mais altos no Google porque ele é
 // chamado por-ticker (mais ruído tolerável antes de abrir).
-const yahooBreaker = createCircuitBreaker({ name: 'yahoo', failureThreshold: 4, cooldownMs: 30_000 });
+// Cooldown do Yahoo bem mais longo que os demais: quando a Yahoo rate-limita o
+// endpoint de crumb (datacenter IP), insistir a cada 30s só prolonga o bloqueio.
+// 2min dá tempo de Yahoo "esfriar" e ainda recupera bem dentro da cadência dos crons.
+const yahooBreaker = createCircuitBreaker({ name: 'yahoo', failureThreshold: 4, cooldownMs: 120_000 });
 const googleBreaker = createCircuitBreaker({ name: 'google-finance', failureThreshold: 8, cooldownMs: 60_000 });
 const brapiBreaker = createCircuitBreaker({ name: 'brapi', failureThreshold: 5, cooldownMs: 60_000 });
 
@@ -193,6 +196,24 @@ export const externalMarketService = {
         }
     },
 
+    // Helper: Google Finance e, se for B3, Brapi como última tentativa. Usado tanto
+    // na falha parcial (alguns tickers do lote) quanto na falha total do Yahoo.
+    async recoverQuote(ticker) {
+        const googleData = await this.fetchFromGoogleFinance(ticker);
+        if (googleData) {
+            logger.info(`✅ [Fallback] Google Finance recuperou cotação para ${ticker}: ${googleData.price}`);
+            return googleData;
+        }
+        if (/^[A-Z]{4}\d{1,2}$/.test(ticker)) {
+            const brapiData = await this.fetchFromBrapi(ticker + '.SA');
+            if (brapiData) {
+                logger.info(`✅ [Fallback] Brapi recuperou cotação para ${ticker}: ${brapiData.price}`);
+                return brapiData;
+            }
+        }
+        return null;
+    },
+
     // Busca Preço de Criptos e Stocks Internacionais em lote (Cotação Atual)
     async getQuotes(tickers) {
         if (!tickers || tickers.length === 0) return [];
@@ -223,9 +244,11 @@ export const externalMarketService = {
             // validateResult: false suprime erros de schema para tickers com dados parciais (ex: BRK.B, BF.B)
             // (I4) 1 retry com backoff para falha transitória, sob circuit breaker.
             // Circuito aberto → lança e cai no catch (Protocolo de Emergência Google).
+            // Sem retry em 429/crumb: é rate-limit de IP, repetir em 300ms não ajuda
+            // e só soma mais uma tacada no endpoint já bloqueado.
             const results = await yahooBreaker.exec(() => withRetry(
                 () => yahooFinance.quote(yahooTickers, {}, { validateResult: false }),
-                { retries: 1, baseDelayMs: 300 },
+                { retries: 1, baseDelayMs: 300, shouldRetry: (err) => !/429|crumb/i.test(err?.message || '') },
             ));
             const validResults = Array.isArray(results) ? results : [results];
             
@@ -260,23 +283,7 @@ export const externalMarketService = {
                 
                 // (MEM) Concorrência limitada: cada scrape carrega uma árvore cheerio
                 // pesada. Promise.all sem teto mantinha todas em memória de uma vez.
-                const fallbackRaw = await mapWithConcurrency(failedTickers, GOOGLE_FALLBACK_CONCURRENCY, async (ticker) => {
-                    const googleData = await this.fetchFromGoogleFinance(ticker);
-                    if (googleData) {
-                        logger.info(`✅ [Fallback] Google Finance recuperou cotação para ${ticker}: ${googleData.price}`);
-                        return googleData;
-                    } else {
-                        // TENTATIVA 3: BRAPI (Se for B3)
-                        if (/^[A-Z]{4}\d{1,2}$/.test(ticker)) {
-                             const brapiData = await this.fetchFromBrapi(ticker + '.SA');
-                             if (brapiData) {
-                                 logger.info(`✅ [Fallback] Brapi recuperou cotação para ${ticker}: ${brapiData.price}`);
-                                 return brapiData;
-                             }
-                        }
-                    }
-                    return null;
-                });
+                const fallbackRaw = await mapWithConcurrency(failedTickers, GOOGLE_FALLBACK_CONCURRENCY, (ticker) => this.recoverQuote(ticker));
 
                 const fallbackResults = fallbackRaw.filter(Boolean);
                 return [...mappedResults, ...fallbackResults];
@@ -286,14 +293,16 @@ export const externalMarketService = {
 
         } catch (error) {
             logger.error(`❌ Erro Crítico Yahoo Finance (Batch): ${error.message}`);
-            // Se o Yahoo caiu completamente, tenta Google um por um (lento mas resiliente)
+            // Se o Yahoo caiu completamente, tenta Google (e Brapi p/ B3) um por um
             logger.warn("⚠️ Ativando Protocolo de Emergência: Fallback Total Google Finance.");
 
             // (MEM) Mesmo no modo de emergência usamos pool limitado em vez de varrer
             // o lote inteiro: protege o heap (árvores cheerio) quando o Yahoo cai e
             // TODOS os tickers caem no scraping de uma vez.
-            const emergencyRaw = await mapWithConcurrency(tickers, GOOGLE_FALLBACK_CONCURRENCY, (t) => this.fetchFromGoogleFinance(t));
-            return emergencyRaw.filter(Boolean);
+            const emergencyRaw = await mapWithConcurrency(tickers, GOOGLE_FALLBACK_CONCURRENCY, (t) => this.recoverQuote(t));
+            const emergencyResults = emergencyRaw.filter(Boolean);
+            logger.info(`✅ [Emergência] Recuperados ${emergencyResults.length}/${tickers.length} ativos via Google/Brapi.`);
+            return emergencyResults;
         }
     },
 
