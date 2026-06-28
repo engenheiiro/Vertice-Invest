@@ -26,6 +26,19 @@ jobs:
           node-version: 22
           cache: npm
 
+      # (8.9) Cache de node_modules entre execuções — `npm run setup` ainda
+      # roda, mas resolve quase tudo do cache local em vez de baixar/instalar.
+      - name: Cache node_modules (root, client, server)
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            client/node_modules
+            server/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json', 'client/package-lock.json', 'server/package-lock.json') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
+
       - name: Install (root + client + server)
         run: npm run setup
 
@@ -77,6 +90,17 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Cache node_modules (root, client, server)
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            client/node_modules
+            server/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json', 'client/package-lock.json', 'server/package-lock.json') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
 
       - name: Install (root + client + server)
         run: npm run setup

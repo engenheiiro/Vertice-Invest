@@ -5,6 +5,7 @@ import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { authService } from '../../services/auth';
 import { CheckCircle2, AlertCircle, User, Loader2 } from 'lucide-react';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 // (3.21a) Corretoras conhecidas — espelha a lista do backend. "Outra" libera
 // um campo de texto livre.
@@ -160,8 +161,8 @@ export const ProfileSettings = () => {
             await refreshProfile(); // Atualiza contexto
             setMsg({ type: 'success', text: 'Perfil atualizado com sucesso.' });
 
-        } catch (error: any) {
-            setMsg({ type: 'error', text: error.message || 'Erro ao salvar perfil.' });
+        } catch (error: unknown) {
+            setMsg({ type: 'error', text: getErrorMessage(error, 'Erro ao salvar perfil.') });
         } finally {
             setIsLoading(false);
         }

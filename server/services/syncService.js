@@ -229,9 +229,13 @@ export const syncService = {
             if (fiiMap.size > 0) fiiMap.forEach((v, k) => pushOp(k, v, 'FII'));
 
             // 3. Atualiza Ativos Internacionais e Cripto
-            let assetsForExternal = await MarketAsset.find({ 
-                type: { $in: ['CRYPTO', 'STOCK_US'] } 
-            }).select('ticker type');
+            // isActive filter: ativos delistados já desativados pela blacklist dinâmica
+            // não devem ser re-cotados aqui (a reativação tem varredura própria). Sem
+            // isto, tickers mortos (SGEN, ABC, MRO...) eram tentados todo sync.
+            let assetsForExternal = await MarketAsset.find({
+                type: { $in: ['CRYPTO', 'STOCK_US'] },
+                isActive: { $ne: false }
+            }).select('ticker type failCount lastFailDate marketCap liquidity');
 
             logger.info("ℹ️ [Sync] Verificando/Seeding default cryptocurrencies...");
             const defaultCryptos = [
@@ -268,9 +272,22 @@ export const syncService = {
             }
 
             if (assetsForExternal.length > 0) {
-                const tickersToFetch = assetsForExternal.map(a => a.ticker);
+                const tickersToFetch = assetsForExternal
+                    .map(a => a.ticker)
+                    .filter(t => typeof t === 'string' && t.trim().length > 0);
                 const quotes = await externalMarketService.getQuotes(tickersToFetch);
-                
+
+                const successfulTickers = new Set(
+                    quotes.filter(q => q.price > 0).map(q => q.ticker)
+                );
+
+                // Blacklist dinâmica no path Exterior/Cripto: tickers que falharam em
+                // Yahoo E Google ganham failCount (1/dia) e são desativados ao atingir o
+                // teto. Reusa a mesma regra de marketDataService — tickers throttlados
+                // se recuperam (reset no sucesso), delistados acumulam e somem do sync.
+                const failureOps = marketDataService.buildQuoteFailureOps(assetsForExternal, successfulTickers);
+                if (failureOps.length > 0) operations.push(...failureOps);
+
                 quotes.forEach(quote => {
                     const updateData = {
                         lastPrice: quote.price,

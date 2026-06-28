@@ -95,7 +95,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                                     </p>
                                 </div>
                             </div>
-                            <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+                            <button onClick={onClose} aria-label="Fechar" className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
                                 <X size={24} />
                             </button>
                         </div>
@@ -135,17 +135,17 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                             <table className="w-full text-left border-collapse">
                                 <thead className="sticky top-0 z-10 bg-card border-b border-slate-800 text-[9px] font-black uppercase text-slate-500">
                                     <tr>
-                                        <th className="p-4 w-12 text-center">#</th>
-                                        <th className="p-4">Ativo</th>
-                                        <th className="p-4 text-center">Perfil</th>
-                                        <th className="p-4 text-center">Score</th>
-                                        <th className="p-4 text-right">Preço Atual</th>
-                                        <th className="p-4 text-right">Graham (VI)</th>
-                                        <th className="p-4 text-right">Bazin (Teto)</th>
-                                        <th className="p-4 text-right">DY %</th>
-                                        <th className="p-4 text-right">P/L</th>
-                                        <th className="p-4 text-right">P/VP</th>
-                                        <th className="p-4 text-center">Ação</th>
+                                        <th scope="col" className="p-4 w-12 text-center">#</th>
+                                        <th scope="col" className="p-4">Ativo</th>
+                                        <th scope="col" className="p-4 text-center">Perfil</th>
+                                        <th scope="col" className="p-4 text-center">Score</th>
+                                        <th scope="col" className="p-4 text-right">Preço Atual</th>
+                                        <th scope="col" className="p-4 text-right">Graham (VI)</th>
+                                        <th scope="col" className="p-4 text-right">Bazin (Teto)</th>
+                                        <th scope="col" className="p-4 text-right">DY %</th>
+                                        <th scope="col" className="p-4 text-right">P/L</th>
+                                        <th scope="col" className="p-4 text-right">P/VP</th>
+                                        <th scope="col" className="p-4 text-center">Ação</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800/50 text-[11px] font-mono text-slate-300">

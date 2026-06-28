@@ -53,7 +53,7 @@ export const RenameReserveModal: React.FC<RenameReserveModalProps> = ({ isOpen, 
                                 <PiggyBank size={18} className="text-emerald-400" />
                                 Renomear Reserva
                             </h2>
-                            <button onClick={onClose} aria-label="Fechar" className="text-slate-500 hover:text-white transition-colors">
+                            <button onClick={onClose} aria-label="Fechar" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-white transition-colors">
                                 <X size={20} />
                             </button>
                         </div>

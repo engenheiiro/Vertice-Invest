@@ -44,7 +44,7 @@ export const Input: React.FC<InputProps> = ({ label, error, id, onFocus, onBlur,
           type={inputType}
           aria-labelledby={label ? labelId : undefined}
           aria-invalid={!!error}
-          aria-errormessage={error ? errorId : undefined}
+          aria-describedby={error ? errorId : undefined}
           onFocus={(e) => {
             setIsFocused(true);
             onFocus?.(e);

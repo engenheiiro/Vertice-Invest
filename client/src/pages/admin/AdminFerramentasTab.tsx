@@ -162,10 +162,10 @@ export const AdminFerramentasTab: React.FC<Props> = ({
                 <table className="w-full text-left text-xs">
                     <thead className="bg-card sticky top-0 z-10">
                         <tr>
-                            <th className="p-3 font-bold text-slate-500 uppercase">Data</th>
-                            <th className="p-3 font-bold text-slate-500 uppercase">Ativo</th>
-                            <th className="p-3 font-bold text-slate-500 uppercase">Motivo</th>
-                            <th className="p-3 font-bold text-slate-500 uppercase">Detalhe</th>
+                            <th scope="col" className="p-3 font-bold text-slate-500 uppercase">Data</th>
+                            <th scope="col" className="p-3 font-bold text-slate-500 uppercase">Ativo</th>
+                            <th scope="col" className="p-3 font-bold text-slate-500 uppercase">Motivo</th>
+                            <th scope="col" className="p-3 font-bold text-slate-500 uppercase">Detalhe</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50 bg-deep">

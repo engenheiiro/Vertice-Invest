@@ -11,6 +11,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { AdminPainelTab, type MacroData } from './AdminPainelTab';
 import { AdminOperacoesTab } from './AdminOperacoesTab';
 import { AdminFerramentasTab } from './AdminFerramentasTab';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 interface CacheData {
     ticker: string;
@@ -141,7 +142,7 @@ export const AdminPanel = () => {
             await researchService.syncMarketData();
             showStatus('success', "Banco de Dados atualizado! Cotações sincronizadas.");
             await Promise.all([loadMacro(), loadConfig(), loadAccuracy()]);
-        } catch (e: any) { showStatus('error', e.message || "Erro na sincronização."); }
+        } catch (e: unknown) { showStatus('error', getErrorMessage(e, "Erro na sincronização.")); }
         finally { setIsSyncing(false); }
     };
 
@@ -151,7 +152,7 @@ export const AdminPanel = () => {
             await researchService.syncMacro();
             showStatus('success', "Indicadores e S&P 500 atualizados com sucesso.");
             await loadMacro();
-        } catch (e: any) { showStatus('error', e.message || "Erro na sync macro."); }
+        } catch (e: unknown) { showStatus('error', getErrorMessage(e, "Erro na sync macro.")); }
         finally { setIsMacroSyncing(false); }
     };
 
@@ -161,7 +162,7 @@ export const AdminPanel = () => {
             await researchService.runFullPipeline();
             showStatus('success', "Protocolo V3 Completo finalizado com sucesso!", 8000);
             await Promise.all([loadHistory(), loadMacro(), loadConfig(), loadDiscardLogs(), loadAccuracy(), loadPublishStatus()]);
-        } catch (e: any) { showStatus('error', e.message || "Erro durante o processamento global.", 8000); }
+        } catch (e: unknown) { showStatus('error', getErrorMessage(e, "Erro durante o processamento global."), 8000); }
         finally { setIsGlobalRunning(false); }
     };
 
@@ -173,7 +174,7 @@ export const AdminPanel = () => {
             const res = await researchService.triggerSnapshot(true);
             showStatus('success', `Snapshot executado. Criados: ${res.stats.created}, Ignorados: ${res.stats.skipped}`);
             await loadConfig();
-        } catch (e: any) { showStatus('error', e.message || "Erro ao executar snapshot."); }
+        } catch (e: unknown) { showStatus('error', getErrorMessage(e, "Erro ao executar snapshot.")); }
         finally { setIsSnapshotRunning(false); }
     };
 
@@ -236,7 +237,7 @@ export const AdminPanel = () => {
             setPromptModal(prev => ({ ...prev, generatedAI: result.generatedExplainableAI }));
             await loadPublishStatus();
             showStatus('success', "Explainable IA salvo com sucesso!");
-        } catch (e: any) { showStatus('error', e.message || "Erro ao gerar IA."); }
+        } catch (e: unknown) { showStatus('error', getErrorMessage(e, "Erro ao gerar IA.")); }
         finally { setIsGeneratingAI(false); }
     };
 
@@ -260,7 +261,7 @@ export const AdminPanel = () => {
             const data = await response.json();
             if (response.ok) showStatus('success', `${data.message} (${data.details?.updates || 0} afetados)`);
             else throw new Error(data.message);
-        } catch (e: any) { showStatus('error', e.message || "Erro ao aplicar split."); }
+        } catch (e: unknown) { showStatus('error', getErrorMessage(e, "Erro ao aplicar split.")); }
         finally { setIsFixingSplit(false); }
     };
 
@@ -269,7 +270,7 @@ export const AdminPanel = () => {
         try {
             const data = await subscriptionService.testCheckout(planKey);
             if (data.redirectUrl) window.open(data.redirectUrl, '_blank');
-        } catch (e: any) { showStatus('error', e.message || "Erro ao gerar link de teste."); }
+        } catch (e: unknown) { showStatus('error', getErrorMessage(e, "Erro ao gerar link de teste.")); }
         finally { setTestPaymentLoading(null); }
     };
 
@@ -289,7 +290,7 @@ export const AdminPanel = () => {
             const res = await researchService.syncTimeSeries();
             showStatus('success', res.message || "Séries temporais atualizadas.");
             await loadConfig();
-        } catch (e: any) { showStatus('error', e.message || "Erro ao sincronizar séries temporais."); }
+        } catch (e: unknown) { showStatus('error', getErrorMessage(e, "Erro ao sincronizar séries temporais.")); }
         finally { setIsSyncingTimeSeries(false); }
     };
 

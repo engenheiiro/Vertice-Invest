@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutGrid, PieChart, BrainCircuit, Radar, MoreHorizontal,
-  BarChart3, Calculator, GraduationCap, Crown, User as UserIcon, Settings, LogOut, X, Target,
+  BarChart3, Calculator, GraduationCap, Crown, User as UserIcon, Settings, LogOut, X, Target, GitCompare,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDemo } from '../../contexts/DemoContext';
@@ -33,6 +33,7 @@ export const BottomNav: React.FC = () => {
 
   const secondary = [
     { to: '/goals', label: 'Metas', icon: Target },
+    { to: '/comparador', label: 'Comparar', icon: GitCompare, disabled: true },
     { to: '/indicators', label: 'Indicadores', icon: BarChart3 },
     { to: '/calculadora', label: 'Calculadora', icon: Calculator },
     { to: '/courses', label: 'Cursos', icon: GraduationCap },
@@ -61,26 +62,37 @@ export const BottomNav: React.FC = () => {
               <button
                 onClick={() => setMoreOpen(false)}
                 aria-label="Fechar"
-                className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
               >
                 <X size={20} />
               </button>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
-              {secondary.map(({ to, label, icon: Icon }) => (
-                <Link
-                  key={to}
-                  to={to}
-                  onClick={() => setMoreOpen(false)}
-                  className={`flex flex-col items-center justify-center gap-1.5 rounded-xl py-4 text-[11px] font-medium border transition-colors min-h-[72px]
-                    ${isActive(to)
-                      ? 'bg-slate-800 text-white border-slate-700/50'
-                      : 'bg-base text-slate-300 border-slate-800 hover:bg-elevated'}`}
-                >
-                  <Icon size={20} />
-                  {label}
-                </Link>
+              {secondary.map(({ to, label, icon: Icon, disabled }) => (
+                disabled ? (
+                  <div
+                    key={to}
+                    title="Em breve"
+                    className="flex flex-col items-center justify-center gap-1.5 rounded-xl py-4 text-[11px] font-medium border transition-colors min-h-[72px] bg-base text-slate-600 border-slate-800/50 opacity-50 cursor-not-allowed"
+                  >
+                    <Icon size={20} />
+                    {label}
+                  </div>
+                ) : (
+                  <Link
+                    key={to}
+                    to={to}
+                    onClick={() => setMoreOpen(false)}
+                    className={`flex flex-col items-center justify-center gap-1.5 rounded-xl py-4 text-[11px] font-medium border transition-colors min-h-[72px]
+                      ${isActive(to)
+                        ? 'bg-slate-800 text-white border-slate-700/50'
+                        : 'bg-base text-slate-300 border-slate-800 hover:bg-elevated'}`}
+                  >
+                    <Icon size={20} />
+                    {label}
+                  </Link>
+                )
               ))}
             </div>
 

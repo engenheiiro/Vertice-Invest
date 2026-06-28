@@ -52,8 +52,8 @@ const PerformanceCard = ({ macro, isLoading }: { macro: any, isLoading: boolean 
                     </div>
                 </div>
                 <div className="bg-slate-900 p-1 rounded-lg border border-slate-800 flex gap-1">
-                    <button onClick={() => setViewMode('chart')} className={`p-1.5 rounded transition-all ${viewMode === 'chart' ? 'bg-slate-800 text-blue-400 shadow-sm' : 'text-slate-600 hover:text-slate-400'}`}><BarChart3 size={16} /></button>
-                    <button onClick={() => setViewMode('simulator')} className={`p-1.5 rounded transition-all ${viewMode === 'simulator' ? 'bg-slate-800 text-blue-400 shadow-sm' : 'text-slate-600 hover:text-slate-400'}`}><Calculator size={16} /></button>
+                    <button onClick={() => setViewMode('chart')} aria-label="Ver gráfico" className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded transition-all ${viewMode === 'chart' ? 'bg-slate-800 text-blue-400 shadow-sm' : 'text-slate-600 hover:text-slate-400'}`}><BarChart3 size={16} /></button>
+                    <button onClick={() => setViewMode('simulator')} aria-label="Ver simulador" className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded transition-all ${viewMode === 'simulator' ? 'bg-slate-800 text-blue-400 shadow-sm' : 'text-slate-600 hover:text-slate-400'}`}><Calculator size={16} /></button>
                 </div>
             </div>
 

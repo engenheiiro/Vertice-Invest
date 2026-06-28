@@ -171,13 +171,13 @@ export const AssetList = () => {
                     <table className="w-full text-left border-collapse min-w-[900px]">
                         <thead>
                             <tr className="bg-card border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500">
-                                <th className="p-4 font-bold">Ativo</th>
-                                <th className="p-4 font-bold text-right">Preço Médio</th>
-                                <th className="p-4 font-bold text-right">Preço Atual</th>
-                                <th className="p-4 font-bold text-right">Saldo Atual (R$)</th>
-                                <th className="p-4 font-bold text-right">% Classe</th>
-                                <th className="p-4 font-bold text-right">Rentabilidade</th>
-                                <th className="p-4 font-bold text-center">Ações</th>
+                                <th scope="col" className="p-4 font-bold">Ativo</th>
+                                <th scope="col" className="p-4 font-bold text-right">Preço Médio</th>
+                                <th scope="col" className="p-4 font-bold text-right">Preço Atual</th>
+                                <th scope="col" className="p-4 font-bold text-right">Saldo Atual (R$)</th>
+                                <th scope="col" className="p-4 font-bold text-right">% Classe</th>
+                                <th scope="col" className="p-4 font-bold text-right">Rentabilidade</th>
+                                <th scope="col" className="p-4 font-bold text-center">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="text-sm">

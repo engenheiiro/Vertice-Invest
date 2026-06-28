@@ -127,7 +127,7 @@ export const Modal = ({
                     type="button"
                     onClick={onClose}
                     aria-label="Fechar"
-                    className="text-slate-500 hover:text-white transition-colors rounded-lg p-1"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-white transition-colors rounded-lg"
                   >
                     <X size={20} />
                   </button>

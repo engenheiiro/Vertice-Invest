@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, PlusCircle } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -17,6 +17,7 @@ import { OperationSection } from './add-asset/OperationSection';
 import { AssetSection } from './add-asset/AssetSection';
 import { ValuesSection } from './add-asset/ValuesSection';
 import { NEW_RESERVE, type TransactionType } from './add-asset/types';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 interface AddAssetModalProps {
     isOpen: boolean;
@@ -46,6 +47,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     const [validationError, setValidationError] = useState('');
     const [transactionType, setTransactionType] = useState<TransactionType>('BUY');
     const [priceWarning, setPriceWarning] = useState<string | null>(null);
+
+    const panelRef = useRef<HTMLDivElement>(null);
 
     const [form, setForm] = useState<AssetFormState>(INITIAL_FORM);
     // Tracks the "total value" input for fractional dollar-denominated assets
@@ -89,6 +92,51 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
+
+    // Focus trap + Esc (A3/A9): foca o primeiro campo ao abrir, cicla Tab dentro
+    // do painel e restaura o foco anterior ao fechar.
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const previouslyFocused = document.activeElement as HTMLElement | null;
+
+        const focusables = () =>
+            panelRef.current
+                ? Array.from(
+                    panelRef.current.querySelectorAll<HTMLElement>(
+                        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+                    )
+                ).filter((el) => el.offsetParent !== null)
+                : [];
+
+        const first = focusables()[0];
+        (first ?? panelRef.current)?.focus();
+
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onClose();
+                return;
+            }
+            if (e.key !== 'Tab') return;
+            const items = focusables();
+            if (items.length === 0) return;
+            const firstEl = items[0];
+            const lastEl = items[items.length - 1];
+            if (e.shiftKey && document.activeElement === firstEl) {
+                e.preventDefault();
+                lastEl.focus();
+            } else if (!e.shiftKey && document.activeElement === lastEl) {
+                e.preventDefault();
+                firstEl.focus();
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.removeEventListener('keydown', onKeyDown);
+            previouslyFocused?.focus?.();
+        };
+    }, [isOpen, onClose]);
 
     // Validação de preço (warning) — desvio da cotação de referência ou data antiga.
     useEffect(() => {
@@ -301,10 +349,10 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                 setStatus('idle');
                 onClose();
             }, 1000);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(error);
             setStatus('idle');
-            setValidationError(error.message || 'Erro ao processar transação.');
+            setValidationError(getErrorMessage(error, 'Erro ao processar transação.'));
             addToast('Falha ao registrar transação.', 'error');
         }
     };
@@ -320,13 +368,13 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4 text-center">
-                    <div className="relative transform overflow-hidden rounded-2xl bg-base border border-slate-800 text-left shadow-2xl transition-all w-full max-w-lg animate-fade-in my-auto max-h-[90vh] flex flex-col">
+                    <div ref={panelRef} tabIndex={-1} className="relative transform overflow-hidden rounded-2xl bg-base border border-slate-800 text-left shadow-2xl transition-all w-full max-w-lg animate-fade-in my-auto max-h-[90vh] flex flex-col outline-none">
                         <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-card shrink-0">
                             <h2 id="modal-title" className="text-lg font-bold text-white flex items-center gap-2">
                                 <PlusCircle size={18} className="text-blue-500" />
                                 Nova Transação
                             </h2>
-                            <button onClick={onClose} aria-label="Fechar" className="text-slate-500 hover:text-white transition-colors">
+                            <button onClick={onClose} aria-label="Fechar" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-white transition-colors">
                                 <X size={20} />
                             </button>
                         </div>

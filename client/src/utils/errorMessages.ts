@@ -34,6 +34,16 @@ const PATTERN_MESSAGES: Array<[RegExp, string]> = [
 
 const FALLBACK = 'Algo deu errado. Tente novamente ou contate o suporte.';
 
+/**
+ * Extrai a mensagem de um erro de tipo `unknown` (catch sem `any`),
+ * caindo para `fallback` quando o erro não tem mensagem utilizável.
+ */
+export function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error) return error;
+  return fallback;
+}
+
 export function friendlyError(error: unknown): string {
   if (!error) return FALLBACK;
 

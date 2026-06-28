@@ -16,6 +16,7 @@ const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHis
 const BATCH_SIZE = 15;
 const BATCH_DELAY_MS = 300;
 const TICKER_TIMEOUT_MS = 10000;
+const RETRY_PASS_DELAY_MS = 2000; // pausa antes do retry das falhas (alivia throttle do Yahoo)
 
 const QUOTESUMMARY_MODULES = [
     'summaryDetail',
@@ -94,6 +95,52 @@ async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Monta o bulkOp de upsert de fundamentos a partir do quoteSummary do Yahoo.
+// Extraído para ser reusado pela passada principal e pelo retry (DRY).
+function buildFundamentalsOp(ticker, data) {
+    const fundamentals = extractFundamentals(ticker, data);
+
+    // Get sector/name from the curated universe if Yahoo didn't return it
+    const universeEntry = US_UNIVERSE.find(s => s.ticker === ticker);
+    const sector = fundamentals.sector || universeEntry?.sector || 'Technology';
+    const name = fundamentals.name || universeEntry?.name || ticker;
+
+    const updatePayload = {
+        type: 'STOCK_US',
+        currency: 'USD',
+        sector,
+        name,
+        isActive: true,
+        lastFundamentalsDate: new Date(),
+    };
+    if (fundamentals.industry) updatePayload.industry = fundamentals.industry;
+
+    if (fundamentals.lastPrice > 0) updatePayload.lastPrice = fundamentals.lastPrice;
+    if (fundamentals.pl !== null) updatePayload.pl = fundamentals.pl;
+    if (fundamentals.pvp !== null) updatePayload.pvp = fundamentals.pvp;
+    if (fundamentals.dy !== null) updatePayload.dy = fundamentals.dy;
+    if (fundamentals.beta !== null) updatePayload.beta = fundamentals.beta;
+    if (fundamentals.marketCap) updatePayload.marketCap = fundamentals.marketCap;
+    if (fundamentals.roe !== null) updatePayload.roe = fundamentals.roe;
+    if (fundamentals.netMargin !== null) updatePayload.netMargin = fundamentals.netMargin;
+    if (fundamentals.revenueGrowth !== null) updatePayload.revenueGrowth = fundamentals.revenueGrowth;
+    if (fundamentals.earningsGrowth !== null) updatePayload.earningsGrowth = fundamentals.earningsGrowth;
+    if (fundamentals.debtToEquity !== null) updatePayload.debtToEquity = fundamentals.debtToEquity;
+    if (fundamentals.avgLiquidity) updatePayload.liquidity = fundamentals.avgLiquidity;
+    if (fundamentals.payoutRatio !== null) updatePayload.payout = fundamentals.payoutRatio;
+    if (fundamentals.vpa !== null) updatePayload.vpa = fundamentals.vpa;
+    if (fundamentals.lpa !== null) updatePayload.lpa = fundamentals.lpa;
+    if (fundamentals.peg !== null) updatePayload.peg = fundamentals.peg;
+
+    return {
+        updateOne: {
+            filter: { ticker },
+            update: { $set: updatePayload },
+            upsert: true
+        }
+    };
+}
+
 export const usStocksFundamentalsService = {
 
     async syncUSStocksFundamentals(tickerList = null) {
@@ -101,75 +148,53 @@ export const usStocksFundamentalsService = {
         logger.info(`🌎 [US Fundamentals] Iniciando sync para ${targets.length} ativos...`);
 
         let processed = 0;
-        let failed = 0;
         const bulkOps = [];
 
-        for (let i = 0; i < targets.length; i += BATCH_SIZE) {
-            const batch = targets.slice(i, i + BATCH_SIZE);
-            const results = await Promise.allSettled(batch.map(fetchFundamentalsForTicker));
+        // Executa uma passada batcheada sobre `list`; ops de sucesso vão para bulkOps
+        // (com flush incremental) e os tickers que falharam são devolvidos para retry.
+        const runPass = async (list) => {
+            const stillFailed = [];
+            for (let i = 0; i < list.length; i += BATCH_SIZE) {
+                const batch = list.slice(i, i + BATCH_SIZE);
+                const results = await Promise.allSettled(batch.map(fetchFundamentalsForTicker));
 
-            for (const result of results) {
-                if (result.status !== 'fulfilled') continue;
-                const { ticker, ok, data, error } = result.value;
+                for (const result of results) {
+                    if (result.status !== 'fulfilled') continue;
+                    const { ticker, ok, data, error } = result.value;
 
-                if (!ok) {
-                    failed++;
-                    logger.debug(`[US Fundamentals] Falhou ${ticker}: ${error}`);
-                    continue;
+                    if (!ok) {
+                        stillFailed.push(ticker);
+                        logger.debug(`[US Fundamentals] Falhou ${ticker}: ${error}`);
+                        continue;
+                    }
+
+                    bulkOps.push(buildFundamentalsOp(ticker, data));
+                    processed++;
                 }
 
-                const fundamentals = extractFundamentals(ticker, data);
+                if (bulkOps.length >= 50) {
+                    await MarketAsset.bulkWrite(bulkOps.splice(0, bulkOps.length));
+                }
 
-                // Get sector/name from the curated universe if Yahoo didn't return it
-                const universeEntry = US_UNIVERSE.find(s => s.ticker === ticker);
-                const sector = fundamentals.sector || universeEntry?.sector || 'Technology';
-                const name = fundamentals.name || universeEntry?.name || ticker;
-
-                const updatePayload = {
-                    type: 'STOCK_US',
-                    currency: 'USD',
-                    sector,
-                    name,
-                    isActive: true,
-                    lastFundamentalsDate: new Date(),
-                };
-                if (fundamentals.industry) updatePayload.industry = fundamentals.industry;
-
-                if (fundamentals.lastPrice > 0) updatePayload.lastPrice = fundamentals.lastPrice;
-                if (fundamentals.pl !== null) updatePayload.pl = fundamentals.pl;
-                if (fundamentals.pvp !== null) updatePayload.pvp = fundamentals.pvp;
-                if (fundamentals.dy !== null) updatePayload.dy = fundamentals.dy;
-                if (fundamentals.beta !== null) updatePayload.beta = fundamentals.beta;
-                if (fundamentals.marketCap) updatePayload.marketCap = fundamentals.marketCap;
-                if (fundamentals.roe !== null) updatePayload.roe = fundamentals.roe;
-                if (fundamentals.netMargin !== null) updatePayload.netMargin = fundamentals.netMargin;
-                if (fundamentals.revenueGrowth !== null) updatePayload.revenueGrowth = fundamentals.revenueGrowth;
-                if (fundamentals.earningsGrowth !== null) updatePayload.earningsGrowth = fundamentals.earningsGrowth;
-                if (fundamentals.debtToEquity !== null) updatePayload.debtToEquity = fundamentals.debtToEquity;
-                if (fundamentals.avgLiquidity) updatePayload.liquidity = fundamentals.avgLiquidity;
-                if (fundamentals.payoutRatio !== null) updatePayload.payout = fundamentals.payoutRatio;
-                if (fundamentals.vpa !== null) updatePayload.vpa = fundamentals.vpa;
-                if (fundamentals.lpa !== null) updatePayload.lpa = fundamentals.lpa;
-                if (fundamentals.peg !== null) updatePayload.peg = fundamentals.peg;
-
-                bulkOps.push({
-                    updateOne: {
-                        filter: { ticker },
-                        update: { $set: updatePayload },
-                        upsert: true
-                    }
-                });
-
-                processed++;
+                if (i + BATCH_SIZE < list.length) {
+                    await sleep(BATCH_DELAY_MS);
+                }
             }
+            return stillFailed;
+        };
 
-            if (bulkOps.length >= 50) {
-                await MarketAsset.bulkWrite(bulkOps.splice(0, bulkOps.length));
-            }
+        let failedTickers = await runPass(targets);
 
-            if (i + BATCH_SIZE < targets.length) {
-                await sleep(BATCH_DELAY_MS);
-            }
+        // Retry único: a maioria das falhas é throttle/crumb transitório do Yahoo
+        // (tickers válidos como IPG/HOLX/MMC retornando "Quote not found" sob rajada),
+        // não delisting. Uma segunda passada com folga recupera esses sem martelar.
+        if (failedTickers.length > 0) {
+            logger.debug(`[US Fundamentals] Retry de ${failedTickers.length} ativos após pausa...`);
+            await sleep(RETRY_PASS_DELAY_MS);
+            const recovered = failedTickers.length;
+            failedTickers = await runPass(failedTickers);
+            const got = recovered - failedTickers.length;
+            if (got > 0) logger.info(`↻ [US Fundamentals] Retry recuperou ${got} ativos.`);
         }
 
         // Flush remaining ops
@@ -177,6 +202,7 @@ export const usStocksFundamentalsService = {
             await MarketAsset.bulkWrite(bulkOps);
         }
 
+        const failed = failedTickers.length;
         logger.info(`✅ [US Fundamentals] Concluído: ${processed} atualizados, ${failed} falhas de ${targets.length} total.`);
         return { processed, failed, total: targets.length };
     },

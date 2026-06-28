@@ -224,7 +224,13 @@ export const externalMarketService = {
     // Busca Preço de Criptos e Stocks Internacionais em lote (Cotação Atual)
     async getQuotes(tickers) {
         if (!tickers || tickers.length === 0) return [];
-        
+
+        // Guarda defensiva: descarta tickers vazios/whitespace/não-string antes do
+        // batch. Um doc com ticker '' vazava para o Yahoo e aparecia como falha
+        // fantasma no log (ex.: "[... HOLX,, MMC ...]").
+        tickers = tickers.filter(t => typeof t === 'string' && t.trim().length > 0);
+        if (tickers.length === 0) return [];
+
         const yahooTickers = tickers.map(t => {
             const cleanT = t.trim().toUpperCase();
             

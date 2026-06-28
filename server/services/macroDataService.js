@@ -211,10 +211,12 @@ export const macroDataService = {
         }
 
         // TENTATIVA 2: HTTP (SEM SSL - Bypass WAF)
+        // debug (não warn): em range sem dado novo o BCB devolve 400/404 e esta
+        // tentativa dispara TODO sync — é fluxo esperado, não anomalia acionável.
         try {
-            logger.warn("⚠️ [Macro] HTTPS falhou. Tentando HTTP (Porta 80)...");
+            logger.debug("[Macro] HTTPS sem dados. Tentando HTTP (Porta 80)...");
             const urlHttp = `http://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.SELIC_DAILY}/dados?formato=json&dataInicial=${startDateStr}`;
-            
+
             const resHttp = await axios.get(urlHttp, {
                 headers: { 'User-Agent': 'Wget/1.20.3 (linux-gnu)', 'Accept': '*/*' },
                 httpAgent: httpAgent,
@@ -235,11 +237,24 @@ export const macroDataService = {
                     return;
                 }
 
+                // BCB devolve um objeto-erro {"erro":{"statusCode":404,...,"Value(s) not found"}}
+                // quando o range pedido ainda não tem cotação publicada (fim de semana,
+                // feriado, ou simplesmente já estamos atualizados). Isso NÃO é falha:
+                // é "sem dado novo". Tratar como benigno evita o error: + fallback sintético
+                // ruidoso a cada sync. A base sintética só roda em falha real de infra.
+                const errNode = resData && typeof resData === 'object' ? resData.erro : null;
+                const looksLikeNoData = !!errNode
+                    || (typeof resData === 'string' && /not found|value\(s\) not found/i.test(resData));
+                if (looksLikeNoData) {
+                    logger.info('✅ [Macro] Selic diária já atualizada (BCB sem dado novo no período).');
+                    return;
+                }
+
                 const dataType = typeof resData;
                 let dataSnippet = 'N/A';
                 try {
-                    dataSnippet = dataType === 'string' 
-                        ? resData.substring(0, 200) 
+                    dataSnippet = dataType === 'string'
+                        ? resData.substring(0, 200)
                         : JSON.stringify(resData).substring(0, 200);
                 } catch (e) {
                     dataSnippet = '[Unserializable Object]';

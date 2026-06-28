@@ -77,7 +77,7 @@ export const InstantReportModal: React.FC<InstantReportModalProps> = ({ isOpen, 
                                     </p>
                                 </div>
                             </div>
-                            <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+                            <button onClick={onClose} aria-label="Fechar" className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
                                 <X size={20} />
                             </button>
                         </div>

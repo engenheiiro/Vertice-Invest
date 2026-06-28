@@ -10,6 +10,7 @@ import { SubscriptionCard } from '../components/profile/SubscriptionCard';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/auth';
 import { useToast } from '../contexts/ToastContext';
+import { getErrorMessage } from '../utils/errorMessages';
 
 export const Profile = () => {
     const { user, logout } = useAuth();
@@ -35,8 +36,8 @@ export const Profile = () => {
         try {
             await authService.exportData();
             addToast('Download iniciado. Verifique sua pasta de downloads.', 'success');
-        } catch (err: any) {
-            addToast(err.message || 'Erro ao exportar dados.', 'error');
+        } catch (err: unknown) {
+            addToast(getErrorMessage(err, 'Erro ao exportar dados.'), 'error');
         } finally {
             setIsExporting(false);
         }
@@ -50,8 +51,8 @@ export const Profile = () => {
             addToast('Conta desativada. Até logo!', 'success');
             await logout();
             navigate('/login');
-        } catch (err: any) {
-            addToast(err.message || 'Erro ao desativar conta.', 'error');
+        } catch (err: unknown) {
+            addToast(getErrorMessage(err, 'Erro ao desativar conta.'), 'error');
         } finally {
             setIsDeactivating(false);
         }
@@ -69,8 +70,8 @@ export const Profile = () => {
             addToast('Conta e dados excluídos permanentemente.', 'success');
             await logout();
             navigate('/login');
-        } catch (err: any) {
-            addToast(err.message || 'Erro ao excluir conta.', 'error');
+        } catch (err: unknown) {
+            addToast(getErrorMessage(err, 'Erro ao excluir conta.'), 'error');
         } finally {
             setIsDeleting(false);
         }

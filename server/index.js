@@ -38,20 +38,32 @@ const panicLog = (message) => {
     const __dirname = path.dirname(__filename);
 
     const dotenv = (await import('dotenv')).default;
-    
-    const envPaths = [
-        path.resolve(__dirname, '../.env'),
-        path.resolve(__dirname, '../../.env'),
-        path.resolve(process.cwd(), '.env')
+
+    // (8.5) Se NODE_ENV já vier definido pela plataforma (Render/Vercel
+    // costumam injetar isso direto, fora de arquivo), prioriza um .env
+    // específico do ambiente (.env.development/.env.staging/.env.production)
+    // antes do .env genérico — evita misturar config de teste com produção.
+    const envFileNames = process.env.NODE_ENV
+        ? [`.env.${process.env.NODE_ENV}`, '.env']
+        : ['.env'];
+
+    const envRoots = [
+        path.resolve(__dirname, '..'),
+        path.resolve(__dirname, '../..'),
+        process.cwd()
     ];
 
     let envLoaded = false;
-    for (const p of envPaths) {
-        if (fs.existsSync(p)) {
-            dotenv.config({ path: p });
-            envLoaded = true;
-            break;
+    for (const fileName of envFileNames) {
+        for (const root of envRoots) {
+            const p = path.resolve(root, fileName);
+            if (fs.existsSync(p)) {
+                dotenv.config({ path: p });
+                envLoaded = true;
+                break;
+            }
         }
+        if (envLoaded) break;
     }
 
     if (!envLoaded) {

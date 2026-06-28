@@ -147,7 +147,7 @@ export const authService = {
           localStorage.setItem('user', JSON.stringify(data.user));
         }
         return data;
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Login Falhou:", error);
         throw error;
     }

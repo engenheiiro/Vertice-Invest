@@ -7,6 +7,7 @@ import { COURSES, LESSONS } from '../data/academy';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { authService } from '../services/auth';
+import { getErrorMessage } from '../utils/errorMessages';
 
 export const CoursePlayer = () => {
     const { courseId } = useParams();
@@ -256,9 +257,9 @@ export const CoursePlayer = () => {
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
-            addToast(`Erro ao baixar certificado: ${err.message || 'Verifique se você concluiu todas as aulas.'}`, 'error');
+            addToast(`Erro ao baixar certificado: ${getErrorMessage(err, 'Verifique se você concluiu todas as aulas.')}`, 'error');
         } finally {
             setDownloading(false);
         }

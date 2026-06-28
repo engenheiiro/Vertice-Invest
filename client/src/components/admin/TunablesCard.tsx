@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { SlidersHorizontal, Save, RotateCcw, Loader2 } from 'lucide-react';
 import { authService } from '../../services/auth';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 interface Tunable {
     key: string;
@@ -30,8 +31,8 @@ export const TunablesCard = () => {
             if (!res.ok) throw new Error(data.message || 'Falha ao carregar');
             setTunables(data.tunables || []);
             setDraft(Object.fromEntries((data.tunables || []).map((t: Tunable) => [t.key, t.value])));
-        } catch (e: any) {
-            setMsg({ type: 'error', text: e.message || 'Erro ao carregar configurações.' });
+        } catch (e: unknown) {
+            setMsg({ type: 'error', text: getErrorMessage(e, 'Erro ao carregar configurações.') });
         } finally {
             setLoading(false);
         }
@@ -57,8 +58,8 @@ export const TunablesCard = () => {
             setDraft(Object.fromEntries(refreshed.map((t) => [t.key, t.value])));
             setMsg({ type: 'success', text: 'Salvo! Em vigor em até 1 min.' });
             setTimeout(() => setMsg(null), 3000);
-        } catch (e: any) {
-            setMsg({ type: 'error', text: e.message || 'Erro ao salvar.' });
+        } catch (e: unknown) {
+            setMsg({ type: 'error', text: getErrorMessage(e, 'Erro ao salvar.') });
         } finally {
             setSaving(false);
         }

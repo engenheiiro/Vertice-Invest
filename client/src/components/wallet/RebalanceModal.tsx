@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { walletService } from '../../services/wallet';
 import { useToast } from '../../contexts/ToastContext';
 import { formatCurrency, formatQuantity } from '../../utils/format';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 interface RebalanceModalProps {
     isOpen: boolean;
@@ -79,8 +80,8 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
         try {
             const data = await walletService.getRebalancePlan(profile);
             setPlan(data);
-        } catch (e: any) {
-            setError(e?.message || 'Não foi possível gerar o plano.');
+        } catch (e: unknown) {
+            setError(getErrorMessage(e, 'Não foi possível gerar o plano.'));
             setPlan(null);
         } finally {
             setIsLoading(false);
@@ -176,7 +177,7 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
                                     </div>
                                 </div>
                             </div>
-                            <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
+                            <button onClick={onClose} aria-label="Fechar" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-white transition-colors">
                                 <X size={20} />
                             </button>
                         </div>

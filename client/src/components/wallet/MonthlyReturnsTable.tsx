@@ -157,29 +157,29 @@ export const MonthlyReturnsTable = () => {
                 <table className="w-full text-center border-collapse text-xs">
                     <thead>
                         <tr className="bg-panel text-slate-500 font-bold border-b border-slate-800">
-                            <th className="p-3 text-left pl-6">Ano</th>
-                            <th className="p-3">Jan</th>
-                            <th className="p-3">Fev</th>
-                            <th className="p-3">Mar</th>
-                            <th className="p-3">Abr</th>
-                            <th className="p-3">Mai</th>
-                            <th className="p-3">Jun</th>
-                            <th className="p-3">Jul</th>
-                            <th className="p-3">Ago</th>
-                            <th className="p-3">Set</th>
-                            <th className="p-3">Out</th>
-                            <th className="p-3">Nov</th>
-                            <th className="p-3">Dez</th>
-                            <th className="p-3 font-black text-white bg-slate-800/30 border-l border-slate-800">Ano</th>
-                            <th className="p-3 font-black text-white bg-slate-800/30">Acum.</th>
+                            <th scope="col" className="p-3 text-left pl-6">Ano</th>
+                            <th scope="col" className="p-3">Jan</th>
+                            <th scope="col" className="p-3">Fev</th>
+                            <th scope="col" className="p-3">Mar</th>
+                            <th scope="col" className="p-3">Abr</th>
+                            <th scope="col" className="p-3">Mai</th>
+                            <th scope="col" className="p-3">Jun</th>
+                            <th scope="col" className="p-3">Jul</th>
+                            <th scope="col" className="p-3">Ago</th>
+                            <th scope="col" className="p-3">Set</th>
+                            <th scope="col" className="p-3">Out</th>
+                            <th scope="col" className="p-3">Nov</th>
+                            <th scope="col" className="p-3">Dez</th>
+                            <th scope="col" className="p-3 font-black text-white bg-slate-800/30 border-l border-slate-800">Ano</th>
+                            <th scope="col" className="p-3 font-black text-white bg-slate-800/30">Acum.</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
                         {tableData.map((row) => (
                             <tr key={row.year} className="hover:bg-slate-800/20 transition-colors group">
-                                <td className="p-3 text-left pl-6 font-bold text-white bg-card border-r border-slate-800/50">
+                                <th scope="row" className="p-3 text-left pl-6 font-bold text-white bg-card border-r border-slate-800/50">
                                     {row.year}
-                                </td>
+                                </th>
                                 {row.months.map((m, idx) => (
                                     <td key={idx} className={`p-3 font-mono font-medium ${getColor(m.value)}`}>
                                         {formatPercent(m.value)}

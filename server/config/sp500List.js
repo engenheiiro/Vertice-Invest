@@ -352,7 +352,7 @@ export const SP500_STOCKS = [
   { ticker: 'V', name: 'Visa Inc.', sector: 'Financials', subsector: 'Transaction & Payment Processing' },
   { ticker: 'MA', name: 'Mastercard Inc.', sector: 'Financials', subsector: 'Transaction & Payment Processing' },
   { ticker: 'PYPL', name: 'PayPal Holdings', sector: 'Financials', subsector: 'Transaction & Payment Processing' },
-  { ticker: 'SQ', name: 'Block Inc.', sector: 'Financials', subsector: 'Transaction & Payment Processing' },
+  { ticker: 'XYZ', name: 'Block Inc.', sector: 'Financials', subsector: 'Transaction & Payment Processing' }, // ex-SQ (rebrand Block, jan/2025)
 
   // Additional high-cap stocks across sectors
   { ticker: 'UBER', name: 'Uber Technologies', sector: 'Industrials', subsector: 'Ground Transportation' },

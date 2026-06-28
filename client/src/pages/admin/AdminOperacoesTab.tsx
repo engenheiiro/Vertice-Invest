@@ -148,9 +148,9 @@ export const AdminOperacoesTab: React.FC<Props> = ({
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className="bg-card border-b border-slate-800 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                            <th className="px-5 py-3">Ativo</th>
-                            <th className="px-5 py-3 text-center">Visualizar</th>
-                            <th className="px-5 py-3 text-center">Publicar</th>
+                            <th scope="col" className="px-5 py-3">Ativo</th>
+                            <th scope="col" className="px-5 py-3 text-center">Visualizar</th>
+                            <th scope="col" className="px-5 py-3 text-center">Publicar</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
@@ -205,7 +205,7 @@ export const AdminOperacoesTab: React.FC<Props> = ({
                     <div className="bg-card border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
                         <div className="flex items-center justify-between p-5 border-b border-slate-800">
                             <h3 className="text-sm font-bold text-white flex items-center gap-2"><MessageSquare size={16} className="text-blue-400" />Explainable IA — {promptModal.assetClass}</h3>
-                            <button onClick={onClosePromptModal} className="text-slate-500 hover:text-white"><X size={18} /></button>
+                            <button onClick={onClosePromptModal} aria-label="Fechar" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-white"><X size={18} /></button>
                         </div>
                         <div className="overflow-y-auto p-5 space-y-4">
                             {isLoadingPrompt ? (

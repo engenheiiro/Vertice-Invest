@@ -284,11 +284,11 @@ export const Indicators = () => {
                             <table className="w-full text-left border-collapse min-w-[800px]">
                                 <thead className="bg-panel text-[10px] font-black text-slate-500 uppercase tracking-widest sticky top-0 z-30 shadow-sm">
                                     <tr>
-                                        <th className="px-6 py-4">Produto</th>
-                                        <th className="px-6 py-4">Emissor</th>
-                                        <th className="px-6 py-4 text-right">Rentabilidade</th>
-                                        <th className="px-6 py-4 text-right">Mínimo</th>
-                                        <th className="px-6 py-4 text-right">Vencimento / Liquidez</th>
+                                        <th scope="col" className="px-6 py-4">Produto</th>
+                                        <th scope="col" className="px-6 py-4">Emissor</th>
+                                        <th scope="col" className="px-6 py-4 text-right">Rentabilidade</th>
+                                        <th scope="col" className="px-6 py-4 text-right">Mínimo</th>
+                                        <th scope="col" className="px-6 py-4 text-right">Vencimento / Liquidez</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800/50 text-sm">
@@ -325,7 +325,8 @@ export const Indicators = () => {
 
 // ... (Subcomponentes mantidos inalterados) ...
 const SortableHeader = ({ label, sortKey, currentSort, onSort, align, icon }: any) => (
-    <th 
+    <th
+        scope="col"
         className={`px-6 py-4 cursor-pointer hover:text-white transition-colors text-${align} bg-panel`}
         onClick={() => onSort(sortKey)}
     >

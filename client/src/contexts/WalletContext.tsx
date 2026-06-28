@@ -8,6 +8,7 @@ import { useToast } from './ToastContext';
 import { DEMO_ASSETS, DEMO_KPIS, DEMO_HISTORY } from '../data/DEMO_DATA'; // Importar Dados Mock
 import { STALE_TIME } from '../config/queryConfig';
 import { computeWalletKpis } from '../utils/kpiCalculations';
+import { getErrorMessage } from '../utils/errorMessages';
 
 // ETF: classe própria para fundos de índice nacionais (BRL) e internacionais (USD).
 // OURO mantido só por compatibilidade com carteiras antigas (não oferecido na UI;
@@ -239,8 +240,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (isDemoMode) return; // Demo não persiste
         try {
             await walletService.updateTargets(newTargets as Record<string, number>, newReserveTarget, newSubAllocation);
-        } catch (err: any) {
-            addToast(err?.message || 'Erro ao salvar carteira ideal.', 'error');
+        } catch (err: unknown) {
+            addToast(getErrorMessage(err, 'Erro ao salvar carteira ideal.'), 'error');
         }
     };
 

@@ -203,7 +203,7 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                 <Calculator size={18} className="text-blue-400" />
                                 Aporte Inteligente
                             </h2>
-                            <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
+                            <button onClick={onClose} aria-label="Fechar" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-white transition-colors">
                                 <X size={20} />
                             </button>
                         </div>

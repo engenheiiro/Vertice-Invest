@@ -19,7 +19,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     if (!isOpen) return null;
 
     return createPortal(
-        <div className="relative z-[200]" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div className="relative z-[200]" aria-labelledby="modal-title" aria-describedby="modal-description" role="dialog" aria-modal="true">
             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
@@ -36,7 +36,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                             <div className="text-center">
                                 <h3 className="text-lg font-bold leading-6 text-white" id="modal-title">{title}</h3>
                                 <div className="mt-3">
-                                    <p className={`text-sm leading-relaxed ${isDestructive ? 'text-slate-300' : 'text-slate-400'}`}>
+                                    <p id="modal-description" className={`text-sm leading-relaxed ${isDestructive ? 'text-slate-300' : 'text-slate-400'}`}>
                                         {message}
                                     </p>
                                 </div>
@@ -52,14 +52,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                         <div className="bg-panel px-4 py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:px-6">
                             <button
                                 type="button"
-                                className="inline-flex w-full justify-center rounded-xl bg-transparent border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-300 shadow-sm hover:bg-slate-800 sm:w-auto transition-all"
+                                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-transparent border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-300 shadow-sm hover:bg-slate-800 sm:w-auto transition-all"
                                 onClick={onClose}
                             >
                                 Cancelar
                             </button>
                             <button
                                 type="button"
-                                className={`inline-flex w-full justify-center rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-sm sm:w-auto transition-all active:scale-95 ${isDestructive ? 'bg-red-600 hover:bg-red-500 shadow-red-900/30' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/30'}`}
+                                className={`inline-flex min-h-[44px] w-full items-center justify-center rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-sm sm:w-auto transition-all active:scale-95 ${isDestructive ? 'bg-red-600 hover:bg-red-500 shadow-red-900/30' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/30'}`}
                                 onClick={() => {
                                     onConfirm();
                                     onClose();

@@ -68,6 +68,24 @@ npm run test:client
 
 ---
 
+## Checklist de PR
+
+Antes de abrir/marcar o PR como pronto, confira:
+
+- [ ] `npm run lint` (root) sem erros.
+- [ ] `npm run typecheck` (client + server) sem erros.
+- [ ] `npm run test:server` e `npm run test:client` verdes.
+- [ ] Specs novos incluídos no `test:ci` (`server/package.json`), se aplicável.
+- [ ] Nenhum `console.log`/segredo hardcoded; logs via `logger` (Winston).
+- [ ] Valores monetários usam `mathUtils.js` (`safeFloat`/`safeAdd`/...), nunca float cru.
+- [ ] Rotas de escrita novas validam entrada com Zod (`validate`) e usam o rate limiter correto (`server/middleware/rateLimiters.js`).
+- [ ] Mudanças em engine (scoring/portfolio/signal) preservam as regras invioláveis de [`CLAUDE.md`](CLAUDE.md) — threshold global, ordenação soberana, um perfil por ativo.
+- [ ] Mensagens de commit seguem Conventional Commits (validado pelo `commit-msg` hook).
+- [ ] CI (lint → typecheck → testes → build) verde no PR.
+- [ ] Para mudanças visuais: testado nos dois temas (light/dark) e responsivo (mobile).
+
+---
+
 ## Regras de negócio invioláveis
 
 Antes de mexer nas engines (`server/services/engines/`), revise as regras em [`CLAUDE.md`](CLAUDE.md) — ex.: threshold global de compra (score ≥ 70), ordenação soberana por score com desempate por composite estrutural, e um único perfil de risco por ativo no ranking.

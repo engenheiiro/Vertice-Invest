@@ -89,12 +89,12 @@ export const Research = () => {
                         window.history.replaceState({}, document.title);
                     }
                 }
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error("Erro ao buscar análise:", err);
                 setReport(null);
             }
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Erro geral:", err);
         } finally {
             setIsLoading(false);

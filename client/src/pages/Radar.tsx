@@ -540,14 +540,14 @@ export const RadarPage = () => {
                             <table className="w-full text-left border-collapse min-w-[860px]">
                                 <thead>
                                     <tr className="bg-card border-b border-slate-800 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                                        <th className="p-4">Data</th>
-                                        <th className="p-4">Ativo</th>
-                                        <th className="p-4">Sinal</th>
-                                        <th className="p-4">Setor</th>
-                                        <th className="p-4 text-right">Entrada</th>
-                                        <th className="p-4 text-right">Saída</th>
-                                        <th className="p-4 text-right">Resultado</th>
-                                        <th className="p-4 text-center">Status</th>
+                                        <th scope="col" className="p-4">Data</th>
+                                        <th scope="col" className="p-4">Ativo</th>
+                                        <th scope="col" className="p-4">Sinal</th>
+                                        <th scope="col" className="p-4">Setor</th>
+                                        <th scope="col" className="p-4 text-right">Entrada</th>
+                                        <th scope="col" className="p-4 text-right">Saída</th>
+                                        <th scope="col" className="p-4 text-right">Resultado</th>
+                                        <th scope="col" className="p-4 text-center">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800/50 text-xs text-slate-300 font-medium">

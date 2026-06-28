@@ -239,7 +239,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                         <button onClick={() => setViewMode('CURRENT')} className={`text-[10px] font-bold px-3 py-1 rounded transition-colors ${viewMode === 'CURRENT' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Atual</button>
                         <button onClick={() => setViewMode('IDEAL')} className={`text-[10px] font-bold px-3 py-1 rounded transition-colors ${viewMode === 'IDEAL' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Ideal</button>
                     </div>
-                    <button onClick={openEditor} className="p-1.5 text-slate-500 hover:text-white transition-colors rounded-lg hover:bg-slate-800 border border-transparent hover:border-slate-700">
+                    <button onClick={openEditor} aria-label="Configurar carteira ideal" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-white transition-colors rounded-lg hover:bg-slate-800 border border-transparent hover:border-slate-700">
                         <Settings size={14} />
                     </button>
                 </div>
@@ -367,7 +367,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                 <div className="absolute inset-0 bg-base z-20 flex flex-col p-6 animate-fade-in rounded-2xl">
                     <div className="flex justify-between items-center mb-4">
                         <h4 className="text-sm font-bold text-white">Configurar Carteira Ideal</h4>
-                        <button onClick={() => setIsEditing(false)}><X size={16} className="text-slate-500" /></button>
+                        <button onClick={() => setIsEditing(false)} aria-label="Fechar" className="min-h-[44px] min-w-[44px] flex items-center justify-center"><X size={16} className="text-slate-500" /></button>
                     </div>
                     <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-1">
                         <div className="bg-slate-900/30 p-3 rounded-xl border border-slate-800">

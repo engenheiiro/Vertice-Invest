@@ -673,14 +673,14 @@ export const Calculator: React.FC = () => {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-white/5 bg-white/2">
-                    <th className="text-left py-3 px-4 text-slate-500 font-semibold w-48">Instrumento</th>
-                    <th className="text-right py-3 px-4 text-slate-500 font-semibold">Valor bruto</th>
-                    <th className="text-right py-3 px-4 text-slate-500 font-semibold">Rent. bruta</th>
-                    <th className="text-right py-3 px-4 text-slate-500 font-semibold">Custos</th>
-                    <th className="text-right py-3 px-4 text-slate-500 font-semibold">IR pago</th>
-                    <th className="text-right py-3 px-4 text-slate-500 font-semibold">Valor líquido</th>
-                    <th className="text-right py-3 px-4 text-slate-500 font-semibold">Rent. líquida</th>
-                    <th className="text-right py-3 px-4 text-slate-500 font-semibold">Ganho líquido</th>
+                    <th scope="col" className="text-left py-3 px-4 text-slate-500 font-semibold w-48">Instrumento</th>
+                    <th scope="col" className="text-right py-3 px-4 text-slate-500 font-semibold">Valor bruto</th>
+                    <th scope="col" className="text-right py-3 px-4 text-slate-500 font-semibold">Rent. bruta</th>
+                    <th scope="col" className="text-right py-3 px-4 text-slate-500 font-semibold">Custos</th>
+                    <th scope="col" className="text-right py-3 px-4 text-slate-500 font-semibold">IR pago</th>
+                    <th scope="col" className="text-right py-3 px-4 text-slate-500 font-semibold">Valor líquido</th>
+                    <th scope="col" className="text-right py-3 px-4 text-slate-500 font-semibold">Rent. líquida</th>
+                    <th scope="col" className="text-right py-3 px-4 text-slate-500 font-semibold">Ganho líquido</th>
                   </tr>
                 </thead>
                 <tbody>

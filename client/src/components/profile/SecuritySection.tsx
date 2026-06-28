@@ -4,6 +4,7 @@ import { Lock, Smartphone, ShieldAlert, ChevronRight, X, Loader2, Copy, Check } 
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { authService } from '../../services/auth';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 type MfaMode = 'idle' | 'setup' | 'disable';
 type Msg = { type: 'success' | 'error'; text: string } | null;
@@ -45,8 +46,8 @@ export const SecuritySection = () => {
             const data = await authService.setupMfa();
             setSetupData({ secret: data.secret, qr: data.qr });
             setMode('setup');
-        } catch (e: any) {
-            setMfaMsg({ type: 'error', text: e.message || 'Erro ao iniciar o MFA.' });
+        } catch (e: unknown) {
+            setMfaMsg({ type: 'error', text: getErrorMessage(e, 'Erro ao iniciar o MFA.') });
         } finally {
             setMfaBusy(false);
         }
@@ -62,8 +63,8 @@ export const SecuritySection = () => {
             setMode('idle');
             setSetupData(null);
             setMfaCode('');
-        } catch (e: any) {
-            setMfaMsg({ type: 'error', text: e.message || 'Código inválido.' });
+        } catch (e: unknown) {
+            setMfaMsg({ type: 'error', text: getErrorMessage(e, 'Código inválido.') });
         } finally {
             setMfaBusy(false);
         }
@@ -79,8 +80,8 @@ export const SecuritySection = () => {
             });
             setMfaEnabled(false);
             resetMfaFlow();
-        } catch (e: any) {
-            setMfaMsg({ type: 'error', text: e.message || 'Não foi possível desativar.' });
+        } catch (e: unknown) {
+            setMfaMsg({ type: 'error', text: getErrorMessage(e, 'Não foi possível desativar.') });
         } finally {
             setMfaBusy(false);
         }
@@ -134,8 +135,8 @@ export const SecuritySection = () => {
                 setIsChangingPassword(false);
                 setPwdMsg(null);
             }, 2000);
-        } catch (error: any) {
-            setPwdMsg({ type: 'error', text: error.message || 'Erro ao alterar senha.' });
+        } catch (error: unknown) {
+            setPwdMsg({ type: 'error', text: getErrorMessage(error, 'Erro ao alterar senha.') });
         } finally {
             setLoadingPwd(false);
         }

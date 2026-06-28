@@ -4,6 +4,7 @@ import { useAuth, UserPlan, BannerPreset } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { authService } from '../../services/auth';
 import { PlanBadge } from '../ui/PlanBadge';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 // (3.17) Redimensiona/comprime a imagem escolhida para um quadrado 256×256
 // (crop "cover") e devolve uma data-URL pequena. Prefere WebP; cai para JPEG
@@ -80,8 +81,8 @@ export const ProfileIdentity = () => {
             await authService.updateAvatar(dataUrl);
             await refreshProfile();
             addToast('Foto de perfil atualizada.', 'success');
-        } catch (err: any) {
-            addToast(err?.message || 'Não foi possível atualizar a foto.', 'error');
+        } catch (err: unknown) {
+            addToast(getErrorMessage(err, 'Não foi possível atualizar a foto.'), 'error');
         } finally {
             setUploadingAvatar(false);
         }
@@ -94,8 +95,8 @@ export const ProfileIdentity = () => {
             await authService.removeAvatar();
             await refreshProfile();
             addToast('Foto de perfil removida.', 'success');
-        } catch (err: any) {
-            addToast(err?.message || 'Não foi possível remover a foto.', 'error');
+        } catch (err: unknown) {
+            addToast(getErrorMessage(err, 'Não foi possível remover a foto.'), 'error');
         } finally {
             setUploadingAvatar(false);
         }
@@ -129,8 +130,8 @@ export const ProfileIdentity = () => {
             await refreshProfile();
             addToast(key ? 'Banner atualizado.' : 'Banner restaurado para o padrão do plano.', 'success');
             setPickerOpen(false);
-        } catch (err: any) {
-            addToast(err?.message || 'Não foi possível atualizar o banner.', 'error');
+        } catch (err: unknown) {
+            addToast(getErrorMessage(err, 'Não foi possível atualizar o banner.'), 'error');
         } finally {
             setSaving(false);
         }

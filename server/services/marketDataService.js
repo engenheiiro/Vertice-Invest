@@ -195,6 +195,30 @@ export const marketDataService = {
         }
     },
 
+    // Regra ÚNICA da blacklist dinâmica por falha de cotação. Recebe os docs de
+    // ativos (com failCount/lastFailDate/marketCap/liquidity) e o conjunto de
+    // tickers que cotaram com sucesso; devolve os bulkOps de failCount/desativação.
+    // Gate de 1 falha/dia (lastFailDate) + proteção de blue chips (ativos grandes/
+    // líquidos seguem contando falhas para alerta, mas nunca são desativados).
+    // Reusada pelo refreshQuotesBatch (BR) e pelo path Exterior/Cripto do syncService.
+    buildQuoteFailureOps(assets, successfulTickers) {
+        const ops = [];
+        const todayKey = new Date().toISOString().slice(0, 10);
+        for (const asset of assets) {
+            if (!asset || successfulTickers.has(asset.ticker)) continue;
+            const lastFailKey = asset.lastFailDate ? new Date(asset.lastFailDate).toISOString().slice(0, 10) : null;
+            if (lastFailKey === todayKey) continue; // já contabilizou falha hoje
+            const currentFail = Number.isFinite(asset.failCount) ? asset.failCount : 0;
+            const newFailCount = Math.min(currentFail + 1, 999);
+            const isLargeAsset = (asset.marketCap || 0) >= LARGE_ASSET_MARKETCAP || (asset.liquidity || 0) >= LARGE_ASSET_LIQUIDITY;
+            const shouldDeactivate = newFailCount >= MAX_FAILURES_BEFORE_BLACKLIST && !isLargeAsset;
+            const updatePayload = { failCount: newFailCount, lastFailDate: new Date() };
+            if (shouldDeactivate) updatePayload.isActive = false;
+            ops.push({ updateOne: { filter: { ticker: asset.ticker }, update: { $set: updatePayload } } });
+        }
+        return ops;
+    },
+
     async refreshQuotesBatch(tickers, force = false) {
         if (!tickers || tickers.length === 0) return;
 
@@ -290,46 +314,13 @@ export const marketDataService = {
             }
 
             // --- BLACKLIST DINÂMICA (DETECTAR FALHAS) ---
-            // Verifica quais tickers solicitados NÃO retornaram ou retornaram erro
-            toUpdate.forEach(requestedTicker => {
-                if (!successfulTickers.has(requestedTicker)) {
-                    const asset = assetMap.get(requestedTicker);
-                    if (asset) {
-                        // Gate de 1 falha/dia: uma rajada de instabilidade do provedor
-                        // (Yahoo fora do ar por minutos, várias requests no mesmo dia) não
-                        // deve inflar failCount. Agora ele significa "dias distintos com falha".
-                        const todayKey = new Date().toISOString().slice(0, 10);
-                        const lastFailKey = asset.lastFailDate ? new Date(asset.lastFailDate).toISOString().slice(0, 10) : null;
-                        if (lastFailKey === todayKey) return; // já contabilizou falha hoje
-
-                        // Coerção defensiva: evita que failCount corrompido (string/NaN)
-                        // gere contagem inválida; teto de 999 previne overflow lógico.
-                        const currentFail = Number.isFinite(asset.failCount) ? asset.failCount : 0;
-                        const newFailCount = Math.min(currentFail + 1, 999);
-
-                        // Protege blue chips: ativos grandes/líquidos seguem contando falhas
-                        // (para alerta), mas nunca são desativados automaticamente.
-                        const isLargeAsset = (asset.marketCap || 0) >= LARGE_ASSET_MARKETCAP || (asset.liquidity || 0) >= LARGE_ASSET_LIQUIDITY;
-                        const shouldDeactivate = newFailCount >= MAX_FAILURES_BEFORE_BLACKLIST && !isLargeAsset;
-
-                        const updatePayload = {
-                            failCount: newFailCount,
-                            lastFailDate: new Date()
-                        };
-
-                        if (shouldDeactivate) {
-                            updatePayload.isActive = false;
-                        }
-
-                        operations.push({
-                            updateOne: {
-                                filter: { ticker: requestedTicker },
-                                update: { $set: updatePayload }
-                            }
-                        });
-                    }
-                }
-            });
+            // Tickers solicitados que NÃO retornaram preço válido ganham failCount
+            // (gate de 1/dia, teto de 999, blue chips protegidas). Regra única em
+            // buildQuoteFailureOps — ver comentário lá.
+            const failedAssets = toUpdate
+                .filter(t => !successfulTickers.has(t))
+                .map(t => assetMap.get(t));
+            operations.push(...this.buildQuoteFailureOps(failedAssets, successfulTickers));
 
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);

@@ -357,7 +357,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                 <h3 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
                                     <Activity size={16} className="text-blue-500" /> Dossiê do Investidor
                                 </h3>
-                                <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+                                <button onClick={onClose} aria-label="Fechar" className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
                                     <X size={20} />
                                 </button>
                             </div>
