@@ -29,7 +29,7 @@ jobs:
       # (8.9) Cache de node_modules entre execuções — `npm run setup` ainda
       # roda, mas resolve quase tudo do cache local em vez de baixar/instalar.
       - name: Cache node_modules (root, client, server)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             node_modules
@@ -92,7 +92,7 @@ jobs:
           cache: npm
 
       - name: Cache node_modules (root, client, server)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             node_modules
