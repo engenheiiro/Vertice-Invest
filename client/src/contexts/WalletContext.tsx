@@ -31,6 +31,9 @@ export interface Asset {
     sector?: string;
     fixedIncomeRate?: number;
     dayChangePct?: number;
+    // Proventos recebidos (all-time, BRL) deste ativo — compõe a Rentabilidade
+    // total (preço + proventos), distinta da Variação (só preço).
+    dividendsReceived?: number;
     // Sub-tipos usados pela ramificação da Carteira Ideal (real vs meta):
     fixedIncomeIndex?: 'SELIC' | 'CDI' | 'IPCA' | 'PRE' | null;
     // ETF/GOLD: holdings de Exterior que são ETFs internacionais (ou ouro lastreado);
@@ -84,6 +87,7 @@ interface WalletContextType {
     history: HistoryPoint[];
     targetAllocation: AllocationMap;
     targetReserve: number;
+    targetMonthlyDividendIncome: number;
     targetSubAllocation: SubAllocationMap;
     usdRate: number;
     isLoading: boolean;
@@ -95,7 +99,7 @@ interface WalletContextType {
     updateAsset: (id: string, data: { name?: string; tags?: string[]; usSubType?: UsSubKey }) => Promise<void>;
     removeAsset: (id: string) => Promise<void>;
     resetWallet: () => Promise<void>;
-    updateTargets: (newTargets: AllocationMap, newReserveTarget: number, newSubAllocation?: SubAllocationMap) => void;
+    updateTargets: (newTargets: AllocationMap, newReserveTarget: number, newSubAllocation?: SubAllocationMap, newDividendGoal?: number) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -108,6 +112,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     
     const [targetAllocation, setTargetAllocation] = useState<AllocationMap>({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10 });
     const [targetReserve, setTargetReserve] = useState(10000);
+    const [targetMonthlyDividendIncome, setTargetMonthlyDividendIncome] = useState(0);
     const [targetSubAllocation, setTargetSubAllocation] = useState<SubAllocationMap>(DEFAULT_SUB_ALLOCATION);
 
     const [isPrivacyMode, setIsPrivacyMode] = useState(() => {
@@ -146,6 +151,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         const data = walletQuery.data;
         if (data?.targetAllocation) setTargetAllocation(data.targetAllocation);
         if (typeof data?.targetReserve === 'number') setTargetReserve(data.targetReserve);
+        if (typeof data?.targetMonthlyDividendIncome === 'number') setTargetMonthlyDividendIncome(data.targetMonthlyDividendIncome);
         if (data?.targetSubAllocation) {
             setTargetSubAllocation({
                 FIXED_INCOME: { ...DEFAULT_SUB_ALLOCATION.FIXED_INCOME, ...data.targetSubAllocation.FIXED_INCOME },
@@ -232,14 +238,15 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         await resetWalletMutation.mutateAsync();
     };
 
-    const updateTargets = async (newTargets: AllocationMap, newReserveTarget: number, newSubAllocation?: SubAllocationMap) => {
+    const updateTargets = async (newTargets: AllocationMap, newReserveTarget: number, newSubAllocation?: SubAllocationMap, newDividendGoal?: number) => {
         // Atualização otimista (UI responde na hora); persiste no backend logo em seguida.
         setTargetAllocation(newTargets);
         setTargetReserve(newReserveTarget);
         if (newSubAllocation) setTargetSubAllocation(newSubAllocation);
+        if (newDividendGoal !== undefined) setTargetMonthlyDividendIncome(newDividendGoal);
         if (isDemoMode) return; // Demo não persiste
         try {
-            await walletService.updateTargets(newTargets as Record<string, number>, newReserveTarget, newSubAllocation);
+            await walletService.updateTargets(newTargets as Record<string, number>, newReserveTarget, newSubAllocation, newDividendGoal);
         } catch (err: unknown) {
             addToast(getErrorMessage(err, 'Erro ao salvar carteira ideal.'), 'error');
         }
@@ -277,6 +284,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             history,
             targetAllocation,
             targetReserve,
+            targetMonthlyDividendIncome,
             targetSubAllocation,
             usdRate,
             isLoading, 

@@ -97,7 +97,7 @@ const MAX_WALLET_HEAL_DEPTH = 1;
 const loadWalletState = async (userId) => {
     // (5.4) Preferências e holdings dependem só do userId → buscadas em paralelo.
     const [userPrefs, userAssets] = await Promise.all([
-        User.findById(userId).select('targetAllocation targetReserve targetSubAllocation').lean(),
+        User.findById(userId).select('targetAllocation targetReserve targetMonthlyDividendIncome targetSubAllocation').lean(),
         UserAsset.find({ user: userId }),
     ]);
 
@@ -105,6 +105,7 @@ const loadWalletState = async (userId) => {
     const targets = {
         targetAllocation: userPrefs?.targetAllocation || { STOCK: 40, FII: 30, STOCK_US: 20, ETF: 0, CRYPTO: 10, FIXED_INCOME: 0 },
         targetReserve: typeof userPrefs?.targetReserve === 'number' ? userPrefs.targetReserve : 10000,
+        targetMonthlyDividendIncome: typeof userPrefs?.targetMonthlyDividendIncome === 'number' ? userPrefs.targetMonthlyDividendIncome : 0,
         targetSubAllocation: userPrefs?.targetSubAllocation || {
             FIXED_INCOME: { IPCA: 0, POS: 0, PRE: 0 },
             STOCK_US: { STOCK: 0, REIT: 0, ETF: 0, DOLLAR: 0 },
@@ -165,11 +166,11 @@ const fetchWalletMarketContext = async (userId, liveTickers) => {
 
     const assetMap = assetMapR.status === 'fulfilled' ? assetMapR.value : new Map();
     const config = configR.status === 'fulfilled' ? configR.value : null;
-    const { totalAllTime: totalDividends = 0, projectedMonthly = 0 } =
+    const { totalAllTime: totalDividends = 0, projectedMonthly = 0, receivedByTicker = {} } =
         dividendsR.status === 'fulfilled' ? dividendsR.value : {};
     const snapshots = snapshotsR.status === 'fulfilled' ? snapshotsR.value : [];
 
-    return { assetMap, config, totalDividends, projectedMonthly, snapshots };
+    return { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots };
 };
 
 // Processa um único ativo: resolve preço/variação e devolve o card pronto +
@@ -372,7 +373,7 @@ export const getWalletData = async (req, res, next, _depth = 0) => {
                 .catch(err => logger.warn(`[Wallet] Refresh de cotações em background falhou: ${err.message}`));
         }
 
-        const { assetMap, config, totalDividends, projectedMonthly, snapshots } =
+        const { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots } =
             await fetchWalletMarketContext(userId, liveTickers);
 
         const usdRate = safeFloat(config?.dollar || 5.75);
@@ -398,6 +399,10 @@ export const getWalletData = async (req, res, next, _depth = 0) => {
         let totalDayVariation = 0;
         for (const asset of activeAssets) {
             const { processed, totalValueBr, totalCostBr, dayChangeValueBr } = processWalletAsset(asset, assetCtx);
+            // Proventos recebidos (all-time, BRL) deste ativo — alimenta a
+            // Rentabilidade total (preço + proventos) na Detalhamento por Classe,
+            // distinta da Variação (só preço).
+            processed.dividendsReceived = safeCurrency(receivedByTicker[asset.ticker] || 0);
             processedAssets.push(processed);
             totalEquity = safeAdd(totalEquity, totalValueBr);
             totalInvested = safeAdd(totalInvested, totalCostBr);
@@ -792,7 +797,7 @@ export const resetWallet = async (req, res, next) => {
 export const updateWalletTargets = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const { targetAllocation, targetReserve, targetSubAllocation } = req.body;
+        const { targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation } = req.body;
 
         const update = {};
         if (targetAllocation !== undefined) {
@@ -807,6 +812,9 @@ export const updateWalletTargets = async (req, res, next) => {
         }
         if (targetReserve !== undefined) {
             update.targetReserve = Math.max(0, safeFloat(targetReserve));
+        }
+        if (targetMonthlyDividendIncome !== undefined) {
+            update.targetMonthlyDividendIncome = Math.max(0, safeFloat(targetMonthlyDividendIncome));
         }
         if (targetSubAllocation !== undefined) {
             const fi = targetSubAllocation.FIXED_INCOME || {};
@@ -827,12 +835,13 @@ export const updateWalletTargets = async (req, res, next) => {
         }
 
         const updated = await User.findByIdAndUpdate(userId, { $set: update }, { new: true })
-            .select('targetAllocation targetReserve targetSubAllocation').lean();
+            .select('targetAllocation targetReserve targetMonthlyDividendIncome targetSubAllocation').lean();
 
         res.json({
             message: 'Carteira ideal atualizada.',
             targetAllocation: updated?.targetAllocation,
             targetReserve: updated?.targetReserve,
+            targetMonthlyDividendIncome: updated?.targetMonthlyDividendIncome,
             targetSubAllocation: updated?.targetSubAllocation,
         });
     } catch (error) {
@@ -917,9 +926,35 @@ const dividendHealAt = new Map();
 export const getWalletDividends = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const data = await financialService.calculateUserDividends(userId);
+        // `req.user` (cache do authMiddleware) não carrega targetMonthlyDividendIncome
+        // — busca dedicada, em paralelo com o cálculo de proventos.
+        const [data, userGoal] = await Promise.all([
+            financialService.calculateUserDividends(userId),
+            User.findById(userId).select('targetMonthlyDividendIncome').lean(),
+        ]);
         const history = Array.from(data.dividendMap.entries()).map(([month, val]) => ({ month, value: val.total, breakdown: val.breakdown })).sort((a, b) => a.month.localeCompare(b.month));
-        res.json({ history, provisioned: data.provisioned, totalAllTime: data.totalAllTime, projectedMonthly: data.projectedMonthly });
+
+        // Meta é MENSAL → `current` precisa ser uma grandeza mensal, nunca o
+        // acumulado vitalício (`totalAllTime`), senão a barra estoura em 100%.
+        // Espelha o que o card exibe (displayDividends): soma das provisões do
+        // mês corrente quando houver, senão o fluxo mensal projetado.
+        const target = userGoal?.targetMonthlyDividendIncome || 0;
+        const provisionedSum = (data.provisioned || []).reduce((acc, p) => safeAdd(acc, p.amount || 0), 0);
+        const current = provisionedSum > 0 ? provisionedSum : data.projectedMonthly;
+        const goal = {
+            target,
+            current,
+            progressPercent: target > 0 ? Math.min(100, safeDiv(safeMult(current, 100), target)) : null,
+        };
+
+        res.json({
+            history,
+            provisioned: data.provisioned,
+            totalAllTime: data.totalAllTime,
+            projectedMonthly: data.projectedMonthly,
+            yieldOnCost: data.yieldOnCost,
+            goal,
+        });
 
         // Self-heal: se o usuário tem ativos pagadores mas TUDO está zerado, é
         // sinal de que faltou sincronizar proventos e/ou popular dy. Dispara em

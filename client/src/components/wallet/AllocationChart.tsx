@@ -60,7 +60,7 @@ interface AllocationChartProps {
 }
 
 export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: AllocationChartProps) => {
-    const { assets, kpis, targetAllocation, targetReserve, targetSubAllocation, updateTargets } = useWallet();
+    const { assets, kpis, targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation, updateTargets } = useWallet();
     const { addToast } = useToast();
     const { theme } = useTheme();
     const chartTooltipStyle = theme === 'light'
@@ -71,6 +71,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
 
     const [tempTargets, setTempTargets] = useState<AllocationMap>(targetAllocation);
     const [tempReserve, setTempReserve] = useState<string>(targetReserve.toString());
+    const [tempDividendGoal, setTempDividendGoal] = useState<string>(targetMonthlyDividendIncome.toString());
     const [tempSub, setTempSub] = useState<SubAllocationMap>(cloneSub(targetSubAllocation));
     // Linhas ramificadas expandidas (no modo de edição e na legenda).
     const [expandedEdit, setExpandedEdit] = useState<Record<string, boolean>>({});
@@ -142,6 +143,13 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
         setTempReserve(String(num));
     };
 
+    const handleDividendGoalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const raw = e.target.value;
+        if (raw === '' || raw === '-') return;
+        const num = Math.max(0, parseFloat(raw) || 0);
+        setTempDividendGoal(String(num));
+    };
+
     const subSum = (parent: AssetType): number =>
         SUB_KEYS[parent].reduce((acc, k) => acc + (Number((tempSub as any)[parent]?.[k]) || 0), 0);
 
@@ -165,7 +173,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
             }
         }
 
-        updateTargets(tempTargets, parseFloat(tempReserve) || 0, tempSub);
+        updateTargets(tempTargets, parseFloat(tempReserve) || 0, tempSub, parseFloat(tempDividendGoal) || 0);
         setIsEditing(false);
         setViewMode('IDEAL');
     };
@@ -173,6 +181,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
     const openEditor = () => {
         setTempTargets(targetAllocation);
         setTempReserve(targetReserve.toString());
+        setTempDividendGoal(targetMonthlyDividendIncome.toString());
         setTempSub(cloneSub(targetSubAllocation));
         setExpandedEdit({});
         setIsEditing(true);
@@ -386,6 +395,24 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                                     />
                                 </div>
                             </div>
+                        </div>
+                        <div className="bg-slate-900/30 p-3 rounded-xl border border-slate-800">
+                            <h5 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1"><DollarSign size={10} /> Meta de Renda Passiva (Mensal)</h5>
+                            <div className="flex items-center gap-3">
+                                <span className="text-xs text-slate-300 w-24">Proventos</span>
+                                <div className="flex-1 relative">
+                                    <span className="absolute left-3 top-1.5 text-xs text-slate-500">R$</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={tempDividendGoal}
+                                        onChange={handleDividendGoalChange}
+                                        onWheel={(e) => e.currentTarget.blur()}
+                                        className="w-full bg-card border border-slate-800 rounded px-3 pl-8 py-1.5 text-xs text-white focus:border-blue-500 outline-none font-mono"
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-slate-600 mt-2">Acompanhe o progresso no Cofre de Dividendos da tela inicial.</p>
                         </div>
                         <div className="bg-slate-900/30 p-3 rounded-xl border border-slate-800">
                              <h5 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">% Investimentos (Soma 100%)</h5>

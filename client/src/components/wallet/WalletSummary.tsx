@@ -29,6 +29,16 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
     const isTotalPositive = (kpis?.totalResult || 0) >= 0;
     const isRentabilityPositive = (kpis?.weightedRentability || 0) >= 0;
     const isEquityProfitable = (kpis?.totalEquity || 0) > (kpis?.totalInvested || 0);
+
+    // Badge do Patrimônio Líquido = variação do CAPITAL (patrimônio vs. investido),
+    // não o retorno total. Antes mostrava totalResultPercent (que inclui proventos),
+    // exibindo % POSITIVO mesmo com patrimônio ABAIXO do investido — incoerente.
+    // O retorno total (com proventos) fica no card Lucro Total. Espelha o
+    // Investidor10, que mostra -4,62% no Patrimônio quando o preço caiu.
+    const capitalVariationPercent = (kpis?.totalInvested || 0) > 0
+        ? (((kpis?.totalEquity || 0) - (kpis?.totalInvested || 0)) / kpis.totalInvested) * 100
+        : 0;
+    const isCapitalPositive = capitalVariationPercent >= 0;
     const isAudited = kpis?.dataQuality === 'AUDITED';
 
     // Cálculo do Retorno Total Bruto
@@ -56,8 +66,11 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                         >
                             {formatCurrency(animatedEquity)}
                         </span>
-                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded border translate-y-[-2px] ${isTotalPositive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-                            {isTotalPositive ? '+' : ''}{safeFixed(kpis.totalResultPercent)}%
+                        <span
+                            className={`text-xs font-bold px-1.5 py-0.5 rounded border translate-y-[-2px] ${isCapitalPositive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}
+                            title="Variação do capital: patrimônio atual vs. valor investido (sem proventos)."
+                        >
+                            {isCapitalPositive ? '+' : ''}{safeFixed(capitalVariationPercent)}%
                         </span>
                     </div>
                 }
@@ -94,7 +107,7 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
             <DashboardCard 
                 label="LUCRO TOTAL"
                 icon={<TrendingUp size={18} className={isTotalPositive ? "text-emerald-500" : "text-red-500"} />}
-                tooltipText="Este valor refere-se apenas à valorização dos ativos (ganho de capital). Proventos são exibidos separadamente."
+                tooltipText="Resultado total = ganho de capital (valorização dos ativos) + proventos recebidos. O card 'Prov. Acumulados' detalha apenas a parcela de proventos."
                 value={
                     <span className={isTotalPositive ? "text-emerald-400" : "text-red-400"}>
                         {isTotalPositive ? '+' : ''}{formatCurrency(kpis.totalResult)}

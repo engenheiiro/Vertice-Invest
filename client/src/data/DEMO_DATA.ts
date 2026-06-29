@@ -99,7 +99,13 @@ export const DEMO_DIVIDENDS = {
         { ticker: 'NVDA', date: '2025-02-28', amount: 5.20 }
     ],
     totalAllTime: 46.72,
-    projectedMonthly: 3.89
+    projectedMonthly: 3.89,
+    yieldOnCost: [
+        { ticker: 'WEGE3', receivedLast12Months: 19.90, totalCost: 850, yocPercent: 2.34 },
+        { ticker: 'SBSP3', receivedLast12Months: 13.50, totalCost: 620, yocPercent: 2.18 },
+        { ticker: 'NVDA', receivedLast12Months: 13.32, totalCost: 1900, yocPercent: 0.70 },
+    ],
+    goal: { target: 50, current: 3.89, progressPercent: 7.78 },
 };
 
 export const DEMO_TRANSACTIONS = {

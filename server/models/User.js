@@ -70,6 +70,9 @@ const UserSchema = new mongoose.Schema({
     default: () => ({ STOCK: 40, FII: 30, STOCK_US: 20, ETF: 0, CRYPTO: 10, FIXED_INCOME: 0, OURO: 0 }),
   },
   targetReserve: { type: Number, default: 10000 },
+  // Meta de renda passiva mensal em proventos (R$). default 0 = "sem meta definida"
+  // (estado de todos os usuários existentes — distinto de "meta zerada").
+  targetMonthlyDividendIncome: { type: Number, default: 0 },
 
   // --- Sub-metas de alocação (ramificação dentro de uma classe) ---
   // Percentuais RELATIVOS à fatia da classe pai (somam ~100% DENTRO da classe).

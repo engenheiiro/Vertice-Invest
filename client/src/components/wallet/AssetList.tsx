@@ -40,6 +40,40 @@ export const AssetList = () => {
         return `${Math.abs(v).toFixed(2)}%`;
     };
 
+    // Duas métricas por ativo, alinhadas ao Investidor10:
+    //  • Variação      = só preço/cotação → (saldo − custo) / custo.
+    //  • Rentabilidade = retorno total    → (saldo − custo + proventos) / custo.
+    // Em ativos que nunca pagaram proventos as duas coincidem (esperado).
+    const assetMetrics = (a: Asset) => {
+        const cost = a.totalCost || 0;
+        const capital = (a.totalValue || 0) - cost;
+        const div = a.dividendsReceived || 0;
+        return {
+            capital,
+            dividends: div,
+            totalResult: capital + div,
+            variationPct: cost > 0 ? (capital / cost) * 100 : 0,
+            rentabilityPct: cost > 0 ? ((capital + div) / cost) * 100 : 0,
+        };
+    };
+
+    const groupMetrics = (items: Asset[]) => {
+        let value = 0, cost = 0, dividends = 0;
+        items.forEach(i => {
+            value += i.totalValue || 0;
+            cost += i.totalCost || 0;
+            dividends += i.dividendsReceived || 0;
+        });
+        const capital = value - cost;
+        return {
+            capital,
+            dividends,
+            totalResult: capital + dividends,
+            variationPct: cost > 0 ? (capital / cost) * 100 : 0,
+            rentabilityPct: cost > 0 ? ((capital + dividends) / cost) * 100 : 0,
+        };
+    };
+
     const toggleGroup = (type: string) => {
         setCollapsedGroups(prev => ({ ...prev, [type]: !prev[type] }));
     };
@@ -77,9 +111,7 @@ export const AssetList = () => {
                         const groupItems = groupedAssets[type];
                         const isCollapsed = collapsedGroups[type];
                         const totalValueGroup = groupItems.reduce((acc, item) => acc + (item.totalValue || 0), 0);
-                        const totalCostGroup = groupItems.reduce((acc, item) => acc + (item.totalCost || 0), 0);
-                        const profitGroup = totalValueGroup - totalCostGroup;
-                        const profitPercentGroup = totalCostGroup > 0 ? (profitGroup / totalCostGroup) * 100 : 0;
+                        const gm = groupMetrics(groupItems);
 
                         return (
                             <div key={type}>
@@ -94,16 +126,22 @@ export const AssetList = () => {
                                     </span>
                                     <span className="text-right shrink-0 ml-3">
                                         <span className="block text-white font-mono font-bold text-sm">{formatCurrency(totalValueGroup)}</span>
-                                        <span className={`block text-[11px] font-bold ${profitGroup >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                            {profitGroup >= 0 ? '+' : '-'}{formatPercent(profitPercentGroup)}
+                                        <span className="flex items-center justify-end gap-2 text-[11px] font-bold">
+                                            <span className={gm.capital >= 0 ? 'text-emerald-500' : 'text-red-500'} title="Variação do preço (sem proventos)">
+                                                {gm.capital >= 0 ? '+' : '-'}{formatPercent(gm.variationPct)}
+                                            </span>
+                                            <span className="text-slate-700">·</span>
+                                            <span className={gm.totalResult >= 0 ? 'text-emerald-500' : 'text-red-500'} title="Rentabilidade total (preço + proventos)">
+                                                {gm.totalResult >= 0 ? '+' : '-'}{formatPercent(gm.rentabilityPct)}
+                                            </span>
                                         </span>
                                     </span>
                                 </button>
 
                                 {!isCollapsed && groupItems.map((asset) => {
-                                    const totalProfit = asset.totalValue - asset.totalCost;
-                                    const profitPercent = asset.totalCost > 0 ? (totalProfit / asset.totalCost) * 100 : 0;
-                                    const isProfitable = totalProfit >= 0;
+                                    const m = assetMetrics(asset);
+                                    const isVarUp = m.capital >= 0;
+                                    const isRentUp = m.totalResult >= 0;
                                     return (
                                         <div key={asset.id} className="flex items-center justify-between px-4 py-3 bg-base">
                                             <div className="min-w-0 flex-1 flex items-center gap-3">
@@ -120,9 +158,15 @@ export const AssetList = () => {
                                             <div className="flex items-center gap-2 shrink-0">
                                                 <div className="text-right">
                                                     <p className="font-bold text-white text-sm">{formatCurrency(asset.totalValue, 'BRL')}</p>
-                                                    <p className={`text-[11px] font-bold flex items-center justify-end gap-0.5 ${isProfitable ? 'text-emerald-500' : 'text-red-500'}`}>
-                                                        {isProfitable ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-                                                        {isProfitable ? '+' : '-'}{formatPercent(profitPercent)}
+                                                    <p className="flex items-center justify-end gap-2 text-[11px] font-bold">
+                                                        <span className={isVarUp ? 'text-emerald-500' : 'text-red-500'} title="Variação do preço (sem proventos)">
+                                                            {isVarUp ? '+' : '-'}{formatPercent(m.variationPct)}
+                                                        </span>
+                                                        <span className="text-slate-700">·</span>
+                                                        <span className={`flex items-center gap-0.5 ${isRentUp ? 'text-emerald-500' : 'text-red-500'}`} title="Rentabilidade total (preço + proventos)">
+                                                            {isRentUp ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                                                            {isRentUp ? '+' : '-'}{formatPercent(m.rentabilityPct)}
+                                                        </span>
                                                     </p>
                                                 </div>
                                                 <div className="flex flex-col">
@@ -176,7 +220,8 @@ export const AssetList = () => {
                                 <th scope="col" className="p-4 font-bold text-right">Preço Atual</th>
                                 <th scope="col" className="p-4 font-bold text-right">Saldo Atual (R$)</th>
                                 <th scope="col" className="p-4 font-bold text-right">% Classe</th>
-                                <th scope="col" className="p-4 font-bold text-right">Rentabilidade</th>
+                                <th scope="col" className="p-4 font-bold text-right" title="Variação do preço: cotação atual vs. preço médio (não inclui proventos).">Variação</th>
+                                <th scope="col" className="p-4 font-bold text-right" title="Retorno total sobre o custo: valorização do preço + proventos recebidos.">Rentabilidade</th>
                                 <th scope="col" className="p-4 font-bold text-center">Ações</th>
                             </tr>
                         </thead>
@@ -186,23 +231,17 @@ export const AssetList = () => {
                                 const isCollapsed = collapsedGroups[type];
                                 
                                 const totalValueGroup = groupItems.reduce((acc, item) => acc + (item.totalValue || 0), 0);
-                                const totalCostGroup = groupItems.reduce((acc, item) => acc + (item.totalCost || 0), 0);
-                                
-                                const profitGroup = totalValueGroup - totalCostGroup;
-                                const profitPercentGroup = totalCostGroup > 0 
-                                    ? (profitGroup / totalCostGroup) * 100 
-                                    : 0;
-                                
                                 const allocationPercent = (kpis.totalEquity || 0) > 0 ? (totalValueGroup / kpis.totalEquity) * 100 : 0;
                                 const idealPercent = targetAllocation[type as AssetType] || 0;
+                                const gm = groupMetrics(groupItems);
 
                                 return (
                                     <React.Fragment key={type}>
-                                        <tr 
+                                        <tr
                                             className="bg-panel border-y border-slate-800/50 cursor-pointer hover:bg-elevated transition-colors"
                                             onClick={() => toggleGroup(type)}
                                         >
-                                            <td colSpan={7} className="px-4 py-3">
+                                            <td colSpan={8} className="px-4 py-3">
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-4">
                                                         <span className="text-xs font-bold text-blue-400 uppercase tracking-widest flex items-center gap-2">
@@ -220,10 +259,17 @@ export const AssetList = () => {
                                                             <span className="text-white font-mono font-bold">{formatCurrency(totalValueGroup)}</span>
                                                         </div>
                                                         
-                                                        <div className="flex flex-col items-end">
-                                                            <span className="text-slate-500 font-bold uppercase text-[9px]">Resultado</span>
-                                                            <span className={`font-bold ${profitGroup >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                                                {profitGroup >= 0 ? '+' : '-'}{formatPercent(profitPercentGroup)}
+                                                        <div className="flex flex-col items-end" title="Variação do preço (sem proventos)">
+                                                            <span className="text-slate-500 font-bold uppercase text-[9px]">Variação</span>
+                                                            <span className={`font-bold ${gm.capital >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                                {gm.capital >= 0 ? '+' : '-'}{formatPercent(gm.variationPct)}
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="flex flex-col items-end" title="Retorno total: preço + proventos">
+                                                            <span className="text-slate-500 font-bold uppercase text-[9px]">Rentabilidade</span>
+                                                            <span className={`font-bold ${gm.totalResult >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                                {gm.totalResult >= 0 ? '+' : '-'}{formatPercent(gm.rentabilityPct)}
                                                             </span>
                                                         </div>
 
@@ -244,17 +290,14 @@ export const AssetList = () => {
                                         {!isCollapsed && groupItems.map((asset) => {
                                             const isUSD = asset.type === 'STOCK_US' || asset.currency === 'USD';
 
-                                            // Resultado da posição = saldo atual − custo (ambos já em BRL e
-                                            // convertidos no backend). Mesma fórmula do cabeçalho da classe,
-                                            // mantendo a linha consistente com o grupo. Recalcular por
-                                            // (currentPrice − averagePrice) zerava o CASH, pois o backend
-                                            // força currentPrice = 1 para Caixa/Reserva.
-                                            const totalProfit = asset.totalValue - asset.totalCost;
-                                            const profitPercent = asset.totalCost > 0
-                                                ? (totalProfit / asset.totalCost) * 100
-                                                : 0;
-                                            const isProfitable = totalProfit >= 0;
-                                            
+                                            // Variação (só preço) e Rentabilidade (preço + proventos) da
+                                            // posição. Saldo/custo já vêm em BRL e convertidos do backend.
+                                            // Recalcular por (currentPrice − averagePrice) zerava o CASH,
+                                            // pois o backend força currentPrice = 1 para Caixa/Reserva.
+                                            const m = assetMetrics(asset);
+                                            const isVarUp = m.capital >= 0;
+                                            const isRentUp = m.totalResult >= 0;
+
                                             // % da Classe
                                             const percentOfClass = totalValueGroup > 0 ? (asset.totalValue / totalValueGroup) * 100 : 0;
 
@@ -296,13 +339,19 @@ export const AssetList = () => {
                                                         </span>
                                                     </td>
                                                     <td className="p-4 text-right">
-                                                        <div className={`flex flex-col items-end ${isProfitable ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                        <span className={`font-bold flex items-center justify-end gap-1 ${isVarUp ? 'text-emerald-500' : 'text-red-500'}`} title="Variação do preço (sem proventos)">
+                                                            {isVarUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                                                            {isVarUp ? '+' : '-'}{formatPercent(m.variationPct)}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-4 text-right">
+                                                        <div className={`flex flex-col items-end ${isRentUp ? 'text-emerald-500' : 'text-red-500'}`} title="Retorno total: valorização + proventos recebidos">
                                                             <span className="font-bold flex items-center gap-1">
-                                                                {isProfitable ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                                                                {isProfitable ? '+' : '-'}{formatPercent(profitPercent)}
+                                                                {isRentUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                                                                {isRentUp ? '+' : '-'}{formatPercent(m.rentabilityPct)}
                                                             </span>
                                                             <span className="text-[10px] opacity-80">
-                                                                {isProfitable ? '+' : ''}{formatCurrency(totalProfit, 'BRL')}
+                                                                {isRentUp ? '+' : ''}{formatCurrency(m.totalResult, 'BRL')}
                                                             </span>
                                                         </div>
                                                     </td>

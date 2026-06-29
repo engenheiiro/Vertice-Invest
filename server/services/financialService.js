@@ -32,6 +32,27 @@ export const financialService = {
         return startOfDay(date);
     },
 
+    // Identidade canônica de um provento = ticker + ex-date (dia) + type.
+    // O MESMO pagamento mensal volta de fontes diferentes (Yahoo/Brapi/
+    // Fundamentus) com hora diferente (00:00Z vs 13:00Z) E valor levemente
+    // diferente (ex.: 0.109829 vs 0.109744). O índice antigo {ticker,date,amount}
+    // NÃO os unia (o valor difere), gerando DOIS eventos por mês e DOBRANDO a
+    // soma de proventos. Por isso o valor NÃO entra na identidade: mesmo ticker
+    // + mesma ex-date = mesmo provento. `type` distingue DIVIDEND × JCP etc.
+    normalizeDividendDate(date) {
+        const d = new Date(date);
+        return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    },
+
+    roundDividendAmount(amount) {
+        return Math.round((Number(amount) || 0) * 1e6) / 1e6;
+    },
+
+    // Chave de deduplicação: ticker + dia (UTC) + type. Sem o valor por ação.
+    dividendIdentity(ticker, date, type = 'DIVIDEND') {
+        return `${String(ticker).toUpperCase()}|${this.toDateKey(this.normalizeDividendDate(date))}|${type || 'DIVIDEND'}`;
+    },
+
     normalizeTickerForHistory(ticker) {
         const clean = ticker.trim().toUpperCase();
         if (clean.endsWith('.SA') || clean.startsWith('^') || clean.includes('-')) return clean;
@@ -157,8 +178,14 @@ export const financialService = {
     async _loadDividendDateMap(uniqueTickers) {
         const allDividends = await DividendEvent.find({ ticker: { $in: uniqueTickers } }).sort({ date: 1 });
         const dividendDateMap = new Map();
+        // Deduplica por identidade canônica (ticker+ex-date+type) — o mesmo
+        // provento de 2 fontes não deve dobrar accumulatedDividends.
+        const seen = new Set();
         allDividends.forEach(div => {
             const dKey = this.toDateKey(div.date);
+            const canonKey = this.dividendIdentity(div.ticker, div.date, div.type);
+            if (seen.has(canonKey)) return;
+            seen.add(canonKey);
             if (!dividendDateMap.has(dKey)) dividendDateMap.set(dKey, []);
             dividendDateMap.get(dKey).push(div);
         });
@@ -526,10 +553,24 @@ export const financialService = {
 
             const events = await externalMarketService.getDividendsHistory(ticker, type);
             for (const ev of events) {
+                // Upsert pela identidade canônica (ticker + ex-date dia + type),
+                // SEM o valor: o mesmo provento de outra fonte (valor levemente
+                // diferente) atualiza o registro existente em vez de inserir um
+                // segundo — o que dobrava a soma. O valor mais recente prevalece.
+                const evType = ev.type || 'DIVIDEND';
+                const normDate = this.normalizeDividendDate(ev.date);
+                const normAmount = this.roundDividendAmount(ev.amount);
+                if (!(normAmount > 0)) continue;
                 try {
                     const res = await DividendEvent.updateOne(
-                        { ticker: key, date: ev.date, amount: ev.amount },
-                        { $setOnInsert: { ticker: key, date: ev.date, amount: ev.amount, type: 'DIVIDEND', currency: 'BRL' } },
+                        { ticker: key, date: normDate, type: evType },
+                        {
+                            $set: {
+                                amount: normAmount,
+                                ...(ev.paymentDate ? { paymentDate: this.normalizeDividendDate(ev.paymentDate) } : {}),
+                            },
+                            $setOnInsert: { ticker: key, date: normDate, type: evType, currency: 'BRL' },
+                        },
                         { upsert: true },
                     );
                     if (res.upsertedCount > 0) eventCount++;
@@ -550,7 +591,7 @@ export const financialService = {
         const relevantAssets = assets.filter(a => !['CRYPTO', 'CASH', 'FIXED_INCOME'].includes(a.type));
         const tickers = relevantAssets.map(a => a.ticker);
 
-        if (tickers.length === 0) return { dividendMap: new Map(), provisioned: [], totalAllTime: 0, projectedMonthly: 0 };
+        if (tickers.length === 0) return { dividendMap: new Map(), provisioned: [], totalAllTime: 0, projectedMonthly: 0, yieldOnCost: [], receivedByTicker: {} };
 
         const marketInfos = await MarketAsset.find({ ticker: { $in: tickers } }).select('ticker dy lastPrice');
         const marketMap = new Map();
@@ -588,22 +629,41 @@ export const financialService = {
         const dividendMap = new Map();
         const provisioned = [];
         let totalAllTime = 0;
+        // Yield on Cost: quanto cada ativo já pagou (líquido recebido, não provisionado)
+        // nos últimos 12 meses em relação ao custo investido (UserAsset.totalCost).
+        const twelveMonthsAgo = new Date();
+        twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
+        const receivedLast12MonthsByTicker = new Map();
+        // Total recebido por ticker desde a compra (não provisionado) — usado
+        // pela carteira para compor a Rentabilidade total (preço + proventos)
+        // por ativo, distinguindo-a da Variação (só preço).
+        const receivedAllTimeByTicker = new Map();
 
         for (const asset of relevantAssets) {
             const firstBuyDate = acquisitionMap.get(asset.ticker);
             const assetEvents = eventsMap.get(asset.ticker) || [];
 
+            // Defesa em profundidade: mesmo antes do cleanup, deduplica por
+            // identidade canônica (ticker + ex-date + type) para que o mesmo
+            // provento vindo de 2 fontes (com valores levemente distintos) não
+            // dobre a soma. O valor NÃO entra na chave (ver dividendIdentity).
+            const seenEvents = new Set();
+
             for (const event of assetEvents) {
                 const eventDateNormalized = this.normalizeDate(event.date);
                 if (!firstBuyDate || eventDateNormalized < firstBuyDate) continue;
 
+                const dedupeKey = this.dividendIdentity(asset.ticker, event.date, event.type);
+                if (seenEvents.has(dedupeKey)) continue;
+                seenEvents.add(dedupeKey);
+
                 const totalValue = safeMult(asset.quantity, event.amount);
-                
+
                 if (totalValue > 0) {
                     const pDate = event.paymentDate || new Date(new Date(event.date).setDate(event.date.getDate() + 15));
                     const today = new Date();
                     const isFuture = pDate > today;
-                    
+
                     if (isFuture) {
                         provisioned.push({ ticker: asset.ticker, date: pDate, amount: totalValue, isProvisioned: true });
                     } else {
@@ -611,18 +671,41 @@ export const financialService = {
                         if (!dividendMap.has(monthKey)) dividendMap.set(monthKey, { total: 0, breakdown: [] });
                         const entry = dividendMap.get(monthKey);
                         entry.total = safeAdd(entry.total, totalValue);
-                        
+
                         const existingBreakdown = entry.breakdown.find(b => b.ticker === asset.ticker);
                         if (existingBreakdown) existingBreakdown.amount = safeAdd(existingBreakdown.amount, totalValue);
                         else entry.breakdown.push({ ticker: asset.ticker, amount: totalValue });
 
                         totalAllTime = safeAdd(totalAllTime, totalValue);
+                        receivedAllTimeByTicker.set(asset.ticker, safeAdd(receivedAllTimeByTicker.get(asset.ticker) || 0, totalValue));
+
+                        if (pDate >= twelveMonthsAgo) {
+                            const prevReceived = receivedLast12MonthsByTicker.get(asset.ticker) || 0;
+                            receivedLast12MonthsByTicker.set(asset.ticker, safeAdd(prevReceived, totalValue));
+                        }
                     }
                 }
             }
         }
 
-        return { dividendMap, provisioned, totalAllTime, projectedMonthly };
+        const yieldOnCost = relevantAssets
+            .map((asset) => {
+                const receivedLast12Months = receivedLast12MonthsByTicker.get(asset.ticker) || 0;
+                const totalCost = asset.totalCost || 0;
+                return {
+                    ticker: asset.ticker,
+                    receivedLast12Months,
+                    totalCost,
+                    yocPercent: safeDiv(safeMult(receivedLast12Months, 100), totalCost),
+                };
+            })
+            .filter((item) => item.receivedLast12Months > 0)
+            .sort((a, b) => b.yocPercent - a.yocPercent);
+
+        return {
+            dividendMap, provisioned, totalAllTime, projectedMonthly, yieldOnCost,
+            receivedByTicker: Object.fromEntries(receivedAllTimeByTicker),
+        };
     },
 
     async recalculatePosition(userId, ticker, forcedType = null, session = null, forcedCurrency = null) {

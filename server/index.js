@@ -39,36 +39,19 @@ const panicLog = (message) => {
 
     const dotenv = (await import('dotenv')).default;
 
-    // (8.5) Se NODE_ENV já vier definido pela plataforma (Render/Vercel
-    // costumam injetar isso direto, fora de arquivo), prioriza um .env
-    // específico do ambiente (.env.development/.env.staging/.env.production)
-    // antes do .env genérico — evita misturar config de teste com produção.
-    const envFileNames = process.env.NODE_ENV
-        ? [`.env.${process.env.NODE_ENV}`, '.env']
-        : ['.env'];
-
+    // .env único na raiz do monorepo (em produção/Render as vars já vêm
+    // injetadas pela plataforma, então isso é só para dev local).
     const envRoots = [
         path.resolve(__dirname, '..'),
         path.resolve(__dirname, '../..'),
         process.cwd()
     ];
 
-    let envLoaded = false;
-    for (const fileName of envFileNames) {
-        for (const root of envRoots) {
-            const p = path.resolve(root, fileName);
-            if (fs.existsSync(p)) {
-                dotenv.config({ path: p });
-                envLoaded = true;
-                break;
-            }
-        }
-        if (envLoaded) break;
-    }
+    const envPath = envRoots
+        .map((root) => path.resolve(root, '.env'))
+        .find((p) => fs.existsSync(p));
 
-    if (!envLoaded) {
-        dotenv.config();
-    }
+    dotenv.config(envPath ? { path: envPath } : undefined);
 
     try {
         await import('./instrument.js');

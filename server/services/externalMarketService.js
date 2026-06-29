@@ -20,6 +20,11 @@ const yahooFinance = new YahooFinance({
 const yahooBreaker = createCircuitBreaker({ name: 'yahoo', failureThreshold: 4, cooldownMs: 120_000 });
 const googleBreaker = createCircuitBreaker({ name: 'google-finance', failureThreshold: 8, cooldownMs: 60_000 });
 const brapiBreaker = createCircuitBreaker({ name: 'brapi', failureThreshold: 5, cooldownMs: 60_000 });
+// Breaker dedicado a proventos: não reaproveita o `yahooBreaker` de cotações
+// (chamado em lote, alta frequência) para que falhas de uma responsabilidade
+// não abram o circuito da outra. Sem fallback de terceiro provedor — o Brapi
+// não inclui o módulo `dividends` no plano de token atual do projeto.
+const yahooDividendsBreaker = createCircuitBreaker({ name: 'yahoo-dividends', failureThreshold: 4, cooldownMs: 120_000 });
 
 // Configuração para Scraping Google Finance
 const GOOGLE_FINANCE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -524,6 +529,10 @@ export const externalMarketService = {
 
     // Busca o histórico de proventos (dividendos/JCP) via Yahoo Finance.
     // Retorna [{ date: Date (ex-date), amount: number por cota }] ordenado por data.
+    // (I4) Retry com backoff para falhas transitórias (rede/timeout) + circuit
+    // breaker dedicado: depois de falhas consecutivas, fast-fail sem martelar o
+    // Yahoo até o cooldown. Sem fallback de terceiro provedor — ver nota no topo
+    // do arquivo (Brapi não inclui o módulo `dividends` no plano de token atual).
     async getDividendsHistory(ticker, type) {
         // Cripto, renda fixa e caixa não pagam proventos.
         if (['CRYPTO', 'FIXED_INCOME', 'CASH'].includes(type)) return [];
@@ -537,12 +546,22 @@ export const externalMarketService = {
 
         try {
             const today = new Date().toISOString().split('T')[0];
-            const result = await yahooFinance.chart(symbol, {
-                period1: '2018-01-01',
-                period2: today,
-                interval: '1d',
-                events: 'dividends',
-            }, { validateResult: false });
+            const result = await yahooDividendsBreaker.exec(() => withRetry(
+                () => yahooFinance.chart(symbol, {
+                    period1: '2018-01-01',
+                    period2: today,
+                    interval: '1d',
+                    events: 'dividends',
+                }, { validateResult: false }),
+                {
+                    retries: 2,
+                    baseDelayMs: 300,
+                    // "No data found"/"delisted": o ticker não existe no Yahoo —
+                    // repetir não ajuda. Demais erros (timeout/rede) são tratados
+                    // como transitórios e re-tentados.
+                    shouldRetry: (err) => !/no data found|delisted/i.test(err?.message || ''),
+                },
+            ));
 
             const divs = result?.events?.dividends || [];
             return divs

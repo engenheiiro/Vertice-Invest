@@ -91,6 +91,7 @@ export const updateTargetsSchema = z.object({
       OURO: allocPct,
     }).optional(),
     targetReserve: z.coerce.number().finite('Valor inválido').nonnegative('Reserva não pode ser negativa').optional(),
+    targetMonthlyDividendIncome: z.coerce.number().finite('Valor inválido').nonnegative('Meta não pode ser negativa').optional(),
     targetSubAllocation: z.object({
       FIXED_INCOME: fixedIncomeSub,
       STOCK_US: stockUsSub,

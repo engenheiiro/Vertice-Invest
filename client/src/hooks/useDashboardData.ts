@@ -7,6 +7,7 @@ import { walletService } from '../services/wallet';
 import { authService } from '../services/auth';
 import { STALE_TIME } from '../config/queryConfig';
 import { useFeatureAccess } from './useFeatureAccess';
+import { DividendGoal } from '../types/dividends';
 
 export interface PortfolioItem {
     ticker: string;
@@ -272,12 +273,15 @@ export const useDashboardData = () => {
         return prov.reduce((acc: number, curr: any) => acc + (curr.amount || 0), 0);
     }, [dividendsQuery.data]);
 
+    const dividendGoal: DividendGoal | null = dividendsQuery.data?.goal ?? null;
+
     return {
         portfolio,
         signals,
         radarMeta,
         equity,
         dividends: totalDividends,
+        dividendGoal,
         marketIndices,
         systemHealth,
         isLoading: isWalletLoading || macroQuery.isLoading,

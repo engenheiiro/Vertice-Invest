@@ -47,10 +47,10 @@ export const walletService = {
         return await response.json();
     },
 
-    async updateTargets(targetAllocation: Record<string, number>, targetReserve: number, targetSubAllocation?: unknown) {
+    async updateTargets(targetAllocation: Record<string, number>, targetReserve: number, targetSubAllocation?: unknown, targetMonthlyDividendIncome?: number) {
         const response = await authService.api('/api/wallet/targets', {
             method: 'PUT',
-            body: JSON.stringify({ targetAllocation, targetReserve, targetSubAllocation })
+            body: JSON.stringify({ targetAllocation, targetReserve, targetSubAllocation, targetMonthlyDividendIncome })
         });
         if (!response.ok) throw new Error("Falha ao salvar carteira ideal");
         return await response.json();
@@ -94,7 +94,7 @@ export const walletService = {
 
     async getDividends() {
         const response = await authService.api('/api/wallet/dividends');
-        if (!response.ok) return { history: [], provisioned: [] };
+        if (!response.ok) return { history: [], provisioned: [], totalAllTime: 0, projectedMonthly: 0, yieldOnCost: [], goal: { target: 0, current: 0, progressPercent: null } };
         return await response.json();
     },
 

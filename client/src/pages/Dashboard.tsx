@@ -10,9 +10,10 @@ import { AiRadar } from '../components/dashboard/AiRadar';
 import { InstantReportModal } from '../components/dashboard/InstantReportModal';
 import { useWallet } from '../contexts/WalletContext';
 import { useDemo } from '../contexts/DemoContext';
-import { Lock } from 'lucide-react';
+import { Lock, Target } from 'lucide-react';
 import { formatCurrency as fmtCurrency } from '../utils/format';
 import { friendlyError } from '../utils/errorMessages';
+import { useNavigate } from 'react-router-dom';
 
 export const Dashboard = () => {
   const {
@@ -20,11 +21,13 @@ export const Dashboard = () => {
       signals,
       radarMeta,
       dividends,
+      dividendGoal,
       marketIndices,
       isLoading,
       isResearchLoading,
       systemHealth
   } = useDashboardData();
+  const navigate = useNavigate();
   
   const { isPrivacyMode, kpis } = useWallet();
   const { isDemoMode } = useDemo();
@@ -118,9 +121,26 @@ export const Dashboard = () => {
                                 <span className="text-white font-bold text-lg block mt-1">{formatCurrency(displayDividends)}</span>
                             </p>
                         )}
-                        <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-blue-500 w-[65%] shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
-                        </div>
+                        {dividendGoal && dividendGoal.target > 0 ? (
+                            <>
+                                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                                        style={{ width: `${Math.min(100, dividendGoal.progressPercent ?? 0)}%` }}
+                                    ></div>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-2">
+                                    {Math.round(dividendGoal.progressPercent ?? 0)}% de {formatCurrency(dividendGoal.target)}/mês
+                                </p>
+                            </>
+                        ) : (
+                            <button
+                                onClick={() => navigate('/wallet')}
+                                className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+                            >
+                                <Target size={12} /> Definir meta de renda passiva
+                            </button>
+                        )}
                     </div>
                 </div>
 

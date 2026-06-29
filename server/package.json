@@ -15,6 +15,7 @@
     "test:fundamentus": "node tests/test_fundamentus.js",
     "sync:prod": "node server/scripts/syncProdData.js",
     "sync:TimeSeriesWorker": "node scripts/syncTimeSeries.js",
+    "clean:dividends": "node scripts/cleanDuplicateDividends.js",
     "backfill:sectors": "node scripts/backfillSectors.js",
     "backfill:logos": "node scripts/backfillLogos.js",
     "lint": "node --check index.js",
