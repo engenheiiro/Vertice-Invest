@@ -60,7 +60,7 @@ interface AllocationChartProps {
 }
 
 export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: AllocationChartProps) => {
-    const { assets, kpis, targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation, updateTargets } = useWallet();
+    const { assets, kpis, targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation, updateTargets, isPrivacyMode } = useWallet();
     const { addToast } = useToast();
     const { theme } = useTheme();
     const chartTooltipStyle = theme === 'light'
@@ -187,7 +187,9 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
         setIsEditing(true);
     };
 
-    const formatCurrency = (val: number) => fmtCompact(val);
+    // Valores monetários respeitam o modo privacidade (••••••); percentuais/proporções
+    // do donut continuam visíveis (não revelam patrimônio).
+    const formatCurrency = (val: number) => fmtCompact(val, 'BRL', { privacy: isPrivacyMode });
 
     // CASH/Reserva é excluída da distribuição de investimentos. Quando não há
     // investimentos (carteira 100% Reserva, ou vazia), o donut ficaria em branco —
