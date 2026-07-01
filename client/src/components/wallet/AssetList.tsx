@@ -190,7 +190,7 @@ export const AssetList = () => {
                                                         onClick={async () => {
                                                             const ok = await confirm({
                                                                 title: 'Remover ativo',
-                                                                message: `Remover ${asset.ticker} e todo o histórico de transações? Esta ação não pode ser desfeita.`,
+                                                                message: `Remover ${asset.ticker} e todo o histórico de transações? Esta ação não pode ser desfeita. Atenção: se este ativo teve vendas no ano, ele deixará de aparecer no Relatório de Imposto de Renda — gere/exporte o IR do ano antes de remover.`,
                                                                 confirmText: 'Remover',
                                                                 isDestructive: true,
                                                             });
@@ -378,7 +378,7 @@ export const AssetList = () => {
                                                                 onClick={async () => {
                                                                     const ok = await confirm({
                                                                         title: 'Remover ativo',
-                                                                        message: `Remover ${asset.ticker} e todo o histórico de transações? Esta ação não pode ser desfeita.`,
+                                                                        message: `Remover ${asset.ticker} e todo o histórico de transações? Esta ação não pode ser desfeita. Atenção: se este ativo teve vendas no ano, ele deixará de aparecer no Relatório de Imposto de Renda — gere/exporte o IR do ano antes de remover.`,
                                                                         confirmText: 'Remover',
                                                                         isDestructive: true,
                                                                     });

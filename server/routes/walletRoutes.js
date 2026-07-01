@@ -20,8 +20,9 @@ import {
     getSnapshotHealth,
     forceSnapshot // Importado
 } from '../controllers/walletController.js';
-import { authenticateToken, requireAdmin, requireElitePlan } from '../middleware/authMiddleware.js';
+import { authenticateToken, requireAdmin, requireElitePlan, requireBlackPlan } from '../middleware/authMiddleware.js';
 import { researchHeavyLimiter } from '../middleware/rateLimiters.js';
+import { getTaxReport, getTaxReportPdf } from '../controllers/taxController.js';
 import validate from '../middleware/validateResource.js';
 import {
     addTransactionSchema,
@@ -67,6 +68,12 @@ router.post('/rebalance', requireElitePlan, researchHeavyLimiter, validate(rebal
 
 // Extrato de Conta Corrente (Cash Flow)
 router.get('/cashflow', getCashFlow);
+
+// (7.11) Relatório de Imposto de Renda (BLACK): apuração de renda variável,
+// posição 31/12, proventos e DARF. Cadeia: authenticateToken (router.use) →
+// requireBlackPlan → limiter pesado (recálculo caro) → handler.
+router.get('/tax-report/:year', requireBlackPlan, researchHeavyLimiter, getTaxReport);
+router.get('/tax-report/:year/pdf', requireBlackPlan, researchHeavyLimiter, getTaxReportPdf);
 
 // Nova Rota: Correção de Splits (Admin / Manutenção)
 router.post('/fix-splits', writeLimiter, validate(corporateActionSchema), runCorporateAction);

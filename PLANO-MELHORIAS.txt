@@ -24,7 +24,7 @@ macro multi-fonte estão concluídas. O que resta abaixo é evolução:
 acessibilidade, performance, arquitetura, DevOps, observabilidade,
 qualidade de código e novas funcionalidades.
 
-Atualizado em: 2026-06-26.
+Atualizado em: 2026-07-01.
 
 ----------------------------------------------------------------
 COMO LER ESTE PLANO (legenda)
@@ -93,43 +93,12 @@ Seção — ✔ Concluída (3.1–3.22).
 ================================================================
 4. ACESSIBILIDADE (a11y)
 ================================================================
-(Boa base — ARIA, navegação por teclado, "pular para conteúdo", labels
-de formulário associados e Lighthouse CI no PR.)
-
-4.1  Teste axe-core standalone no CI
-     O addon de a11y do Storybook já roda axe no preview. Falta um teste
-     axe automatizado no Vitest/CI que quebre o build em violação.
-     [MEDIA] [SONNET]
-
-4.2  scope nas tabelas
-     Tabelas de ativos/retornos (AssetList.tsx) usam <th> sem scope.
-     Marcar cabeçalhos (scope="col"/"row") para leitores de tela.
-     [BAIXA] [SONNET]
-
-4.3  aria-describedby nas confirmações
-     Ligar o título do modal ao texto explicativo e às mensagens de erro
-     (hoje o erro tem role="alert" mas não está ligado por
-     aria-describedby ao input).
-     [BAIXA] [SONNET]
-
-4.4  Conferir contraste de cores (WCAG AA)
-     Garantir que textos/cores passem no padrão de contraste. Atenção:
-     agora há LIGHT MODE padrão — conferir contraste nos DOIS temas.
-     [BAIXA] [SONNET]
-
-4.5  Navegação completa por teclado nos modais
-     Abrir, navegar e fechar sem mouse. Hoje há role="dialog"/aria-modal,
-     mas falta "foco preso" (focus trap) e handler de Esc no AddAssetModal.
-     [MEDIA] [SONNET]
-
-4.7  Textos alternativos revisados em gráficos
-     Gráficos (recharts) precisam de descrição textual alternativa.
-     [MEDIA] [SONNET]
-
-4.8  Tamanho de toque mínimo no mobile
-     Maioria dos alvos atende ~44px só via padding (py-3/py-3.5). Garantir
-     área mínima explícita (min-h-[44px]) nos botões pequenos.
-     [BAIXA] [SONNET]
+(4.1–4.8 SONNET concluídos em 2026-07-01: axe-core no Vitest/CI,
+<caption> + scope nas tabelas, aria-describedby/aria-labelledby nos
+modais, contraste WCAG AA corrigido no light mode (slate-600 sobre
+bg-elevated → 6,5:1), focus trap + Esc em SmartContributionModal e
+RebalanceModal, role="img" + sr-only nos gráficos recharts, e
+min-h-[44px]/min-w-[44px] nos botões pequenos do mobile.)
 
 4.9  Testar com leitor de tela real
      Passar por NVDA/VoiceOver nas telas principais e corrigir.
@@ -175,48 +144,35 @@ bem testado. Aqui são EVOLUÇÕES, não correções.)
      diário/semanal, não só um período fixo.
      [ALTA] [OPUS]
 
-7.5  Backtest visível ao usuário
-     Mostrar como a recomendação teria performado no passado.
-     [ALTA] [OPUS]
-     (Nota: o backtest da Carteira Recomendada JÁ EXISTE — curva
-      RecommendedPortfolioCurve exposta no painel admin via /research/accuracy.
-      Decisão: manter SÓ no admin por enquanto; não expor ao usuário ainda.)
-
 (7.6 Explicações de IA mais ricas — concluído: generateDynamicTheses
  bull/bear no scoringEngine + narrativa Gemini no aiResearchService.)
-
-7.7  Alertas personalizados (preço/RSI atingiu X)
-     Usuário define gatilho e recebe aviso. Hoje só há sinais
-     automáticos do sistema (QuantSignal); não há modelo de alerta
-     definido pelo usuário.
-     [ALTA] [OPUS]
-
-7.8  Comparador de ativos lado a lado
-     Tela para comparar 2-3 ativos em métricas-chave. Inexistente hoje.
-     [MEDIA] [SONNET]
-
-7.9  Simulador de aporte ("e se eu investir R$ X")
-     PROJEÇÃO de impacto do aporte na carteira/metas (retorno/composição
-     futura). NÃO confundir com o "Aporte Inteligente"
-     (SmartContributionModal), que já existe mas é ALOCAÇÃO por gaps, não
-     projeção.
-     [MEDIA] [OPUS]
-
+ 
 7.10 Exportar relatórios em PDF
-     Gerar PDF da carteira/research. Hoje não há lib de PDF no client
-     (pdf-lib/jsPDF) — incluir uma.
+     Gerar PDF da carteira/research para o usuário. O botão "Exportar PDF"
+     já existe no ResearchViewer mas sem handler (placeholder). A lib
+     pdf-lib JÁ está no server (usada para certificados da Academy) —
+     só falta implementar a rota de geração e ligar o botão no frontend.
      [MEDIA] [SONNET]
 
-7.11 Automação de Imposto de Renda  [NOVO]
-     Novo recurso, aproveitando base já pronta: UserAsset.taxLots[]
-     (FIFO), realizedProfit/fifoRealizedProfit, WalletSnapshot e
-     dividendos. Gerar relatório anual de IR:
-       • Posição em 31/12 (Bens e Direitos).
-       • Lucros/prejuízos realizados por mês (renda variável).
-       • Dividendos/JCP recebidos.
-       • DARF quando aplicável (venda de ações > R$ 20k/mês, alíquotas).
-     Exportável em PDF (ver 7.10 — lib de PDF a incluir). OPUS por
-     envolver regras fiscais e dinheiro. MAIOR PENDÊNCIA do plano.
+7.11 Automação de Imposto de Renda  [NOVO] — ✔ Concluído
+     Relatório anual de IR (exclusivo do plano BLACK) na aba "Imposto de
+     Renda" da Carteira, gerado a partir das transações (fonte da verdade):
+       • Posição em 31/12 (Bens e Direitos) a custo de aquisição/preço médio,
+         agrupada por grupo/código sugeridos da DIRPF.
+       • Ganhos/perdas realizados por mês em renda variável BR por preço
+         médio (padrão RFB) com compensação de prejuízo por categoria:
+         Ações (isenção de vendas ≤ R$20k/mês, 15%), FIIs (20%), ETFs BR (15%).
+       • DARF (código 6015) por competência, com vencimento no último dia
+         útil do mês seguinte e regra do mínimo de R$10 acumulável.
+       • Proventos recebidos no ano (Rendimentos Isentos). JCP não é
+         distinguido pela fonte de dados — sinalizado nos avisos.
+       • Exterior e cripto entram em Bens e Direitos e proventos, mas o ganho
+         de capital deles fica marcado como "conferência manual".
+     Exportável em PDF (pdf-lib). Motor puro testado (server/tests/
+     tax_report.spec.js). Backend: services/taxReportService.js +
+     controllers/taxController.js + middleware requireBlackPlan; rotas
+     GET /wallet/tax-report/:year[/pdf]. Frontend: components/wallet/
+     TaxReport.tsx + services/wallet.ts.
      [ALTA] [OPUS]
 
 
@@ -322,9 +278,9 @@ rastreamento de snapshots diários. Falta métricas e alertas externos.)
      produção (services/contexts/componentes) — criar tipos de verdade.
      [MEDIA] [OPUS]
 
-10.2 error: unknown nos catch
-     Trocar catch (error: any) por unknown (forma segura) no client.
-     [BAIXA] [SONNET]
+(10.2 error: unknown nos catch — concluído: todos os catch no client
+ já usam (error: unknown) / (e: unknown); nenhum catch any restante
+ no código de produção.)
 
 10.3 Error boundary por página no frontend
      Já há ErrorBoundary GLOBAL envolvendo o App. Falta isolar por
@@ -337,7 +293,8 @@ rastreamento de snapshots diários. Falta métricas e alertas externos.)
      [MEDIA] [OPUS]
 
 10.5 Retry com backoff nas chamadas de API do frontend
-     Tentar de novo, com espera crescente, em conexão instável.
+     Tentar de novo, com espera crescente, em conexão instável. Hoje há
+     apenas retry: 1 no React Query (sem backoff exponencial).
      [MEDIA] [SONNET]
 
 10.6 Padronizar JSDoc nos serviços principais
@@ -346,23 +303,17 @@ rastreamento de snapshots diários. Falta métricas e alertas externos.)
      schedulerService).
      [BAIXA] [SONNET]
 
-10.7 Atualizar dependências "envelhecidas"
-     cheerio ainda em ^1.0.0-rc.12 (release candidate) — subir para
-     estável. (otplib já está estável.)
-     [BAIXA] [SONNET]
+(10.7 Atualizar cheerio — concluído: atualizado de ^1.0.0-rc.12 para
+ ^1.2.0 (release estável) em server/package.json.)
 
-10.8 Remover pnpm-lock.yaml órfão
-     O projeto usa npm; o pnpm-lock.yaml na raiz ainda existe, confunde
-     e pode dar conflito.
-     [BAIXA] [SONNET]
+(10.8 Remover pnpm-lock.yaml — concluído: arquivo removido; projeto
+ usa npm exclusivamente.)
 
-10.9 Guia CONTRIBUTING com checklist de PR
-     O CONTRIBUTING.md já existe (workflow, convenções, commits, hooks).
-     Falta um CHECKLIST de PR ("o que conferir antes de enviar").
-     [BAIXA] [SONNET]
+(10.9 Guia CONTRIBUTING com checklist de PR — concluído: CONTRIBUTING.md
+ tem seção "Checklist de PR" com 10 itens verificáveis antes de abrir PR.)
 
 10.10 Comentários TODO/FIXME viram issues rastreáveis
-     Os ~16 "TODO/FIXME" do código viram tarefas registradas.
+     Ainda há ~15 "TODO/FIXME" no código; transformar em tarefas rastreáveis.
      [BAIXA] [SONNET]
 
 

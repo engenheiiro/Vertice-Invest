@@ -12,11 +12,12 @@ const PerformanceChart = lazy(() => import('../components/wallet/PerformanceChar
 const MonthlyReturnsTable = lazy(() => import('../components/wallet/MonthlyReturnsTable').then(m => ({ default: m.MonthlyReturnsTable })));
 const DividendDashboard = lazy(() => import('../components/wallet/DividendDashboard').then(m => ({ default: m.DividendDashboard })));
 const CashFlowHistory = lazy(() => import('../components/wallet/CashFlowHistory').then(m => ({ default: m.CashFlowHistory })));
+const TaxReport = lazy(() => import('../components/wallet/TaxReport').then(m => ({ default: m.TaxReport })));
 import { SmartContributionModal } from '../components/wallet/SmartContributionModal';
 import { RebalanceModal } from '../components/wallet/RebalanceModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { SkeletonChart, SkeletonTableRows, EmptyState, Button } from '../components/ui'; // (I12) skeletons padronizados + (U3) empty state
-import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2, DollarSign } from 'lucide-react';
+import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2, DollarSign, Landmark } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useToast } from '../contexts/ToastContext';
@@ -40,7 +41,10 @@ export const Wallet = () => {
     const [limitModalOpen, setLimitModalOpen] = useState(false);
     const [limitMessage, setLimitMessage] = useState('');
 
-    const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PERFORMANCE' | 'DIVIDENDS' | 'STATEMENT'>('OVERVIEW');
+    const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PERFORMANCE' | 'DIVIDENDS' | 'STATEMENT' | 'TAX'>('OVERVIEW');
+
+    // (7.11) Relatório de IR é exclusivo do plano BLACK (ADMIN passa para QA).
+    const canAccessTax = user?.plan === 'BLACK' || user?.role === 'ADMIN';
 
     // --- AUTOMAÇÃO DO TUTORIAL ---
     // A aba ativa é derivada do metadado `tab` do passo atual (sem número mágico),
@@ -78,6 +82,16 @@ export const Wallet = () => {
             return;
         }
         setIsRebalanceModalOpen(true);
+    };
+
+    // CHECK DE PERMISSÃO: RELATÓRIO DE IR (BLACK+)
+    const handleTaxTab = () => {
+        if (!canAccessTax) {
+            setLimitMessage("O Relatório de Imposto de Renda é um recurso exclusivo do plano Black.");
+            setLimitModalOpen(true);
+            return;
+        }
+        setActiveTab('TAX');
     };
 
     return (
@@ -144,6 +158,7 @@ export const Wallet = () => {
                     <TabButton id="tour-tab-performance" active={activeTab === 'PERFORMANCE'} onClick={() => setActiveTab('PERFORMANCE')} icon={<BarChart2 size={14} />} label="Rentabilidade" />
                     <TabButton id="tour-tab-dividends" active={activeTab === 'DIVIDENDS'} onClick={() => setActiveTab('DIVIDENDS')} icon={<Coins size={14} />} label="Proventos" />
                     <TabButton id="tour-tab-statement" active={activeTab === 'STATEMENT'} onClick={() => setActiveTab('STATEMENT')} icon={<FileText size={14} />} label="Extrato" />
+                    <TabButton active={activeTab === 'TAX'} onClick={handleTaxTab} icon={canAccessTax ? <Landmark size={14} /> : <Lock size={14} />} label="Imposto de Renda" />
                 </div>
 
                 {isLoading ? (
@@ -220,6 +235,14 @@ export const Wallet = () => {
                             <Suspense fallback={<TabFallback />}>
                                 <div className="animate-fade-in max-w-4xl mx-auto">
                                     <CashFlowHistory />
+                                </div>
+                            </Suspense>
+                        )}
+
+                        {activeTab === 'TAX' && canAccessTax && (
+                            <Suspense fallback={<TabFallback />}>
+                                <div className="animate-fade-in max-w-5xl mx-auto">
+                                    <TaxReport />
                                 </div>
                             </Suspense>
                         )}

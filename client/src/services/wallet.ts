@@ -105,6 +105,34 @@ export const walletService = {
         return await response.json();
     },
 
+    // (7.11) Relatório de Imposto de Renda (BLACK): JSON estruturado do ano-base.
+    async getTaxReport(year: number) {
+        const response = await authService.api(`/api/wallet/tax-report/${year}`);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || "Falha ao gerar o relatório de IR");
+        }
+        return await response.json();
+    },
+
+    // (7.11) Baixa o PDF do relatório de IR (mesmo padrão de authService.exportData).
+    async downloadTaxReportPdf(year: number) {
+        const response = await authService.api(`/api/wallet/tax-report/${year}/pdf`);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || "Falha ao gerar o PDF");
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `vertice-ir-${year}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    },
+
     // Rebalanceamento IA (BLACK): gera o plano de ordens para o perfil escolhido.
     async getRebalancePlan(riskProfile: 'DEFENSIVE' | 'MODERATE' | 'BOLD' = 'MODERATE') {
         const response = await authService.api('/api/wallet/rebalance', {

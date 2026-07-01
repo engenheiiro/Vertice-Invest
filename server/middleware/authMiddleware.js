@@ -103,3 +103,16 @@ export const requireElitePlan = (req, res, next) => {
         requiredPlan: 'ELITE',
     });
 };
+
+// Middleware 4: Restringe a rota ao plano BLACK (topo de linha) — ex.: Relatório
+// de Imposto de Renda (7.11). ADMIN passa para QA/suporte, mesmo critério dos
+// demais gates.
+export const requireBlackPlan = (req, res, next) => {
+    if (req.user && (req.user.plan === 'BLACK' || req.user.role === 'ADMIN')) {
+        return next();
+    }
+    return res.status(403).json({
+        message: "O Relatório de Imposto de Renda é um recurso exclusivo do plano Black.",
+        requiredPlan: 'BLACK',
+    });
+};
