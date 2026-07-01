@@ -46,7 +46,12 @@ export const macroDataService = {
     //   SELIC: BCB série 432 -> BrasilAPI /taxas (tokenless)
     //   IPCA 12m: BCB série 13522 -> BrasilAPI /taxas -> IBGE SIDRA (ambas tokenless)
     // isFallback só fica true quando TODAS as fontes de alguma métrica falham.
-    async updateOfficialRates() {
+    //
+    // @param {number|null} lastGoodSelic Última Selic boa já cacheada. Usada pelo
+    //   guard de autoridade (_reconcileSelic): só o BCB pode MOVER a Selic; uma
+    //   fonte secundária que diverja do último valor bom é CONGELADA (evita que uma
+    //   BrasilAPI atrasada durante uma queda do BCB propague Selic velha p/ a carteira).
+    async updateOfficialRates(lastGoodSelic = null) {
         let selicVal = await this._fetchBcbSeries(SERIES_BCB.SELIC_META, 'SELIC');
         let ipcaVal = await this._fetchBcbSeries(SERIES_BCB.IPCA_12M, 'IPCA');
 
@@ -80,7 +85,18 @@ export const macroDataService = {
             logger.warn(`⚠️ [Macro] IPCA: BCB e fonte secundária falharam. Fallback hardcoded ${ipcaVal}%.`);
         }
 
-        logger.info(`📊 [Macro] Taxas oficiais: SELIC ${selicVal}% (${selicSource || 'fallback'}) · IPCA 12m ${ipcaVal}% (${ipcaSource || 'fallback'}).`);
+        // (Guard de autoridade) Só o BCB (meta COPOM, propagada no mesmo dia) MOVE a
+        // Selic. Uma fonte secundária que diverge do último valor bom é rejeitada e o
+        // valor bom é mantido (congelado), sinalizando ratesStale. O fallback hardcoded
+        // preserva o comportamento antigo (não é congelado — é o default intencional).
+        const guard = this._reconcileSelic(selicVal, selicSource, lastGoodSelic);
+        const selicFrozen = guard.frozen;
+        if (selicFrozen) {
+            selicVal = guard.selic;
+            logger.warn(`⚠️ [Macro] SELIC de fonte não-autoritativa (${guard.rejectedSource} ${guard.rejectedValue}%) divergiu do último valor bom ${lastGoodSelic}%. Mantendo ${selicVal}% (congelado, ratesStale=true).`);
+        }
+
+        logger.info(`📊 [Macro] Taxas oficiais: SELIC ${selicVal}% (${selicFrozen ? 'congelado' : selicSource || 'fallback'}) · IPCA 12m ${ipcaVal}% (${ipcaSource || 'fallback'}).`);
 
         return {
             selic: selicVal,
@@ -88,8 +104,34 @@ export const macroDataService = {
             cdi: Math.max(0, selicVal - 0.10),
             cdi12m: Math.max(0, selicVal - 0.10),
             isFallback: selicIsFallback || ipcaIsFallback,
-            sources: { selic: selicSource || 'fallback', ipca: ipcaSource || 'fallback' }
+            selicFrozen,
+            sources: { selic: selicFrozen ? 'frozen' : (selicSource || 'fallback'), ipca: ipcaSource || 'fallback' }
         };
+    },
+
+    // (Guard PURO) Decide a Selic final a partir da fonte e do último valor bom.
+    // Regra de AUTORIDADE (não de magnitude — uma alta do COPOM 0,50–1,00 p.p. é
+    // indistinguível de um dado atrasado por magnitude): apenas o BCB (série 432, a
+    // meta do COPOM, atualizada no mesmo dia da decisão) pode mover a taxa. Fallback
+    // hardcoded (source vazia) mantém o comportamento legado. Fonte secundária
+    // (BrasilAPI) só é aceita se CONFIRMAR o último valor bom ou se não houver âncora
+    // (bootstrap); se divergir, congela no último valor bom.
+    // @returns {{selic:number, frozen:boolean, rejectedValue?:number, rejectedSource?:string}}
+    _reconcileSelic(selicVal, selicSource, lastGoodSelic) {
+        // BCB é autoritativa; fallback hardcoded (source null) é o default intencional.
+        if (selicSource === 'BCB' || !selicSource) {
+            return { selic: selicVal, frozen: false };
+        }
+        // Sem âncora anterior → aceita a secundária (bootstrap inicial).
+        if (!(lastGoodSelic > 0)) {
+            return { selic: selicVal, frozen: false };
+        }
+        // Secundária confirma o último valor bom → aceita.
+        if (Math.abs(selicVal - lastGoodSelic) <= 0.001) {
+            return { selic: selicVal, frozen: false };
+        }
+        // Secundária diverge e não é autoritativa → congela no último valor bom.
+        return { selic: lastGoodSelic, frozen: true, rejectedValue: selicVal, rejectedSource: selicSource };
     },
 
     // Primária: lê o último valor de uma série SGS do BCB. Retorna número ou null.
@@ -639,7 +681,10 @@ export const macroDataService = {
 
     async performMacroSync() {
         // Sequência blindada: Oficial -> Histórico (com Fallback) -> Moedas -> Índices -> Tesouro
-        const official = await this.updateOfficialRates();
+        // Âncora do guard de autoridade: última Selic boa cacheada (não sobrescreve com
+        // secundária divergente durante queda do BCB). Ver _reconcileSelic.
+        const prior = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).select('selic').lean();
+        const official = await this.updateOfficialRates(prior?.selic ?? null);
         
         // Esta função agora tem Try/Catch interno e Fallback Sintético, não deve quebrar
         await this.syncDailyEconomicIndexes(); 
@@ -665,10 +710,11 @@ export const macroDataService = {
             config.riskFree = official.selic;
 
             // Observabilidade: marca a fonte efetiva de cada taxa e se houve fallback.
-            // ratesUpdatedAt só é carimbado quando NADA veio do fallback hardcoded.
-            config.ratesStale = !!official.isFallback;
+            // ratesUpdatedAt só é carimbado quando a Selic veio fresca e autoritativa —
+            // nem fallback hardcoded nem valor congelado pelo guard contam como fresco.
+            config.ratesStale = !!official.isFallback || !!official.selicFrozen;
             config.ratesSources = official.sources || { selic: null, ipca: null };
-            if (!official.isFallback) {
+            if (!official.isFallback && !official.selicFrozen) {
                 config.ratesUpdatedAt = new Date();
             }
         }
