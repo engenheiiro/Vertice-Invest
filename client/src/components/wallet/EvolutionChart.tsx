@@ -1,27 +1,28 @@
 
 import React, { useMemo, useState } from 'react';
 import { useWallet } from '../../contexts/WalletContext';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 import { BarChart3 } from 'lucide-react';
-import { formatCurrency as fmtCurrency } from '../../utils/format';
+import { formatCurrency as fmtCurrency, formatPercent } from '../../utils/format';
+import { buildEvolutionChartData, summarizeEvolutionWindow, type ChartGranularity, type ChartWindow } from '../../utils/evolutionChartData';
 
 // Custom Tick para exibir o ponto pulsante no dia LIVE
 const CustomXAxisTick = (props: any) => {
     const { x, y, payload, data } = props;
-    
+
     // Encontra o item correspondente ao tick atual
     const item = data && data[payload.index];
     const isLive = item && item.isLive;
 
     return (
         <g transform={`translate(${x},${y})`}>
-            <text 
-                x={0} 
-                y={0} 
-                dy={12} 
-                textAnchor="middle" 
-                fill="#64748b" 
-                fontSize={10} 
+            <text
+                x={0}
+                y={0}
+                dy={12}
+                textAnchor="middle"
+                fill="#64748b"
+                fontSize={10}
                 fontWeight={500}
             >
                 {payload.value}
@@ -37,9 +38,22 @@ const CustomXAxisTick = (props: any) => {
     );
 };
 
+// Janelas disponíveis por granularidade.
+const WINDOW_OPTIONS: Record<ChartGranularity, ChartWindow[]> = {
+    DAILY: ['7D', '30D', '90D'],
+    MONTHLY: ['6M', '12M', 'ALL'],
+};
+
 export const EvolutionChart = React.memo(() => {
     const { kpis, history, isPrivacyMode } = useWallet();
-    const [timeRange, setTimeRange] = useState<'ALL' | '12M' | 'YTD' | '1M'>('ALL');
+    const [granularity, setGranularity] = useState<ChartGranularity>('MONTHLY');
+    const [range, setRange] = useState<ChartWindow>('ALL');
+
+    // Ao trocar de granularidade, reseta a janela para um default válido.
+    const switchGranularity = (g: ChartGranularity) => {
+        setGranularity(g);
+        setRange(g === 'DAILY' ? '30D' : 'ALL');
+    };
 
     const formatCurrency = (val: number) => {
         if (isPrivacyMode) return '••••••';
@@ -50,188 +64,21 @@ export const EvolutionChart = React.memo(() => {
 
     const formatTooltipCurrency = (val: number) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
 
-    const chartData = useMemo(() => {
-        // Data de hoje normalizada (sem horas) para comparação
-        const now = new Date();
-        const todayStr = now.toLocaleDateString('pt-BR'); // "dd/mm/aaaa"
+    // Moeda com sinal explícito (+) em positivos; Intl já prefixa o "-" em negativos.
+    const formatSignedCurrency = (val: number) => {
+        const formatted = fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
+        return !isPrivacyMode && val > 0 ? `+${formatted}` : formatted;
+    };
 
-        // 1. Filtrar histórico para remover qualquer snapshot que porventura tenha a data de "hoje"
-        // Isso garante que "hoje" seja sempre representado pelos dados LIVE (kpis)
-        const cleanHistory = (history || []).filter(h => {
-            const hDate = new Date(h.date).toLocaleDateString('pt-BR');
-            return hDate !== todayStr;
-        });
+    const chartData = useMemo(
+        () => buildEvolutionChartData({ history, kpis, granularity, window: range }),
+        [history, kpis, granularity, range]
+    );
 
-        // 2. Ordenar histórico
-        const sortedHistory = [...cleanHistory].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-        const rawDates = sortedHistory.map(h => new Date(h.date).getTime());
-        // Se não tiver histórico, usa hoje como base
-        const minDate = rawDates.length > 0 ? new Date(Math.min(...rawDates)) : new Date();
-        const maxDate = new Date(); 
-
-        const filledData: any[] = [];
-
-        if (timeRange === '1M') {
-            // LÓGICA DIÁRIA (Mês Atual)
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-            
-            // Filtra histórico para o mês atual
-            const dailyHistory = sortedHistory.filter(h => new Date(h.date) >= startOfMonth);
-            
-            // Mapeia histórico
-            dailyHistory.forEach(point => {
-                const profit = (point.totalEquity || 0) - (point.totalInvested || 0);
-                const stackBase = Math.min(point.totalEquity || 0, point.totalInvested || 0);
-                const stackProfit = Math.max(0, profit);
-
-                filledData.push({
-                    label: new Date(point.date).getDate().toString(), 
-                    fullDate: new Date(point.date).toLocaleDateString('pt-BR'),
-                    sortDate: new Date(point.date),
-                    baseBar: stackBase,
-                    profitBar: stackProfit,
-                    realInvested: point.totalInvested || 0,
-                    realEquity: point.totalEquity || 0,
-                    realProfit: profit
-                });
-            });
-
-            // SEMPRE Adiciona o dia atual (Live KPI) se houver patrimônio
-            if (kpis.totalEquity > 0) {
-                 const profit = kpis.totalEquity - kpis.totalInvested;
-                 const stackBase = Math.min(kpis.totalEquity, kpis.totalInvested);
-                 const stackProfit = Math.max(0, profit);
-
-                 filledData.push({
-                    label: now.getDate().toString(),
-                    fullDate: now.toLocaleDateString('pt-BR'),
-                    sortDate: now,
-                    baseBar: stackBase,
-                    profitBar: stackProfit,
-                    realInvested: kpis.totalInvested,
-                    realEquity: kpis.totalEquity,
-                    realProfit: kpis.totalResult,
-                    isLive: true // Flag para identificar que é dado vivo
-                });
-            }
-
-        } else {
-            // LÓGICA MENSAL
-            minDate.setDate(1);
-            minDate.setHours(0,0,0,0);
-            
-            const historyMap = new Map();
-            sortedHistory.forEach(point => {
-                const d = new Date(point.date);
-                const key = `${d.getFullYear()}-${d.getMonth()}`; 
-                historyMap.set(key, {
-                    invested: point.totalInvested || 0,
-                    equity: point.totalEquity || 0
-                });
-            });
-
-            const cursor = new Date(minDate);
-            let lastInvested = 0;
-            let lastEquity = 0;
-
-            // Preenche meses passados
-            while (cursor <= maxDate) {
-                // Se cursor for mês atual, pulamos para adicionar o Live KPI no final
-                if (cursor.getMonth() === now.getMonth() && cursor.getFullYear() === now.getFullYear()) {
-                    cursor.setMonth(cursor.getMonth() + 1);
-                    continue;
-                }
-
-                const key = `${cursor.getFullYear()}-${cursor.getMonth()}`;
-                const monthLabel = cursor.toLocaleDateString('pt-BR', { month: '2-digit', year: '2-digit' }); 
-                
-                const existingData = historyMap.get(key);
-
-                if (existingData) {
-                    lastInvested = existingData.invested;
-                    lastEquity = existingData.equity;
-                }
-
-                const profit = lastEquity - lastInvested;
-                const stackBase = Math.min(lastEquity, lastInvested); 
-                const stackProfit = Math.max(0, profit);
-
-                if (lastEquity > 0 || lastInvested > 0) {
-                    filledData.push({
-                        label: monthLabel,
-                        sortDate: new Date(cursor), 
-                        baseBar: stackBase,
-                        profitBar: stackProfit,
-                        realInvested: lastInvested,
-                        realEquity: lastEquity,
-                        realProfit: profit
-                    });
-                }
-
-                cursor.setMonth(cursor.getMonth() + 1);
-            }
-
-            // Adiciona mês atual (Live KPI)
-            if (kpis.totalEquity > 0) {
-                 const profit = kpis.totalEquity - kpis.totalInvested;
-                 const stackBase = Math.min(kpis.totalEquity, kpis.totalInvested);
-                 const stackProfit = Math.max(0, profit);
-
-                 filledData.push({
-                    label: now.toLocaleDateString('pt-BR', { month: '2-digit', year: '2-digit' }),
-                    sortDate: now,
-                    baseBar: stackBase,
-                    profitBar: stackProfit,
-                    realInvested: kpis.totalInvested,
-                    realEquity: kpis.totalEquity,
-                    realProfit: kpis.totalResult,
-                    isLive: true
-                });
-            }
-        }
-
-        // 3. Pós-Processamento: Calcular Variação do Período
-        let finalData = filledData;
-
-        if (timeRange === '12M') finalData = filledData.slice(-12);
-        else if (timeRange === 'YTD') finalData = filledData.filter(d => d.sortDate.getFullYear() === now.getFullYear());
-
-        const dataWithVariation = finalData.map((item, index) => {
-            let prevEquity = 0;
-            let prevInvested = 0;
-
-            if (index > 0) {
-                // Se não for o primeiro item do array VISÍVEL, pega o anterior do array
-                prevEquity = finalData[index - 1].realEquity;
-                prevInvested = finalData[index - 1].realInvested;
-            } else {
-                // Se for o primeiro item visível, tenta buscar no histórico global anterior a ele
-                const firstDate = item.sortDate;
-                const prevSnapshot = sortedHistory
-                    .filter(h => new Date(h.date) < firstDate)
-                    .pop(); 
-                
-                if (prevSnapshot) {
-                    prevEquity = prevSnapshot.totalEquity;
-                    prevInvested = prevSnapshot.totalInvested;
-                }
-            }
-
-            // Variação de Mercado = (Variação Patrimônio) - (Aportes Líquidos)
-            const equityDiff = item.realEquity - prevEquity;
-            const investedDiff = item.realInvested - prevInvested;
-            const marketVariation = equityDiff - investedDiff;
-
-            return {
-                ...item,
-                periodVariation: marketVariation
-            };
-        });
-
-        return dataWithVariation;
-
-    }, [history, kpis, timeRange]);
+    const summary = useMemo(() => summarizeEvolutionWindow(chartData), [chartData]);
+    const hasLoss = useMemo(() => chartData.some((d) => d.lossBar > 0), [chartData]);
+    const showSummary = summary.variationValue !== 0 || summary.variationPercent !== null;
+    const summaryPositive = summary.variationValue >= 0;
 
     const barSize = chartData.length > 24 ? 12 : (chartData.length > 12 ? 20 : 35);
 
@@ -247,10 +94,21 @@ export const EvolutionChart = React.memo(() => {
 
     return (
         <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
-            
+
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 z-10 relative">
                 <div>
-                    <h3 className="text-base font-bold text-white">Evolução do Patrimônio</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-bold text-white">Evolução do Patrimônio</h3>
+                        {showSummary && (
+                            <span className={`text-xs font-bold font-mono ${summaryPositive ? 'text-emerald-400' : 'text-red-500'}`}>
+                                {formatSignedCurrency(summary.variationValue)}
+                                {summary.variationPercent !== null && (
+                                    <span className="text-slate-500 font-sans"> · {formatPercent(summary.variationPercent, { privacy: isPrivacyMode, sign: true })}</span>
+                                )}
+                                <span className="text-slate-500 font-sans font-medium"> no período</span>
+                            </span>
+                        )}
+                    </div>
                     <div className="flex items-center gap-3 mt-1">
                         <div className="flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-emerald-700"></span>
@@ -260,89 +118,120 @@ export const EvolutionChart = React.memo(() => {
                             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
                             <p className="text-[10px] text-slate-400 font-bold uppercase">Resultado</p>
                         </div>
+                        {hasLoss && (
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase">Prejuízo</p>
+                            </div>
+                        )}
                     </div>
                 </div>
-                
-                <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
-                    {(['1M', 'YTD', '12M', 'ALL'] as const).map((t) => (
-                        <button
-                            key={t}
-                            onClick={() => setTimeRange(t)}
-                            className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
-                                timeRange === t 
-                                ? 'bg-slate-700 text-white shadow-sm' 
-                                : 'text-slate-500 hover:text-slate-300'
-                            }`}
-                        >
-                            {t === '1M' ? 'Mês' : t === 'ALL' ? 'Tudo' : t}
-                        </button>
-                    ))}
+
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* Granularidade: Diário vs Mensal */}
+                    <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+                        {(['DAILY', 'MONTHLY'] as const).map((g) => (
+                            <button
+                                key={g}
+                                onClick={() => switchGranularity(g)}
+                                className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                                    granularity === g
+                                    ? 'bg-slate-700 text-white shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-300'
+                                }`}
+                            >
+                                {g === 'DAILY' ? 'Diário' : 'Mensal'}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Janela — depende da granularidade */}
+                    <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+                        {WINDOW_OPTIONS[granularity].map((w) => (
+                            <button
+                                key={w}
+                                onClick={() => setRange(w)}
+                                className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                                    range === w
+                                    ? 'bg-slate-700 text-white shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-300'
+                                }`}
+                            >
+                                {w === 'ALL' ? 'Tudo' : w}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
             {/* (A1) descrição textual do gráfico para leitores de tela */}
             <div className="flex-1 w-full relative min-h-0 text-xs" role="img" aria-label="Gráfico de evolução patrimonial da carteira ao longo do tempo" aria-describedby="evolution-chart-desc">
                 <p id="evolution-chart-desc" className="sr-only">
-                    Gráfico de barras exibindo o patrimônio total da carteira mês a mês. Use os controles de período acima para filtrar por mês, ano ou período completo.
+                    Gráfico de barras exibindo o patrimônio total da carteira. Alterne entre visão diária e mensal e use os controles de período para ajustar a janela exibida.
+                    {showSummary && !isPrivacyMode && ` Resultado no período: ${formatSignedCurrency(summary.variationValue)}${summary.variationPercent !== null ? ` (${formatPercent(summary.variationPercent, { sign: true })})` : ''}.`}
                 </p>
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }} barGap={0}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                        
-                        <XAxis 
-                            dataKey="label" 
-                            axisLine={false} 
+
+                        <XAxis
+                            dataKey="label"
+                            axisLine={false}
                             tickLine={false}
                             minTickGap={10}
                             // Usa o componente customizado para desenhar o ponto live
                             tick={(props) => <CustomXAxisTick {...props} data={chartData} />}
                         />
-                        
-                        <YAxis 
+
+                        <YAxis
                             tickFormatter={formatCurrency}
                             tick={{fill: '#64748b', fontSize: 10}}
                             axisLine={false}
                             tickLine={false}
                         />
-                        
-                        <Tooltip 
+
+                        <Tooltip
                             cursor={{ fill: '#1e293b', opacity: 0.3 }}
                             content={({ active, payload, label }) => {
                                 if (active && payload && payload.length) {
                                     const data = payload[0].payload;
                                     const displayLabel = data.fullDate || label;
                                     const variation = data.periodVariation || 0;
+                                    const variationPct = data.periodVariationPercent;
                                     const isLive = data.isLive;
-                                    
+
                                     return (
-                                        <div className="bg-elevated border border-slate-700 rounded-xl p-3 shadow-2xl z-50 min-w-[180px]">
-                                            <div className="flex justify-between items-center border-b border-slate-800 pb-1 mb-2">
+                                        <div className="bg-elevated border border-slate-700 rounded-xl p-3 shadow-2xl z-50 min-w-[210px]">
+                                            <div className="flex justify-between items-center gap-4 border-b border-slate-800 pb-1.5 mb-2">
                                                 <p className="text-slate-400 text-[10px] font-bold uppercase">{displayLabel}</p>
-                                                {isLive && <span className="text-[9px] text-red-500 font-black animate-pulse flex items-center gap-1">● LIVE</span>}
+                                                {isLive && <span className="text-[9px] text-red-500 font-black animate-pulse flex items-center gap-1 whitespace-nowrap">● LIVE</span>}
                                             </div>
-                                            
+
                                             <div className="space-y-1.5">
-                                                <div className="flex justify-between items-center text-xs">
+                                                <div className="flex justify-between items-center gap-6 text-xs">
                                                     <span className="text-emerald-600 font-bold">Aplicado</span>
-                                                    <span className="text-slate-200 font-mono">{formatTooltipCurrency(data.realInvested)}</span>
+                                                    <span className="text-slate-200 font-mono whitespace-nowrap">{formatTooltipCurrency(data.realInvested)}</span>
                                                 </div>
-                                                <div className="flex justify-between items-center text-xs">
+                                                <div className="flex justify-between items-center gap-6 text-xs">
                                                     <span className="text-emerald-400 font-bold">Resultado</span>
-                                                    <span className={`font-mono font-bold ${data.realProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
+                                                    <span className={`font-mono font-bold whitespace-nowrap ${data.realProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
                                                         {data.realProfit >= 0 ? '+' : ''}{formatTooltipCurrency(data.realProfit)}
                                                     </span>
                                                 </div>
-                                                
-                                                <div className="flex justify-between items-center text-xs">
-                                                    <span className="text-slate-400 font-bold">Variação</span>
-                                                    <span className={`font-mono font-bold ${variation >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
+
+                                                <div className="flex justify-between items-center gap-6 text-xs">
+                                                    <span className="text-slate-400 font-bold whitespace-nowrap">Variação no período</span>
+                                                    <span className={`font-mono font-bold whitespace-nowrap text-right ${variation >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
                                                         {variation >= 0 ? '+' : ''}{formatTooltipCurrency(variation)}
+                                                        {variationPct !== null && variationPct !== undefined && (
+                                                            <span className="block text-[10px] font-sans opacity-80">{formatPercent(variationPct, { sign: true })}</span>
+                                                        )}
                                                     </span>
                                                 </div>
 
-                                                <div className="border-t border-slate-800 pt-1.5 mt-1 flex justify-between items-center">
-                                                    <span className="text-white font-bold text-xs uppercase">Saldo Final</span>
-                                                    <span className="text-white font-bold font-mono text-sm">{formatTooltipCurrency(data.realEquity)}</span>
+                                                <div className="border-t border-slate-800 pt-1.5 mt-1 flex justify-between items-center gap-6">
+                                                    <span className="text-white font-bold text-xs uppercase whitespace-nowrap">Saldo Final</span>
+                                                    <span className="text-white font-bold font-mono text-sm whitespace-nowrap">{formatTooltipCurrency(data.realEquity)}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -351,27 +240,39 @@ export const EvolutionChart = React.memo(() => {
                                 return null;
                             }}
                         />
-                        
-                        <Bar 
-                            dataKey="baseBar" 
-                            stackId="a" 
+
+                        <Bar
+                            dataKey="baseBar"
+                            stackId="a"
                             fill="#047857" // Emerald 700
-                            radius={[0, 0, 4, 4]} 
+                            radius={[0, 0, 4, 4]}
                             maxBarSize={50}
                             barSize={barSize}
                             animationDuration={1000}
                         />
-                        
-                        <Bar 
-                            dataKey="profitBar" 
-                            stackId="a" 
+
+                        <Bar
+                            dataKey="profitBar"
+                            stackId="a"
                             fill="#34D399" // Emerald 400
-                            radius={[4, 4, 0, 0]} 
+                            radius={[4, 4, 0, 0]}
                             maxBarSize={50}
                             barSize={barSize}
                             animationDuration={1000}
                         />
-                        
+
+                        {/* Capa vermelha translúcida: queda do patrimônio até o custo (aplicado) */}
+                        <Bar
+                            dataKey="lossBar"
+                            stackId="a"
+                            fill="#ef4444" // Red 500
+                            fillOpacity={0.55}
+                            radius={[4, 4, 0, 0]}
+                            maxBarSize={50}
+                            barSize={barSize}
+                            animationDuration={1000}
+                        />
+
                         <ReferenceLine y={0} stroke="#334155" />
                     </BarChart>
                 </ResponsiveContainer>
