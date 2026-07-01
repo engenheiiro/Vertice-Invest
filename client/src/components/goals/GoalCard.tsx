@@ -95,7 +95,20 @@ export const GoalCard: React.FC<GoalCardProps> = ({ goal, privacy, onClick }) =>
         </div>
       </div>
 
-      {!achieved && (
+      {achieved ? (
+        // Footer também no estado conquistado → mantém a MESMA altura dos demais cards.
+        <div className="mt-3 pt-3 border-t border-slate-800/60 flex items-center gap-1.5 text-[11px] font-medium">
+          {goal.currentValue > goal.targetAmount ? (
+            <span className="inline-flex items-center gap-1 text-emerald-400">
+              <TrendingUp size={12} /> {formatCurrency(goal.currentValue - goal.targetAmount, 'BRL', { privacy })} acima da meta
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-emerald-400">
+              <CheckCircle2 size={12} /> Objetivo alcançado
+            </span>
+          )}
+        </div>
+      ) : (
         <div className="mt-3 pt-3 border-t border-slate-800/60 flex items-center gap-1.5 text-[11px] font-medium">
           {goal.dateDeltaMonths !== null && goal.dateDeltaMonths > 0 ? (
             <span className="inline-flex items-center gap-1 text-emerald-400">

@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useWallet, AssetType, AllocationMap, SubAllocationMap, DEFAULT_SUB_ALLOCATION } from '../../contexts/WalletContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Settings, Check, X, DollarSign, ChevronDown, ChevronRight } from 'lucide-react';
+import { Settings, Check, X, DollarSign, ChevronDown, ChevronRight, ShieldCheck, PlusCircle } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatCompact as fmtCompact } from '../../utils/format';
@@ -189,6 +189,11 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
 
     const formatCurrency = (val: number) => fmtCompact(val);
 
+    // CASH/Reserva é excluída da distribuição de investimentos. Quando não há
+    // investimentos (carteira 100% Reserva, ou vazia), o donut ficaria em branco —
+    // então mostramos um empty-state dedicado no lugar do gráfico + legenda.
+    const hasInvestments = chartData.length > 0;
+
     // Sub-linhas (drill-down) de uma classe ramificada na legenda.
     const renderSubRows = (type: AssetType) => {
         const keys = SUB_KEYS[type];
@@ -254,7 +259,45 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                 </div>
             </div>
 
-            {/* Content Area */}
+            {/* Empty-state: sem investimentos para distribuir (só reserva, vazio, ou ideal não definida) */}
+            {!hasInvestments ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-center px-4 gap-3 min-h-0">
+                    {viewMode === 'IDEAL' ? (
+                        <>
+                            <div className="w-14 h-14 rounded-2xl bg-slate-800/50 flex items-center justify-center">
+                                <Settings className="text-slate-500" size={24} />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-slate-300">Carteira ideal não definida</p>
+                                <p className="text-xs text-slate-500 mt-1 max-w-[240px]">Toque na engrenagem acima para definir sua alocação-alvo.</p>
+                            </div>
+                        </>
+                    ) : reserveValue > 0 ? (
+                        <>
+                            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+                                <ShieldCheck className="text-emerald-400" size={26} />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-slate-300">Nada investido ainda</p>
+                                <p className="text-xs text-slate-500 mt-1 max-w-[260px]">
+                                    Sua reserva ({formatCurrency(reserveValue)}) está protegida. Adicione ativos para ver a distribuição.
+                                </p>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="w-14 h-14 rounded-2xl bg-slate-800/50 flex items-center justify-center">
+                                <PlusCircle className="text-slate-500" size={26} />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-slate-300">Sem ativos ainda</p>
+                                <p className="text-xs text-slate-500 mt-1 max-w-[240px]">Cadastre seu primeiro ativo para ver a distribuição da carteira.</p>
+                            </div>
+                        </>
+                    )}
+                </div>
+            ) : (
+            /* Content Area */
             <div className="flex items-center gap-2 h-full min-h-0">
 
                 {/* Chart Container - Tamanho Reduzido e Fixo */}
@@ -370,6 +413,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                     })}
                 </div>
             </div>
+            )}
 
             {/* Modal de Edição (Overlay Absoluto) */}
             {isEditing && (
