@@ -490,8 +490,10 @@ export const initScheduler = () => {
         }
     });
 
-    // 12. LIMPEZA DE ARMAZENAMENTO (Domingo 01:00 — janela de menor tráfego)
-    schedule('0 1 * * 0', async () => {
+    // 12. LIMPEZA DE ARMAZENAMENTO (Diário 01:00 — janela de menor tráfego)
+    // Diário (antes semanal): o pipeline grava ~14 análises/dia e o fullAuditLog só é
+    // removido após 7 dias, então rodar todo dia mantém a coleção enxuta continuamente.
+    schedule('0 1 * * *', async () => {
         try {
             const { runStorageCleanup } = await import('./cleanupService.js');
             await runStorageCleanup();

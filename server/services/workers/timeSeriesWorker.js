@@ -4,6 +4,7 @@ import AssetHistory from '../../models/AssetHistory.js';
 import SystemConfig from '../../models/SystemConfig.js';
 import { marketDataService } from '../marketDataService.js';
 import { externalMarketService } from '../externalMarketService.js';
+import { ASSET_HISTORY_MAX_POINTS, HISTORY_CAP_EXEMPT_TICKERS } from '../../config/financialConstants.js';
 
 // Funções matemáticas auxiliares
 const calculateSMA = (prices, period) => {
@@ -119,13 +120,19 @@ export const timeSeriesWorker = {
                         try {
                             const externalHistory = await externalMarketService.getFullHistory(asset.ticker, asset.type);
                             if (externalHistory && externalHistory.length > 0) {
+                                // Cap de armazenamento: guarda só os últimos ASSET_HISTORY_MAX_POINTS
+                                // candles (a série vem oldest→newest do Yahoo, então .slice(-N) mantém os
+                                // mais recentes). Câmbio/benchmarks ficam de fora — precisam de série longa.
+                                const historyToStore = HISTORY_CAP_EXEMPT_TICKERS.has(asset.ticker)
+                                    ? externalHistory
+                                    : externalHistory.slice(-ASSET_HISTORY_MAX_POINTS);
                                 await AssetHistory.updateOne(
                                     { ticker: asset.ticker },
-                                    { $set: { history: externalHistory, lastUpdated: now } },
+                                    { $set: { history: historyToStore, lastUpdated: now } },
                                     { upsert: true }
                                 );
                                 // Reaproveita o array recém-buscado para o cálculo, sem reler do banco.
-                                historyEntry = { ticker: asset.ticker, history: externalHistory, lastUpdated: now };
+                                historyEntry = { ticker: asset.ticker, history: historyToStore, lastUpdated: now };
                             }
                         } catch (e) {
                             logger.warn(`[TimeSeriesWorker] Falha ao buscar histórico para ${asset.ticker}`);

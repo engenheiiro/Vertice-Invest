@@ -35,6 +35,19 @@ export const MAX_CRYPTO_PER_PROFILE = Number(process.env.MAX_CRYPTO_PER_PROFILE)
 // Janela de cache de cotações de mercado, em minutos (marketDataService).
 export const MARKET_CACHE_DURATION_MINUTES = Number(process.env.MARKET_CACHE_MINUTES) || 20;
 
+// Teto de pontos (candles diários) guardados por ticker em AssetHistory.
+// A análise só precisa de ≤252 pontos (SMA200 + volatilidade de 252 dias úteis) e os
+// sinais leem os últimos 60 — guardar ~1.400 candles (2020→hoje) só inchava o banco.
+// 400 (~1,6 ano) cobre SMA200/volatilidade/sinais com folga. Aplicado na escrita do
+// timeSeriesWorker (universo de pesquisa). Ver HISTORY_CAP_EXEMPT_TICKERS.
+export const ASSET_HISTORY_MAX_POINTS = Number(process.env.ASSET_HISTORY_MAX_POINTS) || 400;
+
+// Tickers ISENTOS do cap acima: câmbio (conversão por data na carteira) e benchmarks
+// (comparação de TWRR/beta) precisam de histórico profundo e são poucos documentos.
+// Os caminhos da carteira (financialService) e de benchmark (marketDataService) NÃO
+// aplicam o cap; esta lista garante que o worker e o script de trim também os preservem.
+export const HISTORY_CAP_EXEMPT_TICKERS = new Set(['USD-BRL', '^BVSP', '^GSPC', '^IXIC', '^IFIX']);
+
 // Selic/CDI de fallback quando não há valor no SystemConfig nem na API do BC.
 // Atualizado jun/2026: Selic real subiu para 14,25 (via BrasilAPI; BCB estava em 502).
 export const DEFAULT_SELIC_FALLBACK = Number(process.env.DEFAULT_SELIC_FALLBACK) || 14.25;

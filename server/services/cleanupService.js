@@ -5,7 +5,7 @@ import logger from '../config/logger.js';
 
 export const runStorageCleanup = async () => {
     const now = new Date();
-    const day30  = new Date(now.getTime() - 30  * 24 * 60 * 60 * 1000);
+    const day7   = new Date(now.getTime() - 7   * 24 * 60 * 60 * 1000);
     const day90  = new Date(now.getTime() - 90  * 24 * 60 * 60 * 1000);
     const day120 = new Date(now.getTime() - 120 * 24 * 60 * 60 * 1000);
 
@@ -15,12 +15,22 @@ export const runStorageCleanup = async () => {
     // (backtest olha no máximo 90 dias atrás — 30 dias de buffer)
     const deletedAnalysis = await MarketAnalysis.deleteMany({ createdAt: { $lt: day120 } });
 
-    // 2. MarketAnalysis 30–120 dias: remover fullAuditLog (maior campo, usado só na modal admin)
-    // O endpoint público já exclui fullAuditLog via .select(). O backtest só lê content.ranking.
+    // 2. MarketAnalysis > 7 dias: remover fullAuditLog (maior campo, ~70% da massa da coleção,
+    // usado só na modal admin de deep-dive). O endpoint público já exclui fullAuditLog via
+    // .select() e o backtest só lê content.ranking, que fica intacto por 120 dias.
+    // EXCEÇÃO: preserva o relatório mais recente de cada (assetClass, strategy) — é o que a
+    // modal admin carrega — mesmo que ele já tenha > 7 dias (classe sem run recente).
+    const latestPerClass = await MarketAnalysis.aggregate([
+        { $sort: { createdAt: -1 } },
+        { $group: { _id: { assetClass: '$assetClass', strategy: '$strategy' }, latestId: { $first: '$_id' } } }
+    ]);
+    const latestIds = latestPerClass.map(g => g.latestId);
+
     const strippedAnalysis = await MarketAnalysis.updateMany(
         {
-            createdAt: { $gte: day120, $lt: day30 },
-            'content.fullAuditLog.0': { $exists: true }
+            createdAt: { $lt: day7 },
+            'content.fullAuditLog.0': { $exists: true },
+            _id: { $nin: latestIds }
         },
         { $unset: { 'content.fullAuditLog': 1 } }
     );
