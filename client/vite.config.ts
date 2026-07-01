@@ -100,6 +100,21 @@ export default defineConfig({
             handler: 'NetworkOnly',
           },
           {
+            // Dados FINANCEIROS e de TAXA: SEMPRE rede, nunca cache. Um valor de dinheiro
+            // defasado (ex.: patrimônio calculado com CDI antigo, ou plano expirado) jamais
+            // pode ser servido do cache do SW. Sem cache aqui, uma entrada velha nunca é
+            // relida — quem estava preso num valor antigo corrige sozinho assim que o novo
+            // SW assume (auto-update de 60s do ReloadPrompt), sem limpar cache manualmente.
+            // Regra ANTES do NetworkFirst genérico (workbox usa o primeiro match).
+            urlPattern: ({ url, request }) =>
+              request.method === 'GET' &&
+              (url.pathname === '/api/wallet' ||
+                url.pathname.startsWith('/api/wallet/') ||
+                url.pathname.startsWith('/api/subscription/') ||
+                url.pathname === '/api/research/macro'),
+            handler: 'NetworkOnly',
+          },
+          {
             // Demais GETs de API: rede primeiro, cache como fallback offline (curta validade).
             urlPattern: ({ url, request }) =>
               request.method === 'GET' && url.pathname.startsWith('/api/'),
