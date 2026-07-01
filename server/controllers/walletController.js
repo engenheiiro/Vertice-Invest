@@ -175,9 +175,14 @@ const fetchWalletMarketContext = async (userId, liveTickers) => {
 
 // Processa um único ativo: resolve preço/variação e devolve o card pronto +
 // as contribuições para os totais da carteira. Aritmética idêntica à original.
-const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay }) => {
+export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay }) => {
     let currentPrice = 0;
     let dayChangePct = 0;
+    // Renda fixa/caixa: valor TOTAL acumulado (fonte da verdade). Guardado à parte
+    // porque re-derivar via quantidade × preço unitário perde precisão — safeFloat
+    // arredonda o preço a 4 casas e, numa reserva com muitas "unidades" (ex.: 15.000),
+    // isso descarta centavos (R$15.000 a 100% CDI → 1,000525 vira 1,0005 → perde R$0,38).
+    let accruedTotalValue = null;
 
     if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
         // Accrual via fonte única (utils/fixedIncome) — idêntico ao
@@ -187,6 +192,7 @@ const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroRates, i
 
         const calcDate = brazilToday();
         const totalCurrentValue = accrueFixedIncomeValue(asset, { ...macroRates, calcDate });
+        accruedTotalValue = totalCurrentValue;
         const totalQuantity = asset.quantity;
 
         if (totalQuantity > 0) {
@@ -236,8 +242,10 @@ const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroRates, i
     const prevMultiplier = isDollarized ? (usdRate / (1 + usdChange/100)) : 1;
 
     const valueBase = asset.type === 'CASH' ? asset.quantity : safeValue(asset.quantity, currentPrice);
-    const totalValueBr = asset.type === 'CASH'
-        ? safeMult(safeMult(asset.quantity, currentPrice), currentMultiplier)
+    // Renda fixa/caixa: multiplica o TOTAL acumulado (preciso) pelo câmbio, em vez de
+    // reconstruir via quantidade × preço unitário arredondado (que perdia centavos).
+    const totalValueBr = accruedTotalValue !== null
+        ? safeMult(accruedTotalValue, currentMultiplier)
         : safeMult(valueBase, currentMultiplier);
 
     const totalCostBr = safeMult(asset.totalCost, currentMultiplier);
@@ -245,7 +253,12 @@ const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroRates, i
     // Cálculo robusto da variação diária em BRL
     // Considera tanto a variação do ativo quanto a variação cambial
     const priceStart = currentPrice / (1 + dayChangePct/100);
-    const valueStartBr = safeMult(safeValue(asset.quantity, priceStart), prevMultiplier);
+    // Valor de início do dia: renda fixa/caixa deriva do TOTAL acumulado ÷ fator do dia.
+    // Divisão CRUA (sem safeDiv) de propósito: o fator ~1,0005 arredondado a 4 casas
+    // reintroduziria a perda de centavos; arredonda-se só o resultado monetário final.
+    const valueStartBr = accruedTotalValue !== null
+        ? safeMult(accruedTotalValue / (1 + dayChangePct / 100), prevMultiplier)
+        : safeMult(safeValue(asset.quantity, priceStart), prevMultiplier);
 
     const dayChangeValueBr = safeSub(totalValueBr, valueStartBr);
     const combinedChangePct = valueStartBr > 0 ? ((totalValueBr / valueStartBr) - 1) * 100 : 0;
