@@ -182,30 +182,6 @@ bem testado. Aqui são EVOLUÇÕES, não correções.)
 (CI/CD existe e é bom — ci.yml, lighthouse.yml, secret-scan.yml e ~36
 scripts npm na raiz. Faltam containerização e deploy automático.)
 
-8.1  Criar Dockerfile (client e server)
-     "Empacotar" o app para rodar igual em qualquer lugar.
-     [MEDIA] [OPUS]
-
-8.2  docker-compose para ambiente local
-     Subir app + banco com um comando só.
-     [MEDIA] [SONNET]
-
-8.3  Pipeline de deploy automático
-     Ao aprovar o código, publicar sozinho. Tier gratuito: Vercel/Netlify
-     (frontend) e Render free / Fly.io free (backend). Hoje os workflows
-     fazem só quality gate (lint/typecheck/test/build), sem deploy.
-     [MEDIA] [OPUS]
-
-8.4  Ambiente de homologação (staging)
-     Um "site de testes" idêntico ao real, antes de ir pro ar (mesmos
-     tiers gratuitos).
-     [MEDIA] [OPUS]
-
-8.5  Variáveis de ambiente por ambiente (dev/stage/prod)
-     Hoje há um único .env (+ .env.example). Separar configs por ambiente
-     para não misturar teste com produção.
-     [BAIXA] [SONNET]
-
 8.6  Script de backup do MongoDB documentado
      Procedimento de cópia/restauração (mongodump/restore) escrito e
      testado. O runSnapshotJob.js faz snapshot patrimonial — NÃO é backup.
