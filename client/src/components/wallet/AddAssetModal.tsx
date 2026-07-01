@@ -363,7 +363,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     const confirmDisabled = form.type !== 'CASH' && (!form.ticker || !form.quantity || !form.price);
 
     return createPortal(
-        <div className="relative z-[100]" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div className="relative z-[100]" aria-labelledby="modal-title" aria-describedby="modal-desc" role="dialog" aria-modal="true">
             <div className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
@@ -374,6 +374,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                                 <PlusCircle size={18} className="text-blue-500" />
                                 Nova Transação
                             </h2>
+                            <p id="modal-desc" className="sr-only">Formulário para registrar compra, venda ou lançamento de ativo na carteira. Preencha o tipo de operação, o ativo e os valores.</p>
                             <button onClick={onClose} aria-label="Fechar" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-white transition-colors">
                                 <X size={20} />
                             </button>

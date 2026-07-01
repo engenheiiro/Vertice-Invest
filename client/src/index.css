@@ -174,8 +174,11 @@ html[data-theme="light"] body {
 [data-theme="light"] [class*="text-white/"] { color: rgb(15 23 42 / 0.72); }
 
 /* ─── Light mode: contraste de texto secundário ─────────────────────────────
- * slate-400 (#94a3b8) falha AA sobre fundo claro; sobe para slate-500. ───────*/
+ * slate-400 (#94a3b8) falha AA sobre fundo claro; sobe para slate-500.
+ * slate-500 (#64748b) falha AA sobre bg-elevated (#F0F4FA, ~3.9:1); sobe para
+ * slate-600 (#475569, ~6.5:1) para garantir AA em todas as superfícies. ──────*/
 [data-theme="light"] .text-slate-400 { color: #64748b; }
+[data-theme="light"] .text-slate-500 { color: #475569; }
 
 /* ─── Light mode: HOVER de texto claro → escuro ─────────────────────────────
  * hover:text-white / hover:text-slate-300 etc. são classes próprias (não as

@@ -174,7 +174,7 @@ export const AssetList = () => {
                                                         <button
                                                             onClick={() => setRenameTarget({ id: asset.id, name: asset.name || '' })}
                                                             aria-label={`Renomear ${assetTitle(asset)}`}
-                                                            className="p-2 text-slate-600 hover:text-emerald-400 transition-colors"
+                                                            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-emerald-400 transition-colors"
                                                         >
                                                             <Pencil size={16} />
                                                         </button>
@@ -182,7 +182,7 @@ export const AssetList = () => {
                                                     <button
                                                         onClick={() => setHistoryTicker(asset.ticker)}
                                                         aria-label={`Histórico de ${assetTitle(asset)}`}
-                                                        className="p-2 text-slate-600 hover:text-blue-400 transition-colors"
+                                                        className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-blue-400 transition-colors"
                                                     >
                                                         <History size={16} />
                                                     </button>
@@ -197,7 +197,7 @@ export const AssetList = () => {
                                                             if (ok) removeAsset(asset.id);
                                                         }}
                                                         aria-label={`Remover ${asset.ticker}`}
-                                                        className="p-2 text-slate-600 hover:text-red-500 transition-colors"
+                                                        className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-red-500 transition-colors"
                                                     >
                                                         <Trash2 size={16} />
                                                     </button>
@@ -213,6 +213,7 @@ export const AssetList = () => {
 
                 <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-[900px]">
+                        <caption className="sr-only">Lista de ativos da carteira com preço médio, preço atual, saldo, variação e rentabilidade</caption>
                         <thead>
                             <tr className="bg-card border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500">
                                 <th scope="col" className="p-4 font-bold">Ativo</th>

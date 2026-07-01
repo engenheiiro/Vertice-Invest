@@ -281,7 +281,10 @@ export const EvolutionChart = React.memo(() => {
             </div>
 
             {/* (A1) descrição textual do gráfico para leitores de tela */}
-            <div className="flex-1 w-full relative min-h-0 text-xs" role="img" aria-label="Gráfico de evolução patrimonial da carteira ao longo do tempo">
+            <div className="flex-1 w-full relative min-h-0 text-xs" role="img" aria-label="Gráfico de evolução patrimonial da carteira ao longo do tempo" aria-describedby="evolution-chart-desc">
+                <p id="evolution-chart-desc" className="sr-only">
+                    Gráfico de barras exibindo o patrimônio total da carteira mês a mês. Use os controles de período acima para filtrar por mês, ano ou período completo.
+                </p>
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }} barGap={0}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />

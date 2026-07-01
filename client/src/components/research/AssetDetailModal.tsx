@@ -209,7 +209,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
     ];
 
     return createPortal(
-        <div className="relative z-[100]" role="dialog" aria-modal="true">
+        <div className="relative z-[100]" role="dialog" aria-modal="true" aria-labelledby="asset-detail-title">
             <div className="fixed inset-0 bg-black/90 backdrop-blur-md animate-fade-in" onClick={onClose}></div>
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
@@ -232,7 +232,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                     <div className="flex items-center gap-3 min-w-0">
                                         <AssetLogo ticker={asset.ticker} type={type as AssetType} name={asset.name} size={48} />
                                         <div className="flex flex-col min-w-0">
-                                        <h2 className="text-4xl font-black text-white tracking-tighter">{asset.ticker}</h2>
+                                        <h2 id="asset-detail-title" className="text-4xl font-black text-white tracking-tighter">{asset.ticker}</h2>
                                         <div className="flex gap-2 mt-1">
                                             {asset.riskProfile === 'DEFENSIVE' && (
                                                 <span className="px-2 py-0.5 rounded bg-emerald-900/30 border border-emerald-900/50 text-emerald-400 text-[8px] font-black uppercase tracking-widest flex items-center gap-1">

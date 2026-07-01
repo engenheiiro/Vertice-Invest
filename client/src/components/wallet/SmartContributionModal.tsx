@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Calculator, Target, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -35,6 +35,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
     const [amount, setAmount] = useState('');
     const [prioritizeReserve, setPrioritizeReserve] = useState(true);
     const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+    const panelRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -47,6 +48,31 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
         }
         return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
     }, [amount, prioritizeReserve, isOpen]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const previouslyFocused = document.activeElement as HTMLElement | null;
+        const focusables = () =>
+            panelRef.current
+                ? Array.from(
+                    panelRef.current.querySelectorAll<HTMLElement>(
+                        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+                    )
+                ).filter((el) => el.offsetParent !== null)
+                : [];
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') { onClose(); return; }
+            if (e.key !== 'Tab') return;
+            const items = focusables();
+            if (items.length === 0) return;
+            const first = items[0], last = items[items.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        };
+        (focusables()[0] ?? panelRef.current)?.focus();
+        document.addEventListener('keydown', onKeyDown);
+        return () => { document.removeEventListener('keydown', onKeyDown); previouslyFocused?.focus?.(); };
+    }, [isOpen, onClose]);
 
     const calculateDistribution = () => {
         const contribution = parseFloat(amount);
@@ -148,7 +174,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                 <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
                     
                     {/* Modal Panel */}
-                    <div className="relative transform overflow-hidden rounded-2xl bg-base border border-slate-800 text-left shadow-2xl transition-all w-full max-w-md animate-fade-in my-auto max-h-[90vh] flex flex-col">
+                    <div ref={panelRef} tabIndex={-1} className="relative transform overflow-hidden rounded-2xl bg-base border border-slate-800 text-left shadow-2xl transition-all w-full max-w-md animate-fade-in my-auto max-h-[90vh] flex flex-col outline-none">
                         
                         <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-card shrink-0">
                             <div className="flex items-center gap-2">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, RefreshCw, Info, TrendingUp, TrendingDown, Copy, Check, Loader2, ShieldCheck, Sparkles } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -73,6 +73,7 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+    const panelRef = useRef<HTMLDivElement>(null);
 
     const fetchPlan = useCallback(async (profile: RiskProfile) => {
         setIsLoading(true);
@@ -100,6 +101,31 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
         return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, riskProfile]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const previouslyFocused = document.activeElement as HTMLElement | null;
+        const focusables = () =>
+            panelRef.current
+                ? Array.from(
+                    panelRef.current.querySelectorAll<HTMLElement>(
+                        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+                    )
+                ).filter((el) => el.offsetParent !== null)
+                : [];
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') { onClose(); return; }
+            if (e.key !== 'Tab') return;
+            const items = focusables();
+            if (items.length === 0) return;
+            const first = items[0], last = items[items.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        };
+        (focusables()[0] ?? panelRef.current)?.focus();
+        document.addEventListener('keydown', onKeyDown);
+        return () => { document.removeEventListener('keydown', onKeyDown); previouslyFocused?.focus?.(); };
+    }, [isOpen, onClose]);
 
     const buildPlanText = (p: RebalancePlan): string => {
         const lines: string[] = [];
@@ -157,7 +183,7 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4 sm:p-0">
-                    <div className="relative transform overflow-hidden rounded-2xl bg-base border border-slate-800 text-left shadow-2xl transition-all w-full max-w-2xl animate-fade-in my-auto max-h-[92vh] flex flex-col">
+                    <div ref={panelRef} tabIndex={-1} className="relative transform overflow-hidden rounded-2xl bg-base border border-slate-800 text-left shadow-2xl transition-all w-full max-w-2xl animate-fade-in my-auto max-h-[92vh] flex flex-col outline-none">
 
                         {/* Header */}
                         <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-card shrink-0">
