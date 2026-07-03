@@ -21,7 +21,8 @@ import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
 import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
 import { calculateDailyDietz } from '../utils/mathUtils.js';
-import { isBusinessDay, countBusinessDays, dateKeyToUtcDate } from '../utils/dateUtils.js';
+import { isBusinessDay } from '../utils/dateUtils.js';
+import { accrueFixedIncomeValue } from '../utils/fixedIncome.js';
 
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
@@ -68,8 +69,17 @@ export const runDailySnapshot = async (force = false) => {
         const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
         const usdRate = sysConfig?.dollar || 5.75;
         const currentCdi = (sysConfig?.cdi > 0 ? sysConfig.cdi : null) || (sysConfig?.selic > 0 ? sysConfig.selic : null) || DEFAULT_SELIC_FALLBACK;
+        const macroRates = { cdiRate: currentCdi, selic: sysConfig?.selic, ipca: sysConfig?.ipca };
         const todayDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(today);
         const calcDate = new Date(todayDateStr + 'T00:00:00.000Z');
+
+        // (F4) Cotações em LOTE, uma vez para todo o run — antes cada ativo de cada
+        // usuário fazia um getMarketDataByTicker (N+1). Coleta os tickers de renda
+        // variável distintos das carteiras e resolve tudo num único getMarketDataMap.
+        const liveTickers = await UserAsset.distinct('ticker', {
+            type: { $nin: ['CASH', 'FIXED_INCOME'] },
+        });
+        const priceMap = await marketDataService.getMarketDataMap(liveTickers);
 
         for (const user of users) {
             try {
@@ -83,44 +93,17 @@ export const runDailySnapshot = async (force = false) => {
                     const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1;
 
                     if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
-                        // Calcula valor atual com juros compostos (mesma lógica do walletController)
-                        const rawRate = asset.fixedIncomeRate > 0 ? asset.fixedIncomeRate : 100;
-                        const selicDailyFactor = Math.pow(1 + (currentCdi / 100), 1 / 252);
-                        let effectiveDailyFactor;
-                        if (rawRate > 50) {
-                            // Taxa em % do CDI (ex: 100 = 100% do CDI)
-                            effectiveDailyFactor = ((selicDailyFactor - 1) * (rawRate / 100)) + 1;
-                        } else {
-                            // Taxa prefixada anual (ex: 12.5%)
-                            effectiveDailyFactor = Math.pow(1 + (rawRate / 100), 1 / 252);
-                        }
-
-                        let accruedValue = 0;
-                        if (asset.taxLots && asset.taxLots.length > 0) {
-                            for (const lot of asset.taxLots) {
-                                const lotDate = dateKeyToUtcDate(lot.date);
-                                const bDays = countBusinessDays(lotDate, calcDate);
-                                const factor = Math.max(1, Math.pow(effectiveDailyFactor, bDays));
-                                accruedValue += asset.type === 'CASH'
-                                    ? lot.quantity * factor
-                                    : lot.quantity * lot.price * factor;
-                            }
-                        } else {
-                            // Fallback sem tax lots
-                            const startDate = dateKeyToUtcDate(asset.startDate || asset.updatedAt);
-                            const bDays = countBusinessDays(startDate, calcDate);
-                            const factor = Math.max(1, Math.pow(effectiveDailyFactor, bDays));
-                            const avgPrice = asset.quantity > 0 ? asset.totalCost / asset.quantity : 0;
-                            accruedValue = asset.type === 'CASH'
-                                ? asset.quantity * factor
-                                : asset.quantity * avgPrice * factor;
-                        }
-
+                        // (F3) Fonte ÚNICA de accrual (utils/fixedIncome) — mesma do KPI
+                        // live em walletController. Antes este caminho ignorava
+                        // fixedIncomeIndex/fixedIncomeSpread (tratava tudo como %CDI ou
+                        // prefixado), divergindo o patrimônio histórico de Tesouro
+                        // Selic/IPCA do valor exibido no KPI.
+                        const accruedValue = accrueFixedIncomeValue(asset, { ...macroRates, calcDate });
                         totalEquity += accruedValue;
                         totalInvested += asset.totalCost;
                     } else {
-                        const marketData = await marketDataService.getMarketDataByTicker(asset.ticker);
-                        price = marketData.price;
+                        const marketData = priceMap.get(asset.ticker);
+                        price = marketData?.price || 0;
                         if (price > 0) {
                             totalEquity += asset.quantity * price * multiplier;
                             totalInvested += asset.totalCost * multiplier;
@@ -251,6 +234,24 @@ const ASSET_CLASS_LABELS = {
     STOCK_US: 'Ações EUA', REIT: 'REITs', ETF: 'ETFs', BRASIL_10: 'Brasil 10',
 };
 
+// Gate de qualidade do auto-publish: o cron publica ÀS CEGAS o mais recente de cada
+// classe — sem este gate, um ranking vazio/degradado (sync quebrado) ou velho (geração
+// parada há dias) iria ao ar sem ninguém olhar. Publicação manual do admin não passa
+// por aqui (ele vê os dados antes de publicar). Exportada para teste.
+export const AUTO_PUBLISH_MIN_ASSETS = 5;
+export const AUTO_PUBLISH_MAX_AGE_DAYS = 7;
+export const validateAutoPublish = (analysis, now = new Date()) => {
+    const count = analysis?.content?.ranking?.length || 0;
+    if (count < AUTO_PUBLISH_MIN_ASSETS) {
+        return { ok: false, reason: `ranking com ${count} ativos (mínimo ${AUTO_PUBLISH_MIN_ASSETS})` };
+    }
+    const ageMs = now.getTime() - new Date(analysis.createdAt || 0).getTime();
+    if (ageMs > AUTO_PUBLISH_MAX_AGE_DAYS * 86400000) {
+        return { ok: false, reason: `ranking gerado há ${Math.round(ageMs / 86400000)} dias (máximo ${AUTO_PUBLISH_MAX_AGE_DAYS})` };
+    }
+    return { ok: true };
+};
+
 export const runWeeklyAutoPublish = async () => {
     logger.info("📢 Auto-publish semanal — publicando rankings mais recentes");
     const published = [];
@@ -258,6 +259,12 @@ export const runWeeklyAutoPublish = async () => {
         try {
             const latest = await MarketAnalysis.findOne({ assetClass, strategy: 'BUY_HOLD' }).sort({ createdAt: -1 });
             if (!latest) continue;
+            const gate = validateAutoPublish(latest);
+            if (!gate.ok) {
+                logger.warn(`🚫 Auto-publish BLOQUEADO (${assetClass}): ${gate.reason}`);
+                Sentry.captureMessage(`Auto-publish bloqueado (${assetClass}): ${gate.reason}`, 'warning');
+                continue;
+            }
             const wasPublished = latest.isRankingPublished;
             latest.isRankingPublished = true;
             latest.isExplainableAIPublished = true;
@@ -355,9 +362,14 @@ export const initScheduler = () => {
                     const { buildRecommendedPortfolioCurves } = await import('../scripts/recommendedPortfolioEngine.js');
                     await buildRecommendedPortfolioCurves();
                 } catch (e) { logger.warn(`⚠️ Carteira Recomendada (manhã): ${e.message}`); }
+            } else {
+                // Falha de sync NÃO-tolerada (não é o 403 do Fundamentus): research não roda
+                // hoje — alerta ativo, senão só descobriríamos olhando log.
+                Sentry.captureMessage(`Sync da manhã falhou (${syncResult.error || 'erro desconhecido'}) — research não rodou`, 'error');
             }
         } catch (e) {
             logger.error(`❌ Rotina Manhã V3: ${e.message}`);
+            Sentry.captureException(e);
         }
     });
 
@@ -384,9 +396,12 @@ export const initScheduler = () => {
                     const { buildRecommendedPortfolioCurves } = await import('../scripts/recommendedPortfolioEngine.js');
                     await buildRecommendedPortfolioCurves();
                 } catch (e) { logger.warn(`⚠️ Carteira Recomendada (tarde): ${e.message}`); }
+            } else {
+                Sentry.captureMessage(`Sync da tarde falhou (${syncResult.error || 'erro desconhecido'}) — research não rodou`, 'error');
             }
         } catch (e) {
             logger.error(`❌ Rotina Tarde V3: ${e.message}`);
+            Sentry.captureException(e);
         }
     });
 
@@ -397,6 +412,7 @@ export const initScheduler = () => {
             await runWeeklyAutoPublish();
         } catch (e) {
             logger.error(`❌ Auto-publish semanal: ${e.message}`);
+            Sentry.captureException(e);
         }
     });
 
