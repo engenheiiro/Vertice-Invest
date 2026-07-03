@@ -114,6 +114,12 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
         return scoped.some(p => p.action === 'BUY');
     }, [picks, isEtf, etfOrigin]);
 
+    // A carteira IDEAL é composta apenas pelos COMPRAR: um AGUARDAR não faz parte da
+    // alocação-alvo (Exposição Ideal e Meta % por ativo). O peso-alvo de cada COMPRAR é
+    // 1/nº de COMPRAR; AGUARDAR tem meta 0% (o modelo não recomenda entrada agora).
+    const buyPicks = useMemo(() => filteredPicks.filter(p => p.action === 'BUY'), [filteredPicks]);
+    const buyCount = buyPicks.length;
+
     const stats = useMemo(() => {
         if (!filteredPicks.length) return { avgScore: 0, avgDy: 0, count: 0 };
         const totalScore = filteredPicks.reduce((acc, curr) => acc + curr.score, 0);
@@ -297,7 +303,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                         <h3 className="text-[10px] font-black text-white uppercase tracking-widest">Exposição Ideal</h3>
                     </div>
                     <div className="flex-1 flex flex-col justify-center relative z-10">
-                        <SectorDistribution picks={filteredPicks} />
+                        <SectorDistribution picks={buyPicks} />
                     </div>
                     <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-purple-900/10 rounded-full blur-[50px]"></div>
                 </div>
@@ -312,20 +318,23 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                 </div>
                 {filteredPicks.map((pick, idx) => {
                         const fairValueLabel = "Preço Teto";
+                        const isBuyPick = pick.action === 'BUY';
 
                         // Encontra se o usuário possui este ativo
                         const userAsset = assets.find(a => a.ticker === pick.ticker);
                         const userHasAsset = !!userAsset && userAsset.quantity > 0;
-                        const userAllocPercent = userHasAsset && kpis.totalEquity > 0 
-                            ? (userAsset.totalValue / kpis.totalEquity) * 100 
+                        const userAllocPercent = userHasAsset && kpis.totalEquity > 0
+                            ? (userAsset.totalValue / kpis.totalEquity) * 100
                             : 0;
-                        
-                        const idealPercent = filteredPicks.length > 0 ? (100 / filteredPicks.length) : 0;
-                        
+
+                        // Meta = peso na carteira ideal (só COMPRAR). AGUARDAR não entra na
+                        // alocação-alvo, logo meta 0% e sem sugestão de rebalanceamento.
+                        const idealPercent = isBuyPick && buyCount > 0 ? (100 / buyCount) : 0;
+
                         // Cálculo do Rebalanceamento ($)
                         const idealValue = kpis.totalEquity * (idealPercent / 100);
                         const currentValue = userHasAsset ? userAsset.totalValue : 0;
-                        const rebalanceDelta = currentValue - idealValue; 
+                        const rebalanceDelta = currentValue - idealValue;
 
                         return (
                             <div key={idx} onClick={() => setSelectedAsset(pick)} className="bg-base border border-slate-800 rounded-2xl p-4 hover:border-slate-600 hover:bg-panel transition-all cursor-pointer group relative overflow-hidden">
@@ -427,7 +436,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                                                 <p className="text-[8px] font-bold text-slate-500 uppercase flex items-center gap-1">
                                                     <Wallet size={8} /> Sua Posição
                                                 </p>
-                                                <span className="text-[8px] font-bold text-slate-600">Meta: {idealPercent.toFixed(0)}%</span>
+                                                <span className="text-[8px] font-bold text-slate-600">Meta: {isBuyPick ? `${idealPercent.toFixed(0)}%` : '—'}</span>
                                             </div>
                                             
                                             {userHasAsset ? (
@@ -443,8 +452,15 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                                                         <div className="h-full w-0.5 bg-slate-400 absolute z-10" style={{ left: `${Math.min(idealPercent * 5, 100)}%` }}></div>
                                                     </div>
                                                     
+                                                    {/* Rebalanceamento só faz sentido para COMPRAR (meta > 0). Num
+                                                        AGUARDAR possuído o modelo não pede aumento nem corte — mostra
+                                                        status neutro em vez de "Excede" (que soaria como ordem de venda). */}
                                                     <div className="mt-2 text-right">
-                                                        {rebalanceDelta > 0 ? (
+                                                        {!isBuyPick ? (
+                                                            <span className="text-[10px] font-black text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded border border-slate-700">
+                                                                Aguardar
+                                                            </span>
+                                                        ) : rebalanceDelta > 0 ? (
                                                             <span className="text-[10px] font-black text-yellow-500 bg-yellow-900/10 px-1.5 py-0.5 rounded border border-yellow-900/20">
                                                                 Excede {formatCurrency(Math.abs(rebalanceDelta))}
                                                             </span>

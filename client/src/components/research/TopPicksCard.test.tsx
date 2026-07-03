@@ -56,6 +56,27 @@ const listTickers = () =>
 
 beforeEach(() => vi.clearAllMocks());
 
+describe('TopPicksCard — alocação ideal considera apenas COMPRAR', () => {
+  const MIXED: RankingItem[] = [
+    { ...mkPick('AAA3', null, 'STOCK'), action: 'BUY' },
+    { ...mkPick('BBB3', null, 'STOCK'), action: 'BUY' },
+    { ...mkPick('CCC3', null, 'STOCK'), action: 'WAIT' },
+  ];
+
+  it('Meta % divide por nº de COMPRAR; AGUARDAR fica com Meta —', () => {
+    render(<TopPicksCard picks={MIXED} assetClass="STOCK" />);
+    // 2 COMPRAR → meta 50% cada; o AGUARDAR não entra na alocação-alvo.
+    expect(screen.getAllByText('Meta: 50%')).toHaveLength(2);
+    expect(screen.getByText('Meta: —')).toBeInTheDocument();
+  });
+
+  it('AGUARDAR não possuído mostra status neutro, sem "Aportar ~"', () => {
+    render(<TopPicksCard picks={MIXED} assetClass="STOCK" />);
+    // "Aguardar" aparece para o CCC3 (não possuído + WAIT).
+    expect(screen.getAllByText('Aguardar').length).toBeGreaterThan(0);
+  });
+});
+
 describe('TopPicksCard — Exterior (ranking puro, sem sub-chips)', () => {
   it('NÃO renderiza mais chips de sub-tipo no Exterior (separação vem do dado)', () => {
     render(<TopPicksCard picks={PICKS} assetClass="STOCK_US" />);
