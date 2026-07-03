@@ -155,8 +155,13 @@ export const timeSeriesWorker = {
                     const volatilityPrices = prices.slice(0, 252);
                     const volatility = calculateVolatility(volatilityPrices);
 
+                    // Beta só é recalculado aqui para STOCK/FII (benchmark IBOV). Para os
+                    // demais tipos (STOCK_US/ETF/CRYPTO) o beta vem do Yahoo no sync de
+                    // fundamentos — gravá-lo aqui sobrescrevia esse valor com 1.0 a cada run,
+                    // neutralizando os gates de beta do scoring. Só entra no $set quando é BR.
+                    const isBrBetaType = asset.type === 'STOCK' || asset.type === 'FII';
                     let beta = 1;
-                    if ((asset.type === 'STOCK' || asset.type === 'FII') && ibovReturnsByDate.size > 0) {
+                    if (isBrBetaType && ibovReturnsByDate.size > 0) {
                         // Alinha retornos do ativo com IBOV por data, evitando desalinhamento
                         // causado por dias com preço=0 (gaps) que encurtam a série do ativo mas
                         // não a do IBOV, corrompendo a covariância e zerando o beta.
@@ -184,17 +189,17 @@ export const timeSeriesWorker = {
                         if (alignedAssetReturns.length >= 20) beta = calculateBeta(alignedAssetReturns, alignedIbovReturns);
                     }
 
+                    const setFields = {
+                        volatility: isNaN(volatility) ? 0 : volatility,
+                        sma200: isNaN(sma200) ? 0 : sma200,
+                        ema50: isNaN(ema50) ? 0 : ema50
+                    };
+                    if (isBrBetaType) setFields.beta = isNaN(beta) ? 1 : beta;
+
                     operations.push({
                         updateOne: {
                             filter: { ticker: asset.ticker },
-                            update: {
-                                $set: {
-                                    volatility: isNaN(volatility) ? 0 : volatility,
-                                    beta: isNaN(beta) ? 1 : beta,
-                                    sma200: isNaN(sma200) ? 0 : sma200,
-                                    ema50: isNaN(ema50) ? 0 : ema50
-                                }
-                            }
+                            update: { $set: setFields }
                         }
                     });
                 }));

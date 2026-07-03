@@ -12,7 +12,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
     {
       "category": "Perfil Defensivo",
       "factor": "Crypto Blue Chip",
-      "points": 90,
+      "points": 75,
       "type": "base",
     },
     {
@@ -52,7 +52,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
   "isDividendAristocrat": false,
   "scores": {
     "BOLD": 10,
-    "DEFENSIVE": 100,
+    "DEFENSIVE": 89,
     "MODERATE": 14,
   },
   "structural": {
@@ -77,7 +77,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
     {
       "category": "Perfil Moderado",
       "factor": "Crypto Large Cap",
-      "points": 90,
+      "points": 62,
       "type": "base",
     },
     {
@@ -116,7 +116,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
   "scores": {
     "BOLD": 10,
     "DEFENSIVE": 14,
-    "MODERATE": 100,
+    "MODERATE": 76,
   },
   "structural": {
     "quality": 80,
@@ -140,7 +140,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
     {
       "category": "Perfil Arrojado",
       "factor": "Crypto Mid Cap",
-      "points": 90,
+      "points": 55,
       "type": "base",
     },
     {
@@ -169,7 +169,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
   ],
   "isDividendAristocrat": false,
   "scores": {
-    "BOLD": 94,
+    "BOLD": 59,
     "DEFENSIVE": 10,
     "MODERATE": 10,
   },
@@ -194,8 +194,8 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
     },
     {
       "category": "Perfil Arrojado",
-      "factor": "Crypto Small Cap (Assimetria)",
-      "points": 95,
+      "factor": "Crypto Small Cap",
+      "points": 50,
       "type": "base",
     },
     {
@@ -215,12 +215,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
       "factor": "Acima da Tendência (Preço ≥ SMA200)",
       "points": 4,
       "type": "bonus",
-    },
-    {
-      "category": "Perfil Arrojado",
-      "factor": "Teto Especulativo Cripto (small cap arriscada)",
-      "points": -1,
-      "type": "penalty",
     },
     {
       "category": "Qualidade",
@@ -246,7 +240,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: crypto
   ],
   "isDividendAristocrat": false,
   "scores": {
-    "BOLD": 80,
+    "BOLD": 36,
     "DEFENSIVE": 10,
     "MODERATE": 10,
   },
@@ -419,7 +413,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-bo
     "risk": 70,
     "valuation": 100,
   },
-  "targetPrice": 64.62,
+  "targetPrice": 92.31,
   "ticker": "DEEP11",
 }
 `;
@@ -559,7 +553,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-ne
     "risk": 70,
     "valuation": 0,
   },
-  "targetPrice": 110,
+  "targetPrice": 95.65,
   "ticker": "LOWY11",
 }
 `;
@@ -843,7 +837,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-ti
     "risk": 70,
     "valuation": 90,
   },
-  "targetPrice": 166.72,
+  "targetPrice": 175.49,
   "ticker": "HGLG11",
 }
 `;
@@ -984,7 +978,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: fii-ti
     "risk": 70,
     "valuation": 50,
   },
-  "targetPrice": 81.36,
+  "targetPrice": 104.31,
   "ticker": "VACA11",
 }
 `;
@@ -1024,6 +1018,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Defensivo",
+      "factor": "Sobrevalorizado (preço 23% acima do Preço Justo)",
+      "points": -10,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Defensivo",
       "factor": "Dividend Aristocrat Bonus",
       "points": 10,
       "type": "bonus",
@@ -1048,6 +1048,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Moderado",
+      "factor": "Sobrevalorizado (preço 23% acima do Preço Justo)",
+      "points": -25,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Moderado",
       "factor": "Dividend Aristocrat Bonus",
       "points": 5,
       "type": "bonus",
@@ -1057,6 +1063,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "factor": "Base Arrojada",
       "points": 35,
       "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Sobrevalorizado (preço 23% acima do Preço Justo)",
+      "points": -25,
+      "type": "penalty",
     },
     {
       "category": "Qualidade",
@@ -1149,16 +1161,16 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
   ],
   "isDividendAristocrat": true,
   "scores": {
-    "BOLD": 35,
-    "DEFENSIVE": 80,
-    "MODERATE": 59,
+    "BOLD": 10,
+    "DEFENSIVE": 70,
+    "MODERATE": 34,
   },
   "structural": {
     "quality": 100,
     "risk": 80,
     "valuation": 60,
   },
-  "targetPrice": 31.79,
+  "targetPrice": 26.94,
   "ticker": "ARIS3",
 }
 `;
@@ -1192,12 +1204,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Defensivo",
-      "factor": "Upside Positivo (>15%)",
-      "points": 3,
-      "type": "bonus",
-    },
-    {
-      "category": "Perfil Defensivo",
       "factor": "Payout Saudável (55.0%)",
       "points": 5,
       "type": "bonus",
@@ -1224,12 +1230,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "category": "Perfil Moderado",
       "factor": "ROE Robusto (>15%)",
       "points": 10,
-      "type": "bonus",
-    },
-    {
-      "category": "Perfil Moderado",
-      "factor": "Upside Positivo (>10%)",
-      "points": 5,
       "type": "bonus",
     },
     {
@@ -1348,15 +1348,15 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
   "isDividendAristocrat": true,
   "scores": {
     "BOLD": 47,
-    "DEFENSIVE": 88,
-    "MODERATE": 70,
+    "DEFENSIVE": 85,
+    "MODERATE": 65,
   },
   "structural": {
     "quality": 100,
     "risk": 80,
     "valuation": 80,
   },
-  "targetPrice": 46.33,
+  "targetPrice": 38.02,
   "ticker": "ELET3",
 }
 `;
@@ -1372,6 +1372,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Defensivo",
+      "factor": "Sobrevalorizado (preço 12% acima do Preço Justo)",
+      "points": -10,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Defensivo",
       "factor": "Tendência de Baixa (preço 21% abaixo da SMA200)",
       "points": -12,
       "type": "penalty",
@@ -1384,9 +1390,21 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Moderado",
+      "factor": "Crescimento Receita Alto (>20%)",
+      "points": 16,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
       "factor": "ROE Robusto (>15%)",
       "points": 10,
       "type": "bonus",
+    },
+    {
+      "category": "Perfil Moderado",
+      "factor": "Sobrevalorizado (preço 12% acima do Preço Justo)",
+      "points": -25,
+      "type": "penalty",
     },
     {
       "category": "Perfil Moderado",
@@ -1399,6 +1417,24 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "factor": "Base Arrojada",
       "points": 35,
       "type": "base",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "PEG Excepcional (<0.5)",
+      "points": 30,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Hyper Growth (>25%)",
+      "points": 15,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Sobrevalorizado (preço 12% acima do Preço Justo)",
+      "points": -25,
+      "type": "penalty",
     },
     {
       "category": "Perfil Arrojado",
@@ -1497,16 +1533,16 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
   ],
   "isDividendAristocrat": false,
   "scores": {
-    "BOLD": 27,
-    "DEFENSIVE": 18,
-    "MODERATE": 38,
+    "BOLD": 47,
+    "DEFENSIVE": 10,
+    "MODERATE": 29,
   },
   "structural": {
     "quality": 90,
     "risk": 70,
     "valuation": 80,
   },
-  "targetPrice": 31.75,
+  "targetPrice": 26.34,
   "ticker": "ITUB4",
 }
 `;
@@ -1540,8 +1576,8 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Defensivo",
-      "factor": "Upside Forte (>30%)",
-      "points": 8,
+      "factor": "Upside Moderado (>20%)",
+      "points": 5,
       "type": "bonus",
     },
     {
@@ -1576,8 +1612,8 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Moderado",
-      "factor": "Upside Agressivo (>40%)",
-      "points": 20,
+      "factor": "Upside > 20%",
+      "points": 10,
       "type": "bonus",
     },
     {
@@ -1612,8 +1648,8 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Arrojado",
-      "factor": "Upside Agressivo (>50%)",
-      "points": 20,
+      "factor": "Upside Moderado (>20%)",
+      "points": 5,
       "type": "bonus",
     },
     {
@@ -1723,16 +1759,16 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
   "bullThesis": [],
   "isDividendAristocrat": false,
   "scores": {
-    "BOLD": 33,
-    "DEFENSIVE": 35,
-    "MODERATE": 37,
+    "BOLD": 18,
+    "DEFENSIVE": 32,
+    "MODERATE": 27,
   },
   "structural": {
     "quality": 60,
     "risk": 80,
     "valuation": 80,
   },
-  "targetPrice": 40.21,
+  "targetPrice": 31.89,
   "ticker": "XPTO3",
 }
 `;
@@ -1748,7 +1784,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Defensivo",
-      "factor": "Sobrevalorizado (preço 62% acima do Preço Justo)",
+      "factor": "Sobrevalorizado (preço 63% acima do Preço Justo)",
       "points": -20,
       "type": "penalty",
     },
@@ -1772,7 +1808,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Moderado",
-      "factor": "Sobrevalorizado (preço 62% acima do Preço Justo)",
+      "factor": "Sobrevalorizado (preço 63% acima do Preço Justo)",
       "points": -40,
       "type": "penalty",
     },
@@ -1802,7 +1838,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Arrojado",
-      "factor": "Sobrevalorizado (preço 62% acima do Preço Justo)",
+      "factor": "Sobrevalorizado (preço 63% acima do Preço Justo)",
       "points": -40,
       "type": "penalty",
     },
@@ -1894,7 +1930,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     "risk": 60,
     "valuation": 15,
   },
-  "targetPrice": 19.17,
+  "targetPrice": 18.47,
   "ticker": "GROW3",
 }
 `;
@@ -1910,7 +1946,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Defensivo",
-      "factor": "Sobrevalorizado (preço 49% acima do Preço Justo)",
+      "factor": "Sobrevalorizado (preço 52% acima do Preço Justo)",
       "points": -20,
       "type": "penalty",
     },
@@ -1928,7 +1964,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Moderado",
-      "factor": "Sobrevalorizado (preço 49% acima do Preço Justo)",
+      "factor": "Sobrevalorizado (preço 52% acima do Preço Justo)",
       "points": -40,
       "type": "penalty",
     },
@@ -1952,7 +1988,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Arrojado",
-      "factor": "Sobrevalorizado (preço 49% acima do Preço Justo)",
+      "factor": "Sobrevalorizado (preço 52% acima do Preço Justo)",
       "points": -40,
       "type": "penalty",
     },
@@ -2054,7 +2090,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     "risk": 35,
     "valuation": 60,
   },
-  "targetPrice": 4.07,
+  "targetPrice": 3.84,
   "ticker": "SMAL3",
 }
 `;
@@ -2112,12 +2148,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Defensivo",
-      "factor": "Upside Positivo (>15%)",
-      "points": 3,
-      "type": "bonus",
-    },
-    {
-      "category": "Perfil Defensivo",
       "factor": "Payout Saudável (55.0%)",
       "points": 5,
       "type": "bonus",
@@ -2144,12 +2174,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "category": "Perfil Moderado",
       "factor": "ROE Robusto (>15%)",
       "points": 10,
-      "type": "bonus",
-    },
-    {
-      "category": "Perfil Moderado",
-      "factor": "Upside Positivo (>10%)",
-      "points": 5,
       "type": "bonus",
     },
     {
@@ -2276,7 +2300,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     "risk": 80,
     "valuation": 80,
   },
-  "targetPrice": 46.33,
+  "targetPrice": 38.02,
   "ticker": "MISS3",
 }
 `;
@@ -2292,7 +2316,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Defensivo",
-      "factor": "Sobrevalorizado (preço 85% acima do Preço Justo)",
+      "factor": "Sobrevalorizado (preço 86% acima do Preço Justo)",
       "points": -20,
       "type": "penalty",
     },
@@ -2310,7 +2334,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Moderado",
-      "factor": "Sobrevalorizado (preço 85% acima do Preço Justo)",
+      "factor": "Sobrevalorizado (preço 86% acima do Preço Justo)",
       "points": -40,
       "type": "penalty",
     },
@@ -2322,7 +2346,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Arrojado",
-      "factor": "Sobrevalorizado (preço 85% acima do Preço Justo)",
+      "factor": "Sobrevalorizado (preço 86% acima do Preço Justo)",
       "points": -40,
       "type": "penalty",
     },
@@ -2406,7 +2430,7 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     "risk": 80,
     "valuation": 0,
   },
-  "targetPrice": 30,
+  "targetPrice": 27.23,
   "ticker": "OVER3",
 }
 `;

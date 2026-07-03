@@ -109,11 +109,15 @@ describe('Fase 2 — E: variância de qualidade e trava no BOLD de cripto', () =
         expect(calmo.scores.BOLD).toBeGreaterThan(volatil.scores.BOLD);
     });
 
-    it('small cap de baixa liquidez OU vol extrema tem BOLD limitado a 80 (teto especulativo)', () => {
+    // Recalibrado jul/2026: a base de small cap caiu de 95 para 50 (antes 16/16 criptos
+    // eram BUY). Com a base nova o teto de 80 raramente dispara — o que importa é que a
+    // small cap arriscada fique longe do BUY (70) e MUITO abaixo de uma blue chip.
+    it('small cap de baixa liquidez E vol extrema fica abaixo do BUY (não simula convicção)', () => {
         const arriscada = scoringEngine.processAsset(
             makeCrypto('TINY', { marketCap: 300000000, avgLiquidity: 10000000, volatility: 120 }), CTX);
         expect(arriscada.scores.BOLD).toBeLessThanOrEqual(80);
-        expect(arriscada.auditLog.some(a => a.factor.includes('Teto Especulativo Cripto'))).toBe(true);
+        expect(arriscada.scores.BOLD).toBeLessThan(70);
+        expect(arriscada.auditLog.some(a => a.factor === 'Crypto Small Cap' && a.points === 50)).toBe(true);
     });
 
     it('volatilidade extrema (>100%) gera penalidade no perfil primário', () => {

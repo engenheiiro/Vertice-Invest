@@ -5,6 +5,7 @@ import { SP500_STOCKS } from '../config/sp500List.js';
 import { US_ETF_LIST } from '../config/usEtfList.js';
 import { BR_ETF_LIST } from '../config/brEtfList.js';
 import { toYahooSymbol, externalMarketService } from './externalMarketService.js';
+import { safeFloat } from '../utils/mathUtils.js';
 import logger from '../config/logger.js';
 
 // Universo completo do Exterior: ações do S&P 500 + ETFs/REITs/Ouro curados.
@@ -40,14 +41,16 @@ function extractFundamentals(ticker, data) {
     // Sem este fallback, todo ETF saía com dy=0 (VOO/SCHD/VYM zerados).
     // Number.isFinite descarta null/undefined E NaN — o Yahoo às vezes devolve NaN nesses
     // campos, e um NaN aqui quebrava o cast Mongoose do `dy` (abortava todo o sync).
+    // safeFloat nas conversões fração→percentual: o *100 sobre floats binários do Yahoo
+    // gera ruído (0.0845*100 = 8.450000000000001) que vazava até o ranking salvo.
     const dyRaw = [sd.dividendYield, sd.yield, sd.trailingAnnualDividendYield].find(Number.isFinite);
-    const dy = Number.isFinite(dyRaw) ? dyRaw * 100 : 0;
+    const dy = Number.isFinite(dyRaw) ? safeFloat(dyRaw * 100) : 0;
     const beta = ks.beta || sd.beta || null;
     const marketCap = sd.marketCap || ks.enterpriseValue || null;
-    const roe = fd.returnOnEquity ? fd.returnOnEquity * 100 : null;
-    const netMargin = fd.profitMargins ? fd.profitMargins * 100 : null;
-    const revenueGrowth = fd.revenueGrowth ? fd.revenueGrowth * 100 : null;
-    const earningsGrowth = fd.earningsGrowth ? fd.earningsGrowth * 100 : null;
+    const roe = fd.returnOnEquity ? safeFloat(fd.returnOnEquity * 100) : null;
+    const netMargin = fd.profitMargins ? safeFloat(fd.profitMargins * 100) : null;
+    const revenueGrowth = fd.revenueGrowth ? safeFloat(fd.revenueGrowth * 100) : null;
+    const earningsGrowth = fd.earningsGrowth ? safeFloat(fd.earningsGrowth * 100) : null;
     // Yahoo Finance retorna debtToEquity em formato percentual (ex: 47.49 = 47.49% = ratio 0.4749)
     const debtToEquity = fd.debtToEquity != null ? fd.debtToEquity / 100 : null;
     const lastPrice = fd.currentPrice || sd.regularMarketPrice || null;
@@ -57,7 +60,7 @@ function extractFundamentals(ticker, data) {
     // <1M ações/dia mas >$2bi/dia em valor) levavam -30 de confiança indevidamente.
     const avgVolumeShares = sd.averageVolume || ks.averageDailyVolume10Day || null;
     const avgLiquidity = (avgVolumeShares && lastPrice) ? avgVolumeShares * lastPrice : null;
-    const payoutRatio = sd.payoutRatio ? sd.payoutRatio * 100 : null;
+    const payoutRatio = sd.payoutRatio ? safeFloat(sd.payoutRatio * 100) : null;
     const vpa = ks.bookValue || null;
     const lpa = ks.trailingEps || ks.forwardEps || null;
     const sector = ap.sector || null;
@@ -322,7 +325,7 @@ export const usStocksFundamentalsService = {
                         const cutoff = new Date();
                         cutoff.setFullYear(cutoff.getFullYear() - 1);
                         const ttm = hist.filter(d => d.date >= cutoff).reduce((s, d) => s + d.amount, 0);
-                        if (ttm > 0) dy = (ttm / price) * 100;
+                        if (ttm > 0) dy = safeFloat((ttm / price) * 100);
                     }
                 }
                 // Fallback final: seed curado p/ ETFs distribuidores (DIVO11/BOVA11/SMAL11).

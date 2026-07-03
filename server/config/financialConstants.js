@@ -52,6 +52,22 @@ export const HISTORY_CAP_EXEMPT_TICKERS = new Set(['USD-BRL', '^BVSP', '^GSPC', 
 // Atualizado jun/2026: Selic real subiu para 14,25 (via BrasilAPI; BCB estava em 502).
 export const DEFAULT_SELIC_FALLBACK = Number(process.env.DEFAULT_SELIC_FALLBACK) || 14.25;
 
+// NTN-B longa (taxa real) de fallback quando a cadeia Tesouro→Investidor10 falha.
+// Fonte única — antes o scoringEngine usava 6.0 num ponto e 6.30 em outros quatro,
+// fazendo o mesmo NTN-B ausente valer dois números diferentes no mesmo run.
+export const DEFAULT_NTNB_FALLBACK = Number(process.env.DEFAULT_NTNB_FALLBACK) || 6.3;
+
+// Yield-alvo do preço justo Bazin para ações BR: max(mínimo clássico, NTN-B + prêmio).
+// O 6% histórico de Bazin, fixo, inflava o preço justo de dividendeiras com Selic ~14%;
+// ancorar na NTN-B mantém o alvo realista em qualquer regime de juros.
+export const BAZIN_MIN_YIELD = Number(process.env.BAZIN_MIN_YIELD) || 6;
+export const BAZIN_NTNB_PREMIUM = Number(process.env.BAZIN_NTNB_PREMIUM) || 2;
+
+// DY 12m acima deste teto é tratado como provável amortização de capital / evento não
+// recorrente (yield-trap), não renda sustentável. Calibragem: NTN-B ~6,3% + tier máximo
+// de spread premiado (7pp) ≈ 13,3%; FIIs de papel legítimos em CDI alto rodam 12–16%.
+export const FII_YIELD_TRAP_THRESHOLD = Number(process.env.FII_YIELD_TRAP_THRESHOLD) || 20;
+
 // Alíquotas de IR sobre ganho de capital, por classe de ativo. Usadas APENAS pelo
 // Rebalanceamento IA para ESTIMAR o impacto fiscal de uma venda sugerida — não
 // substituem apuração fiscal real (não modelam isenção mensal de Ações até R$20k

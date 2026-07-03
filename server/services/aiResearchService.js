@@ -9,7 +9,7 @@ import MarketAnalysis from '../models/MarketAnalysis.js';
 import DiscardLog from '../models/DiscardLog.js';
 import { rankingTxtExportService } from './rankingTxtExportService.js';
 // (M9) Threshold global e fallback de Selic centralizados em financialConstants.
-import { BUY_THRESHOLD, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
+import { BUY_THRESHOLD, DEFAULT_SELIC_FALLBACK, DEFAULT_NTNB_FALLBACK } from '../config/financialConstants.js';
 
 // Exportado para teste (T6). Função pura: calcula o delta entre dois rankings.
 export const generateComparisonReport = (assetClass, newRanking, previousRanking) => {
@@ -171,9 +171,12 @@ const buildExplainableAIPrompt = (assetClass, newRanking, comparisonReport, macr
 // Exportado para teste. Brasil 10 não usa draft competitivo: pega o top 5 por score
 // DEFENSIVO de um conjunto já processado (STOCK ou FII), forçando perfil DEFENSIVE.
 // O score já vem capado pelo scoringEngine (maxScoreAllowed); aqui não há penalidade
-// de concentração (por design — é uma lista curinga, não uma carteira).
+// de concentração (por design — é uma lista curinga, não uma carteira; por isso o
+// score pode diferir do ranking de classe, que penaliza concentração por grupo).
+// Prioriza quem passou no gate isEligibleForDefensive: um ativo reprovado no gate
+// não deve aparecer rotulado DEFENSIVE — inelegíveis só completam se faltar elegível.
 export const getTop5Defensive = (processedAssets) => {
-    return (processedAssets || [])
+    const ranked = (processedAssets || [])
         .map(a => ({
             ...a,
             score: a.scores['DEFENSIVE'],
@@ -182,8 +185,10 @@ export const getTop5Defensive = (processedAssets) => {
             tier: 'GOLD',
             thesis: `Brasil 10: Score Defensivo ${a.scores['DEFENSIVE']}`
         }))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 5);
+        .sort((a, b) => b.score - a.score);
+    const eligible = ranked.filter(a => a.isDefensiveEligible !== false);
+    const backfill = ranked.filter(a => a.isDefensiveEligible === false);
+    return [...eligible, ...backfill].slice(0, 5);
 };
 
 // Exportado para teste. Monta o Brasil 10 (≤5 STOCK + ≤5 FII) a partir dos universos
@@ -201,9 +206,12 @@ const normalize = (ticker) => {
     return ticker.toUpperCase().replace('.SA', '').replace(/[^A-Z0-9]/g, '').trim();
 };
 
-const calculateRankingDelta = async (currentList, assetClass, strategy) => {
+// Exportado para teste (baseline publicado — ver comentário interno).
+export const calculateRankingDelta = async (currentList, assetClass, strategy) => {
     try {
-        const lastReport = await MarketAnalysis.findOne({ assetClass, strategy }).sort({ createdAt: -1 });
+        // Baseline PUBLICADO — mesmo critério do generateComparisonReport. Sem o filtro,
+        // as setas de posição comparavam contra rascunhos não publicados (que o TTL apaga).
+        const lastReport = await MarketAnalysis.findOne({ assetClass, strategy, isRankingPublished: true }).sort({ createdAt: -1 });
         const prevPosMap = new Map();
         if (lastReport && lastReport.content && lastReport.content.ranking) {
             lastReport.content.ranking.forEach(r => {
@@ -244,7 +252,7 @@ export const aiResearchService = {
                     RATES_STALE: !!macroConfig.ratesStale
                 } : {
                     // Sem MACRO_INDICATORS no banco: opera 100% em fallback → stale por definição.
-                    SELIC: DEFAULT_SELIC_FALLBACK, IPCA: 4.50, RISK_FREE: DEFAULT_SELIC_FALLBACK, NTNB_LONG: 6.30,
+                    SELIC: DEFAULT_SELIC_FALLBACK, IPCA: 4.50, RISK_FREE: DEFAULT_SELIC_FALLBACK, NTNB_LONG: DEFAULT_NTNB_FALLBACK,
                     RATES_STALE: true
                 }
             };
@@ -361,11 +369,13 @@ export const aiResearchService = {
                 };
             }).sort((a, b) => b.score - a.score);
 
-            return { ranking, fullList, processedAssets, tierStats }; 
+            // discardLogs em memória: o relatório TXT usa isto diretamente em vez de
+            // reconsultar o banco por janela de tempo (que perdia/misturava runs).
+            return { ranking, fullList, processedAssets, tierStats, discardLogs: discardOperations };
 
         } catch (error) {
             logger.error(`Erro ranking: ${error.message}`);
-            return { ranking: [], fullList: [], processedAssets: [] };
+            return { ranking: [], fullList: [], processedAssets: [], discardLogs: [] };
         }
     },
 
@@ -414,19 +424,17 @@ export const aiResearchService = {
 
         // Exporta ranking completo para TXT local
         try {
+            // Discard logs vêm da memória de cada calculateRanking (já com assetType),
+            // não de uma reconsulta ao banco por janela de 10min — que perdia logs se o
+            // batch demorasse mais que isso e misturava logs de runs vizinhos.
             const allData = {
-                BRASIL_10: { ranking: brasil10List,          fullList: brasil10List             },
-                STOCK:     { ranking: stockData.ranking,     fullList: stockData.fullList       },
-                FII:       { ranking: fiiData.ranking,       fullList: fiiData.fullList         },
-                CRYPTO:    { ranking: cryptoData.ranking,    fullList: cryptoData.fullList      },
-                STOCK_US:  { ranking: stockUsData.ranking,   fullList: stockUsData.fullList     },
-                ETF:       { ranking: etfData.ranking,       fullList: etfData.fullList         },
+                BRASIL_10: { ranking: brasil10List,          fullList: brasil10List,          discardLogs: []                       },
+                STOCK:     { ranking: stockData.ranking,     fullList: stockData.fullList,    discardLogs: stockData.discardLogs    },
+                FII:       { ranking: fiiData.ranking,       fullList: fiiData.fullList,      discardLogs: fiiData.discardLogs      },
+                CRYPTO:    { ranking: cryptoData.ranking,    fullList: cryptoData.fullList,   discardLogs: cryptoData.discardLogs   },
+                STOCK_US:  { ranking: stockUsData.ranking,   fullList: stockUsData.fullList,  discardLogs: stockUsData.discardLogs  },
+                ETF:       { ranking: etfData.ranking,       fullList: etfData.fullList,      discardLogs: etfData.discardLogs      },
             };
-
-            // Coleta discard logs do run atual (últimos 10 min) para incluir no relatório
-            const since = new Date(Date.now() - 10 * 60 * 1000);
-            const discardLogs = await DiscardLog.find({ createdAt: { $gte: since } }).lean();
-            Object.keys(allData).forEach(cls => { allData[cls].discardLogs = discardLogs; });
 
             const exportResult = await rankingTxtExportService.saveRankingReport(allData, macroConfig);
             if (exportResult.success) {

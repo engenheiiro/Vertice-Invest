@@ -86,27 +86,45 @@ describe('PR11+ — Teto especulativo do Exterior (STOCK_US sem lucro)', () => {
   // Tese de crescimento SEM lucro (biotech-like): margem/ROE negativos, hyper-growth.
   // pvp/dy zerados forçam o caminho Lynch (PEG reverso) → upside real, BOLD bruto > 82,
   // espelhando o que ARQT/TARS produziam em produção (antes do teto).
-  const spec = (type, mOver = {}) => makeStock(type, {
+  const spec = (type, mOver = {}, rest = {}) => makeStock(type, {
     metrics: { netMargin: -9, roe: -14, revenueGrowth: 45, pl: 10, pvp: 0, dy: 0, volatility: 18, ...mOver },
+    ...rest,
   });
 
   it('STOCK_US sem lucro tem o Arrojado limitado pelo teto (≤ 82) e registra o fator', () => {
     const res = scoringEngine.processAsset(spec('STOCK_US'), CTX);
     expect(res._discarded).toBeFalsy();
     expect(res.scores.BOLD).toBeLessThanOrEqual(82);
-    expect(hasFactor(res, 'Teto Especulativo US')).toBe(true);
+    expect(hasFactor(res, 'Teto Especulativo')).toBe(true);
   });
 
   it('STOCK_US LUCRATIVO (margem +66%) NÃO é limitado e supera o sem-lucro', () => {
     const lucr = scoringEngine.processAsset(spec('STOCK_US', { netMargin: 66, roe: 112 }), CTX);
     const semLucro = scoringEngine.processAsset(spec('STOCK_US'), CTX);
-    expect(hasFactor(lucr, 'Teto Especulativo US')).toBe(false);
+    expect(hasFactor(lucr, 'Teto Especulativo')).toBe(false);
     expect(lucr.scores.BOLD).toBeGreaterThan(semLucro.scores.BOLD);
   });
 
-  it('BR STOCK sem lucro NÃO sofre o teto US (escopo estrito, não contamina o BR)', () => {
-    const res = scoringEngine.processAsset(spec('STOCK'), CTX);
-    expect(hasFactor(res, 'Teto Especulativo US')).toBe(false);
+  // Estendido ao BR em jul/2026: AURE3 (P/L −22) chegava a 82 BUY sem aviso algum.
+  // Empresa sem lucro é aposta em qualquer geografia — o teto agora vale para STOCK BR.
+  // Setor não-financeiro para o hyper-growth não ser capado em 30% e o BOLD bruto (90)
+  // exceder o teto — só assim o fator de auditoria é registrado.
+  it('BR STOCK sem lucro TAMBÉM sofre o teto especulativo (≤ 82 no Arrojado)', () => {
+    const res = scoringEngine.processAsset(spec('STOCK', {}, { sector: 'Varejo' }), CTX);
+    expect(res.scores.BOLD).toBeLessThanOrEqual(82);
+    expect(res.scores.MODERATE).toBeLessThanOrEqual(72);
+    expect(res.scores.DEFENSIVE).toBeLessThanOrEqual(55);
+    expect(hasFactor(res, 'Teto Especulativo')).toBe(true);
+  });
+
+  // P/L negativo SOZINHO (netMargin/roe ausentes) precisa disparar o gatilho: dy alto
+  // gera Bazin → upside → DEFENSIVO bruto ~80, que o teto derruba para ≤55 com fator.
+  it('BR STOCK com P/L negativo (prejuízo) é capado mesmo com netMargin ausente', () => {
+    const res = scoringEngine.processAsset(
+      spec('STOCK', { netMargin: 0, roe: 0, pl: -21.97, dy: 12, _missing: { netMargin: true, roe: true } }, { sector: 'Varejo' }), CTX);
+    expect(res.scores.DEFENSIVE).toBeLessThanOrEqual(55);
+    expect(res.scores.BOLD).toBeLessThanOrEqual(82);
+    expect(hasFactor(res, 'Teto Especulativo')).toBe(true);
   });
 });
 

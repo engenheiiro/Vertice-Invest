@@ -1,4 +1,12 @@
 
+import {
+    DEFAULT_SELIC_FALLBACK,
+    DEFAULT_NTNB_FALLBACK,
+    BAZIN_MIN_YIELD,
+    BAZIN_NTNB_PREMIUM,
+    FII_YIELD_TRAP_THRESHOLD,
+} from '../../config/financialConstants.js';
+
 const safeVal = (val) => {
     if (val === Infinity || val === -Infinity || isNaN(val) || val === null || val === undefined) return 0;
     return Number(val.toFixed(2));
@@ -46,15 +54,17 @@ const calculateConfidenceScore = (m, type, usSubType = null, ratesStale = false)
     // ETF/REIT/Ouro do Exterior não têm métricas de EMPRESA (ROE, margem, crescimento).
     // Cobrá-las da confiança capava injustamente o score em 70/85. Trata como o FII:
     // confiança só sobre dados aplicáveis (liquidez, recência).
-    // ETF nacional (type 'ETF') também não tem fundamentos de empresa → mesmo tratamento.
-    const usNonStock = (type === 'STOCK_US' && isUsNonStock(usSubType)) || type === 'ETF';
+    // ETF nacional (type 'ETF') e CRYPTO também não têm fundamentos de empresa → mesmo
+    // tratamento (antes a cripto era cobrada por revenueGrowth/ROE inexistentes por
+    // natureza, e compensava com isenção total do teto — dois erros se anulando).
+    const noCompanyMetrics = (type === 'STOCK_US' && isUsNonStock(usSubType)) || type === 'ETF' || type === 'CRYPTO';
 
     // Métricas de EMPRESA (crescimento de receita, ROE, margem líquida) só fazem sentido
     // para ações. Em FIIs elas são estruturalmente inaplicáveis — não são "dados ausentes".
     // Cobrá-las da confiança travava TODO bom FII em confidence 60 → maxScoreAllowed 85,
     // comprimindo dezenas de FIIs no mesmo teto. Para FII a confiança vem de dados APLICÁVEIS
     // (patrimônio/valor de mercado, liquidez, recência).
-    if (!isFII && !usNonStock) {
+    if (!isFII && !noCompanyMetrics) {
         // Usa _missing para distinguir dado ausente de dado genuinamente ruim
         if (m._missing?.revenueGrowth) {
             confidence -= 25;
@@ -194,23 +204,30 @@ const calculateIntrinsicValue = (m, type, price, context, usSubType = null) => {
             const vpa = price / m.pvp;
             grahamPrice = Math.sqrt(22.5 * lpa * vpa);
         }
+        // Yield-alvo Bazin ancorado no macro — só para ação BR: max(6% clássico,
+        // NTN-B + prêmio). O 6% fixo inflava o preço justo de dividendeiras com
+        // Selic ~14%. STOCK_US mantém 6%: NTN-B é taxa real BR e não é âncora
+        // válida para ativos em dólar (ambiente de juros US ~4-5%).
+        const bazinYieldPct = type === 'STOCK'
+            ? Math.max(BAZIN_MIN_YIELD, (MACRO.NTNB_LONG || DEFAULT_NTNB_FALLBACK) + BAZIN_NTNB_PREMIUM)
+            : 6;
         if (m.dy > 0) {
             const adjustedDy = Math.min(m.dy, 14) / 100;
             const dividendPerShare = price * adjustedDy;
-            bazinPrice = dividendPerShare / 0.06;
+            bazinPrice = dividendPerShare / (bazinYieldPct / 100);
         }
         if (m.pl > 0 && m.revenueGrowth > 0) {
             pegRatio = m.pl / m.revenueGrowth;
         }
         if (grahamPrice > 0 && bazinPrice > 0) {
             fairPrice = (grahamPrice * 0.4) + (bazinPrice * 0.6);
-            method = "Híbrido (Bazin+Graham)";
+            method = `Híbrido (Bazin ${bazinYieldPct.toFixed(1)}% + Graham)`;
         } else if (grahamPrice > 0) {
             fairPrice = grahamPrice;
             method = "Graham";
         } else if (bazinPrice > 0) {
             fairPrice = bazinPrice;
-            method = "Bazin";
+            method = `Bazin (${bazinYieldPct.toFixed(1)}%)`;
         }
         // PEG reverso para STOCK_US: aplica método Lynch quando Graham e Bazin não produzem
         // preço justo e o ativo está barato em relação ao crescimento (PEG < 1.0)
@@ -225,7 +242,10 @@ const calculateIntrinsicValue = (m, type, price, context, usSubType = null) => {
         }
         if (fairPrice > price * 2.5) fairPrice = price * 2.5;
     } else if (type === 'FII') {
-        const vp = m.vpCota || price;
+        // vpCota é calculado no scraper mas não persiste no MarketAsset — sem o fallback
+        // por P/VP (mesma fórmula: price/pvp), o VP colapsava para o próprio preço e o
+        // prêmio/deságio patrimonial sumia do preço justo de FII (upside sempre ~0).
+        const vp = m.vpCota || (m.pvp > 0 ? price / m.pvp : price);
         // Usa fiiSubType (explícito) ou sector como fallback — corrige bug anterior onde
         // m.sector não existia em metrics e isPapel nunca era detectado
         const isPapelFII = resolvePapel(m.fiiSubType, m.sector);
@@ -233,7 +253,7 @@ const calculateIntrinsicValue = (m, type, price, context, usSubType = null) => {
             fairPrice = vp;
             method = "VP (Papel)";
         } else {
-            const ntnb = MACRO.NTNB_LONG || 6.0;
+            const ntnb = MACRO.NTNB_LONG || DEFAULT_NTNB_FALLBACK;
             const yieldPremium = Math.max(0, m.dy - ntnb);
             fairPrice = vp * (1 + (yieldPremium / 100));
             method = "VP Ajustado";
@@ -256,7 +276,7 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
         // Setor financeiro pode apresentar crescimento de receita artificialmente alto por
         // base-year ou reestruturações. Aplica teto de 30% para evitar PEG/Hyper Growth indevidos.
         const isFinancialSec = isFinancialSector(asset.sector, ['Holding', 'Financials', 'Financial']);
-        const effectiveRevenueGrowth = (isFinancialSec && m.revenueGrowth > 30) ? 0 : m.revenueGrowth;
+        const effectiveRevenueGrowth = (isFinancialSec && m.revenueGrowth > 30) ? 30 : m.revenueGrowth;
 
         // ── DEFENSIVO ────────────────────────────────────────────────────────────
         // Base reduzida 60→40: bônus progressivos diferenciam ações medianas de elite.
@@ -296,8 +316,10 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
             if (m.pvp > 3.0) { defScore -= 10; audit.DEFENSIVE.push({ factor: 'P/VP Muito Esticado (>3.0)', points: -10, type: 'penalty' }); }
             else if (m.pvp > 2.0) { defScore -= 5; audit.DEFENSIVE.push({ factor: 'P/VP Elevado (>2.0)', points: -5, type: 'penalty' }); }
 
-            // Beta tiers: bônus para ultra-defensivos, penalidade mais severa para voláteis
-            if (m.beta < 0.70) { defScore += 5; audit.DEFENSIVE.push({ factor: 'Beta Defensivo (<0.7)', points: 5, type: 'bonus' }); }
+            // Beta tiers: bônus para ultra-defensivos, penalidade mais severa para voláteis.
+            // Beta ausente chega como 0 — exigir > 0 evita dar bônus de "ultra defensivo"
+            // a ativo sem série de preços suficiente para calcular beta.
+            if (m.beta > 0 && m.beta < 0.70) { defScore += 5; audit.DEFENSIVE.push({ factor: 'Beta Defensivo (<0.7)', points: 5, type: 'bonus' }); }
             else if (m.beta >= 1.5) { defScore -= 15; audit.DEFENSIVE.push({ factor: 'Beta Muito Alto (≥1.5)', points: -15, type: 'penalty' }); }
             else if (m.beta > 1.2) { defScore -= 8; audit.DEFENSIVE.push({ factor: 'Beta Alto (>1.2)', points: -8, type: 'penalty' }); }
 
@@ -387,7 +409,7 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
             }
 
             // ROE < Selic com buffer de 0.5% para evitar penalizar casos borderline
-            const selic = MACRO.SELIC || 14.75;
+            const selic = MACRO.SELIC || DEFAULT_SELIC_FALLBACK;
             if (!isFinancialSec && !m._missing?.roe && m.roe > 0 && m.roe < (selic - 0.5)) {
                 const roePenalty = m.roe < selic / 2 ? 20 : 10;
                 modScore -= roePenalty;
@@ -523,22 +545,33 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
 
     }
 
-    // ── TETO ESPECULATIVO — somente Exterior (STOCK_US) ──────────────────────────
+    // ── TETO ESPECULATIVO — empresa sem lucro (BR e Exterior) ────────────────────
     // PEG/Hyper Growth/Upside cravavam 100 no Arrojado para teses SEM LUCRO (ex.: biotechs
     // TARS margem −9% / ARQT margem −0,6%): PEG e crescimento são sinais inválidos quando o
     // lucro é negativo, então elas encabeçavam o ranking acima de nomes lucrativos (TGTX
     // margem +66%, SMCI). Empresa sem lucro é APOSTA: segue elegível como COMPRAR no
     // Arrojado, mas com teto — não simula convicção máxima nem ofusca quem dá lucro.
-    // Escopo estrito a STOCK_US (margem líquida conhecida e ≤ 0): NÃO toca o BR `STOCK`,
-    // nem ETF/REIT/Ouro (que usam scorers próprios).
-    if (asset.type === 'STOCK_US' && !m._missing?.netMargin && m.netMargin <= 0) {
+    // Estendido ao BR `STOCK` (antes só US): ações com P/L negativo (ex.: AURE3 P/L −22)
+    // chegavam a 82 BUY sem nenhum aviso. Gatilho: netMargin ≤ 0 conhecido, OU P/L < 0,
+    // OU ROE < 0 conhecido (valores negativos são dado PRESENTE — _missing só marca 0/falsy).
+    // Não toca ETF/REIT/Ouro/FII/CRYPTO (scorers próprios).
+    const isUnprofitable = (!m._missing?.netMargin && m.netMargin <= 0)
+        || m.pl < 0
+        || (!m._missing?.roe && m.roe < 0);
+    if ((asset.type === 'STOCK_US' || asset.type === 'STOCK') && isUnprofitable) {
         const SPEC_BOLD_CAP = 82, SPEC_MOD_CAP = 72, SPEC_DEF_CAP = 55;
         if (boldScore > SPEC_BOLD_CAP) {
-            audit.BOLD.push({ factor: 'Teto Especulativo US (empresa sem lucro)', points: SPEC_BOLD_CAP - boldScore, type: 'penalty' });
+            audit.BOLD.push({ factor: 'Teto Especulativo (empresa sem lucro)', points: SPEC_BOLD_CAP - boldScore, type: 'penalty' });
             boldScore = SPEC_BOLD_CAP;
         }
-        modScore = Math.min(modScore, SPEC_MOD_CAP);
-        defScore = Math.min(defScore, SPEC_DEF_CAP);
+        if (modScore > SPEC_MOD_CAP) {
+            audit.MODERATE.push({ factor: 'Teto Especulativo (empresa sem lucro)', points: SPEC_MOD_CAP - modScore, type: 'penalty' });
+            modScore = SPEC_MOD_CAP;
+        }
+        if (defScore > SPEC_DEF_CAP) {
+            audit.DEFENSIVE.push({ factor: 'Teto Especulativo (empresa sem lucro)', points: SPEC_DEF_CAP - defScore, type: 'penalty' });
+            defScore = SPEC_DEF_CAP;
+        }
     }
 
     return { defScore, modScore, boldScore };
@@ -548,12 +581,17 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
 const scoreFiiProfiles = (asset, context, audit) => {
     const { MACRO } = context;
     const m = asset.metrics;
-    const NTNB = MACRO.NTNB_LONG || 6.30;
+    const NTNB = MACRO.NTNB_LONG || DEFAULT_NTNB_FALLBACK;
     let defScore = 0, modScore = 0, boldScore = 0;
     {
         const isTier1 = asset.dbFlags?.isTier1 || false;
         const isPapel = resolvePapel(asset.fiiSubType, asset.sector);
         const yieldSpread = m.dy - NTNB;
+        // Anti yield-trap: DY 12m acima do teto é quase sempre amortização de capital /
+        // RCA / evento não recorrente — não renda sustentável. Sem esta guarda, FIIs
+        // estressados (ex.: DY 47%) ganhavam o bônus máximo de "Yield Extremo" e viravam
+        // BUY. O DEFENSIVE já é protegido pelo gate dy>18 do isEligibleForDefensive.
+        const isYieldTrap = m.dy > FII_YIELD_TRAP_THRESHOLD;
 
         // ── DEFENSIVO ────────────────────────────────────────────────────────
         // Base reduzida de 65→40: bônus progressivos evitam que FIIs medianos
@@ -588,9 +626,10 @@ const scoreFiiProfiles = (asset, context, audit) => {
                 else if (m.pvp > 1.12) { defScore -= 5; audit.DEFENSIVE.push({ factor: 'P/VP com Ágio Elevado (Tijolo)', points: -5, type: 'penalty' }); }
             }
 
-            // Beta: tiered — diferencia FIIs ultra-estáveis de apenas estáveis
-            if (m.beta < 0.40) { defScore += 12; audit.DEFENSIVE.push({ factor: 'Beta Ultra Defensivo (<0.4)', points: 12, type: 'bonus' }); }
-            else if (m.beta < 0.70) { defScore += 7; audit.DEFENSIVE.push({ factor: 'Beta Defensivo (<0.7)', points: 7, type: 'bonus' }); }
+            // Beta: tiered — diferencia FIIs ultra-estáveis de apenas estáveis.
+            // Beta ausente chega como 0 — exigir > 0 evita bônus indevido sem série de preços.
+            if (m.beta > 0 && m.beta < 0.40) { defScore += 12; audit.DEFENSIVE.push({ factor: 'Beta Ultra Defensivo (<0.4)', points: 12, type: 'bonus' }); }
+            else if (m.beta > 0 && m.beta < 0.70) { defScore += 7; audit.DEFENSIVE.push({ factor: 'Beta Defensivo (<0.7)', points: 7, type: 'bonus' }); }
             else if (m.beta > 0.90) { defScore -= 15; audit.DEFENSIVE.push({ factor: 'Beta Elevado (>0.9)', points: -15, type: 'penalty' }); }
 
             if (isTier1) { defScore += 8; audit.DEFENSIVE.push({ factor: 'Fundo Tier 1 (Elite)', points: 8, type: 'bonus' }); }
@@ -621,7 +660,9 @@ const scoreFiiProfiles = (asset, context, audit) => {
         modScore = 45;
         audit.MODERATE.push({ factor: 'Score Base (Perfil Moderado FII)', points: 45, type: 'base' });
 
-        if (yieldSpread >= 5.0) {
+        if (isYieldTrap) {
+            modScore -= 15; audit.MODERATE.push({ factor: `Yield Insustentável (${m.dy.toFixed(1)}% — provável amortização/evento não recorrente)`, points: -15, type: 'penalty' });
+        } else if (yieldSpread >= 5.0) {
             modScore += 25; audit.MODERATE.push({ factor: `Yield Excepcional (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 25, type: 'bonus' });
         } else if (yieldSpread >= 3.0) {
             modScore += 18; audit.MODERATE.push({ factor: `Yield Alto (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 18, type: 'bonus' });
@@ -660,7 +701,9 @@ const scoreFiiProfiles = (asset, context, audit) => {
         boldScore = 35;
         audit.BOLD.push({ factor: 'Base Arrojada FII', points: 35, type: 'base' });
 
-        if (yieldSpread >= 7.0) {
+        if (isYieldTrap) {
+            boldScore -= 10; audit.BOLD.push({ factor: `Yield Insustentável (${m.dy.toFixed(1)}% — provável amortização/evento não recorrente)`, points: -10, type: 'penalty' });
+        } else if (yieldSpread >= 7.0) {
             boldScore += 35; audit.BOLD.push({ factor: `Yield Extremo (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 35, type: 'bonus' });
         } else if (yieldSpread >= 5.0) {
             boldScore += 25; audit.BOLD.push({ factor: 'Yield Agressivo (>NTN-B + 5%)', points: 25, type: 'bonus' });
@@ -701,14 +744,19 @@ const scoreCryptoProfiles = (asset, audit) => {
         // Perfil "primário" da faixa (recebe a base 90/95) — destino das notas de variância.
         const primary = isBlueChip ? 'DEFENSIVE' : isTop10 ? 'MODERATE' : 'BOLD';
 
+        // Bases recalibradas (jul/2026): as antigas 90/95 faziam 16/16 criptos cruzarem
+        // o BUY (≥70) com TRX empatando com BTC em 100 — sem diferenciação nenhuma.
+        // Agora a base deixa o ativo ABAIXO do threshold; só liquidez + volatilidade
+        // baixa + tendência (bônus reais) levam ao BUY. Small cap nasce abaixo de mid
+        // cap (o antigo 95 "assimetria" invertia a lógica de risco).
         if (isBlueChip) {
-            defScore = 90; audit.DEFENSIVE.push({ factor: 'Crypto Blue Chip', points: 90, type: 'base' });
+            defScore = 75; audit.DEFENSIVE.push({ factor: 'Crypto Blue Chip', points: 75, type: 'base' });
         } else if (isTop10) {
-            modScore = 90; audit.MODERATE.push({ factor: 'Crypto Large Cap', points: 90, type: 'base' });
+            modScore = 62; audit.MODERATE.push({ factor: 'Crypto Large Cap', points: 62, type: 'base' });
         } else if (isMidCap) {
-            boldScore = 90; audit.BOLD.push({ factor: 'Crypto Mid Cap', points: 90, type: 'base' });
+            boldScore = 55; audit.BOLD.push({ factor: 'Crypto Mid Cap', points: 55, type: 'base' });
         } else {
-            boldScore = 95; audit.BOLD.push({ factor: 'Crypto Small Cap (Assimetria)', points: 95, type: 'base' });
+            boldScore = 50; audit.BOLD.push({ factor: 'Crypto Small Cap', points: 50, type: 'base' });
         }
 
         if (m.avgLiquidity < 50000000) {
@@ -753,10 +801,11 @@ const scoreCryptoProfiles = (asset, audit) => {
         }
 
         // ── (Fase 2 / achado E2) TRAVA BRANDA NO BOLD DE SMALL CAP ──────────────────
-        // Cripto nunca é capada por confiança (maxScoreAllowed=100 sempre). Uma small cap
-        // (não blue chip / não top-10 / não mid) de baixa liquidez OU volatilidade extrema
-        // é APOSTA, não convicção: limita o BOLD a 80 — ainda elegível a COMPRAR, sem cravar
-        // nota máxima. Análogo ao teto especulativo de STOCK_US sem lucro (SPEC_BOLD_CAP).
+        // Uma small cap (não blue chip / não top-10 / não mid) de baixa liquidez OU
+        // volatilidade extrema é APOSTA, não convicção: limita o BOLD a 80 — ainda
+        // elegível a COMPRAR, sem cravar nota máxima. Análogo ao teto especulativo de
+        // ação sem lucro (SPEC_BOLD_CAP). Com a base recalibrada para 50 raramente
+        // dispara, mas segue como cinto de segurança contra stacking de bônus.
         const isSmallCap = !isBlueChip && !isTop10 && !isMidCap;
         if (isSmallCap && (m.avgLiquidity < 50000000 || cVol > 100)) {
             const CRYPTO_SPEC_CAP = 80;
@@ -926,9 +975,10 @@ const calculateProfileScores = (asset, valuationData, context) => {
     }
 
     // Cap graduado: salto binário 59→70/60→100 substituído por escada para evitar que
-    // um dado a menos reduza o teto de 100 para 70 abruptamente.
-    const maxScoreAllowed = type === 'CRYPTO' ? 100
-        : confidence >= 80 ? 100
+    // um dado a menos reduza o teto de 100 para 70 abruptamente. CRYPTO também é capada
+    // (a confiança dela já é calculada só sobre dados aplicáveis — liquidez/recência —,
+    // então a antiga isenção total deixou de ter razão de existir).
+    const maxScoreAllowed = confidence >= 80 ? 100
         : confidence >= 60 ? 85
         : 70;
 
@@ -1059,7 +1109,7 @@ const calculateStructuralScores = (asset, context) => {
         valuation = Math.min(100, Math.max(0, vScore));
 
         // --- NOVO: SPREAD VS TESOURO (VALUATION PROFISSIONAL) ---
-        const ntnb = context.MACRO?.NTNB_LONG || 6.30;
+        const ntnb = context.MACRO?.NTNB_LONG || DEFAULT_NTNB_FALLBACK;
         if (m.pl > 0) {
             const earningsYield = (1 / m.pl) * 100;
             const spread = earningsYield - ntnb;
@@ -1115,7 +1165,7 @@ const calculateStructuralScores = (asset, context) => {
         risk = Math.min(100, Math.max(0, rScore));
 
     } else if (type === 'FII') {
-        const ntnb = context.MACRO?.NTNB_LONG || 6.30;
+        const ntnb = context.MACRO?.NTNB_LONG || DEFAULT_NTNB_FALLBACK;
         const spread = m.dy - ntnb;
 
         // --- QUALITY FII ---
@@ -1151,8 +1201,11 @@ const calculateStructuralScores = (asset, context) => {
         // Lógica de Spread: O investidor exige prêmio sobre o Tesouro IPCA+
         // Prêmio ideal: > 2% para Tijolo, > 3% para Papel (Risco de Crédito)
         const requiredSpread = isPapel ? 3.0 : 2.0;
-        
-        if (spread >= requiredSpread + 2) { vScore += 90; audit.VALUATION.push({ factor: 'Spread Excelente (>4-5%)', points: 90, type: 'bonus' }); }
+
+        // Anti yield-trap: DY acima do teto torna o spread não confiável (provável
+        // amortização/evento) — não pode valer o bônus máximo de valuation.
+        if (m.dy > FII_YIELD_TRAP_THRESHOLD) { vScore += 20; audit.VALUATION.push({ factor: `Spread Não Confiável (DY ${m.dy.toFixed(1)}% sugere amortização)`, points: 20, type: 'bonus' }); }
+        else if (spread >= requiredSpread + 2) { vScore += 90; audit.VALUATION.push({ factor: 'Spread Excelente (>4-5%)', points: 90, type: 'bonus' }); }
         else if (spread >= requiredSpread) { vScore += 70; audit.VALUATION.push({ factor: 'Spread Saudável', points: 70, type: 'bonus' }); }
         else if (spread >= 0) { vScore += 40; audit.VALUATION.push({ factor: 'Spread Positivo', points: 40, type: 'bonus' }); }
         else { audit.VALUATION.push({ factor: `Spread Negativo vs Tesouro (${spread.toFixed(1)}%)`, points: 0, type: 'penalty' }); }
@@ -1245,7 +1298,7 @@ const generateDynamicTheses = (m, type, ticker, context, valuationData, currentP
     if (!m._missing?.roe && m.roe > 18) bull.push(`Rentabilidade alta (ROE ${m.roe.toFixed(1)}%).`);
 
     if (type === 'FII') {
-        const ntnb = context.MACRO?.NTNB_LONG || 6.30;
+        const ntnb = context.MACRO?.NTNB_LONG || DEFAULT_NTNB_FALLBACK;
         const spread = m.dy - ntnb;
         const isPapel = resolvePapel(fiiSubType, sector);
         
@@ -1353,9 +1406,12 @@ export const scoringEngine = {
             score: 0, 
             action: 'WAIT',
             thesis: '',
-            bullThesis: thesisData.bull, 
+            bullThesis: thesisData.bull,
             bearThesis: thesisData.bear,
-            isDividendAristocrat: aristocrat
+            isDividendAristocrat: aristocrat,
+            // Consumido pelo Brasil 10 (getTop5Defensive): sem este flag, ativos
+            // reprovados no gate defensivo entravam na lista rotulados DEFENSIVE.
+            isDefensiveEligible: isEligibleForDefensive(asset, context)
         };
     }
 };
