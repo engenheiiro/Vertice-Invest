@@ -310,8 +310,8 @@ export const researchService = {
     },
 
     // --- NOVOS MÉTODOS (ACURÁCIA E LOGS) ---
-    async getAlgorithmAccuracy(assetClass?: string, days: number = 30) {
-        const response = await authService.api(`/api/research/accuracy?assetClass=${assetClass || ''}&days=${days}`);
+    async getAlgorithmAccuracy(assetClass?: string, days: number = 30, profile?: string) {
+        const response = await authService.api(`/api/research/accuracy?assetClass=${assetClass || ''}&days=${days}&profile=${profile || ''}`);
         if (!response.ok) return [];
         return await response.json();
     },

@@ -17,6 +17,7 @@ const CurvePointSchema = new mongoose.Schema({
   spxReturn: { type: Number, default: 0 },
   cdiReturn: { type: Number, default: 0 },
   ifixReturn: { type: Number, default: 0 },
+  btcReturn: { type: Number, default: 0 }, // benchmark de cripto (buy & hold BTC)
   holdingsCount: { type: Number, default: 0 },
   lastRebalanceDate: { type: String, default: null }, // YYYY-MM-DD da última troca de cesta vigente
 }, { _id: false });
@@ -29,7 +30,7 @@ const RebalanceSchema = new mongoose.Schema({
 }, { _id: false });
 
 const RecommendedPortfolioCurveSchema = new mongoose.Schema({
-  assetClass: { type: String, required: true }, // STOCK | FII | BRASIL_10 | STOCK_US
+  assetClass: { type: String, required: true }, // BRASIL_10 | STOCK | FII | STOCK_US | REIT | CRYPTO | ETF_BR | ETF_US
   profile: { type: String, default: 'MODERATE' }, // DEFENSIVE | MODERATE | BOLD
   base: { type: Date, required: true }, // data-base (1ª publicação considerada)
   lastRebuild: { type: Date, default: Date.now },

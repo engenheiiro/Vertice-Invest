@@ -66,6 +66,7 @@ export const AdminPanel = () => {
     const [accuracyData, setAccuracyData] = useState<any[]>([]);
     const [accuracyWindow, setAccuracyWindow] = useState<number>(30);
     const [accuracyAsset, setAccuracyAsset] = useState<string>('BRASIL_10');
+    const [accuracyProfile, setAccuracyProfile] = useState<string>('MODERATE');
     const [discardLogs, setDiscardLogs] = useState<any[]>([]);
     const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
@@ -102,7 +103,9 @@ export const AdminPanel = () => {
 
     const loadAccuracy = async () => {
         try {
-            const data = await researchService.getAlgorithmAccuracy(accuracyAsset, accuracyWindow);
+            // BRASIL_10 é curva única (sem perfil); demais classes respeitam o perfil escolhido.
+            const prof = accuracyAsset === 'BRASIL_10' ? undefined : accuracyProfile;
+            const data = await researchService.getAlgorithmAccuracy(accuracyAsset, accuracyWindow, prof);
             setAccuracyData(data.map((d: any) => ({
                 ...d,
                 formattedDate: new Date(d.date).toLocaleDateString('pt-BR'),
@@ -111,6 +114,7 @@ export const AdminPanel = () => {
                 spxReturn: d.spxReturn ?? 0,
                 cdiReturn: d.cdiReturn ?? 0,
                 ifixReturn: d.ifixReturn ?? 0,
+                btcReturn: d.btcReturn ?? 0,
                 holdingsCount: d.holdingsCount ?? 0,
                 lastRebalanceDate: d.lastRebalanceDate ?? null,
             })));
@@ -128,7 +132,7 @@ export const AdminPanel = () => {
     };
 
     useEffect(() => { loadHistory(); loadMacro(); loadConfig(); loadDiscardLogs(); loadPublishStatus(); }, []);
-    useEffect(() => { loadAccuracy(); }, [accuracyWindow, accuracyAsset]);
+    useEffect(() => { loadAccuracy(); }, [accuracyWindow, accuracyAsset, accuracyProfile]);
 
     // --- HANDLERS ---
     const showStatus = (type: 'success' | 'error', text: string, ms = 5000) => {
@@ -359,6 +363,8 @@ export const AdminPanel = () => {
                         setAccuracyWindow={setAccuracyWindow}
                         accuracyAsset={accuracyAsset}
                         setAccuracyAsset={setAccuracyAsset}
+                        accuracyProfile={accuracyProfile}
+                        setAccuracyProfile={setAccuracyProfile}
                         macroData={macroData}
                         isLoadingMacro={isLoadingMacro}
                         isMacroSyncing={isMacroSyncing}

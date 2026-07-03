@@ -30,25 +30,47 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const MS_DAY = 86400000;
 const WINDOW_DAYS = 180;          // horizonte máximo da curva
-const DEFAULT_CLASSES = ['BRASIL_10', 'STOCK', 'FII', 'STOCK_US'];
 const DEFAULT_PROFILE = 'MODERATE';
+const PROFILES = ['DEFENSIVE', 'MODERATE', 'BOLD'];
+
+// ── Pseudo-classes do backtest ───────────────────────────────────────────────
+// `key` é salva em RecommendedPortfolioCurve.assetClass; `realClass` é a assetClass
+// consultada em MarketAnalysis. `typeFilter` separa a classe publicada 'ETF' (que
+// mistura B3 e US) em duas curvas com benchmarks próprios — mesma regra do front
+// (nacional = type 'ETF'). `profileAware` = gera 1 curva por perfil de risco.
+export const CLASS_CONFIG = {
+    BRASIL_10: { realClass: 'BRASIL_10', typeFilter: null, profileAware: false, benchmarks: ['ibov', 'cdi', 'ifix'] },
+    STOCK: { realClass: 'STOCK', typeFilter: null, profileAware: true, benchmarks: ['ibov', 'cdi'] },
+    FII: { realClass: 'FII', typeFilter: null, profileAware: true, benchmarks: ['ifix', 'cdi'] },
+    STOCK_US: { realClass: 'STOCK_US', typeFilter: null, profileAware: true, benchmarks: ['spx', 'cdi'] },
+    REIT: { realClass: 'REIT', typeFilter: null, profileAware: true, benchmarks: ['spx', 'cdi'] },
+    CRYPTO: { realClass: 'CRYPTO', typeFilter: null, profileAware: true, benchmarks: ['btc', 'cdi'] },
+    ETF_BR: { realClass: 'ETF', typeFilter: 'BR', profileAware: true, benchmarks: ['ibov', 'ifix', 'cdi'] },
+    ETF_US: { realClass: 'ETF', typeFilter: 'US', profileAware: true, benchmarks: ['spx', 'cdi'] },
+};
+const DEFAULT_CLASSES = Object.keys(CLASS_CONFIG);
 
 const toKey = (d) => financialService.toDateKey(d);
 
 // ── Seleção da cesta recomendada de um relatório ─────────────────────────────
-// BRASIL_10 já é uma carteira curada (top 5 ações + top 5 FIIs) → usa todos não-SELL.
-// Demais classes: BUY do perfil; fallback BUY de qualquer perfil; fallback top-score.
-const selectBasket = (report, profile) => {
-    const ranking = report.content?.ranking || [];
+// Só entram ativos COMPRAR (nunca AGUARDAR/SELL). Nenhum fallback que injete WAIT
+// ou empreste picks de outro perfil — cada curva de perfil é PURA. Se não há BUY do
+// perfil na data, retorna [] e o loop diário mantém a cesta anterior vigente.
+// `typeFilter` (ETF): 'BR' = type 'ETF' (B3); 'US' = demais (STOCK_US/usSubType ETF).
+export const selectBasket = (report, profile, typeFilter = null) => {
+    let ranking = report.content?.ranking || [];
     if (!ranking.length) return [];
+
+    if (typeFilter) {
+        ranking = ranking.filter(r => (r.type === 'ETF') === (typeFilter === 'BR'));
+    }
 
     let picks;
     if (report.assetClass === 'BRASIL_10') {
-        picks = ranking.filter(r => r.action !== 'SELL');
+        // Carteira curada (top 5 ações + top 5 FIIs) — só COMPRAR (exclui AGUARDAR).
+        picks = ranking.filter(r => r.action === 'BUY');
     } else {
         picks = ranking.filter(r => r.action === 'BUY' && r.riskProfile === profile);
-        if (picks.length < 3) picks = ranking.filter(r => r.action === 'BUY');
-        if (picks.length === 0) picks = [...ranking].sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 10);
     }
 
     // dedupe por ticker, máx 10 nomes
@@ -107,24 +129,27 @@ const loadCdiCumulative = async (baseDate) => {
 };
 
 // ── Construção da curva de uma classe ────────────────────────────────────────
-const buildCurveForClass = async (assetClass, profile) => {
+// `pseudoClass` é a chave em CLASS_CONFIG (ex.: ETF_BR); a query usa `realClass`.
+const buildCurveForClass = async (pseudoClass, profile) => {
+    const config = CLASS_CONFIG[pseudoClass];
+    if (!config) { logger.warn(`⚠️  [Carteira] Pseudo-classe desconhecida: ${pseudoClass}`); return null; }
     const windowStart = new Date(Date.now() - WINDOW_DAYS * MS_DAY);
 
     const reports = await MarketAnalysis.find({
-        assetClass,
+        assetClass: config.realClass,
         isRankingPublished: true,
         date: { $gte: windowStart },
     }).sort({ date: 1 }).lean();
 
     if (!reports.length) {
-        logger.debug(`⚠️  [Carteira] Sem relatórios publicados para ${assetClass}.`);
+        logger.debug(`⚠️  [Carteira] Sem relatórios publicados para ${pseudoClass}.`);
         return null;
     }
 
     // Eventos de rebalance: 1 por dia (último relatório do dia vence).
     const basketByDay = new Map();
     for (const r of reports) {
-        const basket = selectBasket(r, profile);
+        const basket = selectBasket(r, profile, config.typeFilter);
         if (basket.length) basketByDay.set(toKey(r.date), basket);
     }
     const rebalances = [...basketByDay.entries()]
@@ -132,7 +157,7 @@ const buildCurveForClass = async (assetClass, profile) => {
         .map(([date, holdings]) => ({ date, holdings }));
 
     if (!rebalances.length) {
-        logger.debug(`⚠️  [Carteira] Nenhuma cesta válida para ${assetClass}.`);
+        logger.debug(`⚠️  [Carteira] Nenhuma cesta válida para ${pseudoClass}/${profile}.`);
         return null;
     }
 
@@ -157,14 +182,16 @@ const buildCurveForClass = async (assetClass, profile) => {
         if (m) priceMaps.set(t, m);
     }));
 
-    // Benchmarks
-    const isUS = assetClass === 'STOCK_US';
-    const [ibovMap, spxMap, ifixMap] = await Promise.all([
-        loadPriceMap('^BVSP'),
-        loadPriceMap('^GSPC'),
-        isUS ? Promise.resolve(null) : loadIfixMap(),
+    // Benchmarks — só os que a classe usa (config.benchmarks). Séries não pedidas
+    // ficam null → retorno 0 → o front oculta a linha.
+    const wants = new Set(config.benchmarks);
+    const [ibovMap, spxMap, ifixMap, btcMap] = await Promise.all([
+        wants.has('ibov') ? loadPriceMap('^BVSP') : Promise.resolve(null),
+        wants.has('spx') ? loadPriceMap('^GSPC') : Promise.resolve(null),
+        wants.has('ifix') ? loadIfixMap() : Promise.resolve(null),
+        wants.has('btc') ? loadPriceMap('BTC') : Promise.resolve(null),
     ]);
-    const cdiCum = await loadCdiCumulative(baseDate);
+    const cdiCum = wants.has('cdi') ? await loadCdiCumulative(baseDate) : [];
     const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
     const annualCdi = sysConfig?.cdi || 10.65;
 
@@ -181,6 +208,7 @@ const buildCurveForClass = async (assetClass, profile) => {
     const ibovBase = benchBase(ibovMap);
     const spxBase = benchBase(spxMap);
     const ifixBase = benchBase(ifixMap);
+    const btcBase = benchBase(btcMap);
     const benchReturn = (map, base, dayKey) => {
         if (!map || !base) return 0;
         const day = financialService.findPriceInMap(map, dayKey).close;
@@ -196,6 +224,7 @@ const buildCurveForClass = async (assetClass, profile) => {
     // Fallback (sem dados de CDI no banco): estimativa flat por dias corridos.
     const baseMs = baseDate.getTime();
     const cdiReturnAt = (dayKey, dayMs) => {
+        if (!wants.has('cdi')) return 0;
         if (cdiCum.length) {
             while (cdiPtr + 1 < cdiCum.length && cdiCum[cdiPtr + 1].key <= dayKey) cdiPtr++;
             return cdiCum[cdiPtr].key <= dayKey ? cdiCum[cdiPtr].cum - 1 : 0;
@@ -240,16 +269,17 @@ const buildCurveForClass = async (assetClass, profile) => {
             spxReturn: benchReturn(spxMap, spxBase, dayKey),
             cdiReturn: cdiReturnAt(dayKey, dayMs),
             ifixReturn: benchReturn(ifixMap, ifixBase, dayKey),
+            btcReturn: benchReturn(btcMap, btcBase, dayKey),
             holdingsCount: units.size,
             lastRebalanceDate: activeRebalanceDate,
         });
     }
 
     await RecommendedPortfolioCurve.updateOne(
-        { assetClass, profile },
+        { assetClass: pseudoClass, profile },
         {
             $set: {
-                assetClass,
+                assetClass: pseudoClass,
                 profile,
                 base: baseDate,
                 lastRebuild: new Date(),
@@ -266,19 +296,27 @@ const buildCurveForClass = async (assetClass, profile) => {
     );
 
     const last = points[points.length - 1];
-    logger.info(`📈 [Carteira ${assetClass}/${profile}] ${points.length}d | base ${baseKey} | equity ${(last.equityReturn * 100).toFixed(2)}% vs IBOV ${(last.ibovReturn * 100).toFixed(2)}% · CDI ${(last.cdiReturn * 100).toFixed(2)}% | ${rebalances.length} rebalances`);
+    logger.info(`📈 [Carteira ${pseudoClass}/${profile}] ${points.length}d | base ${baseKey} | equity ${(last.equityReturn * 100).toFixed(2)}% vs IBOV ${(last.ibovReturn * 100).toFixed(2)}% · CDI ${(last.cdiReturn * 100).toFixed(2)}% | ${rebalances.length} rebalances`);
     return last;
 };
 
-// Exportada — usada pelo scheduler (DB já conectado)
+// Exportada — usada pelo scheduler (DB já conectado). Gera, para cada pseudo-classe,
+// 1 curva por perfil (DEFENSIVE/MODERATE/BOLD); classes não profile-aware (BRASIL_10,
+// carteira curada) geram 1 curva única sob o perfil MODERATE.
 export const buildRecommendedPortfolioCurves = async (options = {}) => {
     const classes = options.classes || DEFAULT_CLASSES;
-    const profile = options.profile || DEFAULT_PROFILE;
-    for (const assetClass of classes) {
-        try {
-            await buildCurveForClass(assetClass, profile);
-        } catch (e) {
-            logger.warn(`⚠️ [Carteira] Falha em ${assetClass}: ${e.message}`);
+    for (const pseudoClass of classes) {
+        const config = CLASS_CONFIG[pseudoClass];
+        if (!config) { logger.warn(`⚠️ [Carteira] Pseudo-classe desconhecida: ${pseudoClass}`); continue; }
+        const profiles = options.profile ? [options.profile]
+            : config.profileAware ? PROFILES
+            : [DEFAULT_PROFILE];
+        for (const profile of profiles) {
+            try {
+                await buildCurveForClass(pseudoClass, profile);
+            } catch (e) {
+                logger.warn(`⚠️ [Carteira] Falha em ${pseudoClass}/${profile}: ${e.message}`);
+            }
         }
     }
 };

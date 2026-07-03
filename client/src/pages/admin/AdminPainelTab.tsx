@@ -17,6 +17,8 @@ interface Props {
     setAccuracyWindow: (v: number) => void;
     accuracyAsset: string;
     setAccuracyAsset: (v: string) => void;
+    accuracyProfile: string;
+    setAccuracyProfile: (v: string) => void;
     macroData: MacroData | null;
     isLoadingMacro: boolean;
     isMacroSyncing: boolean;
@@ -55,6 +57,7 @@ const MacroCard = ({ label, value, change, sub, color }: { label: string; value:
 
 export const AdminPainelTab: React.FC<Props> = ({
     qualityStats, accuracyData, accuracyWindow, setAccuracyWindow, accuracyAsset, setAccuracyAsset,
+    accuracyProfile, setAccuracyProfile,
     macroData, isLoadingMacro, isMacroSyncing, isSyncing, isGlobalRunning,
     isResettingHealth, isSnapshotRunning, isSyncingTimeSeries,
     onResetHealth, onForceSnapshot, onSyncTimeSeries, onMacroSync, onSyncData, onRetryMacro,
@@ -152,15 +155,28 @@ export const AdminPainelTab: React.FC<Props> = ({
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <div>
                         <h3 className="text-base font-bold text-white flex items-center gap-2"><Target size={18} className="text-purple-500" />Carteira Recomendada (Backtest Contínuo)</h3>
-                        <p className="text-xs text-slate-500">Valorização de uma carteira que segue a Research (entradas/saídas a cada publicação) vs IBOV · CDI · IFIX</p>
+                        <p className="text-xs text-slate-500">Valorização de uma carteira que segue a Research (só COMPRAR, entradas/saídas a cada publicação) vs benchmark da classe (IBOV · CDI · IFIX · S&P · BTC)</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <select value={accuracyAsset} onChange={(e) => setAccuracyAsset(e.target.value)} className="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1 outline-none">
                             <option value="BRASIL_10">Brasil 10</option>
                             <option value="STOCK">Ações BR</option>
                             <option value="FII">FIIs</option>
+                            <option value="CRYPTO">Cripto</option>
                             <option value="STOCK_US">Global (S&P 500)</option>
+                            <option value="REIT">REITs</option>
+                            <option value="ETF_BR">ETF Nacional</option>
+                            <option value="ETF_US">ETF Internacional</option>
                         </select>
+                        {/* Perfil de risco — BRASIL_10 é curva única (carteira curada), sem seletor.
+                            Classes Tailwind completas (JIT não resolve interpolação de cor). */}
+                        {accuracyAsset !== 'BRASIL_10' && (
+                            <div className="flex bg-slate-900 p-0.5 rounded border border-slate-700">
+                                {([['DEFENSIVE', 'Defensivo', 'bg-emerald-900/40 text-emerald-400 shadow'], ['MODERATE', 'Moderado', 'bg-blue-900/40 text-blue-400 shadow'], ['BOLD', 'Arrojado', 'bg-purple-900/40 text-purple-400 shadow']] as const).map(([key, label, activeCls]) => (
+                                    <button key={key} onClick={() => setAccuracyProfile(key)} className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all ${accuracyProfile === key ? activeCls : 'text-slate-500 hover:text-slate-300'}`}>{label}</button>
+                                ))}
+                            </div>
+                        )}
                         <div className="flex bg-slate-900 p-0.5 rounded border border-slate-700">
                             {[7, 30, 60, 90].map(days => (
                                 <button key={days} onClick={() => setAccuracyWindow(days)} className={`px-3 py-1 text-[10px] font-bold rounded ${accuracyWindow === days ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>{days}D</button>
@@ -170,8 +186,9 @@ export const AdminPainelTab: React.FC<Props> = ({
                 </div>
                 <div className="h-[280px] w-full">
                     {accuracyData.length > 0 ? (() => {
-                        const hasIfixData = accuracyData.some(d => d.ifixReturn !== 0) && accuracyAsset !== 'STOCK_US';
-                        const hasSpxData = accuracyAsset === 'STOCK_US' && accuracyData.some(d => d.spxReturn !== 0);
+                        // Cada benchmark aparece só quando a série tem dado (o backend zera as
+                        // que a classe não usa — ex.: cripto só traz BTC+CDI, ETF_US só SPX+CDI).
+                        const has = (key: string) => accuracyData.some(d => d[key] !== 0);
                         return (
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={accuracyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -191,10 +208,11 @@ export const AdminPainelTab: React.FC<Props> = ({
                                     }} />
                                     <Legend iconType="circle" wrapperStyle={{ fontSize: '11px' }} />
                                     <Area type="monotone" dataKey="equityReturn" name="Carteira Recomendada" stroke="#3B82F6" fillOpacity={1} fill="url(#colorAvg)" strokeWidth={2.5} dot={false} />
-                                    <Area type="monotone" dataKey="ibovReturn" name="IBOV" stroke="#F97316" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />
-                                    <Area type="monotone" dataKey="cdiReturn" name="CDI" stroke="#10B981" fill="transparent" strokeDasharray="3 3" strokeWidth={1.5} dot={false} />
-                                    {hasIfixData && <Area type="monotone" dataKey="ifixReturn" name="IFIX" stroke="#A78BFA" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />}
-                                    {hasSpxData && <Area type="monotone" dataKey="spxReturn" name="S&P 500" stroke="#06B6D4" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />}
+                                    {has('ibovReturn') && <Area type="monotone" dataKey="ibovReturn" name="IBOV" stroke="#F97316" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />}
+                                    {has('cdiReturn') && <Area type="monotone" dataKey="cdiReturn" name="CDI" stroke="#10B981" fill="transparent" strokeDasharray="3 3" strokeWidth={1.5} dot={false} />}
+                                    {has('ifixReturn') && <Area type="monotone" dataKey="ifixReturn" name="IFIX" stroke="#A78BFA" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />}
+                                    {has('spxReturn') && <Area type="monotone" dataKey="spxReturn" name="S&P 500" stroke="#06B6D4" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />}
+                                    {has('btcReturn') && <Area type="monotone" dataKey="btcReturn" name="BTC" stroke="#F59E0B" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />}
                                 </AreaChart>
                             </ResponsiveContainer>
                         );

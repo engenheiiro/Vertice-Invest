@@ -28,10 +28,13 @@ export const getAlgorithmAccuracy = async (req, res, next) => {
     try {
         const { assetClass, days, profile } = req.query;
         const window = Math.max(1, parseInt(days) || 30);
+        const cls = assetClass || 'BRASIL_10';
+        // BRASIL_10 é curva única (carteira curada, sem dimensão de perfil) — sempre MODERATE.
+        const effProfile = cls === 'BRASIL_10' ? 'MODERATE' : (profile || 'MODERATE');
 
         const curve = await RecommendedPortfolioCurve.findOne({
-            assetClass: assetClass || 'BRASIL_10',
-            profile: profile || 'MODERATE',
+            assetClass: cls,
+            profile: effProfile,
         }).lean();
 
         if (!curve || !curve.points?.length) return res.json([]);
@@ -49,6 +52,7 @@ export const getAlgorithmAccuracy = async (req, res, next) => {
             spxReturn: rebase(p.spxReturn, start.spxReturn),
             cdiReturn: rebase(p.cdiReturn, start.cdiReturn),
             ifixReturn: rebase(p.ifixReturn, start.ifixReturn),
+            btcReturn: rebase(p.btcReturn, start.btcReturn),
             holdingsCount: p.holdingsCount,
             lastRebalanceDate: p.lastRebalanceDate,
         }));
@@ -411,17 +415,40 @@ export const generateExplainableAI = async (req, res, next) => {
 
 export const listReports = async (req, res, next) => { try { const reports = await MarketAnalysis.aggregate([ { $sort: { createdAt: -1 } }, { $limit: 50 }, { $project: { date: 1, assetClass: 1, strategy: 1, isRankingPublished: 1, isMorningCallPublished: 1, isReportPublished: 1, isExplainableAIPublished: 1, generatedBy: 1, morningCallPresent: { $cond: [{ $ifNull: ["$content.morningCall", false] }, true, false] }, rankingCount: { $size: { $ifNull: ["$content.ranking", []] } }, hasComparisonReport: { $cond: [{ $ifNull: ["$comparisonReport", false] }, true, false] }, hasGeneratedAI: { $cond: [{ $gt: [{ $strLenCP: { $ifNull: ["$generatedExplainableAI", ""] } }, 0] }, true, false] } } } ]); res.json(reports); } catch (error) { next(error); } };
 export const getReportDetails = async (req, res, next) => { try { const report = await MarketAnalysis.findById(req.params.id); if (!report) return res.status(404).json({ message: "Not found" }); res.json(report); } catch (error) { next(error); } };
+// Gate de plano AUTORITATIVO por classe de ativo (o frontend só esconde; a
+// autorização real é aqui). Mapeia cada assetClass à sua feature em LIMITS_CONFIG,
+// espelhando os minPlan das abas em client/src/pages/Research.tsx:
+// - STOCK/FII/CRYPTO/ETF → research_general (PRO+)
+// - STOCK_US/REIT (Ativos Globais) → research_global (ELITE/BLACK)
+// BRASIL_10 e FIXED_INCOME ficam FORA do gate de propósito: CLAUDE.md os trata
+// como acessíveis a planos básicos (Brasil 10 até GUEST) — não os restringimos aqui.
+const RESEARCH_FEATURE_BY_CLASS = {
+    STOCK: 'research_general',
+    FII: 'research_general',
+    CRYPTO: 'research_general',
+    ETF: 'research_general',
+    STOCK_US: 'research_global',
+    REIT: 'research_global',
+};
+
+const RESEARCH_DENIED_MESSAGE = {
+    research_general: 'Pesquisa de Ações, FIIs e Cripto disponível a partir do plano Pro.',
+    research_global: 'Ativos Globais disponível nos planos Elite e Black.',
+};
+
 export const getLatestReport = async (req, res, next) => {
     try {
         const { assetClass, strategy } = req.query;
 
-        // REIT é gerado do universo do Exterior (STOCK_US) → mesmo gate de plano (Elite/Black).
-        if (assetClass === 'STOCK_US' || assetClass === 'REIT') {
+        // Enforcement de plano no backend (autoritativo). O gate legado só cobria
+        // STOCK_US/REIT; STOCK/FII/CRYPTO ficavam abertos a qualquer autenticado.
+        const feature = RESEARCH_FEATURE_BY_CLASS[assetClass];
+        if (feature) {
             const userPlan = req.user?.plan || 'GUEST';
             const isAdmin = req.user?.role === 'ADMIN';
-            const hasAccess = isAdmin || (LIMITS_CONFIG['research_global']?.[userPlan] > 0);
+            const hasAccess = isAdmin || (LIMITS_CONFIG[feature]?.[userPlan] > 0);
             if (!hasAccess) {
-                return res.status(403).json({ message: 'Ativos Globais disponível nos planos Elite e Black.' });
+                return res.status(403).json({ message: RESEARCH_DENIED_MESSAGE[feature] });
             }
         }
 
