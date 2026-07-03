@@ -69,7 +69,8 @@ router.post('/cleanup-storage', researchHeavyLimiter, requireAdmin, runStorageCl
 router.get('/data-quality', adminLimiter, requireAdmin, getDataQualityStats);
 router.post('/reset-health', adminLimiter, requireAdmin, resetAssetHealth);
 router.get('/accuracy', adminLimiter, requireAdmin, getAlgorithmAccuracy);
-router.get('/discard-logs', getDiscardLogs);
+// Motivos internos de descarte — só admin (único consumidor é o AdminPanel).
+router.get('/discard-logs', adminLimiter, requireAdmin, getDiscardLogs);
 
 // Publicação & Explainable AI
 router.get('/publish-status', adminLimiter, requireAdmin, getPublishStatus);

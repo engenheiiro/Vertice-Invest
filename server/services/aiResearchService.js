@@ -1,5 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
+import * as Sentry from "@sentry/node";
 import logger from '../config/logger.js';
 import { marketDataService } from './marketDataService.js';
 import { scoringEngine } from './engines/scoringEngine.js';
@@ -385,6 +386,14 @@ export const aiResearchService = {
         const macroConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
 
         const saveAnalysis = async (assetClass, ranking, fullList) => {
+            // Alerta ativo: ranking vazio numa classe que normalmente tem dados indica
+            // pipeline degradado (fonte caiu / universo zerado) — sem isso, só se
+            // descobria olhando o site. O rascunho vazio ainda é salvo (auditável),
+            // mas o auto-publish semanal o bloqueia (validateAutoPublish).
+            if (!ranking || ranking.length === 0) {
+                logger.warn(`🚨 [Research] Ranking VAZIO gerado para ${assetClass}`);
+                Sentry.captureMessage(`Ranking vazio gerado para ${assetClass}`, 'warning');
+            }
             const prevAnalysis = await MarketAnalysis.findOne({ assetClass, strategy: strat, isRankingPublished: true }).sort({ createdAt: -1 }).select('content.ranking date');
             const comparisonReport = generateComparisonReport(assetClass, ranking, prevAnalysis?.content?.ranking || []);
             const explainableAIPrompt = buildExplainableAIPrompt(assetClass, ranking, comparisonReport, macroConfig);

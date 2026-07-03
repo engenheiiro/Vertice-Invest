@@ -45,9 +45,11 @@ const PerformanceCard = ({ macro, isLoading }: { macro: any, isLoading: boolean 
                 <div>
                     <h3 className="text-lg font-bold text-white mb-0.5">Performance (Acumulado 12m)</h3>
                     <div className="flex items-center gap-1.5">
-                         <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                         <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+                         {/* Rótulo honesto: o valor "IA Vértice" é ilustrativo, não medição real.
+                             O selo anterior ("Dados Reais" + data de hoje) era enganoso. */}
                          <p className="text-[10px] text-slate-400 uppercase tracking-wider">
-                             {isLoading ? 'Sincronizando...' : `Dados Reais (${new Date().toLocaleDateString()})`}
+                             {isLoading ? 'Sincronizando...' : 'Simulação ilustrativa'}
                          </p>
                     </div>
                 </div>
@@ -105,6 +107,11 @@ const PerformanceCard = ({ macro, isLoading }: { macro: any, isLoading: boolean 
                     </div>
                 </div>
             )}
+
+            {/* Disclaimer sempre visível — o retorno "IA Vértice" é ilustrativo. */}
+            <p className="text-[9px] text-slate-500 mt-4 leading-relaxed">
+                Simulação ilustrativa. Não é promessa de retorno; resultados passados não garantem resultados futuros.
+            </p>
         </div>
     </div>
   );

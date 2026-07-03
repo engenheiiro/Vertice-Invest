@@ -45,6 +45,26 @@ const calculateVolatility = (prices) => {
     return stdDev * Math.sqrt(252) * 100; // Anualizada em %
 };
 
+// Staleness pela DATA DO ÚLTIMO CANDLE, não por lastUpdated. O critério antigo
+// (lastUpdated > 7d) era derrotado pelo "touch" diário que renovava lastUpdated sem
+// buscar dados — a série congelava para sempre após a primeira carga (bug confirmado
+// em produção: candles parados 2-4 semanas). Limite de 2 dias corridos: como a data
+// do candle é meia-noite, "ontem" tem ~1,8d de idade no run das 18:30 (fresco) e
+// "anteontem" ~2,8d (stale) → cada série re-busca a cada ~2 dias, defasagem máxima
+// de ~1 pregão para SMA/volatilidade/RSI. Exportada para teste.
+export const HISTORY_MAX_CANDLE_AGE_DAYS = 2;
+export const isHistoryStale = (historyEntry, now = new Date()) => {
+    if (!historyEntry?.history?.length) return true;
+    // Não assume ordenação: acha a maior data (strings YYYY-MM-DD comparam lexicograficamente).
+    let latest = '';
+    for (const h of historyEntry.history) {
+        if (h?.date && h.date > latest) latest = h.date;
+    }
+    if (!latest) return true;
+    const ageMs = now.getTime() - new Date(`${latest}T00:00:00Z`).getTime();
+    return ageMs > HISTORY_MAX_CANDLE_AGE_DAYS * 24 * 60 * 60 * 1000;
+};
+
 const calculateBeta = (assetReturns, benchmarkReturns) => {
     if (assetReturns.length < 2 || benchmarkReturns.length < 2) return 1;
     const length = Math.min(assetReturns.length, benchmarkReturns.length);
@@ -112,8 +132,9 @@ export const timeSeriesWorker = {
                 await Promise.all(batch.map(async (asset) => {
                     let historyEntry = histByTicker.get(asset.ticker) || null;
 
-                    // Se não tem histórico ou está desatualizado (> 7 dias), tenta buscar
-                    const isStale = historyEntry && (now - new Date(historyEntry.lastUpdated)) > 7 * 24 * 60 * 60 * 1000;
+                    // Staleness pela data do último candle (ver isHistoryStale) — nunca por
+                    // lastUpdated, que o touch renovava sem dados novos.
+                    const isStale = isHistoryStale(historyEntry, now);
 
                     if (!historyEntry || isStale || !historyEntry.history || historyEntry.history.length < 20) {
                         batchDidFetch = true;
@@ -128,7 +149,7 @@ export const timeSeriesWorker = {
                                     : externalHistory.slice(-ASSET_HISTORY_MAX_POINTS);
                                 await AssetHistory.updateOne(
                                     { ticker: asset.ticker },
-                                    { $set: { history: historyToStore, lastUpdated: now } },
+                                    { $set: { history: historyToStore, lastUpdated: now, lastCheckedAt: now } },
                                     { upsert: true }
                                 );
                                 // Reaproveita o array recém-buscado para o cálculo, sem reler do banco.
@@ -138,7 +159,9 @@ export const timeSeriesWorker = {
                             logger.warn(`[TimeSeriesWorker] Falha ao buscar histórico para ${asset.ticker}`);
                         }
                     } else {
-                        // "Touch" para que o monitor de admin veja que o cálculo foi renovado hoje
+                        // "Touch" de monitoramento: renova lastCheckedAt (visita do worker),
+                        // NUNCA lastUpdated — renovar lastUpdated sem buscar dados era o que
+                        // mascarava a staleness e congelava as séries.
                         touchTickers.push(asset.ticker);
                     }
 
@@ -204,11 +227,12 @@ export const timeSeriesWorker = {
                     });
                 }));
 
-                // Renova lastUpdated dos ativos frescos em uma única operação por lote.
+                // Renova lastCheckedAt dos ativos frescos em uma única operação por lote.
+                // (lastUpdated fica intocado — só muda quando candles são realmente re-buscados.)
                 if (touchTickers.length > 0) {
                     await AssetHistory.updateMany(
                         { ticker: { $in: touchTickers } },
-                        { $set: { lastUpdated: now } }
+                        { $set: { lastCheckedAt: now } }
                     );
                 }
 

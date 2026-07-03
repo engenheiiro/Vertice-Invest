@@ -319,6 +319,13 @@ export const Research = () => {
                     />
                 )}
 
+                {/* Disclaimer — o ranking usa termos fortes (COMPRAR/Recomendação IA);
+                    a ressalva precisa estar na própria página, não só nos Termos. */}
+                <p className="text-[10px] text-slate-600 text-center mt-10 pb-6 max-w-2xl mx-auto leading-relaxed">
+                    Conteúdo informativo e educacional gerado por análise quantitativa; não constitui recomendação
+                    individualizada de investimento. Investimentos envolvem risco de perda de capital.
+                </p>
+
             </main>
         </div>
     );

@@ -349,6 +349,10 @@ export const Landing = () => {
                     <ResultCard key={i} {...res} delay={i * 100} />
                 ))}
              </div>
+             {/* Disclaimer junto dos cards de resultado — os exemplos são ilustrativos. */}
+             <p className="text-[10px] text-slate-600 mt-6 text-center leading-relaxed">
+                Exemplos ilustrativos de sinais. Não constituem promessa de retorno; resultados passados não garantem resultados futuros.
+             </p>
           </div>
       </section>
 
@@ -433,12 +437,17 @@ export const Landing = () => {
                 <h4 className="font-bold text-slate-300 mb-3 text-xs uppercase">Legal</h4>
                 <ul className="space-y-1.5 text-[11px]">
                     <li><Link to="/terms" className="hover:text-blue-400">Termos de Uso</Link></li>
-                    <li><a href="#" className="hover:text-blue-400">Privacidade</a></li>
-                    <li><a href="#" className="hover:text-blue-400">Compliance</a></li>
+                    <li><Link to="/terms" className="hover:text-blue-400">Privacidade</Link></li>
+                    <li><Link to="/terms" className="hover:text-blue-400">Compliance</Link></li>
                 </ul>
             </div>
         </div>
-        <div className="max-w-6xl mx-auto px-6 pt-6 border-t border-slate-900 text-center text-[10px]">
+        <div className="max-w-6xl mx-auto px-6 pt-6 border-t border-slate-900 text-center text-[10px] space-y-2">
+            {/* Disclaimer geral — antes só existia dentro dos Termos de Uso. */}
+            <p className="max-w-3xl mx-auto leading-relaxed text-slate-600">
+                Conteúdo informativo e educacional; não constitui recomendação individualizada de investimento.
+                Investimentos envolvem risco de perda de capital. Resultados passados não garantem resultados futuros.
+            </p>
             <p>© {new Date().getFullYear()} Vértice Invest Tecnologia Ltda.</p>
         </div>
       </footer>
