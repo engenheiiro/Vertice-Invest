@@ -298,9 +298,18 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
 
                 {/* 3. ALOCAÇÃO IDEAL */}
                 <div className="lg:col-span-4 bg-base border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
-                    <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0 border-b border-slate-800/50 pb-2">
-                        <PieChart size={14} className="text-purple-500" />
-                        <h3 className="text-[10px] font-black text-white uppercase tracking-widest">Exposição Ideal</h3>
+                    <div className="flex items-center justify-between gap-2 mb-4 relative z-10 shrink-0 border-b border-slate-800/50 pb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <PieChart size={14} className="text-purple-500 shrink-0" />
+                            <h3 className="text-[10px] font-black text-white uppercase tracking-widest truncate">Exposição Ideal</h3>
+                        </div>
+                        {/* Deixa explícito que a alocação-alvo desconsidera os AGUARDAR. */}
+                        <span
+                            title="A carteira ideal considera apenas os ativos COMPRAR; os AGUARDAR ficam de fora."
+                            className="text-[8px] font-black text-emerald-400 bg-emerald-900/10 px-1.5 py-0.5 rounded border border-emerald-900/20 uppercase tracking-wider whitespace-nowrap shrink-0"
+                        >
+                            Só COMPRAR
+                        </span>
                     </div>
                     <div className="flex-1 flex flex-col justify-center relative z-10">
                         <SectorDistribution picks={buyPicks} />
@@ -610,7 +619,8 @@ const SectorDistribution = ({ picks }: { picks: RankingItem[] }) => {
             .sort((a, b) => b.count - a.count);
     }, [picks]);
 
-    if (sectors.length === 0) return <p className="text-[10px] text-slate-500 text-center mt-10">Sem dados.</p>;
+    // Pode ficar vazio quando todos os ativos da seleção estão em AGUARDAR (nenhum COMPRAR).
+    if (sectors.length === 0) return <p className="text-[10px] text-slate-500 text-center mt-10">Nenhum ativo COMPRAR nesta seleção.</p>;
 
     return (
         <div className="flex flex-row items-center gap-4 w-full h-full">
