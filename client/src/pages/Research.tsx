@@ -32,6 +32,9 @@ export const Research = () => {
     // Dentro do Exterior, alterna entre dois rankings INDEPENDENTES: Ações US (STOCK_US)
     // e REITs (classe própria). Não é filtro client-side — troca a fonte buscada.
     const [exteriorView, setExteriorView] = useState<'STOCK' | 'REIT'>('STOCK');
+    // Aba ETFs: origem visível (Nacional B3 / Internacional US). Espelha o sub-filtro do
+    // TopPicksCard aqui em cima para que o modal de Aporte respeite a mesma seleção.
+    const [etfOrigin, setEtfOrigin] = useState<'BR' | 'US'>('US');
     const [viewMode, setViewMode] = useState<'ANALYSIS' | 'RANKING'>('RANKING');
     const [report, setReport] = useState<ResearchReport | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -286,6 +289,7 @@ export const Research = () => {
                             view="RANKING"
                             onAporte={() => setShowAporte(true)}
                             onExteriorViewChange={isExterior ? setExteriorView : undefined}
+                            onEtfOriginChange={setEtfOrigin}
                         />
                     ) : (
                         <div className="flex flex-col items-center justify-center py-20 bg-base border border-dashed border-slate-800 rounded-3xl text-center">
@@ -311,6 +315,7 @@ export const Research = () => {
                         onClose={() => setShowAporte(false)}
                         ranking={report.content.ranking}
                         assetClass={effectiveAsset}
+                        etfOrigin={etfOrigin}
                     />
                 )}
 

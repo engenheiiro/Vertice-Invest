@@ -15,6 +15,9 @@ interface TopPicksCardProps {
     // Exterior: alterna entre os rankings independentes Ações (STOCK_US) e REITs.
     // Quando presente, os chips Ações/REITs aparecem na barra "Perfil da Carteira".
     onExteriorViewChange?: (view: 'STOCK' | 'REIT') => void;
+    // Aba ETFs: notifica o pai (Research) da origem selecionada (Nacional/Internacional)
+    // para que o modal de Aporte considere o mesmo universo. O estado segue interno aqui.
+    onEtfOriginChange?: (origin: 'BR' | 'US') => void;
 }
 
 type RiskFilter = 'DEFENSIVE' | 'MODERATE' | 'BOLD';
@@ -45,7 +48,7 @@ const COLORS = [
     '#EF4444', '#84CC16', '#14B8A6', '#F97316', '#A855F7', '#0EA5E9'
 ];
 
-export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, onAporte, onExteriorViewChange }) => {
+export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, onAporte, onExteriorViewChange, onEtfOriginChange }) => {
     const { assets, kpis, isPrivacyMode } = useWallet();
     const navigate = useNavigate();
     const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
@@ -68,6 +71,9 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
 
     // Reseta o sub-filtro de origem (default Internacional) ao trocar de classe.
     useEffect(() => { setEtfOrigin('US'); }, [assetClass]);
+
+    // Mantém o pai (Research → modal de Aporte) em sincronia com a origem visível.
+    useEffect(() => { onEtfOriginChange?.(etfOrigin); }, [etfOrigin, onEtfOriginChange]);
 
     const filteredPicks = useMemo(() => {
         let filtered = picks;
@@ -97,6 +103,16 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                 visualPosition: idx + 1
             }));
     }, [picks, riskFilter, isEtf, etfOrigin]);
+
+    // O botão Aporte deve refletir o universo visível: na aba ETFs, se a origem atual
+    // (Nacional/Internacional) não tem nenhum COMPRAR, o botão não aparece — evita abrir
+    // o modal já vazio. Independe do perfil de risco (o modal cobre os três).
+    const hasBuyInScope = useMemo(() => {
+        const scoped = isEtf
+            ? picks.filter(p => (p.type === 'ETF') === (etfOrigin === 'BR'))
+            : picks;
+        return scoped.some(p => p.action === 'BUY');
+    }, [picks, isEtf, etfOrigin]);
 
     const stats = useMemo(() => {
         if (!filteredPicks.length) return { avgScore: 0, avgDy: 0, count: 0 };
@@ -205,7 +221,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                             ))}
                         </div>
                     )}
-                    {onAporte && picks.some(p => p.action === 'BUY') && (
+                    {onAporte && hasBuyInScope && (
                         <div className="flex items-center gap-2 pl-2 border-l border-slate-700/60 shrink-0">
                             <button
                                 onClick={onAporte}
@@ -444,10 +460,18 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                                                     <div className="w-full h-5 rounded bg-slate-800/50 border border-dashed border-slate-700 flex items-center justify-center">
                                                         <span className="text-[8px] text-slate-600 font-bold uppercase">Não possui</span>
                                                     </div>
+                                                    {/* Só sugere aporte em ativos COMPRAR. Em AGUARDAR o sistema não
+                                                        recomenda entrada — mostra o status neutro em vez do valor. */}
                                                     <div className="text-right mt-1">
-                                                        <span className="text-[10px] font-black text-emerald-400 bg-emerald-900/10 px-1.5 py-0.5 rounded border border-emerald-900/20">
-                                                            Aportar ~{formatCurrency(idealValue)}
-                                                        </span>
+                                                        {pick.action === 'BUY' ? (
+                                                            <span className="text-[10px] font-black text-emerald-400 bg-emerald-900/10 px-1.5 py-0.5 rounded border border-emerald-900/20">
+                                                                Aportar ~{formatCurrency(idealValue)}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[10px] font-black text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded border border-slate-700">
+                                                                Aguardar
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             )}

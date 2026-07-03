@@ -12,6 +12,9 @@ interface ResearchAporteModalProps {
     onClose: () => void;
     ranking: RankingItem[];
     assetClass: string;
+    // Aba ETFs: origem selecionada (Nacional B3 / Internacional US). O aporte deve
+    // considerar APENAS o universo visível — nunca misturar B3 (BRL) com US (USD).
+    etfOrigin?: 'BR' | 'US';
 }
 
 type Profile = 'DEFENSIVE' | 'MODERATE' | 'BOLD';
@@ -28,23 +31,35 @@ interface Allocation {
     cost: number;
 }
 
-export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen, onClose, ranking, assetClass }) => {
+export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen, onClose, ranking, assetClass, etfOrigin = 'US' }) => {
     const { usdRate } = useWallet();
-    const isUsd = assetClass === 'CRYPTO' || assetClass === 'STOCK_US';
+    const isEtf = assetClass === 'ETF';
+    // Na aba ETFs a moeda depende da origem: Nacional (B3) é BRL; Internacional (US) é USD.
+    const isUsd = assetClass === 'CRYPTO' || assetClass === 'STOCK_US' || (isEtf && etfOrigin === 'US');
     const currency: 'BRL' | 'USD' = isUsd ? 'USD' : 'BRL';
     const isFractional = isUsd;
+
+    // Universo do aporte restrito à origem visível na aba ETFs (Nacional = type 'ETF' B3;
+    // Internacional = o resto/STOCK_US). Fora de ETF, usa o ranking inteiro da classe.
+    const scopedRanking = useMemo(() => {
+        if (!isEtf) return ranking;
+        return ranking.filter(r => {
+            const isNacional = r.type === 'ETF';
+            return etfOrigin === 'BR' ? isNacional : !isNacional;
+        });
+    }, [ranking, isEtf, etfOrigin]);
 
     const [amount, setAmount] = useState('');
     const [excludedTickers, setExcludedTickers] = useState<Set<string>>(new Set());
 
-    // Perfis disponíveis entre os COMPRAR desta classe.
+    // Perfis disponíveis entre os COMPRAR do universo visível.
     const availableProfiles = useMemo(() => {
         const present = new Set<Profile>();
-        ranking.forEach(r => {
+        scopedRanking.forEach(r => {
             if (r.action === 'BUY' && r.riskProfile) present.add(r.riskProfile as Profile);
         });
         return (['DEFENSIVE', 'MODERATE', 'BOLD'] as Profile[]).filter(p => present.has(p));
-    }, [ranking]);
+    }, [scopedRanking]);
 
     const [profile, setProfile] = useState<Profile>('DEFENSIVE');
 
@@ -54,8 +69,9 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
         }
     }, [availableProfiles, profile]);
 
-    // Reseta excluídos ao trocar perfil (lista diferente) ou ao fechar o modal.
+    // Reseta excluídos ao trocar perfil ou origem (lista diferente) ou ao fechar o modal.
     useEffect(() => { setExcludedTickers(new Set()); }, [profile]);
+    useEffect(() => { setExcludedTickers(new Set()); }, [etfOrigin]);
     useEffect(() => { if (!isOpen) setExcludedTickers(new Set()); }, [isOpen]);
 
     useEffect(() => {
@@ -67,20 +83,20 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
     // Posição visual — espelha TopPicksCard: sort por score, empates preservam
     // a ordem original do backend (sort estável, sem tiebreaker adicional).
     const profilePositionMap = useMemo(() => {
-        const sorted = ranking
+        const sorted = scopedRanking
             .filter(r => r.riskProfile === profile)
             .sort((a, b) => b.score - a.score)
             .slice(0, 10);
         const map = new Map<string, number>();
         sorted.forEach((r, i) => map.set(r.ticker, i + 1));
         return map;
-    }, [ranking, profile]);
+    }, [scopedRanking, profile]);
 
     const { allocations, leftover, invested, sectorCount } = useMemo(() => {
         const value = parseFloat((amount || '').replace(',', '.'));
         if (!value || value <= 0) return { allocations: [] as Allocation[], leftover: 0, invested: 0, sectorCount: 0 };
 
-        const sorted = ranking
+        const sorted = scopedRanking
             .filter(r => r.action === 'BUY' && (r.currentPrice || 0) > 0
                 && (availableProfiles.length === 0 || r.riskProfile === profile)
                 && !excludedTickers.has(r.ticker))
@@ -169,12 +185,12 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
             invested: investedTotal,
             sectorCount: new Set(diverse.map(b => (b.sector || 'GERAL').toUpperCase())).size,
         };
-    }, [amount, ranking, profile, availableProfiles, isFractional, excludedTickers]);
+    }, [amount, scopedRanking, profile, availableProfiles, isFractional, excludedTickers]);
 
     // Ativos excluídos com seus dados originais do ranking (para exibir os chips).
     const excludedItems = useMemo(() =>
-        ranking.filter(r => excludedTickers.has(r.ticker) && r.riskProfile === profile),
-        [ranking, excludedTickers, profile]
+        scopedRanking.filter(r => excludedTickers.has(r.ticker) && r.riskProfile === profile),
+        [scopedRanking, excludedTickers, profile]
     );
 
     const removeExcluded = (ticker: string) =>
