@@ -55,6 +55,50 @@ describe('normalizeTreasuryBonds', () => {
     expect(out[1].index).toBe('IPCA');
   });
 
+  it('saneia a contaminação nominal do raspador (IPCA+ com rate já nominal ~12%)', () => {
+    // rate=12.43 é NOMINAL (cupom real ⊕ IPCA), não cupom real. Deve ser recuperado
+    // para real = 12.43 - 4.72, e as estimativas derivadas do cupom real corrigido.
+    const [b] = normalizeTreasuryBonds(
+      [{ title: 'Tesouro IPCA+ 2045 Juros Semestrais', type: 'IPCA', rate: 12.43 }],
+      { ipca: 4.72, selic: 14.25, cdi: 14.15 },
+    );
+    expect(b.rate).toBe(7.71);            // cupom real recuperado (12.43 - 4.72)
+    expect(b.rate).not.toBe(12.43);       // nunca exibe o nominal como "taxa contratada"
+    expect(b.nominalEstimate).toBe(12.43); // real + IPCA reconstrói o nominal original
+    expect(b.realEstimate).toBe(7.71);     // acima da inflação = cupom real
+    expect(b.vsCdi).toBe(-1.72);           // 12.43 - 14.15
+  });
+
+  it('RENDAMAIS/EDUCA contaminados também são saneados', () => {
+    const out = normalizeTreasuryBonds(
+      [
+        { title: 'Renda+ 2050', type: 'RENDAMAIS', rate: 11.92 },
+        { title: 'Educa+ 2040', type: 'EDUCA', rate: 12.35 },
+      ],
+      { ipca: 4.72, selic: 14.25, cdi: 14.15 },
+    );
+    expect(out[0].rate).toBe(7.2);   // 11.92 - 4.72
+    expect(out[1].rate).toBe(7.63);  // 12.35 - 4.72
+  });
+
+  it('cupom real legítimo (≤ teto) NÃO é alterado', () => {
+    const [b] = normalizeTreasuryBonds(
+      [{ title: 'Tesouro IPCA+ 2035', type: 'IPCA', rate: 7.31 }],
+      { ipca: 4.72, selic: 14.25, cdi: 14.15 },
+    );
+    expect(b.rate).toBe(7.31);             // plausível como real → intacto
+    expect(b.nominalEstimate).toBe(12.03); // 7.31 + 4.72
+  });
+
+  it('PREFIXADO alto NÃO é confundido com contaminação (não é IPCA-indexado)', () => {
+    const [b] = normalizeTreasuryBonds(
+      [{ title: 'Tesouro Prefixado 2032', type: 'PREFIXADO', rate: 14.6 }],
+      { ipca: 4.72, selic: 14.25, cdi: 14.15 },
+    );
+    expect(b.rate).toBe(14.6);             // prefixado já é nominal, fica intacto
+    expect(b.nominalEstimate).toBe(14.6);
+  });
+
   it('sem CDI no macro → vsCdi null', () => {
     const [b] = normalizeTreasuryBonds(
       [{ title: 'X', type: 'PREFIXADO', rate: 11 }],

@@ -9,7 +9,18 @@
  *  - IPCA+ (e RENDAMAIS/EDUCA): cupom real contratado + IPCA projetado
  *  - SELIC: Selic + ágio/deságio (o campo `rate` costuma ser o spread, ~0)
  *  - PREFIXADO: a própria taxa contratada já é nominal
+ *
+ * Saneamento da contaminação NOMINAL: o raspador do Investidor10 passou a devolver,
+ * para títulos IPCA-indexados, o retorno NOMINAL projetado (cupom real ⊕ IPCA, ex.:
+ * 7,3% ⊕ 4,7% ≈ 12,4%) no lugar do cupom REAL contratado. Um cupom real acima de
+ * ~10% a.a. nunca existiu em NTN-B/Educa+/Renda+; quando o `rate` de um título
+ * IPCA-indexado ultrapassa esse teto, ele é a contaminação nominal e o cupom real é
+ * recuperado subtraindo o IPCA (modelo aditivo do app: nominal ≈ real + IPCA). Isso
+ * é espelho da guarda `isPlausibleNtnbRate` do scoring (macroDataService).
  */
+
+// Cupom real contratado plausível em títulos IPCA-indexados fica bem abaixo disso.
+const REAL_COUPON_CEILING = 10;
 
 const num = (v) => {
     const n = Number(v);
@@ -18,17 +29,28 @@ const num = (v) => {
 
 const round2 = (n) => Number(n.toFixed(2));
 
+const isIpcaLinked = (type) => type === 'IPCA' || type === 'RENDAMAIS' || type === 'EDUCA';
+
+// Recupera o cupom REAL quando o valor persistido é, na verdade, o nominal (real+IPCA).
+const effectiveRealCoupon = (rate, type, ipca) => {
+    if (isIpcaLinked(type) && ipca > 0 && rate > REAL_COUPON_CEILING) {
+        const real = rate - ipca;
+        return real > 0 ? round2(real) : rate;
+    }
+    return rate;
+};
+
 export const normalizeTreasuryBonds = (bonds = [], macro = {}) => {
     const ipca = num(macro.ipca);
     const selic = num(macro.selic);
     const cdi = num(macro.cdi) > 0 ? num(macro.cdi) : selic;
 
     return (bonds || []).map((b) => {
-        const rate = num(b.rate);
         const type = b.type || 'IPCA';
+        const rate = effectiveRealCoupon(num(b.rate), type, ipca);
 
         let nominalEstimate;
-        if (type === 'IPCA' || type === 'RENDAMAIS' || type === 'EDUCA') nominalEstimate = rate + ipca;
+        if (isIpcaLinked(type)) nominalEstimate = rate + ipca;
         else if (type === 'SELIC') nominalEstimate = selic + rate;
         else nominalEstimate = rate; // PREFIXADO
 
@@ -38,7 +60,7 @@ export const normalizeTreasuryBonds = (bonds = [], macro = {}) => {
         return {
             title: b.title,
             type,
-            index: b.index || ((type === 'IPCA' || type === 'RENDAMAIS' || type === 'EDUCA') ? 'IPCA' : type === 'SELIC' ? 'SELIC' : 'PRE'),
+            index: b.index || (isIpcaLinked(type) ? 'IPCA' : type === 'SELIC' ? 'SELIC' : 'PRE'),
             rate,
             maturityDate: b.maturityDate || null,
             minInvestment: num(b.minInvestment),
