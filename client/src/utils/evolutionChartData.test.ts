@@ -137,6 +137,18 @@ describe('buildEvolutionChartData — DIÁRIO (forward-fill)', () => {
         expect(byLabel(pts2, '30/06')!.periodVariation).toBeCloseTo(0);
     });
 
+    it('variação sub-centavo (ruído float snapshot×live) é arredondada para 0', () => {
+        // Sexta gravada = 15023.65; live de sábado recalcula 15023.6499 (renda fixa
+        // não rende no fim de semana, mas snapshot×live divergem por fração de centavo).
+        // O -0,0001 NÃO pode virar "-R$ 0,00" vermelho: deve ser exatamente 0.
+        const history = [snap(2026, 5, 30, 15023.65, 15000)];
+        const pts = build(history, kpis(15023.6499, 15000, 23.6499), 'DAILY', '30D');
+        const live = pts[pts.length - 1];
+        expect(live.isLive).toBe(true);
+        expect(live.periodVariation).toBe(0);
+        expect(live.periodVariationPercent).toBe(0);
+    });
+
     it('prejuízo: baseBar=equity, profitBar=0 e lossBar=invested−equity (capa vermelha)', () => {
         const history = [snap(2026, 5, 30, 900, 1000)];
         const pts = build(history, kpis(900, 1000, -100), 'DAILY', '30D');

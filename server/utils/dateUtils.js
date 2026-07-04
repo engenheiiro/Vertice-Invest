@@ -40,10 +40,18 @@ export const dateKeyToUtcDate = (date) => {
     return key ? new Date(`${key}T00:00:00.000Z`) : null;
 };
 
+// Dia útil ancorado em UTC. As datas do projeto são "dias puros" à meia-noite UTC
+// (dateKeyToUtcDate, brazilDateOnly, brazilToday, calcDate). Usar getDay()/setHours
+// (LOCAL) fazia o resultado depender do fuso do PROCESSO: num servidor UTC (prod)
+// funcionava, mas num dev em BRT (UTC-3) a meia-noite UTC vira 21h do dia anterior
+// → o dia da semana e a contagem retrocediam 1 dia (ex.: renda fixa "rendia" no
+// sábado no dev). getUTCDay()/setUTCHours mantêm dev e prod idênticos.
+// (Em processo UTC, getDay()===getUTCDay() e setHours(0..)===setUTCHours(0..), então
+//  este ajuste é NO-OP em produção — só torna o dev determinístico.)
 export const isBusinessDay = (date) => {
-    const day = date.getDay();
+    const day = date.getUTCDay();
     if (day === 0 || day === 6) return false; // Sábado ou Domingo
-    
+
     const isoDate = date.toISOString().split('T')[0];
     if (holidayService.isHoliday(isoDate)) return false; // Feriado
 
@@ -54,16 +62,16 @@ export const countBusinessDays = (startDate, endDate) => {
     let count = 0;
     const curDate = new Date(startDate);
     const end = new Date(endDate);
-    
-    // Normaliza horas para evitar problemas de fuso
-    curDate.setHours(0,0,0,0);
-    end.setHours(0,0,0,0);
+
+    // Normaliza para meia-noite UTC (independe do fuso do processo).
+    curDate.setUTCHours(0, 0, 0, 0);
+    end.setUTCHours(0, 0, 0, 0);
 
     // Se datas forem iguais, 0 dias
     if (curDate.getTime() >= end.getTime()) return 0;
 
     while (curDate < end) {
-        curDate.setDate(curDate.getDate() + 1);
+        curDate.setUTCDate(curDate.getUTCDate() + 1);
         if (isBusinessDay(curDate)) {
             count++;
         }
@@ -75,7 +83,7 @@ export const addBusinessDays = (date, days) => {
     const result = new Date(date);
     let added = 0;
     while (added < days) {
-        result.setDate(result.getDate() + 1);
+        result.setUTCDate(result.getUTCDate() + 1);
         if (isBusinessDay(result)) {
             added++;
         }

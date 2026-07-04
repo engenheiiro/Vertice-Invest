@@ -241,8 +241,15 @@ function withVariation(points: RawPoint[], sortedHistory: HistoryPoint[]): Evolu
 
         const equityDiff = item.realEquity - prevEquity;
         const investedDiff = item.realInvested - prevInvested;
-        const periodVariation = equityDiff - investedDiff;
-        const periodVariationPercent = prevEquity > 0 ? (periodVariation / prevEquity) * 100 : null;
+        let periodVariation = equityDiff - investedDiff;
+        // Ruído sub-centavo (divergência de ponto flutuante entre o snapshot GRAVADO
+        // e o recálculo LIVE, que passa por safeMult) não é variação real. Arredonda
+        // para zero para não pintar de vermelho um "-R$ 0,00" num dia sem movimento —
+        // ex.: ponto live de fim de semana, onde renda fixa não rende nada.
+        if (Math.abs(periodVariation) < 0.005) periodVariation = 0;
+        const periodVariationPercent = prevEquity > 0
+            ? (periodVariation === 0 ? 0 : (periodVariation / prevEquity) * 100)
+            : null;
 
         return { ...item, periodVariation, periodVariationPercent };
     });

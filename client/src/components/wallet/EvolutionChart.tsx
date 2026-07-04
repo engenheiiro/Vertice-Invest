@@ -199,6 +199,11 @@ export const EvolutionChart = React.memo(() => {
                                     const variation = data.periodVariation || 0;
                                     const variationPct = data.periodVariationPercent;
                                     const isLive = data.isLive;
+                                    // Zero é NEUTRO (cinza), não verde nem vermelho — dia sem
+                                    // movimento (ex.: fim de semana de renda fixa) não é ganho
+                                    // nem perda. Evita o "-R$ 0,00" vermelho por ruído de float.
+                                    const variationColor = variation > 0 ? 'text-emerald-400' : variation < 0 ? 'text-red-500' : 'text-slate-400';
+                                    const variationSign = variation > 0 ? '+' : '';
 
                                     return (
                                         <div className="bg-elevated border border-slate-700 rounded-xl p-3 shadow-2xl z-50 min-w-[210px]">
@@ -221,8 +226,8 @@ export const EvolutionChart = React.memo(() => {
 
                                                 <div className="flex justify-between items-center gap-6 text-xs">
                                                     <span className="text-slate-400 font-bold whitespace-nowrap">Variação no período</span>
-                                                    <span className={`font-mono font-bold whitespace-nowrap text-right ${variation >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
-                                                        {variation >= 0 ? '+' : ''}{formatTooltipCurrency(variation)}
+                                                    <span className={`font-mono font-bold whitespace-nowrap text-right ${variationColor}`}>
+                                                        {variationSign}{formatTooltipCurrency(variation)}
                                                         {variationPct !== null && variationPct !== undefined && (
                                                             <span className="block text-[10px] font-sans opacity-80">{formatPercent(variationPct, { sign: true })}</span>
                                                         )}

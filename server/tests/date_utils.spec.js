@@ -3,7 +3,7 @@
  * startOfDay (meia-noite local) e dateKeyToUtcDate (chave → Date UTC estável).
  */
 import { describe, it, expect } from 'vitest';
-import { toDateKey, startOfDay, dateKeyToUtcDate } from '../utils/dateUtils.js';
+import { toDateKey, startOfDay, dateKeyToUtcDate, isBusinessDay, countBusinessDays } from '../utils/dateUtils.js';
 
 describe('toDateKey', () => {
   it('gera chave YYYY-MM-DD a partir de Date/string/number', () => {
@@ -35,6 +35,27 @@ describe('startOfDay', () => {
     expect(result.getMilliseconds()).toBe(0);
     // não muta o original
     expect(original.getHours()).toBe(15);
+  });
+});
+
+// Regressão: dev (BRT, UTC-3) contava 1 dia útil a MAIS que prod (UTC) porque
+// isBusinessDay usava getDay() e countBusinessDays usava setHours/getDate (LOCAL).
+// A meia-noite UTC ("dia puro") virava 21h do dia anterior em BRT → renda fixa
+// "rendia" no sábado no dev. Ancorado em UTC, dev e prod dão o MESMO resultado.
+describe('isBusinessDay / countBusinessDays — ancorados em UTC (independem do fuso)', () => {
+  it('dia da semana pela data UTC pura (sexta útil, sáb/dom não)', () => {
+    expect(isBusinessDay(new Date('2026-07-03T00:00:00.000Z'))).toBe(true);  // sexta
+    expect(isBusinessDay(new Date('2026-07-04T00:00:00.000Z'))).toBe(false); // sábado
+    expect(isBusinessDay(new Date('2026-07-05T00:00:00.000Z'))).toBe(false); // domingo
+    expect(isBusinessDay(new Date('2026-07-06T00:00:00.000Z'))).toBe(true);  // segunda
+  });
+
+  it('sábado NÃO adiciona dia útil sobre a sexta (reserva não rende no fim de semana)', () => {
+    const lote = new Date('2026-06-30T00:00:00.000Z'); // terça
+    expect(countBusinessDays(lote, new Date('2026-07-03T00:00:00.000Z'))).toBe(3); // sexta
+    expect(countBusinessDays(lote, new Date('2026-07-04T00:00:00.000Z'))).toBe(3); // sábado = sexta
+    expect(countBusinessDays(lote, new Date('2026-07-05T00:00:00.000Z'))).toBe(3); // domingo = sexta
+    expect(countBusinessDays(lote, new Date('2026-07-06T00:00:00.000Z'))).toBe(4); // segunda
   });
 });
 
