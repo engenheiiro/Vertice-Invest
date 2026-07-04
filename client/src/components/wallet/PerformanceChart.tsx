@@ -50,6 +50,9 @@ export const PerformanceChart = React.memo(() => {
     // claro some no fundo branco e cinza-escuro some no fundo escuro. slate-600 no
     // claro / slate-300 no escuro garante contraste nos dois.
     const ibovStroke = theme === 'light' ? '#475569' : '#cbd5e1';
+    // Linhas de apoio do eixo Y: slate-800 (#1e293b) é sutil no escuro, mas fica
+    // forte demais no fundo branco. slate-200 no claro mantém o mesmo ar "apagado".
+    const gridStroke = theme === 'light' ? '#e2e8f0' : '#1e293b';
 
     const { isDemoMode } = useDemo();
     const { kpis } = useWallet();
@@ -309,7 +312,7 @@ export const PerformanceChart = React.memo(() => {
                             </linearGradient>
                         </defs>
 
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
 
                         <XAxis
                             dataKey="date"
