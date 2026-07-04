@@ -65,6 +65,31 @@ if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
 
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
+// (F5) Rotação de refresh token com janela de graça para concorrência multi-aba.
+// O cookie de refresh é COMPARTILHADO entre abas do mesmo domínio; duas abas podem
+// apresentar o mesmo token simultaneamente antes de qualquer resposta rotacioná-lo.
+// Sem graça, o "perdedor" da corrida receberia 401 e cairia no /login. Guardamos
+// por poucos segundos o mapeamento hash-antigo → novo cookie: a aba retardatária
+// recebe o MESMO novo token em vez de erro. Fora dessa janela, hash ausente = reuso.
+const REFRESH_GRACE_MS = 15 * 1000;
+const recentlyRotated = new Map(); // oldHash -> { newTokenString, userId, expires }
+
+const rememberRotation = (oldHash, newTokenString, userId) => {
+  recentlyRotated.set(oldHash, { newTokenString, userId, expires: Date.now() + REFRESH_GRACE_MS });
+  // Expurgo oportunístico para não crescer indefinidamente.
+  if (recentlyRotated.size > 10_000) {
+    const now = Date.now();
+    for (const [k, v] of recentlyRotated) if (v.expires < now) recentlyRotated.delete(k);
+  }
+};
+
+const consumeGraceRotation = (oldHash) => {
+  const entry = recentlyRotated.get(oldHash);
+  if (!entry) return null;
+  if (Date.now() > entry.expires) { recentlyRotated.delete(oldHash); return null; }
+  return entry;
+};
+
 // --- UTILS DE SEGURANÇA ---
 
 // Log de Auditoria
@@ -257,33 +282,85 @@ export const login = async (req, res, next) => {
   }
 };
 
+// Emite (ou reemite) o cookie de refresh e devolve o access token correspondente.
+const emitSession = (req, res, user, refreshTokenString) => {
+  res.cookie('jwt', refreshTokenString, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: REFRESH_TOKEN_EXPIRATION_DAYS * 24 * 60 * 60 * 1000,
+  });
+  // (1.4) Auto-cura: garante o cookie CSRF (sessões anteriores ao deploy).
+  issueCsrfToken(req, res);
+  return jwt.sign(
+    { id: user._id, email: user.email, plan: user.plan, role: user.role },
+    JWT_SECRET,
+    { expiresIn: ACCESS_TOKEN_EXPIRATION }
+  );
+};
+
 export const refreshToken = async (req, res, next) => {
   try {
     const cookies = req.cookies;
     if (!cookies?.jwt) return res.status(401).json({ message: "Sessão inválida." });
-    
+
     const requestToken = cookies.jwt;
-    const tokenInDb = await RefreshToken.findOne({ token: hashToken(requestToken) });
-    
-    if (!tokenInDb || RefreshToken.verifyExpiration(tokenInDb)) {
-      if (tokenInDb) await RefreshToken.findByIdAndDelete(tokenInDb._id);
-      logAudit(req, 'TOKEN_REFRESH_FAILED', 'Token de refresh inválido ou expirado');
+    const requestHash = hashToken(requestToken);
+    const tokenInDb = await RefreshToken.findOne({ token: requestHash });
+
+    // Hash não está no banco: pode ser (a) uma corrida multi-aba dentro da janela
+    // de graça — reemite o mesmo token novo já rotacionado; ou (b) reuso de um
+    // token já consumido/roubado — revoga TODA a família como precaução.
+    if (!tokenInDb) {
+      const grace = consumeGraceRotation(requestHash);
+      if (grace) {
+        const user = await User.findById(grace.userId);
+        if (user) {
+          const newAccessToken = emitSession(req, res, user, grace.newTokenString);
+          return res.status(200).json({ accessToken: newAccessToken });
+        }
+      }
+      // Reuso fora da graça: se o JWT ainda é estruturalmente válido, revoga a família.
+      try {
+        const decoded = jwt.verify(requestToken, JWT_REFRESH_SECRET);
+        if (decoded?.id) {
+          await RefreshToken.deleteMany({ user: decoded.id });
+          logAudit(req, 'TOKEN_REUSE_DETECTED', 'Refresh token reusado — todas as sessões revogadas', decoded.id);
+        }
+      } catch { /* JWT inválido/expirado: nada a revogar */ }
+      logAudit(req, 'TOKEN_REFRESH_FAILED', 'Token de refresh inválido ou reusado');
+      return res.status(401).json({ message: "Sessão expirada." });
+    }
+
+    if (RefreshToken.verifyExpiration(tokenInDb)) {
+      await RefreshToken.findByIdAndDelete(tokenInDb._id);
+      logAudit(req, 'TOKEN_REFRESH_FAILED', 'Token de refresh expirado');
       return res.status(401).json({ message: "Sessão expirada." });
     }
 
     const user = await User.findById(tokenInDb.user);
     if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
 
-    const newAccessToken = jwt.sign(
-      { id: user._id, email: user.email, plan: user.plan, role: user.role },
-      JWT_SECRET,
-      { expiresIn: ACCESS_TOKEN_EXPIRATION }
+    // ROTAÇÃO (uso único): invalida o token apresentado e emite um novo. Limita a
+    // janela de utilidade de um refresh token vazado a uma única renovação.
+    await RefreshToken.findByIdAndDelete(tokenInDb._id);
+
+    const newRefreshTokenString = jwt.sign(
+      { id: user._id },
+      JWT_REFRESH_SECRET,
+      { expiresIn: `${REFRESH_TOKEN_EXPIRATION_DAYS}d` }
     );
+    const expiredAt = new Date();
+    expiredAt.setDate(expiredAt.getDate() + REFRESH_TOKEN_EXPIRATION_DAYS);
+    await RefreshToken.create({
+      token: hashToken(newRefreshTokenString),
+      user: user._id,
+      expiryDate: expiredAt,
+    });
+    // Registra a rotação para a janela de graça (corrida multi-aba).
+    rememberRotation(requestHash, newRefreshTokenString, user._id.toString());
 
-    // (1.4) Auto-cura: emite o cookie CSRF se a sessão (anterior ao deploy)
-    // ainda não tem um. Mantém o existente para não invalidar requests em voo.
-    issueCsrfToken(req, res);
-
+    const newAccessToken = emitSession(req, res, user, newRefreshTokenString);
     res.status(200).json({ accessToken: newAccessToken });
 
   } catch (error) {

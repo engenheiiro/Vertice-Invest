@@ -6,7 +6,11 @@ const TransactionSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   currency: { type: String, default: 'BRL' },
   status: { type: String, enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED'], default: 'PENDING' },
-  gatewayId: { type: String }, // ID da transação no Stripe/Pagar.me (Simulado)
+  // Índice único (sparse): garante idempotência de webhook/sync — a mesma
+  // notificação do Mercado Pago (entregas duplicadas são normais) não pode
+  // criar duas Transactions nem creditar plano em dobro. `sparse` permite
+  // múltiplos documentos sem gatewayId (ex.: registros legados/manuais).
+  gatewayId: { type: String, unique: true, sparse: true }, // ID da transação no gateway
   method: { type: String, enum: ['CREDIT_CARD', 'PIX', 'CRYPTO'], default: 'CREDIT_CARD' },
   createdAt: { type: Date, default: Date.now }
 });

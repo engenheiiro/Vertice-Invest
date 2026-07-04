@@ -121,6 +121,28 @@ export const handleMercadoPagoWebhook = async (req, res) => {
                 const user = await User.findById(userId);
 
                 if (user) {
+                    // Barreira de idempotência ATÔMICA: cria a Transaction ANTES de
+                    // estender o plano. O índice único em gatewayId faz a 2ª entrega
+                    // concorrente do MP falhar com E11000 aqui — nunca creditando +30
+                    // dias duas vezes nem duplicando o registro de cobrança. O findOne
+                    // acima é apenas fast-path; esta é a garantia real.
+                    try {
+                        await Transaction.create({
+                            user: user._id,
+                            plan: plan,
+                            amount: amount,
+                            status: 'PAID',
+                            method: payment.payment_type_id === 'bank_transfer' ? 'PIX' : 'CREDIT_CARD',
+                            gatewayId: resourceId.toString()
+                        });
+                    } catch (e) {
+                        if (e.code === 11000) {
+                            logger.info(`♻️ Pagamento ${resourceId} já processado (índice único). Ignorando.`);
+                            return res.status(200).send('OK');
+                        }
+                        throw e;
+                    }
+
                     const now = new Date();
                     let newValidUntil = new Date();
 
@@ -139,15 +161,6 @@ export const handleMercadoPagoWebhook = async (req, res) => {
                     invalidateUser(user._id); // (I6) plano mudou → derruba cache do authMiddleware
 
                     await sendCheckoutConfirmationEmail(user.email, plan, newValidUntil);
-
-                    await Transaction.create({
-                        user: user._id,
-                        plan: plan,
-                        amount: amount,
-                        status: 'PAID',
-                        method: payment.payment_type_id === 'bank_transfer' ? 'PIX' : 'CREDIT_CARD',
-                        gatewayId: resourceId.toString()
-                    });
 
                     logger.info(`✅ Acesso liberado para user ${user._id} até ${newValidUntil.toISOString()}`);
                 } else {

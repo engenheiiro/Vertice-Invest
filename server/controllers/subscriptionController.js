@@ -199,6 +199,26 @@ export const syncPayment = async (req, res, next) => {
                 return res.json({ success: true, message: "Plano já estava ativo." });
             }
 
+            // Barreira de idempotência ATÔMICA (mesma do webhook): cria a Transaction
+            // ANTES de estender o plano. O índice único em gatewayId impede que esta
+            // rota e o webhook creditem o mesmo pagamento em dobro numa corrida.
+            try {
+                await Transaction.create({
+                    user: user._id,
+                    plan: plan,
+                    amount: payment.transaction_amount,
+                    status: 'PAID',
+                    method: payment.payment_type_id === 'bank_transfer' ? 'PIX' : 'CREDIT_CARD',
+                    gatewayId: paymentId.toString()
+                });
+            } catch (e) {
+                if (e.code === 11000) {
+                    logger.info(`♻️ [Sync] Pagamento ${paymentId} já processado (índice único).`);
+                    return res.json({ success: true, message: "Pagamento já processado." });
+                }
+                throw e;
+            }
+
             const now = new Date();
             let newValidUntil = new Date();
             if (user.validUntil && new Date(user.validUntil) > now) {
@@ -213,19 +233,6 @@ export const syncPayment = async (req, res, next) => {
 
             await user.save();
             invalidateUser(user._id); // (I6) plano mudou → derruba cache do authMiddleware
-
-            // Salva Transação se não existir
-            const existingTx = await Transaction.findOne({ gatewayId: paymentId.toString() });
-            if (!existingTx) {
-                await Transaction.create({
-                    user: user._id,
-                    plan: plan,
-                    amount: payment.transaction_amount,
-                    status: 'PAID',
-                    method: payment.payment_type_id === 'bank_transfer' ? 'PIX' : 'CREDIT_CARD',
-                    gatewayId: paymentId.toString()
-                });
-            }
 
             logger.info(`✅ [Sync] Plano ${plan} ativado manualmente para user ${user._id}`);
             return res.json({ success: true, plan, validUntil: newValidUntil });

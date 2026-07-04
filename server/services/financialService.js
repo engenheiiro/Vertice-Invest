@@ -534,8 +534,9 @@ export const financialService = {
 
     /**
      * Ingestão de proventos: busca o histórico de cada ticker e faz upsert em
-     * DividendEvent (índice único ticker+date+amount evita duplicar). Cripto,
-     * renda fixa e caixa são ignorados. `assets`: [{ ticker, type }].
+     * DividendEvent (índice único ticker+date+type — o valor NÃO entra na chave;
+     * ver DividendEvent.js). Cripto, renda fixa e caixa são ignorados.
+     * `assets`: [{ ticker, type }].
      */
     async syncDividends(assets) {
         if (!Array.isArray(assets) || assets.length === 0) return { tickers: 0, events: 0 };

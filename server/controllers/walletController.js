@@ -936,6 +936,16 @@ export const deleteTransaction = async (req, res, next) => {
 const DIVIDEND_HEAL_TTL = 60 * 60 * 1000;
 const dividendHealAt = new Map();
 
+// (F9) Expurgo oportunístico: sem isto o Map cresce 1 entrada por usuário para
+// sempre (vazamento lento). Remove marcas de heal já expiradas quando o Map
+// passa de um teto — barato e limita o uso de memória do processo.
+const DIVIDEND_HEAL_MAX = 50_000;
+const pruneDividendHeal = () => {
+    if (dividendHealAt.size < DIVIDEND_HEAL_MAX) return;
+    const cutoff = Date.now() - DIVIDEND_HEAL_TTL;
+    for (const [uid, ts] of dividendHealAt) if (ts < cutoff) dividendHealAt.delete(uid);
+};
+
 export const getWalletDividends = async (req, res, next) => {
     try {
         const userId = req.user.id;
@@ -977,6 +987,7 @@ export const getWalletDividends = async (req, res, next) => {
         if (isEmpty) {
             const last = dividendHealAt.get(userId) || 0;
             if (Date.now() - last > DIVIDEND_HEAL_TTL) {
+                pruneDividendHeal();
                 dividendHealAt.set(userId, Date.now());
                 (async () => {
                     try {

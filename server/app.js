@@ -64,8 +64,13 @@ if (process.env.SENTRY_DSN) {
 // (I7) Documentação interativa da API em /api/docs. Montada ANTES do helmet
 // porque a Swagger UI usa scripts/estilos inline que a CSP estrita bloquearia.
 // Também expõe o JSON cru do spec em /api/docs.json para tooling.
-app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { customSiteTitle: 'Vértice Invest API' }));
+// (F7) Fora de produção por padrão: expor toda a superfície da API a não
+// autenticados é divulgação desnecessária. ENABLE_API_DOCS=true reabilita se
+// preciso (ex.: ambiente de staging com acesso restrito).
+if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_API_DOCS === 'true') {
+  app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { customSiteTitle: 'Vértice Invest API' }));
+}
 
 app.use(helmet({
   hsts: process.env.NODE_ENV === 'production'

@@ -5,7 +5,7 @@ import { getMfaStatus, setupMfa, enableMfa, disableMfa } from '../controllers/mf
 import validate from '../middleware/validateResource.js';
 import { registerSchema, loginSchema, updateProfileSchema, avatarSchema } from '../schemas/authSchemas.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
-import { dataExportLimiter, accountDeleteLimiter, avatarUploadLimiter } from '../middleware/rateLimiters.js';
+import { dataExportLimiter, accountDeleteLimiter, avatarUploadLimiter, changePasswordLimiter } from '../middleware/rateLimiters.js';
 
 const router = express.Router();
 
@@ -22,7 +22,7 @@ router.put('/me', authenticateToken, validate(updateProfileSchema), updateProfil
 // (3.17) Foto de perfil — rate limiter dedicado (payload maior).
 router.put('/me/avatar', avatarUploadLimiter, authenticateToken, validate(avatarSchema), updateAvatar);
 router.delete('/me/avatar', authenticateToken, removeAvatar);
-router.post('/change-password', authenticateToken, changePassword);
+router.post('/change-password', changePasswordLimiter, authenticateToken, changePassword);
 router.post('/tutorial-seen', authenticateToken, markTutorialSeen);
 router.post('/me/deactivate', authenticateToken, deactivateAccount);
 router.get('/me/export', dataExportLimiter, authenticateToken, exportData);

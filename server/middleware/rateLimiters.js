@@ -74,4 +74,13 @@ export const avatarUploadLimiter = createUserLimiter({
   message: 'Muitas atualizações de foto. Aguarde alguns minutos.',
 });
 
+// (F6) Troca de senha: faz bcrypt.compare da senha ATUAL — sem limiter dedicado,
+// uma sessão sequestrada teria o orçamento amplo do apiLimiter (3000/15min) para
+// brute-force da senha atual. 10/15min por usuário é folgado para uso legítimo.
+export const changePasswordLimiter = createUserLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Muitas tentativas de troca de senha. Aguarde alguns minutos.',
+});
+
 export { createUserLimiter };
