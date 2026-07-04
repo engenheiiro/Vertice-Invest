@@ -548,7 +548,13 @@ export const getWalletPerformance = async (req, res, next) => {
         const currentRate = config?.cdi || DEFAULT_SELIC_FALLBACK;
         let accumulatedCDI = 1.0;
         let accumulatedIPCA = 1.0; // IPCA + 6%
-        let previousDate = startOfDay(history[0].date);
+        // (TZ) Ancora no DIA-CALENDÁRIO BR do snapshot, não em startOfDay(date). O
+        // snapshot é gravado às 23:59 BRT (= 02:59 UTC do dia seguinte); startOfDay
+        // num servidor UTC devolvia o dia SEGUINTE, e o countBusinessDays entre
+        // snapshots perdia a sexta (o snapshot de sexta caía num "sábado"), fazendo
+        // o CDI acumular 1 dia útil A MENOS que a carteira — que então "batia" o CDI
+        // sendo 100% CDI (impossível). brazilDateOnly alinha benchmark e carteira.
+        let previousDate = brazilDateOnly(history[0].date);
 
         // Taxas para IPCA+6%
         const ipcaRate = config?.ipca || 4.5;
@@ -569,7 +575,7 @@ export const getWalletPerformance = async (req, res, next) => {
 
         const result = history.map((point, index) => {
             const dateStr = toDateKey(point.date);
-            const currentDate = startOfDay(point.date);
+            const currentDate = brazilDateOnly(point.date);
 
             const daysDelta = countBusinessDays(previousDate, currentDate);
 

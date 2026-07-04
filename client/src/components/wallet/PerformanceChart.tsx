@@ -382,10 +382,10 @@ export const PerformanceChart = React.memo(() => {
                             type="monotone"
                             dataKey={viewMode === 'brl' ? 'ibovBRL' : 'ibov'}
                             name={viewMode === 'brl' ? 'ibovBRL' : 'ibov'}
-                            stroke="#64748b"
+                            stroke="#cbd5e1"
                             strokeWidth={2}
                             fill="transparent"
-                            strokeOpacity={0.5}
+                            strokeDasharray="6 3"
                             activeDot={false}
                         />
 
