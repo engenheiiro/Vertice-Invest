@@ -1,18 +1,30 @@
 
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import * as Sentry from '@sentry/node';
 import https from 'https';
 import http from 'http';
 import SystemConfig from '../models/SystemConfig.js';
 import TreasuryBond from '../models/TreasuryBond.js';
 import EconomicIndex from '../models/EconomicIndex.js';
-import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
+import { DEFAULT_SELIC_FALLBACK, DEFAULT_NTNB_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import AssetHistory from '../models/AssetHistory.js';
 import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
 import { isBusinessDay } from '../utils/dateUtils.js';
 
 const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391, SELIC_DAILY: 11 };
+
+// --- Plausibilidade da taxa REAL da NTN-B (Tesouro IPCA+) longa ---
+// Yields reais brasileiros de longo prazo historicamente vivem em ~2%–9%.
+// Um valor bem acima disso (ex.: ~12%) quase sempre é contaminação da fonte:
+// o retorno NOMINAL projetado = taxa real ⊕ IPCA (7,3% ⊕ 4,7% ≈ 12,4%), e não
+// a taxa real de referência. Esta faixa rejeita leituras corrompidas antes que
+// cheguem ao scoring (Bazin/spread vs Tesouro em ações e FIIs).
+export const NTNB_REAL_MIN = 2.0;
+export const NTNB_REAL_MAX = 9.5;
+export const isPlausibleNtnbRate = (rate) =>
+    Number.isFinite(rate) && rate >= NTNB_REAL_MIN && rate <= NTNB_REAL_MAX;
 
 // Verificação de certificado HABILITADA por padrão (segurança contra MITM).
 // Escape hatch: defina ALLOW_INSECURE_TLS=true SOMENTE se o ambiente de
@@ -478,23 +490,58 @@ export const macroDataService = {
             let ntnbRate = null;
 
             for (const year of longMaturityYears) {
-                const bond = records.find(r =>
-                    r['Tipo Titulo']?.includes('IPCA+') &&
-                    r['Tipo Titulo']?.includes(String(year))
-                );
+                const bond = records.find(r => {
+                    const tipo = String(r['Tipo Titulo'] || '');
+                    // Apenas NTN-B de referência: IPCA+ e NUNCA Educa+/Renda+
+                    // (que são IPCA-indexados mas têm taxa/estrutura diferentes).
+                    if (!/IPCA\+/i.test(tipo) || /Educa|Renda/i.test(tipo)) return false;
+                    // O ano de vencimento pode vir no campo próprio ou no nome do título.
+                    const venc = String(r['Vencimento do Titulo'] || tipo);
+                    return venc.includes(String(year));
+                });
                 if (bond) {
                     // Taxa Venda Manhã é o que o investidor paga — mais conservador para benchmark
                     const rate = parseFloat(bond['Taxa Venda Manha'] ?? bond['Taxa Compra Manha'] ?? 0);
-                    if (rate > 3 && rate < 20) {
+                    if (isPlausibleNtnbRate(rate)) {
                         ntnbRate = rate;
                         logger.debug(`🏛️ [NTN-B] Fonte oficial (Tesouro Transparente): ${rate}% a.a. (IPCA+ ${year})`);
                         break;
+                    } else if (rate > 0) {
+                        logger.warn(`⚠️ [NTN-B] Taxa oficial implausível descartada: ${rate}% (IPCA+ ${year})`);
                     }
                 }
             }
             return ntnbRate;
         } catch (error) {
             logger.debug(`[NTN-B] Fonte oficial indisponível (${error.message}). Usando Investidor10.`);
+            return null;
+        }
+    },
+
+    // Última taxa REAL de NTN-B longa já persistida e plausível.
+    // Fallback preferível ao hardcoded quando as fontes ao vivo falham ou
+    // retornam valor contaminado — mantém o benchmark ancorado no último dado
+    // real conhecido em vez de um número arbitrário.
+    async getLastKnownNtnbRate() {
+        try {
+            const rows = await TreasuryBond.find({
+                index: 'IPCA',
+                type: 'IPCA',
+                title: /IPCA\+/i,
+                rate: { $gte: NTNB_REAL_MIN, $lte: NTNB_REAL_MAX }
+            }).sort({ updatedAt: -1 }).limit(20).lean();
+
+            if (!rows.length) return null;
+
+            const yearOf = (t) => {
+                const m = String(t).match(/20\d{2}/g);
+                return m ? Math.max(...m.map(Number)) : 0;
+            };
+            const long = rows.filter(r => yearOf(r.title) >= 2035);
+            const pick = (long.length ? long : rows)
+                .sort((a, b) => yearOf(b.title) - yearOf(a.title))[0];
+            return pick ? pick.rate : null;
+        } catch {
             return null;
         }
     },
@@ -530,41 +577,50 @@ export const macroDataService = {
     },
 
     async updateTreasuryRates() {
-        // Cadeia de prioridade para NTN-B:
+        // Cadeia de prioridade para NTN-B (sempre validada pela faixa de
+        // plausibilidade da taxa REAL — isPlausibleNtnbRate):
         // 1. Tesouro Transparente (API oficial gov.br)
         // 2. Investidor10 (scraping — fallback)
-        // 3. Hardcoded 6.00% (emergência)
-        let ntnbLongRate = 6.00;
+        // 3. Última taxa real plausível já persistida no banco
+        // 4. Hardcoded DEFAULT_NTNB_FALLBACK (emergência)
+        let ntnbLongRate = null;
+        let ntnbSource = null;
 
         const officialRate = await this.fetchNtnbFromTesouroDireto();
-        if (officialRate) {
+        if (isPlausibleNtnbRate(officialRate)) {
             ntnbLongRate = officialRate;
+            ntnbSource = 'TesouroTransparente';
         }
 
         // Scraping do Investidor10 mantido para popular a tabela de títulos do frontend
         // mesmo quando a taxa NTN-B já foi obtida pela fonte oficial
         const list = await this.scrapeInvestidor10();
-        if (!officialRate && list.length === 0) {
-            logger.warn(`⚠️ [Tesouro] Ambas as fontes falharam. Usando fallback hardcoded: ${ntnbLongRate}%`);
-        }
-        
+
         const uniqueBondsMap = new Map();
 
         list.forEach(bond => {
             const cleanTitle = bond.title.replace(/\s+/g, ' ').trim();
-            
+
             let type = 'IPCA';
             let index = 'IPCA';
             if (cleanTitle.includes('Prefixado') || cleanTitle.includes('LTN')) { type = 'PREFIXADO'; index = 'PRE'; }
             else if (cleanTitle.includes('Selic') || cleanTitle.includes('LFT')) { type = 'SELIC'; index = 'SELIC'; }
-            else if (cleanTitle.includes('Renda+')) { type = 'RENDAMAIS'; }
-            else if (cleanTitle.includes('Educa+')) { type = 'EDUCA'; }
-            
-            // Só usa taxa do scraping se a fonte oficial não conseguiu a taxa
-            if (!officialRate && type === 'IPCA' && (cleanTitle.includes('2035') || cleanTitle.includes('2045'))) {
-                if (bond.rate > 4) {
+            else if (/Renda\+/i.test(cleanTitle)) { type = 'RENDAMAIS'; }
+            else if (/Educa\+/i.test(cleanTitle)) { type = 'EDUCA'; }
+
+            // Só usa a taxa do scraping se ainda não temos taxa ao vivo E se for
+            // uma NTN-B de referência (IPCA+ longa, nunca Educa+/Renda+) E se a
+            // taxa for plausível como YIELD REAL. Isso rejeita a contaminação
+            // NOMINAL (~12% = real ⊕ IPCA) que o Investidor10 passou a exibir.
+            const isGenuineNtnb = type === 'IPCA' && /IPCA\+/i.test(cleanTitle) && !/Educa|Renda/i.test(cleanTitle);
+            const isLong = /20(3[5-9]|[4-9]\d)/.test(cleanTitle); // vencimento >= 2035
+            if (!ntnbLongRate && isGenuineNtnb && isLong) {
+                if (isPlausibleNtnbRate(bond.rate)) {
                     ntnbLongRate = bond.rate;
+                    ntnbSource = 'Investidor10';
                     logger.info(`🏛️ [NTN-B] Fonte fallback (Investidor10): ${bond.rate}% a.a.`);
+                } else {
+                    logger.warn(`⚠️ [NTN-B] Taxa de scraping implausível ignorada: ${bond.rate}% (${cleanTitle})`);
                 }
             }
 
@@ -595,9 +651,26 @@ export const macroDataService = {
 
             await TreasuryBond.bulkWrite(operations);
             logger.debug(`🏛️ [Tesouro Direto] Atualizado com sucesso: ${uniqueBonds.length} títulos.`);
-        } 
-        
-        return { ntnbLong: ntnbLongRate };
+        }
+
+        // Nenhuma fonte ao vivo entregou taxa REAL plausível: ancora no último
+        // valor real conhecido do banco antes de cair no hardcoded. Alerta via
+        // Sentry para que a defasagem/quebra do scraper seja visível.
+        if (!ntnbLongRate) {
+            const lastKnown = await this.getLastKnownNtnbRate();
+            if (lastKnown) {
+                ntnbLongRate = lastKnown;
+                ntnbSource = 'último-conhecido';
+            } else {
+                ntnbLongRate = DEFAULT_NTNB_FALLBACK;
+                ntnbSource = 'hardcoded';
+            }
+            const msg = `[NTN-B] Nenhuma fonte ao vivo com taxa real plausível; usando fallback (${ntnbSource}: ${ntnbLongRate}%)`;
+            logger.warn(`⚠️ ${msg}`);
+            Sentry.captureMessage(msg, 'warning');
+        }
+
+        return { ntnbLong: ntnbLongRate, ntnbSource };
     },
 
     // Busca e armazena série histórica diária de USD/BRL (últimos 2 anos)
@@ -740,7 +813,11 @@ export const macroDataService = {
         if (spxReturn12m) config.spxReturn12m = spxReturn12m;
         if (ibovReturn12m) config.ibovReturn12m = ibovReturn12m;
 
-        if (treasury && treasury.ntnbLong) config.ntnbLong = treasury.ntnbLong;
+        if (treasury && treasury.ntnbLong) {
+            config.ntnbLong = treasury.ntnbLong;
+            // Observabilidade: fonte efetiva da NTN-B (oficial / scraping / último-conhecido / hardcoded)
+            config.ratesSources = { ...(config.ratesSources || {}), ntnb: treasury.ntnbSource };
+        }
 
         config.lastUpdated = new Date();
         await config.save();

@@ -19,6 +19,8 @@ const SystemConfigSchema = new mongoose.Schema({
   ratesSources: {
     selic: { type: String, default: null },
     ipca: { type: String, default: null },
+    // Fonte efetiva da NTN-B: TesouroTransparente | Investidor10 | último-conhecido | hardcoded
+    ntnb: { type: String, default: null },
   },
   // Último instante em que TODAS as taxas vieram de fonte real (sem fallback).
   ratesUpdatedAt: { type: Date, default: null },
