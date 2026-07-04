@@ -21,7 +21,6 @@ import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
 import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
 import { calculateDailyDietz } from '../utils/mathUtils.js';
-import { isBusinessDay } from '../utils/dateUtils.js';
 import { accrueFixedIncomeValue } from '../utils/fixedIncome.js';
 
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
@@ -47,164 +46,253 @@ const scheduleHeavy = (expression, fn) => {
 };
 
 // --- LÓGICA DE SNAPSHOT ISOLADA (Reutilizável) ---
+//
+// Convenção de datas (crítica): TUDO é ancorado no DIA-CALENDÁRIO de São Paulo.
+// O cron dispara 23:59 BRT, que é 02:59 UTC do dia seguinte. Usar o instante UTC
+// cru (getDay()) fazia o gate de dia útil ver SEXTA como SÁBADO (pulava a sexta)
+// e DOMINGO como SEGUNDA (gravava snapshot indevido). Estas helpers derivam o dia
+// BR e só então checam feriado/fim de semana e compõem o accrual.
+const CATCHUP_MAX_DAYS = 14; // teto de recuperação por usuário (segurança)
+
+// Dia-calendário BR (YYYY-MM-DD) de um instante.
+const brDayStr = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d);
+// Date à meia-noite UTC do dia BR — calcDate do accrual de renda fixa.
+const brCalcDate = (dayStr) => new Date(`${dayStr}T00:00:00.000Z`);
+// Dia útil a partir da STRING do dia BR — independente do fuso do servidor.
+// getUTCDay() sobre a âncora ao meio-dia UTC dá o dia da semana correto do dia BR;
+// o feriado é checado pela própria string YYYY-MM-DD. (isBusinessDay usa getDay()
+// local, que só é correto num servidor UTC — evitamos essa dependência aqui.)
+export const isBrBusinessDay = (dayStr) => {
+    const dow = new Date(`${dayStr}T12:00:00.000Z`).getUTCDay(); // 0=Dom .. 6=Sáb
+    if (dow === 0 || dow === 6) return false;
+    return !holidayService.isHoliday(dayStr);
+};
+// Instante gravado no snapshot: 23:59 BRT do dia — garante que o gráfico (que
+// bucketiza por dia LOCAL no browser BRT) coloque o ponto no dia correto.
+const brSnapshotInstant = (dayStr) => new Date(`${dayStr}T23:59:00.000-03:00`);
+// Limites do dia BR como instantes, para janelas de busca (snapshots/transações).
+const brDayBounds = (dayStr) => ({
+    start: new Date(`${dayStr}T00:00:00.000-03:00`),
+    end: new Date(`${dayStr}T23:59:59.999-03:00`),
+});
+// Próximo dia BR (string). Âncora ao meio-dia UTC evita bordas de fuso/DST.
+const nextBrDay = (dayStr) => {
+    const d = new Date(`${dayStr}T12:00:00.000Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return brDayStr(d);
+};
+// Dias úteis estritamente APÓS fromDayStr e estritamente ANTES de untilDayStr.
+const businessDaysBetween = (fromDayStr, untilDayStr) => {
+    const days = [];
+    let cur = nextBrDay(fromDayStr);
+    let guard = 0;
+    while (cur < untilDayStr && guard++ < 60) {
+        if (isBrBusinessDay(cur)) days.push(cur);
+        cur = nextBrDay(cur);
+    }
+    return days;
+};
+
+// Contexto compartilhado (macro + cotações em lote) de um run de snapshot.
+const loadSnapshotContext = async () => {
+    const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
+    const usdRate = sysConfig?.dollar || 5.75;
+    const currentCdi = (sysConfig?.cdi > 0 ? sysConfig.cdi : null) || (sysConfig?.selic > 0 ? sysConfig.selic : null) || DEFAULT_SELIC_FALLBACK;
+    const macroRates = { cdiRate: currentCdi, selic: sysConfig?.selic, ipca: sysConfig?.ipca };
+    // (F4) Cotações em LOTE, uma vez por run — evita N+1 de getMarketDataByTicker.
+    const liveTickers = await UserAsset.distinct('ticker', { type: { $nin: ['CASH', 'FIXED_INCOME'] } });
+    const priceMap = await marketDataService.getMarketDataMap(liveTickers);
+    return { usdRate, macroRates, priceMap };
+};
+
+// Patrimônio (equity/invested) de um conjunto de ativos numa data de cálculo.
+// Renda fixa/caixa: accrual exato via fonte única (utils/fixedIncome). Renda
+// variável: cotação do priceMap (para dias recuperados, é a cotação corrente —
+// aproximação aceitável para um gap de poucos dias, protegida pelo circuit breaker).
+const computeEquityAt = (assets, { priceMap, macroRates, usdRate, calcDate }) => {
+    let totalEquity = 0;
+    let totalInvested = 0;
+    for (const asset of assets) {
+        const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1;
+        if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
+            totalEquity += accrueFixedIncomeValue(asset, { ...macroRates, calcDate });
+            totalInvested += asset.totalCost;
+        } else {
+            const price = priceMap.get(asset.ticker)?.price || 0;
+            if (price > 0) {
+                totalEquity += asset.quantity * price * multiplier;
+                totalInvested += asset.totalCost * multiplier;
+            }
+        }
+    }
+    return { totalEquity, totalInvested };
+};
+
+// Persiste UM snapshot de um usuário para um dia BR específico.
+// - Idempotente por (user, dia BR): se já existe snapshot no dia, retorna 'exists'
+//   (a menos de force, que substitui). Evita duplicata entre catch-up, cron in-app
+//   e Render Cron Job.
+// - Mantém a cadeia de cotas (TWRR) buscando o snapshot imediatamente ANTERIOR ao dia.
+// Retorna: 'created' | 'exists' | 'empty' | 'anomaly' | 'reset-guard'.
+const persistUserSnapshotForDay = async (user, dayStr, ctx, { assets = null, force = false } = {}) => {
+    const { priceMap, macroRates, usdRate } = ctx;
+    const bounds = brDayBounds(dayStr);
+    const calcDate = brCalcDate(dayStr);
+
+    if (!force) {
+        const existing = await WalletSnapshot.exists({ user: user._id, date: { $gte: bounds.start, $lte: bounds.end } });
+        if (existing) return 'exists';
+    }
+
+    const positions = assets || await UserAsset.find({ user: user._id });
+    const { totalEquity, totalInvested } = computeEquityAt(positions, { priceMap, macroRates, usdRate, calcDate });
+    if (!(totalEquity > 0)) return 'empty';
+
+    // Snapshot anterior (cota/Dietz) — estritamente antes deste dia BR.
+    const lastSnapshot = await WalletSnapshot.findOne({ user: user._id, date: { $lt: bounds.start } }).sort({ date: -1 });
+
+    // Fluxo de caixa DO DIA (aportes/retiradas), no fuso BR.
+    const transactions = await AssetTransaction.find({ user: user._id, date: { $gte: bounds.start, $lte: bounds.end } });
+    let dayFlow = 0;
+    transactions.forEach(tx => {
+        if (tx.type === 'BUY') dayFlow += tx.totalValue;
+        if (tx.type === 'SELL') dayFlow -= tx.totalValue;
+    });
+
+    let quotaPrice = 100;
+    const v0 = lastSnapshot ? lastSnapshot.totalEquity : 0;
+    if (v0 > 0 || dayFlow > 0) {
+        const dailyReturn = calculateDailyDietz(v0, totalEquity, dayFlow);
+        // Circuit breaker: rejeita variação diária absurda (dado corrompido).
+        if (Math.abs(dailyReturn) > 0.5) {
+            logger.warn(`⚠️ Anomalia TWRR ${user._id} @ ${dayStr}: ${(dailyReturn * 100).toFixed(2)}%. Snapshot ignorado.`);
+            if (process.env.SENTRY_DSN) {
+                Sentry.captureMessage(`TWRR Anomaly: User ${user._id} @ ${dayStr} = ${dailyReturn.toFixed(2)}%. Skipped.`);
+            }
+            return 'anomaly';
+        }
+        const prevQuota = lastSnapshot ? (lastSnapshot.quotaPrice || 100) : 100;
+        quotaPrice = prevQuota * (1 + dailyReturn);
+    }
+
+    // Proteção contra Reset Indevido da cota (histórico existente + quota ~100).
+    if (Math.abs(quotaPrice - 100) < 0.1) {
+        const hasHistory = lastSnapshot
+            ? Math.abs(lastSnapshot.quotaPrice - 100) > 5
+            : await WalletSnapshot.exists({ user: user._id });
+        if (hasHistory) {
+            logger.error(`❌ Cota resetou p/ 100 indevidamente ${user._id} @ ${dayStr}. Snapshot abortado.`);
+            return 'reset-guard';
+        }
+    }
+
+    const divData = await financialService.calculateUserDividends(user._id);
+    const totalDividends = divData.totalAllTime;
+
+    if (force) {
+        await WalletSnapshot.deleteMany({ user: user._id, date: { $gte: bounds.start, $lte: bounds.end } });
+    }
+    await WalletSnapshot.create({
+        user: user._id,
+        date: brSnapshotInstant(dayStr),
+        totalEquity,
+        totalInvested,
+        totalDividends,
+        profit: totalEquity - totalInvested + totalDividends,
+        profitPercent: totalInvested > 0 ? ((totalEquity - totalInvested + totalDividends) / totalInvested) * 100 : 0,
+        quotaPrice,
+    });
+    return 'created';
+};
+
+// Recupera dias úteis PERDIDOS de um usuário (entre o último snapshot e hoje,
+// exclusivo). node-cron não reexecuta ticks perdidos (deploy/reinício/erro
+// transitório sobre 23:59) — este catch-up é a rede de segurança que fecha os
+// buracos, com data retroativa correta e accrual exato de renda fixa.
+const backfillUserGap = async (user, todayStr, ctx, assets) => {
+    const last = await WalletSnapshot.findOne({ user: user._id }).sort({ date: -1 });
+    if (!last) return 0; // sem histórico: o fluxo normal cuida do 1º snapshot
+    const lastDayStr = brDayStr(new Date(last.date));
+    const missing = businessDaysBetween(lastDayStr, todayStr).slice(-CATCHUP_MAX_DAYS);
+    let created = 0;
+    for (const dayStr of missing) {
+        const r = await persistUserSnapshotForDay(user, dayStr, ctx, { assets, force: false });
+        if (r === 'created') { created++; logger.info(`🩹 Backfill snapshot ${user.email || user._id} @ ${dayStr}`); }
+    }
+    return created;
+};
+
+// Varredura de recuperação (boot / pré-run diário) sem tocar no dia de hoje.
+export const backfillMissedSnapshots = async () => {
+    try {
+        const todayStr = brDayStr(new Date());
+        const ctx = await loadSnapshotContext();
+        const users = await User.find({}).select('_id email');
+        let created = 0;
+        for (const user of users) {
+            try {
+                created += await backfillUserGap(user, todayStr, ctx, null);
+            } catch (e) {
+                logger.error(`Backfill erro user ${user._id}: ${e.message}`);
+                if (process.env.SENTRY_DSN) Sentry.captureException(e);
+            }
+        }
+        if (created > 0) logger.info(`🩹 Recuperação de snapshots concluída: ${created} dia(s) preenchido(s).`);
+        return { status: 'SUCCESS', created };
+    } catch (error) {
+        logger.error(`❌ Backfill Erro Geral: ${error.message}`);
+        Sentry.captureException(error);
+        return { status: 'ERROR', error: error.message };
+    }
+};
+
 export const runDailySnapshot = async (force = false) => {
-    const today = new Date();
-    
-    // --- DETECÇÃO DE FERIADOS E FIM DE SEMANA ---
-    // Se force = true, ignora a validação de dia útil
-    if (!force && !isBusinessDay(today)) {
+    const now = new Date();
+    const todayStr = brDayStr(now);
+
+    // (FIX TZ) Gate de dia útil ancorado no DIA-CALENDÁRIO do Brasil — nunca no
+    // instante UTC cru. Antes, 'isBusinessDay(new Date())' às 23:59 BRT lia o dia
+    // da semana em UTC (02:59 do dia seguinte), pulando toda SEXTA e gravando
+    // snapshot indevido todo DOMINGO.
+    if (!force && !isBrBusinessDay(todayStr)) {
         logger.info("⏸️ Snapshot Diário ignorado: Dia não útil (Feriado ou Fim de Semana).");
+        // Mesmo em dia não útil, recupera dias úteis perdidos anteriores.
+        await backfillMissedSnapshots();
         return { status: 'SKIPPED', reason: 'Non-business day' };
     }
 
     logger.info(`📸 Iniciando Snapshot Patrimonial Diário (Auditado) [Force: ${force}]...`);
     try {
+        const ctx = await loadSnapshotContext();
         const users = await User.find({}).select('_id email');
-        const startOfDay = new Date(today); startOfDay.setHours(0,0,0,0);
-        const endOfDay = new Date(today); endOfDay.setHours(23,59,59,999);
-        
+
         let snapshotsCreated = 0;
         let snapshotsSkipped = 0;
-
-        const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-        const usdRate = sysConfig?.dollar || 5.75;
-        const currentCdi = (sysConfig?.cdi > 0 ? sysConfig.cdi : null) || (sysConfig?.selic > 0 ? sysConfig.selic : null) || DEFAULT_SELIC_FALLBACK;
-        const macroRates = { cdiRate: currentCdi, selic: sysConfig?.selic, ipca: sysConfig?.ipca };
-        const todayDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(today);
-        const calcDate = new Date(todayDateStr + 'T00:00:00.000Z');
-
-        // (F4) Cotações em LOTE, uma vez para todo o run — antes cada ativo de cada
-        // usuário fazia um getMarketDataByTicker (N+1). Coleta os tickers de renda
-        // variável distintos das carteiras e resolve tudo num único getMarketDataMap.
-        const liveTickers = await UserAsset.distinct('ticker', {
-            type: { $nin: ['CASH', 'FIXED_INCOME'] },
-        });
-        const priceMap = await marketDataService.getMarketDataMap(liveTickers);
+        let backfilled = 0;
 
         for (const user of users) {
             try {
-                // 1. Calcula Patrimônio Atual
+                // Posições buscadas uma vez por usuário (reuso no catch-up + hoje).
                 const assets = await UserAsset.find({ user: user._id });
-                let totalEquity = 0;
-                let totalInvested = 0;
 
-                for (const asset of assets) {
-                    let price = 0;
-                    const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1;
+                // 1) Recupera dias úteis anteriores faltantes (self-healing).
+                backfilled += await backfillUserGap(user, todayStr, ctx, assets);
 
-                    if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
-                        // (F3) Fonte ÚNICA de accrual (utils/fixedIncome) — mesma do KPI
-                        // live em walletController. Antes este caminho ignorava
-                        // fixedIncomeIndex/fixedIncomeSpread (tratava tudo como %CDI ou
-                        // prefixado), divergindo o patrimônio histórico de Tesouro
-                        // Selic/IPCA do valor exibido no KPI.
-                        const accruedValue = accrueFixedIncomeValue(asset, { ...macroRates, calcDate });
-                        totalEquity += accruedValue;
-                        totalInvested += asset.totalCost;
-                    } else {
-                        const marketData = priceMap.get(asset.ticker);
-                        price = marketData?.price || 0;
-                        if (price > 0) {
-                            totalEquity += asset.quantity * price * multiplier;
-                            totalInvested += asset.totalCost * multiplier;
-                        }
-                    }
-                }
-
-                if (totalEquity > 0) {
-                    // 2. Busca Snapshot Anterior para calcular Cota (TWRR)
-                    const lastSnapshot = await WalletSnapshot.findOne({ user: user._id }).sort({ date: -1 });
-                    
-                    let quotaPrice = 100; // Base inicial
-                    let dailyReturn = 0;
-                    let isValidSnapshot = true;
-                    
-                    // 3. Calcula Fluxo de Caixa do Dia (Aportes/Retiradas)
-                    const transactions = await AssetTransaction.find({
-                        user: user._id,
-                        date: { $gte: startOfDay, $lte: endOfDay }
-                    });
-
-                    let dayFlow = 0;
-                    transactions.forEach(tx => {
-                        if (tx.type === 'BUY') dayFlow += tx.totalValue;
-                        if (tx.type === 'SELL') dayFlow -= tx.totalValue;
-                    });
-
-                    const v0 = lastSnapshot ? lastSnapshot.totalEquity : 0;
-                    const v1 = totalEquity;
-                    const f = dayFlow;
-                    
-                    if (v0 > 0 || f > 0) {
-                        dailyReturn = calculateDailyDietz(v0, v1, f);
-                            
-                        // --- VALIDAÇÃO DE SEGURANÇA (Circuit Breaker) ---
-                        if (Math.abs(dailyReturn) > 0.5) {
-                            logger.warn(`⚠️ Anomalia TWRR detectada para ${user._id}: ${(dailyReturn * 100).toFixed(2)}%. Snapshot ignorado.`);
-                            if (process.env.SENTRY_DSN) {
-                                Sentry.captureMessage(`TWRR Anomaly: User ${user._id} had ${dailyReturn.toFixed(2)}% variance. Snapshot skipped.`);
-                            }
-                            isValidSnapshot = false;
-                            snapshotsSkipped++;
-                        } else {
-                            const prevQuota = lastSnapshot ? (lastSnapshot.quotaPrice || 100) : 100;
-                            quotaPrice = prevQuota * (1 + dailyReturn);
-                        }
-                    }
-
-                    // Proteção contra Reset Indevido
-                    // Cobre dois casos:
-                    // 1. lastSnapshot existe e quotaPrice caiu para ~100 (reset clássico)
-                    // 2. lastSnapshot é null MAS existem snapshots anteriores no banco —
-                    //    isso indica que o findOne falhou ou a conta foi recriada; salvar
-                    //    quota=100 agora apagaria o histórico real.
-                    if (Math.abs(quotaPrice - 100) < 0.1) {
-                        const hasHistory = lastSnapshot
-                            ? Math.abs(lastSnapshot.quotaPrice - 100) > 5
-                            : await WalletSnapshot.exists({ user: user._id });
-
-                        if (hasHistory) {
-                            logger.error(`❌ Erro Crítico: Cota resetou para 100 indevidamente para ${user._id}. Snapshot abortado.`);
-                            isValidSnapshot = false;
-                            snapshotsSkipped++;
-                        }
-                    }
-
-                    if (isValidSnapshot) {
-                        // 4. Busca Dividendos Totais para o Snapshot Histórico
-                        const divData = await financialService.calculateUserDividends(user._id);
-                        const totalDividends = divData.totalAllTime;
-
-                        // Se for forçado, deleta snapshot existente do dia para evitar duplicata (Upsert Logic Simplificada)
-                        if (force) {
-                            await WalletSnapshot.deleteMany({ 
-                                user: user._id, 
-                                date: { $gte: startOfDay, $lte: endOfDay } 
-                            });
-                        }
-
-                        await WalletSnapshot.create({
-                            user: user._id,
-                            date: today,
-                            totalEquity,
-                            totalInvested,
-                            totalDividends,
-                            profit: totalEquity - totalInvested + totalDividends,
-                            profitPercent: totalInvested > 0 ? ((totalEquity - totalInvested + totalDividends) / totalInvested) * 100 : 0,
-                            quotaPrice: quotaPrice 
-                        });
-                        snapshotsCreated++;
-                    }
-                }
+                // 2) Snapshot de HOJE (idempotente; respeita force).
+                const r = await persistUserSnapshotForDay(user, todayStr, ctx, { assets, force });
+                if (r === 'created') snapshotsCreated++;
+                else snapshotsSkipped++;
             } catch (userErr) {
                 logger.error(`Erro snapshot user ${user._id}: ${userErr.message}`);
+                if (process.env.SENTRY_DSN) Sentry.captureException(userErr);
             }
         }
-        
+
         const stats = {
             created: snapshotsCreated,
             skipped: snapshotsSkipped,
-            timestamp: new Date()
+            backfilled,
+            timestamp: new Date(),
         };
 
         // PERSISTÊNCIA DO RELATÓRIO NO SYSTEM CONFIG
@@ -214,7 +302,7 @@ export const runDailySnapshot = async (force = false) => {
             { upsert: true }
         );
 
-        logger.info(`✅ Snapshot Finalizado. Criados: ${snapshotsCreated}, Ignorados (Proteção): ${snapshotsSkipped}`);
+        logger.info(`✅ Snapshot Finalizado. Criados: ${snapshotsCreated}, Recuperados: ${backfilled}, Ignorados: ${snapshotsSkipped}`);
         return { status: 'SUCCESS', stats };
 
     } catch (error) {
@@ -290,6 +378,13 @@ export const runWeeklyAutoPublish = async () => {
 
 export const initScheduler = () => {
     logger.info("⏰ Scheduler Service Inicializado");
+
+    // (RESILIÊNCIA) Recuperação de snapshots perdidos no BOOT. Um deploy/reinício
+    // que caia sobre 23:59 BRT não reexecuta o tick do cron — este catch-up fecha
+    // o buraco no próximo start. Fire-and-forget após 15s (deixa o boot assentar).
+    setTimeout(() => {
+        backfillMissedSnapshots().catch((e) => logger.error(`Backfill boot: ${e.message}`));
+    }, 15000);
 
     // 1. Sync Leve: Macroeconomia (A cada 15 minutos)
     schedule('5,20,35,50 * * * *', async () => {
