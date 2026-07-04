@@ -46,6 +46,10 @@ export const PerformanceChart = React.memo(() => {
     const chartTooltipStyle = theme === 'light'
         ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '12px', zIndex: 100, color: '#0f172a' }
         : { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px', zIndex: 100 };
+    // Ibovespa é neutro (cinza) em ambos os temas, mas o tom precisa inverter: prata
+    // claro some no fundo branco e cinza-escuro some no fundo escuro. slate-600 no
+    // claro / slate-300 no escuro garante contraste nos dois.
+    const ibovStroke = theme === 'light' ? '#475569' : '#cbd5e1';
 
     const { isDemoMode } = useDemo();
     const { kpis } = useWallet();
@@ -382,7 +386,7 @@ export const PerformanceChart = React.memo(() => {
                             type="monotone"
                             dataKey={viewMode === 'brl' ? 'ibovBRL' : 'ibov'}
                             name={viewMode === 'brl' ? 'ibovBRL' : 'ibov'}
-                            stroke="#cbd5e1"
+                            stroke={ibovStroke}
                             strokeWidth={2}
                             fill="transparent"
                             strokeDasharray="6 3"
