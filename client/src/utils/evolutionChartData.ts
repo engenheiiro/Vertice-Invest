@@ -45,7 +45,12 @@ const localDayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate
 const localMonthKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}`;
 
 const dayLabel = (d: Date) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-const monthLabel = (d: Date) => d.toLocaleDateString('pt-BR', { month: '2-digit', year: '2-digit' });
+// Nome abreviado (não numérico) para não confundir com rótulo de dia (dd/mm) na
+// janela Diária — "07/26" lido rápido pode parecer dia/mês. Array fixo (não
+// Intl month:'short') porque a saída do ICU varia entre Node/browser (com ou
+// sem ponto: "jul." vs "jul") e alguns runtimes de teste usam ICU reduzido.
+const MONTH_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const monthLabel = (d: Date) => `${MONTH_ABBR[d.getMonth()]}/${d.getFullYear()}`;
 const fullLabel = (d: Date) => d.toLocaleDateString('pt-BR');
 
 // Segmentos empilhados: base = patrimônio "seguro"; profit = ganho (verde, sobe);

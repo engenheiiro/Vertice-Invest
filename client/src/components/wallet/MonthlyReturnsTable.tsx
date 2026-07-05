@@ -181,14 +181,14 @@ export const MonthlyReturnsTable = () => {
                                     {row.year}
                                 </th>
                                 {row.months.map((m, idx) => (
-                                    <td key={idx} className={`p-3 font-mono font-medium ${getColor(m.value)}`}>
+                                    <td key={idx} className={`p-3 tabular-nums font-medium ${getColor(m.value)}`}>
                                         {formatPercent(m.value)}
                                     </td>
                                 ))}
-                                <td className={`p-3 font-mono font-bold border-l border-slate-800 bg-slate-900/20 ${getColor(row.ytd)}`}>
+                                <td className={`p-3 tabular-nums font-bold border-l border-slate-800 bg-slate-900/20 ${getColor(row.ytd)}`}>
                                     {formatPercent(row.ytd)}
                                 </td>
-                                <td className={`p-3 font-mono font-bold bg-slate-900/20 ${getColor(row.accumulated)}`}>
+                                <td className={`p-3 tabular-nums font-bold bg-slate-900/20 ${getColor(row.accumulated)}`}>
                                     {formatPercent(row.accumulated)}
                                 </td>
                             </tr>
@@ -206,11 +206,11 @@ export const MonthlyReturnsTable = () => {
                             <div className="flex gap-3 text-right">
                                 <div>
                                     <p className="text-[9px] text-slate-500 uppercase">Ano</p>
-                                    <p className={`text-xs font-mono font-bold ${getColor(row.ytd)}`}>{formatPercent(row.ytd)}</p>
+                                    <p className={`text-xs tabular-nums font-bold ${getColor(row.ytd)}`}>{formatPercent(row.ytd)}</p>
                                 </div>
                                 <div>
                                     <p className="text-[9px] text-slate-500 uppercase">Acum.</p>
-                                    <p className={`text-xs font-mono font-bold ${getColor(row.accumulated)}`}>{formatPercent(row.accumulated)}</p>
+                                    <p className={`text-xs tabular-nums font-bold ${getColor(row.accumulated)}`}>{formatPercent(row.accumulated)}</p>
                                 </div>
                             </div>
                         </div>
@@ -218,7 +218,7 @@ export const MonthlyReturnsTable = () => {
                             {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'].map((label, idx) => (
                                 <div key={label} className="bg-slate-900/40 rounded-md py-1.5 text-center">
                                     <p className="text-[9px] text-slate-500">{label}</p>
-                                    <p className={`text-[10px] font-mono font-medium ${getColor(row.months[idx]?.value ?? null)}`}>
+                                    <p className={`text-[10px] tabular-nums font-medium ${getColor(row.months[idx]?.value ?? null)}`}>
                                         {formatPercent(row.months[idx]?.value ?? null)}
                                     </p>
                                 </div>

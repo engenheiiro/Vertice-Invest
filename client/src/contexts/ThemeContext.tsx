@@ -8,15 +8,20 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: 'light',
+  theme: 'dark',
   toggleTheme: () => {},
 });
 
+// Chave v2: a v1 auto-salvava 'light' mesmo sem escolha do usuário, então todo mundo
+// tinha uma preferência "fantasma" clara. A v2 zera isso — padrão ESCURO para todos;
+// só quem trocar de propósito salva 'light'. Mantida em sincronia com o anti-FOUC do index.html.
+const THEME_KEY = 'vertice-theme-v2';
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>(() => {
-    // Padrão = claro. Só fica escuro se o usuário escolheu explicitamente antes.
-    const stored = localStorage.getItem('vertice-theme');
-    return stored === 'dark' ? 'dark' : 'light';
+    // Padrão = escuro. Só fica claro se o usuário escolheu 'light' explicitamente antes.
+    const stored = localStorage.getItem(THEME_KEY);
+    return stored === 'light' ? 'light' : 'dark';
   });
 
   useEffect(() => {
@@ -26,7 +31,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } else {
       root.removeAttribute('data-theme');
     }
-    localStorage.setItem('vertice-theme', theme);
+    localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
   const toggleTheme = () => setTheme(t => (t === 'dark' ? 'light' : 'dark'));

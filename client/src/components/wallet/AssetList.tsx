@@ -42,6 +42,7 @@ const pluralAtivos = (n: number) => `${n} ${n === 1 ? 'Ativo' : 'Ativos'}`;
 export const AssetList = () => {
     const { assets, removeAsset, kpis, targetAllocation, isPrivacyMode } = useWallet();
     const confirm = useConfirm();
+
     const [historyTicker, setHistoryTicker] = useState<string | null>(null);
     const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -144,7 +145,7 @@ export const AssetList = () => {
                                         <span className="text-[10px] text-slate-500 shrink-0">({groupItems.length})</span>
                                     </span>
                                     <span className="text-right shrink-0 ml-3">
-                                        <span className="block text-white font-mono font-bold text-sm">{formatCurrency(totalValueGroup)}</span>
+                                        <span className="block text-white tabular-nums font-bold text-sm">{formatCurrency(totalValueGroup)}</span>
                                         <span className="flex items-center justify-end gap-2 text-[11px] font-bold">
                                             <span className={gm.capital >= 0 ? 'text-emerald-500' : 'text-red-500'} title="Variação do preço (sem proventos)">
                                                 {gm.capital >= 0 ? '+' : '-'}{formatPercent(gm.variationPct)}
@@ -231,7 +232,7 @@ export const AssetList = () => {
                 </div>
 
                 <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[900px]">
+                    <table className="w-full text-left border-collapse min-w-[860px]">
                         <caption className="sr-only">Lista de ativos da carteira com preço médio, preço atual, saldo, variação e rentabilidade</caption>
                         <thead>
                             <tr className="bg-card border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500">
@@ -274,7 +275,7 @@ export const AssetList = () => {
                                                         <span className={`text-xs font-bold uppercase tracking-widest ${accent.label}`}>
                                                             {TYPE_LABELS[type]}
                                                         </span>
-                                                        <span className="text-[10px] font-bold text-slate-500 bg-slate-900 px-2 py-0.5 rounded border border-slate-800/50">
+                                                        <span className="text-[10px] font-bold text-slate-500 bg-elevated px-2 py-0.5 rounded border border-slate-800/50">
                                                             {pluralAtivos(groupItems.length)}
                                                         </span>
                                                     </div>
@@ -282,7 +283,7 @@ export const AssetList = () => {
                                                     <div className="flex items-center gap-6 text-[10px] md:text-xs">
                                                         <div className="flex flex-col items-end">
                                                             <span className="text-slate-500 font-bold uppercase text-[9px]">Total</span>
-                                                            <span className="text-white font-mono font-bold">{formatCurrency(totalValueGroup)}</span>
+                                                            <span className="text-white tabular-nums font-bold">{formatCurrency(totalValueGroup)}</span>
                                                         </div>
                                                         
                                                         <div className="flex flex-col items-end" title="Variação do preço (sem proventos)">
@@ -338,10 +339,10 @@ export const AssetList = () => {
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td className="p-4 text-right text-slate-400 font-mono">
+                                                    <td className="p-4 text-right text-slate-400 tabular-nums">
                                                         {formatCurrency(asset.averagePrice, asset.currency)}
                                                     </td>
-                                                    <td className="p-4 text-right text-slate-300 font-mono font-bold">
+                                                    <td className="p-4 text-right text-slate-300 tabular-nums font-bold">
                                                         {formatCurrency(asset.currentPrice, asset.currency)}
                                                     </td>
                                                     <td className="p-4 text-right">
@@ -349,7 +350,7 @@ export const AssetList = () => {
                                                             {formatCurrency(asset.totalValue, 'BRL')}
                                                         </p>
                                                         {isUSD && !isPrivacyMode && (
-                                                            <p className="text-[10px] text-blue-400/70 font-mono">
+                                                            <p className="text-[10px] text-blue-400/70 tabular-nums">
                                                                 ({formatCurrency(asset.currentPrice * asset.quantity, 'USD')})
                                                             </p>
                                                         )}
@@ -360,7 +361,7 @@ export const AssetList = () => {
                                                         )}
                                                     </td>
                                                     <td className="p-4 text-right">
-                                                        <span className="text-xs font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                                                        <span className="text-xs font-bold text-slate-400 bg-elevated px-2 py-0.5 rounded border border-slate-800">
                                                             {percentOfClass.toFixed(1)}%
                                                         </span>
                                                     </td>

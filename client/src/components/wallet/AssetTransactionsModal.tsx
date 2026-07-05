@@ -169,7 +169,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
                                             <div className="flex items-center gap-6">
                                                 <div className="text-right">
                                                     <p className="text-[10px] text-slate-500 uppercase font-bold">Total</p>
-                                                    <p className="text-sm font-mono text-slate-300">{formatCurrency(tx.totalValue)}</p>
+                                                    <p className="text-sm tabular-nums text-slate-300">{formatCurrency(tx.totalValue)}</p>
                                                 </div>
                                                 
                                                 <button 

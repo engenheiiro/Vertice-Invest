@@ -418,7 +418,7 @@ export const Calculator: React.FC = () => {
     <div className="min-h-screen bg-deep text-white">
       <Header />
 
-      <main id="main-content" tabIndex={-1} className="max-w-[1400px] mx-auto px-4 md:px-6 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-[1360px] mx-auto px-4 md:px-6 py-8">
 
         {/* Título */}
         <div className="flex items-center gap-3 mb-8">

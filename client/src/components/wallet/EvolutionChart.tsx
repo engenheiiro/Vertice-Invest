@@ -65,13 +65,6 @@ export const EvolutionChart = React.memo(() => {
         setRange(g === 'DAILY' ? '30D' : 'ALL');
     };
 
-    const formatCurrency = (val: number) => {
-        if (isPrivacyMode) return '••••••';
-        if (val >= 1000000) return `R$ ${(val/1000000).toFixed(1)}M`;
-        if (val >= 1000) return `R$ ${(val/1000).toFixed(0)}k`;
-        return `R$ ${val.toFixed(0)}`;
-    };
-
     const formatTooltipCurrency = (val: number) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
 
     // Moeda com sinal explícito (+) em positivos; Intl já prefixa o "-" em negativos.
@@ -85,6 +78,63 @@ export const EvolutionChart = React.memo(() => {
         [history, kpis, granularity, range]
     );
 
+    // Escala do eixo Y calculada a partir dos próprios dados (Patrimônio + Aplicado),
+    // em vez de deixar o Recharts decidir. Dois motivos:
+    //  1) Zoom: sem domain explícito o auto-scale às vezes inclui o zero (comum na
+    //     janela Diária) e uma variação real de poucos R$ vira uma linha reta.
+    //  2) Rótulos: geramos os ticks em passos "redondos" e derivamos as casas decimais
+    //     do próprio passo — assim os labels ficam distintos em qualquer zoom (antes,
+    //     numa faixa apertada, (val/1000).toFixed(0) colava tudo em "15k").
+    const yScale = useMemo(() => {
+        if (chartData.length === 0) return null;
+        let min = Infinity, max = -Infinity;
+        chartData.forEach((p) => {
+            min = Math.min(min, p.realEquity, p.realInvested);
+            max = Math.max(max, p.realEquity, p.realInvested);
+        });
+        if (!isFinite(min) || !isFinite(max)) return null;
+
+        // Banda vertical do eixo — duas metas em tensão, resolvidas por um piso:
+        //  • Movimento real pequeno (ex.: +0,16%) precisa aparecer: usa o range + 12%
+        //    de folga em cada lado (span × 1,24), como antes.
+        //  • Movimento TRIVIAL (centavos de ruído) NÃO pode virar uma "montanha": a
+        //    banda nunca é menor que ~0,5% do patrimônio. Assim, variação irrelevante
+        //    fica quase reta (honesto) e as casas decimais do eixo ficam limitadas
+        //    (rótulos nunca colam). Série chapada (span 0) cai no mesmo piso.
+        const span = max - min;
+        const mid = (min + max) / 2;
+        const band = Math.max(span * 1.24, mid * 0.005, 10);
+        min = Math.max(0, mid - band / 2);
+        max = mid + band / 2;
+
+        // Passo "nice" (1/2/2.5/5/10 × 10ⁿ) para ~5 divisões.
+        const rawStep = (max - min) / 5 || 1;
+        const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+        const norm = rawStep / mag;
+        const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
+
+        const domainMin = Math.max(0, Math.floor(min / step) * step);
+        const domainMax = Math.ceil(max / step) * step;
+        const ticks: number[] = [];
+        for (let v = domainMin; v <= domainMax + step * 0.5; v += step) ticks.push(Number(v.toFixed(6)));
+
+        // Unidade única para todo o eixo (mesma escala/decimais em todos os ticks).
+        const maxAbs = Math.max(Math.abs(domainMin), Math.abs(domainMax));
+        const divisor = maxAbs >= 1_000_000 ? 1_000_000 : maxAbs >= 1_000 ? 1_000 : 1;
+        const suffix = divisor === 1_000_000 ? 'M' : divisor === 1_000 ? 'k' : '';
+        const unitStep = step / divisor;
+        // Casas decimais que tornam ticks adjacentes distintos na unidade escolhida.
+        const decimals = unitStep >= 1 ? 0 : Math.min(4, Math.ceil(-Math.log10(unitStep)));
+
+        return { domain: [domainMin, domainMax] as [number, number], ticks, divisor, suffix, decimals };
+    }, [chartData]);
+
+    const formatAxisCurrency = (val: number) => {
+        if (isPrivacyMode) return '••••••';
+        if (!yScale) return `R$ ${val.toFixed(0)}`;
+        return `R$ ${(val / yScale.divisor).toFixed(yScale.decimals)}${yScale.suffix}`;
+    };
+
     const summary = useMemo(() => summarizeEvolutionWindow(chartData), [chartData]);
     const showSummary = summary.variationValue !== 0 || summary.variationPercent !== null;
     const summaryPositive = summary.variationValue >= 0;
@@ -94,8 +144,8 @@ export const EvolutionChart = React.memo(() => {
     const renderEndDot = (props: any): React.ReactElement => {
         const { cx, cy, index, payload } = props;
         if (cx == null || cy == null || index !== chartData.length - 1) return <g key={`d${index}`} />;
-        const label = formatCurrency(payload.realEquity);
-        const bw = Math.max(78, label.length * 8 + 18);
+        const label = formatTooltipCurrency(payload.realEquity);
+        const bw = Math.max(78, label.length * 7.2 + 18);
         const bx = cx - bw - 6; // bolha à esquerda do ponto (o ponto vive na borda direita)
         return (
             <g>
@@ -126,7 +176,7 @@ export const EvolutionChart = React.memo(() => {
                     <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-base font-bold text-white">Evolução do Patrimônio</h3>
                         {showSummary && (
-                            <span className={`text-xs font-bold font-mono ${summaryPositive ? 'text-emerald-400' : 'text-red-500'}`}>
+                            <span className={`text-xs font-bold tabular-nums ${summaryPositive ? 'text-emerald-400' : 'text-red-500'}`}>
                                 {formatSignedCurrency(summary.variationValue)}
                                 {summary.variationPercent !== null && (
                                     <span className="text-slate-500 font-sans"> · {formatPercent(summary.variationPercent, { privacy: isPrivacyMode, sign: true })}</span>
@@ -149,14 +199,14 @@ export const EvolutionChart = React.memo(() => {
 
                 <div className="flex flex-wrap items-center gap-2">
                     {/* Granularidade: Diário vs Mensal */}
-                    <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+                    <div className="flex bg-deep p-1 rounded-lg border border-slate-800">
                         {(['DAILY', 'MONTHLY'] as const).map((g) => (
                             <button
                                 key={g}
                                 onClick={() => switchGranularity(g)}
                                 className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
                                     granularity === g
-                                    ? 'bg-slate-700 text-white shadow-sm'
+                                    ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'
                                 }`}
                             >
@@ -166,14 +216,14 @@ export const EvolutionChart = React.memo(() => {
                     </div>
 
                     {/* Janela — depende da granularidade */}
-                    <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+                    <div className="flex bg-deep p-1 rounded-lg border border-slate-800">
                         {WINDOW_OPTIONS[granularity].map((w) => (
                             <button
                                 key={w}
                                 onClick={() => setRange(w)}
                                 className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
                                     range === w
-                                    ? 'bg-slate-700 text-white shadow-sm'
+                                    ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'
                                 }`}
                             >
@@ -191,7 +241,7 @@ export const EvolutionChart = React.memo(() => {
                     {showSummary && !isPrivacyMode && ` Resultado no período: ${formatSignedCurrency(summary.variationValue)}${summary.variationPercent !== null ? ` (${formatPercent(summary.variationPercent, { sign: true })})` : ''}.`}
                 </p>
                 <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={chartData} margin={{ top: 30, right: 14, left: -18, bottom: 0 }}>
+                    <ComposedChart data={chartData} margin={{ top: 30, right: 14, left: -4, bottom: 0 }}>
                         <defs>
                             <linearGradient id="evoEquityFill" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#0e9268" stopOpacity={0.22} />
@@ -210,7 +260,10 @@ export const EvolutionChart = React.memo(() => {
                         />
 
                         <YAxis
-                            tickFormatter={formatCurrency}
+                            domain={yScale?.domain ?? ['auto', 'auto']}
+                            ticks={yScale?.ticks}
+                            allowDataOverflow={false}
+                            tickFormatter={formatAxisCurrency}
                             tick={{fill: '#64748b', fontSize: 10}}
                             axisLine={false}
                             tickLine={false}
@@ -241,18 +294,18 @@ export const EvolutionChart = React.memo(() => {
                                             <div className="space-y-1.5">
                                                 <div className="flex justify-between items-center gap-6 text-xs">
                                                     <span className="text-emerald-600 font-bold">Aplicado</span>
-                                                    <span className="text-slate-200 font-mono whitespace-nowrap">{formatTooltipCurrency(data.realInvested)}</span>
+                                                    <span className="text-slate-200 tabular-nums whitespace-nowrap">{formatTooltipCurrency(data.realInvested)}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center gap-6 text-xs">
                                                     <span className="text-emerald-400 font-bold">Resultado</span>
-                                                    <span className={`font-mono font-bold whitespace-nowrap ${data.realProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
+                                                    <span className={`tabular-nums font-bold whitespace-nowrap ${data.realProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
                                                         {data.realProfit >= 0 ? '+' : ''}{formatTooltipCurrency(data.realProfit)}
                                                     </span>
                                                 </div>
 
                                                 <div className="flex justify-between items-center gap-6 text-xs">
                                                     <span className="text-slate-400 font-bold whitespace-nowrap">Variação no período</span>
-                                                    <span className={`font-mono font-bold whitespace-nowrap text-right ${variationColor}`}>
+                                                    <span className={`tabular-nums font-bold whitespace-nowrap text-right ${variationColor}`}>
                                                         {variationSign}{formatTooltipCurrency(variation)}
                                                         {variationPct !== null && variationPct !== undefined && (
                                                             <span className="block text-[10px] font-sans opacity-80">{formatPercent(variationPct, { sign: true })}</span>
@@ -262,7 +315,7 @@ export const EvolutionChart = React.memo(() => {
 
                                                 <div className="border-t border-slate-800 pt-1.5 mt-1 flex justify-between items-center gap-6">
                                                     <span className="text-white font-bold text-xs uppercase whitespace-nowrap">Saldo Final</span>
-                                                    <span className="text-white font-bold font-mono text-sm whitespace-nowrap">{formatTooltipCurrency(data.realEquity)}</span>
+                                                    <span className="text-white font-bold tabular-nums text-sm whitespace-nowrap">{formatTooltipCurrency(data.realEquity)}</span>
                                                 </div>
                                             </div>
                                         </div>

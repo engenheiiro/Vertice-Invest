@@ -152,27 +152,27 @@ describe('navegação por abas', () => {
   it('aba Visão Geral está ativa por padrão', () => {
     renderWallet();
     const overviewTab = screen.getByText('Visão Geral');
-    expect(overviewTab.closest('button')).toHaveClass('bg-slate-800');
+    expect(overviewTab.closest('button')).toHaveAttribute('aria-current', 'page');
   });
 
   it('clicar em "Rentabilidade" torna a aba ativa', async () => {
     renderWallet();
     fireEvent.click(screen.getByText('Rentabilidade'));
     await waitFor(() =>
-      expect(screen.getByText('Rentabilidade').closest('button')).toHaveClass('bg-slate-800')
+      expect(screen.getByText('Rentabilidade').closest('button')).toHaveAttribute('aria-current', 'page')
     );
   });
 
   it('clicar em "Proventos" torna a aba ativa', () => {
     renderWallet();
     fireEvent.click(screen.getByText('Proventos'));
-    expect(screen.getByText('Proventos').closest('button')).toHaveClass('bg-slate-800');
+    expect(screen.getByText('Proventos').closest('button')).toHaveAttribute('aria-current', 'page');
   });
 
   it('clicar em "Extrato" torna a aba ativa', () => {
     renderWallet();
     fireEvent.click(screen.getByText('Extrato'));
-    expect(screen.getByText('Extrato').closest('button')).toHaveClass('bg-slate-800');
+    expect(screen.getByText('Extrato').closest('button')).toHaveAttribute('aria-current', 'page');
   });
 });
 

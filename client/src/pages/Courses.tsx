@@ -143,7 +143,7 @@ export const Courses = () => {
                     <div className="absolute inset-0 bg-gradient-to-r from-deep via-deep/50 to-transparent"></div>
                 </div>
 
-                <div className="relative z-10 max-w-[1600px] w-full px-6 md:px-12 flex flex-col items-start">
+                <div className="relative z-10 max-w-[1360px] w-full px-6 md:px-12 flex flex-col items-start">
                     {selectedCourseId && (
                         <button 
                             onClick={() => setSelectedCourseId(null)}
@@ -186,7 +186,7 @@ export const Courses = () => {
             </div>
 
             {/* Main Content */}
-            <main id="catalog" className="max-w-[1600px] mx-auto px-6 md:px-12 pb-24 -mt-20 relative z-20">
+            <main id="catalog" className="max-w-[1360px] mx-auto px-6 md:px-12 pb-24 -mt-20 relative z-20">
                 {/* Maintenance Banner */}
                 <div className="mb-12 p-6 rounded-2xl bg-amber-500/10 border border-amber-500/20 backdrop-blur-md flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
                     <div className="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500 shrink-0 animate-pulse">

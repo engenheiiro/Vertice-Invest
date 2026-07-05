@@ -9,11 +9,16 @@
  * usuários existentes). [data-theme="light"] ativa o tema claro opcional.
  * ─────────────────────────────────────────────────────────────────────────── */
 :root {
-  --tw-color-base:     8 12 20;      /* #080C14 – fundo principal */
-  --tw-color-deep:     2 4 10;       /* #02040a – fundo profundo  */
-  --tw-color-card:     11 16 26;     /* #0B101A – superfície cards */
-  --tw-color-panel:    15 19 30;     /* #0F131E – modais/painéis  */
-  --tw-color-elevated: 15 23 41;     /* #0F1729 – hover/dropdowns */
+  /* Paleta "GitHub dark" ESCURECIDA (mockup Minha Carteira, ~2 passos mais fechada):
+     superfícies grafite-azuladas quase-pretas p/ eliminar a sensação "leitosa/fosca"
+     do grafite claro, mantendo o hue azul (canal B sempre o maior) e abrindo o
+     contraste entre níveis. Ordem de luminância preservada (deep < base < card <
+     panel < elevated) p/ que o layering existente (header bg-card sobre bg-base) siga ok. */
+  --tw-color-base:     15 20 26;     /* #0F141A – superfície de cards (surface)    */
+  --tw-color-deep:      9 12 17;     /* #090C11 – fundo da página (bg, quase-preto) */
+  --tw-color-card:     20 25 34;     /* #141922 – headers/superfície 2 (surface-2)  */
+  --tw-color-panel:    25 31 41;     /* #191F29 – modais/painéis                    */
+  --tw-color-elevated: 32 38 49;     /* #202631 – hover/dropdowns (chip)            */
 }
 
 [data-theme="light"] {
@@ -24,10 +29,37 @@
   --tw-color-elevated: 240 244 250;  /* #F0F4FA – hover/dropdowns (cinza sutil)         */
 }
 
+/* ─── Dark mode: neutros do mockup "Minha Carteira" ──────────────────────────
+ * O dark usa classes Tailwind soltas (não tokens semânticos). Aqui remapeamos
+ * os neutros mais usados para a paleta do mockup: texto #E6EDF3 (primário) /
+ * #8B95A3 (muted) / #79838F (muted-2); bordas #252D38; dividers #20272F.
+ * Regras SEM escopo → valem só no dark, pois cada [data-theme="light"] acima
+ * tem especificidade maior e continua vencendo no claro (nada vaza). ──────────*/
+.text-slate-100 { color: #E6EDF3; }  /* primário   (--text)    */
+.text-slate-400 { color: #8B95A3; }  /* secundário (--muted)   */
+.text-slate-500 { color: #79838F; }  /* terciário  (--muted-2) */
+.border-slate-800 { border-color: #252D38; }           /* --border      */
+.divide-slate-800 > * + * { border-color: #20272F; }   /* --border-soft */
+
+/* Cards: elevação suave + raio 18px no dark (espelha o bloco de sombra do light).
+   Só superfícies grandes (bg-base/card/panel + rounded-2xl/3xl); o light re-aplica
+   a própria sombra por ter especificidade maior. */
+.bg-base.rounded-2xl:not([class*="shadow"]),
+.bg-card.rounded-2xl:not([class*="shadow"]),
+.bg-panel.rounded-2xl:not([class*="shadow"]),
+.bg-base.rounded-3xl:not([class*="shadow"]),
+.bg-card.rounded-3xl:not([class*="shadow"]),
+.bg-panel.rounded-3xl:not([class*="shadow"]) {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.28), 0 14px 30px -20px rgb(0 0 0 / 0.55);
+}
+.bg-base.rounded-2xl,
+.bg-card.rounded-2xl,
+.bg-panel.rounded-2xl { border-radius: 18px; }
+
 @layer base {
   body {
     @apply antialiased bg-base;
-    color: rgb(241 245 249); /* slate-100 – default dark */
+    color: rgb(230 237 243); /* #E6EDF3 – texto primário (neutros do mockup) */
   }
   html {
     scroll-behavior: smooth;
@@ -414,7 +446,7 @@ textarea:focus-visible,
   background: rgb(var(--tw-color-deep));
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #2b333d; /* mockup --scroll */
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {

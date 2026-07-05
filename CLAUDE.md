@@ -120,7 +120,9 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < BLACK (3). Definido em `server
 
 ## Design System
 
-- **Fundos:** `#080C14` (main), `#0B101A` (cards), `#0F131E` (modais).
+- **Fundos (dark GitHub escurecido):** `#090C11` (deep/página, quase-preto), `#0F141A` (base/cards), `#141922` (card/headers), `#191F29` (panel/modais), `#202631` (elevated). Hue azul-grafite do mockup, ~2 passos mais fechado que o GitHub-dark padrão p/ evitar sensação "leitosa". Light mode sobrescreve (`#E4EAF4` página / branco cards). Tokens via CSS vars em `client/src/index.css`.
+- **Largura de conteúdo:** trilho global `max-w-[1360px] mx-auto` (Header, MarketStatusBar, páginas largas); formulários/feeds em `1200px`.
+- **Tipografia:** `Manrope` (Google Fonts, pesos 400–800).
 - **Semáforo:** COMPRAR → `emerald-400/500`; AGUARDAR → `yellow-400/500`; perfis/risco → `blue-400/500` e `purple-400/500`; erros → `red-400/500`.
 - **Modais:** `createPortal` + `z-[100]` + `backdrop-blur-md bg-black/95`.
 - **Hooks primeiro:** `useState`/`useMemo` no topo; guards (`if (!data) return null`) só após todos os hooks.

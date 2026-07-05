@@ -54,20 +54,21 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
-    <!-- Fontes -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- Fontes — Manrope (tipografia do design system) -->
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   </head>
   <body>
     <!-- Anti-FOUC: aplica data-theme antes do React hidratar para evitar flash de tema errado.
-         Padrão = claro; só mantém escuro se o usuário escolheu 'dark' explicitamente. -->
+         Padrão = ESCURO (ausência de data-theme); só aplica claro se o usuário escolheu
+         'light' explicitamente. Chave v2: reseta todo mundo pro escuro (a v1 auto-salvava
+         'light' mesmo sem escolha do usuário). -->
     <script>
       (function () {
         try {
-          var t = localStorage.getItem('vertice-theme');
-          if (t !== 'dark') document.documentElement.setAttribute('data-theme', 'light');
-        } catch (_) {
-          document.documentElement.setAttribute('data-theme', 'light');
-        }
+          if (localStorage.getItem('vertice-theme-v2') === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+          }
+        } catch (_) { /* padrão escuro: não faz nada */ }
       })();
     </script>
     <div id="root"></div>

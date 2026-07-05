@@ -129,7 +129,7 @@ export const Comparator = () => {
         return (
             <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
                 <Header />
-                <main id="main-content" tabIndex={-1} className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in">
+                <main id="main-content" tabIndex={-1} className="max-w-[1360px] mx-auto p-4 md:p-6 animate-fade-in">
                     <div className="flex flex-col items-center justify-center py-20 bg-base border border-slate-800 rounded-3xl p-10 text-center">
                         <Crown size={40} className="text-blue-500 mb-6" />
                         <h2 className="text-2xl font-black text-white mb-3">Conteúdo Exclusivo PRO</h2>
@@ -149,7 +149,7 @@ export const Comparator = () => {
         <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
 
-            <main id="main-content" tabIndex={-1} className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in">
+            <main id="main-content" tabIndex={-1} className="max-w-[1360px] mx-auto p-4 md:p-6 animate-fade-in">
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-2">

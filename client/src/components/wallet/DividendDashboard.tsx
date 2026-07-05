@@ -139,13 +139,13 @@ export const DividendDashboard = () => {
                         {breakdown.map((item: any, idx: number) => (
                             <div key={idx} className="flex justify-between text-[10px] text-slate-300">
                                 <span>{item.ticker}</span>
-                                <span className="font-mono">{formatCurrency(item.amount)}</span>
+                                <span className="tabular-nums">{formatCurrency(item.amount)}</span>
                             </div>
                         ))}
                     </div>
                     <div className="flex justify-between border-t border-gold/30 pt-1">
                         <span className="text-xs text-white font-bold">Total</span>
-                        <span className="text-xs text-gold font-mono font-bold">{formatCurrency(dataPoint.value)}</span>
+                        <span className="text-xs text-gold tabular-nums font-bold">{formatCurrency(dataPoint.value)}</span>
                     </div>
                 </div>
             );
@@ -174,7 +174,7 @@ export const DividendDashboard = () => {
                         <p className="text-xs text-slate-500">Histórico de Pagamentos</p>
                     </div>
                     
-                    <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+                    <div className="flex bg-deep p-1 rounded-lg border border-slate-800">
                         <button
                             onClick={() => setTimeRange('12M')}
                             className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
@@ -343,7 +343,7 @@ export const DividendDashboard = () => {
                     </div>
 
                     <div className="flex items-center gap-3 flex-wrap">
-                        <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+                        <div className="flex bg-deep p-1 rounded-lg border border-slate-800">
                             {SIMULATOR_PERIODS.map((y) => (
                                 <button
                                     key={y}
@@ -367,7 +367,7 @@ export const DividendDashboard = () => {
                                 onChange={(e) => setSimulatorContribution(e.target.value)}
                                 onWheel={(e) => e.currentTarget.blur()}
                                 placeholder="Aporte/mês"
-                                className="w-28 bg-card border border-slate-800 rounded px-2 pl-7 py-1.5 text-[10px] text-white focus:border-emerald-500 outline-none font-mono"
+                                className="w-28 bg-card border border-slate-800 rounded px-2 pl-7 py-1.5 text-[10px] text-white focus:border-emerald-500 outline-none tabular-nums"
                             />
                         </div>
                     </div>

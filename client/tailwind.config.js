@@ -7,7 +7,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['Manrope', 'Inter', 'system-ui', 'sans-serif'],
       },
       // Tokens do design system Vértice (M12). Consolidam os tons de fundo que
       // antes apareciam como hex soltos (#080C14, #0B101A, #0F131E, ...).

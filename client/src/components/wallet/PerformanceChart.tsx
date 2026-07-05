@@ -43,16 +43,25 @@ export const PerformanceChart = React.memo(() => {
     const [timeRange, setTimeRange] = useState<'1M' | '12M' | 'YTD' | 'ALL'>('ALL');
     const [viewMode, setViewMode] = useState<'pct' | 'brl'>('pct');
     const { theme } = useTheme();
+    // Tooltip: no escuro usa a superfície ELEVATED do tema novo (#202631) + borda
+    // slate-700 — mesma "casa" do tooltip do EvolutionChart (bg-elevated). Antes
+    // apontava para #1B212B, que após escurecermos a paleta virou um tom mais claro
+    // que os cards (caixa fora da paleta).
     const chartTooltipStyle = theme === 'light'
         ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '12px', zIndex: 100, color: '#0f172a' }
-        : { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px', zIndex: 100 };
+        : { backgroundColor: '#202631', borderColor: '#334155', borderRadius: '8px', fontSize: '12px', zIndex: 100 };
     // Ibovespa é neutro (cinza) em ambos os temas, mas o tom precisa inverter: prata
     // claro some no fundo branco e cinza-escuro some no fundo escuro. slate-600 no
     // claro / slate-300 no escuro garante contraste nos dois.
     const ibovStroke = theme === 'light' ? '#475569' : '#cbd5e1';
-    // Linhas de apoio do eixo Y: slate-800 (#1e293b) é sutil no escuro, mas fica
-    // forte demais no fundo branco. slate-200 no claro mantém o mesmo ar "apagado".
-    const gridStroke = theme === 'light' ? '#e2e8f0' : '#1e293b';
+    // Grade/cursor/rótulos theme-aware — mesma convenção do EvolutionChart, p/ os dois
+    // gráficos da Carteira ficarem idênticos no tema novo (escuro grafite).
+    const gridStroke = theme === 'light' ? '#eef1f5' : '#232B36';
+    // Cursor do tooltip: no escuro era branco puro (#fff) — clarão que destoava do
+    // tema; agora slate-700 (#334155), igual ao EvolutionChart.
+    const cursorStroke = theme === 'light' ? '#cbd5e1' : '#334155';
+    // Rótulos dos eixos: slate-500 no claro; cinza-frio do mockup (#6A7480) no escuro.
+    const axisTick = theme === 'light' ? '#64748b' : '#6A7480';
 
     const { isDemoMode } = useDemo();
     const { kpis } = useWallet();
@@ -197,7 +206,7 @@ export const PerformanceChart = React.memo(() => {
     const walletDataKey = viewMode === 'brl' ? 'walletBRL' : (metricMode === 'TWRR' ? 'wallet' : 'walletRoi');
 
     return (
-        <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden">
+        <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
 
             {/* HEADER COM CONTROLES */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 z-10 relative">
@@ -218,14 +227,14 @@ export const PerformanceChart = React.memo(() => {
                 <div className="flex flex-wrap items-center gap-2">
 
                     {/* CONTROLE DE TEMPO */}
-                    <div className="bg-slate-900 p-1 rounded-lg border border-slate-800 flex gap-1">
+                    <div className="bg-deep p-1 rounded-lg border border-slate-800 flex gap-1">
                         {(['1M', 'YTD', '12M', 'ALL'] as const).map((t) => (
                             <button
                                 key={t}
                                 onClick={() => setTimeRange(t)}
                                 className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
                                     timeRange === t
-                                        ? 'bg-slate-700 text-white shadow-sm'
+                                        ? 'bg-base text-white shadow-sm'
                                         : 'text-slate-500 hover:text-slate-300'
                                 }`}
                             >
@@ -237,12 +246,12 @@ export const PerformanceChart = React.memo(() => {
                     <div className="w-px h-6 bg-slate-800 hidden sm:block"></div>
 
                     {/* CONTROLE % vs R$ */}
-                    <div className="bg-slate-900 p-1 rounded-lg border border-slate-800 flex gap-1">
+                    <div className="bg-deep p-1 rounded-lg border border-slate-800 flex gap-1">
                         <button
                             onClick={() => setViewMode('pct')}
                             className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
                                 viewMode === 'pct'
-                                    ? 'bg-slate-700 text-white shadow-sm'
+                                    ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'
                             }`}
                             title="Rentabilidade percentual"
@@ -253,7 +262,7 @@ export const PerformanceChart = React.memo(() => {
                             onClick={() => setViewMode('brl')}
                             className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
                                 viewMode === 'brl'
-                                    ? 'bg-slate-700 text-white shadow-sm'
+                                    ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'
                             }`}
                             title="Valor em R$"
@@ -265,12 +274,12 @@ export const PerformanceChart = React.memo(() => {
                     <div className="w-px h-6 bg-slate-800 hidden sm:block"></div>
 
                     {/* CONTROLE DE MÉTRICA — só relevante em modo % */}
-                    <div className={`bg-slate-900 p-1 rounded-lg border border-slate-800 flex gap-1 transition-opacity ${viewMode === 'brl' ? 'opacity-30 pointer-events-none' : ''}`}>
+                    <div className={`bg-deep p-1 rounded-lg border border-slate-800 flex gap-1 transition-opacity ${viewMode === 'brl' ? 'opacity-30 pointer-events-none' : ''}`}>
                         <button
                             onClick={() => setMetricMode('TWRR')}
                             className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
                                 metricMode === 'TWRR'
-                                    ? 'bg-slate-700 text-white shadow-sm'
+                                    ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'
                             }`}
                             title="Time-Weighted Rate of Return"
@@ -281,7 +290,7 @@ export const PerformanceChart = React.memo(() => {
                             onClick={() => setMetricMode('ROI')}
                             className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
                                 metricMode === 'ROI'
-                                    ? 'bg-slate-700 text-white shadow-sm'
+                                    ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'
                             }`}
                             title="Return on Investment"
@@ -307,7 +316,7 @@ export const PerformanceChart = React.memo(() => {
                     <AreaChart data={displayData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                         <defs>
                             <linearGradient id="colorWallet" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.4} />
+                                <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.28} />
                                 <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
                             </linearGradient>
                         </defs>
@@ -316,7 +325,7 @@ export const PerformanceChart = React.memo(() => {
 
                         <XAxis
                             dataKey="date"
-                            tick={{ fill: '#64748b', fontSize: 10 }}
+                            tick={{ fill: axisTick, fontSize: 10 }}
                             axisLine={false}
                             tickLine={false}
                             ticks={xAxisTicks}
@@ -339,7 +348,7 @@ export const PerformanceChart = React.memo(() => {
                         <YAxis
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fill: '#64748b', fontSize: 10 }}
+                            tick={{ fill: axisTick, fontSize: 10 }}
                             domain={['auto', 'auto']}
                             tickFormatter={(val) =>
                                 viewMode === 'brl'
@@ -360,7 +369,7 @@ export const PerformanceChart = React.memo(() => {
                                 return [`${value.toFixed(2)}%`, label];
                             }}
                             labelFormatter={(label) => new Date(label).toLocaleDateString('pt-BR')}
-                            cursor={{ stroke: '#fff', strokeWidth: 1, strokeDasharray: '4 4' }}
+                            cursor={{ stroke: cursorStroke, strokeWidth: 1, strokeDasharray: '4 4' }}
                         />
 
                         <Legend

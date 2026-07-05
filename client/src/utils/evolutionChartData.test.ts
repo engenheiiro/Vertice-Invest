@@ -38,13 +38,13 @@ describe('buildEvolutionChartData — MENSAL', () => {
         ];
         const pts = build(history, kpis(1200, 1100, 100), 'MONTHLY', 'ALL');
 
-        expect(pts.map((p) => p.label)).toEqual(['05/26', '06/26', '07/26']);
+        expect(pts.map((p) => p.label)).toEqual(['mai/2026', 'jun/2026', 'jul/2026']);
 
-        const june = byLabel(pts, '06/26')!;
+        const june = byLabel(pts, 'jun/2026')!;
         expect(june.realEquity).toBe(1100); // fim de mês, não o do dia 10
         expect(june.isLive).toBeUndefined();
 
-        const live = byLabel(pts, '07/26')!;
+        const live = byLabel(pts, 'jul/2026')!;
         expect(live.isLive).toBe(true);
         expect(live.realEquity).toBe(1200);
         expect(live.realProfit).toBe(100); // vem de kpis.totalResult

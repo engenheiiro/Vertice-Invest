@@ -80,9 +80,12 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
     const { assets, kpis, targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation, updateTargets, isPrivacyMode } = useWallet();
     const { addToast } = useToast();
     const { theme } = useTheme();
+    // Tooltip alinhado ao Evolution/PerformanceChart: superfície ELEVATED do tema novo
+    // (#202631) + borda slate-700 no escuro. Antes usava #0F1729/#1e293b (navy legado,
+    // fora da paleta grafite atual).
     const chartTooltipStyle = theme === 'light'
         ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '10px', color: '#0f172a' }
-        : { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '10px' };
+        : { backgroundColor: '#202631', borderColor: '#334155', borderRadius: '8px', fontSize: '10px' };
     const [viewMode, setViewMode] = useState<'CURRENT' | 'IDEAL'>(initialViewMode);
     const [isEditing, setIsEditing] = useState(false);
     // Fatia sob o cursor: cresce um pouco (activeShape) para dar feedback tátil ao donut.
@@ -273,6 +276,10 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                 </div>
             );
         }
+        // Só faz sentido reforçar "diversifique o excedente" quando NÃO há excedente
+        // ainda investido (carteira é 100% reserva). Com ações/FIIs/etc. já
+        // cadastrados, o nudge perdia o sentido mas aparecia sempre.
+        if (!(reserveValue > 0 && investmentTotal <= 0)) return null;
         return (
             <div className="shrink-0 mt-3 flex gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] p-3.5">
                 <span className="w-8 h-8 rounded-[9px] bg-base flex items-center justify-center shrink-0 text-emerald-400"><ShieldCheck size={17} /></span>
@@ -298,7 +305,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
+                    <div className="flex gap-1 bg-deep p-1 rounded-lg border border-slate-800">
                         <button onClick={() => setViewMode('CURRENT')} className={`text-[10px] font-bold px-3 py-1 rounded transition-colors ${viewMode === 'CURRENT' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Atual</button>
                         <button onClick={() => setViewMode('IDEAL')} className={`text-[10px] font-bold px-3 py-1 rounded transition-colors ${viewMode === 'IDEAL' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Ideal</button>
                     </div>
@@ -390,7 +397,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                     {/* Center Text */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                         <span className="text-[9px] text-slate-500 uppercase font-bold">Invest.</span>
-                        <span className="text-xs text-white font-mono font-bold">100%</span>
+                        <span className="text-xs text-white tabular-nums font-bold">100%</span>
                     </div>
                 </div>
 
@@ -494,7 +501,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                                         value={tempReserve}
                                         onChange={handleReserveChange}
                                         onWheel={(e) => e.currentTarget.blur()}
-                                        className="w-full bg-card border border-slate-800 rounded px-3 pl-8 py-1.5 text-xs text-white focus:border-blue-500 outline-none font-mono"
+                                        className="w-full bg-card border border-slate-800 rounded px-3 pl-8 py-1.5 text-xs text-white focus:border-blue-500 outline-none tabular-nums"
                                     />
                                 </div>
                             </div>
@@ -511,7 +518,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                                         value={tempDividendGoal}
                                         onChange={handleDividendGoalChange}
                                         onWheel={(e) => e.currentTarget.blur()}
-                                        className="w-full bg-card border border-slate-800 rounded px-3 pl-8 py-1.5 text-xs text-white focus:border-blue-500 outline-none font-mono"
+                                        className="w-full bg-card border border-slate-800 rounded px-3 pl-8 py-1.5 text-xs text-white focus:border-blue-500 outline-none tabular-nums"
                                     />
                                 </div>
                             </div>

@@ -130,7 +130,7 @@ export const Goals: React.FC = () => {
   return (
     <div className="min-h-screen bg-deep text-white pb-24 md:pb-8">
       <Header />
-      <main id="main-content" className="max-w-[1600px] mx-auto p-4 md:p-6">
+      <main id="main-content" className="max-w-[1360px] mx-auto p-4 md:p-6">
         {/* Cabeçalho */}
         <div className="flex items-start justify-between gap-4 mb-6">
           <div>

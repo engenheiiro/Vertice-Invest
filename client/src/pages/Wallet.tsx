@@ -98,7 +98,7 @@ export const Wallet = () => {
         <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
             
-            <main id="main-content" tabIndex={-1} className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in relative">
+            <main id="main-content" tabIndex={-1} className="max-w-[1360px] mx-auto p-4 md:p-6 animate-fade-in relative">
                 
                 {/* Header Actions */}
                 <div id="tour-wallet-intro" className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
@@ -117,7 +117,7 @@ export const Wallet = () => {
                             {usdRate > 0 && (
                                 <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-900/20 border border-blue-900/40 rounded-full">
                                     <DollarSign size={10} className="text-blue-400" />
-                                    <span className="text-[10px] text-blue-400 font-bold font-mono">
+                                    <span className="text-[10px] text-blue-400 font-bold tabular-nums">
                                         USD/BRL R${usdRate.toFixed(2)}
                                     </span>
                                 </div>
@@ -295,8 +295,8 @@ const TabButton = ({ active, onClick, icon, label, id }: any) => (
         onClick={onClick}
         aria-current={active ? 'page' : undefined}
         className={`
-            relative flex items-center gap-2 px-3 sm:px-4 py-2.5 -mb-px text-xs font-bold whitespace-nowrap
-            border-b-2 transition-colors duration-200
+            relative flex items-center gap-2 px-3 sm:px-4 py-[11px] -mb-px text-[13.5px] font-bold whitespace-nowrap
+            border-b-[2.5px] transition-colors duration-200
             ${active
                 ? 'text-emerald-400 border-emerald-400'
                 : 'text-slate-500 border-transparent hover:text-slate-300 hover:border-slate-700'

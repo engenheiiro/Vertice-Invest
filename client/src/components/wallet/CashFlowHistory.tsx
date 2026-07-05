@@ -88,7 +88,7 @@ export const CashFlowHistory = () => {
                 </div>
 
                 {/* Filtros */}
-                <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+                <div className="flex bg-deep p-1 rounded-lg border border-slate-800">
                     <FilterButton active={activeFilter === 'ALL'} onClick={() => handleFilterChange('ALL')} label="Tudo" />
                     <FilterButton active={activeFilter === 'CASH'} onClick={() => handleFilterChange('CASH')} label="Reserva" />
                     <FilterButton active={activeFilter === 'TRADE'} onClick={() => handleFilterChange('TRADE')} label="Investimentos" />
@@ -140,7 +140,7 @@ export const CashFlowHistory = () => {
                                                 {title}
                                             </p>
                                             <div className="flex items-center gap-2 mt-0.5">
-                                                <span className="text-[10px] text-slate-500 flex items-center gap-1 font-mono">
+                                                <span className="text-[10px] text-slate-500 flex items-center gap-1 tabular-nums">
                                                     <Calendar size={10} />
                                                     {new Date(tx.date).toLocaleDateString('pt-BR')}
                                                 </span>
@@ -154,7 +154,7 @@ export const CashFlowHistory = () => {
                                     </div>
                                     
                                     <div className="text-right">
-                                        <p className={`text-sm font-mono font-bold ${isBuy ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        <p className={`text-sm tabular-nums font-bold ${isBuy ? 'text-emerald-400' : 'text-red-400'}`}>
                                             {isBuy ? '+' : '-'} {formatCurrency(tx.totalValue)}
                                         </p>
                                         <span className="text-[9px] font-bold uppercase text-slate-600 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">

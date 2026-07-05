@@ -96,7 +96,7 @@ export const Indicators = () => {
         <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
             <Header />
 
-            <main id="main-content" tabIndex={-1} className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in">
+            <main id="main-content" tabIndex={-1} className="max-w-[1360px] mx-auto p-4 md:p-6 animate-fade-in">
                 {/* Skeleton de carregamento inicial */}
                 {isLoading && !data && (
                     <div className="space-y-6" role="status" aria-label="Carregando indicadores">

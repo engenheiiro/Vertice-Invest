@@ -58,8 +58,8 @@ export const Header: React.FC = () => {
     >
       Pular para o conteúdo
     </a>
-    <nav className="border-b border-slate-800/60 bg-deep/80 backdrop-blur-md sticky top-0 z-50 pt-[env(safe-area-inset-top)]">
-      <div className="max-w-[1600px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
+    <nav className="border-b border-slate-800 bg-deep/85 backdrop-blur-[14px] sticky top-0 z-50 pt-[env(safe-area-inset-top)]">
+      <div className="max-w-[1360px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-6">
            <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/dashboard')}>
               <div className="w-6 h-6 bg-blue-600 flex items-center justify-center rounded-md shadow-lg shadow-blue-600/20">

@@ -258,7 +258,7 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
                                                         <div key={g.class}>
                                                             <div className="flex items-center justify-between text-[11px] mb-1">
                                                                 <span className="text-slate-300 font-semibold">{g.label}</span>
-                                                                <span className="text-slate-500 font-mono">
+                                                                <span className="text-slate-500 tabular-nums">
                                                                     {g.currentPct.toFixed(0)}% → {g.targetPct.toFixed(0)}%
                                                                     {!onTarget && (
                                                                         <span className={`ml-2 font-bold ${overweight ? 'text-red-400' : 'text-emerald-400'}`}>

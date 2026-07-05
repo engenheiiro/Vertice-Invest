@@ -69,7 +69,7 @@ export const Dashboard = () => {
       <Header />
       <MarketStatusBar indices={marketIndices} />
 
-      <main id="main-content" tabIndex={-1} className="max-w-[1600px] mx-auto p-4 md:p-6 animate-fade-in relative">
+      <main id="main-content" tabIndex={-1} className="max-w-[1360px] mx-auto p-4 md:p-6 animate-fade-in relative">
         
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             

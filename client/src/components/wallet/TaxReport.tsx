@@ -170,7 +170,7 @@ export const TaxReport = () => {
                                     <div key={g.groupLabel}>
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="text-xs font-bold text-blue-400">Grupo {g.grupo} — {g.groupLabel}</span>
-                                            <span className="text-xs font-bold text-white font-mono">{fmt(g.totalCost)}</span>
+                                            <span className="text-xs font-bold text-white tabular-nums">{fmt(g.totalCost)}</span>
                                         </div>
                                         <div className="overflow-x-auto custom-scrollbar">
                                             <table className="w-full text-xs min-w-[480px]">
@@ -189,9 +189,9 @@ export const TaxReport = () => {
                                                                 {p.ticker}
                                                                 {p.manualReview && <span className="ml-2 text-[9px] text-amber-400 font-normal">(conferir câmbio)</span>}
                                                             </td>
-                                                            <td className="py-2 text-right text-slate-300 font-mono">{p.quantity % 1 === 0 ? p.quantity : p.quantity.toFixed(6)}</td>
-                                                            <td className="py-2 text-right text-slate-300 font-mono">{fmt(p.avgPrice)}</td>
-                                                            <td className="py-2 text-right text-white font-mono font-bold">{fmt(p.totalCost)}</td>
+                                                            <td className="py-2 text-right text-slate-300 tabular-nums">{p.quantity % 1 === 0 ? p.quantity : p.quantity.toFixed(6)}</td>
+                                                            <td className="py-2 text-right text-slate-300 tabular-nums">{fmt(p.avgPrice)}</td>
+                                                            <td className="py-2 text-right text-white tabular-nums font-bold">{fmt(p.totalCost)}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -227,12 +227,12 @@ export const TaxReport = () => {
                                                 <tr key={`${l.month}-${l.category}-${idx}`} className="border-b border-slate-800/40">
                                                     <td className="py-2 text-slate-300">{MONTH_PT[parseInt(l.month, 10) - 1]}</td>
                                                     <td className="py-2 text-slate-300">{CATEGORY_PT[l.category] || l.category}</td>
-                                                    <td className="py-2 text-right text-slate-300 font-mono">{fmt(l.sales)}</td>
-                                                    <td className={`py-2 text-right font-mono ${l.gain < 0 ? 'text-red-400' : 'text-slate-300'}`}>{fmt(l.gain)}</td>
-                                                    <td className="py-2 text-right font-mono">
+                                                    <td className="py-2 text-right text-slate-300 tabular-nums">{fmt(l.sales)}</td>
+                                                    <td className={`py-2 text-right tabular-nums ${l.gain < 0 ? 'text-red-400' : 'text-slate-300'}`}>{fmt(l.gain)}</td>
+                                                    <td className="py-2 text-right tabular-nums">
                                                         {l.exempt ? <span className="text-emerald-400">isento</span> : <span className="text-slate-300">{fmt(l.taxableBase)}</span>}
                                                     </td>
-                                                    <td className={`py-2 text-right font-mono font-bold ${l.tax > 0 ? 'text-white' : 'text-slate-600'}`}>{l.tax > 0 ? fmt(l.tax) : '—'}</td>
+                                                    <td className={`py-2 text-right tabular-nums font-bold ${l.tax > 0 ? 'text-white' : 'text-slate-600'}`}>{l.tax > 0 ? fmt(l.tax) : '—'}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -253,7 +253,7 @@ export const TaxReport = () => {
                                                         <span className="text-slate-500">Código {d.code}</span>
                                                         <span className="text-slate-500">Venc. {fmtDate(d.dueDate)}</span>
                                                     </div>
-                                                    <span className="text-sm font-bold text-emerald-400 font-mono">{fmt(d.amount)}</span>
+                                                    <span className="text-sm font-bold text-emerald-400 tabular-nums">{fmt(d.amount)}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -286,12 +286,12 @@ export const TaxReport = () => {
                                             <span className="text-xs font-bold text-white">{d.ticker}</span>
                                             <span className="text-[11px] text-slate-500 truncate">{d.name}</span>
                                         </div>
-                                        <span className="text-xs text-slate-300 font-mono">{fmt(d.amount)}</span>
+                                        <span className="text-xs text-slate-300 tabular-nums">{fmt(d.amount)}</span>
                                     </div>
                                 ))}
                                 <div className="flex items-center justify-between pt-3">
                                     <span className="text-xs font-bold text-white">Total de proventos isentos</span>
-                                    <span className="text-sm font-bold text-emerald-400 font-mono">{fmt(data.dividends.total)}</span>
+                                    <span className="text-sm font-bold text-emerald-400 tabular-nums">{fmt(data.dividends.total)}</span>
                                 </div>
                             </div>
                         )}
@@ -305,8 +305,8 @@ export const TaxReport = () => {
                                 {data.manualReviewItems.map((m) => (
                                     <div key={m.category} className="flex flex-wrap items-center justify-between gap-2 text-xs">
                                         <span className="text-white font-bold">{CATEGORY_PT[m.category] || m.category}</span>
-                                        <span className="text-slate-500">Vendas no ano: <span className="font-mono">{fmt(m.sales)}</span></span>
-                                        <span className="text-slate-300">Resultado: <span className="font-mono">{fmt(m.realizedGain)}</span></span>
+                                        <span className="text-slate-500">Vendas no ano: <span className="tabular-nums">{fmt(m.sales)}</span></span>
+                                        <span className="text-slate-300">Resultado: <span className="tabular-nums">{fmt(m.realizedGain)}</span></span>
                                     </div>
                                 ))}
                             </div>
@@ -344,7 +344,7 @@ export const TaxReport = () => {
 const SummaryCard = ({ label, value, accent }: { label: string; value: string; accent: 'emerald' | 'slate' }) => (
     <div className="bg-base border border-slate-800 rounded-2xl p-4">
         <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">{label}</p>
-        <p className={`text-lg font-bold font-mono ${accent === 'emerald' ? 'text-emerald-400' : 'text-white'}`}>{value}</p>
+        <p className={`text-lg font-bold tabular-nums ${accent === 'emerald' ? 'text-emerald-400' : 'text-white'}`}>{value}</p>
     </div>
 );
 
