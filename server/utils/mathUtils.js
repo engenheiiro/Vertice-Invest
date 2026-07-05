@@ -74,13 +74,22 @@ export const calculatePercent = (current, initial) => {
  * @param {number} startEquity Patrimônio Inicial (V0)
  * @param {number} endEquity Patrimônio Final (V1)
  * @param {number} flow Fluxo de Caixa Líquido (Aportes - Resgates)
+ * @param {number} [income=0] Proventos (dividendos/JCP) com ex-date no dia — RENDA,
+ *   não fluxo. Compensa a queda de preço do dia-ex; sem ele a cota vaza proventos.
  */
-export const calculateDailyDietz = (startEquity, endEquity, flow) => {
+export const calculateDailyDietz = (startEquity, endEquity, flow, income = 0) => {
+    // `income` = proventos com EX-DATE no dia. São RETORNO, não fluxo de caixa:
+    // no dia-ex o preço cai (endEquity menor), mas o provento recebido compensa
+    // essa queda. Sem creditá-lo, a cota (TWRR) contabiliza a queda como prejuízo
+    // PERMANENTE — o "vazamento de proventos" que fazia uma carteira de FIIs
+    // (~1%/mês distribuído) parecer plana ou perdendo do CDI.
+    const inc = Number(income) || 0;
+
     // Se não havia patrimônio no início do dia, o fluxo (aporte) é a base de cálculo.
     // Assumimos que o aporte ocorreu no início do dia para capturar o rendimento do primeiro dia.
     if (startEquity <= 0.01) {
         if (flow > 0.01) {
-            return (endEquity - flow) / flow;
+            return (endEquity + inc - flow) / flow;
         }
         return 0;
     }
@@ -88,14 +97,14 @@ export const calculateDailyDietz = (startEquity, endEquity, flow) => {
     // Se houve resgate total (ou maior que o patrimônio inicial)
     // O rendimento foi gerado sobre o startEquity antes do resgate.
     if (startEquity + flow <= 0.01) {
-        return (endEquity - startEquity - flow) / startEquity;
+        return (endEquity + inc - startEquity - flow) / startEquity;
     }
 
     // Para TWRR diário com fluxos intradiários, usamos peso 0.5 (Modified Dietz padrão)
     // Isso permite capturar a rentabilidade intradiária do fluxo sem distorcer a cota.
-    const numerator = endEquity - startEquity - flow;
-    const denominator = startEquity + (0.5 * flow); 
-    
+    const numerator = endEquity + inc - startEquity - flow;
+    const denominator = startEquity + (0.5 * flow);
+
     if (denominator <= 0.01) return 0;
     return numerator / denominator;
 };

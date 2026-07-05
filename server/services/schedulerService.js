@@ -17,6 +17,7 @@ import User from '../models/User.js';
 import UserAsset from '../models/UserAsset.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
 import AssetTransaction from '../models/AssetTransaction.js';
+import DividendEvent from '../models/DividendEvent.js';
 import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
 import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
@@ -159,10 +160,32 @@ const persistUserSnapshotForDay = async (user, dayStr, ctx, { assets = null, for
         if (tx.type === 'SELL') dayFlow -= tx.totalValue;
     });
 
+    // Proventos com EX-DATE neste dia BR (crédito de RENDA no TWRR). O preço cai
+    // no dia-ex; sem somar o provento recebido à cota, essa queda vira prejuízo-
+    // fantasma e a cota vaza ~1%/mês em FIIs distribuidores. DividendEvent.date é
+    // a ex-date normalizada à meia-noite UTC do dia-calendário — casa 1:1 com dayStr.
+    let dayDividendIncome = 0;
+    const qtyByTicker = new Map();
+    positions.forEach(p => { if (p.quantity > 0) qtyByTicker.set(String(p.ticker).toUpperCase(), p.quantity); });
+    if (qtyByTicker.size > 0) {
+        const [dy, dm, dd] = dayStr.split('-').map(Number);
+        const exDateUtc = new Date(Date.UTC(dy, dm - 1, dd));
+        const divEvents = await DividendEvent.find({ ticker: { $in: [...qtyByTicker.keys()] }, date: exDateUtc }).lean();
+        const seenDiv = new Set();
+        for (const ev of divEvents) {
+            const t = String(ev.ticker).toUpperCase();
+            const key = `${t}|${ev.type || 'DIVIDEND'}`; // dedup multi-fonte (mesmo provento)
+            if (seenDiv.has(key)) continue;
+            seenDiv.add(key);
+            const qty = qtyByTicker.get(t);
+            if (qty > 0) dayDividendIncome += qty * ev.amount;
+        }
+    }
+
     let quotaPrice = 100;
     const v0 = lastSnapshot ? lastSnapshot.totalEquity : 0;
-    if (v0 > 0 || dayFlow > 0) {
-        const dailyReturn = calculateDailyDietz(v0, totalEquity, dayFlow);
+    if (v0 > 0 || dayFlow > 0 || dayDividendIncome > 0) {
+        const dailyReturn = calculateDailyDietz(v0, totalEquity, dayFlow, dayDividendIncome);
         // Circuit breaker: rejeita variação diária absurda (dado corrompido).
         if (Math.abs(dailyReturn) > 0.5) {
             logger.warn(`⚠️ Anomalia TWRR ${user._id} @ ${dayStr}: ${(dailyReturn * 100).toFixed(2)}%. Snapshot ignorado.`);

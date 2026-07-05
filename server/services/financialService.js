@@ -232,6 +232,7 @@ export const financialService = {
         } = ctx;
         let txIndex = ctx.txIndex;
         let dayFlowAdjusted = 0;
+        let dayFlowNominal = 0;
 
         while (txIndex < txs.length) {
             const tx = txs[txIndex];
@@ -280,6 +281,7 @@ export const financialService = {
                     fixedIncomeState[tx.ticker].currentValue += tx.totalValue;
                 }
                 dayFlowAdjusted += trueAdjustedFlow * txUsdRate;
+                dayFlowNominal += tx.totalValue * txUsdRate;
 
                 if (!lastKnownPrices[tx.ticker]) lastKnownPrices[tx.ticker] = { close: tx.price, adjClose: txAdjPrice };
 
@@ -291,6 +293,7 @@ export const financialService = {
                     fixedIncomeState[tx.ticker].currentValue = Math.max(0, fixedIncomeState[tx.ticker].currentValue - tx.totalValue);
                 }
                 dayFlowAdjusted -= trueAdjustedFlow * txUsdRate;
+                dayFlowNominal -= tx.totalValue * txUsdRate;
             }
 
             if (portfolio[tx.ticker].qty < QUANTITY_EPSILON) {
@@ -301,7 +304,7 @@ export const financialService = {
             txIndex++;
         }
 
-        return { txIndex, dayFlowAdjusted };
+        return { txIndex, dayFlowAdjusted, dayFlowNominal };
     },
 
     /**
@@ -452,7 +455,7 @@ export const financialService = {
             const lastKnownPrices = {};
             let accumulatedDividends = 0;
             let currentQuota = 100.0;
-            let previousEquityAdjusted = 0;
+            let previousEquityNominal = 0;
             let txIndex = 0;
 
             let cursor = new Date(startDate);
@@ -469,15 +472,21 @@ export const financialService = {
                     assetMetadataMap, priceCacheMap, lastKnownPrices, getUsdRateForDate,
                 });
                 txIndex = dayTx.txIndex;
-                const dayFlowAdjusted = dayTx.dayFlowAdjusted;
+                const dayFlowNominal = dayTx.dayFlowNominal;
 
-                // 2) Proventos do dia (sobre a posição já atualizada).
+                // 2) Proventos do dia (sobre a posição já atualizada). Além de
+                //    acumular o total exibido, o caixa recebido HOJE é creditado na
+                //    cota como RENDA — senão a queda de preço do dia-ex vira
+                //    prejuízo-fantasma (vazamento de proventos: o adjClose da fonte
+                //    BR vem SEM ajuste, então a cota precisa do provento explícito).
                 const dayDividends = dividendDateMap.get(cursorIso) || [];
+                let dayDividendCash = 0;
                 for (const div of dayDividends) {
                     if (portfolio[div.ticker] && portfolio[div.ticker].qty > 0) {
-                        accumulatedDividends += (portfolio[div.ticker].qty * div.amount);
+                        dayDividendCash += (portfolio[div.ticker].qty * div.amount);
                     }
                 }
+                accumulatedDividends += dayDividendCash;
 
                 // 3) Juros da renda fixa do dia.
                 this._accrueDailyFixedIncome({
@@ -487,15 +496,16 @@ export const financialService = {
 
                 // 4) Marcação a mercado.
                 const usdRateForDay = getUsdRateForDate(cursorIso);
-                const { totalEquityNominal, totalEquityAdjusted, totalInvested, hasPosition } =
+                const { totalEquityNominal, totalInvested, hasPosition } =
                     this._markPortfolioToMarket({
                         cursorIso, portfolio, fixedIncomeState, assetMetadataMap,
                         priceCacheMap, lastKnownPrices, usdRateForDay,
                     });
 
-                // 5) Cota TWRR (Modified Dietz diário).
-                if (previousEquityAdjusted > 0 || dayFlowAdjusted > 0) {
-                    const dailyReturn = calculateDailyDietz(previousEquityAdjusted, totalEquityAdjusted, dayFlowAdjusted);
+                // 5) Cota TWRR (Modified Dietz diário) em espaço NOMINAL + provento
+                //    explícito — mesma metodologia do snapshot diário (schedulerService).
+                if (previousEquityNominal > 0 || dayFlowNominal > 0 || dayDividendCash > 0) {
+                    const dailyReturn = calculateDailyDietz(previousEquityNominal, totalEquityNominal, dayFlowNominal, dayDividendCash);
 
                     // Proteção contra spikes absurdos (ex: dados sujos)
                     if (dailyReturn > -0.5 && dailyReturn < 0.5) {
@@ -516,7 +526,7 @@ export const financialService = {
                     });
                 }
 
-                previousEquityAdjusted = totalEquityAdjusted;
+                previousEquityNominal = totalEquityNominal;
                 cursor.setDate(cursor.getDate() + 1);
             }
 
