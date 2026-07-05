@@ -46,6 +46,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "backtest:portfolio": "node server/scripts/seedPortfolioBacktest.js",
+    "seed:wallet": "node server/scripts/seedFullWallet.js",
     "changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s",
     "changelog:first": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0",
     "prepare": "husky || true"

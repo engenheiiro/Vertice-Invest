@@ -20,7 +20,8 @@
     "backfill:logos": "node scripts/backfillLogos.js",
     "lint": "node --check index.js",
     "build": "node scripts/build.js",
-    "backtest:portfolio": "node scripts/seedPortfolioBacktest.js"
+    "backtest:portfolio": "node scripts/seedPortfolioBacktest.js",
+    "seed:wallet": "node scripts/seedFullWallet.js"
   },
   "dependencies": {
     "@google/genai": "^1.38.0",
