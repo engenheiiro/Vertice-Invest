@@ -153,7 +153,7 @@ export const Wallet = () => {
                     <WalletSummary />
                 </div>
 
-                <div className={`flex gap-1 sm:gap-2 mb-6 border-b border-slate-800/60 overflow-x-auto no-scrollbar transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
+                <div className={`flex gap-2 mb-6 border-b border-slate-800/60 pb-1 overflow-x-auto no-scrollbar transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
                     <TabButton id="tour-tab-overview" active={activeTab === 'OVERVIEW'} onClick={() => setActiveTab('OVERVIEW')} icon={<PieChart size={14} />} label="Visão Geral" />
                     <TabButton id="tour-tab-performance" active={activeTab === 'PERFORMANCE'} onClick={() => setActiveTab('PERFORMANCE')} icon={<BarChart2 size={14} />} label="Rentabilidade" />
                     <TabButton id="tour-tab-dividends" active={activeTab === 'DIVIDENDS'} onClick={() => setActiveTab('DIVIDENDS')} icon={<Coins size={14} />} label="Proventos" />
@@ -286,20 +286,15 @@ const TabFallback = () => (
     </div>
 );
 
-// Tab estilo "underline": a aba ativa recebe texto emerald + sublinhado emerald
-// (a borda inferior de 2px sobrepõe a divisória do container via -mb-px). Mais
-// limpo que a pílula cinza e coerente com o semáforo do design system.
 const TabButton = ({ active, onClick, icon, label, id }: any) => (
     <button
         id={id}
         onClick={onClick}
-        aria-current={active ? 'page' : undefined}
         className={`
-            relative flex items-center gap-2 px-3 sm:px-4 py-2.5 -mb-px text-xs font-bold whitespace-nowrap
-            border-b-2 transition-colors duration-200
-            ${active
-                ? 'text-emerald-400 border-emerald-400'
-                : 'text-slate-500 border-transparent hover:text-slate-300 hover:border-slate-700'
+            flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap
+            ${active 
+                ? 'bg-slate-800 text-white shadow-sm border border-slate-700' 
+                : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 border border-transparent'
             }
         `}
     >

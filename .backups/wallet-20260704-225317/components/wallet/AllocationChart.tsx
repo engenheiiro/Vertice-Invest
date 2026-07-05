@@ -2,9 +2,9 @@
 import React, { useState, useMemo } from 'react';
 import { useWallet, AssetType, AllocationMap, SubAllocationMap, DEFAULT_SUB_ALLOCATION } from '../../contexts/WalletContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Settings, Check, X, DollarSign, ChevronDown, ChevronRight, ShieldCheck, PlusCircle, ArrowRight, TrendingUp } from 'lucide-react';
+import { Settings, Check, X, DollarSign, ChevronDown, ChevronRight, ShieldCheck, PlusCircle } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Sector } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatCompact as fmtCompact } from '../../utils/format';
 import { useToast } from '../../contexts/ToastContext';
 import { computeSubAllocationReal, hasSubTargets } from '../../utils/allocation';
@@ -53,23 +53,6 @@ const cloneSub = (s: SubAllocationMap): SubAllocationMap => ({
     STOCK_US: { ...DEFAULT_SUB_ALLOCATION.STOCK_US, ...s.STOCK_US },
 });
 
-// Fatia ativa (hover): mesma fatia com o raio externo um pouco maior — realce sutil,
-// sem deslocar o donut. Recharts injeta a geometria do setor nas props.
-const renderActiveSlice = (props: any) => {
-    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
-    return (
-        <Sector
-            cx={cx}
-            cy={cy}
-            innerRadius={innerRadius}
-            outerRadius={outerRadius + 5}
-            startAngle={startAngle}
-            endAngle={endAngle}
-            fill={fill}
-        />
-    );
-};
-
 interface AllocationChartProps {
     /** View inicial do toggle Atual/Ideal. 'IDEAL' é útil em carteira vazia,
      * quando o usuário quer definir a alocação-alvo antes de cadastrar ativos. */
@@ -85,8 +68,6 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
         : { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '10px' };
     const [viewMode, setViewMode] = useState<'CURRENT' | 'IDEAL'>(initialViewMode);
     const [isEditing, setIsEditing] = useState(false);
-    // Fatia sob o cursor: cresce um pouco (activeShape) para dar feedback tátil ao donut.
-    const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
 
     const [tempTargets, setTempTargets] = useState<AllocationMap>(targetAllocation);
     const [tempReserve, setTempReserve] = useState<string>(targetReserve.toString());
@@ -259,36 +240,8 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
         });
     };
 
-    // Card de nudge (rodapé da Distribuição): contextual ao modo de visão. Espelha o
-    // protótipo — reforça a reserva protegida (Atual) ou orienta a alocação-alvo (Ideal).
-    const renderNudge = () => {
-        if (viewMode === 'IDEAL') {
-            return (
-                <div className="shrink-0 mt-3 flex gap-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.07] p-3.5">
-                    <span className="w-8 h-8 rounded-[9px] bg-base flex items-center justify-center shrink-0 text-blue-400"><TrendingUp size={17} /></span>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-bold text-white">Alocação sugerida</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">Distribuição-alvo do seu perfil. Use o Aporte Inteligente para chegar lá aos poucos.</p>
-                    </div>
-                </div>
-            );
-        }
-        return (
-            <div className="shrink-0 mt-3 flex gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] p-3.5">
-                <span className="w-8 h-8 rounded-[9px] bg-base flex items-center justify-center shrink-0 text-emerald-400"><ShieldCheck size={17} /></span>
-                <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-bold text-white">Reserva protegida</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">Sua reserva está garantida. Diversifique o excedente para buscar mais rentabilidade.</p>
-                    <button onClick={() => setViewMode('IDEAL')} className="mt-2 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[12px] font-bold transition-colors">
-                        Ver alocação ideal <ArrowRight size={14} />
-                    </button>
-                </div>
-            </div>
-        );
-    };
-
     return (
-        <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
+        <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden">
 
             {/* Header */}
             <div className="flex justify-between items-start mb-2 shrink-0">
@@ -327,14 +280,11 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                                 <ShieldCheck className="text-emerald-400" size={26} />
                             </div>
                             <div>
-                                <p className="text-sm font-bold text-slate-300">Reserva 100% protegida</p>
+                                <p className="text-sm font-bold text-slate-300">Nada investido ainda</p>
                                 <p className="text-xs text-slate-500 mt-1 max-w-[260px]">
-                                    Sua reserva ({formatCurrency(reserveValue)}) está garantida. Que tal diversificar o excedente para buscar mais rentabilidade?
+                                    Sua reserva ({formatCurrency(reserveValue)}) está protegida. Adicione ativos para ver a distribuição.
                                 </p>
                             </div>
-                            <button onClick={() => setViewMode('IDEAL')} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors">
-                                Ver alocação ideal <ArrowRight size={15} />
-                            </button>
                         </>
                     ) : (
                         <>
@@ -350,8 +300,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                 </div>
             ) : (
             /* Content Area */
-            <div className="flex-1 flex flex-col min-h-0">
-                <div className="flex items-center gap-2 flex-1 min-h-0">
+            <div className="flex items-center gap-2 h-full min-h-0">
 
                 {/* Chart Container - Tamanho Reduzido e Fixo */}
                 {/* (A1) role=img + aria-label: leitores de tela leem um resumo no lugar do SVG */}
@@ -371,10 +320,6 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                                 paddingAngle={3}
                                 dataKey="value"
                                 stroke="none"
-                                activeIndex={activeIndex}
-                                activeShape={renderActiveSlice}
-                                onMouseEnter={(_, index) => setActiveIndex(index)}
-                                onMouseLeave={() => setActiveIndex(undefined)}
                             >
                                 {chartData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -469,8 +414,6 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                         );
                     })}
                 </div>
-                </div>
-                {renderNudge()}
             </div>
             )}
 

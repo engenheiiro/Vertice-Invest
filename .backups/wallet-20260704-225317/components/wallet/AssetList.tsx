@@ -24,21 +24,6 @@ const TYPE_LABELS: Record<string, string> = {
     CASH: 'Caixa / Reserva'
 };
 
-// Acento de cor por classe (espelha a paleta do donut de Distribuição): tinge o
-// ícone do grupo, o rótulo e a barra de alocação — dando identidade a cada classe.
-const CLASS_ACCENT: Record<string, { label: string; icon: string; bar: string }> = {
-    STOCK:        { label: 'text-blue-400',    icon: 'bg-blue-500/10 text-blue-400',       bar: 'bg-blue-500' },
-    FII:          { label: 'text-emerald-400', icon: 'bg-emerald-500/10 text-emerald-400', bar: 'bg-emerald-500' },
-    STOCK_US:     { label: 'text-cyan-400',    icon: 'bg-cyan-500/10 text-cyan-400',       bar: 'bg-cyan-500' },
-    ETF:          { label: 'text-teal-400',    icon: 'bg-teal-500/10 text-teal-400',       bar: 'bg-teal-500' },
-    CRYPTO:       { label: 'text-fuchsia-400', icon: 'bg-fuchsia-500/10 text-fuchsia-400', bar: 'bg-fuchsia-500' },
-    FIXED_INCOME: { label: 'text-amber-400',   icon: 'bg-amber-500/10 text-amber-400',     bar: 'bg-amber-500' },
-    OURO:         { label: 'text-yellow-400',  icon: 'bg-yellow-500/10 text-yellow-400',   bar: 'bg-yellow-500' },
-    CASH:         { label: 'text-slate-300',   icon: 'bg-slate-700/60 text-slate-300',     bar: 'bg-slate-500' },
-};
-const accentOf = (type: string) => CLASS_ACCENT[type] || CLASS_ACCENT.CASH;
-const pluralAtivos = (n: number) => `${n} ${n === 1 ? 'Ativo' : 'Ativos'}`;
-
 export const AssetList = () => {
     const { assets, removeAsset, kpis, targetAllocation, isPrivacyMode } = useWallet();
     const confirm = useConfirm();
@@ -109,10 +94,8 @@ export const AssetList = () => {
         <>
             <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden animate-fade-in">
                 <div className="p-5 border-b border-slate-800 bg-card flex justify-between items-center">
-                    <h3 className="font-bold text-slate-200 flex items-center gap-2.5">
-                        <span className="w-8 h-8 rounded-[9px] bg-slate-800 text-slate-300 flex items-center justify-center">
-                            <Folder size={16} />
-                        </span>
+                    <h3 className="font-bold text-slate-200 flex items-center gap-2">
+                        <Folder size={16} className="text-blue-500" />
                         Detalhamento por Classe
                     </h3>
                     {isPrivacyMode && (
@@ -129,7 +112,6 @@ export const AssetList = () => {
                         const isCollapsed = collapsedGroups[type];
                         const totalValueGroup = groupItems.reduce((acc, item) => acc + (item.totalValue || 0), 0);
                         const gm = groupMetrics(groupItems);
-                        const accent = accentOf(type);
 
                         return (
                             <div key={type}>
@@ -137,9 +119,8 @@ export const AssetList = () => {
                                     onClick={() => toggleGroup(type)}
                                     className="w-full flex items-center justify-between px-4 py-3 bg-panel text-left"
                                 >
-                                    <span className={`text-xs font-bold uppercase tracking-widest flex items-center gap-2 min-w-0 ${accent.label}`}>
+                                    <span className="text-xs font-bold text-blue-400 uppercase tracking-widest flex items-center gap-2 min-w-0">
                                         {isCollapsed ? <ChevronRight size={14} className="shrink-0" /> : <ChevronDown size={14} className="shrink-0" />}
-                                        <span className={`w-6 h-6 rounded-[7px] flex items-center justify-center shrink-0 ${accent.icon}`}><PieChart size={13} /></span>
                                         <span className="truncate">{TYPE_LABELS[type]}</span>
                                         <span className="text-[10px] text-slate-500 shrink-0">({groupItems.length})</span>
                                     </span>
@@ -254,7 +235,6 @@ export const AssetList = () => {
                                 const allocationPercent = (kpis.totalEquity || 0) > 0 ? (totalValueGroup / kpis.totalEquity) * 100 : 0;
                                 const idealPercent = targetAllocation[type as AssetType] || 0;
                                 const gm = groupMetrics(groupItems);
-                                const accent = accentOf(type);
 
                                 return (
                                     <React.Fragment key={type}>
@@ -264,18 +244,13 @@ export const AssetList = () => {
                                         >
                                             <td colSpan={8} className="px-4 py-3">
                                                 <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-3">
-                                                        <span className={`shrink-0 ${accent.label}`}>
-                                                            {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                                                        </span>
-                                                        <span className={`w-7 h-7 rounded-[8px] flex items-center justify-center ${accent.icon}`}>
-                                                            <PieChart size={15} />
-                                                        </span>
-                                                        <span className={`text-xs font-bold uppercase tracking-widest ${accent.label}`}>
-                                                            {TYPE_LABELS[type]}
+                                                    <div className="flex items-center gap-4">
+                                                        <span className="text-xs font-bold text-blue-400 uppercase tracking-widest flex items-center gap-2">
+                                                            {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                                                            <PieChart size={14} /> {TYPE_LABELS[type]}
                                                         </span>
                                                         <span className="text-[10px] font-bold text-slate-500 bg-slate-900 px-2 py-0.5 rounded border border-slate-800/50">
-                                                            {pluralAtivos(groupItems.length)}
+                                                            {groupItems.length} Ativos
                                                         </span>
                                                     </div>
                                                     
@@ -304,7 +279,7 @@ export const AssetList = () => {
                                                             <div className="flex items-center gap-2 w-full justify-end">
                                                                 <span className="text-white font-bold">{allocationPercent.toFixed(1)}%</span>
                                                                 <div className="w-12 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                                                    <div className={`h-full ${accent.bar}`} style={{ width: `${Math.min(allocationPercent, 100)}%` }}></div>
+                                                                    <div className="h-full bg-blue-500" style={{ width: `${Math.min(allocationPercent, 100)}%` }}></div>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -382,22 +357,22 @@ export const AssetList = () => {
                                                         </div>
                                                     </td>
                                                     <td className="p-4 text-center">
-                                                        <div className="flex items-center justify-center gap-1.5">
+                                                        <div className="flex items-center justify-center gap-1">
                                                             {asset.type === 'CASH' && (
                                                                 <button
                                                                     onClick={() => setRenameTarget({ id: asset.id, name: asset.name || '' })}
-                                                                    className="w-8 h-8 flex items-center justify-center border border-slate-800 rounded-lg text-slate-500 hover:text-emerald-400 hover:border-emerald-500/40 transition-colors"
+                                                                    className="p-2 text-slate-600 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
                                                                     title="Renomear Reserva"
                                                                 >
-                                                                    <Pencil size={15} />
+                                                                    <Pencil size={16} />
                                                                 </button>
                                                             )}
                                                             <button
                                                                 onClick={() => setHistoryTicker(asset.ticker)}
-                                                                className="w-8 h-8 flex items-center justify-center border border-slate-800 rounded-lg text-slate-500 hover:text-blue-400 hover:border-blue-500/40 transition-colors"
+                                                                className="p-2 text-slate-600 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
                                                                 title="Ver Histórico"
                                                             >
-                                                                <History size={15} />
+                                                                <History size={16} />
                                                             </button>
                                                             <button
                                                                 onClick={async () => {
@@ -409,10 +384,10 @@ export const AssetList = () => {
                                                                     });
                                                                     if (ok) removeAsset(asset.id);
                                                                 }}
-                                                                className="w-8 h-8 flex items-center justify-center border border-slate-800 rounded-lg text-slate-500 hover:text-red-500 hover:border-red-500/40 transition-colors"
+                                                                className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
                                                                 title="Remover Ativo"
                                                             >
-                                                                <Trash2 size={15} />
+                                                                <Trash2 size={16} />
                                                             </button>
                                                         </div>
                                                     </td>

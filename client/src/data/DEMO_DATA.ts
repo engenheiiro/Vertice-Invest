@@ -48,21 +48,54 @@ export const DEMO_KPIS = {
     weightedRentability: 96.44 
 };
 
-// Histórico ajustado para curva ascendente forte (Simulando o ganho ponderado alto)
-export const DEMO_HISTORY = [
-    { date: '2024-01-01', totalEquity: 322.34, totalInvested: 322.34, profit: 0 },
-    { date: '2024-02-01', totalEquity: 330.50, totalInvested: 322.34, profit: 8.16 },
-    { date: '2024-03-01', totalEquity: 345.20, totalInvested: 322.34, profit: 22.86 },
-    { date: '2024-04-01', totalEquity: 358.90, totalInvested: 322.34, profit: 36.56 },
-    { date: '2024-05-01', totalEquity: 380.40, totalInvested: 322.34, profit: 58.06 },
-    { date: '2024-06-01', totalEquity: 375.10, totalInvested: 322.34, profit: 52.76 },
-    { date: '2024-07-01', totalEquity: 405.60, totalInvested: 322.34, profit: 83.26 },
-    { date: '2024-08-01', totalEquity: 435.80, totalInvested: 322.34, profit: 113.46 },
-    { date: '2024-09-01', totalEquity: 460.20, totalInvested: 322.34, profit: 137.86 },
-    { date: '2024-10-01', totalEquity: 482.50, totalInvested: 322.34, profit: 160.16 },
-    { date: '2024-11-01', totalEquity: 505.30, totalInvested: 322.34, profit: 182.96 },
-    { date: '2024-12-01', totalEquity: 526.07, totalInvested: 322.34, profit: 203.73 },
+// Histórico DEMO (tour/onboarding/marketing). Gerado em granularidade DIÁRIA para o
+// gráfico de Evolução exibir uma curva ondulada e viva — como no protótipo — tanto na
+// visão Diária quanto na Mensal (que agrega por mês). NÃO é dado real: a carteira real
+// reflete os snapshots do usuário (uma carteira 100% caixa, p.ex., é uma reta correta).
+const DEMO_INVESTED = 322.34;
+// Âncoras mensais de patrimônio: definem a TENDÊNCIA (inclui a correção de junho).
+const DEMO_EQUITY_ANCHORS = [
+    322.34, 330.50, 345.20, 358.90, 380.40, 375.10,
+    405.60, 435.80, 460.20, 482.50, 505.30, 526.07,
 ];
+
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+function buildDemoHistory() {
+    const points: { date: string; totalEquity: number; totalInvested: number; profit: number }[] = [];
+    const start = new Date(Date.UTC(2024, 0, 1));
+    const totalDays = 365;
+
+    for (let i = 0; i < totalDays; i++) {
+        const d = new Date(start);
+        d.setUTCDate(start.getUTCDate() + i);
+
+        // Interpola linearmente entre as âncoras mensais (tendência de fundo).
+        const t = i / (totalDays - 1);
+        const seg = t * (DEMO_EQUITY_ANCHORS.length - 1);
+        const idx = Math.min(DEMO_EQUITY_ANCHORS.length - 2, Math.floor(seg));
+        const frac = seg - idx;
+        const trend = DEMO_EQUITY_ANCHORS[idx] + (DEMO_EQUITY_ANCHORS[idx + 1] - DEMO_EQUITY_ANCHORS[idx]) * frac;
+
+        // Ondas determinísticas (duas frequências) — oscilação diária de mercado. A
+        // amplitude cresce com o tempo (mercado "respira" mais conforme o capital sobe).
+        const wave = (Math.sin(i * 0.36) * 3.0 + Math.sin(i * 0.12) * 4.4) * Math.min(1, t * 1.8 + 0.15);
+        const equity = trend + wave;
+
+        points.push({
+            date: d.toISOString().slice(0, 10),
+            totalEquity: round2(equity),
+            totalInvested: DEMO_INVESTED,
+            profit: round2(equity - DEMO_INVESTED),
+        });
+    }
+
+    // Fixa o último ponto no KPI atual do demo (coerência com os cards).
+    points[points.length - 1] = { date: points[points.length - 1].date, totalEquity: 526.07, totalInvested: DEMO_INVESTED, profit: 203.73 };
+    return points;
+}
+
+export const DEMO_HISTORY = buildDemoHistory();
 
 export const DEMO_PERFORMANCE = [
     { date: '2024-01-01', wallet: 0,     walletRoi: 0,     cdi: 0.8,  ibov: -1.5, ipca: 0.6,  equity: 322.34 },

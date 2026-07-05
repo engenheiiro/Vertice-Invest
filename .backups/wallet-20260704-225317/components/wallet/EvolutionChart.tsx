@@ -1,8 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useWallet } from '../../contexts/WalletContext';
-import { useTheme } from '../../contexts/ThemeContext';
-import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 import { BarChart3 } from 'lucide-react';
 import { formatCurrency as fmtCurrency, formatPercent } from '../../utils/format';
 import { buildEvolutionChartData, summarizeEvolutionWindow, type ChartGranularity, type ChartWindow } from '../../utils/evolutionChartData';
@@ -47,15 +46,6 @@ const WINDOW_OPTIONS: Record<ChartGranularity, ChartWindow[]> = {
 
 export const EvolutionChart = React.memo(() => {
     const { kpis, history, isPrivacyMode } = useWallet();
-    const { theme } = useTheme();
-    // Grade/eixo/cursor theme-aware — mesma convenção do PerformanceChart. No claro
-    // os tons escuros crus (#1e293b, #334155) ficavam pesados sobre o card branco.
-    const gridStroke = theme === 'light' ? '#eef1f5' : '#232b36';
-    const cursorStroke = theme === 'light' ? '#cbd5e1' : '#334155';
-    // Bolha do ponto LIVE: contraste invertido ao tema (escura no claro, clara no escuro).
-    const bubbleBg = theme === 'light' ? '#0f1b2d' : '#e9eef5';
-    const bubbleText = theme === 'light' ? '#ffffff' : '#0d1117';
-    const dotFill = theme === 'light' ? '#ffffff' : '#0B101A';
     const [granularity, setGranularity] = useState<ChartGranularity>('MONTHLY');
     const [range, setRange] = useState<ChartWindow>('ALL');
 
@@ -86,27 +76,11 @@ export const EvolutionChart = React.memo(() => {
     );
 
     const summary = useMemo(() => summarizeEvolutionWindow(chartData), [chartData]);
+    const hasLoss = useMemo(() => chartData.some((d) => d.lossBar > 0), [chartData]);
     const showSummary = summary.variationValue !== 0 || summary.variationPercent !== null;
     const summaryPositive = summary.variationValue >= 0;
 
-    // Ponto LIVE (última barra): bolinha destacada + bolha flutuante com o saldo atual.
-    // Recharts chama esta função para cada ponto da série; só desenhamos no último.
-    const renderEndDot = (props: any): React.ReactElement => {
-        const { cx, cy, index, payload } = props;
-        if (cx == null || cy == null || index !== chartData.length - 1) return <g key={`d${index}`} />;
-        const label = formatCurrency(payload.realEquity);
-        const bw = Math.max(78, label.length * 8 + 18);
-        const bx = cx - bw - 6; // bolha à esquerda do ponto (o ponto vive na borda direita)
-        return (
-            <g>
-                <rect x={bx} y={cy - 30} width={bw} height={22} rx={7} fill={bubbleBg} />
-                <text x={bx + bw / 2} y={cy - 15} textAnchor="middle" fontSize={11.5} fontWeight={800} fill={bubbleText}>
-                    {label}
-                </text>
-                <circle cx={cx} cy={cy} r={5} fill={dotFill} stroke="#0e9268" strokeWidth={2.6} />
-            </g>
-        );
-    };
+    const barSize = chartData.length > 24 ? 12 : (chartData.length > 12 ? 20 : 35);
 
     if (kpis.totalEquity === 0 && chartData.length === 0) {
         return (
@@ -137,13 +111,19 @@ export const EvolutionChart = React.memo(() => {
                     </div>
                     <div className="flex items-center gap-3 mt-1">
                         <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#8fd6bd' }}></span>
+                            <span className="w-2 h-2 rounded-full bg-emerald-700"></span>
                             <p className="text-[10px] text-slate-400 font-bold uppercase">Valor Aplicado</p>
                         </div>
                         <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#0e9268' }}></span>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">Patrimônio</p>
+                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">Resultado</p>
                         </div>
+                        {hasLoss && (
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase">Prejuízo</p>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -191,14 +171,8 @@ export const EvolutionChart = React.memo(() => {
                     {showSummary && !isPrivacyMode && ` Resultado no período: ${formatSignedCurrency(summary.variationValue)}${summary.variationPercent !== null ? ` (${formatPercent(summary.variationPercent, { sign: true })})` : ''}.`}
                 </p>
                 <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={chartData} margin={{ top: 30, right: 14, left: -18, bottom: 0 }}>
-                        <defs>
-                            <linearGradient id="evoEquityFill" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#0e9268" stopOpacity={0.22} />
-                                <stop offset="100%" stopColor="#0e9268" stopOpacity={0} />
-                            </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 4" stroke={gridStroke} vertical={false} />
+                    <BarChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }} barGap={0}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
 
                         <XAxis
                             dataKey="label"
@@ -217,7 +191,7 @@ export const EvolutionChart = React.memo(() => {
                         />
 
                         <Tooltip
-                            cursor={{ stroke: cursorStroke, strokeWidth: 1, strokeDasharray: '4 4' }}
+                            cursor={{ fill: '#1e293b', opacity: 0.3 }}
                             content={({ active, payload, label }) => {
                                 if (active && payload && payload.length) {
                                     const data = payload[0].payload;
@@ -272,38 +246,40 @@ export const EvolutionChart = React.memo(() => {
                             }}
                         />
 
-                        {/* Preenchimento do patrimônio (sem traço — o traço é a Line abaixo, p/ camadas) */}
-                        <Area
-                            type="monotone"
-                            dataKey="realEquity"
-                            stroke="none"
-                            fill="url(#evoEquityFill)"
-                            isAnimationActive={false}
+                        <Bar
+                            dataKey="baseBar"
+                            stackId="a"
+                            fill="#047857" // Emerald 700
+                            radius={[0, 0, 4, 4]}
+                            maxBarSize={50}
+                            barSize={barSize}
+                            animationDuration={1000}
                         />
 
-                        {/* Linha tracejada do Valor Aplicado (custo) */}
-                        <Line
-                            type="monotone"
-                            dataKey="realInvested"
-                            stroke="#8fd6bd"
-                            strokeWidth={1.8}
-                            strokeDasharray="5 4"
-                            dot={false}
-                            activeDot={false}
-                            isAnimationActive={false}
+                        <Bar
+                            dataKey="profitBar"
+                            stackId="a"
+                            fill="#34D399" // Emerald 400
+                            radius={[4, 4, 0, 0]}
+                            maxBarSize={50}
+                            barSize={barSize}
+                            animationDuration={1000}
                         />
 
-                        {/* Linha do Patrimônio (verde) + ponto/bolha do dia LIVE */}
-                        <Line
-                            type="monotone"
-                            dataKey="realEquity"
-                            stroke="#0e9268"
-                            strokeWidth={2.6}
-                            dot={renderEndDot}
-                            activeDot={{ r: 4, fill: '#0e9268', stroke: dotFill, strokeWidth: 2 }}
-                            animationDuration={900}
+                        {/* Capa vermelha translúcida: queda do patrimônio até o custo (aplicado) */}
+                        <Bar
+                            dataKey="lossBar"
+                            stackId="a"
+                            fill="#ef4444" // Red 500
+                            fillOpacity={0.55}
+                            radius={[4, 4, 0, 0]}
+                            maxBarSize={50}
+                            barSize={barSize}
+                            animationDuration={1000}
                         />
-                    </ComposedChart>
+
+                        <ReferenceLine y={0} stroke="#334155" />
+                    </BarChart>
                 </ResponsiveContainer>
             </div>
         </div>

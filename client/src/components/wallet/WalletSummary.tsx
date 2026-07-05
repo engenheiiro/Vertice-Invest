@@ -1,47 +1,40 @@
 
 import React from 'react';
 import { useWallet } from '../../contexts/WalletContext';
-import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Activity, Layers, BarChart2, Info, ShieldCheck, AlertTriangle, Scale } from 'lucide-react';
+import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
 import { SkeletonKpiGrid } from '../ui'; // (I12) skeleton padronizado
 import { formatCurrency as fmtCurrency } from '../../utils/format';
 import { useCountUp } from '../../hooks/useCountUp';
 
 interface EquitySummaryProps {
-    onGenerateReport?: () => void; 
+    onGenerateReport?: () => void;
 }
 
 export const WalletSummary: React.FC<EquitySummaryProps> = () => {
     const { kpis, isPrivacyMode, isLoading } = useWallet();
     const animatedEquity = useCountUp(kpis?.totalEquity || 0);
 
-    const formatCurrency = (val: number | null | undefined) => {
-        if (isLoading) return <div className="h-6 w-24 bg-slate-800 rounded animate-pulse"></div>;
-        return fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
-    };
+    const formatCurrency = (val: number | null | undefined) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
 
     const safeFixed = (val: number | null | undefined) => {
-        if (isLoading) return '...';
         if (isPrivacyMode) return '•••';
         return (val || 0).toFixed(2);
     };
 
     const isDayPositive = (kpis?.dayVariation || 0) >= 0;
+    const isDayFlat = (kpis?.dayVariation || 0) === 0;
     const isTotalPositive = (kpis?.totalResult || 0) >= 0;
     const isRentabilityPositive = (kpis?.weightedRentability || 0) >= 0;
-    const isEquityProfitable = (kpis?.totalEquity || 0) > (kpis?.totalInvested || 0);
 
     // Badge do Patrimônio Líquido = variação do CAPITAL (patrimônio vs. investido),
-    // não o retorno total. Antes mostrava totalResultPercent (que inclui proventos),
-    // exibindo % POSITIVO mesmo com patrimônio ABAIXO do investido — incoerente.
-    // O retorno total (com proventos) fica no card Lucro Total. Espelha o
-    // Investidor10, que mostra -4,62% no Patrimônio quando o preço caiu.
+    // não o retorno total. O retorno total (com proventos) fica no card Lucro Total.
     const capitalVariationPercent = (kpis?.totalInvested || 0) > 0
         ? (((kpis?.totalEquity || 0) - (kpis?.totalInvested || 0)) / kpis.totalInvested) * 100
         : 0;
     const isCapitalPositive = capitalVariationPercent >= 0;
     const isAudited = kpis?.dataQuality === 'AUDITED';
 
-    // Cálculo do Retorno Total Bruto
+    // Retorno Total Bruto (patrimônio + proventos) e múltiplo sobre o aplicado.
     const totalGross = (kpis?.totalEquity || 0) + (kpis?.totalDividends || 0);
     const grossMultiple = (kpis?.totalInvested || 0) > 0 ? totalGross / kpis.totalInvested : 0;
 
@@ -53,166 +46,147 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
         // (A7) região nomeada para os indicadores patrimoniais (landmark)
         <section aria-label="Resumo patrimonial" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
 
-            {/* 1. PATRIMÔNIO LÍQUIDO */}
-            <DashboardCard 
-                label="PATRIMÔNIO LÍQUIDO"
-                icon={<Wallet size={18} className="text-blue-500" />}
-                value={
-                    <div className="flex items-baseline gap-2">
-                        <span
-                            className={isEquityProfitable ? "text-emerald-400" : "text-white"}
-                            aria-live="polite"
-                            aria-atomic="true"
-                        >
-                            {formatCurrency(animatedEquity)}
-                        </span>
-                        <span
-                            className={`text-xs font-bold px-1.5 py-0.5 rounded border translate-y-[-2px] ${isCapitalPositive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}
-                            title="Variação do capital: patrimônio atual vs. valor investido (sem proventos)."
-                        >
-                            {isCapitalPositive ? '+' : ''}{safeFixed(capitalVariationPercent)}%
-                        </span>
+            {/* 1. PATRIMÔNIO LÍQUIDO — card "herói" em gradiente verde (destaque da carteira) */}
+            {/* Card sempre verde-escuro nos DOIS temas → texto sempre branco. Usamos valores
+                arbitrários (text-[#fff], rgba…) porque o tema claro sobrescreve .text-white
+                e .text-white/xx para tons escuros — o que apagaria o texto sobre o verde. */}
+            <div
+                className="relative overflow-hidden rounded-2xl p-[18px] text-[#fff]"
+                style={{
+                    background: 'linear-gradient(180deg, #0f5f47, #0c4f3b)',
+                    boxShadow: '0 14px 30px -18px rgba(12,79,59,.9)',
+                }}
+            >
+                <div
+                    className="absolute right-[-30px] top-[-30px] w-[130px] h-[130px] rounded-full pointer-events-none"
+                    style={{ background: 'radial-gradient(circle, rgba(255,255,255,.14), transparent 70%)' }}
+                />
+                <div className="relative flex justify-between items-start">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[rgba(255,255,255,0.72)]">Patrimônio Líquido</span>
+                    <span className="w-[30px] h-[30px] rounded-[9px] bg-white/[0.14] flex items-center justify-center text-[#eafff6]">
+                        <Wallet size={16} />
+                    </span>
+                </div>
+
+                <div className="relative flex items-baseline gap-2 mt-3.5">
+                    <span className="text-[28px] font-extrabold tracking-tight" aria-live="polite" aria-atomic="true">
+                        {formatCurrency(animatedEquity)}
+                    </span>
+                    <span
+                        className={`text-xs font-bold ${isCapitalPositive ? 'text-[#8ff0c8]' : 'text-[#fca5a5]'}`}
+                        title="Variação do capital: patrimônio atual vs. valor investido (sem proventos)."
+                    >
+                        {isCapitalPositive ? '+' : ''}{safeFixed(capitalVariationPercent)}%
+                    </span>
+                </div>
+
+                <div className="relative flex items-center justify-between mt-4 pt-3 border-t border-white/[0.14]">
+                    <div>
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.6)] mb-0.5">Variação Hoje</p>
+                        <div className="text-sm font-bold text-[#fff]">
+                            {isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}
+                        </div>
                     </div>
-                }
-                subLabel="VARIAÇÃO HOJE"
-                subContent={
-                    <div className={`text-sm font-bold ${isDayPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}
-                    </div>
-                }
-                badge={
-                    <Badge value={`${safeFixed(kpis.dayVariationPercent)}%`} isPositive={isDayPositive} />
-                }
-                glow="blue"
-            />
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#eafff6] bg-white/[0.14] px-2.5 py-1 rounded-full">
+                        {isDayFlat ? <Minus size={12} /> : isDayPositive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                        {safeFixed(kpis.dayVariationPercent)}%
+                    </span>
+                </div>
+            </div>
 
             {/* 2. VALOR APLICADO */}
-            <DashboardCard 
-                label="VALOR APLICADO"
-                value={formatCurrency(kpis.totalInvested)}
-                icon={<DollarSign size={18} className="text-purple-500" />}
+            <StatCard
+                label="Valor Aplicado"
                 tooltipText="Custo Contábil: Soma exata do dinheiro que saiu do seu bolso. Não inclui dividendos reinvestidos (estes aumentam apenas a quantidade de cotas)."
+                icon={<DollarSign size={16} />}
+                iconClass="bg-slate-800 text-slate-300"
+                value={formatCurrency(kpis.totalInvested)}
                 subLabel="Patrimônio + Proventos"
-                subContent={
-                    <span className="text-slate-200 font-bold text-xs">{formatCurrency(totalGross)}</span>
-                }
-                badge={
-                    <div className="text-[10px] font-bold px-2 py-0.5 rounded border bg-purple-500/10 text-purple-400 border-purple-500/20 flex items-center gap-1">
-                        <Activity size={10} /> {grossMultiple.toFixed(2)}x
-                    </div>
-                }
+                subValue={formatCurrency(totalGross)}
+                tag={<><Activity size={11} /> {grossMultiple.toFixed(2)}x</>}
+                tagClass="bg-purple-500/10 text-purple-400 border-purple-500/20"
             />
 
             {/* 3. LUCRO TOTAL */}
-            <DashboardCard 
-                label="LUCRO TOTAL"
-                icon={<TrendingUp size={18} className={isTotalPositive ? "text-emerald-500" : "text-red-500"} />}
+            <StatCard
+                label="Lucro Total"
                 tooltipText="Resultado total = ganho de capital (valorização dos ativos) + proventos recebidos. O card 'Prov. Acumulados' detalha apenas a parcela de proventos."
-                value={
-                    <span className={isTotalPositive ? "text-emerald-400" : "text-red-400"}>
-                        {isTotalPositive ? '+' : ''}{formatCurrency(kpis.totalResult)}
+                icon={<TrendingUp size={16} />}
+                iconClass={isTotalPositive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}
+                value={`${isTotalPositive ? '+' : ''}${formatCurrency(kpis.totalResult)}`}
+                valueClass={isTotalPositive ? 'text-emerald-400' : 'text-red-400'}
+                subLabel="Rentabilidade Real (TWRR)"
+                subValue={
+                    <span className={`inline-flex items-center gap-1 ${isRentabilityPositive ? 'text-emerald-400' : 'text-slate-400'}`}>
+                        {isRentabilityPositive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                        {safeFixed(kpis.weightedRentability)}%
                     </span>
                 }
-                subLabel="Rentabilidade Real (TWRR)"
-                subContent={
-                    <div className={`flex items-center gap-1.5 text-xs font-bold ${isRentabilityPositive ? 'text-emerald-400' : 'text-slate-400'}`}>
-                        {isRentabilityPositive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                        {safeFixed(kpis.weightedRentability)}%
-                    </div>
-                }
-                badge={
-                    <div className="flex gap-2">
-                        {/* Sharpe/Beta Badge - Se disponível */}
+                tag={
+                    <>
                         {kpis.sharpeRatio !== undefined && kpis.sharpeRatio !== 0 && (
-                            <div className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-slate-800 text-slate-400 border-slate-700 flex items-center gap-1" title="Índice de Sharpe (Retorno vs Risco)">
-                                <Scale size={10} /> S: {kpis.sharpeRatio.toFixed(1)}
-                            </div>
+                            <span className="inline-flex items-center gap-1 mr-1 text-slate-400" title="Índice de Sharpe (Retorno vs Risco)">
+                                <Scale size={10} /> {kpis.sharpeRatio.toFixed(1)}
+                            </span>
                         )}
-                        <div className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${isAudited ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'}`} title={isAudited ? "Cálculo preciso baseado em cotas diárias." : "Estimativa baseada em retorno simples. Histórico incompleto."}>
-                            {isAudited ? <ShieldCheck size={10} /> : <AlertTriangle size={10} />}
-                            {isAudited ? 'Auditado' : 'Estimado'}
-                        </div>
-                    </div>
+                        {isAudited ? <ShieldCheck size={11} /> : <AlertTriangle size={11} />}
+                        {isAudited ? 'Auditado' : 'Estimado'}
+                    </>
                 }
-                borderColor={isTotalPositive ? "group-hover:border-emerald-500/30" : "group-hover:border-red-500/30"}
+                tagClass={isAudited ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'}
             />
 
             {/* 4. PROVENTOS */}
-            <DashboardCard 
-                label="PROV. ACUMULADOS"
+            <StatCard
+                label="Prov. Acumulados"
+                icon={<PiggyBank size={16} />}
+                iconClass="bg-gold/10 text-gold"
                 value={formatCurrency(kpis.totalDividends)}
-                icon={<PiggyBank size={18} className="text-gold" />}
                 subLabel="Média Mensal Est."
-                subContent={
-                    <span className="text-gold font-bold text-xs">{formatCurrency(kpis.projectedDividends)}</span>
-                }
-                badge={
-                    <div className="text-[10px] font-bold px-2 py-0.5 rounded border bg-gold/10 text-gold border-gold/20 flex items-center gap-1">
-                        <Layers size={10} /> Passivo
-                    </div>
-                }
-                glow="gold"
+                subValue={<span className="text-gold">{formatCurrency(kpis.projectedDividends)}</span>}
+                tag={<><Layers size={11} /> Passivo</>}
+                tagClass="bg-gold/10 text-gold border-gold/20"
             />
 
         </section>
     );
 };
 
-// Componente Visual Interno (Dashboard Specific) - Refatorado para Overflow
-const DashboardCard = ({ label, value, icon, subLabel, subContent, badge, glow, tooltipText, borderColor }: any) => (
-    <div className={`relative group transition-all duration-300 ${borderColor || 'hover:border-slate-700'}`}>
-        {/* Background Container (Clipped) */}
-        <div className="absolute inset-0 bg-base border border-slate-800 rounded-2xl overflow-hidden group-hover:bg-card transition-colors">
-            {glow === 'blue' && <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/5 rounded-full blur-[60px] pointer-events-none"></div>}
-            {glow === 'gold' && <div className="absolute top-0 right-0 w-32 h-32 bg-gold/5 rounded-full blur-[60px] pointer-events-none"></div>}
+// Card de indicador padrão: superfície + ícone tingido em quadrado + pílula de tag,
+// espelhando o layout do mock. Mantém os tokens de tema (bg-base/slate) p/ coerência
+// com o resto do app (dark #080C14 / light branco).
+const StatCard = ({ label, tooltipText, icon, iconClass, value, valueClass, subLabel, subValue, tag, tagClass }: any) => (
+    <div className="bg-base border border-slate-800 rounded-2xl p-[18px] flex flex-col justify-between transition-colors hover:border-slate-700">
+        <div className="flex justify-between items-start">
+            <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
+                {tooltipText && (
+                    <div className="group/info relative flex items-center">
+                        <Info size={11} className="text-slate-600 cursor-help hover:text-blue-400 transition-colors" />
+                        <div className="absolute left-0 top-6 w-48 p-3 bg-elevated border border-slate-700 rounded-xl shadow-xl z-50 opacity-0 group-hover/info:opacity-100 transition-opacity pointer-events-none">
+                            <p className="text-[10px] text-slate-300 leading-relaxed font-medium">{tooltipText}</p>
+                            <div className="absolute -top-1.5 left-2 w-3 h-3 bg-elevated border-t border-l border-slate-700 transform rotate-45"></div>
+                        </div>
+                    </div>
+                )}
+            </div>
+            <span className={`w-[30px] h-[30px] rounded-[9px] flex items-center justify-center ${iconClass}`}>
+                {icon}
+            </span>
         </div>
 
-        {/* Content Container (z-10) - Permite que o tooltip saia pra fora */}
-        <div className="relative z-10 p-5 h-full flex flex-col justify-between">
-            <div>
-                <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
-                        {tooltipText && (
-                            <div className="group/info relative flex items-center">
-                                <Info size={10} className="text-slate-600 cursor-help hover:text-blue-400 transition-colors" />
-                                <div className="absolute left-0 top-6 w-48 p-3 bg-elevated border border-slate-700 rounded-xl shadow-xl z-50 opacity-0 group-hover/info:opacity-100 transition-opacity pointer-events-none">
-                                    <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
-                                        {tooltipText}
-                                    </p>
-                                    <div className="absolute -top-1.5 left-2 w-3 h-3 bg-elevated border-t border-l border-slate-700 transform rotate-45"></div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                    <div className="p-1.5 bg-slate-900 rounded-lg border border-slate-800 group-hover:border-slate-600 transition-colors">
-                        {icon}
-                    </div>
-                </div>
-
-                <div className="mt-2 mb-4">
-                    <h3 className="text-2xl font-bold text-white tracking-tight truncate">{value}</h3>
-                </div>
-            </div>
-
-            <div>
-                <div className="w-full h-px bg-slate-800/80 mb-3"></div>
-
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-[9px] text-slate-500 uppercase font-bold mb-0.5">{subLabel}</p>
-                        {subContent}
-                    </div>
-                    <div>{badge}</div>
-                </div>
-            </div>
+        <div className={`text-[26px] font-extrabold tracking-tight mt-3.5 mb-4 truncate ${valueClass || 'text-white'}`}>
+            {value}
         </div>
-    </div>
-);
 
-const Badge = ({ value, isPositive }: { value: string, isPositive: boolean }) => (
-    <div className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${isPositive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-        {isPositive ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
-        {value}
+        <div className="flex items-center justify-between pt-3 border-t border-slate-800/80">
+            <div className="min-w-0">
+                <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">{subLabel}</p>
+                <div className="text-sm font-bold text-slate-200 truncate">{subValue}</div>
+            </div>
+            <span className={`shrink-0 ml-2 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border ${tagClass}`}>
+                {tag}
+            </span>
+        </div>
     </div>
 );
