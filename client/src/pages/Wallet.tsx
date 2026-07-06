@@ -15,9 +15,10 @@ const CashFlowHistory = lazy(() => import('../components/wallet/CashFlowHistory'
 const TaxReport = lazy(() => import('../components/wallet/TaxReport').then(m => ({ default: m.TaxReport })));
 import { SmartContributionModal } from '../components/wallet/SmartContributionModal';
 import { RebalanceModal } from '../components/wallet/RebalanceModal';
+import { RenameWalletModal } from '../components/wallet/RenameWalletModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { SkeletonChart, SkeletonTableRows, EmptyState, Button } from '../components/ui'; // (I12) skeletons padronizados + (U3) empty state
-import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2, DollarSign, Landmark } from 'lucide-react';
+import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2, DollarSign, Landmark, Pencil } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useToast } from '../contexts/ToastContext';
@@ -37,6 +38,7 @@ export const Wallet = () => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
     const [isRebalanceModalOpen, setIsRebalanceModalOpen] = useState(false);
+    const [isRenameWalletOpen, setIsRenameWalletOpen] = useState(false);
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
     const [limitModalOpen, setLimitModalOpen] = useState(false);
     const [limitMessage, setLimitMessage] = useState('');
@@ -103,8 +105,16 @@ export const Wallet = () => {
                 {/* Header Actions */}
                 <div id="tour-wallet-intro" className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
                     <div>
-                        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-                            Minha Carteira
+                        <h1 className="text-2xl font-bold text-white flex items-center gap-2.5">
+                            <span>{user?.walletName || 'Minha Carteira'}</span>
+                            <button
+                                onClick={() => setIsRenameWalletOpen(true)}
+                                title="Renomear carteira"
+                                aria-label="Renomear carteira"
+                                className="text-slate-500 hover:text-blue-400 transition-colors shrink-0"
+                            >
+                                <Pencil size={16} />
+                            </button>
                             {isRefreshing && (
                                 <div className="flex items-center gap-2 px-2 py-1 bg-blue-900/20 rounded-full border border-blue-900/50 animate-fade-in">
                                     <Loader2 size={14} className="text-blue-400 animate-spin" />
@@ -252,6 +262,11 @@ export const Wallet = () => {
                 <AddAssetModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
                 <SmartContributionModal isOpen={isSmartModalOpen} onClose={() => setIsSmartModalOpen(false)} />
                 <RebalanceModal isOpen={isRebalanceModalOpen} onClose={() => setIsRebalanceModalOpen(false)} />
+                <RenameWalletModal
+                    isOpen={isRenameWalletOpen}
+                    currentName={user?.walletName || 'Minha Carteira'}
+                    onClose={() => setIsRenameWalletOpen(false)}
+                />
                 
                 <ConfirmModal 
                     isOpen={limitModalOpen} 

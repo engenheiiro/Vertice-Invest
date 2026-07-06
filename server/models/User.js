@@ -53,6 +53,10 @@ const UserSchema = new mongoose.Schema({
   // --- Onboarding ---
   hasSeenTutorial: { type: Boolean, default: false },
 
+  // Nome da carteira do usuário (editável). Ausente → a UI cai no rótulo padrão
+  // "Minha Carteira". Fase 1 do multicarteira: uma carteira nomeável por usuário.
+  walletName: { type: String, trim: true, maxlength: 40 },
+
   // --- Carteira Ideal (alocação-alvo definida pelo usuário) ---
   // Percentuais por classe de ativo (somam ~100% nos investimentos) + reserva em valor fixo (R$).
   targetAllocation: {

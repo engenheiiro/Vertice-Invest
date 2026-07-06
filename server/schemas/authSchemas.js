@@ -38,6 +38,8 @@ export const updateProfileSchema = z.object({
     phone: z.string().max(30).optional(),
     occupation: z.string().max(80).optional(),
     bannerColor: z.string().max(20).optional(),
+    // Nome da carteira (fase 1 multicarteira). '' → reseta p/ o rótulo padrão.
+    walletName: z.string().max(40).optional(),
     // (3.21) novos campos
     brokerage: z.string().max(80).optional(),
     cep: z.string().max(20).optional(),

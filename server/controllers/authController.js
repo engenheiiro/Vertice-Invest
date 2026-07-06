@@ -123,6 +123,7 @@ const sanitizeUser = (user) => {
         subscriptionStatus: user.subscriptionStatus,
         validUntil: user.validUntil,
         hasSeenTutorial: user.hasSeenTutorial,
+        walletName: user.walletName,
         // CPF cifrado em repouso — decrypt() trata valores legados em claro (sem ':').
         cpf: user.cpf ? decrypt(user.cpf) : user.cpf,
         phone: user.phone,
@@ -434,7 +435,7 @@ export const updateProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const {
-            name, cpf, phone, occupation, bannerColor,
+            name, cpf, phone, occupation, bannerColor, walletName,
             // (3.21) novos campos de perfil
             brokerage, cep, street, neighborhood, city, state, birthDate, salary,
         } = req.body;
@@ -443,6 +444,14 @@ export const updateProfile = async (req, res, next) => {
         // $set ignora chaves undefined (deixa o campo inalterado quando vazio).
         const set = { name, phone: phone || undefined, occupation: occupation || undefined };
         const unset = {};
+
+        // Nome da carteira (fase 1 multicarteira). '' → remove (volta ao rótulo padrão).
+        if (walletName !== undefined) {
+            const w = typeof walletName === 'string' ? walletName.trim() : '';
+            if (w === '') unset.walletName = 1;
+            else if (w.length > 40) return res.status(400).json({ message: "Nome da carteira muito longo (máx. 40)." });
+            else set.walletName = w;
+        }
 
         // (3.21a) Corretora — texto livre (lista conhecida + "Outra"). Só valida
         // tamanho. '' → remove a escolha.

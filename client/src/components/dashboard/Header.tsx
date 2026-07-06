@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck, LayoutGrid, PieChart, Bot,
   GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
-  Eye, EyeOff, Radar, Calculator, Target, ChevronRight, Sun, Moon
+  Eye, EyeOff, Radar, Calculator, Target, ChevronRight, ChevronDown, Sun, Moon
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
@@ -69,36 +69,51 @@ export const Header: React.FC = () => {
               {user && <PlanBadge plan={user.plan} className="ml-1" showIcon={false} />}
            </div>
            
-           {/* Main Links com ID para o Tutorial */}
+           {/* Main Links com ID para o Tutorial. Agrupados em submenus (hover/foco)
+               p/ enxugar o topo: Carteira (sua grana), Análise (descoberta), Ferramentas. */}
            <div id="tour-nav-links" className="hidden md:flex items-center gap-1">
               <Link to="/dashboard">
                 <NavLink icon={<LayoutGrid size={14} />} label="Terminal" active={activeTab === 'terminal'} />
               </Link>
-              <Link to="/wallet">
-                 <NavLink icon={<PieChart size={14} />} label="Carteira" active={activeTab === 'wallet'} />
-              </Link>
-              <Link to="/goals">
-                 <NavLink icon={<Target size={14} />} label="Metas" active={activeTab === 'goals'} />
-              </Link>
-              <Link to="/research">
-                 <NavLink icon={<Bot size={14} />} label="Research" active={activeTab === 'research'} />
-              </Link>
-              <Link to="/radar">
-                 <NavLink icon={<Radar size={14} />} label="Radar" active={activeTab === 'radar'} />
-              </Link>
-              <Link to="/indicators">
-                 <NavLink icon={<BarChart3 size={14} />} label="Indicadores" active={activeTab === 'indicators'} />
-              </Link>
-              <Link to="/calculadora">
-                 <NavLink icon={<Calculator size={14} />} label="Calculadora" active={activeTab === 'calculadora'} />
-              </Link>
-              <Link to="/courses">
-                 <NavLink icon={<GraduationCap size={14} />} label="Cursos" active={activeTab === 'courses'} />
-              </Link>
+
+              <NavGroup
+                label="Carteira"
+                icon={<PieChart size={14} />}
+                currentPath={location.pathname}
+                onNavigate={navigate}
+                items={[
+                  { to: '/wallet', label: 'Carteira', icon: <PieChart size={14} /> },
+                  { to: '/goals',  label: 'Metas',    icon: <Target size={14} /> },
+                ]}
+              />
+
+              <NavGroup
+                label="Análise"
+                icon={<Bot size={14} />}
+                currentPath={location.pathname}
+                onNavigate={navigate}
+                items={[
+                  { to: '/research',   label: 'Research',     icon: <Bot size={14} /> },
+                  { to: '/radar',      label: 'Radar',        icon: <Radar size={14} /> },
+                  { to: '/indicators', label: 'Indicadores',  icon: <BarChart3 size={14} /> },
+                ]}
+              />
+
+              <NavGroup
+                label="Ferramentas"
+                icon={<Calculator size={14} />}
+                currentPath={location.pathname}
+                onNavigate={navigate}
+                items={[
+                  { to: '/calculadora', label: 'Calculadora', icon: <Calculator size={14} /> },
+                  { to: '/courses',     label: 'Cursos',      icon: <GraduationCap size={14} /> },
+                ]}
+              />
+
               <Link to="/pricing">
                  <NavLink icon={<Crown size={14} />} label="Planos" active={activeTab === 'pricing'} />
               </Link>
-              
+
               {isAdmin && (
                   <Link to="/admin">
                      <div className={`
@@ -192,3 +207,56 @@ const NavLink = ({ icon, label, active = false }: { icon: React.ReactNode, label
         {label}
     </div>
 );
+
+interface NavItem { to: string; label: string; icon: React.ReactNode; }
+
+/**
+ * Grupo de navegação com submenu que abre no hover (e no foco por teclado, via
+ * group-focus-within). O gatilho navega para o 1º item ao clicar; fica "ativo"
+ * quando a rota atual pertence a qualquer item do grupo. O `pt-2` do painel serve
+ * de ponte invisível p/ o mouse não perder o hover ao descer do gatilho ao menu.
+ */
+const NavGroup = ({ label, icon, items, currentPath, onNavigate }: {
+    label: string;
+    icon: React.ReactNode;
+    items: NavItem[];
+    currentPath: string;
+    onNavigate: (to: string) => void;
+}) => {
+    const isOn = (to: string) => currentPath === to || currentPath.startsWith(`${to}/`);
+    const active = items.some((i) => isOn(i.to));
+
+    return (
+        <div className="relative group">
+            <button
+                type="button"
+                onClick={() => onNavigate(items[0].to)}
+                aria-haspopup="menu"
+                className={`
+                    flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer
+                    ${active ? 'bg-slate-800 text-white shadow-sm border border-slate-700/50' : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'}
+                `}
+            >
+                {icon}
+                {label}
+                <ChevronDown size={12} className="opacity-70 transition-transform duration-200 group-hover:rotate-180" />
+            </button>
+
+            <div className="absolute left-0 top-full pt-2 min-w-[13rem] z-50 opacity-0 invisible -translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:translate-y-0">
+                <div className="bg-card border border-slate-800 rounded-xl shadow-2xl p-1.5 flex flex-col gap-0.5">
+                    {items.map((it) => (
+                        <Link
+                            key={it.to}
+                            to={it.to}
+                            aria-current={isOn(it.to) ? 'page' : undefined}
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${isOn(it.to) ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'}`}
+                        >
+                            <span className={isOn(it.to) ? 'text-blue-400' : 'text-slate-500'}>{it.icon}</span>
+                            {it.label}
+                        </Link>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
