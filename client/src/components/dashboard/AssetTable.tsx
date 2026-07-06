@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { PieChart, TrendingUp, RefreshCw, Folder, ChevronDown, ChevronRight, Lock, Medal } from 'lucide-react';
+import { PieChart, TrendingUp, RefreshCw, ChevronDown, ChevronRight, Lock, Medal } from 'lucide-react';
 import { PortfolioItem } from '../../hooks/useDashboardData';
 import { useFeatureAccess } from '../../hooks/useFeatureAccess';
 import { useWallet } from '../../contexts/WalletContext';
@@ -29,11 +29,28 @@ const GROUP_NAMES: Record<string, string> = {
     'STOCK': 'Ações Brasil',
     'FII': 'Fundos Imobiliários',
     'STOCK_US': 'Exterior',
+    'ETF': 'ETFs',
     'CRYPTO': 'Criptoativos',
     'FIXED_INCOME': 'Renda Fixa',
+    'OURO': 'Ouro',
     'CASH': 'Caixa / Reserva',
     'OUTROS': 'Outros'
 };
+
+// Acento de cor por classe — espelha o CLASS_ACCENT da aba Carteira (AssetList),
+// tingindo ícone, chevron e rótulo de cada grupo com a identidade da classe.
+const CLASS_ACCENT: Record<string, { label: string; icon: string }> = {
+    STOCK:        { label: 'text-blue-400',    icon: 'bg-blue-500/10 text-blue-400' },
+    FII:          { label: 'text-emerald-400', icon: 'bg-emerald-500/10 text-emerald-400' },
+    STOCK_US:     { label: 'text-cyan-400',    icon: 'bg-cyan-500/10 text-cyan-400' },
+    ETF:          { label: 'text-teal-400',    icon: 'bg-teal-500/10 text-teal-400' },
+    CRYPTO:       { label: 'text-fuchsia-400', icon: 'bg-fuchsia-500/10 text-fuchsia-400' },
+    FIXED_INCOME: { label: 'text-amber-400',   icon: 'bg-amber-500/10 text-amber-400' },
+    OURO:         { label: 'text-yellow-400',  icon: 'bg-yellow-500/10 text-yellow-400' },
+    CASH:         { label: 'text-slate-300',   icon: 'bg-slate-700/60 text-slate-300' },
+};
+const accentOf = (type?: string) => CLASS_ACCENT[type || ''] || CLASS_ACCENT.CASH;
+const pluralAtivos = (n: number) => `${n} ${n === 1 ? 'Ativo' : 'Ativos'}`;
 
 export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false, isResearchLoading = false }) => {
     const { hasPlan, limitFor } = useFeatureAccess();
@@ -94,7 +111,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
 
     // Mesma ordem da aba Carteira: Ações Brasil, FIIs, Exterior, Renda Fixa, Cripto, Caixa.
     const orderedGroups: [string, PortfolioItem[]][] = useMemo(() => {
-        const TYPE_ORDER = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
+        const TYPE_ORDER = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
         return [
             ...TYPE_ORDER.filter((t) => groupedItems[t]),
             ...Object.keys(groupedItems).filter((t) => !TYPE_ORDER.includes(t)),
@@ -104,36 +121,30 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
     return (
         <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-full min-h-[400px]">
             <div className="p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card">
-                <h3 className="font-bold text-slate-200 flex items-center gap-2">
-                    <PieChart size={16} className="text-blue-500" />
+                <h3 className="flex items-center gap-2.5 text-base font-bold text-white">
+                    <span className="w-[30px] h-[30px] rounded-[9px] bg-blue-500/10 text-blue-400 flex items-center justify-center">
+                        <PieChart size={16} />
+                    </span>
                     Carteira Inteligente
                 </h3>
-                
-                <div className="flex gap-2">
+
+                {/* Botões alinhados à estética da aba Carteira: preenchidos, cantos xl,
+                    sombra sutil; o gating só adiciona o cadeado (mantém a cor). */}
+                <div className="flex flex-wrap gap-2">
                     <button
                         onClick={handleOpenSmartContribution}
-                        className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors border flex items-center gap-1.5 ${
-                            isPro
-                            ? 'bg-blue-600/10 text-blue-400 border-blue-600/30 hover:bg-blue-600/20'
-                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
-                        }`}
+                        className="flex items-center gap-2 h-10 px-4 rounded-xl text-xs font-bold whitespace-nowrap transition-all active:scale-95 bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20"
                         title={isPro ? "Aporte Inteligente" : "Exclusivo Pro"}
                     >
-                        {!isPro && <Lock size={11} />}
-                        <TrendingUp size={12} /> Aporte Inteligente
+                        {!isPro ? <Lock size={13} /> : <TrendingUp size={15} />} Aporte Inteligente
                     </button>
 
                     <button
                         onClick={handleRebalance}
-                        className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors border flex items-center gap-1.5 ${
-                            canRebalance
-                            ? 'bg-gold/10 text-gold border-gold/30 hover:bg-gold/20'
-                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
-                        }`}
+                        className="flex items-center gap-2 h-10 px-4 rounded-xl text-xs font-bold whitespace-nowrap transition-all active:scale-95 bg-gradient-to-r from-[#D4AF37] via-[#F2D06B] to-[#D4AF37] text-black hover:brightness-110 shadow-lg shadow-[#D4AF37]/20"
                         title={canRebalance ? "Rebalanceamento Automático" : "Exclusivo Elite e Black"}
                     >
-                        {!canRebalance && <Lock size={11} />}
-                        <RefreshCw size={12} /> Rebalanceamento IA
+                        {!canRebalance ? <Lock size={13} className="text-black/80" /> : <RefreshCw size={15} className="text-black/80" />} Rebalanceamento IA
                     </button>
                 </div>
             </div>
@@ -168,20 +179,27 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                 </tr>
                             ))
                         ) : (
-                            orderedGroups.map(([group, groupItems]) => (
+                            orderedGroups.map(([group, groupItems]) => {
+                                const accent = accentOf((groupItems as PortfolioItem[])[0]?.type);
+                                return (
                                 <React.Fragment key={group}>
-                                    <tr 
+                                    <tr
                                         className="bg-panel border-y border-slate-800/50 cursor-pointer hover:bg-elevated transition-colors"
                                         onClick={() => toggleGroup(group)}
                                     >
-                                        <td colSpan={7} className="px-4 py-2">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest flex items-center gap-2">
-                                                    {collapsedGroups[group] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                                                    <Folder size={12} /> {group}
+                                        <td colSpan={7} className="px-4 py-2.5">
+                                            <div className="flex items-center gap-3">
+                                                <span className={`shrink-0 ${accent.label}`}>
+                                                    {collapsedGroups[group] ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                                                 </span>
-                                                <span className="text-[9px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                                                    {(groupItems as PortfolioItem[]).length} Ativos
+                                                <span className={`w-7 h-7 rounded-[8px] flex items-center justify-center ${accent.icon}`}>
+                                                    <PieChart size={15} />
+                                                </span>
+                                                <span className={`text-xs font-bold uppercase tracking-widest ${accent.label}`}>
+                                                    {group}
+                                                </span>
+                                                <span className="text-[10px] font-bold text-slate-500 bg-elevated px-2 py-0.5 rounded border border-slate-800/50">
+                                                    {pluralAtivos((groupItems as PortfolioItem[]).length)}
                                                 </span>
                                             </div>
                                         </td>
@@ -223,10 +241,10 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                         </div>
                                                     )}
                                                 </td>
-                                                <td className="p-4 text-right font-mono text-slate-300">
+                                                <td className="p-4 text-right tabular-nums font-bold text-slate-300">
                                                     {formatCurrency(item.currentPrice)}
                                                 </td>
-                                                <td className="p-4 text-right font-mono text-slate-400">
+                                                <td className="p-4 text-right tabular-nums text-slate-400">
                                                     {formatCurrency(item.avgPrice)}
                                                 </td>
                                                 <td className="p-4 text-right">
@@ -283,9 +301,10 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                         );
                                     })}
                                 </React.Fragment>
-                            ))
+                                );
+                            })
                         )}
-                        
+
                         {!isLoading && items.length === 0 && (
                             <tr>
                                 <td colSpan={7} className="p-10 text-center text-slate-500">
@@ -306,18 +325,27 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                 ) : items.length === 0 ? (
                     <div className="p-8 text-center text-slate-500 text-sm">Nenhum ativo na carteira.</div>
                 ) : (
-                    Object.entries(groupedItems).map(([group, groupItems]) => (
+                    Object.entries(groupedItems).map(([group, groupItems]) => {
+                        const accent = accentOf(group);
+                        return (
                         <div key={group} className="space-y-2">
                             <button
                                 onClick={() => toggleGroup(group)}
-                                className="w-full flex items-center justify-between bg-panel border border-slate-800/50 rounded-lg px-3 py-2"
+                                className="w-full flex items-center justify-between bg-panel border border-slate-800/50 rounded-lg px-3 py-2.5"
                             >
-                                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest flex items-center gap-2">
-                                    {collapsedGroups[group] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                                    <Folder size={12} /> {group}
+                                <span className="flex items-center gap-2 min-w-0">
+                                    <span className={`shrink-0 ${accent.label}`}>
+                                        {collapsedGroups[group] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                                    </span>
+                                    <span className={`w-6 h-6 rounded-[7px] flex items-center justify-center shrink-0 ${accent.icon}`}>
+                                        <PieChart size={13} />
+                                    </span>
+                                    <span className={`text-xs font-bold uppercase tracking-widest truncate ${accent.label}`}>
+                                        {GROUP_NAMES[group] || 'Outros'}
+                                    </span>
                                 </span>
-                                <span className="text-[9px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                                    {(groupItems as PortfolioItem[]).length} Ativos
+                                <span className="text-[10px] font-bold text-slate-500 bg-elevated px-2 py-0.5 rounded border border-slate-800/50 shrink-0 ml-2">
+                                    {pluralAtivos((groupItems as PortfolioItem[]).length)}
                                 </span>
                             </button>
 
@@ -382,7 +410,8 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                 );
                             })}
                         </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
 

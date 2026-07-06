@@ -47,7 +47,7 @@ const ScanCountdown: React.FC<{ nextScanAt: string | null }> = ({ nextScanAt }) 
         return () => clearInterval(id);
     }, [nextScanAt]);
 
-    return <span className="font-mono tabular-nums">{display}</span>;
+    return <span className="tabular-nums">{display}</span>;
 };
 
 // Ponto de frescor: verde < 2 min, amarelo < 10 min, cinza acima disso
@@ -97,10 +97,17 @@ const getScoreColor = (score: number) => {
     return 'bg-red-500';
 };
 
+// Cor do número do score (espelha getScoreColor em texto p/ destacar a nota).
+const getScoreTextColor = (score: number) => {
+    if (score >= 80) return 'text-emerald-400';
+    if (score >= 60) return 'text-yellow-400';
+    return 'text-red-400';
+};
+
 const getRiskProfileBadge = (profile?: string) => {
-    if (profile === 'DEFENSIVE') return <span className="text-[8px] font-bold text-emerald-400 bg-emerald-900/30 px-1.5 py-0.5 rounded border border-emerald-900/50 flex items-center gap-1 uppercase"><Shield size={8} /> Defensivo</span>;
-    if (profile === 'MODERATE') return <span className="text-[8px] font-bold text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded border border-blue-900/50 flex items-center gap-1 uppercase"><Activity size={8} /> Moderado</span>;
-    if (profile === 'BOLD') return <span className="text-[8px] font-bold text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded border border-purple-900/50 flex items-center gap-1 uppercase"><Zap size={8} /> Arrojado</span>;
+    if (profile === 'DEFENSIVE') return <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md flex items-center gap-1 uppercase tracking-wide"><Shield size={9} /> Defensivo</span>;
+    if (profile === 'MODERATE') return <span className="text-[9px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md flex items-center gap-1 uppercase tracking-wide"><Activity size={9} /> Moderado</span>;
+    if (profile === 'BOLD') return <span className="text-[9px] font-bold text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-md flex items-center gap-1 uppercase tracking-wide"><Zap size={9} /> Arrojado</span>;
     return null;
 };
 
@@ -109,19 +116,30 @@ const SignalValueBadge: React.FC<{ signalType?: string; value?: number }> = ({ s
     if (!value) return null;
     if (signalType === 'RSI_OVERSOLD' || signalType === 'BULLISH_DIVERGENCE') {
         return (
-            <span className="text-[8px] font-bold font-mono bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded border border-slate-700">
+            <span className="text-[9px] font-bold tabular-nums whitespace-nowrap bg-slate-800 text-slate-300 px-2 py-0.5 rounded-md">
                 RSI {value.toFixed(0)}
             </span>
         );
     }
     if (signalType === 'DEEP_VALUE') {
         return (
-            <span className="text-[8px] font-bold font-mono bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded border border-slate-700">
+            <span className="text-[9px] font-bold tabular-nums whitespace-nowrap bg-slate-800 text-slate-300 px-2 py-0.5 rounded-md">
                 Graham {(value * 100).toFixed(0) !== 'NaN' ? `R$${value.toFixed(2)}` : '-'}
             </span>
         );
     }
     return null;
+};
+
+// Mensagem do sinal com "lead" em negrito antes do primeiro ":" (ex.: "Deep Value:").
+// Espelha o mock; se não houver rótulo curto, renderiza o texto puro.
+const SignalMessage: React.FC<{ text?: string }> = ({ text }) => {
+    const msg = text || '';
+    const ci = msg.indexOf(':');
+    if (ci > 0 && ci <= 28) {
+        return <><strong className="text-white font-extrabold">{msg.slice(0, ci + 1)}</strong>{msg.slice(ci + 1)}</>;
+    }
+    return <>{msg}</>;
 };
 
 export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, meta }) => {
@@ -162,8 +180,11 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
         return (
             <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-[480px]">
                 <div className="p-4 border-b border-slate-800 bg-card">
-                    <h3 className="font-bold text-slate-200 text-xs uppercase tracking-wider flex items-center gap-2">
-                        <Radar size={14} className="text-purple-500 animate-spin-slow" /> Radar Alfa
+                    <h3 className="flex items-center gap-2.5 text-sm font-bold text-white">
+                        <span className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center">
+                            <Radar size={16} className="animate-spin-slow" />
+                        </span>
+                        Radar Alfa
                     </h3>
                 </div>
                 <div className="flex-1 p-3 space-y-3 bg-gradient-to-b from-base to-deep">
@@ -174,16 +195,18 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
     }
 
     return (
-        <div className="bg-base border border-slate-800 rounded-2xl flex flex-col h-[480px] relative group">
+        <div className="bg-base border border-slate-800 rounded-2xl flex flex-col h-[480px] relative group hover:border-slate-700 transition-colors">
 
             {/* Header */}
             <div className="p-4 border-b border-slate-800 bg-card flex flex-col gap-2 rounded-t-2xl">
 
                 {/* Linha 1: Título + Tooltip + Lock */}
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <Radar size={14} className="text-purple-500 animate-spin-slow" />
-                        <h3 className="font-bold text-slate-200 text-xs uppercase tracking-wider">Radar Alfa</h3>
+                    <div className="flex items-center gap-2.5">
+                        <span className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0">
+                            <Radar size={16} className="animate-spin-slow" />
+                        </span>
+                        <h3 className="text-sm font-bold text-white">Radar Alfa</h3>
 
                         <div className="group/tooltip relative flex items-center z-50">
                             <Info size={12} className="text-slate-600 cursor-help hover:text-blue-400 transition-colors" />
@@ -215,40 +238,42 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                 </div>
 
                 {/* Linha 2: Status de scan */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                         <FreshnessDot lastScanAt={meta?.lastScanAt || null} />
-                        <span className="text-[9px] text-slate-500 font-mono">
-                            {meta?.assetsScanned
-                                ? `${meta.assetsScanned} ativos · última ${lastScanMinutesAgo}`
-                                : 'aguardando varredura...'}
+                        <span className="text-[11px] font-semibold text-slate-500 truncate">
+                            {meta?.assetsScanned ? (
+                                <><b className="text-slate-300 font-extrabold">{meta.assetsScanned}</b> ativos · última {lastScanMinutesAgo}</>
+                            ) : 'aguardando varredura...'}
                         </span>
                     </div>
                     {meta?.nextScanAt && (
-                        <div className="flex items-center gap-1 text-[9px] text-slate-500">
-                            <Clock size={9} className="text-slate-600" />
-                            próx. <span className="text-purple-400 font-bold"><ScanCountdown nextScanAt={meta.nextScanAt} /></span>
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 whitespace-nowrap shrink-0">
+                            <Clock size={11} className="text-slate-500" />
+                            próx. <span className="text-purple-400 font-extrabold"><ScanCountdown nextScanAt={meta.nextScanAt} /></span>
                         </div>
                     )}
                 </div>
 
-                {/* Linha 3: Filtros (só PRO) */}
+                {/* Linha 3: Filtros (só PRO) — pílulas arredondadas; GOLD empurrado à direita */}
                 {hasAccess && (
-                    <div className="flex items-center justify-between pt-1">
-                        <div className="flex flex-wrap bg-slate-900 rounded p-0.5 border border-slate-800 gap-px">
-                            {([
-                                ['ALL',          'TUDO',   'bg-slate-700 text-white'],
-                                ['STOCK',        'BR',     'bg-blue-900/50 text-blue-400'],
-                                ['FII',          'FII',    'bg-emerald-900/50 text-emerald-400'],
-                                ['STOCK_US',     'EXT',    'bg-indigo-900/50 text-indigo-400'],
-                                ['CRYPTO',       'CRIPTO', 'bg-orange-900/50 text-orange-400'],
-                                ['FIXED_INCOME', 'RF',     'bg-yellow-900/50 text-yellow-400'],
-                            ] as [FilterType, string, string][]).map(([type, label, activeClass]) => (
-                                <button key={type} onClick={() => setFilter(type)} className={`px-1.5 py-0.5 text-[8px] font-bold rounded transition-colors ${filter === type ? activeClass : 'text-slate-500 hover:text-slate-300'}`}>{label}</button>
-                            ))}
-                        </div>
-                        <span className="flex items-center gap-1 px-2 py-1 rounded text-[8px] font-bold border bg-gold/10 text-gold border-gold/30">
-                            <Medal size={8} /> GOLD
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                        {([
+                            ['ALL',      'TUDO', 'bg-slate-700 text-white'],
+                            ['STOCK',    'BR',   'bg-blue-500/15 text-blue-400'],
+                            ['FII',      'FII',  'bg-emerald-500/15 text-emerald-400'],
+                            ['STOCK_US', 'EXT',  'bg-indigo-500/15 text-indigo-400'],
+                        ] as [FilterType, string, string][]).map(([type, label, activeClass]) => (
+                            <button
+                                key={type}
+                                onClick={() => setFilter(type)}
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors ${filter === type ? activeClass : 'bg-slate-800/60 text-slate-400 hover:text-slate-200'}`}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                        <span className="ml-auto flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border bg-gold/10 text-gold border-gold/30">
+                            <Medal size={9} /> GOLD
                         </span>
                     </div>
                 )}
@@ -285,7 +310,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                         <div
                             key={signal.id || idx}
                             onClick={() => handleSignalClick(signal.ticker)}
-                            className={`p-3.5 rounded-xl border transition-all relative overflow-hidden bg-panel ${urgency.border} ${hasAccess ? 'cursor-pointer hover:brightness-110' : 'opacity-50 pointer-events-none grayscale'}`}
+                            className={`p-3.5 rounded-[14px] border transition-all relative overflow-hidden bg-panel ${urgency.border} ${hasAccess ? 'cursor-pointer hover:brightness-110 hover:-translate-y-0.5 hover:border-slate-600' : 'opacity-50 pointer-events-none grayscale'}`}
                         >
                             {/* Linha superior: ticker + badges */}
                             <div className="flex items-start justify-between mb-2">
@@ -296,16 +321,18 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                                         {/* Dot de urgência */}
                                         <span className={`w-1.5 h-1.5 rounded-full ${urgency.dot} shrink-0`} />
                                         <span className="font-black text-sm text-white tracking-wide">{signal.ticker}</span>
-                                        <span className="text-[8px] font-bold bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded uppercase">
+                                        <span className="text-[9px] font-bold bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded-[5px] uppercase tracking-wide">
                                             {getTypeLabel(signal.assetType)}
                                         </span>
-                                        {/* Badge urgência */}
-                                        <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase ${urgency.badge}`}>
-                                            {urgency.label}
-                                        </span>
-                                        {/* Badge qualidade — todos os sinais são GOLD */}
-                                        <span className="text-[7px] font-black px-1.5 py-0.5 rounded border uppercase flex items-center gap-0.5 bg-gold/10 text-gold border-gold/30">
-                                            <Medal size={7} /> Ouro
+                                        {/* Urgência + Ouro agrupados: quebram juntos p/ o CRÍTICO ficar
+                                            sempre colado à esquerda do OURO na coluna estreita */}
+                                        <span className="flex items-center gap-1.5 shrink-0">
+                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-[5px] uppercase tracking-wide whitespace-nowrap ${urgency.badge}`}>
+                                                {urgency.label}
+                                            </span>
+                                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-[5px] uppercase tracking-wide whitespace-nowrap flex items-center gap-0.5 bg-gold/10 text-gold">
+                                                <Medal size={9} /> Ouro
+                                            </span>
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
@@ -315,26 +342,26 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                                     </div>
                                 </div>
 
-                                {/* Score */}
+                                {/* Score — nota em destaque + barra de qualidade abaixo */}
                                 <div className="flex flex-col items-end shrink-0">
-                                    <span className="text-xs font-black text-white">{score}</span>
-                                    <div className="w-10 h-1 bg-slate-800 rounded-full overflow-hidden mt-0.5">
+                                    <span className={`text-lg font-black leading-none ${getScoreTextColor(score)}`}>{score}</span>
+                                    <div className="w-9 h-1 bg-slate-800 rounded-full overflow-hidden mt-1.5">
                                         <div className={`h-full ${getScoreColor(score)}`} style={{ width: `${score}%` }} />
                                     </div>
                                 </div>
                             </div>
 
                             {/* Mensagem */}
-                            <p className="text-[10px] leading-relaxed text-slate-400 border-t border-slate-800/50 pt-2">
-                                {hasAccess ? signal.message : 'Sinal quantitativo oculto.'}
+                            <p className="text-[11px] leading-relaxed font-medium text-slate-400 border-t border-slate-800/50 pt-2">
+                                {hasAccess ? <SignalMessage text={signal.message} /> : 'Sinal quantitativo oculto.'}
                             </p>
 
                             {/* Footer da card */}
-                            <div className="flex items-center justify-between mt-2">
-                                <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border-emerald-500/20`}>
-                                    <TrendingUp size={9} /> OPORTUNIDADE
+                            <div className="flex items-center justify-between mt-2.5">
+                                <span className="text-[9px] font-black tracking-wide px-2 py-1 rounded-md flex items-center gap-1 bg-emerald-500/10 text-emerald-400">
+                                    <TrendingUp size={10} /> OPORTUNIDADE
                                 </span>
-                                <span className="text-[9px] text-slate-600 font-mono">{signal.time}</span>
+                                <span className="text-[10px] font-semibold text-slate-500">{signal.time}</span>
                             </div>
                         </div>
                     );
@@ -345,11 +372,9 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                     <div className="h-full flex flex-col items-center justify-center text-center py-10">
                         <Radar size={36} className="text-slate-700 mb-3" />
                         <p className="text-xs font-bold text-slate-500">
-                            {filter === 'CRYPTO' ? 'Scanner ainda não cobre cripto. Em breve.'
-                             : filter === 'FIXED_INCOME' ? 'Renda Fixa não gera sinais quantitativos.'
-                             : 'Nenhuma anomalia GOLD detectada no momento.'}
+                            Nenhuma anomalia GOLD detectada no momento.
                         </p>
-                        {meta?.nextScanAt && filter !== 'CRYPTO' && filter !== 'FIXED_INCOME' && (
+                        {meta?.nextScanAt && (
                             <p className="text-[10px] text-slate-600 mt-1.5 flex items-center gap-1">
                                 <Clock size={9} /> Próxima varredura em <ScanCountdown nextScanAt={meta.nextScanAt} />
                             </p>

@@ -11,6 +11,7 @@ import { InstantReportModal } from '../components/dashboard/InstantReportModal';
 import { useWallet } from '../contexts/WalletContext';
 import { useDemo } from '../contexts/DemoContext';
 import { Lock, Target } from 'lucide-react';
+import { FitText } from '../components/ui';
 import { formatCurrency as fmtCurrency } from '../utils/format';
 import { friendlyError } from '../utils/errorMessages';
 import { useNavigate } from 'react-router-dom';
@@ -100,32 +101,36 @@ export const Dashboard = () => {
                 </div>
 
                 {/* ID para o Tutorial: tour-dividends */}
-                <div id="tour-dividends" className={`bg-base border border-slate-800 rounded-2xl p-5 relative overflow-hidden group transition-opacity duration-500 ${isDemoMode && 'relative z-[100] ring-2 ring-[#D4AF37] shadow-[0_0_30px_-5px_rgba(212,175,55,0.3)]'}`}>
-                    <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div id="tour-dividends" className={`bg-base border border-slate-800 rounded-2xl p-5 relative overflow-hidden group transition-colors hover:border-slate-700 duration-500 ${isDemoMode && 'relative z-[100] ring-2 ring-[#D4AF37] shadow-[0_0_30px_-5px_rgba(212,175,55,0.3)]'}`}>
+                    <div className="absolute right-[-30px] top-[-30px] w-[130px] h-[130px] rounded-full bg-gold/[0.07] blur-[50px] pointer-events-none"></div>
                     <div className="relative z-10">
                         <div className="flex justify-between items-start mb-3">
-                            <div className="w-8 h-8 bg-blue-900/30 rounded-lg flex items-center justify-center text-blue-400 border border-blue-500/20">
+                            <span className="w-[30px] h-[30px] rounded-[9px] bg-gold/10 text-gold flex items-center justify-center">
                                 <Lock size={16} />
-                            </div>
+                            </span>
                             {isProjected && (
-                                <span className="text-[9px] font-bold bg-slate-800 px-2 py-0.5 rounded text-slate-400 border border-slate-700">ESTIMATIVA MENSAL</span>
+                                <span className="text-[9px] font-bold bg-gold/10 px-2 py-0.5 rounded-full text-gold border border-gold/20">ESTIMATIVA MENSAL</span>
                             )}
                         </div>
-                        
-                        <h4 className="font-bold text-slate-200 text-sm mb-1">Cofre de Dividendos</h4>
+
+                        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Cofre de Dividendos</h4>
                         {isLoading ? (
                             <div className="h-4 w-32 bg-slate-800 rounded animate-pulse mt-1 mb-4"></div>
                         ) : (
-                            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                                {isProjected ? 'Fluxo mensal estimado:' : 'Provisões confirmadas:'} <br/>
-                                <span className="text-white font-bold text-lg block mt-1">{formatCurrency(displayDividends)}</span>
-                            </p>
+                            <div className="mb-4">
+                                <FitText className="font-extrabold tracking-tight text-white" max={24} min={14}>
+                                    {formatCurrency(displayDividends)}
+                                </FitText>
+                                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                                    {isProjected ? 'Fluxo mensal estimado' : 'Provisões confirmadas'}
+                                </p>
+                            </div>
                         )}
                         {dividendGoal && dividendGoal.target > 0 ? (
                             <>
                                 <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
                                     <div
-                                        className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                                        className="h-full bg-gold shadow-[0_0_10px_rgba(212,175,55,0.5)]"
                                         style={{ width: `${Math.min(100, dividendGoal.progressPercent ?? 0)}%` }}
                                     ></div>
                                 </div>
@@ -136,7 +141,7 @@ export const Dashboard = () => {
                         ) : (
                             <button
                                 onClick={() => navigate('/wallet')}
-                                className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+                                className="flex items-center gap-1.5 text-[11px] font-semibold text-gold hover:brightness-110 transition-all"
                             >
                                 <Target size={12} /> Definir meta de renda passiva
                             </button>

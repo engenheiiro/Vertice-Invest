@@ -26,52 +26,52 @@ export const MarketStatusBar: React.FC<MarketStatusBarProps> = ({ indices }) => 
     }, []);
 
     return (
-        <div className="w-full bg-deep border-b border-slate-800/60 py-1.5 overflow-hidden">
-            <div className="max-w-[1360px] mx-auto px-6 flex items-center gap-6 overflow-x-auto no-scrollbar">
+        <div className="w-full bg-deep border-b border-slate-800/60 py-2 overflow-hidden">
+            <div className="max-w-[1360px] mx-auto px-6 flex items-center gap-5 overflow-x-auto no-scrollbar">
                 <div className="flex items-center gap-2 pr-4 border-r border-slate-800/60 shrink-0">
                     <span className={`w-1.5 h-1.5 rounded-full ${marketStatus.dot}`}></span>
-                    <span className={`text-[9px] font-bold uppercase tracking-widest ${marketStatus.color}`}>
+                    <span className={`text-[10px] font-bold uppercase tracking-widest ${marketStatus.color}`}>
                         {marketStatus.label}
                     </span>
                 </div>
-                
+
                 {indices.map((idx) => {
                     const change = idx.changePercent || 0;
                     const val = idx.value || 0;
                     const isRate = idx.type === 'RATE'; // CDI, SELIC
-                    
+
                     let Icon = Minus;
                     let colorClass = 'text-slate-400';
-                    let bgClass = 'bg-slate-800/50';
+                    let chipClass = 'bg-slate-800/60 text-slate-400';
 
                     if (change > 0) {
                         Icon = TrendingUp;
                         colorClass = 'text-emerald-500';
-                        bgClass = 'bg-emerald-500/10';
+                        chipClass = 'bg-emerald-500/10 text-emerald-500';
                     } else if (change < 0) {
                         Icon = TrendingDown;
                         colorClass = 'text-red-500';
-                        bgClass = 'bg-red-500/10';
+                        chipClass = 'bg-red-500/10 text-red-500';
                     } else if (isRate) {
-                        colorClass = 'text-slate-300'; 
+                        colorClass = 'text-slate-300';
                         Icon = Percent;
                     }
 
-                    const displayValue = val < 100 
-                        ? val.toFixed(2) 
-                        : val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 }); 
+                    const displayValue = val < 100
+                        ? val.toFixed(2)
+                        : val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
 
                     return (
                         <div key={idx.ticker} className="flex items-center gap-2 shrink-0 group cursor-default">
-                            <span className="text-[10px] font-bold text-slate-300 font-mono group-hover:text-blue-400 transition-colors">{idx.ticker}</span>
-                            <div className={`flex items-center gap-1 text-[10px] font-mono ${colorClass}`}>
-                                {!isRate && <Icon size={10} />}
-                                <span>{displayValue}</span>
-                                
+                            <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wide group-hover:text-blue-400 transition-colors">{idx.ticker}</span>
+                            <div className={`flex items-center gap-1.5 text-[11px] font-mono font-semibold tabular-nums ${colorClass}`}>
+                                {!isRate && <Icon size={11} />}
+                                <span className="text-slate-200">{displayValue}</span>
+
                                 {isRate ? (
-                                    <span className="px-1 text-[9px] text-slate-500 font-bold uppercase">a.a.</span>
+                                    <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wide">a.a.</span>
                                 ) : (
-                                    <span className={`px-1 rounded ${bgClass}`}>
+                                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${chipClass}`}>
                                         {change > 0 ? '+' : ''}{change.toFixed(2)}%
                                     </span>
                                 )}

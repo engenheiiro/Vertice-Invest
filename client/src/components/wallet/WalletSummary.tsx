@@ -2,7 +2,7 @@
 import React from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
-import { SkeletonKpiGrid } from '../ui'; // (I12) skeleton padronizado
+import { SkeletonKpiGrid, FitText } from '../ui'; // (I12) skeleton padronizado + auto-fit de valor
 import { formatCurrency as fmtCurrency } from '../../utils/format';
 import { useCountUp } from '../../hooks/useCountUp';
 
@@ -69,11 +69,17 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                 </div>
 
                 <div className="relative flex items-baseline gap-2 mt-3.5">
-                    <span className="text-[28px] font-extrabold tracking-tight" aria-live="polite" aria-atomic="true">
+                    <FitText
+                        className="flex-1 font-extrabold tracking-tight"
+                        max={28}
+                        min={15}
+                        aria-live="polite"
+                        aria-atomic={true}
+                    >
                         {formatCurrency(animatedEquity)}
-                    </span>
+                    </FitText>
                     <span
-                        className={`text-xs font-bold ${isCapitalPositive ? 'text-[#8ff0c8]' : 'text-[#fca5a5]'}`}
+                        className={`shrink-0 text-xs font-bold ${isCapitalPositive ? 'text-[#8ff0c8]' : 'text-[#fca5a5]'}`}
                         title="Variação do capital: patrimônio atual vs. valor investido (sem proventos)."
                     >
                         {isCapitalPositive ? '+' : ''}{safeFixed(capitalVariationPercent)}%
@@ -175,9 +181,9 @@ const StatCard = ({ label, tooltipText, icon, iconClass, value, valueClass, subL
             </span>
         </div>
 
-        <div className={`text-[26px] font-extrabold tracking-tight mt-3.5 mb-4 truncate ${valueClass || 'text-white'}`}>
+        <FitText className={`font-extrabold tracking-tight mt-3.5 mb-4 ${valueClass || 'text-white'}`} max={26} min={14}>
             {value}
-        </div>
+        </FitText>
 
         <div className="flex items-center justify-between pt-3 border-t border-slate-800/80">
             <div className="min-w-0">
