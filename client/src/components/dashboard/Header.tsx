@@ -3,14 +3,16 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck, LayoutGrid, PieChart, Bot,
   GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
-  Eye, EyeOff, Radar, Calculator, Target, ChevronRight, ChevronDown, Sun, Moon
+  Radar, Calculator, Target, ChevronRight, ChevronDown, Sun, Moon
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
 import { PlanBadge } from '../ui/PlanBadge';
+import { PrivacyToggle } from '../ui/PrivacyToggle';
 import { NotificationBell } from './NotificationBell';
+import { WalletSwitcher } from '../wallet/WalletSwitcher';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuth();
@@ -132,20 +134,22 @@ export const Header: React.FC = () => {
 
         <div className="flex items-center gap-2">
 
+           {/* Seletor de carteira ativa (Fase 2) — oculto em modo demo. */}
+           <div className="hidden md:block">
+             <WalletSwitcher />
+           </div>
+
+           <div className="h-4 w-px bg-slate-800 hidden md:block"></div>
+
            {/* Notification Bell + Privacy Toggle + Theme Toggle */}
            <div className="flex items-center gap-1">
                <NotificationBell />
-               <button
-                 onClick={togglePrivacyMode}
-                 className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
-                 title={isPrivacyMode ? "Mostrar Valores" : "Ocultar Valores"}
-               >
-                 {isPrivacyMode ? <EyeOff size={16} /> : <Eye size={16} />}
-               </button>
+               <PrivacyToggle isPrivacyMode={isPrivacyMode} onToggle={togglePrivacyMode} />
                <button
                  onClick={toggleTheme}
                  className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
                  title={theme === 'dark' ? "Ativar modo claro" : "Ativar modo escuro"}
+                 aria-label={theme === 'dark' ? "Ativar modo claro" : "Ativar modo escuro"}
                >
                  {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
                </button>
@@ -170,8 +174,12 @@ export const Header: React.FC = () => {
                 aria-label="Abrir meu perfil"
                 className="hidden sm:flex items-center gap-2 group cursor-pointer pl-1 pr-2 py-1 rounded-lg border border-transparent hover:border-slate-700 hover:bg-slate-800/60 transition-colors"
               >
-                  <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-600/40 flex items-center justify-center text-blue-300 group-hover:bg-blue-600/30 transition-colors shrink-0">
-                      <span className="text-[11px] font-black uppercase">{user?.name?.trim()?.charAt(0) || <UserIcon size={12} />}</span>
+                  <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-600/40 flex items-center justify-center text-blue-300 group-hover:bg-blue-600/30 transition-colors shrink-0 overflow-hidden">
+                      {user?.avatar ? (
+                        <img src={user.avatar} alt="Foto de perfil" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-[11px] font-black uppercase">{user?.name?.trim()?.charAt(0) || <UserIcon size={12} />}</span>
+                      )}
                   </div>
                   <div className="text-right leading-tight">
                       <p className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors whitespace-nowrap">

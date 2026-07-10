@@ -2,7 +2,7 @@
 import React from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
-import { SkeletonKpiGrid, FitText } from '../ui'; // (I12) skeleton padronizado + auto-fit de valor
+import { SkeletonKpiGrid, FitText, PrivacyToggle } from '../ui'; // (I12) skeleton padronizado + auto-fit de valor
 import { formatCurrency as fmtCurrency } from '../../utils/format';
 import { useCountUp } from '../../hooks/useCountUp';
 
@@ -62,7 +62,15 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                     style={{ background: 'radial-gradient(circle, rgba(255,255,255,.14), transparent 70%)' }}
                 />
                 <div className="relative flex justify-between items-start">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-[rgba(255,255,255,0.72)]">Patrimônio Líquido</span>
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-[rgba(255,255,255,0.72)]">Patrimônio Líquido</span>
+                        <PrivacyToggle
+                            isPrivacyMode={isPrivacyMode}
+                            onToggle={togglePrivacyMode}
+                            size={14}
+                            className="p-1 hover:bg-white/[0.14] rounded-lg text-[rgba(255,255,255,0.6)] hover:text-[rgba(255,255,255,0.9)] transition-colors"
+                        />
+                    </div>
                     <span className="w-[30px] h-[30px] rounded-[9px] bg-white/[0.14] flex items-center justify-center text-[#eafff6]">
                         <Wallet size={16} />
                     </span>

@@ -10,3 +10,4 @@ export { ConfirmModal } from './ConfirmModal';
 export { PlanBadge } from './PlanBadge';
 export { EmptyState } from './EmptyState';
 export { FitText } from './FitText';
+export { PrivacyToggle } from './PrivacyToggle';
