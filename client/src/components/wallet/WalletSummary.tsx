@@ -11,7 +11,7 @@ interface EquitySummaryProps {
 }
 
 export const WalletSummary: React.FC<EquitySummaryProps> = () => {
-    const { kpis, isPrivacyMode, isLoading } = useWallet();
+    const { kpis, isPrivacyMode, togglePrivacyMode, isLoading } = useWallet();
     const animatedEquity = useCountUp(kpis?.totalEquity || 0);
 
     const formatCurrency = (val: number | null | undefined) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
