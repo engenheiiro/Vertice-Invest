@@ -45,7 +45,7 @@ const fmtBRL = (v: number) =>
 const MacroPill: React.FC<{ label: string; value: number }> = ({ label, value }) => (
     <div className="bg-card border border-slate-800 rounded-xl px-4 py-2 text-center">
         <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{label}</p>
-        <p className="text-sm font-black text-white font-mono">{fmtPct(value)}</p>
+        <p className="text-sm font-black text-white tabular-nums">{fmtPct(value)}</p>
     </div>
 );
 
@@ -62,21 +62,21 @@ const BondRow: React.FC<{ bond: TreasuryBondItem }> = ({ bond }) => (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 shrink-0">
                 <div className="text-center sm:text-left">
                     <p className="text-[8px] font-bold text-slate-500 uppercase">Taxa contratada</p>
-                    <p className="text-xs font-bold text-white font-mono">{fmtPct(bond.rate)}</p>
+                    <p className="text-xs font-bold text-white tabular-nums">{fmtPct(bond.rate)}</p>
                 </div>
                 <div className="text-center sm:text-left">
                     <p className="text-[8px] font-bold text-slate-500 uppercase">Nominal est.</p>
-                    <p className="text-xs font-bold text-slate-300 font-mono">{fmtPct(bond.nominalEstimate)}</p>
+                    <p className="text-xs font-bold text-slate-300 tabular-nums">{fmtPct(bond.nominalEstimate)}</p>
                 </div>
                 <div className="text-center sm:text-left">
                     <p className="text-[8px] font-bold text-slate-500 uppercase">Acima da inflação</p>
-                    <p className={`text-xs font-bold font-mono ${bond.realEstimate > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <p className={`text-xs font-bold tabular-nums ${bond.realEstimate > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                         {fmtPct(bond.realEstimate)}
                     </p>
                 </div>
                 <div className="text-center sm:text-left">
                     <p className="text-[8px] font-bold text-slate-500 uppercase">vs CDI</p>
-                    <p className={`text-xs font-bold font-mono ${
+                    <p className={`text-xs font-bold tabular-nums ${
                         bond.vsCdi === null ? 'text-slate-500' : bond.vsCdi >= 0 ? 'text-emerald-400' : 'text-yellow-400'
                     }`}>
                         {fmtSigned(bond.vsCdi)}

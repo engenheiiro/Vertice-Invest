@@ -323,19 +323,19 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                     {/* 1. Preço Atual */}
                                     <div className="flex justify-between items-center">
                                         <span className="text-xs text-slate-400">Preço Atual</span>
-                                        <span className="text-sm font-mono text-white font-bold">{formatCurrency(asset.currentPrice, type === 'CRYPTO' || type === 'STOCK_US' ? 'USD' : 'BRL')}</span>
+                                        <span className="text-sm tabular-nums text-white font-bold">{formatCurrency(asset.currentPrice, type === 'CRYPTO' || type === 'STOCK_US' ? 'USD' : 'BRL')}</span>
                                     </div>
 
                                     {/* 2. Preço Teto */}
                                     <div className="flex justify-between items-center">
                                         <span className="text-xs text-slate-400">Preço Teto</span>
-                                        <span className="text-sm font-mono text-blue-400 font-bold">{formatCurrency(asset.targetPrice, type === 'CRYPTO' || type === 'STOCK_US' ? 'USD' : 'BRL')}</span>
+                                        <span className="text-sm tabular-nums text-blue-400 font-bold">{formatCurrency(asset.targetPrice, type === 'CRYPTO' || type === 'STOCK_US' ? 'USD' : 'BRL')}</span>
                                     </div>
 
                                     {/* 3. Upside */}
                                     <div className="flex justify-between items-center">
                                         <span className="text-xs text-slate-400">Upside Potencial</span>
-                                        <span className={`text-xs font-bold font-mono px-1.5 py-0.5 rounded ${upside > 0 ? 'bg-emerald-900/20 text-emerald-400' : 'bg-red-900/20 text-red-400'}`}>
+                                        <span className={`text-xs font-bold tabular-nums px-1.5 py-0.5 rounded ${upside > 0 ? 'bg-emerald-900/20 text-emerald-400' : 'bg-red-900/20 text-red-400'}`}>
                                             {upside > 0 ? '+' : ''}{upside.toFixed(1)}%
                                         </span>
                                     </div>
@@ -343,7 +343,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                     {/* 4. Dividend Yield (Dynamic Colors) */}
                                     <div className="flex justify-between items-center pt-2 border-t border-slate-800/50">
                                         <span className="text-xs text-slate-400 font-bold flex items-center gap-1"><DollarSign size={10}/> Yield (12m)</span>
-                                        <span className={`text-sm font-mono font-black ${getYieldColor(asset.metrics.dy)}`}>
+                                        <span className={`text-sm tabular-nums font-black ${getYieldColor(asset.metrics.dy)}`}>
                                             {asset.metrics.dy ? asset.metrics.dy.toFixed(1) : 0}%
                                         </span>
                                     </div>
@@ -574,7 +574,7 @@ const DetailRow = ({ label, value, status }: { label: string, value: string, sta
     return (
         <div className="flex justify-between items-center text-xs border-b border-slate-800/50 pb-2 last:border-0 group hover:bg-slate-800/20 px-2 rounded transition-colors">
             <span className="text-slate-400 font-medium group-hover:text-slate-200">{label}</span>
-            <span className={`font-mono font-bold flex items-center gap-1 ${colorClass}`}>
+            <span className={`tabular-nums font-bold flex items-center gap-1 ${colorClass}`}>
                 {value !== '-' && status === 'bad' && <AlertTriangle size={10} />}
                 {value !== '-' && status === 'warning' && <AlertOctagon size={10} />}
                 {value}

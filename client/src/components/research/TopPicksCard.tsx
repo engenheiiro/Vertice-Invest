@@ -385,24 +385,24 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                                                 {/* 1. Preço Atual */}
                                                 <div className="text-center sm:text-left">
                                                     <p className="text-[8px] font-bold text-slate-500 uppercase">Preço Atual</p>
-                                                    <p className="text-xs font-bold text-slate-300 font-mono">{formatCurrency(pick.currentPrice)}</p>
+                                                    <p className="text-xs font-bold text-slate-300 tabular-nums">{formatCurrency(pick.currentPrice)}</p>
                                                 </div>
                                                 
                                                 {/* 2. Preço Teto */}
                                                 <div className="text-center sm:text-left">
                                                     <p className="text-[8px] font-bold text-slate-500 uppercase">{fairValueLabel}</p>
-                                                    <p className="text-xs font-bold text-blue-400 font-mono">{formatCurrency(pick.targetPrice || 0)}</p>
+                                                    <p className="text-xs font-bold text-blue-400 tabular-nums">{formatCurrency(pick.targetPrice || 0)}</p>
                                                 </div>
 
                                                 {/* 3. Yield / Variável (Com Cores) */}
                                                 <div className="text-center sm:text-left">
                                                     <p className="text-[8px] font-bold text-slate-500 uppercase">{assetClass === 'CRYPTO' ? 'Market Cap' : 'Yield'}</p>
                                                     {assetClass === 'CRYPTO' ? (
-                                                        <p className="text-xs font-bold font-mono text-slate-300">
+                                                        <p className="text-xs font-bold tabular-nums text-slate-300">
                                                             {pick.metrics.marketCap ? `$${(pick.metrics.marketCap / 1e9).toFixed(1)}B` : '-'}
                                                         </p>
                                                     ) : (
-                                                        <p className={`text-xs font-bold font-mono ${getYieldColor(pick.metrics.dy)}`}>
+                                                        <p className={`text-xs font-bold tabular-nums ${getYieldColor(pick.metrics.dy)}`}>
                                                             {pick.metrics.dy ? pick.metrics.dy.toFixed(1) : 0}%
                                                         </p>
                                                     )}
@@ -451,7 +451,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                                             {userHasAsset ? (
                                                 <div>
                                                     <div className="flex justify-between items-end mb-1">
-                                                        <span className="text-xs font-bold text-white font-mono">{formatCurrency(userAsset.totalValue)}</span>
+                                                        <span className="text-xs font-bold text-white tabular-nums">{formatCurrency(userAsset.totalValue)}</span>
                                                         <span className={`text-[9px] font-bold ${userAllocPercent > idealPercent ? 'text-yellow-500' : 'text-blue-400'}`}>
                                                             {userAllocPercent.toFixed(1)}%
                                                         </span>
@@ -598,7 +598,7 @@ const UserWalletSectorChart = ({ assetClass }: { assetClass: string }) => {
                                 <div className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
                                 <span className="text-slate-400 truncate max-w-[80px] group-hover:text-slate-200 transition-colors" title={sector.name}>{sector.name}</span>
                             </div>
-                            <span className="font-bold text-slate-300 font-mono ml-1">{Math.round(sector.percent)}%</span>
+                            <span className="font-bold text-slate-300 tabular-nums ml-1">{Math.round(sector.percent)}%</span>
                         </div>
                     ))}
                 </div>
@@ -649,7 +649,7 @@ const SectorDistribution = ({ picks }: { picks: RankingItem[] }) => {
                             <div className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
                             <span className="text-slate-400 truncate max-w-[90px] group-hover:text-slate-200 transition-colors" title={sector.name}>{sector.name}</span>
                         </div>
-                        <span className="font-bold text-slate-300 font-mono ml-1">{Math.round(sector.percent)}%</span>
+                        <span className="font-bold text-slate-300 tabular-nums ml-1">{Math.round(sector.percent)}%</span>
                     </div>
                 ))}
             </div>
