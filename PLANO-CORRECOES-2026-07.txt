@@ -1,0 +1,63 @@
+================================================================================
+ VÉRTICE INVEST — PLANO DE CORREÇÕES & EVOLUÇÕES (Jul/2026)
+ Documento de acompanhamento — atualizado a cada avanço.
+ Fonte de verdade legível por qualquer IA/pessoa no meio da execução.
+================================================================================
+
+Plano completo (design + decisões): ver o plano aprovado.
+Legenda de status: [ ] pendente | [~] em andamento | [x] concluído | [!] bloqueado
+Modelo de IA recomendado por item: Haiku (baixo risco) / Sonnet (médio) / Opus (alto).
+
+DECISÕES APROVADAS PELO USUÁRIO
+  - Reserva/RF: flag booleana isReserve (ativo marcado sai da base de alocação;
+    RF não-reserva volta à distribuição e ao detalhamento "Renda Fixa").
+  - Carteira pública: composição + performance %, valores R$ MASCARADOS por padrão.
+  - Vencimento RF: guardar maturityDate; no vencimento parar de render + marcar
+    VENCIDO + sugerir resgate (SEM auto-liquidação).
+  - Commits direto na main (sem branch/PR de feature).
+
+--------------------------------------------------------------------------------
+ TABELA MESTRE (ordenada por complexidade ↑)
+--------------------------------------------------------------------------------
+ #   | Item                                                      | IA     | Status | Commit
+-----|-----------------------------------------------------------|--------|--------|--------
+ A1  | Foto de perfil no cabeçalho                               | Haiku  | [x]    | 3f4a637
+ A2  | Olhozinho ao lado de "Patrimônio Líquido" (+E1)           | Haiku  | [x]    | d57d44e
+ A3  | Research: font-mono -> tabular-nums                       | Haiku  | [ ]    | -
+ A4  | Research: estilo abas + troféu amarelo + Semanal          | Haiku  | [ ]    | -
+ A5  | Terminal: BTC em US$ (moeda por tipo)                     | Haiku  | [ ]    | -
+ A6  | Metas: indicador "Metas Conquistadas" (após C3)          | Haiku  | [ ]    | -
+ B1  | Cofre de Dividendos abre config ideal                     | Sonnet | [ ]    | -
+ B2  | Cache/refresh (self-host fonte + SW controlado)           | Sonnet | [ ]    | -
+ B3  | Múltiplas Carteiras: finalizar + testes (+E3, E7)        | Sonnet | [ ]    | -
+ C1  | Reserva/RF: flag isReserve + reconciliar alocação        | Opus   | [ ]    | -
+ C2  | Tesouro: auditar cálculos + maturityDate/vencimento      | Opus   | [ ]    | -
+ C3  | Metas: reversão ACHIEVED->ACTIVE (+E4)                    | Opus   | [ ]    | -
+ C4  | Carteira pública (URL leitura, valores mascarados) (+E5,E6)| Opus  | [ ]    | -
+
+ EXTRAS: E1 PrivacyToggle | E2 currency no PortfolioItem | E3 testes wallets |
+         E4 reset milestone | E5 Sentry público | E6 rate limiter público |
+         E7 commit scripts migração | E8 aria-labels
+
+--------------------------------------------------------------------------------
+ ORDEM DE EXECUÇÃO
+--------------------------------------------------------------------------------
+ Wave A (Haiku): A1, A2(+E1), A3, A4, A5(+E2 opc), A6(depois de C3)
+ Wave B (Sonnet): B1, B2, B3(+E3, E7)
+ Wave C (Opus): C1 -> C2 -> C3(+E4) -> C4(+E5, E6)
+   Sequência interna: C1 antes de C2; C3 antes de A6; C4 por último.
+
+--------------------------------------------------------------------------------
+ LOG DE EXECUÇÃO (mais recente no topo)
+--------------------------------------------------------------------------------
+ [2026-07-09] A2 + E1 concluído (commit d57d44e). PrivacyToggle compartilhado em Header + WalletSummary.
+ [2026-07-09] Plano aprovado. TXT de acompanhamento criado. Iniciando Wave A.
+
+--------------------------------------------------------------------------------
+ PENDÊNCIAS / NOTAS OPERACIONAIS
+--------------------------------------------------------------------------------
+ - C1/B3: rodar scripts de migração em DRY-RUN antes de aplicar em prod.
+ - C4: confirmar fallback SPA no server (código usa BrowserRouter, não HashRouter).
+ - B2: validar em build de PREVIEW de produção (dev não usa service worker).
+ - Financeiro (C1/C2/C3): usar sempre mathUtils (safeFloat/Add/Sub/Mult/Div).
+================================================================================
