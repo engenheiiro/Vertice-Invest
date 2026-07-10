@@ -23,7 +23,7 @@ DECISÕES APROVADAS PELO USUÁRIO
 -----|-----------------------------------------------------------|--------|--------|--------
  A1  | Foto de perfil no cabeçalho                               | Haiku  | [x]    | 3f4a637
  A2  | Olhozinho ao lado de "Patrimônio Líquido" (+E1)           | Haiku  | [x]    | d57d44e
- A3  | Research: font-mono -> tabular-nums                       | Haiku  | [ ]    | -
+ A3  | Research: font-mono -> tabular-nums                       | Haiku  | [x]    | 0badf57
  A4  | Research: estilo abas + troféu amarelo + Semanal          | Haiku  | [ ]    | -
  A5  | Terminal: BTC em US$ (moeda por tipo)                     | Haiku  | [ ]    | -
  A6  | Metas: indicador "Metas Conquistadas" (após C3)          | Haiku  | [ ]    | -
@@ -50,6 +50,7 @@ DECISÕES APROVADAS PELO USUÁRIO
 --------------------------------------------------------------------------------
  LOG DE EXECUÇÃO (mais recente no topo)
 --------------------------------------------------------------------------------
+ [2026-07-09] A3 concluído (commit 0badf57). Sem mais font-mono no Research.
  [2026-07-09] A2 + E1 concluído (commit d57d44e). PrivacyToggle compartilhado em Header + WalletSummary.
  [2026-07-09] Plano aprovado. TXT de acompanhamento criado. Iniciando Wave A.
 
