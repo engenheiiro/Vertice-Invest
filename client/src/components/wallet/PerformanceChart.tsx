@@ -64,7 +64,7 @@ export const PerformanceChart = React.memo(() => {
     const axisTick = theme === 'light' ? '#64748b' : '#6A7480';
 
     const { isDemoMode } = useDemo();
-    const { kpis } = useWallet();
+    const { kpis, activeWalletId } = useWallet();
 
     const loadPerformance = async () => {
         setIsLoading(true);
@@ -78,7 +78,7 @@ export const PerformanceChart = React.memo(() => {
         }
 
         try {
-            const res = await walletService.getPerformance();
+            const res = await walletService.getPerformance(activeWalletId);
             const sorted = Array.isArray(res?.history)
                 ? res.history.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
                 : [];
@@ -93,7 +93,7 @@ export const PerformanceChart = React.memo(() => {
 
     useEffect(() => {
         loadPerformance();
-    }, [isDemoMode]);
+    }, [isDemoMode, activeWalletId]);
 
     // --- RECONCILIAÇÃO COM OS KPIs ---
     // O último ponto representa "agora". O ponto live do backend pode divergir

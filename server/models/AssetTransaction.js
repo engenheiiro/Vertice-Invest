@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 
 const AssetTransactionSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  // Carteira dona deste lançamento (Fase 2 — múltiplas carteiras).
+  wallet: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet', required: true },
   ticker: { type: String, required: true, uppercase: true },
   
   // Referência opcional ao ativo pai (para facilitar queries, mas o ticker é a chave principal de agrupamento)
@@ -20,7 +22,8 @@ const AssetTransactionSchema = new mongoose.Schema({
 });
 
 // Índices para performance na busca de histórico
-AssetTransactionSchema.index({ user: 1, ticker: 1, date: 1 });
+AssetTransactionSchema.index({ wallet: 1, ticker: 1, date: 1 });
+AssetTransactionSchema.index({ user: 1 }); // consultas "todas as carteiras do usuário"
 
 const AssetTransaction = mongoose.models.AssetTransaction || mongoose.model('AssetTransaction', AssetTransactionSchema);
 export default AssetTransaction;

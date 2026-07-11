@@ -181,13 +181,20 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         let defaultRate = '';
         let defaultQty = '';
         const defaultTicker = '';
+        // Modo padrão da Renda Fixa: % do CDI a 100% (auto-explicativo e neutro —
+        // equivale à Reserva). Substitui o antigo "10,00" cego, que não dizia se
+        // era CDI ou prefixado.
+        let defaultFiMode: AssetFormState['fixedIncomeMode'] = undefined;
 
         if (newType === 'FIXED_INCOME') {
-            defaultRate = '10,00';
+            defaultRate = '100,00';
             defaultQty = '1';
+            defaultFiMode = 'CDI_PCT';
         } else if (newType === 'CASH') {
             // Sem ticker fixo: o cofrinho é resolvido no submit (novo ou existente).
             defaultQty = '';
+            // Rentabilidade padrão da reserva: 100% do CDI (editável no cadastro).
+            defaultRate = '100,00';
             // Aporte: se já houver cofrinhos, deixa escolher; senão, cria um novo.
             // Saque: sempre escolhe um existente.
             setCashSelection(
@@ -208,6 +215,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             quantity: defaultQty,
             price: '',
             fixedIncomeIndex: undefined,
+            fixedIncomeMode: defaultFiMode,
             usSubType: undefined,
             currency: undefined,
         }));
@@ -316,8 +324,10 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                 const newTicker = makeReserveTicker(nm, reserves.map(r => r.ticker));
                 workingForm = { ...form, ticker: newTicker, name: nm };
             } else if (cashSelection) {
+                // Aporte a um cofrinho existente: NÃO reenvia a taxa (rate vazio) para
+                // não sobrescrever a rentabilidade já cadastrada daquele cofrinho.
                 const target = reserves.find(r => r.ticker === cashSelection);
-                workingForm = { ...form, ticker: cashSelection, name: target?.name || '' };
+                workingForm = { ...form, ticker: cashSelection, name: target?.name || '', rate: '' };
             } else {
                 setValidationError('Selecione um cofrinho ou crie um novo.');
                 return;

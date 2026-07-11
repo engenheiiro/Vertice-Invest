@@ -15,6 +15,8 @@ interface AssetLogoProps {
   currency?: 'BRL' | 'USD';
   /** Nome do ativo (usado no alt da imagem e p/ rotular renda fixa). */
   name?: string;
+  /** Reserva separada: força o cofrinho (PiggyBank) mesmo em RF marcada como reserva. */
+  isReserve?: boolean;
   /** URL explícita (gancho futuro: backend pode popular logoUrl). Tem prioridade. */
   logoUrl?: string;
   /** Tamanho do container em px (default 32). */
@@ -37,6 +39,7 @@ export default function AssetLogo({
   type,
   currency,
   name,
+  isReserve,
   logoUrl,
   size = 32,
   rounded = 'lg',
@@ -53,8 +56,9 @@ export default function AssetLogo({
   const radius = rounded === 'full' ? 'rounded-full' : 'rounded-lg';
   const dimension = { width: size, height: size };
 
-  // Caixa / Reserva → cofrinho
-  if (type === 'CASH') {
+  // Reserva / Caixa → cofrinho. `isReserve` cobre a Renda Fixa marcada como
+  // reserva (type continua FIXED_INCOME, mas visualmente é um cofrinho).
+  if (type === 'CASH' || isReserve) {
     return (
       <div
         style={dimension}

@@ -16,8 +16,6 @@ export interface User {
   role: UserRole;
   validUntil?: string;
   hasSeenTutorial?: boolean;
-  /** Nome da carteira (editável). Ausente → UI usa "Minha Carteira". */
-  walletName?: string;
   cpf?: string;
   phone?: string;
   occupation?: string;

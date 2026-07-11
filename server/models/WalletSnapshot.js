@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 
 const WalletSnapshotSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  // Carteira deste snapshot (Fase 2 — múltiplas carteiras).
+  wallet: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet', required: true },
   date: { type: Date, required: true }, // Data do snapshot (geralmente final do dia)
   
   totalEquity: { type: Number, required: true }, // Patrimônio Total
@@ -29,8 +31,9 @@ const WalletSnapshotSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-// Índice composto para buscar histórico de um usuário ordenado por data
-WalletSnapshotSchema.index({ user: 1, date: 1 });
+// Índice composto para buscar histórico de UMA CARTEIRA ordenado por data.
+WalletSnapshotSchema.index({ wallet: 1, date: 1 });
+WalletSnapshotSchema.index({ user: 1, date: 1 }); // agregações "todas as carteiras do usuário"
 
 const WalletSnapshot = mongoose.models.WalletSnapshot || mongoose.model('WalletSnapshot', WalletSnapshotSchema);
 export default WalletSnapshot;

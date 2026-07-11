@@ -11,6 +11,8 @@ import mongoose from 'mongoose';
  */
 const InvestmentGoalSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  // Carteira dona desta meta (Fase 2 — múltiplas carteiras: metas são por carteira).
+  wallet: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet', required: true },
 
   name: { type: String, required: true, trim: true },
   icon: { type: String, default: 'target' }, // chave do mapa de ícones no front
@@ -43,7 +45,7 @@ const InvestmentGoalSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now },
 });
 
-InvestmentGoalSchema.index({ user: 1, status: 1 });
+InvestmentGoalSchema.index({ wallet: 1, status: 1 });
 
 const InvestmentGoal = mongoose.models.InvestmentGoal || mongoose.model('InvestmentGoal', InvestmentGoalSchema);
 export default InvestmentGoal;

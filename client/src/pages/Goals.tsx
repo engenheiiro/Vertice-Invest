@@ -56,7 +56,7 @@ const ChainArrow: React.FC = () => (
 );
 
 export const Goals: React.FC = () => {
-  const { isPrivacyMode } = useWallet();
+  const { isPrivacyMode, activeWalletId } = useWallet();
   const { addToast } = useToast();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -64,13 +64,13 @@ export const Goals: React.FC = () => {
   const [clearOpen, setClearOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['goals'],
-    queryFn: goalsService.getGoals,
+    queryKey: ['goals', activeWalletId],
+    queryFn: () => goalsService.getGoals(activeWalletId),
     staleTime: STALE_TIME.REALTIME,
   });
 
   const clearAllMutation = useMutation({
-    mutationFn: goalsService.clearAllGoals,
+    mutationFn: () => goalsService.clearAllGoals(activeWalletId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] });
       addToast('Todas as metas foram removidas.', 'success');

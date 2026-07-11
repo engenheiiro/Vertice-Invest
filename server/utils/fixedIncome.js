@@ -81,17 +81,50 @@ export const assetDailyFactor = (asset, macro = {}) => {
 };
 
 /**
+ * Data de vencimento do título como "dia" no fuso SP (Date à meia-noite UTC), ou
+ * `null` quando não há vencimento (CASH/reserva e RF perpétua nunca vencem).
+ */
+export const maturityDateOnly = (asset) => {
+    if (!asset?.maturityDate) return null;
+    const d = new Date(asset.maturityDate);
+    if (isNaN(d.getTime())) return null;
+    return brazilDateOnly(d);
+};
+
+/**
+ * O título já venceu em relação à data de cálculo? No vencimento (`>=`) o título
+ * PARA de render e é marcado VENCIDO — resgate é sugerido, nunca automático.
+ */
+export const isMatured = (asset, calcDate) => {
+    const maturity = maturityDateOnly(asset);
+    if (!maturity) return false;
+    const ref = calcDate ? brazilDateOnly(calcDate) : brazilToday();
+    return ref.getTime() >= maturity.getTime();
+};
+
+/**
  * Valor acumulado de um ativo CASH/FIXED_INCOME numa data, compondo CADA lote
  * desde sua data de compra pelos dias úteis (réplica exata da lógica de
  * getWalletData, agora compartilhada). Lote comprado HOJE rende 0 (dias úteis = 0).
  *
- * @param {Object} asset { type, taxLots?, quantity, totalCost, fixedIncomeRate, startDate?, createdAt? }
+ * Vencimento: Tesouro/RF é resgatado ao par na data de vencimento e não rende
+ * depois. Quando `asset.maturityDate` já passou, o accrual é CONGELADO no
+ * vencimento (cap da data-fim), sem liquidar a posição — o valor exibido é o do
+ * dia do vencimento até o usuário resgatar manualmente.
+ *
+ * @param {Object} asset { type, taxLots?, quantity, totalCost, fixedIncomeRate, startDate?, createdAt?, maturityDate? }
  * @param {Object} opts  { cdiRate, calcDate }
  * @returns {number} valor acumulado (na moeda do ativo; multiplicador cambial é aplicado pelo chamador)
  */
 export const accrueFixedIncomeValue = (asset, { cdiRate, selic, ipca, calcDate }) => {
     const dailyFactor = assetDailyFactor(asset, { cdiRate, selic, ipca });
     const isCash = asset.type === 'CASH';
+
+    // Congela o accrual no vencimento: data-fim = min(calcDate, vencimento).
+    const maturity = maturityDateOnly(asset);
+    const endDate = (maturity && brazilDateOnly(calcDate).getTime() > maturity.getTime())
+        ? maturity
+        : calcDate;
 
     const lots = (asset.taxLots && asset.taxLots.length > 0)
         ? asset.taxLots
@@ -104,7 +137,7 @@ export const accrueFixedIncomeValue = (asset, { cdiRate, selic, ipca, calcDate }
     let value = 0;
     for (const lot of lots) {
         const startDate = brazilDateOnly(lot.date);
-        const businessDays = countBusinessDays(startDate, calcDate);
+        const businessDays = countBusinessDays(startDate, endDate);
         let compoundFactor = Math.pow(dailyFactor, businessDays);
         if (!isFinite(compoundFactor) || compoundFactor < 1) compoundFactor = 1;
         value += (isCash ? lot.quantity : lot.quantity * lot.price) * compoundFactor;

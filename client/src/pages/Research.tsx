@@ -141,7 +141,7 @@ export const Research = () => {
 
                     {/* Controles */}
                     <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex bg-base border border-slate-800 p-1 rounded-xl overflow-x-auto no-scrollbar gap-0.5 shadow-inner w-full md:w-auto">
+                        <div className="flex bg-deep border border-slate-800 p-1 rounded-xl overflow-x-auto no-scrollbar gap-0.5 shadow-inner w-full md:w-auto">
                             {ASSETS.map(asset => {
                                 const allowed = checkAccess(asset.id);
                                 return (
@@ -161,22 +161,22 @@ export const Research = () => {
                             })}
                         </div>
 
-                        <div className={`flex bg-base border border-slate-800 p-1 rounded-xl gap-0.5 shadow-inner shrink-0 ${isFixedIncome ? 'hidden' : ''}`}>
+                        <div className={`flex bg-deep border border-slate-800 p-1 rounded-xl gap-0.5 shadow-inner shrink-0 ${isFixedIncome ? 'hidden' : ''}`}>
                             <button
                                 onClick={() => setViewMode('RANKING')}
                                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-black whitespace-nowrap transition-all ${
-                                    viewMode === 'RANKING' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+                                    viewMode === 'RANKING' ? 'bg-base text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
                                 }`}
                             >
-                                <Trophy size={14} /> Top 10
+                                <Trophy size={14} className="text-yellow-400" /> Top 10
                             </button>
                             <button
                                 onClick={() => setViewMode('ANALYSIS')}
                                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-black whitespace-nowrap transition-all ${
-                                    viewMode === 'ANALYSIS' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+                                    viewMode === 'ANALYSIS' ? 'bg-base text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
                                 }`}
                             >
-                                <Newspaper size={14} /> Semanal
+                                <Newspaper size={14} className="text-blue-400" /> Semanal
                             </button>
                         </div>
 

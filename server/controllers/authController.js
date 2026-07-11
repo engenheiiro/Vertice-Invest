@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { runTransaction, txError } from '../utils/dbTransaction.js';
 import User from '../models/User.js';
+import Wallet from '../models/Wallet.js';
 import RefreshToken from '../models/RefreshToken.js';
 import AuditLog from '../models/AuditLog.js';
 import UserAsset from '../models/UserAsset.js';
@@ -123,7 +124,6 @@ const sanitizeUser = (user) => {
         subscriptionStatus: user.subscriptionStatus,
         validUntil: user.validUntil,
         hasSeenTutorial: user.hasSeenTutorial,
-        walletName: user.walletName,
         // CPF cifrado em repouso — decrypt() trata valores legados em claro (sem ':').
         cpf: user.cpf ? decrypt(user.cpf) : user.cpf,
         phone: user.phone,
@@ -177,6 +177,13 @@ export const register = async (req, res, next) => {
         consentVersion: (acceptedTerms && acceptedPrivacy) ? CONSENT_VERSION : undefined,
         marketingOptIn: !!marketingOptIn,
       });
+
+      // Toda conta nasce com uma carteira padrão (Fase 2 — múltiplas carteiras):
+      // sem isto, o middleware resolveWallet não teria nenhuma carteira para
+      // resolver no primeiro acesso à Carteira/Terminal do usuário novo.
+      const defaultWallet = new Wallet({ user: newUser._id, name: 'Minha Carteira', isDefault: true });
+      await defaultWallet.save({ session });
+      newUser.activeWalletId = defaultWallet._id;
 
       await newUser.save({ session });
       newUserId = newUser._id;
@@ -435,7 +442,7 @@ export const updateProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const {
-            name, cpf, phone, occupation, bannerColor, walletName,
+            name, cpf, phone, occupation, bannerColor,
             // (3.21) novos campos de perfil
             brokerage, cep, street, neighborhood, city, state, birthDate, salary,
         } = req.body;
@@ -445,13 +452,8 @@ export const updateProfile = async (req, res, next) => {
         const set = { name, phone: phone || undefined, occupation: occupation || undefined };
         const unset = {};
 
-        // Nome da carteira (fase 1 multicarteira). '' → remove (volta ao rótulo padrão).
-        if (walletName !== undefined) {
-            const w = typeof walletName === 'string' ? walletName.trim() : '';
-            if (w === '') unset.walletName = 1;
-            else if (w.length > 40) return res.status(400).json({ message: "Nome da carteira muito longo (máx. 40)." });
-            else set.walletName = w;
-        }
+        // Nome da carteira (Fase 1) foi substituído por Wallet.name — renomear
+        // agora é feito via PUT /api/wallets/:walletId (walletsController.js).
 
         // (3.21a) Corretora — texto livre (lista conhecida + "Outra"). Só valida
         // tamanho. '' → remove a escolha.
@@ -680,6 +682,7 @@ export const exportData = async (req, res, next) => {
         if (safeUser.salary) safeUser.salary = decrypt(safeUser.salary);
 
         const [
+            wallets,
             userAssets,
             assetTransactions,
             walletSnapshots,
@@ -689,6 +692,7 @@ export const exportData = async (req, res, next) => {
             userProgress,
             usageLogs,
         ] = await Promise.all([
+            Wallet.find({ user: userId }).lean(),
             UserAsset.find({ user: userId }).lean(),
             AssetTransaction.find({ user: userId }).lean(),
             WalletSnapshot.find({ user: userId }).lean(),
@@ -707,6 +711,7 @@ export const exportData = async (req, res, next) => {
         res.json({
             exportedAt: new Date().toISOString(),
             user: safeUser,
+            wallets,
             userAssets,
             assetTransactions,
             walletSnapshots,
@@ -774,6 +779,8 @@ export const deleteAccount = async (req, res, next) => {
             await WalletSnapshot.deleteMany({ user: userId }, { session });
             await InvestmentGoal.deleteMany({ user: userId }, { session });
             await GoalContribution.deleteMany({ user: userId }, { session });
+            // Fase 2 — múltiplas carteiras: remove os documentos Wallet do titular.
+            await Wallet.deleteMany({ user: userId }, { session });
             await UsageLog.deleteMany({ user: userId }, { session });
             await Transaction.deleteMany({ user: userId }, { session });
             await RefreshToken.deleteMany({ user: userId }, { session });

@@ -30,7 +30,7 @@ const num = (v: string): number => {
 export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClose, goal }) => {
   const isEdit = !!goal;
   const { addToast } = useToast();
-  const { kpis } = useWallet();
+  const { kpis, activeWalletId } = useWallet();
   const queryClient = useQueryClient();
 
   const [name, setName] = useState(goal?.name || '');
@@ -47,7 +47,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
   // Sugestão de taxa: CDI atual (macro) e TWRR real da carteira.
   const { data: macro } = useQuery({ queryKey: ['macroData'], queryFn: researchService.getMacroData, staleTime: STALE_TIME.LONG });
   // Metas existentes para o seletor de encadeamento (usa cache da página de Metas).
-  const { data: goalsData } = useQuery({ queryKey: ['goals'], queryFn: goalsService.getGoals, staleTime: STALE_TIME.REALTIME });
+  const { data: goalsData } = useQuery({ queryKey: ['goals', activeWalletId], queryFn: () => goalsService.getGoals(activeWalletId), staleTime: STALE_TIME.REALTIME });
   const cdiRate = macro?.cdi?.value || macro?.selic?.value || null;
   const twrr = kpis.weightedRentability || null;
 
@@ -59,7 +59,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
   );
 
   const mutation = useMutation({
-    mutationFn: (payload: any) => (isEdit ? goalsService.updateGoal(goal!._id, payload) : goalsService.createGoal(payload)),
+    mutationFn: (payload: any) => (isEdit ? goalsService.updateGoal(goal!._id, payload, activeWalletId) : goalsService.createGoal(payload, activeWalletId)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] });
       if (isEdit) queryClient.invalidateQueries({ queryKey: ['goal', goal!._id] });

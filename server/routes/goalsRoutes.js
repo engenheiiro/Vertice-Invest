@@ -1,6 +1,7 @@
 
 import express from 'express';
 import { authenticateToken } from '../middleware/authMiddleware.js';
+import { resolveWallet } from '../middleware/resolveWallet.js';
 import { walletWriteLimiter } from '../middleware/rateLimiters.js';
 import validate from '../middleware/validateResource.js';
 import {
@@ -25,7 +26,10 @@ const router = express.Router();
 
 // Planejador de Metas — disponível a todos os planos (sem requireXPlan).
 // authenticateToken roda primeiro, garantindo req.user.id na chave do limiter.
+// resolveWallet global: metas são 100% por carteira (Fase 2), toda rota aqui
+// opera sobre req.walletId.
 router.use(authenticateToken);
+router.use(resolveWallet);
 
 const writeLimiter = walletWriteLimiter;
 

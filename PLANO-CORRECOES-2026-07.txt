@@ -24,14 +24,14 @@ DECISÕES APROVADAS PELO USUÁRIO
  A1  | Foto de perfil no cabeçalho                               | Haiku  | [x]    | 3f4a637
  A2  | Olhozinho ao lado de "Patrimônio Líquido" (+E1)           | Haiku  | [x]    | d57d44e
  A3  | Research: font-mono -> tabular-nums                       | Haiku  | [x]    | 0badf57
- A4  | Research: estilo abas + troféu amarelo + Semanal          | Haiku  | [ ]    | -
- A5  | Terminal: BTC em US$ (moeda por tipo)                     | Haiku  | [ ]    | -
+ A4  | Research: estilo abas + troféu amarelo + Semanal          | Haiku  | [x]    | pendente commit
+ A5  | Terminal: BTC em US$ (moeda por tipo)                     | Haiku  | [x]    | pendente commit
  A6  | Metas: indicador "Metas Conquistadas" (após C3)          | Haiku  | [ ]    | -
- B1  | Cofre de Dividendos abre config ideal                     | Sonnet | [ ]    | -
- B2  | Cache/refresh (self-host fonte + SW controlado)           | Sonnet | [ ]    | -
- B3  | Múltiplas Carteiras: finalizar + testes (+E3, E7)        | Sonnet | [ ]    | -
- C1  | Reserva/RF: flag isReserve + reconciliar alocação        | Opus   | [ ]    | -
- C2  | Tesouro: auditar cálculos + maturityDate/vencimento      | Opus   | [ ]    | -
+ B1  | Cofre de Dividendos abre config ideal                     | Sonnet | [x]    | pendente commit
+ B2  | Cache/refresh (self-host fonte + SW controlado)           | Sonnet | [x]    | pendente commit
+ B3  | Múltiplas Carteiras: finalizar + testes (+E3, E7)        | Sonnet | [x]    | pendente commit
+ C1  | Reserva/RF: flag isReserve + reconciliar alocação        | Opus   | [x]    | pendente commit
+ C2  | Tesouro: auditar cálculos + maturityDate/vencimento      | Opus   | [x]    | pendente commit
  C3  | Metas: reversão ACHIEVED->ACTIVE (+E4)                    | Opus   | [ ]    | -
  C4  | Carteira pública (URL leitura, valores mascarados) (+E5,E6)| Opus  | [ ]    | -
 
@@ -50,6 +50,190 @@ DECISÕES APROVADAS PELO USUÁRIO
 --------------------------------------------------------------------------------
  LOG DE EXECUÇÃO (mais recente no topo)
 --------------------------------------------------------------------------------
+ [2026-07-10] C2 implementado (sem commit) — Tesouro: auditoria de cálculos +
+              maturityDate/vencimento. Modelo Opus.
+              AUDITORIA: a matemática de accrual está correta e consistente
+              (fixedIncomeDailyFactor >50=%CDI/≤50=prefixado; effectiveAnnualRate
+              índice vivo+spread com SELIC≈CDI+0,10; composição por dias úteis por
+              lote; paridade KPI live × rebuild). ÚNICO defeito real: título
+              VENCIDO seguia rendendo para sempre (não havia corte na data de
+              vencimento). É o gap que o C2 fecha.
+              Backend:
+               - UserAsset.maturityDate (Date, default null). CASH/RF perpétua = null.
+               - utils/fixedIncome.js: maturityDateOnly() + isMatured() (>= no dia
+                 do vencimento). accrueFixedIncomeValue CONGELA o accrual no
+                 vencimento (data-fim = min(calcDate, vencimento)) — SEM
+                 auto-liquidação; valor exibido = o do dia do vencimento.
+               - Zod addTransactionSchema aceita maturityDate (coerce.date; aceita
+                 YYYY-MM-DD ou ISO).
+               - addAssetTransaction persiste maturityDate: da UI (form) ou, quando
+                 ausente, do catálogo TreasuryBond (string "dd/mm/aaaa" parseada);
+                 nunca reescreve vencimento já salvo. Bond buscado 1x (índice+venc).
+               - processWalletAsset expõe maturityDate + matured; matured zera a
+                 variação do dia (não rende mais).
+              Frontend:
+               - Asset.maturityDate/matured; AssetFormState/TransactionPayload +
+                 maturityDate; validateTransaction envia só p/ FIXED_INCOME quando
+                 informado.
+               - ValuesSection: input "Vencimento (opcional)" (type=date) no ramo
+                 FIXED_INCOME + aviso de comportamento VENCIDO.
+               - useAssetSearch: pré-preenche maturityDate ao escolher título do
+                 catálogo (converte "dd/mm/aaaa" → YYYY-MM-DD).
+               - AssetList: badge "VENCIDO" (âmbar) ao lado do ticker + sublinha
+                 "Vencido — sugerimos resgatar" quando matured.
+              Testes: fixed_income.spec +7 (isMatured, maturityDateOnly, congela no
+              vencimento, rende normal antes) = 33 verdes no arquivo; suíte ampla
+              relacionada verde (fixed_income+reserve_precision+wallet_schemas=54;
+              tax_report+rebalance+wallet_targets+wallet_snapshot+fixedIncomeView=
+              91). tsc --noEmit limpo; npm run build (client) OK.
+              PENDÊNCIA prod: nenhum script de migração necessário (campo aditivo,
+              default null — posições antigas sem vencimento seguem perpétuas até o
+              usuário informar o vencimento pela UI/reaporte).
+              AINDA PENDENTE (fora do escopo mínimo do C2, adiado): E2 — Terminal do
+              Dashboard mostrar R$ primário + US$ entre parênteses (currency/
+              convertedValue/usdRate no PortfolioItem), conforme Q4.
+ [2026-07-10] Q4 respondida (sem código ainda): usuário pediu que o Terminal
+              replique o padrão de Cripto da Carteira (AssetList.tsx:366-370) —
+              valor primário em R$ e, embaixo, entre parênteses em azul, o
+              valor em US$. Terminal hoje só mostra a moeda nativa (A5). Vira
+              trabalho extra (E2: currency/convertedValue/usdRate no
+              PortfolioItem) — DOBRAR NA ONDA C junto com C2, ainda não
+              implementado.
+ [2026-07-10] B2 validado ponta a ponta (build de produção, sem alteração de
+              código): fontes self-hosted fingerprintadas no precache do SW,
+              zero referência a googleapis/gstatic, cleanupOutdatedCaches ativo,
+              endpoints financeiros/identidade (wallet, subscription/status,
+              research/macro) em NetworkOnly, ReloadPrompt com auto-update a
+              cada 60s + reload automático, server serve sw.js/index.html como
+              no-cache. Cadeia fecha; só falta 1 deploy + 1 refresh manual em
+              prod para os navegadores saírem do SW antigo (depois disso o
+              auto-update se mantém sozinho).
+ [2026-07-10] Q1/Q2 respondidas (sem código): dev e prod usam o MESMO cluster
+              Atlas + MESMO banco `test` (URIs idênticas, confirmado pelo
+              usuário). A carteira "ToInvestindo!" NÃO existe no banco (só
+              existem "Carteira Inicial" e "teste 02"); o avatar do usuário
+              matheusambroziio@outlook.com está salvo corretamente. A
+              divergência de tela é cache (SW/React Query) do prod desatualizado
+              — resolvida pelo B2 acima, não por mudança de dados/.env.
+              CONSTRAINT CRÍTICA: dev e prod compartilham o MESMO banco de
+              produção real (9 users, 2640 snapshots). Qualquer migração/seed
+              local afeta dados reais na hora — sempre backup (mongodump) +
+              --dry antes.
+ [2026-07-10] Fix pontual (sem commit) fora da tabela mestre, adiantado do C2 a
+              partir da pergunta do usuário sobre RF manual: useAssetSearch.ts
+              — ao criar título manual de Renda Fixa, o campo "Nome do Título"
+              vazava o rótulo do dropdown ("Criar: X") em vez do texto digitado.
+              selectResult agora usa result.ticker (o que o usuário digitou)
+              tanto pra ticker quanto pra name quando isManual. PENDENTE ainda
+              dentro do C2: label de rentabilidade ambíguo (10% pré-preenchido,
+              não fica claro se é CDI), fluxo Reserva/Caixa vs RF (onde comprar
+              cada um), e toggle de reclassificação CASH<->RF no lápis/editar
+              de ativos já cadastrados (Q3 do usuário, resposta ainda não dada
+              em código — só o fix do "Criar:" foi adiantado).
+ [2026-07-10] C1 implementado (sem commit) — Reserva/RF + reconciliação de
+              alocação. Modelo Opus. Decisão de projeto: reserva vira FLAG
+              EXPLÍCITA (UserAsset.isReserve), desacoplada do type. RF passa a
+              ser INVESTIMENTO por padrão (entra no donut + grupo "Renda Fixa");
+              qualquer ativo marcado (CASH ou RF) sai da base e vai p/
+              "Caixa/Reserva".
+              Backend:
+               - UserAsset.isReserve (Boolean, default false).
+               - Zod addTransactionSchema aceita isReserve.
+               - addAssetTransaction persiste: CASH sempre true; FIXED_INCOME
+                 conforme flag (só quando explícito, não reclassifica em aportes
+                 seguintes).
+               - processWalletAsset expõe isReserve (fallback CASH→true p/
+                 posições não migradas).
+               - rebalanceService: classe EFETIVA = balde de reserva
+                 (reserveBucket). CORREÇÃO IMPORTANTE: sem isso o motor poderia
+                 sugerir VENDER a reserva de emergência (RF-reserva) para
+                 "acertar a alocação". type real preservado p/ a valuation
+                 (RF-reserva ainda rende como RF); só a classe muda.
+              Frontend:
+               - Asset.isReserve; helpers em utils/allocation.ts: isReserveAsset
+                 (fallback CASH), allocationBucket (reserva→CASH), sumReserveValue.
+               - computeSubAllocationReal ignora reserva (RF-reserva fora da
+                 ramificação de investimentos).
+               - AllocationChart: currentValues bucketiza por allocationBucket.
+               - AssetList: agrupa por allocationBucket + DENOMINADOR ÚNICO
+                 corrigido (a distorção): investimento usa base = equity−reserva
+                 (antes usava kpis.totalEquity, que incluía a reserva e diluía o
+                 % de todas as classes); reserva mostra % do patrimônio total.
+               - SmartContributionModal: mesma bucketização (RF-reserva conta
+                 como reserva no aporte, coerente com o donut).
+               - Cadastro: checkbox "Guardar como Reserva separada" no ramo
+                 FIXED_INCOME (ValuesSection); form/payload plumbing.
+              Migração (E7): server/scripts/migrateReserveFlag.js (idempotente,
+              --dry): marca CASH → isReserve=true; modo dirigido
+              --reclassify=TICKER[,TICKER] converte CASH → FIXED_INCOME+reserva
+              (RF cadastrada como cofrinho). npm: migrate:reserve-flag.
+              Testes: allocation.test.ts +5 (isReserveAsset/allocationBucket/
+              sumReserveValue/sub-alloc ignora reserva) = 16 verdes; rebalance
+              (17) + wallet_reserve_precision (4) + wallet_schemas (29) +
+              wallet_targets (7) verdes; tsc --noEmit limpo; build client OK.
+              PENDÊNCIA prod: rodar migrate:reserve-flag --dry e depois aplicar.
+ [2026-07-10] Usuário pediu para parar antes de iniciar qualquer item da Wave C
+              (C1-C4) — avisar e aguardar antes de prosseguir pro financeiro/
+              schema/migração/segurança.
+ [2026-07-10] B3 implementado (sem commit). Backend de múltiplas carteiras já
+              estava sólido (Wallet.js, walletsController, resolveWallet,
+              scripts de migração) de trabalho anterior não commitado — revisado
+              e completado o que faltava:
+              - Backend: DELETE /wallets/:id agora devolve `activeWalletId` na
+                resposta (a nova carteira ativa, quando a apagada era a
+                corrente) — elimina um round-trip/flash de loading no front.
+              - Front: WalletContext.deleteWallet usa esse valor direto em vez
+                de zerar e esperar o próximo GET /wallets.
+              - Front: WalletSwitcher.tsx passou a consumir `isSwitchingWallet`
+                (estava exposto no contexto mas não usado) — trigger mostra
+                spinner e desabilita, lista fica não-clicável durante a troca
+                (evita disparar 2 trocas em paralelo).
+              - Confirmado (sem mudança): empty-state pós-createWallet já
+                funciona por carteira (buildEmptyWalletResponse escopado por
+                walletId, não só "conta nova").
+              - Testes novos (E3): server/tests/wallets_controller.spec.js (8,
+                teto de 15 carteiras, bloqueio de apagar a última, cascata de
+                delete + realocação de ativa, ownership 403 no setActive) e
+                server/tests/resolve_wallet.spec.js (6, walletId explícito
+                owned/forbidden, fallback pra activeWalletId, fallback pra
+                primeira carteira, 400 sem nenhuma carteira). 53/53 testes
+                wallet-related passando.
+              - E7: scripts migrateToWallets.js/repairOrphanWallets.js já
+                existiam (idempotentes, dry-run, bem documentados) — só
+                faltava o npm script do repair (adicionado:
+                repair:orphan-wallets) e a ordem de execução documentada aqui
+                embaixo (Pendências).
+              - tsc --noEmit limpo; npm run build (client) passou.
+ [2026-07-10] BUG achado e corrigido (sem commit): PrivacyToggle.tsx importava
+              `React` de 'lucide-react' em vez de 'react' (só quebrava tsc/build
+              de produção, dev/HMR não pegava). Achado ao rodar `npm run build`
+              para validar B2.
+ [2026-07-10] B2 implementado (sem commit). Manrope self-hosted: baixados os
+              2 subsets (latin + latin-ext, fonte variável 400-800, v20 gstatic)
+              para client/src/assets/fonts/*.woff2; @font-face em index.css
+              (Vite fingerprinta no build); removidas as tags <link> do Google
+              Fonts em index.html e a regra de cache 'google-fonts' do
+              vite.config.ts (não é mais buscada). Validado com `npm run build`:
+              woff2 com hash em dist/assets/, precache do SW inclui os 2
+              arquivos, zero referência a fonts.googleapis/gstatic no output.
+              Headers do server/app.js já corretos (assets = immutable, shell/SW
+              = no-cache) — nada a mudar lá. ReloadPrompt.tsx já fazia
+              auto-update de SW a cada 60s + reload automático (não mexido).
+ [2026-07-10] Usuário pediu para NUNCA commitar sozinho — commits só quando
+              explicitamente pedidos, mesmo em modo autônomo. A partir daqui os
+              itens ficam implementados e aguardando ordem de commit (em lote).
+ [2026-07-10] B1 implementado (sem commit). Fix: WalletSummary.tsx tinha bug
+              (togglePrivacyMode não desestruturado do useWallet() — quebrava a
+              tela de Carteira, corrigido à parte). Cofre de Dividendos agora
+              navega com state{openDividendGoalEditor:true}; AllocationChart
+              recebe autoOpenDividendGoal e abre o editor com foco/scroll no
+              campo "Meta de Renda Passiva".
+ [2026-07-10] A5 implementado (sem commit). AssetTable: helper currencyOf(type)
+              (CRYPTO/STOCK_US -> USD) aplicado nos 4 pontos de formatCurrency
+              (desktop + mobile).
+ [2026-07-10] A4 implementado (sem commit). Research.tsx: container das abas
+              (seletor de ativo + Top10/Semanal) em bg-deep, pill ativa bg-base
+              (padrão EvolutionChart), troféu amarelo, ícone Semanal azul.
  [2026-07-09] A3 concluído (commit 0badf57). Sem mais font-mono no Research.
  [2026-07-09] A2 + E1 concluído (commit d57d44e). PrivacyToggle compartilhado em Header + WalletSummary.
  [2026-07-09] Plano aprovado. TXT de acompanhamento criado. Iniciando Wave A.
@@ -61,4 +245,27 @@ DECISÕES APROVADAS PELO USUÁRIO
  - C4: confirmar fallback SPA no server (código usa BrowserRouter, não HashRouter).
  - B2: validar em build de PREVIEW de produção (dev não usa service worker).
  - Financeiro (C1/C2/C3): usar sempre mathUtils (safeFloat/Add/Sub/Mult/Div).
+
+ B3 — Ordem de execução em prod dos scripts de múltiplas carteiras (rodar UMA
+ vez, nesta ordem, sempre com --dry primeiro e conferindo a contagem antes de
+ aplicar sem --dry). Ambos são idempotentes/resumíveis — reexecutar não duplica:
+   1) npm run migrate:wallets -- --dry   (relata)
+      npm run migrate:wallets            (aplica: cria Wallet padrão por user +
+      seta activeWalletId + backfill de `wallet` em UserAsset/AssetTransaction/
+      WalletSnapshot/InvestmentGoal/GoalContribution)
+   2) npm run repair:orphan-wallets -- --dry   (relata)
+      npm run repair:orphan-wallets             (aplica: reparo pontual de docs
+      que ficaram wallet=null após (1) — ex.: cron rodando código antigo durante
+      o deploy; trata colisão de índice único em WalletSnapshot)
+ Só rodar (2) DEPOIS de (1) já ter concluído (precisa da Wallet isDefault:true
+ de cada usuário já existir).
+
+ C1 — Migração da flag isReserve em prod (idempotente, dry-run):
+   npm run migrate:reserve-flag -- --dry   (relata CASH sem a flag)
+   npm run migrate:reserve-flag            (marca CASH → isReserve=true)
+ Reclassificação dirigida (só se houver RF cadastrada como cofrinho CASH):
+   npm run migrate:reserve-flag -- --reclassify=RESERVA-XXX --dry
+   npm run migrate:reserve-flag -- --reclassify=RESERVA-XXX
+ (ativo reclassificado fica sem taxa/índice de RF — ajustar pela UI se quiser
+ rendimento). Independente dos scripts de B3.
 ================================================================================

@@ -2,6 +2,7 @@
 import mongoose from 'mongoose';
 import { runTransaction, txError } from '../utils/dbTransaction.js';
 import User from '../models/User.js';
+import Wallet from '../models/Wallet.js';
 import UserAsset from '../models/UserAsset.js';
 import AssetTransaction from '../models/AssetTransaction.js';
 import MarketAsset from '../models/MarketAsset.js';
@@ -12,7 +13,7 @@ import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, calculateSharpeRatio, calculateBeta, safeValue, safePrice, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
 import { countBusinessDays, isBusinessDay, toDateKey, startOfDay } from '../utils/dateUtils.js';
-import { accrueFixedIncomeValue, fixedIncomeDailyFactor, assetDailyFactor, brazilToday, brazilDateOnly } from '../utils/fixedIncome.js';
+import { accrueFixedIncomeValue, fixedIncomeDailyFactor, assetDailyFactor, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
 import logger from '../config/logger.js';
 import AppError from '../utils/AppError.js';
 import { HISTORICAL_CDI_RATES, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
@@ -34,8 +35,8 @@ const getDailyFactorForDate = (date, currentConfigRate) => {
 };
 
 // HELPER: Calcula KPIs em tempo real (versão leve do getWalletData)
-const calculateLiveKPIS = async (userId, currentCdi) => {
-    const activeAssets = await UserAsset.find({ user: userId, quantity: { $gt: QUANTITY_EPSILON } });
+const calculateLiveKPIS = async (userId, currentCdi, walletId) => {
+    const activeAssets = await UserAsset.find({ user: userId, wallet: walletId, quantity: { $gt: QUANTITY_EPSILON } });
 
     if (activeAssets.length === 0) return null;
 
@@ -50,7 +51,7 @@ const calculateLiveKPIS = async (userId, currentCdi) => {
     // (5.4 + 5.8) Dividendos, macro e cotações em lote (sem N+1): em vez de um
     // findOne por ativo, getMarketDataMap resolve todos os tickers de uma vez.
     const [divData, usdConfig, marketMap] = await Promise.all([
-        financialService.calculateUserDividends(userId),
+        financialService.calculateUserDividends(userId, walletId),
         SystemConfig.findOne({ key: 'MACRO_INDICATORS' }),
         marketDataService.getMarketDataMap(tickers),
     ]);
@@ -93,20 +94,20 @@ const MAX_WALLET_HEAL_DEPTH = 1;
 // (6.3) Helpers extraídos de getWalletData para que cada etapa seja pequena e
 // testável isoladamente. A aritmética financeira é idêntica à versão monolítica.
 
-// Carrega preferências + holdings do usuário e deriva targets/active/closed.
-const loadWalletState = async (userId) => {
-    // (5.4) Preferências e holdings dependem só do userId → buscadas em paralelo.
-    const [userPrefs, userAssets] = await Promise.all([
-        User.findById(userId).select('targetAllocation targetReserve targetMonthlyDividendIncome targetSubAllocation').lean(),
-        UserAsset.find({ user: userId }),
+// Carrega preferências (agora por carteira, Fase 2) + holdings e deriva targets/active/closed.
+const loadWalletState = async (userId, walletId) => {
+    // (5.4) Preferências e holdings dependem só do walletId → buscadas em paralelo.
+    const [walletPrefs, userAssets] = await Promise.all([
+        Wallet.findById(walletId).select('targetAllocation targetReserve targetMonthlyDividendIncome targetSubAllocation').lean(),
+        UserAsset.find({ user: userId, wallet: walletId }),
     ]);
 
-    // Carteira ideal (alocação-alvo + sub-metas) persistida no usuário — acompanha a resposta.
+    // Carteira ideal (alocação-alvo + sub-metas) desta carteira — acompanha a resposta.
     const targets = {
-        targetAllocation: userPrefs?.targetAllocation || { STOCK: 40, FII: 30, STOCK_US: 20, ETF: 0, CRYPTO: 10, FIXED_INCOME: 0 },
-        targetReserve: typeof userPrefs?.targetReserve === 'number' ? userPrefs.targetReserve : 10000,
-        targetMonthlyDividendIncome: typeof userPrefs?.targetMonthlyDividendIncome === 'number' ? userPrefs.targetMonthlyDividendIncome : 0,
-        targetSubAllocation: userPrefs?.targetSubAllocation || {
+        targetAllocation: walletPrefs?.targetAllocation || { STOCK: 40, FII: 30, STOCK_US: 20, ETF: 0, CRYPTO: 10, FIXED_INCOME: 0 },
+        targetReserve: typeof walletPrefs?.targetReserve === 'number' ? walletPrefs.targetReserve : 10000,
+        targetMonthlyDividendIncome: typeof walletPrefs?.targetMonthlyDividendIncome === 'number' ? walletPrefs.targetMonthlyDividendIncome : 0,
+        targetSubAllocation: walletPrefs?.targetSubAllocation || {
             FIXED_INCOME: { IPCA: 0, POS: 0, PRE: 0 },
             STOCK_US: { STOCK: 0, REIT: 0, ETF: 0, DOLLAR: 0 },
         },
@@ -120,16 +121,16 @@ const loadWalletState = async (userId) => {
 
 // Auto-Heal: sem ativos ativos mas com transações → reconstrói as posições.
 // Retorna os ativos curados (>0) ou null se nada foi reconstruído.
-const autoHealPositions = async (userId) => {
-    const txCount = await AssetTransaction.countDocuments({ user: userId });
+const autoHealPositions = async (userId, walletId) => {
+    const txCount = await AssetTransaction.countDocuments({ user: userId, wallet: walletId });
     if (txCount === 0) return null;
 
-    const allTxs = await AssetTransaction.find({ user: userId });
+    const allTxs = await AssetTransaction.find({ user: userId, wallet: walletId });
     const distinctTickers = [...new Set(allTxs.map(t => t.ticker))];
     for (const ticker of distinctTickers) {
-        await financialService.recalculatePosition(userId, ticker);
+        await financialService.recalculatePosition(userId, ticker, null, null, null, walletId);
     }
-    const healedAssets = await UserAsset.find({ user: userId, quantity: { $gt: QUANTITY_EPSILON } });
+    const healedAssets = await UserAsset.find({ user: userId, wallet: walletId, quantity: { $gt: QUANTITY_EPSILON } });
     return healedAssets.length > 0 ? healedAssets : null;
 };
 
@@ -156,12 +157,12 @@ const buildEmptyWalletResponse = async (targets) => {
 // cotações (1 query em lote, sem N+1 — 5.8), macro, dividendos e os snapshots
 // usados no TWRR/Sharpe. (5.3) Promise.allSettled: se uma falha (ex.: cálculo
 // de dividendos), a carteira ainda renderiza com degradação graciosa.
-const fetchWalletMarketContext = async (userId, liveTickers) => {
+const fetchWalletMarketContext = async (userId, liveTickers, walletId) => {
     const [assetMapR, configR, dividendsR, snapshotsR] = await Promise.allSettled([
         marketDataService.getMarketDataMap(liveTickers),
         SystemConfig.findOne({ key: 'MACRO_INDICATORS' }),
-        financialService.calculateUserDividends(userId),
-        WalletSnapshot.find({ user: userId }).sort({ date: -1 }).limit(30).lean(),
+        financialService.calculateUserDividends(userId, walletId),
+        WalletSnapshot.find({ user: userId, wallet: walletId }).sort({ date: -1 }).limit(30).lean(),
     ]);
 
     const assetMap = assetMapR.status === 'fulfilled' ? assetMapR.value : new Map();
@@ -183,6 +184,7 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
     // arredonda o preço a 4 casas e, numa reserva com muitas "unidades" (ex.: 15.000),
     // isso descarta centavos (R$15.000 a 100% CDI → 1,000525 vira 1,0005 → perde R$0,38).
     let accruedTotalValue = null;
+    let matured = false; // C2: título de RF vencido (accrual congelado, sugere resgate)
 
     if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
         // Accrual via fonte única (utils/fixedIncome) — idêntico ao
@@ -210,6 +212,11 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
         };
         const boughtToday = asset.taxLots && asset.taxLots.length > 0 && asset.taxLots.every(lot => lotDayStr(lot.date) === todayStr);
         if (boughtToday) dayChangePct = 0;
+
+        // C2: título vencido não rende mais — zera a variação do dia (o valor já
+        // vem congelado no vencimento pelo accrue). isMatured usa a mesma calcDate.
+        matured = isMatured(asset, calcDate);
+        if (matured) dayChangePct = 0;
 
     } else {
         const cached = assetMap.get(asset.ticker);
@@ -292,7 +299,16 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
         // Sub-tipos usados pela ramificação da Carteira Ideal (real vs meta):
         // RF → índice (IPCA/SELIC/CDI/PRE); Exterior → usSubType (STOCK/ETF/REIT/DOLLAR).
         fixedIncomeIndex: asset.fixedIncomeIndex || null,
+        // Taxa contratada — o front usa junto com o índice para classificar o sub-tipo
+        // (%CDI manual sem índice: rate > 50 → pós-fixado, espelhando o accrual).
+        fixedIncomeRate: asset.fixedIncomeRate ?? null,
         usSubType: asset.usSubType || null,
+        // C1: reserva separada. Fallback p/ posições ainda não migradas: CASH é
+        // reserva por natureza (mantém o comportamento antigo até a migração rodar).
+        isReserve: asset.isReserve ?? (asset.type === 'CASH'),
+        // C2: vencimento da RF + flag VENCIDO (accrual congelado; UI sugere resgate).
+        maturityDate: asset.maturityDate || null,
+        matured,
     };
 
     return { processed, totalValueBr, totalCostBr, dayChangeValueBr };
@@ -301,7 +317,7 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
 // --- CÁLCULO LIVE TWRR + VOLATILIDADE (SOURCE OF TRUTH BLINDADA) ---
 // Beta omitido aqui pois exigiria buscar histórico do Ibovespa (pesado) —
 // disponível em getWalletPerformance.
-const computeWalletMetrics = async ({ userId, snapshots, safeTotalEquity, totalResultPercent, currentCdi }) => {
+const computeWalletMetrics = async ({ userId, walletId, snapshots, safeTotalEquity, totalResultPercent, currentCdi }) => {
     const now = new Date();
     let weightedRentability = 0;
     let dataQuality = 'AUDITED'; // Default Audited
@@ -320,7 +336,7 @@ const computeWalletMetrics = async ({ userId, snapshots, safeTotalEquity, totalR
         const snapshotDate = new Date(lastSnapshot.date);
         snapshotDate.setHours(23, 59, 59, 999);
 
-        const txs = await AssetTransaction.find({ user: userId, date: { $gt: snapshotDate } });
+        const txs = await AssetTransaction.find({ user: userId, wallet: walletId, date: { $gt: snapshotDate } });
 
         let periodFlow = 0;
         txs.forEach(tx => {
@@ -358,12 +374,13 @@ const computeWalletMetrics = async ({ userId, snapshots, safeTotalEquity, totalR
 export const getWalletData = async (req, res, next, _depth = 0) => {
     try {
         const userId = req.user.id;
+        const walletId = req.walletId;
 
-        const { userAssets, activeAssets, closedAssets, targets } = await loadWalletState(userId);
+        const { userAssets, activeAssets, closedAssets, targets } = await loadWalletState(userId, walletId);
 
         // Auto-Heal se não houver ativos mas houver transações (reconstrução forçada).
         if (activeAssets.length === 0) {
-            const healed = await autoHealPositions(userId);
+            const healed = await autoHealPositions(userId, walletId);
             if (healed) {
                 // (6.2) Reprocessa com o estado curado, mas só até o limite de
                 // profundidade — nunca recursa infinitamente.
@@ -387,7 +404,7 @@ export const getWalletData = async (req, res, next, _depth = 0) => {
         }
 
         const { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots } =
-            await fetchWalletMarketContext(userId, liveTickers);
+            await fetchWalletMarketContext(userId, liveTickers, walletId);
 
         const usdRate = safeFloat(config?.dollar || 5.75);
         const usdChange = safeFloat(config?.dollarChange || 0);
@@ -445,7 +462,7 @@ export const getWalletData = async (req, res, next, _depth = 0) => {
         }
 
         const { weightedRentability, dataQuality, sharpeRatio, beta } = await computeWalletMetrics({
-            userId, snapshots, safeTotalEquity, totalResultPercent, currentCdi,
+            userId, walletId, snapshots, safeTotalEquity, totalResultPercent, currentCdi,
         });
 
         res.json({
@@ -477,11 +494,13 @@ export const getWalletData = async (req, res, next, _depth = 0) => {
 export const getWalletPerformance = async (req, res, next) => {
     try {
         const userId = req.user.id;
+        const walletId = req.walletId;
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-        
-        let history = await WalletSnapshot.find({ 
-            user: userId, 
-            totalEquity: { $gt: 1 } 
+
+        let history = await WalletSnapshot.find({
+            user: userId,
+            wallet: walletId,
+            totalEquity: { $gt: 1 }
         }).sort({ date: 1 }).lean();
         
         if (history.length === 0) {
@@ -497,7 +516,7 @@ export const getWalletPerformance = async (req, res, next) => {
         const lastSnapshotDate = toDateKey(brazilDateOnly(lastSnapshot.date));
 
         if (lastSnapshotDate !== todayStr) {
-            const liveData = await calculateLiveKPIS(userId, config?.cdi || DEFAULT_SELIC_FALLBACK);
+            const liveData = await calculateLiveKPIS(userId, config?.cdi || DEFAULT_SELIC_FALLBACK, walletId);
 
             if (liveData && liveData.totalEquity > 0) {
                 // Mesma âncora do KPI (getWalletData): regra única compartilhada.
@@ -510,6 +529,7 @@ export const getWalletPerformance = async (req, res, next) => {
                     anchorDate.setHours(23, 59, 59, 999);
                     const txsSince = await AssetTransaction.find({
                         user: userId,
+                        wallet: walletId,
                         date: { $gt: anchorDate }
                     }).lean();
                     txsSince.forEach(tx => {
@@ -665,7 +685,7 @@ export const getWalletPerformance = async (req, res, next) => {
 
 export const getWalletHistory = async (req, res, next) => {
     try {
-        const snapshots = await WalletSnapshot.find({ user: req.user.id }).sort({ date: 1 });
+        const snapshots = await WalletSnapshot.find({ user: req.user.id, wallet: req.walletId }).sort({ date: 1 });
         res.json(snapshots);
     } catch (error) {
         next(error);
@@ -674,7 +694,8 @@ export const getWalletHistory = async (req, res, next) => {
 
 export const addAssetTransaction = async (req, res, next) => {
     const userId = req.user.id;
-    const { ticker, type, quantity, price, date, fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread, name, usSubType, currency } = req.body;
+    const walletId = req.walletId;
+    const { ticker, type, quantity, price, date, fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread, name, usSubType, currency, isReserve, maturityDate } = req.body;
     const txDate = date ? new Date(date) : new Date();
     const transactionType = quantity >= 0 ? 'BUY' : 'SELL';
     let updatedAsset;
@@ -684,13 +705,13 @@ export const addAssetTransaction = async (req, res, next) => {
         if (txDate > todayEnd) throw AppError.badRequest("Data futura não permitida.");
         await runTransaction(async (session) => {
             const newTx = new AssetTransaction({
-                user: userId, ticker: ticker.toUpperCase(), type: transactionType,
+                user: userId, wallet: walletId, ticker: ticker.toUpperCase(), type: transactionType,
                 quantity: Math.abs(parseFloat(quantity)), price: Math.abs(parseFloat(price)),
                 totalValue: Math.abs(parseFloat(quantity)) * Math.abs(parseFloat(price)),
                 date: txDate, notes: name ? `Nome: ${name}` : ''
             });
             await newTx.save({ session });
-            updatedAsset = await financialService.recalculatePosition(userId, ticker.toUpperCase(), type, session, currency);
+            updatedAsset = await financialService.recalculatePosition(userId, ticker.toUpperCase(), type, session, currency, walletId);
             if (updatedAsset && (type === 'FIXED_INCOME' || type === 'CASH')) {
                 if (fixedIncomeRate) updatedAsset.fixedIncomeRate = fixedIncomeRate;
                 // Pós-fixados/indexados (Selic/CDI/IPCA): o rendimento é índice vivo +
@@ -699,20 +720,43 @@ export const addAssetTransaction = async (req, res, next) => {
                 if (type === 'FIXED_INCOME') {
                     let idx = fixedIncomeIndex;
                     let spread = fixedIncomeSpread;
-                    if (!idx) {
-                        // Fonte autoritativa: descobre o índice pelo título no catálogo.
+                    // Catálogo é a fonte autoritativa de índice E vencimento — busca
+                    // uma vez quando falta qualquer um dos dois (evita 2 queries).
+                    let bond = null;
+                    if (!idx || (!maturityDate && !updatedAsset.maturityDate)) {
                         const safeTitle = String(ticker).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        const bond = await TreasuryBond.findOne({ title: new RegExp(`^${safeTitle}$`, 'i') }).session(session);
-                        if (bond?.index) { idx = bond.index; if (spread == null) spread = bond.rate; }
+                        bond = await TreasuryBond.findOne({ title: new RegExp(`^${safeTitle}$`, 'i') }).session(session);
                     }
+                    if (!idx && bond?.index) { idx = bond.index; if (spread == null) spread = bond.rate; }
                     if (idx === 'SELIC' || idx === 'CDI' || idx === 'IPCA') {
                         updatedAsset.fixedIncomeIndex = idx;
                         updatedAsset.fixedIncomeSpread = Number(spread) || 0;
                     } else if (idx === 'PRE') {
                         updatedAsset.fixedIncomeIndex = 'PRE';
                     }
+                    // C2: vencimento — da UI (form) ou, quando ausente, do catálogo
+                    // (string "dd/mm/aaaa"). Nunca reescreve um vencimento já salvo.
+                    if (maturityDate) {
+                        const md = new Date(maturityDate);
+                        if (!isNaN(md.getTime())) updatedAsset.maturityDate = md;
+                    } else if (!updatedAsset.maturityDate && bond?.maturityDate) {
+                        const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(bond.maturityDate).trim());
+                        if (m) {
+                            const parsed = new Date(`${m[3]}-${m[2]}-${m[1]}T00:00:00.000Z`);
+                            if (!isNaN(parsed.getTime())) updatedAsset.maturityDate = parsed;
+                        }
+                    }
                 }
                 if (name) updatedAsset.name = name;
+                // C1: CASH é reserva por natureza; FIXED_INCOME segue a escolha do
+                // usuário ("Guardar como Reserva separada"). Só grava no primeiro
+                // aporte (posição nova) ou quando o flag vem explícito — aportes
+                // seguintes não devem silenciosamente reclassificar a posição.
+                if (type === 'CASH') {
+                    updatedAsset.isReserve = true;
+                } else if (type === 'FIXED_INCOME' && isReserve !== undefined) {
+                    updatedAsset.isReserve = !!isReserve;
+                }
                 if (transactionType === 'BUY' && (!updatedAsset.startDate || new Date(date) < updatedAsset.startDate)) {
                     updatedAsset.startDate = new Date(date);
                 }
@@ -735,7 +779,7 @@ export const addAssetTransaction = async (req, res, next) => {
         // falhar, logamos (sem silenciar) — o snapshot é corrigido no próximo
         // recálculo/job diário, mas a falha precisa ficar visível.
         try {
-            await financialService.rebuildUserHistory(userId);
+            await financialService.rebuildUserHistory(userId, walletId);
         } catch (err) {
             logger.warn(`[Wallet] Rebuild de histórico falhou após addAssetTransaction (user ${userId}): ${err.message}`);
         }
@@ -752,10 +796,12 @@ export const addAssetTransaction = async (req, res, next) => {
 export const updateAsset = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { tags, name, usSubType } = req.body;
+        const { tags, name, usSubType, type, fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread, maturityDate, isReserve } = req.body;
         const userId = req.user.id;
 
-        const asset = await UserAsset.findOne({ _id: id, user: userId });
+        // wallet no filtro evita que um id de outra carteira do mesmo usuário
+        // (ou de outro usuário) resolva aqui — posse é sempre {user, wallet, _id}.
+        const asset = await UserAsset.findOne({ _id: id, user: userId, wallet: req.walletId });
         if (!asset) return res.status(404).json({ message: "Ativo não encontrado" });
 
         if (tags !== undefined) asset.tags = tags;
@@ -768,8 +814,46 @@ export const updateAsset = async (req, res, next) => {
             asset.usSubTypeManual = true;
         }
 
+        // Reclassificar um Caixa/Reserva (CASH) em Renda Fixa (FIXED_INCOME) —
+        // para posições cadastradas como "cofrinho" que na verdade são um título.
+        // Só nessa direção: CASH guarda price=1, então o valor principal
+        // (quantity×price = quantity) é idêntico à base do accrual de RF — a
+        // reclassificação preserva o patrimônio e só troca a curva de rendimento.
+        let reclassified = false;
+        if (type === 'FIXED_INCOME' && asset.type === 'CASH') {
+            asset.type = 'FIXED_INCOME';
+            if (fixedIncomeRate !== undefined) asset.fixedIncomeRate = fixedIncomeRate;
+            if (fixedIncomeIndex === 'SELIC' || fixedIncomeIndex === 'CDI' || fixedIncomeIndex === 'IPCA') {
+                asset.fixedIncomeIndex = fixedIncomeIndex;
+                asset.fixedIncomeSpread = Number(fixedIncomeSpread) || 0;
+            } else if (fixedIncomeIndex === 'PRE') {
+                asset.fixedIncomeIndex = 'PRE';
+            }
+            if (maturityDate) {
+                const md = new Date(maturityDate);
+                if (!isNaN(md.getTime())) asset.maturityDate = md;
+            }
+            // Ao virar título, passa a ser investimento por padrão (entra no donut
+            // e no grupo "Renda Fixa"), salvo se o usuário pedir p/ manter na reserva.
+            asset.isReserve = isReserve === undefined ? false : !!isReserve;
+            reclassified = true;
+        } else if (isReserve !== undefined && (asset.type === 'FIXED_INCOME' || asset.type === 'CASH')) {
+            // Alternar "Reserva separada" sem mudar a classe.
+            asset.isReserve = !!isReserve;
+        }
+
         await asset.save();
-        res.json({ message: "Ativo atualizado.", asset });
+
+        // Reclassificar muda a curva de rendimento (100% CDI → taxa do título),
+        // inclusive retroativamente: reconstrói o histórico p/ os snapshots baterem.
+        if (reclassified) {
+            try {
+                await financialService.rebuildUserHistory(userId, req.walletId);
+            } catch (e) {
+                logger.warn(`[Wallet] Rebuild pós-reclassificação falhou (user ${userId}): ${e.message}`);
+            }
+        }
+        res.json({ message: reclassified ? "Ativo convertido em Renda Fixa." : "Ativo atualizado.", asset });
     } catch (error) {
         next(error);
     }
@@ -777,12 +861,13 @@ export const updateAsset = async (req, res, next) => {
 
 export const removeAsset = async (req, res, next) => {
     const userId = req.user.id;
+    const walletId = req.walletId;
     const assetId = req.params.id;
     try {
         await runTransaction(async (session) => {
-            const asset = await UserAsset.findOne({ _id: assetId, user: userId });
+            const asset = await UserAsset.findOne({ _id: assetId, user: userId, wallet: walletId });
             if (!asset) throw txError(404, "Ativo não encontrado");
-            await AssetTransaction.deleteMany({ user: userId, ticker: asset.ticker }).session(session);
+            await AssetTransaction.deleteMany({ user: userId, wallet: walletId, ticker: asset.ticker }).session(session);
             await UserAsset.deleteOne({ _id: assetId }).session(session);
         });
     } catch (error) {
@@ -791,20 +876,25 @@ export const removeAsset = async (req, res, next) => {
     }
     // Best-effort pós-commit (ver removeAsset/addAssetTransaction): loga em vez de silenciar.
     try {
-        await financialService.rebuildUserHistory(userId);
+        await financialService.rebuildUserHistory(userId, walletId);
     } catch (e) {
         logger.warn(`[Wallet] Rebuild de histórico falhou após remover ativo (user ${userId}): ${e.message}`);
     }
     res.json({ message: "Ativo removido." });
 };
 
+// Wipe completo da carteira ATIVA (ativos + lançamentos + histórico). Fase 2:
+// escopado por wallet — o equivalente para conta inteira/todas as carteiras
+// não existe mais aqui; a exclusão de UMA carteira específica vive em
+// DELETE /api/wallets/:walletId (walletsController.js).
 export const resetWallet = async (req, res, next) => {
     const userId = req.user.id;
+    const walletId = req.walletId;
     try {
         await runTransaction(async (session) => {
-            await UserAsset.deleteMany({ user: userId }).session(session);
-            await AssetTransaction.deleteMany({ user: userId }).session(session);
-            await WalletSnapshot.deleteMany({ user: userId }).session(session);
+            await UserAsset.deleteMany({ user: userId, wallet: walletId }).session(session);
+            await AssetTransaction.deleteMany({ user: userId, wallet: walletId }).session(session);
+            await WalletSnapshot.deleteMany({ user: userId, wallet: walletId }).session(session);
         });
     } catch (error) {
         return next(error);
@@ -812,10 +902,12 @@ export const resetWallet = async (req, res, next) => {
     res.json({ message: "Carteira resetada." });
 };
 
-// PUT /wallet/targets — salva a carteira ideal (alocação-alvo + reserva) do usuário.
+// PUT /wallet/targets — salva a carteira ideal (alocação-alvo + reserva) DESTA
+// carteira (Fase 2: cada carteira tem sua própria, não mais uma por conta).
 export const updateWalletTargets = async (req, res, next) => {
     try {
         const userId = req.user.id;
+        const walletId = req.walletId;
         const { targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation } = req.body;
 
         const update = {};
@@ -853,7 +945,9 @@ export const updateWalletTargets = async (req, res, next) => {
             };
         }
 
-        const updated = await User.findByIdAndUpdate(userId, { $set: update }, { new: true })
+        // { _id, user } no filtro: defesa em profundidade além do já validado por
+        // resolveWallet (nunca reconfia num walletId cru sem o par correto de user).
+        const updated = await Wallet.findOneAndUpdate({ _id: walletId, user: userId }, { $set: update }, { new: true })
             .select('targetAllocation targetReserve targetMonthlyDividendIncome targetSubAllocation').lean();
 
         res.json({
@@ -905,7 +999,7 @@ export const getAssetTransactions = async (req, res, next) => {
     try {
         const { ticker } = req.params;
         const { page = 1, limit = 10 } = req.query;
-        const query = { user: req.user.id, ticker: ticker.toUpperCase() };
+        const query = { user: req.user.id, wallet: req.walletId, ticker: ticker.toUpperCase() };
         const transactions = await AssetTransaction.find(query).sort({ date: -1, createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
         const total = await AssetTransaction.countDocuments(query);
         res.json({ transactions, pagination: { total, page: parseInt(page), pages: Math.ceil(total / limit), hasMore: page * limit < total } });
@@ -914,15 +1008,16 @@ export const getAssetTransactions = async (req, res, next) => {
 
 export const deleteTransaction = async (req, res, next) => {
     const userId = req.user.id;
+    const walletId = req.walletId;
     let txTicker;
     try {
         await runTransaction(async (session) => {
-            const tx = await AssetTransaction.findOneAndDelete({ _id: req.params.id, user: userId }, { session });
+            const tx = await AssetTransaction.findOneAndDelete({ _id: req.params.id, user: userId, wallet: walletId }, { session });
             if (!tx) throw txError(404, "Transação não encontrada");
             txTicker = tx.ticker;
             // Recalcula a posição na MESMA transação: se o recálculo falhar (ex.: saldo
             // insuficiente), o delete é revertido — sem estado financeiro inconsistente.
-            await financialService.recalculatePosition(userId, tx.ticker, null, session);
+            await financialService.recalculatePosition(userId, tx.ticker, null, session, null, walletId);
         });
     } catch (error) {
         if (error.httpStatus) return res.status(error.httpStatus).json({ message: error.message });
@@ -930,7 +1025,7 @@ export const deleteTransaction = async (req, res, next) => {
     }
     // Best-effort pós-commit (ver acima): loga em vez de silenciar.
     try {
-        await financialService.rebuildUserHistory(userId);
+        await financialService.rebuildUserHistory(userId, walletId);
     } catch (e) {
         logger.warn(`[Wallet] Rebuild de histórico falhou após remover transação (user ${userId}): ${e.message}`);
     }
@@ -955,11 +1050,12 @@ const pruneDividendHeal = () => {
 export const getWalletDividends = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        // `req.user` (cache do authMiddleware) não carrega targetMonthlyDividendIncome
-        // — busca dedicada, em paralelo com o cálculo de proventos.
-        const [data, userGoal] = await Promise.all([
-            financialService.calculateUserDividends(userId),
-            User.findById(userId).select('targetMonthlyDividendIncome').lean(),
+        const walletId = req.walletId;
+        // Meta de renda passiva é por carteira (Fase 2) — busca dedicada em Wallet,
+        // em paralelo com o cálculo de proventos.
+        const [data, walletDoc] = await Promise.all([
+            financialService.calculateUserDividends(userId, walletId),
+            Wallet.findById(walletId).select('targetMonthlyDividendIncome').lean(),
         ]);
         const history = Array.from(data.dividendMap.entries()).map(([month, val]) => ({ month, value: val.total, breakdown: val.breakdown })).sort((a, b) => a.month.localeCompare(b.month));
 
@@ -967,7 +1063,7 @@ export const getWalletDividends = async (req, res, next) => {
         // acumulado vitalício (`totalAllTime`), senão a barra estoura em 100%.
         // Espelha o que o card exibe (displayDividends): soma das provisões do
         // mês corrente quando houver, senão o fluxo mensal projetado.
-        const target = userGoal?.targetMonthlyDividendIncome || 0;
+        const target = walletDoc?.targetMonthlyDividendIncome || 0;
         const provisionedSum = (data.provisioned || []).reduce((acc, p) => safeAdd(acc, p.amount || 0), 0);
         const current = provisionedSum > 0 ? provisionedSum : data.projectedMonthly;
         const goal = {
@@ -997,7 +1093,7 @@ export const getWalletDividends = async (req, res, next) => {
                 dividendHealAt.set(userId, Date.now());
                 (async () => {
                     try {
-                        const eligible = await UserAsset.find({ user: userId, quantity: { $gt: QUANTITY_EPSILON } }).select('ticker type').lean();
+                        const eligible = await UserAsset.find({ user: userId, wallet: walletId, quantity: { $gt: QUANTITY_EPSILON } }).select('ticker type').lean();
                         const payers = eligible.filter(a => !['CRYPTO', 'CASH', 'FIXED_INCOME'].includes(a.type));
                         if (payers.length === 0) return;
                         await marketDataService.refreshFundamentals(payers.map(a => a.ticker));
@@ -1016,14 +1112,15 @@ export const getCashFlow = async (req, res, next) => {
     try {
         const { page = 1, limit = 20, filterType } = req.query;
         const userId = req.user.id;
+        const walletId = req.walletId;
 
-        // Cofrinhos (Reserva/Caixa) do usuário: cada um é um UserAsset type=CASH com
-        // ticker próprio. Mapa ticker→nome para rotular o extrato e set para filtrar.
-        const cashAssets = await UserAsset.find({ user: userId, type: 'CASH' }).select('ticker name').lean();
+        // Cofrinhos (Reserva/Caixa) desta carteira: cada um é um UserAsset type=CASH
+        // com ticker próprio. Mapa ticker→nome para rotular o extrato e set para filtrar.
+        const cashAssets = await UserAsset.find({ user: userId, wallet: walletId, type: 'CASH' }).select('ticker name').lean();
         const cashTickers = cashAssets.map(a => a.ticker);
         const cashNameByTicker = new Map(cashAssets.map(a => [a.ticker, a.name || 'Reserva']));
 
-        const query = { user: userId };
+        const query = { user: userId, wallet: walletId };
         if (filterType === 'CASH') query.ticker = { $in: cashTickers };
         else if (filterType === 'TRADE') query.ticker = { $nin: cashTickers };
         const transactions = await AssetTransaction.find(query).sort({ date: -1, createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
@@ -1051,11 +1148,13 @@ export const fixWalletSnapshots = async (req, res, next) => {
             $or: [{ quotaPrice: { $lte: 0.1 } }, { quotaPrice: { $gte: 1000000 } }]
         });
         
-        const users = await WalletSnapshot.distinct('user');
+        // Fase 2: agrupa por CARTEIRA (não mais por usuário) — cada carteira tem
+        // sua própria cadeia de cotas/TWRR independente.
+        const wallets = await WalletSnapshot.distinct('wallet');
         let resetDeletions = 0;
 
-        for (const userId of users) {
-            const snaps = await WalletSnapshot.find({ user: userId }).sort({ date: 1 });
+        for (const walletId of wallets) {
+            const snaps = await WalletSnapshot.find({ wallet: walletId }).sort({ date: 1 });
             const toDelete = [];
             for (let i = 1; i < snaps.length; i++) {
                 const prev = snaps[i-1];
@@ -1084,16 +1183,17 @@ export const getSnapshotHealth = async (req, res, next) => {
     try {
         const today = startOfDay(new Date());
 
-        const totalUsers = await User.countDocuments({});
+        // Fase 2: cobertura esperada é 1 snapshot/dia por CARTEIRA (não por usuário).
+        const totalWallets = await Wallet.countDocuments({});
         const snapshotsToday = await WalletSnapshot.countDocuments({ date: { $gte: today } });
         const lastRun = await WalletSnapshot.findOne().sort({ createdAt: -1 }).select('createdAt');
 
         res.json({
-            totalUsers,
+            totalWallets,
             snapshotsToday,
-            coverage: totalUsers > 0 ? ((snapshotsToday / totalUsers) * 100).toFixed(1) + '%' : '0%',
+            coverage: totalWallets > 0 ? ((snapshotsToday / totalWallets) * 100).toFixed(1) + '%' : '0%',
             lastRun: lastRun?.createdAt,
-            status: snapshotsToday > (totalUsers * 0.9) ? 'HEALTHY' : 'WARNING'
+            status: snapshotsToday > (totalWallets * 0.9) ? 'HEALTHY' : 'WARNING'
         });
     } catch (error) {
         next(error);

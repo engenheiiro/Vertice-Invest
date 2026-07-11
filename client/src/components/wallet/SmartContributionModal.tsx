@@ -6,7 +6,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { useWallet, AssetType, FixedIncomeSubKey, UsSubKey } from '../../contexts/WalletContext';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
-import { computeSubAllocationReal, splitContributionBySubMeta, hasSubTargets, SUB_LABELS } from '../../utils/allocation';
+import { computeSubAllocationReal, splitContributionBySubMeta, hasSubTargets, SUB_LABELS, allocationBucket } from '../../utils/allocation';
 
 interface SmartContributionModalProps {
     isOpen: boolean;
@@ -87,9 +87,12 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
         const currentValues: Record<string, number> = { STOCK: 0, FII: 0, STOCK_US: 0, ETF: 0, CRYPTO: 0, FIXED_INCOME: 0, OURO: 0, CASH: 0 };
         assets.forEach(asset => {
             const val = asset.quantity * asset.currentPrice * (asset.currency === 'USD' ? (usdRate || 5.75) : 1);
-            // Bucketiza por classe (type): ETF nacional é classe própria; ETFs
-            // internacionais têm type STOCK_US e contam no Exterior.
-            currentValues[asset.type] = (currentValues[asset.type] || 0) + val;
+            // Bucketiza pelo BALDE DE ALOCAÇÃO (C1), coerente com o donut: ativos de
+            // Reserva (CASH ou RF marcada) contam em CASH (reserva); RF não-reserva
+            // fica em FIXED_INCOME (investimento). ETF nacional é classe própria;
+            // ETFs internacionais têm type STOCK_US e contam no Exterior.
+            const bucket = allocationBucket(asset);
+            currentValues[bucket] = (currentValues[bucket] || 0) + val;
         });
 
         const currentReserve = currentValues['CASH'];

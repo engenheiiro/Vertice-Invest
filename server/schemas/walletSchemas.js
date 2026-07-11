@@ -30,16 +30,23 @@ export const addTransactionSchema = z.object({
     // Pós-fixados/indexados: índice + spread a.a. sobre o índice (Tesouro Selic/IPCA).
     fixedIncomeIndex: z.enum(['SELIC', 'CDI', 'IPCA', 'PRE']).optional(),
     fixedIncomeSpread: z.coerce.number().finite('Spread inválido').optional(),
+    // C2: vencimento do título (Renda Fixa). No vencimento o accrual congela e o
+    // ativo é marcado VENCIDO. Aceita YYYY-MM-DD (input date) ou ISO.
+    maturityDate: z.coerce.date({ invalid_type_error: 'Data de vencimento inválida' }).optional(),
     name: z.string().trim().max(120, 'Nome muito longo').optional(),
     // Sub-tipo de Exterior escolhido manualmente no cadastro (Stocks/ETF/REIT/Dólar/Ouro).
     usSubType: z.enum(['STOCK', 'ETF', 'REIT', 'DOLLAR', 'GOLD']).optional(),
     // Moeda do lançamento — autoritativa p/ a classe ETF (nacional R$ vs internacional US$),
     // onde o mesmo tipo pode ser BRL ou USD. Sem ela, cai no default por tipo/MarketAsset.
     currency: z.enum(['BRL', 'USD']).optional(),
+    // C1: marca o ativo como Reserva separada (sai da base de alocação). Só faz
+    // sentido para FIXED_INCOME/CASH; para os demais o controller ignora.
+    isReserve: z.coerce.boolean().optional(),
   }),
 });
 
-// PUT /wallet/:id — atualizar tags, nome e/ou sub-tipo de Exterior do ativo.
+// PUT /wallet/:id — atualizar tags, nome, sub-tipo de Exterior, alternar reserva
+// ou reclassificar um Caixa/Reserva (CASH) em Renda Fixa (FIXED_INCOME).
 export const updateAssetSchema = z.object({
   params: z.object({ id: objectId }),
   body: z.object({
@@ -47,6 +54,14 @@ export const updateAssetSchema = z.object({
     name: z.string().trim().min(1, 'Nome não pode ser vazio').max(120, 'Nome muito longo').optional(),
     // Override manual do sub-tipo de Exterior (Stocks/ETF/REIT/Dólar/Ouro).
     usSubType: z.enum(['STOCK', 'ETF', 'REIT', 'DOLLAR', 'GOLD'], { errorMap: () => ({ message: 'Sub-tipo inválido' }) }).optional(),
+    // Reclassificação CASH → FIXED_INCOME (o controller só aceita essa direção).
+    type: z.literal('FIXED_INCOME').optional(),
+    fixedIncomeRate: z.coerce.number().finite('Taxa inválida').optional(),
+    fixedIncomeIndex: z.enum(['SELIC', 'CDI', 'IPCA', 'PRE']).optional(),
+    fixedIncomeSpread: z.coerce.number().finite('Spread inválido').optional(),
+    maturityDate: z.coerce.date({ invalid_type_error: 'Data de vencimento inválida' }).optional(),
+    // Alterna "Reserva separada" (fora da base de alocação) de CASH/Renda Fixa.
+    isReserve: z.coerce.boolean().optional(),
   }),
 });
 

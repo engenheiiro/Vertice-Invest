@@ -23,18 +23,31 @@ import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useToast } from '../contexts/ToastContext';
 import { useDemo } from '../contexts/DemoContext'; 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { FEATURE_LIMITS } from '../constants/subscription';
 import { WALLET_STEPS } from '../components/tutorial/tutorialSteps';
 
 export const Wallet = () => {
     const { user } = useAuth();
-    const { assets, kpis, resetWallet, isLoading, isRefreshing, usdRate } = useWallet();
+    const { assets, kpis, resetWallet, isLoading, isRefreshing, usdRate, activeWalletId, activeWalletName } = useWallet();
     const { addToast } = useToast();
     const { isDemoMode, currentStep } = useDemo();
     const navigate = useNavigate();
-    
+    const location = useLocation();
+
+    // (B1) Cofre de Dividendos (Dashboard) manda direto pra cá com o editor já aberto
+    // na Meta de Renda Passiva, em vez de só cair na tela da Carteira.
+    const [autoOpenDividendGoal, setAutoOpenDividendGoal] = useState(
+        Boolean((location.state as { openDividendGoalEditor?: boolean } | null)?.openDividendGoalEditor)
+    );
+    useEffect(() => {
+        if (autoOpenDividendGoal) {
+            // Limpa o state da navegação para não reabrir num refresh/voltar.
+            window.history.replaceState({}, document.title);
+        }
+    }, [autoOpenDividendGoal]);
+
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
     const [isRebalanceModalOpen, setIsRebalanceModalOpen] = useState(false);
@@ -106,7 +119,7 @@ export const Wallet = () => {
                 <div id="tour-wallet-intro" className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-2.5">
-                            <span>{user?.walletName || 'Minha Carteira'}</span>
+                            <span>{activeWalletName || 'Minha Carteira'}</span>
                             <button
                                 onClick={() => setIsRenameWalletOpen(true)}
                                 title="Renomear carteira"
@@ -199,7 +212,11 @@ export const Wallet = () => {
                                         />
                                     </div>
                                     <div className="lg:col-span-1">
-                                        <AllocationChart initialViewMode="IDEAL" />
+                                        <AllocationChart
+                                            initialViewMode="IDEAL"
+                                            autoOpenDividendGoal={autoOpenDividendGoal}
+                                            onAutoOpenHandled={() => setAutoOpenDividendGoal(false)}
+                                        />
                                     </div>
                                 </div>
                             ) : (
@@ -209,7 +226,10 @@ export const Wallet = () => {
                                             <EvolutionChart />
                                         </div>
                                         <div className="lg:col-span-1">
-                                            <AllocationChart />
+                                            <AllocationChart
+                                                autoOpenDividendGoal={autoOpenDividendGoal}
+                                                onAutoOpenHandled={() => setAutoOpenDividendGoal(false)}
+                                            />
                                         </div>
                                     </div>
                                     <div id="tour-wallet-list" className="mb-8 animate-fade-in">
@@ -264,7 +284,9 @@ export const Wallet = () => {
                 <RebalanceModal isOpen={isRebalanceModalOpen} onClose={() => setIsRebalanceModalOpen(false)} />
                 <RenameWalletModal
                     isOpen={isRenameWalletOpen}
-                    currentName={user?.walletName || 'Minha Carteira'}
+                    mode="rename"
+                    walletId={activeWalletId}
+                    currentName={activeWalletName}
                     onClose={() => setIsRenameWalletOpen(false)}
                 />
                 

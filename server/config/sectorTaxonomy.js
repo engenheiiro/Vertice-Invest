@@ -189,6 +189,74 @@ export const getConcentrationKey = (asset) => {
     return getMacroSector(asset.sector);
 };
 
+// ---------------------------------------------------------------------------
+// CICLICIDADE — macro-setores estruturalmente cíclicos.
+//
+// Ciclicidade ≠ "não estar na lista de setores seguros". O gate defensivo já
+// exige DY≥6 & P/L≤10 para setor não-seguro, mas uma ação cíclica em queda cumpre
+// isso TRIVIALMENTE: preço caindo ÷ lucro de PICO do ciclo gera P/L baixo e DY alto,
+// exatamente o perfil que o scoring premiava como "defensivo barato" (caso SHUL4 —
+// Schulz, bens industriais/autopeças de caminhão/fundidos p/ agro). É a armadilha
+// clássica de value-trap cíclico: comprar P/L baixo (topo do ciclo) em vez de P/L
+// alto (fundo). Cíclicas nunca devem ser elegíveis ao perfil DEFENSIVE.
+//
+// INDUSTRIAL e COMMODITIES são os dois macro-setores estruturalmente cíclicos.
+// REAL_ESTATE e o varejo de Consumo Cíclico são sensíveis a juros, mas têm perfil
+// de renda/consumo distinto — ficam de fora do BARRAMENTO (tratados só pela
+// sensibilidade a juros no scoringEngine). 'Consumo Cíclico' (sub-setor fino que
+// cai em CONSUMO) é coberto por substring dedicada abaixo.
+export const CYCLICAL_MACRO_SECTORS = new Set(['INDUSTRIAL', 'COMMODITIES']);
+
+// Rótulos finos explicitamente cíclicos cujo macro-setor (CONSUMO) não é cíclico
+// como um todo — casam por substring normalizada.
+const CYCLICAL_SUBSECTOR_HINTS = ['consumo ciclico', 'consumer cyclical'];
+
+// True se o setor do ativo é estruturalmente cíclico (macro cíclico OU sub-setor
+// explicitamente cíclico). Reaproveita getMacroSector.
+export const isCyclicalSector = (sector) => {
+    if (!sector) return false;
+    if (CYCLICAL_MACRO_SECTORS.has(getMacroSector(sector))) return true;
+    const n = normalizeSegment(sector);
+    return CYCLICAL_SUBSECTOR_HINTS.some(h => n.includes(h));
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GOVERNANÇA — controle estatal (eixo ORTOGONAL à ciclicidade).
+//
+// A ciclicidade pega a Petrobras pela porta do setor (COMMODITIES), mas deixa passar
+// nomes ESTATAIS de setores "seguros" — um banco estatal (BBAS3) ou uma utility
+// estadual (CMIG4, SAPR11) entram no gate Defensivo como qualquer banco/elétrica.
+// O risco real dessas empresas não é o setor: é o CONTROLADOR. A União/Estado pode
+// redirecionar payout, política de preços e capex por decisão política (a história
+// de dividendo da Petrobras muda com o governo). O DY alto não é contratual como o de
+// uma pagadora privada regulada. É um eixo próprio de risco que setor nenhum captura.
+//
+// Lista curada (conhecimento de domínio estável, como as listas de setor seguro):
+// só empresas com controlador estatal DE FATO hoje. Exclui deliberadamente as já
+// PRIVATIZADAS — SBSP3 (2024), CPLE3/6 (2023), ELET3/6 (2022, só golden share) —
+// que passaram a ser corporations sem controlador estatal. Revisar quando houver
+// nova privatização/estatização. Tickers por classe (ON/PN/Unit) explícitos.
+export const STATE_CONTROLLED_TICKERS = new Set([
+    // Federal
+    'PETR3', 'PETR4',      // Petrobras
+    'BBAS3',               // Banco do Brasil
+    'BBSE3',               // BB Seguridade (controlada pelo BB → indireta federal)
+    // Estaduais
+    'SAPR3', 'SAPR4', 'SAPR11', // Sanepar (PR)
+    'CMIG3', 'CMIG4',      // Cemig (MG)
+    'CSMG3',               // Copasa (MG)
+    'BRSR3', 'BRSR5', 'BRSR6',  // Banrisul (RS)
+]);
+
+// True se o ativo tem controlador estatal de fato (federal/estadual). Normaliza o
+// ticker (uppercase/trim) e ignora sufixo fracionário 'F' (ex.: PETR4F → PETR4).
+export const isStateControlled = (ticker) => {
+    if (!ticker) return false;
+    let t = String(ticker).trim().toUpperCase();
+    if (t.endsWith('F') && STATE_CONTROLLED_TICKERS.has(t.slice(0, -1))) t = t.slice(0, -1);
+    return STATE_CONTROLLED_TICKERS.has(t);
+};
+
 // Função Helper para descobrir o Macro Setor
 export const getMacroSector = (subSector) => {
     if (!subSector) return 'OUTROS';

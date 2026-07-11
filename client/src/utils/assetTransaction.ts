@@ -1,5 +1,45 @@
 import type { Asset, AssetType } from '../contexts/WalletContext';
 
+/**
+ * Modo de rendimento de um título de Renda Fixa (UI). Diz COMO a taxa digitada
+ * deve ser interpretada — resolve a ambiguidade "10% é do CDI ou prefixado?":
+ *  - 'CDI_PCT' → % do CDI (ex.: 110 = 110% do CDI); pós-fixado multiplicativo.
+ *  - 'PRE'     → prefixado, taxa cheia a.a. (ex.: 12 = 12% ao ano).
+ *  - 'IPCA'    → IPCA + spread a.a. (ex.: 6 = IPCA + 6%).
+ *  - 'SELIC'   → Selic + spread a.a. (ex.: 0,10 = Selic + 0,10%).
+ */
+export type FixedIncomeMode = 'CDI_PCT' | 'PRE' | 'IPCA' | 'SELIC';
+
+/** Índice do catálogo (SELIC/CDI/IPCA/PRE) → modo de rendimento da UI. */
+export const fixedIncomeModeFromIndex = (index?: string): FixedIncomeMode => {
+  switch ((index || '').toUpperCase()) {
+    case 'IPCA': return 'IPCA';
+    case 'SELIC': return 'SELIC';
+    case 'PRE': return 'PRE';
+    // Catálogo do Tesouro não traz CDI; %CDI só aparece em CDB/LCI manuais.
+    case 'CDI': return 'CDI_PCT';
+    default: return 'CDI_PCT';
+  }
+};
+
+/**
+ * Traduz o modo + taxa digitada nos campos que o backend entende. Pós-fixados
+ * indexados (IPCA/Selic) viram índice + spread; prefixado vira PRE + taxa cheia;
+ * % do CDI usa o caminho legado (`fixedIncomeRate` > 50 = %CDI) sem índice.
+ */
+export const buildFixedIncomeRateFields = (
+  mode: FixedIncomeMode,
+  rateValue: number,
+): { fixedIncomeRate: number; fixedIncomeIndex?: 'SELIC' | 'CDI' | 'IPCA' | 'PRE'; fixedIncomeSpread?: number } => {
+  switch (mode) {
+    case 'IPCA': return { fixedIncomeRate: rateValue, fixedIncomeIndex: 'IPCA', fixedIncomeSpread: rateValue };
+    case 'SELIC': return { fixedIncomeRate: rateValue, fixedIncomeIndex: 'SELIC', fixedIncomeSpread: rateValue };
+    case 'PRE': return { fixedIncomeRate: rateValue, fixedIncomeIndex: 'PRE' };
+    case 'CDI_PCT':
+    default: return { fixedIncomeRate: rateValue };
+  }
+};
+
 export interface AssetFormState {
   ticker: string;
   name: string;
@@ -11,11 +51,20 @@ export interface AssetFormState {
   // Renda fixa pós-fixada/indexada: índice de referência (SELIC/CDI/IPCA/PRE).
   // Quando definido, `rate` representa o spread a.a. sobre o índice.
   fixedIncomeIndex?: string;
+  // Modo de rendimento da Renda Fixa (UI). Governa a interpretação de `rate`
+  // (% do CDI, prefixado, IPCA+, Selic+). Ver FixedIncomeMode.
+  fixedIncomeMode?: FixedIncomeMode;
   // Exterior (STOCK_US): sub-tipo manual (Stocks/REIT/Dólar). Vazio = auto.
   usSubType?: string;
   // Moeda explícita do lançamento. Para a classe ETF (nacional R$ vs internacional US$)
   // o modal define isto; quando ausente, cai no default por tipo.
   currency?: 'BRL' | 'USD';
+  // C1: Renda Fixa marcada como "Reserva separada" (sai da base de alocação).
+  // Só aplicável a FIXED_INCOME; CASH é sempre reserva (definido no backend).
+  isReserve?: boolean;
+  // C2: vencimento do título de Renda Fixa (YYYY-MM-DD). No vencimento o backend
+  // congela o rendimento e marca VENCIDO. Vazio = sem vencimento (perpétua).
+  maturityDate?: string;
 }
 
 export interface TransactionPayload {
@@ -32,6 +81,8 @@ export interface TransactionPayload {
   fixedIncomeIndex?: string;
   fixedIncomeSpread?: number;
   usSubType?: string;
+  isReserve?: boolean;
+  maturityDate?: string;
 }
 
 export interface ValidationResult {
@@ -138,9 +189,12 @@ export function validateTransaction(
 
   const finalRate = form.rate ? parseFloat(form.rate.replace(',', '.')) : 0;
   const finalTicker = form.ticker.toUpperCase();
-  // Pós-fixado/indexado: a taxa digitada é o spread sobre o índice (SELIC/CDI/IPCA).
-  const idx = form.fixedIncomeIndex;
-  const isIndexed = idx === 'SELIC' || idx === 'CDI' || idx === 'IPCA';
+  // Renda Fixa: o "modo" (definido na UI ou inferido do índice do catálogo) diz
+  // como interpretar a taxa digitada — % do CDI, prefixado, IPCA+ ou Selic+.
+  const fiMode = form.fixedIncomeMode || fixedIncomeModeFromIndex(form.fixedIncomeIndex);
+  const fiFields = form.type === 'FIXED_INCOME'
+    ? buildFixedIncomeRateFields(fiMode, finalRate)
+    : { fixedIncomeRate: finalRate };
 
   return {
     payload: {
@@ -153,10 +207,14 @@ export function validateTransaction(
       currency: form.currency || (form.type === 'STOCK_US' ? 'USD' : 'BRL'),
       sector: 'General',
       date: form.date,
-      fixedIncomeRate: finalRate,
-      ...(isIndexed ? { fixedIncomeIndex: idx, fixedIncomeSpread: finalRate } : {}),
+      ...fiFields,
       // Override de sub-tipo só faz sentido para Exterior; vazio = backend classifica.
       ...(form.type === 'STOCK_US' && form.usSubType ? { usSubType: form.usSubType } : {}),
+      // C1: "Reserva separada" só é enviada para Renda Fixa (CASH é sempre reserva
+      // no backend; demais classes são sempre investimento).
+      ...(form.type === 'FIXED_INCOME' ? { isReserve: !!form.isReserve } : {}),
+      // C2: vencimento só faz sentido para Renda Fixa e quando informado.
+      ...(form.type === 'FIXED_INCOME' && form.maturityDate ? { maturityDate: form.maturityDate } : {}),
     },
   };
 }

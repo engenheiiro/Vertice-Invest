@@ -67,6 +67,14 @@ const RankingItemSchema = new mongoose.Schema({
     rentM2: Number,  
     avgLiquidity: Number,
     revenueGrowth: Number,
+    // Séries temporais (worker): usadas no scoring (via dados vivos) mas antes NÃO
+    // declaradas aqui — o Mongoose as descartava no save, então o ranking persistido
+    // não as tinha. Consequência: o Comparador exibia "Beta" e "Volatilidade" como
+    // "N/A" para todo ativo. Declaradas para persistirem e alimentarem a UI.
+    volatility: Number,
+    beta: Number,
+    sma200: Number,
+    ema50: Number,
     structural: {
         quality: { type: Number, default: 50 },
         valuation: { type: Number, default: 50 },

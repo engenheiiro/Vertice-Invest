@@ -310,7 +310,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                     <p className="text-sm font-bold text-emerald-400">{s.valuation}</p>
                                 </div>
                                 <div>
-                                    <p className="text-[10px] text-slate-500 uppercase">Risco</p>
+                                    <p className="text-[10px] text-slate-500 uppercase">Segurança</p>
                                     <p className="text-sm font-bold text-purple-400">{s.risk}</p>
                                 </div>
                             </div>

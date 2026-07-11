@@ -31,9 +31,9 @@ const firstOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
 const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 const monthsBetween = (a, b) => (b.getTime() - a.getTime()) / (30.4375 * MS_DAY);
 
-// Patrimônio espelhado da carteira = último snapshot diário do usuário.
-const getLatestSnapshot = async (userId) => {
-    return WalletSnapshot.findOne({ user: userId }).sort({ date: -1 }).lean();
+// Patrimônio espelhado da carteira = último snapshot diário DESTA carteira.
+const getLatestSnapshot = async (userId, walletId) => {
+    return WalletSnapshot.findOne({ user: userId, wallet: walletId }).sort({ date: -1 }).lean();
 };
 
 /**
@@ -47,11 +47,11 @@ const getLatestSnapshot = async (userId) => {
  * (scheduler), então ativos adicionados depois ficariam invisíveis na meta
  * até o snapshot do dia seguinte, divergindo da página de Carteira.
  */
-const getLiveWalletEquity = async (userId) => {
-    const snapshot = await getLatestSnapshot(userId);
+const getLiveWalletEquity = async (userId, walletId) => {
+    const snapshot = await getLatestSnapshot(userId, walletId);
 
     try {
-        const assets = await UserAsset.find({ user: userId, quantity: { $gt: QUANTITY_EPSILON } });
+        const assets = await UserAsset.find({ user: userId, wallet: walletId, quantity: { $gt: QUANTITY_EPSILON } });
         // Carteira vazia (reset ou remoção de todos os ativos) = patrimônio 0.
         // Não cair no snapshot aqui, senão a meta manteria um valor fantasma.
         if (assets.length === 0) return { equity: 0, snapshot };
@@ -163,17 +163,20 @@ const syncAchievedStatus = async (goalDoc, achieved) => {
  * (ΣBUY−ΣSELL, se espelha) + aportes manuais. Ordem cronológica, meses sem
  * aporte preenchidos com 0. Base para streak e ritmo real (média 3m).
  */
-const buildMonthlyHistory = async (userId, goal, months = 12) => {
+const buildMonthlyHistory = async (userId, walletId, goal, months = 12) => {
     const since = new Date();
     since.setMonth(since.getMonth() - (months - 1));
     since.setDate(1);
     since.setHours(0, 0, 0, 0);
 
     const map = new Map(); // 'YYYY-MM' -> amount
+    // `new ObjectId(undefined)` geraria um id ALEATÓRIO (não omite o filtro!),
+    // então o campo só entra no $match quando walletId de fato foi passado.
+    const walletMatch = walletId ? { wallet: new mongoose.Types.ObjectId(walletId) } : {};
 
     if (goal.mirrorWallet) {
         const walletAgg = await AssetTransaction.aggregate([
-            { $match: { user: new mongoose.Types.ObjectId(userId), date: { $gte: since } } },
+            { $match: { user: new mongoose.Types.ObjectId(userId), ...walletMatch, date: { $gte: since } } },
             {
                 $group: {
                     _id: { y: { $year: '$date' }, m: { $month: '$date' } },
@@ -188,7 +191,7 @@ const buildMonthlyHistory = async (userId, goal, months = 12) => {
     }
 
     const manualAgg = await GoalContribution.aggregate([
-        { $match: { user: new mongoose.Types.ObjectId(userId), goal: goal._id, date: { $gte: since } } },
+        { $match: { user: new mongoose.Types.ObjectId(userId), ...walletMatch, goal: goal._id, date: { $gte: since } } },
         { $group: { _id: { y: { $year: '$date' }, m: { $month: '$date' } }, total: { $sum: '$amount' } } },
     ]);
     manualAgg.forEach((row) => {
@@ -281,9 +284,10 @@ const buildTrajectory = (goal, snapshots, contributions, projection) => {
 export const listGoals = async (req, res, next) => {
     try {
         const userId = req.user.id;
+        const walletId = req.walletId;
         const [goals, { equity: walletEquity, snapshot }] = await Promise.all([
-            InvestmentGoal.find({ user: userId, status: { $ne: 'ARCHIVED' } }).sort({ createdAt: 1 }),
-            getLiveWalletEquity(userId),
+            InvestmentGoal.find({ user: userId, wallet: walletId, status: { $ne: 'ARCHIVED' } }).sort({ createdAt: 1 }),
+            getLiveWalletEquity(userId, walletId),
         ]);
 
         const result = [];
@@ -303,13 +307,14 @@ export const listGoals = async (req, res, next) => {
 export const getGoal = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const goal = await InvestmentGoal.findOne({ _id: req.params.id, user: userId });
+        const walletId = req.walletId;
+        const goal = await InvestmentGoal.findOne({ _id: req.params.id, user: userId, wallet: walletId });
         if (!goal) return res.status(404).json({ message: 'Meta não encontrada.' });
 
-        const { equity: walletEquity, snapshot } = await getLiveWalletEquity(userId);
+        const { equity: walletEquity, snapshot } = await getLiveWalletEquity(userId, walletId);
 
         // Histórico patrimonial p/ a trajetória (ordem cronológica).
-        const snapshots = await WalletSnapshot.find({ user: userId }).sort({ date: 1 }).lean();
+        const snapshots = await WalletSnapshot.find({ user: userId, wallet: walletId }).sort({ date: 1 }).lean();
 
         // Baseline do "Plano": usa startValue salvo; p/ metas antigas sem o campo,
         // estima pelo 1º snapshot a partir do início (ou 0).
@@ -324,7 +329,7 @@ export const getGoal = async (req, res, next) => {
         await syncAchievedStatus(goal, projection.achieved);
 
         // Aportes manuais (ledger).
-        const contributions = await GoalContribution.find({ user: userId, goal: goal._id })
+        const contributions = await GoalContribution.find({ user: userId, wallet: walletId, goal: goal._id })
             .sort({ date: -1 })
             .limit(100)
             .lean();
@@ -334,7 +339,7 @@ export const getGoal = async (req, res, next) => {
         let walletInflowThisMonth = 0;
         if (goal.mirrorWallet) {
             const agg = await AssetTransaction.aggregate([
-                { $match: { user: new mongoose.Types.ObjectId(userId), date: { $gte: monthStart } } },
+                { $match: { user: new mongoose.Types.ObjectId(userId), wallet: new mongoose.Types.ObjectId(walletId), date: { $gte: monthStart } } },
                 {
                     $group: {
                         _id: null,
@@ -352,7 +357,7 @@ export const getGoal = async (req, res, next) => {
         const contributionsThisMonth = safeCurrency(walletInflowThisMonth + manualThisMonth);
 
         // Decomposição do mês: aporte vs. mercado, ancorada no snapshot do início do mês.
-        const monthAnchor = await WalletSnapshot.findOne({ user: userId, date: { $lt: monthStart } })
+        const monthAnchor = await WalletSnapshot.findOne({ user: userId, wallet: walletId, date: { $lt: monthStart } })
             .sort({ date: -1 })
             .lean();
         const prevMirrored = goal.mirrorWallet ? (monthAnchor?.totalEquity || 0) : 0;
@@ -362,7 +367,7 @@ export const getGoal = async (req, res, next) => {
 
         // Trajetória (real/plano/projeção) + histórico mensal p/ streak e ritmo.
         const trajectory = buildTrajectory(goal, snapshots, contributions, projection);
-        const monthlyHistory = await buildMonthlyHistory(userId, goal, 12);
+        const monthlyHistory = await buildMonthlyHistory(userId, walletId, goal, 12);
         const amounts = monthlyHistory.map((m) => m.amount);
         const streak = computeStreak(amounts);
         const last3 = amounts.slice(-3);
@@ -394,15 +399,17 @@ export const getGoal = async (req, res, next) => {
 export const createGoal = async (req, res, next) => {
     try {
         const userId = req.user.id;
+        const walletId = req.walletId;
         const { name, icon, color, targetAmount, monthlyTarget, expectedAnnualRate, startDate, targetDate, mirrorWallet, manualBalance, previousGoalId } = req.body;
 
         const useMirror = mirrorWallet !== undefined ? mirrorWallet : true;
-        const { equity: liveEquity, snapshot } = await getLiveWalletEquity(userId);
+        const { equity: liveEquity, snapshot } = await getLiveWalletEquity(userId, walletId);
         // Baseline da curva "Plano": valor da meta no momento da criação.
         const startValue = safeCurrency((useMirror ? liveEquity : 0) + (manualBalance || 0));
 
         const goal = await InvestmentGoal.create({
             user: userId,
+            wallet: walletId,
             name,
             icon,
             color,
@@ -429,7 +436,8 @@ export const createGoal = async (req, res, next) => {
 export const updateGoal = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const goal = await InvestmentGoal.findOne({ _id: req.params.id, user: userId });
+        const walletId = req.walletId;
+        const goal = await InvestmentGoal.findOne({ _id: req.params.id, user: userId, wallet: walletId });
         if (!goal) return res.status(404).json({ message: 'Meta não encontrada.' });
 
         const fields = ['name', 'icon', 'color', 'mirrorWallet', 'status', 'lastCelebratedMilestone', 'previousGoalId'];
@@ -443,7 +451,7 @@ export const updateGoal = async (req, res, next) => {
         goal.updatedAt = Date.now();
         await goal.save();
 
-        const { equity: walletEquity } = await getLiveWalletEquity(userId);
+        const { equity: walletEquity } = await getLiveWalletEquity(userId, walletId);
         const projection = computeGoalProjection(goal, walletEquity);
         res.json({ goal: { ...goal.toObject(), ...projection } });
     } catch (error) {
@@ -456,9 +464,10 @@ export const updateGoal = async (req, res, next) => {
 export const deleteGoal = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const goal = await InvestmentGoal.findOneAndDelete({ _id: req.params.id, user: userId });
+        const walletId = req.walletId;
+        const goal = await InvestmentGoal.findOneAndDelete({ _id: req.params.id, user: userId, wallet: walletId });
         if (!goal) return res.status(404).json({ message: 'Meta não encontrada.' });
-        await GoalContribution.deleteMany({ user: userId, goal: goal._id });
+        await GoalContribution.deleteMany({ user: userId, wallet: walletId, goal: goal._id });
         res.json({ message: 'Meta removida.' });
     } catch (error) {
         logger.error(`Erro ao remover meta: ${error.message}`);
@@ -466,13 +475,14 @@ export const deleteGoal = async (req, res, next) => {
     }
 };
 
-// DELETE /goals — remove TODAS as metas do usuário (e seus aportes manuais).
+// DELETE /goals — remove TODAS as metas DESTA CARTEIRA (e seus aportes manuais).
 // Espelha o "Resetar Carteira": ação destrutiva, confirmada no front.
 export const clearAllGoals = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const { deletedCount } = await InvestmentGoal.deleteMany({ user: userId });
-        await GoalContribution.deleteMany({ user: userId });
+        const walletId = req.walletId;
+        const { deletedCount } = await InvestmentGoal.deleteMany({ user: userId, wallet: walletId });
+        await GoalContribution.deleteMany({ user: userId, wallet: walletId });
         res.json({ message: 'Todas as metas removidas.', deletedCount: deletedCount || 0 });
     } catch (error) {
         logger.error(`Erro ao limpar metas: ${error.message}`);
@@ -484,17 +494,18 @@ export const clearAllGoals = async (req, res, next) => {
 export const addContribution = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const goal = await InvestmentGoal.findOne({ _id: req.params.id, user: userId });
+        const walletId = req.walletId;
+        const goal = await InvestmentGoal.findOne({ _id: req.params.id, user: userId, wallet: walletId });
         if (!goal) return res.status(404).json({ message: 'Meta não encontrada.' });
 
         const { amount, date, note } = req.body;
         const value = safeCurrency(amount);
 
         // "Adiantou X meses": meses antes vs. depois do aporte (com patrimônio atual).
-        const { equity: walletEquity } = await getLiveWalletEquity(userId);
+        const { equity: walletEquity } = await getLiveWalletEquity(userId, walletId);
         const before = computeGoalProjection(goal, walletEquity);
 
-        await GoalContribution.create({ user: userId, goal: goal._id, amount: value, date: date || Date.now(), note });
+        await GoalContribution.create({ user: userId, wallet: walletId, goal: goal._id, amount: value, date: date || Date.now(), note });
         goal.manualBalance = safeCurrency(safeFloat(goal.manualBalance) + value);
         goal.updatedAt = Date.now();
 
@@ -520,17 +531,18 @@ export const addContribution = async (req, res, next) => {
 export const deleteContribution = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const goal = await InvestmentGoal.findOne({ _id: req.params.id, user: userId });
+        const walletId = req.walletId;
+        const goal = await InvestmentGoal.findOne({ _id: req.params.id, user: userId, wallet: walletId });
         if (!goal) return res.status(404).json({ message: 'Meta não encontrada.' });
 
-        const contribution = await GoalContribution.findOneAndDelete({ _id: req.params.cid, user: userId, goal: goal._id });
+        const contribution = await GoalContribution.findOneAndDelete({ _id: req.params.cid, user: userId, wallet: walletId, goal: goal._id });
         if (!contribution) return res.status(404).json({ message: 'Aporte não encontrado.' });
 
         goal.manualBalance = safeCurrency(safeSub(goal.manualBalance, contribution.amount));
         goal.updatedAt = Date.now();
         await goal.save();
 
-        const { equity: walletEquity } = await getLiveWalletEquity(userId);
+        const { equity: walletEquity } = await getLiveWalletEquity(userId, walletId);
         const projection = computeGoalProjection(goal, walletEquity);
         res.json({ goal: { ...goal.toObject(), ...projection } });
     } catch (error) {

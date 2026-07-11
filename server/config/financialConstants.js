@@ -68,6 +68,67 @@ export const BAZIN_NTNB_PREMIUM = Number(process.env.BAZIN_NTNB_PREMIUM) || 2;
 // de spread premiado (7pp) ≈ 13,3%; FIIs de papel legítimos em CDI alto rodam 12–16%.
 export const FII_YIELD_TRAP_THRESHOLD = Number(process.env.FII_YIELD_TRAP_THRESHOLD) || 20;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Ciclicidade — parâmetros do tratamento de setores cíclicos (INDUSTRIAL/COMMODITIES).
+// Ver server/config/sectorTaxonomy.js (CYCLICAL_MACRO_SECTORS / isCyclicalSector) e o
+// bloco de penalidade cíclica em scoringEngine.js. Motivação: value-trap cíclico (SHUL4).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// P/L abaixo deste piso, COMBINADO com margem/ROE elevados, sinaliza LUCRO DE PICO de
+// ciclo (preço ÷ lucro inflado) — não barato genuíno. Gatilho do desconto de pico.
+export const CYCLICAL_PEAK_PL_FLOOR = Number(process.env.CYCLICAL_PEAK_PL_FLOOR) || 8;
+
+// Desconto de "pico de ciclo" aplicado a cíclicas com P/L de pico + preço em downtrend
+// (rolando o topo do ciclo). Poupa o perfil BOLD (aposta de reversão é legítima lá).
+export const CYCLICAL_PEAK_DEF_DISCOUNT = Number(process.env.CYCLICAL_PEAK_DEF_DISCOUNT) || 12;
+export const CYCLICAL_PEAK_MOD_DISCOUNT = Number(process.env.CYCLICAL_PEAK_MOD_DISCOUNT) || 8;
+
+// Multiplicador da penalidade de downtrend (SMA200) para cíclicas: downtrend estrutural
+// numa cíclica é sinal mais forte de reversão de ciclo que numa não-cíclica.
+export const CYCLICAL_TREND_MULTIPLIER = Number(process.env.CYCLICAL_TREND_MULTIPLIER) || 1.3;
+
+// SELIC (% a.a.) a partir da qual o ambiente é hostil ao capex industrial/agro —
+// dispara desconto de juros para cíclicas nos perfis DEFENSIVE/MODERATE.
+export const RATE_SENSITIVE_SELIC_HIGH = Number(process.env.RATE_SENSITIVE_SELIC_HIGH) || 12;
+export const CYCLICAL_RATE_DEF_DISCOUNT = Number(process.env.CYCLICAL_RATE_DEF_DISCOUNT) || 6;
+export const CYCLICAL_RATE_MOD_DISCOUNT = Number(process.env.CYCLICAL_RATE_MOD_DISCOUNT) || 4;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Governança / controle estatal. Estatais (Petrobras, BB, Sanepar, Cemig, ...) têm
+// dividendo e alocação de capital DISCRICIONÁRIOS — o acionista controlador (União/
+// Estado) pode redirecionar payout, preços e capex por decisão política. O DY alto
+// delas NÃO é contratual como o de uma pagadora privada regulada, então não deve
+// pesar como "renda segura" no perfil Defensivo. Não é BARRAMENTO (uma estatal pode
+// ser um bom ativo): é um desconto que faz a estatal ranquear ABAIXO de uma privada
+// de fundamentos equivalentes. Poupa o BOLD (aposta não se importa com governança).
+export const GOVERNANCE_STATE_DEF_DISCOUNT = Number(process.env.GOVERNANCE_STATE_DEF_DISCOUNT) || 8;
+export const GOVERNANCE_STATE_MOD_DISCOUNT = Number(process.env.GOVERNANCE_STATE_MOD_DISCOUNT) || 4;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Alavancagem crítica (DL/EBITDA) fora do Defensivo. O desconto de alavancagem já
+// existia, mas só dentro do bloco Defensivo (e só quando o ativo já era ELEGÍVEL a
+// ele) e no sub-score estrutural de Risco — que é apenas tiebreaker/exibição, nunca
+// input do score de MODERATE/BOLD. Resultado real observado em produção: MTRE3
+// (DL/EBITDA 4.1x, "Alavancagem Crítica") virou #1 geral do ranking STOCK em BOLD
+// com score 99, sem nenhum desconto por dívida. MODERATE/BOLD toleram volatilidade
+// por natureza, mas risco de SOLVÊNCIA é uma dimensão distinta — mesmo uma aposta
+// especulativa deve descontar por risco de default. Ver bloco de alavancagem em
+// scoreStockProfiles (scoringEngine.js).
+// ─────────────────────────────────────────────────────────────────────────────
+export const LEVERAGE_CRITICAL_MOD_DISCOUNT = Number(process.env.LEVERAGE_CRITICAL_MOD_DISCOUNT) || 20;
+export const LEVERAGE_CRITICAL_BOLD_DISCOUNT = Number(process.env.LEVERAGE_CRITICAL_BOLD_DISCOUNT) || 15;
+export const LEVERAGE_ELEVATED_MOD_DISCOUNT = Number(process.env.LEVERAGE_ELEVATED_MOD_DISCOUNT) || 10;
+export const LEVERAGE_ELEVATED_BOLD_DISCOUNT = Number(process.env.LEVERAGE_ELEVATED_BOLD_DISCOUNT) || 8;
+
+// Teto de score para empresas com alavancagem CRÍTICA (DL/EBITDA > 3.5x). O desconto
+// graduado acima não basta: múltiplos extremos (PEG < 0.5, upside > 80%) podiam manter
+// uma micro-cap super-alavancada no topo do ranking mesmo após o -15/-20 (MTRE3: caía
+// de 99 para 84 em BOLD e seguia #2 geral). Risco de SOLVÊNCIA deve limitar a convicção
+// MÁXIMA — análogo ao teto especulativo de empresa sem lucro. MODERATE mais severo que
+// BOLD (aposta de reversão alavancada é mais legítima no Arrojado). Ver scoreStockProfiles.
+export const LEVERAGE_CRITICAL_BOLD_CAP = Number(process.env.LEVERAGE_CRITICAL_BOLD_CAP) || 75;
+export const LEVERAGE_CRITICAL_MOD_CAP = Number(process.env.LEVERAGE_CRITICAL_MOD_CAP) || 70;
+
 // Alíquotas de IR sobre ganho de capital, por classe de ativo. Usadas APENAS pelo
 // Rebalanceamento IA para ESTIMAR o impacto fiscal de uma venda sugerida — não
 // substituem apuração fiscal real (não modelam isenção mensal de Ações até R$20k

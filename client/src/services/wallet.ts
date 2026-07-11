@@ -1,25 +1,47 @@
 
 import { authService } from './auth';
 
+/** Payload do PUT /wallet/:id — edição e reclassificação de ativo. */
+export interface UpdateAssetPayload {
+    name?: string;
+    tags?: string[];
+    usSubType?: string;
+    // Reclassificação de um Caixa/Reserva (CASH) em Renda Fixa.
+    type?: 'FIXED_INCOME';
+    fixedIncomeRate?: number;
+    fixedIncomeIndex?: 'SELIC' | 'CDI' | 'IPCA' | 'PRE';
+    fixedIncomeSpread?: number;
+    maturityDate?: string;
+    isReserve?: boolean;
+}
+
+// Anexa ?walletId= à URL quando informado; omitido, o backend resolve a
+// carteira ativa do usuário via middleware resolveWallet.
+const withWallet = (path: string, walletId?: string) => {
+    if (!walletId) return path;
+    const sep = path.includes('?') ? '&' : '?';
+    return `${path}${sep}walletId=${encodeURIComponent(walletId)}`;
+};
+
 export const walletService = {
-    async getWallet() {
-        const response = await authService.api('/api/wallet');
+    async getWallet(walletId?: string) {
+        const response = await authService.api(withWallet('/api/wallet', walletId));
         if (!response.ok) throw new Error("Falha ao carregar carteira");
         return await response.json();
     },
 
-    async getHistory() {
-        const response = await authService.api('/api/wallet/history');
+    async getHistory(walletId?: string) {
+        const response = await authService.api(withWallet('/api/wallet/history', walletId));
         if (!response.ok) return [];
         return await response.json();
     },
 
-    async addAsset(data: any) {
-        const response = await authService.api('/api/wallet/add', {
+    async addAsset(data: any, walletId?: string) {
+        const response = await authService.api(withWallet('/api/wallet/add', walletId), {
             method: 'POST',
             body: JSON.stringify(data)
         });
-        
+
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.message || "Falha ao adicionar ativo");
@@ -27,8 +49,8 @@ export const walletService = {
         return await response.json();
     },
 
-    async updateAsset(id: string, data: { name?: string; tags?: string[]; usSubType?: string }) {
-        const response = await authService.api(`/api/wallet/${id}`, {
+    async updateAsset(id: string, data: UpdateAssetPayload, walletId?: string) {
+        const response = await authService.api(withWallet(`/api/wallet/${id}`, walletId), {
             method: 'PUT',
             body: JSON.stringify(data)
         });
@@ -39,16 +61,16 @@ export const walletService = {
         return await response.json();
     },
 
-    async removeAsset(id: string) {
-        const response = await authService.api(`/api/wallet/${id}`, {
+    async removeAsset(id: string, walletId?: string) {
+        const response = await authService.api(withWallet(`/api/wallet/${id}`, walletId), {
             method: 'DELETE'
         });
         if (!response.ok) throw new Error("Falha ao remover ativo");
         return await response.json();
     },
 
-    async updateTargets(targetAllocation: Record<string, number>, targetReserve: number, targetSubAllocation?: unknown, targetMonthlyDividendIncome?: number) {
-        const response = await authService.api('/api/wallet/targets', {
+    async updateTargets(targetAllocation: Record<string, number>, targetReserve: number, targetSubAllocation?: unknown, targetMonthlyDividendIncome?: number, walletId?: string) {
+        const response = await authService.api(withWallet('/api/wallet/targets', walletId), {
             method: 'PUT',
             body: JSON.stringify({ targetAllocation, targetReserve, targetSubAllocation, targetMonthlyDividendIncome })
         });
@@ -56,8 +78,8 @@ export const walletService = {
         return await response.json();
     },
 
-    async resetWallet() {
-        const response = await authService.api('/api/wallet/reset', {
+    async resetWallet(walletId?: string) {
+        const response = await authService.api(withWallet('/api/wallet/reset', walletId), {
             method: 'POST'
         });
         if (!response.ok) throw new Error("Falha ao resetar carteira");
@@ -72,35 +94,35 @@ export const walletService = {
         return await response.json();
     },
 
-    async getTransactions(ticker: string, page: number = 1, limit: number = 10) {
-        const response = await authService.api(`/api/wallet/transactions/${ticker}?page=${page}&limit=${limit}`);
+    async getTransactions(ticker: string, page: number = 1, limit: number = 10, walletId?: string) {
+        const response = await authService.api(withWallet(`/api/wallet/transactions/${ticker}?page=${page}&limit=${limit}`, walletId));
         if (!response.ok) throw new Error("Falha ao buscar histórico");
         return await response.json();
     },
 
-    async deleteTransaction(id: string) {
-        const response = await authService.api(`/api/wallet/transactions/${id}`, {
+    async deleteTransaction(id: string, walletId?: string) {
+        const response = await authService.api(withWallet(`/api/wallet/transactions/${id}`, walletId), {
             method: 'DELETE'
         });
         if (!response.ok) throw new Error("Falha ao deletar transação");
         return await response.json();
     },
 
-    async getPerformance() {
-        const response = await authService.api('/api/wallet/performance');
+    async getPerformance(walletId?: string) {
+        const response = await authService.api(withWallet('/api/wallet/performance', walletId));
         if (!response.ok) return [];
         return await response.json();
     },
 
-    async getDividends() {
-        const response = await authService.api('/api/wallet/dividends');
+    async getDividends(walletId?: string) {
+        const response = await authService.api(withWallet('/api/wallet/dividends', walletId));
         if (!response.ok) return { history: [], provisioned: [], totalAllTime: 0, projectedMonthly: 0, yieldOnCost: [], goal: { target: 0, current: 0, progressPercent: null } };
         return await response.json();
     },
 
     // Atualizado: Suporte a filtros
-    async getCashFlow(page: number = 1, limit: number = 20, filterType: string = 'ALL') {
-        const response = await authService.api(`/api/wallet/cashflow?page=${page}&limit=${limit}&filterType=${filterType}`);
+    async getCashFlow(page: number = 1, limit: number = 20, filterType: string = 'ALL', walletId?: string) {
+        const response = await authService.api(withWallet(`/api/wallet/cashflow?page=${page}&limit=${limit}&filterType=${filterType}`, walletId));
         if (!response.ok) throw new Error("Falha ao buscar extrato");
         return await response.json();
     },
@@ -134,8 +156,8 @@ export const walletService = {
     },
 
     // Rebalanceamento IA (BLACK): gera o plano de ordens para o perfil escolhido.
-    async getRebalancePlan(riskProfile: 'DEFENSIVE' | 'MODERATE' | 'BOLD' = 'MODERATE') {
-        const response = await authService.api('/api/wallet/rebalance', {
+    async getRebalancePlan(riskProfile: 'DEFENSIVE' | 'MODERATE' | 'BOLD' = 'MODERATE', walletId?: string) {
+        const response = await authService.api(withWallet('/api/wallet/rebalance', walletId), {
             method: 'POST',
             body: JSON.stringify({ riskProfile })
         });

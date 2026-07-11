@@ -31,7 +31,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
     const [hasMore, setHasMore] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     
-    const { refreshWallet, assets } = useWallet();
+    const { refreshWallet, assets, activeWalletId } = useWallet();
     const asset = assets.find((a) => a.ticker === ticker);
     const assetType = asset?.type;
     // Cofrinhos (CASH) exibem o nome amigável; demais ativos, o próprio ticker.
@@ -60,7 +60,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
         else setIsLoadingMore(true);
 
         try {
-            const data = await walletService.getTransactions(ticker, pageNum, 10);
+            const data = await walletService.getTransactions(ticker, pageNum, 10, activeWalletId);
             
             if (isInitial) {
                 setTransactions(data.transactions);
@@ -95,7 +95,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
         if (!ok) return;
 
         try {
-            await walletService.deleteTransaction(id);
+            await walletService.deleteTransaction(id, activeWalletId);
             // Recarrega a primeira página para garantir consistência
             loadTransactions(1, true);
             refreshWallet(); // Invalida queries globais

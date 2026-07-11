@@ -4,6 +4,7 @@ import { X, RefreshCw, Info, TrendingUp, TrendingDown, Copy, Check, Loader2, Shi
 import { Button } from '../ui/Button';
 import { walletService } from '../../services/wallet';
 import { useToast } from '../../contexts/ToastContext';
+import { useWallet } from '../../contexts/WalletContext';
 import { formatCurrency, formatQuantity } from '../../utils/format';
 import { getErrorMessage } from '../../utils/errorMessages';
 
@@ -68,6 +69,7 @@ const PROFILE_LABEL: Record<RiskProfile, string> = {
 
 export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose }) => {
     const { addToast } = useToast();
+    const { activeWalletId } = useWallet();
     const [riskProfile, setRiskProfile] = useState<RiskProfile>('MODERATE');
     const [plan, setPlan] = useState<RebalancePlan | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -79,7 +81,7 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
         setIsLoading(true);
         setError(null);
         try {
-            const data = await walletService.getRebalancePlan(profile);
+            const data = await walletService.getRebalancePlan(profile, activeWalletId);
             setPlan(data);
         } catch (e: unknown) {
             setError(getErrorMessage(e, 'Não foi possível gerar o plano.'));
@@ -87,7 +89,7 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [activeWalletId]);
 
     useEffect(() => {
         if (isOpen) {

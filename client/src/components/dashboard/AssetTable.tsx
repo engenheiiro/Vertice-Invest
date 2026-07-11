@@ -33,7 +33,7 @@ const GROUP_NAMES: Record<string, string> = {
     'CRYPTO': 'Criptoativos',
     'FIXED_INCOME': 'Renda Fixa',
     'OURO': 'Ouro',
-    'CASH': 'Caixa / Reserva',
+    'CASH': 'Reserva / Caixa',
     'OUTROS': 'Outros'
 };
 
@@ -52,6 +52,9 @@ const CLASS_ACCENT: Record<string, { label: string; icon: string }> = {
 const accentOf = (type?: string) => CLASS_ACCENT[type || ''] || CLASS_ACCENT.CASH;
 const pluralAtivos = (n: number) => `${n} ${n === 1 ? 'Ativo' : 'Ativos'}`;
 
+// Cripto e ativos internacionais cotam em US$; o resto (B3, FIIs, RF, caixa) em R$.
+const currencyOf = (type?: string): 'USD' | 'BRL' => (type === 'CRYPTO' || type === 'STOCK_US' ? 'USD' : 'BRL');
+
 export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false, isResearchLoading = false }) => {
     const { hasPlan, limitFor } = useFeatureAccess();
     const { isPrivacyMode } = useWallet();
@@ -68,7 +71,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
     const isPro = hasPlan('PRO');
     const canRebalance = hasPlan('ELITE'); // Rebalanceamento IA: ELITE e Black
 
-    const formatCurrency = (val: number) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
+    const formatCurrency = (val: number, currency: 'BRL' | 'USD' = 'BRL') => fmtCurrency(val, currency, { privacy: isPrivacyMode });
 
     // Abre o modal no próprio Terminal (mesma lógica/gating da Carteira).
     const handleOpenSmartContribution = () => {
@@ -210,6 +213,10 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                         const profitPercent = item.avgPrice > 0 ? (profit / item.avgPrice) * 100 : 0;
                                         const maxRange = Math.max(item.currentPrice, item.avgPrice) * 1.2;
                                         const isChampion = profitPercent > 15; // Regra visual para 'Campeã'
+                                        // Cripto/exterior: R$ como principal + valor nativo (US$) embaixo, igual à Carteira.
+                                        const isUSD = currencyOf(item.type) === 'USD' || item.currency === 'USD';
+                                        const brlValue = item.totalValue ?? item.currentPrice * item.shares;
+                                        const nativeValue = item.currentPrice * item.shares;
 
                                         return (
                                             <tr key={item.ticker} className="hover:bg-slate-800/30 transition-colors group">
@@ -242,16 +249,20 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                     )}
                                                 </td>
                                                 <td className="p-4 text-right tabular-nums font-bold text-slate-300">
-                                                    {formatCurrency(item.currentPrice)}
+                                                    {formatCurrency(item.currentPrice, currencyOf(item.type))}
                                                 </td>
                                                 <td className="p-4 text-right tabular-nums text-slate-400">
-                                                    {formatCurrency(item.avgPrice)}
+                                                    {formatCurrency(item.avgPrice, currencyOf(item.type))}
                                                 </td>
                                                 <td className="p-4 text-right">
-                                                    <p className="font-bold text-slate-200">{formatCurrency(item.currentPrice * item.shares)}</p>
-                                                    <p className="text-[10px] text-slate-500">{item.shares} un</p>
+                                                    <p className="font-bold text-slate-200">{formatCurrency(brlValue, 'BRL')}</p>
+                                                    {isUSD && !isPrivacyMode ? (
+                                                        <p className="text-[10px] text-blue-400/70 tabular-nums">({formatCurrency(nativeValue, 'USD')})</p>
+                                                    ) : (
+                                                        <p className="text-[10px] text-slate-500">{item.shares} un</p>
+                                                    )}
                                                 </td>
-                                                
+
                                                 <td className="p-4">
                                                     <div className="flex flex-col gap-1">
                                                         <div className="flex justify-between text-[9px] font-bold">
@@ -353,6 +364,9 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                 const profit = item.currentPrice - item.avgPrice;
                                 const profitPercent = item.avgPrice > 0 ? (profit / item.avgPrice) * 100 : 0;
                                 const isChampion = profitPercent > 15;
+                                const isUSD = currencyOf(item.type) === 'USD' || item.currency === 'USD';
+                                const brlValue = item.totalValue ?? item.currentPrice * item.shares;
+                                const nativeValue = item.currentPrice * item.shares;
 
                                 return (
                                     <div key={item.ticker} className="bg-card border border-slate-800 rounded-xl p-4">
@@ -374,8 +388,12 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                 </div>
                                             </div>
                                             <div className="text-right shrink-0">
-                                                <p className="font-bold text-slate-200 text-sm">{formatCurrency(item.currentPrice * item.shares)}</p>
-                                                <p className="text-[10px] text-slate-500">{item.shares} un</p>
+                                                <p className="font-bold text-slate-200 text-sm">{formatCurrency(brlValue, 'BRL')}</p>
+                                                {isUSD && !isPrivacyMode ? (
+                                                    <p className="text-[10px] text-blue-400/70 tabular-nums">({formatCurrency(nativeValue, 'USD')})</p>
+                                                ) : (
+                                                    <p className="text-[10px] text-slate-500">{item.shares} un</p>
+                                                )}
                                             </div>
                                         </div>
 

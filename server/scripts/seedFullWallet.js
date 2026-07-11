@@ -25,6 +25,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 import User from '../models/User.js';
+import Wallet from '../models/Wallet.js';
 import UserAsset from '../models/UserAsset.js';
 import AssetTransaction from '../models/AssetTransaction.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
@@ -75,16 +76,16 @@ const FIXED_INCOME_BASKET = [
 
 const CASH_RESERVE = { ticker: 'RESERVA-EMERGENCIA', name: 'Reserva de Emergência', amount: 5000, daysAgo: 20 };
 
-async function insertBuy(userId, ticker, type, quantity, price, dateStr, notes) {
+async function insertBuy(userId, walletId, ticker, type, quantity, price, dateStr, notes) {
     await new AssetTransaction({
-        user: userId, ticker, type: 'BUY',
+        user: userId, wallet: walletId, ticker, type: 'BUY',
         quantity, price, totalValue: quantity * price,
         date: new Date(`${dateStr}T12:00:00.000Z`),
         notes,
     }).save();
 }
 
-async function seedMarketAsset(userId, def) {
+async function seedMarketAsset(userId, walletId, def) {
     const ticker = def.ticker.toUpperCase();
     console.log(`\n📈 ${ticker} (${def.type})`);
     for (const buy of def.buys) {
@@ -102,23 +103,23 @@ async function seedMarketAsset(userId, def) {
             ? Number((buy.amount / price).toFixed(6))
             : Math.max(1, Math.floor(buy.amount / price));
         if (quantity <= 0) { console.log(`   ⚠️  Orçamento insuficiente para 1 unidade em ${dateStr} — pulando lote.`); continue; }
-        await insertBuy(userId, ticker, def.type, quantity, price, dateStr, `Seed — lote de ${dateStr}`);
+        await insertBuy(userId, walletId, ticker, def.type, quantity, price, dateStr, `Seed — lote de ${dateStr}`);
         console.log(`   ✅ ${dateStr}: ${quantity} × ${def.currency === 'USD' ? '$' : 'R$'}${price.toFixed(2)}`);
     }
-    const asset = await financialService.recalculatePosition(userId, ticker, def.type, null, def.currency);
+    const asset = await financialService.recalculatePosition(userId, ticker, def.type, null, def.currency, walletId);
     return asset;
 }
 
-async function seedFixedIncome(userId, def) {
+async function seedFixedIncome(userId, walletId, def) {
     const ticker = def.ticker.toUpperCase();
     console.log(`\n💰 ${ticker} (FIXED_INCOME, ${def.index} + ${def.spread}%)`);
     for (const buy of def.buys) {
         const dateStr = daysAgoStr(buy.daysAgo);
         // quantity=1 por aporte, price=valor total investido — convenção do cadastro real.
-        await insertBuy(userId, ticker, 'FIXED_INCOME', 1, buy.amount, dateStr, `Seed — aporte de ${dateStr}`);
+        await insertBuy(userId, walletId, ticker, 'FIXED_INCOME', 1, buy.amount, dateStr, `Seed — aporte de ${dateStr}`);
         console.log(`   ✅ ${dateStr}: aporte de R$${buy.amount.toFixed(2)}`);
     }
-    const asset = await financialService.recalculatePosition(userId, ticker, 'FIXED_INCOME', null, 'BRL');
+    const asset = await financialService.recalculatePosition(userId, ticker, 'FIXED_INCOME', null, 'BRL', walletId);
     if (asset) {
         asset.fixedIncomeIndex = def.index;
         asset.fixedIncomeSpread = def.spread;
@@ -129,11 +130,11 @@ async function seedFixedIncome(userId, def) {
     return asset;
 }
 
-async function seedCash(userId, def) {
+async function seedCash(userId, walletId, def) {
     console.log(`\n🐷 ${def.ticker} (CASH — ${def.name})`);
     const dateStr = daysAgoStr(def.daysAgo);
-    await insertBuy(userId, def.ticker, 'CASH', def.amount, 1, dateStr, `Seed — aporte de ${dateStr}`);
-    const asset = await financialService.recalculatePosition(userId, def.ticker, 'CASH', null, 'BRL');
+    await insertBuy(userId, walletId, def.ticker, 'CASH', def.amount, 1, dateStr, `Seed — aporte de ${dateStr}`);
+    const asset = await financialService.recalculatePosition(userId, def.ticker, 'CASH', null, 'BRL', walletId);
     if (asset) { asset.name = def.name; await asset.save(); }
     console.log(`   ✅ ${dateStr}: R$${def.amount.toFixed(2)}`);
     return asset;
@@ -160,24 +161,35 @@ async function main() {
     }
     console.log(`✅ Usuário: ${user.name || '—'} (${user.email})`);
 
+    // Semeia sempre na carteira ATIVA do usuário (fallback: default, depois a mais antiga)
+    // — mesma resolução do middleware resolveWallet, só que sem request.
+    let wallet = user.activeWalletId ? await Wallet.findOne({ _id: user.activeWalletId, user: user._id }) : null;
+    if (!wallet) wallet = await Wallet.findOne({ user: user._id, isDefault: true });
+    if (!wallet) wallet = await Wallet.findOne({ user: user._id }).sort({ createdAt: 1 });
+    if (!wallet) {
+        console.error(`❌ Usuário ${email} não tem nenhuma carteira (rode migrateToWallets.js primeiro).`);
+        process.exit(1);
+    }
+    console.log(`✅ Carteira: ${wallet.name}`);
+
     if (reset) {
         console.log('🗑️  --reset: apagando carteira existente...');
-        await UserAsset.deleteMany({ user: user._id });
-        await AssetTransaction.deleteMany({ user: user._id });
-        await WalletSnapshot.deleteMany({ user: user._id });
+        await UserAsset.deleteMany({ user: user._id, wallet: wallet._id });
+        await AssetTransaction.deleteMany({ user: user._id, wallet: wallet._id });
+        await WalletSnapshot.deleteMany({ user: user._id, wallet: wallet._id });
     }
 
     for (const def of MARKET_BASKET) {
-        await seedMarketAsset(user._id, def);
+        await seedMarketAsset(user._id, wallet._id, def);
     }
     for (const def of FIXED_INCOME_BASKET) {
-        await seedFixedIncome(user._id, def);
+        await seedFixedIncome(user._id, wallet._id, def);
     }
-    await seedCash(user._id, CASH_RESERVE);
+    await seedCash(user._id, wallet._id, CASH_RESERVE);
 
     console.log('\n🔄 Reconstruindo histórico patrimonial (WalletSnapshot)...');
     try {
-        await financialService.rebuildUserHistory(user._id);
+        await financialService.rebuildUserHistory(user._id, wallet._id);
         console.log('✅ Histórico reconstruído.');
     } catch (err) {
         console.warn(`⚠️  Rebuild de histórico falhou: ${err.message} (ativos já estão cadastrados)`);
@@ -194,7 +206,7 @@ async function main() {
         console.warn(`⚠️  Sync de proventos falhou: ${err.message}`);
     }
 
-    const finalAssets = await UserAsset.find({ user: user._id }).sort({ type: 1, ticker: 1 });
+    const finalAssets = await UserAsset.find({ user: user._id, wallet: wallet._id }).sort({ type: 1, ticker: 1 });
     const totalCostBRL = finalAssets.reduce((sum, a) => {
         const rate = 5.4; // só para o resumo impresso; a carteira real usa a taxa live do dia
         return sum + (a.currency === 'USD' ? a.totalCost * rate : a.totalCost);

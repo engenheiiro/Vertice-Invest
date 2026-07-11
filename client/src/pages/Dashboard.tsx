@@ -140,7 +140,7 @@ export const Dashboard = () => {
                             </>
                         ) : (
                             <button
-                                onClick={() => navigate('/wallet')}
+                                onClick={() => navigate('/wallet', { state: { openDividendGoalEditor: true } })}
                                 className="flex items-center gap-1.5 text-[11px] font-semibold text-gold hover:brightness-110 transition-all"
                             >
                                 <Target size={12} /> Definir meta de renda passiva

@@ -396,11 +396,11 @@ export const financialService = {
         return { totalEquityNominal, totalEquityAdjusted, totalInvested, hasPosition };
     },
 
-    /** Substitui os snapshots do usuário pelos recém-calculados (em transação, em lotes). */
-    async _persistSnapshots(userId, snapshots) {
+    /** Substitui os snapshots da carteira pelos recém-calculados (em transação, em lotes). */
+    async _persistSnapshots(userId, walletId, snapshots) {
         if (snapshots.length === 0) return;
         await runTransaction(async (session) => {
-            await WalletSnapshot.deleteMany({ user: userId }).session(session);
+            await WalletSnapshot.deleteMany({ user: userId, wallet: walletId }).session(session);
             const CHUNK_SIZE = 5000;
             for (let i = 0; i < snapshots.length; i += CHUNK_SIZE) {
                 await WalletSnapshot.insertMany(snapshots.slice(i, i + CHUNK_SIZE), { session });
@@ -408,7 +408,7 @@ export const financialService = {
         });
     },
 
-    async rebuildUserHistory(userId) {
+    async rebuildUserHistory(userId, walletId) {
         const startTime = Date.now();
 
         try {
@@ -419,9 +419,9 @@ export const financialService = {
                 details: 'Início de reconstrução de histórico (Manual/Transaction Trigger)'
             });
 
-            const txs = await AssetTransaction.find({ user: userId }).sort({ date: 1 });
+            const txs = await AssetTransaction.find({ user: userId, wallet: walletId }).sort({ date: 1 });
             if (txs.length === 0) {
-                await WalletSnapshot.deleteMany({ user: userId });
+                await WalletSnapshot.deleteMany({ user: userId, wallet: walletId });
                 return;
             }
 
@@ -433,7 +433,7 @@ export const financialService = {
             const uniqueTickers = [...new Set(txs.map(t => t.ticker))];
 
             const assetMetadataMap = new Map();
-            const userAssets = await UserAsset.find({ user: userId });
+            const userAssets = await UserAsset.find({ user: userId, wallet: walletId });
             userAssets.forEach(ua => assetMetadataMap.set(ua.ticker, ua));
 
             // Carregamento de contexto (cada fonte isolada num helper testável).
@@ -516,6 +516,7 @@ export const financialService = {
                 if (hasPosition || totalInvested > 0 || accumulatedDividends > 0) {
                     snapshots.push({
                         user: userId,
+                        wallet: walletId,
                         date: new Date(cursor),
                         totalEquity: safeCurrency(totalEquityNominal),
                         totalInvested: safeCurrency(totalInvested),
@@ -530,7 +531,7 @@ export const financialService = {
                 cursor.setDate(cursor.getDate() + 1);
             }
 
-            await this._persistSnapshots(userId, snapshots);
+            await this._persistSnapshots(userId, walletId, snapshots);
 
             const duration = ((Date.now() - startTime) / 1000).toFixed(2);
             logger.info(`✅ [History] Reconstrução V4.7 (Precision) concluída em ${duration}s.`, {
@@ -596,9 +597,9 @@ export const financialService = {
     },
 
     // ... (Mantém o restante igual) ...
-    async calculateUserDividends(userId) {
+    async calculateUserDividends(userId, walletId) {
         // ... (Mantém inalterado)
-        const assets = await UserAsset.find({ user: userId });
+        const assets = await UserAsset.find({ user: userId, wallet: walletId });
         const relevantAssets = assets.filter(a => !['CRYPTO', 'CASH', 'FIXED_INCOME'].includes(a.type));
         const tickers = relevantAssets.map(a => a.ticker);
 
@@ -628,8 +629,17 @@ export const financialService = {
             eventsMap.get(e.ticker).push(e);
         });
 
+        // `new ObjectId(undefined)` geraria um id ALEATÓRIO (não omite o filtro!),
+        // então o campo só entra no $match quando walletId de fato foi passado.
         const firstTransactions = await AssetTransaction.aggregate([
-            { $match: { user: new mongoose.Types.ObjectId(userId), ticker: { $in: tickers }, type: 'BUY' } },
+            {
+                $match: {
+                    user: new mongoose.Types.ObjectId(userId),
+                    ...(walletId ? { wallet: new mongoose.Types.ObjectId(walletId) } : {}),
+                    ticker: { $in: tickers },
+                    type: 'BUY',
+                },
+            },
             { $sort: { date: 1 } },
             { $group: { _id: "$ticker", firstBuyDate: { $first: "$date" } } }
         ]);
@@ -719,9 +729,15 @@ export const financialService = {
         };
     },
 
-    async recalculatePosition(userId, ticker, forcedType = null, session = null, forcedCurrency = null) {
+    // walletId SEM default `null`: um filtro Mongoose {wallet: null} bateria
+    // "wallet ausente ou null" — depois que o campo virar required, nenhum
+    // documento real jamais terá isso, então cairia silenciosamente em zero
+    // resultados. Deixado `undefined` quando omitido, o Mongoose IGNORA a chave
+    // no filtro de find/findOne (comportamento seguro para chamadores legados
+    // que ainda não passam walletId, ex. scripts de seed).
+    async recalculatePosition(userId, ticker, forcedType = null, session = null, forcedCurrency = null, walletId) {
         // ... (Mantém inalterado)
-        const query = AssetTransaction.find({ user: userId, ticker }).sort({ date: 1, createdAt: 1 });
+        const query = AssetTransaction.find({ user: userId, wallet: walletId, ticker }).sort({ date: 1, createdAt: 1 });
         if (session) query.session(session);
         const transactions = await query;
         
@@ -797,7 +813,7 @@ export const financialService = {
         if (quantity < -QUANTITY_EPSILON) throw new Error(`Saldo insuficiente para ${ticker}.`);
         if (quantity <= QUANTITY_EPSILON) { quantity = 0; totalCost = 0; taxLots = []; }
 
-        let assetQuery = UserAsset.findOne({ user: userId, ticker });
+        let assetQuery = UserAsset.findOne({ user: userId, wallet: walletId, ticker });
         if (session) assetQuery.session(session);
         let asset = await assetQuery;
 
@@ -810,7 +826,7 @@ export const financialService = {
                 // (forcedType), instrumentos de ouro caem na classe ETF.
                 const goldDefault = isGoldTicker(ticker) ? 'ETF' : null;
                 asset = new UserAsset({
-                    user: userId, ticker,
+                    user: userId, wallet: walletId, ticker,
                     type: forcedType || goldDefault || marketInfo?.type || 'STOCK',
                     // Moeda explícita do cadastro tem prioridade (ETF nacional R$ vs
                     // internacional US$); senão herda do MarketAsset; senão BRL.

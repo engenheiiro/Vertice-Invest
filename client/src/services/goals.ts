@@ -1,6 +1,14 @@
 
 import { authService } from './auth';
 
+// Anexa ?walletId= à URL quando informado; omitido, o backend resolve a
+// carteira ativa do usuário via middleware resolveWallet.
+const withWallet = (path: string, walletId?: string) => {
+    if (!walletId) return path;
+    const sep = path.includes('?') ? '&' : '?';
+    return `${path}${sep}walletId=${encodeURIComponent(walletId)}`;
+};
+
 export interface Goal {
     _id: string;
     name: string;
@@ -86,20 +94,20 @@ export interface CreateGoalPayload {
 }
 
 export const goalsService = {
-    async getGoals(): Promise<{ goals: Goal[]; walletEquity: number; snapshotDate: string | null }> {
-        const response = await authService.api('/api/goals');
+    async getGoals(walletId?: string): Promise<{ goals: Goal[]; walletEquity: number; snapshotDate: string | null }> {
+        const response = await authService.api(withWallet('/api/goals', walletId));
         if (!response.ok) throw new Error('Falha ao carregar metas');
         return await response.json();
     },
 
-    async getGoal(id: string): Promise<GoalDetail> {
-        const response = await authService.api(`/api/goals/${id}`);
+    async getGoal(id: string, walletId?: string): Promise<GoalDetail> {
+        const response = await authService.api(withWallet(`/api/goals/${id}`, walletId));
         if (!response.ok) throw new Error('Falha ao carregar meta');
         return await response.json();
     },
 
-    async createGoal(data: CreateGoalPayload): Promise<{ goal: Goal }> {
-        const response = await authService.api('/api/goals', {
+    async createGoal(data: CreateGoalPayload, walletId?: string): Promise<{ goal: Goal }> {
+        const response = await authService.api(withWallet('/api/goals', walletId), {
             method: 'POST',
             body: JSON.stringify(data),
         });
@@ -110,8 +118,8 @@ export const goalsService = {
         return await response.json();
     },
 
-    async updateGoal(id: string, data: Partial<CreateGoalPayload> & { status?: string }): Promise<{ goal: Goal }> {
-        const response = await authService.api(`/api/goals/${id}`, {
+    async updateGoal(id: string, data: Partial<CreateGoalPayload> & { status?: string }, walletId?: string): Promise<{ goal: Goal }> {
+        const response = await authService.api(withWallet(`/api/goals/${id}`, walletId), {
             method: 'PUT',
             body: JSON.stringify(data),
         });
@@ -122,13 +130,13 @@ export const goalsService = {
         return await response.json();
     },
 
-    async deleteGoal(id: string): Promise<void> {
-        const response = await authService.api(`/api/goals/${id}`, { method: 'DELETE' });
+    async deleteGoal(id: string, walletId?: string): Promise<void> {
+        const response = await authService.api(withWallet(`/api/goals/${id}`, walletId), { method: 'DELETE' });
         if (!response.ok) throw new Error('Falha ao remover meta');
     },
 
-    async clearAllGoals(): Promise<{ deletedCount: number }> {
-        const response = await authService.api('/api/goals', { method: 'DELETE' });
+    async clearAllGoals(walletId?: string): Promise<{ deletedCount: number }> {
+        const response = await authService.api(withWallet('/api/goals', walletId), { method: 'DELETE' });
         if (!response.ok) throw new Error('Falha ao limpar metas');
         return await response.json();
     },
@@ -136,8 +144,9 @@ export const goalsService = {
     async addContribution(
         id: string,
         data: { amount: number; date?: string; note?: string },
+        walletId?: string,
     ): Promise<{ goal: Goal; monthsAccelerated: number | null }> {
-        const response = await authService.api(`/api/goals/${id}/contributions`, {
+        const response = await authService.api(withWallet(`/api/goals/${id}/contributions`, walletId), {
             method: 'POST',
             body: JSON.stringify(data),
         });
@@ -148,8 +157,8 @@ export const goalsService = {
         return await response.json();
     },
 
-    async deleteContribution(id: string, cid: string): Promise<{ goal: Goal }> {
-        const response = await authService.api(`/api/goals/${id}/contributions/${cid}`, { method: 'DELETE' });
+    async deleteContribution(id: string, cid: string, walletId?: string): Promise<{ goal: Goal }> {
+        const response = await authService.api(withWallet(`/api/goals/${id}/contributions/${cid}`, walletId), { method: 'DELETE' });
         if (!response.ok) throw new Error('Falha ao remover aporte');
         return await response.json();
     },

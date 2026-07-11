@@ -12,7 +12,7 @@ export const generateRebalancePlan = async (req, res, next) => {
         // validate() não reescreve req.body, então o default fica aqui.
         const riskProfile = req.body?.riskProfile || 'MODERATE';
 
-        const plan = await rebalanceService.generatePlan(userId, riskProfile);
+        const plan = await rebalanceService.generatePlan(userId, req.walletId, riskProfile);
         res.json(plan);
     } catch (error) {
         logger.error(`Erro no rebalanceamento: ${error.message}`);

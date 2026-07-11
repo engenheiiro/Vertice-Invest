@@ -27,7 +27,7 @@ vi.mock('../contexts/ToastContext', () => ({ useToast: vi.fn() }));
 vi.mock('../contexts/DemoContext', () => ({ useDemo: vi.fn() }));
 
 const mockNavigate = vi.fn();
-vi.mock('react-router-dom', () => ({ useNavigate: () => mockNavigate }));
+vi.mock('react-router-dom', () => ({ useNavigate: () => mockNavigate, useLocation: () => ({ pathname: '/', search: '', hash: '', state: null, key: 'default' }) }));
 
 vi.mock('../services/auth', () => ({ authService: {} }));
 

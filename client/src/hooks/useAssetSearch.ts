@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { walletService } from '../services/wallet';
 import { useToast } from '../contexts/ToastContext';
-import type { AssetFormState } from '../utils/assetTransaction';
+import { fixedIncomeModeFromIndex, type AssetFormState } from '../utils/assetTransaction';
 import type { AssetType } from '../contexts/WalletContext';
 
 interface UseAssetSearchArgs {
@@ -86,11 +86,19 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
     }
 
     const finalTicker = result.isManual ? result.ticker : result.ticker || result.name;
-    const finalName = result.name || result.ticker;
+    // Em título manual, `name` é o rótulo "Criar: X" do dropdown — não deve
+    // vazar para o campo "Nome do Título". Usa o que o usuário digitou.
+    const finalName = result.isManual ? result.ticker : (result.name || result.ticker);
     const finalType = result.type ? (result.type as AssetType) : form.type;
     const finalQty = finalType === 'FIXED_INCOME' ? '1' : form.quantity;
     // Índice do título (SELIC/CDI/IPCA/PRE) para accrual pós-fixado correto.
     const finalIndex = result.index ? String(result.index).toUpperCase() : undefined;
+    // C2: vencimento do catálogo vem como "dd/mm/aaaa"; o input date usa YYYY-MM-DD.
+    const brToIso = (s: string): string | undefined => {
+      const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s).trim());
+      return m ? `${m[3]}-${m[2]}-${m[1]}` : undefined;
+    };
+    const finalMaturity = result.maturityDate ? brToIso(result.maturityDate) : undefined;
 
     setForm((prev) => ({
       ...prev,
@@ -100,6 +108,10 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
       rate: rateVal,
       quantity: finalQty,
       fixedIncomeIndex: finalIndex,
+      // Catálogo (Tesouro) define o modo pelo índice; título manual preserva o
+      // modo já escolhido no seletor (default % do CDI).
+      ...(result.isManual ? {} : { fixedIncomeMode: fixedIncomeModeFromIndex(finalIndex) }),
+      ...(finalMaturity ? { maturityDate: finalMaturity } : {}),
     }));
 
     setShowDropdown(false);

@@ -5,7 +5,7 @@
  * bloqueia (≥5 ativos e ≤7 dias) e o bloqueio gera alerta Sentry.
  * Deps pesadas mockadas só para importar o módulo (padrão research_delta.spec.js).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('node-cron', () => ({ default: { schedule: vi.fn() } }));
 vi.mock('@sentry/node', () => ({ captureMessage: vi.fn(), captureException: vi.fn() }));
@@ -71,6 +71,13 @@ describe('validateAutoPublish (função pura)', () => {
 });
 
 describe('runWeeklyAutoPublish (fluxo com gate)', () => {
+    // runWeeklyAutoPublish valida a idade do ranking contra a data REAL do sistema
+    // (validateAutoPublish(latest) sem `now`). Fixamos o relógio em NOW para o gate
+    // de 7 dias ser determinístico — senão o caso "1 dia de idade" quebra assim que
+    // a data real passa de NOW + 7d.
+    beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(NOW); });
+    afterEach(() => { vi.useRealTimers(); });
+
     const stub = (doc) => MarketAnalysis.findOne.mockReturnValue({ sort: () => Promise.resolve(doc) });
 
     it('publica ranking saudável e dispara broadcast na 1ª publicação', async () => {

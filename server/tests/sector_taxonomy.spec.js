@@ -9,7 +9,7 @@
  *    sejam mapeados (regressão: caíam em OUTROS).
  */
 import { describe, it, expect } from 'vitest';
-import { getMacroSector, getFiiSegment, getConcentrationKey } from '../config/sectorTaxonomy.js';
+import { getMacroSector, getFiiSegment, getConcentrationKey, isCyclicalSector, isStateControlled } from '../config/sectorTaxonomy.js';
 
 describe('getMacroSector — nomes de setor do Yahoo (US)', () => {
     it('mapeia Consumer Cyclical/Defensive para CONSUMO (não OUTROS)', () => {
@@ -45,6 +45,59 @@ describe('getFiiSegment — granularidade fina', () => {
     it('segmento desconhecido recebe balde próprio (nunca colapsa)', () => {
         expect(getFiiSegment('Algo Novo XYZ')).toBe('FII::algo novo xyz');
         expect(getFiiSegment('')).toBe('FII_OUTROS');
+    });
+});
+
+describe('isCyclicalSector — barramento de cíclicas', () => {
+    it('reconhece macro-setores cíclicos (INDUSTRIAL/COMMODITIES)', () => {
+        expect(isCyclicalSector('Indústria')).toBe(true);        // SHUL4
+        expect(isCyclicalSector('Bens Industriais')).toBe(true);
+        expect(isCyclicalSector('Máquinas e Equipamentos')).toBe(true);
+        expect(isCyclicalSector('Material de Transporte')).toBe(true);
+        expect(isCyclicalSector('Mineração')).toBe(true);
+        expect(isCyclicalSector('Siderurgia')).toBe(true);
+        expect(isCyclicalSector('Basic Materials')).toBe(true);
+        expect(isCyclicalSector('Industrials')).toBe(true);
+    });
+    it('reconhece sub-setor Consumo Cíclico (macro CONSUMO não é cíclico como um todo)', () => {
+        expect(isCyclicalSector('Consumo Cíclico')).toBe(true);
+        expect(isCyclicalSector('Consumer Cyclical')).toBe(true);
+    });
+    it('NÃO marca setores defensivos/perenes como cíclicos', () => {
+        expect(isCyclicalSector('Energia Elétrica')).toBe(false);
+        expect(isCyclicalSector('Bancos')).toBe(false);
+        expect(isCyclicalSector('Saúde')).toBe(false);
+        expect(isCyclicalSector('Saneamento')).toBe(false);
+        expect(isCyclicalSector('Varejo')).toBe(false);
+        expect(isCyclicalSector('')).toBe(false);
+        expect(isCyclicalSector(null)).toBe(false);
+    });
+});
+
+describe('isStateControlled — eixo de governança', () => {
+    it('reconhece estatais federais e estaduais por classe (ON/PN/Unit)', () => {
+        expect(isStateControlled('PETR4')).toBe(true);   // Petrobras (federal)
+        expect(isStateControlled('PETR3')).toBe(true);
+        expect(isStateControlled('BBAS3')).toBe(true);   // Banco do Brasil
+        expect(isStateControlled('BBSE3')).toBe(true);   // BB Seguridade (indireta)
+        expect(isStateControlled('SAPR11')).toBe(true);  // Sanepar (PR)
+        expect(isStateControlled('CMIG4')).toBe(true);   // Cemig (MG)
+        expect(isStateControlled('CSMG3')).toBe(true);   // Copasa (MG)
+        expect(isStateControlled('BRSR6')).toBe(true);   // Banrisul (RS)
+    });
+    it('normaliza caixa/espaço e sufixo fracionário F', () => {
+        expect(isStateControlled(' petr4 ')).toBe(true);
+        expect(isStateControlled('PETR4F')).toBe(true);
+    });
+    it('NÃO marca privadas nem já-privatizadas (corporations sem controlador estatal)', () => {
+        expect(isStateControlled('ITSA4')).toBe(false);  // Itaúsa (privada)
+        expect(isStateControlled('ITUB4')).toBe(false);
+        expect(isStateControlled('SBSP3')).toBe(false);  // Sabesp — privatizada 2024
+        expect(isStateControlled('CPLE6')).toBe(false);  // Copel — privatizada 2023
+        expect(isStateControlled('ELET3')).toBe(false);  // Eletrobras — só golden share
+        expect(isStateControlled('WIZC3')).toBe(false);
+        expect(isStateControlled('')).toBe(false);
+        expect(isStateControlled(null)).toBe(false);
     });
 });
 

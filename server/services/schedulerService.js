@@ -14,6 +14,7 @@ import { signalEngine } from './engines/signalEngine.js';
 import MarketAsset from '../models/MarketAsset.js';
 import MarketAnalysis from '../models/MarketAnalysis.js';
 import User from '../models/User.js';
+import Wallet from '../models/Wallet.js';
 import UserAsset from '../models/UserAsset.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
 import AssetTransaction from '../models/AssetTransaction.js';
@@ -129,31 +130,35 @@ const computeEquityAt = (assets, { priceMap, macroRates, usdRate, calcDate }) =>
     return { totalEquity, totalInvested };
 };
 
-// Persiste UM snapshot de um usuário para um dia BR específico.
-// - Idempotente por (user, dia BR): se já existe snapshot no dia, retorna 'exists'
-//   (a menos de force, que substitui). Evita duplicata entre catch-up, cron in-app
-//   e Render Cron Job.
+// Persiste UM snapshot de UMA CARTEIRA para um dia BR específico (Fase 2: o
+// snapshot diário/TWRR passou a ser por carteira, não mais por usuário — cada
+// carteira tem seu próprio histórico desde a data em que foi criada).
+// - Idempotente por (wallet, dia BR): se já existe snapshot no dia, retorna
+//   'exists' (a menos de force, que substitui). Evita duplicata entre catch-up,
+//   cron in-app e Render Cron Job.
 // - Mantém a cadeia de cotas (TWRR) buscando o snapshot imediatamente ANTERIOR ao dia.
 // Retorna: 'created' | 'exists' | 'empty' | 'anomaly' | 'reset-guard'.
-const persistUserSnapshotForDay = async (user, dayStr, ctx, { assets = null, force = false } = {}) => {
+const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = null, force = false } = {}) => {
     const { priceMap, macroRates, usdRate } = ctx;
     const bounds = brDayBounds(dayStr);
     const calcDate = brCalcDate(dayStr);
+    const userId = wallet.user?._id || wallet.user;
+    const walletId = wallet._id;
 
     if (!force) {
-        const existing = await WalletSnapshot.exists({ user: user._id, date: { $gte: bounds.start, $lte: bounds.end } });
+        const existing = await WalletSnapshot.exists({ wallet: walletId, date: { $gte: bounds.start, $lte: bounds.end } });
         if (existing) return 'exists';
     }
 
-    const positions = assets || await UserAsset.find({ user: user._id });
+    const positions = assets || await UserAsset.find({ user: userId, wallet: walletId });
     const { totalEquity, totalInvested } = computeEquityAt(positions, { priceMap, macroRates, usdRate, calcDate });
     if (!(totalEquity > 0)) return 'empty';
 
     // Snapshot anterior (cota/Dietz) — estritamente antes deste dia BR.
-    const lastSnapshot = await WalletSnapshot.findOne({ user: user._id, date: { $lt: bounds.start } }).sort({ date: -1 });
+    const lastSnapshot = await WalletSnapshot.findOne({ wallet: walletId, date: { $lt: bounds.start } }).sort({ date: -1 });
 
     // Fluxo de caixa DO DIA (aportes/retiradas), no fuso BR.
-    const transactions = await AssetTransaction.find({ user: user._id, date: { $gte: bounds.start, $lte: bounds.end } });
+    const transactions = await AssetTransaction.find({ user: userId, wallet: walletId, date: { $gte: bounds.start, $lte: bounds.end } });
     let dayFlow = 0;
     transactions.forEach(tx => {
         if (tx.type === 'BUY') dayFlow += tx.totalValue;
@@ -188,9 +193,9 @@ const persistUserSnapshotForDay = async (user, dayStr, ctx, { assets = null, for
         const dailyReturn = calculateDailyDietz(v0, totalEquity, dayFlow, dayDividendIncome);
         // Circuit breaker: rejeita variação diária absurda (dado corrompido).
         if (Math.abs(dailyReturn) > 0.5) {
-            logger.warn(`⚠️ Anomalia TWRR ${user._id} @ ${dayStr}: ${(dailyReturn * 100).toFixed(2)}%. Snapshot ignorado.`);
+            logger.warn(`⚠️ Anomalia TWRR wallet ${walletId} @ ${dayStr}: ${(dailyReturn * 100).toFixed(2)}%. Snapshot ignorado.`);
             if (process.env.SENTRY_DSN) {
-                Sentry.captureMessage(`TWRR Anomaly: User ${user._id} @ ${dayStr} = ${dailyReturn.toFixed(2)}%. Skipped.`);
+                Sentry.captureMessage(`TWRR Anomaly: Wallet ${walletId} @ ${dayStr} = ${dailyReturn.toFixed(2)}%. Skipped.`);
             }
             return 'anomaly';
         }
@@ -202,21 +207,22 @@ const persistUserSnapshotForDay = async (user, dayStr, ctx, { assets = null, for
     if (Math.abs(quotaPrice - 100) < 0.1) {
         const hasHistory = lastSnapshot
             ? Math.abs(lastSnapshot.quotaPrice - 100) > 5
-            : await WalletSnapshot.exists({ user: user._id });
+            : await WalletSnapshot.exists({ wallet: walletId });
         if (hasHistory) {
-            logger.error(`❌ Cota resetou p/ 100 indevidamente ${user._id} @ ${dayStr}. Snapshot abortado.`);
+            logger.error(`❌ Cota resetou p/ 100 indevidamente wallet ${walletId} @ ${dayStr}. Snapshot abortado.`);
             return 'reset-guard';
         }
     }
 
-    const divData = await financialService.calculateUserDividends(user._id);
+    const divData = await financialService.calculateUserDividends(userId, walletId);
     const totalDividends = divData.totalAllTime;
 
     if (force) {
-        await WalletSnapshot.deleteMany({ user: user._id, date: { $gte: bounds.start, $lte: bounds.end } });
+        await WalletSnapshot.deleteMany({ wallet: walletId, date: { $gte: bounds.start, $lte: bounds.end } });
     }
     await WalletSnapshot.create({
-        user: user._id,
+        user: userId,
+        wallet: walletId,
         date: brSnapshotInstant(dayStr),
         totalEquity,
         totalInvested,
@@ -232,31 +238,33 @@ const persistUserSnapshotForDay = async (user, dayStr, ctx, { assets = null, for
 // exclusivo). node-cron não reexecuta ticks perdidos (deploy/reinício/erro
 // transitório sobre 23:59) — este catch-up é a rede de segurança que fecha os
 // buracos, com data retroativa correta e accrual exato de renda fixa.
-const backfillUserGap = async (user, todayStr, ctx, assets) => {
-    const last = await WalletSnapshot.findOne({ user: user._id }).sort({ date: -1 });
+const backfillUserGap = async (wallet, todayStr, ctx, assets) => {
+    const last = await WalletSnapshot.findOne({ wallet: wallet._id }).sort({ date: -1 });
     if (!last) return 0; // sem histórico: o fluxo normal cuida do 1º snapshot
     const lastDayStr = brDayStr(new Date(last.date));
     const missing = businessDaysBetween(lastDayStr, todayStr).slice(-CATCHUP_MAX_DAYS);
     let created = 0;
     for (const dayStr of missing) {
-        const r = await persistUserSnapshotForDay(user, dayStr, ctx, { assets, force: false });
-        if (r === 'created') { created++; logger.info(`🩹 Backfill snapshot ${user.email || user._id} @ ${dayStr}`); }
+        const r = await persistUserSnapshotForDay(wallet, dayStr, ctx, { assets, force: false });
+        if (r === 'created') { created++; logger.info(`🩹 Backfill snapshot ${wallet.user?.email || wallet.user} (${wallet.name}) @ ${dayStr}`); }
     }
     return created;
 };
 
 // Varredura de recuperação (boot / pré-run diário) sem tocar no dia de hoje.
+// Fase 2: itera CARTEIRAS (não usuários) — cada carteira tem sua própria cadeia
+// de snapshots/TWRR independente.
 export const backfillMissedSnapshots = async () => {
     try {
         const todayStr = brDayStr(new Date());
         const ctx = await loadSnapshotContext();
-        const users = await User.find({}).select('_id email');
+        const wallets = await Wallet.find({}).populate('user', 'email').select('_id user name');
         let created = 0;
-        for (const user of users) {
+        for (const wallet of wallets) {
             try {
-                created += await backfillUserGap(user, todayStr, ctx, null);
+                created += await backfillUserGap(wallet, todayStr, ctx, null);
             } catch (e) {
-                logger.error(`Backfill erro user ${user._id}: ${e.message}`);
+                logger.error(`Backfill erro wallet ${wallet._id}: ${e.message}`);
                 if (process.env.SENTRY_DSN) Sentry.captureException(e);
             }
         }
@@ -287,27 +295,30 @@ export const runDailySnapshot = async (force = false) => {
     logger.info(`📸 Iniciando Snapshot Patrimonial Diário (Auditado) [Force: ${force}]...`);
     try {
         const ctx = await loadSnapshotContext();
-        const users = await User.find({}).select('_id email');
+        // Fase 2: itera CARTEIRAS (não usuários) — 1 snapshot/dia por carteira,
+        // já que cada uma tem seu próprio histórico/TWRR desde a criação.
+        const wallets = await Wallet.find({}).populate('user', 'email').select('_id user name');
 
         let snapshotsCreated = 0;
         let snapshotsSkipped = 0;
         let backfilled = 0;
 
-        for (const user of users) {
+        for (const wallet of wallets) {
             try {
-                // Posições buscadas uma vez por usuário (reuso no catch-up + hoje).
-                const assets = await UserAsset.find({ user: user._id });
+                const userId = wallet.user?._id || wallet.user;
+                // Posições buscadas uma vez por carteira (reuso no catch-up + hoje).
+                const assets = await UserAsset.find({ user: userId, wallet: wallet._id });
 
                 // 1) Recupera dias úteis anteriores faltantes (self-healing).
-                backfilled += await backfillUserGap(user, todayStr, ctx, assets);
+                backfilled += await backfillUserGap(wallet, todayStr, ctx, assets);
 
                 // 2) Snapshot de HOJE (idempotente; respeita force).
-                const r = await persistUserSnapshotForDay(user, todayStr, ctx, { assets, force });
+                const r = await persistUserSnapshotForDay(wallet, todayStr, ctx, { assets, force });
                 if (r === 'created') snapshotsCreated++;
                 else snapshotsSkipped++;
-            } catch (userErr) {
-                logger.error(`Erro snapshot user ${user._id}: ${userErr.message}`);
-                if (process.env.SENTRY_DSN) Sentry.captureException(userErr);
+            } catch (walletErr) {
+                logger.error(`Erro snapshot wallet ${wallet._id}: ${walletErr.message}`);
+                if (process.env.SENTRY_DSN) Sentry.captureException(walletErr);
             }
         }
 

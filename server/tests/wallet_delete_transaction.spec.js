@@ -18,6 +18,7 @@ vi.mock('mongoose', () => ({
   default: { startSession: vi.fn(() => Promise.resolve(session)) },
 }));
 vi.mock('../models/User.js', () => ({ default: {} }));
+vi.mock('../models/Wallet.js', () => ({ default: {} }));
 vi.mock('../models/UserAsset.js', () => ({ default: {} }));
 vi.mock('../models/AssetTransaction.js', () => ({
   default: { findOneAndDelete: vi.fn() },
@@ -55,16 +56,17 @@ describe('deleteTransaction — atomicidade', () => {
   it('commita quando delete + recálculo têm sucesso', async () => {
     AssetTransaction.findOneAndDelete.mockResolvedValue({ ticker: 'PETR4' });
     financialService.recalculatePosition.mockResolvedValue({});
-    const req = { params: { id: 't1' }, user: { id: 'u1' } };
+    // walletId simula o que o middleware resolveWallet já teria anexado a req.
+    const req = { params: { id: 't1' }, user: { id: 'u1' }, walletId: 'w1' };
     const res = mockRes();
 
     await deleteTransaction(req, res, vi.fn());
 
     expect(AssetTransaction.findOneAndDelete).toHaveBeenCalledWith(
-      { _id: 't1', user: 'u1' },
+      { _id: 't1', user: 'u1', wallet: 'w1' },
       { session },
     );
-    expect(financialService.recalculatePosition).toHaveBeenCalledWith('u1', 'PETR4', null, session);
+    expect(financialService.recalculatePosition).toHaveBeenCalledWith('u1', 'PETR4', null, session, null, 'w1');
     expect(session.commitTransaction).toHaveBeenCalledTimes(1);
     expect(session.abortTransaction).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({ message: 'Transação removida.' });
@@ -73,7 +75,7 @@ describe('deleteTransaction — atomicidade', () => {
   it('aborta (reverte o delete) quando o recálculo lança', async () => {
     AssetTransaction.findOneAndDelete.mockResolvedValue({ ticker: 'PETR4' });
     financialService.recalculatePosition.mockRejectedValue(new Error('Saldo insuficiente para PETR4.'));
-    const req = { params: { id: 't1' }, user: { id: 'u1' } };
+    const req = { params: { id: 't1' }, user: { id: 'u1' }, walletId: 'w1' };
     const res = mockRes();
     const next = vi.fn();
 
@@ -86,7 +88,7 @@ describe('deleteTransaction — atomicidade', () => {
 
   it('aborta e responde 404 quando a transação não existe', async () => {
     AssetTransaction.findOneAndDelete.mockResolvedValue(null);
-    const req = { params: { id: 'nope' }, user: { id: 'u1' } };
+    const req = { params: { id: 'nope' }, user: { id: 'u1' }, walletId: 'w1' };
     const res = mockRes();
 
     await deleteTransaction(req, res, vi.fn());

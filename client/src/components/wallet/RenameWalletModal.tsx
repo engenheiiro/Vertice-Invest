@@ -3,26 +3,29 @@ import { createPortal } from 'react-dom';
 import { X, PieChart } from 'lucide-react';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
-import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { authService } from '../../services/auth';
+import { useWallet } from '../../contexts/WalletContext';
 
 interface RenameWalletModalProps {
     isOpen: boolean;
-    currentName: string;
+    /** 'rename' edita walletId; 'create' cria uma carteira nova. */
+    mode?: 'create' | 'rename';
+    /** Obrigatório em mode='rename'. */
+    walletId?: string;
+    currentName?: string;
     onClose: () => void;
 }
 
-/** Modal enxuto para renomear a carteira do usuário (User.walletName). */
-export const RenameWalletModal: React.FC<RenameWalletModalProps> = ({ isOpen, currentName, onClose }) => {
-    const { refreshProfile } = useAuth();
+/** Modal enxuto para criar ou renomear uma carteira (Wallet, Fase 2). */
+export const RenameWalletModal: React.FC<RenameWalletModalProps> = ({ isOpen, mode = 'rename', walletId, currentName = '', onClose }) => {
+    const { renameWallet, createWallet } = useWallet();
     const { addToast } = useToast();
     const [name, setName] = useState(currentName);
     const [status, setStatus] = useState<'idle' | 'loading'>('idle');
 
     useEffect(() => {
-        if (isOpen) setName(currentName);
-    }, [isOpen, currentName]);
+        if (isOpen) setName(mode === 'rename' ? currentName : '');
+    }, [isOpen, currentName, mode]);
 
     if (!isOpen) return null;
 
@@ -32,14 +35,16 @@ export const RenameWalletModal: React.FC<RenameWalletModalProps> = ({ isOpen, cu
         if (!trimmed) return;
         setStatus('loading');
         try {
-            // updateProfile já grava o user devolvido no localStorage; refreshProfile
-            // relê o storage (com o walletName novo) e propaga p/ o AuthContext.
-            await authService.updateProfile({ walletName: trimmed });
-            await refreshProfile();
-            addToast('Carteira renomeada.', 'success');
+            if (mode === 'create') {
+                await createWallet(trimmed);
+                addToast('Carteira criada.', 'success');
+            } else if (walletId) {
+                await renameWallet(walletId, trimmed);
+                addToast('Carteira renomeada.', 'success');
+            }
             onClose();
         } catch (err: any) {
-            addToast(err?.message || 'Não foi possível renomear a carteira.', 'error');
+            addToast(err?.message || 'Não foi possível salvar a carteira.', 'error');
         } finally {
             setStatus('idle');
         }
@@ -54,7 +59,7 @@ export const RenameWalletModal: React.FC<RenameWalletModalProps> = ({ isOpen, cu
                         <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-card">
                             <h2 className="text-base font-bold text-white flex items-center gap-2">
                                 <PieChart size={18} className="text-blue-400" />
-                                Renomear Carteira
+                                {mode === 'create' ? 'Nova Carteira' : 'Renomear Carteira'}
                             </h2>
                             <button onClick={onClose} aria-label="Fechar" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-white transition-colors">
                                 <X size={20} />

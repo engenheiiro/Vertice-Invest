@@ -11,12 +11,18 @@
  *   - renda do dia (DividendEvent com ex-date no intervalo × quantidade em carteira
  *     naquele momento, deduplicada por identidade canônica).
  *
+ * Fase 2 (múltiplas carteiras): a cota é recalculada POR CARTEIRA — misturar
+ * snapshots/transações de carteiras diferentes do mesmo usuário na mesma cadeia
+ * produziria uma série corrompida (equity de uma carteira "colidindo" com o
+ * fluxo de outra).
+ *
  * Modo padrão = DRY-RUN (compara cota antiga × nova, sem gravar).
  * Uso:
- *   node scripts/rechainQuota.js                 # dry-run, todas as contas (resumo)
- *   node scripts/rechainQuota.js --user=<id>     # dry-run detalhado de uma conta
- *   node scripts/rechainQuota.js --limit=20      # dry-run numa amostra
- *   node scripts/rechainQuota.js --apply         # GRAVA o quotaPrice recalculado
+ *   node scripts/rechainQuota.js                   # dry-run, todas as carteiras (resumo)
+ *   node scripts/rechainQuota.js --user=<id>       # dry-run de todas as carteiras de 1 usuário
+ *   node scripts/rechainQuota.js --wallet=<id>     # dry-run detalhado de 1 carteira
+ *   node scripts/rechainQuota.js --limit=20        # dry-run numa amostra
+ *   node scripts/rechainQuota.js --apply           # GRAVA o quotaPrice recalculado
  */
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
@@ -40,14 +46,14 @@ const utcDay = (d) => new Date(d).toISOString().slice(0, 10);
 const up = (t) => String(t || '').toUpperCase();
 
 /**
- * Recalcula a série de cotas de um usuário a partir dos snapshots existentes.
+ * Recalcula a série de cotas de UMA carteira a partir dos snapshots existentes.
  * Retorna { snaps, oldQuota, newQuota[], maxDailyJump, income, flow } ou null.
  */
-const rechainUser = async (userId) => {
-    const snaps = await WalletSnapshot.find({ user: userId }).sort({ date: 1 }).lean();
+const rechainUser = async (userId, walletId) => {
+    const snaps = await WalletSnapshot.find({ user: userId, wallet: walletId }).sort({ date: 1 }).lean();
     if (snaps.length < 2) return null;
 
-    const txs = await AssetTransaction.find({ user: userId }).sort({ date: 1 }).lean();
+    const txs = await AssetTransaction.find({ user: userId, wallet: walletId }).sort({ date: 1 }).lean();
     const tickers = [...new Set(txs.map((t) => up(t.ticker)))];
     const divs = tickers.length
         ? await DividendEvent.find({ ticker: { $in: tickers } }).sort({ date: 1 }).lean()
@@ -138,27 +144,35 @@ const run = async () => {
 
     const apply = process.argv.includes('--apply');
     const userArg = process.argv.find((a) => a.startsWith('--user='));
+    const walletArg = process.argv.find((a) => a.startsWith('--wallet='));
     const limitArg = process.argv.find((a) => a.startsWith('--limit='));
     const targetUser = userArg ? userArg.split('=')[1] : null;
+    const targetWallet = walletArg ? walletArg.split('=')[1] : null;
     const limit = limitArg ? parseInt(limitArg.split('=')[1], 10) : null;
 
-    let userIds = targetUser
-        ? [targetUser]
-        : (await WalletSnapshot.distinct('user')).map((id) => String(id));
-    if (limit) userIds = userIds.slice(0, limit);
+    const matchStage = {};
+    if (targetUser) matchStage.user = new mongoose.Types.ObjectId(targetUser);
+    if (targetWallet) matchStage.wallet = new mongoose.Types.ObjectId(targetWallet);
 
-    console.log(`${apply ? '💾 APLICANDO' : '🔍 DRY-RUN'} — ${userIds.length} conta(s)\n`);
-    console.log('user                     | snaps | TWRR antigo | TWRR novo | Δpp     | renda R$ | maxΔdia');
-    console.log('-------------------------|-------|-------------|-----------|---------|----------|--------');
+    let pairs = await WalletSnapshot.aggregate([
+        ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
+        { $group: { _id: { user: '$user', wallet: '$wallet' } } },
+    ]);
+    if (limit) pairs = pairs.slice(0, limit);
+
+    console.log(`${apply ? '💾 APLICANDO' : '🔍 DRY-RUN'} — ${pairs.length} carteira(s)\n`);
+    console.log('user/wallet                                | snaps | TWRR antigo | TWRR novo | Δpp     | renda R$ | maxΔdia');
+    console.log('--------------------------------------------|-------|-------------|-----------|---------|----------|--------');
 
     let changed = 0;
     let flagged = 0;
-    for (const userId of userIds) {
+    for (const pair of pairs) {
+        const { user: userId, wallet: walletId } = pair._id;
         let res;
         try {
-            res = await rechainUser(userId);
+            res = await rechainUser(userId, walletId);
         } catch (e) {
-            console.log(`${userId} | ERRO: ${e.message}`);
+            console.log(`${userId}/${walletId} | ERRO: ${e.message}`);
             continue;
         }
         if (!res) continue;
@@ -172,7 +186,7 @@ const run = async () => {
         if (jump > 20) flagged++;
 
         console.log(
-            `${String(userId).padEnd(24)} | ${pad(res.snaps.length, 5)} | ${pad(oldT.toFixed(2) + '%', 11)} | ${pad(newT.toFixed(2) + '%', 9)} | ${pad((delta >= 0 ? '+' : '') + delta.toFixed(2), 7)} | ${pad(res.totalIncome.toFixed(0), 8)} | ${pad(jump.toFixed(1) + '%', 6)}${flag}`
+            `${String(`${userId}/${walletId}`).padEnd(44)} | ${pad(res.snaps.length, 5)} | ${pad(oldT.toFixed(2) + '%', 11)} | ${pad(newT.toFixed(2) + '%', 9)} | ${pad((delta >= 0 ? '+' : '') + delta.toFixed(2), 7)} | ${pad(res.totalIncome.toFixed(0), 8)} | ${pad(jump.toFixed(1) + '%', 6)}${flag}`
         );
 
         if (apply) {

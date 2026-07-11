@@ -10,6 +10,9 @@ import mongoose from 'mongoose';
 const GoalContributionSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   goal: { type: mongoose.Schema.Types.ObjectId, ref: 'InvestmentGoal', required: true },
+  // Denormalizado a partir de goal.wallet (mesmo padrão de UserAsset/AssetTransaction),
+  // evita um lookup extra para filtrar contribuições por carteira.
+  wallet: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet', required: true },
 
   amount: { type: Number, required: true }, // pode ser negativo (resgate)
   date: { type: Date, required: true, default: Date.now },
@@ -18,7 +21,7 @@ const GoalContributionSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-GoalContributionSchema.index({ user: 1, goal: 1, date: -1 });
+GoalContributionSchema.index({ wallet: 1, goal: 1, date: -1 });
 
 const GoalContribution = mongoose.models.GoalContribution || mongoose.model('GoalContribution', GoalContributionSchema);
 export default GoalContribution;

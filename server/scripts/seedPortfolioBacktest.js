@@ -17,6 +17,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 import User from '../models/User.js';
+import Wallet from '../models/Wallet.js';
 import MarketAnalysis from '../models/MarketAnalysis.js';
 import AssetTransaction from '../models/AssetTransaction.js';
 import SystemConfig from '../models/SystemConfig.js';
@@ -75,7 +76,7 @@ async function main() {
     }
 
     // ── 1. Selecionar usuário ─────────────────────────────────────────────────
-    const users = await User.find({}).select('_id name email plan').sort({ email: 1 });
+    const users = await User.find({}).select('_id name email plan activeWalletId').sort({ email: 1 });
     if (!users.length) { console.error('❌ Nenhum usuário encontrado.'); process.exit(1); }
 
     console.log('👤 Usuários disponíveis:');
@@ -85,6 +86,18 @@ async function main() {
     if (userIdx < 0) { console.error('❌ Opção inválida.'); process.exit(1); }
     const targetUser = users[userIdx];
     console.log(`✅ Usuário selecionado: ${targetUser.email}\n`);
+
+    // Semeia sempre na carteira ATIVA do usuário (fallback: default, depois a mais antiga).
+    let targetWallet = targetUser.activeWalletId
+        ? await Wallet.findOne({ _id: targetUser.activeWalletId, user: targetUser._id })
+        : null;
+    if (!targetWallet) targetWallet = await Wallet.findOne({ user: targetUser._id, isDefault: true });
+    if (!targetWallet) targetWallet = await Wallet.findOne({ user: targetUser._id }).sort({ createdAt: 1 });
+    if (!targetWallet) {
+        console.error(`❌ Usuário ${targetUser.email} não tem nenhuma carteira (rode migrateToWallets.js primeiro).`);
+        process.exit(1);
+    }
+    console.log(`✅ Carteira: ${targetWallet.name}\n`);
 
     // ── 2. Selecionar portfólio ───────────────────────────────────────────────
     console.log('📁 Portfólios disponíveis:');
@@ -251,6 +264,7 @@ async function main() {
         try {
             await new AssetTransaction({
                 user:       targetUser._id,
+                wallet:     targetWallet._id,
                 ticker:     asset.ticker,
                 type:       'BUY',
                 quantity:   asset.quantity,
@@ -260,7 +274,7 @@ async function main() {
                 notes:      `Backtest ${portfolio.assetClass} — data: ${purchaseDateStr}`,
             }).save();
 
-            await financialService.recalculatePosition(targetUser._id, asset.ticker, asset.type);
+            await financialService.recalculatePosition(targetUser._id, asset.ticker, asset.type, null, null, targetWallet._id);
 
             // Preço atual para cálculo do retorno estimado
             const mkt = await marketDataService.getMarketDataByTicker(asset.ticker);
@@ -281,7 +295,7 @@ async function main() {
     // ── 11. Reconstruir histórico de snapshots ────────────────────────────────
     console.log('\n🔄 Reconstruindo histórico patrimonial (pode demorar alguns minutos)...');
     try {
-        await financialService.rebuildUserHistory(targetUser._id);
+        await financialService.rebuildUserHistory(targetUser._id, targetWallet._id);
         console.log('✅ Histórico reconstruído.\n');
     } catch (err) {
         console.warn(`⚠️  Histórico não pôde ser reconstruído: ${err.message}`);

@@ -15,6 +15,11 @@ export interface PortfolioItem {
     shares: number;
     avgPrice: number;
     currentPrice: number;
+    // Saldo em R$ (já convertido pelo backend) e moeda nativa do ativo. Permitem
+    // ao Terminal mostrar cripto/exterior em R$ com o valor nativo (US$) embaixo,
+    // igual à aba Carteira.
+    totalValue?: number;
+    currency?: 'BRL' | 'USD';
     type: string;
     sector?: string;
     aiScore: number;
@@ -78,7 +83,7 @@ interface QuantSignal {
 
 export const useDashboardData = () => {
     const { hasPlan } = useFeatureAccess();
-    const { assets, kpis, isLoading: isWalletLoading } = useWallet();
+    const { assets, kpis, isLoading: isWalletLoading, activeWalletId } = useWallet();
 
     // 1. Dados Macro
     const macroQuery = useQuery({
@@ -89,8 +94,8 @@ export const useDashboardData = () => {
 
     // 2. Dividendos
     const dividendsQuery = useQuery({
-        queryKey: ['dividends'],
-        queryFn: walletService.getDividends,
+        queryKey: ['dividends', activeWalletId],
+        queryFn: () => walletService.getDividends(activeWalletId),
         staleTime: STALE_TIME.SHORT,
     });
 
@@ -245,6 +250,8 @@ export const useDashboardData = () => {
                 shares: asset.quantity,
                 avgPrice: asset.averagePrice,
                 currentPrice: asset.currentPrice,
+                totalValue: asset.totalValue,
+                currency: asset.currency,
                 type: asset.type,
                 sector: asset.sector,
                 aiScore: researchData ? researchData.score : 0,

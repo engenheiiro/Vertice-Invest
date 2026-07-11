@@ -1,7 +1,8 @@
 
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { walletService } from '../services/wallet';
+import { walletService, type UpdateAssetPayload } from '../services/wallet';
+import { walletsService, WalletSummary } from '../services/wallets';
 import { useAuth } from './AuthContext';
 import { useDemo } from './DemoContext'; // Importar DemoContext
 import { useToast } from './ToastContext';
@@ -39,6 +40,12 @@ export interface Asset {
     // ETF/GOLD: holdings de Exterior que são ETFs internacionais (ou ouro lastreado);
     // contam no Exterior, sub-tipo ETF.
     usSubType?: 'STOCK' | 'REIT' | 'DOLLAR' | 'ETF' | 'GOLD' | null;
+    // C1: Reserva separada. true → sai da base de alocação e lista em "Caixa/Reserva".
+    // Pode vir ausente em posições antigas (ver isReserveAsset em utils/allocation).
+    isReserve?: boolean;
+    // C2: vencimento da RF (ISO) e flag VENCIDO (accrual congelado; sugere resgate).
+    maturityDate?: string | null;
+    matured?: boolean;
 }
 
 export interface WalletKPIs {
@@ -51,7 +58,7 @@ export interface WalletKPIs {
     totalDividends: number;
     projectedDividends: number;
     weightedRentability: number;
-    dataQuality?: 'AUDITED' | 'ESTIMATED'; 
+    dataQuality?: 'AUDITED' | 'ESTIMATED';
     sharpeRatio?: number; // Novo
     beta?: number; // Novo
 }
@@ -81,6 +88,9 @@ export const DEFAULT_SUB_ALLOCATION: SubAllocationMap = {
     STOCK_US: { STOCK: 0, REIT: 0, ETF: 0, DOLLAR: 0 },
 };
 
+// Pseudo-carteira única usada só em modo demo — o seletor real fica oculto.
+const DEMO_WALLETS: WalletSummary[] = [{ id: 'demo', name: 'Demo', isDefault: true, createdAt: new Date().toISOString() }];
+
 interface WalletContextType {
     assets: Asset[];
     kpis: WalletKPIs;
@@ -96,10 +106,20 @@ interface WalletContextType {
     togglePrivacyMode: () => void;
     refreshWallet: () => void;
     addAsset: (asset: any) => Promise<void>;
-    updateAsset: (id: string, data: { name?: string; tags?: string[]; usSubType?: UsSubKey }) => Promise<void>;
+    updateAsset: (id: string, data: UpdateAssetPayload) => Promise<void>;
     removeAsset: (id: string) => Promise<void>;
     resetWallet: () => Promise<void>;
     updateTargets: (newTargets: AllocationMap, newReserveTarget: number, newSubAllocation?: SubAllocationMap, newDividendGoal?: number) => void;
+    // --- Fase 2: múltiplas carteiras ---
+    wallets: WalletSummary[];
+    activeWalletId: string | undefined;
+    activeWalletName: string;
+    isWalletsLoading: boolean;
+    isSwitchingWallet: boolean;
+    setActiveWallet: (walletId: string) => Promise<void>;
+    createWallet: (name: string) => Promise<WalletSummary | undefined>;
+    renameWallet: (walletId: string, name: string) => Promise<void>;
+    deleteWallet: (walletId: string) => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -109,11 +129,12 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const { isDemoMode } = useDemo(); // Hook do Modo Demo
     const { addToast } = useToast();
     const queryClient = useQueryClient();
-    
+
     const [targetAllocation, setTargetAllocation] = useState<AllocationMap>({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10 });
     const [targetReserve, setTargetReserve] = useState(10000);
     const [targetMonthlyDividendIncome, setTargetMonthlyDividendIncome] = useState(0);
     const [targetSubAllocation, setTargetSubAllocation] = useState<SubAllocationMap>(DEFAULT_SUB_ALLOCATION);
+    const [activeWalletId, setActiveWalletId] = useState<string | undefined>(undefined);
 
     const [isPrivacyMode, setIsPrivacyMode] = useState(() => {
         const saved = localStorage.getItem('isPrivacyMode');
@@ -129,23 +150,40 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     // --- QUERIES ---
+    const walletsQuery = useQuery({
+        queryKey: ['wallets', user?.id],
+        queryFn: walletsService.list,
+        enabled: !!user?.id && !isDemoMode,
+        staleTime: STALE_TIME.MEDIUM,
+    });
+
+    // A carteira ativa é resolvida pelo servidor (User.activeWalletId) e sincronizada
+    // aqui; a partir daí, cada troca via setActiveWallet atualiza o estado local
+    // otimisticamente, e as queries wallet-scoped (chave inclui activeWalletId)
+    // buscam de novo sozinhas — sem precisar de invalidação manual em cada uma.
+    useEffect(() => {
+        if (isDemoMode) return;
+        const serverActive = walletsQuery.data?.activeWalletId;
+        if (serverActive && serverActive !== activeWalletId) setActiveWalletId(serverActive);
+    }, [walletsQuery.data?.activeWalletId, isDemoMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const walletQuery = useQuery({
-        queryKey: ['wallet', user?.id],
-        queryFn: walletService.getWallet,
+        queryKey: ['wallet', user?.id, activeWalletId],
+        queryFn: () => walletService.getWallet(activeWalletId),
         enabled: !!user?.id && !isDemoMode, // Não busca se estiver em Demo
         staleTime: STALE_TIME.REALTIME,
     });
 
     const historyQuery = useQuery({
-        queryKey: ['walletHistory', user?.id],
-        queryFn: walletService.getHistory,
+        queryKey: ['walletHistory', user?.id, activeWalletId],
+        queryFn: () => walletService.getHistory(activeWalletId),
         enabled: !!user?.id && !isDemoMode,
         staleTime: STALE_TIME.MEDIUM,
     });
 
     // --- HIDRATA CARTEIRA IDEAL DO SERVIDOR ---
-    // O backend retorna targetAllocation/targetReserve persistidos no usuário.
-    // Sincroniza sempre que a carteira recarregar (login, refresh, troca de conta).
+    // O backend retorna targetAllocation/targetReserve persistidos na carteira ativa.
+    // Sincroniza sempre que a carteira recarregar (login, refresh, troca de conta/carteira).
     useEffect(() => {
         if (isDemoMode) return;
         const data = walletQuery.data;
@@ -170,7 +208,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     // --- MUTATIONS ---
     const addAssetMutation = useMutation({
-        mutationFn: walletService.addAsset,
+        mutationFn: (asset: any) => walletService.addAsset(asset, activeWalletId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
@@ -183,8 +221,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     });
 
     const updateAssetMutation = useMutation({
-        mutationFn: ({ id, data }: { id: string; data: { name?: string; tags?: string[]; usSubType?: UsSubKey } }) =>
-            walletService.updateAsset(id, data),
+        mutationFn: ({ id, data }: { id: string; data: UpdateAssetPayload }) =>
+            walletService.updateAsset(id, data, activeWalletId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
@@ -193,7 +231,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     });
 
     const removeAssetMutation = useMutation({
-        mutationFn: walletService.removeAsset,
+        mutationFn: (id: string) => walletService.removeAsset(id, activeWalletId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
@@ -205,7 +243,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     });
 
     const resetWalletMutation = useMutation({
-        mutationFn: walletService.resetWallet,
+        mutationFn: () => walletService.resetWallet(activeWalletId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
             queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
@@ -217,13 +255,22 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         onError: (err: any) => addToast(err?.message || 'Erro ao resetar carteira.', 'error')
     });
 
+    const setActiveWalletMutation = useMutation({
+        mutationFn: (walletId: string) => walletsService.setActive(walletId),
+        onSuccess: (_data, walletId) => {
+            setActiveWalletId(walletId);
+            queryClient.invalidateQueries({ queryKey: ['wallets', user?.id] });
+        },
+        onError: (err: any) => addToast(err?.message || 'Erro ao trocar de carteira.', 'error')
+    });
+
     // --- ACTIONS ---
     const addAsset = async (newAsset: any) => {
         if (isDemoMode) return; // Bloqueia ações no demo
         await addAssetMutation.mutateAsync(newAsset);
     };
 
-    const updateAsset = async (id: string, data: { name?: string; tags?: string[]; usSubType?: UsSubKey }) => {
+    const updateAsset = async (id: string, data: UpdateAssetPayload) => {
         if (isDemoMode) return;
         await updateAssetMutation.mutateAsync({ id, data });
     };
@@ -246,19 +293,49 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (newDividendGoal !== undefined) setTargetMonthlyDividendIncome(newDividendGoal);
         if (isDemoMode) return; // Demo não persiste
         try {
-            await walletService.updateTargets(newTargets as Record<string, number>, newReserveTarget, newSubAllocation, newDividendGoal);
+            await walletService.updateTargets(newTargets as Record<string, number>, newReserveTarget, newSubAllocation, newDividendGoal, activeWalletId);
         } catch (err: unknown) {
             addToast(getErrorMessage(err, 'Erro ao salvar carteira ideal.'), 'error');
         }
     };
 
+    const setActiveWallet = async (walletId: string) => {
+        if (isDemoMode || walletId === activeWalletId) return;
+        await setActiveWalletMutation.mutateAsync(walletId);
+    };
+
+    const createWallet = async (name: string) => {
+        if (isDemoMode) return undefined;
+        const res = await walletsService.create(name);
+        queryClient.invalidateQueries({ queryKey: ['wallets', user?.id] });
+        if (res?.wallet?.id) await setActiveWalletMutation.mutateAsync(res.wallet.id);
+        return res.wallet;
+    };
+
+    const renameWallet = async (walletId: string, name: string) => {
+        if (isDemoMode) return;
+        await walletsService.rename(walletId, name);
+        queryClient.invalidateQueries({ queryKey: ['wallets', user?.id] });
+    };
+
+    const deleteWallet = async (walletId: string) => {
+        if (isDemoMode) return;
+        const res = await walletsService.remove(walletId);
+        queryClient.invalidateQueries({ queryKey: ['wallets', user?.id] });
+        // O backend já realoca a carteira ativa (na mesma transação) quando a
+        // apagada era a corrente, e devolve o novo id — seta direto em vez de
+        // esperar o próximo GET /wallets, senão a query key ['wallet', undefined]
+        // busca uma vez e depois refaz pra ['wallet', novoId] (flash de loading).
+        if (walletId === activeWalletId) setActiveWalletId(res.activeWalletId || undefined);
+    };
+
     // --- STATES & MEMOIZED CALCULATIONS ---
-    
+
     // LÓGICA DE INJEÇÃO DO MODO DEMO
     const assets = isDemoMode ? DEMO_ASSETS : (walletQuery.data?.assets || []);
     const history = isDemoMode ? DEMO_HISTORY : (historyQuery.data || []);
     const serverKpis = isDemoMode ? DEMO_KPIS : walletQuery.data?.kpis;
-    
+
     // KPIs híbridos
     const kpis = useMemo(() => {
         // Se estiver em demo, retorna os KPIs fixos do demo
@@ -267,27 +344,30 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         // Cálculo puro extraído para utils/kpiCalculations.ts (M5, testável).
         return computeWalletKpis(assets, serverKpis);
     }, [assets, serverKpis, isDemoMode]);
-    
+
     const usdRate = walletQuery.data?.meta?.usdRate || 5.75;
     const isLoading = !isDemoMode && (walletQuery.isLoading || historyQuery.isLoading);
 
     const isRefreshing = !isDemoMode && (
-                         (walletQuery.isFetching && !walletQuery.isLoading) || 
+                         (walletQuery.isFetching && !walletQuery.isLoading) ||
                          (historyQuery.isFetching && !historyQuery.isLoading) ||
-                         addAssetMutation.isPending || 
+                         addAssetMutation.isPending ||
                          removeAssetMutation.isPending);
 
+    const wallets = isDemoMode ? DEMO_WALLETS : (walletsQuery.data?.wallets || []);
+    const activeWalletName = isDemoMode ? 'Demo' : (wallets.find(w => w.id === activeWalletId)?.name || 'Minha Carteira');
+
     return (
-        <WalletContext.Provider value={{ 
-            assets, 
-            kpis, 
+        <WalletContext.Provider value={{
+            assets,
+            kpis,
             history,
             targetAllocation,
             targetReserve,
             targetMonthlyDividendIncome,
             targetSubAllocation,
             usdRate,
-            isLoading, 
+            isLoading,
             isRefreshing,
             isPrivacyMode: isDemoMode ? false : isPrivacyMode, // Demo sempre visível
             togglePrivacyMode,
@@ -296,7 +376,16 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             updateAsset,
             removeAsset,
             resetWallet,
-            updateTargets
+            updateTargets,
+            wallets,
+            activeWalletId,
+            activeWalletName,
+            isWalletsLoading: !isDemoMode && walletsQuery.isLoading,
+            isSwitchingWallet: setActiveWalletMutation.isPending,
+            setActiveWallet,
+            createWallet,
+            renameWallet,
+            deleteWallet,
         }}>
             {children}
         </WalletContext.Provider>

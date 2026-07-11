@@ -1,4 +1,34 @@
-import type { Asset, FixedIncomeSubKey, UsSubKey } from '../contexts/WalletContext';
+import type { Asset, AssetType, FixedIncomeSubKey, UsSubKey } from '../contexts/WalletContext';
+
+// ---------------------------------------------------------------------------
+// C1 — Reserva separada (base de alocação consistente).
+//
+// Um ativo é RESERVA quando `isReserve === true`. Ativos de reserva saem da base
+// de alocação (denominador dos percentuais) e são exibidos no balde
+// "Caixa / Reserva", independentemente do `type` (CASH ou uma Renda Fixa que o
+// usuário marcou como reserva). Renda Fixa NÃO-reserva volta a ser investimento:
+// entra no donut e no grupo "Renda Fixa".
+//
+// Fallback p/ posições ainda não migradas (sem o campo): CASH é reserva por
+// natureza, o resto é investimento — preserva o comportamento antigo até a
+// migração `isReserve` rodar em produção.
+// ---------------------------------------------------------------------------
+
+/** true se o ativo deve ser tratado como Reserva (fora da base de alocação). */
+export const isReserveAsset = (a: Pick<Asset, 'isReserve' | 'type'>): boolean =>
+    a.isReserve ?? (a.type === 'CASH');
+
+/**
+ * Balde de exibição/alocação de um ativo: reserva (qualquer tipo) → 'CASH';
+ * senão, a própria classe. Usado para agrupar a lista e o donut de forma
+ * coerente com a base de alocação.
+ */
+export const allocationBucket = (a: Pick<Asset, 'isReserve' | 'type'>): AssetType =>
+    isReserveAsset(a) ? 'CASH' : (a.type as AssetType);
+
+/** Soma (R$) de todos os ativos de Reserva — o que sai da base de alocação. */
+export const sumReserveValue = (assets: Asset[]): number =>
+    (assets || []).reduce((acc, a) => acc + (isReserveAsset(a) ? (Number(a.totalValue) || 0) : 0), 0);
 
 // ---------------------------------------------------------------------------
 // Cálculo PURO da sub-alocação REAL (ramificação) da carteira.
@@ -31,15 +61,23 @@ export interface SubAllocationReal {
 const FI_KEYS: FixedIncomeSubKey[] = ['IPCA', 'POS', 'PRE'];
 const US_KEYS: UsSubKey[] = ['STOCK', 'REIT', 'ETF', 'DOLLAR'];
 
-/** Sub-tipo de um holding de Renda Fixa a partir do índice contratado. */
-export const fixedIncomeSubKey = (asset: Pick<Asset, 'fixedIncomeIndex'>): FixedIncomeSubKey => {
+/**
+ * Sub-tipo de um holding de Renda Fixa. Índice explícito manda (IPCA / Selic-CDI /
+ * PRE). Sem índice (legado / CDB %CDI manual) espelha EXATAMENTE a convenção do
+ * accrual (fixedIncomeDailyFactor): `fixedIncomeRate > 50` = % do CDI → pós-fixado;
+ * `≤ 50` = prefixado a.a. Assim o rótulo bate com o rendimento — um "100% do CDI"
+ * não aparece mais como Prefixado. Rate ausente cai em 100 (%CDI), igual ao accrual.
+ */
+export const fixedIncomeSubKey = (asset: Pick<Asset, 'fixedIncomeIndex' | 'fixedIncomeRate'>): FixedIncomeSubKey => {
     switch (asset.fixedIncomeIndex) {
         case 'IPCA': return 'IPCA';
         case 'SELIC':
         case 'CDI': return 'POS';
         case 'PRE': return 'PRE';
-        // Sem índice (legado): tratado como prefixado/taxa cheia.
-        default: return 'PRE';
+        default: {
+            const rawRate = (Number(asset.fixedIncomeRate) || 0) > 0 ? Number(asset.fixedIncomeRate) : 100;
+            return rawRate > 50 ? 'POS' : 'PRE';
+        }
     }
 };
 
@@ -65,6 +103,8 @@ export function computeSubAllocationReal(assets: Asset[]): SubAllocationReal {
     (assets || []).forEach((a) => {
         const v = Number(a.totalValue) || 0;
         if (v <= 0) return;
+        // C1: RF/ativo marcado como Reserva não é investimento — fora da ramificação.
+        if (isReserveAsset(a)) return;
         if (a.type === 'FIXED_INCOME') {
             fiValue[fixedIncomeSubKey(a)] += v;
         } else if (a.type === 'STOCK_US') {

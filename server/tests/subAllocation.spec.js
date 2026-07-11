@@ -11,12 +11,18 @@ import {
 } from '../utils/subAllocation.js';
 
 describe('fixedIncomeSubKey', () => {
-    it('mapeia índice → IPCA/POS/PRE (legado → PRE)', () => {
+    it('mapeia índice explícito → IPCA/POS/PRE', () => {
         expect(fixedIncomeSubKey('IPCA')).toBe('IPCA');
         expect(fixedIncomeSubKey('SELIC')).toBe('POS');
         expect(fixedIncomeSubKey('CDI')).toBe('POS');
         expect(fixedIncomeSubKey('PRE')).toBe('PRE');
-        expect(fixedIncomeSubKey(null)).toBe('PRE');
+    });
+
+    it('sem índice (%CDI manual): rate > 50 → POS; ≤ 50 → PRE; ausente → POS (espelha o accrual)', () => {
+        expect(fixedIncomeSubKey(null, 100)).toBe('POS'); // 100% do CDI → pós-fixado
+        expect(fixedIncomeSubKey(null, 110)).toBe('POS');
+        expect(fixedIncomeSubKey(null, 12)).toBe('PRE');  // 12% a.a. → prefixado legado
+        expect(fixedIncomeSubKey(null)).toBe('POS');      // rate ausente cai em 100 (%CDI)
     });
 });
 
@@ -51,6 +57,17 @@ describe('currentValueBySub', () => {
         expect(v.IPCA).toBe(6800);
         expect(v.POS).toBe(3200);
         expect(v.PRE).toBe(0);
+    });
+
+    it('CDB %CDI manual (sem índice, rate > 50) agrega em pós-fixado, não prefixado', () => {
+        const holdings = [
+            { type: 'FIXED_INCOME', fixedIncomeIndex: null, fixedIncomeRate: 100, valueBr: 7000 }, // 100% CDI → POS
+            { type: 'FIXED_INCOME', fixedIncomeIndex: null, fixedIncomeRate: 12, valueBr: 3000 },  // 12% a.a. → PRE
+        ];
+        const v = currentValueBySub(holdings, 'FIXED_INCOME');
+        expect(v.POS).toBe(7000);
+        expect(v.PRE).toBe(3000);
+        expect(v.IPCA).toBe(0);
     });
 
     it('agrega Exterior por usSubType; ETFs internacionais e ouro lastreado → sub-tipo ETF', () => {

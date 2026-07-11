@@ -8,6 +8,7 @@ import { formatCurrency as fmtCurrency, type Currency } from '../../utils/format
 import { useConfirm } from '../../hooks/useConfirm';
 import AssetLogo from '../common/AssetLogo';
 import { getAssetSubtitle } from '../../utils/assetDisplay';
+import { allocationBucket, sumReserveValue, isReserveAsset } from '../../utils/allocation';
 
 /** Título exibido na lista: cofrinhos (CASH) mostram o nome; demais, o ticker. */
 const assetTitle = (asset: Asset): string =>
@@ -21,7 +22,7 @@ const TYPE_LABELS: Record<string, string> = {
     CRYPTO: 'Criptoativos',
     FIXED_INCOME: 'Renda Fixa',
     OURO: 'Ouro',
-    CASH: 'Caixa / Reserva'
+    CASH: 'Reserva / Caixa'
 };
 
 // Acento de cor por classe (espelha a paleta do donut de Distribuição): tinge o
@@ -94,13 +95,21 @@ export const AssetList = () => {
         setCollapsedGroups(prev => ({ ...prev, [type]: !prev[type] }));
     };
 
-    // Agrupa por classe (type): ETF nacional é grupo próprio "ETFs"; ETFs internacionais
-    // têm type STOCK_US e listam sob "Exterior", coerente com a Distribuição e o % ideal.
+    // Agrupa pelo BALDE DE ALOCAÇÃO (C1): ativos de Reserva (CASH ou RF marcada)
+    // caem em "Caixa / Reserva"; RF não-reserva fica em "Renda Fixa". ETF nacional
+    // é grupo próprio "ETFs"; ETFs internacionais (type STOCK_US) listam sob "Exterior".
     const groupedAssets = assets.reduce((acc, asset) => {
-        if (!acc[asset.type]) acc[asset.type] = [];
-        acc[asset.type].push(asset);
+        const bucket = allocationBucket(asset);
+        if (!acc[bucket]) acc[bucket] = [];
+        acc[bucket].push(asset);
         return acc;
     }, {} as Record<string, Asset[]>);
+
+    // Base de alocação = patrimônio − reserva. Denominador ÚNICO dos percentuais
+    // de investimento (corrige a distorção: antes usava kpis.totalEquity, que
+    // inclui a reserva e diluía o % de todas as classes de investimento).
+    const reserveValue = sumReserveValue(assets);
+    const allocationBase = Math.max((kpis.totalEquity || 0) - reserveValue, 0);
 
     // OURO mantido no fim para exibir holdings legados de ouro (não cadastrável mais).
     const typeOrder = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
@@ -165,12 +174,12 @@ export const AssetList = () => {
                                     return (
                                         <div key={asset.id} className="flex items-center justify-between px-4 py-3 bg-base">
                                             <div className="min-w-0 flex-1 flex items-center gap-3">
-                                                <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} size={32} />
+                                                <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} isReserve={isReserveAsset(asset)} size={32} />
                                                 <div className="min-w-0">
                                                     <p className="font-bold text-slate-200 text-sm truncate">{assetTitle(asset)}</p>
                                                     <p className="text-[10px] text-slate-500 truncate">
-                                                        {asset.type === 'CASH'
-                                                            ? 'Caixa / Reserva'
+                                                        {isReserveAsset(asset)
+                                                            ? 'Reserva / Caixa'
                                                             : `${asset.quantity} un · PM ${formatCurrency(asset.averagePrice, asset.currency)}`}
                                                     </p>
                                                 </div>
@@ -252,7 +261,12 @@ export const AssetList = () => {
                                 const isCollapsed = collapsedGroups[type];
                                 
                                 const totalValueGroup = groupItems.reduce((acc, item) => acc + (item.totalValue || 0), 0);
-                                const allocationPercent = (kpis.totalEquity || 0) > 0 ? (totalValueGroup / kpis.totalEquity) * 100 : 0;
+                                // Reserva: % do PATRIMÔNIO total (quanto do total está guardado).
+                                // Investimento: % da BASE (patrimônio − reserva), coerente com o donut.
+                                const isReserveGroup = type === 'CASH';
+                                const allocationPercent = isReserveGroup
+                                    ? ((kpis.totalEquity || 0) > 0 ? (totalValueGroup / kpis.totalEquity) * 100 : 0)
+                                    : (allocationBase > 0 ? (totalValueGroup / allocationBase) * 100 : 0);
                                 const idealPercent = targetAllocation[type as AssetType] || 0;
                                 const gm = groupMetrics(groupItems);
                                 const accent = accentOf(type);
@@ -300,15 +314,24 @@ export const AssetList = () => {
                                                             </span>
                                                         </div>
 
-                                                        <div className="flex flex-col items-end min-w-[100px]">
-                                                            <span className="text-slate-500 font-bold uppercase text-[9px]">Alocação (Ideal: {idealPercent}%)</span>
-                                                            <div className="flex items-center gap-2 w-full justify-end">
-                                                                <span className="text-white font-bold">{allocationPercent.toFixed(1)}%</span>
-                                                                <div className="w-12 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                                                    <div className={`h-full ${accent.bar}`} style={{ width: `${Math.min(allocationPercent, 100)}%` }}></div>
+                                                        {/* Reserva/Caixa não entra na Distribuição da Carteira nem na
+                                                            Distribuição Ideal — por isso não exibe % de alocação. */}
+                                                        {isReserveGroup ? (
+                                                            <div className="flex flex-col items-end min-w-[100px]">
+                                                                <span className="text-slate-500 font-bold uppercase text-[9px]">Reserva</span>
+                                                                <span className="text-slate-400 font-bold text-[11px]">Fora da distribuição</span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex flex-col items-end min-w-[100px]">
+                                                                <span className="text-slate-500 font-bold uppercase text-[9px]">Alocação (Ideal: {idealPercent}%)</span>
+                                                                <div className="flex items-center gap-2 w-full justify-end">
+                                                                    <span className="text-white font-bold">{allocationPercent.toFixed(1)}%</span>
+                                                                    <div className="w-12 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                                                        <div className={`h-full ${accent.bar}`} style={{ width: `${Math.min(allocationPercent, 100)}%` }}></div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
-                                                        </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </td>
@@ -332,10 +355,19 @@ export const AssetList = () => {
                                                 <tr key={asset.id} className="hover:bg-slate-800/30 transition-colors border-b border-slate-800/30 last:border-0 group animate-fade-in">
                                                     <td className="p-4 pl-8">
                                                         <div className="flex items-center gap-3">
-                                                            <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} size={32} />
+                                                            <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} isReserve={isReserveAsset(asset)} size={32} />
                                                             <div>
-                                                                <p className="font-bold text-slate-200">{assetTitle(asset)}</p>
-                                                                <p className="text-[10px] text-slate-500">{getAssetSubtitle(asset)}</p>
+                                                                <p className="font-bold text-slate-200 flex items-center gap-1.5">
+                                                                    {assetTitle(asset)}
+                                                                    {asset.matured && (
+                                                                        <span className="text-[9px] font-bold uppercase tracking-wide text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded" title="Título vencido — parou de render. Considere resgatar (nada é vendido automaticamente).">
+                                                                            Vencido
+                                                                        </span>
+                                                                    )}
+                                                                </p>
+                                                                <p className="text-[10px] text-slate-500">
+                                                                    {asset.matured ? 'Vencido — sugerimos resgatar' : getAssetSubtitle(asset)}
+                                                                </p>
                                                             </div>
                                                         </div>
                                                     </td>

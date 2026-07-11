@@ -1,9 +1,9 @@
 /**
  * Rebalanceamento IA (plano BLACK) — gera um PLANO de ordens (read-only) cruzando
- * a carteira real do usuário com a carteira-modelo do motor quant.
+ * a carteira ATIVA do usuário com a carteira-modelo do motor quant.
  *
- * Profundidade HÍBRIDA: as metas por classe (User.targetAllocation + targetReserve)
- * definem os baldes; dentro de cada balde os scores persistidos no MarketAnalysis
+ * Profundidade HÍBRIDA: as metas por classe (Wallet.targetAllocation + targetReserve,
+ * por carteira — Fase 2) definem os baldes; dentro de cada balde os scores persistidos no MarketAnalysis
  * decidem o que REDUZIR (sobrealocado / AGUARDAR / baixa qualidade) e o que
  * COMPRAR/REFORÇAR (top picks do perfil escolhido). Sem chamada ao Gemini — as
  * justificativas vêm de score/action/bullThesis/bearThesis já calculados.
@@ -12,7 +12,7 @@
  */
 
 import UserAsset from '../models/UserAsset.js';
-import User from '../models/User.js';
+import Wallet from '../models/Wallet.js';
 import MarketAnalysis from '../models/MarketAnalysis.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from './marketDataService.js';
@@ -54,6 +54,14 @@ const MAX_BUYS_PER_CLASS = 4;
 const isDollarized = (asset) =>
     asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO';
 
+// C1: classe EFETIVA de alocação do ativo. Um ativo de Reserva (flag isReserve,
+// ou CASH por natureza em posições ainda não migradas) conta como CASH — sai da
+// base de investimento e nunca é sugerido para venda/compra como investimento.
+// Assim o rebalance NUNCA sugere liquidar a reserva de emergência (RF marcada
+// como reserva) para "acertar a alocação". O `type` real segue preservado para a
+// valuation (RF-reserva ainda rende como renda fixa), só a CLASSE muda.
+const reserveBucket = (asset) => ((asset.isReserve ?? (asset.type === 'CASH')) ? 'CASH' : asset.type);
+
 const tierFromScore = (score) => {
     if (score == null) return null;
     if (score >= 55) return 'GOLD';
@@ -69,8 +77,8 @@ const tierFromScore = (score) => {
  * Espelha a matemática de valor atual de walletController.getWalletData (sem a
  * variação diária/TWRR, que o rebalance não usa). Retorna valores já em BRL.
  */
-export const computeWalletValuation = async (userId) => {
-    const userAssets = await UserAsset.find({ user: userId });
+export const computeWalletValuation = async (userId, walletId) => {
+    const userAssets = await UserAsset.find({ user: userId, wallet: walletId });
     const activeAssets = userAssets.filter((a) => a.quantity > QUANTITY_EPSILON);
 
     const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean();
@@ -120,16 +128,22 @@ export const computeWalletValuation = async (userId) => {
         const valueBr = safeCurrency(valueNative * multiplier);
         const priceBr = asset.quantity > 0 ? safeDiv(valueBr, asset.quantity) : 0;
 
-        // Classe = type. ETFs internacionais (type STOCK_US) contam no Exterior; ETF
+        // Classe EFETIVA = balde de alocação (C1): RF/CASH marcados como reserva
+        // caem em CASH. ETFs internacionais (type STOCK_US) contam no Exterior; ETF
         // nacional (type 'ETF') é classe própria.
-        valueByClass[asset.type] = safeCurrency((valueByClass[asset.type] || 0) + valueBr);
+        const cls = reserveBucket(asset);
+        valueByClass[cls] = safeCurrency((valueByClass[cls] || 0) + valueBr);
 
         assets.push({
             ticker: asset.ticker,
-            type: asset.type,
-            sector: asset.type === 'FIXED_INCOME' ? 'Renda Fixa' : asset.type === 'CASH' ? 'Caixa' : null,
+            // `type` aqui é a CLASSE de alocação (usada em gaps/sells/buys); reserva → CASH.
+            type: cls,
+            sector: cls === 'FIXED_INCOME' ? 'Renda Fixa' : cls === 'CASH' ? 'Caixa' : null,
             // Sub-tipos da ramificação (Carteira Ideal): permitem quebrar o gap da classe.
             fixedIncomeIndex: asset.fixedIncomeIndex || null,
+            // Taxa contratada: junto com o índice classifica o sub-tipo (%CDI manual
+            // sem índice → pós-fixado quando rate > 50, espelhando o accrual).
+            fixedIncomeRate: safeFloat(asset.fixedIncomeRate),
             usSubType: asset.usSubType || null,
             quantity: asset.quantity,
             currency: asset.currency,
@@ -401,7 +415,7 @@ export const buildRebalancePlan = ({
 
             // Rótulo de sub-tipo (ramificação) para RF/Exterior — espelha o lado compra.
             let subLabel = null;
-            if (gap.class === 'FIXED_INCOME') subLabel = SUB_LABELS.FIXED_INCOME[fixedIncomeSubKey(h.fixedIncomeIndex)];
+            if (gap.class === 'FIXED_INCOME') subLabel = SUB_LABELS.FIXED_INCOME[fixedIncomeSubKey(h.fixedIncomeIndex, h.fixedIncomeRate)];
             else if (gap.class === 'STOCK_US') subLabel = SUB_LABELS.STOCK_US[usSubKeyOf(h.usSubType)];
 
             sells.push({
@@ -582,10 +596,10 @@ export const rebalanceService = {
     loadEngineData,
     estimateCapitalGainsTax,
 
-    async generatePlan(userId, riskProfile = 'MODERATE') {
+    async generatePlan(userId, walletId, riskProfile = 'MODERATE') {
         const [valuation, prefs, engine] = await Promise.all([
-            computeWalletValuation(userId),
-            User.findById(userId).select('targetAllocation targetReserve targetSubAllocation').lean(),
+            computeWalletValuation(userId, walletId),
+            Wallet.findById(walletId).select('targetAllocation targetReserve targetSubAllocation').lean(),
             loadEngineData(riskProfile),
         ]);
 
@@ -607,7 +621,7 @@ export const rebalanceService = {
         });
 
         logger.info(
-            `[Rebalance] user ${userId} perfil ${riskProfile}: ${plan.sells.length} vendas / ${plan.buys.length} compras / IR est. R$${plan.summary.estTaxTotal}`,
+            `[Rebalance] user ${userId} wallet ${walletId} perfil ${riskProfile}: ${plan.sells.length} vendas / ${plan.buys.length} compras / IR est. R$${plan.summary.estTaxTotal}`,
         );
         return plan;
     },

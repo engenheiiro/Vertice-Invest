@@ -127,17 +127,6 @@ export default defineConfig({
             },
           },
           {
-            // Fontes Google.
-            urlPattern: ({ url }) =>
-              url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com',
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts',
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
             // Imagens estáticas.
             urlPattern: ({ request }) => request.destination === 'image',
             handler: 'CacheFirst',

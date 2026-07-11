@@ -7,6 +7,8 @@ import {
     assetDailyFactor,
     brazilToday,
     brazilDateOnly,
+    isMatured,
+    maturityDateOnly,
 } from '../utils/fixedIncome.js';
 
 const CDI = 14.4;
@@ -122,6 +124,44 @@ describe('renda fixa indexada (SELIC/CDI/IPCA + spread)', () => {
         const dailyF = Math.pow(1 + (SELIC + 0.0843) / 100, 1 / 252);
         const expected = 10 * 100 * Math.pow(dailyF, bd);
         expect(accrueFixedIncomeValue(asset, { cdiRate: CDI, selic: SELIC, ipca: IPCA, calcDate })).toBeCloseTo(expected, 4);
+    });
+});
+
+describe('vencimento (C2 — congela accrual + VENCIDO)', () => {
+    it('isMatured: false sem maturityDate; true quando calcDate >= vencimento', () => {
+        expect(isMatured({ type: 'FIXED_INCOME' }, brazilToday())).toBe(false);
+        const maturity = new Date('2026-06-16T00:00:00.000Z');
+        expect(isMatured({ maturityDate: maturity }, new Date('2026-06-15T00:00:00.000Z'))).toBe(false);
+        expect(isMatured({ maturityDate: maturity }, new Date('2026-06-16T00:00:00.000Z'))).toBe(true); // no dia
+        expect(isMatured({ maturityDate: maturity }, new Date('2026-06-30T00:00:00.000Z'))).toBe(true); // depois
+    });
+
+    it('maturityDateOnly normaliza para dia puro (UTC meia-noite) ou null', () => {
+        expect(maturityDateOnly({})).toBeNull();
+        expect(maturityDateOnly({ maturityDate: 'lixo' })).toBeNull();
+        expect(maturityDateOnly({ maturityDate: '2026-06-16' }).toISOString()).toBe('2026-06-16T00:00:00.000Z');
+    });
+
+    it('accrual CONGELA no vencimento — valor igual ao do dia do vencimento', () => {
+        const lotDate = new Date('2026-06-15T00:00:00.000Z');
+        const maturity = new Date('2026-06-17T00:00:00.000Z');
+        const asset = { type: 'FIXED_INCOME', quantity: 10, totalCost: 1000, fixedIncomeRate: 12, maturityDate: maturity, taxLots: [{ date: lotDate, quantity: 10, price: 100 }] };
+
+        // Valor no dia do vencimento (accrual até 17/06).
+        const atMaturity = accrueFixedIncomeValue({ ...asset, maturityDate: null }, { cdiRate: CDI, calcDate: maturity });
+        // Muito depois do vencimento: deve permanecer igual (congelado), não render mais.
+        const wayAfter = accrueFixedIncomeValue(asset, { cdiRate: CDI, calcDate: new Date('2026-12-31T00:00:00.000Z') });
+        expect(wayAfter).toBeCloseTo(atMaturity, 6);
+    });
+
+    it('antes do vencimento rende normalmente (sem cap)', () => {
+        const lotDate = new Date('2026-06-15T00:00:00.000Z');
+        const calcDate = new Date('2026-06-17T00:00:00.000Z');
+        const maturity = new Date('2026-12-31T00:00:00.000Z');
+        const bd = countBusinessDays(lotDate, calcDate);
+        const rateDaily = Math.pow(1.12, 1 / 252);
+        const asset = { type: 'FIXED_INCOME', quantity: 10, totalCost: 1000, fixedIncomeRate: 12, maturityDate: maturity, taxLots: [{ date: lotDate, quantity: 10, price: 100 }] };
+        expect(accrueFixedIncomeValue(asset, { cdiRate: CDI, calcDate })).toBeCloseTo(10 * 100 * Math.pow(rateDaily, bd), 4);
     });
 });
 

@@ -50,12 +50,9 @@
       gtag('config', 'G-V9QW6ZJEQW');
     </script>
 
-    <!-- Preconnects para performance -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-
-    <!-- Fontes — Manrope (tipografia do design system) -->
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <!-- Fontes — Manrope self-hosted (B2: remove dependência do Google Fonts CDN;
+         @font-face fica em src/index.css, fingerprintado pelo Vite e precachado
+         pelo Service Worker junto do resto do shell do app). -->
   </head>
   <body>
     <!-- Anti-FOUC: aplica data-theme antes do React hidratar para evitar flash de tema errado.

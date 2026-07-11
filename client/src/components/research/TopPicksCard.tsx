@@ -416,21 +416,21 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                                             <div className="flex-1 grid grid-cols-3 gap-3 w-full">
                                                 <div>
                                                     <p className="text-[7px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
-                                                        <span>Qualidade</span> <span>{pick.metrics?.structural?.quality || 50}</span>
+                                                        <span>Qualidade</span> <span>{pick.metrics?.structural?.quality ?? 50}</span>
                                                     </p>
-                                                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{ width: `${pick.metrics?.structural?.quality || 50}%` }}></div></div>
+                                                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{ width: `${pick.metrics?.structural?.quality ?? 50}%` }}></div></div>
                                                 </div>
                                                 <div>
                                                     <p className="text-[7px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
-                                                        <span>Valuation</span> <span>{pick.metrics?.structural?.valuation || 50}</span>
+                                                        <span>Valuation</span> <span>{pick.metrics?.structural?.valuation ?? 50}</span>
                                                     </p>
-                                                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${pick.metrics?.structural?.valuation || 50}%` }}></div></div>
+                                                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${pick.metrics?.structural?.valuation ?? 50}%` }}></div></div>
                                                 </div>
                                                 <div>
                                                     <p className="text-[7px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
-                                                        <span>Segurança</span> <span>{pick.metrics?.structural?.risk || 50}</span>
+                                                        <span>Segurança</span> <span>{pick.metrics?.structural?.risk ?? 50}</span>
                                                     </p>
-                                                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${pick.metrics?.structural?.risk || 50}%` }}></div></div>
+                                                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${pick.metrics?.structural?.risk ?? 50}%` }}></div></div>
                                                 </div>
                                             </div>
                                         </div>

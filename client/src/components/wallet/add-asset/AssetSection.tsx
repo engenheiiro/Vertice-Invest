@@ -1,5 +1,5 @@
 import React, { type Dispatch, type SetStateAction } from 'react';
-import { Search, Loader2, Edit3, ShieldCheck, PiggyBank, Tag } from 'lucide-react';
+import { Search, Loader2, Edit3, PiggyBank, Percent, Tag } from 'lucide-react';
 import { Input } from '../../ui/Input';
 import type { Asset, AssetType } from '../../../contexts/WalletContext';
 import type { AssetFormState } from '../../../utils/assetTransaction';
@@ -81,23 +81,43 @@ export const AssetSection: React.FC<AssetSectionProps> = ({
                     </div>
 
                     {transactionType === 'BUY' && (isNew || noReserves) && (
-                        <Input
-                            label="Nome do Cofrinho"
-                            placeholder="Ex: Reserva de Emergência, Viagem, Carro novo..."
-                            value={form.name}
-                            onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-                            containerClassName="mb-0"
-                            className="px-4 py-3"
-                            maxLength={120}
-                        />
+                        <>
+                            <Input
+                                label="Nome do Cofrinho"
+                                placeholder="Ex: Reserva de Emergência, Viagem, Carro novo..."
+                                value={form.name}
+                                onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
+                                containerClassName="mb-0"
+                                className="px-4 py-3"
+                                maxLength={120}
+                            />
+
+                            {/* I4: rentabilidade da reserva (% do CDI), editável no cadastro.
+                                Default 100% (liquidez diária). Só aparece ao CRIAR um cofrinho —
+                                aportes a um cofrinho existente preservam a taxa dele. */}
+                            <div className="relative">
+                                <Input
+                                    label="Rentabilidade (% do CDI)"
+                                    placeholder="Ex: 100"
+                                    value={form.rate}
+                                    onChange={(e) => setForm(prev => ({ ...prev, rate: e.target.value }))}
+                                    containerClassName="mb-0"
+                                    className="px-4 py-3"
+                                />
+                                <Percent className="absolute right-3 top-9 text-slate-600 pointer-events-none" size={16} />
+                                <p className="text-[10px] text-slate-500 mt-1 ml-1">
+                                    Quanto a reserva rende. <strong className="text-slate-400">100 = 100% do CDI</strong> (padrão). Poupança ≈ 70%; CDB de liquidez diária costuma pagar 100–110%.
+                                </p>
+                            </div>
+                        </>
                     )}
 
-                    <div className="flex items-center gap-2 px-3 py-2 bg-emerald-900/20 border border-emerald-900/50 rounded-lg">
-                        <ShieldCheck size={14} className="text-emerald-500" />
-                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">
-                            Rentabilidade: 100% do CDI (Padrão)
-                        </span>
-                    </div>
+                    {transactionType === 'BUY' && (
+                        <p className="text-[10px] text-slate-500 leading-snug ml-1">
+                            <strong className="text-slate-400">Reserva / Caixa</strong> é dinheiro parado para emergência (rende conforme o % do CDI acima, sem vencimento) e fica <strong className="text-slate-400">fora da Distribuição da Carteira e da Distribuição Ideal</strong>.
+                            Para um título com taxa própria — Tesouro, CDB, LCI/LCA — escolha a classe <strong className="text-amber-400">Renda Fixa</strong>.
+                        </p>
+                    )}
                 </div>
             );
         }
@@ -163,6 +183,13 @@ export const AssetSection: React.FC<AssetSectionProps> = ({
                 {(form.type === 'STOCK_US' || (form.type === 'ETF' && etfMarket === 'US')) && (
                     <p className="text-[10px] text-blue-400/60 mt-1 ml-1">
                         Valores em dólar. Convertido para R$ pela cotação do dia.
+                    </p>
+                )}
+
+                {form.type === 'FIXED_INCOME' && (
+                    <p className="text-[10px] text-slate-500 mt-1 ml-1 leading-snug">
+                        Busque no catálogo do Tesouro ou digite o nome de um CDB/LCI para criá-lo.
+                        O tipo de rendimento (% do CDI, prefixado, IPCA+, Selic+) é definido abaixo, em <strong className="text-slate-400">Valores</strong>.
                     </p>
                 )}
 

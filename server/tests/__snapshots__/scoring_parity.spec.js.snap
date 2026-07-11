@@ -1975,6 +1975,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "type": "penalty",
     },
     {
+      "category": "Perfil Moderado",
+      "factor": "Alavancagem Elevada (DL/EBITDA: 2.7x)",
+      "points": -10,
+      "type": "penalty",
+    },
+    {
       "category": "Perfil Arrojado",
       "factor": "Base Arrojada",
       "points": 35,
@@ -1996,6 +2002,12 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "category": "Perfil Arrojado",
       "factor": "Tendência de Baixa (preço 79% abaixo da SMA200)",
       "points": -14,
+      "type": "penalty",
+    },
+    {
+      "category": "Perfil Arrojado",
+      "factor": "Alavancagem Elevada (DL/EBITDA: 2.7x)",
+      "points": -8,
       "type": "penalty",
     },
     {

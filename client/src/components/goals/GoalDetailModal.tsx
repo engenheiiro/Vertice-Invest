@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { useToast } from '../../contexts/ToastContext';
+import { useWallet } from '../../contexts/WalletContext';
 import { useConfirm } from '../../hooks/useConfirm';
 import { goalsService, type Goal } from '../../services/goals';
 import { formatCurrency, formatCompact } from '../../utils/format';
@@ -57,6 +58,7 @@ const MILESTONES = [25, 50, 75, 100];
 
 export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClose, goalId, privacy }) => {
   const { addToast } = useToast();
+  const { activeWalletId } = useWallet();
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { theme: uiTheme } = useTheme();
@@ -69,15 +71,15 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
   const celebratedRef = useRef<number>(0);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['goal', goalId],
-    queryFn: () => goalsService.getGoal(goalId),
+    queryKey: ['goal', goalId, activeWalletId],
+    queryFn: () => goalsService.getGoal(goalId, activeWalletId),
     enabled: isOpen && !!goalId,
   });
 
   const goal: Goal | undefined = data?.goal;
 
   const updateMutation = useMutation({
-    mutationFn: (payload: Partial<{ monthlyTarget: number; lastCelebratedMilestone: number }>) => goalsService.updateGoal(goalId, payload),
+    mutationFn: (payload: Partial<{ monthlyTarget: number; lastCelebratedMilestone: number }>) => goalsService.updateGoal(goalId, payload, activeWalletId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] });
       queryClient.invalidateQueries({ queryKey: ['goal', goalId] });
@@ -85,7 +87,7 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
   });
 
   const deleteGoalMutation = useMutation({
-    mutationFn: () => goalsService.deleteGoal(goalId),
+    mutationFn: () => goalsService.deleteGoal(goalId, activeWalletId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] });
       addToast('Meta removida.', 'success');
@@ -95,7 +97,7 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
   });
 
   const deleteContribMutation = useMutation({
-    mutationFn: (cid: string) => goalsService.deleteContribution(goalId, cid),
+    mutationFn: (cid: string) => goalsService.deleteContribution(goalId, cid, activeWalletId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] });
       queryClient.invalidateQueries({ queryKey: ['goal', goalId] });

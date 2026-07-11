@@ -1,13 +1,17 @@
 /**
  * Reconstrói o histórico patrimonial (WalletSnapshot + cota/TWRR) de TODAS as
- * contas a partir das transações reais. Corrige carteiras cujo quotaPrice ficou
- * travado em ~100 (TWRR plano) ou com snapshots corrompidos.
+ * carteiras a partir das transações reais. Corrige carteiras cujo quotaPrice
+ * ficou travado em ~100 (TWRR plano) ou com snapshots corrompidos.
  *
  * Diferente de POST /wallet/fix-snapshots (que só APAGA snapshots ruins), este
  * script recalcula tudo via financialService.rebuildUserHistory.
  *
+ * Fase 2 (múltiplas carteiras): o histórico é POR CARTEIRA, não por usuário —
+ * um usuário com 2 carteiras gera 2 reconstruções independentes.
+ *
  * Uso: npm run rebuild:history
- *      npm run rebuild:history -- --user=<userId>   (uma conta só)
+ *      npm run rebuild:history -- --user=<userId>     (todas as carteiras de 1 usuário)
+ *      npm run rebuild:history -- --wallet=<walletId>  (1 carteira só)
  */
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
@@ -27,36 +31,42 @@ const run = async () => {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('📡 Conectado ao MongoDB...\n');
 
-    // Permite reconstruir uma conta específica: --user=<id>
     const userArg = process.argv.find((a) => a.startsWith('--user='));
+    const walletArg = process.argv.find((a) => a.startsWith('--wallet='));
     const targetUser = userArg ? userArg.split('=')[1] : null;
+    const targetWallet = walletArg ? walletArg.split('=')[1] : null;
 
-    // Só contas que têm transações (as únicas com histórico a reconstruir).
-    const userIds = targetUser
-      ? [targetUser]
-      : (await AssetTransaction.distinct('user')).map((id) => id.toString());
+    // Só carteiras que têm transações (as únicas com histórico a reconstruir).
+    const matchStage = {};
+    if (targetUser) matchStage.user = new mongoose.Types.ObjectId(targetUser);
+    if (targetWallet) matchStage.wallet = new mongoose.Types.ObjectId(targetWallet);
 
-    if (userIds.length === 0) {
-      console.log('Nenhuma conta com transações encontrada.');
+    const pairs = await AssetTransaction.aggregate([
+      ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
+      { $group: { _id: { user: '$user', wallet: '$wallet' } } },
+    ]);
+
+    if (pairs.length === 0) {
+      console.log('Nenhuma carteira com transações encontrada.');
       process.exit(0);
     }
 
-    console.log(`🔧 Reconstruindo histórico de ${userIds.length} conta(s)...\n`);
+    console.log(`🔧 Reconstruindo histórico de ${pairs.length} carteira(s)...\n`);
 
     let ok = 0;
     let failed = 0;
-    for (let i = 0; i < userIds.length; i++) {
-      const userId = userIds[i];
-      const label = `[${i + 1}/${userIds.length}] ${userId}`;
+    for (let i = 0; i < pairs.length; i++) {
+      const { user, wallet } = pairs[i]._id;
+      const label = `[${i + 1}/${pairs.length}] user=${user} wallet=${wallet}`;
       try {
-        await financialService.rebuildUserHistory(userId);
+        await financialService.rebuildUserHistory(user, wallet);
         ok++;
         console.log(`✅ ${label}`);
       } catch (err) {
         failed++;
         console.error(`❌ ${label} — ${err.message}`);
       }
-      // Respiro entre contas para não saturar as APIs externas de cotação.
+      // Respiro entre carteiras para não saturar as APIs externas de cotação.
       await sleep(300);
     }
 

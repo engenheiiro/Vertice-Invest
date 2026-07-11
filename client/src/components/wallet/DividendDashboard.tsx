@@ -34,7 +34,7 @@ export const DividendDashboard = () => {
     const [simulatorContribution, setSimulatorContribution] = useState<string>('0');
 
     const { isDemoMode } = useDemo();
-    const { kpis } = useWallet();
+    const { kpis, activeWalletId } = useWallet();
 
     useEffect(() => {
         const load = async () => {
@@ -48,7 +48,7 @@ export const DividendDashboard = () => {
             }
 
             try {
-                const res = await walletService.getDividends();
+                const res = await walletService.getDividends(activeWalletId);
                 const cleanHistory = Array.isArray(res?.history) ? res.history : [];
                 while(cleanHistory.length > 0 && cleanHistory[0].value === 0) {
                     cleanHistory.shift();
@@ -69,7 +69,7 @@ export const DividendDashboard = () => {
             }
         };
         load();
-    }, [isDemoMode]);
+    }, [isDemoMode, activeWalletId]);
 
     const filteredHistory = useMemo(() => {
         if (timeRange === '12M') {

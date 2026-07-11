@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeSubAllocationReal, fixedIncomeSubKey, usSubKeyOf, hasSubTargets, splitContributionBySubMeta } from './allocation';
+import { computeSubAllocationReal, fixedIncomeSubKey, usSubKeyOf, hasSubTargets, splitContributionBySubMeta, isReserveAsset, allocationBucket, sumReserveValue } from './allocation';
 import type { Asset } from '../contexts/WalletContext';
 
 const mkAsset = (partial: Partial<Asset>): Asset => ({
@@ -18,12 +18,21 @@ const mkAsset = (partial: Partial<Asset>): Asset => ({
 });
 
 describe('fixedIncomeSubKey', () => {
-    it('mapeia IPCA, Selic/CDI (POS), PRE e legado', () => {
+    it('mapeia índice explícito: IPCA, Selic/CDI (POS), PRE', () => {
         expect(fixedIncomeSubKey({ fixedIncomeIndex: 'IPCA' })).toBe('IPCA');
         expect(fixedIncomeSubKey({ fixedIncomeIndex: 'SELIC' })).toBe('POS');
         expect(fixedIncomeSubKey({ fixedIncomeIndex: 'CDI' })).toBe('POS');
         expect(fixedIncomeSubKey({ fixedIncomeIndex: 'PRE' })).toBe('PRE');
-        expect(fixedIncomeSubKey({ fixedIncomeIndex: null })).toBe('PRE'); // legado
+    });
+
+    it('sem índice (%CDI manual): rate > 50 → pós-fixado; ≤ 50 → prefixado (espelha o accrual)', () => {
+        // Bug corrigido: "100% do CDI" (rate 100, sem índice) é POS, não PRE.
+        expect(fixedIncomeSubKey({ fixedIncomeIndex: null, fixedIncomeRate: 100 })).toBe('POS');
+        expect(fixedIncomeSubKey({ fixedIncomeIndex: null, fixedIncomeRate: 110 })).toBe('POS');
+        // Prefixado legado (sem índice, taxa cheia a.a. ≤ 50).
+        expect(fixedIncomeSubKey({ fixedIncomeIndex: null, fixedIncomeRate: 12 })).toBe('PRE');
+        // Rate ausente cai em 100 (%CDI), igual ao accrual → POS.
+        expect(fixedIncomeSubKey({ fixedIncomeIndex: null })).toBe('POS');
     });
 });
 
@@ -83,6 +92,18 @@ describe('computeSubAllocationReal', () => {
         expect(r.FIXED_INCOME.pct.POS).toBeCloseTo(32, 5);
     });
 
+    it('CDB %CDI manual (sem índice, rate > 50) conta como pós-fixado, não prefixado', () => {
+        const assets = [
+            mkAsset({ type: 'FIXED_INCOME', fixedIncomeIndex: null, fixedIncomeRate: 100, totalValue: 7000 }), // 100% CDI → POS
+            mkAsset({ type: 'FIXED_INCOME', fixedIncomeIndex: null, fixedIncomeRate: 12, totalValue: 3000 }),  // 12% a.a. → PRE
+        ];
+        const r = computeSubAllocationReal(assets);
+        expect(r.FIXED_INCOME.value.POS).toBe(7000);
+        expect(r.FIXED_INCOME.value.PRE).toBe(3000);
+        expect(r.FIXED_INCOME.pct.POS).toBeCloseTo(70, 5);
+        expect(r.FIXED_INCOME.pct.PRE).toBeCloseTo(30, 5);
+    });
+
     it('agrupa Exterior por usSubType (null → STOCK)', () => {
         const assets = [
             mkAsset({ type: 'STOCK_US', usSubType: 'REIT', totalValue: 200 }),
@@ -107,6 +128,48 @@ describe('computeSubAllocationReal', () => {
         expect(r.FIXED_INCOME.total).toBe(0);
         expect(r.STOCK_US.total).toBe(0);
         expect(r.STOCK_US.total).toBe(0);
+    });
+});
+
+describe('C1 — isReserveAsset / allocationBucket / sumReserveValue', () => {
+    it('isReserveAsset: usa a flag explícita quando presente', () => {
+        expect(isReserveAsset(mkAsset({ type: 'FIXED_INCOME', isReserve: true }))).toBe(true);
+        expect(isReserveAsset(mkAsset({ type: 'FIXED_INCOME', isReserve: false }))).toBe(false);
+        expect(isReserveAsset(mkAsset({ type: 'CASH', isReserve: false }))).toBe(false); // CASH explicitamente NÃO-reserva
+    });
+
+    it('isReserveAsset: fallback para posições sem a flag (CASH = reserva)', () => {
+        expect(isReserveAsset(mkAsset({ type: 'CASH', isReserve: undefined }))).toBe(true);
+        expect(isReserveAsset(mkAsset({ type: 'FIXED_INCOME', isReserve: undefined }))).toBe(false);
+        expect(isReserveAsset(mkAsset({ type: 'STOCK', isReserve: undefined }))).toBe(false);
+    });
+
+    it('allocationBucket: reserva (qualquer tipo) → CASH; senão a própria classe', () => {
+        expect(allocationBucket(mkAsset({ type: 'FIXED_INCOME', isReserve: true }))).toBe('CASH');
+        expect(allocationBucket(mkAsset({ type: 'FIXED_INCOME', isReserve: false }))).toBe('FIXED_INCOME');
+        expect(allocationBucket(mkAsset({ type: 'CASH' }))).toBe('CASH');
+        expect(allocationBucket(mkAsset({ type: 'STOCK' }))).toBe('STOCK');
+    });
+
+    it('sumReserveValue: soma só os ativos de reserva', () => {
+        const assets = [
+            mkAsset({ type: 'CASH', totalValue: 5000 }),                        // reserva (fallback)
+            mkAsset({ type: 'FIXED_INCOME', isReserve: true, totalValue: 3000 }), // RF marcada como reserva
+            mkAsset({ type: 'FIXED_INCOME', isReserve: false, totalValue: 2000 }),// RF investimento
+            mkAsset({ type: 'STOCK', totalValue: 9000 }),                        // investimento
+        ];
+        expect(sumReserveValue(assets)).toBe(8000);
+    });
+
+    it('computeSubAllocationReal: RF marcada como reserva NÃO entra na ramificação', () => {
+        const assets = [
+            mkAsset({ type: 'FIXED_INCOME', fixedIncomeIndex: 'IPCA', totalValue: 6000 }),                 // investimento
+            mkAsset({ type: 'FIXED_INCOME', fixedIncomeIndex: 'SELIC', isReserve: true, totalValue: 4000 }),// reserva → fora
+        ];
+        const r = computeSubAllocationReal(assets);
+        expect(r.FIXED_INCOME.total).toBe(6000);      // só a IPCA investimento
+        expect(r.FIXED_INCOME.value.IPCA).toBe(6000);
+        expect(r.FIXED_INCOME.value.POS).toBe(0);     // a Selic-reserva ficou de fora
     });
 });
 

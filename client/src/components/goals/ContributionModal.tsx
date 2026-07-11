@@ -6,6 +6,7 @@ import { Input } from '../ui/Input';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { Button } from '../ui/Button';
 import { useToast } from '../../contexts/ToastContext';
+import { useWallet } from '../../contexts/WalletContext';
 import { goalsService, type Goal } from '../../services/goals';
 import { parseCurrencyToFloat, getLocalDateString } from '../../utils/assetTransaction';
 import { formatMonths } from './goalTheme';
@@ -18,6 +19,7 @@ interface ContributionModalProps {
 
 export const ContributionModal: React.FC<ContributionModalProps> = ({ isOpen, onClose, goal }) => {
   const { addToast } = useToast();
+  const { activeWalletId } = useWallet();
   const queryClient = useQueryClient();
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(getLocalDateString());
@@ -27,7 +29,7 @@ export const ContributionModal: React.FC<ContributionModalProps> = ({ isOpen, on
   const mutation = useMutation({
     mutationFn: () => {
       const value = parseCurrencyToFloat(amount);
-      return goalsService.addContribution(goal._id, { amount: value, date, note: note || undefined });
+      return goalsService.addContribution(goal._id, { amount: value, date, note: note || undefined }, activeWalletId);
     },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['goals'] });

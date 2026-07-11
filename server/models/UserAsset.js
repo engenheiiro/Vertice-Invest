@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 
 const UserAssetSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  // Carteira dona deste ativo (Fase 2 — múltiplas carteiras).
+  wallet: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet', required: true },
   ticker: { type: String, required: true, uppercase: true },
   // Nome amigável (ex.: nome do "cofrinho" de uma Reserva/Caixa, ou nome do título
   // de Renda Fixa). Para ativos de mercado o nome vem da cotação ao vivo.
@@ -35,6 +37,11 @@ const UserAssetSchema = new mongoose.Schema({
   fixedIncomeIndex: { type: String, enum: ['SELIC', 'CDI', 'IPCA', 'PRE', null], default: null },
   fixedIncomeSpread: { type: Number, default: 0 }, // Spread a.a. sobre o índice (%)
 
+  // C2: Vencimento do título de Renda Fixa. No vencimento o accrual CONGELA
+  // (para de render) e o ativo é marcado VENCIDO na UI, que sugere resgate —
+  // SEM auto-liquidação. null = sem vencimento (RF perpétua / CASH nunca vence).
+  maturityDate: { type: Date, default: null },
+
   // --- Sub-tipo de ativo do Exterior (ramificação STOCK_US) ---
   // STOCK | ETF | REIT | DOLLAR. null = não classificado (auto-heurística decide).
   // usSubTypeManual=true: usuário definiu manualmente; a heurística NÃO sobrescreve.
@@ -44,10 +51,21 @@ const UserAssetSchema = new mongoose.Schema({
   // --- Feature: Tags Personalizadas ---
   tags: { type: [String], default: [] }, // Ex: ["Aposentadoria", "Viagem", "Risco"]
 
+  // --- C1: Reserva separada (flag explícita, desacoplada do `type`) ---
+  // true  → ativo é RESERVA: sai da base de alocação (donut/percentuais) e é
+  //         listado em "Caixa / Reserva", independentemente do type (CASH ou RF).
+  // false → ativo é INVESTIMENTO: entra na distribuição e no grupo da sua classe.
+  // CASH nasce true (reserva por natureza); FIXED_INCOME nasce false (é
+  // investimento) e o usuário pode marcar "Guardar como Reserva separada".
+  isReserve: { type: Boolean, default: false },
+
   updatedAt: { type: Date, default: Date.now }
 });
 
-UserAssetSchema.index({ user: 1, ticker: 1 }, { unique: true });
+// Fase 2: ticker é único POR CARTEIRA, não mais por usuário — a mesma ação pode
+// existir em duas carteiras diferentes do mesmo usuário como posições isoladas.
+UserAssetSchema.index({ wallet: 1, ticker: 1 }, { unique: true });
+UserAssetSchema.index({ user: 1 }); // consultas "todas as carteiras do usuário" (rebalance/metas)
 
 const UserAsset = mongoose.models.UserAsset || mongoose.model('UserAsset', UserAssetSchema);
 export default UserAsset;

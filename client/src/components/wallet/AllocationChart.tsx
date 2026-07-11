@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useWallet, AssetType, AllocationMap, SubAllocationMap, DEFAULT_SUB_ALLOCATION } from '../../contexts/WalletContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Settings, Check, X, DollarSign, ChevronDown, ChevronRight, ShieldCheck, PlusCircle, ArrowRight, TrendingUp } from 'lucide-react';
@@ -7,7 +7,7 @@ import { Button } from '../ui/Button';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Sector } from 'recharts';
 import { formatCompact as fmtCompact } from '../../utils/format';
 import { useToast } from '../../contexts/ToastContext';
-import { computeSubAllocationReal, hasSubTargets } from '../../utils/allocation';
+import { computeSubAllocationReal, hasSubTargets, allocationBucket } from '../../utils/allocation';
 
 // Cores
 const COLORS: Record<AssetType, string> = {
@@ -74,9 +74,14 @@ interface AllocationChartProps {
     /** View inicial do toggle Atual/Ideal. 'IDEAL' é útil em carteira vazia,
      * quando o usuário quer definir a alocação-alvo antes de cadastrar ativos. */
     initialViewMode?: 'CURRENT' | 'IDEAL';
+    /** (B1) Abre o editor automaticamente com foco na Meta de Renda Passiva —
+     * usado pelo link "Definir meta" do Cofre de Dividendos no Dashboard. */
+    autoOpenDividendGoal?: boolean;
+    /** Notifica o pai para limpar o flag após consumido (evita reabrir em re-renders). */
+    onAutoOpenHandled?: () => void;
 }
 
-export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: AllocationChartProps) => {
+export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOpenDividendGoal = false, onAutoOpenHandled }: AllocationChartProps) => {
     const { assets, kpis, targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation, updateTargets, isPrivacyMode } = useWallet();
     const { addToast } = useToast();
     const { theme } = useTheme();
@@ -99,12 +104,15 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
     const [expandedEdit, setExpandedEdit] = useState<Record<string, boolean>>({});
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
-    // 1. Calcular Valores Atuais — bucketiza pela classe (type). ETF nacional é classe
-    // própria; ETFs internacionais têm type STOCK_US e contam no Exterior.
+    // 1. Calcular Valores Atuais — bucketiza pelo BALDE DE ALOCAÇÃO (C1), não pelo
+    // type cru: ativos de Reserva (CASH ou RF marcada) caem em CASH e saem da base;
+    // RF não-reserva fica em FIXED_INCOME e entra na distribuição. ETF nacional é
+    // classe própria; ETFs internacionais têm type STOCK_US e contam no Exterior.
     const currentValues = useMemo(() => {
         const vals: Record<string, number> = { STOCK: 0, FII: 0, STOCK_US: 0, ETF: 0, CRYPTO: 0, FIXED_INCOME: 0, OURO: 0, CASH: 0 };
         assets.forEach(asset => {
-            vals[asset.type] = (vals[asset.type] || 0) + asset.totalValue;
+            const bucket = allocationBucket(asset);
+            vals[bucket] = (vals[bucket] || 0) + asset.totalValue;
         });
         return vals;
     }, [assets]);
@@ -208,6 +216,21 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
         setExpandedEdit({});
         setIsEditing(true);
     };
+
+    // (B1) Cofre de Dividendos manda direto para cá em vez de só abrir a Carteira.
+    const dividendGoalInputRef = React.useRef<HTMLInputElement>(null);
+    useEffect(() => {
+        if (!autoOpenDividendGoal) return;
+        openEditor();
+        onAutoOpenHandled?.();
+        // Espera o overlay de edição montar antes de rolar/focar o campo.
+        const timer = setTimeout(() => {
+            dividendGoalInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            dividendGoalInputRef.current?.focus();
+        }, 50);
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoOpenDividendGoal]);
 
     // Valores monetários respeitam o modo privacidade (••••••); percentuais/proporções
     // do donut continuam visíveis (não revelam patrimônio).
@@ -513,6 +536,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT' }: Allo
                                 <div className="flex-1 relative">
                                     <span className="absolute left-3 top-1.5 text-xs text-slate-500">R$</span>
                                     <input
+                                        ref={dividendGoalInputRef}
                                         type="number"
                                         min="0"
                                         value={tempDividendGoal}

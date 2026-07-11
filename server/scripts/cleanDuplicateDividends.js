@@ -150,20 +150,25 @@ const run = async () => {
         }
 
         if (doRebuild && affectedTickers.size > 0) {
-            const userIds = (await AssetTransaction.distinct('user', {
-                ticker: { $in: [...affectedTickers] },
-            })).map((id) => id.toString());
+            // Fase 2: o histórico é por CARTEIRA — reconstrói cada carteira afetada,
+            // não cada usuário (um usuário pode ter o ticker em mais de uma carteira).
+            const pairs = await AssetTransaction.aggregate([
+                { $match: { ticker: { $in: [...affectedTickers] } } },
+                { $group: { _id: { user: '$user', wallet: '$wallet' } } },
+            ]);
 
-            console.log(`🔧 Reconstruindo histórico de ${userIds.length} conta(s) afetada(s)...\n`);
+            console.log(`🔧 Reconstruindo histórico de ${pairs.length} carteira(s) afetada(s)...\n`);
             let ok = 0, failed = 0;
-            for (let i = 0; i < userIds.length; i++) {
+            for (let i = 0; i < pairs.length; i++) {
+                const { user, wallet } = pairs[i]._id;
+                const label = `user=${user} wallet=${wallet}`;
                 try {
-                    await financialService.rebuildUserHistory(userIds[i]);
+                    await financialService.rebuildUserHistory(user, wallet);
                     ok++;
-                    console.log(`✅ [${i + 1}/${userIds.length}] ${userIds[i]}`);
+                    console.log(`✅ [${i + 1}/${pairs.length}] ${label}`);
                 } catch (err) {
                     failed++;
-                    console.error(`❌ [${i + 1}/${userIds.length}] ${userIds[i]} — ${err.message}`);
+                    console.error(`❌ [${i + 1}/${pairs.length}] ${label} — ${err.message}`);
                 }
                 await sleep(300);
             }

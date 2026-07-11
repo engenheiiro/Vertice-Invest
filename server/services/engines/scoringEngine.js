@@ -5,7 +5,23 @@ import {
     BAZIN_MIN_YIELD,
     BAZIN_NTNB_PREMIUM,
     FII_YIELD_TRAP_THRESHOLD,
+    CYCLICAL_PEAK_PL_FLOOR,
+    CYCLICAL_PEAK_DEF_DISCOUNT,
+    CYCLICAL_PEAK_MOD_DISCOUNT,
+    CYCLICAL_TREND_MULTIPLIER,
+    RATE_SENSITIVE_SELIC_HIGH,
+    CYCLICAL_RATE_DEF_DISCOUNT,
+    CYCLICAL_RATE_MOD_DISCOUNT,
+    LEVERAGE_CRITICAL_MOD_DISCOUNT,
+    LEVERAGE_CRITICAL_BOLD_DISCOUNT,
+    LEVERAGE_ELEVATED_MOD_DISCOUNT,
+    LEVERAGE_ELEVATED_BOLD_DISCOUNT,
+    LEVERAGE_CRITICAL_BOLD_CAP,
+    LEVERAGE_CRITICAL_MOD_CAP,
+    GOVERNANCE_STATE_DEF_DISCOUNT,
+    GOVERNANCE_STATE_MOD_DISCOUNT,
 } from '../../config/financialConstants.js';
+import { isCyclicalSector, isStateControlled } from '../../config/sectorTaxonomy.js';
 
 const safeVal = (val) => {
     if (val === Infinity || val === -Infinity || isNaN(val) || val === null || val === undefined) return 0;
@@ -129,6 +145,11 @@ const isEligibleForDefensive = (asset, context) => {
         // muitos bônus de DY/ROE compensem essa fraqueza estrutural e entrem no DEFENSIVE.
         if (m.beta >= 1.5) return false;
         const sector = asset.sector || '';
+        // Setor cíclico (INDUSTRIAL/COMMODITIES) NUNCA é elegível ao perfil Defensivo:
+        // DY/P/L baratos numa cíclica em queda são lucro de PICO de ciclo (value-trap),
+        // não segurança. Barra na origem — antes de qualquer bônus de DY/ROE (caso SHUL4).
+        // Continua elegível a MODERATE/BOLD via scoreStockProfiles.
+        if (isCyclicalSector(sector)) return false;
         const isSafeSector = DEFENSIVE_SAFE_SECTORS_BR.some(keyword => sector.includes(keyword));
         if (!isSafeSector) {
             if (m.dy < 6.0 || m.pl > 10) return false;
@@ -272,6 +293,7 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
     const m = asset.metrics;
     const upside = asset.price > 0 ? (valuationData.fairPrice / asset.price) - 1 : 0;
     let defScore = 0, modScore = 0, boldScore = 0;
+    let criticalLeverage = false; // DL/EBITDA > 3.5x — dispara teto em MODERATE/BOLD abaixo
     {
         // Setor financeiro pode apresentar crescimento de receita artificialmente alto por
         // base-year ou reestruturações. Aplica teto de 30% para evitar PEG/Hyper Growth indevidos.
@@ -517,6 +539,7 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
         // re-selecionadas o tempo todo). Aqui o desvio negativo da SMA200 vira penalidade
         // graduada — sinal de momentum que faltava. Defensivo/Moderado levam cheio (não
         // devem segurar faca caindo); Arrojado tolera um pouco mais (apostas de reversão).
+        const isCyclical = isCyclicalSector(asset.sector);
         if (m.sma200 > 0 && asset.price > 0) {
             const devSMA = (asset.price - m.sma200) / m.sma200;
             let trendPenalty = 0;
@@ -525,7 +548,11 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
             else if (devSMA < -0.08) trendPenalty = 6;   // 8–15% abaixo
             if (trendPenalty > 0) {
                 const pctBelow = (Math.abs(devSMA) * 100).toFixed(0);
+                // Arrojado tolera mais (aposta de reversão) → 0.7× do sinal base.
                 const boldTrend = Math.round(trendPenalty * 0.7);
+                // Downtrend estrutural numa cíclica é sinal mais forte de reversão de ciclo
+                // que numa não-cíclica — amplifica só Defensivo/Moderado, não o Arrojado.
+                if (isCyclical) trendPenalty = Math.round(trendPenalty * CYCLICAL_TREND_MULTIPLIER);
                 defScore -= trendPenalty;
                 modScore -= trendPenalty;
                 boldScore -= boldTrend;
@@ -543,6 +570,78 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
             audit.BOLD.push({ ...note });
         }
 
+        // ── SETOR CÍCLICO — desconto de pico de ciclo + sensibilidade a juros ────────
+        // Cíclicas (INDUSTRIAL/COMMODITIES) já são barradas do gate Defensivo, mas ainda
+        // pontuam em MODERATE/BOLD. Dois riscos que o snapshot pontual não captura:
+        //   (a) PICO DE CICLO: P/L baixo + margem/ROE elevados + preço em downtrend é o
+        //       padrão de lucro inflado rolando o topo — "barato" é ilusório (caso SHUL4).
+        //   (b) JUROS ALTOS: SELIC elevada contrai capex industrial/agro — vento contra
+        //       estrutural para a cíclica, independente do preço.
+        // Poupam o Arrojado (aposta de reversão é legítima lá). Registram fator explícito.
+        if (isCyclical) {
+            const belowSMA = m.sma200 > 0 && asset.price > 0 && asset.price < m.sma200;
+            const peakEarnings = m.pl > 0 && m.pl < CYCLICAL_PEAK_PL_FLOOR
+                && (m.netMargin > 12 || m.roe > 18);
+            if (peakEarnings && belowSMA) {
+                defScore -= CYCLICAL_PEAK_DEF_DISCOUNT;
+                modScore -= CYCLICAL_PEAK_MOD_DISCOUNT;
+                audit.DEFENSIVE.push({ factor: `Pico de Ciclo (P/L ${m.pl.toFixed(1)} baixo + margem alta em queda)`, points: -CYCLICAL_PEAK_DEF_DISCOUNT, type: 'penalty' });
+                audit.MODERATE.push({ factor: `Pico de Ciclo (P/L ${m.pl.toFixed(1)} baixo + margem alta em queda)`, points: -CYCLICAL_PEAK_MOD_DISCOUNT, type: 'penalty' });
+            }
+            const selic = MACRO.SELIC || DEFAULT_SELIC_FALLBACK;
+            if (selic >= RATE_SENSITIVE_SELIC_HIGH) {
+                defScore -= CYCLICAL_RATE_DEF_DISCOUNT;
+                modScore -= CYCLICAL_RATE_MOD_DISCOUNT;
+                audit.DEFENSIVE.push({ factor: `Setor Cíclico em Ciclo Desfavorável (Selic ${selic.toFixed(2)}%)`, points: -CYCLICAL_RATE_DEF_DISCOUNT, type: 'penalty' });
+                audit.MODERATE.push({ factor: `Setor Cíclico em Ciclo Desfavorável (Selic ${selic.toFixed(2)}%)`, points: -CYCLICAL_RATE_MOD_DISCOUNT, type: 'penalty' });
+            }
+        }
+
+        // ── GOVERNANÇA — controle estatal (eixo ortogonal ao setor) ──────────────────
+        // Estatais (Petrobras, BB, Sanepar, Cemig, Copasa, Banrisul, BB Seguridade)
+        // têm dividendo/alocação de capital DISCRICIONÁRIOS pelo controlador político.
+        // O gate de setor seguro deixa banco/utility estatal entrar no Defensivo como
+        // qualquer privada; aqui aplicamos o desconto que faltava para que a estatal
+        // ranqueie ABAIXO de uma privada de fundamentos equivalentes — sem barrá-la
+        // (estatal pode ser bom ativo). Poupa o BOLD (aposta não se importa com quem
+        // controla). Lista curada em sectorTaxonomy (isStateControlled). US não casa.
+        if (isStateControlled(asset.ticker)) {
+            defScore -= GOVERNANCE_STATE_DEF_DISCOUNT;
+            modScore -= GOVERNANCE_STATE_MOD_DISCOUNT;
+            audit.DEFENSIVE.push({ factor: 'Controle Estatal (dividendo/gestão discricionários)', points: -GOVERNANCE_STATE_DEF_DISCOUNT, type: 'penalty' });
+            audit.MODERATE.push({ factor: 'Controle Estatal (dividendo/gestão discricionários)', points: -GOVERNANCE_STATE_MOD_DISCOUNT, type: 'penalty' });
+        }
+
+        // ── ALAVANCAGEM CRÍTICA — desconto em MODERATE/BOLD ──────────────────────────
+        // O desconto de DL/EBITDA elevado já existia, mas só dentro do bloco Defensivo
+        // (e só quando o ativo já era ELEGÍVEL a ele) e no sub-score estrutural de Risco
+        // — que é só tiebreaker/exibição, nunca input do score de MODERATE/BOLD. Uma ação
+        // com alavancagem "Crítica" podia liderar o ranking geral em BOLD sem nenhum
+        // desconto por dívida (caso MTRE3: DL/EBITDA 4.1x, #1 geral em BOLD score 99).
+        // MODERATE/BOLD toleram volatilidade por natureza, mas risco de SOLVÊNCIA é
+        // dimensão distinta — mesmo aposta especulativa deve descontar por risco de
+        // default. Não soma ao -15/-8 já aplicado dentro do Defensivo elegível (evita
+        // duplo desconto); setor financeiro fica de fora (dívida é insumo do negócio).
+        const isFinancialSecForLev = isFinancialSector(asset.sector, ['Financial', 'Insurance', 'Holding']);
+        if (!isFinancialSecForLev) {
+            const evLev = (m.marketCap || 0) + (m.netDebt || 0);
+            if (m.evEbitda > 0 && evLev > 0) {
+                const ebitdaLev = evLev / m.evEbitda;
+                const dlEbitdaLev = m.netDebt / ebitdaLev;
+                if (dlEbitdaLev > 3.5) {
+                    criticalLeverage = true;
+                    modScore -= LEVERAGE_CRITICAL_MOD_DISCOUNT;
+                    boldScore -= LEVERAGE_CRITICAL_BOLD_DISCOUNT;
+                    audit.MODERATE.push({ factor: `Alavancagem Crítica (DL/EBITDA: ${dlEbitdaLev.toFixed(1)}x)`, points: -LEVERAGE_CRITICAL_MOD_DISCOUNT, type: 'penalty' });
+                    audit.BOLD.push({ factor: `Alavancagem Crítica (DL/EBITDA: ${dlEbitdaLev.toFixed(1)}x)`, points: -LEVERAGE_CRITICAL_BOLD_DISCOUNT, type: 'penalty' });
+                } else if (dlEbitdaLev > 2.5) {
+                    modScore -= LEVERAGE_ELEVATED_MOD_DISCOUNT;
+                    boldScore -= LEVERAGE_ELEVATED_BOLD_DISCOUNT;
+                    audit.MODERATE.push({ factor: `Alavancagem Elevada (DL/EBITDA: ${dlEbitdaLev.toFixed(1)}x)`, points: -LEVERAGE_ELEVATED_MOD_DISCOUNT, type: 'penalty' });
+                    audit.BOLD.push({ factor: `Alavancagem Elevada (DL/EBITDA: ${dlEbitdaLev.toFixed(1)}x)`, points: -LEVERAGE_ELEVATED_BOLD_DISCOUNT, type: 'penalty' });
+                }
+            }
+        }
     }
 
     // ── TETO ESPECULATIVO — empresa sem lucro (BR e Exterior) ────────────────────
@@ -571,6 +670,24 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
         if (defScore > SPEC_DEF_CAP) {
             audit.DEFENSIVE.push({ factor: 'Teto Especulativo (empresa sem lucro)', points: SPEC_DEF_CAP - defScore, type: 'penalty' });
             defScore = SPEC_DEF_CAP;
+        }
+    }
+
+    // ── TETO POR ALAVANCAGEM CRÍTICA (BR + Exterior) ─────────────────────────────
+    // O desconto graduado (-15 BOLD / -20 MODERATE) não neutraliza múltiplos extremos:
+    // uma micro-cap com DL/EBITDA > 3.5x e PEG<0.5 / upside>80% ainda liderava o ranking
+    // (MTRE3: 99→84 em BOLD, seguia #2 geral). Risco de SOLVÊNCIA deve limitar a convicção
+    // MÁXIMA independentemente de quão baratos estejam os múltiplos — análogo ao teto
+    // especulativo de empresa sem lucro. Só toca MODERATE/BOLD (o Defensivo já barra via
+    // gate/penalidade); financeiro já foi excluído na marcação de criticalLeverage.
+    if ((asset.type === 'STOCK_US' || asset.type === 'STOCK') && criticalLeverage) {
+        if (boldScore > LEVERAGE_CRITICAL_BOLD_CAP) {
+            audit.BOLD.push({ factor: 'Teto por Alavancagem Crítica (DL/EBITDA > 3.5x)', points: LEVERAGE_CRITICAL_BOLD_CAP - boldScore, type: 'penalty' });
+            boldScore = LEVERAGE_CRITICAL_BOLD_CAP;
+        }
+        if (modScore > LEVERAGE_CRITICAL_MOD_CAP) {
+            audit.MODERATE.push({ factor: 'Teto por Alavancagem Crítica (DL/EBITDA > 3.5x)', points: LEVERAGE_CRITICAL_MOD_CAP - modScore, type: 'penalty' });
+            modScore = LEVERAGE_CRITICAL_MOD_CAP;
         }
     }
 

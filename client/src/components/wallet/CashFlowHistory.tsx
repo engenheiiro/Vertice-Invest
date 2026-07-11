@@ -4,6 +4,7 @@ import { walletService } from '../../services/wallet';
 import { ArrowUpCircle, ArrowDownCircle, Calendar, Loader2, FileText } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
+import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
 import { DEMO_TRANSACTIONS } from '../../data/DEMO_DATA';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
@@ -24,14 +25,15 @@ type FilterType = 'ALL' | 'CASH' | 'TRADE';
 
 export const CashFlowHistory = () => {
     const { user } = useAuth();
+    const { activeWalletId } = useWallet();
     const { isDemoMode } = useDemo();
     const [page, setPage] = useState(1);
     const [activeFilter, setActiveFilter] = useState<FilterType>('ALL');
     const [transactions, setTransactions] = useState<Transaction[]>([]);
 
     const { data, isLoading, isFetching } = useQuery({
-        queryKey: ['cashFlow', user?.id, page, activeFilter],
-        queryFn: () => walletService.getCashFlow(page, 15, activeFilter),
+        queryKey: ['cashFlow', user?.id, activeWalletId, page, activeFilter],
+        queryFn: () => walletService.getCashFlow(page, 15, activeFilter, activeWalletId),
         staleTime: 1000 * 60 * 2,
         enabled: !!user?.id && !isDemoMode // Desativa query real no demo
     });

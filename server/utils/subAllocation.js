@@ -21,14 +21,23 @@ export const SUB_LABELS = {
     STOCK_US: { STOCK: 'Stocks', REIT: 'REITs', ETF: 'ETFs', DOLLAR: 'Dólar' },
 };
 
-/** Sub-tipo de um holding de Renda Fixa a partir do índice contratado. */
-export const fixedIncomeSubKey = (index) => {
+/**
+ * Sub-tipo de um holding de Renda Fixa. Índice explícito manda (IPCA / Selic-CDI /
+ * PRE). Sem índice (legado / CDB %CDI manual) espelha a convenção do accrual
+ * (fixedIncomeDailyFactor): `fixedIncomeRate > 50` = % do CDI → pós-fixado; `≤ 50` =
+ * prefixado a.a. Assim o rótulo bate com o rendimento (um "100% do CDI" é POS, não
+ * PRE). Rate ausente cai em 100 (%CDI), igual ao accrual.
+ */
+export const fixedIncomeSubKey = (index, rate) => {
     switch (index) {
         case 'IPCA': return 'IPCA';
         case 'SELIC':
         case 'CDI': return 'POS';
         case 'PRE': return 'PRE';
-        default: return 'PRE'; // legado / sem índice → prefixado
+        default: {
+            const rawRate = (Number(rate) || 0) > 0 ? Number(rate) : 100;
+            return rawRate > 50 ? 'POS' : 'PRE';
+        }
     }
 };
 
@@ -51,7 +60,7 @@ export const currentValueBySub = (holdings, classType) => {
     const out = Object.fromEntries(keys.map((k) => [k, 0]));
     for (const h of holdings || []) {
         if (h.type !== classType) continue;
-        const key = classType === 'FIXED_INCOME' ? fixedIncomeSubKey(h.fixedIncomeIndex) : usSubKeyOf(h.usSubType);
+        const key = classType === 'FIXED_INCOME' ? fixedIncomeSubKey(h.fixedIncomeIndex, h.fixedIncomeRate) : usSubKeyOf(h.usSubType);
         out[key] = safeCurrency((out[key] || 0) + safeFloat(h.valueBr));
     }
     return out;

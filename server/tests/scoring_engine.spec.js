@@ -201,6 +201,195 @@ describe('scoringEngine — guarda de tendência de baixa (anti value-trap)', ()
     });
 });
 
+describe('scoringEngine — barramento de setor cíclico (caso SHUL4)', () => {
+    // Cíclica "barata" em queda: P/L baixo + margem/ROE de pico + preço abaixo da SMA200.
+    // É o perfil que o scoring antigo premiava como defensivo (value-trap cíclico).
+    const cyclical = (overrides = {}) => makeStock({
+        ticker: 'SHUL4', sector: 'Indústria', price: 6,
+        metrics: {
+            ...makeStock().metrics, sector: 'Indústria',
+            pl: 6, dy: 7.5, roe: 20, netMargin: 15, beta: 1.1, price: 6, sma200: 8, ema50: 8,
+        },
+        ...overrides,
+    });
+
+    it('cíclica NÃO é elegível ao Defensivo — some a base de setor defensivo', () => {
+        const res = scoringEngine.processAsset(cyclical(), DEFAULT_CONTEXT);
+        expect(res._discarded).toBeUndefined();
+        const factors = res.auditLog.map(a => a.factor);
+        expect(factors).not.toContain('Score Base (Setor Defensivo)');
+        expect(factors).toContain('Ineligível para Carteira Defensiva');
+    });
+
+    it('mesma ação num setor defensivo pontua MUITO mais no Defensivo que como cíclica', () => {
+        const asCyclical = scoringEngine.processAsset(cyclical(), DEFAULT_CONTEXT);
+        // Idêntica, porém em setor perene (energia) e sem downtrend → elegível ao Defensivo.
+        const asDefensive = scoringEngine.processAsset(
+            cyclical({ sector: 'Energia Elétrica', metrics: { ...cyclical().metrics, sector: 'Energia Elétrica', price: 9, sma200: 8, ema50: 8 }, price: 9 }),
+            DEFAULT_CONTEXT
+        );
+        expect(asDefensive.scores.DEFENSIVE).toBeGreaterThan(asCyclical.scores.DEFENSIVE);
+    });
+
+    it('aplica desconto de Pico de Ciclo (P/L baixo + margem alta + preço < SMA200)', () => {
+        const res = scoringEngine.processAsset(cyclical(), DEFAULT_CONTEXT);
+        const factors = res.auditLog.map(a => a.factor);
+        expect(factors.some(f => f.startsWith('Pico de Ciclo'))).toBe(true);
+    });
+
+    it('aplica desconto de juros a cíclica quando SELIC ≥ limiar', () => {
+        const res = scoringEngine.processAsset(cyclical(), DEFAULT_CONTEXT); // SELIC 13.75 ≥ 12
+        const factors = res.auditLog.map(a => a.factor);
+        expect(factors.some(f => f.startsWith('Setor Cíclico em Ciclo Desfavorável'))).toBe(true);
+    });
+
+    it('NÃO aplica desconto de juros quando SELIC abaixo do limiar', () => {
+        const res = scoringEngine.processAsset(cyclical(), { MACRO: { ...DEFAULT_CONTEXT.MACRO, SELIC: 9 } });
+        const factors = res.auditLog.map(a => a.factor);
+        expect(factors.some(f => f.startsWith('Setor Cíclico em Ciclo Desfavorável'))).toBe(false);
+    });
+
+    it('não toca ação de setor defensivo (sem fatores cíclicos)', () => {
+        const res = scoringEngine.processAsset(makeStock(), DEFAULT_CONTEXT);
+        const factors = res.auditLog.map(a => a.factor);
+        expect(factors.some(f => f.startsWith('Pico de Ciclo'))).toBe(false);
+        expect(factors.some(f => f.startsWith('Setor Cíclico em Ciclo Desfavorável'))).toBe(false);
+    });
+});
+
+describe('scoringEngine — alavancagem crítica fora do Defensivo (caso MTRE3)', () => {
+    // DL/EBITDA derivado: ev=marketCap+netDebt; ebitda=ev/evEbitda; dlEbitda=netDebt/ebitda.
+    // 400M + 470M = 870M ev; 870M/7.61 ≈ 114.3M ebitda; 470M/114.3M ≈ 4.11x (crítica).
+    const leveraged = (overrides = {}) => makeStock({
+        ticker: 'LEVX3', sector: 'Construção Civil', price: 6,
+        metrics: {
+            ...makeStock().metrics, sector: 'Construção Civil',
+            price: 6, sma200: 6, ema50: 6,
+            pl: 7.28, pvp: 0.39, evEbitda: 7.61, roe: 5.36, netMargin: 7.4,
+            revenueGrowth: 18, dy: 10.99, payout: 78.7,
+            marketCap: 400000000, netDebt: 470000000, avgLiquidity: 1892100,
+            debtToEquity: 0.67,
+        },
+        ...overrides,
+    });
+
+    it('reconhece DL/EBITDA > 3.5 como Alavancagem Crítica e desconta MODERATE/BOLD', () => {
+        const res = scoringEngine.processAsset(leveraged(), DEFAULT_CONTEXT);
+        const crit = res.auditLog.filter(a => a.factor.startsWith('Alavancagem Crítica'));
+        const modCrit = crit.find(a => a.category === 'Perfil Moderado');
+        const boldCrit = crit.find(a => a.category === 'Perfil Arrojado');
+        expect(modCrit?.points).toBe(-20);
+        expect(boldCrit?.points).toBe(-15);
+    });
+
+    it('não desconta MODERATE/BOLD quando a alavancagem está saudável (<2.5x)', () => {
+        const res = scoringEngine.processAsset(
+            leveraged({ metrics: { ...leveraged().metrics, netDebt: 50000000 } }),
+            DEFAULT_CONTEXT
+        );
+        const crit = res.auditLog.filter(a =>
+            a.factor.startsWith('Alavancagem') && (a.category === 'Perfil Moderado' || a.category === 'Perfil Arrojado')
+        );
+        expect(crit.length).toBe(0);
+    });
+
+    it('setor financeiro fica de fora do desconto (dívida é insumo do negócio)', () => {
+        const res = scoringEngine.processAsset(
+            leveraged({ sector: 'Bancos', metrics: { ...leveraged().metrics, sector: 'Bancos' } }),
+            DEFAULT_CONTEXT
+        );
+        const crit = res.auditLog.filter(a =>
+            a.factor.startsWith('Alavancagem') && (a.category === 'Perfil Moderado' || a.category === 'Perfil Arrojado')
+        );
+        expect(crit.length).toBe(0);
+    });
+
+    it('reduz o score MODERATE/BOLD frente ao mesmo ativo sem alavancagem crítica', () => {
+        const withLev = scoringEngine.processAsset(leveraged(), DEFAULT_CONTEXT);
+        const healthy = scoringEngine.processAsset(
+            leveraged({ metrics: { ...leveraged().metrics, netDebt: 50000000 } }),
+            DEFAULT_CONTEXT
+        );
+        expect(withLev.scores.BOLD).toBeLessThan(healthy.scores.BOLD);
+        expect(withLev.scores.MODERATE).toBeLessThan(healthy.scores.MODERATE);
+    });
+
+    it('não duplica o desconto já existente dentro do Defensivo elegível', () => {
+        const eligible = leveraged({
+            sector: 'Energia Elétrica',
+            metrics: {
+                ...leveraged().metrics, sector: 'Energia Elétrica',
+                marketCap: 5000000000, netDebt: 6000000000,
+                dy: 7.5, roe: 18, netMargin: 22,
+            },
+        });
+        const res = scoringEngine.processAsset(eligible, DEFAULT_CONTEXT);
+        const defCrit = res.auditLog.filter(a => a.factor.startsWith('Alavancagem Crítica') && a.category === 'Perfil Defensivo');
+        expect(defCrit.length).toBe(1);
+        expect(defCrit[0].points).toBe(-15);
+        const modCrit = res.auditLog.find(a => a.factor.startsWith('Alavancagem Crítica') && a.category === 'Perfil Moderado');
+        expect(modCrit?.points).toBe(-20);
+    });
+
+    it('aplica TETO por alavancagem crítica: BOLD ≤ 75 e MODERATE ≤ 70', () => {
+        const res = scoringEngine.processAsset(leveraged(), DEFAULT_CONTEXT);
+        // Múltiplos extremos (PEG<0.5, upside alto) manteriam o BOLD acima de 75 sem o teto.
+        expect(res.scores.BOLD).toBeLessThanOrEqual(75);
+        expect(res.scores.MODERATE).toBeLessThanOrEqual(70);
+        const capBold = res.auditLog.find(a => a.factor.startsWith('Teto por Alavancagem Crítica') && a.category === 'Perfil Arrojado');
+        expect(capBold).toBeTruthy();
+    });
+
+    it('NÃO aplica o teto quando a alavancagem não é crítica (≤3.5x)', () => {
+        const res = scoringEngine.processAsset(
+            leveraged({ metrics: { ...leveraged().metrics, netDebt: 50000000 } }),
+            DEFAULT_CONTEXT
+        );
+        const cap = res.auditLog.filter(a => a.factor.startsWith('Teto por Alavancagem Crítica'));
+        expect(cap.length).toBe(0);
+    });
+});
+
+describe('scoringEngine — governança / controle estatal (eixo ortogonal)', () => {
+    // Mesma utility saudável (Energia Elétrica, elegível ao Defensivo), variando só o
+    // ticker: privada (TEST3) vs estatal (CMIG4 / Cemig). O único delta deve ser o
+    // desconto de governança — isola o efeito.
+    const stateUtility = (overrides = {}) => makeStock({
+        ticker: 'CMIG4',
+        metrics: { ...makeStock().metrics, ticker: 'CMIG4' },
+        ...overrides,
+    });
+
+    it('desconta DEFENSIVE (-8) e MODERATE (-4) de estatal, com fator no auditLog', () => {
+        const res = scoringEngine.processAsset(stateUtility(), DEFAULT_CONTEXT);
+        const gov = res.auditLog.filter(a => a.factor.startsWith('Controle Estatal'));
+        const def = gov.find(a => a.category === 'Perfil Defensivo');
+        const mod = gov.find(a => a.category === 'Perfil Moderado');
+        expect(def?.points).toBe(-8);
+        expect(mod?.points).toBe(-4);
+        // Não toca o Arrojado.
+        expect(gov.find(a => a.category === 'Perfil Arrojado')).toBeUndefined();
+    });
+
+    it('estatal ranqueia ABAIXO de uma privada de fundamentos idênticos', () => {
+        const priv = scoringEngine.processAsset(makeStock(), DEFAULT_CONTEXT); // TEST3, privada
+        const state = scoringEngine.processAsset(stateUtility(), DEFAULT_CONTEXT);
+        expect(state.scores.DEFENSIVE).toBe(priv.scores.DEFENSIVE - 8);
+        expect(state.scores.MODERATE).toBe(priv.scores.MODERATE - 4);
+        expect(state.scores.BOLD).toBe(priv.scores.BOLD); // BOLD intacto
+    });
+
+    it('não marca privada nem já-privatizada como estatal', () => {
+        for (const tk of ['TEST3', 'SBSP3', 'ITSA4']) {
+            const res = scoringEngine.processAsset(
+                makeStock({ ticker: tk, metrics: { ...makeStock().metrics, ticker: tk } }),
+                DEFAULT_CONTEXT
+            );
+            expect(res.auditLog.some(a => a.factor.startsWith('Controle Estatal'))).toBe(false);
+        }
+    });
+});
+
 describe('scoringEngine.processAsset — saída de ativo saudável', () => {
     it('não descarta e produz scores por perfil + auditLog + structural', () => {
         const res = scoringEngine.processAsset(makeStock(), DEFAULT_CONTEXT);

@@ -10,6 +10,10 @@ vi.mock('../utils/dbTransaction.js', () => ({ runTransaction: vi.fn(), txError: 
 vi.mock('../models/User.js', () => ({
   default: { findByIdAndUpdate: vi.fn(), findById: vi.fn() },
 }));
+// Fase 2: targetAllocation/targetMonthlyDividendIncome moraram p/ Wallet (por carteira).
+vi.mock('../models/Wallet.js', () => ({
+  default: { findOneAndUpdate: vi.fn(), findById: vi.fn() },
+}));
 vi.mock('../models/UserAsset.js', () => ({ default: {} }));
 vi.mock('../models/AssetTransaction.js', () => ({ default: {} }));
 vi.mock('../models/MarketAsset.js', () => ({ default: {} }));
@@ -34,6 +38,7 @@ vi.mock('../config/logger.js', () => ({
 
 const { updateWalletTargets, getWalletDividends } = await import('../controllers/walletController.js');
 const User = (await import('../models/User.js')).default;
+const Wallet = (await import('../models/Wallet.js')).default;
 const { financialService } = await import('../services/financialService.js');
 
 const mockRes = () => {
@@ -58,16 +63,17 @@ beforeEach(() => {
 
 describe('updateWalletTargets — targetMonthlyDividendIncome', () => {
   it('persiste a meta quando enviada no body', async () => {
-    User.findByIdAndUpdate.mockReturnValue({
+    Wallet.findOneAndUpdate.mockReturnValue({
       select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ targetMonthlyDividendIncome: 500 }) }),
     });
-    const req = { user: { id: 'u1' }, body: { targetMonthlyDividendIncome: 500 } };
+    const req = { user: { id: 'u1' }, walletId: 'w1', body: { targetMonthlyDividendIncome: 500 } };
     const res = mockRes();
 
     await updateWalletTargets(req, res, vi.fn());
 
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
-      'u1',
+    // Fase 2: grava em Wallet (por carteira), não mais em User (por conta).
+    expect(Wallet.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: 'w1', user: 'u1' },
       { $set: { targetMonthlyDividendIncome: 500 } },
       { new: true },
     );
@@ -75,23 +81,23 @@ describe('updateWalletTargets — targetMonthlyDividendIncome', () => {
   });
 
   it('não toca o campo quando ausente do body', async () => {
-    User.findByIdAndUpdate.mockReturnValue({
+    Wallet.findOneAndUpdate.mockReturnValue({
       select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({}) }),
     });
-    const req = { user: { id: 'u1' }, body: {} };
+    const req = { user: { id: 'u1' }, walletId: 'w1', body: {} };
     const res = mockRes();
 
     await updateWalletTargets(req, res, vi.fn());
 
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith('u1', { $set: {} }, { new: true });
+    expect(Wallet.findOneAndUpdate).toHaveBeenCalledWith({ _id: 'w1', user: 'u1' }, { $set: {} }, { new: true });
   });
 });
 
 describe('getWalletDividends — goal', () => {
   it('sem meta definida (0) → progressPercent null', async () => {
     financialService.calculateUserDividends.mockResolvedValue(emptyDividendData());
-    User.findById.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ targetMonthlyDividendIncome: 0 }) }) });
-    const req = { user: { id: 'u1' } };
+    Wallet.findById.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ targetMonthlyDividendIncome: 0 }) }) });
+    const req = { user: { id: 'u1' }, walletId: 'w1' };
     const res = mockRes();
 
     await getWalletDividends(req, res, vi.fn());
@@ -102,8 +108,8 @@ describe('getWalletDividends — goal', () => {
 
   it('meta R$500, projeção R$250 → progressPercent 50', async () => {
     financialService.calculateUserDividends.mockResolvedValue(emptyDividendData({ projectedMonthly: 250 }));
-    User.findById.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ targetMonthlyDividendIncome: 500 }) }) });
-    const req = { user: { id: 'u1' } };
+    Wallet.findById.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ targetMonthlyDividendIncome: 500 }) }) });
+    const req = { user: { id: 'u1' }, walletId: 'w1' };
     const res = mockRes();
 
     await getWalletDividends(req, res, vi.fn());
@@ -114,8 +120,8 @@ describe('getWalletDividends — goal', () => {
 
   it('meta R$100, projeção R$300 → progressPercent capado em 100', async () => {
     financialService.calculateUserDividends.mockResolvedValue(emptyDividendData({ projectedMonthly: 300 }));
-    User.findById.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ targetMonthlyDividendIncome: 100 }) }) });
-    const req = { user: { id: 'u1' } };
+    Wallet.findById.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ targetMonthlyDividendIncome: 100 }) }) });
+    const req = { user: { id: 'u1' }, walletId: 'w1' };
     const res = mockRes();
 
     await getWalletDividends(req, res, vi.fn());
@@ -129,8 +135,8 @@ describe('getWalletDividends — goal', () => {
       provisioned: [{ ticker: 'TAEE11', amount: 30 }, { ticker: 'BBAS3', amount: 20 }],
       projectedMonthly: 80,
     }));
-    User.findById.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ targetMonthlyDividendIncome: 100 }) }) });
-    const req = { user: { id: 'u1' } };
+    Wallet.findById.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ targetMonthlyDividendIncome: 100 }) }) });
+    const req = { user: { id: 'u1' }, walletId: 'w1' };
     const res = mockRes();
 
     await getWalletDividends(req, res, vi.fn());
@@ -145,8 +151,8 @@ describe('getWalletDividends — goal', () => {
     // Acumulado alto (1200) mas sem provisões e com fluxo mensal baixo (30):
     // a barra deve refletir 30/600 = 5%, não estourar em 100% por causa do acumulado.
     financialService.calculateUserDividends.mockResolvedValue(emptyDividendData({ totalAllTime: 1200, projectedMonthly: 30 }));
-    User.findById.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ targetMonthlyDividendIncome: 600 }) }) });
-    const req = { user: { id: 'u1' } };
+    Wallet.findById.mockReturnValue({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue({ targetMonthlyDividendIncome: 600 }) }) });
+    const req = { user: { id: 'u1' }, walletId: 'w1' };
     const res = mockRes();
 
     await getWalletDividends(req, res, vi.fn());
