@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { annualToMonthly, fv, monthsRemaining, requiredMonthly, decomposeProgress, monthsSaved, computeStreak } from '../utils/goalMath.js';
+import { annualToMonthly, fv, monthsRemaining, requiredMonthly, decomposeProgress, monthsSaved, computeStreak, resolveGoalStatus } from '../utils/goalMath.js';
 
 describe('goalMath', () => {
   describe('annualToMonthly', () => {
@@ -131,6 +131,54 @@ describe('goalMath', () => {
     it('lista vazia ou inválida → 0', () => {
       expect(computeStreak([])).toBe(0);
       expect(computeStreak(null)).toBe(0);
+    });
+  });
+
+  describe('resolveGoalStatus', () => {
+    it('ACTIVE → ACHIEVED ao cruzar o alvo (marca achievedAt)', () => {
+      const d = resolveGoalStatus('ACTIVE', 100_000, 100, 100_000, 75);
+      expect(d.changed).toBe(true);
+      expect(d.status).toBe('ACHIEVED');
+      expect(d.achievedAtAction).toBe('set');
+    });
+
+    it('ACTIVE abaixo do alvo permanece ACTIVE', () => {
+      const d = resolveGoalStatus('ACTIVE', 90_000, 90, 100_000, 75);
+      expect(d.changed).toBe(false);
+      expect(d.status).toBe('ACTIVE');
+    });
+
+    it('ACHIEVED dentro da banda de histerese (98–100%) NÃO reverte', () => {
+      // 99% do alvo — cairia se a reversão fosse exata em 100%, mas a histerese segura.
+      const d = resolveGoalStatus('ACHIEVED', 99_000, 99, 100_000, 100);
+      expect(d.changed).toBe(false);
+      expect(d.status).toBe('ACHIEVED');
+    });
+
+    it('ACHIEVED → ACTIVE ao cair abaixo de 98% (limpa achievedAt, rebaixa marco)', () => {
+      // 96% do alvo → reverte; marco 100 volta pra 75 (maior múltiplo ainda alcançado).
+      const d = resolveGoalStatus('ACHIEVED', 96_000, 96, 100_000, 100);
+      expect(d.changed).toBe(true);
+      expect(d.status).toBe('ACTIVE');
+      expect(d.achievedAtAction).toBe('clear');
+      expect(d.lastCelebratedMilestone).toBe(75);
+    });
+
+    it('não rebaixa o marco quando ele já é ≤ ao maior alcançado', () => {
+      // caiu forte pra 40% mas o marco salvo já era 25 → mantém (nada a rebaixar).
+      const d = resolveGoalStatus('ACHIEVED', 40_000, 40, 100_000, 25);
+      expect(d.status).toBe('ACTIVE');
+      expect(d.lastCelebratedMilestone).toBe(null);
+    });
+
+    it('exatamente no alvo (100%) conta como conquistado', () => {
+      const d = resolveGoalStatus('ACTIVE', 100_000, 100, 100_000, 0);
+      expect(d.status).toBe('ACHIEVED');
+    });
+
+    it('alvo zero não promove (evita divisão/estado inválido)', () => {
+      const d = resolveGoalStatus('ACTIVE', 0, 0, 0, 0);
+      expect(d.changed).toBe(false);
     });
   });
 });

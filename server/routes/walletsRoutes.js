@@ -9,12 +9,15 @@ import {
     renameWallet,
     deleteWallet,
     setActiveWallet,
+    shareWallet,
+    unshareWallet,
 } from '../controllers/walletsController.js';
 import {
     createWalletSchema,
     renameWalletSchema,
     walletIdParamSchema,
     setActiveWalletSchema,
+    shareWalletSchema,
 } from '../schemas/walletsSchemas.js';
 
 const router = express.Router();
@@ -32,5 +35,10 @@ router.post('/', writeLimiter, validate(createWalletSchema), createWallet);
 router.put('/active', writeLimiter, validate(setActiveWalletSchema), setActiveWallet);
 router.put('/:walletId', writeLimiter, validate(renameWalletSchema), renameWallet);
 router.delete('/:walletId', writeLimiter, validate(walletIdParamSchema), deleteWallet);
+
+// (C4) Compartilhamento público opt-in — ligar/atualizar e revogar. '/:walletId/
+// share' vem depois de '/:walletId' mas com sub-path fixo, sem ambiguidade.
+router.post('/:walletId/share', writeLimiter, validate(shareWalletSchema), shareWallet);
+router.delete('/:walletId/share', writeLimiter, validate(walletIdParamSchema), unshareWallet);
 
 export default router;

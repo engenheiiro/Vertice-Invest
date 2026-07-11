@@ -83,4 +83,14 @@ export const changePasswordLimiter = createUserLimiter({
   message: 'Muitas tentativas de troca de senha. Aguarde alguns minutos.',
 });
 
+// (C4/E6) Rota pública de carteira — NÃO autenticada, então a chave é o IP
+// (userKey cai no ramo defensivo de IP). 120/15min por IP: generoso para quem
+// abre/atualiza um link legítimo, apertado o bastante contra scraping/varredura
+// de tokens numa superfície sem login.
+export const publicShareLimiter = createUserLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  message: 'Muitas requisições. Aguarde alguns minutos.',
+});
+
 export { createUserLimiter };

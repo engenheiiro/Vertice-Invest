@@ -66,10 +66,22 @@ const WalletSchema = new mongoose.Schema({
     }),
   },
 
+  // --- Compartilhamento público (C4) — carteira somente-leitura por link ---
+  // Off por padrão (opt-in). Ao ligar, gera um publicToken aleatório; ao revogar,
+  // token volta a null e a rota pública deixa de resolver. `sparse` no índice
+  // único garante que múltiplas carteiras com token=null não colidam.
+  publicToken: { type: String, default: null },
+  isPublic: { type: Boolean, default: false },
+  // Por padrão a página pública mascara valores em R$ (mostra só % e composição).
+  // O dono pode optar por expor os valores absolutos ao compartilhar.
+  publicShowValues: { type: Boolean, default: false },
+
   createdAt: { type: Date, default: Date.now },
 });
 
 WalletSchema.index({ user: 1, createdAt: 1 });
+// Resolução O(1) da rota pública por token; sparse+unique evita colisão de nulls.
+WalletSchema.index({ publicToken: 1 }, { unique: true, sparse: true });
 
 const Wallet = mongoose.models.Wallet || mongoose.model('Wallet', WalletSchema);
 export default Wallet;

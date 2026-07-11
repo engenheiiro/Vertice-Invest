@@ -8,7 +8,7 @@ import UserAsset from '../models/UserAsset.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { accrueFixedIncomeValue, brazilToday } from '../utils/fixedIncome.js';
-import { monthsRemaining, requiredMonthly, decomposeProgress, fv, annualToMonthly, computeStreak } from '../utils/goalMath.js';
+import { monthsRemaining, requiredMonthly, decomposeProgress, fv, annualToMonthly, computeStreak, resolveGoalStatus } from '../utils/goalMath.js';
 import { safeCurrency, safeFloat, safeSub, safeMult, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import logger from '../config/logger.js';
@@ -149,13 +149,33 @@ const computeGoalProjection = (goal, walletEquity, opts = {}) => {
     };
 };
 
-// Marca como ACHIEVED no banco se cruzou o alvo (efeito colateral leve, lazy).
-const syncAchievedStatus = async (goalDoc, achieved) => {
-    if (achieved && goalDoc.status === 'ACTIVE') {
-        goalDoc.status = 'ACHIEVED';
+/**
+ * Reconcilia o status salvo da meta com o patrimônio atual (lazy, no read/write).
+ * Delega a decisão à máquina de estados pura resolveGoalStatus (histerese de 2%
+ * + rebaixamento de marco E4) e aplica o efeito colateral de gravar. Retorna
+ * true se houve mudança.
+ */
+const syncGoalStatus = async (goalDoc, projection) => {
+    const decision = resolveGoalStatus(
+        goalDoc.status,
+        projection.currentValue,
+        projection.progressPct,
+        goalDoc.targetAmount,
+        goalDoc.lastCelebratedMilestone,
+    );
+    if (!decision.changed) return false;
+
+    goalDoc.status = decision.status;
+    if (decision.achievedAtAction === 'set') {
         if (!goalDoc.achievedAt) goalDoc.achievedAt = new Date(); // "Data real" da conquista
-        await goalDoc.save();
+    } else if (decision.achievedAtAction === 'clear') {
+        goalDoc.achievedAt = undefined;
     }
+    if (decision.lastCelebratedMilestone !== null) {
+        goalDoc.lastCelebratedMilestone = decision.lastCelebratedMilestone;
+    }
+    await goalDoc.save();
+    return true;
 };
 
 /**
@@ -293,7 +313,7 @@ export const listGoals = async (req, res, next) => {
         const result = [];
         for (const goal of goals) {
             const projection = computeGoalProjection(goal, walletEquity);
-            await syncAchievedStatus(goal, projection.achieved);
+            await syncGoalStatus(goal, projection);
             result.push({ ...goal.toObject(), status: goal.status, ...projection });
         }
         res.json({ goals: result, walletEquity, snapshotDate: snapshot?.date || null });
@@ -326,7 +346,7 @@ export const getGoal = async (req, res, next) => {
         }
 
         const projection = computeGoalProjection(goal, walletEquity, { startValue: effectiveStartValue });
-        await syncAchievedStatus(goal, projection.achieved);
+        await syncGoalStatus(goal, projection);
 
         // Aportes manuais (ledger).
         const contributions = await GoalContribution.find({ user: userId, wallet: walletId, goal: goal._id })
@@ -510,8 +530,10 @@ export const addContribution = async (req, res, next) => {
         goal.updatedAt = Date.now();
 
         const after = computeGoalProjection(goal, walletEquity);
-        await syncAchievedStatus(goal, after.achieved);
-        if (goal.status !== 'ACHIEVED') await goal.save();
+        await syncGoalStatus(goal, after);
+        // Persiste o manualBalance sempre (syncGoalStatus só salva quando muda o
+        // status; sem isso, um aporte numa meta já ACHIEVED não seria gravado).
+        await goal.save();
 
         const monthsAccelerated = (before.monthsRemaining !== null && after.monthsRemaining !== null)
             ? Math.max(0, before.monthsRemaining - after.monthsRemaining)

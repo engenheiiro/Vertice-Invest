@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Wallet as WalletIcon, ChevronDown, Plus, Pencil, Trash2, Check, Loader2 } from 'lucide-react';
+import { Wallet as WalletIcon, ChevronDown, Plus, Pencil, Trash2, Check, Loader2, Share2, Globe } from 'lucide-react';
 import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../contexts/ToastContext';
 import { RenameWalletModal } from './RenameWalletModal';
+import { ShareWalletModal } from './ShareWalletModal';
+import type { WalletSummary } from '../../services/wallets';
 
 /**
  * Seletor de carteira ativa (Fase 2 — múltiplas carteiras). Fica no Header,
@@ -18,6 +20,7 @@ export const WalletSwitcher: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [modalMode, setModalMode] = useState<'create' | 'rename' | null>(null);
     const [editingWallet, setEditingWallet] = useState<{ id: string; name: string } | null>(null);
+    const [sharingWallet, setSharingWallet] = useState<WalletSummary | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -98,6 +101,17 @@ export const WalletSwitcher: React.FC = () => {
                                             {active && <Check size={13} className="text-blue-400" />}
                                         </span>
                                         <span className="flex-1 truncate">{w.name}</span>
+                                        {w.isPublic && (
+                                            <Globe size={11} className="shrink-0 text-emerald-400" aria-label="Carteira pública" />
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setIsOpen(false); setSharingWallet(w); }}
+                                            aria-label={`Compartilhar ${w.name}`}
+                                            className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-emerald-400 transition-all shrink-0 p-0.5"
+                                        >
+                                            <Share2 size={12} />
+                                        </button>
                                         <button
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); setEditingWallet({ id: w.id, name: w.name }); setModalMode('rename'); }}
@@ -139,6 +153,16 @@ export const WalletSwitcher: React.FC = () => {
                 walletId={editingWallet?.id}
                 currentName={editingWallet?.name || ''}
                 onClose={() => { setModalMode(null); setEditingWallet(null); }}
+            />
+
+            <ShareWalletModal
+                isOpen={sharingWallet !== null}
+                walletId={sharingWallet?.id}
+                walletName={sharingWallet?.name}
+                initialIsPublic={!!sharingWallet?.isPublic}
+                initialToken={sharingWallet?.publicToken ?? null}
+                initialShowValues={!!sharingWallet?.publicShowValues}
+                onClose={() => setSharingWallet(null)}
             />
         </div>
     );

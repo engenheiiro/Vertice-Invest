@@ -34,3 +34,12 @@ export const walletIdParamSchema = z.object({
 export const setActiveWalletSchema = z.object({
     body: z.object({ walletId: objectId }),
 });
+
+// POST /wallets/:walletId/share — (C4) ligar/atualizar compartilhamento público.
+export const shareWalletSchema = z.object({
+    params: z.object({ walletId: objectId }),
+    body: z.object({
+        showValues: z.boolean().optional(),
+        regenerate: z.boolean().optional(),
+    }),
+});

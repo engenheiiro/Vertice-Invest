@@ -24,20 +24,20 @@ DECISÕES APROVADAS PELO USUÁRIO
  A1  | Foto de perfil no cabeçalho                               | Haiku  | [x]    | 3f4a637
  A2  | Olhozinho ao lado de "Patrimônio Líquido" (+E1)           | Haiku  | [x]    | d57d44e
  A3  | Research: font-mono -> tabular-nums                       | Haiku  | [x]    | 0badf57
- A4  | Research: estilo abas + troféu amarelo + Semanal          | Haiku  | [x]    | pendente commit
- A5  | Terminal: BTC em US$ (moeda por tipo)                     | Haiku  | [x]    | pendente commit
- A6  | Metas: indicador "Metas Conquistadas" (após C3)          | Haiku  | [ ]    | -
- B1  | Cofre de Dividendos abre config ideal                     | Sonnet | [x]    | pendente commit
- B2  | Cache/refresh (self-host fonte + SW controlado)           | Sonnet | [x]    | pendente commit
- B3  | Múltiplas Carteiras: finalizar + testes (+E3, E7)        | Sonnet | [x]    | pendente commit
- C1  | Reserva/RF: flag isReserve + reconciliar alocação        | Opus   | [x]    | pendente commit
- C2  | Tesouro: auditar cálculos + maturityDate/vencimento      | Opus   | [x]    | pendente commit
- C3  | Metas: reversão ACHIEVED->ACTIVE (+E4)                    | Opus   | [ ]    | -
- C4  | Carteira pública (URL leitura, valores mascarados) (+E5,E6)| Opus  | [ ]    | -
+ A4  | Research: estilo abas + troféu amarelo + Semanal          | Haiku  | [x]    | 162f1c8
+ A5  | Terminal: BTC em US$ (moeda por tipo)                     | Haiku  | [x]    | 162f1c8
+ A6  | Metas: indicador "Metas Conquistadas" (após C3)          | Haiku  | [x]    | pendente commit
+ B1  | Cofre de Dividendos abre config ideal                     | Sonnet | [x]    | 162f1c8
+ B2  | Cache/refresh (self-host fonte + SW controlado)           | Sonnet | [x]    | 162f1c8
+ B3  | Múltiplas Carteiras: finalizar + testes (+E3, E7)        | Sonnet | [x]    | 162f1c8
+ C1  | Reserva/RF: flag isReserve + reconciliar alocação        | Opus   | [x]    | 162f1c8
+ C2  | Tesouro: auditar cálculos + maturityDate/vencimento      | Opus   | [x]    | 162f1c8
+ C3  | Metas: reversão ACHIEVED->ACTIVE (+E4)                    | Opus   | [x]    | pendente commit
+ C4  | Carteira pública (URL leitura, valores mascarados) (+E5,E6)| Opus  | [x]    | pendente commit
 
- EXTRAS: E1 PrivacyToggle | E2 currency no PortfolioItem | E3 testes wallets |
-         E4 reset milestone | E5 Sentry público | E6 rate limiter público |
-         E7 commit scripts migração | E8 aria-labels
+ EXTRAS: E1 PrivacyToggle✓ | E2 currency no PortfolioItem✓ | E3 testes wallets✓ |
+         E4 reset milestone✓ | E5 Sentry público✓ | E6 rate limiter público✓ |
+         E7 commit scripts migração✓ | E8 aria-labels
 
 --------------------------------------------------------------------------------
  ORDEM DE EXECUÇÃO
@@ -50,6 +50,96 @@ DECISÕES APROVADAS PELO USUÁRIO
 --------------------------------------------------------------------------------
  LOG DE EXECUÇÃO (mais recente no topo)
 --------------------------------------------------------------------------------
+ [2026-07-11] C4 + E5 + E6 implementados (sem commit). Modelo Opus. Carteira
+              pública somente-leitura. Decisões do usuário: acesso por TOKEN
+              opt-in revogável; composição por ATIVO individual + %; máscara R$
+              com o DONO podendo optar por expor (publicShowValues).
+              Backend:
+               - Wallet.js: +publicToken (índice unique+sparse), +isPublic,
+                 +publicShowValues. Off por padrão (opt-in).
+               - walletController.js: EXTRAÍDO buildWalletPayload(userId,walletId)
+                 de getWalletData — FONTE ÚNICA da matemática da carteira; a rota
+                 privada e a pública consomem daqui (números idênticos por
+                 construção). getWalletData virou casca fina.
+               - publicWalletController.js (novo): getPublicWallet(token) resolve
+                 só isPublic+token, chama buildWalletPayload e PROJETA um
+                 subconjunto seguro — composição (ticker/nome/tipo/peso%),
+                 alocação por classe, curva de performance SÓ em % (cota TWRR
+                 normalizada, nunca R$). R$ só quando publicShowValues (value na
+                 composição + kpis; senão kpis=null). Nunca vaza userId/e-mail
+                 (só primeiro nome do dono). Cache-Control 60s. (E5) tag Sentry
+                 'route=public_wallet' no catch, além do handler global.
+               - walletsController.js: shareWallet (POST .../share: gera token
+                 randomBytes(24) base64url, isPublic=true, showValues; regenerate
+                 rotaciona) + unshareWallet (DELETE: isPublic=false, token=null).
+                 listWallets agora devolve isPublic/publicToken/publicShowValues.
+               - walletsSchemas.js: shareWalletSchema (showValues/regenerate opc).
+               - rateLimiters.js: (E6) publicShareLimiter 120/15min POR IP
+                 (userKey cai no ramo de IP; rota sem auth). routes/publicRoutes.js
+                 (novo) SEM authenticateToken, atrás do limiter, montado em
+                 /api/public. SPA fallback já existia (app.get('*') serve
+                 index.html p/ não-/api) — /p/:token resolve sem mudança no server.
+              Frontend (BrowserRouter → URL limpa /p/:token):
+               - services/wallets.ts: WalletSummary +campos de share; share()/
+                 unshare().
+               - services/publicWallet.ts (novo): fetch CRU (sem token) da rota
+                 pública, tipado.
+               - pages/PublicWallet.tsx (novo): página standalone (sem Header/auth)
+                 — destaque de rentabilidade %, curva (recharts Area), donut de
+                 alocação, lista de ativos com barra de peso; R$ só se liberado;
+                 estados loading/404/erro; CTA "Criar minha carteira".
+               - App.tsx: rota /p/:token fora dos layouts protegidos.
+               - ShareWalletModal.tsx (novo): toggle público, link+copiar, "gerar
+                 novo link" (regenerate), toggle "exibir R$"; invalida ['wallets'].
+               - WalletSwitcher.tsx: ícone Share2 por carteira + Globe verde nas
+                 públicas; abre o modal.
+              Testes/build: backend wallets_controller+resolve_wallet+goal_math =
+              45 verdes; node --check em todos os arquivos novos/alterados do
+              server OK; client tsc --noEmit limpo; npm run build (client) OK
+              (lazy chunk da página + recharts empacotam, PWA regenerada).
+              PENDÊNCIA prod: campos aditivos com default (nenhuma migração).
+              publicToken só existe após o dono ligar o compartilhamento.
+ [2026-07-11] RECONCILIAÇÃO E2: encontrado JÁ IMPLEMENTADO. AssetTable.tsx (o
+              Terminal do Dashboard) já mostra, em desktop E mobile, o valor
+              primário em R$ (brlValue = item.totalValue) e, embaixo, entre
+              parênteses em azul (text-blue-400/70), o valor nativo em US$
+              (nativeValue = currentPrice × shares) quando isUSD && !privacy —
+              exatamente o padrão de Cripto da Carteira (AssetList.tsx). O
+              PortfolioItem já carrega `currency` e `totalValue`
+              (useDashboardData.ts:21-22, populados em :253-254). Nada a fazer;
+              o LOG anterior que dizia "ainda não implementado" estava defasado.
+              ÚNICO item realmente restante: C4 (carteira pública).
+ [2026-07-11] RECONCILIAÇÃO: a coluna Status estava defasada. O commit 162f1c8
+              ("carteiras múltiplas Fase 2 + classificação de RF") empacotou e
+              JÁ SHIPOU tudo que o TXT marcava como "pendente commit" (A4, A5,
+              B1, B2, B3, C1, C2). Árvore limpa. Colunas Commit atualizadas p/
+              162f1c8. Restam: C4 (pública) e E2 (Terminal R$+US$, deferido).
+ [2026-07-11] C3 + E4 + A6 implementados (sem commit). Modelo Opus. Decisão do
+              usuário: reversão com HISTERESE de 2%.
+              Backend:
+               - utils/goalMath.js: resolveGoalStatus() — máquina de estados PURA
+                 (testável) com GOAL_MILESTONES + ACHIEVE_REVERT_RATIO=0.98.
+                 ACTIVE→ACHIEVED ao cruzar o alvo; ACHIEVED→ACTIVE só abaixo de
+                 98% (histerese: não pisca Conquistada↔Ativa nem re-notifica na
+                 fronteira). Na volta: limpa achievedAt + rebaixa
+                 lastCelebratedMilestone p/ o maior múltiplo ainda alcançado (E4:
+                 recruzar 100% volta a comemorar).
+               - goalsController.js: syncAchievedStatus (só promovia) virou
+                 syncGoalStatus, que delega a decisão à função pura e aplica o
+                 save. Callsites listGoals/getGoal/addContribution atualizados.
+                 BUG LATENTE corrigido de passagem: addContribution não gravava o
+                 manualBalance quando a meta já estava ACHIEVED (o
+                 `if status !== ACHIEVED` pulava o save) — agora salva sempre.
+              Frontend:
+               - Goals.tsx: novo KPI "Metas conquistadas" (conta status ACHIEVED,
+                 verde quando >0). Grid do resumo passou de md:3 → md:4 colunas.
+                 GoalCard já reagia a status/achieved — sem mudança lá.
+              Testes: goal_math.spec +7 (promoção, banda de histerese não
+              reverte, reversão <98% limpa achievedAt + rebaixa marco, não
+              rebaixa marco já menor, alvo exato, alvo zero) = 31 verdes.
+              tsc --noEmit limpo; npm run build (client) OK.
+              PENDÊNCIA prod: nenhuma migração (lazy no read/write; metas antigas
+              se reconciliam no próximo GET /goals).
  [2026-07-10] C2 implementado (sem commit) — Tesouro: auditoria de cálculos +
               maturityDate/vencimento. Modelo Opus.
               AUDITORIA: a matemática de accrual está correta e consistente

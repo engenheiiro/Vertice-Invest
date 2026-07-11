@@ -41,6 +41,7 @@ const Indicators = lazy(() => import('./pages/Indicators').then(module => ({ def
 const Calculator = lazy(() => import('./pages/Calculator').then(module => ({ default: module.Calculator })));
 const Goals = lazy(() => import('./pages/Goals').then(module => ({ default: module.Goals })));
 const Comparator = lazy(() => import('./pages/Comparator').then(module => ({ default: module.Comparator })));
+const PublicWallet = lazy(() => import('./pages/PublicWallet').then(module => ({ default: module.PublicWallet })));
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel').then(module => ({ default: module.AdminPanel }))); 
 
 const PageLoader = () => (
@@ -96,6 +97,10 @@ export default function App() {
           <CookieNotice />
           <Routes>
             <Route path="/" element={<Landing />} />
+
+            {/* (C4) Carteira pública — leitura, sem auth. Fora dos layouts protegidos. */}
+            <Route path="/p/:token" element={<Suspense fallback={<PageLoader />}><PublicWallet /></Suspense>} />
+
 
             <Route element={<AuthLayout />}>
               <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />

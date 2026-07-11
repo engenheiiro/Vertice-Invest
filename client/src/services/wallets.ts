@@ -6,6 +6,17 @@ export interface WalletSummary {
     name: string;
     isDefault: boolean;
     createdAt: string;
+    // (C4) Compartilhamento público — presentes só via GET /wallets.
+    isPublic?: boolean;
+    publicToken?: string | null;
+    publicShowValues?: boolean;
+}
+
+export interface ShareWalletResponse {
+    message: string;
+    isPublic: boolean;
+    publicToken: string;
+    publicShowValues: boolean;
 }
 
 export interface WalletListResponse {
@@ -63,6 +74,33 @@ export const walletsService = {
         if (!response.ok) {
             const err = await response.json().catch(() => ({}));
             throw new Error(err.message || 'Falha ao trocar carteira ativa');
+        }
+        return await response.json();
+    },
+
+    // (C4) Liga/atualiza o compartilhamento público. `regenerate` rotaciona o
+    // token (invalida o link antigo); `showValues` libera valores em R$.
+    async share(
+        walletId: string,
+        opts: { showValues?: boolean; regenerate?: boolean } = {},
+    ): Promise<ShareWalletResponse> {
+        const response = await authService.api(`/api/wallets/${walletId}/share`, {
+            method: 'POST',
+            body: JSON.stringify(opts),
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || 'Falha ao compartilhar carteira');
+        }
+        return await response.json();
+    },
+
+    // (C4) Revoga o link público (token → null).
+    async unshare(walletId: string): Promise<{ message: string; isPublic: boolean }> {
+        const response = await authService.api(`/api/wallets/${walletId}/share`, { method: 'DELETE' });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || 'Falha ao revogar compartilhamento');
         }
         return await response.json();
     },

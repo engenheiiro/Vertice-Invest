@@ -112,6 +112,40 @@ export const monthsSaved = (pv, pmt, annualRate, target, deltaPmt) => {
     return saved > 0 ? saved : 0;
 };
 
+// Marcos comemorados (%) — espelha MILESTONES do front (GoalDetailModal).
+export const GOAL_MILESTONES = [25, 50, 75, 100];
+// Histerese: só reverte ACHIEVED→ACTIVE abaixo de 98% do alvo. Evita piscar
+// Conquistada↔Ativa (e re-notificar) quando o patrimônio oscila na fronteira.
+export const ACHIEVE_REVERT_RATIO = 0.98;
+
+/**
+ * Decide o próximo status de uma meta a partir do patrimônio atual (função pura;
+ * o controller aplica o efeito colateral de gravar). Máquina de estados com
+ * histerese de 2% na volta:
+ *   - ACTIVE  → ACHIEVED quando currentValue ≥ targetAmount.
+ *   - ACHIEVED → ACTIVE  quando currentValue < 98% do alvo; rebaixa o marco
+ *     comemorado para o maior múltiplo ainda alcançado (E4: recruzar 100%
+ *     volta a comemorar) e zera achievedAt.
+ * @returns {{ changed: boolean, status: string, achievedAtAction: 'set'|'clear'|null, lastCelebratedMilestone: number|null }}
+ */
+export const resolveGoalStatus = (status, currentValue, progressPct, targetAmount, lastCelebratedMilestone = 0) => {
+    const value = safeFloat(currentValue);
+    const target = safeFloat(targetAmount);
+    const noop = { changed: false, status, achievedAtAction: null, lastCelebratedMilestone: null };
+
+    if (status === 'ACTIVE' && value >= target && target > 0) {
+        return { changed: true, status: 'ACHIEVED', achievedAtAction: 'set', lastCelebratedMilestone: null };
+    }
+
+    if (status === 'ACHIEVED' && target > 0 && value < target * ACHIEVE_REVERT_RATIO) {
+        const highestValid = GOAL_MILESTONES.filter((m) => safeFloat(progressPct) >= m).pop() || 0;
+        const nextMilestone = (safeFloat(lastCelebratedMilestone) > highestValid) ? highestValid : null;
+        return { changed: true, status: 'ACTIVE', achievedAtAction: 'clear', lastCelebratedMilestone: nextMilestone };
+    }
+
+    return noop;
+};
+
 /**
  * Nº de meses consecutivos (do mais recente para trás) com aporte líquido > 0.
  * `monthlyNetAmounts` em ordem cronológica (último elemento = mês mais recente).

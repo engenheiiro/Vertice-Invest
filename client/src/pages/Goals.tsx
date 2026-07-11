@@ -84,6 +84,8 @@ export const Goals: React.FC = () => {
 
   const summary = useMemo(() => {
     const active = goals.filter((g) => g.status === 'ACTIVE').length;
+    // Conquistadas: status persistido ACHIEVED (com histerese de 2% no back).
+    const achieved = goals.filter((g) => g.status === 'ACHIEVED').length;
     let totalCurrent = 0;
     let totalTarget = 0;
     for (const chain of chains) {
@@ -93,7 +95,7 @@ export const Goals: React.FC = () => {
       // target: apenas o alvo final da jornada, não a soma dos marcos intermediários.
       totalTarget += chain[chain.length - 1].targetAmount;
     }
-    return { totalTarget, totalCurrent, active };
+    return { totalTarget, totalCurrent, active, achieved };
   }, [chains, goals]);
 
   // Agrupa chains em "render items": cadeias (≥2) ficam em linha própria;
@@ -161,16 +163,20 @@ export const Goals: React.FC = () => {
 
         {/* Resumo */}
         {goals.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             <div className="bg-card border border-slate-800 rounded-xl p-4">
               <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Metas ativas</p>
               <p className="text-xl font-bold text-slate-100 mt-1">{summary.active}</p>
             </div>
             <div className="bg-card border border-slate-800 rounded-xl p-4">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Metas conquistadas</p>
+              <p className={`text-xl font-bold mt-1 ${summary.achieved > 0 ? 'text-emerald-400' : 'text-slate-100'}`}>{summary.achieved}</p>
+            </div>
+            <div className="bg-card border border-slate-800 rounded-xl p-4">
               <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Acumulado nas metas</p>
               <p className="text-xl font-bold text-emerald-400 mt-1">{formatCurrency(summary.totalCurrent, 'BRL', { privacy: isPrivacyMode })}</p>
             </div>
-            <div className="bg-card border border-slate-800 rounded-xl p-4 col-span-2 md:col-span-1">
+            <div className="bg-card border border-slate-800 rounded-xl p-4">
               <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Soma dos alvos</p>
               <p className="text-xl font-bold text-slate-100 mt-1">{formatCurrency(summary.totalTarget, 'BRL', { privacy: isPrivacyMode })}</p>
             </div>

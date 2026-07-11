@@ -371,29 +371,32 @@ const computeWalletMetrics = async ({ userId, walletId, snapshots, safeTotalEqui
     return { weightedRentability, dataQuality, sharpeRatio, beta };
 };
 
-export const getWalletData = async (req, res, next, _depth = 0) => {
-    try {
-        const userId = req.user.id;
-        const walletId = req.walletId;
+/**
+ * Monta o payload completo da carteira (assets processados + KPIs + targets +
+ * meta) para um (userId, walletId). Fonte ÚNICA da verdade: tanto a rota
+ * autenticada (getWalletData) quanto a rota pública (publicWalletController)
+ * consomem daqui — os números da carteira pública são, por construção,
+ * idênticos aos privados (a pública só projeta/mascara um subconjunto).
+ */
+export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
+    const { userAssets, activeAssets, closedAssets, targets } = await loadWalletState(userId, walletId);
 
-        const { userAssets, activeAssets, closedAssets, targets } = await loadWalletState(userId, walletId);
-
-        // Auto-Heal se não houver ativos mas houver transações (reconstrução forçada).
-        if (activeAssets.length === 0) {
-            const healed = await autoHealPositions(userId, walletId);
-            if (healed) {
-                // (6.2) Reprocessa com o estado curado, mas só até o limite de
-                // profundidade — nunca recursa infinitamente.
-                if (_depth < MAX_WALLET_HEAL_DEPTH) {
-                    return getWalletData(req, res, next, _depth + 1);
-                }
-                logger.warn(`getWalletData: limite de auto-heal (${MAX_WALLET_HEAL_DEPTH}) atingido para ${userId}; renderizando estado atual.`);
+    // Auto-Heal se não houver ativos mas houver transações (reconstrução forçada).
+    if (activeAssets.length === 0) {
+        const healed = await autoHealPositions(userId, walletId);
+        if (healed) {
+            // (6.2) Reprocessa com o estado curado, mas só até o limite de
+            // profundidade — nunca recursa infinitamente.
+            if (_depth < MAX_WALLET_HEAL_DEPTH) {
+                return buildWalletPayload(userId, walletId, _depth + 1);
             }
+            logger.warn(`buildWalletPayload: limite de auto-heal (${MAX_WALLET_HEAL_DEPTH}) atingido para ${userId}; renderizando estado atual.`);
         }
+    }
 
-        if (userAssets.length === 0) {
-            return res.json(await buildEmptyWalletResponse(targets));
-        }
+    if (userAssets.length === 0) {
+        return buildEmptyWalletResponse(targets);
+    }
 
         const liveTickers = activeAssets.filter(a => a.type !== 'FIXED_INCOME' && a.type !== 'CASH').map(a => a.ticker);
         if (liveTickers.length > 0) {
@@ -465,7 +468,7 @@ export const getWalletData = async (req, res, next, _depth = 0) => {
             userId, walletId, snapshots, safeTotalEquity, totalResultPercent, currentCdi,
         });
 
-        res.json({
+        return {
             assets: processedAssets,
             kpis: {
                 totalEquity: safeTotalEquity,
@@ -483,7 +486,15 @@ export const getWalletData = async (req, res, next, _depth = 0) => {
             },
             ...targets,
             meta: { usdRate, lastUpdate: new Date() }
-        });
+        };
+};
+
+// GET /wallet — carteira ativa do usuário autenticado. Casca fina sobre
+// buildWalletPayload (a matemática vive lá, compartilhada com a rota pública).
+export const getWalletData = async (req, res, next) => {
+    try {
+        const payload = await buildWalletPayload(req.user.id, req.walletId);
+        res.json(payload);
     } catch (error) {
         logger.error(`Erro ao processar carteira: ${error.message}`);
         next(error);

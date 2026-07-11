@@ -1,4 +1,5 @@
 
+import crypto from 'crypto';
 import Wallet from '../models/Wallet.js';
 import User from '../models/User.js';
 import UserAsset from '../models/UserAsset.js';
@@ -30,7 +31,17 @@ export const listWallets = async (req, res, next) => {
         const activeWalletId = activeExists ? String(user.activeWalletId) : String(wallets[0]?._id || '');
 
         res.json({
-            wallets: wallets.map((w) => ({ id: w._id, name: w.name, isDefault: !!w.isDefault, createdAt: w.createdAt })),
+            wallets: wallets.map((w) => ({
+                id: w._id,
+                name: w.name,
+                isDefault: !!w.isDefault,
+                createdAt: w.createdAt,
+                // (C4) Estado de compartilhamento público — o front monta o link
+                // a partir do publicToken (só presente quando isPublic).
+                isPublic: !!w.isPublic,
+                publicToken: w.isPublic ? (w.publicToken || null) : null,
+                publicShowValues: !!w.publicShowValues,
+            })),
             activeWalletId,
         });
     } catch (error) {
@@ -120,6 +131,61 @@ export const deleteWallet = async (req, res, next) => {
         res.json({ message: 'Carteira excluída.', activeWalletId: newActiveWalletId });
     } catch (error) {
         if (error.httpStatus) return res.status(error.httpStatus).json({ message: error.message });
+        next(error);
+    }
+};
+
+// POST /wallets/:walletId/share — (C4) liga/atualiza o compartilhamento público
+// (opt-in). Gera um publicToken aleatório na primeira vez; `regenerate:true`
+// rotaciona o token (invalida o link antigo). `showValues` controla se a página
+// pública exibe valores em R$ (default false: só % e composição).
+export const shareWallet = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { walletId } = req.params;
+        const { showValues = false, regenerate = false } = req.body || {};
+
+        const wallet = await Wallet.findOne({ _id: walletId, user: userId });
+        if (!wallet) return next(AppError.notFound('Carteira não encontrada.'));
+
+        // randomBytes(24)→32 chars base64url: espaço de busca inviável de varrer.
+        if (!wallet.publicToken || regenerate) {
+            wallet.publicToken = crypto.randomBytes(24).toString('base64url');
+        }
+        wallet.isPublic = true;
+        wallet.publicShowValues = !!showValues;
+        await wallet.save();
+
+        logger.info(`[Wallets] Carteira ${walletId} compartilhada (user ${userId}, showValues=${wallet.publicShowValues}).`);
+        res.json({
+            message: 'Compartilhamento ativado.',
+            isPublic: true,
+            publicToken: wallet.publicToken,
+            publicShowValues: wallet.publicShowValues,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// DELETE /wallets/:walletId/share — revoga o link público (token → null). O link
+// antigo passa a não resolver. Mantém a preferência de showValues para um futuro
+// re-compartilhamento não perder a escolha do usuário.
+export const unshareWallet = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { walletId } = req.params;
+
+        const wallet = await Wallet.findOneAndUpdate(
+            { _id: walletId, user: userId },
+            { $set: { isPublic: false, publicToken: null } },
+            { new: true },
+        );
+        if (!wallet) return next(AppError.notFound('Carteira não encontrada.'));
+
+        logger.info(`[Wallets] Carteira ${walletId} despublicada (user ${userId}).`);
+        res.json({ message: 'Compartilhamento revogado.', isPublic: false });
+    } catch (error) {
         next(error);
     }
 };
