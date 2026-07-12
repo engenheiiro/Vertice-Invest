@@ -17,7 +17,8 @@ const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHis
 const BATCH_SIZE = 15;
 const BATCH_DELAY_MS = 300;
 const TICKER_TIMEOUT_MS = 10000;
-const RETRY_PASS_DELAY_MS = 2000; // pausa antes do retry das falhas (alivia throttle do Yahoo)
+const RETRY_PASS_DELAY_MS = 2000; // pausa-base antes do retry das falhas (alivia throttle do Yahoo); escala por passada
+const MAX_RETRY_PASSES = 2;       // nº de passadas extras sobre o resíduo de falhas transitórias
 
 const QUOTESUMMARY_MODULES = [
     'summaryDetail',
@@ -188,16 +189,18 @@ export const usStocksFundamentalsService = {
 
         let failedTickers = await runPass(targets);
 
-        // Retry único: a maioria das falhas é throttle/crumb transitório do Yahoo
+        // Retry escalonado: a maioria das falhas é throttle/crumb transitório do Yahoo
         // (tickers válidos como IPG/HOLX/MMC retornando "Quote not found" sob rajada),
-        // não delisting. Uma segunda passada com folga recupera esses sem martelar.
-        if (failedTickers.length > 0) {
-            logger.debug(`[US Fundamentals] Retry de ${failedTickers.length} ativos após pausa...`);
-            await sleep(RETRY_PASS_DELAY_MS);
-            const recovered = failedTickers.length;
+        // não delisting. Cada passada carrega só o resíduo (~dezenas de tickers) e usa
+        // folga crescente para não martelar o endpoint já saturado. Duas passadas costumam
+        // zerar as falhas; o que sobrar mantém o valor anterior no DB (upsert só grava sucesso).
+        for (let attempt = 1; attempt <= MAX_RETRY_PASSES && failedTickers.length > 0; attempt++) {
+            logger.debug(`[US Fundamentals] Retry ${attempt}/${MAX_RETRY_PASSES} de ${failedTickers.length} ativos após pausa...`);
+            await sleep(RETRY_PASS_DELAY_MS * attempt);
+            const before = failedTickers.length;
             failedTickers = await runPass(failedTickers);
-            const got = recovered - failedTickers.length;
-            if (got > 0) logger.info(`↻ [US Fundamentals] Retry recuperou ${got} ativos.`);
+            const got = before - failedTickers.length;
+            if (got > 0) logger.info(`↻ [US Fundamentals] Retry ${attempt} recuperou ${got} ativos.`);
         }
 
         // Flush remaining ops

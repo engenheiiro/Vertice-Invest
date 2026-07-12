@@ -34,6 +34,12 @@ const GOOGLE_FINANCE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit
 // "No data found / delisted" e o ativo nunca recebe cotação/histórico/fundamentos.
 const US_CLASS_DOT_RE = /^[A-Z]{1,4}\.[A-Z]$/;   // BRK.B, BF.B (não casa PETR4.SA)
 const US_CLASS_DASH_RE = /^[A-Z]{1,4}-[A-Z]$/;   // BRK-B (não casa BTC-USD)
+// Formato de ticker B3: raiz de 4 chars + 1-2 dígitos. A raiz normalmente é toda de
+// letras (PETR4, HGLG11), MAS há exceções com dígito na raiz — notadamente B3SA3 (a
+// própria B3). A regex antiga `^[A-Z]{4}\d{1,2}$` exigia 4 LETRAS e rejeitava B3SA3,
+// que então não recebia sufixo .SA (Yahoo falhava) nem a bolsa :BVMF (Google ia p/
+// :NASDAQ e voltava vazio) — a bolsa ficou 70 dias sem cotação por causa disso.
+const B3_TICKER_RE = /^[A-Z][A-Z0-9]{3}\d{1,2}$/; // B3SA3, PETR4, HGLG11 (não casa BRK.B/BTC-USD/AAPL)
 // Ticker canônico (DB) → símbolo aceito pelo Yahoo.
 export const toYahooSymbol = (sym) => (US_CLASS_DOT_RE.test(sym) ? sym.replace('.', '-') : sym);
 // Símbolo do Yahoo → ticker canônico (DB), revertendo só a classe US (preserva BTC-USD).
@@ -86,7 +92,7 @@ export const externalMarketService = {
                 googleTicker = ticker.replace('.SA', '');
                 exchange = ':BVMF';
             }
-            else if (/^[A-Z]{4}\d{1,2}$/.test(ticker)) {
+            else if (B3_TICKER_RE.test(ticker)) {
                 googleTicker = ticker;
                 exchange = ':BVMF';
             }
@@ -106,10 +112,20 @@ export const externalMarketService = {
 
             // (I4) Via circuit breaker: se o Google estiver fora, fast-fail (null)
             // sem esperar o timeout em cada ticker do lote.
+            // Cookie de consentimento: sem ele o Google responde 302→página de consent
+            // (0 byte) a partir de IP de datacenter — o fallback devolvia null p/ TUDO,
+            // derrubava blue-chips como B3SA3 e abria o circuit breaker. Accept-Language
+            // pt-BR ancora o formato de preço BR. maxRedirects segue o novo 302 para
+            // /finance/beta/quote/. Timeout 6s tolera o hop extra + latência do datacenter.
             const response = await googleBreaker.exec(
                 () => axios.get(url, {
-                    headers: { 'User-Agent': GOOGLE_FINANCE_UA },
-                    timeout: 3000 // Timeout curto para não travar o fluxo
+                    headers: {
+                        'User-Agent': GOOGLE_FINANCE_UA,
+                        'Accept-Language': 'pt-BR,pt;q=0.9',
+                        Cookie: 'CONSENT=YES+cb.20210328-17-p0.en+FX+000',
+                    },
+                    timeout: 6000,
+                    maxRedirects: 5,
                 }),
             );
 
@@ -216,7 +232,7 @@ export const externalMarketService = {
             logger.info(`✅ [Fallback] Google Finance recuperou cotação para ${ticker}: ${googleData.price}`);
             return googleData;
         }
-        if (/^[A-Z]{4}\d{1,2}$/.test(ticker)) {
+        if (B3_TICKER_RE.test(ticker)) {
             const brapiData = await this.fetchFromBrapi(ticker + '.SA');
             if (brapiData) {
                 logger.info(`✅ [Fallback] Brapi recuperou cotação para ${ticker}: ${brapiData.price}`);
@@ -251,7 +267,7 @@ export const externalMarketService = {
             if (knownCryptos.includes(cleanT)) return `${cleanT}-USD`;
             if (cleanT.endsWith('-USD')) return cleanT;
 
-            const isB3Format = /^[A-Z]{4}\d{1,2}$/.test(cleanT);
+            const isB3Format = B3_TICKER_RE.test(cleanT);
             if (isB3Format && !cleanT.endsWith('.SA')) return `${cleanT}.SA`;
             // Ação com classe (BRK.B) → formato do Yahoo (BRK-B).
             return toYahooSymbol(cleanT);
@@ -288,9 +304,13 @@ export const externalMarketService = {
                 };
             });
 
-            // Verifica quais tickers falharam no Yahoo (não retornaram ou preço zero)
+            // Verifica quais tickers falharam no Yahoo (não retornaram ou preço zero).
+            // successTickers guarda a forma CANÔNICA (fromYahooSymbol: BRK-B→BRK.B), então
+            // a entrada também é normalizada — senão um ticker de classe gravado com hífen
+            // (BF-B) nunca casaria com "BF.B" e viraria falha-fantasma que aciona o Google
+            // Finance à toa (a cotação do Yahoo já veio correta).
             const successTickers = new Set(mappedResults.filter(r => r.price > 0).map(r => r.ticker));
-            const failedTickers = tickers.filter(t => !successTickers.has(t));
+            const failedTickers = tickers.filter(t => !successTickers.has(fromYahooSymbol(t)));
 
             // TENTATIVA 2: GOOGLE FINANCE (Fallback para falhas)
             if (failedTickers.length > 0) {
@@ -476,7 +496,7 @@ export const externalMarketService = {
             // ETF cobre nacionais (BOVA11/IVVB11 → .SA) e internacionais (VOO/QQQ →
             // sem sufixo). O regex B3 garante o .SA só para o formato brasileiro.
             if (!symbol.startsWith('^') && !symbol.endsWith('.SA')) {
-                if (/^[A-Z]{4}\d{1,2}$/.test(symbol)) {
+                if (B3_TICKER_RE.test(symbol)) {
                     symbol = `${symbol}.SA`;
                 }
             }
@@ -486,7 +506,6 @@ export const externalMarketService = {
             // US stocks vão quase sem ajuste (AAPL, MSFT). Exceção: ações com classe
             // (BRK.B) precisam do hífen do Yahoo (BRK-B), senão "No data found".
             symbol = toYahooSymbol(symbol);
-            logger.debug(`[getFullHistory] STOCK_US: ${symbol}`);
         }
         // For USD-BRL exchange rate history
         if (symbol === 'USD-BRL') {
@@ -540,7 +559,7 @@ export const externalMarketService = {
         let symbol = ticker.trim().toUpperCase();
         // B3 (ações/FIIs/ETFs nacionais) precisam do sufixo .SA; STOCK_US e ETFs
         // internacionais (sem formato B3) vão como está.
-        if ((type === 'STOCK' || type === 'FII' || type === 'ETF') && !symbol.endsWith('.SA') && /^[A-Z]{4}\d{1,2}$/.test(symbol)) {
+        if ((type === 'STOCK' || type === 'FII' || type === 'ETF') && !symbol.endsWith('.SA') && B3_TICKER_RE.test(symbol)) {
             symbol = `${symbol}.SA`;
         }
 
