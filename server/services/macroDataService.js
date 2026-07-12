@@ -439,9 +439,15 @@ export const macroDataService = {
                 maturity = text;
             } 
             else if (text.includes('%')) {
+                // O Investidor10 tem DUAS colunas de %: "Rentabilidade anual" (a taxa
+                // REAL/contratada — ex.: IPCA+ mostra "IPCA + 7,95%" → 7.95; Selic
+                // mostra "SELIC + 0,07%" → 0.07) vem ANTES de "Rentabilidade estimada"
+                // (o retorno NOMINAL projetado — ex.: 12,18%). Só a PRIMEIRA (!rate)
+                // interessa: a estimada nominal contaminava a taxa NTN-B e o spread da
+                // renda fixa (IPCA+ virava ~12%, Selic virava ~14%).
                 const val = this.cleanNumber(text);
-                if (val > 0 && val < 25) rate = val;
-            } 
+                if (!rate && val > 0 && val < 25) rate = val;
+            }
             else if (text.includes('R$') || (this.cleanNumber(text) > 30)) {
                 const val = this.cleanNumber(text);
                 if (val > 0) foundPrices.push(val);
@@ -472,50 +478,99 @@ export const macroDataService = {
     // API pública do governo: sem autenticação, sem risco de bloqueio por mudança de HTML.
     async fetchNtnbFromTesouroDireto() {
         try {
-            // Tesouro Transparente CKAN API — retorna os títulos mais recentes negociados
-            const resourceId = '796d2059-14e9-44e3-80a7-de3269fd8229';
-            const url = `https://www.tesourotransparente.gov.br/ckan/api/3/action/datastore_search?resource_id=${resourceId}&limit=100&sort=Data%20Venda%20desc`;
+            // Tesouro Transparente — CSV oficial "Preços e Taxas do Tesouro Direto",
+            // atualizado diariamente. A API `datastore_search` foi desativada nesta
+            // instância CKAN (retorna 400 "ação desconhecida"); o download do CSV é
+            // a fonte oficial estável. Formato: delimitador ';', decimal com vírgula,
+            // datas dd/mm/aaaa. Sem autenticação. gzip reduz o tráfego (~2–3MB).
+            const url = 'https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/precotaxatesourodireto.csv';
 
             const res = await axios.get(url, {
-                headers: { ...BASE_HEADERS, 'Accept': 'application/json' },
+                headers: { ...BASE_HEADERS, 'Accept': 'text/csv, text/plain, */*', 'Accept-Encoding': 'gzip' },
                 httpsAgent: bcbAgent,
-                timeout: 12000
+                timeout: 25000,
+                responseType: 'text',
+                transformResponse: [(d) => d], // não deixa o axios tentar parsear como JSON
+                maxContentLength: 64 * 1024 * 1024,
+                maxBodyLength: 64 * 1024 * 1024,
             });
 
-            const records = res.data?.result?.records || [];
-            if (records.length === 0) return null;
-
-            // Procura NTN-B longa: IPCA+ com vencimento >= 2035
-            const longMaturityYears = [2035, 2040, 2045, 2050, 2055];
-            let ntnbRate = null;
-
-            for (const year of longMaturityYears) {
-                const bond = records.find(r => {
-                    const tipo = String(r['Tipo Titulo'] || '');
-                    // Apenas NTN-B de referência: IPCA+ e NUNCA Educa+/Renda+
-                    // (que são IPCA-indexados mas têm taxa/estrutura diferentes).
-                    if (!/IPCA\+/i.test(tipo) || /Educa|Renda/i.test(tipo)) return false;
-                    // O ano de vencimento pode vir no campo próprio ou no nome do título.
-                    const venc = String(r['Vencimento do Titulo'] || tipo);
-                    return venc.includes(String(year));
-                });
-                if (bond) {
-                    // Taxa Venda Manhã é o que o investidor paga — mais conservador para benchmark
-                    const rate = parseFloat(bond['Taxa Venda Manha'] ?? bond['Taxa Compra Manha'] ?? 0);
-                    if (isPlausibleNtnbRate(rate)) {
-                        ntnbRate = rate;
-                        logger.debug(`🏛️ [NTN-B] Fonte oficial (Tesouro Transparente): ${rate}% a.a. (IPCA+ ${year})`);
-                        break;
-                    } else if (rate > 0) {
-                        logger.warn(`⚠️ [NTN-B] Taxa oficial implausível descartada: ${rate}% (IPCA+ ${year})`);
-                    }
-                }
-            }
-            return ntnbRate;
+            const csv = typeof res.data === 'string' ? res.data : String(res.data ?? '');
+            return this._parseNtnbFromCsv(csv);
         } catch (error) {
             logger.debug(`[NTN-B] Fonte oficial indisponível (${error.message}). Usando Investidor10.`);
             return null;
         }
+    },
+
+    // Extrai a taxa REAL da NTN-B longa (Tesouro IPCA+, venc. >= 2035) na Data Base
+    // mais recente do CSV oficial. Função pura (sem rede) para ser testável.
+    // Robusta a reordenação de colunas: resolve índices pelo cabeçalho, não por posição.
+    _parseNtnbFromCsv(csv) {
+        if (!csv || typeof csv !== 'string') return null;
+        const lines = csv.split(/\r?\n/);
+        if (lines.length < 2) return null;
+
+        const header = lines[0].split(';').map(h => h.trim().toLowerCase());
+        const col = (name) => header.indexOf(name.toLowerCase());
+        const iTipo = col('Tipo Titulo');
+        const iVenc = col('Data Vencimento');
+        const iBase = col('Data Base');
+        const iVenda = col('Taxa Venda Manha');
+        const iCompra = col('Taxa Compra Manha');
+        if (iTipo < 0 || iVenc < 0 || iBase < 0 || (iVenda < 0 && iCompra < 0)) return null;
+
+        const toTs = (s) => {
+            const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || '').trim());
+            return m ? Date.UTC(+m[3], +m[2] - 1, +m[1]) : NaN;
+        };
+        const toNum = (s) => {
+            const v = parseFloat(String(s || '').replace(/\./g, '').replace(',', '.'));
+            return Number.isFinite(v) ? v : NaN;
+        };
+
+        // Passo 1: coleta só IPCA+ longos (nunca Educa+/Renda+) e acha a Data Base máxima.
+        let maxBaseTs = -Infinity;
+        const rows = [];
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line) continue;
+            const c = line.split(';');
+            const tipo = (c[iTipo] || '').trim();
+            if (!/IPCA\+/i.test(tipo) || /Educa|Renda/i.test(tipo)) continue;
+            const vencTs = toTs(c[iVenc]);
+            const vencYear = Number.isFinite(vencTs) ? new Date(vencTs).getUTCFullYear() : 0;
+            if (vencYear < 2035) continue; // NTN-B longa de referência
+            const baseTs = toTs(c[iBase]);
+            if (!Number.isFinite(baseTs)) continue;
+            // Taxa Venda Manhã: o que o investidor paga — mais conservador para benchmark.
+            const rate = toNum(iVenda >= 0 ? c[iVenda] : c[iCompra]);
+            if (!Number.isFinite(rate)) continue;
+            rows.push({ baseTs, vencYear, rate });
+            if (baseTs > maxBaseTs) maxBaseTs = baseTs;
+        }
+        if (!rows.length || maxBaseTs < 0) return null;
+
+        // Passo 2: entre os títulos da Data Base mais recente, prioriza a mesma
+        // escada de vencimentos do benchmark anterior e valida a faixa de yield real.
+        const latest = rows.filter(r => r.baseTs === maxBaseTs);
+        const preferred = [2035, 2040, 2045, 2050, 2055, 2060];
+        for (const year of preferred) {
+            const hit = latest.find(r => r.vencYear === year && isPlausibleNtnbRate(r.rate));
+            if (hit) {
+                logger.debug(`🏛️ [NTN-B] Fonte oficial (Tesouro Transparente CSV): ${hit.rate}% a.a. (IPCA+ ${year})`);
+                return hit.rate;
+            }
+        }
+        // Fallback: qualquer plausível na data mais recente (vencimento mais longo primeiro).
+        const anyPlausible = latest
+            .filter(r => isPlausibleNtnbRate(r.rate))
+            .sort((a, b) => b.vencYear - a.vencYear)[0];
+        if (anyPlausible) {
+            logger.debug(`🏛️ [NTN-B] Fonte oficial (CSV): ${anyPlausible.rate}% a.a. (IPCA+ ${anyPlausible.vencYear})`);
+            return anyPlausible.rate;
+        }
+        return null;
     },
 
     // Última taxa REAL de NTN-B longa já persistida e plausível.
