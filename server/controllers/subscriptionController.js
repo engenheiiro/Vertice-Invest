@@ -1,5 +1,4 @@
 
-import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 import UsageLog from '../models/UsageLog.js';
@@ -150,15 +149,33 @@ export const createCheckoutSession = async (req, res, next) => {
 
 export const handlePaymentReturn = async (req, res) => {
     try {
-        const { plan, ...query } = req.query;
-        let clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-        clientUrl = clientUrl.replace(/\/$/, '');
-        
-        const queryString = new URLSearchParams(query).toString();
-        const target = `${clientUrl}/#/checkout/success?plan=${plan}&${queryString}`;
-        
-        logger.info(`🔄 Redirecionando usuário do MP para: ${target}`);
-        res.redirect(target);
+        // Checkout Pro devolve payment_id, collection_id, status e
+        // collection_status. A SPA os usa apenas para consultar/exibir o
+        // pagamento: webhook e sync-payment continuam sendo a fonte de verdade.
+        const readSingleQueryValue = (value) => Array.isArray(value) ? value.at(-1) : value;
+        const rawPlan = readSingleQueryValue(req.query.plan);
+        const plan = typeof rawPlan === 'string' && PLANS[rawPlan] ? rawPlan : null;
+        const allowedParams = [
+            'payment_id',
+            'collection_id',
+            'status',
+            'collection_status',
+            'return_status',
+        ];
+        const query = new URLSearchParams();
+        if (plan) query.set('plan', plan);
+
+        for (const key of allowedParams) {
+            const value = readSingleQueryValue(req.query[key]);
+            if (typeof value === 'string' && value.length > 0) query.set(key, value);
+        }
+
+        const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const target = new URL('/checkout/success', clientUrl);
+        target.search = query.toString();
+
+        logger.info(`🔄 Redirecionando usuário do MP para: ${target.toString()}`);
+        res.redirect(target.toString());
 
     } catch (error) {
         logger.error(`Erro no redirect de retorno: ${error.message}`);
@@ -242,23 +259,6 @@ export const syncPayment = async (req, res, next) => {
 
     } catch (error) {
         logger.error(`Erro Sync Payment: ${error.message}`);
-        next(error);
-    }
-};
-
-export const confirmPayment = async (req, res, next) => {
-    // Mock legacy - mantido para não quebrar testes
-    const session = await mongoose.startSession();
-    try {
-        session.startTransaction({ maxCommitTimeMS: 30_000 });
-        const { planId } = req.body;
-        if (!PLANS[planId]) throw new Error("Plano inválido");
-        await session.commitTransaction();
-        session.endSession();
-        res.status(200).json({ success: true });
-    } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
         next(error);
     }
 };

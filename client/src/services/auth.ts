@@ -112,8 +112,8 @@ export const authService = {
           onRrefreshed(newToken);
         } else {
           this.clearSession();
-          if (!window.location.hash.includes('/login') && !endpoint.includes('/subscription/status')) {
-             window.location.hash = '/login';
+          if (window.location.pathname !== '/login' && !endpoint.includes('/subscription/status')) {
+             window.location.assign('/login');
           }
           onRrefreshed(""); // Notifica falha
         }

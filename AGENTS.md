@@ -6,7 +6,7 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 
 ## Stack
 
-- **Frontend** (`/client`): React 18 + TypeScript + Vite + Tailwind. Ícones: `lucide-react`. Gráficos: `recharts`. Data fetching: `@tanstack/react-query` v5. Roteamento: React Router v6 com **HashRouter**. Animações: CSS/Tailwind (keyframes em `tailwind.config.js`; sem libs de animação).
+- **Frontend** (`/client`): React 18 + TypeScript + Vite + Tailwind. Ícones: `lucide-react`. Gráficos: `recharts`. Data fetching: `@tanstack/react-query` v5. Roteamento: React Router v6 com **BrowserRouter** (o Express atende deep links da SPA). Animações: CSS/Tailwind (keyframes em `tailwind.config.js`; sem libs de animação).
 - **Backend** (`/server`): Node.js ES Modules (`import/export`, nunca `require`). Express 4, MongoDB/Mongoose 8, Winston (logs), node-cron. AI: `@google/genai` (Gemini). Pagamentos: Mercado Pago SDK.
 - **Dev**: Nodemon (server), Vite HMR (client), Vitest (testes).
 
@@ -95,7 +95,7 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 - **`MarketAnalysis`**: ranking salvo. `content.ranking[]` (RankingItem com `position`, `score`, `riskProfile`, `action`, `auditLog[]`, `metrics`) e `content.fullAuditLog[]`.
 - **`SystemConfig`** (key `MACRO_INDICATORS`): cache macro — `selic`, `ipca`, `ntnbLong`, `riskFree`, `ibov`, `dollar`, `btc`.
 - **`DiscardLog`**: ativos descartados por run — `runId`, `ticker`, `reason`, `details`.
-- **`User`**: `plan` (GUEST|ESSENTIAL|PRO|BLACK), `role` (USER|ADMIN), `subscriptionStatus`.
+- **`User`**: `plan` (GUEST|ESSENTIAL|PRO|ELITE|BLACK), `role` (USER|ADMIN), `subscriptionStatus`.
 - **`UserAsset`**: holdings — `taxLots[]` para FIFO, `totalCost`, `realizedProfit`, `fifoRealizedProfit`. Índice único `{ user, ticker }`.
 - **`WalletSnapshot`**: snapshot patrimonial diário — `equity`, `invested`, `result`, `twrr`, `dividends`. Gerado por `schedulerService.runDailySnapshot()`.
 - **`QuantSignal`**: sinal técnico salvo — `ticker`, `type`, `strength`, `rsiValue`, `volumeRatio`.
@@ -106,15 +106,15 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 
 ## Planos e Acesso
 
-Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < BLACK (3). Definido em `server/config/subscription.js`.
+Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < ELITE (3) < BLACK (4). Definido em `server/config/subscription.js`.
 
-| Feature | GUEST | ESSENTIAL | PRO | BLACK |
-|---|---|---|---|---|
-| Carteira / Brasil 10 | ✅ | ✅ | ✅ | ✅ |
-| Sinais (delay) | ❌ | ✅ | ✅ | ✅ |
-| Research STOCK/FII/Crypto | ❌ | ❌ | ✅ | ✅ |
-| Radar Alpha / Aporte Inteligente | ❌ | ❌ | ✅ | ✅ |
-| Ativos Globais / Rebalanceamento IA | ❌ | ❌ | ❌ | ✅ |
+| Feature | GUEST | ESSENTIAL | PRO | ELITE | BLACK |
+|---|---|---|---|---|---|
+| Carteira / Brasil 10 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Sinais (delay) | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Research STOCK/FII/Crypto | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Radar Alpha / Aporte Inteligente | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Ativos Globais / Rebalanceamento IA | ❌ | ❌ | ❌ | ✅ | ✅ |
 
 ---
 

@@ -12,16 +12,6 @@ export const subscriptionService = {
         return await response.json();
     },
 
-    async confirmPayment(planId: string, paymentMethod: string) {
-        const response = await authService.api('/api/subscription/confirm', {
-            method: 'POST',
-            body: JSON.stringify({ planId, paymentMethod })
-        });
-        
-        if (!response.ok) throw new Error("Falha no pagamento");
-        return await response.json();
-    },
-
     // Novo método para forçar a verificação do pagamento
     async syncPayment(paymentId: string) {
         const response = await authService.api('/api/subscription/sync-payment', {

@@ -25,7 +25,6 @@ import { Privacy } from './pages/Privacy';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { Landing } from './pages/Landing';
-import { Checkout } from './pages/Checkout';
 import { CheckoutSuccess } from './pages/CheckoutSuccess';
 import { CookieNotice } from './components/ui/CookieNotice';
 
@@ -132,7 +131,9 @@ export default function App() {
               } />
             </Route>
 
-            <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+            {/* Checkout ocorre exclusivamente no Mercado Pago. Mantemos esta rota
+                apenas para não quebrar links antigos para a antiga tela simulada. */}
+            <Route path="/checkout" element={<Navigate to="/pricing" replace />} />
             <Route path="/checkout/success" element={<ProtectedRoute><CheckoutSuccess /></ProtectedRoute>} />
             
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -99,7 +99,7 @@ hooks/         → useDashboardData (React Query), useFeatureAccess, usePriceFet
 services/      → camada de chamada à API (auth, market, research, subscription)
 ```
 
-- **Roteamento:** React Router com HashRouter; rotas protegidas por `ProtectedRoute`/`AdminRoute`.
+- **Roteamento:** React Router com BrowserRouter; rotas protegidas por `ProtectedRoute`/`AdminRoute`. O Express atende deep links da SPA, inclusive retornos do Mercado Pago.
 - **Dados:** React Query agrega macro, sinais, dividendos e research com `staleTime` por domínio.
 - **Auth:** interceptor de refresh automático em 401, com fila de requisições aguardando o novo token.
 - **Code splitting:** abas pesadas (ex.: Wallet) carregam via `React.lazy`.
@@ -109,7 +109,7 @@ services/      → camada de chamada à API (auth, market, research, subscriptio
 
 ## Planos e acesso
 
-Hierarquia `GUEST < ESSENTIAL < PRO < BLACK`, definida em `server/config/subscription.js`. O gating é aplicado no backend (middleware + checagens) e refletido no frontend (`useFeatureAccess`).
+Hierarquia `GUEST < ESSENTIAL < PRO < ELITE < BLACK`, definida em `server/config/subscription.js`. O gating é aplicado no backend (middleware + checagens) e refletido no frontend (`useFeatureAccess`).
 
 ---
 

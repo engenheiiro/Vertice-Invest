@@ -10,7 +10,7 @@ Monorepo com frontend (React) e backend (Node/Express) rodando juntos via `concu
 
 | Camada | Tecnologias |
 |---|---|
-| **Frontend** (`/client`) | React 18 · TypeScript · Vite · Tailwind · React Router (HashRouter) · React Query v5 · Recharts · animações via CSS/Tailwind |
+| **Frontend** (`/client`) | React 18 · TypeScript · Vite · Tailwind · React Router (BrowserRouter) · React Query v5 · Recharts · animações via CSS/Tailwind |
 | **Backend** (`/server`) | Node.js (ES Modules) · Express 4 · MongoDB/Mongoose 8 · Winston · node-cron |
 | **IA / Integrações** | Google Gemini (`@google/genai`) · Mercado Pago · Yahoo Finance · Brapi · Fundamentus · BCB · Sentry |
 | **Qualidade** | Vitest · ESLint · Prettier · Husky + lint-staged · commitlint · GitHub Actions |

@@ -325,9 +325,6 @@ const definition = {
     '/subscription/test-checkout': {
       post: { tags: ['Subscription'], summary: 'Checkout de teste (admin)', responses: { 200: { description: 'Preferência de teste' }, 403: { description: 'Requer ADMIN' } } },
     },
-    '/subscription/confirm': {
-      post: { tags: ['Subscription'], summary: 'Confirma pagamento (legado/mock)', responses: { 200: { description: 'Confirmado' } } },
-    },
     '/subscription/sync-payment': {
       post: { tags: ['Subscription'], summary: 'Força a sincronização do pagamento', responses: { 200: { description: 'Sincronizado' } } },
     },

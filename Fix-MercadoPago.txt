@@ -1,0 +1,198 @@
+PLANO DE CORRECAO — MERCADO PAGO / P0
+Data: 2026-07-12
+Status: IMPLEMENTADO — validacao automatizada concluida em 2026-07-12.
+
+OBJETIVO
+
+Consolidar o Mercado Pago como o unico checkout de pagamento, tornar o retorno
+ao Vértice compativel com o BrowserRouter em uso e impedir que a interface
+declare um pagamento/aprovacao antes da confirmacao autoritativa no servidor.
+
+ESCOPO E DECISAO FUNDAMENTAL
+
+O checkout de teste de R$ 0,50 do Admin NAO deve ser removido. Ele e um fluxo
+legitimo para validar, de ponta a ponta e com cobranca autentica, Mercado Pago
+→ callback → webhook → Transaction → plano → UI.
+
+Ele ja usa corretamente POST /api/subscription/test-checkout, exige ADMIN,
+cria uma preferencia Mercado Pago real com as variantes *_TEST e mapeia o plano
+de teste ao plano comercial correspondente. Portanto, o conserto deve preservar
+este fluxo e fazer com que ele atravesse exatamente as mesmas etapas de retorno,
+webhook, idempotencia e sincronizacao do checkout comercial.
+
+O que sera removido e somente o checkout simulado: a pagina /checkout coleta
+cartao apenas visualmente e chama POST /api/subscription/confirm. Essa rota hoje
+retorna { success: true }, mas nao cobra e nao altera o plano. Ela nao deve ser
+mantida como caminho de compra nem como fallback de teste.
+
+EVIDENCIAS CONFIRMADAS
+
+1. client/src/App.tsx usa BrowserRouter.
+2. server/controllers/subscriptionController.js e server/services/emailService.js
+   ainda geram URLs internas com /#/ (convencao de HashRouter).
+3. O callback /api/subscription/return redireciona para /#/checkout/success;
+   com BrowserRouter isso abre a rota raiz e pode impedir a tela de sucesso.
+4. client/src/pages/CheckoutSuccess.tsx espera payment_id + status=approved,
+   enquanto o callback atual envia status=success e nao adiciona payment_id.
+   O resultado e que a tela pode mostrar sucesso sem ter confirmado a ativacao.
+5. client/src/pages/Pricing.tsx ja inicia o fluxo correto: POST /checkout e
+   redirecionamento para a URL hospedada do Mercado Pago.
+6. client/src/pages/admin/AdminFerramentasTab.tsx inicia o teste autentico de
+   R$ 0,50 por POST /test-checkout; esse endpoint exige ADMIN.
+7. Webhook e sync-payment usam Transaction.gatewayId unico como barreira de
+   idempotencia. Essa protecao deve continuar sendo a fonte de verdade.
+
+INVARIANTES DE SEGURANCA E NEGOCIO
+
+- Nenhum retorno do navegador concede plano; somente webhook ou sync-payment,
+  apos consultar o Mercado Pago, pode criar Transaction e estender validUntil.
+- gatewayId permanece unico e a Transaction e criada antes da extensao do plano.
+- O teste de R$ 0,50 preserva a cobranca real, mas concede o plano real por
+  TEST_PLAN_MAP (por exemplo PRO_TEST → PRO), como ja ocorre hoje.
+- /test-checkout permanece protegido por authenticateToken + requireAdmin.
+- Nao registrar, trafegar ou processar dados de cartao no Vértice: cartao/Pix/
+  boleto continuam exclusivamente no checkout hospedado do Mercado Pago.
+- O webhook continua com validacao HMAC em producao e fail-closed sem segredo.
+
+PLANO DE EXECUCAO
+
+FASE 0 — Preparacao e contrato de retorno
+
+0.1 Escolher BrowserRouter como contrato oficial. A aplicacao Express ja tem
+    fallback para index.html e a SPA ja o utiliza; nao migrar de volta para
+    HashRouter apenas para acomodar links legados.
+0.2 Registrar os parametros reais recebidos do Mercado Pago em ambiente de
+    sandbox ou no teste de R$ 0,50 (sem registrar dados sensiveis). Confirmar
+    os nomes do identificador de pagamento e do status no retorno real.
+0.3 Definir um contrato interno tolerante a aliases conhecidos do Mercado Pago
+    para o identificador, sem confiar nele para conceder acesso. O servidor
+    continuara verificando ownership e status diretamente na API do gateway.
+
+FASE 1 — Redirecionamento e retorno confiavel
+
+1.1 Em handlePaymentReturn, construir a URL sem /#/:
+    CLIENT_URL/checkout/success?plan=...&...
+1.2 Preservar todos os parametros permitidos do retorno. Escapar/normalizar
+    plan e query string por URLSearchParams; nao interpolar valores brutos.
+1.3 Em paymentService, manter as back_urls apontando para o callback do
+    servidor. O callback e necessario para centralizar a URL do cliente e
+    evitar depender de configuracao duplicada no Mercado Pago.
+1.4 Atualizar os links de email para BrowserRouter (/dashboard, /profile e
+    reset-password) e validar que funcionam em producao com o fallback da SPA.
+
+FASE 2 — Tela de sucesso orientada a estado do servidor
+
+2.1 Reescrever CheckoutSuccess para distinguir: pagamento aprovado/ativado,
+    pendente, recusado, retorno sem identificador e erro temporario de consulta.
+2.2 Quando houver identificador de pagamento, chamar sync-payment como backup
+    do webhook. Ele somente ativa se Mercado Pago retornar approved e se o
+    pagamento pertencer ao usuario autenticado.
+2.3 Fazer polling de /subscription/status com criterio verificavel: plano
+    esperado e/ou Transaction mais recente correspondente. Nao considerar
+    "plano diferente" como unica prova, pois uma renovacao pode manter o mesmo
+    plano.
+2.4 Em timeout, informar "pagamento em processamento" e oferecer atualizar ou
+    voltar ao dashboard; nunca informar "plano ativado" sem evidencia do server.
+2.5 Atualizar AuthContext apenas depois de o servidor refletir o estado novo.
+
+FASE 3 — Remocao do checkout falso, preservando compatibilidade segura
+
+3.1 Remover o formulario manual de cartao de client/src/pages/Checkout.tsx.
+3.2 Remover subscriptionService.confirmPayment, confirmPayment no controller,
+    POST /subscription/confirm e seu registro Swagger.
+3.3 Alterar a rota SPA /checkout para redirecionar a /pricing (ou removê-la
+    depois de medir links legados). Nunca renderizar um formulario que pareca
+    processar cartao fora do Mercado Pago.
+3.4 Confirmar por busca que nenhum componente, teste ou documentacao depende
+    de /subscription/confirm.
+
+FASE 4 — Fluxo de teste Admin R$ 0,50 (OBRIGATORIO PRESERVAR E VALIDAR)
+
+4.1 Manter os botoes Essential, Pro, Elite e Black no Admin Ferramentas.
+4.2 Manter as chaves ESSENTIAL_TEST, PRO_TEST, ELITE_TEST e BLACK_TEST a R$0,50
+    apenas no servidor e a conversao TEST_PLAN_MAP para o plano real.
+4.3 Validar que usuario nao-admin recebe 403 em /test-checkout.
+4.4 Executar para cada plano, pelo menos uma vez, um teste integrado:
+    Admin → Mercado Pago R$0,50 → retorno BrowserRouter → webhook/sync →
+    Transaction com gatewayId unico → plano real correto → UI atualizada.
+4.5 Reenviar webhook ou chamar sync-payment apos o webhook para confirmar que
+    o mesmo gatewayId nao concede 30 dias em dobro.
+4.6 Validar pagamento pendente/recusado: nao criar Transaction PAID, nao mudar
+    plano e nao exibir sucesso enganoso.
+
+FASE 5 — Testes automatizados
+
+5.1 Controller: retorno converte query em URL BrowserRouter, sem /#/.
+5.2 Frontend: CheckoutSuccess mostra estados aprovado, pendente, recusado,
+    timeout e falha de sync; refreshProfile acontece somente quando apropriado.
+5.3 API: /subscription/confirm deixa de existir (404) e /test-checkout continua
+    ADMIN-only.
+5.4 Integracao simulada: sync-payment e webhook concorrentes para o mesmo
+    paymentId criam uma unica Transaction e estendem somente 30 dias.
+5.5 Regressao: checkout comercial e checkout *_TEST usam createSubscription;
+    o preco e a chave de referencia corretos chegam ao gateway.
+5.6 Rodar npm.cmd test, typecheck, build:all e E2E relevante.
+
+FASE 6 — Documentacao e deploy
+
+6.1 Atualizar README.md, ARCHITECTURE.md, AGENTS.md e CLAUDE.md para
+    BrowserRouter e URLs sem hash; documentar o checkout hospedado.
+6.2 Documentar que o R$0,50 e teste administrativo autentico, nao mock, e que
+    testa o mesmo fluxo de producao com variantes *_TEST.
+6.3 Antes do deploy, conferir CLIENT_URL, RENDER_EXTERNAL_URL/API_URL,
+    MP_ACCESS_TOKEN e MP_WEBHOOK_SECRET no ambiente alvo. Em producao, a falta
+    de MP_WEBHOOK_SECRET deve impedir processamento do webhook.
+6.4 Pos-deploy: executar um teste admin R$0,50, verificar logs por request id,
+    Transaction, plano, e-mail e atualizacao da UI. Repetir idempotencia.
+
+CRITERIOS DE ACEITE
+
+- Checkout comercial e teste admin chegam a /checkout/success sem #/.
+- O retorno do navegador por si so nao concede acesso.
+- A UI nao afirma ativacao sem confirmacao persistida do servidor.
+- Teste R$0,50 continua disponivel apenas para ADMIN e ativa o plano correto.
+- Webhook e sync concorrentes nao duplicam Transaction nem dias de assinatura.
+- Nao ha rota nem tela que simule cobranca com cartao no Vértice.
+- Testes, typecheck e builds passam.
+
+ROLLBACK
+
+As mudancas sao de aplicacao e reversiveis por deploy. O rollback nao deve
+remover Transactions ja processadas. Caso haja problema no retorno, manter o
+webhook como fonte de ativacao e restaurar a versao anterior apenas depois de
+preservar logs/request IDs e payment IDs para conciliacao manual.
+
+FORA DE ESCOPO DESTA ENTREGA
+
+- Implementar assinatura recorrente PreApproval; o fluxo atual usa Preference.
+- Alterar precos comerciais ou a hierarquia de planos.
+- Rodar migracoes de carteira/renda fixa em producao.
+- Recalibrar RSI ou alterar taxLots.
+
+RESULTADO DA IMPLEMENTACAO
+
+- BrowserRouter foi consolidado como contrato da SPA; callback e e-mails usam
+  URLs sem /#/.
+- O retorno encaminha somente plan valido, payment_id/collection_id, status,
+  collection_status e return_status. Dados desnecessarios, como
+  external_reference, nao chegam ao navegador.
+- CheckoutSuccess somente apresenta "Pagamento confirmado" depois de encontrar
+  uma Transaction PAID com o mesmo gatewayId e o plano esperado no servidor.
+- O checkout visual falso, POST /subscription/confirm e sua documentacao Swagger
+  foram removidos. /checkout agora redireciona para /pricing por compatibilidade.
+- O checkout autentico de R$0,50 para ADMIN foi preservado e recebeu teste que
+  confirma a criacao da preferencia ELITE_TEST (padrao valido para todos planos).
+
+VALIDACAO EXECUTADA
+
+- Servidor: 80 arquivos / 774 testes aprovados.
+- Cliente: 28 arquivos / 295 testes aprovados.
+- Typecheck do cliente, sintaxe/build do servidor e build de producao do cliente
+  aprovados.
+- E2E em Chromium aprovado (login → carteira → compra), executado contra o
+  bundle de producao com backend interceptado de forma deterministica.
+- O lint global da raiz continua bloqueado por arquivos preexistentes em
+  .backups/wallet-20260704-225317; nao pertence a esta entrega. Os arquivos
+  alterados passaram em TypeScript/build e git diff --check.
+- Pendente apenas a verificacao externa autorizada: executar um botao ADMIN de
+  R$0,50 no ambiente com dominio, credenciais Mercado Pago e webhook configurado.

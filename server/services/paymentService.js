@@ -29,9 +29,12 @@ export const paymentService = {
             const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.API_URL || 'http://localhost:5000';
             const apiUrl = baseUrl.replace(/\/$/, '');
 
-            const successUrl = `${apiUrl}/api/subscription/return?plan=${planKey}&status=success`;
-            const failureUrl = `${apiUrl}/api/subscription/return?plan=${planKey}&status=failure`;
-            const pendingUrl = `${apiUrl}/api/subscription/return?plan=${planKey}&status=pending`;
+            // `status` é adicionado pelo próprio Mercado Pago no retorno. Usar
+            // `return_status` para o nosso fallback evita duplicar a chave e
+            // preserva o estado autoritativo devolvido pelo gateway.
+            const successUrl = `${apiUrl}/api/subscription/return?plan=${planKey}&return_status=success`;
+            const failureUrl = `${apiUrl}/api/subscription/return?plan=${planKey}&return_status=failure`;
+            const pendingUrl = `${apiUrl}/api/subscription/return?plan=${planKey}&return_status=pending`;
 
             // --- DETECÇÃO DE AMBIENTE SANDBOX ---
             const isSandbox = accessToken.startsWith('TEST-');

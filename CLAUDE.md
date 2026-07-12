@@ -6,7 +6,7 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 
 ## Stack
 
-- **Frontend** (`/client`): React 18 + TypeScript + Vite + Tailwind. Ícones: `lucide-react`. Gráficos: `recharts`. Data fetching: `@tanstack/react-query` v5. Roteamento: React Router v6 com **HashRouter**. Animações: CSS/Tailwind (keyframes em `tailwind.config.js`; sem libs de animação).
+- **Frontend** (`/client`): React 18 + TypeScript + Vite + Tailwind. Ícones: `lucide-react`. Gráficos: `recharts`. Data fetching: `@tanstack/react-query` v5. Roteamento: React Router v6 com **BrowserRouter** (o Express atende deep links da SPA). Animações: CSS/Tailwind (keyframes em `tailwind.config.js`; sem libs de animação).
 - **Backend** (`/server`): Node.js ES Modules (`import/export`, nunca `require`). Express 4, MongoDB/Mongoose 8, Winston (logs), node-cron. AI: `@google/genai` (Gemini). Pagamentos: Mercado Pago SDK.
 - **Dev**: Nodemon (server), Vite HMR (client), Vitest (testes).
 

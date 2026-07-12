@@ -15,7 +15,7 @@ const transporter = nodemailer.createTransport({
 });
 
 export const sendResetPasswordEmail = async (to, token, origin) => {
-  const resetLink = `${origin}/#/reset-password?token=${token}`;
+  const resetLink = `${origin}/reset-password?token=${token}`;
 
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 10px; overflow: hidden;">
@@ -97,9 +97,9 @@ export const sendCheckoutConfirmationEmail = async (to, plan, validUntil) => {
           ${expiryDate ? `<p style="margin: 16px 0 0; font-size: 13px; color: #64748b;">Válido até: <strong>${expiryDate}</strong></p>` : ''}
         </div>
         <div style="text-align: center; margin: 28px 0;">
-          <a href="${CLIENT_URL}/#/dashboard" style="background: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px;">Acessar o Dashboard →</a>
+          <a href="${CLIENT_URL}/dashboard" style="background: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px;">Acessar o Dashboard →</a>
         </div>
-        <p style="font-size: 13px; color: #94a3b8;">Dúvidas? Responda este email ou acesse seu <a href="${CLIENT_URL}/#/profile" style="color: #2563eb;">perfil</a> para gerenciar sua assinatura.</p>
+        <p style="font-size: 13px; color: #94a3b8;">Dúvidas? Responda este email ou acesse seu <a href="${CLIENT_URL}/profile" style="color: #2563eb;">perfil</a> para gerenciar sua assinatura.</p>
       </div>
       <div style="background-color: #f8fafc; padding: 18px; text-align: center; font-size: 12px; color: #94a3b8;">
         © ${new Date().getFullYear()} Vértice Invest. Todos os direitos reservados.
