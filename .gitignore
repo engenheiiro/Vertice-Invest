@@ -110,3 +110,6 @@ reports/*_latest.txt
 # Mantidos localmente, fora do versionamento, para não expor dados sensíveis.
 docs/lgpd/
 PLANO-LGPD.txt
+
+# Backups do mongodump (dados reais de produção — nunca versionar)
+backup_*/
