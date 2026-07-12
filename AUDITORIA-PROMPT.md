@@ -25,8 +25,8 @@ Você é um **arquiteto de software sênior + auditor de segurança + revisor qu
 - **Dev/Qualidade**: Nodemon, Vite HMR, **Vitest** (client e server), ESLint 9 (flat config), Prettier, Husky + lint-staged, commitlint (conventional commits), gitleaks/secret-scan, Lighthouse CI. CI em `.github/workflows/` (`ci.yml`, `lighthouse.yml`, `secret-scan.yml`).
 
 ### Dimensão do código (para calibrar esforço)
-- **Server**: ~228 arquivos `.js` (fora node_modules). Subpastas: `config` (13), `controllers` (12), `middleware` (8), `models` (29), `routes` (10), `services` (26 + `engines/` + `workers/`), `utils` (20), `scripts` (33), `tests` (~69 arquivos).
-- **Client**: ~176 arquivos `.ts/.tsx`. Pastas: `components/` (Academy, admin, auth, common, dashboard, goals, layout, profile, pwa, research, seo, tutorial, ui, wallet), `pages/` (+ `pages/admin`), `contexts`, `hooks`, `services`, `utils`, `types`, `data`, `stories`.
+- **Server**: ~259 arquivos `.js` (fora node_modules). Subpastas: `config` (13), `controllers` (14), `middleware` (9), `models` (30), `routes` (12), `services` (22 + `engines/` (3) + `workers/` (1)), `utils` (20), `scripts` (40), `tests` (~80 arquivos).
+- **Client**: ~185 arquivos `.ts/.tsx`. Pastas: `components/` (Academy, admin, auth, common, dashboard, goals, layout, profile, pwa, research, seo, tutorial, ui, wallet), `pages/` (+ `pages/admin`), `contexts`, `hooks`, `services`, `utils`, `types`, `data`, `stories`.
 
 ### Arquitetura de domínio (onde mora a lógica crítica)
 
@@ -44,7 +44,7 @@ Você é um **arquiteto de software sênior + auditor de segurança + revisor qu
 
 **Middleware (backend):** `authMiddleware.js` (JWT + downgrade automático de plano por `validUntil` + cache de plano), `rateLimiters.js` (limiters por usuário), `correlationId.js`, `csrf.js`, `errorHandler.js`, `mongoCircuitBreaker.js`, `sanitize.js`, `validateResource.js` (Zod).
 
-**Modelos MongoDB (29):** `MarketAsset`, `MarketAnalysis`, `SystemConfig`, `DiscardLog`, `User`, `UserAsset` (taxLots FIFO), `WalletSnapshot`, `QuantSignal`, `RefreshToken`, `UsageLog`, `AssetHistory`, `AssetTransaction`, `DividendEvent`, `FundamentalSnapshot`, `InvestmentGoal`/`GoalContribution`, `Course`/`Lesson`/`Quiz`/`QuizAttempt`/`UserProgress`, `AlgorithmPerformance`, `RecommendedPortfolioCurve`, `TreasuryBond`, `EconomicIndex`, `Notification`, `AuditLog`, `AssetLogo`, `Transaction`.
+**Modelos MongoDB (30):** `MarketAsset`, `MarketAnalysis`, `SystemConfig`, `DiscardLog`, `User`, `UserAsset` (taxLots FIFO), `WalletSnapshot`, `QuantSignal`, `RefreshToken`, `UsageLog`, `AssetHistory`, `AssetTransaction`, `DividendEvent`, `FundamentalSnapshot`, `InvestmentGoal`/`GoalContribution`, `Course`/`Lesson`/`Quiz`/`QuizAttempt`/`UserProgress`, `AlgorithmPerformance`, `RecommendedPortfolioCurve`, `TreasuryBond`, `EconomicIndex`, `Notification`, `AuditLog`, `AssetLogo`, `Transaction`.
 
 **Frontend chave:** páginas `Dashboard`, `Wallet`, `Research`, `Radar`, `Goals`, `Comparator`, `Calculator`, `Indicators`, `Checkout`/`CheckoutSuccess`/`Pricing`, `Courses`/`CoursePlayer`, `Landing`, auth pages, `pages/admin/*`. Contextos: `AuthContext`, `WalletContext` (com demo mode / `DEMO_ASSETS`), `ToastContext`, `DemoContext`, `ThemeContext` (light mode). Hooks: `useDashboardData`, `useFeatureAccess`, `usePriceFetch`, `useAssetSearch`, `useFormValidation`, `useConfirm`, `useCountUp`, `useIsMobile`.
 
@@ -59,7 +59,7 @@ Você é um **arquiteto de software sênior + auditor de segurança + revisor qu
 8. **Rate limiting** obrigatório em novas rotas (limiters por usuário) + validação Zod na escrita.
 
 ### Planos e feature gating
-Hierarquia GUEST(0) < ESSENTIAL(1) < PRO(2) < BLACK(3), em `server/config/subscription.js`. Ex.: Research STOCK/FII/Crypto e Radar Alpha exigem PRO+; Ativos Globais / Rebalanceamento IA exigem BLACK. **Verifique se o gating é aplicado no backend (autoritativo) e não só escondido no frontend.**
+Hierarquia GUEST(0) < ESSENTIAL(1) < PRO(2) < ELITE(3) < BLACK(4), em `server/config/subscription.js`. Ex.: Brasil 10 exige ESSENTIAL+; Research STOCK/FII/Crypto/ETF e Radar Alpha exigem PRO+; Ativos Globais (STOCK_US/REIT) / Rebalanceamento IA exigem ELITE+. **Verifique se o gating é aplicado no backend (autoritativo) e não só escondido no frontend.**
 
 ---
 
@@ -109,7 +109,7 @@ Percorra **todas** as dimensões abaixo. Para cada uma, liste achados com severi
 - `WalletContext` demo mode: mutações checam `isDemoMode` antes de chamar API? Vazamento entre demo e dados reais.
 - Interceptor de 401/refresh: fila de requests, loop infinito, redirect para `/login`.
 - Privacy mode: todos os valores sensíveis são mascarados de forma consistente (o commit recente ajustou o card de Distribuição — verifique regressões similares em outros cards/KPIs).
-- Consistência do Design System (fundos `#080C14`/`#0B101A`/`#0F131E`, semáforo emerald/yellow, modais `createPortal`+`z-[100]`+`backdrop-blur`), light mode (`ThemeContext` + CSS vars) sem regressões de contraste.
+- Consistência do Design System (fundos `#090C11`/`#0F141A`/`#141922`/`#191F29`/`#202631`, semáforo emerald/yellow, modais `createPortal`+`z-[100]`+`backdrop-blur`), light mode (`ThemeContext` + CSS vars) sem regressões de contraste.
 - Acessibilidade (há `a11y.test.tsx`): roles, foco, teclado, aria, contraste. Amplie.
 - Performance: re-renders, memoização, listas grandes, code splitting/lazy, tamanho de bundle, imagens/logos.
 - Tipagem TS: uso de `any`, `as`, tipos frouxos em fronteiras de API; alinhamento entre tipos do client e payloads reais do backend.
@@ -127,7 +127,7 @@ Percorra **todas** as dimensões abaixo. Para cada uma, liste achados com severi
 - Código morto, scripts obsoletos (33 em `server/scripts`), features "dormentes" (ex.: track record Fase 3).
 - Divergência entre `CLAUDE.md`/`ARCHITECTURE.md`/`README`/`CHANGELOG` e o código real.
 - Nomenclatura, ES Modules vs `require`, padrões de log estruturado (`logger.info(msg,{meta})`), tratamento de datas.
-- `PLANO-MELHORIAS.txt` e `Info/`: itens pendentes vs implementados.
+- `planejamento/BACKLOG.md`: itens pendentes vs implementados.
 
 ### 8. Operação e confiabilidade
 - Variáveis de ambiente: `.env.example` cobre tudo que o código lê? Falha graciosa quando faltam.

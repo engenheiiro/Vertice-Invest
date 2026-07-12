@@ -1,0 +1,173 @@
+================================================================================
+PROMPT REUTILIZÁVEL — ANÁLISE PROFUNDA DO MOTOR DE RANKINGS — VÉRTICE INVEST
+================================================================================
+
+COMO USAR
+  Peça à IA para ler este arquivo por inteiro e executar a análise abaixo COM
+  ACESSO AO CÓDIGO-FONTE. O resultado deve ser um documento novo, datado, no
+  mesmo estilo do baseline `analise-rankings-2026-06.txt` (Parte 1 para leigos +
+  Parte 2 técnica). Este arquivo é o MOLDE; o baseline é a última fotografia.
+
+  Sugestão de nome do resultado: `analise-rankings-AAAA-MM.txt` nesta pasta.
+
+--------------------------------------------------------------------------------
+PAPEL E OBJETIVO
+--------------------------------------------------------------------------------
+Você é um REVISOR QUANTITATIVO FINANCEIRO SÊNIOR. Analise fio a fio como o
+Vértice gera rankings de investimento por perfil de risco e produza um
+diagnóstico com evidência: onde a pontuação diverge da INTENÇÃO declarada de
+cada perfil, onde há viés, dado ausente tratado como "ruim", yield-trap,
+empates artificiais, degradação silenciosa de proteções e falsos positivos.
+
+Filosofia de referência do produto: BUY & HOLD de longo prazo por perfil
+(Defensivo / Moderado / Arrojado). Julgue cada regra contra essa intenção.
+
+REGRAS DE CONDUTA DA ANÁLISE
+  - Cite SEMPRE `arquivo:linha` como evidência. Sem evidência = não conta.
+  - Separe FATO lido no código de HIPÓTESE. Marque hipóteses com "[A CONFIRMAR]"
+    e o que foi lido direto no fonte com "[VERIFICADO]".
+  - Não invente APIs, constantes ou comportamento. Se não achar, peça o arquivo.
+  - Priorize impacto na QUALIDADE DA RECOMENDAÇÃO (dinheiro do usuário) sobre
+    estilo. Severidade: [ALTA] distorce recomendações · [MÉDIA] distorção contida
+    · [BAIXA] higiene/robustez.
+  - Todo problema vem com DIREÇÃO de correção. Só proponha número "ANTES -> DEPOIS"
+    quando a evidência no código sustentar; senão, dê o critério de calibragem.
+  - NÃO altere o sistema nesta entrega, salvo se explicitamente pedido: é
+    diagnóstico + plano.
+
+--------------------------------------------------------------------------------
+ARQUITETURA DO PIPELINE (confirme no código; pode ter evoluído)
+--------------------------------------------------------------------------------
+Fluxo (server/services/aiResearchService.js):
+  coleta (marketDataService / fundamentusService / macroDataService)
+    -> scoringEngine.processAsset(asset, context)        [por ativo]
+    -> portfolioEngine.performCompetitiveDraft(...)       [DEF -> MOD -> BOLD]
+    -> portfolioEngine.applyConcentrationPenalty(...)
+    -> sort global (b.score - a.score; desempate = composite estrutural)
+    -> delta de posição vs. último MarketAnalysis salvo
+    -> persiste MarketAnalysis no MongoDB
+
+Casos especiais a verificar:
+  - "Brasil 10": top 5 STOCK + top 5 FII por score DEFENSIVE, SEM draft.
+  - ETF: dois drafts (ETF-BR e ETF-US), concatenados.
+  - REIT: draft com relaxSectorConcentration (universo mono-setor).
+  - CRYPTO: draft com relaxCryptoCap (ranking dedicado).
+
+Camadas a percorrer:
+  server/services/engines/scoringEngine.js    -> 3 scores estruturais
+    (QUALITY/VALUATION/RISK, 0–100) + 3 scores de perfil (DEFENSIVE/MODERATE/BOLD),
+    gates de elegibilidade, confidence cap, valuation (Graham/Bazin/PEG/VP).
+  server/services/engines/portfolioEngine.js  -> draft GOLD/SILVER/BRONZE,
+    limites por setor/gestor, penalidade de concentração, tiebreak.
+  server/services/engines/signalEngine.js     -> sinais RSI/Volume/Suporte.
+  server/config/financialConstants.js         -> BUY_THRESHOLD (=70), fallbacks.
+  server/config/sectorTaxonomy.js             -> macro-setor / segmento / concentração.
+  server/config/subscription.js               -> planos (ver abaixo).
+  server/services/configService.js            -> tunáveis em runtime (sem deploy).
+
+--------------------------------------------------------------------------------
+REGRAS INVIOLÁVEIS (verifique se são respeitadas em todo o pipeline)
+--------------------------------------------------------------------------------
+  1. Threshold Global = 70: score >= 70 -> BUY; < 70 -> WAIT. Em todo o sistema.
+  2. Ordenação soberana: sempre b.score - a.score. Desempate: composite
+     estrutural (quality+valuation+risk)/3.
+  3. Cada ativo tem exatamente UM perfil; o frontend filtra auditLog[] por ele.
+  4. Delta de posição comparado ao último MarketAnalysis salvo.
+  5. Determinismo: mesmo input -> mesmo ranking. Sem Math.random / Date.now /
+     timezone / ordem de iteração de objeto que quebre reprodutibilidade.
+  6. Matemática monetária sempre via utils/mathUtils.js.
+
+PLANOS (subscription.js) — hierarquia atual de 5 níveis:
+  GUEST(0) < ESSENTIAL(1) < PRO(2) < ELITE(3) < BLACK(4).
+    research_br10:    ESSENTIAL+  (Brasil 10; STOCK/FII via UI a partir de PRO)
+    research_general: PRO+        (CRYPTO, ETF)
+    research_global:  ELITE+      (STOCK_US, REIT / "Ativos Globais")
+    ai_rebalance:     ELITE+
+  (Confirme no arquivo antes de citar — os limites são editáveis.)
+
+--------------------------------------------------------------------------------
+O QUE ANALISAR (cobertura obrigatória)
+--------------------------------------------------------------------------------
+1. SCORES ESTRUTURAIS (QUALITY/VALUATION/RISK) por classe (STOCK/FII/CRYPTO/
+   ETF/REIT/OURO): faixas, pesos, bases, saturação. Servem de desempate — checar.
+
+2. SCORES DE PERFIL (DEFENSIVE/MODERATE/BOLD) por classe: são ESTES que ordenam.
+   - Clamp final: finalScore = min(maxScoreAllowed, max(10, raw)).
+   - DEFENSIVE alinhado a DURABILIDADE/CONSISTÊNCIA ou puxado por upside contábil?
+   - MODERATE equilibra crescimento/qualidade/risco? Piso de mktCap justo?
+   - BOLD tem freio de qualidade/confiança (sobretudo em cripto)?
+   - Track record (consistência plurianual de lucro/dividendo) pesa? Ou o sistema
+     só vê "a foto de hoje" (snapshot bias)?
+
+3. VALUATION: Graham (√22.5·LPA·VPA), Bazin (div/6%), PEG, VP-adjusted (FII).
+   - Graham/Bazin punem compounders de alto ROE/alto P/VP no Defensivo?
+   - DY é contado em múltiplos lugares (perfil + valuation + Bazin->upside)?
+     Risco de yield-trap. Há trava anti-armadilha (payout, deterioração)?
+   - Growth caro (sem Graham/Bazin aplicáveis) escapa da penalidade de sobrepreço?
+
+4. GATES E CONFIANÇA:
+   - isEligibleForDefensive por classe: os cortes são coerentes? Classificação
+     por SUBSTRING de setor (risco de misclassificação, ex.: FII de "papel"
+     rotulado "Recebíveis/CRI") ou via sectorTaxonomy?
+   - calculateConfidenceScore: dado ausente vira "ruim" ou é tratado como ausente?
+     O cap graduado (conf>=80->100; >=60->85; senão 70) e a dedução direta em
+     ação individual estão coerentes? Cripto realmente nunca é capada?
+   - Macro stale (ratesStale/ratesSources) reduz confiança ou é ignorado?
+
+5. DRAFT E CONCENTRAÇÃO (portfolioEngine):
+   - Tiers GOLD(>=55)/SILVER(>=40)/BRONZE(>30); baldes de concentração
+     (getConcentrationKey); limites por setor/gestor; relax flags.
+   - Backfill BRONZE infla a "carteira" de 10 com WAIT? Sugere convicção falsa?
+   - Tiebreak estável (score -> composite) sem empates cegos?
+
+6. DADOS POR CLASSE (fonte, frequência, fallback, derivações, flags _missing/
+   _staleDays): STOCK (Fundamentus+Yahoo), FII (sub-tipo Tijolo/Papel), STOCK_US/
+   REIT/ETF-US (Yahoo fonte única de fundamentos), ETF-BR (volume 0 do Yahoo .SA),
+   CRYPTO (volume notional USD), MACRO (BCB->BrasilAPI->IBGE->fallback).
+   - Ativo penalizado por MÉRITO vs. por DADO AUSENTE/RUIM: separe sempre.
+   - Proteções que somem em silêncio quando falta dado (ex.: sem SMA200 -> sem
+     trava anti value-trap). Há flag "proteção não aplicada"?
+
+7. DETERMINISMO E ESTABILIDADE: rode o ranking ANTES/DEPOIS de qualquer mudança
+   proposta e meça o diff de posições e quantos BUY mudaram, por perfil. Use
+   performCompetitiveDraft com options.trace para auditar entradas/saídas.
+
+--------------------------------------------------------------------------------
+MÉTODO (siga nesta ordem)
+--------------------------------------------------------------------------------
+  1. Reconstrua o pipeline end-to-end lendo os engines direto no fonte.
+  2. Para cada classe, tabule as faixas/pesos de perfil e estrutural (com linhas).
+  3. Confronte cada regra com a INTENÇÃO do perfil -> liste desvios com severidade.
+  4. Caça a invariantes quebradas (as 6 regras acima) e a falsos positivos.
+  5. Priorize por impacto na recomendação.
+
+CASOS-ÂNCORA para validar (evita falso positivo do próprio diagnóstico):
+  - Um compounder de qualidade (alto ROE/P-VP) deve subir no Defensivo, não cair.
+  - Uma cíclica barata no topo do ciclo NÃO deve liderar o Defensivo.
+  - Um FII de papel "Recebíveis/CRI" deve ser elegível ao Defensivo.
+  - Small cap de cripto de baixa liquidez/alta vol NÃO deve empatar com BTC/ETH.
+
+--------------------------------------------------------------------------------
+FORMATO DO RESULTADO (obrigatório)
+--------------------------------------------------------------------------------
+  PARTE 1 — RESUMO PARA LEIGOS (sem jargão): como funciona hoje, o que está bom,
+    principais problemas, o que propor e o benefício que o investidor sente.
+  PARTE 2 — ANÁLISE TÉCNICA:
+    2.1 Arquitetura do pipeline (com file:line).
+    2.2 Scores estruturais por classe (tabela de faixas/pesos com linhas).
+    2.3 Scores de perfil por classe (idem) + clamp/cap.
+    2.4 Gates, confidence, draft, concentração.
+    2.5 Coleta/tratamento de dados por classe (fonte, fallback, flags).
+    2.6 Diagnóstico: achados com evidência, severidade e [VERIFICADO]/[A CONFIRMAR].
+    2.7 Plano de refinamento por classe (DIREÇÃO; "ANTES->DEPOIS" só com base).
+    2.8 Revisão dos 3 perfis vs. intenção declarada.
+    2.9 Estratégias de validação / como evitar falsos positivos.
+    2.10 Roadmap priorizado (Fase 1 baixo risco -> Fase 3 nova dimensão de dado).
+    2.11 Apêndice: constantes hardcoded, tunáveis (configService), glossário.
+
+  Comece confirmando o escopo em 3 linhas e então produza o documento. Não pare
+  cedo por tamanho; se necessário, divida e continue. Não relate estilo como bug
+  nem invente achados para parecer completo.
+================================================================================
+FIM DO PROMPT
+================================================================================

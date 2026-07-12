@@ -95,7 +95,7 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 - **`MarketAnalysis`**: ranking salvo. `content.ranking[]` (RankingItem com `position`, `score`, `riskProfile`, `action`, `auditLog[]`, `metrics`) e `content.fullAuditLog[]`.
 - **`SystemConfig`** (key `MACRO_INDICATORS`): cache macro — `selic`, `ipca`, `ntnbLong`, `riskFree`, `ibov`, `dollar`, `btc`.
 - **`DiscardLog`**: ativos descartados por run — `runId`, `ticker`, `reason`, `details`.
-- **`User`**: `plan` (GUEST|ESSENTIAL|PRO|BLACK), `role` (USER|ADMIN), `subscriptionStatus`.
+- **`User`**: `plan` (GUEST|ESSENTIAL|PRO|ELITE|BLACK), `role` (USER|ADMIN), `subscriptionStatus`.
 - **`UserAsset`**: holdings — `taxLots[]` para FIFO, `totalCost`, `realizedProfit`, `fifoRealizedProfit`. Índice único `{ user, ticker }`.
 - **`WalletSnapshot`**: snapshot patrimonial diário — `equity`, `invested`, `result`, `twrr`, `dividends`. Gerado por `schedulerService.runDailySnapshot()`.
 - **`QuantSignal`**: sinal técnico salvo — `ticker`, `type`, `strength`, `rsiValue`, `volumeRatio`.
@@ -106,15 +106,15 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 
 ## Planos e Acesso
 
-Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < BLACK (3). Definido em `server/config/subscription.js`.
+Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < ELITE (3) < BLACK (4). Definido em `server/config/subscription.js`.
 
-| Feature | GUEST | ESSENTIAL | PRO | BLACK |
-|---|---|---|---|---|
-| Carteira / Brasil 10 | ✅ | ✅ | ✅ | ✅ |
-| Sinais (delay) | ❌ | ✅ | ✅ | ✅ |
-| Research STOCK/FII/Crypto | ❌ | ❌ | ✅ | ✅ |
-| Radar Alpha / Aporte Inteligente | ❌ | ❌ | ✅ | ✅ |
-| Ativos Globais / Rebalanceamento IA | ❌ | ❌ | ❌ | ✅ |
+| Feature | GUEST | ESSENTIAL | PRO | ELITE | BLACK |
+|---|---|---|---|---|---|
+| Carteira / Brasil 10 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Sinais (delay) | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Research STOCK/FII/Crypto/ETF | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Radar Alpha / Aporte Inteligente | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Ativos Globais (US/REIT) / Rebalanceamento IA | ❌ | ❌ | ❌ | ✅ | ✅ |
 
 ---
 

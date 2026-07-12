@@ -1,14 +1,20 @@
 # Resultado da Auditoria Técnica — Vértice Invest
 
-> Executada conforme [AUDITORIA-PROMPT.md](AUDITORIA-PROMPT.md). Data: 2026-07-02.
+> Executada conforme [AUDITORIA-PROMPT.md](AUDITORIA-PROMPT.md). Data original: 2026-07-02 · Status revisado: 2026-07-11.
 > Papel: arquiteto sênior + auditor de segurança + revisor quantitativo.
-> Toda evidência cita `arquivo:linha` verificada no código atual. Suposições marcadas `[SUPOSIÇÃO]`.
+> Toda evidência cita `arquivo:linha` verificada no código à época. Suposições marcadas `[SUPOSIÇÃO]`.
+
+> **Este documento é a baseline da última auditoria.** Para uma nova rodada,
+> peça à IA para ler [`AUDITORIA-PROMPT.md`](AUDITORIA-PROMPT.md) e produzir um
+> relatório novo — o único débito herdado daqui são os nits **F11–F13** (ver
+> [`planejamento/BACKLOG.md`](planejamento/BACKLOG.md) §1). O corpo abaixo é
+> mantido como registro histórico dos achados.
 
 ---
 
-## Status de implementação (2026-07-02)
+## Status de implementação (revisado 2026-07-11)
 
-Os achados priorizados foram **corrigidos e testados** (suíte server: 69 arquivos / 647 testes verdes, incluindo 2 novos specs). Nada foi commitado ainda.
+Os achados priorizados **F1–F10 foram corrigidos, testados e commitados** — principalmente em `c01dbc8` (_hardening de auth, idempotência de pagamento e rate limits_) e `34828b5` (_dedup de Transactions por `gatewayId` + build do índice único_), além de commits correlatos de scheduler/macro/carteira. A frase original "nada foi commitado ainda" ficou **desatualizada** e foi corrigida aqui.
 
 | # | Correção aplicada | Arquivos |
 |---|---|---|
@@ -23,7 +29,7 @@ Os achados priorizados foram **corrigidos e testados** (suíte server: 69 arquiv
 | F9 | Expurgo do `dividendHealAt` (teto + limpeza de expirados) | `walletController.js` |
 | F10 | `.env.example` documenta `EXTERNAL_SCHEDULER`, `PLAN_CACHE_TTL_MS`, `RENDER_EXTERNAL_URL`, `ENABLE_API_DOCS` | `.env.example` |
 
-**Pendente (nits, não implementados):** F11 (RSI Wilder), F12 (remover `confirmPayment` morto), F13 (política de merge de `taxLots`). **Ação operacional recomendada:** ao aplicar F2 em produção, checar/limpar duplicatas pré-existentes de `Transaction.gatewayId` antes de o índice único ser construído (senão a criação do índice falha).
+**Pendente (nits, ainda não implementados em 2026-07-11):** F11 (RSI Wilder), F12 (remover `confirmPayment` morto — a rota `POST /subscription/confirm` segue montada em `subscriptionRoutes.js:17`), F13 (política de merge de `taxLots`). Rastreados em [`planejamento/BACKLOG.md`](planejamento/BACKLOG.md) §1. **Ação operacional (F2) já executada** via `34828b5` (dedup de duplicatas de `Transaction.gatewayId` antes do build do índice único).
 
 ---
 

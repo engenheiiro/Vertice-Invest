@@ -10,7 +10,7 @@ Monorepo com frontend (React) e backend (Node/Express) rodando juntos via `concu
 
 | Camada | Tecnologias |
 |---|---|
-| **Frontend** (`/client`) | React 18 · TypeScript · Vite · Tailwind · React Router (HashRouter) · React Query v5 · Recharts · framer-motion |
+| **Frontend** (`/client`) | React 18 · TypeScript · Vite · Tailwind · React Router (HashRouter) · React Query v5 · Recharts · animações via CSS/Tailwind |
 | **Backend** (`/server`) | Node.js (ES Modules) · Express 4 · MongoDB/Mongoose 8 · Winston · node-cron |
 | **IA / Integrações** | Google Gemini (`@google/genai`) · Mercado Pago · Yahoo Finance · Brapi · Fundamentus · BCB · Sentry |
 | **Qualidade** | Vitest · ESLint · Prettier · Husky + lint-staged · commitlint · GitHub Actions |
@@ -19,7 +19,7 @@ Monorepo com frontend (React) e backend (Node/Express) rodando juntos via `concu
 
 ## Quickstart
 
-Pré-requisitos: **Node 20+** e uma instância **MongoDB** (Atlas ou local).
+Pré-requisitos: **Node 22+** (ver `engines` no `package.json`) e uma instância **MongoDB** (Atlas ou local).
 
 ```bash
 # 1. Instala dependências (raiz + client + server)
@@ -34,7 +34,7 @@ npm run dev
 
 - Frontend (Vite): http://localhost:5173
 - Backend (Express): http://localhost:5000 — proxy `/api` configurado no Vite
-- Documentação da API (Swagger): http://localhost:5000/api/docs
+- Documentação da API (Swagger): http://localhost:5000/api/docs (dev; em produção só com `ENABLE_API_DOCS=true`)
 
 ---
 
@@ -94,4 +94,6 @@ O CI (GitHub Actions) roda lint → typecheck → testes (com cobertura) → bui
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — visão de arquitetura, engines e fluxo de dados.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — fluxo de desenvolvimento, convenções e padrões.
 - [`CLAUDE.md`](CLAUDE.md) — diretrizes detalhadas (mapa de onde mexer, regras de negócio).
+- [`planejamento/`](planejamento/) — backlog de pendências, cheat sheet de comandos e análises.
+- [`AUDITORIA-PROMPT.md`](AUDITORIA-PROMPT.md) + [`RESULTADO-AUDITORIA.md`](RESULTADO-AUDITORIA.md) — prompt e baseline de auditoria técnica.
 - Swagger em `/api/docs` (runtime).
