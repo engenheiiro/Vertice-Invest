@@ -39,7 +39,7 @@
     "helmet": "^7.1.0",
     "iconv-lite": "^0.6.3",
     "jsonwebtoken": "^9.0.2",
-    "mercadopago": "^2.0.8",
+    "mercadopago": "^3.0.0",
     "mongoose": "^8.0.0",
     "node-cron": "^3.0.3",
     "nodemailer": "^8.0.6",
