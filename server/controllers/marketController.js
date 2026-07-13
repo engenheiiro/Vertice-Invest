@@ -112,7 +112,7 @@ export const getLandingData = async (req, res, next) => {
         })
         .sort({ marketCap: -1 })
         .limit(15)
-        .select('ticker lastPrice type currency');
+        .select('ticker lastPrice change type currency');
 
         // 3. Melhores Performers
         let bestPerformers = [];
@@ -156,7 +156,9 @@ export const getLandingData = async (req, res, next) => {
             tickers: topAssets.map(a => ({
                 ticker: a.ticker,
                 price: a.lastPrice,
-                change: (Math.random() * 3 - 1.5) 
+                // `change` é a variação percentual retornada pelo provedor de cotações
+                // e persistida em MarketAsset durante o sync de mercado.
+                change: Number.isFinite(a.change) ? a.change : 0,
             })),
             results: bestPerformers
         });

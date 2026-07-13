@@ -64,6 +64,7 @@ describe('refreshQuotesBatch — cache', () => {
     const ops = MarketAsset.bulkWrite.mock.calls[0][0];
     const set = ops[0].updateOne.update.$set;
     expect(set.lastPrice).toBe(42);
+    expect(set.change).toBe(1.5);
     expect(set.failCount).toBe(0); // sucesso reseta o contador
     expect(set.isActive).toBe(true);
   });

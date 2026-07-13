@@ -198,7 +198,15 @@ export const getTop5Defensive = (processedAssets) => {
 export const buildBrasil10 = (stockProcessed, fiiProcessed) => {
     const merged = [...getTop5Defensive(stockProcessed), ...getTop5Defensive(fiiProcessed)]
         .map(item => ({ ...item, action: item.score >= BUY_THRESHOLD ? 'BUY' : 'WAIT' }))
-        .sort((a, b) => b.score - a.score);
+        .sort((a, b) => {
+            const scoreDiff = b.score - a.score;
+            if (scoreDiff !== 0) return scoreDiff;
+            const composite = (item) => {
+                const structural = item.metrics?.structural;
+                return structural ? (structural.quality + structural.valuation + structural.risk) / 3 : 0;
+            };
+            return composite(b) - composite(a);
+        });
     return merged.map((item, idx) => ({ ...item, position: idx + 1 }));
 };
 

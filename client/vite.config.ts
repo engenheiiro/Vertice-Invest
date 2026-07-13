@@ -44,6 +44,9 @@ export default defineConfig({
     // bundle e do /public — incl. og-image.png (827KB → bem menor). Só roda em
     // `vite build` (apply:'build' interno), não afeta o dev/HMR.
     ViteImageOptimizer({
+      // Screenshot do dashboard contém textos pequenos. Preservamos os bytes originais
+      // para evitar artefatos de compressão no hero da landing.
+      exclude: /hero-dashboard\.png$/,
       png: { quality: 80 },
       jpeg: { quality: 80 },
       jpg: { quality: 80 },
@@ -216,6 +219,14 @@ export default defineConfig({
         'src/main.tsx',
         'src/prerender.tsx',
       ],
+      // Piso inicial baseado na linha de base de 12/07/2026. O objetivo é
+      // impedir regressão enquanto a cobertura de páginas e contexts avança.
+      thresholds: {
+        lines: 20,
+        statements: 20,
+        functions: 40,
+        branches: 70,
+      },
     },
   }
 });

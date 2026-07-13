@@ -61,6 +61,14 @@ jobs:
       - name: Test backend (com cobertura)
         run: npm run test:ci --prefix server
 
+      - name: Upload cobertura backend
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-backend
+          path: server/coverage/
+          retention-days: 14
+
       - name: Test frontend (com cobertura)
         run: npm run test:coverage --prefix client
 

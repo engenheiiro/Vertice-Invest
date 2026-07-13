@@ -12,6 +12,13 @@ import { CreateGoalModal } from '../components/goals/CreateGoalModal';
 import { GoalDetailModal } from '../components/goals/GoalDetailModal';
 import { ConfirmModal, EmptyState, SkeletonCard, SkeletonKpiGrid } from '../components/ui';
 
+/** Quebra um array em blocos de até `size` itens (preserva a ordem). */
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 /** Constrói cadeias de metas sequenciais a partir do campo previousGoalId. */
 function buildChains(goals: Goal[]): Goal[][] {
   const idSet = new Set(goals.map((g) => g._id));
@@ -216,12 +223,25 @@ export const Goals: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <div key={item.goals[0]._id} className="flex flex-col sm:flex-row items-stretch gap-0">
-                  {item.goals.map((goal, i) => (
-                    <React.Fragment key={goal._id}>
-                      {i > 0 && <ChainArrow />}
-                      <div className="flex-1 min-w-0">
-                        <GoalCard goal={goal} privacy={isPrivacyMode} onClick={() => setSelectedId(goal._id)} />
+                // Cadeias longas (>3) quebram em sub-linhas de até 3 cards — do
+                // contrário a linha flex nunca quebra e estoura a largura do container.
+                <div key={item.goals[0]._id} className="flex flex-col gap-2">
+                  {chunk(item.goals, 3).map((sub, si) => (
+                    <React.Fragment key={si}>
+                      {si > 0 && (
+                        <div className="flex items-center pl-6 text-slate-600">
+                          <ArrowDown size={18} />
+                        </div>
+                      )}
+                      <div className="flex flex-col sm:flex-row items-stretch gap-0">
+                        {sub.map((goal, i) => (
+                          <React.Fragment key={goal._id}>
+                            {i > 0 && <ChainArrow />}
+                            <div className="flex-1 min-w-0">
+                              <GoalCard goal={goal} privacy={isPrivacyMode} onClick={() => setSelectedId(goal._id)} />
+                            </div>
+                          </React.Fragment>
+                        ))}
                       </div>
                     </React.Fragment>
                   ))}

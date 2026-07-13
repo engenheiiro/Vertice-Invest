@@ -30,8 +30,13 @@ export default {
 'shake': 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both',
         'scroll': 'scroll 40s linear infinite',
         'shimmer': 'shimmer 2s linear infinite',
+        'pulse-slow': 'pulseSlow 6s ease-in-out infinite',
       },
       keyframes: {
+        pulseSlow: {
+          '0%, 100%': { opacity: '0.4' },
+          '50%': { opacity: '0.15' },
+        },
         fadeIn: {
           'from': { opacity: '0', transform: 'translateY(10px)' },
           'to': { opacity: '1', transform: 'translateY(0)' },

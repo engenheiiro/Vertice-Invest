@@ -15,6 +15,7 @@ export default tseslint.config(// --- Ignorados globais ---
     '**/dist/**',
     '**/dev-dist/**',
     '**/build/**',
+    '.backups/**',
     'server/logs/**',
     'coverage/**',
     '**/*.config.{js,ts,cjs,mjs}',
