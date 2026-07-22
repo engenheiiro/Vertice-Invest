@@ -64,6 +64,36 @@ if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
   throw new Error('JWT_SECRET e JWT_REFRESH_SECRET devem estar definidos no ambiente.');
 }
 
+// URL canônica do cliente usada em links sensíveis enviados por e-mail. Nunca
+// derive este valor de Origin/Host da requisição: tais headers podem ser forjados
+// fora do navegador e permitiriam envenenar o link de reset de senha.
+const getTrustedClientUrl = () => {
+  const configuredUrl = process.env.CLIENT_URL
+    || (process.env.NODE_ENV === 'production' ? null : 'http://localhost:5173');
+
+  if (!configuredUrl) {
+    throw new Error('CLIENT_URL deve estar definida em produção.');
+  }
+
+  let url;
+  try {
+    url = new URL(configuredUrl);
+  } catch {
+    throw new Error('CLIENT_URL inválida. Use uma URL absoluta.');
+  }
+
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('CLIENT_URL deve usar HTTP ou HTTPS.');
+  }
+  if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') {
+    throw new Error('CLIENT_URL deve usar HTTPS em produção.');
+  }
+
+  return url.origin;
+};
+
+const CLIENT_URL = getTrustedClientUrl();
+
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 // (F5) Rotação de refresh token com janela de graça para concorrência multi-aba.
@@ -89,6 +119,17 @@ const consumeGraceRotation = (oldHash) => {
   if (!entry) return null;
   if (Date.now() > entry.expires) { recentlyRotated.delete(oldHash); return null; }
   return entry;
+};
+
+// Revoga as sessões persistidas e também a curta janela de graça em memória.
+// Sem remover essa janela, um refresh token rotacionado instantes antes de um
+// reset de senha ainda poderia receber um novo access token por até 15 segundos.
+const revokeUserSessions = async (userId) => {
+  const normalizedUserId = String(userId);
+  await RefreshToken.deleteMany({ user: userId });
+  for (const [oldHash, entry] of recentlyRotated) {
+    if (String(entry.userId) === normalizedUserId) recentlyRotated.delete(oldHash);
+  }
 };
 
 // --- UTILS DE SEGURANÇA ---
@@ -246,7 +287,7 @@ export const login = async (req, res, next) => {
 
     // Geração de Tokens
     const accessToken = jwt.sign(
-      { id: user._id, email: user.email, plan: user.plan, role: user.role }, 
+      { id: user._id, email: user.email, plan: user.plan, role: user.role, sv: user.sessionVersion ?? 0 },
       JWT_SECRET,
       { expiresIn: ACCESS_TOKEN_EXPIRATION }
     );
@@ -301,7 +342,7 @@ const emitSession = (req, res, user, refreshTokenString) => {
   // (1.4) Auto-cura: garante o cookie CSRF (sessões anteriores ao deploy).
   issueCsrfToken(req, res);
   return jwt.sign(
-    { id: user._id, email: user.email, plan: user.plan, role: user.role },
+    { id: user._id, email: user.email, plan: user.plan, role: user.role, sv: user.sessionVersion ?? 0 },
     JWT_SECRET,
     { expiresIn: ACCESS_TOKEN_EXPIRATION }
   );
@@ -332,7 +373,7 @@ export const refreshToken = async (req, res, next) => {
       try {
         const decoded = jwt.verify(requestToken, JWT_REFRESH_SECRET);
         if (decoded?.id) {
-          await RefreshToken.deleteMany({ user: decoded.id });
+          await revokeUserSessions(decoded.id);
           logAudit(req, 'TOKEN_REUSE_DETECTED', 'Refresh token reusado — todas as sessões revogadas', decoded.id);
         }
       } catch { /* JWT inválido/expirado: nada a revogar */ }
@@ -402,8 +443,7 @@ export const forgotPassword = async (req, res, next) => {
     user.resetPasswordExpires = Date.now() + 1800000;
     await user.save();
 
-    const origin = req.get('origin') || 'http://localhost:5173';
-    await sendResetPasswordEmail(user.email, token, origin);
+    await sendResetPasswordEmail(user.email, token, CLIENT_URL);
 
     logAudit(req, 'PASSWORD_RESET_REQUESTED', 'Link de reset enviado', user._id, user.email);
     res.status(200).json({ message: "Se o email existir, instruções foram enviadas." });
@@ -429,7 +469,10 @@ export const resetPassword = async (req, res, next) => {
     user.password = await bcrypt.hash(newPassword, salt);
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
+    user.sessionVersion = (user.sessionVersion ?? 0) + 1;
     await user.save();
+    await revokeUserSessions(user._id);
+    invalidateUser(user._id);
 
     logAudit(req, 'PASSWORD_RESET_USED', 'Senha redefinida via token', user._id, user.email);
     res.status(200).json({ message: "Senha atualizada." });
@@ -618,7 +661,10 @@ export const changePassword = async (req, res, next) => {
 
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(newPassword, salt);
+        user.sessionVersion = (user.sessionVersion ?? 0) + 1;
         await user.save();
+        await revokeUserSessions(user._id);
+        invalidateUser(user._id);
 
         logAudit(req, 'PASSWORD_CHANGED', 'Senha alterada pelo usuário', user._id, user.email);
         res.json({ message: "Senha alterada." });
@@ -651,10 +697,11 @@ export const deactivateAccount = async (req, res, next) => {
 
         user.isActive = false;
         user.deactivatedAt = new Date();
+        user.sessionVersion = (user.sessionVersion ?? 0) + 1;
         await user.save();
 
         // Remove todos os refresh tokens — invalida todas as sessões ativas
-        await RefreshToken.deleteMany({ user: userId });
+        await revokeUserSessions(userId);
         invalidateUser(userId);
 
         logAudit(req, 'ACCOUNT_DEACTIVATED', 'Conta desativada pelo usuário', user._id, user.email);

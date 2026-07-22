@@ -42,6 +42,15 @@ const WalletSchema = new mongoose.Schema({
   // --- Sub-metas de alocação (ramificação dentro de uma classe), por carteira ---
   targetSubAllocation: {
     type: new mongoose.Schema({
+      // Ações BR ramifica em ações individuais / ETFs nacionais (BRL). O ETF nacional
+      // deixou de ser classe de topo (targetAllocation.ETF, legado) e conta aqui.
+      STOCK: {
+        type: new mongoose.Schema({
+          STOCK: { type: Number, default: 0 },
+          ETF: { type: Number, default: 0 },
+        }, { _id: false }),
+        default: () => ({ STOCK: 0, ETF: 0 }),
+      },
       FIXED_INCOME: {
         type: new mongoose.Schema({
           IPCA: { type: Number, default: 0 },
@@ -61,6 +70,7 @@ const WalletSchema = new mongoose.Schema({
       },
     }, { _id: false }),
     default: () => ({
+      STOCK: { STOCK: 0, ETF: 0 },
       FIXED_INCOME: { IPCA: 0, POS: 0, PRE: 0 },
       STOCK_US: { STOCK: 0, REIT: 0, ETF: 0, DOLLAR: 0 },
     }),

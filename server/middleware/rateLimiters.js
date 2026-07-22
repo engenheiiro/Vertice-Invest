@@ -83,6 +83,14 @@ export const changePasswordLimiter = createUserLimiter({
   message: 'Muitas tentativas de troca de senha. Aguarde alguns minutos.',
 });
 
+// Alterar o segundo fator muda a proteção da conta. Orçamento baixo e isolado
+// reduz tentativas de TOTP/senha sem afetar operações normais da sessão.
+export const mfaWriteLimiter = createUserLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: 'Muitas tentativas de alteração do MFA. Aguarde alguns minutos.',
+});
+
 // (C4/E6) Rota pública de carteira — NÃO autenticada, então a chave é o IP
 // (userKey cai no ramo defensivo de IP). 120/15min por IP: generoso para quem
 // abre/atualiza um link legítimo, apertado o bastante contra scraping/varredura
@@ -91,6 +99,14 @@ export const publicShareLimiter = createUserLimiter({
   windowMs: 15 * 60 * 1000,
   max: 120,
   message: 'Muitas requisições. Aguarde alguns minutos.',
+});
+
+// Logos públicos podem provocar uma busca externa no primeiro acesso. Limita
+// varreduras de símbolos inexistentes, mantendo folga para páginas com cards.
+export const publicLogoLimiter = createUserLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 240,
+  message: 'Muitas solicitações de logo. Aguarde alguns minutos.',
 });
 
 export { createUserLimiter };

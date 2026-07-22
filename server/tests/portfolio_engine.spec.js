@@ -174,4 +174,19 @@ describe('portfolioEngine.performCompetitiveDraft', () => {
         expect(buy.action).toBe('BUY');
         expect(wait.action).toBe('WAIT');
     });
+
+    it('aceita override shadow de quatro ativos no setor defensivo', () => {
+        const banks = ['B1', 'B2', 'B3', 'B4', 'B5'].map((ticker, index) => ({
+            ticker,
+            type: 'STOCK',
+            sector: 'Bancos',
+            scores: { DEFENSIVE: 90 - index, MODERATE: 0, BOLD: 0 },
+            metrics: { structural: { quality: 70, valuation: 70, risk: 70 } },
+        }));
+
+        const result = portfolioEngine.performCompetitiveDraft(banks, {
+            strictSectorCapByProfile: { DEFENSIVE: 4 },
+        });
+        expect(result.filter(item => item.riskProfile === 'DEFENSIVE')).toHaveLength(4);
+    });
 });

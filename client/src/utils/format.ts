@@ -87,3 +87,15 @@ export function formatQuantity(
     maximumFractionDigits: options.maxDecimals ?? 8,
   });
 }
+
+/**
+ * Formata datas financeiras que representam um DIA, sem horário. Usa UTC de
+ * propósito para compatibilidade com registros legados gravados à meia-noite Z:
+ * `2026-07-21T00:00:00Z` deve continuar aparecendo como 21/07 no Brasil.
+ */
+export function formatCalendarDate(value: string | Date | null | undefined): string {
+  if (!value) return '-';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(date);
+}

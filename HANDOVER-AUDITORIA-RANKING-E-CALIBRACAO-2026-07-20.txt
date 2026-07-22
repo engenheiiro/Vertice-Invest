@@ -1,0 +1,818 @@
+HANDOVER — AUDITORIA END-TO-END DO RANKING E CALIBRAÇÃO BUY AND HOLD STOCK
+Projeto: Vértice Invest
+Workspace: D:\Github\Vertice-Invest
+Data do handover: 20/07/2026 — America/Sao_Paulo
+Status: implementação concluída até a geração e validação do draft STOCK V3; publicação NÃO realizada.
+
+===============================================================================
+0. LEIA ISTO PRIMEIRO
+===============================================================================
+
+1. Leia integralmente o AGENTS.md fornecido pelo workspace antes de alterar código.
+2. O worktree está muito sujo e contém mudanças de várias fases da auditoria, além
+   de possíveis mudanças paralelas do usuário. NÃO execute git reset, checkout,
+   clean ou qualquer restauração ampla. Não descarte arquivos não relacionados.
+3. Não existe commit criado para este trabalho. Nada foi staged, committed ou
+   pushed nesta sessão.
+4. Não publique nenhum ranking sem autorização explícita do usuário. O draft final
+   está propositalmente com todas as flags de publicação falsas.
+5. Nunca exponha secrets ou o conteúdo do .env. Os scripts carregam MONGO_URI do
+   .env local.
+6. O threshold global é regra inviolável: score >= 70 => BUY; score < 70 => WAIT.
+7. A próxima IA deve tratar os dois relatórios abaixo como fonte de verdade:
+
+   - planejamento/AUDITORIA-RANKING-END-TO-END-2026-07-19.md
+   - planejamento/AUDITORIA-CALIBRACAO-BUY-AND-HOLD-STOCK-2026-07-19.md
+
+8. O prompt original está em:
+
+   - PROMPT-MESTRE-AUDITORIA-RANKING-END-TO-END.md
+
+===============================================================================
+1. OBJETIVO DO PRODUTO ACORDADO COM O USUÁRIO
+===============================================================================
+
+O usuário quer que:
+
+- todo o universo elegível de ações seja analisado;
+- o usuário final veja um Top 10 coeso por perfil: Defensivo, Moderado e Arrojado;
+- cada ticker ocupe exatamente um perfil no draft competitivo;
+- não exista quota artificial de BUY: a lista pode conter WAIT;
+- BUY continue significando score >= 70;
+- a Auditoria Completa contenha todos os ativos analisados e fique somente no admin;
+- os eixos internos de qualidade/durabilidade, entrada e resiliência não virem três
+  rankings públicos separados;
+- o modelo não seja simplesmente “afrouxado” para aumentar a quantidade de BUY;
+- bancos, seguradoras, holdings e produtoras de petróleo sejam avaliados por métricas
+  economicamente aplicáveis aos respectivos modelos de negócio;
+- o ranking publicado atual permaneça intacto até revisão explícita do novo draft.
+
+Decisões já aprovadas pelo usuário:
+
+- manter um único Top 10 final por perfil;
+- separar eixos somente internamente;
+- adotar aplicabilidade setorial e métricas específicas;
+- manter confiança como teto do score;
+- usar o draft para decidir composição, sem penalidade pós-seleção que reescreva o
+  fundamento de STOCK;
+- rodar sync e gerar novo draft, mas não publicar automaticamente.
+
+===============================================================================
+2. ESTADO FINAL NO BANCO — DRAFT V3
+===============================================================================
+
+Batch final validado:
+
+- batchId: 6a5dd539da989f190e6af353
+- runId: ed0a98e8-61b3-447e-af30-47ca46458fcd
+- algorithmVersion: STOCK_BH_SHADOW_V3
+- status: COMPLETED
+- startedAt: 2026-07-20T07:58:49.435Z
+- completedAt: 2026-07-20T07:59:16.269Z
+- sete classes esperadas e concluídas: BRASIL_10, CRYPTO, ETF, FII, REIT,
+  STOCK e STOCK_US
+- warnings: zero
+- failures: zero
+- todas as flags de publicação dos sete documentos: false
+- ponteiros PublishedResearchPointer referenciando o draft: zero
+
+Draft STOCK final:
+
+- analysisId: 6a5dd53eda989f190e6b0e52
+- rankingSize: 30
+- uniqueTickers: 30
+- DEFENSIVE: 10 posições, 7 BUY
+- MODERATE: 10 posições, 3 BUY
+- BOLD: 10 posições, 4 BUY
+- total: 14 BUY e 16 WAIT
+- fullAuditLog: 203 ativos
+- calibrationReady: 202
+- exclusão de cobertura: BRAP4, por netMargin e revenueGrowth ausentes
+- ranking público contém zero stockCalibration/coverage/eixos internos
+- fullAuditLog administrativo contém versão, cobertura, eixos e auditByProfile
+- ranking e fullAuditLog reconciliam exatamente riskProfile, score e action dos
+  30 selecionados.
+
+Documento publicado que continuava sendo o baseline observado:
+
+- MarketAnalysis: 6a5658c1481e245978d1aebc
+- criado em 2026-07-14T15:41:54.170Z
+- não foi substituído por este trabalho.
+
+Observação: a infraestrutura nova de PublishedResearchPointer estava sem ponteiros
+ativos na validação final; a leitura continua com fallback legado para os documentos
+com flags publicadas. Não criar ponteiro ou ativar flags sem passar pelo serviço de
+publicação e sem autorização explícita.
+
+===============================================================================
+3. TOP 10 STOCK FINAL DO DRAFT V3
+===============================================================================
+
+DEFENSIVE
+
+  1. CMIG4   89  BUY
+  2. ABCB4   81  BUY
+  3. WIZC3   78  BUY
+  4. TAEE11  76  BUY
+  5. ITSA4   74  BUY
+  6. INTB3   72  BUY
+  7. ITUB4   72  BUY
+  8. CPFE3   69  WAIT
+  9. VLID3   63  WAIT
+ 10. VULC3   61  WAIT
+
+MODERATE
+
+  1. MDNE3   95  BUY
+  2. JHSF3   83  BUY
+  3. PETR4   77  BUY
+  4. POMO4   69  WAIT
+  5. AZZA3   68  WAIT
+  6. BMGB4   68  WAIT
+  7. EUCA4   66  WAIT
+  8. RIAA3   65  WAIT
+  9. FIQE3   63  WAIT
+ 10. BRSR6   61  WAIT
+
+BOLD
+
+  1. VTRU3   91  BUY
+  2. EZTC3   84  BUY
+  3. CYRE3   79  BUY
+  4. DIRR3   75  BUY
+  5. GMAT3   69  WAIT
+  6. RECV3   68  WAIT
+  7. CSED3   67  WAIT
+  8. SHUL4   59  WAIT
+  9. MILS3   56  WAIT
+ 10. CSUD3   55  WAIT
+
+Após o sync de dados, WIZC3 mudou de 77 para 78 e RECV3 de 69 para 68. A
+composição e as actions não mudaram.
+
+===============================================================================
+4. POR QUE HAVIA “SÓ 30” E “SÓ 4 BUY”
+===============================================================================
+
+Conclusão reconciliada:
+
+- o motor analisava o universo e o portfolioEngine materializava até 10 posições
+  por perfil, totalizando 30;
+- 30 não era o tamanho do universo analisado;
+- no snapshot final, 287 ações deduplicadas passaram pela análise inicial, 203
+  foram pontuadas integralmente e 202 ficaram prontas para a calibração;
+- o frontend abre no filtro DEFENSIVE, por isso o usuário via somente os BUY do
+  perfil defensivo e interpretava como total da bolsa;
+- no documento publicado auditado em 14/07 havia 8 BUY totais, não 4: 4 defensivos,
+  2 moderados e 2 arrojados;
+- o TopPicksCard filtra por perfil, ordena, corta 10 e cria visualPosition de 1 a 10.
+
+Arquivos relevantes:
+
+- client/src/components/research/TopPicksCard.tsx
+- server/services/engines/portfolioEngine.js
+- server/services/aiResearchService.js
+
+===============================================================================
+5. CORREÇÃO CRÍTICA DA INGESTÃO FUNDAMENTALISTA
+===============================================================================
+
+Problema encontrado:
+
+- a tabela STOCK do Fundamentus passou a ter 22 colunas com a adição de Mrg Bruta
+  no índice 12;
+- o schema antigo tinha 21 colunas e os campos posteriores ficaram deslocados;
+- ROE era lido como liquidez, liquidez como patrimônio etc.;
+- o sync dizia sucesso porque o contador final misturava STOCK, FII, cripto e
+  exterior;
+- somente 3 ações atravessaram indevidamente o gate do sync defeituoso.
+
+Implementado:
+
+- schema STOCK v2 com largura, nomes e ordem exatos do cabeçalho;
+- Mrg Bruta no índice 12;
+- extração corrigida de margem, ROIC, ROE, liquidez, patrimônio, dívida e crescimento;
+- schema FII v2 para a coluna Endereço adicionada no final;
+- validação fail-closed contra drift de layout;
+- health gate por classe com parsed, accepted, rejectedLowLiquidity, duplicates e
+  acceptanceRate;
+- bloqueio antes do bulkWrite em scrape parcial, fonte pequena ou colapso de aceitação;
+- persistência de fundamentalsHealthy, errorCode e contagens em lastSyncStats;
+- gate de publicação manual/automática quando a saúde fundamental estiver ausente,
+  degradada ou com mais de 36 horas;
+- relatório sync:prod separado por classe.
+
+Recuperação já executada:
+
+- backup local: backup_audit_ranking_20260719_2025, com manifesto e hashes;
+- sync fundamental controlado: STOCK 333/994 aceitos; FII 316/560 aceitos;
+- três documentos contaminados ADMF3, PLTO5 e PLTO6 saneados em transação;
+- snapshots indevidos dos três removidos;
+- health gate persistido como saudável;
+- ativos-âncora reconciliados: PETR4, CMIG4, BBAS3, BBSE3, ITSA4 e SAPR11.
+
+Arquivos centrais:
+
+- server/config/scraperSchemas.js
+- server/services/fundamentusService.js
+- server/services/syncService.js
+- server/utils/ingestionHealth.js
+- server/models/SystemConfig.js
+- server/scripts/syncProdData.js
+- server/scripts/syncReporter.js
+- server/tests/ingestion.spec.js
+- server/tests/ingestion_health.spec.js
+- server/tests/scraper_schema.spec.js
+- server/tests/auto_publish_gate.spec.js
+
+Detalhes, hashes, contagens e causalidade estão no relatório end-to-end.
+
+===============================================================================
+6. PUBLICAÇÃO VERSIONADA, DRAFTS E INTEGRIDADE
+===============================================================================
+
+Foi implementada uma arquitetura de lote e ativação por seção para impedir que o
+“mais recente” seja confundido com o “publicado”. Componentes principais:
+
+- ResearchBatch: runId, classes esperadas/concluídas, status, warnings, failures,
+  inputManifest e algorithmVersion;
+- PublishedResearchPointer: ponteiro ativo por assetClass/strategy/seção;
+- researchPublicationService: composição do relatório ativo e ativação controlada;
+- rankingContract/finalizeRanking: contrato final de posição, action e threshold;
+- MarketAnalysis: batchId, runId, parentAnalysis, revision, algorithmVersion,
+  inputManifest, calculatedAt e metadados de publicação;
+- API pública remove fullAuditLog;
+- rota administrativa /research/details/:id é protegida por authenticateToken,
+  adminLimiter e requireAdmin, e retorna a Auditoria Completa;
+- cron/manual passam por health gate antes de publicação;
+- novos batches nascem como draft e não ativam ponteiros.
+
+Arquivos:
+
+- server/models/ResearchBatch.js
+- server/models/PublishedResearchPointer.js
+- server/models/MarketAnalysis.js
+- server/services/researchPublicationService.js
+- server/utils/rankingContract.js
+- server/controllers/researchController.js
+- server/routes/researchRoutes.js
+- server/tests/research_publication_activation.spec.js
+- server/tests/research_publication_contract.spec.js
+- server/tests/ranking_contract.spec.js
+- server/tests/research_ranking_contract.spec.js
+- server/scripts/verifyLatestResearchBatch.js
+- server/scripts/auditPublicationIntegrity.js
+
+Comandos de validação read-only:
+
+  node server/scripts/verifyLatestResearchBatch.js
+  node server/scripts/auditPublicationIntegrity.js
+
+===============================================================================
+7. CALIBRAÇÃO BUY AND HOLD STOCK — ARQUITETURA
+===============================================================================
+
+Arquétipos implementados em server/config/stockCalibration.js:
+
+- OPERATIONAL
+- BANK
+- INSURER
+- INSURANCE_HOLDING_DISTRIBUTOR
+- DIVERSIFIED_HOLDING
+- INSURANCE_BROKER
+- OIL_GAS_PRODUCER
+
+Conceito:
+
+- cada arquétipo declara métricas REQUIRED, OPTIONAL e NOT_APPLICABLE;
+- métricas N/A não recebem penalidade de missingness;
+- NaN é usado somente como marcador transitório durante o scoring;
+- normalizeStockScoringOutputForPersistence converte números não finitos para null
+  antes do Mongoose, sem alterar scores;
+- coverage.readyForSectorCalibration=false exclui do draft, mas mantém o ativo na
+  Auditoria Completa com score 0 e razão explícita;
+- dataConfidence é limitada pela cobertura e pode cair por liquidez, macro stale e
+  stale genérico para OPERATIONAL;
+- confiança <60 limita score a 70; 60–79 limita a 85; >=80 permite 100.
+
+Eixos internos:
+
+- durability: qualidade e persistência econômica;
+- entry: preço e margem de segurança;
+- resilience: robustez financeira e risco de controle.
+
+Pesos por perfil:
+
+- DEFENSIVE: 45% durability, 25% entry, 30% resilience;
+- MODERATE: 40% durability, 35% entry, 25% resilience;
+- BOLD: 30% durability, 50% entry, 20% resilience.
+
+Blend V3:
+
+- arquétipos em geral: 80% baseline legado + 20% eixos;
+- OIL_GAS_PRODUCER com cobertura completa: 20% baseline + 80% eixos;
+- threshold continua 70;
+- não existe quota de BUY;
+- draft usa 4 ativos por macrosetor no GOLD defensivo e 2 nos demais perfis;
+- ticker selecionado em um perfil não pode reaparecer nos outros;
+- para STOCK, concentração decide quem entra, mas não reduz score/action depois do
+  draft. Isso evita converter BUY em WAIT por uma penalidade de carteira após a
+  avaliação fundamental.
+
+Contrato público/admin:
+
+- calibrateStockCandidate gera a mesma representação usada pelo draft, Brasil 10 e
+  Auditoria Completa;
+- selectedItems e calibratedAssets vêm do mesmo cálculo;
+- stripStockCalibrationInternals remove stockCalibration, coverage,
+  shadowAuditByProfile e scores do content.ranking público;
+- fullAuditLog mantém versão, coverage, axes e auditByProfile para o admin;
+- auditLog do perfil é recomposto para explicar Fundamentos consolidados,
+  Durabilidade, Preço/margem, Resiliência, arredondamento e teto de confiança.
+
+Arquivos principais:
+
+- server/config/stockCalibration.js
+- server/schemas/stockSectorMetricsSchemas.js
+- server/services/engines/stockSectorAxisEngine.js
+- server/services/engines/stockCalibrationShadowEngine.js
+- server/services/engines/portfolioEngine.js
+- server/services/aiResearchService.js
+- server/services/marketDataService.js
+- server/models/MarketAsset.js
+- server/models/MarketAnalysis.js
+- server/tests/stock_calibration_shadow.spec.js
+- server/tests/stock_sector_axis_engine.spec.js
+- server/tests/stock_sector_metrics_schema.spec.js
+
+Scripts:
+
+- server/scripts/auditStockCalibrationReadiness.js
+- server/scripts/auditStockCalibrationShadowRanking.js
+- server/scripts/syncBankIfDataShadow.js
+- server/scripts/syncNonBankSectorMetricsShadow.js
+- server/scripts/verifyLatestStockCalibrationDraft.js
+
+===============================================================================
+8. DADOS SETORIAIS FINANCEIROS
+===============================================================================
+
+Foram criados contratos e snapshots oficiais para bancos, seguradoras, holdings e
+corretoras/holdings de seguros.
+
+Arquivos:
+
+- server/config/bankIfDataMap.js
+- server/config/stockSectorMetricsSnapshot1Q26.js
+- server/services/bcbIfDataService.js
+- server/scripts/syncBankIfDataShadow.js
+- server/scripts/syncNonBankSectorMetricsShadow.js
+- server/tests/bcb_ifdata_service.spec.js
+
+Ideia central: não usar margem líquida e crescimento de receita genéricos como se
+tivessem a mesma semântica para bancos e seguradoras. Usar capital, inadimplência,
+ativos problemáticos, índice combinado, solvência, remessas e concentração conforme
+o arquétipo.
+
+Ativos de referência auditados:
+
+- ITUB4 entrou no Top 10 Defensivo em 7º, 72 BUY;
+- ITSA4 entrou em 5º, 74 BUY;
+- BBSE3 ficou fora por cap competitivo do macrosetor financeiro, não por estar sem
+  qualidade econômica;
+- BBAS3 continuou fora porque durabilidade e resiliência setoriais não sustentaram o
+  score necessário no snapshot;
+- PSSA3 e CXSE3 foram avaliadas pelos respectivos contratos, sem forçar entrada.
+
+===============================================================================
+9. OIL_GAS_PRODUCER E CASO PETROBRAS
+===============================================================================
+
+Universo produtor comparável:
+
+- PETR3/PETR4
+- PRIO3
+- RECV3
+- BRAV3
+
+CSAN3, RAIZ4, UGPA3 e VBBR3 não foram tratados como produtoras equivalentes.
+
+Métricas obrigatórias OIL_GAS_PRODUCER:
+
+- proveniência e data-base;
+- productionGrowth;
+- liftingCostUsdBoe;
+- ebitdaMargin;
+- netDebtEbitda;
+- controlType.
+
+Métricas opcionais:
+
+- freeCashFlowMargin;
+- provedReserveLifeYears;
+- reserveReplacementRatio;
+- múltiplos e fundamentos de entrada.
+
+Métricas genéricas explicitamente N/A para o arquétipo:
+
+- netMargin;
+- revenueGrowth;
+- debtToEquity.
+
+Snapshot oficial 1Q26:
+
+PETROBRAS
+- produção +16,38% YoY
+- lifting cost US$ 6,40/boe
+- margem EBITDA 49,71%
+- dívida líquida/EBITDA 1,43x
+- FCF/receita 16,51%
+- vida de reservas provadas aproximada 10,29 anos
+- controle STATE_DIRECT
+- eixos 76/96/72
+- Moderado 77 BUY, 3º lugar
+
+PRIO
+- produção +42%
+- lifting cost US$ 9,40/boe
+- margem EBITDA 76%
+- dívida líquida/EBITDA 2,0x
+- controle PRIVATE
+- eixos 94/31/67
+- operação excelente, mas entrada cara; fora do Top 10
+
+PETRORECONCAVO
+- produção -11%
+- lifting cost US$ 15,82/boe
+- margem EBITDA 45,3%
+- dívida líquida/EBITDA 1,04x
+- FCF/receita 11,7%
+- eixos 37/99/69
+- BOLD 68 WAIT, 6º após o sync final
+
+BRAVA
+- produção -1%
+- lifting cost US$ 14,20/boe
+- margem EBITDA 51,9%
+- dívida líquida/EBITDA 1,84x
+- FCF/receita 13,09%
+- eixos 57/61/64
+- fora do Top 10
+
+Arquivos:
+
+- server/config/stockOilGasMetricsSnapshot1Q26.js
+- server/scripts/auditOilGasUniverse.js
+- server/scripts/syncOilGasSectorMetricsShadow.js
+- server/tests/stock_oil_gas_snapshot.spec.js
+
+Persistência já executada:
+
+- 4 emissores validados;
+- 5 documentos MarketAsset atualizados por causa de PETR3/PETR4;
+- somente stockArchetype e sectorMetrics foram escritos nessa etapa;
+- nenhum ranking publicado foi alterado.
+
+Fontes oficiais e URLs estão documentadas integralmente nas seções 22–24 de:
+
+- planejamento/AUDITORIA-CALIBRACAO-BUY-AND-HOLD-STOCK-2026-07-19.md
+
+Os PDFs/PNGs temporários usados para inspeção visual foram removidos de tmp/pdfs ao
+final. Não há arquivo fonte necessário faltando; as URLs oficiais ficaram no relatório
+e no snapshot de configuração.
+
+===============================================================================
+10. HISTÓRICO DO SYNC FINAL E PROBLEMA NaN
+===============================================================================
+
+Em 20/07 foi executado:
+
+  npm.cmd run sync:prod
+
+Resultado da primeira tentativa desta fase:
+
+- conexão OK;
+- cotações & mercado concluídos em aproximadamente 1m58s, com avisos externos;
+- reativação concluída;
+- séries temporais concluídas em aproximadamente 10m20s;
+- ranking falhou no save do MarketAnalysis porque NaN não é número BSON válido;
+- Radar Alpha e auditoria de precisão dessa execução não chegaram a rodar;
+- nenhum ranking foi publicado.
+
+Causa:
+
+- prepareStockForSectorScoring usa NaN para sinalizar métricas NOT_APPLICABLE e
+  impedir penalidade de missingness;
+- o scorer propagou esses NaN para processed.metrics;
+- o schema Mongoose recusou content.ranking e content.fullAuditLog.
+
+Correção:
+
+- normalizeStockScoringOutputForPersistence foi adicionada ao
+  stockSectorAxisEngine;
+- converte apenas números não finitos para null depois do cálculo;
+- zero e números negativos legítimos permanecem intactos;
+- foi adicionado teste de schema MarketAnalysis com ativo calibrado.
+
+Recuperação:
+
+- como cotações e séries já estavam atualizadas, foi usado
+  node server/scripts/runRankingOnly.js;
+- o batch foi regenerado até o documento final versionado citado na seção 2;
+- ranking_latest.txt também foi regenerado;
+- as sete classes passaram pelo contrato.
+
+O código do sync:prod agora usa o mesmo caminho de ranking corrigido. A execução
+completa do comando inteiro não foi repetida depois da correção para evitar mais 12
+minutos de coleta redundante; o trecho que falhou foi reexecutado com sucesso e as
+etapas posteriores são código preexistente. Se a próxima IA quiser uma prova operacional
+literal de ponta a ponta, pode rodar novamente npm.cmd run sync:prod com autorização,
+mas deve lembrar que isso faz escritas externas e gera outro batch draft.
+
+Relatório da tentativa:
+
+- server/logs/sync-report.txt
+
+===============================================================================
+11. VALIDAÇÕES E TESTES
+===============================================================================
+
+Comandos direcionados finais usados:
+
+  cd server
+  npm.cmd test -- --run tests/research_ranking_contract.spec.js \
+    tests/stock_calibration_shadow.spec.js \
+    tests/stock_sector_axis_engine.spec.js \
+    tests/stock_oil_gas_snapshot.spec.js \
+    tests/brasil10.spec.js
+
+Resultados ao longo da correção final:
+
+- 37 testes direcionados passaram após a normalização BSON;
+- última rodada focal: 29/29 passaram;
+- regressão completa: 101 arquivos; 867 de 868 testes passaram na execução paralela;
+- única falha: logger_structured esperou combined.json.log e observou combined1.log
+  por colisão transitória de arquivo no runner paralelo;
+- o teste do logger foi reexecutado junto com calibração e passou 3/3;
+- não há falha funcional conhecida aberta decorrente da calibração.
+
+Validação do batch:
+
+  node server/scripts/verifyLatestResearchBatch.js
+
+Resultado final:
+
+- ok=true;
+- sete classes completas;
+- todos os contratos válidos;
+- zero flags publicadas;
+- zero ponteiros para o draft;
+- algorithmVersion=STOCK_BH_SHADOW_V3.
+
+Validação específica STOCK:
+
+  node server/scripts/verifyLatestStockCalibrationDraft.js
+
+Resultado final:
+
+- ok=true;
+- 30/30 únicos;
+- 10/10/10;
+- threshold coerente;
+- fullAuditLog 203;
+- 202 calibráveis;
+- BRAP4 excluída por cobertura;
+- ranking público sem eixos internos;
+- ranking e auditoria reconciliados;
+- zero ponteiros para o draft.
+
+Observação Windows: use npm.cmd, pois npm.ps1 pode falhar por ExecutionPolicy.
+
+===============================================================================
+12. SEGURANÇA E HARDENING EXISTENTES NO MESMO WORKTREE
+===============================================================================
+
+O worktree também contém uma frente de segurança executada durante a auditoria.
+Não misture nem descarte essas mudanças. Consulte SECURITY-REMEDIATION-PLAN.txt e
+os testes correspondentes antes de modificar. Arquivos novos/alterados incluem:
+
+- server/middleware/productionErrorSanitizer.js
+- server/middleware/csrf.js
+- server/middleware/rateLimiters.js
+- server/middleware/authMiddleware.js
+- server/utils/passwordPolicy.js
+- schemas Zod de auth, academy, research e subscription;
+- proteções de webhook, sessão/MFA, logos/URLs e transporte macro;
+- testes auth_session_security, csrf_fail_closed, production_error_sanitizer,
+  webhook_signature, market_logo_security, macro_transport_security etc.
+
+O objetivo deste handover não é afirmar que essa frente está pronta para deploy
+isoladamente, mas alertar que ela faz parte do mesmo worktree e foi coberta pela suíte.
+Leia o plano e os diffs antes de qualquer refatoração ampla.
+
+===============================================================================
+13. PRINCIPAIS ARQUIVOS ALTERADOS/CRIADOS NESTA JORNADA
+===============================================================================
+
+Auditoria e documentação:
+
+- PROMPT-MESTRE-AUDITORIA-RANKING-END-TO-END.md
+- planejamento/AUDITORIA-RANKING-END-TO-END-2026-07-19.md
+- planejamento/AUDITORIA-CALIBRACAO-BUY-AND-HOLD-STOCK-2026-07-19.md
+- planejamento/HANDOVER-AUDITORIA-RANKING-E-CALIBRACAO-2026-07-20.txt
+- SECURITY-REMEDIATION-PLAN.txt
+
+Ingestão/health:
+
+- server/config/scraperSchemas.js
+- server/services/fundamentusService.js
+- server/services/syncService.js
+- server/utils/ingestionHealth.js
+- server/scripts/syncProdData.js
+- server/scripts/syncReporter.js
+
+Publicação/lotes/contrato:
+
+- server/models/MarketAnalysis.js
+- server/models/ResearchBatch.js
+- server/models/PublishedResearchPointer.js
+- server/services/researchPublicationService.js
+- server/utils/rankingContract.js
+- server/controllers/researchController.js
+- server/routes/researchRoutes.js
+
+Calibração STOCK:
+
+- server/config/stockCalibration.js
+- server/config/bankIfDataMap.js
+- server/config/stockSectorMetricsSnapshot1Q26.js
+- server/config/stockOilGasMetricsSnapshot1Q26.js
+- server/schemas/stockSectorMetricsSchemas.js
+- server/services/bcbIfDataService.js
+- server/services/engines/stockSectorAxisEngine.js
+- server/services/engines/stockCalibrationShadowEngine.js
+- server/services/engines/portfolioEngine.js
+- server/services/aiResearchService.js
+- server/services/marketDataService.js
+- server/models/MarketAsset.js
+
+Scripts principais:
+
+- server/scripts/auditStockCalibrationReadiness.js
+- server/scripts/auditStockCalibrationShadowRanking.js
+- server/scripts/auditOilGasUniverse.js
+- server/scripts/syncBankIfDataShadow.js
+- server/scripts/syncNonBankSectorMetricsShadow.js
+- server/scripts/syncOilGasSectorMetricsShadow.js
+- server/scripts/runRankingOnly.js
+- server/scripts/verifyLatestResearchBatch.js
+- server/scripts/verifyLatestStockCalibrationDraft.js
+- server/scripts/auditPublicationIntegrity.js
+- server/scripts/auditScoringMetamorphic.js
+- server/scripts/auditStateGovernance.js
+
+Testes novos relevantes:
+
+- server/tests/stock_calibration_shadow.spec.js
+- server/tests/stock_sector_axis_engine.spec.js
+- server/tests/stock_sector_metrics_schema.spec.js
+- server/tests/stock_oil_gas_snapshot.spec.js
+- server/tests/bcb_ifdata_service.spec.js
+- server/tests/research_publication_activation.spec.js
+- server/tests/research_publication_contract.spec.js
+- server/tests/ranking_contract.spec.js
+- server/tests/research_ranking_contract.spec.js
+- server/tests/ingestion_health.spec.js
+- server/tests/auto_publish_gate.spec.js
+
+===============================================================================
+14. PRÓXIMOS PASSOS RECOMENDADOS
+===============================================================================
+
+PASSO IMEDIATO — decisão do usuário:
+
+1. Abrir no admin o draft STOCK analysisId 6a5dd53eda989f190e6b0e52.
+2. Conferir visualmente:
+   - Top 10 dos três perfis;
+   - PETR4 em Moderado 77 BUY;
+   - ITUB4 e ITSA4 no Defensivo;
+   - BRAP4 na Auditoria Completa como inelegível por cobertura;
+   - auditLog V3 dos selecionados;
+   - ausência de eixos internos no payload público.
+3. Se o usuário aprovar, publicar somente pela rota/serviço versionado e validar o
+   ponteiro/rollback. Não atualizar flags diretamente no Mongo.
+
+Antes de publicar:
+
+- rodar verifyLatestResearchBatch.js;
+- rodar verifyLatestStockCalibrationDraft.js;
+- confirmar que o draft final ainda é o batchId deste handover;
+- revisar comparisonReport e possíveis entradas/saídas;
+- decidir se a publicação será somente RANKING ou também outras seções;
+- verificar health fundamental com menos de 36 horas;
+- registrar o ID anterior para rollback;
+- confirmar que nenhuma nova execução do sync criou batch mais recente.
+
+Depois de publicar, se autorizado:
+
+- confirmar PublishedResearchPointer ativo para STOCK/BUY_HOLD/RANKING;
+- chamar a API pública e verificar que content.fullAuditLog não aparece;
+- confirmar 10 itens por filtro no frontend;
+- validar delta de posições contra o último publicado;
+- testar rollback para o documento anterior sem apagar drafts;
+- documentar publicationAt, analysisId novo e analysisId anterior.
+
+Pendências técnicas não bloqueadoras:
+
+- executar teste E2E visual/logado do admin e da página Research se houver sessão
+  disponível;
+- iniciar shadow prospectivo investível antes de mexer novamente em pesos/threshold;
+- acompanhar estabilidade das métricas setoriais nos próximos trimestres;
+- coletar FCF/reservas opcionais ausentes de PRIO quando houver fonte oficial;
+- revisar BRAP4 e decidir se o arquétipo OPERATIONAL é correto ou se precisa de
+  contrato próprio de holding de participações;
+- não concluir que 14 BUY é “melhor” que 8 sem validação prospectiva.
+
+===============================================================================
+15. COMANDOS ÚTEIS
+===============================================================================
+
+Testes focais:
+
+  cd D:\Github\Vertice-Invest\server
+  npm.cmd test -- --run tests/stock_calibration_shadow.spec.js tests/stock_sector_axis_engine.spec.js tests/stock_oil_gas_snapshot.spec.js tests/research_ranking_contract.spec.js tests/brasil10.spec.js
+
+Suíte completa:
+
+  cd D:\Github\Vertice-Invest\server
+  npm.cmd test -- --run
+
+Auditoria STOCK read-only:
+
+  cd D:\Github\Vertice-Invest
+  node server/scripts/auditStockCalibrationShadowRanking.js --compact
+
+Verificação do último batch read-only:
+
+  node server/scripts/verifyLatestResearchBatch.js
+
+Verificação STOCK V3 read-only:
+
+  node server/scripts/verifyLatestStockCalibrationDraft.js
+
+Gerar somente novo batch draft usando dados já sincronizados — FAZ ESCRITAS:
+
+  node server/scripts/runRankingOnly.js
+
+Sync completo — FAZ ESCRITAS E CHAMADAS EXTERNAS:
+
+  npm.cmd run sync:prod
+
+Validar o snapshot OIL_GAS atual sem escrever:
+
+  npm.cmd run sync:oil-gas:check
+
+Persistir o snapshot OIL_GAS atual no MongoDB — FAZ ESCRITAS:
+
+  npm.cmd run sync:oil-gas
+
+Esses comandos não coletam automaticamente um trimestre novo. Antes de persistir,
+atualizar e revisar server/config/stockOilGasMetricsSnapshot1Q26.js com os documentos
+oficiais, datas, métricas e methodologyVersion do novo período.
+
+Publicação — NÃO EXECUTAR SEM AUTORIZAÇÃO:
+
+- usar a rota administrativa POST /api/research/publish com schema e serviço
+  existentes; não editar flags ou ponteiros manualmente.
+
+===============================================================================
+16. CUIDADOS IMPORTANTES PARA A PRÓXIMA IA
+===============================================================================
+
+- Não assumir que o batch mais recente é o batch deste handover; sempre consultar.
+- Não assumir que “30” significa universo analisado; é a saída 10/10/10.
+- Não assumir que quantidade de BUY é objetivo de otimização.
+- Não diminuir threshold 70.
+- Não reintroduzir penalidade de concentração pós-draft para STOCK.
+- Não salvar NaN no MongoDB.
+- Não usar netMargin/revenueGrowth/debtToEquity genéricos para OIL_GAS_PRODUCER.
+- Não tratar CSAN3, RAIZ4, UGPA3 e VBBR3 como produtoras upstream equivalentes.
+- Não expor fullAuditLog ou stockCalibration ao usuário final.
+- Não publicar o batch final sem revisão do usuário.
+- Não apagar drafts antigos nem o baseline publicado.
+- Não usar git clean/reset/checkout para “organizar” o worktree.
+- Não incluir backup, .env, logs ou reports gerados em commit sem revisar tamanho e
+  sensibilidade.
+- Não interpretar o backtest atual como prova econômica da calibração V3.
+
+===============================================================================
+17. VEREDITO PARA CONTINUAÇÃO
+===============================================================================
+
+A implementação técnica da calibração V3 está concluída e o draft final está
+íntegro, versionado, não publicado e auditável. A próxima etapa não é alterar mais
+pesos: é revisão administrativa e decisão explícita de publicação. Se a revisão
+encontrar divergência, diagnosticar pelo fullAuditLog e pelos scripts read-only,
+sem mexer no threshold ou forçar mais BUY.
+
+FIM DO HANDOVER

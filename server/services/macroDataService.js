@@ -3,7 +3,6 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import * as Sentry from '@sentry/node';
 import https from 'https';
-import http from 'http';
 import SystemConfig from '../models/SystemConfig.js';
 import TreasuryBond from '../models/TreasuryBond.js';
 import EconomicIndex from '../models/EconomicIndex.js';
@@ -26,21 +25,16 @@ export const NTNB_REAL_MAX = 9.5;
 export const isPlausibleNtnbRate = (rate) =>
     Number.isFinite(rate) && rate >= NTNB_REAL_MIN && rate <= NTNB_REAL_MAX;
 
-// Verificação de certificado HABILITADA por padrão (segurança contra MITM).
-// Escape hatch: defina ALLOW_INSECURE_TLS=true SOMENTE se o ambiente de
-// hospedagem tiver problema com a cadeia de certificados do BCB. As camadas de
-// fallback (HTTP + síntese local) já cobrem falhas de TLS sem quebrar o sync.
-const REJECT_UNAUTHORIZED = process.env.ALLOW_INSECURE_TLS !== 'true';
-
-const httpAgent = new http.Agent({ keepAlive: true });
+// Verificação de certificado é obrigatória: falha de TLS deve seguir para os
+// fallbacks seguros, nunca degradar a conexão para HTTP ou aceitar um MITM.
 const bcbAgent = new https.Agent({
-    rejectUnauthorized: REJECT_UNAUTHORIZED,
+    rejectUnauthorized: true,
     keepAlive: true,
     minVersion: 'TLSv1.2'
 });
 
 const scrapingAgent = new https.Agent({
-    rejectUnauthorized: REJECT_UNAUTHORIZED,
+    rejectUnauthorized: true,
     keepAlive: true,
     ciphers: 'DEFAULT:!DH'
 });
@@ -264,63 +258,8 @@ export const macroDataService = {
             }
         }
 
-        // TENTATIVA 2: HTTP (SEM SSL - Bypass WAF)
-        // debug (não warn): em range sem dado novo o BCB devolve 400/404 e esta
-        // tentativa dispara TODO sync — é fluxo esperado, não anomalia acionável.
-        try {
-            logger.debug("[Macro] HTTPS sem dados. Tentando HTTP (Porta 80)...");
-            const urlHttp = `http://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.SELIC_DAILY}/dados?formato=json&dataInicial=${startDateStr}`;
-
-            const resHttp = await axios.get(urlHttp, {
-                headers: { 'User-Agent': 'Wget/1.20.3 (linux-gnu)', 'Accept': '*/*' },
-                httpAgent: httpAgent,
-                timeout: 10000 // Timeout maior
-            });
-
-            const resData = resHttp.data;
-            const dataArray = Array.isArray(resData) ? resData : (resData && typeof resData === 'object' && resData.data && resData.valor ? [resData] : []);
-
-            if (dataArray.length > 0) {
-                await this.processDailyData(dataArray);
-                logger.info(`✅ [Macro] Sucesso via HTTP: ${dataArray.length} registros.`);
-                return;
-            } else {
-                // Se for um array vazio, é sucesso mas sem dados novos
-                if (Array.isArray(resData) && resData.length === 0) {
-                    logger.info(`✅ [Macro] HTTP: Nenhum dado novo.`);
-                    return;
-                }
-
-                // BCB devolve um objeto-erro {"erro":{"statusCode":404,...,"Value(s) not found"}}
-                // quando o range pedido ainda não tem cotação publicada (fim de semana,
-                // feriado, ou simplesmente já estamos atualizados). Isso NÃO é falha:
-                // é "sem dado novo". Tratar como benigno evita o error: + fallback sintético
-                // ruidoso a cada sync. A base sintética só roda em falha real de infra.
-                const errNode = resData && typeof resData === 'object' ? resData.erro : null;
-                const looksLikeNoData = !!errNode
-                    || (typeof resData === 'string' && /not found|value\(s\) not found/i.test(resData));
-                if (looksLikeNoData) {
-                    logger.info('✅ [Macro] Selic diária já atualizada (BCB sem dado novo no período).');
-                    return;
-                }
-
-                const dataType = typeof resData;
-                let dataSnippet = 'N/A';
-                try {
-                    dataSnippet = dataType === 'string'
-                        ? resData.substring(0, 200)
-                        : JSON.stringify(resData).substring(0, 200);
-                } catch (e) {
-                    dataSnippet = '[Unserializable Object]';
-                }
-                throw new Error(`Resposta HTTP inválida (Status: ${resHttp.status}, Tipo: ${dataType}). Snippet: ${dataSnippet}`);
-            }
-        } catch (httpError) {
-            logger.error(`❌ [Macro] HTTP também falhou: ${httpError.message}`);
-        }
-
-        // TENTATIVA 3: GERAÇÃO SINTÉTICA (Matemática)
-        // Se o BCB bloqueou tudo, calculamos o CDI com base na meta atual para não quebrar os gráficos.
+        // Se os endpoints HTTPS não entregarem a série, calculamos o CDI com base
+        // na meta atual para não quebrar os gráficos. Nunca há downgrade de TLS.
         await this.generateSyntheticData(startDateObj);
     },
 

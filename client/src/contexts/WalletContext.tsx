@@ -10,6 +10,7 @@ import { DEMO_ASSETS, DEMO_KPIS, DEMO_HISTORY } from '../data/DEMO_DATA'; // Imp
 import { STALE_TIME } from '../config/queryConfig';
 import { computeWalletKpis } from '../utils/kpiCalculations';
 import { getErrorMessage } from '../utils/errorMessages';
+import { foldEtfIntoStock } from '../utils/allocation';
 
 // ETF: classe própria para fundos de índice nacionais (BRL) e internacionais (USD).
 // OURO mantido só por compatibilidade com carteiras antigas (não oferecido na UI;
@@ -74,16 +75,21 @@ export type AllocationMap = Partial<Record<AssetType, number>>;
 
 // Sub-metas (ramificação) por classe. Percentuais RELATIVOS à fatia da classe
 // (somam ~100% DENTRO da classe). Tudo 0 = sem sub-meta (classe em bloco).
+// Ações BR ramifica em Ações individuais / ETFs nacionais (BRL). O ETF nacional deixou
+// de ser classe de topo da Carteira Ideal e conta aqui, no sub-tipo ETF.
+export type StockSubKey = 'STOCK' | 'ETF';
 export type FixedIncomeSubKey = 'IPCA' | 'POS' | 'PRE';
 // Exterior ramifica em Stocks/REITs/ETFs/Dólar. ETFs internacionais (e ouro lastreado)
 // contam aqui no sub-tipo ETF; a classe própria 'ETF' (AssetType) é só p/ ETFs nacionais.
 export type UsSubKey = 'STOCK' | 'REIT' | 'ETF' | 'DOLLAR';
 export interface SubAllocationMap {
+    STOCK: Record<StockSubKey, number>;
     FIXED_INCOME: Record<FixedIncomeSubKey, number>;
     STOCK_US: Record<UsSubKey, number>;
 }
 
 export const DEFAULT_SUB_ALLOCATION: SubAllocationMap = {
+    STOCK: { STOCK: 0, ETF: 0 },
     FIXED_INCOME: { IPCA: 0, POS: 0, PRE: 0 },
     STOCK_US: { STOCK: 0, REIT: 0, ETF: 0, DOLLAR: 0 },
 };
@@ -187,11 +193,22 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     useEffect(() => {
         if (isDemoMode) return;
         const data = walletQuery.data;
-        if (data?.targetAllocation) setTargetAllocation(data.targetAllocation);
         if (typeof data?.targetReserve === 'number') setTargetReserve(data.targetReserve);
         if (typeof data?.targetMonthlyDividendIncome === 'number') setTargetMonthlyDividendIncome(data.targetMonthlyDividendIncome);
-        if (data?.targetSubAllocation) {
+        if (data?.targetAllocation) {
+            // Normaliza metas legadas: alvo de topo ETF (nacional) é absorvido por Ações BR
+            // (STOCK) como sub-meta. Idempotente para carteiras já salvas no formato novo.
+            const sub: SubAllocationMap = {
+                STOCK: { ...DEFAULT_SUB_ALLOCATION.STOCK, ...data.targetSubAllocation?.STOCK },
+                FIXED_INCOME: { ...DEFAULT_SUB_ALLOCATION.FIXED_INCOME, ...data.targetSubAllocation?.FIXED_INCOME },
+                STOCK_US: { ...DEFAULT_SUB_ALLOCATION.STOCK_US, ...data.targetSubAllocation?.STOCK_US },
+            };
+            const folded = foldEtfIntoStock(data.targetAllocation, sub);
+            setTargetAllocation(folded.targetAllocation);
+            setTargetSubAllocation(folded.targetSubAllocation);
+        } else if (data?.targetSubAllocation) {
             setTargetSubAllocation({
+                STOCK: { ...DEFAULT_SUB_ALLOCATION.STOCK, ...data.targetSubAllocation.STOCK },
                 FIXED_INCOME: { ...DEFAULT_SUB_ALLOCATION.FIXED_INCOME, ...data.targetSubAllocation.FIXED_INCOME },
                 STOCK_US: { ...DEFAULT_SUB_ALLOCATION.STOCK_US, ...data.targetSubAllocation.STOCK_US },
             });

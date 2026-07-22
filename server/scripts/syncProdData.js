@@ -47,7 +47,15 @@ const syncProd = async () => {
             if (!r.success) throw new Error(r.error || 'Falha no sync de mercado');
             return r;
         });
-        reporter.detail(`${result.count} ativos`);
+        if (result.fundamentals) {
+            reporter.detail(
+                `STOCK ${result.fundamentals.STOCK.accepted}/${result.fundamentals.STOCK.parsed} · ` +
+                `FII ${result.fundamentals.FII.accepted}/${result.fundamentals.FII.parsed} aceitos · ` +
+                `${result.count} operações totais`
+            );
+        } else {
+            reporter.detail(`${result.count} operações totais`);
+        }
 
         // 1.2 Reativação: re-cota os ativos inativos e reativa os que voltaram a
         // cotar (ex.: B3SA3 após o fix de fallback). O sync regular só cota ATIVOS,

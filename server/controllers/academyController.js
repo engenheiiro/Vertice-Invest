@@ -1,10 +1,8 @@
 import Course from '../models/Course.js';
 import Lesson from '../models/Lesson.js';
 import UserProgress from '../models/UserProgress.js';
-import User from '../models/User.js';
 import Quiz from '../models/Quiz.js';
 import QuizAttempt from '../models/QuizAttempt.js';
-import jwt from 'jsonwebtoken';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import logger from '../config/logger.js'; // (M10) logger estruturado
 
@@ -17,36 +15,38 @@ const PLAN_LEVELS = {
     'BLACK': 4
 };
 
-// Helper para identificar o usuário mesmo se o middleware falhar (emergência dev)
-const getUserFromRequest = async (req) => {
-    if (req.user) return req.user;
-    
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (token) {
-        try {
-            const decoded = jwt.decode(token);
-            if (decoded && decoded.id) {
-                return await User.findById(decoded.id);
-            }
-        } catch (e) {
-            logger.error("Error decoding token in helper:", e);
-        }
+const hasPlanAccess = (user, course) =>
+    user?.role === 'ADMIN' || (PLAN_LEVELS[user?.plan] ?? 0) >= (PLAN_LEVELS[course.requiredPlan] ?? 0);
+
+const requireCourseAccess = (user, course, res) => {
+    if (course.isLocked) {
+        res.status(403).json({
+            message: 'Este curso está em produção e será liberado em breve.',
+            isLocked: true,
+        });
+        return false;
     }
-    
-    // Fallback: primeiro usuário do banco
-    return await User.findOne();
+
+    if (!user) {
+        res.status(401).json({ message: 'Autenticação necessária para acessar este conteúdo.' });
+        return false;
+    }
+
+    if (!hasPlanAccess(user, course)) {
+        res.status(403).json({
+            message: 'Acesso negado. Faça upgrade do seu plano para acessar este conteúdo.',
+            requiredPlan: course.requiredPlan,
+        });
+        return false;
+    }
+
+    return true;
 };
 
-export const getCourses = async (req, res) => {
+export const getCourses = async (req, res, next) => {
     try {
-        const user = await getUserFromRequest(req);
-        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-
         const courses = await Course.find().sort({ order: 1 });
-        
-        // Vamos buscar o progresso do usuário para esses cursos
-        const progress = await UserProgress.find({ userId: user._id });
+        const progress = req.user ? await UserProgress.find({ userId: req.user._id }) : [];
         
         // Anexar o progresso aos cursos (simplificado para o frontend)
         const coursesWithProgress = courses.map(course => {
@@ -63,16 +63,11 @@ export const getCourses = async (req, res) => {
         });
 
         res.json(coursesWithProgress);
-    } catch (error) {
-        res.status(500).json({ message: "Erro ao buscar cursos", error: error.message });
-    }
+    } catch (error) { next(error); }
 };
 
-export const getCourseById = async (req, res) => {
+export const getCourseById = async (req, res, next) => {
     try {
-        const user = await getUserFromRequest(req);
-        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-
         const course = await Course.findById(req.params.id);
         if (!course) return res.status(404).json({ message: "Curso não encontrado" });
 
@@ -86,9 +81,7 @@ export const getCourseById = async (req, res) => {
         const lessons = await Lesson.find({ courseId: course._id }).sort({ order: 1 });
         
         // Ocultar o youtubeVideoId se o usuário não tiver acesso ao curso
-        const userPlanLevel = PLAN_LEVELS[user.plan] || 0;
-        const requiredPlanLevel = PLAN_LEVELS[course.requiredPlan] || 0;
-        const hasAccess = userPlanLevel >= requiredPlanLevel;
+        const hasAccess = hasPlanAccess(req.user, course) && !course.isLocked;
 
         const safeLessons = lessons.map(lesson => {
             const l = lesson.toObject();
@@ -101,64 +94,40 @@ export const getCourseById = async (req, res) => {
         });
 
         res.json({ course, lessons: safeLessons, hasAccess });
-    } catch (error) {
-        res.status(500).json({ message: "Erro ao buscar curso", error: error.message });
-    }
+    } catch (error) { next(error); }
 };
 
 // O Gatekeeper principal
-export const getLessonById = async (req, res) => {
+export const getLessonById = async (req, res, next) => {
     try {
-        const user = await getUserFromRequest(req);
-        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-
         const lesson = await Lesson.findById(req.params.id).populate('courseId');
         if (!lesson) return res.status(404).json({ message: "Aula não encontrada" });
 
         const course = lesson.courseId;
-        
-        if (course.isLocked) {
-            return res.status(403).json({ 
-                message: "Este curso está em produção e será liberado em breve.",
-                isLocked: true
-            });
-        }
-
-        // Gatekeeper: Verifica se o plano do usuário permite acessar este curso
-        const userPlanLevel = PLAN_LEVELS[user.plan] || 0;
-        const requiredPlanLevel = PLAN_LEVELS[course.requiredPlan] || 0;
-
-        if (userPlanLevel < requiredPlanLevel) {
-            return res.status(403).json({ 
-                message: "Acesso negado. Faça upgrade do seu plano para assistir a esta aula.",
-                requiredPlan: course.requiredPlan
-            });
-        }
+        if (!requireCourseAccess(req.user, course, res)) return;
 
         // Busca o progresso atual
-        let progress = await UserProgress.findOne({ userId: user._id, lessonId: lesson._id });
+        const progress = await UserProgress.findOne({ userId: req.user._id, lessonId: lesson._id });
 
         const lessonObj = lesson.toObject();
         lessonObj.youtubeId = lessonObj.youtubeVideoId;
 
         res.json({ lesson: lessonObj, progress });
-    } catch (error) {
-        res.status(500).json({ message: "Erro ao buscar aula", error: error.message });
-    }
+    } catch (error) { next(error); }
 };
 
-export const updateProgress = async (req, res) => {
+export const updateProgress = async (req, res, next) => {
     try {
-        const user = await getUserFromRequest(req);
-        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-
         const { lessonId, watchTime, completed } = req.body;
         
         const lesson = await Lesson.findById(lessonId);
         if (!lesson) return res.status(404).json({ message: "Aula não encontrada" });
+        const course = await Course.findById(lesson.courseId);
+        if (!course) return res.status(404).json({ message: 'Curso não encontrado' });
+        if (!requireCourseAccess(req.user, course, res)) return;
 
         const progress = await UserProgress.findOneAndUpdate(
-            { userId: user._id, lessonId: lesson._id },
+            { userId: req.user._id, lessonId: lesson._id },
             { 
                 courseId: lesson.courseId,
                 watchTime, 
@@ -169,34 +138,33 @@ export const updateProgress = async (req, res) => {
         );
 
         res.json(progress);
-    } catch (error) {
-        res.status(500).json({ message: "Erro ao atualizar progresso", error: error.message });
-    }
+    } catch (error) { next(error); }
 };
 
-export const getCourseProgress = async (req, res) => {
+export const getCourseProgress = async (req, res, next) => {
     try {
-        const user = await getUserFromRequest(req);
-        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-
         const { courseId } = req.params;
+        const course = await Course.findById(courseId);
+        if (!course) return res.status(404).json({ message: 'Curso não encontrado' });
+        if (!requireCourseAccess(req.user, course, res)) return;
         const progress = await UserProgress.find({ 
-            userId: user._id, 
+            userId: req.user._id,
             courseId 
         });
         
         // Também buscar tentativas de quiz
-        const quizAttempts = await QuizAttempt.find({ userId: user._id, courseId }).sort({ createdAt: -1 });
+        const quizAttempts = await QuizAttempt.find({ userId: req.user._id, courseId }).sort({ createdAt: -1 });
         
         res.json({ progress, quizAttempts });
-    } catch (error) {
-        res.status(500).json({ message: "Erro ao buscar progresso", error: error.message });
-    }
+    } catch (error) { next(error); }
 };
 
-export const getQuizByCourseId = async (req, res) => {
+export const getQuizByCourseId = async (req, res, next) => {
     try {
         const { courseId } = req.params;
+        const course = await Course.findById(courseId);
+        if (!course) return res.status(404).json({ message: 'Curso não encontrado' });
+        if (!requireCourseAccess(req.user, course, res)) return;
         const quiz = await Quiz.findOne({ courseId });
         if (!quiz) return res.status(404).json({ message: "Quiz não encontrado para este curso." });
         
@@ -208,21 +176,20 @@ export const getQuizByCourseId = async (req, res) => {
         });
         
         res.json(safeQuiz);
-    } catch (error) {
-        res.status(500).json({ message: "Erro ao buscar quiz", error: error.message });
-    }
+    } catch (error) { next(error); }
 };
 
-export const submitQuiz = async (req, res) => {
+export const submitQuiz = async (req, res, next) => {
     try {
-        const user = await getUserFromRequest(req);
-        if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-
         const { courseId, answers } = req.body;
         
         if (!Array.isArray(answers)) {
             return res.status(400).json({ message: "Respostas devem ser um array." });
         }
+
+        const course = await Course.findById(courseId);
+        if (!course) return res.status(404).json({ message: 'Curso não encontrado' });
+        if (!requireCourseAccess(req.user, course, res)) return;
 
         const quiz = await Quiz.findOne({ courseId });
         if (!quiz) return res.status(404).json({ message: "Quiz não encontrado." });
@@ -242,7 +209,7 @@ export const submitQuiz = async (req, res) => {
         const passed = score >= quiz.passingScore;
 
         const attempt = await QuizAttempt.create({
-            userId: user._id,
+            userId: req.user._id,
             courseId,
             score,
             passed,
@@ -256,9 +223,7 @@ export const submitQuiz = async (req, res) => {
             passingScore: quiz.passingScore,
             correctAnswers: quiz.questions.map(q => q.correctOptionIndex)
         });
-    } catch (error) {
-        res.status(500).json({ message: "Erro ao processar quiz", error: error.message });
-    }
+    } catch (error) { next(error); }
 };
 
 const getCourseTheme = (plan) => {
@@ -301,12 +266,10 @@ const getCourseTheme = (plan) => {
     }
 };
 
-export const generateCertificate = async (req, res) => {
+export const generateCertificate = async (req, res, next) => {
     try {
         const { courseId } = req.params;
-        
-        const user = await getUserFromRequest(req);
-        if (!user) return res.status(404).json({ message: "Usuário não encontrado para gerar certificado." });
+        const user = req.user;
 
         logger.debug(`Generating certificate for course: ${courseId}, user: ${user._id}`);
         
@@ -315,6 +278,7 @@ export const generateCertificate = async (req, res) => {
             logger.debug(`Course not found: ${courseId}`);
             return res.status(404).json({ message: "Curso não encontrado" });
         }
+        if (!requireCourseAccess(user, course, res)) return;
 
         // Verify if all lessons are completed
         const lessons = await Lesson.find({ courseId });
@@ -508,12 +472,12 @@ export const generateCertificate = async (req, res) => {
 
     } catch (error) {
         logger.error("Certificate Error:", error);
-        res.status(500).json({ message: "Erro ao gerar certificado", error: error.message });
+        next(error);
     }
 };
 
 // Seeder para popular dados de exemplo
-export const seedAcademy = async (req, res) => {
+export const seedAcademy = async (req, res, next) => {
     try {
         logger.info("Starting academy seed process...");
         
@@ -647,10 +611,6 @@ export const seedAcademy = async (req, res) => {
         });
     } catch (error) {
         logger.error("CRITICAL Seed Error:", error);
-        res.status(500).json({ 
-            message: "Erro ao popular banco", 
-            error: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
+        next(error);
     }
 };

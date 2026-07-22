@@ -40,6 +40,35 @@ export const dateKeyToUtcDate = (date) => {
     return key ? new Date(`${key}T00:00:00.000Z`) : null;
 };
 
+// Interpreta o valor de um <input type="date"> como DIA-CALENDÁRIO, e não como
+// meia-noite UTC. `new Date('2026-07-21')` vira 20/07 às 21h em Brasília; ancorar
+// ao meio-dia UTC mantém o dia selecionado tanto em UTC quanto nos fusos do Brasil.
+// Entradas Date/ISO completas preservam o instante informado.
+export const parseCalendarDate = (value) => {
+    if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? null : new Date(value);
+    }
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+        if (match) {
+            const year = Number(match[1]);
+            const month = Number(match[2]);
+            const day = Number(match[3]);
+            const parsed = new Date(Date.UTC(year, month - 1, day, 12));
+            const valid = parsed.getUTCFullYear() === year
+                && parsed.getUTCMonth() === month - 1
+                && parsed.getUTCDate() === day;
+            return valid ? parsed : null;
+        }
+    }
+
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 // Dia útil ancorado em UTC. As datas do projeto são "dias puros" à meia-noite UTC
 // (dateKeyToUtcDate, brazilDateOnly, brazilToday, calcDate). Usar getDay()/setHours
 // (LOCAL) fazia o resultado depender do fuso do PROCESSO: num servidor UTC (prod)

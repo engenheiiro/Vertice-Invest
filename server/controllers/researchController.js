@@ -6,10 +6,12 @@ import MarketAsset from '../models/MarketAsset.js';
 import SystemConfig from '../models/SystemConfig.js';
 import RecommendedPortfolioCurve from '../models/RecommendedPortfolioCurve.js';
 import DiscardLog from '../models/DiscardLog.js'; // Novo
+import PublishedResearchPointer from '../models/PublishedResearchPointer.js';
 import { createBroadcast } from '../services/notificationService.js';
 import { aiResearchService } from '../services/aiResearchService.js';
 import { aiEnhancementService } from '../services/aiEnhancementService.js';
 import { marketDataService } from '../services/marketDataService.js';
+import { buyAndHoldService } from '../services/buyAndHoldService.js';
 import { macroDataService } from '../services/macroDataService.js';
 import { syncService } from '../services/syncService.js';
 import { backfillSectors } from '../services/sectorBackfillService.js';
@@ -18,6 +20,12 @@ import { LIMITS_CONFIG } from '../config/subscription.js';
 import { normalizeTreasuryBonds } from '../utils/fixedIncomeView.js';
 import { V2_SIGNAL_START_DATE } from '../config/financialConstants.js';
 import logger from '../config/logger.js';
+import { validateFundamentalsPublicationHealth } from '../utils/ingestionHealth.js';
+import {
+    activateResearchSections,
+    composeActiveResearchReport,
+    sectionsForPublicationType,
+} from '../services/researchPublicationService.js';
 
 // ... (Outros controllers mantidos)
 
@@ -306,7 +314,39 @@ export const crunchNumbers = async (req, res, next) => {
     } catch (error) { if (next) next(error); }
 };
 
-export const enhanceWithAI = async (req, res, next) => { try { const { assetClass, strategy } = req.body; const latestReport = await MarketAnalysis.findOne({ assetClass, strategy }).sort({ createdAt: -1 }); if (!latestReport) return res.status(404).json({ message: "Relatório não encontrado." }); const enhancedRanking = await aiEnhancementService.enhanceRankingWithNews(latestReport.content.ranking, assetClass); latestReport.content.ranking = enhancedRanking; latestReport.isMorningCallPublished = false; await latestReport.save(); return res.json({ message: "Refinamento IA concluído.", ranking: enhancedRanking }); } catch (error) { next(error); } };
+export const enhanceWithAI = async (req, res, next) => {
+    try {
+        const { assetClass, strategy } = req.body;
+        const latestReport = await MarketAnalysis.findOne({ assetClass, strategy }).sort({ createdAt: -1 });
+        if (!latestReport) return res.status(404).json({ message: "Relatório não encontrado." });
+
+        const enhancedRanking = await aiEnhancementService.enhanceRankingWithNews(
+            latestReport.content.ranking,
+            assetClass,
+        );
+        const source = latestReport.toObject();
+        delete source._id;
+        delete source.__v;
+        delete source.createdAt;
+        const revision = await MarketAnalysis.create({
+            ...source,
+            parentAnalysis: latestReport._id,
+            revision: (latestReport.revision || 1) + 1,
+            generatedBy: req.user?.id || latestReport.generatedBy,
+            content: { ...source.content, ranking: enhancedRanking },
+            isRankingPublished: false,
+            isMorningCallPublished: false,
+            isReportPublished: false,
+            isExplainableAIPublished: false,
+            publication: {},
+        });
+        return res.json({
+            message: "Refinamento IA concluído em nova revisão não publicada.",
+            analysisId: revision._id,
+            ranking: enhancedRanking,
+        });
+    } catch (error) { next(error); }
+};
 export const generateNarrative = async (req, res, next) => { try { const { analysisId } = req.body; const analysis = await MarketAnalysis.findById(analysisId); if (!analysis) return res.status(404).json({ message: "Not found" }); const narrative = await aiResearchService.generateNarrative(analysis.content.ranking, analysis.assetClass); analysis.content.morningCall = narrative; await analysis.save(); if (res) res.json({ morningCall: narrative }); } catch (error) { next(error); } };
 
 export const publishContent = async (req, res, next) => {
@@ -315,13 +355,32 @@ export const publishContent = async (req, res, next) => {
         const analysis = await MarketAnalysis.findById(analysisId);
         if (!analysis) return res.status(404).json({ message: "Not found" });
 
+        const sections = sectionsForPublicationType(type);
         const rankingWasAlreadyPublished = analysis.isRankingPublished;
+        const publishesRanking = sections.includes('RANKING');
 
-        if (type === 'RANKING' || type === 'BOTH' || type === 'ALL') analysis.isRankingPublished = true;
-        if (type === 'MORNING_CALL' || type === 'BOTH' || type === 'ALL') analysis.isMorningCallPublished = true;
-        if (type === 'REPORT' || type === 'ALL') analysis.isReportPublished = true;
-        if (type === 'EXPLAINABLE_AI' || type === 'ALL') analysis.isExplainableAIPublished = true;
-        await analysis.save();
+        if (publishesRanking) {
+            const systemConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' })
+                .select('lastSyncStats')
+                .lean();
+            const fundamentalsGate = validateFundamentalsPublicationHealth(
+                analysis.assetClass,
+                systemConfig?.lastSyncStats || null,
+            );
+            if (!fundamentalsGate.ok) {
+                return res.status(409).json({
+                    message: 'Publicação bloqueada por dados fundamentais degradados.',
+                    error: fundamentalsGate.reason,
+                });
+            }
+        }
+
+        const publication = await activateResearchSections({
+            analysis,
+            sections,
+            activatedBy: req.user?.id || null,
+            requireAll: true,
+        });
 
         // Dispara broadcast apenas quando o ranking passa a publicado pela primeira vez
         if (!rankingWasAlreadyPublished && analysis.isRankingPublished) {
@@ -331,8 +390,7 @@ export const publishContent = async (req, res, next) => {
                 STOCK_US: 'Ações EUA', REIT: 'REITs', ETF: 'ETFs', BRASIL_10: 'Brasil 10',
             };
             const label = assetClassLabels[assetClass] || assetClass;
-            // Fire-and-forget — não bloqueia a resposta
-            createBroadcast({
+            await createBroadcast({
                 type: 'RANKING_PUBLISHED',
                 title: 'Novo ranking publicado',
                 message: `Novo ranking de ${label} está disponível. Confira as recomendações atualizadas.`,
@@ -340,8 +398,13 @@ export const publishContent = async (req, res, next) => {
             });
         }
 
-        if (res) res.json({ message: "Publicado." });
-    } catch (error) { next(error); }
+        if (res) res.json({ message: "Publicado.", ...publication });
+    } catch (error) {
+        if (['INVALID_RANKING', 'SECTION_CONTENT_MISSING'].includes(error.code)) {
+            return res.status(409).json({ message: error.message });
+        }
+        next(error);
+    }
 };
 
 export const getPublishStatus = async (req, res, next) => {
@@ -415,6 +478,17 @@ export const generateExplainableAI = async (req, res, next) => {
 
 export const listReports = async (req, res, next) => { try { const reports = await MarketAnalysis.aggregate([ { $sort: { createdAt: -1 } }, { $limit: 50 }, { $project: { date: 1, assetClass: 1, strategy: 1, isRankingPublished: 1, isMorningCallPublished: 1, isReportPublished: 1, isExplainableAIPublished: 1, generatedBy: 1, morningCallPresent: { $cond: [{ $ifNull: ["$content.morningCall", false] }, true, false] }, rankingCount: { $size: { $ifNull: ["$content.ranking", []] } }, hasComparisonReport: { $cond: [{ $ifNull: ["$comparisonReport", false] }, true, false] }, hasGeneratedAI: { $cond: [{ $gt: [{ $strLenCP: { $ifNull: ["$generatedExplainableAI", ""] } }, 0] }, true, false] } } } ]); res.json(reports); } catch (error) { next(error); } };
 export const getReportDetails = async (req, res, next) => { try { const report = await MarketAnalysis.findById(req.params.id); if (!report) return res.status(404).json({ message: "Not found" }); res.json(report); } catch (error) { next(error); } };
+
+// Ranking Buy-and-Hold (estratégia BUY_AND_HOLD) em SHADOW — admin-only.
+// Calcula on-demand a partir dos dados atuais (read-only): não persiste
+// MarketAnalysis nem publica. Consumido pela aba Operações do AdminPanel.
+export const getBuyAndHoldShadow = async (req, res, next) => {
+    try {
+        const includeExcluded = req.query.excluded === 'true' || req.query.excluded === '1';
+        const result = await buyAndHoldService.generateBuyAndHoldRanking({ includeExcluded });
+        res.json(result);
+    } catch (error) { next(error); }
+};
 // Gate de plano AUTORITATIVO por classe de ativo (o frontend só esconde; a
 // autorização real é aqui). Mapeia cada assetClass à sua feature em LIMITS_CONFIG,
 // espelhando os minPlan das abas em client/src/pages/Research.tsx:
@@ -452,15 +526,39 @@ export const getLatestReport = async (req, res, next) => {
             }
         }
 
-        const report = await MarketAnalysis.findOne({
+        const pointers = await PublishedResearchPointer.find({ assetClass, strategy }).lean();
+        if (pointers.length) {
+            const ids = [...new Set(pointers.map(pointer => String(pointer.analysis)))];
+            const documents = await MarketAnalysis.find({ _id: { $in: ids } })
+                .select('-content.fullAuditLog')
+                .lean();
+            const response = composeActiveResearchReport({ pointers, documents });
+            if (response) {
+                return res.json(response);
+            }
+        }
+
+        const legacyReport = await MarketAnalysis.findOne({
             assetClass,
             strategy,
-            // Visível se QUALQUER seção foi publicada. Sem o flag de Explainable AI aqui,
-            // um relatório publicado só com a IA (sem ranking) ficava invisível ao usuário.
-            $or: [{ isRankingPublished: true }, { isMorningCallPublished: true }, { isExplainableAIPublished: true }]
+            $or: [
+                { isRankingPublished: true },
+                { isMorningCallPublished: true },
+                { isReportPublished: true },
+                { isExplainableAIPublished: true },
+            ]
         }).select('-content.fullAuditLog').sort({ createdAt: -1 });
 
-        if (!report) return res.status(404).json({ message: "Indisponível" });
-        res.json(report);
+        if (!legacyReport) return res.status(404).json({ message: "Indisponível" });
+        const response = legacyReport.toObject ? legacyReport.toObject() : structuredClone(legacyReport);
+        response.content = response.content || {};
+        if (!response.isRankingPublished) response.content.ranking = [];
+        if (!response.isMorningCallPublished) response.content.morningCall = '';
+        if (!response.isReportPublished) response.comparisonReport = null;
+        if (!response.isExplainableAIPublished) {
+            response.generatedExplainableAI = '';
+            response.generatedExplainableAIByProfile = {};
+        }
+        res.json(response);
     } catch (error) { next(error); }
 };

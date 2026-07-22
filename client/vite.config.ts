@@ -95,39 +95,11 @@ export default defineConfig({
         // o needRefresh nunca dispararia (a página não recarregaria).
         runtimeCaching: [
           {
-            // Auth e escrita: SEMPRE rede, nunca cache (dados sensíveis / mutações).
-            urlPattern: ({ url, request }) =>
-              url.pathname.startsWith('/api/') &&
-              (request.method !== 'GET' ||
-                /\/api\/(login|register|logout|refresh|forgot-password|reset-password)/.test(url.pathname)),
+            // A API pode responder com dados de qualquer conta autenticada. Cache
+            // compartilhado do service worker é indexado por URL, não por usuário,
+            // portanto nunca deve guardar /api (nem como fallback offline).
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
             handler: 'NetworkOnly',
-          },
-          {
-            // Dados FINANCEIROS e de TAXA: SEMPRE rede, nunca cache. Um valor de dinheiro
-            // defasado (ex.: patrimônio calculado com CDI antigo, ou plano expirado) jamais
-            // pode ser servido do cache do SW. Sem cache aqui, uma entrada velha nunca é
-            // relida — quem estava preso num valor antigo corrige sozinho assim que o novo
-            // SW assume (auto-update de 60s do ReloadPrompt), sem limpar cache manualmente.
-            // Regra ANTES do NetworkFirst genérico (workbox usa o primeiro match).
-            urlPattern: ({ url, request }) =>
-              request.method === 'GET' &&
-              (url.pathname === '/api/wallet' ||
-                url.pathname.startsWith('/api/wallet/') ||
-                url.pathname.startsWith('/api/subscription/') ||
-                url.pathname === '/api/research/macro'),
-            handler: 'NetworkOnly',
-          },
-          {
-            // Demais GETs de API: rede primeiro, cache como fallback offline (curta validade).
-            urlPattern: ({ url, request }) =>
-              request.method === 'GET' && url.pathname.startsWith('/api/'),
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 10,
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
           },
           {
             // Imagens estáticas.

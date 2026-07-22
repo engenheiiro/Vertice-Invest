@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bot, RefreshCw, CheckCircle2, AlertCircle, BarChart3, Layers, Globe, Zap, Search, Play, Server, Share2, Send, Copy, X, MessageSquare, ShieldCheck } from 'lucide-react';
 import type { ResearchReport, PublishStatus } from '../../services/research';
+import { BuyAndHoldShadowCard } from '../../components/admin/BuyAndHoldShadowCard';
 
 const ASSET_CLASSES = [
     { id: 'BRASIL_10', label: 'Brasil 10 (Mix)', icon: <ShieldCheck size={18} className="text-emerald-500" />, desc: 'Carteira Defensiva Top Picks' },
@@ -197,6 +198,11 @@ export const AdminOperacoesTab: React.FC<Props> = ({
                         })}
                     </tbody>
                 </table>
+            </div>
+
+            {/* Ranking Buy-and-Hold (shadow, admin-only) */}
+            <div className="mt-6">
+                <BuyAndHoldShadowCard />
             </div>
 
             {/* Modal — Prompt + Explainable IA */}

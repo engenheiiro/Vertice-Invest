@@ -5,7 +5,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { BarChart3 } from 'lucide-react';
 import { formatCurrency as fmtCurrency, formatPercent } from '../../utils/format';
-import { buildEvolutionChartData, summarizeEvolutionWindow, type ChartGranularity, type ChartWindow } from '../../utils/evolutionChartData';
+import { buildEvolutionChartData, buildEvolutionRenderData, summarizeEvolutionWindow, type ChartGranularity, type ChartWindow } from '../../utils/evolutionChartData';
 
 // Custom Tick para exibir o ponto pulsante no dia LIVE
 const CustomXAxisTick = (props: any) => {
@@ -77,6 +77,9 @@ export const EvolutionChart = React.memo(() => {
         () => buildEvolutionChartData({ history, kpis, granularity, window: range }),
         [history, kpis, granularity, range]
     );
+    // A âncora existe só na camada visual; cálculos e resumos continuam usando
+    // chartData. Para séries com histórico, renderData === chartData.
+    const renderData = useMemo(() => buildEvolutionRenderData(chartData), [chartData]);
 
     // Escala do eixo Y calculada a partir dos próprios dados (Patrimônio + Aplicado),
     // em vez de deixar o Recharts decidir. Dois motivos:
@@ -143,7 +146,7 @@ export const EvolutionChart = React.memo(() => {
     // Recharts chama esta função para cada ponto da série; só desenhamos no último.
     const renderEndDot = (props: any): React.ReactElement => {
         const { cx, cy, index, payload } = props;
-        if (cx == null || cy == null || index !== chartData.length - 1) return <g key={`d${index}`} />;
+        if (cx == null || cy == null || payload?.isVisualAnchor || index !== renderData.length - 1) return <g key={`d${index}`} />;
         const label = formatTooltipCurrency(payload.realEquity);
         const bw = Math.max(78, label.length * 7.2 + 18);
         const bx = cx - bw - 6; // bolha à esquerda do ponto (o ponto vive na borda direita)
@@ -156,6 +159,13 @@ export const EvolutionChart = React.memo(() => {
                 <circle cx={cx} cy={cy} r={5} fill={dotFill} stroke="#0e9268" strokeWidth={2.6} />
             </g>
         );
+    };
+
+    // A âncora artificial não deve reagir ao hover nem exibir um segundo ponto.
+    const renderActiveDot = (props: any): React.ReactElement => {
+        const { cx, cy, payload, index } = props;
+        if (cx == null || cy == null || payload?.isVisualAnchor) return <g key={`a${index}`} />;
+        return <circle cx={cx} cy={cy} r={4} fill="#0e9268" stroke={dotFill} strokeWidth={2} />;
     };
 
     if (kpis.totalEquity === 0 && chartData.length === 0) {
@@ -241,7 +251,7 @@ export const EvolutionChart = React.memo(() => {
                     {showSummary && !isPrivacyMode && ` Resultado no período: ${formatSignedCurrency(summary.variationValue)}${summary.variationPercent !== null ? ` (${formatPercent(summary.variationPercent, { sign: true })})` : ''}.`}
                 </p>
                 <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={chartData} margin={{ top: 30, right: 14, left: -4, bottom: 0 }}>
+                    <ComposedChart data={renderData} margin={{ top: 30, right: 14, left: -4, bottom: 0 }}>
                         <defs>
                             <linearGradient id="evoEquityFill" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#0e9268" stopOpacity={0.22} />
@@ -256,7 +266,7 @@ export const EvolutionChart = React.memo(() => {
                             tickLine={false}
                             minTickGap={10}
                             // Usa o componente customizado para desenhar o ponto live
-                            tick={(props) => <CustomXAxisTick {...props} data={chartData} />}
+                            tick={(props) => <CustomXAxisTick {...props} data={renderData} />}
                         />
 
                         <YAxis
@@ -274,6 +284,7 @@ export const EvolutionChart = React.memo(() => {
                             content={({ active, payload, label }) => {
                                 if (active && payload && payload.length) {
                                     const data = payload[0].payload;
+                                    if (data.isVisualAnchor) return null;
                                     const displayLabel = data.fullDate || label;
                                     const variation = data.periodVariation || 0;
                                     const variationPct = data.periodVariationPercent;
@@ -353,7 +364,7 @@ export const EvolutionChart = React.memo(() => {
                             stroke="#0e9268"
                             strokeWidth={2.6}
                             dot={renderEndDot}
-                            activeDot={{ r: 4, fill: '#0e9268', stroke: dotFill, strokeWidth: 2 }}
+                            activeDot={renderActiveDot}
                             animationDuration={900}
                         />
                     </ComposedChart>

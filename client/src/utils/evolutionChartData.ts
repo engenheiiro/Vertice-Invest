@@ -21,6 +21,8 @@ export interface EvolutionChartPoint {
     periodVariation: number;         // variação de mercado do período em R$ (desconta aportes)
     periodVariationPercent: number | null; // % sobre o patrimônio do ponto anterior
     isLive?: boolean;
+    // Somente para renderização: âncora que estende uma série unitária.
+    isVisualAnchor?: boolean;
 }
 
 type KpiSubset = Pick<WalletKPIs, 'totalEquity' | 'totalInvested' | 'totalResult'>;
@@ -84,6 +86,27 @@ export function buildEvolutionChartData(params: BuildParams): EvolutionChartPoin
             : buildMonthly(sortedHistory, kpis, window, now);
 
     return withVariation(points, sortedHistory);
+}
+
+/**
+ * Uma categoria única é centralizada pelo Recharts e não forma um segmento.
+ * Para renderização, duplicamos o ponto como âncora invisível à esquerda; o dado
+ * real/LIVE permanece no fim. Séries normais voltam pela mesma referência.
+ */
+export function buildEvolutionRenderData(points: EvolutionChartPoint[]): EvolutionChartPoint[] {
+    if (points.length !== 1) return points;
+
+    const livePoint = points[0];
+    return [
+        {
+            ...livePoint,
+            label: '',
+            fullDate: '',
+            isLive: false,
+            isVisualAnchor: true,
+        },
+        livePoint,
+    ];
 }
 
 function buildDaily(

@@ -99,3 +99,59 @@ describe('scoringEngine — Exterior por sub-tipo', () => {
         noNaN(res);
     });
 });
+
+// Roteamento por TEMA do ETF nacional: Cripto/Ouro/Renda Fixa NÃO são cesta de ações e
+// ganham scorers próprios (com guardrails apropriados), em vez do modelo genérico.
+const makeBrEtf = (sector, overrides = {}) => ({
+    ...makeFund('ETF'),
+    type: 'ETF',
+    usSubType: null,
+    currency: 'BRL',
+    sector,
+    ...overrides,
+    metrics: { ...makeFund('ETF').metrics, sector, ...(overrides.metrics || {}) },
+});
+
+describe('scoringEngine — ETF nacional por tema (Cripto/Ouro/Renda Fixa)', () => {
+    it('ETF de CRIPTO (HASH11) é rotulado como tema único, não "cesta diversificada"', () => {
+        const res = scoringEngine.processAsset(
+            makeBrEtf('Cripto', { ticker: 'HASH11', metrics: { volatility: 60, dy: 0 } }), CTX);
+        expect(res._discarded).toBeFalsy();
+        const labels = res.auditLog.map(a => a.factor).join(' | ');
+        expect(labels).toMatch(/ETF Cripto|Base ETF Cripto/);
+        expect(labels).not.toMatch(/cesta diversificada/);
+        noNaN(res);
+    });
+
+    it('ETF de CRIPTO respeita o teto especulativo no BOLD (≤ 80)', () => {
+        const res = scoringEngine.processAsset(
+            makeBrEtf('Cripto', { ticker: 'BITH11', price: 100, metrics: { volatility: 30, sma200: 70, dy: 0, avgLiquidity: 80000000 } }), CTX);
+        expect(res.scores.BOLD).toBeLessThanOrEqual(80);
+        noNaN(res);
+    });
+
+    it('ETF de OURO (GOLD11) recebe tratamento de hedge (defensivo forte, arrojado menor)', () => {
+        const res = scoringEngine.processAsset(
+            makeBrEtf('Ouro', { ticker: 'GOLD11', metrics: { volatility: 15, dy: 0 } }), CTX);
+        expect(res._discarded).toBeFalsy();
+        expect(res.scores.DEFENSIVE).toBeGreaterThanOrEqual(60);
+        expect(res.scores.BOLD).toBeLessThan(res.scores.DEFENSIVE);
+        noNaN(res);
+    });
+
+    it('ETF de RENDA FIXA (FIXA11) é defensivo e não pontua alto no arrojado', () => {
+        const res = scoringEngine.processAsset(
+            makeBrEtf('Renda Fixa', { ticker: 'FIXA11', metrics: { volatility: 8, dy: 10 } }), CTX);
+        expect(res._discarded).toBeFalsy();
+        expect(res.scores.DEFENSIVE).toBeGreaterThan(res.scores.BOLD);
+        noNaN(res);
+    });
+
+    it('ETF de índice amplo (BOVA11) permanece na cesta diversificada genérica', () => {
+        const res = scoringEngine.processAsset(
+            makeBrEtf('Índice Amplo', { ticker: 'BOVA11', metrics: { dy: 4.5 } }), CTX);
+        const labels = res.auditLog.map(a => a.factor).join(' | ');
+        expect(labels).toMatch(/cesta diversificada/);
+        noNaN(res);
+    });
+});

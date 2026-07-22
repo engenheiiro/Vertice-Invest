@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBrasil10 } from '../services/aiResearchService.js';
+import { buildBrasil10, stripStockCalibrationInternals } from '../services/aiResearchService.js';
 
 const processed = (ticker, score, structural) => ({
     ticker,
@@ -7,6 +7,25 @@ const processed = (ticker, score, structural) => ({
     sector: 'Bancos',
     scores: { DEFENSIVE: score, MODERATE: score, BOLD: score },
     metrics: { structural },
+});
+
+describe('payload publico do ranking STOCK', () => {
+    it('remove eixos e cobertura administrativos sem alterar o score publico', () => {
+        const publicItem = stripStockCalibrationInternals({
+            ticker: 'PETR4',
+            score: 77,
+            action: 'BUY',
+            riskProfile: 'MODERATE',
+            stockCalibration: { version: 'STOCK_BH_SHADOW_V3', axes: { durability: 76 } },
+            coverage: { readyForSectorCalibration: true },
+            shadowAuditByProfile: { MODERATE: {} },
+            scores: { MODERATE: 77 },
+        });
+
+        expect(publicItem).toEqual({
+            ticker: 'PETR4', score: 77, action: 'BUY', riskProfile: 'MODERATE',
+        });
+    });
 });
 
 describe('buildBrasil10 — contratos de ranking', () => {

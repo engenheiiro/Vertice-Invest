@@ -575,6 +575,12 @@ export const marketDataService = {
                     type: asset.type,
                     name: asset.name || asset.ticker,
                     sector: displaySector,
+                    // Metadados da calibração buy-and-hold STOCK. Permanecem no
+                    // topo para não contaminar `metrics` com dados de proveniência.
+                    stockArchetype: asset.stockArchetype || null,
+                    sectorMetrics: asset.sectorMetrics?.toObject
+                        ? asset.sectorMetrics.toObject()
+                        : (asset.sectorMetrics || {}),
                     fiiSubType: asset.fiiSubType || null,
                     usSubType: asset.usSubType || null,
                     price: asset.lastPrice || 0,

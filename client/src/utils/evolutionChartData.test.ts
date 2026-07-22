@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildEvolutionChartData, summarizeEvolutionWindow, type ChartGranularity, type ChartWindow, type EvolutionChartPoint } from './evolutionChartData';
+import { buildEvolutionChartData, buildEvolutionRenderData, summarizeEvolutionWindow, type ChartGranularity, type ChartWindow, type EvolutionChartPoint } from './evolutionChartData';
 import type { HistoryPoint } from '../contexts/WalletContext';
 
 // Data com hora ao MEIO-DIA local: 12h de folga de cada lado da meia-noite torna
@@ -209,5 +209,35 @@ describe('summarizeEvolutionWindow', () => {
         const r = summarizeEvolutionWindow([pt(0, 0), pt(100, 100)]);
         expect(r.variationValue).toBeCloseTo(0);
         expect(r.variationPercent).toBeNull();
+    });
+});
+
+describe('buildEvolutionRenderData', () => {
+    it('duplica uma série unitária com âncora visual e mantém o LIVE no final', () => {
+        const live = build([], kpis(8354.38, 8353.77), 'MONTHLY', 'ALL')[0];
+        const rendered = buildEvolutionRenderData([live]);
+
+        expect(rendered).toHaveLength(2);
+        expect(rendered[0]).toMatchObject({
+            label: '',
+            isLive: false,
+            isVisualAnchor: true,
+            realEquity: live.realEquity,
+            realInvested: live.realInvested,
+        });
+        expect(rendered[1]).toBe(live);
+        expect(rendered[1].isLive).toBe(true);
+    });
+
+    it('não altera nem copia séries com histórico real', () => {
+        const realSeries = build(
+            [snap(2026, 5, 29, 1000, 900), snap(2026, 5, 30, 1010, 900)],
+            kpis(1020, 900),
+            'DAILY',
+            '7D',
+        );
+
+        expect(buildEvolutionRenderData(realSeries)).toBe(realSeries);
+        expect(realSeries.some((point) => point.isVisualAnchor)).toBe(false);
     });
 });

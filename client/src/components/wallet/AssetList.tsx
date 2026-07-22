@@ -95,15 +95,26 @@ export const AssetList = () => {
         setCollapsedGroups(prev => ({ ...prev, [type]: !prev[type] }));
     };
 
-    // Agrupa pelo BALDE DE ALOCAÇÃO (C1): ativos de Reserva (CASH ou RF marcada)
-    // caem em "Caixa / Reserva"; RF não-reserva fica em "Renda Fixa". ETF nacional
-    // é grupo próprio "ETFs"; ETFs internacionais (type STOCK_US) listam sob "Exterior".
+    // Agrupa pelo BALDE DE ALOCAÇÃO (C1), coerente com a Distribuição: ativos de Reserva
+    // (CASH ou RF marcada) caem em "Caixa / Reserva"; RF não-reserva fica em "Renda Fixa".
+    // ETF NACIONAL (type 'ETF') conta dentro de "Ações Brasil" (marcado com selo ETF);
+    // ETFs internacionais (type STOCK_US) listam sob "Exterior".
     const groupedAssets = assets.reduce((acc, asset) => {
         const bucket = allocationBucket(asset);
-        if (!acc[bucket]) acc[bucket] = [];
-        acc[bucket].push(asset);
+        const cls = bucket === 'ETF' ? 'STOCK' : bucket;
+        if (!acc[cls]) acc[cls] = [];
+        acc[cls].push(asset);
         return acc;
     }, {} as Record<string, Asset[]>);
+
+    // Divisão Ações individuais vs ETFs nacionais dentro de "Ações Brasil" — decompõe o %
+    // do grupo (mesma leitura da ramificação da Distribuição).
+    const isNationalEtf = (a: Asset) => a.type === 'ETF';
+    const stockSplit = (items: Asset[]) => {
+        let stock = 0, etf = 0;
+        items.forEach(i => { if (isNationalEtf(i)) etf += i.totalValue || 0; else stock += i.totalValue || 0; });
+        return { stock, etf };
+    };
 
     // Base de alocação = patrimônio − reserva. Denominador ÚNICO dos percentuais
     // de investimento (corrige a distorção: antes usava kpis.totalEquity, que
@@ -111,8 +122,8 @@ export const AssetList = () => {
     const reserveValue = sumReserveValue(assets);
     const allocationBase = Math.max((kpis.totalEquity || 0) - reserveValue, 0);
 
-    // OURO mantido no fim para exibir holdings legados de ouro (não cadastrável mais).
-    const typeOrder = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
+    // ETF nacional foldado em Ações BR (STOCK). OURO no fim p/ holdings legados de ouro.
+    const typeOrder = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
     const visibleTypes = typeOrder.filter(type => groupedAssets[type] && groupedAssets[type].length > 0);
 
     return (
@@ -140,6 +151,8 @@ export const AssetList = () => {
                         const totalValueGroup = groupItems.reduce((acc, item) => acc + (item.totalValue || 0), 0);
                         const gm = groupMetrics(groupItems);
                         const accent = accentOf(type);
+                        const sp = stockSplit(groupItems);
+                        const showStockSplit = type === 'STOCK' && sp.etf > 0 && allocationBase > 0;
 
                         return (
                             <div key={type}>
@@ -150,8 +163,17 @@ export const AssetList = () => {
                                     <span className={`text-xs font-bold uppercase tracking-widest flex items-center gap-2 min-w-0 ${accent.label}`}>
                                         {isCollapsed ? <ChevronRight size={14} className="shrink-0" /> : <ChevronDown size={14} className="shrink-0" />}
                                         <span className={`w-6 h-6 rounded-[7px] flex items-center justify-center shrink-0 ${accent.icon}`}><PieChart size={13} /></span>
-                                        <span className="truncate">{TYPE_LABELS[type]}</span>
-                                        <span className="text-[10px] text-slate-500 shrink-0">({groupItems.length})</span>
+                                        <span className="flex flex-col min-w-0">
+                                            <span className="flex items-center gap-2 min-w-0">
+                                                <span className="truncate">{TYPE_LABELS[type]}</span>
+                                                <span className="text-[10px] text-slate-500 shrink-0">({groupItems.length})</span>
+                                            </span>
+                                            {showStockSplit && (
+                                                <span className="text-[9px] text-slate-500 font-semibold normal-case tracking-normal">
+                                                    Ações {(sp.stock / allocationBase * 100).toFixed(0)}% · ETFs {(sp.etf / allocationBase * 100).toFixed(0)}%
+                                                </span>
+                                            )}
+                                        </span>
                                     </span>
                                     <span className="text-right shrink-0 ml-3">
                                         <span className="block text-white tabular-nums font-bold text-sm">{formatCurrency(totalValueGroup)}</span>
@@ -176,7 +198,14 @@ export const AssetList = () => {
                                             <div className="min-w-0 flex-1 flex items-center gap-3">
                                                 <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} isReserve={isReserveAsset(asset)} size={32} />
                                                 <div className="min-w-0">
-                                                    <p className="font-bold text-slate-200 text-sm truncate">{assetTitle(asset)}</p>
+                                                    <p className="font-bold text-slate-200 text-sm truncate flex items-center gap-1.5">
+                                                        <span className="truncate">{assetTitle(asset)}</span>
+                                                        {isNationalEtf(asset) && (
+                                                            <span className="text-[8px] font-bold uppercase tracking-wide text-teal-400 bg-teal-500/10 border border-teal-500/30 px-1 py-0.5 rounded shrink-0" title="ETF nacional — conta dentro de Ações BR na distribuição.">
+                                                                ETF
+                                                            </span>
+                                                        )}
+                                                    </p>
                                                     <p className="text-[10px] text-slate-500 truncate">
                                                         {isReserveAsset(asset)
                                                             ? 'Reserva / Caixa'
@@ -270,6 +299,9 @@ export const AssetList = () => {
                                 const idealPercent = targetAllocation[type as AssetType] || 0;
                                 const gm = groupMetrics(groupItems);
                                 const accent = accentOf(type);
+                                // Ações BR: decompõe o % do grupo em Ações individuais vs ETFs nacionais.
+                                const sp = stockSplit(groupItems);
+                                const showStockSplit = type === 'STOCK' && sp.etf > 0 && allocationBase > 0;
 
                                 return (
                                     <React.Fragment key={type}>
@@ -292,6 +324,11 @@ export const AssetList = () => {
                                                         <span className="text-[10px] font-bold text-slate-500 bg-elevated px-2 py-0.5 rounded border border-slate-800/50">
                                                             {pluralAtivos(groupItems.length)}
                                                         </span>
+                                                        {showStockSplit && (
+                                                            <span className="text-[10px] text-slate-500 font-semibold normal-case tracking-normal">
+                                                                Ações {(sp.stock / allocationBase * 100).toFixed(0)}% · ETFs {(sp.etf / allocationBase * 100).toFixed(0)}%
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     
                                                     <div className="flex items-center gap-6 text-[10px] md:text-xs">
@@ -359,6 +396,11 @@ export const AssetList = () => {
                                                             <div>
                                                                 <p className="font-bold text-slate-200 flex items-center gap-1.5">
                                                                     {assetTitle(asset)}
+                                                                    {isNationalEtf(asset) && (
+                                                                        <span className="text-[9px] font-bold uppercase tracking-wide text-teal-400 bg-teal-500/10 border border-teal-500/30 px-1.5 py-0.5 rounded" title="ETF nacional — conta dentro de Ações BR na distribuição.">
+                                                                            ETF
+                                                                        </span>
+                                                                    )}
                                                                     {asset.matured && (
                                                                         <span className="text-[9px] font-bold uppercase tracking-wide text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded" title="Título vencido — parou de render. Considere resgatar (nada é vendido automaticamente).">
                                                                             Vencido

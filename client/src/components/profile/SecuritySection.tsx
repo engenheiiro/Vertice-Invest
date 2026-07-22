@@ -15,6 +15,7 @@ export const SecuritySection = () => {
     const [mfaStatusLoading, setMfaStatusLoading] = useState(true);
     const [mode, setMode] = useState<MfaMode>('idle');
     const [setupData, setSetupData] = useState<{ secret: string; qr: string } | null>(null);
+    const [setupPassword, setSetupPassword] = useState('');
     const [mfaCode, setMfaCode] = useState('');
     const [disablePwd, setDisablePwd] = useState('');
     const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
@@ -34,18 +35,24 @@ export const SecuritySection = () => {
     const resetMfaFlow = () => {
         setMode('idle');
         setSetupData(null);
+        setSetupPassword('');
         setMfaCode('');
         setDisablePwd('');
         setMfaMsg(null);
     };
 
-    const startSetup = async () => {
+    const startSetup = () => {
+        setMode('setup');
+        setMfaMsg(null);
+    };
+
+    const confirmSetupPassword = async () => {
         setMfaBusy(true);
         setMfaMsg(null);
         try {
-            const data = await authService.setupMfa();
+            const data = await authService.setupMfa(setupPassword);
             setSetupData({ secret: data.secret, qr: data.qr });
-            setMode('setup');
+            setSetupPassword('');
         } catch (e: unknown) {
             setMfaMsg({ type: 'error', text: getErrorMessage(e, 'Erro ao iniciar o MFA.') });
         } finally {
@@ -178,6 +185,31 @@ export const SecuritySection = () => {
                     </div>
 
                     {/* Painel de SETUP (escanear QR + confirmar código) */}
+                    {mode === 'setup' && !setupData && (
+                        <div className="mt-5 pt-4 border-t border-slate-800/50 animate-fade-in">
+                            <p className="text-xs text-slate-400 mb-3">
+                                Confirme sua senha atual antes de configurar o segundo fator.
+                            </p>
+                            <Input
+                                label="Senha atual"
+                                type="password"
+                                autoComplete="current-password"
+                                value={setupPassword}
+                                onChange={(e) => { setSetupPassword(e.target.value); setMfaMsg(null); }}
+                                containerClassName="mb-0"
+                            />
+                            {mfaMsg && (
+                                <div className="mt-3 p-2 text-xs font-bold text-center rounded-lg text-red-400 bg-red-900/20">
+                                    {mfaMsg.text}
+                                </div>
+                            )}
+                            <div className="mt-4 flex justify-end gap-3">
+                                <Button type="button" variant="ghost" onClick={resetMfaFlow} className="w-auto px-4 py-2 text-xs">Cancelar</Button>
+                                <Button type="button" status={mfaBusy ? 'loading' : 'idle'} onClick={confirmSetupPassword} disabled={!setupPassword} className="w-auto px-6 py-2 text-xs">Continuar</Button>
+                            </div>
+                        </div>
+                    )}
+
                     {mode === 'setup' && setupData && (
                         <div className="mt-5 pt-4 border-t border-slate-800/50 animate-fade-in">
                             <p className="text-xs text-slate-400 mb-3">

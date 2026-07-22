@@ -23,6 +23,12 @@ describe('Ingestion Engine (Fundamentus Parser)', () => {
 
     // Função auxiliar para gerar HTML mockado do Fundamentus
     const generateHtml = (rows) => {
+        const headers = [
+            'Papel', 'Cotação', 'P/L', 'P/VP', 'PSR', 'Div.Yield', 'P/Ativo',
+            'P/Cap.Giro', 'P/EBIT', 'P/Ativ Circ.Liq', 'EV/EBIT', 'EV/EBITDA',
+            'Mrg Bruta', 'Mrg Ebit', 'Mrg. Líq.', 'Liq. Corr.', 'ROIC', 'ROE',
+            'Liq.2meses', 'Patrim. Líq', 'Dív.Líq/ Patrim.', 'Cresc. Rec.5a',
+        ];
         const rowsHtml = rows.map(r => `
             <tr>
                 <td><span class="txt">${r.ticker}</span></td>
@@ -37,6 +43,7 @@ describe('Ingestion Engine (Fundamentus Parser)', () => {
                 <td><span class="txt">${r.pativcircliq}</span></td>
                 <td><span class="txt">${r.evebit}</span></td>
                 <td><span class="txt">${r.evebitda}</span></td>
+                <td><span class="txt">${r.mrgbruta}</span></td>
                 <td><span class="txt">${r.mrgebit}</span></td>
                 <td><span class="txt">${r.mrgliq}</span></td>
                 <td><span class="txt">${r.liqcorr}</span></td>
@@ -53,7 +60,7 @@ describe('Ingestion Engine (Fundamentus Parser)', () => {
             <html>
                 <body>
                     <table id="resultado">
-                        <thead></thead>
+                        <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
                         <tbody>${rowsHtml}</tbody>
                     </table>
                 </body>
@@ -77,6 +84,7 @@ describe('Ingestion Engine (Fundamentus Parser)', () => {
                 pativcircliq: '-0,50',
                 evebit: '4,00',
                 evebitda: '3,50',
+                mrgbruta: '42,0%',
                 mrgebit: '30,0%',
                 mrgliq: '25,0%',
                 liqcorr: '1,50',
@@ -100,6 +108,7 @@ describe('Ingestion Engine (Fundamentus Parser)', () => {
                 pativcircliq: '0,00',
                 evebit: '6,00',
                 evebitda: '5,00',
+                mrgbruta: '35,0%',
                 mrgebit: '20,0%',
                 mrgliq: '15,0%',
                 liqcorr: '2,00',
@@ -129,7 +138,11 @@ describe('Ingestion Engine (Fundamentus Parser)', () => {
         expect(petr4.ticker).toBe('PETR4');
         expect(petr4.price).toBe(35.50);
         expect(petr4.dy).toBe(12.5); // Removeu % e parseou float
+        expect(petr4.grossMargin).toBe(42);
+        expect(petr4.roe).toBe(20);
         expect(petr4.liq2m).toBe(1500000000); // Removeu pontos
+        expect(petr4.patrimLiq).toBe(380000000000);
+        expect(petr4.debtToEquity).toBe(0.8);
         expect(petr4.marketCap).toBeGreaterThan(0); // Cálculo derivado deve funcionar
 
         // Verifica VALE3 (Dados Faltantes e Ponto Decimal)
@@ -157,6 +170,16 @@ describe('Ingestion Engine (Fundamentus Parser)', () => {
         expect(result.size).toBe(0);
     });
 
+    it('bloqueia a ingestão quando o layout STOCK não tem as 22 colunas esperadas', async () => {
+        const headers = Array.from({ length: 21 }, (_, i) => `<th>H${i}</th>`).join('');
+        const cells = Array.from({ length: 21 }, (_, i) => `<td>${i === 0 ? 'TEST3' : '1,00'}</td>`).join('');
+        const html = `<table id="resultado"><thead><tr>${headers}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
+        axios.get.mockResolvedValue({ data: iconv.encode(html, 'iso-8859-1') });
+
+        const result = await fundamentusService.getStocksMap();
+        expect(result.size).toBe(0);
+    });
+
     it('Should calculate derived financial data correctly', async () => {
         const row = {
             ticker: 'TEST3',
@@ -171,6 +194,7 @@ describe('Ingestion Engine (Fundamentus Parser)', () => {
             pativcircliq: '0,00',
             evebit: '6,00',
             evebitda: '0,00',
+            mrgbruta: '0,0%',
             mrgebit: '0,0%',
             mrgliq: '0,0%',
             liqcorr: '0,00',

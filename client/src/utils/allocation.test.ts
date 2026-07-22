@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeSubAllocationReal, fixedIncomeSubKey, usSubKeyOf, hasSubTargets, splitContributionBySubMeta, isReserveAsset, allocationBucket, sumReserveValue } from './allocation';
+import { computeSubAllocationReal, fixedIncomeSubKey, usSubKeyOf, stockSubKeyOf, hasSubTargets, splitContributionBySubMeta, isReserveAsset, allocationBucket, sumReserveValue, foldEtfIntoStock } from './allocation';
+import { DEFAULT_SUB_ALLOCATION } from '../contexts/WalletContext';
 import type { Asset } from '../contexts/WalletContext';
 
 const mkAsset = (partial: Partial<Asset>): Asset => ({
@@ -46,6 +47,36 @@ describe('usSubKeyOf', () => {
     });
 });
 
+describe('stockSubKeyOf', () => {
+    it('ETF nacional → ETF; ação individual → STOCK', () => {
+        expect(stockSubKeyOf({ type: 'ETF' })).toBe('ETF');
+        expect(stockSubKeyOf({ type: 'STOCK' })).toBe('STOCK');
+    });
+});
+
+describe('foldEtfIntoStock', () => {
+    it('folda alvo de topo ETF em Ações BR e cria a sub-meta ETF', () => {
+        const { targetAllocation, targetSubAllocation } = foldEtfIntoStock(
+            { STOCK: 40, FII: 30, ETF: 10, STOCK_US: 20 },
+            DEFAULT_SUB_ALLOCATION,
+        );
+        expect(targetAllocation.STOCK).toBe(50);
+        expect(targetAllocation.ETF).toBe(0);
+        expect(targetSubAllocation.STOCK.STOCK).toBeCloseTo(80, 5);
+        expect(targetSubAllocation.STOCK.ETF).toBeCloseTo(20, 5);
+    });
+
+    it('idempotente com sub-metas de STOCK já definidas; no-op sem ETF legado', () => {
+        const kept = foldEtfIntoStock({ STOCK: 50, ETF: 0, FII: 50 }, { ...DEFAULT_SUB_ALLOCATION, STOCK: { STOCK: 80, ETF: 20 } });
+        expect(kept.targetAllocation.STOCK).toBe(50);
+        expect(kept.targetSubAllocation.STOCK.ETF).toBe(20);
+
+        const noop = foldEtfIntoStock({ STOCK: 60, FII: 40 }, DEFAULT_SUB_ALLOCATION);
+        expect(noop.targetAllocation.STOCK).toBe(60);
+        expect(hasSubTargets(noop.targetSubAllocation.STOCK)).toBe(false);
+    });
+});
+
 describe('hasSubTargets', () => {
     it('true quando há alguma sub-meta > 0', () => {
         expect(hasSubTargets({ IPCA: 0, POS: 0, PRE: 0 })).toBe(false);
@@ -57,19 +88,27 @@ describe('hasSubTargets', () => {
 describe('computeSubAllocationReal', () => {
     it('carteira vazia → tudo zero', () => {
         const r = computeSubAllocationReal([]);
+        expect(r.STOCK.total).toBe(0);
         expect(r.FIXED_INCOME.total).toBe(0);
         expect(r.STOCK_US.total).toBe(0);
         expect(r.FIXED_INCOME.pct.IPCA).toBe(0);
     });
 
-    it('ETFs internacionais e ouro lastreado contam no Exterior (sub-tipo ETF); nacional fica fora', () => {
+    it('ETF nacional conta em Ações BR (sub-tipo ETF); ETF internacional e ouro no Exterior', () => {
         const assets = [
-            mkAsset({ type: 'ETF', ticker: 'BOVA11', totalValue: 600 }),                      // nacional: classe própria
+            mkAsset({ type: 'STOCK', ticker: 'PETR4', totalValue: 400 }),                     // ação individual BR
+            mkAsset({ type: 'ETF', ticker: 'BOVA11', totalValue: 600 }),                      // ETF nacional → Ações BR/ETF
             mkAsset({ type: 'STOCK_US', usSubType: 'ETF', ticker: 'VOO', totalValue: 300 }),  // internacional → ETF
             mkAsset({ type: 'STOCK_US', usSubType: 'GOLD', ticker: 'GLD', totalValue: 100 }), // ouro lastreado → ETF
             mkAsset({ type: 'STOCK_US', usSubType: 'STOCK', ticker: 'AAPL', totalValue: 500 }), // Stocks
         ];
         const r = computeSubAllocationReal(assets);
+        // Ações BR: ações 400 + ETF nacional 600.
+        expect(r.STOCK.total).toBe(1000);
+        expect(r.STOCK.value.STOCK).toBe(400);
+        expect(r.STOCK.value.ETF).toBe(600);
+        expect(r.STOCK.pct.STOCK).toBeCloseTo(40, 5);
+        expect(r.STOCK.pct.ETF).toBeCloseTo(60, 5);
         // Exterior: Stocks 500 + ETF 400 (VOO 300 + GLD 100). ETF nacional (BOVA11) não entra.
         expect(r.STOCK_US.total).toBe(900);
         expect(r.STOCK_US.value.STOCK).toBe(500);

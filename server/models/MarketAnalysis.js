@@ -28,8 +28,26 @@ const RankingItemSchema = new mongoose.Schema({
   }],
   bullThesis: [String], 
   bearThesis: [String], 
+  // A IA apenas sinaliza risco extraordinário; não altera a action quantitativa.
+  riskVeto: {
+    active: { type: Boolean, default: false },
+    level: { type: String, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], default: 'LOW' },
+    rationale: { type: String, default: '' },
+    source: { type: String, default: 'GEMINI' },
+    evaluatedAt: { type: Date, default: null },
+  },
+  // Compatibilidade de leitura com clientes/admin legados.
+  aiMetadata: {
+    riskLevel: { type: String, default: 'LOW' },
+    rationale: { type: String, default: '' },
+    vetoed: { type: Boolean, default: false },
+  },
   
   reason: String,
+  // Evidência administrativa da calibração buy-and-hold STOCK. Mixed mantém o
+  // contrato versionado sem expor eixos internos como um segundo ranking público.
+  stockCalibration: { type: mongoose.Schema.Types.Mixed, default: null },
+  coverage: { type: mongoose.Schema.Types.Mixed, default: null },
   metrics: {
     grahamPrice: Number,
     bazinPrice: Number,
@@ -87,6 +105,13 @@ const MarketAnalysisSchema = new mongoose.Schema({
   date: { type: Date, default: Date.now },
   assetClass: { type: String, required: true },
   strategy: { type: String, required: true },
+  batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'ResearchBatch', default: null, index: true },
+  runId: { type: String, default: null, index: true },
+  parentAnalysis: { type: mongoose.Schema.Types.ObjectId, ref: 'MarketAnalysis', default: null },
+  revision: { type: Number, default: 1 },
+  algorithmVersion: { type: String, default: 'unknown' },
+  inputManifest: { type: mongoose.Schema.Types.Mixed, default: {} },
+  calculatedAt: { type: Date, default: Date.now },
   
   isRankingPublished: { type: Boolean, default: false },
   isMorningCallPublished: { type: Boolean, default: false },
@@ -111,6 +136,12 @@ const MarketAnalysisSchema = new mongoose.Schema({
   },
   
   generatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  publication: {
+    rankingAt: { type: Date, default: null },
+    morningCallAt: { type: Date, default: null },
+    reportAt: { type: Date, default: null },
+    explainableAIAt: { type: Date, default: null },
+  },
   createdAt: { type: Date, default: Date.now }
 });
 

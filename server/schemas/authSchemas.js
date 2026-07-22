@@ -71,3 +71,41 @@ export const loginSchema = z.object({
       .min(1, "Senha é obrigatória")
   })
 });
+
+const currentPassword = z.string({ required_error: 'Senha atual é obrigatória.' })
+  .min(1, 'Senha atual é obrigatória.')
+  .max(1024, 'Senha inválida.');
+
+export const forgotPasswordSchema = z.object({
+  body: z.object({
+    email: z.string({ required_error: 'Email é obrigatório.' }).email('Formato de email inválido.').trim().toLowerCase(),
+  }).strict(),
+});
+
+export const resetPasswordSchema = z.object({
+  body: z.object({
+    token: z.string({ required_error: 'Token é obrigatório.' }).min(32, 'Token inválido.').max(512, 'Token inválido.'),
+    newPassword: z.string({ required_error: 'Nova senha é obrigatória.' })
+      .superRefine((val, ctx) => {
+        const err = getPasswordError(val);
+        if (err) ctx.addIssue({ code: z.ZodIssueCode.custom, message: err });
+      }),
+  }).strict(),
+});
+
+export const mfaSetupSchema = z.object({
+  body: z.object({ password: currentPassword }).strict(),
+});
+
+export const mfaEnableSchema = z.object({
+  body: z.object({ token: z.string().regex(/^\d{6}$/, 'Código MFA inválido.') }).strict(),
+});
+
+export const mfaDisableSchema = z.object({
+  body: z.object({
+    token: z.string().regex(/^\d{6}$/, 'Código MFA inválido.').optional(),
+    password: currentPassword.optional(),
+  }).strict().refine((data) => data.token || data.password, {
+    message: 'Informe o código MFA ou a senha atual.',
+  }),
+});

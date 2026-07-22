@@ -28,6 +28,15 @@ interface AuthResponse {
 // header em mutações. O servidor compara header × cookie.
 const CSRF_COOKIE = 'csrfToken';
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
+const LEGACY_API_CACHE = 'api-cache';
+
+// Versões anteriores da PWA guardavam GETs autenticados em `api-cache`. Mesmo
+// depois de trocar a estratégia para NetworkOnly, apagamos esse cache ao trocar
+// de sessão para evitar que dados antigos sobrevivam em dispositivos compartilhados.
+const clearLegacyApiCache = () => {
+  if (typeof window === 'undefined' || !('caches' in window)) return;
+  void window.caches.delete(LEGACY_API_CACHE);
+};
 
 const getCookie = (name: string): string | null => {
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
@@ -42,6 +51,7 @@ const csrfHeader = (): Record<string, string> => {
 
 let isRefreshing = false;
 let refreshSubscribers: ((token: string) => void)[] = [];
+let accessToken: string | null = null;
 
 const subscribeTokenRefresh = (cb: (token: string) => void) => {
   refreshSubscribers.push(cb);
@@ -56,9 +66,15 @@ export const authService = {
   // (1.4) Header CSRF para fetches diretos (fora do wrapper `api()`).
   csrfHeader,
 
+  // O access token vive somente na memória da aba. Ao recarregar a página,
+  // ele é obtido de novo pelo refresh token HttpOnly, que nunca fica exposto ao
+  // JavaScript. Isso remove a persistência que um XSS poderia extrair.
+  getAccessToken: () => accessToken,
+  setAccessToken: (token: string | null) => { accessToken = token; },
+
   // Wrapper para chamadas autenticadas
   async api(endpoint: string, options: RequestInit = {}) {
-    const token = localStorage.getItem('accessToken');
+    const token = accessToken;
     
     const headers = new Headers(options.headers);
     if (token) {
@@ -143,7 +159,8 @@ export const authService = {
         if (!response.ok) throw new Error(data.message || 'Erro no login');
 
         if (data.accessToken && data.user) {
-          localStorage.setItem('accessToken', data.accessToken);
+          clearLegacyApiCache();
+          accessToken = data.accessToken;
           localStorage.setItem('user', JSON.stringify(data.user));
         }
         return data;
@@ -178,7 +195,7 @@ export const authService = {
         
         if (response.ok) {
             const data = await response.json();
-            localStorage.setItem('accessToken', data.accessToken);
+            accessToken = data.accessToken;
             return data.accessToken;
         }
         return null;
@@ -200,13 +217,13 @@ export const authService = {
   },
 
   clearSession() {
-    localStorage.removeItem('accessToken');
+    clearLegacyApiCache();
+    accessToken = null;
     localStorage.removeItem('user');
   },
 
   isAuthenticated(): boolean {
-    const token = localStorage.getItem('accessToken');
-    return !!token;
+    return !!accessToken;
   },
 
   // --- MÉTODOS DE PERFIL E TUTORIAL ---
@@ -267,8 +284,11 @@ export const authService = {
       return response.json();
   },
 
-  async setupMfa(): Promise<{ secret: string; otpauth: string; qr: string }> {
-      const response = await this.api('/api/mfa/setup', { method: 'POST' });
+  async setupMfa(password: string): Promise<{ secret: string; otpauth: string; qr: string }> {
+      const response = await this.api('/api/mfa/setup', {
+          method: 'POST',
+          body: JSON.stringify({ password }),
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Erro ao iniciar configuração do MFA');
       return data;

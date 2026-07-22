@@ -13,6 +13,23 @@ const MarketAssetSchema = new mongoose.Schema({
   
   // --- Metadados de Análise ---
   sector: { type: String, default: 'Geral' },
+  // Arquétipo econômico explícito para calibração setorial STOCK. `null` mantém
+  // compatibilidade e permite classificação shadow por setor/ticker até o backfill.
+  stockArchetype: {
+    type: String,
+    enum: [
+      'OPERATIONAL',
+      'BANK',
+      'INSURER',
+      'INSURANCE_BROKER',
+      'FINANCIAL_HOLDING',
+      'INSURANCE_HOLDING_DISTRIBUTOR',
+      'DIVERSIFIED_HOLDING',
+      'OIL_GAS_PRODUCER',
+      null,
+    ],
+    default: null
+  },
   // Indústria fina do Yahoo (ex.: "REIT - Retail") — usada p/ sub-segmentar REITs na UI
   // sem alterar o `sector` (que a classificação usa p/ identificar REAL_ESTATE).
   industry: { type: String, default: null },
@@ -36,6 +53,67 @@ const MarketAssetSchema = new mongoose.Schema({
   debtToEquity: { type: Number, default: 0 },
   netDebt: { type: Number, default: 0 },
   payout: { type: Number, default: 0 },
+  // Métricas próprias de bancos/seguros/holdings. Ausência permanece `null` —
+  // nunca vira zero econômico. Ainda não participa do ranking de produção.
+  sectorMetrics: {
+    asOf: { type: Date, default: null },
+    collectedAt: { type: Date, default: null },
+    source: { type: String, default: null },
+    sourceDocument: { type: String, default: null },
+    supportingDocuments: { type: [String], default: undefined },
+    methodologyVersion: { type: String, default: null },
+    roeTtm: { type: Number, default: null },
+    earningsGrowth: { type: Number, default: null },
+    delinquencyRatio: { type: Number, default: null },
+    problemAssetsRatio: { type: Number, default: null },
+    capitalRatio: { type: Number, default: null },
+    capitalPrincipalRatio: { type: Number, default: null },
+    operatingCostRatio: { type: Number, default: null },
+    creditCost: { type: Number, default: null },
+    coverageRatio: { type: Number, default: null },
+    liquidityCoverage: { type: Number, default: null },
+    recurringEarningsGrowth: { type: Number, default: null },
+    solvencyRatio: { type: Number, default: null },
+    combinedRatio: { type: Number, default: null },
+    claimsRatio: { type: Number, default: null },
+    premiumGrowth: { type: Number, default: null },
+    cashRemittanceCoverage: { type: Number, default: null },
+    capitalAdequacy: { type: Number, default: null },
+    investeeCapitalAdequacy: { type: Number, default: null },
+    distributionConcentration: { type: Number, default: null },
+    distributionRevenueGrowth: { type: Number, default: null },
+    commissionRevenueGrowth: { type: Number, default: null },
+    partnerConcentration: { type: Number, default: null },
+    productionKboed: { type: Number, default: null },
+    productionGrowth: { type: Number, default: null },
+    liftingCostUsdBoe: { type: Number, default: null },
+    liftingCostAsOf: { type: Date, default: null },
+    liftingCostBasis: {
+      type: String,
+      enum: ['REPORTED', 'EX_LEASES', null],
+      default: null
+    },
+    ebitdaMargin: { type: Number, default: null },
+    ebitdaBasis: {
+      type: String,
+      enum: ['REPORTED', 'ADJUSTED', 'ADJUSTED_EX_IFRS16', null],
+      default: null
+    },
+    netDebtEbitda: { type: Number, default: null },
+    freeCashFlowMargin: { type: Number, default: null },
+    provedReserveLifeYears: { type: Number, default: null },
+    reserveReplacementRatio: { type: Number, default: null },
+    reserveBasis: {
+      type: String,
+      enum: ['SEC_1P', 'SPE_1P', null],
+      default: null
+    },
+    controlType: {
+      type: String,
+      enum: ['PRIVATE', 'STATE_DIRECT', 'STATE_INDIRECT', 'DISPERSED', null],
+      default: null
+    }
+  },
   // Financials LTM (engenharia reversa Fundamentus) — cacheados para preencher
   // lacunas no modal "Financials (LTM)" e carregados como carry-forward.
   netRevenue: { type: Number, default: 0 },

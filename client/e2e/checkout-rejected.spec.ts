@@ -14,6 +14,15 @@ test('retorno de pagamento rejeitado informa o usuário e oferece nova tentativa
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) })
   );
+  // Em uma navegação completa, o access token em memória é reconstruído pelo
+  // refresh HttpOnly. O mock mantém o teste fiel a esse contrato de sessão.
+  await page.route('**/api/refresh', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accessToken: 'checkout-refreshed-access-token' }),
+    })
+  );
   await page.route('**/api/login', (route) =>
     route.fulfill({
       status: 200,

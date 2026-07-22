@@ -17,6 +17,7 @@ import { sanitizeInput } from './middleware/sanitize.js'; // (S8) anti-injeção
 import { correlationId } from './middleware/correlationId.js'; // (D12) correlation id
 import { csrfProtection } from './middleware/csrf.js'; // (1.4) CSRF double-submit
 import { errorHandler } from './middleware/errorHandler.js'; // (6.1) erro estruturado
+import { productionErrorSanitizer } from './middleware/productionErrorSanitizer.js';
 import { mongoCircuitBreaker, getMongoBreakerState } from './middleware/mongoCircuitBreaker.js'; // (6.9) disjuntor do MongoDB
 import { swaggerSpec } from './config/swagger.js'; // (I7) OpenAPI/Swagger
 
@@ -45,6 +46,7 @@ app.set('trust proxy', 1);
 // (D12) Primeiro middleware: atribui/propaga o correlation id para toda a
 // cadeia (logs e header de resposta). Precisa vir antes de tudo.
 app.use(correlationId);
+app.use(productionErrorSanitizer);
 
 // (D12) Log de conclusão da requisição (método, rota, status, duração) no nível
 // `http` — sai em dev, silencioso em produção. Pula probes/docs para não poluir.
@@ -113,6 +115,14 @@ app.use(cors({
   // usarem Content-Type: application/json).
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 }));
+
+// Respostas da API podem conter dados pessoais, financeiros ou de sessão. A PWA
+// já usa NetworkOnly, mas este header também impede caches de navegador, proxy e
+// CDN. Rotas públicas explicitamente seguras para cache podem sobrescrevê-lo.
+app.use('/api', (_req, res, next) => {
+  res.set('Cache-Control', 'private, no-store');
+  next();
+});
 
 // Health check (liveness/readiness) — antes do rate limiter para não ser
 // estrangulado por probes de monitoramento (Render, uptime checks, k8s).

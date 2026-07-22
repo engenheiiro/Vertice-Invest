@@ -63,6 +63,19 @@ const usSubOf = (asset) => (asset && asset.type === 'STOCK_US') ? (asset.usSubTy
 // Exterior que NÃO é ação individual (ETF/REIT/Ouro): não tem fundamentos de empresa.
 const isUsNonStock = (sub) => sub === 'ETF' || sub === 'REIT' || sub === 'GOLD';
 
+// Tema efetivo de um ETF NACIONAL (classe própria, type 'ETF'), derivado do `sector`
+// curado em brEtfList.js. Cripto (HASH11/BITH11/…), Ouro (GOLD11) e Renda Fixa (FIXA11)
+// NÃO são cestas de ações e ganham scorers próprios; qualquer outro tema (índice amplo,
+// setorial, exterior) cai no modelo genérico de cesta diversificada.
+const brEtfThemeOf = (asset) => {
+    if (!asset || asset.type !== 'ETF') return null;
+    const s = (asset.sector || '').toLowerCase();
+    if (s.includes('cripto') || s.includes('crypto')) return 'CRYPTO';
+    if (s.includes('ouro') || s.includes('gold')) return 'GOLD';
+    if (s.includes('renda fixa')) return 'FIXED_INCOME';
+    return null;
+};
+
 const calculateConfidenceScore = (m, type, usSubType = null, ratesStale = false) => {
     let confidence = 100;
     const audit = [];
@@ -1027,6 +1040,78 @@ const scoreCommodityProfiles = (asset, audit) => {
     return { defScore, modScore, boldScore };
 };
 
+// ETF nacional de CRIPTO (HASH11/BITH11/…): veículo de tema único e alta volatilidade,
+// sem yield e sem a diversificação de uma cesta de índice. Frame de risco de cripto
+// (defensivo baixo, arrojado moderado) + teto especulativo no BOLD. NÃO reaproveita
+// scoreCryptoProfiles — cujos limiares de marketCap/liquidez são em escala de MOEDA (USD)
+// e disparariam errado sobre um ETF cotado em BRL, com marketCap do FUNDO ≈ 0.
+const scoreCryptoEtfProfiles = (asset, audit) => {
+    const m = asset.metrics;
+    const price = asset.price;
+    const aboveTrend = m.sma200 > 0 && price > m.sma200;
+    let defScore = 25, modScore = 40, boldScore = 55;
+    audit.DEFENSIVE.push({ factor: 'Base ETF Cripto (tema único, sem renda)', points: 25, type: 'base' });
+    audit.MODERATE.push({ factor: 'Base ETF Cripto', points: 40, type: 'base' });
+    audit.BOLD.push({ factor: 'Base ETF Cripto (exposição à classe)', points: 55, type: 'base' });
+
+    // Momentum (preço vs SMA200): principal driver em cripto.
+    if (aboveTrend) { defScore += 4; modScore += 10; boldScore += 14; audit.BOLD.push({ factor: 'Tendência de Alta (Preço > SMA200)', points: 14, type: 'bonus' }); }
+    else if (m.sma200 > 0) { modScore -= 8; boldScore -= 10; audit.BOLD.push({ factor: 'Tendência de Baixa (Preço < SMA200)', points: -10, type: 'penalty' }); }
+
+    // Volatilidade em escala de cripto (candles ~50–90%).
+    if (m.volatility > 0) {
+        if (m.volatility < 40) { defScore += 6; modScore += 6; boldScore += 4; audit.DEFENSIVE.push({ factor: 'Volatilidade Baixa p/ Cripto (<40%)', points: 6, type: 'bonus' }); }
+        else if (m.volatility > 100) { defScore -= 12; modScore -= 10; boldScore -= 8; audit.BOLD.push({ factor: 'Volatilidade Extrema (>100%)', points: -8, type: 'penalty' }); }
+        else if (m.volatility > 70) { defScore -= 6; modScore -= 5; boldScore -= 4; audit.BOLD.push({ factor: 'Volatilidade Elevada (>70%)', points: -4, type: 'penalty' }); }
+    }
+
+    // Liquidez do VEÍCULO em BRL (escala de ETF, não de moeda). avgLiquidity=0 = fonte
+    // não reportou (tickers .SA) → sem penalidade; só desconta quando presente e baixo.
+    if (m.avgLiquidity > 20000000) { modScore += 6; boldScore += 4; audit.MODERATE.push({ factor: 'Liquidez Alta (>20M)', points: 6, type: 'bonus' }); }
+    else if (m.avgLiquidity > 0 && m.avgLiquidity < 1000000) { defScore -= 10; modScore -= 8; boldScore -= 6; audit.MODERATE.push({ factor: 'Liquidez Baixa (<1M)', points: -8, type: 'penalty' }); }
+
+    // Teto especulativo no BOLD: cripto é aposta, não convicção máxima (análogo ao
+    // CRYPTO_SPEC_CAP de scoreCryptoProfiles). Cinto de segurança contra stacking de bônus.
+    const CRYPTO_ETF_BOLD_CAP = 80;
+    if (boldScore > CRYPTO_ETF_BOLD_CAP) {
+        audit.BOLD.push({ factor: 'Teto Especulativo Cripto (ETF de tema único)', points: CRYPTO_ETF_BOLD_CAP - boldScore, type: 'penalty' });
+        boldScore = CRYPTO_ETF_BOLD_CAP;
+    }
+    return { defScore, modScore, boldScore };
+};
+
+// ETF nacional de RENDA FIXA (FIXA11/…): baixo risco, retorno modesto. Defensivo por
+// natureza; arrojado baixo (sem prêmio de crescimento). Sensível a juros — preço acima
+// da SMA200 sinaliza ambiente de juros em queda (favorável a prefixado).
+const scoreFixedIncomeEtfProfiles = (asset, audit) => {
+    const m = asset.metrics;
+    const price = asset.price;
+    const aboveTrend = m.sma200 > 0 && price > m.sma200;
+    let defScore = 52, modScore = 45, boldScore = 30;
+    audit.DEFENSIVE.push({ factor: 'Base ETF Renda Fixa (baixo risco)', points: 52, type: 'base' });
+    audit.MODERATE.push({ factor: 'Base ETF Renda Fixa', points: 45, type: 'base' });
+    audit.BOLD.push({ factor: 'Base ETF Renda Fixa (sem prêmio de crescimento)', points: 30, type: 'base' });
+
+    // Renda distribuída (quando houver — muitos ETFs de RF são de acumulação, dy=0).
+    if (m.dy >= 8) { defScore += 12; modScore += 8; audit.DEFENSIVE.push({ factor: `Renda Alta (DY ${m.dy.toFixed(1)}%)`, points: 12, type: 'bonus' }); }
+    else if (m.dy >= 4) { defScore += 6; modScore += 4; audit.DEFENSIVE.push({ factor: `Renda Moderada (DY ${m.dy.toFixed(1)}%)`, points: 6, type: 'bonus' }); }
+
+    // Estabilidade: baixa volatilidade é a própria tese do ativo.
+    if (m.volatility > 0) {
+        if (m.volatility < 12) { defScore += 10; modScore += 4; audit.DEFENSIVE.push({ factor: 'Volatilidade Baixa (<12%)', points: 10, type: 'bonus' }); }
+        else if (m.volatility > 25) { defScore -= 8; audit.DEFENSIVE.push({ factor: 'Volatilidade Alta p/ Renda Fixa (>25%)', points: -8, type: 'penalty' }); }
+    }
+
+    // Sensibilidade a juros: preço acima da SMA200 = juros em queda (favorável).
+    if (aboveTrend) { defScore += 4; modScore += 8; boldScore += 8; audit.MODERATE.push({ factor: 'Tendência de Alta (juros em queda)', points: 8, type: 'bonus' }); }
+    else if (m.sma200 > 0) { modScore -= 4; boldScore -= 4; audit.MODERATE.push({ factor: 'Tendência de Baixa (juros em alta)', points: -4, type: 'penalty' }); }
+
+    // Liquidez do veículo (avgLiquidity=0 = fonte não reportou → sem penalidade).
+    if (m.avgLiquidity > 5000000) { defScore += 4; audit.DEFENSIVE.push({ factor: 'Liquidez Boa (>5M)', points: 4, type: 'bonus' }); }
+    else if (m.avgLiquidity > 0 && m.avgLiquidity < 1000000) { defScore -= 8; modScore -= 6; audit.DEFENSIVE.push({ factor: 'Liquidez Baixa (<1M)', points: -8, type: 'penalty' }); }
+    return { defScore, modScore, boldScore };
+};
+
 // (M1) Orquestrador: confiança, dispatch por tipo (helpers acima) e clamp final.
 const calculateProfileScores = (asset, valuationData, context) => {
     const m = asset.metrics;
@@ -1042,8 +1127,18 @@ const calculateProfileScores = (asset, valuationData, context) => {
     const { confidence, audit: confAudit } = calculateConfidenceScore(m, type, asset.usSubType, ratesStale);
     audit.CONFIDENCE = confAudit;
 
+    // Tema do ETF nacional (Cripto/Ouro/Renda Fixa têm scorer próprio; demais = cesta).
+    const etfTheme = brEtfThemeOf(asset);
+
     if (isPlainStock) {
         ({ defScore, modScore, boldScore } = scoreStockProfiles(asset, valuationData, context, audit));
+    } else if (type === 'ETF' && etfTheme === 'GOLD') {
+        // ETF de ouro BR (GOLD11): mesmo hedge/reserva de valor do ouro US.
+        ({ defScore, modScore, boldScore } = scoreCommodityProfiles(asset, audit));
+    } else if (type === 'ETF' && etfTheme === 'CRYPTO') {
+        ({ defScore, modScore, boldScore } = scoreCryptoEtfProfiles(asset, audit));
+    } else if (type === 'ETF' && etfTheme === 'FIXED_INCOME') {
+        ({ defScore, modScore, boldScore } = scoreFixedIncomeEtfProfiles(asset, audit));
     } else if ((type === 'STOCK_US' && usSub === 'ETF') || type === 'ETF') {
         ({ defScore, modScore, boldScore } = scoreEtfProfiles(asset, audit));
     } else if (type === 'STOCK_US' && usSub === 'REIT') {
@@ -1138,6 +1233,38 @@ const calculateStructuralScores = (asset, context) => {
     let quality = 0; audit.QUALITY.push({ factor: 'Base de Qualidade', points: 0, type: 'base' });
     let valuation = 0; audit.VALUATION.push({ factor: 'Base de Valuation', points: 0, type: 'base' });
     let risk = 0;
+
+    // ETF nacional temático (Cripto/Ouro/Renda Fixa): estrutural próprio, coerente com o
+    // scorer de perfil correspondente. Precede o modelo genérico de cesta abaixo.
+    const etfTheme = brEtfThemeOf(asset);
+    if (type === 'ETF' && etfTheme === 'GOLD') {
+        // Espelha o estrutural do ouro US (hedge): tendência + liquidez + volatilidade.
+        let q = 60; if (aboveTrend) q += 12; if (m.avgLiquidity > 20000000) q += 8;
+        quality = clamp(q); audit.QUALITY.push({ factor: 'Ouro: tendência e liquidez', points: q, type: 'bonus' });
+        let v = 50; if (m.sma200 > 0) { const dev = (asset.price - m.sma200) / m.sma200; if (dev < -0.1) v += 20; else if (dev > 0.3) v -= 15; }
+        valuation = clamp(v); audit.VALUATION.push({ factor: 'Ouro: posição vs média histórica', points: v, type: 'bonus' });
+        let r = 65; if (m.volatility > 0 && m.volatility < 20) r += 10; else if (m.volatility > 40) r -= 15; if (m.avgLiquidity > 0 && m.avgLiquidity < 1000000) r -= 20;
+        risk = clamp(r); audit.RISK.push({ factor: 'Ouro: hedge de baixa correlação', points: r, type: 'base' });
+        return { quality, valuation, risk, audit };
+    }
+    if (type === 'ETF' && etfTheme === 'CRYPTO') {
+        let q = 45; if (m.avgLiquidity > 20000000) q += 10; if (m.sma200 > 0 && asset.price > m.sma200) q += 10;
+        quality = clamp(q); audit.QUALITY.push({ factor: 'ETF Cripto: liquidez e tendência', points: q, type: 'bonus' });
+        let v = 50; if (m.sma200 > 0) { const dev = (asset.price - m.sma200) / m.sma200; if (dev < -0.2) v += 25; else if (dev < 0) v += 12; else if (dev > 0.5) v -= 20; else if (dev > 0.2) v -= 10; }
+        valuation = clamp(v); audit.VALUATION.push({ factor: 'ETF Cripto: desvio da média histórica', points: v, type: 'bonus' });
+        let r = 35; if (m.volatility > 0 && m.volatility < 40) r += 15; else if (m.volatility > 100) r -= 15; else if (m.volatility > 70) r -= 8; if (m.avgLiquidity > 20000000) r += 10; else if (m.avgLiquidity > 0 && m.avgLiquidity < 1000000) r -= 15;
+        risk = clamp(r); audit.RISK.push({ factor: 'ETF Cripto: volatilidade e liquidez', points: r, type: 'base' });
+        return { quality, valuation, risk, audit };
+    }
+    if (type === 'ETF' && etfTheme === 'FIXED_INCOME') {
+        let q = 60; if (m.avgLiquidity > 5000000) q += 10; if (m.dy >= 4) q += 8;
+        quality = clamp(q); audit.QUALITY.push({ factor: 'Renda Fixa: estabilidade e renda', points: q, type: 'bonus' });
+        let v = 55; if (m.sma200 > 0 && asset.price > m.sma200) v += 10;
+        valuation = clamp(v); audit.VALUATION.push({ factor: 'Renda Fixa: tendência de juros', points: v, type: 'bonus' });
+        let r = 70; if (m.volatility > 0 && m.volatility < 12) r += 15; else if (m.volatility > 25) r -= 15; if (m.avgLiquidity > 0 && m.avgLiquidity < 1000000) r -= 15;
+        risk = clamp(r); audit.RISK.push({ factor: 'Renda Fixa: baixa volatilidade', points: r, type: 'base' });
+        return { quality, valuation, risk, audit };
+    }
 
     if ((type === 'STOCK_US' && usSub === 'ETF') || type === 'ETF') {
         let q = 55; if (m.avgLiquidity > 50000000) q += 20; else if (m.avgLiquidity > 5000000) q += 10; if (m.dy >= 2) q += 10;

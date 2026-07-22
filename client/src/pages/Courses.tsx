@@ -4,6 +4,7 @@ import { GraduationCap, ChevronRight, PlayCircle, ArrowLeft, BookOpen, Clock, Lo
 import { Header } from '../components/dashboard/Header';
 import { CourseCard } from '../components/Academy/CourseCard';
 import { useAuth } from '../contexts/AuthContext';
+import { authService } from '../services/auth';
 
 const PLAN_LEVELS: Record<string, number> = {
     'GUEST': 0,
@@ -73,7 +74,7 @@ export const Courses = () => {
         const fetchCourses = async () => {
             try {
                 setLoading(true);
-                const token = localStorage.getItem('accessToken');
+                const token = authService.getAccessToken();
                 const res = await fetch('/api/academy/courses', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -97,7 +98,7 @@ export const Courses = () => {
         if (selectedCourseId) {
             const fetchCourseDetails = async () => {
                 try {
-                    const token = localStorage.getItem('accessToken');
+                    const token = authService.getAccessToken();
                     const res = await fetch(`/api/academy/courses/${selectedCourseId}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });

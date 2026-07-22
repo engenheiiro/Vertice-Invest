@@ -6,7 +6,7 @@ import { walletService } from '../../services/wallet';
 import { useWallet } from '../../contexts/WalletContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../hooks/useConfirm';
-import { formatCurrency as fmtCurrency } from '../../utils/format';
+import { formatCalendarDate, formatCurrency as fmtCurrency } from '../../utils/format';
 import AssetLogo from '../common/AssetLogo';
 
 interface Transaction {
@@ -157,7 +157,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
                                                         </span>
                                                         <span className="text-[10px] text-slate-500 flex items-center gap-1">
                                                             <Calendar size={10} />
-                                                            {new Date(tx.date).toLocaleDateString('pt-BR')}
+                                                            {formatCalendarDate(tx.date)}
                                                         </span>
                                                     </div>
                                                     <div className="text-sm font-bold text-white mt-0.5">

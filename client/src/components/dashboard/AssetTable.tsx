@@ -105,16 +105,19 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
 
     // (5.2) Agrupamento + ordenação só recalculam quando `items` muda — antes
     // rodavam o reduce/sort a cada render (toggle de grupo, abrir modal, etc.).
+    // ETF NACIONAL (type 'ETF') conta dentro de "Ações Brasil" (marcado com selo ETF),
+    // coerente com a Distribuição e a aba Carteira.
     const groupedItems = useMemo(() => items.reduce((acc, item) => {
-        const type = item.type || 'OUTROS';
+        const type = item.type === 'ETF' ? 'STOCK' : (item.type || 'OUTROS');
         if (!acc[type]) acc[type] = [];
         acc[type].push(item);
         return acc;
     }, {} as Record<string, PortfolioItem[]>), [items]);
+    const isNationalEtf = (item: PortfolioItem) => item.type === 'ETF';
 
     // Mesma ordem da aba Carteira: Ações Brasil, FIIs, Exterior, Renda Fixa, Cripto, Caixa.
     const orderedGroups: [string, PortfolioItem[]][] = useMemo(() => {
-        const TYPE_ORDER = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
+        const TYPE_ORDER = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
         return [
             ...TYPE_ORDER.filter((t) => groupedItems[t]),
             ...Object.keys(groupedItems).filter((t) => !TYPE_ORDER.includes(t)),
@@ -237,6 +240,11 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                             <div>
                                                                 <div className="flex items-center gap-1.5">
                                                                     <p className="font-bold text-slate-200">{itemTitle(item)}</p>
+                                                                    {isNationalEtf(item) && (
+                                                                        <span title="ETF nacional — conta dentro de Ações BR na distribuição." className="text-[9px] font-bold uppercase tracking-wide text-teal-400 bg-teal-500/10 border border-teal-500/30 px-1.5 py-0.5 rounded">
+                                                                            ETF
+                                                                        </span>
+                                                                    )}
                                                                     {isChampion && (
                                                                         <span title="Campeã: Retorno > 15%" className="text-gold animate-pulse">
                                                                             <Medal size={12} fill="currentColor" />
@@ -378,6 +386,11 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                 <div className="min-w-0">
                                                     <div className="flex items-center gap-1.5">
                                                         <p className="font-bold text-slate-200">{isDemoMode ? '••••' : itemTitle(item)}</p>
+                                                        {isNationalEtf(item) && !isDemoMode && (
+                                                            <span title="ETF nacional — conta dentro de Ações BR na distribuição." className="text-[8px] font-bold uppercase tracking-wide text-teal-400 bg-teal-500/10 border border-teal-500/30 px-1 py-0.5 rounded">
+                                                                ETF
+                                                            </span>
+                                                        )}
                                                         {isChampion && !isDemoMode && (
                                                             <span title="Campeã: Retorno > 15%" className="text-gold">
                                                                 <Medal size={12} fill="currentColor" />

@@ -9,7 +9,10 @@ import { invalidateUser } from '../utils/userCache.js'; // (I6) bust de cache de
 import { sendCheckoutConfirmationEmail } from '../services/emailService.js';
 
 // --- MELHORIA 3: VALIDAÇÃO DE ASSINATURA HMAC ---
-const isValidSignature = (req) => {
+// Janela fixa, interna ao serviço: não cria nem exige uma nova variável de ambiente.
+const WEBHOOK_MAX_AGE_SECONDS = 300;
+
+export const isValidSignature = (req) => {
     const signature = req.headers['x-signature'];
     const requestId = req.headers['x-request-id'];
     const WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET;
@@ -39,6 +42,13 @@ const isValidSignature = (req) => {
     });
 
     if (!ts || !v1) return false;
+
+    // A assinatura também precisa ser recente. Sem essa janela, uma requisição
+    // legítima capturada poderia ser repetida indefinidamente.
+    const timestamp = Number(ts);
+    if (!Number.isSafeInteger(timestamp) || Math.abs(Math.floor(Date.now() / 1000) - timestamp) > WEBHOOK_MAX_AGE_SECONDS) {
+        return false;
+    }
 
     // Template assinado: "id:[data.id];request-id:[x-request-id];ts:[ts];"
     const dataId = req.body?.data?.id || req.query.id;
@@ -73,19 +83,20 @@ export const handleMercadoPagoWebhook = async (req, res) => {
     try {
         const { type, data } = req.body;
 
-        // --- SEGURANÇA ---
-        // Só valida se for um evento de notificação real (tem data.id)
-        if (data && data.id) {
-            if (!isValidSignature(req)) {
-                logger.warn(`⛔ Webhook MP rejeitado: Assinatura Inválida. IP: ${req.ip}`);
-                // Retorna 200 para o MP parar de tentar (pois é ataque ou config errada), mas não processa
-                return res.status(200).send('Signature Mismatch');
-            }
+        // Toda variação de notificação (body ou query) precisa de assinatura.
+        // Nunca processe um id de pagamento antes de validar o HMAC e o timestamp.
+        if (!isValidSignature(req)) {
+            logger.warn(`⛔ Webhook MP rejeitado: assinatura inválida ou expirada. IP: ${req.ip}`);
+            return res.status(401).send('Invalid signature');
         }
-        // ------------------
 
         const topic = type || req.query.topic;
         const resourceId = (data && data.id) || req.query.id;
+
+        if (!topic || !resourceId) {
+            logger.warn(`Webhook MP rejeitado: tópico ou recurso ausente. IP: ${req.ip}`);
+            return res.status(400).send('Invalid notification');
+        }
 
         logger.info(`🔔 Webhook MP Recebido: Tópico [${topic}] ID [${resourceId}]`);
 

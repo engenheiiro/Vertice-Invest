@@ -21,6 +21,15 @@ test('assinante Pro acessa Research e consulta o ranking de ações brasileiras'
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) })
   );
+  // O token de acesso não é persistido: após page.goto, a sessão é reidratada
+  // pelo refresh token HttpOnly simulado abaixo.
+  await page.route('**/api/refresh', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accessToken: 'research-refreshed-access-token' }),
+    })
+  );
   await page.route('**/api/research/latest?**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(report) })
   );

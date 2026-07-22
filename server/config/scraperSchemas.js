@@ -23,7 +23,7 @@
  */
 
 export const FUNDAMENTUS_STOCKS_LAYOUT = {
-    version: 1,
+    version: 2,
     source: 'https://www.fundamentus.com.br/resultado.php',
     table: 'table#resultado',
     columns: {
@@ -39,15 +39,43 @@ export const FUNDAMENTUS_STOCKS_LAYOUT = {
         pAtivCircLiq: 9,
         evEbit: 10,
         evEbitda: 11,
-        mrgEbit: 12,
-        netMargin: 13,
-        currentRatio: 14,
-        roic: 15,
-        roe: 16,
-        liq2m: 17,
-        patrimLiq: 18,
-        divBrutaPatrim: 19,
-        cresRec5a: 20,
+        mrgBruta: 12,
+        mrgEbit: 13,
+        netMargin: 14,
+        currentRatio: 15,
+        roic: 16,
+        roe: 17,
+        liq2m: 18,
+        patrimLiq: 19,
+        debtToEquity: 20,
+        cresRec5a: 21,
+    },
+    // O Fundamentus adicionou "Mrg Bruta" no corpo em jul/2026. Como quase todas
+    // as colunas seguintes continuam numéricas, validar somente o tipo da célula
+    // não detecta o deslocamento. A assinatura do cabeçalho protege a semântica.
+    headerSignature: {
+        ticker: 'Papel',
+        price: 'Cotação',
+        pl: 'P/L',
+        pvp: 'P/VP',
+        psr: 'PSR',
+        dy: 'Div.Yield',
+        pAtivo: 'P/Ativo',
+        pCapGiro: 'P/Cap.Giro',
+        pEbit: 'P/EBIT',
+        pAtivCircLiq: 'P/Ativ Circ.Liq',
+        evEbit: 'EV/EBIT',
+        evEbitda: 'EV/EBITDA',
+        mrgBruta: 'Mrg Bruta',
+        mrgEbit: 'Mrg Ebit',
+        netMargin: 'Mrg. Líq.',
+        currentRatio: 'Liq. Corr.',
+        roic: 'ROIC',
+        roe: 'ROE',
+        liq2m: 'Liq.2meses',
+        patrimLiq: 'Patrim. Líq',
+        debtToEquity: 'Dív.Líq/ Patrim.',
+        cresRec5a: 'Cresc. Rec.5a',
     },
     // Invariantes na linha de dados: âncoras espalhadas (início, preço, métricas
     // intermediárias e finais) detectam shift/insert/remoção de coluna no corpo.
@@ -57,11 +85,12 @@ export const FUNDAMENTUS_STOCKS_LAYOUT = {
         pl: 'number',
         roe: 'number',
         patrimLiq: 'number', // pode ser 0 legitimamente (empresa em prejuízo/PL negativo)
+        liq2m: 'number',
     },
 };
 
 export const FUNDAMENTUS_FIIS_LAYOUT = {
-    version: 1,
+    version: 2,
     source: 'https://www.fundamentus.com.br/fii_resultado.php',
     table: 'table#tabelaResultado',
     columns: {
@@ -78,6 +107,23 @@ export const FUNDAMENTUS_FIIS_LAYOUT = {
         rentM2: 10,
         capRate: 11,
         vacancy: 12,
+        address: 13,
+    },
+    headerSignature: {
+        ticker: 'Papel',
+        segment: 'Segmento',
+        price: 'Cotação',
+        ffoYield: 'FFO Yield',
+        dy: 'Dividend Yield',
+        pvp: 'P/VP',
+        marketCap: 'Valor de Mercado',
+        liquidity: 'Liquidez',
+        qtdImoveis: 'Qtd de imóveis',
+        priceM2: 'Preço do m2',
+        rentM2: 'Aluguel por m2',
+        capRate: 'Cap Rate',
+        vacancy: 'Vacância Média',
+        address: 'Endereço',
     },
     dataSignature: {
         ticker: 'fiiTicker',
@@ -145,13 +191,40 @@ export const validateFundamentusLayout = ($, layout) => {
     }
 
     const maxIdx = Math.max(...Object.values(layout.columns));
+    const expectedWidth = maxIdx + 1;
+
+    // Quando existe uma assinatura de cabeçalho, exige largura, nomes e ordem.
+    // Uma coluna numérica inserida no meio do corpo não pode ser distinguida por
+    // invariantes de tipo; o cabeçalho é o contrato semântico do layout.
+    if (layout.headerSignature) {
+        const headerCells = $(`${layout.table} thead tr`).last().find('th');
+        if (headerCells.length !== expectedWidth) {
+            return {
+                ok: false,
+                version: layout.version,
+                mismatches: [`cabeçalho com ${headerCells.length} colunas; esperava exatamente ${expectedWidth}`],
+            };
+        }
+        const headerMismatches = [];
+        for (const [colName, expectedLabel] of Object.entries(layout.headerSignature)) {
+            const idx = layout.columns[colName];
+            const actual = normalizeHeader($(headerCells[idx]).text());
+            const expected = normalizeHeader(expectedLabel);
+            if (actual !== expected) {
+                headerMismatches.push(`cabeçalho col ${idx} (${colName}): "${actual}"; esperava "${expected}"`);
+            }
+        }
+        if (headerMismatches.length > 0) {
+            return { ok: false, version: layout.version, mismatches: headerMismatches };
+        }
+    }
 
     // Confere uma linha contra largura + invariantes de coluna. Retorna lista de divergências.
     const checkRow = (tr) => {
         const tds = $(tr).find('td');
         const mismatches = [];
-        if (tds.length < maxIdx + 1) {
-            mismatches.push(`linha com ${tds.length} colunas; esperava ≥ ${maxIdx + 1}`);
+        if (tds.length !== expectedWidth) {
+            mismatches.push(`linha com ${tds.length} colunas; esperava exatamente ${expectedWidth}`);
         }
         for (const [colName, testName] of Object.entries(layout.dataSignature)) {
             const idx = layout.columns[colName];

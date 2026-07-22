@@ -268,17 +268,35 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                 <p className="text-slate-500 text-sm font-medium leading-tight">{asset.name}</p>
                                 
                                 <div className="mt-6 p-4 bg-slate-900/50 rounded-xl border border-slate-800 text-center">
-                                    <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Recomendação IA</p>
+                                    <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Sinal quantitativo</p>
                                     <div className={`text-xl font-black uppercase ${
                                         asset.action === 'BUY' ? 'text-emerald-500' : 
                                         asset.action === 'SELL' ? 'text-red-500' : 'text-yellow-500'
                                     }`}>
-                                        {asset.action === 'BUY' ? 'COMPRA FORTE' : asset.action === 'SELL' ? 'VENDA' : 'AGUARDAR'}
+                                        {asset.action === 'BUY' ? 'OPORTUNIDADE DE ENTRADA' : asset.action === 'SELL' ? 'VENDA' : 'AGUARDAR'}
                                     </div>
+                                    <p className="mt-1 text-[9px] leading-tight text-slate-500">
+                                        Para o perfil {asset.riskProfile === 'DEFENSIVE' ? 'defensivo' : asset.riskProfile === 'BOLD' ? 'arrojado' : 'moderado'}
+                                    </p>
                                     <div className="h-1 w-20 mx-auto bg-slate-800 rounded-full mt-2 overflow-hidden">
                                         <div className={`h-full ${asset.action === 'BUY' ? 'bg-emerald-500' : 'bg-slate-500'} w-full`}></div>
                                     </div>
                                 </div>
+
+                                {asset.riskVeto?.active && (
+                                    <div className="mt-3 rounded-xl border border-red-500/40 bg-red-950/30 p-3 text-left">
+                                        <div className="flex items-center gap-2 text-red-400">
+                                            <AlertOctagon size={15} />
+                                            <p className="text-[10px] font-black uppercase tracking-wide">
+                                                Alerta qualitativo {asset.riskVeto.level}
+                                            </p>
+                                        </div>
+                                        <p className="mt-2 text-xs leading-relaxed text-red-200/90">{asset.riskVeto.rationale}</p>
+                                        <p className="mt-2 text-[9px] leading-tight text-slate-500">
+                                            Avaliação separada: este alerta não altera o score nem o sinal quantitativo.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="h-[200px] w-full -ml-4">

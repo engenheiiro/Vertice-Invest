@@ -49,12 +49,20 @@ export const getAssetLogo = async (req, res, next) => {
     try {
         const { ticker } = req.params;
         const { type } = req.query;
-        if (!ticker) return res.status(400).end();
+        // Aceita somente símbolos usados pelas fontes de logo (ex.: PETR4,
+        // BTC-USD, BRK.B). Impede caminho/URL arbitrário antes da busca externa.
+        const cleanTicker = String(ticker || '').trim().toUpperCase();
+        if (!/^[A-Z0-9.-]{1,20}$/.test(cleanTicker)) return res.status(400).end();
 
-        const logo = await logoService.getOrFetch(ticker, type);
+        const allowedTypes = new Set(['STOCK', 'FII', 'STOCK_US', 'CRYPTO', 'FIXED_INCOME', 'CASH']);
+        const safeType = allowedTypes.has(String(type || '').toUpperCase())
+            ? String(type).toUpperCase()
+            : 'STOCK';
+
+        const logo = await logoService.getOrFetch(cleanTicker, safeType);
         if (!logo) return res.status(404).end();
 
-        const etag = `"${ticker.toUpperCase()}-${type || ''}-${logo.bytes}"`;
+        const etag = `"${cleanTicker}-${safeType}-${logo.bytes}"`;
         // Logo é praticamente imutável → cache agressivo no navegador/CDN.
         res.set('Cache-Control', 'public, max-age=604800, immutable');
         res.set('ETag', etag);

@@ -50,6 +50,12 @@ const SystemConfigSchema = new mongoose.Schema({
   lastSyncStats: {
     typosFixed: { type: Number, default: 0 },
     assetsProcessed: { type: Number, default: 0 },
+    fundamentalsHealthy: { type: Boolean, default: false },
+    errorCode: { type: String, default: null },
+    // Contadores separados por classe (parsed, accepted, rejected e taxa).
+    // Mixed mantém compatibilidade com documentos anteriores e permite adicionar
+    // novos reason codes sem migração destrutiva.
+    fundamentals: { type: mongoose.Schema.Types.Mixed, default: null },
     timestamp: { type: Date }
   },
 

@@ -110,10 +110,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        const token = localStorage.getItem('accessToken');
         const storedUser = localStorage.getItem('user');
 
-        if (token && storedUser) {
+        if (storedUser) {
+          // O access token não é persistido. Em cada recarga, usamos o refresh
+          // token HttpOnly para reconstruir a sessão em memória e garantir o
+          // cookie CSRF antes de liberar mutações autenticadas.
+          const refreshedToken = await authService.refreshToken();
+          if (!refreshedToken) {
+            authService.clearSession();
+            return;
+          }
           try {
             setUser(JSON.parse(storedUser));
           } catch (e) {
@@ -133,7 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = (userData: User, token: string) => {
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
-    localStorage.setItem('accessToken', token);
+    authService.setAccessToken(token);
   };
 
   const logout = async () => {
@@ -144,7 +151,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
         setUser(null);
         localStorage.removeItem('user');
-        localStorage.removeItem('accessToken');
         queryClient.removeQueries();
         queryClient.clear();
     }

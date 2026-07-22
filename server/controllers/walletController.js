@@ -12,7 +12,7 @@ import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, calculateSharpeRatio, calculateBeta, safeValue, safePrice, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
-import { countBusinessDays, isBusinessDay, toDateKey, startOfDay } from '../utils/dateUtils.js';
+import { countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { accrueFixedIncomeValue, fixedIncomeDailyFactor, assetDailyFactor, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
 import logger from '../config/logger.js';
 import AppError from '../utils/AppError.js';
@@ -108,6 +108,7 @@ const loadWalletState = async (userId, walletId) => {
         targetReserve: typeof walletPrefs?.targetReserve === 'number' ? walletPrefs.targetReserve : 10000,
         targetMonthlyDividendIncome: typeof walletPrefs?.targetMonthlyDividendIncome === 'number' ? walletPrefs.targetMonthlyDividendIncome : 0,
         targetSubAllocation: walletPrefs?.targetSubAllocation || {
+            STOCK: { STOCK: 0, ETF: 0 },
             FIXED_INCOME: { IPCA: 0, POS: 0, PRE: 0 },
             STOCK_US: { STOCK: 0, REIT: 0, ETF: 0, DOLLAR: 0 },
         },
@@ -707,13 +708,18 @@ export const addAssetTransaction = async (req, res, next) => {
     const userId = req.user.id;
     const walletId = req.walletId;
     const { ticker, type, quantity, price, date, fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread, name, usSubType, currency, isReserve, maturityDate } = req.body;
-    const txDate = date ? new Date(date) : new Date();
+    // `<input type=date>` envia YYYY-MM-DD. Parsing nativo interpreta isso como
+    // meia-noite UTC e desloca para o dia anterior em Brasília; tratamos como dia
+    // civil e ancoramos ao meio-dia UTC (parseCalendarDate).
+    const txDate = date ? parseCalendarDate(date) : new Date();
     const transactionType = quantity >= 0 ? 'BUY' : 'SELL';
     let updatedAsset;
     try {
         if (!ticker || quantity === undefined || price === undefined) throw AppError.badRequest("Dados incompletos.");
-        const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-        if (txDate > todayEnd) throw AppError.badRequest("Data futura não permitida.");
+        if (!txDate) throw AppError.badRequest("Data inválida.");
+        const brazilTodayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+        const transactionDayKey = toDateKey(txDate);
+        if (date && transactionDayKey > brazilTodayKey) throw AppError.badRequest("Data futura não permitida.");
         await runTransaction(async (session) => {
             const newTx = new AssetTransaction({
                 user: userId, wallet: walletId, ticker: ticker.toUpperCase(), type: transactionType,
@@ -768,8 +774,8 @@ export const addAssetTransaction = async (req, res, next) => {
                 } else if (type === 'FIXED_INCOME' && isReserve !== undefined) {
                     updatedAsset.isReserve = !!isReserve;
                 }
-                if (transactionType === 'BUY' && (!updatedAsset.startDate || new Date(date) < updatedAsset.startDate)) {
-                    updatedAsset.startDate = new Date(date);
+                if (transactionType === 'BUY' && (!updatedAsset.startDate || txDate < updatedAsset.startDate)) {
+                    updatedAsset.startDate = txDate;
                 }
                 await updatedAsset.save({ session });
             }
@@ -784,8 +790,9 @@ export const addAssetTransaction = async (req, res, next) => {
     } catch (error) {
         return next(error);
     }
-    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-    if (txDate < yesterday) {
+    // Qualquer dia anterior ao dia-calendário atual exige reconstrução. A regra
+    // anterior usava "agora - 24h" e podia não recalcular uma compra de ontem.
+    if (toDateKey(txDate) < new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())) {
         // Best-effort: a transação já foi persistida. Se o rebuild do histórico
         // falhar, logamos (sem silenciar) — o snapshot é corrigido no próximo
         // recálculo/job diário, mas a falha precisa ficar visível.
@@ -939,9 +946,14 @@ export const updateWalletTargets = async (req, res, next) => {
             update.targetMonthlyDividendIncome = Math.max(0, safeFloat(targetMonthlyDividendIncome));
         }
         if (targetSubAllocation !== undefined) {
+            const st = targetSubAllocation.STOCK || {};
             const fi = targetSubAllocation.FIXED_INCOME || {};
             const us = targetSubAllocation.STOCK_US || {};
             update.targetSubAllocation = {
+                STOCK: {
+                    STOCK: safeFloat(st.STOCK || 0),
+                    ETF: safeFloat(st.ETF || 0),
+                },
                 FIXED_INCOME: {
                     IPCA: safeFloat(fi.IPCA || 0),
                     POS: safeFloat(fi.POS || 0),

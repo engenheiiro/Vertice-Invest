@@ -40,8 +40,8 @@ beforeEach(() => {
 
 describe('authenticateToken — cache (I6)', () => {
   it('cache hit no 2º request evita novo findById', async () => {
-    jwt.verify.mockReturnValue({ id: 'u1' });
-    mockUser({ _id: 'u1', name: 'Ana', role: 'USER', plan: 'PRO', validUntil: future });
+    jwt.verify.mockReturnValue({ id: 'u1', sv: 0 });
+    mockUser({ _id: 'u1', name: 'Ana', role: 'USER', plan: 'PRO', validUntil: future, sessionVersion: 0 });
 
     const r1 = await run(reqWith());
     expect(r1.blocked).toBe(false);
@@ -55,10 +55,10 @@ describe('authenticateToken — cache (I6)', () => {
   });
 
   it('plano pago expirado no cache força DB e rebaixa para GUEST', async () => {
-    jwt.verify.mockReturnValue({ id: 'u2' });
+    jwt.verify.mockReturnValue({ id: 'u2', sv: 0 });
     // 1º request: plano pago já vencido → DB path rebaixa + salva + cacheia GUEST
     const save = vi.fn().mockResolvedValue();
-    mockUser({ _id: 'u2', name: 'Beto', role: 'USER', plan: 'PRO', validUntil: past, save });
+    mockUser({ _id: 'u2', name: 'Beto', role: 'USER', plan: 'PRO', validUntil: past, sessionVersion: 0, save });
 
     const r1 = await run(reqWith());
     expect(r1.user.plan).toBe('GUEST');

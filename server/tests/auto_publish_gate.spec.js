@@ -25,15 +25,28 @@ vi.mock('../models/User.js', () => ({ default: {} }));
 vi.mock('../models/UserAsset.js', () => ({ default: {} }));
 vi.mock('../models/WalletSnapshot.js', () => ({ default: {} }));
 vi.mock('../models/AssetTransaction.js', () => ({ default: {} }));
-vi.mock('../models/SystemConfig.js', () => ({ default: {} }));
+vi.mock('../models/SystemConfig.js', () => ({ default: { findOne: vi.fn() } }));
 vi.mock('../models/RefreshToken.js', () => ({ default: {} }));
 vi.mock('../services/notificationService.js', () => ({ createBroadcast: vi.fn() }));
+vi.mock('../services/researchPublicationService.js', () => ({
+    hasSectionContent: vi.fn((analysis, section) => {
+        if (section === 'REPORT') return !!analysis?.comparisonReport;
+        if (section === 'EXPLAINABLE_AI') return !!analysis?.generatedExplainableAI;
+        return (analysis?.content?.ranking?.length || 0) > 0;
+    }),
+    activateResearchSections: vi.fn(async ({ analysis, sections }) => {
+        if (sections.includes('RANKING')) analysis.isRankingPublished = true;
+        await analysis.save();
+        return { activated: sections, skipped: [] };
+    }),
+}));
 vi.mock('../services/workers/timeSeriesWorker.js', () => ({ timeSeriesWorker: {} }));
 vi.mock('../services/usStocksFundamentalsService.js', () => ({ usStocksFundamentalsService: {} }));
 
 const { validateAutoPublish, runWeeklyAutoPublish, AUTO_PUBLISH_MIN_ASSETS } =
     await import('../services/schedulerService.js');
 const MarketAnalysis = (await import('../models/MarketAnalysis.js')).default;
+const SystemConfig = (await import('../models/SystemConfig.js')).default;
 const { createBroadcast } = await import('../services/notificationService.js');
 const Sentry = await import('@sentry/node');
 
@@ -45,7 +58,14 @@ const mkAnalysis = (n, ageDays, published = false) => ({
     save: vi.fn(),
 });
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+    vi.clearAllMocks();
+    SystemConfig.findOne.mockReturnValue({
+        lean: () => Promise.resolve({
+            lastSyncStats: { fundamentalsHealthy: true, timestamp: NOW },
+        }),
+    });
+});
 
 describe('validateAutoPublish (função pura)', () => {
     it('ranking saudável e recente → ok', () => {
@@ -67,6 +87,16 @@ describe('validateAutoPublish (função pura)', () => {
         const r = validateAutoPublish(mkAnalysis(10, 8), NOW);
         expect(r.ok).toBe(false);
         expect(r.reason).toContain('dias');
+    });
+
+    it('ranking BR bloqueia quando o último sync fundamental está degradado', () => {
+        const r = validateAutoPublish(
+            { ...mkAnalysis(10, 1), assetClass: 'STOCK' },
+            NOW,
+            { fundamentalsHealthy: false, timestamp: NOW },
+        );
+        expect(r.ok).toBe(false);
+        expect(r.reason).toContain('não está saudável');
     });
 });
 

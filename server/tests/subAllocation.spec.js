@@ -5,9 +5,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-    fixedIncomeSubKey, usSubKeyOf, hasSubMetas,
-    currentValueBySub, splitNeedBySubMeta, subGaps,
-    FI_SUB_KEYS, US_SUB_KEYS,
+    fixedIncomeSubKey, usSubKeyOf, stockSubKeyOf, hasSubMetas,
+    currentValueBySub, splitNeedBySubMeta, subGaps, foldEtfIntoStock,
+    STOCK_SUB_KEYS, FI_SUB_KEYS, US_SUB_KEYS,
 } from '../utils/subAllocation.js';
 
 describe('fixedIncomeSubKey', () => {
@@ -23,6 +23,14 @@ describe('fixedIncomeSubKey', () => {
         expect(fixedIncomeSubKey(null, 110)).toBe('POS');
         expect(fixedIncomeSubKey(null, 12)).toBe('PRE');  // 12% a.a. → prefixado legado
         expect(fixedIncomeSubKey(null)).toBe('POS');      // rate ausente cai em 100 (%CDI)
+    });
+});
+
+describe('stockSubKeyOf', () => {
+    it('ETF nacional → ETF; ação individual (ou qualquer outro) → STOCK', () => {
+        expect(stockSubKeyOf('ETF')).toBe('ETF');
+        expect(stockSubKeyOf('STOCK')).toBe('STOCK');
+        expect(stockSubKeyOf(undefined)).toBe('STOCK');
     });
 });
 
@@ -46,6 +54,18 @@ describe('hasSubMetas', () => {
 });
 
 describe('currentValueBySub', () => {
+    it('agrega Ações BR por sub-tipo: ações individuais vs ETFs nacionais (rawType após fold)', () => {
+        const holdings = [
+            { type: 'STOCK', valueBr: 6000 },                 // ação individual
+            { type: 'ETF', valueBr: 2000 },                   // ETF nacional (raw)
+            { type: 'STOCK', rawType: 'ETF', valueBr: 1000 }, // ETF nacional já foldado (type STOCK, rawType ETF)
+            { type: 'FIXED_INCOME', valueBr: 9999 },          // ignorado
+        ];
+        const v = currentValueBySub(holdings, 'STOCK');
+        expect(v.STOCK).toBe(6000);
+        expect(v.ETF).toBe(3000); // 2000 + 1000
+    });
+
     it('agrega RF por índice contratado', () => {
         const holdings = [
             { type: 'FIXED_INCOME', fixedIncomeIndex: 'IPCA', valueBr: 6800 },
@@ -84,6 +104,38 @@ describe('currentValueBySub', () => {
         expect(v.REIT).toBe(200);
         expect(v.DOLLAR).toBe(300);
         expect(v.ETF).toBe(150); // 100 + 50
+    });
+});
+
+describe('foldEtfIntoStock', () => {
+    it('folda alvo de topo ETF em Ações BR (STOCK) e vira sub-meta ETF', () => {
+        const { targetAllocation, targetSubAllocation } = foldEtfIntoStock(
+            { STOCK: 40, FII: 30, ETF: 10, STOCK_US: 20 },
+            {},
+        );
+        expect(targetAllocation.STOCK).toBe(50); // 40 + 10
+        expect(targetAllocation.ETF).toBe(0);
+        expect(targetAllocation.FII).toBe(30);   // demais intactos
+        expect(targetSubAllocation.STOCK.STOCK).toBeCloseTo(80, 2); // 40/50
+        expect(targetSubAllocation.STOCK.ETF).toBeCloseTo(20, 2);   // 10/50
+    });
+
+    it('idempotente: com sub-metas de STOCK já definidas não mexe', () => {
+        const input = { STOCK: 50, ETF: 0, FII: 50 };
+        const sub = { STOCK: { STOCK: 80, ETF: 20 } };
+        const { targetAllocation, targetSubAllocation } = foldEtfIntoStock(input, sub);
+        expect(targetAllocation.STOCK).toBe(50);
+        expect(targetSubAllocation.STOCK.ETF).toBe(20);
+    });
+
+    it('sem alvo de ETF legado → no-op (não cria sub-meta)', () => {
+        const { targetAllocation, targetSubAllocation } = foldEtfIntoStock({ STOCK: 60, FII: 40 }, {});
+        expect(targetAllocation.STOCK).toBe(60);
+        expect(hasSubMetas(targetSubAllocation.STOCK)).toBe(false);
+    });
+
+    it('STOCK_SUB_KEYS expõe as sub-chaves de Ações BR', () => {
+        expect(STOCK_SUB_KEYS).toEqual(['STOCK', 'ETF']);
     });
 });
 

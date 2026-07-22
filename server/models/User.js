@@ -49,6 +49,11 @@ const UserSchema = new mongoose.Schema({
     default: 'ACTIVE'
   },
   validUntil: { type: Date },
+
+  // Incrementada quando uma sessão deve deixar de ser válida imediatamente
+  // (por exemplo, troca de senha). O valor entra no access token e é conferido
+  // pelo middleware, sem depender da expiração natural do JWT.
+  sessionVersion: { type: Number, default: 0 },
   
   // --- Onboarding ---
   hasSeenTutorial: { type: Boolean, default: false },

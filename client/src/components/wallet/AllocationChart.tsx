@@ -32,23 +32,27 @@ const LABELS: Record<AssetType, string> = {
     CASH: 'Reserva'
 };
 
-// Ouro deixou de ser classe da Carteira Ideal (entra como ETF lastreado). ETF é classe
-// própria só para fundos NACIONAIS; ETFs internacionais contam no Exterior (sub-tipo ETF).
-const ORDERED_TYPES: AssetType[] = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
+// Ouro deixou de ser classe da Carteira Ideal (entra como ETF lastreado). ETF NACIONAL
+// deixou de ser classe de topo: conta dentro de Ações BR (sub-tipo ETF). ETFs
+// internacionais contam no Exterior (sub-tipo ETF).
+const ORDERED_TYPES: AssetType[] = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
 
 // Classes que admitem ramificação (sub-metas), com suas sub-chaves e rótulos.
-const RAMIFIABLE: AssetType[] = ['FIXED_INCOME', 'STOCK_US'];
+const RAMIFIABLE: AssetType[] = ['STOCK', 'FIXED_INCOME', 'STOCK_US'];
 const SUB_KEYS: Record<string, string[]> = {
+    STOCK: ['STOCK', 'ETF'],
     FIXED_INCOME: ['IPCA', 'POS', 'PRE'],
     STOCK_US: ['STOCK', 'REIT', 'ETF', 'DOLLAR'],
 };
 const SUB_LABELS: Record<string, Record<string, string>> = {
+    STOCK: { STOCK: 'Ações', ETF: 'ETFs' },
     FIXED_INCOME: { IPCA: 'IPCA', POS: 'Pós-fixado', PRE: 'Prefixado' },
     STOCK_US: { STOCK: 'Stocks', REIT: 'REITs', ETF: 'ETFs', DOLLAR: 'Dólar' },
 };
 
 // Clona profundo a estrutura de sub-metas (evita mutação do estado do contexto).
 const cloneSub = (s: SubAllocationMap): SubAllocationMap => ({
+    STOCK: { ...DEFAULT_SUB_ALLOCATION.STOCK, ...s.STOCK },
     FIXED_INCOME: { ...DEFAULT_SUB_ALLOCATION.FIXED_INCOME, ...s.FIXED_INCOME },
     STOCK_US: { ...DEFAULT_SUB_ALLOCATION.STOCK_US, ...s.STOCK_US },
 });
@@ -111,8 +115,11 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
     const currentValues = useMemo(() => {
         const vals: Record<string, number> = { STOCK: 0, FII: 0, STOCK_US: 0, ETF: 0, CRYPTO: 0, FIXED_INCOME: 0, OURO: 0, CASH: 0 };
         assets.forEach(asset => {
+            // ETF nacional (bucket 'ETF') conta dentro de Ações BR (STOCK) na distribuição;
+            // o detalhe Ações/ETFs aparece na ramificação (sub-metas de Ações BR).
             const bucket = allocationBucket(asset);
-            vals[bucket] = (vals[bucket] || 0) + asset.totalValue;
+            const cls = bucket === 'ETF' ? 'STOCK' : bucket;
+            vals[cls] = (vals[cls] || 0) + asset.totalValue;
         });
         return vals;
     }, [assets]);

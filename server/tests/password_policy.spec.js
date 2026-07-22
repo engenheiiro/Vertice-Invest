@@ -4,7 +4,7 @@
  * bloqueio de senhas comuns/previsíveis (case-insensitive).
  */
 import { describe, it, expect } from 'vitest';
-import { getPasswordError, isStrongPassword } from '../utils/passwordPolicy.js';
+import { BCRYPT_MAX_PASSWORD_BYTES, getPasswordError, isStrongPassword } from '../utils/passwordPolicy.js';
 
 describe('getPasswordError — rejeita senhas fracas', () => {
   it('curta demais (< 8)', () => {
@@ -41,5 +41,17 @@ describe('getPasswordError — aceita senhas fortes', () => {
   it('isStrongPassword reflete o resultado', () => {
     expect(isStrongPassword('GoodPass123')).toBe(true);
     expect(isStrongPassword('fraca')).toBe(false);
+  });
+});
+
+describe('getPasswordError — limite de bytes do bcrypt', () => {
+  it('aceita exatamente 72 bytes UTF-8 e rejeita valores maiores', () => {
+    const atLimit = `aA1${'x'.repeat(BCRYPT_MAX_PASSWORD_BYTES - 3)}`;
+    const overLimitWithAccents = `aA1${'é'.repeat(35)}`; // 73 bytes UTF-8
+
+    expect(Buffer.byteLength(atLimit, 'utf8')).toBe(72);
+    expect(getPasswordError(atLimit)).toBeNull();
+    expect(Buffer.byteLength(overLimitWithAccents, 'utf8')).toBeGreaterThan(72);
+    expect(getPasswordError(overLimitWithAccents)).toMatch(/72 bytes/);
   });
 });

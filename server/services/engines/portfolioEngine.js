@@ -49,7 +49,12 @@ export const portfolioEngine = {
             // relaxSectorConcentration: para rankings MONO-SETOR (ex.: REIT, onde todo o
             // universo cai em REAL_ESTATE), o cap por balde colapsaria a lista — então o
             // cap vira o próprio alvo (sem teto efetivo) e os ativos competem só por score.
-            const MAX_PER_SECTOR_STRICT = options.relaxSectorConcentration ? TARGET_COUNT : (profile === 'DEFENSIVE' ? 3 : 2);
+            const configuredStrictCap = options.strictSectorCapByProfile?.[profile];
+            const MAX_PER_SECTOR_STRICT = options.relaxSectorConcentration
+                ? TARGET_COUNT
+                : (Number.isFinite(configuredStrictCap)
+                    ? configuredStrictCap
+                    : (profile === 'DEFENSIVE' ? 3 : 2));
             const MAX_PER_SECTOR_FLEX = options.relaxSectorConcentration ? TARGET_COUNT : 3;
             // Cap de cripto efetivo (relaxado no ranking dedicado de cripto).
             const cryptoCap = options.relaxCryptoCap ? TARGET_COUNT : MAX_CRYPTO_PER_PROFILE;

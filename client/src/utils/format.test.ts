@@ -3,6 +3,7 @@ import {
   formatCurrency,
   formatPercent,
   formatCompact,
+  formatCalendarDate,
   formatQuantity,
   PRIVACY_MASK,
   PRIVACY_MASK_SHORT,
@@ -67,6 +68,18 @@ describe('formatQuantity', () => {
   });
   it('mascara no modo privacidade', () => {
     expect(formatQuantity(0.0000028, { privacy: true })).toBe(PRIVACY_MASK_SHORT);
+  });
+});
+
+describe('formatCalendarDate', () => {
+  it('não desloca para o dia anterior um registro legado à meia-noite UTC', () => {
+    expect(formatCalendarDate('2026-07-21T00:00:00.000Z')).toBe('21/07/2026');
+  });
+
+  it('formata também a nova âncora ao meio-dia UTC e trata inválidos', () => {
+    expect(formatCalendarDate('2026-07-21T12:00:00.000Z')).toBe('21/07/2026');
+    expect(formatCalendarDate('não-é-data')).toBe('-');
+    expect(formatCalendarDate(null)).toBe('-');
   });
 });
 

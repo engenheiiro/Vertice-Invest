@@ -25,13 +25,15 @@ import {
     getPublishStatus,
     generateExplainableAI,
     runStorageCleanupHandler,
-    backfillSectorsHandler
+    backfillSectorsHandler,
+    getBuyAndHoldShadow
 } from '../controllers/researchController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 import { researchHeavyLimiter, researchReadLimiter, adminLimiter } from '../middleware/rateLimiters.js';
 import { getTunablesHandler, updateTunablesHandler } from '../controllers/configController.js'; // (I13)
 import validate from '../middleware/validateResource.js';
 import { tunablesPatchSchema } from '../schemas/configSchemas.js';
+import { enhanceResearchSchema, publishResearchSchema } from '../schemas/researchSchemas.js';
 
 const router = express.Router();
 
@@ -47,11 +49,15 @@ router.get('/radar-stats', getRadarStats);
 // (I5) Fluxo Granular Admin — operações caras (pipeline, IA, syncs): 20/15min por usuário.
 router.post('/crunch', researchHeavyLimiter, requireAdmin, crunchNumbers);
 router.post('/full-pipeline', researchHeavyLimiter, requireAdmin, runFullPipeline);
-router.post('/enhance', researchHeavyLimiter, requireAdmin, enhanceWithAI);
+router.post('/enhance', researchHeavyLimiter, requireAdmin, validate(enhanceResearchSchema), enhanceWithAI);
 router.post('/narrative', researchHeavyLimiter, requireAdmin, generateNarrative);
-router.post('/publish', adminLimiter, requireAdmin, publishContent);
+router.post('/publish', adminLimiter, requireAdmin, validate(publishResearchSchema), publishContent);
 router.get('/history', adminLimiter, requireAdmin, listReports);
 router.get('/details/:id', adminLimiter, requireAdmin, getReportDetails);
+
+// Ranking Buy-and-Hold em shadow (admin-only). Cálculo on-demand sobre todo o
+// universo STOCK — usa o limiter pesado (20/15min).
+router.get('/buy-and-hold/shadow', researchHeavyLimiter, requireAdmin, getBuyAndHoldShadow);
 
 router.post('/sync-market', researchHeavyLimiter, requireAdmin, triggerMarketSync);
 router.post('/backfill-sectors', researchHeavyLimiter, requireAdmin, backfillSectorsHandler);

@@ -43,7 +43,7 @@ export const CoursePlayer = () => {
         const fetchCourseData = async () => {
             try {
                 setLoading(true);
-                const token = localStorage.getItem('accessToken');
+                const token = authService.getAccessToken();
                 
                 // Buscar dados do curso e aulas do servidor
                 console.log(`Fetching data for course: ${courseId}`);
@@ -134,7 +134,7 @@ export const CoursePlayer = () => {
         // Mark as completed if watched 90%
         if (state.played > 0.9 && !completedLessons.includes(currentLesson._id)) {
             console.log(`Marking lesson ${currentLesson._id} as completed (90% watched)`);
-            const token = localStorage.getItem('accessToken');
+            const token = authService.getAccessToken();
             try {
                 const res = await fetch('/api/academy/progress', {
                     method: 'POST',
@@ -173,7 +173,7 @@ export const CoursePlayer = () => {
         try {
             setQuizLoading(true);
             setQuizError('');
-            const token = localStorage.getItem('accessToken');
+            const token = authService.getAccessToken();
             const res = await fetch(`/api/academy/quiz/${courseId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -202,7 +202,7 @@ export const CoursePlayer = () => {
         setQuizSubmitting(true);
         setQuizError('');
         try {
-            const token = localStorage.getItem('accessToken');
+            const token = authService.getAccessToken();
             const res = await fetch('/api/academy/quiz/submit', {
                 method: 'POST',
                 headers: {
@@ -237,7 +237,7 @@ export const CoursePlayer = () => {
         console.log(`Attempting to download certificate. Lessons: ${lessons.length}, Completed: ${completedLessons.length}`);
         setDownloading(true);
         try {
-            const token = localStorage.getItem('accessToken');
+            const token = authService.getAccessToken();
             const response = await fetch(`/api/academy/certificate/${courseId}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -393,7 +393,7 @@ export const CoursePlayer = () => {
                                     {!completedLessons.includes(currentLesson?._id) && (
                                         <button 
                                             onClick={async () => {
-                                                const token = localStorage.getItem('accessToken');
+                                                const token = authService.getAccessToken();
                                                 try {
                                                     await fetch('/api/academy/progress', {
                                                         method: 'POST',

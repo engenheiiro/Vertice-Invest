@@ -24,6 +24,11 @@ import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
 import { calculateDailyDietz } from '../utils/mathUtils.js';
 import { accrueFixedIncomeValue } from '../utils/fixedIncome.js';
+import { validateFundamentalsPublicationHealth } from '../utils/ingestionHealth.js';
+import {
+    activateResearchSections,
+    hasSectionContent,
+} from './researchPublicationService.js';
 
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
@@ -362,7 +367,7 @@ const ASSET_CLASS_LABELS = {
 // por aqui (ele vê os dados antes de publicar). Exportada para teste.
 export const AUTO_PUBLISH_MIN_ASSETS = 5;
 export const AUTO_PUBLISH_MAX_AGE_DAYS = 7;
-export const validateAutoPublish = (analysis, now = new Date()) => {
+export const validateAutoPublish = (analysis, now = new Date(), lastSyncStats = null, assetClassOverride = null) => {
     const count = analysis?.content?.ranking?.length || 0;
     if (count < AUTO_PUBLISH_MIN_ASSETS) {
         return { ok: false, reason: `ranking com ${count} ativos (mínimo ${AUTO_PUBLISH_MIN_ASSETS})` };
@@ -371,31 +376,40 @@ export const validateAutoPublish = (analysis, now = new Date()) => {
     if (ageMs > AUTO_PUBLISH_MAX_AGE_DAYS * 86400000) {
         return { ok: false, reason: `ranking gerado há ${Math.round(ageMs / 86400000)} dias (máximo ${AUTO_PUBLISH_MAX_AGE_DAYS})` };
     }
+    const assetClass = assetClassOverride || analysis?.assetClass;
+    const fundamentalsGate = validateFundamentalsPublicationHealth(assetClass, lastSyncStats, now);
+    if (!fundamentalsGate.ok) return fundamentalsGate;
     return { ok: true };
 };
 
 export const runWeeklyAutoPublish = async () => {
     logger.info("📢 Auto-publish semanal — publicando rankings mais recentes");
     const published = [];
+    const systemConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean();
+    const lastSyncStats = systemConfig?.lastSyncStats || null;
     for (const assetClass of AUTO_PUBLISH_CLASSES) {
         try {
             const latest = await MarketAnalysis.findOne({ assetClass, strategy: 'BUY_HOLD' }).sort({ createdAt: -1 });
             if (!latest) continue;
-            const gate = validateAutoPublish(latest);
+            const gate = validateAutoPublish(latest, new Date(), lastSyncStats, assetClass);
             if (!gate.ok) {
                 logger.warn(`🚫 Auto-publish BLOQUEADO (${assetClass}): ${gate.reason}`);
                 Sentry.captureMessage(`Auto-publish bloqueado (${assetClass}): ${gate.reason}`, 'warning');
                 continue;
             }
             const wasPublished = latest.isRankingPublished;
-            latest.isRankingPublished = true;
-            latest.isExplainableAIPublished = true;
-            latest.isReportPublished = true;
-            await latest.save();
+            const sections = ['RANKING'];
+            if (hasSectionContent(latest, 'REPORT')) sections.push('REPORT');
+            if (hasSectionContent(latest, 'EXPLAINABLE_AI')) sections.push('EXPLAINABLE_AI');
+            await activateResearchSections({
+                analysis: latest,
+                sections,
+                requireAll: false,
+            });
             if (!wasPublished) {
                 published.push(assetClass);
                 const label = ASSET_CLASS_LABELS[assetClass] || assetClass;
-                createBroadcast({
+                await createBroadcast({
                     type: 'RANKING_PUBLISHED',
                     title: 'Novo ranking publicado',
                     message: `Novo ranking de ${label} está disponível. Confira as recomendações atualizadas.`,

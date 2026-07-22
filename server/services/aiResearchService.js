@@ -11,6 +11,47 @@ import DiscardLog from '../models/DiscardLog.js';
 import { rankingTxtExportService } from './rankingTxtExportService.js';
 // (M9) Threshold global e fallback de Selic centralizados em financialConstants.
 import { BUY_THRESHOLD, DEFAULT_SELIC_FALLBACK, DEFAULT_NTNB_FALLBACK } from '../config/financialConstants.js';
+import { randomUUID } from 'crypto';
+import ResearchBatch from '../models/ResearchBatch.js';
+import { finalizeRanking } from '../utils/rankingContract.js';
+import {
+    calculateStockCalibrationConfidence,
+    calculateStockShadowAxes,
+    normalizeStockScoringOutputForPersistence,
+    prepareStockForSectorScoring,
+} from './engines/stockSectorAxisEngine.js';
+import {
+    STOCK_CALIBRATION_SHADOW_VERSION,
+    buildCompetitiveCohesiveShadowTop10s,
+} from './engines/stockCalibrationShadowEngine.js';
+import { assessStockMetricCoverage } from '../config/stockCalibration.js';
+
+const stockWeakAxisReason = axes => {
+    const labels = {
+        durability: 'durabilidade e qualidade do negócio',
+        entry: 'preço e margem de segurança',
+        resilience: 'resiliência financeira',
+    };
+    const [weakest] = Object.entries({
+        durability: axes.durability,
+        entry: axes.entry,
+        resilience: axes.resilience,
+    }).sort((a, b) => a[1] - b[1]);
+    return `Eixo limitante: ${labels[weakest[0]]} (${weakest[1]}/100)`;
+};
+
+// O ranking é o contrato do usuário final. Cobertura e eixos V3 pertencem à
+// Auditoria Completa (admin) e não devem vazar como uma segunda leitura pública.
+export const stripStockCalibrationInternals = item => {
+    const {
+        stockCalibration: _stockCalibration,
+        coverage: _coverage,
+        shadowAuditByProfile: _shadowAuditByProfile,
+        scores: _scores,
+        ...publicItem
+    } = item || {};
+    return publicItem;
+};
 
 // Exportado para teste (T6). Função pura: calcula o delta entre dois rankings.
 export const generateComparisonReport = (assetClass, newRanking, previousRanking) => {
@@ -266,12 +307,19 @@ export const aiResearchService = {
                 }
             };
 
-            const processedAssets = [];
+            let processedAssets = [];
+            const stockCalibrationCandidates = [];
             const discardOperations = [];
             const runId = Date.now().toString();
 
             rawData.forEach(asset => {
-                const result = scoringEngine.processAsset(asset, context);
+                const scoringAsset = assetClass === 'STOCK'
+                    ? prepareStockForSectorScoring(asset)
+                    : asset;
+                const scoringResult = scoringEngine.processAsset(scoringAsset, context);
+                const result = assetClass === 'STOCK' && scoringResult && !scoringResult._discarded
+                    ? normalizeStockScoringOutputForPersistence(scoringResult)
+                    : scoringResult;
                 if (result) {
                     if (result._discarded) {
                         // Log de Descarte
@@ -284,6 +332,38 @@ export const aiResearchService = {
                         });
                     } else {
                         processedAssets.push(result);
+                        if (assetClass === 'STOCK') {
+                            const calibrationAsset = {
+                                ...scoringAsset,
+                                metrics: result.metrics,
+                            };
+                            const coverage = assessStockMetricCoverage(calibrationAsset);
+                            const axes = calculateStockShadowAxes(calibrationAsset);
+                            stockCalibrationCandidates.push({
+                                ticker: result.ticker,
+                                name: result.name,
+                                sector: result.sector,
+                                type: result.type,
+                                metrics: result.metrics,
+                                sectorMetrics: scoringAsset.sectorMetrics || {},
+                                archetype: coverage.archetype,
+                                eligibleByProfile: {
+                                    DEFENSIVE: result.isDefensiveEligible !== false,
+                                    MODERATE: true,
+                                    BOLD: true,
+                                },
+                                coverage,
+                                dataConfidence: calculateStockCalibrationConfidence(
+                                    calibrationAsset,
+                                    coverage,
+                                    context.MACRO.RATES_STALE,
+                                ),
+                                axes,
+                                currentScores: result.scores,
+                                processedAsset: result,
+                                reason: stockWeakAxisReason(axes),
+                            });
+                        }
                     }
                 }
             });
@@ -308,7 +388,17 @@ export const aiResearchService = {
                 );
 
             let ranking;
-            if (assetClass === 'ETF') {
+            if (assetClass === 'STOCK') {
+                const calibratedDraft = buildCompetitiveCohesiveShadowTop10s(stockCalibrationCandidates);
+                ranking = calibratedDraft.selectedItems;
+                processedAssets = calibratedDraft.calibratedAssets;
+                const excludedCoverage = processedAssets.filter(asset => !asset.stockCalibration?.eligible).length;
+                logger.info(
+                    `[Ranking STOCK] ${STOCK_CALIBRATION_SHADOW_VERSION}: `
+                    + `${ranking.length} selecionados únicos; ${processedAssets.length} auditados; `
+                    + `${excludedCoverage} excluídos por cobertura.`,
+                );
+            } else if (assetClass === 'ETF') {
                 // ETF roda DOIS drafts independentes (nacional B3 vs internacional/ouro) para
                 // que o universo BR tenha seu próprio top-10 por perfil e nunca seja espremido
                 // pelos ETFs US (que pontuam mais alto). Os dois são concatenados e o sort
@@ -390,80 +480,148 @@ export const aiResearchService = {
 
     async runBatchAnalysis(adminId = null) {
         const strat = 'BUY_HOLD';
-        
-        const macroConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
+        const runId = randomUUID();
+        const algorithmVersion = process.env.RENDER_GIT_COMMIT
+            || process.env.GIT_COMMIT
+            || process.env.npm_package_version
+            || STOCK_CALIBRATION_SHADOW_VERSION;
+        const expectedClasses = ['STOCK', 'FII', 'CRYPTO', 'STOCK_US', 'REIT', 'ETF', 'BRASIL_10'];
+        const batch = await ResearchBatch.create({
+            runId,
+            strategy: strat,
+            expectedClasses,
+            generatedBy: adminId,
+            algorithmVersion,
+        });
+        let currentClass = 'BATCH';
 
-        const saveAnalysis = async (assetClass, ranking, fullList) => {
-            // Alerta ativo: ranking vazio numa classe que normalmente tem dados indica
-            // pipeline degradado (fonte caiu / universo zerado) — sem isso, só se
-            // descobria olhando o site. O rascunho vazio ainda é salvo (auditável),
-            // mas o auto-publish semanal o bloqueia (validateAutoPublish).
-            if (!ranking || ranking.length === 0) {
-                logger.warn(`🚨 [Research] Ranking VAZIO gerado para ${assetClass}`);
-                Sentry.captureMessage(`Ranking vazio gerado para ${assetClass}`, 'warning');
-            }
-            const prevAnalysis = await MarketAnalysis.findOne({ assetClass, strategy: strat, isRankingPublished: true }).sort({ createdAt: -1 }).select('content.ranking date');
-            const comparisonReport = generateComparisonReport(assetClass, ranking, prevAnalysis?.content?.ranking || []);
-            const explainableAIPrompt = buildExplainableAIPrompt(assetClass, ranking, comparisonReport, macroConfig);
-            return MarketAnalysis.create({ assetClass, strategy: strat, content: { ranking, fullAuditLog: fullList }, generatedBy: adminId, comparisonReport, explainableAIPrompt });
-        };
-
-        logger.info("ℹ️ [AI Research] Processando Ações...");
-        const stockData = await this.calculateRanking('STOCK', strat);
-        await saveAnalysis('STOCK', stockData.ranking, stockData.fullList);
-
-        logger.info("ℹ️ [AI Research] Processando FIIs...");
-        const fiiData = await this.calculateRanking('FII', strat);
-        await saveAnalysis('FII', fiiData.ranking, fiiData.fullList);
-
-        logger.info("ℹ️ [AI Research] Processando Criptomoedas...");
-        const cryptoData = await this.calculateRanking('CRYPTO', strat);
-        await saveAnalysis('CRYPTO', cryptoData.ranking, cryptoData.fullList);
-
-        logger.info("ℹ️ [AI Research] Processando Ativos Globais (S&P 500)...");
-        const stockUsData = await this.calculateRanking('STOCK_US', strat);
-        await saveAnalysis('STOCK_US', stockUsData.ranking, stockUsData.fullList);
-
-        logger.info("ℹ️ [AI Research] Processando REITs (imobiliário US)...");
-        const reitData = await this.calculateRanking('REIT', strat);
-        await saveAnalysis('REIT', reitData.ranking, reitData.fullList);
-
-        logger.info("ℹ️ [AI Research] Processando ETFs (nacionais + internacionais)...");
-        const etfData = await this.calculateRanking('ETF', strat);
-        await saveAnalysis('ETF', etfData.ranking, etfData.fullList);
-
-        logger.info("ℹ️ [AI Research] Processando Brasil 10...");
-
-        let brasil10List = buildBrasil10(stockData.processedAssets, fiiData.processedAssets);
-        brasil10List = await calculateRankingDelta(brasil10List, 'BRASIL_10', strat);
-
-        await saveAnalysis('BRASIL_10', brasil10List, brasil10List);
-
-        // Exporta ranking completo para TXT local
         try {
-            // Discard logs vêm da memória de cada calculateRanking (já com assetType),
-            // não de uma reconsulta ao banco por janela de 10min — que perdia logs se o
-            // batch demorasse mais que isso e misturava logs de runs vizinhos.
-            const allData = {
-                BRASIL_10: { ranking: brasil10List,          fullList: brasil10List,          discardLogs: []                       },
-                STOCK:     { ranking: stockData.ranking,     fullList: stockData.fullList,    discardLogs: stockData.discardLogs    },
-                FII:       { ranking: fiiData.ranking,       fullList: fiiData.fullList,      discardLogs: fiiData.discardLogs      },
-                CRYPTO:    { ranking: cryptoData.ranking,    fullList: cryptoData.fullList,   discardLogs: cryptoData.discardLogs   },
-                STOCK_US:  { ranking: stockUsData.ranking,   fullList: stockUsData.fullList,  discardLogs: stockUsData.discardLogs  },
-                ETF:       { ranking: etfData.ranking,       fullList: etfData.fullList,      discardLogs: etfData.discardLogs      },
+            const macroConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
+            batch.inputManifest = {
+                capturedAt: new Date(),
+                macroConfigId: macroConfig?._id || null,
+                macroLastSync: macroConfig?.lastUpdated || macroConfig?.updatedAt || null,
+                fundamentalsSync: macroConfig?.lastSyncStats?.timestamp || null,
+                stockCalibrationVersion: STOCK_CALIBRATION_SHADOW_VERSION,
+            };
+            await batch.save();
+
+            const saveAnalysis = async (assetClass, ranking, fullList) => {
+                if (!ranking || ranking.length === 0) {
+                    logger.warn(`🚨 [Research] Ranking VAZIO gerado para ${assetClass}`);
+                    Sentry.captureMessage(`Ranking vazio gerado para ${assetClass}`, 'warning');
+                    batch.warnings.push({
+                        assetClass,
+                        code: 'EMPTY_RANKING',
+                        message: 'Ranking vazio salvo como rascunho e inelegível para publicação automática.',
+                    });
+                }
+                const prevAnalysis = await MarketAnalysis.findOne({
+                    assetClass,
+                    strategy: strat,
+                    isRankingPublished: true,
+                }).sort({ createdAt: -1 }).select('content.ranking date');
+                const finalizedRanking = finalizeRanking(ranking, prevAnalysis?.content?.ranking || []);
+                const publicRanking = finalizedRanking.map(stripStockCalibrationInternals);
+                const comparisonReport = generateComparisonReport(
+                    assetClass,
+                    publicRanking,
+                    prevAnalysis?.content?.ranking || [],
+                );
+                const explainableAIPrompt = buildExplainableAIPrompt(
+                    assetClass,
+                    publicRanking,
+                    comparisonReport,
+                    macroConfig,
+                );
+                const analysis = await MarketAnalysis.create({
+                    assetClass,
+                    strategy: strat,
+                    batchId: batch._id,
+                    runId,
+                    algorithmVersion,
+                    inputManifest: batch.inputManifest,
+                    content: { ranking: publicRanking, fullAuditLog: fullList },
+                    generatedBy: adminId,
+                    comparisonReport,
+                    explainableAIPrompt,
+                });
+                if (!batch.completedClasses.includes(assetClass)) batch.completedClasses.push(assetClass);
+                await batch.save();
+                return analysis;
             };
 
-            const exportResult = await rankingTxtExportService.saveRankingReport(allData, macroConfig);
-            if (exportResult.success) {
-                logger.info(`📄 [Export TXT] Relatório salvo: ${exportResult.filename}`);
-            } else {
-                logger.warn(`⚠️ [Export TXT] Falha ao salvar relatório: ${exportResult.error}`);
-            }
-        } catch (exportErr) {
-            logger.warn(`⚠️ [Export TXT] Erro inesperado: ${exportErr.message}`);
-        }
+            currentClass = 'STOCK';
+            logger.info("ℹ️ [AI Research] Processando Ações...");
+            const stockData = await this.calculateRanking('STOCK', strat);
+            await saveAnalysis('STOCK', stockData.ranking, stockData.fullList);
 
-        return true;
+            currentClass = 'FII';
+            logger.info("ℹ️ [AI Research] Processando FIIs...");
+            const fiiData = await this.calculateRanking('FII', strat);
+            await saveAnalysis('FII', fiiData.ranking, fiiData.fullList);
+
+            currentClass = 'CRYPTO';
+            logger.info("ℹ️ [AI Research] Processando Criptomoedas...");
+            const cryptoData = await this.calculateRanking('CRYPTO', strat);
+            await saveAnalysis('CRYPTO', cryptoData.ranking, cryptoData.fullList);
+
+            currentClass = 'STOCK_US';
+            logger.info("ℹ️ [AI Research] Processando Ativos Globais (S&P 500)...");
+            const stockUsData = await this.calculateRanking('STOCK_US', strat);
+            await saveAnalysis('STOCK_US', stockUsData.ranking, stockUsData.fullList);
+
+            currentClass = 'REIT';
+            logger.info("ℹ️ [AI Research] Processando REITs (imobiliário US)...");
+            const reitData = await this.calculateRanking('REIT', strat);
+            await saveAnalysis('REIT', reitData.ranking, reitData.fullList);
+
+            currentClass = 'ETF';
+            logger.info("ℹ️ [AI Research] Processando ETFs (nacionais + internacionais)...");
+            const etfData = await this.calculateRanking('ETF', strat);
+            await saveAnalysis('ETF', etfData.ranking, etfData.fullList);
+
+            currentClass = 'BRASIL_10';
+            logger.info("ℹ️ [AI Research] Processando Brasil 10...");
+            let brasil10List = buildBrasil10(stockData.processedAssets, fiiData.processedAssets);
+            brasil10List = await calculateRankingDelta(brasil10List, 'BRASIL_10', strat);
+            await saveAnalysis('BRASIL_10', brasil10List, brasil10List);
+
+            try {
+                const allData = {
+                    BRASIL_10: { ranking: brasil10List, fullList: brasil10List, discardLogs: [] },
+                    STOCK: { ranking: stockData.ranking, fullList: stockData.fullList, discardLogs: stockData.discardLogs },
+                    FII: { ranking: fiiData.ranking, fullList: fiiData.fullList, discardLogs: fiiData.discardLogs },
+                    CRYPTO: { ranking: cryptoData.ranking, fullList: cryptoData.fullList, discardLogs: cryptoData.discardLogs },
+                    STOCK_US: { ranking: stockUsData.ranking, fullList: stockUsData.fullList, discardLogs: stockUsData.discardLogs },
+                    REIT: { ranking: reitData.ranking, fullList: reitData.fullList, discardLogs: reitData.discardLogs },
+                    ETF: { ranking: etfData.ranking, fullList: etfData.fullList, discardLogs: etfData.discardLogs },
+                };
+                const exportResult = await rankingTxtExportService.saveRankingReport(allData, macroConfig);
+                if (exportResult.success) logger.info(`📄 [Export TXT] Relatório salvo: ${exportResult.filename}`);
+                else logger.warn(`⚠️ [Export TXT] Falha ao salvar relatório: ${exportResult.error}`);
+            } catch (exportErr) {
+                logger.warn(`⚠️ [Export TXT] Erro inesperado: ${exportErr.message}`);
+            }
+
+            batch.status = batch.warnings.length ? 'COMPLETED_WITH_WARNINGS' : 'COMPLETED';
+            batch.completedAt = new Date();
+            await batch.save();
+            return { success: true, runId, batchId: batch._id, status: batch.status };
+        } catch (error) {
+            if (currentClass !== 'BATCH' && !batch.failedClasses.includes(currentClass)) {
+                batch.failedClasses.push(currentClass);
+            }
+            batch.failures.push({
+                assetClass: currentClass,
+                code: error.code || 'BATCH_FAILURE',
+                message: error.message,
+            });
+            batch.status = batch.completedClasses.length ? 'PARTIAL' : 'FAILED';
+            batch.completedAt = new Date();
+            await batch.save();
+            throw error;
+        }
     },
 
     async generateNarrative(ranking, assetClass) {

@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { X, Calculator, Target, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { useWallet, AssetType, FixedIncomeSubKey, UsSubKey } from '../../contexts/WalletContext';
+import { useWallet, AssetType, StockSubKey, FixedIncomeSubKey, UsSubKey } from '../../contexts/WalletContext';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
 import { computeSubAllocationReal, splitContributionBySubMeta, hasSubTargets, SUB_LABELS, allocationBucket } from '../../utils/allocation';
 
@@ -27,6 +27,7 @@ const LABELS: Record<string, string> = {
     CASH: 'Reserva'
 };
 
+const STOCK_KEYS: StockSubKey[] = ['STOCK', 'ETF'];
 const FI_KEYS: FixedIncomeSubKey[] = ['IPCA', 'POS', 'PRE'];
 const US_KEYS: UsSubKey[] = ['STOCK', 'REIT', 'ETF', 'DOLLAR'];
 
@@ -89,10 +90,11 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
             const val = asset.quantity * asset.currentPrice * (asset.currency === 'USD' ? (usdRate || 5.75) : 1);
             // Bucketiza pelo BALDE DE ALOCAÇÃO (C1), coerente com o donut: ativos de
             // Reserva (CASH ou RF marcada) contam em CASH (reserva); RF não-reserva
-            // fica em FIXED_INCOME (investimento). ETF nacional é classe própria;
-            // ETFs internacionais têm type STOCK_US e contam no Exterior.
+            // fica em FIXED_INCOME (investimento). ETF NACIONAL conta dentro de Ações BR
+            // (STOCK); ETFs internacionais têm type STOCK_US e contam no Exterior.
             const bucket = allocationBucket(asset);
-            currentValues[bucket] = (currentValues[bucket] || 0) + val;
+            const cls = bucket === 'ETF' ? 'STOCK' : bucket;
+            currentValues[cls] = (currentValues[cls] || 0) + val;
         });
 
         const currentReserve = currentValues['CASH'];
@@ -107,7 +109,8 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
         }
 
         if (remainingContribution > 0) {
-            const riskAssets = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'FIXED_INCOME', 'CRYPTO'] as AssetType[];
+            // ETF nacional foldado em Ações BR (STOCK) — fora da lista de classes de topo.
+            const riskAssets = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO'] as AssetType[];
             const currentRiskEquity = riskAssets.reduce((acc, type) => acc + currentValues[type], 0);
             const projectedRiskEquity = currentRiskEquity + remainingContribution;
 
@@ -142,6 +145,10 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
         // um nível abaixo da mesma lógica de gap. Reusa a sub-alocação REAL da carteira.
         const subReal = computeSubAllocationReal(assets);
         const childrenFor = (s: Suggestion): SubLine[] | undefined => {
+            if (s.type === 'STOCK' && hasSubTargets(targetSubAllocation.STOCK)) {
+                const split = splitContributionBySubMeta(s.amount, subReal.STOCK.value, targetSubAllocation.STOCK, STOCK_KEYS);
+                return STOCK_KEYS.map(k => ({ sub: k, label: SUB_LABELS.STOCK[k], amount: split[k] })).filter(c => c.amount > 0.005);
+            }
             if (s.type === 'FIXED_INCOME' && hasSubTargets(targetSubAllocation.FIXED_INCOME)) {
                 const split = splitContributionBySubMeta(s.amount, subReal.FIXED_INCOME.value, targetSubAllocation.FIXED_INCOME, FI_KEYS);
                 return FI_KEYS.map(k => ({ sub: k, label: SUB_LABELS.FIXED_INCOME[k], amount: split[k] })).filter(c => c.amount > 0.005);

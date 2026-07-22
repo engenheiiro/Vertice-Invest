@@ -16,11 +16,11 @@
  *     atacante não consegue ler o cookie cross-site, não consegue produzir o
  *     header correspondente.
  *
- * Fail-open quando NÃO há cookie csrf: cobre clientes ainda não "bootstrapados"
- * (pré-login), sessões anteriores ao deploy (que recebem o token no próximo
- * refresh, em até 15min) e chamadas servidor-a-servidor (webhooks). Essas rotas
- * já são protegidas pelo Bearer/SameSite; a ausência do cookie não cria brecha
- * nova. Quando o cookie EXISTE, a verificação é estrita (fail-closed).
+ * Mutações autenticadas são fail-closed: toda requisição com Bearer precisa do
+ * cookie e do header correspondentes. Clientes de sessão antiga se recuperam no
+ * bootstrap com `/refresh`, que emite o cookie antes das chamadas autenticadas.
+ * Requisições públicas/servidor-a-servidor continuam cobertas pelas isenções da
+ * aplicação e não dependem de um cookie de sessão.
  */
 import crypto from 'crypto';
 
@@ -72,8 +72,13 @@ export const csrfProtection = (req, res, next) => {
   if (SAFE_METHODS.has(req.method)) return next();
 
   const cookieToken = req.cookies?.[CSRF_COOKIE];
-  // Sem cookie emitido → fail-open (ver cabeçalho do arquivo).
-  if (!cookieToken) return next();
+  const hasBearerToken = /^Bearer\s+\S+$/i.test(req.headers.authorization || '');
+  if (!cookieToken) {
+    if (!hasBearerToken) return next();
+    return res.status(403).json({
+      message: 'Sessão de segurança não inicializada. Recarregue a página e tente novamente.',
+    });
+  }
 
   const headerToken = req.get(CSRF_HEADER);
   if (headerToken && safeEqual(headerToken, cookieToken)) return next();

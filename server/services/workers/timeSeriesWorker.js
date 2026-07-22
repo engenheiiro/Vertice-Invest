@@ -65,6 +65,22 @@ export const isHistoryStale = (historyEntry, now = new Date()) => {
     return ageMs > HISTORY_MAX_CANDLE_AGE_DAYS * 24 * 60 * 60 * 1000;
 };
 
+// Liquidez média (R$/dia) de um ETF a partir dos candles: turnover diário médio
+// (volume × close) sobre uma janela de ~3 meses úteis. Dias sem negócio (volume=0)
+// entram no denominador de propósito — refletem iliquidez real (ex.: FIXA11), não são
+// descartados. Retorna null quando não há janela mínima (mantém o valor de bootstrap do
+// sync). Exportada para teste. `sortedHistory` deve vir newest-first.
+export const ETF_LIQUIDITY_WINDOW = 60;
+export const computeEtfAvgLiquidity = (sortedHistory, window = ETF_LIQUIDITY_WINDOW) => {
+    if (!Array.isArray(sortedHistory)) return null;
+    const liqWindow = sortedHistory.slice(0, window);
+    if (liqWindow.length < 20) return null;
+    const sumTurnover = liqWindow.reduce(
+        (s, h) => s + ((h?.volume > 0 && h?.close > 0) ? h.volume * h.close : 0), 0);
+    const avg = sumTurnover / liqWindow.length;
+    return avg > 0 ? Math.round(avg) : null;
+};
+
 const calculateBeta = (assetReturns, benchmarkReturns) => {
     if (assetReturns.length < 2 || benchmarkReturns.length < 2) return 1;
     const length = Math.min(assetReturns.length, benchmarkReturns.length);
@@ -178,6 +194,13 @@ export const timeSeriesWorker = {
                     const volatilityPrices = prices.slice(0, 252);
                     const volatility = calculateVolatility(volatilityPrices);
 
+                    // Liquidez média (R$/dia) via candles — SÓ ETF nacional (.SA). As fontes
+                    // devolvem averageVolume=0 p/ tickers .SA, então o sync cai num snapshot de
+                    // volume de 1 dia (Brapi): ruidoso e que SUBCONTA (ex.: SMAL11 ~52M no
+                    // snapshot vs ~250M na média real). O worker roda SEMPRE após o sync e antes
+                    // do ranking (sync:prod e cron das 09h) → este valor supera o snapshot.
+                    const etfAvgLiquidity = asset.type === 'ETF' ? computeEtfAvgLiquidity(sortedHistory) : null;
+
                     // Beta só é recalculado aqui para STOCK/FII (benchmark IBOV). Para os
                     // demais tipos (STOCK_US/ETF/CRYPTO) o beta vem do Yahoo no sync de
                     // fundamentos — gravá-lo aqui sobrescrevia esse valor com 1.0 a cada run,
@@ -218,6 +241,9 @@ export const timeSeriesWorker = {
                         ema50: isNaN(ema50) ? 0 : ema50
                     };
                     if (isBrBetaType) setFields.beta = isNaN(beta) ? 1 : beta;
+                    // ETF nacional: liquidez média dos candles é a autoridade (supera o
+                    // snapshot Brapi gravado no sync). Só grava quando há janela suficiente.
+                    if (etfAvgLiquidity !== null) setFields.liquidity = etfAvgLiquidity;
 
                     operations.push({
                         updateOne: {

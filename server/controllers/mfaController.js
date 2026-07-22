@@ -22,9 +22,13 @@ export const getMfaStatus = async (req, res, next) => {
 
 export const setupMfa = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id).select('email mfaEnabled +mfaPendingSecret');
+    const { password } = req.body;
+    const user = await User.findById(req.user.id).select('email mfaEnabled +mfaPendingSecret +password');
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado.' });
     if (user.mfaEnabled) return res.status(400).json({ message: 'MFA já está ativo.' });
+    if (!await bcrypt.compare(password, user.password)) {
+      return res.status(401).json({ message: 'Senha atual inválida.' });
+    }
 
     const secret = generateMfaSecret();
     user.mfaPendingSecret = encrypt(secret);

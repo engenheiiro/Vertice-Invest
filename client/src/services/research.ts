@@ -21,6 +21,18 @@ export interface RankingItem {
     score: number;
     probability: number;
     riskProfile?: 'DEFENSIVE' | 'MODERATE' | 'BOLD';
+    riskVeto?: {
+        active: boolean;
+        level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+        rationale: string;
+        source?: string;
+        evaluatedAt?: string;
+    };
+    aiMetadata?: {
+        riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+        riskRationale?: string;
+        evaluatedAt?: string;
+    };
     thesis: string;
     auditLog?: AuditEntry[];
     bullThesis?: string[]; 
@@ -132,6 +144,30 @@ export interface FixedIncomeResponse {
     updatedAt: string | null;
 }
 
+export interface BuyAndHoldRow {
+    position: number;
+    ticker: string;
+    name?: string;
+    sector?: string;
+    archetype?: string;
+    score: number;
+    action: 'BUY' | 'WAIT';
+    axes: { durability: number; resilience: number; consistency: number };
+    premiumPct: number | null;
+    reason: string;
+}
+
+export interface BuyAndHoldShadow {
+    version: string;
+    generatedAt: string;
+    writesPerformed: boolean;
+    config: { minMarketCap: number; maxBeta: number; weights: { durability: number; resilience: number; consistency: number } };
+    macro: { SELIC?: number; IPCA?: number; NTNB_LONG?: number; RATES_STALE?: boolean };
+    counts: { analyzed: number; eligible: number; excluded: number; buy: number; wait: number };
+    ranking: BuyAndHoldRow[];
+    excludedByReason: { reason: string; count: number }[];
+}
+
 export interface ResearchReport {
     _id: string;
     date: string;
@@ -233,6 +269,15 @@ export const researchService = {
     async getReportDetails(id: string) {
         const response = await authService.api(`/api/research/details/${id}`);
         if (!response.ok) throw new Error("Erro ao buscar detalhes");
+        return await response.json();
+    },
+
+    async getBuyAndHoldShadow(): Promise<BuyAndHoldShadow> {
+        const response = await authService.api('/api/research/buy-and-hold/shadow');
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.message || "Erro ao gerar ranking Buy-and-Hold.");
+        }
         return await response.json();
     },
 

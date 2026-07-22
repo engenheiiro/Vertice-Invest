@@ -540,6 +540,10 @@ export const financialService = {
 
         } catch (error) {
             logger.error(`❌ [Engine] Erro Fatal no Rebuild: ${error.message}`);
+            // Os chamadores fazem o rebuild em modo best-effort e já possuem seus
+            // próprios catch/logs. Sem relançar aqui, eles registravam falso sucesso
+            // e scripts de manutenção contabilizavam carteiras quebradas como OK.
+            throw error;
         }
     },
 

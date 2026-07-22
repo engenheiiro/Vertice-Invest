@@ -19,6 +19,8 @@
     "set:password": "node server/scripts/setPassword.js",
     "seed:market": "node server/scripts/seedMarketData.js",
     "sync:prod": "node server/scripts/syncProdData.js",
+    "sync:oil-gas:check": "node server/scripts/syncOilGasSectorMetricsShadow.js",
+    "sync:oil-gas": "node server/scripts/syncOilGasSectorMetricsShadow.js --persist",
     "snapshot:prod": "node server/scripts/runSnapshotJob.js",
     "sync:dividends": "node server/scripts/syncDividends.js",
     "rebuild:history": "node server/scripts/rebuildAllHistory.js",

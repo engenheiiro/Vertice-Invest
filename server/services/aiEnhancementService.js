@@ -1,6 +1,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import logger from '../config/logger.js';
+import { finalizeRanking } from '../utils/rankingContract.js';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -16,6 +17,36 @@ const cleanJsonString = (str) => {
         cleaned = cleaned.substring(firstBrace, lastBrace + 1);
     }
     return cleaned;
+};
+
+export const applyAiRiskAssessment = (candidates, aiAnalysis) => {
+    const enhancedList = (candidates || []).map(original => {
+        const aiData = Array.isArray(aiAnalysis)
+            ? aiAnalysis.find(item => item.ticker === original.ticker)
+            : null;
+        const rationale = aiData ? aiData.rationale : 'Sem fatos relevantes recentes.';
+        const hasRisk = aiData ? aiData.hasBankruptcyRisk : false;
+        const riskLevel = aiData ? aiData.riskLevel : 'LOW';
+        const riskVetoActive = hasRisk || riskLevel === 'CRITICAL';
+        if (riskVetoActive) {
+            logger.warn(`🚨 IA sinalizou risco crítico em ${original.ticker}: ${rationale}`);
+        }
+
+        return {
+            ...original,
+            aiMetadata: { riskLevel, rationale, vetoed: riskVetoActive },
+            riskVeto: {
+                active: riskVetoActive,
+                level: riskLevel,
+                rationale,
+                source: 'GEMINI',
+                evaluatedAt: new Date(),
+            },
+            thesis: `[Quant]: ${original.thesis}. [IA Audit]: ${rationale}`,
+            bullThesis: [...(original.bullThesis || []), `IA Sentiment: ${rationale}`],
+        };
+    });
+    return finalizeRanking(enhancedList);
 };
 
 export const aiEnhancementService = {
@@ -84,50 +115,8 @@ export const aiEnhancementService = {
                 return candidates;
             }
             
-            const enhancedList = candidates.map(original => {
-                const aiData = Array.isArray(aiAnalysis) ? aiAnalysis.find(a => a.ticker === original.ticker) : null;
-                
-                // Defaults se a IA falhar para um item específico
-                const rationale = aiData ? aiData.rationale : "Sem fatos relevantes recentes.";
-                const hasRisk = aiData ? aiData.hasBankruptcyRisk : false;
-                const riskLevel = aiData ? aiData.riskLevel : 'LOW';
-
-                // --- ALTERAÇÃO CRÍTICA: SCORE DESACOPLADO ---
-                // O score final é 100% o score matemático original.
-                // A IA não soma pontos.
-                const finalScore = original.score;
-
-                let finalAction = original.action;
-                
-                // Kill Switch: A IA tem poder de VETO, mas não de promoção.
-                // Se detectar risco de falência ou risco crítico, força WAIT/SELL.
-                if (hasRisk || riskLevel === 'CRITICAL') {
-                    finalAction = 'WAIT'; // Remove recomendação de compra
-                    logger.warn(`🚨 IA vetou ${original.ticker} por Risco Crítico: ${rationale}`);
-                }
-
-                return {
-                    ...original,
-                    score: finalScore, // Mantém score quantitativo puro
-                    
-                    // Metadados da IA para exibição no front (Audit Modal)
-                    aiMetadata: {
-                        riskLevel,
-                        rationale,
-                        vetoed: hasRisk || riskLevel === 'CRITICAL'
-                    },
-                    
-                    // Concatena a visão da IA na tese para leitura
-                    thesis: `[Quant]: ${original.thesis}. [IA Audit]: ${rationale}`,
-                    bullThesis: [...(original.bullThesis || []), `IA Sentiment: ${rationale}`],
-                    
-                    action: finalAction
-                };
-            });
-
             logger.info(`✅ Auditoria IA Concluída. Ranking matemático preservado.`);
-            // Reordena pelo score original (Matemático) para garantir integridade
-            return enhancedList.sort((a, b) => b.score - a.score);
+            return applyAiRiskAssessment(candidates, aiAnalysis);
 
         } catch (error) {
             logger.error(`❌ Erro Fatal IA: ${error.message}`);

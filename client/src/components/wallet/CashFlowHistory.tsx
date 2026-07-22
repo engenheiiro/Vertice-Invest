@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
 import { DEMO_TRANSACTIONS } from '../../data/DEMO_DATA';
-import { formatCurrency as fmtCurrency } from '../../utils/format';
+import { formatCalendarDate, formatCurrency as fmtCurrency } from '../../utils/format';
 
 interface Transaction {
     _id: string;
@@ -144,7 +144,7 @@ export const CashFlowHistory = () => {
                                             <div className="flex items-center gap-2 mt-0.5">
                                                 <span className="text-[10px] text-slate-500 flex items-center gap-1 tabular-nums">
                                                     <Calendar size={10} />
-                                                    {new Date(tx.date).toLocaleDateString('pt-BR')}
+                                                    {formatCalendarDate(tx.date)}
                                                 </span>
                                                 {!isCash && (
                                                     <span className="text-[10px] text-slate-600 border-l border-slate-700 pl-2">

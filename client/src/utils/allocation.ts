@@ -1,4 +1,4 @@
-import type { Asset, AssetType, FixedIncomeSubKey, UsSubKey } from '../contexts/WalletContext';
+import type { Asset, AssetType, AllocationMap, SubAllocationMap, StockSubKey, FixedIncomeSubKey, UsSubKey } from '../contexts/WalletContext';
 
 // ---------------------------------------------------------------------------
 // C1 — Reserva separada (base de alocação consistente).
@@ -54,10 +54,12 @@ export interface ClassSubReal<K extends string> {
 }
 
 export interface SubAllocationReal {
+    STOCK: ClassSubReal<StockSubKey>;
     FIXED_INCOME: ClassSubReal<FixedIncomeSubKey>;
     STOCK_US: ClassSubReal<UsSubKey>;
 }
 
+const STOCK_KEYS: StockSubKey[] = ['STOCK', 'ETF'];
 const FI_KEYS: FixedIncomeSubKey[] = ['IPCA', 'POS', 'PRE'];
 const US_KEYS: UsSubKey[] = ['STOCK', 'REIT', 'ETF', 'DOLLAR'];
 
@@ -90,6 +92,14 @@ export const usSubKeyOf = (asset: Pick<Asset, 'usSubType'>): UsSubKey => {
     return (asset.usSubType && US_KEYS.includes(asset.usSubType as UsSubKey)) ? (asset.usSubType as UsSubKey) : 'STOCK';
 };
 
+/**
+ * Sub-tipo de um holding de Ações BR: ETF nacional (type 'ETF', BRL) → ETF; ação
+ * individual → STOCK. O ETF nacional deixou de ser classe de topo e conta dentro de
+ * Ações BR, sub-tipo ETF (espelha stockSubKeyOf do server/utils/subAllocation.js).
+ */
+export const stockSubKeyOf = (asset: Pick<Asset, 'type'>): StockSubKey =>
+    asset.type === 'ETF' ? 'ETF' : 'STOCK';
+
 const toPct = <K extends string>(value: Record<K, number>, keys: K[], total: number): Record<K, number> => {
     const out = {} as Record<K, number>;
     keys.forEach((k) => { out[k] = total > 0 ? (value[k] / total) * 100 : 0; });
@@ -97,6 +107,7 @@ const toPct = <K extends string>(value: Record<K, number>, keys: K[], total: num
 };
 
 export function computeSubAllocationReal(assets: Asset[]): SubAllocationReal {
+    const stockValue = { STOCK: 0, ETF: 0 } as Record<StockSubKey, number>;
     const fiValue = { IPCA: 0, POS: 0, PRE: 0 } as Record<FixedIncomeSubKey, number>;
     const usValue = { STOCK: 0, REIT: 0, ETF: 0, DOLLAR: 0 } as Record<UsSubKey, number>;
 
@@ -105,7 +116,10 @@ export function computeSubAllocationReal(assets: Asset[]): SubAllocationReal {
         if (v <= 0) return;
         // C1: RF/ativo marcado como Reserva não é investimento — fora da ramificação.
         if (isReserveAsset(a)) return;
-        if (a.type === 'FIXED_INCOME') {
+        if (a.type === 'STOCK' || a.type === 'ETF') {
+            // Ações BR = ações individuais (STOCK) + ETFs nacionais (type 'ETF', sub-tipo ETF).
+            stockValue[stockSubKeyOf(a)] += v;
+        } else if (a.type === 'FIXED_INCOME') {
             fiValue[fixedIncomeSubKey(a)] += v;
         } else if (a.type === 'STOCK_US') {
             // Inclui ETFs internacionais e ouro lastreado (usSubKeyOf → 'ETF').
@@ -113,10 +127,12 @@ export function computeSubAllocationReal(assets: Asset[]): SubAllocationReal {
         }
     });
 
+    const stockTotal = STOCK_KEYS.reduce((s, k) => s + stockValue[k], 0);
     const fiTotal = FI_KEYS.reduce((s, k) => s + fiValue[k], 0);
     const usTotal = US_KEYS.reduce((s, k) => s + usValue[k], 0);
 
     return {
+        STOCK: { value: stockValue, total: stockTotal, pct: toPct(stockValue, STOCK_KEYS, stockTotal) },
         FIXED_INCOME: { value: fiValue, total: fiTotal, pct: toPct(fiValue, FI_KEYS, fiTotal) },
         STOCK_US: { value: usValue, total: usTotal, pct: toPct(usValue, US_KEYS, usTotal) },
     };
@@ -128,11 +144,43 @@ export const hasSubTargets = (sub: Record<string, number> | undefined): boolean 
 
 /** Rótulos das sub-metas, reusados por Aporte/Rebalance/AllocationChart. */
 export const SUB_LABELS: {
+    STOCK: Record<StockSubKey, string>;
     FIXED_INCOME: Record<FixedIncomeSubKey, string>;
     STOCK_US: Record<UsSubKey, string>;
 } = {
+    STOCK: { STOCK: 'Ações', ETF: 'ETFs' },
     FIXED_INCOME: { IPCA: 'IPCA', POS: 'Pós-fixado', PRE: 'Prefixado' },
     STOCK_US: { STOCK: 'Stocks', REIT: 'REITs', ETF: 'ETFs', DOLLAR: 'Dólar' },
+};
+
+/**
+ * Normaliza metas legadas: a classe ETF (nacional) foi absorvida por Ações BR (STOCK).
+ * Se houver alvo de topo `ETF > 0` e Ações BR ainda não tiver sub-metas, foldamos o alvo
+ * de ETF para dentro de STOCK (soma os %) e o convertemos em sub-meta ETF de Ações BR.
+ * Idempotente: com sub-metas de STOCK já definidas, não mexe. Devolve novos objetos.
+ * Espelha foldEtfIntoStock de server/utils/subAllocation.js.
+ */
+export const foldEtfIntoStock = (
+    targetAllocation: AllocationMap,
+    targetSubAllocation: SubAllocationMap,
+): { targetAllocation: AllocationMap; targetSubAllocation: SubAllocationMap } => {
+    const ta: AllocationMap = { ...targetAllocation };
+    const tsa: SubAllocationMap = {
+        STOCK: { ...targetSubAllocation.STOCK },
+        FIXED_INCOME: { ...targetSubAllocation.FIXED_INCOME },
+        STOCK_US: { ...targetSubAllocation.STOCK_US },
+    };
+    const etf = Number(ta.ETF) || 0;
+    const stock = Number(ta.STOCK) || 0;
+    if (etf > 0 && !hasSubTargets(tsa.STOCK)) {
+        const combined = stock + etf;
+        ta.STOCK = combined;
+        ta.ETF = 0;
+        tsa.STOCK = combined > 0
+            ? { STOCK: (stock / combined) * 100, ETF: (etf / combined) * 100 }
+            : { STOCK: 0, ETF: 0 };
+    }
+    return { targetAllocation: ta, targetSubAllocation: tsa };
 };
 
 /**

@@ -43,7 +43,7 @@ const callAuthentication = async (user) => {
 beforeEach(() => {
     vi.clearAllMocks();
     clearUserCache();
-    jwt.verify.mockReturnValue({ id: 'user-1' });
+    jwt.verify.mockReturnValue({ id: 'user-1', sv: 0 });
 });
 
 describe('authenticateToken — rejeições de identidade', () => {
@@ -70,6 +70,17 @@ describe('authenticateToken — rejeições de identidade', () => {
 
         expect(res.statusCode).toBe(401);
         expect(res.body.message).toMatch(/desativada/i);
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    it('rejeita imediatamente um access token de versão revogada', async () => {
+        jwt.verify.mockReturnValue({ id: 'user-1', sv: 2 });
+        const { res, next } = await callAuthentication({
+            _id: 'user-1', plan: 'PRO', role: 'USER', isActive: true, sessionVersion: 3,
+        });
+
+        expect(res.statusCode).toBe(401);
+        expect(res.body.message).toMatch(/sessão desatualizada/i);
         expect(next).not.toHaveBeenCalled();
     });
 });

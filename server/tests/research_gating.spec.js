@@ -15,6 +15,9 @@ vi.mock('../services/aiEnhancementService.js', () => ({ aiEnhancementService: {}
 const reportDoc = { assetClass: 'STOCK', content: { ranking: [] } };
 const chain = { select: vi.fn(() => chain), sort: vi.fn(() => Promise.resolve(reportDoc)) };
 vi.mock('../models/MarketAnalysis.js', () => ({ default: { findOne: vi.fn(() => chain) } }));
+vi.mock('../models/PublishedResearchPointer.js', () => ({
+  default: { find: vi.fn(() => ({ lean: () => Promise.resolve([]) })) },
+}));
 
 const MarketAnalysis = (await import('../models/MarketAnalysis.js')).default;
 const { getLatestReport } = await import('../controllers/researchController.js');

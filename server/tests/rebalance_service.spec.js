@@ -189,11 +189,11 @@ describe('buildRebalancePlan', () => {
         expect(plan.sells.some((s) => s.class === 'OURO')).toBe(false);
     });
 
-    it('meta de ETF nacional subalocada gera compra de ETF nacional (BRL, sem conversão)', () => {
+    it('meta legada de ETF nacional é absorvida por Ações BR (fold) e compra o ETF via sub-meta', () => {
         const valuation = {
             totalEquity: 10000,
             usdRate: 5,
-            valueByClass: { STOCK: 5000, FII: 5000, STOCK_US: 0, ETF: 0, CRYPTO: 0, FIXED_INCOME: 0, CASH: 0 },
+            valueByClass: { STOCK: 5000, FII: 5000, STOCK_US: 0, CRYPTO: 0, FIXED_INCOME: 0, CASH: 0 },
             assets: [
                 holding({ ticker: 'AAAA3', type: 'STOCK', valueBr: 5000, priceBr: 50, priceNative: 50 }),
                 holding({ ticker: 'CCCC11', type: 'FII', valueBr: 5000, priceBr: 100, priceNative: 100 }),
@@ -201,18 +201,23 @@ describe('buildRebalancePlan', () => {
         };
         const plan = build({
             valuation,
-            // STOCK 50 (ok), FII 40 (sobra 10%), ETF 10 (falta 10%).
+            // Meta LEGADA: STOCK 50, FII 40, ETF 10 (topo). O fold vira STOCK 60 com
+            // sub-metas {STOCK ~83%, ETF ~17%}; Ações BR está em 50% → falta ~10% (R$1000),
+            // todo defasado no sub-tipo ETF.
             targetAllocation: { STOCK: 50, FII: 40, STOCK_US: 0, ETF: 10, CRYPTO: 0, FIXED_INCOME: 0 },
             idealBuysByClass: {
                 STOCK: [], FII: [], STOCK_US: [], CRYPTO: [],
-                // Classe ETF = só fundos NACIONAIS (type 'ETF', BRL) — sem conversão de moeda.
+                // Ranking de ETFs nacionais (type 'ETF', BRL) — candidato da sub-meta ETF de Ações BR.
                 ETF: [{ ticker: 'BOVA11', name: 'iShares Ibovespa', sector: 'ETF', type: 'ETF', usSubType: null, score: 80, currentPrice: 100, bull: ['Mercado amplo'] }],
             },
             coveredClasses: ['STOCK', 'FII', 'ETF'],
         });
-        const etfBuy = plan.buys.find((b) => b.class === 'ETF');
+        // Classe ETF de topo não existe mais — a compra sai como Ações BR, sub-tipo ETFs.
+        expect(plan.buys.some((b) => b.class === 'ETF')).toBe(false);
+        const etfBuy = plan.buys.find((b) => b.ticker === 'BOVA11');
         expect(etfBuy).toBeTruthy();
-        expect(etfBuy.ticker).toBe('BOVA11');
+        expect(etfBuy.class).toBe('STOCK');
+        expect(etfBuy.subLabel).toBe('ETFs');
         expect(etfBuy.amount).toBeCloseTo(1000, 0);
         // BRL, sem conversão (100) → 1000 / 100 = 10 cotas.
         expect(etfBuy.quantity).toBeCloseTo(10, 1);

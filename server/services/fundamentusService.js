@@ -57,9 +57,10 @@ export const fundamentusService = {
             // de coluna defasados → dados zerados sem erro).
             const check = validateFundamentusLayout($, layout);
             if (!check.ok) {
-                logger.warn('⚠️ [Fundamentus] Layout de AÇÕES possivelmente desatualizado', {
+                logger.error('❌ [Fundamentus] Layout de AÇÕES incompatível; ingestão bloqueada', {
                     source: 'fundamentus', kind: 'STOCK', schemaVersion: check.version, mismatches: check.mismatches,
                 });
+                throw new Error(`Layout de AÇÕES incompatível: ${check.mismatches.join('; ')}`);
             }
 
             $(`${layout.table} tbody tr`).each((i, el) => {
@@ -136,6 +137,7 @@ export const fundamentusService = {
                         pAtivCircLiq: parseBrFloat($(tds[col.pAtivCircLiq]).text()),
                         evEbit: evEbit,
                         evEbitda: parseBrFloat($(tds[col.evEbitda]).text()),
+                        grossMargin: parseBrFloat($(tds[col.mrgBruta]).text()),
                         mrgEbit: parseBrFloat($(tds[col.mrgEbit]).text()),
                         netMargin: parseBrFloat($(tds[col.netMargin]).text()),
                         currentRatio: parseBrFloat($(tds[col.currentRatio]).text()),
@@ -143,7 +145,10 @@ export const fundamentusService = {
                         roe: parseBrFloat($(tds[col.roe]).text()),
                         liq2m: parseBrFloat($(tds[col.liq2m]).text()),
                         patrimLiq: patrimLiq,
-                        divBrutaPatrim: parseBrFloat($(tds[col.divBrutaPatrim]).text()),
+                        // A fonte atual publica Dív.Líq/Patrim. O alias legado é
+                        // mantido no payload durante a transição do syncService.
+                        debtToEquity: parseBrFloat($(tds[col.debtToEquity]).text()),
+                        divBrutaPatrim: parseBrFloat($(tds[col.debtToEquity]).text()),
                         cresRec5a: parseBrFloat($(tds[col.cresRec5a]).text()),
                         
                         // Dados Enriquecidos Calculados
@@ -201,9 +206,10 @@ export const fundamentusService = {
             // (6.7) Alerta proativo de mudança de estrutura do site.
             const check = validateFundamentusLayout($, layout);
             if (!check.ok) {
-                logger.warn('⚠️ [Fundamentus] Layout de FIIs possivelmente desatualizado', {
+                logger.error('❌ [Fundamentus] Layout de FIIs incompatível; ingestão bloqueada', {
                     source: 'fundamentus', kind: 'FII', schemaVersion: check.version, mismatches: check.mismatches,
                 });
+                throw new Error(`Layout de FIIs incompatível: ${check.mismatches.join('; ')}`);
             }
 
             $(`${layout.table} tbody tr`).each((i, el) => {
@@ -236,6 +242,7 @@ export const fundamentusService = {
                         rentM2: parseBrFloat($(tds[col.rentM2]).text()),
                         capRate: parseBrFloat($(tds[col.capRate]).text()),
                         vacancy: parseBrFloat($(tds[col.vacancy]).text()),
+                        address: $(tds[col.address]).text().replace(/\s+/g, ' ').trim(),
                         vpCota: parseFloat(vpCota.toFixed(2)),
                         ffoCota: parseFloat(ffoCota.toFixed(2))
                     });

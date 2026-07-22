@@ -3,9 +3,19 @@ import express from 'express';
 import { register, login, refreshToken, logout, forgotPassword, resetPassword, updateProfile, updateAvatar, removeAvatar, changePassword, markTutorialSeen, deactivateAccount, exportData, deleteAccount } from '../controllers/authController.js';
 import { getMfaStatus, setupMfa, enableMfa, disableMfa } from '../controllers/mfaController.js'; // (I14)
 import validate from '../middleware/validateResource.js';
-import { registerSchema, loginSchema, updateProfileSchema, avatarSchema } from '../schemas/authSchemas.js';
+import {
+  registerSchema,
+  loginSchema,
+  updateProfileSchema,
+  avatarSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  mfaSetupSchema,
+  mfaEnableSchema,
+  mfaDisableSchema,
+} from '../schemas/authSchemas.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
-import { dataExportLimiter, accountDeleteLimiter, avatarUploadLimiter, changePasswordLimiter } from '../middleware/rateLimiters.js';
+import { dataExportLimiter, accountDeleteLimiter, avatarUploadLimiter, changePasswordLimiter, mfaWriteLimiter } from '../middleware/rateLimiters.js';
 
 const router = express.Router();
 
@@ -14,8 +24,8 @@ router.post('/register', validate(registerSchema), register);
 router.post('/login', validate(loginSchema), login);
 router.post('/refresh', refreshToken);
 router.post('/logout', logout);
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password', resetPassword);
+router.post('/forgot-password', validate(forgotPasswordSchema), forgotPassword);
+router.post('/reset-password', validate(resetPasswordSchema), resetPassword);
 
 // Rotas Protegidas (Perfil)
 router.put('/me', authenticateToken, validate(updateProfileSchema), updateProfile);
@@ -30,8 +40,8 @@ router.delete('/me', accountDeleteLimiter, authenticateToken, deleteAccount);
 
 // (I14) MFA / 2FA — todas exigem sessão autenticada.
 router.get('/mfa/status', authenticateToken, getMfaStatus);
-router.post('/mfa/setup', authenticateToken, setupMfa);
-router.post('/mfa/enable', authenticateToken, enableMfa);
-router.post('/mfa/disable', authenticateToken, disableMfa);
+router.post('/mfa/setup', authenticateToken, mfaWriteLimiter, validate(mfaSetupSchema), setupMfa);
+router.post('/mfa/enable', authenticateToken, mfaWriteLimiter, validate(mfaEnableSchema), enableMfa);
+router.post('/mfa/disable', authenticateToken, mfaWriteLimiter, validate(mfaDisableSchema), disableMfa);
 
 export default router;

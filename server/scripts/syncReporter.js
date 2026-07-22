@@ -90,6 +90,15 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
 
     const out = (s) => process.stdout.write(s);
 
+    // yahoo-finance2 dá `console.error(url)` cru sempre que uma requisição volta
+    // !response.ok (ex.: "upstream connect error", timeout, throttle) — ANTES de
+    // lançar o HTTPError que os nossos callers já capturam e tratam (retry + mantém
+    // o valor anterior no DB). A URL solta é ruído redundante: o ticker afetado já
+    // aparece nas linhas "Falhou X:" e no resumo "N ativos sem cotação". Rebaixamos
+    // para debug p/ não inflar a contagem de erros nem virar o veredito para
+    // "SUCESSO COM ERROS" por uma falha transitória já absorvida.
+    const YF_FETCH_URL = /^https?:\/\/query\d*\.finance\.yahoo\.com\//i;
+
     // Bibliotecas (ex.: yahoo-finance2) escrevem direto no console, driblando o
     // winston. Interceptamos console.* para jogar isso no TXT, mantendo o terminal
     // limpo. Não afeta a saída do próprio reporter (usa process.stdout.write via out()).
@@ -102,7 +111,9 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
                 const msg = args
                     .map((a) => (typeof a === 'string' ? a : util.inspect(a, { depth: 2, breakLength: 120 })))
                     .join(' ');
-                collector.log({ level: lvl, message: msg }, () => {});
+                // Erro-URL cru do yahoo-finance2 (falha transitória já tratada) → debug.
+                const level = (lvl === 'error' && YF_FETCH_URL.test(msg.trim())) ? 'debug' : lvl;
+                collector.log({ level, message: msg }, () => {});
             };
         }
     }
@@ -207,13 +218,21 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
     }
 
     // ── Geração do TXT ──────────────────────────────────────────────────────
+    // Só conta como "sem cotação na fonte" quem falhou por motivo TERMINAL
+    // (símbolo inexistente/deslistado). Falhas transitórias — "upstream connect
+    // error", "timeout", "Connection refused" — NÃO entram: CLX/KR/CAH/CAT (Clorox,
+    // Kroger, Cardinal, Caterpillar) estão listadas, só sofreram throttle do Yahoo
+    // no run. Rotulá-las como "saída de bolsa" era enganoso.
+    const TERMINAL_MISS = /quote not found|no data found|may be delisted|symbol may be delisted/i;
+
     function collectNotFound() {
         const set = new Set();
         for (const e of collector.entries) {
-            const m =
-                e.message.match(/Quote not found for symbol:\s*([A-Za-z0-9.-]+)/) ||
-                e.message.match(/Falhou\s+([A-Za-z0-9.-]+)\s*:/);
-            if (m) set.add(m[1]);
+            const direct = e.message.match(/Quote not found for symbol:\s*([A-Za-z0-9.-]+)/);
+            if (direct) { set.add(direct[1]); continue; }
+            // "Falhou TICKER: <motivo>" — só bucketiza se o motivo for terminal.
+            const failed = e.message.match(/Falhou\s+([A-Za-z0-9.-]+)\s*:\s*(.*)$/);
+            if (failed && TERMINAL_MISS.test(failed[2])) set.add(failed[1]);
         }
         return [...set];
     }

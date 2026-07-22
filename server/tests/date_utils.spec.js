@@ -3,7 +3,7 @@
  * startOfDay (meia-noite local) e dateKeyToUtcDate (chave → Date UTC estável).
  */
 import { describe, it, expect } from 'vitest';
-import { toDateKey, startOfDay, dateKeyToUtcDate, isBusinessDay, countBusinessDays } from '../utils/dateUtils.js';
+import { toDateKey, startOfDay, dateKeyToUtcDate, parseCalendarDate, isBusinessDay, countBusinessDays } from '../utils/dateUtils.js';
 
 describe('toDateKey', () => {
   it('gera chave YYYY-MM-DD a partir de Date/string/number', () => {
@@ -67,5 +67,25 @@ describe('dateKeyToUtcDate', () => {
 
   it('retorna null para entrada inválida', () => {
     expect(dateKeyToUtcDate(null)).toBeNull();
+  });
+});
+
+describe('parseCalendarDate', () => {
+  it('preserva o dia civil de um input YYYY-MM-DD no Brasil', () => {
+    const d = parseCalendarDate('2026-07-21');
+    expect(d.toISOString()).toBe('2026-07-21T12:00:00.000Z');
+    expect(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d)).toBe('2026-07-21');
+  });
+
+  it('preserva Date e ISO completos sem reinterpretar o instante', () => {
+    const source = new Date('2026-07-21T18:30:00.000Z');
+    expect(parseCalendarDate(source).toISOString()).toBe(source.toISOString());
+    expect(parseCalendarDate(source)).not.toBe(source);
+    expect(parseCalendarDate('2026-07-21T18:30:00.000Z').toISOString()).toBe(source.toISOString());
+  });
+
+  it('rejeita dias inexistentes e entradas inválidas', () => {
+    expect(parseCalendarDate('2026-02-30')).toBeNull();
+    expect(parseCalendarDate('não-é-data')).toBeNull();
   });
 });

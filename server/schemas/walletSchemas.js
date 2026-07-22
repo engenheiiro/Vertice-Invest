@@ -82,6 +82,13 @@ const subAllocSum100 = (label) => (obj) => {
   return sum === 0 || Math.abs(sum - 100) <= 0.5;
 };
 
+// Ações BR ramifica em Ações individuais / ETFs nacionais (BRL). O ETF nacional deixou
+// de ser classe de topo e conta aqui como sub-tipo ETF de Ações BR.
+const stockSub = z
+  .object({ STOCK: allocPct, ETF: allocPct })
+  .refine(subAllocSum100('STOCK'), { message: 'Sub-metas de Ações BR devem somar 100%' })
+  .optional();
+
 const fixedIncomeSub = z
   .object({ IPCA: allocPct, POS: allocPct, PRE: allocPct })
   .refine(subAllocSum100('FIXED_INCOME'), { message: 'Sub-metas de Renda Fixa devem somar 100%' })
@@ -108,6 +115,7 @@ export const updateTargetsSchema = z.object({
     targetReserve: z.coerce.number().finite('Valor inválido').nonnegative('Reserva não pode ser negativa').optional(),
     targetMonthlyDividendIncome: z.coerce.number().finite('Valor inválido').nonnegative('Meta não pode ser negativa').optional(),
     targetSubAllocation: z.object({
+      STOCK: stockSub,
       FIXED_INCOME: fixedIncomeSub,
       STOCK_US: stockUsSub,
     }).optional(),

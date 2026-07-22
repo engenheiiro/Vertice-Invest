@@ -21,17 +21,26 @@ export const authenticateToken = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Tokens legados (sem sv) passam pelo refresh uma única vez. Isto evita
+    // mantê-los ativos até a expiração e estabelece o controle de revogação
+    // imediata para todas as sessões seguintes.
+    const tokenSessionVersion = Number.isInteger(decoded.sv) ? decoded.sv : null;
 
     // (I6) Cache hit — serve sem tocar o banco, exceto se um plano pago expirou
     // (aí precisamos do caminho de DB para rebaixar e persistir).
     const cached = getCachedUser(decoded.id);
-    if (cached && !isExpiredPaid(cached)) {
+    if (
+      tokenSessionVersion !== null
+      && cached
+      && cached.sessionVersion === tokenSessionVersion
+      && !isExpiredPaid(cached)
+    ) {
       req.user = cached;
       return next();
     }
 
     // Busca o usuário atualizado no banco para checar validade (Crítico para expiração)
-    const user = await User.findById(decoded.id).select('name email role plan subscriptionStatus validUntil isActive');
+    const user = await User.findById(decoded.id).select('name email role plan subscriptionStatus validUntil isActive sessionVersion');
 
     if (!user) {
         return res.status(404).json({ message: "Usuário não encontrado." });
@@ -39,6 +48,10 @@ export const authenticateToken = async (req, res, next) => {
 
     if (user.isActive === false) {
         return res.status(401).json({ message: "Conta desativada." });
+    }
+
+    if (tokenSessionVersion === null || tokenSessionVersion !== (user.sessionVersion ?? 0)) {
+        return res.status(401).json({ message: "Sessão desatualizada. Entre novamente." });
     }
 
     // --- LÓGICA DE EXPIRAÇÃO (GUARDIÃO) ---
@@ -70,6 +83,7 @@ export const authenticateToken = async (req, res, next) => {
       plan: user.plan,
       subscriptionStatus: user.subscriptionStatus,
       validUntil: user.validUntil,
+      sessionVersion: user.sessionVersion ?? 0,
     };
     setCachedUser(decoded.id, userData);
 
@@ -79,6 +93,16 @@ export const authenticateToken = async (req, res, next) => {
   } catch (err) {
     return res.status(401).json({ message: "Token inválido ou expirado." });
   }
+};
+
+// Catálogos públicos podem aproveitar dados da sessão quando ela é válida, mas
+// nunca devem identificar um usuário a partir de um token apenas decodificado.
+// Sem Bearer, a rota segue como visitante; com Bearer, aplica exatamente a mesma
+// verificação criptográfica da autenticação obrigatória.
+export const optionalAuthenticateToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return next();
+  return authenticateToken(req, res, next);
 };
 
 // Middleware 2: Verifica se o usuário é ADMIN

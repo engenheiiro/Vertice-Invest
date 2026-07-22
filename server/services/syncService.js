@@ -12,6 +12,11 @@ import { resolveSector, deriveFiiSubType } from '../utils/sectorResolver.js';
 import { backfillSectors } from './sectorBackfillService.js';
 import { classifyUsAsset } from '../utils/usClassification.js';
 import { appendSnapshots } from './fundamentalHistoryService.js';
+import {
+    createFundamentusStats,
+    finalizeFundamentusStats,
+    validateFundamentusIngestion,
+} from '../utils/ingestionHealth.js';
 
 const yahooFinanceLTM = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 const LTM_BATCH_SIZE = 10;
@@ -117,17 +122,35 @@ export const syncService = {
 
             const stocksMap = await fundamentusService.getStocksMap();
             const fiiMap = await fundamentusService.getFIIsMap();
+            const ingestionStats = createFundamentusStats({
+                stockParsed: stocksMap.size,
+                fiiParsed: fiiMap.size,
+            });
             
             const isScrapingFailed = stocksMap.size === 0 && fiiMap.size === 0;
 
             if (isScrapingFailed) {
-                return { success: false, error: "Scraping blocked." };
+                const stats = finalizeFundamentusStats(ingestionStats);
+                await SystemConfig.findOneAndUpdate(
+                    { key: 'MACRO_INDICATORS' },
+                    { $set: { lastSyncStats: {
+                        typosFixed: 0,
+                        assetsProcessed: 0,
+                        fundamentalsHealthy: false,
+                        errorCode: 'FUNDAMENTUS_BLOCKED',
+                        fundamentals: stats,
+                        timestamp,
+                    } } },
+                    { upsert: true },
+                );
+                return { success: false, error: "Scraping blocked.", errorCode: 'FUNDAMENTUS_BLOCKED', fundamentals: stats };
             }
 
             const processedTickers = new Set();
             let typosFixedCount = 0; // Contador para Monitor de Qualidade
 
             const pushOp = (rawTicker, data, type) => {
+                const classStats = ingestionStats[type];
                 // 1. CAMADA DE SANITIZAÇÃO (CORREÇÃO DE TYPOS)
                 let ticker = rawTicker;
                 if (KNOWN_TYPOS[rawTicker]) {
@@ -136,13 +159,20 @@ export const syncService = {
                 }
 
                 // 2. FILTRO DE DUPLICIDADE PÓS-CORREÇÃO
-                if (processedTickers.has(ticker)) return;
+                if (processedTickers.has(ticker)) {
+                    classStats.duplicates++;
+                    return;
+                }
                 processedTickers.add(ticker);
 
                 const liquidity = Number(data.liq2m) || Number(data.liquidity) || 0;
                 
                 // Filtro de liquidez mínima para não sujar o banco com lixo
-                if (liquidity < 5000) return;
+                if (liquidity < 5000) {
+                    classStats.rejectedLowLiquidity++;
+                    return;
+                }
+                classStats.accepted++;
 
                 // Resolução resiliente: override exato → override por base (ações)
                 // → setor do scraping (FIIs) → default por tipo.
@@ -160,7 +190,7 @@ export const syncService = {
                     netMargin: Number(data.netMargin) || 0,
                     evEbitda: Number(data.evEbitda) || 0,
                     revenueGrowth: Number(data.cresRec5a) || 0,
-                    debtToEquity: Number(data.divBrutaPatrim) || 0,
+                    debtToEquity: Number(data.debtToEquity ?? data.divBrutaPatrim) || 0,
 
                     vacancy: Number(data.vacancy) || 0,
                     capRate: Number(data.capRate) || 0,
@@ -227,6 +257,35 @@ export const syncService = {
 
             if (stocksMap.size > 0) stocksMap.forEach((v, k) => pushOp(k, v, 'STOCK'));
             if (fiiMap.size > 0) fiiMap.forEach((v, k) => pushOp(k, v, 'FII'));
+
+            // Fail closed antes de qualquer bulkWrite: uma queda abrupta na taxa
+            // parseado→aceito indica layout deslocado ou fonte parcial. Não mistura
+            // operações externas no denominador e não persiste fundamentos suspeitos.
+            const ingestionHealth = validateFundamentusIngestion(ingestionStats);
+            if (!ingestionHealth.ok) {
+                logger.error(`❌ [Sync] Fundamentos degradados: ${ingestionHealth.reason}`, {
+                    errorCode: ingestionHealth.code,
+                    fundamentals: ingestionHealth.stats,
+                });
+                await SystemConfig.findOneAndUpdate(
+                    { key: 'MACRO_INDICATORS' },
+                    { $set: { lastSyncStats: {
+                        typosFixed: typosFixedCount,
+                        assetsProcessed: 0,
+                        fundamentalsHealthy: false,
+                        errorCode: ingestionHealth.code,
+                        fundamentals: ingestionHealth.stats,
+                        timestamp,
+                    } } },
+                    { upsert: true },
+                );
+                return {
+                    success: false,
+                    error: ingestionHealth.reason,
+                    errorCode: ingestionHealth.code,
+                    fundamentals: ingestionHealth.stats,
+                };
+            }
 
             // 3. Atualiza Ativos Internacionais e Cripto
             // isActive filter: ativos delistados já desativados pela blacklist dinâmica
@@ -369,6 +428,9 @@ export const syncService = {
                             lastSyncStats: {
                                 typosFixed: typosFixedCount,
                                 assetsProcessed: operations.length,
+                                fundamentalsHealthy: true,
+                                errorCode: null,
+                                fundamentals: ingestionHealth.stats,
                                 timestamp: new Date()
                             }
                         }
@@ -376,7 +438,11 @@ export const syncService = {
                     { upsert: true }
                 );
 
-                logger.info(`ℹ️ [Sync] Etapa 2: ${operations.length} ativos fundamentados (Typos corrigidos: ${typosFixedCount}).`);
+                logger.info(
+                    `ℹ️ [Sync] Etapa 2: STOCK ${ingestionHealth.stats.STOCK.accepted}/${ingestionHealth.stats.STOCK.parsed} · ` +
+                    `FII ${ingestionHealth.stats.FII.accepted}/${ingestionHealth.stats.FII.parsed} aceitos ` +
+                    `(operações totais: ${operations.length}; typos: ${typosFixedCount}).`
+                );
 
                 logger.info("ℹ️ [Sync] Etapa 3: Cotações em tempo real");
                 
@@ -449,7 +515,12 @@ export const syncService = {
                     logger.error(`❌ [Sync] Etapa 4.5 falhou: ${err.message}`);
                 }
 
-                return { success: true, count: operations.length };
+                return {
+                    success: true,
+                    count: operations.length,
+                    fundamentalsProcessed: ingestionHealth.stats.STOCK.accepted + ingestionHealth.stats.FII.accepted,
+                    fundamentals: ingestionHealth.stats,
+                };
             } else {
                 return { success: false, count: 0, error: "Nenhum ativo válido encontrado." };
             }

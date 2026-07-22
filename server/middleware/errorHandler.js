@@ -60,9 +60,11 @@ export const buildErrorResponse = (err = {}, requestId) => {
   status = status || 500;
   code = code || STATUS_CODE[status] || 'INTERNAL_ERROR';
 
-  // Mantém o comportamento atual: a mensagem do erro chega ao cliente (vários
-  // controllers dependem disso para exibir validações). Apenas garante fallback.
-  const message = err.message || 'Erro interno no servidor.';
+  // Erros 5xx podem carregar detalhes de banco, provedores externos e stack
+  // traces. Em produção, só o requestId chega ao cliente; o detalhe fica no log.
+  const message = status >= 500 && process.env.NODE_ENV === 'production'
+    ? 'Erro interno no servidor.'
+    : (err.message || 'Erro interno no servidor.');
 
   const error = { code, message };
   if (details) error.details = details;

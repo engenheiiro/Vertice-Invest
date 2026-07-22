@@ -18,9 +18,11 @@ import logger from '../config/logger.js';
  * Nunca vaza userId, e-mail, custo, proventos ou métricas sensíveis.
  */
 
-// Classe efetiva p/ o donut público: reserva (RF/CASH marcada) cai no balde
-// CASH, senão usa o type real. Espelha allocationBucket do front (allocation.ts).
-const publicBucket = (asset) => (asset.isReserve ? 'CASH' : asset.type);
+// Classe efetiva p/ o donut público: reserva (RF/CASH marcada) cai no balde CASH;
+// ETF nacional (type 'ETF') conta dentro de Ações BR (STOCK); senão usa o type real.
+// Espelha allocationBucket + fold de ETF do front (allocation.ts / AllocationChart).
+const publicBucket = (asset) =>
+    asset.isReserve ? 'CASH' : (asset.type === 'ETF' ? 'STOCK' : asset.type);
 
 export const getPublicWallet = async (req, res, next) => {
     try {
