@@ -12,6 +12,13 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { scoringEngine } from '../services/engines/scoringEngine.js';
+// Imports ESTÁTICOS (hoisted): antes eram `await import()` DENTRO dos testes, e o
+// grafo pesado do aiResearchService (~1,5s a frio) era contado contra o timeout de
+// 5s por-teste — sob 100+ specs em paralelo estourava só na 1ª chamada, causando
+// flake raro. Carregar no setup do arquivo tira o custo do timeout do teste. A
+// vi.mock abaixo é elevada pelo Vitest acima destes imports, então o mock vale.
+import { getTop5Defensive, calculateRankingDelta } from '../services/aiResearchService.js';
+import MarketAnalysis from '../models/MarketAnalysis.js';
 
 // Mock só do model: calculateRankingDelta consulta MarketAnalysis; sem DB no teste.
 vi.mock('../models/MarketAnalysis.js', () => ({
@@ -190,8 +197,7 @@ describe('Cripto recalibrada: bases menores, confiança aplicável, sem isençã
 
 // ── Brasil 10: prioriza elegíveis do gate defensivo ──────────────────────────
 describe('getTop5Defensive prioriza elegíveis do gate', () => {
-    it('inelegível com score maior fica atrás dos elegíveis', async () => {
-        const { getTop5Defensive } = await import('../services/aiResearchService.js');
+    it('inelegível com score maior fica atrás dos elegíveis', () => {
         const mk = (ticker, def, eligible) => ({
             ticker, type: 'STOCK', sector: 'Energia',
             scores: { DEFENSIVE: def, MODERATE: def - 5, BOLD: def - 10 },
@@ -210,8 +216,7 @@ describe('getTop5Defensive prioriza elegíveis do gate', () => {
         expect(top.map(a => a.ticker)).toEqual(['ELI13', 'ELI23', 'ELI33', 'ELI43', 'ELI53']);
     });
 
-    it('inelegíveis completam a lista quando faltam elegíveis (backfill)', async () => {
-        const { getTop5Defensive } = await import('../services/aiResearchService.js');
+    it('inelegíveis completam a lista quando faltam elegíveis (backfill)', () => {
         const mk = (ticker, def, eligible) => ({
             ticker, type: 'STOCK', sector: 'Energia',
             scores: { DEFENSIVE: def, MODERATE: def - 5, BOLD: def - 10 },
@@ -227,8 +232,6 @@ describe('getTop5Defensive prioriza elegíveis do gate', () => {
 // ── Delta com baseline publicado ─────────────────────────────────────────────
 describe('calculateRankingDelta usa apenas relatório PUBLICADO como baseline', () => {
     it('consulta MarketAnalysis com isRankingPublished: true (mesmo critério do comparisonReport)', async () => {
-        const { calculateRankingDelta } = await import('../services/aiResearchService.js');
-        const MarketAnalysis = (await import('../models/MarketAnalysis.js')).default;
         await calculateRankingDelta([{ ticker: 'AAA3', position: 1 }], 'STOCK', 'BUY_HOLD');
         expect(MarketAnalysis.findOne).toHaveBeenCalledWith(
             expect.objectContaining({ assetClass: 'STOCK', strategy: 'BUY_HOLD', isRankingPublished: true })

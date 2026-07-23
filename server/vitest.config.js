@@ -4,6 +4,11 @@ export default defineConfig({
   test: {
     // Testes do backend não dependem de DOM
     environment: 'node',
+    // O default de 5s é apertado quando um `await import()` de módulo pesado
+    // (ex.: aiResearchService, ~1,5s a frio) cai no PRIMEIRO teste de um arquivo
+    // sob 100+ specs em paralelo disputando CPU — o cold import estourava o
+    // timeout e gerava flake raro. 15s dá folga sem mascarar travamentos reais.
+    testTimeout: 15000,
     coverage: {
       provider: 'v8',
       reporter: ['text-summary', 'html', 'lcov'],
