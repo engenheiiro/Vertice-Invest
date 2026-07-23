@@ -28,6 +28,19 @@ const QUOTESUMMARY_MODULES = [
     'price', // nome da empresa (longName/shortName) — assetProfile NÃO tem longName
 ];
 
+// Conjunto de tickers blacklistados (estado terminal) dentro de um universo dado.
+// Usado para subtrair deslistados das listas ESTÁTICAS de fundamentals (que não
+// consultam o DB por si). Falha de DB → Set vazio (degrada para "não filtra",
+// nunca derruba o sync). Sem filtro, um deslistado é re-tentado todo run.
+async function getBlacklistedSet(tickers) {
+    try {
+        const rows = await MarketAsset.find({ ticker: { $in: tickers }, isBlacklisted: true }).select('ticker').lean();
+        return new Set(rows.map(r => r.ticker));
+    } catch {
+        return new Set();
+    }
+}
+
 function extractFundamentals(ticker, data) {
     const sd = data.summaryDetail || {};
     const ks = data.defaultKeyStatistics || {};
@@ -148,7 +161,15 @@ function buildFundamentalsOp(ticker, data) {
 export const usStocksFundamentalsService = {
 
     async syncUSStocksFundamentals(tickerList = null) {
-        const targets = tickerList ?? US_UNIVERSE.map(s => s.ticker);
+        let targets = tickerList ?? US_UNIVERSE.map(s => s.ticker);
+        // A lista é ESTÁTICA (US_UNIVERSE), então não conhece o flag isBlacklisted do
+        // DB. Sem subtrair os deslistados (IPG, SGEN…), o sync os martelava todo run
+        // com "Quote not found", inflando warnings e a lista "sem cotação" mesmo após
+        // a blacklist. Subtrai o conjunto blacklistado (estado terminal) uma vez.
+        const blacklisted = await getBlacklistedSet(targets);
+        if (blacklisted.size > 0) {
+            targets = targets.filter(t => !blacklisted.has(t));
+        }
         logger.info(`🌎 [US Fundamentals] Iniciando sync para ${targets.length} ativos...`);
 
         let processed = 0;
@@ -277,7 +298,10 @@ export const usStocksFundamentalsService = {
     // populando sobretudo o `dy` — que o seed básico não traz e o Fundamentus não cobre.
     // Preserva type:'ETF'/currency:'BRL'/sector da lista curada.
     async syncBrEtfFundamentals() {
-        const list = BR_ETF_LIST;
+        // Mesma lógica do sync US: BR_ETF_LIST é estática, subtrai os ETFs blacklistados
+        // (EURP11, BDRX11…) para não re-tentar deslistados a cada run.
+        const blacklisted = await getBlacklistedSet(BR_ETF_LIST.map(e => e.ticker));
+        const list = blacklisted.size > 0 ? BR_ETF_LIST.filter(e => !blacklisted.has(e.ticker)) : BR_ETF_LIST;
         logger.info(`🌎 [BR ETF Fundamentals] Iniciando sync para ${list.length} ETFs (.SA)...`);
         let processed = 0, failed = 0;
         const bulkOps = [];

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@google/genai', () => ({ GoogleGenAI: vi.fn(() => ({})) }));
+// GoogleGenAI é instanciado com `new` no load do serviço; um mock com arrow fn
+// não é construível ("() => ({}) is not a constructor"). Class mock resolve.
+vi.mock('@google/genai', () => ({ GoogleGenAI: class { constructor() {} } }));
 vi.mock('../config/logger.js', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));

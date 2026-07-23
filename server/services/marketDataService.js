@@ -435,7 +435,11 @@ export const marketDataService = {
     // Se a cotação voltar, reseta failCount e reativa. Se não, mantém inativo.
     async tryReactivateAssets() {
         try {
-            const inactiveAssets = await MarketAsset.find({ isActive: false }).select('ticker failCount type marketCap');
+            // isBlacklisted é estado TERMINAL: tira do sync E do loop de reativação.
+            // Sem este filtro, ativos deslistados (SGEN, IPG, EURP11, BDRX11…) seguiam
+            // sendo re-cotados todo run — falhavam, disparavam 404 na brapi (abrindo o
+            // breaker e starvando os vivos) e poluíam os warnings apesar da blacklist.
+            const inactiveAssets = await MarketAsset.find({ isActive: false, isBlacklisted: false }).select('ticker failCount type marketCap');
             if (inactiveAssets.length === 0) {
                 logger.info(`✅ [Reativação] Nenhum ativo inativo para verificar.`);
                 return { reactivated: 0, stillInactive: 0 };

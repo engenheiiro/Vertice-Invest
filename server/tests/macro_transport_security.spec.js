@@ -1,8 +1,10 @@
 import fs from 'fs';
-import path from 'path';
+import { fileURLToPath } from 'url';
 import { describe, expect, it } from 'vitest';
 
-const source = fs.readFileSync(path.resolve('services/macroDataService.js'), 'utf8');
+// Resolve relativo ao próprio spec (server/tests/), não ao CWD — rodar da raiz do
+// repo apontava para <root>/services/... (inexistente) e quebrava o arquivo inteiro.
+const source = fs.readFileSync(fileURLToPath(new URL('../services/macroDataService.js', import.meta.url)), 'utf8');
 
 describe('macroDataService — segurança de transporte', () => {
   it('não contém escape hatch de TLS inseguro nem fallback HTTP', () => {

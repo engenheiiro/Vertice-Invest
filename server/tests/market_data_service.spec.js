@@ -124,6 +124,27 @@ describe('refreshQuotesBatch — blacklist dinâmica', () => {
   });
 });
 
+describe('tryReactivateAssets — blacklist é estado terminal', () => {
+  it('consulta apenas inativos NÃO-blacklistados (deslistados não são re-cotados)', async () => {
+    mockFind([]); // nenhum inativo elegível → retorna cedo
+    await marketDataService.tryReactivateAssets();
+    // O filtro precisa excluir isBlacklisted — senão SGEN/IPG/EURP11/BDRX11 voltavam
+    // ao loop todo run, disparando 404 na brapi e poluindo os warnings.
+    expect(MarketAsset.find).toHaveBeenCalledWith({ isActive: false, isBlacklisted: false });
+    expect(externalMarketService.getQuotes).not.toHaveBeenCalled();
+  });
+
+  it('reativa inativo (não-blacklistado) que volta a cotar', async () => {
+    mockFind([{ ticker: 'BPAN4', failCount: 10, type: 'STOCK', marketCap: 2e9 }]);
+    externalMarketService.getQuotes.mockResolvedValue([{ ticker: 'BPAN4', price: 12.75, change: 1.2 }]);
+    MarketAsset.bulkWrite.mockResolvedValue({ modifiedCount: 1 });
+    const res = await marketDataService.tryReactivateAssets();
+    expect(res.reactivated).toBe(1);
+    const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(set).toMatchObject({ isActive: true, failCount: 0, lastPrice: 12.75 });
+  });
+});
+
 describe('getMarketDataMap — lote sem N+1 (5.8) / cada uma por si (5.3)', () => {
   it('lista vazia → Map vazio, sem tocar o banco', async () => {
     const map = await marketDataService.getMarketDataMap([]);

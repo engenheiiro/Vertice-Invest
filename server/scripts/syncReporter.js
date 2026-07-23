@@ -83,6 +83,13 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
     const isTTY = Boolean(process.stdout.isTTY);
     const RULE = '─'.repeat(56);
 
+    // Alertas de performance (picks publicados que caíram no backtest) ≠ avisos
+    // operacionais. São saída ESPERADA do monitor de precisão, não falha de sync —
+    // separados p/ não inflar a contagem de avisos nem marcar a etapa de auditoria
+    // como problemática (verdicto do run passa a olhar só avisos operacionais).
+    const PERF_ALERT_RE = /\[Backtest\]\s*ALERTA|\bcaiu\s+-?\d/i;
+    const isPerfAlert = (e) => e.level === 'warn' && PERF_ALERT_RE.test(e.message);
+
     let consoleTransport = null;
     let prevLevel = null;
     let fatal = null;
@@ -126,7 +133,9 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
     // status da etapa a partir dos eventos que pertencem a ela: 'ok' | 'warn'
     function stageStatus(idx) {
         const own = collector.entries.filter((e) => e.stageIdx === idx);
-        if (own.some((e) => e.level === 'error' || e.level === 'warn')) return 'warn';
+        // Alertas de performance não marcam a etapa como ⚠ (a etapa concluiu ok;
+        // o alerta é uma saída informativa, não uma falha operacional).
+        if (own.some((e) => e.level === 'error' || (e.level === 'warn' && !isPerfAlert(e)))) return 'warn';
         return 'ok';
     }
 
@@ -195,7 +204,9 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
 
         const totalDur = fmtDuration(Date.now() - startedAt.getTime());
         const errs = collector.entries.filter((e) => e.level === 'error');
-        const warns = collector.entries.filter((e) => e.level === 'warn');
+        const allWarns = collector.entries.filter((e) => e.level === 'warn');
+        const perfAlerts = allWarns.filter(isPerfAlert);       // picks caídos — informativo
+        const warns = allWarns.filter((e) => !isPerfAlert(e)); // avisos operacionais
 
         const overall = !success
             ? '✖ FALHOU'
@@ -206,12 +217,12 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
                     : '✔ concluído';
 
         out(`\n  ${RULE}\n`);
-        out(`  ${overall} em ${totalDur}   ·   ${warns.length} avisos   ·   ${errs.length} erros\n`);
+        out(`  ${overall} em ${totalDur}   ·   ${warns.length} avisos   ·   ${perfAlerts.length} alertas perf   ·   ${errs.length} erros\n`);
         out(`  Relatório detalhado: ${path.relative(process.cwd(), reportFile)}\n`);
         out(`  ${RULE}\n\n`);
 
         try {
-            writeReport({ success, totalDur, errs, warns });
+            writeReport({ success, totalDur, errs, warns, perfAlerts });
         } catch (err) {
             out(`  (não foi possível gravar o TXT: ${err.message})\n`);
         }
@@ -268,7 +279,7 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         return line;
     }
 
-    function writeReport({ success, totalDur, errs, warns }) {
+    function writeReport({ success, totalDur, errs, warns, perfAlerts = [] }) {
         const finishedAt = new Date();
         const L = [];
         const box = '═'.repeat(58);
@@ -281,7 +292,7 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         L.push(`Gerado em ....... ${finishedAt.toISOString().slice(0, 10)} ${clockOf(finishedAt)}`);
         L.push(`Duração total ... ${totalDur}`);
         L.push(
-            `Resultado ....... ${!success ? '❌ FALHA' : errs.length ? '⚠️  SUCESSO COM ERROS' : warns.length ? '⚠️  SUCESSO COM AVISOS' : '✅ SUCESSO'}`
+            `Resultado ....... ${!success ? '❌ FALHA' : errs.length ? '⚠️  SUCESSO COM ERROS' : warns.length ? '⚠️  SUCESSO COM AVISOS' : perfAlerts.length ? '✅ SUCESSO · com alertas de performance' : '✅ SUCESSO'}`
         );
         L.push('');
 
@@ -313,6 +324,15 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         }
         L.push('');
 
+        // Bloco separado: alertas de performance (não são falha de sync).
+        if (perfAlerts.length) {
+            const clean = (m) => m.replace(/^[\s️\p{Extended_Pictographic}]+/u, '').trim();
+            const perfMsgs = [...new Set(perfAlerts.map((e) => clean(e.message)))];
+            L.push('Alertas de performance (picks publicados — informativo, não é falha de sync):');
+            for (const m of perfMsgs) L.push(`  • 🚨 ${m}`);
+            L.push('');
+        }
+
         // ── PARTE 2 — IA / desenvolvedor ─────────────────────────────────────
         L.push(SEP);
         L.push('PARTE 2 — DETALHE TÉCNICO (para IA / desenvolvedor)');
@@ -325,7 +345,9 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         }, {});
         L.push('Contadores de log:');
         for (const lvl of ['error', 'warn', 'info', 'http', 'debug']) {
-            if (byLevel[lvl]) L.push(`  ${lvl.padEnd(6)} : ${byLevel[lvl]}`);
+            if (!byLevel[lvl]) continue;
+            const extra = lvl === 'warn' ? `  (${warns.length} operacional · ${perfAlerts.length} performance)` : '';
+            L.push(`  ${lvl.padEnd(6)} : ${byLevel[lvl]}${extra}`);
         }
         L.push('');
 
@@ -334,9 +356,14 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         else for (const e of errs) L.push(fmtEntry(e, '  '));
         L.push('');
 
-        L.push(`[AVISOS] (${warns.length})`);
+        L.push(`[AVISOS OPERACIONAIS] (${warns.length})`);
         if (warns.length === 0) L.push('  (nenhum)');
         else for (const e of warns) L.push(fmtEntry(e, '  '));
+        L.push('');
+
+        L.push(`[ALERTAS DE PERFORMANCE] (${perfAlerts.length})`);
+        if (perfAlerts.length === 0) L.push('  (nenhum)');
+        else for (const e of perfAlerts) L.push(fmtEntry(e, '  '));
         L.push('');
 
         L.push('[LOG COMPLETO POR ETAPA]');

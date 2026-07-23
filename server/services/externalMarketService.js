@@ -20,6 +20,10 @@ const yahooFinance = new YahooFinance({
 const yahooBreaker = createCircuitBreaker({ name: 'yahoo', failureThreshold: 4, cooldownMs: 120_000 });
 const googleBreaker = createCircuitBreaker({ name: 'google-finance', failureThreshold: 8, cooldownMs: 60_000 });
 const brapiBreaker = createCircuitBreaker({ name: 'brapi', failureThreshold: 5, cooldownMs: 60_000 });
+// Sinaliza UMA vez por processo o 429 de cota mensal esgotada da brapi. Sem isto o
+// report só mostra "breaker aberto após N falhas" (opaco) e leva a diagnosticar
+// tickers BR como "deslistados" quando o fallback está apenas sem cota do plano free.
+let brapiQuotaWarned = false;
 // Breaker dedicado a proventos: não reaproveita o `yahooBreaker` de cotações
 // (chamado em lote, alta frequência) para que falhas de uma responsabilidade
 // não abram o circuito da outra. Sem fallback de terceiro provedor — o Brapi
@@ -200,7 +204,16 @@ export const externalMarketService = {
             const url = `https://brapi.dev/api/quote/${cleanTicker}?range=1d&interval=1d&fundamental=false${token}`;
 
             // (I4) Brapi via circuit breaker — fast-fail quando o serviço cai.
-            const response = await brapiBreaker.exec(() => axios.get(url, { timeout: 4000 }));
+            // validateStatus deixa o 404 "ticker não encontrado" RESOLVER em vez de
+            // lançar: um ticker morto (EURP11, BDRX11…) é condição de DADO, não de
+            // saúde do serviço. Sem isso, cada 404 vira recordFailure() e ≥5 tickers
+            // mortos no lote ABREM o breaker, starvando os vivos que vêm depois
+            // (BPAN4/CPLE5/JPSA3 ficavam presos inativos por meses). 429/5xx/timeout
+            // ainda lançam → o breaker segue protegendo contra queda real da brapi.
+            const response = await brapiBreaker.exec(() => axios.get(url, {
+                timeout: 4000,
+                validateStatus: (s) => s === 200 || s === 404,
+            }));
             
             if (response.data && response.data.results && response.data.results.length > 0) {
                 const data = response.data.results[0];
@@ -220,6 +233,14 @@ export const externalMarketService = {
             }
             return null;
         } catch (error) {
+            // 429 = cota da brapi esgotada (plano free: 15k req/mês). É condição
+            // operacional, não delisting: torna explícito no log (uma vez) para o
+            // report apontar a causa real da indisponibilidade do fallback BR.
+            if (error?.response?.status === 429 && !brapiQuotaWarned) {
+                brapiQuotaWarned = true;
+                const msg = error.response?.data?.message || 'limite de requisições atingido';
+                logger.warn(`🔻 [brapi] HTTP 429 — cota do plano esgotada: ${msg} Fallback BR indisponível até o reset.`);
+            }
             return null;
         }
     },
