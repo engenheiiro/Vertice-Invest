@@ -2,14 +2,22 @@
 import winston from 'winston';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { getRequestId } from '../utils/requestContext.js'; // (D12) correlation id
 
 // Define caminhos absolutos para evitar confusão de diretório
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// Sobe um nível de /config para /server e entra em /logs
-const logDir = path.join(__dirname, '..', 'logs');
+// Sob teste (Vitest), os transports de arquivo apontam para um diretório ISOLADO
+// por worker no tmp — não para server/logs. Sem isto: (1) rodar a suíte poluía os
+// logs de PRODUÇÃO reais e (2) workers paralelos disputavam o mesmo combined.json.log
+// (lock no Windows), causando um flake raro no logger_structured. O basename dos
+// arquivos é preservado, então o transport JSON continua sendo "combined.json.log".
+const isTest = !!(process.env.VITEST || process.env.NODE_ENV === 'test');
+const logDir = isTest
+  ? path.join(os.tmpdir(), 'vertice-test-logs', String(process.env.VITEST_WORKER_ID || process.env.VITEST_POOL_ID || process.pid))
+  : path.join(__dirname, '..', 'logs');
 
 // Garante que a pasta de logs existe
 if (!fs.existsSync(logDir)) {
