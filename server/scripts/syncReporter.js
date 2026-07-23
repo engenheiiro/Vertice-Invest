@@ -21,6 +21,15 @@ import logger from '../config/logger.js';
 const RESERVED = new Set(['level', 'message', 'timestamp', 'stack', 'requestId']);
 const CLR = String.fromCharCode(27) + '[K'; // ANSI: limpa até o fim da linha
 
+// Tickers CONFIRMADOS vivos (negociam), mas ausentes das DUAS fontes gratuitas
+// (Yahoo E Google Finance) — lacuna de fonte, NÃO delisting. Verificado por probe
+// ao vivo em 2026-07-23: quote v7, quoteSummary, chart v8 e search do Yahoo falham,
+// e o Google devolve página sem preço em ambas as bolsas. Rotulá-los como "provável
+// saída de bolsa" era enganoso. Só recuperáveis com fonte US secundária (paga);
+// NÃO blacklistar. Reavaliar se voltarem a cotar (ou remover daqui).
+const KNOWN_SOURCE_GAP = new Set(['BK', 'MMC', 'MRUS', 'HOLX', 'SEE', 'EXAS', 'CFLT', 'CTRA', 'FOLD', 'DAWN']);
+const bareTicker = (t) => String(t).replace(/\.SA$/i, '').toUpperCase();
+
 // ── Formatação ────────────────────────────────────────────────────────────
 const pad2 = (n) => String(n).padStart(2, '0');
 
@@ -259,10 +268,23 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
 
         const notFound = collectNotFound();
         if (notFound.length) {
-            points.push(
-                `⚠️  ${notFound.length} ativo(s) sem cotação na fonte (provável mudança de ` +
-                `ticker ou saída de bolsa): ${notFound.join(', ')}`
-            );
+            // Separa lacuna-de-fonte CONHECIDA (ativo vivo, fonte sem o símbolo) de
+            // suspeita real de saída de bolsa/mudança de ticker (a verificar). Evita
+            // o rótulo enganoso de "delisting" para megacaps vivas (BK, MMC…).
+            const gap = notFound.filter((t) => KNOWN_SOURCE_GAP.has(bareTicker(t)));
+            const suspect = notFound.filter((t) => !KNOWN_SOURCE_GAP.has(bareTicker(t)));
+            if (suspect.length) {
+                points.push(
+                    `⚠️  ${suspect.length} ativo(s) sem cotação na fonte — verificar (mudança de ` +
+                    `ticker ou saída de bolsa): ${suspect.join(', ')}`
+                );
+            }
+            if (gap.length) {
+                points.push(
+                    `ℹ️  ${gap.length} ativo(s) com lacuna de fonte conhecida — vivos, mas Yahoo/Google ` +
+                    `não servem o símbolo (NÃO é delisting; não blacklistar): ${gap.join(', ')}`
+                );
+            }
         }
         return points;
     }
