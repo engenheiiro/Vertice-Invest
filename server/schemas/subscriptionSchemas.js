@@ -1,10 +1,12 @@
 import { z } from 'zod';
-import { LIMITS_CONFIG, PLANS } from '../config/subscription.js';
+import { LIMITS_CONFIG, PUBLIC_PLAN_KEYS } from '../config/subscription.js';
 
 const feature = z.enum(Object.keys(LIMITS_CONFIG));
 
+// Só planos vendáveis: as variantes _TEST (R$0,50) entram exclusivamente pelo
+// /test-checkout, que é requireAdmin.
 export const checkoutSchema = z.object({
-  body: z.object({ planId: z.enum(Object.keys(PLANS)) }).strict(),
+  body: z.object({ planId: z.enum(PUBLIC_PLAN_KEYS) }).strict(),
 });
 
 export const testCheckoutSchema = z.object({

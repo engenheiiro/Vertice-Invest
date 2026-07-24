@@ -3,7 +3,7 @@ import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 import UsageLog from '../models/UsageLog.js';
 import logger from '../config/logger.js';
-import { PLANS, LIMITS_CONFIG, TEST_PLAN_MAP } from '../config/subscription.js';
+import { PLANS, LIMITS_CONFIG, TEST_PLAN_MAP, isTestPlan } from '../config/subscription.js';
 import { paymentService } from '../services/paymentService.js';
 import { invalidateUser } from '../utils/userCache.js'; // (I6) bust de cache de plano
 
@@ -131,6 +131,14 @@ export const createCheckoutSession = async (req, res, next) => {
         const user = req.user;
 
         if (!PLANS[planId]) {
+            return res.status(400).json({ message: "Plano inválido." });
+        }
+
+        // Barreira independente do schema: uma variante _TEST cobra R$0,50 e
+        // credita o plano real, então o checkout público nunca pode aceitá-la.
+        // Só /test-checkout (requireAdmin) cria essas preferências.
+        if (isTestPlan(planId)) {
+            logger.warn(`⛔ [Subscription] Tentativa de checkout com plano de teste ${planId} pelo user ${user.id}.`);
             return res.status(400).json({ message: "Plano inválido." });
         }
 

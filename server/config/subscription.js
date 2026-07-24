@@ -23,6 +23,16 @@ export const TEST_PLAN_MAP = {
     'BLACK_TEST':     'BLACK',
 };
 
+// Uma variante _TEST cobra R$0,50 mas credita o plano real (TEST_PLAN_MAP é
+// resolvido no webhook). Ela só pode nascer de POST /subscription/test-checkout,
+// que é requireAdmin. Nunca derive a lista de planos vendáveis de
+// `Object.keys(PLANS)` — isso expõe as variantes de teste ao checkout público e
+// vende BLACK por R$0,50. Use sempre PUBLIC_PLAN_KEYS / isTestPlan().
+export const isTestPlan = (planKey) => Object.hasOwn(TEST_PLAN_MAP, planKey);
+
+// Planos realmente vendáveis pelo checkout público (fonte única).
+export const PUBLIC_PLAN_KEYS = Object.keys(PLANS).filter((key) => !isTestPlan(key));
+
 // Definição de limites por feature e plano
 export const LIMITS_CONFIG = {
     // Carteira
