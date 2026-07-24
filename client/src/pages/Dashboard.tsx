@@ -21,6 +21,7 @@ export const Dashboard = () => {
       portfolio,
       signals,
       radarMeta,
+      signalAccess,
       dividends,
       dividendGoal,
       marketIndices,
@@ -97,6 +98,7 @@ export const Dashboard = () => {
                         signals={signals}
                         isLoading={isResearchLoading}
                         meta={radarMeta}
+                        access={signalAccess}
                     />
                 </div>
 

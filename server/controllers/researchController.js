@@ -16,7 +16,7 @@ import { macroDataService } from '../services/macroDataService.js';
 import { syncService } from '../services/syncService.js';
 import { backfillSectors } from '../services/sectorBackfillService.js';
 import { signalEngine } from '../services/engines/signalEngine.js';
-import { LIMITS_CONFIG } from '../config/subscription.js';
+import { LIMITS_CONFIG, getSignalAccess } from '../config/subscription.js';
 import { normalizeTreasuryBonds } from '../utils/fixedIncomeView.js';
 import { V2_SIGNAL_START_DATE } from '../config/financialConstants.js';
 import logger from '../config/logger.js';
@@ -109,11 +109,61 @@ export const getFixedIncomeData = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
+// Metadata do último scan para exibição no frontend (countdown, contexto).
+// `activeSignalsTotal` vem do scan (total real, independente do que o plano do
+// usuário enxerga) — é contagem agregada, nunca identifica ativo, então serve de
+// isca de upsell mesmo para quem não recebe sinal.
+const buildRadarScanMeta = async (visibleSignals) => {
+    const scanMetaDoc = await SystemConfig.findOne({ key: 'RADAR_SCAN_META' }).lean();
+    const scanMeta = scanMetaDoc?.value || null;
+    const fallbackActive = visibleSignals.filter(s => s.status === 'ACTIVE').length;
+
+    if (!scanMeta) {
+        return {
+            lastScanAt: null,
+            nextScanAt: null,
+            assetsScanned: 0,
+            assetsWithHistory: 0,
+            activeSignalsTotal: fallbackActive,
+            scanIntervalMinutes: 15,
+        };
+    }
+
+    return {
+        lastScanAt: scanMeta.lastScanAt,
+        nextScanAt: new Date(new Date(scanMeta.lastScanAt).getTime() + 15 * 60 * 1000).toISOString(),
+        assetsScanned: scanMeta.assetsScanned || 0,
+        assetsWithHistory: scanMeta.assetsWithHistory || 0,
+        activeSignalsTotal: scanMeta.activeSignalsTotal ?? fallbackActive,
+        scanIntervalMinutes: 15,
+    };
+};
+
 export const getQuantSignals = async (req, res, next) => {
     try {
         const { history } = req.query;
         let query = history === 'true' ? {} : { status: 'ACTIVE' };
         const limit = 200;
+
+        // Gate de plano AUTORITATIVO (o front só rotula; a autorização é aqui).
+        // Antes, o payload íntegro ia para qualquer autenticado e o "atraso" do
+        // ESSENTIAL era só a `message` reescrita no client — ticker e valor
+        // chegavam intactos e visíveis na aba Network.
+        const access = getSignalAccess(req.user);
+
+        // GUEST não recebe sinal nenhum. Devolve 200 (não 403) para o dashboard
+        // seguir montando com a isca de upsell: `meta.activeSignalsTotal` é uma
+        // contagem agregada, não identifica ativo.
+        if (access.tier === 'NONE') {
+            return res.json({ signals: [], meta: await buildRadarScanMeta([]), access });
+        }
+
+        // Atraso real: corta na origem, no filtro do banco. O sinal entregue é
+        // íntegro — só não é o mais recente.
+        if (access.delayMinutes > 0) {
+            query.timestamp = { $lte: new Date(Date.now() - access.delayMinutes * 60 * 1000) };
+        }
+
         const signals = await QuantSignal.find(query).sort({ timestamp: -1 }).limit(limit).lean();
 
         if (signals.length > 0) {
@@ -124,27 +174,7 @@ export const getQuantSignals = async (req, res, next) => {
             signals.forEach(s => { if (s.status === 'ACTIVE') s.finalPrice = priceMap.get(s.ticker); });
         }
 
-        // Metadata do último scan para exibição no frontend (countdown, contexto)
-        const scanMetaDoc = await SystemConfig.findOne({ key: 'RADAR_SCAN_META' }).lean();
-        const scanMeta = scanMetaDoc?.value || null;
-
-        const meta = scanMeta ? {
-            lastScanAt: scanMeta.lastScanAt,
-            nextScanAt: new Date(new Date(scanMeta.lastScanAt).getTime() + 15 * 60 * 1000).toISOString(),
-            assetsScanned: scanMeta.assetsScanned || 0,
-            assetsWithHistory: scanMeta.assetsWithHistory || 0,
-            activeSignalsTotal: scanMeta.activeSignalsTotal ?? signals.filter(s => s.status === 'ACTIVE').length,
-            scanIntervalMinutes: 15
-        } : {
-            lastScanAt: null,
-            nextScanAt: null,
-            assetsScanned: 0,
-            assetsWithHistory: 0,
-            activeSignalsTotal: signals.filter(s => s.status === 'ACTIVE').length,
-            scanIntervalMinutes: 15
-        };
-
-        res.json({ signals, meta });
+        res.json({ signals, meta: await buildRadarScanMeta(signals), access });
     } catch (error) { next(error); }
 };
 

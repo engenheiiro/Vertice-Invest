@@ -33,6 +33,35 @@ export const isTestPlan = (planKey) => Object.hasOwn(TEST_PLAN_MAP, planKey);
 // Planos realmente vendáveis pelo checkout público (fonte única).
 export const PUBLIC_PLAN_KEYS = Object.keys(PLANS).filter((key) => !isTestPlan(key));
 
+// --- SINAIS QUANTITATIVOS (Radar Alfa) ---
+// Atraso de entrega em MINUTOS por plano. `0` = tempo real, `null` = sem acesso.
+// O ESSENTIAL recebe o sinal ÍNTEGRO (mesmo ticker, mesmo valor), só fora da
+// janela quente — nunca um payload adulterado. O GUEST não recebe sinal algum;
+// só a contagem agregada em `meta`, que não identifica ativo.
+// Calibração: o scan roda a cada 15 min, então 60 = 4 ciclos de defasagem.
+export const SIGNAL_DELAY_MINUTES = {
+    'GUEST': null,
+    'ESSENTIAL': 60,
+    'PRO': 0,
+    'ELITE': 0,
+    'BLACK': 0,
+};
+
+/**
+ * Resolve o nível de acesso a sinais de um usuário. Fail-closed: plano
+ * desconhecido ou ausente cai em 'NONE'. ADMIN vê em tempo real (QA/suporte),
+ * mesmo critério dos demais gates.
+ * @returns {{ tier: 'REALTIME'|'DELAYED'|'NONE', delayMinutes: number|null }}
+ */
+export const getSignalAccess = (user) => {
+    if (user?.role === 'ADMIN') return { tier: 'REALTIME', delayMinutes: 0 };
+
+    const delayMinutes = SIGNAL_DELAY_MINUTES[user?.plan ?? 'GUEST'] ?? null;
+    if (delayMinutes === null) return { tier: 'NONE', delayMinutes: null };
+
+    return { tier: delayMinutes > 0 ? 'DELAYED' : 'REALTIME', delayMinutes };
+};
+
 // Definição de limites por feature e plano
 export const LIMITS_CONFIG = {
     // Carteira

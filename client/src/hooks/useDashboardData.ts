@@ -6,7 +6,6 @@ import { researchService, RankingItem } from '../services/research';
 import { walletService } from '../services/wallet';
 import { authService } from '../services/auth';
 import { STALE_TIME } from '../config/queryConfig';
-import { useFeatureAccess } from './useFeatureAccess';
 import { DividendGoal } from '../types/dividends';
 
 export interface PortfolioItem {
@@ -54,6 +53,14 @@ export interface RadarMeta {
     scanIntervalMinutes: number;
 }
 
+// Espelha getSignalAccess() do backend (server/config/subscription.js).
+// 'NONE' = nenhum sinal entregue; 'DELAYED' = sinais reais, defasados em
+// delayMinutes; 'REALTIME' = tempo real.
+export interface SignalAccess {
+    tier: 'REALTIME' | 'DELAYED' | 'NONE';
+    delayMinutes: number | null;
+}
+
 export interface MarketIndex {
     ticker: string;
     value: number;
@@ -82,7 +89,6 @@ interface QuantSignal {
 }
 
 export const useDashboardData = () => {
-    const { hasPlan } = useFeatureAccess();
     const { assets, kpis, isLoading: isWalletLoading, activeWalletId } = useWallet();
 
     // 1. Dados Macro
@@ -170,7 +176,13 @@ export const useDashboardData = () => {
         return signalsQuery.data?.meta || null;
     }, [signalsQuery.data]);
 
-    const isProUser = hasPlan('PRO');
+    // Nível de acesso decidido pelo BACKEND (getSignalAccess). O client apenas
+    // rotula: quem não tem direito já não recebe os sinais, e o ESSENTIAL recebe
+    // os reais com atraso. Não remascare nada aqui — a máscara antiga era
+    // cosmética (só reescrevia a `message`) e o payload íntegro vazava.
+    const signalAccess: SignalAccess = signalsQuery.data?.access ?? { tier: 'NONE', delayMinutes: null };
+    const isDelayed = signalAccess.tier === 'DELAYED';
+
     const signals: AiSignal[] = useMemo(() => {
         const rawSignals: QuantSignal[] = signalsQuery.data?.signals || [];
 
@@ -191,7 +203,7 @@ export const useDashboardData = () => {
                 id: sig._id,
                 ticker: sig.ticker,
                 assetType: sig.assetType || 'STOCK',
-                type: 'OPPORTUNITY' as const,
+                type: (isDelayed ? 'DELAYED' : 'OPPORTUNITY') as AiSignal['type'],
                 signalType: sig.type,
                 message: sig.message,
                 time: new Date(sig.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
@@ -205,16 +217,8 @@ export const useDashboardData = () => {
             };
         });
 
-        if (!isProUser) {
-            return mapped.map(s => ({
-                ...s,
-                type: 'DELAYED' as const,
-                message: `[SINAL QUANT PRO] ${s.ticker}: Oportunidade Técnica Detectada.`
-            }));
-        }
-
         return mapped;
-    }, [signalsQuery.data, isProUser]);
+    }, [signalsQuery.data, isDelayed]);
 
     // Score Map para enriquecer Portfolio
     const scoreMap = useMemo(() => {
@@ -286,6 +290,7 @@ export const useDashboardData = () => {
         portfolio,
         signals,
         radarMeta,
+        signalAccess,
         equity,
         dividends: totalDividends,
         dividendGoal,

@@ -1,9 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Radar, Zap, Lock, Shield, Activity, Crown, Info, History, Medal, TrendingUp, Clock } from 'lucide-react';
-import { AiSignal, RadarMeta } from '../../hooks/useDashboardData';
+import { AiSignal, RadarMeta, SignalAccess } from '../../hooks/useDashboardData';
 import { useNavigate } from 'react-router-dom';
-import { useFeatureAccess } from '../../hooks/useFeatureAccess';
 import AssetLogo from '../common/AssetLogo';
 import type { AssetType } from '../../contexts/WalletContext';
 
@@ -11,6 +10,9 @@ interface AiRadarProps {
     signals: AiSignal[];
     isLoading?: boolean;
     meta?: RadarMeta | null;
+    // Nível decidido pelo backend. O ESSENTIAL ('DELAYED') recebe sinais reais
+    // com defasagem, então tem acesso à lista completa — só não em tempo real.
+    access?: SignalAccess;
 }
 
 type FilterType = 'ALL' | 'STOCK' | 'FII' | 'STOCK_US' | 'CRYPTO' | 'FIXED_INCOME';
@@ -142,12 +144,15 @@ const SignalMessage: React.FC<{ text?: string }> = ({ text }) => {
     return <>{msg}</>;
 };
 
-export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, meta }) => {
+export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, meta, access }) => {
     const navigate = useNavigate();
-    const { hasPlan } = useFeatureAccess();
     const [filter, setFilter] = useState<FilterType>('ALL');
 
-    const hasAccess = hasPlan('PRO');
+    // Quem recebe sinal (tempo real ou defasado) vê a lista inteira; o backend já
+    // decidiu o que entregar. Só 'NONE' cai na vitrine bloqueada.
+    const tier = access?.tier ?? 'NONE';
+    const hasAccess = tier !== 'NONE';
+    const isDelayed = tier === 'DELAYED';
 
     const urgencyRank = (level?: string) => level === 'CRITICAL' ? 3 : level === 'HIGH' ? 2 : 1;
 
@@ -233,6 +238,18 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                     {!hasAccess && (
                         <span className="text-[9px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1">
                             <Lock size={10} /> Pro
+                        </span>
+                    )}
+
+                    {/* O ESSENTIAL recebe o sinal real, mas defasado — dizer isso é
+                        obrigatório: sem o selo, um sinal de 1h atrás se passa por
+                        tempo real e induz a uma decisão errada. */}
+                    {isDelayed && (
+                        <span
+                            title={`Sinais com atraso de ${access?.delayMinutes} minutos. Tempo real a partir do plano Pro.`}
+                            className="text-[9px] font-bold bg-yellow-500/10 text-yellow-400 px-2 py-0.5 rounded border border-yellow-500/20 flex items-center gap-1"
+                        >
+                            <Clock size={10} /> Atraso {access?.delayMinutes}min
                         </span>
                     )}
                 </div>
