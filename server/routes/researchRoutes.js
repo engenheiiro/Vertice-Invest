@@ -44,7 +44,10 @@ router.get('/latest', researchReadLimiter, getLatestReport);
 router.get('/macro', researchReadLimiter, getMacroData);
 router.get('/fixed-income', researchReadLimiter, getFixedIncomeData);
 router.get('/signals', researchReadLimiter, getQuantSignals);
-router.get('/radar-stats', getRadarStats);
+// getRadarStats dispara 4 pipelines $aggregate por chamada; sem limiter, qualquer
+// autenticado (a rota não tem gate de plano — só devolve agregados por setor, sem
+// ticker) pode martelá-los em rajada. Mesmo limiter das demais leituras caras.
+router.get('/radar-stats', researchReadLimiter, getRadarStats);
 
 // (I5) Fluxo Granular Admin — operações caras (pipeline, IA, syncs): 20/15min por usuário.
 router.post('/crunch', researchHeavyLimiter, requireAdmin, crunchNumbers);
