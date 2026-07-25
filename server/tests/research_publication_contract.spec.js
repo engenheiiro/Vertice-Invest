@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   composeActiveResearchReport,
   hasSectionContent,
+  pendingSectionsFor,
   prepareRankingForPublication,
   sectionsForPublicationType,
 } from '../services/researchPublicationService.js';
@@ -27,6 +28,45 @@ describe('contrato de publicação por seção', () => {
     const analysis = { content: { ranking: [rankingItem] } };
     prepareRankingForPublication(analysis);
     expect(analysis.content.ranking[0]).toMatchObject({ action: 'BUY', position: 1 });
+  });
+
+  /**
+   * `readyToPublish` era só `!isRankingPublished`. Depois da publicação parcial
+   * isso escondia o trabalho restante: com o ranking no ar, uma narrativa gerada
+   * em seguida nunca acendia o botão de publicação em massa.
+   */
+  describe('seções pendentes de publicação', () => {
+    it('conta seção com conteúdo ainda não publicada, mesmo com ranking no ar', () => {
+      const analysis = {
+        content: { ranking: [rankingItem], morningCall: '' },
+        generatedExplainableAI: 'Tese qualitativa.',
+        isRankingPublished: true,
+        isExplainableAIPublished: false,
+      };
+      expect(pendingSectionsFor(analysis)).toEqual(['EXPLAINABLE_AI']);
+    });
+
+    it('não conta seção vazia nem seção já publicada', () => {
+      const analysis = {
+        content: { ranking: [rankingItem], morningCall: '' },
+        comparisonReport: { summary: 'x' },
+        isRankingPublished: true,
+        isReportPublished: true,
+      };
+      expect(pendingSectionsFor(analysis)).toEqual([]);
+    });
+
+    it('draft novo tem todas as seções com conteúdo pendentes', () => {
+      const analysis = {
+        content: { ranking: [rankingItem], morningCall: 'Resumo.' },
+        generatedExplainableAI: 'Tese.',
+      };
+      expect(pendingSectionsFor(analysis)).toEqual(['RANKING', 'MORNING_CALL', 'EXPLAINABLE_AI']);
+    });
+
+    it('sem análise não há nada pendente', () => {
+      expect(pendingSectionsFor(null)).toEqual([]);
+    });
   });
 
   it('compõe seções ativas de revisões e lotes independentes', () => {

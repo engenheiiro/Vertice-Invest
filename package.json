@@ -27,6 +27,7 @@
     "scan:radar": "node server/scripts/runRadarScanner.js",
     "radar:report": "node server/scripts/generateRadarReport.js",
     "sync:TimeSeriesWorker": "node server/scripts/syncTimeSeries.js",
+    "generate:xai": "node server/scripts/generateExplainableAI.js",
     "migrate:fix": "node server/scripts/migrateHardcodedData.js",
     "migrate:wallets": "node server/scripts/migrateToWallets.js",
     "repair:orphan-wallets": "node server/scripts/repairOrphanWallets.js",

@@ -249,7 +249,35 @@ const definition = {
       post: { tags: ['Research (Admin)'], summary: 'Gera narrativa (Morning Call) via IA', responses: { 200: { description: 'Narrativa gerada' }, 403: { description: 'Requer ADMIN' } } },
     },
     '/research/publish': {
-      post: { tags: ['Research (Admin)'], summary: 'Publica o ranking calculado', responses: { 200: { description: 'Publicado' }, 403: { description: 'Requer ADMIN' } } },
+      post: {
+        tags: ['Research (Admin)'],
+        summary: 'Publica seções de um relatório (ranking, morning call, relatório, XAI)',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['analysisId', 'type'],
+                properties: {
+                  analysisId: { type: 'string' },
+                  type: { type: 'string', enum: ['RANKING', 'MORNING_CALL', 'REPORT', 'EXPLAINABLE_AI', 'BOTH', 'ALL'] },
+                  partial: {
+                    type: 'boolean',
+                    default: false,
+                    description: 'Publica as seções com conteúdo e devolve as vazias em `skipped`, em vez de rejeitar tudo com 409.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Publicado — retorna `activated[]` e `skipped[]`' },
+          403: { description: 'Requer ADMIN' },
+          409: { description: 'Seção sem conteúdo (modo estrito) ou ranking inválido' },
+        },
+      },
     },
     '/research/history': {
       get: { tags: ['Research (Admin)'], summary: 'Lista relatórios MarketAnalysis', responses: { 200: { description: 'Relatórios' }, 403: { description: 'Requer ADMIN' } } },

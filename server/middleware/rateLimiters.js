@@ -42,12 +42,18 @@ export const researchReadLimiter = createUserLimiter({
   message: 'Muitas requisições. Aguarde alguns minutos.',
 });
 
-// Rotas de configuração e diagnóstico exclusivas de admin: 60/15min por usuário.
+// Rotas de configuração e diagnóstico exclusivas de admin: 300/15min por usuário.
 // Isolado do researchHeavyLimiter para que operações de config não consumam
 // o orçamento de pipeline/sync e vice-versa.
+//
+// Por que 300 e não 60: ~14 rotas dividem este balde e o AdminPanel dispara 5–6
+// delas a cada montagem (history, data-quality, discard-logs, publish-status,
+// accuracy) — o StrictMode do React dobra isso em dev, e cada ação ainda faz
+// refresh de history+publish-status. Com 60, uma sessão normal de admin estourava
+// no meio de "Publicar Tudo Pendente" e o 429 aparecia como falha de banco.
 export const adminLimiter = createUserLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 60,
+  max: 300,
   message: 'Muitas operações de administração. Aguarde alguns minutos.',
 });
 

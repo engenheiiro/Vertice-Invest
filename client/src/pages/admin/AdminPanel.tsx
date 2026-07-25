@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Header } from '../../components/dashboard/Header';
-import { researchService, ResearchReport, PublishStatus } from '../../services/research';
+import { researchService, SECTION_LABEL, ResearchReport, PublishStatus } from '../../services/research';
 import { marketService } from '../../services/market';
 import { authService } from '../../services/auth';
 import { subscriptionService } from '../../services/subscription';
@@ -198,7 +198,7 @@ export const AdminPanel = () => {
             await researchService.publish(id, type);
             showStatus('success', "Publicado com sucesso.", 4000);
             await Promise.all([loadHistory(), loadPublishStatus()]);
-        } catch { showStatus('error', "Falha ao publicar.", 4000); }
+        } catch (e: unknown) { showStatus('error', getErrorMessage(e, "Falha ao publicar."), 4000); }
         finally { setLoadingKey(null); }
     };
 
@@ -206,12 +206,33 @@ export const AdminPanel = () => {
         const pending = publishStatus.filter(s => s.readyToPublish && s.latestId);
         if (pending.length === 0) return showStatus('error', "Nenhum draft pendente para publicar.");
         setIsPublishingAll(true);
-        try {
-            for (const s of pending) await researchService.publish(s.latestId!, 'ALL');
-            showStatus('success', `${pending.length} classe(s) publicadas com sucesso!`);
-            await Promise.all([loadHistory(), loadPublishStatus()]);
-        } catch { showStatus('error', "Erro ao publicar todas."); }
-        finally { setIsPublishingAll(false); }
+        // Publica classe a classe e reporta o resultado REAL: uma falha no meio
+        // (429, validação, erro do servidor) não pode virar toast de sucesso.
+        // `partial` coloca no ar o que está pronto — seções ainda sem conteúdo
+        // (tipicamente Morning Call e Explainable IA) voltam em `skipped` e são
+        // publicadas depois, sem bloquear o ranking.
+        const failures: string[] = [];
+        const skipped = new Set<string>();
+        let published = 0;
+        for (const s of pending) {
+            try {
+                const result = await researchService.publish(s.latestId!, 'ALL', { partial: true });
+                (result.skipped || []).forEach(section => skipped.add(SECTION_LABEL[section] || section));
+                if ((result.activated || []).length > 0) published++;
+                else failures.push(`${s.assetClass}: nenhuma seção com conteúdo`);
+            } catch (e: unknown) {
+                failures.push(`${s.assetClass}: ${getErrorMessage(e, 'falha desconhecida')}`);
+            }
+        }
+        await Promise.all([loadHistory(), loadPublishStatus()]);
+        setIsPublishingAll(false);
+
+        const skippedNote = skipped.size > 0 ? ` Sem conteúdo, não publicado: ${[...skipped].join(', ')}.` : '';
+        if (failures.length === 0) {
+            showStatus('success', `${published} classe(s) publicadas com sucesso!${skippedNote}`, skippedNote ? 8000 : 5000);
+        } else {
+            showStatus('error', `${published}/${pending.length} publicadas.${skippedNote} Falhas — ${failures.join(' | ')}`, 8000);
+        }
     };
 
     const handleViewPrompt = async (id: string, assetClass: string) => {
@@ -313,7 +334,7 @@ export const AdminPanel = () => {
         setSelectedAuditReport(null);
         setAuditModalOpen(true);
         try { setSelectedAuditReport(await researchService.getReportDetails(reportId)); }
-        catch { setAuditModalOpen(false); addToast("Erro ao carregar auditoria.", 'error'); }
+        catch (e: unknown) { setAuditModalOpen(false); addToast(getErrorMessage(e, "Erro ao carregar auditoria."), 'error'); }
     };
 
     return (

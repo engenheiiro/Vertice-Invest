@@ -1,5 +1,6 @@
 import React from 'react';
 import { Bot, RefreshCw, CheckCircle2, AlertCircle, BarChart3, Layers, Globe, Zap, Search, Play, Server, Share2, Send, Copy, X, MessageSquare, ShieldCheck } from 'lucide-react';
+import { SECTION_LABEL } from '../../services/research';
 import type { ResearchReport, PublishStatus } from '../../services/research';
 import { BuyAndHoldShadowCard } from '../../components/admin/BuyAndHoldShadowCard';
 
@@ -71,6 +72,10 @@ export const AdminOperacoesTab: React.FC<Props> = ({
     };
 
     const pendingCount = publishStatus.filter(s => s.readyToPublish).length;
+    // Quais seções o botão em massa vai publicar (união entre as classes).
+    const pendingSectionLabels = [...new Set(
+        publishStatus.flatMap(s => s.pendingSections || []).map(section => SECTION_LABEL[section] || section)
+    )];
     const lastPub = publishStatus.map(s => s.lastPublishedAt).filter(Boolean).sort().reverse()[0];
     const daysSinceLastPub = lastPub ? Math.floor((Date.now() - new Date(lastPub).getTime()) / 86400000) : null;
 
@@ -105,7 +110,10 @@ export const AdminOperacoesTab: React.FC<Props> = ({
                             <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-1"><Send size={16} className="text-indigo-400" />Controle de Publicação Semanal</h3>
                             <div className="flex items-center gap-4 text-[10px] text-slate-500 font-bold">
                                 {pendingCount > 0 ? (
-                                    <span className="text-yellow-400 flex items-center gap-1"><AlertCircle size={10} /> {pendingCount} classe(s) com draft pronto para publicar</span>
+                                    <span className="text-yellow-400 flex items-center gap-1">
+                                        <AlertCircle size={10} /> {pendingCount} classe(s) com seção pendente
+                                        {pendingSectionLabels.length > 0 && `: ${pendingSectionLabels.join(', ')}`}
+                                    </span>
                                 ) : (
                                     <span className="text-emerald-500 flex items-center gap-1"><CheckCircle2 size={10} /> Tudo publicado</span>
                                 )}

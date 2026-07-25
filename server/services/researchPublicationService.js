@@ -31,6 +31,19 @@ export const hasSectionContent = (analysis, section) => {
   return false;
 };
 
+export const isSectionPublished = (analysis, section) => !!analysis?.[SECTION_META[section]?.flag];
+
+/**
+ * Seções que já têm conteúdo mas ainda não foram ao ar — a definição de
+ * "pendente de publicação" para o painel admin. Uma narrativa gerada depois do
+ * ranking publicado conta como pendente; uma seção vazia, não.
+ */
+export const pendingSectionsFor = (analysis) => (
+  analysis
+    ? RESEARCH_SECTIONS.filter(section => hasSectionContent(analysis, section) && !isSectionPublished(analysis, section))
+    : []
+);
+
 export const prepareRankingForPublication = (analysis) => {
   const finalized = finalizeRanking(analysis?.content?.ranking || []);
   const validation = validateRankingContract(finalized);
@@ -81,7 +94,12 @@ export const activateResearchSections = async ({
   const requested = [...new Set(sections || [])].filter(section => RESEARCH_SECTIONS.includes(section));
   if (!requested.length) throw new Error('Nenhuma seção de publicação válida.');
 
-  if (requested.includes('RANKING')) prepareRankingForPublication(analysis);
+  // Em modo parcial, um ranking vazio é uma seção a pular — não um contrato
+  // violado. Validar só quando ele de fato vai ao ar evita derrubar a
+  // publicação das demais seções por causa de uma seção ausente.
+  if (requested.includes('RANKING') && (requireAll || hasSectionContent(analysis, 'RANKING'))) {
+    prepareRankingForPublication(analysis);
+  }
   const missing = requested.filter(section => !hasSectionContent(analysis, section));
   if (requireAll && missing.length) {
     const error = new Error(`Conteúdo ausente para: ${missing.join(', ')}`);

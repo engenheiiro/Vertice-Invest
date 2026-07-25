@@ -2,6 +2,7 @@
 import { GoogleGenAI } from "@google/genai";
 import logger from '../config/logger.js';
 import { finalizeRanking } from '../utils/rankingContract.js';
+import { GEMINI_TEXT_MODEL } from '../config/aiModels.js';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -94,7 +95,7 @@ export const aiEnhancementService = {
 
         try {
             const response = await ai.models.generateContent({
-                model: 'gemini-2.0-flash-exp', 
+                model: GEMINI_TEXT_MODEL,
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
                 config: {
                     tools: [{ googleSearch: {} }], 

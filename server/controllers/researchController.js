@@ -24,8 +24,11 @@ import { validateFundamentalsPublicationHealth } from '../utils/ingestionHealth.
 import {
     activateResearchSections,
     composeActiveResearchReport,
+    hasSectionContent,
+    pendingSectionsFor,
     sectionsForPublicationType,
 } from '../services/researchPublicationService.js';
+import { generateExplainableText, saveExplainableText } from '../services/explainableAIService.js';
 
 // ... (Outros controllers mantidos)
 
@@ -381,13 +384,17 @@ export const generateNarrative = async (req, res, next) => { try { const { analy
 
 export const publishContent = async (req, res, next) => {
     try {
-        const { analysisId, type } = req.body;
+        const { analysisId, type, partial = false } = req.body;
         const analysis = await MarketAnalysis.findById(analysisId);
         if (!analysis) return res.status(404).json({ message: "Not found" });
 
         const sections = sectionsForPublicationType(type);
         const rankingWasAlreadyPublished = analysis.isRankingPublished;
-        const publishesRanking = sections.includes('RANKING');
+        // Em modo parcial o ranking só vai ao ar se tiver conteúdo — sem isso, o
+        // gate de fundamentos bloquearia a publicação de seções que nem envolvem
+        // o ranking.
+        const publishesRanking = sections.includes('RANKING')
+            && (!partial || hasSectionContent(analysis, 'RANKING'));
 
         if (publishesRanking) {
             const systemConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' })
@@ -409,7 +416,9 @@ export const publishContent = async (req, res, next) => {
             analysis,
             sections,
             activatedBy: req.user?.id || null,
-            requireAll: true,
+            // Em modo parcial as seções sem conteúdo são puladas (voltam em
+            // `skipped`) em vez de derrubar a publicação inteira.
+            requireAll: !partial,
         });
 
         // Dispara broadcast apenas quando o ranking passa a publicado pela primeira vez
@@ -443,29 +452,36 @@ export const getPublishStatus = async (req, res, next) => {
         const status = await Promise.all(classes.map(async (assetClass) => {
             const latest = await MarketAnalysis.findOne({ assetClass, strategy: 'BUY_HOLD' })
                 .sort({ createdAt: -1 })
-                .select('createdAt isRankingPublished isMorningCallPublished isReportPublished isExplainableAIPublished comparisonReport explainableAIPrompt generatedExplainableAI');
+                .select('createdAt isRankingPublished isMorningCallPublished isReportPublished isExplainableAIPublished comparisonReport explainableAIPrompt generatedExplainableAI generatedExplainableAIByProfile content.morningCall content.ranking');
             const lastPublished = await MarketAnalysis.findOne({ assetClass, strategy: 'BUY_HOLD', isRankingPublished: true })
                 .sort({ createdAt: -1 })
                 .select('createdAt');
+
+            // Uma seção está pendente quando TEM conteúdo e AINDA NÃO foi publicada.
+            // Antes o "pronto para publicar" era só `!isRankingPublished`, então uma
+            // narrativa gerada depois do ranking ir ao ar nunca acendia o botão de
+            // publicação em massa — ficava só nos botões granulares.
+            const pendingSections = pendingSectionsFor(latest);
+
             return {
                 assetClass,
                 lastSyncAt: latest?.createdAt || null,
                 lastPublishedAt: lastPublished?.createdAt || null,
                 isRankingPublished: latest?.isRankingPublished || false,
+                isMorningCallPublished: latest?.isMorningCallPublished || false,
                 isReportPublished: latest?.isReportPublished || false,
                 isExplainableAIPublished: latest?.isExplainableAIPublished || false,
                 hasComparisonReport: !!latest?.comparisonReport,
                 hasExplainableAIPrompt: !!(latest?.explainableAIPrompt),
                 hasGeneratedExplainableAI: !!(latest?.generatedExplainableAI),
                 latestId: latest?._id || null,
-                readyToPublish: latest && !latest.isRankingPublished
+                pendingSections,
+                readyToPublish: pendingSections.length > 0,
             };
         }));
         res.json(status);
     } catch (error) { next(error); }
 };
-
-const PROFILE_LABEL_PT = { DEFENSIVE: 'Defensivo', MODERATE: 'Moderado', BOLD: 'Arrojado' };
 
 export const generateExplainableAI = async (req, res, next) => {
     try {
@@ -476,34 +492,23 @@ export const generateExplainableAI = async (req, res, next) => {
 
         // Perfil opcional: grava a narrativa específica do perfil; sem perfil usa o campo único (legado/fallback).
         const validProfile = ['DEFENSIVE', 'MODERATE', 'BOLD'].includes(profile) ? profile : null;
-        const saveText = (text) => {
-            if (validProfile) {
-                if (!analysis.generatedExplainableAIByProfile) analysis.generatedExplainableAIByProfile = {};
-                analysis.generatedExplainableAIByProfile[validProfile] = text;
-                analysis.markModified('generatedExplainableAIByProfile');
-            } else {
-                analysis.generatedExplainableAI = text;
-            }
-        };
 
         if (customText) {
-            saveText(customText);
+            saveExplainableText(analysis, customText, validProfile);
             await analysis.save();
             return res.json({ generatedExplainableAI: customText, profile: validProfile });
         }
 
-        if (!analysis.explainableAIPrompt) return res.status(400).json({ message: "Prompt não gerado ainda. Rode o sync primeiro." });
-        if (!process.env.API_KEY) return res.status(503).json({ message: "API_KEY não configurada." });
-        const { GoogleGenAI } = await import('@google/genai');
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const prompt = validProfile
-            ? `${analysis.explainableAIPrompt}\n\nIMPORTANTE: Escreva a análise focada exclusivamente no perfil ${PROFILE_LABEL_PT[validProfile]}, destacando os ativos e a tese adequados a esse perfil de risco.`
-            : analysis.explainableAIPrompt;
-        const response = await ai.models.generateContent({ model: 'gemini-2.0-flash-exp', contents: prompt });
-        saveText(response.text);
+        const text = await generateExplainableText(analysis, validProfile);
+        saveExplainableText(analysis, text, validProfile);
         await analysis.save();
-        res.json({ generatedExplainableAI: response.text, profile: validProfile });
-    } catch (error) { next(error); }
+        res.json({ generatedExplainableAI: text, profile: validProfile });
+    } catch (error) {
+        if (error.code === 'PROMPT_MISSING') return res.status(400).json({ message: error.message });
+        if (error.code === 'API_KEY_MISSING') return res.status(503).json({ message: error.message });
+        if (error.code === 'EMPTY_RESPONSE') return res.status(502).json({ message: error.message });
+        next(error);
+    }
 };
 
 export const listReports = async (req, res, next) => { try { const reports = await MarketAnalysis.aggregate([ { $sort: { createdAt: -1 } }, { $limit: 50 }, { $project: { date: 1, assetClass: 1, strategy: 1, isRankingPublished: 1, isMorningCallPublished: 1, isReportPublished: 1, isExplainableAIPublished: 1, generatedBy: 1, morningCallPresent: { $cond: [{ $ifNull: ["$content.morningCall", false] }, true, false] }, rankingCount: { $size: { $ifNull: ["$content.ranking", []] } }, hasComparisonReport: { $cond: [{ $ifNull: ["$comparisonReport", false] }, true, false] }, hasGeneratedAI: { $cond: [{ $gt: [{ $strLenCP: { $ifNull: ["$generatedExplainableAI", ""] } }, 0] }, true, false] } } } ]); res.json(reports); } catch (error) { next(error); } };

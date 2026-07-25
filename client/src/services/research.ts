@@ -111,6 +111,22 @@ export interface ComparisonReport {
     topBuys: { ticker: string; name: string; score: number; riskProfile: string; sector: string }[];
 }
 
+export type ResearchSection = 'RANKING' | 'MORNING_CALL' | 'REPORT' | 'EXPLAINABLE_AI';
+
+// Nomes das seções de publicação para o feedback ao admin.
+export const SECTION_LABEL: Record<string, string> = {
+    RANKING: 'Ranking',
+    MORNING_CALL: 'Morning Call',
+    REPORT: 'Relatório',
+    EXPLAINABLE_AI: 'Explainable IA',
+};
+
+export interface PublishResult {
+    message: string;
+    activated?: ResearchSection[];
+    skipped?: ResearchSection[];
+}
+
 export interface PublishStatus {
     assetClass: string;
     lastSyncAt: string | null;
@@ -122,6 +138,9 @@ export interface PublishStatus {
     hasExplainableAIPrompt: boolean;
     hasGeneratedExplainableAI: boolean;
     latestId: string | null;
+    // Seções com conteúdo ainda não publicadas — o que o "Publicar Tudo
+    // Pendente" vai colocar no ar nesta classe.
+    pendingSections?: ResearchSection[];
     readyToPublish: boolean;
 }
 
@@ -196,6 +215,10 @@ export const researchService = {
             method: 'POST',
             body: JSON.stringify({ assetClass, isBulk })
         });
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.message || "Erro ao processar números.");
+        }
         return await response.json();
     },
 
@@ -249,14 +272,28 @@ export const researchService = {
             method: 'POST',
             body: JSON.stringify({ analysisId })
         });
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.message || "Erro ao gerar narrativa.");
+        }
         return await response.json();
     },
 
-    async publish(analysisId: string, type: 'RANKING' | 'MORNING_CALL' | 'BOTH' | 'REPORT' | 'EXPLAINABLE_AI' | 'ALL') {
+    // `partial: true` publica as seções que já têm conteúdo e devolve as vazias
+    // em `skipped`, em vez de rejeitar a análise inteira (409).
+    async publish(
+        analysisId: string,
+        type: 'RANKING' | 'MORNING_CALL' | 'BOTH' | 'REPORT' | 'EXPLAINABLE_AI' | 'ALL',
+        options: { partial?: boolean } = {}
+    ): Promise<PublishResult> {
         const response = await authService.api('/api/research/publish', {
             method: 'POST',
-            body: JSON.stringify({ analysisId, type })
+            body: JSON.stringify({ analysisId, type, ...(options.partial ? { partial: true } : {}) })
         });
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.message || "Erro ao publicar.");
+        }
         return await response.json();
     },
 
@@ -268,7 +305,10 @@ export const researchService = {
 
     async getReportDetails(id: string) {
         const response = await authService.api(`/api/research/details/${id}`);
-        if (!response.ok) throw new Error("Erro ao buscar detalhes");
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.message || "Erro ao buscar detalhes");
+        }
         return await response.json();
     },
 
@@ -316,7 +356,10 @@ export const researchService = {
             method: 'POST',
             body: JSON.stringify({ days })
         });
-        if (!response.ok) throw new Error("Falha ao atualizar config.");
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.message || "Falha ao atualizar config.");
+        }
         return await response.json();
     },
 
@@ -324,7 +367,10 @@ export const researchService = {
         const response = await authService.api('/api/research/signals/history', {
             method: 'DELETE'
         });
-        if (!response.ok) throw new Error("Falha ao limpar histórico.");
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.message || "Falha ao limpar histórico.");
+        }
         return await response.json();
     },
 
@@ -338,7 +384,10 @@ export const researchService = {
         const response = await authService.api('/api/research/reset-health', {
             method: 'POST'
         });
-        if (!response.ok) throw new Error("Falha ao resetar saúde.");
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.message || "Falha ao resetar saúde.");
+        }
         return await response.json();
     },
 
