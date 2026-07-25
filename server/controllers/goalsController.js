@@ -11,6 +11,7 @@ import { accrueFixedIncomeValue, brazilToday } from '../utils/fixedIncome.js';
 import { monthsRemaining, requiredMonthly, decomposeProgress, fv, annualToMonthly, computeStreak, resolveGoalStatus } from '../utils/goalMath.js';
 import { safeCurrency, safeFloat, safeSub, safeMult, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
+import { isDollarized } from '../utils/assetCurrency.js';
 import logger from '../config/logger.js';
 
 const MS_DAY = 24 * 60 * 60 * 1000;
@@ -69,7 +70,7 @@ const getLiveWalletEquity = async (userId, walletId) => {
 
         let totalEquity = 0;
         for (const asset of assets) {
-            const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1;
+            const multiplier = isDollarized(asset) ? usdRate : 1;
             let val;
             if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
                 val = accrueFixedIncomeValue(asset, { cdiRate: cdi, calcDate });

@@ -19,6 +19,10 @@ interface Transaction {
     date: string;
     isCashOp: boolean;
     cashName?: string;
+    /** Moeda NATIVA do lançamento (US$ para STOCK_US/CRYPTO). `price` e `totalValue`
+     * são gravados nela, não em BRL — formatar tudo como R$ inflava a leitura do
+     * extrato e não fechava com o "Valor Aplicado" da carteira. */
+    currency?: 'BRL' | 'USD';
 }
 
 type FilterType = 'ALL' | 'CASH' | 'TRADE';
@@ -70,7 +74,7 @@ export const CashFlowHistory = () => {
         }
     };
 
-    const formatCurrency = (val: number) => fmtCurrency(val);
+    const formatCurrency = (val: number, currency: 'BRL' | 'USD' = 'BRL') => fmtCurrency(val, currency);
 
     return (
         <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden min-h-[500px] flex flex-col">
@@ -114,6 +118,7 @@ export const CashFlowHistory = () => {
                         {transactions.map((tx) => {
                             const isBuy = tx.type === 'BUY';
                             const isCash = tx.isCashOp || tx.ticker === 'RESERVA';
+                            const cur = tx.currency ?? 'BRL';
 
                             let title = '';
                             let subtitle = '';
@@ -124,7 +129,7 @@ export const CashFlowHistory = () => {
                                 subtitle = 'Movimentação de Caixa';
                             } else {
                                 title = `${isBuy ? 'Compra' : 'Venda'} de ${tx.ticker}`;
-                                subtitle = `${tx.quantity} unid. a ${formatCurrency(tx.price)}`;
+                                subtitle = `${tx.quantity} unid. a ${formatCurrency(tx.price, cur)}`;
                             }
 
                             return (
@@ -157,7 +162,7 @@ export const CashFlowHistory = () => {
                                     
                                     <div className="text-right">
                                         <p className={`text-sm tabular-nums font-bold ${isBuy ? 'text-emerald-400' : 'text-red-400'}`}>
-                                            {isBuy ? '+' : '-'} {formatCurrency(tx.totalValue)}
+                                            {isBuy ? '+' : '-'} {formatCurrency(tx.totalValue, cur)}
                                         </p>
                                         <span className="text-[9px] font-bold uppercase text-slate-600 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
                                             {isCash ? 'CAIXA' : 'TRADE'}

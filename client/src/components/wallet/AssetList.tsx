@@ -1,13 +1,14 @@
 
 import React, { useState } from 'react';
 import { useWallet, AssetType, Asset } from '../../contexts/WalletContext';
-import { TrendingUp, TrendingDown, Trash2, Folder, PieChart, History, ChevronDown, ChevronRight, EyeOff, Pencil } from 'lucide-react';
+import { TrendingUp, TrendingDown, Trash2, Folder, PieChart, History, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, EyeOff, Pencil } from 'lucide-react';
 import { AssetTransactionsModal } from './AssetTransactionsModal';
 import { RenameReserveModal } from './RenameReserveModal';
 import { formatCurrency as fmtCurrency, type Currency } from '../../utils/format';
 import { useConfirm } from '../../hooks/useConfirm';
 import AssetLogo from '../common/AssetLogo';
-import { getAssetSubtitle } from '../../utils/assetDisplay';
+import AssetTags from '../common/AssetTags';
+import { getAssetSubtitle, getAssetTags } from '../../utils/assetDisplay';
 import { allocationBucket, sumReserveValue, isReserveAsset } from '../../utils/allocation';
 
 /** Título exibido na lista: cofrinhos (CASH) mostram o nome; demais, o ticker. */
@@ -126,6 +127,15 @@ export const AssetList = () => {
     const typeOrder = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
     const visibleTypes = typeOrder.filter(type => groupedAssets[type] && groupedAssets[type].length > 0);
 
+    // Toggle global: se TODAS as classes estão contraídas, o botão expande; caso
+    // contrário contrai tudo (inclusive quando só parte está aberta).
+    const allCollapsed = visibleTypes.length > 0 && visibleTypes.every(type => collapsedGroups[type]);
+    const toggleAllGroups = () => {
+        setCollapsedGroups(allCollapsed
+            ? {}
+            : Object.fromEntries(visibleTypes.map(type => [type, true])));
+    };
+
     return (
         <>
             <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden animate-fade-in">
@@ -136,11 +146,24 @@ export const AssetList = () => {
                         </span>
                         Detalhamento por Classe
                     </h3>
-                    {isPrivacyMode && (
-                        <div className="text-[10px] text-slate-500 flex items-center gap-1 bg-slate-900 px-2 py-1 rounded border border-slate-800">
-                            <EyeOff size={10} /> Modo Privado
-                        </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                        {isPrivacyMode && (
+                            <div className="text-[10px] text-slate-500 flex items-center gap-1 bg-slate-900 px-2 py-1 rounded border border-slate-800">
+                                <EyeOff size={10} /> Modo Privado
+                            </div>
+                        )}
+                        {visibleTypes.length > 0 && (
+                            <button
+                                onClick={toggleAllGroups}
+                                aria-expanded={!allCollapsed}
+                                title={allCollapsed ? 'Expandir todas as classes' : 'Contrair todas as classes'}
+                                className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-white bg-elevated hover:bg-slate-700/50 px-2.5 py-1.5 rounded-lg border border-slate-800 transition-colors"
+                            >
+                                {allCollapsed ? <ChevronsUpDown size={13} /> : <ChevronsDownUp size={13} />}
+                                <span className="hidden sm:inline">{allCollapsed ? 'Expandir' : 'Contrair'}</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* (M4) Mobile: cards empilhados no lugar da tabela larga (evita scroll-x). */}
@@ -158,6 +181,7 @@ export const AssetList = () => {
                             <div key={type}>
                                 <button
                                     onClick={() => toggleGroup(type)}
+                                    aria-expanded={!isCollapsed}
                                     className="w-full flex items-center justify-between px-4 py-3 bg-panel text-left"
                                 >
                                     <span className={`text-xs font-bold uppercase tracking-widest flex items-center gap-2 min-w-0 ${accent.label}`}>
@@ -198,14 +222,10 @@ export const AssetList = () => {
                                             <div className="min-w-0 flex-1 flex items-center gap-3">
                                                 <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} isReserve={isReserveAsset(asset)} size={32} />
                                                 <div className="min-w-0">
-                                                    <p className="font-bold text-slate-200 text-sm truncate flex items-center gap-1.5">
-                                                        <span className="truncate">{assetTitle(asset)}</span>
-                                                        {isNationalEtf(asset) && (
-                                                            <span className="text-[8px] font-bold uppercase tracking-wide text-teal-400 bg-teal-500/10 border border-teal-500/30 px-1 py-0.5 rounded shrink-0" title="ETF nacional — conta dentro de Ações BR na distribuição.">
-                                                                ETF
-                                                            </span>
-                                                        )}
-                                                    </p>
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                        <span className="font-bold text-slate-200 text-sm truncate">{assetTitle(asset)}</span>
+                                                        <AssetTags tags={getAssetTags(asset)} size="sm" />
+                                                    </div>
                                                     <p className="text-[10px] text-slate-500 truncate">
                                                         {isReserveAsset(asset)
                                                             ? 'Reserva / Caixa'
@@ -227,12 +247,15 @@ export const AssetList = () => {
                                                         </span>
                                                     </p>
                                                 </div>
-                                                <div className="flex flex-col">
+                                                {/* Ações em LINHA: empilhadas na vertical, os ícones esticavam a
+                                                    linha p/ ~130px e o "remover" caía ao lado do ativo seguinte,
+                                                    dando a impressão de pertencer à linha de baixo. */}
+                                                <div className="flex items-center">
                                                     {asset.type === 'CASH' && (
                                                         <button
                                                             onClick={() => setRenameTarget({ id: asset.id, name: asset.name || '' })}
                                                             aria-label={`Renomear ${assetTitle(asset)}`}
-                                                            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-emerald-400 transition-colors"
+                                                            className="min-h-[44px] w-9 flex items-center justify-center text-slate-600 hover:text-emerald-400 transition-colors"
                                                         >
                                                             <Pencil size={16} />
                                                         </button>
@@ -240,7 +263,7 @@ export const AssetList = () => {
                                                     <button
                                                         onClick={() => setHistoryTicker(asset.ticker)}
                                                         aria-label={`Histórico de ${assetTitle(asset)}`}
-                                                        className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-blue-400 transition-colors"
+                                                        className="min-h-[44px] w-9 flex items-center justify-center text-slate-600 hover:text-blue-400 transition-colors"
                                                     >
                                                         <History size={16} />
                                                     </button>
@@ -255,7 +278,7 @@ export const AssetList = () => {
                                                             if (ok) removeAsset(asset.id);
                                                         }}
                                                         aria-label={`Remover ${asset.ticker}`}
-                                                        className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-red-500 transition-colors"
+                                                        className="min-h-[44px] w-9 flex items-center justify-center text-slate-600 hover:text-red-500 transition-colors"
                                                     >
                                                         <Trash2 size={16} />
                                                     </button>
@@ -391,23 +414,14 @@ export const AssetList = () => {
                                             return (
                                                 <tr key={asset.id} className="hover:bg-slate-800/30 transition-colors border-b border-slate-800/30 last:border-0 group animate-fade-in">
                                                     <td className="p-4 pl-8">
-                                                        <div className="flex items-center gap-3">
+                                                        <div className="flex items-center gap-3 min-w-0">
                                                             <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} isReserve={isReserveAsset(asset)} size={32} />
-                                                            <div>
-                                                                <p className="font-bold text-slate-200 flex items-center gap-1.5">
-                                                                    {assetTitle(asset)}
-                                                                    {isNationalEtf(asset) && (
-                                                                        <span className="text-[9px] font-bold uppercase tracking-wide text-teal-400 bg-teal-500/10 border border-teal-500/30 px-1.5 py-0.5 rounded" title="ETF nacional — conta dentro de Ações BR na distribuição.">
-                                                                            ETF
-                                                                        </span>
-                                                                    )}
-                                                                    {asset.matured && (
-                                                                        <span className="text-[9px] font-bold uppercase tracking-wide text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded" title="Título vencido — parou de render. Considere resgatar (nada é vendido automaticamente).">
-                                                                            Vencido
-                                                                        </span>
-                                                                    )}
-                                                                </p>
-                                                                <p className="text-[10px] text-slate-500">
+                                                            <div className="min-w-0">
+                                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                                    <span className="font-bold text-slate-200 truncate">{assetTitle(asset)}</span>
+                                                                    <AssetTags tags={getAssetTags(asset)} />
+                                                                </div>
+                                                                <p className="text-[10px] text-slate-500 truncate">
                                                                     {asset.matured ? 'Vencido — sugerimos resgatar' : getAssetSubtitle(asset)}
                                                                 </p>
                                                             </div>

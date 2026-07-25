@@ -16,6 +16,8 @@ interface Transaction {
     price: number;
     totalValue: number;
     date: string;
+    /** Moeda nativa do lançamento, resolvida no servidor (gravada > posição > BRL). */
+    currency?: 'BRL' | 'USD';
 }
 
 interface AssetTransactionsModalProps {
@@ -105,7 +107,13 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
         }
     };
 
-    const formatCurrency = (val: number) => fmtCurrency(val);
+    // Preço/total da transação são gravados na moeda NATIVA do ativo (US$ para
+    // STOCK_US/CRYPTO). Formatar em R$ mostrava "R$ 400,00" numa compra de US$ 400.
+    // A moeda vem resolvida do servidor por lançamento; a posição só serve de rede
+    // caso a resposta seja de uma versão anterior da API.
+    const fallbackCurrency: 'BRL' | 'USD' =
+        asset?.currency === 'USD' || assetType === 'STOCK_US' || assetType === 'CRYPTO' ? 'USD' : 'BRL';
+    const formatCurrency = (val: number, currency: 'BRL' | 'USD' = fallbackCurrency) => fmtCurrency(val, currency);
 
     if (!isOpen) return null;
 
@@ -161,7 +169,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
                                                         </span>
                                                     </div>
                                                     <div className="text-sm font-bold text-white mt-0.5">
-                                                        {tx.quantity} <span className="text-xs text-slate-500 font-normal">cotas a</span> {formatCurrency(tx.price)}
+                                                        {tx.quantity} <span className="text-xs text-slate-500 font-normal">cotas a</span> {formatCurrency(tx.price, tx.currency)}
                                                     </div>
                                                 </div>
                                             </div>
@@ -169,7 +177,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
                                             <div className="flex items-center gap-6">
                                                 <div className="text-right">
                                                     <p className="text-[10px] text-slate-500 uppercase font-bold">Total</p>
-                                                    <p className="text-sm tabular-nums text-slate-300">{formatCurrency(tx.totalValue)}</p>
+                                                    <p className="text-sm tabular-nums text-slate-300">{formatCurrency(tx.totalValue, tx.currency)}</p>
                                                 </div>
                                                 
                                                 <button 

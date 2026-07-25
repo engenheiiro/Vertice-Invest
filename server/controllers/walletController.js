@@ -14,6 +14,7 @@ import { financialService } from '../services/financialService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, calculateSharpeRatio, calculateBeta, safeValue, safePrice, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
 import { countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { accrueFixedIncomeValue, fixedIncomeDailyFactor, assetDailyFactor, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
+import { isDollarized, resolveAssetCurrency, resolveTransactionCurrency, needsCurrencyFallback } from '../utils/assetCurrency.js';
 import logger from '../config/logger.js';
 import AppError from '../utils/AppError.js';
 import { HISTORICAL_CDI_RATES, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
@@ -63,7 +64,7 @@ const calculateLiveKPIS = async (userId, currentCdi, walletId) => {
     const calcDate = brazilToday();
 
     for (const asset of activeAssets) {
-        const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1;
+        const multiplier = isDollarized(asset) ? usdRate : 1;
 
         let val;
         if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
@@ -245,9 +246,9 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
         }
     }
 
-    const isDollarized = asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO';
-    const currentMultiplier = isDollarized ? usdRate : 1;
-    const prevMultiplier = isDollarized ? (usdRate / (1 + usdChange/100)) : 1;
+    const dollarized = isDollarized(asset);
+    const currentMultiplier = dollarized ? usdRate : 1;
+    const prevMultiplier = dollarized ? (usdRate / (1 + usdChange/100)) : 1;
 
     const valueBase = asset.type === 'CASH' ? asset.quantity : safeValue(asset.quantity, currentPrice);
     // Renda fixa/caixa: multiplica o TOTAL acumulado (preciso) pelo câmbio, em vez de
@@ -416,8 +417,7 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         const macroRates = { cdiRate: currentCdi, selic: config?.selic, ipca: config?.ipca };
 
         const totalRealizedProfit = closedAssets.reduce((acc, curr) => {
-            const isDollarized = curr.currency === 'USD' || curr.type === 'STOCK_US' || curr.type === 'CRYPTO';
-            const mult = isDollarized ? usdRate : 1;
+            const mult = isDollarized(curr) ? usdRate : 1;
             const profitInBrl = safeMult((curr.realizedProfit || 0), mult);
             return safeAdd(acc, profitInBrl);
         }, 0);
@@ -729,6 +729,17 @@ export const addAssetTransaction = async (req, res, next) => {
             });
             await newTx.save({ session });
             updatedAsset = await financialService.recalculatePosition(userId, ticker.toUpperCase(), type, session, currency, walletId);
+            // Carimba a moeda NATIVA do lançamento. Só dá para fazer depois do
+            // recálculo: é `recalculatePosition` que resolve a moeda autoritativa
+            // (cadastro explícito > MarketAsset > BRL), e um ETF só se distingue
+            // por ela (BOVA11 é R$, VOO é US$). Mesma sessão → atômico com o resto.
+            if (updatedAsset) {
+                const txCurrency = resolveAssetCurrency(updatedAsset);
+                if (newTx.currency !== txCurrency) {
+                    newTx.currency = txCurrency;
+                    await newTx.save({ session });
+                }
+            }
             if (updatedAsset && (type === 'FIXED_INCOME' || type === 'CASH')) {
                 if (fixedIncomeRate) updatedAsset.fixedIncomeRate = fixedIncomeRate;
                 // Pós-fixados/indexados (Selic/CDI/IPCA): o rendimento é índice vivo +
@@ -1025,7 +1036,16 @@ export const getAssetTransactions = async (req, res, next) => {
         const query = { user: req.user.id, wallet: req.walletId, ticker: ticker.toUpperCase() };
         const transactions = await AssetTransaction.find(query).sort({ date: -1, createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
         const total = await AssetTransaction.countDocuments(query);
-        res.json({ transactions, pagination: { total, page: parseInt(page), pages: Math.ceil(total / limit), hasMore: page * limit < total } });
+        // Mesma resolução do extrato global: a moeda acompanha o lançamento, para o
+        // cliente não precisar reimplementar a regra de dolarização. A posição só é
+        // buscada se houver lançamento legado sem moeda gravada (ver getCashFlow).
+        const asset = transactions.some(needsCurrencyFallback)
+            ? await UserAsset.findOne(query).select('ticker type currency').lean()
+            : null;
+        res.json({
+            transactions: transactions.map(t => ({ ...t.toObject(), currency: resolveTransactionCurrency(t, asset) })),
+            pagination: { total, page: parseInt(page), pages: Math.ceil(total / limit), hasMore: page * limit < total },
+        });
     } catch (error) { next(error); }
 };
 
@@ -1139,7 +1159,7 @@ export const getCashFlow = async (req, res, next) => {
 
         // Cofrinhos (Reserva/Caixa) desta carteira: cada um é um UserAsset type=CASH
         // com ticker próprio. Mapa ticker→nome para rotular o extrato e set para filtrar.
-        const cashAssets = await UserAsset.find({ user: userId, wallet: walletId, type: 'CASH' }).select('ticker name').lean();
+        const cashAssets = await UserAsset.find({ user: userId, wallet: walletId, type: 'CASH' }).select('ticker name type currency').lean();
         const cashTickers = cashAssets.map(a => a.ticker);
         const cashNameByTicker = new Map(cashAssets.map(a => [a.ticker, a.name || 'Reserva']));
 
@@ -1148,10 +1168,34 @@ export const getCashFlow = async (req, res, next) => {
         else if (filterType === 'TRADE') query.ticker = { $nin: cashTickers };
         const transactions = await AssetTransaction.find(query).sort({ date: -1, createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
         const total = await AssetTransaction.countDocuments(query);
+
+        // Moeda: `price`/`totalValue` são gravados na moeda NATIVA do ativo (US$ para
+        // STOCK_US/CRYPTO), então sem isso o extrato exibia US$ 400 como "R$ 400,00".
+        // O campo é gravado na criação desde a migração, e a busca de posições só
+        // acontece se ESTA PÁGINA tiver lançamento legado sem moeda — com a base
+        // migrada, custo zero. O escopo é limitado aos tickers da página (≤ limit),
+        // então nem uma carteira gigante amplia a consulta. Continua auto-curável:
+        // se dado legado reaparecer (restore de backup antigo), o fallback volta
+        // sozinho sem precisar rodar o backfill de novo.
+        const legacyTickers = [...new Set(transactions.filter(needsCurrencyFallback).map(t => t.ticker))];
+        const assetByTicker = new Map(cashAssets.map(a => [a.ticker, a]));
+        if (legacyTickers.length > 0) {
+            const legacyAssets = await UserAsset.find({
+                user: userId, wallet: walletId, ticker: { $in: legacyTickers },
+            }).select('ticker type currency').lean();
+            legacyAssets.forEach(a => assetByTicker.set(a.ticker, a));
+        }
+
         res.json({
             transactions: transactions.map(t => {
                 const isCashOp = cashNameByTicker.has(t.ticker);
-                return { ...t.toObject(), isCashOp, cashName: isCashOp ? cashNameByTicker.get(t.ticker) : undefined };
+                return {
+                    ...t.toObject(),
+                    isCashOp,
+                    cashName: isCashOp ? cashNameByTicker.get(t.ticker) : undefined,
+                    // Gravada > posição atual > BRL.
+                    currency: resolveTransactionCurrency(t, assetByTicker.get(t.ticker)),
+                };
             }),
             pagination: { total, hasMore: page * limit < total }
         });

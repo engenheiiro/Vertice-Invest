@@ -21,6 +21,8 @@ export interface PortfolioItem {
     currency?: 'BRL' | 'USD';
     type: string;
     sector?: string;
+    // Sub-tipo do Exterior — define o selo (ETF/REIT/Ouro/Dólar) ao lado do ticker.
+    usSubType?: 'STOCK' | 'REIT' | 'DOLLAR' | 'ETF' | 'GOLD' | null;
     aiScore: number;
     aiSentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
 }
@@ -258,6 +260,7 @@ export const useDashboardData = () => {
                 currency: asset.currency,
                 type: asset.type,
                 sector: asset.sector,
+                usSubType: asset.usSubType,
                 aiScore: researchData ? researchData.score : 0,
                 aiSentiment: sentiment
             };

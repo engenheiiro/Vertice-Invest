@@ -14,6 +14,15 @@ const AssetTransactionSchema = new mongoose.Schema({
   quantity: { type: Number, required: true },
   price: { type: Number, required: true }, // Preço unitário
   totalValue: { type: Number, required: true }, // Qty * Price
+  // Moeda NATIVA em que `price`/`totalValue` foram gravados (US$ para STOCK_US e
+  // CRYPTO). Sem isso o extrato exibia uma compra de US$ 400 como "R$ 400,00" e
+  // a soma não fechava com o Valor Aplicado da carteira, que é convertido.
+  //
+  // SEM `default` de propósito: o Mongoose aplica defaults ao hidratar documentos
+  // que não têm o campo, então um default 'BRL' tornaria lançamentos legados
+  // indistinguíveis dos genuinamente em real e mataria o fallback pela posição
+  // (ver resolveTransactionCurrency em utils/assetCurrency.js). Ausente = legado.
+  currency: { type: String, enum: ['BRL', 'USD'] },
   date: { type: Date, required: true, default: Date.now },
   
   notes: { type: String },

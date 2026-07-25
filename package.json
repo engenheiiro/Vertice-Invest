@@ -54,7 +54,8 @@
     "seed:wallet": "node server/scripts/seedFullWallet.js",
     "changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s",
     "changelog:first": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "migrate:tx-currency": "node server/scripts/migrateTransactionCurrency.js"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": "eslint --fix"

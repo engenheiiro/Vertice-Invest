@@ -12,8 +12,9 @@ import { SmartContributionModal } from '../wallet/SmartContributionModal';
 import { RebalanceModal } from '../wallet/RebalanceModal';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import AssetLogo from '../common/AssetLogo';
+import AssetTags from '../common/AssetTags';
 import type { AssetType } from '../../contexts/WalletContext';
-import { getAssetSubtitle } from '../../utils/assetDisplay';
+import { getAssetSubtitle, getAssetTags } from '../../utils/assetDisplay';
 
 interface AssetTableProps {
     items: PortfolioItem[];
@@ -113,7 +114,6 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
         acc[type].push(item);
         return acc;
     }, {} as Record<string, PortfolioItem[]>), [items]);
-    const isNationalEtf = (item: PortfolioItem) => item.type === 'ETF';
 
     // Mesma ordem da aba Carteira: Ações Brasil, FIIs, Exterior, Renda Fixa, Cripto, Caixa.
     const orderedGroups: [string, PortfolioItem[]][] = useMemo(() => {
@@ -235,23 +235,19 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <div className="flex items-center gap-3">
+                                                        <div className="flex items-center gap-3 min-w-0">
                                                             <AssetLogo ticker={item.ticker} type={item.type as AssetType} name={item.name} size={32} />
-                                                            <div>
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <p className="font-bold text-slate-200">{itemTitle(item)}</p>
-                                                                    {isNationalEtf(item) && (
-                                                                        <span title="ETF nacional — conta dentro de Ações BR na distribuição." className="text-[9px] font-bold uppercase tracking-wide text-teal-400 bg-teal-500/10 border border-teal-500/30 px-1.5 py-0.5 rounded">
-                                                                            ETF
-                                                                        </span>
-                                                                    )}
+                                                            <div className="min-w-0">
+                                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                                    <span className="font-bold text-slate-200 truncate">{itemTitle(item)}</span>
+                                                                    <AssetTags tags={getAssetTags(item)} />
                                                                     {isChampion && (
-                                                                        <span title="Campeã: Retorno > 15%" className="text-gold animate-pulse">
+                                                                        <span title="Campeã: Retorno > 15%" className="text-gold animate-pulse shrink-0">
                                                                             <Medal size={12} fill="currentColor" />
                                                                         </span>
                                                                     )}
                                                                 </div>
-                                                                <p className="text-[10px] text-slate-500">{getAssetSubtitle(item)}</p>
+                                                                <p className="text-[10px] text-slate-500 truncate">{getAssetSubtitle(item)}</p>
                                                             </div>
                                                         </div>
                                                     )}
@@ -384,20 +380,16 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                     {isDemoMode ? <Lock size={12} /> : item.ticker.substring(0, 2)}
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <p className="font-bold text-slate-200">{isDemoMode ? '••••' : itemTitle(item)}</p>
-                                                        {isNationalEtf(item) && !isDemoMode && (
-                                                            <span title="ETF nacional — conta dentro de Ações BR na distribuição." className="text-[8px] font-bold uppercase tracking-wide text-teal-400 bg-teal-500/10 border border-teal-500/30 px-1 py-0.5 rounded">
-                                                                ETF
-                                                            </span>
-                                                        )}
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                        <span className="font-bold text-slate-200 truncate">{isDemoMode ? '••••' : itemTitle(item)}</span>
+                                                        {!isDemoMode && <AssetTags tags={getAssetTags(item)} size="sm" />}
                                                         {isChampion && !isDemoMode && (
-                                                            <span title="Campeã: Retorno > 15%" className="text-gold">
+                                                            <span title="Campeã: Retorno > 15%" className="text-gold shrink-0">
                                                                 <Medal size={12} fill="currentColor" />
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <p className="text-[10px] text-slate-500 truncate">{isDemoMode ? '•••••••' : item.name}</p>
+                                                    <p className="text-[10px] text-slate-500 truncate">{isDemoMode ? '•••••••' : getAssetSubtitle(item)}</p>
                                                 </div>
                                             </div>
                                             <div className="text-right shrink-0">

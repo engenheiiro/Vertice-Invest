@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useWallet, AssetType, AllocationMap, SubAllocationMap, DEFAULT_SUB_ALLOCATION } from '../../contexts/WalletContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Settings, Check, X, DollarSign, ChevronDown, ChevronRight, ShieldCheck, PlusCircle, ArrowRight, TrendingUp } from 'lucide-react';
+import { Settings, Check, X, DollarSign, ChevronDown, ChevronRight, ShieldCheck, PlusCircle, ArrowRight } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Sector } from 'recharts';
 import { formatCompact as fmtCompact } from '../../utils/format';
@@ -104,9 +104,14 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
     const [tempReserve, setTempReserve] = useState<string>(targetReserve.toString());
     const [tempDividendGoal, setTempDividendGoal] = useState<string>(targetMonthlyDividendIncome.toString());
     const [tempSub, setTempSub] = useState<SubAllocationMap>(cloneSub(targetSubAllocation));
-    // Linhas ramificadas expandidas (no modo de edição e na legenda).
+    // Linhas ramificadas expandidas no modo de edição (overlay com scroll próprio: pode
+    // abrir várias).
     const [expandedEdit, setExpandedEdit] = useState<Record<string, boolean>>({});
-    const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+    // Na legenda é ACORDEÃO — um grupo aberto por vez. O card tem altura fixa e as três
+    // classes ramificáveis somam 9 sub-linhas; abrir mais de uma estourava a lista e o
+    // final ficava fora da área visível. Com um grupo por vez o pior caso (6 classes +
+    // as 4 sub-linhas do Exterior) cabe inteiro, sem rolagem.
+    const [expandedRow, setExpandedRow] = useState<AssetType | null>(null);
 
     // 1. Calcular Valores Atuais — bucketiza pelo BALDE DE ALOCAÇÃO (C1), não pelo
     // type cru: ativos de Reserva (CASH ou RF marcada) caem em CASH e saem da base;
@@ -259,7 +264,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
         const realTotal = (subReal as any)[type]?.total || 0;
         if (!hasMeta && realTotal <= 0) {
             return (
-                <div className="pl-6 pr-1 py-1 text-[10px] text-slate-600 italic">Sem sub-metas definidas.</div>
+                <div className="pl-2.5 pr-1 py-1 text-[10px] text-slate-600 italic">Sem sub-metas definidas.</div>
             );
         }
 
@@ -274,7 +279,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
             const showDiff = viewMode === 'CURRENT' && hasMeta && Math.abs(diff) > 1;
 
             return (
-                <div key={`${type}-${k}`} className="flex justify-between items-center text-[11px] py-1 pl-6 pr-1">
+                <div key={`${type}-${k}`} className="flex justify-between items-center text-[11px] py-[3px] pl-2.5 pr-1">
                     <div className="flex items-center gap-2 min-w-0">
                         <div className="w-1.5 h-1.5 rounded-full shrink-0 opacity-60" style={{ backgroundColor: COLORS[type] }}></div>
                         <span className="text-slate-500 truncate">{SUB_LABELS[type][k]}</span>
@@ -292,37 +297,12 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
         });
     };
 
-    // Card de nudge (rodapé da Distribuição): contextual ao modo de visão. Espelha o
-    // protótipo — reforça a reserva protegida (Atual) ou orienta a alocação-alvo (Ideal).
-    const renderNudge = () => {
-        if (viewMode === 'IDEAL') {
-            return (
-                <div className="shrink-0 mt-3 flex gap-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.07] p-3.5">
-                    <span className="w-8 h-8 rounded-[9px] bg-base flex items-center justify-center shrink-0 text-blue-400"><TrendingUp size={17} /></span>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-bold text-white">Alocação sugerida</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">Distribuição-alvo do seu perfil. Use o Aporte Inteligente para chegar lá aos poucos.</p>
-                    </div>
-                </div>
-            );
-        }
-        // Só faz sentido reforçar "diversifique o excedente" quando NÃO há excedente
-        // ainda investido (carteira é 100% reserva). Com ações/FIIs/etc. já
-        // cadastrados, o nudge perdia o sentido mas aparecia sempre.
-        if (!(reserveValue > 0 && investmentTotal <= 0)) return null;
-        return (
-            <div className="shrink-0 mt-3 flex gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] p-3.5">
-                <span className="w-8 h-8 rounded-[9px] bg-base flex items-center justify-center shrink-0 text-emerald-400"><ShieldCheck size={17} /></span>
-                <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-bold text-white">Reserva protegida</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">Sua reserva está garantida. Diversifique o excedente para buscar mais rentabilidade.</p>
-                    <button onClick={() => setViewMode('IDEAL')} className="mt-2 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[12px] font-bold transition-colors">
-                        Ver alocação ideal <ArrowRight size={14} />
-                    </button>
-                </div>
-            </div>
-        );
-    };
+    // Nota: o card de nudge no rodapé foi removido. Na visão Ideal ele repetia o que o
+    // toggle já diz e consumia ~80px da altura fixa do card — espaço que a legenda
+    // precisa quando várias classes são expandidas. O contexto virou subtítulo do header
+    // (custo vertical zero). A variante "Reserva protegida" era código morto: ela exigia
+    // investmentTotal <= 0, condição em que chartData fica vazio e o empty-state (que já
+    // traz a mesma mensagem e o mesmo CTA) assume o lugar de todo o bloco.
 
     return (
         <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
@@ -331,13 +311,15 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
             <div className="flex justify-between items-start mb-2 shrink-0">
                 <div>
                     <h3 className="text-base font-bold text-white">Distribuição</h3>
-                    <p className="text-xs text-slate-500">Carteira de Investimentos</p>
+                    <p className="text-xs text-slate-500">
+                        {viewMode === 'IDEAL' ? 'Alocação-alvo do seu perfil' : 'Carteira de Investimentos'}
+                    </p>
                 </div>
 
                 <div className="flex items-center gap-2">
                     <div className="flex gap-1 bg-deep p-1 rounded-lg border border-slate-800">
-                        <button onClick={() => setViewMode('CURRENT')} className={`text-[10px] font-bold px-3 py-1 rounded transition-colors ${viewMode === 'CURRENT' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Atual</button>
-                        <button onClick={() => setViewMode('IDEAL')} className={`text-[10px] font-bold px-3 py-1 rounded transition-colors ${viewMode === 'IDEAL' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Ideal</button>
+                        <button onClick={() => setViewMode('CURRENT')} className={`text-[10px] font-bold px-3 min-h-[32px] inline-flex items-center justify-center rounded transition-colors ${viewMode === 'CURRENT' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Atual</button>
+                        <button onClick={() => setViewMode('IDEAL')} className={`text-[10px] font-bold px-3 min-h-[32px] inline-flex items-center justify-center rounded transition-colors ${viewMode === 'IDEAL' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Ideal</button>
                     </div>
                     <button onClick={openEditor} aria-label="Configurar carteira ideal" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-white transition-colors rounded-lg hover:bg-slate-800 border border-transparent hover:border-slate-700">
                         <Settings size={14} />
@@ -386,9 +368,9 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                     )}
                 </div>
             ) : (
-            /* Content Area */
-            <div className="flex-1 flex flex-col min-h-0">
-                <div className="flex items-center gap-2 flex-1 min-h-0">
+            /* Content Area — sem o nudge no rodapé, a linha gráfico+legenda ocupa toda a
+               altura restante do card (ganho de ~80px para a legenda na visão Ideal). */
+            <div className="flex-1 flex items-center gap-2 min-h-0">
 
                 {/* Chart Container - Tamanho Reduzido e Fixo */}
                 {/* (A1) role=img + aria-label: leitores de tela leem um resumo no lugar do SVG */}
@@ -431,8 +413,15 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                     </div>
                 </div>
 
-                {/* Legend List - Scrollável e Flexível */}
-                <div className="flex-1 h-full overflow-y-auto custom-scrollbar pr-2 flex flex-col justify-center">
+                {/* Legend List - Scrollável e Flexível.
+                    O `justify-center` NÃO pode viver no elemento que rola: quando a lista
+                    cresce (várias classes expandidas), o flexbox centraliza o excedente e
+                    estoura para os DOIS lados — e o overflow de cima é inalcançável pelo
+                    scroll (scrollTop nunca é negativo), cortando as primeiras linhas.
+                    Solução: o wrapper rola e o filho carrega `min-h-full + justify-center`,
+                    que centraliza enquanto sobra espaço e cresce normalmente quando falta. */}
+                <div className="flex-1 h-full min-w-0 overflow-y-auto custom-scrollbar pr-2">
+                    <div className="min-h-full flex flex-col justify-center">
                     {ORDERED_TYPES.map((type) => {
                         const isCash = type === 'CASH';
                         const isRamifiable = RAMIFIABLE.includes(type);
@@ -440,10 +429,12 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                         let divergenceNode = null;
 
                         if (isCash) {
-                            if (viewMode === 'CURRENT' && reserveValue <= 0) return null;
-
                             const currentR = reserveValue;
                             const targetR = targetReserve;
+
+                            if (viewMode === 'CURRENT' && currentR <= 0) return null;
+                            // Simétrico ao CURRENT: sem reserva-alvo definida, não há linha.
+                            if (viewMode === 'IDEAL' && targetR <= 0) return null;
 
                             if (viewMode === 'IDEAL') {
                                 displayValue = formatCurrency(targetR);
@@ -458,8 +449,12 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                             const currentPct = (currentValues[type] / safeInvestmentTotal) * 100;
                             const targetPct = targetAllocation[type] || 0;
 
-                            // Se modo atual e valor é 0, esconde (exceto se for editar ideal)
+                            // Classe sem posição (Atual) ou sem meta (Ideal) não vira linha:
+                            // "0.0%" é ruído e consome altura que as sub-linhas precisam.
+                            // Quem quiser distribuir para ela usa a engrenagem, que sempre
+                            // lista todas as classes.
                             if (viewMode === 'CURRENT' && currentValues[type] <= 0) return null;
+                            if (viewMode === 'IDEAL' && targetPct <= 0) return null;
 
                             const valToShow = viewMode === 'CURRENT' ? currentPct : targetPct;
                             displayValue = `${valToShow.toFixed(1)}%`;
@@ -472,15 +467,15 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                             }
                         }
 
-                        const isOpen = !!expandedRows[type];
+                        const isOpen = expandedRow === type;
 
                         return (
                             <div key={type}>
-                                <div className="flex justify-between items-center text-xs py-1.5 border-b border-slate-800/30 hover:bg-slate-900/30 px-1 rounded transition-colors">
+                                <div className="flex justify-between items-center text-xs py-1 border-b border-slate-800/30 hover:bg-slate-900/30 px-1 rounded transition-colors">
                                     <div className="flex items-center gap-2 min-w-0">
                                         {isRamifiable ? (
                                             <button
-                                                onClick={() => setExpandedRows(prev => ({ ...prev, [type]: !prev[type] }))}
+                                                onClick={() => setExpandedRow(prev => (prev === type ? null : type))}
                                                 className="text-slate-500 hover:text-white shrink-0"
                                                 aria-label={isOpen ? `Recolher ${LABELS[type]}` : `Expandir ${LABELS[type]}`}
                                             >
@@ -498,16 +493,18 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                                     </div>
                                 </div>
                                 {isRamifiable && isOpen && (
-                                    <div className="bg-slate-900/20 rounded-b">
+                                    /* Trilho à esquerda amarra as sub-linhas à classe-mãe —
+                                       com 2+ grupos abertos e scroll, sem ele não dá para
+                                       saber a quem cada sub-linha pertence. */
+                                    <div className="ml-[22px] pl-1 border-l border-slate-800 bg-slate-900/20 rounded-br py-0.5">
                                         {renderSubRows(type)}
                                     </div>
                                 )}
                             </div>
                         );
                     })}
+                    </div>
                 </div>
-                </div>
-                {renderNudge()}
             </div>
             )}
 

@@ -18,6 +18,7 @@ import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
 import { classifyUsAsset } from '../utils/usClassification.js';
 import { isGoldTicker } from '../utils/goldClassification.js';
+import { isDollarized as isDollarizedAsset } from '../utils/assetCurrency.js';
 import logger from '../config/logger.js';
 
 export const financialService = {
@@ -256,7 +257,7 @@ export const financialService = {
             let trueAdjustedFlow = tx.totalValue; // Fluxo ajustado real
             const meta = assetMetadataMap.get(tx.ticker);
             const isFixed = meta?.type === 'FIXED_INCOME' || meta?.type === 'CASH';
-            const txIsDollarized = meta?.type === 'STOCK_US' || meta?.type === 'CRYPTO' || meta?.currency === 'USD';
+            const txIsDollarized = isDollarizedAsset(meta);
             const txUsdRate = txIsDollarized ? getUsdRateForDate(cursorIso) : 1;
 
             if (!isFixed) {
@@ -362,8 +363,7 @@ export const financialService = {
             hasPosition = true;
 
             const meta = assetMetadataMap.get(ticker);
-            const isDollarized = meta?.type === 'STOCK_US' || meta?.type === 'CRYPTO' || meta?.currency === 'USD';
-            const fxRate = isDollarized ? usdRateForDay : 1;
+            const fxRate = isDollarizedAsset(meta) ? usdRateForDay : 1;
 
             totalInvested += pos.cost * fxRate;
 

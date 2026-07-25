@@ -24,6 +24,7 @@ import {
     currentValueBySub, splitNeedBySubMeta, subGaps, foldEtfIntoStock,
 } from '../utils/subAllocation.js';
 import { BUY_THRESHOLD, CAPITAL_GAINS_TAX, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
+import { isDollarized } from '../utils/assetCurrency.js';
 import logger from '../config/logger.js';
 
 // O ranking 'ETF' une nacionais + internacionais; carregamos os NACIONAIS como candidatos
@@ -53,9 +54,6 @@ const allocClassOf = (type) => (type === 'ETF' ? 'STOCK' : type);
 const MIN_GAP_PCT = 1;
 // Quantos ativos no máximo entram do lado da compra por classe (não pulverizar).
 const MAX_BUYS_PER_CLASS = 4;
-
-const isDollarized = (asset) =>
-    asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO';
 
 // C1: classe EFETIVA de alocação do ativo. Um ativo de Reserva (flag isReserve,
 // ou CASH por natureza em posições ainda não migradas) conta como CASH — sai da

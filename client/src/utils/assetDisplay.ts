@@ -1,18 +1,32 @@
 import type { AssetType } from '../contexts/WalletContext';
 import { getB3SectorFallback } from '../data/b3Sectors';
 
-/** Setores genéricos que não agregam informação na 2ª linha. */
-const GENERIC_SECTORS = new Set(['OUTROS', 'OUTRO', 'N/A', 'GERAL', '']);
+/**
+ * Setores genéricos que não agregam informação na 2ª linha. 'ETF' entra aqui
+ * porque o veículo já é comunicado pelo SELO ao lado do ticker (ver getAssetTags):
+ * repetir "ETF" na sublinha só duplicaria a informação — os ETFs internacionais
+ * do universo curado chegam com sector = 'ETF' (server/config/usEtfList.js).
+ */
+const GENERIC_SECTORS = new Set(['OUTROS', 'OUTRO', 'N/A', 'GERAL', 'ETF', '']);
 
 /** Rótulo amigável por tipo, usado quando não há nome real nem setor útil. */
 const TYPE_FALLBACK: Record<string, string> = {
   STOCK: 'Ação',
   FII: 'FII',
-  STOCK_US: 'Stock US',
-  ETF: 'ETF',
+  STOCK_US: 'Ação (EUA)',
+  ETF: 'Fundo de Índice',
   CRYPTO: 'Criptoativo',
   FIXED_INCOME: 'Renda Fixa',
   CASH: 'Caixa / Reserva',
+};
+
+/** Sublinha do Exterior quando o setor é genérico — deriva do sub-tipo (usSubType). */
+const US_SUB_FALLBACK: Record<string, string> = {
+  ETF: 'Fundo de Índice',
+  REIT: 'Imobiliário (REIT)',
+  GOLD: 'Ouro',
+  DOLLAR: 'Dólar',
+  STOCK: 'Ação (EUA)',
 };
 
 /** Tradução de setores em inglês (Yahoo, ações US) para PT-BR. */
@@ -47,6 +61,10 @@ interface AssetLike {
   name?: string;
   sector?: string;
   type?: AssetType | string;
+  /** Sub-tipo do Exterior (STOCK_US) — define o selo e a sublinha do ativo. */
+  usSubType?: 'STOCK' | 'REIT' | 'DOLLAR' | 'ETF' | 'GOLD' | null;
+  /** Renda Fixa vencida (accrual congelado). */
+  matured?: boolean;
 }
 
 /**
@@ -66,6 +84,64 @@ export function getAssetSubtitle(asset: AssetLike): string {
     if (mapped) return mapped;
   }
 
-  // 3. Rótulo por tipo
+  // 3. Exterior sem setor útil: descreve o veículo pelo sub-tipo
+  if (asset.type === 'STOCK_US' && asset.usSubType) {
+    const mapped = US_SUB_FALLBACK[asset.usSubType];
+    if (mapped) return mapped;
+  }
+
+  // 4. Rótulo por tipo
   return TYPE_FALLBACK[String(asset.type)] || 'Ativo';
+}
+
+// ---------------------------------------------------------------------------
+// Selos (tags) do ativo — 1ª linha, ao lado do ticker.
+//
+// Regra única em todo o app: o VEÍCULO do ativo é sempre um selo ao lado do
+// ticker (nunca texto na sublinha) e a sublinha fica reservada ao setor/segmento.
+// Antes, ETF nacional ganhava selo e ETF internacional aparecia como "ETF" na
+// sublinha — duas leituras diferentes para a mesma informação.
+// ---------------------------------------------------------------------------
+
+export type AssetTagTone = 'etf' | 'reit' | 'gold' | 'dollar' | 'warning';
+
+export interface AssetTag {
+  label: string;
+  tone: AssetTagTone;
+  /** Texto do title= — explica como o ativo entra na distribuição. */
+  title: string;
+}
+
+const ETF_BR_TAG: AssetTag = {
+  label: 'ETF',
+  tone: 'etf',
+  title: 'ETF nacional — conta dentro de Ações BR na distribuição.',
+};
+
+/** Selo por sub-tipo do Exterior. STOCK (ação individual) não recebe selo. */
+const US_SUB_TAG: Record<string, AssetTag> = {
+  ETF: { label: 'ETF', tone: 'etf', title: 'ETF internacional — conta dentro de Exterior (sub-tipo ETF) na distribuição.' },
+  REIT: { label: 'REIT', tone: 'reit', title: 'REIT — imobiliário dos EUA; conta dentro de Exterior (sub-tipo REIT).' },
+  GOLD: { label: 'Ouro', tone: 'gold', title: 'Ouro lastreado (ETF) — conta dentro de Exterior, sub-tipo ETF.' },
+  DOLLAR: { label: 'Dólar', tone: 'dollar', title: 'Exposição em dólar — conta dentro de Exterior, sub-tipo Dólar.' },
+};
+
+const MATURED_TAG: AssetTag = {
+  label: 'Vencido',
+  tone: 'warning',
+  title: 'Título vencido — parou de render. Considere resgatar (nada é vendido automaticamente).',
+};
+
+/** Selos de um ativo, na ordem de exibição (veículo primeiro, estado depois). */
+export function getAssetTags(asset: AssetLike): AssetTag[] {
+  const tags: AssetTag[] = [];
+
+  if (asset.type === 'ETF') tags.push(ETF_BR_TAG);
+  else if (asset.type === 'STOCK_US' && asset.usSubType && US_SUB_TAG[asset.usSubType]) {
+    tags.push(US_SUB_TAG[asset.usSubType]);
+  }
+
+  if (asset.matured) tags.push(MATURED_TAG);
+
+  return tags;
 }

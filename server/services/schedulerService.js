@@ -30,6 +30,7 @@ import {
     hasSectionContent,
 } from './researchPublicationService.js';
 
+import { isDollarized } from '../utils/assetCurrency.js';
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 
@@ -120,7 +121,7 @@ const computeEquityAt = (assets, { priceMap, macroRates, usdRate, calcDate }) =>
     let totalEquity = 0;
     let totalInvested = 0;
     for (const asset of assets) {
-        const multiplier = (asset.currency === 'USD' || asset.type === 'STOCK_US' || asset.type === 'CRYPTO') ? usdRate : 1;
+        const multiplier = isDollarized(asset) ? usdRate : 1;
         if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
             totalEquity += accrueFixedIncomeValue(asset, { ...macroRates, calcDate });
             totalInvested += asset.totalCost;

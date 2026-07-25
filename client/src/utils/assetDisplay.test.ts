@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getAssetSubtitle } from './assetDisplay';
+import { getAssetSubtitle, getAssetTags } from './assetDisplay';
 
 describe('getAssetSubtitle', () => {
   it('mostra sempre o setor, ignorando o nome real', () => {
@@ -65,5 +65,46 @@ describe('getAssetSubtitle', () => {
 
   it('fallback final quando não há nada útil', () => {
     expect(getAssetSubtitle({ ticker: 'ZZZ9' })).toBe('Ativo');
+  });
+
+  it('sector "ETF" é genérico: sublinha descreve o veículo, sem repetir o selo', () => {
+    // ETF internacional amplo (VOO chega do universo curado com sector = 'ETF').
+    expect(
+      getAssetSubtitle({ ticker: 'VOO', name: 'Vanguard S&P 500 ETF', sector: 'ETF', type: 'STOCK_US', usSubType: 'ETF' })
+    ).toBe('Fundo de Índice');
+    // ETF internacional setorial mantém o setor real traduzido.
+    expect(
+      getAssetSubtitle({ ticker: 'VGT', sector: 'Technology', type: 'STOCK_US', usSubType: 'ETF' })
+    ).toBe('Tecnologia');
+    // ETF nacional sem setor não vira "ETF" na sublinha.
+    expect(getAssetSubtitle({ ticker: 'BOVA11', sector: 'ETF', type: 'ETF' })).toBe('Fundo de Índice');
+  });
+
+  it('Exterior sem setor útil usa o sub-tipo na sublinha', () => {
+    expect(getAssetSubtitle({ ticker: 'O', type: 'STOCK_US', usSubType: 'REIT' })).toBe('Imobiliário (REIT)');
+    expect(getAssetSubtitle({ ticker: 'GLD', type: 'STOCK_US', usSubType: 'GOLD' })).toBe('Ouro');
+    expect(getAssetSubtitle({ ticker: 'AAPL', type: 'STOCK_US' })).toBe('Ação (EUA)');
+  });
+});
+
+describe('getAssetTags', () => {
+  it('ETF nacional e ETF internacional recebem o MESMO selo', () => {
+    const br = getAssetTags({ ticker: 'BOVA11', type: 'ETF' });
+    const us = getAssetTags({ ticker: 'VOO', type: 'STOCK_US', usSubType: 'ETF' });
+    expect(br.map((t) => t.label)).toEqual(['ETF']);
+    expect(us.map((t) => t.label)).toEqual(['ETF']);
+    expect(us[0].tone).toBe(br[0].tone);
+  });
+
+  it('sub-tipos do Exterior viram selo próprio; ação individual não tem selo', () => {
+    expect(getAssetTags({ ticker: 'O', type: 'STOCK_US', usSubType: 'REIT' })[0].label).toBe('REIT');
+    expect(getAssetTags({ ticker: 'GLD', type: 'STOCK_US', usSubType: 'GOLD' })[0].label).toBe('Ouro');
+    expect(getAssetTags({ ticker: 'AAPL', type: 'STOCK_US', usSubType: 'STOCK' })).toEqual([]);
+    expect(getAssetTags({ ticker: 'PETR4', type: 'STOCK' })).toEqual([]);
+  });
+
+  it('renda fixa vencida ganha o selo de estado', () => {
+    const tags = getAssetTags({ ticker: 'TESOURO IPCA+ 2029', type: 'FIXED_INCOME', matured: true });
+    expect(tags.map((t) => t.label)).toEqual(['Vencido']);
   });
 });
