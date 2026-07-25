@@ -177,7 +177,7 @@ export const DividendDashboard = () => {
                     <div className="flex bg-deep p-1 rounded-lg border border-slate-800">
                         <button
                             onClick={() => setTimeRange('12M')}
-                            className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                            className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
                                 timeRange === '12M' 
                                 ? 'bg-gold/20 text-gold shadow-sm border border-gold/50' 
                                 : 'text-slate-500 hover:text-slate-300'
@@ -187,7 +187,7 @@ export const DividendDashboard = () => {
                         </button>
                         <button
                             onClick={() => setTimeRange('ALL')}
-                            className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                            className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
                                 timeRange === 'ALL' 
                                 ? 'bg-gold/20 text-gold shadow-sm border border-gold/50' 
                                 : 'text-slate-500 hover:text-slate-300'

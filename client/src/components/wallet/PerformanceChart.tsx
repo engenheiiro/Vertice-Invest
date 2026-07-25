@@ -232,7 +232,7 @@ export const PerformanceChart = React.memo(() => {
                             <button
                                 key={t}
                                 onClick={() => setTimeRange(t)}
-                                className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                                className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
                                     timeRange === t
                                         ? 'bg-base text-white shadow-sm'
                                         : 'text-slate-500 hover:text-slate-300'
@@ -249,7 +249,7 @@ export const PerformanceChart = React.memo(() => {
                     <div className="bg-deep p-1 rounded-lg border border-slate-800 flex gap-1">
                         <button
                             onClick={() => setViewMode('pct')}
-                            className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                            className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
                                 viewMode === 'pct'
                                     ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'
@@ -260,7 +260,7 @@ export const PerformanceChart = React.memo(() => {
                         </button>
                         <button
                             onClick={() => setViewMode('brl')}
-                            className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                            className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
                                 viewMode === 'brl'
                                     ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'
@@ -277,7 +277,7 @@ export const PerformanceChart = React.memo(() => {
                     <div className={`bg-deep p-1 rounded-lg border border-slate-800 flex gap-1 transition-opacity ${viewMode === 'brl' ? 'opacity-30 pointer-events-none' : ''}`}>
                         <button
                             onClick={() => setMetricMode('TWRR')}
-                            className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                            className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
                                 metricMode === 'TWRR'
                                     ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'
@@ -288,7 +288,7 @@ export const PerformanceChart = React.memo(() => {
                         </button>
                         <button
                             onClick={() => setMetricMode('ROI')}
-                            className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                            className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
                                 metricMode === 'ROI'
                                     ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'

@@ -185,7 +185,10 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                         <p className="text-[10px] text-slate-500">Selecione o nível de risco para gerar o Top 10 específico.</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar min-w-0 pb-2 md:pb-0">
+                {/* Mobile: quebra em linhas em vez de rolar na horizontal — com
+                    `no-scrollbar` não havia pista visual e o botão "Aporte" (CTA)
+                    ficava cortado fora da tela. */}
+                <div className="flex items-center justify-center gap-2 flex-wrap w-full md:w-auto md:flex-nowrap md:justify-start md:overflow-x-auto no-scrollbar min-w-0">
                     {Object.entries(RISK_LABELS).map(([key, label]) => {
                         if (isBrasil10 && key !== 'DEFENSIVE') return null;
                         return (

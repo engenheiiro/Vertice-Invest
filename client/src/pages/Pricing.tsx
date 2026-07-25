@@ -158,7 +158,7 @@ export const Pricing = () => {
     );
 
     return (
-        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-20">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-[calc(5rem+env(safe-area-inset-bottom))] xl:pb-20">
             <Header />
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 lg:py-16 animate-fade-in">

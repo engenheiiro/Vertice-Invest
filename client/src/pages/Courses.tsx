@@ -128,7 +128,7 @@ export const Courses = () => {
     }
 
     return (
-        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-0">
             <Header />
             
             {/* Hero Banner */}

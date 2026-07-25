@@ -214,7 +214,7 @@ export const EvolutionChart = React.memo(() => {
                             <button
                                 key={g}
                                 onClick={() => switchGranularity(g)}
-                                className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                                className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
                                     granularity === g
                                     ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'
@@ -231,7 +231,7 @@ export const EvolutionChart = React.memo(() => {
                             <button
                                 key={w}
                                 onClick={() => setRange(w)}
-                                className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${
+                                className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
                                     range === w
                                     ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'

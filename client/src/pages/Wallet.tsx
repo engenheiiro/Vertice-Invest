@@ -110,7 +110,7 @@ export const Wallet = () => {
     };
 
     return (
-        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-0">
             <Header />
             
             <main id="main-content" tabIndex={-1} className="max-w-[1360px] mx-auto p-4 md:p-6 animate-fade-in relative">
@@ -124,7 +124,8 @@ export const Wallet = () => {
                                 onClick={() => setIsRenameWalletOpen(true)}
                                 title="Renomear carteira"
                                 aria-label="Renomear carteira"
-                                className="text-slate-500 hover:text-blue-400 transition-colors shrink-0"
+                                // -m-2: área de toque de 40px sem deslocar o título.
+                                className="min-h-[40px] min-w-[40px] -m-2 inline-flex items-center justify-center text-slate-500 hover:text-blue-400 transition-colors shrink-0"
                             >
                                 <Pencil size={16} />
                             </button>
@@ -149,18 +150,20 @@ export const Wallet = () => {
                     </div>
                     
                     <div id="tour-wallet-actions" className={`flex flex-wrap items-center gap-2 md:gap-3 transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
-                        <button className="flex items-center gap-2 px-4 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={() => setIsAddModalOpen(true)}>
+                        {/* aria-label: no mobile o texto some (hidden sm:inline) e o botão
+                            ficaria sem nome acessível — leitores de tela anunciariam vazio. */}
+                        <button aria-label="Nova Transação" title="Nova Transação" className="flex items-center gap-2 px-4 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={() => setIsAddModalOpen(true)}>
                             <PlusCircle size={16} /> <span className="hidden sm:inline">Nova Transação</span>
                         </button>
 
                         {/* Botão Aporte Inteligente */}
-                        <button className="flex items-center gap-2 px-4 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={handleOpenSmartContribution}>
+                        <button aria-label="Aporte Inteligente" title="Aporte Inteligente" className="flex items-center gap-2 px-4 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={handleOpenSmartContribution}>
                             {(user?.plan === 'GUEST' || user?.plan === 'ESSENTIAL') && <Lock size={12} />}
                             <TrendingUp size={16} /> <span className="hidden sm:inline">Aporte Inteligente</span>
                         </button>
 
                         {/* Botão Rebalanceamento (Black) */}
-                        <button className="flex items-center gap-2 px-4 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-gradient-to-r from-[#D4AF37] via-[#F2D06B] to-[#D4AF37] text-black hover:brightness-110 shadow-lg shadow-[#D4AF37]/20 border-none whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={handleRebalance}>
+                        <button aria-label="Rebalanceamento IA" title="Rebalanceamento IA" className="flex items-center gap-2 px-4 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-gradient-to-r from-[#D4AF37] via-[#F2D06B] to-[#D4AF37] text-black hover:brightness-110 shadow-lg shadow-[#D4AF37]/20 border-none whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={handleRebalance}>
                             {(user?.plan !== 'BLACK' && user?.plan !== 'ELITE') ? <Lock size={12} className="text-black/80" /> : <RefreshCw size={16} className="text-black/80" />}
                             <span className="hidden sm:inline">Rebalanceamento IA</span>
                         </button>

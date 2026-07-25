@@ -66,7 +66,9 @@ export const Dashboard = () => {
   const isProjected = dividends === 0 && kpis.projectedDividends > 0;
 
   return (
-    <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
+    // pb no mobile: reserva a altura da BottomNav (h-16 + safe area) para o fim do
+    // conteúdo não ficar escondido atrás dela. box-border → não cria scroll extra.
+    <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-0">
       
       <Header />
       <MarketStatusBar indices={marketIndices} />

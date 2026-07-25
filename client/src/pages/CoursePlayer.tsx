@@ -294,7 +294,7 @@ export const CoursePlayer = () => {
     }
 
     return (
-        <div className="min-h-screen bg-deep text-white font-sans flex flex-col md:flex-row">
+        <div className="min-h-screen bg-deep text-white font-sans flex flex-col md:flex-row pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-0">
             {/* Main Player Area */}
             <div className="flex-1 flex flex-col h-screen overflow-y-auto">
                 {/* Header */}

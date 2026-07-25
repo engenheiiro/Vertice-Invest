@@ -93,7 +93,7 @@ export const Indicators = () => {
     const isPanelStale = lastUpdatedMs ? (Date.now() - lastUpdatedMs) > 60 * 60 * 1000 : false;
 
     return (
-        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-0">
             <Header />
 
             <main id="main-content" tabIndex={-1} className="max-w-[1360px] mx-auto p-4 md:p-6 animate-fade-in">

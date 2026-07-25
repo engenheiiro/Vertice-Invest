@@ -8,7 +8,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useDemo } from '../../contexts/DemoContext';
 
 /**
- * (M1/M2) Barra de navegação inferior — só no mobile (`md:hidden`).
+ * (M1/M2) Barra de navegação inferior — visível abaixo de xl (`xl:hidden`).
+ * O corte é xl (e não md) porque o header do topo precisa de ~1300px: entre
+ * 768 e 1279 ele estourava a largura e escondia Sair/perfil/seletor de carteira.
  *
  * Padrão de apps financeiros: os 4 destinos principais ficam ao alcance do
  * polegar e o botão "Mais" abre um bottom sheet com os destinos secundários
@@ -54,7 +56,7 @@ export const BottomNav: React.FC = () => {
   return (
     <>
       {moreOpen && (
-        <div className="md:hidden fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Mais opções">
+        <div className="xl:hidden fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Mais opções">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setMoreOpen(false)} />
           <div className="absolute bottom-0 inset-x-0 bg-card border-t border-slate-800 rounded-t-2xl p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] animate-fade-in">
             <div className="flex items-center justify-between mb-4">
@@ -68,7 +70,7 @@ export const BottomNav: React.FC = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-w-xl mx-auto">
               {secondary.map(({ to, label, icon: Icon, disabled }) => (
                 disabled ? (
                   <div
@@ -98,7 +100,7 @@ export const BottomNav: React.FC = () => {
 
             <button
               onClick={handleLogout}
-              className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-red-400 bg-red-900/10 border border-red-900/30 hover:bg-red-900/20 transition-colors"
+              className="mt-3 w-full max-w-xl mx-auto flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-red-400 bg-red-900/10 border border-red-900/30 hover:bg-red-900/20 transition-colors"
             >
               <LogOut size={16} /> Sair
             </button>
@@ -108,10 +110,12 @@ export const BottomNav: React.FC = () => {
 
       <nav
         id="tour-nav-mobile"
-        className={`md:hidden fixed bottom-0 inset-x-0 bg-deep/95 backdrop-blur-md border-t border-slate-800/60 pb-[env(safe-area-inset-bottom)] ${isDemoMode ? 'z-[100]' : 'z-50'}`}
+        className={`xl:hidden fixed bottom-0 inset-x-0 bg-deep/95 backdrop-blur-md border-t border-slate-800/60 pb-[env(safe-area-inset-bottom)] ${isDemoMode ? 'z-[100]' : 'z-50'}`}
         aria-label="Navegação principal"
       >
-        <div className="flex items-stretch justify-around h-16">
+        {/* max-w: em tablet/laptop pequeno (até xl) os 5 destinos ficariam esparramados
+            por toda a largura; centralizados mantêm a proporção de app. */}
+        <div className="flex items-stretch justify-around h-16 max-w-xl mx-auto">
           {PRIMARY.map(({ to, label, icon: Icon }) => {
             const active = isActive(to);
             return (

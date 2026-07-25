@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Download, X, Share, Plus } from 'lucide-react';
 
 const DISMISS_KEY = 'vertice_pwa_install_dismissed';
@@ -19,11 +20,17 @@ const isIOS = () =>
   !(window.navigator as any).standalone;
 
 /**
- * Banner de instalação do PWA. Aparece apenas no mobile (md:hidden) e nunca no desktop.
+ * Banner de instalação do PWA. Aparece apenas abaixo de xl (xl:hidden) — mesma faixa da BottomNav.
  * - Android/Chrome: usa o evento `beforeinstallprompt`.
  * - iOS/Safari: mostra instrução manual (Compartilhar → Adicionar à Tela de Início).
  */
+// Telas do AuthLayout: o card é centralizado e alto, então um banner ancorado
+// embaixo cobre justamente o botão de envio ("Entrar"/"Criar conta"). Convidar
+// para instalar só faz sentido depois que a pessoa está dentro do app.
+const HIDDEN_PATHS = ['/login', '/register', '/forgot-password', '/reset-password', '/terms', '/privacy'];
+
 export const InstallPrompt: React.FC = () => {
+  const { pathname } = useLocation();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showIosHint, setShowIosHint] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -71,10 +78,12 @@ export const InstallPrompt: React.FC = () => {
     localStorage.setItem(DISMISS_KEY, '1');
   };
 
-  if (!visible) return null;
+  if (!visible || HIDDEN_PATHS.includes(pathname)) return null;
 
   return (
-    <div className="md:hidden fixed bottom-0 inset-x-0 z-[90] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+    // Acima da BottomNav (h-16 + safe area): ancorado em bottom-0 o banner cobria
+    // toda a barra de navegação e travava o app até o usuário dispensá-lo.
+    <div className="xl:hidden fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] inset-x-0 z-[90] p-3">
       <div className="bg-card border border-blue-500/30 rounded-2xl shadow-2xl p-4 flex items-start gap-3">
         <div className="w-10 h-10 shrink-0 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
           <Download size={20} className="text-blue-400" />
@@ -108,7 +117,7 @@ export const InstallPrompt: React.FC = () => {
         <button
           onClick={dismiss}
           aria-label="Dispensar"
-          className="p-1 text-slate-500 hover:text-white transition-colors shrink-0"
+          className="min-h-[44px] min-w-[44px] -m-2 flex items-center justify-center text-slate-500 hover:text-white transition-colors shrink-0"
         >
           <X size={16} />
         </button>

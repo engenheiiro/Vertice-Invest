@@ -73,7 +73,7 @@ export const Header: React.FC = () => {
            
            {/* Main Links com ID para o Tutorial. Agrupados em submenus (hover/foco)
                p/ enxugar o topo: Carteira (sua grana), Análise (descoberta), Ferramentas. */}
-           <div id="tour-nav-links" className="hidden md:flex items-center gap-1">
+           <div id="tour-nav-links" className="hidden xl:flex items-center gap-1">
               <Link to="/dashboard">
                 <NavLink icon={<LayoutGrid size={14} />} label="Terminal" active={activeTab === 'terminal'} />
               </Link>
@@ -135,11 +135,11 @@ export const Header: React.FC = () => {
         <div className="flex items-center gap-2">
 
            {/* Seletor de carteira ativa (Fase 2) — oculto em modo demo. */}
-           <div className="hidden md:block">
+           <div className="hidden xl:block">
              <WalletSwitcher />
            </div>
 
-           <div className="h-4 w-px bg-slate-800 hidden md:block"></div>
+           <div className="h-4 w-px bg-slate-800 hidden xl:block"></div>
 
            {/* Notification Bell + Privacy Toggle + Theme Toggle */}
            <div className="flex items-center gap-1">
@@ -147,7 +147,7 @@ export const Header: React.FC = () => {
                <PrivacyToggle isPrivacyMode={isPrivacyMode} onToggle={togglePrivacyMode} />
                <button
                  onClick={toggleTheme}
-                 className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                 className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
                  title={theme === 'dark' ? "Ativar modo claro" : "Ativar modo escuro"}
                  aria-label={theme === 'dark' ? "Ativar modo claro" : "Ativar modo escuro"}
                >
@@ -181,18 +181,22 @@ export const Header: React.FC = () => {
                         <span className="text-[11px] font-black uppercase">{user?.name?.trim()?.charAt(0) || <UserIcon size={12} />}</span>
                       )}
                   </div>
-                  <div className="text-right leading-tight">
+                  {/* Nome só a partir de 2xl: com ele sempre visível o conteúdo do header
+                      somava ~1300px e estourava a largura em telas de 1280px (o botão Sair
+                      e o seletor de carteira ficavam fora da tela). O avatar continua
+                      levando ao perfil em qualquer largura. */}
+                  <div className="hidden 2xl:block text-right leading-tight">
                       <p className="text-xs font-bold text-slate-300 group-hover:text-white transition-colors whitespace-nowrap">
                           {user?.name}
                       </p>
                       <p className="text-[10px] text-emerald-500 font-mono">ONLINE</p>
                   </div>
-                  <ChevronRight size={14} className="text-slate-600 group-hover:text-blue-400 transition-colors shrink-0" />
+                  <ChevronRight size={14} className="hidden 2xl:block text-slate-600 group-hover:text-blue-400 transition-colors shrink-0" />
               </Link>
               
               <button
                 onClick={handleLogout}
-                className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
                 title="Sair"
               >
                   <LogOut size={16} />

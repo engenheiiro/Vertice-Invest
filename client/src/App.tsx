@@ -90,10 +90,11 @@ export default function App() {
     <ToastProvider>
       <ConfirmProvider>
       <ReloadPrompt />
-      <InstallPrompt />
       <AuthProvider>
         <BrowserRouter>
           <CookieNotice />
+          {/* Dentro do Router: usa useLocation p/ não cobrir o CTA das telas de auth. */}
+          <InstallPrompt />
           <Routes>
             <Route path="/" element={<Landing />} />
 

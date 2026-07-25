@@ -213,11 +213,22 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
             <div className="fixed inset-0 bg-black/90 backdrop-blur-md animate-fade-in" onClick={onClose}></div>
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
-                <div className="flex min-h-full items-center justify-center p-4">
-                    <div className="relative w-full max-w-5xl bg-base border border-slate-700 rounded-3xl overflow-hidden shadow-2xl animate-fade-in flex flex-col md:flex-row max-h-[90vh]">
-                        
+                <div className="flex min-h-full items-center justify-center p-2 sm:p-4">
+                    {/* Mobile: UMA rolagem só no painel. Antes, sidebar e conteúdo eram dois
+                        flex-children com scroll próprio dentro de max-h-[90vh] — cada um ficava
+                        com meia tela e o dossiê aparecia espremido no meio do modal. */}
+                    <div className="relative w-full max-w-5xl bg-base border border-slate-700 rounded-3xl overflow-y-auto md:overflow-hidden shadow-2xl animate-fade-in flex flex-col md:flex-row max-h-[90vh]">
+
                         {/* SIDEBAR - IDENTIDADE E SCORES */}
-                        <div className="w-full md:w-[320px] bg-card border-r border-slate-800 p-6 flex flex-col overflow-y-auto">
+                        <div className="relative w-full md:w-[320px] shrink-0 bg-card border-r border-slate-800 p-5 pt-14 md:p-6 flex flex-col md:overflow-y-auto">
+                            {/* Fechar acessível no topo do mobile — no desktop ele vive no header do dossiê. */}
+                            <button
+                                onClick={onClose}
+                                aria-label="Fechar"
+                                className="md:hidden absolute top-2 right-2 z-10 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-base/80 text-slate-400 hover:text-white transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
                             <div className="mb-6">
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-[10px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded uppercase">{asset.type}</span>
@@ -370,17 +381,17 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                         </div>
 
                         {/* MAIN CONTENT - SCROLLABLE */}
-                        <div className="flex-1 bg-base flex flex-col overflow-hidden">
+                        <div className="flex-1 bg-base flex flex-col md:overflow-hidden">
                             <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-card">
                                 <h3 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
                                     <Activity size={16} className="text-blue-500" /> Dossiê do Investidor
                                 </h3>
-                                <button onClick={onClose} aria-label="Fechar" className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+                                <button onClick={onClose} aria-label="Fechar" className="hidden md:flex min-h-[44px] min-w-[44px] items-center justify-center hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
                                     <X size={20} />
                                 </button>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8">
+                            <div className="flex-1 md:overflow-y-auto p-4 sm:p-6 md:p-8 custom-scrollbar space-y-6 md:space-y-8">
                                 
                                 {/* CABEÇALHO DO BOLETIM */}
                                 <div className="bg-card rounded-2xl p-6 border border-slate-700/50 relative overflow-hidden group">

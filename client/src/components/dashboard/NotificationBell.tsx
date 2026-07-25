@@ -103,7 +103,7 @@ export const NotificationBell: React.FC = () => {
       <button
         ref={buttonRef}
         onClick={() => setOpen((v) => !v)}
-        className="relative p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+        className="relative min-h-[40px] min-w-[40px] inline-flex items-center justify-center hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
         title="Notificações"
         aria-label={`Notificações${hasUnread ? ` (${unreadCount} não lidas)` : ''}`}
       >

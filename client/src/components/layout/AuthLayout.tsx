@@ -50,8 +50,11 @@ export const AuthLayout: React.FC = () => {
   }, []);
 
   return (
-    // MUDANÇA: h-screen e overflow-hidden garantem que não haja scroll na página
-    <div className="h-screen w-full bg-deep relative flex items-center justify-center p-4 font-sans selection:bg-blue-600 selection:text-white overflow-hidden">
+    // Desktop (lg+): h-screen + overflow-hidden — tela cheia, sem scroll.
+    // Mobile: precisa rolar. Com h-screen/overflow-hidden fixos, formulários altos
+    // (cadastro) e o teclado aberto encurtando a viewport deixavam campos e o botão
+    // de envio inalcançáveis.
+    <div className="min-h-screen lg:h-screen w-full bg-deep relative flex items-center justify-center p-4 font-sans selection:bg-blue-600 selection:text-white overflow-y-auto lg:overflow-hidden">
       
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
          <div className="absolute top-[-20%] left-[-10%] w-[80vw] h-[80vw] bg-blue-900/10 rounded-full blur-[150px]"></div>

@@ -53,8 +53,10 @@ export const OperationSection: React.FC<OperationSectionProps> = ({
             </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2">
+        {/* Mobile empilha: em 3 colunas o input de data ficava com ~90px e cortava
+            o ano (24/07/…). Só a partir de sm volta a dividir a linha. */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="sm:col-span-2">
                 <label className="text-[10px] font-bold uppercase text-slate-500 ml-1 mb-1.5 block">Tipo de Ativo</label>
                 <div className="relative">
                     <select

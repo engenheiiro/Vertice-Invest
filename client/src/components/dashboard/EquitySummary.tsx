@@ -49,13 +49,14 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
     }
 
     return (
-        <section aria-label="Resumo patrimonial" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        // Mobile em 2 colunas (herói na linha inteira) — ver WalletSummary.
+        <section aria-label="Resumo patrimonial" className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
 
             {/* 1. PATRIMÔNIO LÍQUIDO — card "herói" em gradiente verde (destaque). */}
             {/* Verde-escuro nos dois temas → texto sempre branco (valores arbitrários
                 porque o tema claro sobrescreveria .text-white p/ tons escuros). */}
             <div
-                className="relative overflow-hidden rounded-2xl p-[18px] text-[#fff]"
+                className="col-span-2 md:col-span-1 relative overflow-hidden rounded-2xl p-[18px] text-[#fff]"
                 style={{
                     background: 'linear-gradient(180deg, #0f5f47, #0c4f3b)',
                     boxShadow: '0 14px 30px -18px rgba(12,79,59,.9)',
@@ -148,6 +149,8 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
 
             {/* 4. PROVENTOS */}
             <StatCard
+                // Fecha a última linha do grid mobile (4 cards em 2 colunas deixavam um vão).
+                className="col-span-2 md:col-span-1"
                 label="Prov. Acumulados"
                 icon={<PiggyBank size={16} />}
                 iconClass="bg-gold/10 text-gold"
@@ -164,8 +167,8 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
 
 // Card de indicador padrão: superfície + ícone tingido em quadrado + pílula de tag.
 // Espelha o StatCard da aba Carteira; o valor usa <FitText> p/ nunca cortar dígitos.
-const StatCard = ({ label, tooltipText, icon, iconClass, value, valueClass, subLabel, subValue, tag, tagClass }: any) => (
-    <div className="bg-base border border-slate-800 rounded-2xl p-[18px] flex flex-col justify-between transition-colors hover:border-slate-700">
+const StatCard = ({ label, tooltipText, icon, iconClass, value, valueClass, subLabel, subValue, tag, tagClass, className = '' }: any) => (
+    <div className={`bg-base border border-slate-800 rounded-2xl p-[18px] flex flex-col justify-between transition-colors hover:border-slate-700 ${className}`}>
         <div className="flex justify-between items-start">
             <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
@@ -188,12 +191,13 @@ const StatCard = ({ label, tooltipText, icon, iconClass, value, valueClass, subL
             {value}
         </FitText>
 
-        <div className="flex items-center justify-between pt-3 border-t border-slate-800/80">
-            <div className="min-w-0">
+        {/* Rodapé empilha no mobile (card de ~165px em 2 colunas) — ver WalletSummary. */}
+        <div className="flex flex-col items-start gap-2 xl:flex-row xl:items-center xl:justify-between pt-3 border-t border-slate-800/80">
+            <div className="min-w-0 w-full xl:w-auto">
                 <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">{subLabel}</p>
                 <div className="text-sm font-bold text-slate-200 truncate">{subValue}</div>
             </div>
-            <span className={`shrink-0 ml-2 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border ${tagClass}`}>
+            <span className={`shrink-0 xl:ml-2 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border ${tagClass}`}>
                 {tag}
             </span>
         </div>

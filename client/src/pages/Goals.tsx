@@ -137,7 +137,7 @@ export const Goals: React.FC = () => {
   }, [chains]);
 
   return (
-    <div className="min-h-screen bg-deep text-white pb-24 md:pb-8">
+    <div className="min-h-screen bg-deep text-white pb-[calc(5rem+env(safe-area-inset-bottom))] xl:pb-8">
       <Header />
       <main id="main-content" className="max-w-[1360px] mx-auto p-4 md:p-6">
         {/* Cabeçalho */}
@@ -161,6 +161,8 @@ export const Goals: React.FC = () => {
             )}
             <button
               onClick={() => setCreateOpen(true)}
+              aria-label="Nova meta"
+              title="Nova meta"
               className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl px-4 py-2.5 text-sm transition-colors"
             >
               <Plus size={16} /> <span className="hidden sm:inline">Nova meta</span>

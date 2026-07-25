@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Hook reativo que indica se a viewport está abaixo do breakpoint `md` do
- * Tailwind (768px) — ou seja, no layout mobile onde o menu do topo dá lugar
+ * Hook reativo que indica se a viewport está abaixo do breakpoint `xl` do
+ * Tailwind (1280px) — ou seja, no layout mobile onde o menu do topo dá lugar
  * à barra de navegação inferior (`BottomNav`).
  *
  * Usa `matchMedia` com listener de mudança para reagir a resize/rotação.
  */
-const MOBILE_QUERY = '(max-width: 767px)';
+const MOBILE_QUERY = '(max-width: 1279px)';
 
 export const useIsMobile = (): boolean => {
     const [isMobile, setIsMobile] = useState<boolean>(() => {

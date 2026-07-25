@@ -119,7 +119,7 @@ export const Research = () => {
     const requiredPlanLabel = ASSETS.find(a => a.id === selectedAsset)?.minPlan || 'PRO';
 
     return (
-        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
+        <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-0">
             <Header />
 
             <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto p-4 md:p-8">

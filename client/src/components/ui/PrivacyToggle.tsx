@@ -13,7 +13,7 @@ export const PrivacyToggle: React.FC<PrivacyToggleProps> = ({
   isPrivacyMode,
   onToggle,
   size = 16,
-  className = 'p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors',
+  className = 'min-h-[40px] min-w-[40px] inline-flex items-center justify-center hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors',
   hideTitle = false,
 }) => {
   return (

@@ -941,18 +941,18 @@ export const Landing = () => {
           <div>
             <h4 className="mb-3 text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-400">Produto</h4>
             <ul className="space-y-2 text-[10px]">
-              <li><a href="#recursos" className="hover:text-blue-400">Research e recursos</a></li>
-              <li><a href="#metas" className="hover:text-blue-400">Sistema de Metas</a></li>
-              <li><a href="#planos" className="hover:text-blue-400">Planos</a></li>
-              <li><Link to="/pricing" className="hover:text-blue-400">Comparar assinaturas</Link></li>
+              <li><a href="#recursos" className="inline-block py-1.5 hover:text-blue-400">Research e recursos</a></li>
+              <li><a href="#metas" className="inline-block py-1.5 hover:text-blue-400">Sistema de Metas</a></li>
+              <li><a href="#planos" className="inline-block py-1.5 hover:text-blue-400">Planos</a></li>
+              <li><Link to="/pricing" className="inline-block py-1.5 hover:text-blue-400">Comparar assinaturas</Link></li>
             </ul>
           </div>
           <div>
             <h4 className="mb-3 text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-400">Legal</h4>
             <ul className="space-y-2 text-[10px]">
-              <li><Link to="/terms" className="hover:text-blue-400">Termos de Uso</Link></li>
-              <li><Link to="/privacy" className="hover:text-blue-400">Privacidade</Link></li>
-              <li><Link to="/terms" className="hover:text-blue-400">Compliance</Link></li>
+              <li><Link to="/terms" className="inline-block py-1.5 hover:text-blue-400">Termos de Uso</Link></li>
+              <li><Link to="/privacy" className="inline-block py-1.5 hover:text-blue-400">Privacidade</Link></li>
+              <li><Link to="/terms" className="inline-block py-1.5 hover:text-blue-400">Compliance</Link></li>
             </ul>
           </div>
         </div>
