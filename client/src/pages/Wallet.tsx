@@ -16,6 +16,7 @@ const TaxReport = lazy(() => import('../components/wallet/TaxReport').then(m => 
 import { SmartContributionModal } from '../components/wallet/SmartContributionModal';
 import { RebalanceModal } from '../components/wallet/RebalanceModal';
 import { RenameWalletModal } from '../components/wallet/RenameWalletModal';
+import { WalletSwitcher } from '../components/wallet/WalletSwitcher';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { SkeletonChart, SkeletonTableRows, EmptyState, Button } from '../components/ui'; // (I12) skeletons padronizados + (U3) empty state
 import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2, DollarSign, Landmark, Pencil } from 'lucide-react';
@@ -118,14 +119,19 @@ export const Wallet = () => {
                 {/* Header Actions */}
                 <div id="tour-wallet-intro" className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
                     <div>
-                        <h1 className="text-2xl font-bold text-white flex items-center gap-2.5">
-                            <span>{activeWalletName || 'Minha Carteira'}</span>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="xl:hidden shrink-0">
+                                <WalletSwitcher compact />
+                            </div>
+                            <h1 className="text-2xl font-bold text-white truncate">
+                                {activeWalletName || 'Minha Carteira'}
+                            </h1>
                             <button
                                 onClick={() => setIsRenameWalletOpen(true)}
                                 title="Renomear carteira"
                                 aria-label="Renomear carteira"
                                 // -m-2: área de toque de 40px sem deslocar o título.
-                                className="min-h-[40px] min-w-[40px] -m-2 inline-flex items-center justify-center text-slate-500 hover:text-blue-400 transition-colors shrink-0"
+                                className="hidden xl:inline-flex min-h-[40px] min-w-[40px] -m-2 items-center justify-center text-slate-500 hover:text-blue-400 transition-colors shrink-0"
                             >
                                 <Pencil size={16} />
                             </button>
@@ -135,7 +141,7 @@ export const Wallet = () => {
                                     <span className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Atualizando...</span>
                                 </div>
                             )}
-                        </h1>
+                        </div>
                         <div className="flex items-center gap-3">
                             <p className="text-slate-400 text-sm">Gerencie seus ativos e acompanhe a evolução patrimonial.</p>
                             {usdRate > 0 && (

@@ -41,6 +41,11 @@ vi.mock('../components/wallet/PerformanceChart', () => ({ PerformanceChart: () =
 vi.mock('../components/wallet/MonthlyReturnsTable', () => ({ MonthlyReturnsTable: () => null }));
 vi.mock('../components/wallet/DividendDashboard', () => ({ DividendDashboard: () => null }));
 vi.mock('../components/wallet/CashFlowHistory', () => ({ CashFlowHistory: () => null }));
+vi.mock('../components/wallet/WalletSwitcher', () => ({
+  WalletSwitcher: ({ compact }: { compact?: boolean }) => (
+    <button aria-label="Trocar carteira" data-compact={String(Boolean(compact))} />
+  ),
+}));
 
 vi.mock('../components/wallet/AddAssetModal', () => ({
   AddAssetModal: ({ isOpen }: { isOpen: boolean }) =>
@@ -121,6 +126,13 @@ describe('render básico', () => {
   it('exibe o título "Minha Carteira"', () => {
     renderWallet();
     expect(screen.getByText('Minha Carteira')).toBeInTheDocument();
+  });
+
+  it('oferece o seletor compacto de carteira na versão mobile', () => {
+    renderWallet();
+    const switcher = screen.getByRole('button', { name: 'Trocar carteira' });
+    expect(switcher).toHaveAttribute('data-compact', 'true');
+    expect(switcher.parentElement).toHaveClass('xl:hidden');
   });
 
   it('mostra esqueleto de carregamento quando isLoading=true', () => {
