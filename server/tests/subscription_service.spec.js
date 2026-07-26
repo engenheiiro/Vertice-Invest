@@ -111,7 +111,7 @@ describe('grantOneTimePeriod — aditivo e idempotente', () => {
     expect(days).toBe(30);
   });
 
-  it('credita o plano REAL a partir da variante _TEST (R$5,00)', async () => {
+  it('credita o plano REAL a partir da variante _TEST (R$0,50)', async () => {
     Transaction.create.mockResolvedValue({});
     const user = makeUser();
 

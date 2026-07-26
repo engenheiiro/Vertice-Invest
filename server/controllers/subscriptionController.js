@@ -144,7 +144,7 @@ export const createTestCheckoutSession = async (req, res, next) => {
             return res.status(400).json({ message: "Plano inválido para teste. Use ESSENTIAL, PRO, ELITE ou BLACK." });
         }
 
-        // Usa a mesma função do fluxo real — apenas com a variante _TEST (R$5,00, mesmos dias)
+        // Usa a mesma função do fluxo real — apenas com a variante _TEST (R$0,50, mesmos dias)
         const testPlanKey = `${planKey}_TEST`;
         const subscription = await startCheckout(req.user, testPlanKey, mode);
 
@@ -167,7 +167,7 @@ export const createCheckoutSession = async (req, res, next) => {
             return res.status(400).json({ message: "Plano inválido." });
         }
 
-        // Barreira independente do schema: uma variante _TEST cobra R$5,00 e
+        // Barreira independente do schema: uma variante _TEST cobra R$0,50 e
         // credita o plano real, então o checkout público nunca pode aceitá-la.
         // Só /test-checkout (requireAdmin) cria essas preferências.
         if (isTestPlan(planId)) {

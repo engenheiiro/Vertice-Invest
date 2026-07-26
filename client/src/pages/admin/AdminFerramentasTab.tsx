@@ -133,9 +133,9 @@ export const AdminFerramentasTab: React.FC<Props> = ({
         <div className="bg-base border border-amber-900/30 rounded-2xl p-6 shadow-lg mb-6">
             <div className="flex items-center gap-2 mb-1">
                 <ShieldAlert size={18} className="text-amber-500" />
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Testar Pagamento (R$5,00)</h3>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Testar Pagamento (R$0,50)</h3>
             </div>
-            <p className="text-[10px] text-slate-400 mb-4">Gera um checkout real no Mercado Pago com valor reduzido. O webhook ativa o plano correto ao aprovar. Centavos não servem: o antifraude dos bancos recusa cobrança recorrente de valor irrisório.</p>
+            <p className="text-[10px] text-slate-400 mb-4">Gera um checkout real no Mercado Pago com valor mínimo. O webhook ativa o plano correto ao aprovar. O cartão precisa ser de outra pessoa: o Mercado Pago recusa pagamento do vendedor para a própria conta.</p>
 
             {/* Dois fluxos distintos do MP (Preference x PreApproval), com webhooks
                 distintos: aprovar um não valida o outro. */}

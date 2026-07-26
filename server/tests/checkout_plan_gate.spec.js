@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Regressão: o checkout público aceitava qualquer chave de `PLANS`, incluindo as
-// variantes _TEST (R$5,00). Como o webhook resolve TEST_PLAN_MAP para o plano
-// real, `{"planId":"BLACK_TEST"}` vendia 30 dias de BLACK por R$5,00 a qualquer
+// variantes _TEST (R$0,50). Como o webhook resolve TEST_PLAN_MAP para o plano
+// real, `{"planId":"BLACK_TEST"}` vendia 30 dias de BLACK por R$0,50 a qualquer
 // usuário autenticado. O gate agora é em três camadas: PUBLIC_PLAN_KEYS (config),
 // checkoutSchema (Zod) e isTestPlan() no controller.
 
@@ -32,7 +32,7 @@ const response = () => {
 
 const TEST_PLAN_KEYS = Object.keys(TEST_PLAN_MAP);
 
-describe('Checkout público — planos de teste (R$5,00) fora de alcance', () => {
+describe('Checkout público — planos de teste (R$0,50) fora de alcance', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('não expõe nenhuma variante _TEST na lista de planos vendáveis', () => {
@@ -92,7 +92,7 @@ describe('Checkout público — planos de teste (R$5,00) fora de alcance', () =>
     // /test-checkout (requireAdmin) continua funcionando: as variantes seguem em
     // PLANS, apenas não são mais alcançáveis pelo checkout público.
     for (const [testKey, realKey] of Object.entries(TEST_PLAN_MAP)) {
-      expect(PLANS[testKey].price).toBe(5);
+      expect(PLANS[testKey].price).toBe(0.5);
       expect(PLANS[realKey].price).toBeGreaterThan(PLANS[testKey].price);
     }
   });

@@ -85,13 +85,18 @@ describe('Sinais quantitativos — gate de plano autoritativo', () => {
   it('aplica 1h de atraso real no filtro do banco para ESSENTIAL', async () => {
     const before = Date.now();
     const res = await callAs({ plan: 'ESSENTIAL', role: 'USER' });
+    const after = Date.now();
 
     expect(res.body.access).toEqual({ tier: 'DELAYED', delayMinutes: 60 });
     // O corte é por timestamp, na origem — não uma máscara pós-consulta.
     expect(lastQuery.timestamp.$lte).toBeInstanceOf(Date);
-    const cutoffAgeMs = before - lastQuery.timestamp.$lte.getTime();
-    expect(cutoffAgeMs).toBeGreaterThanOrEqual(60 * 60 * 1000);
-    expect(cutoffAgeMs).toBeLessThan(61 * 60 * 1000);
+    // Enquadrado entre os dois instantes medidos: medir a idade só contra
+    // `before` exigia que o handler rodasse no MESMO milissegundo (1ms de
+    // atraso já dava 3599999 e derrubava a suíte por acaso).
+    const cutoff = lastQuery.timestamp.$lte.getTime();
+    const HOUR_MS = 60 * 60 * 1000;
+    expect(cutoff).toBeGreaterThanOrEqual(before - HOUR_MS);
+    expect(cutoff).toBeLessThanOrEqual(after - HOUR_MS);
   });
 
   it('entrega o sinal ÍNTEGRO ao ESSENTIAL (defasado, nunca adulterado)', async () => {
