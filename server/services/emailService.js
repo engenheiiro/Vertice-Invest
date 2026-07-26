@@ -169,12 +169,15 @@ const sendSafely = async ({ to, subject, html, logLabel }) => {
       subject,
       html,
     });
-    logger.info(`📨 Email de ${logLabel} enviado para %s: %s`, to, info.messageId);
+    // Convenção do projeto: logger.info(msg, {meta}) — o logger não interpola
+    // %s. O destinatário fica de fora de propósito: e-mail é PII e não deve
+    // aparecer em claro no log (mesmo critério do authMiddleware).
+    logger.info('📨 E-mail de assinatura enviado', { tipo: logLabel, messageId: info.messageId });
     if (process.env.SMTP_HOST?.includes('ethereal')) {
-      logger.info("🔗 Preview URL: %s", nodemailer.getTestMessageUrl(info));
+      logger.info('🔗 Preview do e-mail', { url: nodemailer.getTestMessageUrl(info) });
     }
   } catch (error) {
-    logger.error(`❌ Erro ao enviar email de ${logLabel}:`, error);
+    logger.error('❌ Falha ao enviar e-mail de assinatura', { tipo: logLabel, erro: error.message });
   }
 };
 
