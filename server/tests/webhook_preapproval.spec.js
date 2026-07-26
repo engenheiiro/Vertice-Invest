@@ -99,9 +99,26 @@ describe('tópico subscription_preapproval — ciclo de vida', () => {
     expect(emails.sendSubscriptionCreatedEmail).not.toHaveBeenCalled();
   });
 
+  it('tentativa que morre antes de ser autorizada NÃO cancela a assinatura do usuário', async () => {
+    // Cenário real de produção: cartão recusado na 1ª cobrança → o MP cancela o
+    // preapproval recém-criado. Esse evento não pode derrubar o que o usuário já
+    // tinha (outra assinatura, ou um plano concedido por fora).
+    const validUntil = new Date(Date.now() + 300 * DAY);
+    const user = makeUser({ plan: 'ELITE', subscriptionStatus: 'ACTIVE', validUntil, mpPreapprovalId: undefined });
+    User.findById.mockResolvedValue(user);
+    paymentService.getPreapproval.mockResolvedValue(preapproval({ id: 'preapp-natimorto', status: 'cancelled' }));
+
+    await handleMercadoPagoWebhook(req('subscription_preapproval', 'preapp-natimorto'), mockRes());
+
+    expect(user.subscriptionStatus).toBe('ACTIVE');
+    expect(user.validUntil).toBe(validUntil);
+    expect(user.save).not.toHaveBeenCalled();
+    expect(emails.sendSubscriptionCanceledEmail).not.toHaveBeenCalled();
+  });
+
   it('cancelled: encerra a cobrança mas PRESERVA o acesso já pago', async () => {
     const validUntil = new Date(Date.now() + 12 * DAY);
-    const user = makeUser({ plan: 'PRO', subscriptionType: 'RECURRING', validUntil });
+    const user = makeUser({ plan: 'PRO', subscriptionType: 'RECURRING', validUntil, mpPreapprovalId: 'preapp-1' });
     User.findById.mockResolvedValue(user);
     paymentService.getPreapproval.mockResolvedValue(preapproval({ status: 'cancelled' }));
 
@@ -113,8 +130,23 @@ describe('tópico subscription_preapproval — ciclo de vida', () => {
     expect(emails.sendSubscriptionCanceledEmail).toHaveBeenCalledOnce();
   });
 
+  it('reentrega do mesmo cancelamento não dispara um segundo e-mail', async () => {
+    // O MP reenviou o evento "cancelled" três vezes em dois minutos na produção.
+    const user = makeUser({
+      plan: 'PRO', subscriptionType: 'RECURRING', subscriptionStatus: 'CANCELED',
+      mpPreapprovalId: 'preapp-1',
+    });
+    User.findById.mockResolvedValue(user);
+    paymentService.getPreapproval.mockResolvedValue(preapproval({ status: 'cancelled' }));
+
+    await handleMercadoPagoWebhook(req('subscription_preapproval', 'preapp-1'), mockRes());
+
+    expect(user.save).not.toHaveBeenCalled();
+    expect(emails.sendSubscriptionCanceledEmail).not.toHaveBeenCalled();
+  });
+
   it('paused: marca PAUSED sem tocar no plano', async () => {
-    const user = makeUser({ plan: 'PRO', subscriptionType: 'RECURRING' });
+    const user = makeUser({ plan: 'PRO', subscriptionType: 'RECURRING', mpPreapprovalId: 'preapp-1' });
     User.findById.mockResolvedValue(user);
     paymentService.getPreapproval.mockResolvedValue(preapproval({ status: 'paused' }));
 
@@ -158,6 +190,43 @@ describe('tópico subscription_authorized_payment — cobrança mensal', () => {
     expect(Transaction.create).toHaveBeenCalledWith(expect.objectContaining({ gatewayId: 'pay-999' }));
     expect(user.validUntil.toISOString()).toBe(NEXT.toISOString());
     expect(emails.sendRenewalReceiptEmail).toHaveBeenCalledOnce();
+  });
+
+  it('recusa numa assinatura que não governa a conta é ignorada', async () => {
+    // Cenário real: o usuário tenta assinar de novo, o cartão recusa e o MP avisa.
+    // Isso não pode marcar como PAST_DUE (nem gerar e-mail sobre) a assinatura
+    // anterior, que segue saudável.
+    const user = makeUser({
+      plan: 'ELITE', subscriptionStatus: 'ACTIVE', subscriptionType: 'RECURRING',
+      mpPreapprovalId: 'preapp-vigente',
+    });
+    User.findById.mockResolvedValue(user);
+    paymentService.getAuthorizedPayment.mockResolvedValue({
+      id: 'authpay-x', status: 'rejected', preapproval_id: 'preapp-natimorto',
+      external_reference: 'user-1:ELITE',
+    });
+
+    await handleMercadoPagoWebhook(req('subscription_authorized_payment', 'authpay-x'), mockRes());
+
+    expect(user.subscriptionStatus).toBe('ACTIVE');
+    expect(user.save).not.toHaveBeenCalled();
+    expect(emails.sendPaymentFailedEmail).not.toHaveBeenCalled();
+  });
+
+  it('reentrega da mesma recusa não dispara um segundo e-mail', async () => {
+    const user = makeUser({
+      plan: 'PRO', subscriptionStatus: 'PAST_DUE', subscriptionType: 'RECURRING',
+      mpPreapprovalId: 'preapp-1',
+    });
+    User.findById.mockResolvedValue(user);
+    paymentService.getAuthorizedPayment.mockResolvedValue({
+      id: 'authpay-2', status: 'rejected', preapproval_id: 'preapp-1',
+      external_reference: 'user-1:PRO',
+    });
+
+    await handleMercadoPagoWebhook(req('subscription_authorized_payment', 'authpay-2'), mockRes());
+
+    expect(emails.sendPaymentFailedEmail).not.toHaveBeenCalled();
   });
 
   it('rejected: marca PAST_DUE e pede novo cartão, SEM rebaixar o plano', async () => {

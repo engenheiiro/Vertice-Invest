@@ -123,6 +123,12 @@ const handlePreapprovalEvent = async (preapprovalId) => {
     }
 
     const wasRecurring = user.subscriptionType === 'RECURRING';
+    // Só o preapproval que REALMENTE governa a conta pode encerrá-la. Uma
+    // tentativa de assinatura que morre antes de ser autorizada (cartão recusado
+    // na 1ª cobrança → o MP cancela o preapproval) dispara este mesmo evento; sem
+    // esta checagem, ela marcaria como CANCELED a assinatura anterior do usuário
+    // — ou um plano que ele nem paga por aqui.
+    const isActiveSubscription = user.mpPreapprovalId === preapprovalId.toString();
 
     switch (preapproval.status) {
         case 'authorized': {
@@ -134,10 +140,19 @@ const handlePreapprovalEvent = async (preapprovalId) => {
             break;
         }
         case 'paused': {
+            if (!isActiveSubscription || user.subscriptionStatus === 'PAUSED') break;
             await markSubscriptionCanceled(user, { status: 'PAUSED' });
             break;
         }
         case 'cancelled': {
+            if (!isActiveSubscription) {
+                logger.info(`ℹ️ Preapproval ${preapprovalId} cancelado sem nunca ter governado a conta. Assinatura do usuário intacta.`);
+                break;
+            }
+            // O MP reentrega o mesmo evento várias vezes; sem esta guarda o
+            // usuário recebe um e-mail de cancelamento por entrega.
+            if (user.subscriptionStatus === 'CANCELED') break;
+
             // Acesso preservado até validUntil: cancelar interrompe a cobrança,
             // não estorna o período já pago.
             await markSubscriptionCanceled(user);
@@ -167,6 +182,17 @@ const handleAuthorizedPaymentEvent = async (authorizedPaymentId) => {
     // "processed" = cobrança liquidada. "recycling"/"rejected" = recusada, com
     // retentativas do MP em andamento.
     if (authorized.status !== 'processed') {
+        // A recusa só afeta a conta se vier da assinatura que a governa. Uma
+        // tentativa nova de assinar que é recusada não pode marcar como PAST_DUE
+        // (nem gerar e-mail de) uma assinatura anterior que está saudável.
+        if (user.mpPreapprovalId !== preapprovalId?.toString()) {
+            logger.info(`ℹ️ Cobrança ${authorizedPaymentId} recusada em assinatura que não governa a conta. Ignorada.`);
+            return;
+        }
+        // O MP reentrega o mesmo evento várias vezes; sem esta guarda o usuário
+        // recebe um e-mail de cobrança recusada por entrega.
+        if (user.subscriptionStatus === 'PAST_DUE') return;
+
         await markPaymentFailed(user);
         await sendPaymentFailedEmail(user.email, user.plan, user.validUntil);
         return;
@@ -256,7 +282,17 @@ export const handleMercadoPagoWebhook = async (req, res) => {
         // Toda variação de notificação (body ou query) precisa de assinatura.
         // Nunca processe um id de pagamento antes de validar o HMAC e o timestamp.
         if (!isValidSignature(req)) {
-            logger.warn(`⛔ Webhook MP rejeitado: assinatura inválida ou expirada. IP: ${req.ip}`);
+            // Detalha o formato recebido: notificações IPN legadas chegam sem
+            // x-signature e são rejeitadas aqui, enquanto o webhook moderno da
+            // MESMA cobrança chega assinado logo depois. Sem estes campos, os dois
+            // casos ficam indistinguíveis no log e parecem perda de pagamento.
+            logger.warn('⛔ Webhook MP rejeitado: assinatura inválida ou expirada.', {
+                ip: req.ip,
+                topic: req.body?.type || req.query.topic || null,
+                resourceId: req.body?.data?.id || req.query.id || null,
+                hasSignature: Boolean(req.headers['x-signature']),
+                hasRequestId: Boolean(req.headers['x-request-id']),
+            });
             return res.status(401).send('Invalid signature');
         }
 
