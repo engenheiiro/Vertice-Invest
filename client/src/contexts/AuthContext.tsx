@@ -4,8 +4,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { authService } from '../services/auth';
 
 export type UserPlan = 'GUEST' | 'ESSENTIAL' | 'PRO' | 'ELITE' | 'BLACK';
-export type SubscriptionStatus = 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'TRIAL';
+export type SubscriptionStatus = 'ACTIVE' | 'PAST_DUE' | 'PAUSED' | 'CANCELED' | 'TRIAL';
 export type UserRole = 'USER' | 'ADMIN';
+// ONE_TIME: comprou 30 dias no Pix. RECURRING: cartão cadastrado, renova sozinho.
+export type SubscriptionType = 'ONE_TIME' | 'RECURRING';
 
 export interface User {
   id: string;
@@ -13,8 +15,11 @@ export interface User {
   email: string;
   plan: UserPlan;
   subscriptionStatus: SubscriptionStatus;
+  subscriptionType?: SubscriptionType;
   role: UserRole;
   validUntil?: string;
+  nextBillingDate?: string;
+  cardBrand?: string;
   hasSeenTutorial?: boolean;
   cpf?: string;
   phone?: string;

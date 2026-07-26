@@ -1,12 +1,18 @@
 
-import React from 'react';
-import { CreditCard, CheckCircle2, ArrowRight, CalendarClock, Crown, AlertTriangle, QrCode, Bitcoin } from 'lucide-react';
+import React, { useState } from 'react';
+import { CreditCard, CheckCircle2, ArrowRight, CalendarClock, Crown, AlertTriangle, QrCode, Bitcoin, RefreshCw, Loader2 } from 'lucide-react';
 import { useAuth, UserPlan, PaymentMethod } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { ConfirmModal } from '../ui/ConfirmModal';
+import { subscriptionService } from '../../services/subscription';
+import { useToast } from '../../contexts/ToastContext';
 
 export const SubscriptionCard = () => {
-    const { user } = useAuth();
+    const { user, refreshProfile } = useAuth();
     const navigate = useNavigate();
+    const { addToast } = useToast();
+    const [isCancelOpen, setCancelOpen] = useState(false);
+    const [isCanceling, setCanceling] = useState(false);
 
     // Configurações de exibição por plano. Features REAIS, derivadas de
     // PLAN_ACCESS/PLAN_EXCLUSIVE (constants/subscription + Pricing) — cada tier
@@ -49,9 +55,38 @@ export const SubscriptionCard = () => {
     const status = statusConfig[user?.subscriptionStatus || ''] || { label: 'Inativo', classes: 'bg-slate-800 text-slate-300 border-slate-700', dot: 'bg-slate-500' };
 
     const daysLeft = isPaidPlan ? getDaysLeft(user?.validUntil) : null;
-    const expiryBadge = daysLeft !== null && daysLeft <= 7
+    // Assinatura recorrente ativa não "expira" — ela renova. Mostrar contagem
+    // regressiva ali assustaria o assinante adimplente sem motivo.
+    const isRecurring = user?.subscriptionType === 'RECURRING';
+    const isRenewing = isRecurring && user?.subscriptionStatus === 'ACTIVE';
+    const expiryBadge = !isRenewing && daysLeft !== null && daysLeft <= 7
         ? { label: daysLeft <= 0 ? 'Expirado' : `Expira em ${daysLeft} dia${daysLeft === 1 ? '' : 's'}`, urgent: daysLeft <= 3 }
         : null;
+
+    // Convite de migração: quem pagou avulso e está perto de vencer ganha o
+    // caminho para o cartão recorrente, em vez de simplesmente perder o acesso.
+    const showRecurringInvite = isPaidPlan && !isRecurring && daysLeft !== null && daysLeft <= 7 && daysLeft > 0;
+    const showPaymentFailed = isRecurring && user?.subscriptionStatus === 'PAST_DUE';
+    const canCancel = isRecurring && user?.subscriptionStatus !== 'CANCELED';
+
+    const handleCancel = async () => {
+        setCanceling(true);
+        try {
+            const result = await subscriptionService.cancelSubscription();
+            await refreshProfile();
+            const until = result?.validUntil ? new Date(result.validUntil).toLocaleDateString('pt-BR') : null;
+            addToast(
+                until
+                    ? `Assinatura cancelada. Seu acesso continua até ${until}.`
+                    : 'Assinatura cancelada.',
+                'success',
+            );
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : 'Não foi possível cancelar a assinatura.', 'error');
+        } finally {
+            setCanceling(false);
+        }
+    };
 
     return (
         <div className="bg-gradient-to-br from-base to-card border border-slate-800 rounded-2xl p-6 relative overflow-hidden group">
@@ -91,10 +126,23 @@ export const SubscriptionCard = () => {
                                 </span>
                                 <span className="text-[11px] font-bold text-emerald-400">{new Date(user.validUntil).toLocaleDateString('pt-BR')}</span>
                             </div>
+                            {/* Data real da próxima cobrança quando há assinatura; caso
+                                contrário deixa claro que não haverá renovação. */}
                             <div className="flex items-center justify-between gap-3">
-                                <span className="text-[10px] text-slate-500 uppercase tracking-wide">Renova dia</span>
-                                <span className="text-[11px] font-bold text-slate-300">{new Date(user.validUntil).getDate()}</span>
+                                <span className="text-[10px] text-slate-500 uppercase tracking-wide">
+                                    {isRenewing ? 'Próxima cobrança' : 'Renovação'}
+                                </span>
+                                <span className={`text-[11px] font-bold ${isRenewing ? 'text-slate-300' : 'text-slate-500'}`}>
+                                    {isRenewing
+                                        ? new Date(user.nextBillingDate || user.validUntil).toLocaleDateString('pt-BR')
+                                        : user?.subscriptionStatus === 'CANCELED' ? 'Cancelada' : 'Manual'}
+                                </span>
                             </div>
+                            {isRenewing && (
+                                <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-950/60 text-blue-300 border border-blue-800/60">
+                                    <RefreshCw size={9} /> Renovação automática
+                                </span>
+                            )}
                             {expiryBadge && (
                                 <span className={`mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
                                     expiryBadge.urgent
@@ -114,6 +162,43 @@ export const SubscriptionCard = () => {
                     )}
                 </div>
             </div>
+
+            {showPaymentFailed && (
+                <div className="mb-4 relative z-10 flex items-start gap-3 p-4 rounded-xl bg-red-950/40 border border-red-800/60">
+                    <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-red-300">Não conseguimos renovar sua assinatura</p>
+                        <p className="text-[11px] text-red-400/80 mt-0.5 leading-relaxed">
+                            A cobrança no seu cartão foi recusada. O Mercado Pago vai tentar de novo nos próximos dias —
+                            se preferir não esperar, atualize a forma de pagamento agora.
+                        </p>
+                        <button
+                            onClick={() => navigate('/pricing')}
+                            className="mt-2 text-[11px] font-bold text-red-300 hover:text-white transition-colors inline-flex items-center gap-1"
+                        >
+                            Atualizar pagamento <ArrowRight size={11} />
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {showRecurringInvite && (
+                <div className="mb-4 relative z-10 flex items-start gap-3 p-4 rounded-xl bg-blue-950/30 border border-blue-800/50">
+                    <RefreshCw size={16} className="text-blue-400 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-blue-200">Seu acesso vence em {daysLeft} dia{daysLeft === 1 ? '' : 's'}</p>
+                        <p className="text-[11px] text-blue-300/80 mt-0.5 leading-relaxed">
+                            Cadastre um cartão e a renovação passa a ser automática — sem precisar lembrar de pagar todo mês.
+                        </p>
+                        <button
+                            onClick={() => navigate('/pricing')}
+                            className="mt-2 text-[11px] font-bold text-blue-300 hover:text-white transition-colors inline-flex items-center gap-1"
+                        >
+                            Ativar renovação automática <ArrowRight size={11} />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <div className="space-y-2 mb-6 relative z-10 bg-card p-4 rounded-xl border border-slate-800/50">
                 <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Recursos Ativos</p>
@@ -139,22 +224,49 @@ export const SubscriptionCard = () => {
                         <p className="text-[10px] text-slate-500">
                             {user?.subscriptionStatus === 'TRIAL'
                                 ? 'Período de Testes'
-                                : user?.paymentMethod
-                                    ? `${paymentDisplay[user.paymentMethod].label} · Mercado Pago`
-                                    : 'Mercado Pago (Pré-pago)'}
+                                : isRecurring
+                                    ? `Cartão de Crédito${user?.cardBrand ? ` (${user.cardBrand})` : ''} · Assinatura`
+                                    : user?.paymentMethod
+                                        ? `${paymentDisplay[user.paymentMethod].label} · Mercado Pago`
+                                        : 'Mercado Pago (Pré-pago)'}
                         </p>
                     </div>
                 </div>
-                
-                {!isMaxTier && (
-                    <button 
-                        onClick={() => navigate('/pricing')}
-                        className="text-xs font-bold text-blue-400 hover:text-white hover:bg-blue-600 px-4 py-2 rounded-lg transition-all flex items-center gap-1 border border-blue-500/30 hover:border-transparent"
-                    >
-                        {isPaidPlan ? 'Gerenciar / Upgrade' : 'Fazer Upgrade'} <ArrowRight size={12} />
-                    </button>
-                )}
+
+                <div className="flex items-center gap-2">
+                    {canCancel && (
+                        <button
+                            onClick={() => setCancelOpen(true)}
+                            disabled={isCanceling}
+                            className="text-xs font-bold text-slate-400 hover:text-red-400 px-3 py-2 rounded-lg transition-all inline-flex items-center gap-1.5 disabled:opacity-60"
+                        >
+                            {isCanceling && <Loader2 size={12} className="animate-spin" />}
+                            Cancelar
+                        </button>
+                    )}
+                    {!isMaxTier && (
+                        <button
+                            onClick={() => navigate('/pricing')}
+                            className="text-xs font-bold text-blue-400 hover:text-white hover:bg-blue-600 px-4 py-2 rounded-lg transition-all flex items-center gap-1 border border-blue-500/30 hover:border-transparent"
+                        >
+                            {isPaidPlan ? 'Gerenciar / Upgrade' : 'Fazer Upgrade'} <ArrowRight size={12} />
+                        </button>
+                    )}
+                </div>
             </div>
+
+            <ConfirmModal
+                isOpen={isCancelOpen}
+                onClose={() => setCancelOpen(false)}
+                onConfirm={handleCancel}
+                title="Cancelar assinatura?"
+                message={
+                    user?.validUntil
+                        ? `Não haverá novas cobranças. Você mantém acesso completo ao ${currentPlan.name} até ${new Date(user.validUntil).toLocaleDateString('pt-BR')} — o período já pago é seu.`
+                        : 'Não haverá novas cobranças. Você mantém o acesso até o fim do período já pago.'
+                }
+                confirmText="Sim, cancelar"
+            />
         </div>
     );
 };

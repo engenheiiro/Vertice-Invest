@@ -10,6 +10,7 @@ import { holidayService } from './holidayService.js';
 import { financialService } from './financialService.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { clearUserCache } from '../utils/userCache.js'; // (I6) limpa cache pós-downgrade em massa
+import { RECURRING_GRACE_DAYS } from '../config/subscription.js';
 import { signalEngine } from './engines/signalEngine.js';
 import MarketAsset from '../models/MarketAsset.js';
 import MarketAnalysis from '../models/MarketAnalysis.js';
@@ -569,11 +570,32 @@ export const initScheduler = () => {
     schedule('0 3 * * *', async () => {
         try {
             const now = new Date();
+            // Assinatura recorrente ativa ganha carência: o MP cobra na data de
+            // aniversário em horário próprio e ainda retenta cobranças recusadas.
+            // Rebaixar em `validUntil` cravado derrubaria assinantes adimplentes.
+            // Mesma regra de isSubscriptionExpired(), aqui em forma de query.
+            const graceCutoff = new Date(now.getTime() - RECURRING_GRACE_DAYS * 86_400_000);
+
             const res = await User.updateMany(
                 {
                     plan: { $ne: 'GUEST' },
                     role: { $ne: 'ADMIN' },
-                    validUntil: { $lt: now }
+                    $or: [
+                        // Recorrente e não cancelada → só cai depois da carência.
+                        {
+                            subscriptionType: 'RECURRING',
+                            subscriptionStatus: { $ne: 'CANCELED' },
+                            validUntil: { $lt: graceCutoff },
+                        },
+                        // Avulso, cancelado ou legado (sem subscriptionType) → data cravada.
+                        {
+                            $or: [
+                                { subscriptionType: { $ne: 'RECURRING' } },
+                                { subscriptionStatus: 'CANCELED' },
+                            ],
+                            validUntil: { $lt: now },
+                        },
+                    ],
                 },
                 { $set: { plan: 'GUEST', subscriptionStatus: 'PAST_DUE' } }
             );

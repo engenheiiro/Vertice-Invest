@@ -115,4 +115,14 @@ export const publicLogoLimiter = createUserLimiter({
   message: 'Muitas solicitações de logo. Aguarde alguns minutos.',
 });
 
+// Escrita de assinatura (checkout, cancelamento, troca de plano, sync): cada
+// chamada bate na API do Mercado Pago e algumas criam/cancelam preapprovals de
+// verdade. 20/15min por usuário cobre folgado uma sessão de compra com
+// retentativas e impede tanto abuso quanto flood acidental do gateway.
+export const subscriptionWriteLimiter = createUserLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: 'Muitas operações de assinatura. Aguarde alguns minutos.',
+});
+
 export { createUserLimiter };

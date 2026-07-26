@@ -5,8 +5,9 @@ import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { useAuth, UserPlan } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { subscriptionService } from '../services/subscription';
+import { subscriptionService, type BillingMode } from '../services/subscription';
 import { Header } from '../components/dashboard/Header';
+import { PaymentMethodModal } from '../components/subscription/PaymentMethodModal';
 import { PLAN_DETAILS } from '../constants/subscription';
 
 // Features exclusivas de cada tier — só o que é NOVO naquele plano
@@ -103,12 +104,22 @@ export const Pricing = () => {
     const { addToast } = useToast();
     const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
     const [activeDot, setActiveDot] = useState(0);
+    // Plano escolhido aguardando a escolha do método (cartão recorrente x Pix avulso).
+    const [pendingPlan, setPendingPlan] = useState<UserPlan | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    const handleSelectPlan = async (planId: string) => {
-        setLoadingPlan(planId);
+    // Cartão e Pix não são só formas de pagar: levam a APIs diferentes do Mercado
+    // Pago (PreApproval x Preference), com consequências diferentes de renovação.
+    // Por isso a escolha vem antes do redirect, não depois.
+    const handleSelectPlan = (planId: string) => {
+        setPendingPlan(planId as UserPlan);
+    };
+
+    const handleConfirmMethod = async (mode: BillingMode) => {
+        if (!pendingPlan) return;
+        setLoadingPlan(pendingPlan);
         try {
-            const response = await subscriptionService.initCheckout(planId);
+            const response = await subscriptionService.initCheckout(pendingPlan, mode);
             if (response.redirectUrl) {
                 window.location.href = response.redirectUrl;
             } else {
@@ -118,6 +129,7 @@ export const Pricing = () => {
             console.error('Erro ao iniciar checkout', error);
             addToast('Não foi possível conectar ao Mercado Pago. Tente novamente.', 'error');
             setLoadingPlan(null);
+            setPendingPlan(null);
         }
     };
 
@@ -160,6 +172,17 @@ export const Pricing = () => {
     return (
         <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-[calc(5rem+env(safe-area-inset-bottom))] xl:pb-20">
             <Header />
+
+            {pendingPlan && (
+                <PaymentMethodModal
+                    isOpen
+                    onClose={() => setPendingPlan(null)}
+                    onConfirm={handleConfirmMethod}
+                    planLabel={PLAN_DETAILS[pendingPlan].label}
+                    price={PLAN_DETAILS[pendingPlan].price}
+                    isLoading={loadingPlan === pendingPlan}
+                />
+            )}
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 lg:py-16 animate-fade-in">
 

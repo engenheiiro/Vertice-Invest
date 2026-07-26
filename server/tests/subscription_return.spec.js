@@ -9,11 +9,11 @@ vi.mock('../config/logger.js', () => ({ default: { info: vi.fn(), error: vi.fn()
 vi.mock('../models/User.js', () => ({ default: { findById: vi.fn() } }));
 vi.mock('../models/Transaction.js', () => ({ default: { create: vi.fn(), findOne: vi.fn() } }));
 vi.mock('../models/UsageLog.js', () => ({ default: { findOne: vi.fn(), findOneAndUpdate: vi.fn() } }));
-vi.mock('../services/paymentService.js', () => ({ paymentService: { createSubscription: vi.fn(), getPaymentStatus: vi.fn() } }));
+vi.mock('../services/paymentService.js', () => ({ paymentService: { createOneTimeCheckout: vi.fn(), createRecurringSubscription: vi.fn(), getPaymentStatus: vi.fn(), getPreapproval: vi.fn() } }));
 vi.mock('../utils/userCache.js', () => ({ invalidateUser: vi.fn() }));
 
 const { paymentService } = await import('../services/paymentService.js');
-const { handlePaymentReturn, createTestCheckoutSession } = await import('../controllers/subscriptionController.js');
+const { handlePaymentReturn, createTestCheckoutSession, createCheckoutSession } = await import('../controllers/subscriptionController.js');
 
 const mockRes = () => {
   const res = { statusCode: 200, body: null, redirectUrl: null };
@@ -54,6 +54,43 @@ describe('handlePaymentReturn — contrato BrowserRouter do Checkout Pro', () =>
     expect(target.searchParams.has('unexpected')).toBe(false);
   });
 
+  it('lê o plano do PATH no retorno recorrente e marca o modo', async () => {
+    // O back_url do preapproval não pode ter query string, então o plano viaja
+    // pelo path (/return/:plan) e o MP anexa o preapproval_id por conta própria.
+    const res = mockRes();
+    await handlePaymentReturn({ params: { plan: 'ELITE_TEST' }, query: { preapproval_id: 'preapp-1' } }, res);
+
+    const target = new URL(res.redirectUrl);
+    expect(target.searchParams.get('plan')).toBe('ELITE_TEST');
+    expect(target.searchParams.get('preapproval_id')).toBe('preapp-1');
+    expect(target.searchParams.get('mode')).toBe('recurring');
+  });
+
+  it('resgata o preapproval_id que o MP grudou dentro de outro parâmetro', async () => {
+    // Regressão real: com query string no back_url, o MP concatenou
+    // "?preapproval_id=..." no fim, produzindo return_status="success?preapproval_id=X".
+    // O identificador sumia e o cliente pagava sem ver a assinatura ativar.
+    const res = mockRes();
+    await handlePaymentReturn({
+      params: {},
+      query: { plan: 'ELITE', return_status: 'success?preapproval_id=69CACAE919C14904A53C0AF42C927673' },
+    }, res);
+
+    const target = new URL(res.redirectUrl);
+    expect(target.searchParams.get('preapproval_id')).toBe('69CACAE919C14904A53C0AF42C927673');
+    expect(target.searchParams.get('return_status')).toBe('success');
+    expect(target.searchParams.get('mode')).toBe('recurring');
+  });
+
+  it('não marca modo recorrente num retorno avulso', async () => {
+    const res = mockRes();
+    await handlePaymentReturn({ params: {}, query: { plan: 'PRO', payment_id: '123', status: 'approved' } }, res);
+
+    const target = new URL(res.redirectUrl);
+    expect(target.searchParams.has('mode')).toBe(false);
+    expect(target.searchParams.has('preapproval_id')).toBe(false);
+  });
+
   it('não encaminha plano injetado que não exista na configuração', async () => {
     const res = mockRes();
     await handlePaymentReturn({ query: { plan: 'BLACK_GRÁTIS', payment_id: '123', status: 'approved' } }, res);
@@ -64,14 +101,66 @@ describe('handlePaymentReturn — contrato BrowserRouter do Checkout Pro', () =>
   });
 
   it('mantém o checkout de teste de R$0,50 restrito ao fluxo *_TEST', async () => {
-    paymentService.createSubscription.mockResolvedValue({ init_point: 'https://mp.test/checkout', id: 'pref-1' });
+    paymentService.createOneTimeCheckout.mockResolvedValue({ init_point: 'https://mp.test/checkout', id: 'pref-1' });
     const req = { body: { planKey: 'ELITE' }, user: { id: 'admin-1' } };
     const res = mockRes();
 
     await createTestCheckoutSession(req, res, (error) => { throw error; });
 
-    expect(paymentService.createSubscription).toHaveBeenCalledWith(req.user, 'ELITE_TEST');
+    expect(paymentService.createOneTimeCheckout).toHaveBeenCalledWith(req.user, 'ELITE_TEST');
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ redirectUrl: 'https://mp.test/checkout', subscriptionId: 'pref-1' });
+  });
+});
+
+describe('createCheckoutSession — início da cobrança recorrente', () => {
+  const DAY = 86_400_000;
+
+  it('adia a 1ª cobrança para o fim do período já pago (não descarta dias de Pix)', async () => {
+    paymentService.createRecurringSubscription.mockResolvedValue({ init_point: 'https://mp/sub', id: 'preapp-1' });
+    const validUntil = new Date(Date.now() + 20 * DAY);
+    const res = mockRes();
+
+    await createCheckoutSession(
+      { body: { planId: 'PRO', mode: 'RECURRING' }, user: { id: 'u1', validUntil } },
+      res,
+      (error) => { throw error; },
+    );
+
+    expect(paymentService.createRecurringSubscription).toHaveBeenCalledWith(
+      expect.anything(), 'PRO', { startDate: validUntil },
+    );
+  });
+
+  it('cobra na hora quem não tem saldo restante', async () => {
+    paymentService.createRecurringSubscription.mockResolvedValue({ init_point: 'https://mp/sub', id: 'preapp-1' });
+    const res = mockRes();
+
+    await createCheckoutSession(
+      { body: { planId: 'PRO', mode: 'RECURRING' }, user: { id: 'u1', validUntil: new Date(Date.now() - DAY) } },
+      res,
+      (error) => { throw error; },
+    );
+
+    expect(paymentService.createRecurringSubscription).toHaveBeenCalledWith(
+      expect.anything(), 'PRO', { startDate: null },
+    );
+  });
+
+  it('ignora validade distante (acesso concedido à mão, não período comprado)', async () => {
+    // Contas internas costumam ter validUntil em datas remotas. Adiar a cobrança
+    // para lá deixaria a assinatura sem cobrar por anos.
+    paymentService.createRecurringSubscription.mockResolvedValue({ init_point: 'https://mp/sub', id: 'preapp-1' });
+    const res = mockRes();
+
+    await createCheckoutSession(
+      { body: { planId: 'PRO', mode: 'RECURRING' }, user: { id: 'u1', validUntil: new Date('2100-03-31') } },
+      res,
+      (error) => { throw error; },
+    );
+
+    expect(paymentService.createRecurringSubscription).toHaveBeenCalledWith(
+      expect.anything(), 'PRO', { startDate: null },
+    );
   });
 });

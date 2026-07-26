@@ -33,6 +33,18 @@ export const isTestPlan = (planKey) => Object.hasOwn(TEST_PLAN_MAP, planKey);
 // Planos realmente vendáveis pelo checkout público (fonte única).
 export const PUBLIC_PLAN_KEYS = Object.keys(PLANS).filter((key) => !isTestPlan(key));
 
+// --- ASSINATURA RECORRENTE ---
+// Modos de cobrança aceitos pelo checkout. O cartão é sempre RECURRING
+// (PreApproval); Pix/boleto são sempre ONE_TIME (o Pix não suporta recorrência
+// no Mercado Pago).
+export const BILLING_MODES = ['ONE_TIME', 'RECURRING'];
+
+// Folga entre o vencimento do período e o rebaixamento para GUEST, aplicada só a
+// assinaturas RECURRING. O MP cobra na data de aniversário em horário próprio e
+// ainda faz retentativas ("recycling") por alguns dias — sem essa carência, uma
+// renovação processada às 10h deixaria o assinante como GUEST desde a meia-noite.
+export const RECURRING_GRACE_DAYS = 3;
+
 // --- SINAIS QUANTITATIVOS (Radar Alfa) ---
 // Atraso de entrega em MINUTOS por plano. `0` = tempo real, `null` = sem acesso.
 // O ESSENTIAL recebe o sinal ÍNTEGRO (mesmo ticker, mesmo valor), só fora da

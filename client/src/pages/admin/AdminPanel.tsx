@@ -3,7 +3,7 @@ import { Header } from '../../components/dashboard/Header';
 import { researchService, SECTION_LABEL, ResearchReport, PublishStatus } from '../../services/research';
 import { marketService } from '../../services/market';
 import { authService } from '../../services/auth';
-import { subscriptionService } from '../../services/subscription';
+import { subscriptionService, type BillingMode } from '../../services/subscription';
 import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, Settings, Play } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 import { useToast } from '../../contexts/ToastContext';
@@ -290,10 +290,13 @@ export const AdminPanel = () => {
         finally { setIsFixingSplit(false); }
     };
 
-    const handleTestPayment = async (planKey: string) => {
-        setTestPaymentLoading(planKey);
+    // `mode` decide qual API do MP é exercitada: ONE_TIME (Preference/Pix) ou
+    // RECURRING (PreApproval/cartão). São fluxos e webhooks diferentes — testar
+    // um não dá garantia nenhuma sobre o outro.
+    const handleTestPayment = async (planKey: string, mode: BillingMode = 'ONE_TIME') => {
+        setTestPaymentLoading(`${planKey}:${mode}`);
         try {
-            const data = await subscriptionService.testCheckout(planKey);
+            const data = await subscriptionService.testCheckout(planKey, mode);
             if (data.redirectUrl) window.open(data.redirectUrl, '_blank');
         } catch (e: unknown) { showStatus('error', getErrorMessage(e, "Erro ao gerar link de teste.")); }
         finally { setTestPaymentLoading(null); }

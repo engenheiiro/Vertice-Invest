@@ -11,7 +11,10 @@ vi.mock('../models/Transaction.js', () => ({ default: { findOne: vi.fn(), create
 vi.mock('../models/UsageLog.js', () => ({ default: { findOne: vi.fn(), findOneAndUpdate: vi.fn() } }));
 vi.mock('../config/logger.js', () => ({ default: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
 vi.mock('../services/paymentService.js', () => ({
-  paymentService: { createSubscription: vi.fn().mockResolvedValue({ init_point: 'https://mp/x', id: 'pref-1' }) },
+  paymentService: {
+    createOneTimeCheckout: vi.fn().mockResolvedValue({ init_point: 'https://mp/x', id: 'pref-1' }),
+    createRecurringSubscription: vi.fn().mockResolvedValue({ init_point: 'https://mp/sub', id: 'preapp-1' }),
+  },
 }));
 vi.mock('../utils/userCache.js', () => ({ invalidateUser: vi.fn() }));
 
@@ -61,7 +64,8 @@ describe('Checkout público — planos de teste (R$0,50) fora de alcance', () =>
       await createCheckoutSession({ body: { planId: key }, user: { id: 'u1' } }, res, vi.fn());
 
       expect(res.statusCode, `${key} deveria ser barrado no controller`).toBe(400);
-      expect(paymentService.createSubscription).not.toHaveBeenCalled();
+      expect(paymentService.createOneTimeCheckout).not.toHaveBeenCalled();
+      expect(paymentService.createRecurringSubscription).not.toHaveBeenCalled();
     }
   });
 
@@ -71,7 +75,17 @@ describe('Checkout público — planos de teste (R$0,50) fora de alcance', () =>
 
     expect(res.statusCode).toBe(200);
     expect(res.body.redirectUrl).toBe('https://mp/x');
-    expect(paymentService.createSubscription).toHaveBeenCalledWith({ id: 'u1' }, 'BLACK');
+    expect(paymentService.createOneTimeCheckout).toHaveBeenCalledWith({ id: 'u1' }, 'BLACK');
+  });
+
+  it('roteia o modo RECURRING para o PreApproval, não para a Preference', async () => {
+    const res = response();
+    await createCheckoutSession({ body: { planId: 'PRO', mode: 'RECURRING' }, user: { id: 'u1' } }, res, vi.fn());
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.redirectUrl).toBe('https://mp/sub');
+    expect(paymentService.createRecurringSubscription).toHaveBeenCalledWith({ id: 'u1' }, 'PRO', { startDate: null });
+    expect(paymentService.createOneTimeCheckout).not.toHaveBeenCalled();
   });
 
   it('mantém o preço de teste desacoplado do preço real (a variante ainda existe p/ o admin)', () => {

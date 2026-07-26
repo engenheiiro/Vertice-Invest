@@ -814,8 +814,10 @@ export const deleteAccount = async (req, res, next) => {
 
         // Cancela a assinatura recorrente no Mercado Pago (best-effort, fora da transação:
         // é uma chamada externa que não deve abortar a exclusão dos dados).
-        if (user.mpSubscriptionId) {
-            await paymentService.cancelSubscription(user.mpSubscriptionId);
+        // Precisa ser o preapproval_id — mpSubscriptionId guarda id de PAGAMENTO
+        // (legado do fluxo avulso) e o MP rejeita esse id no cancelamento.
+        if (user.mpPreapprovalId) {
+            await paymentService.cancelPreapproval(user.mpPreapprovalId);
         }
 
         // Exclusão em cascata atômica. Operações SEQUENCIAIS: uma sessão de transação

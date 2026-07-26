@@ -348,13 +348,22 @@ const definition = {
       get: { tags: ['Subscription'], summary: 'Callback de retorno do checkout', security: [], responses: { 302: { description: 'Redireciona para o app' } } },
     },
     '/subscription/checkout': {
-      post: { tags: ['Subscription'], summary: 'Inicia checkout de um plano', responses: { 200: { description: 'Preferência de pagamento' } } },
+      post: { tags: ['Subscription'], summary: 'Inicia checkout de um plano (mode: ONE_TIME=Pix avulso | RECURRING=cartão, assinatura)', responses: { 200: { description: 'Link de pagamento ou assinatura' } } },
     },
     '/subscription/test-checkout': {
       post: { tags: ['Subscription'], summary: 'Checkout de teste (admin)', responses: { 200: { description: 'Preferência de teste' }, 403: { description: 'Requer ADMIN' } } },
     },
     '/subscription/sync-payment': {
-      post: { tags: ['Subscription'], summary: 'Força a sincronização do pagamento', responses: { 200: { description: 'Sincronizado' } } },
+      post: { tags: ['Subscription'], summary: 'Força a sincronização do pagamento avulso', responses: { 200: { description: 'Sincronizado' } } },
+    },
+    '/subscription/sync-preapproval': {
+      post: { tags: ['Subscription'], summary: 'Força a sincronização da assinatura recorrente', responses: { 200: { description: 'Sincronizada' }, 403: { description: 'Assinatura de outro usuário' }, 404: { description: 'Não encontrada no Mercado Pago' } } },
+    },
+    '/subscription/cancel': {
+      post: { tags: ['Subscription'], summary: 'Cancela a assinatura recorrente (acesso mantido até validUntil)', responses: { 200: { description: 'Cancelada' }, 400: { description: 'Sem assinatura recorrente ativa' }, 502: { description: 'Falha no Mercado Pago' } } },
+    },
+    '/subscription/change-plan': {
+      post: { tags: ['Subscription'], summary: 'Troca o plano assinado (recria o preapproval a partir do fim do período pago)', responses: { 200: { description: 'Link da nova assinatura' }, 400: { description: 'Plano inválido ou sem assinatura ativa' } } },
     },
     '/subscription/status': {
       get: { tags: ['Subscription'], summary: 'Status do plano/assinatura do usuário', responses: { 200: { description: 'Plano atual' } } },

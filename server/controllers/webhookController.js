@@ -4,9 +4,22 @@ import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 import logger from '../config/logger.js';
 import { paymentService } from '../services/paymentService.js';
-import { TEST_PLAN_MAP } from '../config/subscription.js';
-import { invalidateUser } from '../utils/userCache.js'; // (I6) bust de cache de plano
-import { sendCheckoutConfirmationEmail } from '../services/emailService.js';
+import {
+    grantOneTimePeriod,
+    syncRecurringPeriod,
+    recordRecurringCharge,
+    markPaymentFailed,
+    markSubscriptionCanceled,
+    parseExternalReference,
+    resolvePlanKey,
+} from '../services/subscriptionService.js';
+import {
+    sendCheckoutConfirmationEmail,
+    sendSubscriptionCreatedEmail,
+    sendRenewalReceiptEmail,
+    sendPaymentFailedEmail,
+    sendSubscriptionCanceledEmail,
+} from '../services/emailService.js';
 
 // --- MELHORIA 3: VALIDAÇÃO DE ASSINATURA HMAC ---
 // Janela fixa, interna ao serviço: não cria nem exige uma nova variável de ambiente.
@@ -68,15 +81,172 @@ export const isValidSignature = (req) => {
     }
 };
 
-// Extrai userId e planKey do external_reference no formato "{userId}:{planKey}"
-const parseExternalReference = (rawRef) => {
-    if (!rawRef) return { userId: null, planKey: null };
-    const colonIdx = rawRef.indexOf(':');
-    if (colonIdx === -1) return { userId: rawRef, planKey: null };
-    return {
-        userId: rawRef.substring(0, colonIdx),
-        planKey: rawRef.substring(colonIdx + 1),
-    };
+/**
+ * Descobre se um pagamento nasceu de uma assinatura recorrente e devolve o
+ * preapproval de origem. Não dá para confiar só em `user.subscriptionType`: na
+ * PRIMEIRA cobrança o tópico `payment` pode chegar antes do
+ * `subscription_preapproval`, com o usuário ainda marcado como ONE_TIME — e aí o
+ * crédito aditivo somaria 30 dias por cima do calendário do MP.
+ */
+const resolvePreapprovalId = (payment, user) => (
+    payment?.metadata?.preapproval_id
+    || payment?.metadata?.preapprovalId
+    || (payment?.point_of_interaction?.type === 'SUBSCRIPTIONS' ? user?.mpPreapprovalId : null)
+    || (user?.subscriptionType === 'RECURRING' ? user?.mpPreapprovalId : null)
+    || null
+);
+
+// Localiza o assinante de um evento de assinatura: primeiro pelo
+// external_reference (fonte primária), depois pelo preapproval já vinculado.
+const findSubscriber = async (externalReference, preapprovalId) => {
+    const { userId } = parseExternalReference(externalReference);
+    if (userId) {
+        const byRef = await User.findById(userId).catch(() => null);
+        if (byRef) return byRef;
+    }
+    if (preapprovalId) return User.findOne({ mpPreapprovalId: preapprovalId.toString() });
+    return null;
+};
+
+// --- TÓPICO: subscription_preapproval (ciclo de vida da assinatura) ---
+const handlePreapprovalEvent = async (preapprovalId) => {
+    const preapproval = await paymentService.getPreapproval(preapprovalId);
+    if (!preapproval) {
+        logger.warn(`Webhook: preapproval ${preapprovalId} não encontrado na API.`);
+        return;
+    }
+
+    const user = await findSubscriber(preapproval.external_reference, preapprovalId);
+    if (!user) {
+        logger.error(`❌ Assinante não encontrado para preapproval ${preapprovalId}.`);
+        return;
+    }
+
+    const wasRecurring = user.subscriptionType === 'RECURRING';
+
+    switch (preapproval.status) {
+        case 'authorized': {
+            await syncRecurringPeriod(user, preapproval);
+            // Só avisa na estreia — renovações têm o e-mail de recibo próprio.
+            if (!wasRecurring) {
+                await sendSubscriptionCreatedEmail(user.email, user.plan, user.nextBillingDate);
+            }
+            break;
+        }
+        case 'paused': {
+            await markSubscriptionCanceled(user, { status: 'PAUSED' });
+            break;
+        }
+        case 'cancelled': {
+            // Acesso preservado até validUntil: cancelar interrompe a cobrança,
+            // não estorna o período já pago.
+            await markSubscriptionCanceled(user);
+            await sendSubscriptionCanceledEmail(user.email, user.plan, user.validUntil);
+            break;
+        }
+        default:
+            logger.info(`ℹ️ Preapproval ${preapprovalId} em status "${preapproval.status}". Nenhuma ação.`);
+    }
+};
+
+// --- TÓPICO: subscription_authorized_payment (cada cobrança mensal) ---
+const handleAuthorizedPaymentEvent = async (authorizedPaymentId) => {
+    const authorized = await paymentService.getAuthorizedPayment(authorizedPaymentId);
+    if (!authorized) {
+        logger.warn(`Webhook: authorized_payment ${authorizedPaymentId} não encontrado na API.`);
+        return;
+    }
+
+    const preapprovalId = authorized.preapproval_id;
+    const user = await findSubscriber(authorized.external_reference, preapprovalId);
+    if (!user) {
+        logger.error(`❌ Assinante não encontrado para authorized_payment ${authorizedPaymentId}.`);
+        return;
+    }
+
+    // "processed" = cobrança liquidada. "recycling"/"rejected" = recusada, com
+    // retentativas do MP em andamento.
+    if (authorized.status !== 'processed') {
+        await markPaymentFailed(user);
+        await sendPaymentFailedEmail(user.email, user.plan, user.validUntil);
+        return;
+    }
+
+    const preapproval = await paymentService.getPreapproval(preapprovalId);
+    const { planKey } = parseExternalReference(authorized.external_reference || preapproval?.external_reference);
+
+    // gatewayId = id do PAGAMENTO real (não do authorized_payment). É o mesmo id
+    // que o tópico `payment` usaria, então o índice único cobre os dois caminhos
+    // e a cobrança entra no extrato uma única vez.
+    const paymentId = authorized.payment?.id || authorizedPaymentId;
+    const isNewCharge = await recordRecurringCharge(user, {
+        gatewayId: paymentId,
+        amount: authorized.transaction_amount ?? authorized.payment?.transaction_amount,
+        plan: planKey || user.plan,
+    });
+
+    if (preapproval) await syncRecurringPeriod(user, preapproval);
+
+    if (isNewCharge) {
+        await sendRenewalReceiptEmail(user.email, user.plan, user.validUntil, authorized.transaction_amount);
+    }
+};
+
+// --- TÓPICO: payment (avulso Pix/boleto e também cobranças de assinatura) ---
+const handlePaymentEvent = async (resourceId) => {
+    // Fast-path de idempotência; a garantia real é o índice único em gatewayId.
+    const existingTransaction = await Transaction.findOne({ gatewayId: resourceId.toString() });
+    if (existingTransaction) {
+        logger.info(`♻️ Pagamento ${resourceId} já processado anteriormente. Ignorando.`);
+        return;
+    }
+
+    const payment = await paymentService.getPaymentStatus(resourceId);
+    if (!payment) {
+        logger.warn(`Webhook: Pagamento ${resourceId} não encontrado na API.`);
+        return;
+    }
+
+    const { userId, planKey } = parseExternalReference(payment.external_reference);
+    const plan = resolvePlanKey(planKey);
+
+    logger.info(`💰 Pagamento ${resourceId}: Status=${payment.status} | User=${userId} | Valor=${payment.transaction_amount} | Plano=${plan}`);
+
+    if (payment.status !== 'approved' || !userId) return;
+
+    const user = await User.findById(userId);
+    if (!user) {
+        logger.error(`❌ Usuário ${userId} não encontrado para liberar acesso.`);
+        return;
+    }
+
+    const preapprovalId = resolvePreapprovalId(payment, user);
+
+    if (preapprovalId) {
+        // Cobrança de assinatura: registra o extrato e deixa o PERÍODO vir do MP.
+        const isNewCharge = await recordRecurringCharge(user, {
+            gatewayId: resourceId,
+            amount: payment.transaction_amount,
+            plan: planKey || user.plan,
+        });
+        const preapproval = await paymentService.getPreapproval(preapprovalId);
+        if (preapproval) await syncRecurringPeriod(user, preapproval);
+        if (isNewCharge) {
+            await sendRenewalReceiptEmail(user.email, user.plan, user.validUntil, payment.transaction_amount);
+        }
+        return;
+    }
+
+    const result = await grantOneTimePeriod(user, planKey, {
+        gatewayId: resourceId,
+        amount: payment.transaction_amount,
+        method: payment.payment_type_id === 'bank_transfer' ? 'PIX' : 'CREDIT_CARD',
+    });
+
+    if (result.credited) {
+        await sendCheckoutConfirmationEmail(user.email, result.plan, result.validUntil);
+        logger.info(`✅ Acesso liberado para user ${user._id} até ${result.validUntil.toISOString()}`);
+    }
 };
 
 export const handleMercadoPagoWebhook = async (req, res) => {
@@ -100,84 +270,20 @@ export const handleMercadoPagoWebhook = async (req, res) => {
 
         logger.info(`🔔 Webhook MP Recebido: Tópico [${topic}] ID [${resourceId}]`);
 
-        if (topic === 'payment') {
-
-            // 1. IDEMPOTÊNCIA: Verifica se já processamos essa transação
-            const existingTransaction = await Transaction.findOne({ gatewayId: resourceId.toString() });
-            if (existingTransaction) {
-                logger.info(`♻️ Pagamento ${resourceId} já processado anteriormente. Ignorando.`);
-                return res.status(200).send('OK');
-            }
-
-            // 2. Busca status real na API
-            const payment = await paymentService.getPaymentStatus(resourceId);
-
-            if (!payment) {
-                logger.warn(`Webhook: Pagamento ${resourceId} não encontrado na API.`);
-                return res.status(200).send('OK');
-            }
-
-            const status = payment.status;
-            const amount = payment.transaction_amount;
-
-            // external_reference no formato "{userId}:{planKey}" (ex: "abc123:ESSENTIAL_TEST")
-            const { userId, planKey } = parseExternalReference(payment.external_reference);
-
-            // Resolve plano de teste → plano real (ex: ESSENTIAL_TEST → ESSENTIAL)
-            const plan = TEST_PLAN_MAP[planKey] || planKey || 'ESSENTIAL';
-
-            logger.info(`💰 Pagamento ${resourceId}: Status=${status} | User=${userId} | Valor=${amount} | Plano=${plan}${TEST_PLAN_MAP[planKey] ? ' (teste)' : ''}`);
-
-            if (status === 'approved' && userId) {
-                const user = await User.findById(userId);
-
-                if (user) {
-                    // Barreira de idempotência ATÔMICA: cria a Transaction ANTES de
-                    // estender o plano. O índice único em gatewayId faz a 2ª entrega
-                    // concorrente do MP falhar com E11000 aqui — nunca creditando +30
-                    // dias duas vezes nem duplicando o registro de cobrança. O findOne
-                    // acima é apenas fast-path; esta é a garantia real.
-                    try {
-                        await Transaction.create({
-                            user: user._id,
-                            plan: plan,
-                            amount: amount,
-                            status: 'PAID',
-                            method: payment.payment_type_id === 'bank_transfer' ? 'PIX' : 'CREDIT_CARD',
-                            gatewayId: resourceId.toString()
-                        });
-                    } catch (e) {
-                        if (e.code === 11000) {
-                            logger.info(`♻️ Pagamento ${resourceId} já processado (índice único). Ignorando.`);
-                            return res.status(200).send('OK');
-                        }
-                        throw e;
-                    }
-
-                    const now = new Date();
-                    let newValidUntil = new Date();
-
-                    if (user.validUntil && new Date(user.validUntil) > now) {
-                        newValidUntil = new Date(user.validUntil);
-                    }
-
-                    newValidUntil.setDate(newValidUntil.getDate() + 30);
-
-                    user.plan = plan;
-                    user.subscriptionStatus = 'ACTIVE';
-                    user.validUntil = newValidUntil;
-                    user.mpSubscriptionId = resourceId.toString();
-
-                    await user.save();
-                    invalidateUser(user._id); // (I6) plano mudou → derruba cache do authMiddleware
-
-                    await sendCheckoutConfirmationEmail(user.email, plan, newValidUntil);
-
-                    logger.info(`✅ Acesso liberado para user ${user._id} até ${newValidUntil.toISOString()}`);
-                } else {
-                    logger.error(`❌ Usuário ${userId} não encontrado para liberar acesso.`);
-                }
-            }
+        switch (topic) {
+            case 'payment':
+                await handlePaymentEvent(resourceId);
+                break;
+            case 'subscription_preapproval':
+                await handlePreapprovalEvent(resourceId);
+                break;
+            case 'subscription_authorized_payment':
+                await handleAuthorizedPaymentEvent(resourceId);
+                break;
+            default:
+                // Tópicos não assinados (merchant_order, plan, ...) são apenas ACKados
+                // para o MP não ficar reentregando.
+                break;
         }
 
         res.status(200).send('OK');

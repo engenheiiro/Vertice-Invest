@@ -9,7 +9,7 @@ import { authService } from '../services/auth';
 type CheckoutPhase = 'verifying' | 'activated' | 'pending' | 'rejected' | 'error';
 
 type SubscriptionStatusResponse = {
-    current?: { plan?: string };
+    current?: { plan?: string; subscriptionType?: string; subscriptionStatus?: string };
     lastPayment?: { gatewayId?: string; status?: string; plan?: string };
 };
 
@@ -19,13 +19,16 @@ const TEST_PLAN_SUFFIX = '_TEST';
 
 export const getCheckoutReturnDetails = (params: URLSearchParams) => {
     const paymentId = params.get('payment_id') || params.get('collection_id');
+    // Fluxo recorrente: o back_url do PreApproval devolve preapproval_id e nunca
+    // um payment_id — a autorização do cartão precede a primeira cobrança.
+    const preapprovalId = params.get('preapproval_id');
     const status = (params.get('status') || params.get('collection_status') || params.get('return_status') || 'processing').toLowerCase();
     const rawPlan = params.get('plan');
     const expectedPlan = rawPlan?.endsWith(TEST_PLAN_SUFFIX)
         ? rawPlan.slice(0, -TEST_PLAN_SUFFIX.length)
         : rawPlan;
 
-    return { paymentId, status, rawPlan, expectedPlan };
+    return { paymentId, preapprovalId, status, rawPlan, expectedPlan };
 };
 
 export const isActivationRecorded = (
@@ -37,6 +40,21 @@ export const isActivationRecorded = (
     return transaction?.gatewayId === paymentId
         && transaction.status === 'PAID'
         && (!expectedPlan || (transaction.plan === expectedPlan && data.current?.plan === expectedPlan));
+};
+
+/**
+ * Confirmação do fluxo recorrente. Não dá para esperar por uma Transaction: o
+ * preapproval é autorizado antes da primeira cobrança ser liquidada, e a tela
+ * ficaria presa em "processando". O sinal correto é a assinatura estar ativa.
+ */
+export const isSubscriptionActivated = (
+    data: SubscriptionStatusResponse,
+    expectedPlan: string | null,
+) => {
+    const current = data.current;
+    return current?.subscriptionType === 'RECURRING'
+        && current.subscriptionStatus === 'ACTIVE'
+        && (!expectedPlan || current.plan === expectedPlan);
 };
 
 const isRejectedStatus = (status: string) => ['rejected', 'cancelled', 'canceled', 'failure'].includes(status);
@@ -72,10 +90,11 @@ export const CheckoutSuccess = () => {
     const [phase, setPhase] = useState<CheckoutPhase>('verifying');
     const [message, setMessage] = useState('Verificando o pagamento com o Mercado Pago...');
 
-    const { paymentId, status, rawPlan, expectedPlan } = useMemo(
+    const { paymentId, preapprovalId, status, rawPlan, expectedPlan } = useMemo(
         () => getCheckoutReturnDetails(searchParams),
         [searchParams],
     );
+    const isRecurring = Boolean(preapprovalId);
 
     useEffect(() => {
         let cancelled = false;
@@ -87,15 +106,21 @@ export const CheckoutSuccess = () => {
             setMessage(nextMessage || phaseDetails[nextPhase].defaultMessage);
         };
 
-        const waitForRecordedActivation = async () => {
-            if (!paymentId) return false;
+        // Cada fluxo tem um sinal de sucesso diferente: o avulso espera a
+        // Transaction do pagamento; o recorrente espera a assinatura ficar ativa.
+        const hasActivated = (data: SubscriptionStatusResponse) => (
+            isRecurring
+                ? isSubscriptionActivated(data, expectedPlan)
+                : Boolean(paymentId) && isActivationRecorded(data, paymentId!, expectedPlan)
+        );
 
+        const waitForRecordedActivation = async () => {
             for (let index = 0; index < POLL_ATTEMPTS; index += 1) {
                 try {
                     const response = await authService.api('/api/subscription/status');
                     if (response.ok) {
                         const data = await response.json() as SubscriptionStatusResponse;
-                        if (isActivationRecorded(data, paymentId, expectedPlan)) {
+                        if (hasActivated(data)) {
                             await refreshProfile();
                             return true;
                         }
@@ -112,7 +137,8 @@ export const CheckoutSuccess = () => {
 
         const verifyPayment = async () => {
             let effectiveStatus = status;
-            if (!paymentId) {
+
+            if (!paymentId && !preapprovalId) {
                 if (isRejectedStatus(effectiveStatus)) {
                     setResult('rejected');
                 } else {
@@ -122,16 +148,20 @@ export const CheckoutSuccess = () => {
             }
 
             try {
-                // Backup seguro para o webhook: o endpoint consulta o Mercado Pago,
-                // verifica ownership e usa gatewayId único antes de ativar qualquer plano.
-                const syncResult = await subscriptionService.syncPayment(paymentId);
+                // Backup seguro para o webhook: os endpoints consultam o Mercado Pago
+                // e verificam ownership antes de ativar qualquer plano.
+                const syncResult = preapprovalId
+                    ? await subscriptionService.syncPreapproval(preapprovalId)
+                    : await subscriptionService.syncPayment(paymentId!);
                 if (syncResult?.status) effectiveStatus = String(syncResult.status).toLowerCase();
             } catch {
                 // Mesmo se o backup falhar, o webhook pode concluir enquanto fazemos polling.
             }
 
             if (await waitForRecordedActivation()) {
-                setResult('activated');
+                setResult('activated', isRecurring
+                    ? 'Sua assinatura está ativa e a renovação é automática.'
+                    : undefined);
                 return;
             }
 
@@ -147,7 +177,7 @@ export const CheckoutSuccess = () => {
         void verifyPayment();
 
         return () => { cancelled = true; };
-    }, [attempt, expectedPlan, paymentId, refreshProfile, status]);
+    }, [attempt, expectedPlan, isRecurring, paymentId, preapprovalId, refreshProfile, status]);
 
     const detail = phase === 'verifying' ? null : phaseDetails[phase];
     const Icon = phase === 'activated'
@@ -198,10 +228,16 @@ export const CheckoutSuccess = () => {
                                     {status}
                                 </span>
                             </div>
-                            {paymentId && (
+                            <div className="flex justify-between text-xs gap-3">
+                                <span className="text-slate-500">Cobrança</span>
+                                <span className="text-white font-bold text-right">
+                                    {isRecurring ? 'Mensal automática' : 'Avulsa (30 dias)'}
+                                </span>
+                            </div>
+                            {(paymentId || preapprovalId) && (
                                 <div className="flex justify-between text-xs gap-3">
-                                    <span className="text-slate-500">ID da transação</span>
-                                    <span className="text-slate-400 font-mono text-right break-all">{paymentId}</span>
+                                    <span className="text-slate-500">{isRecurring ? 'ID da assinatura' : 'ID da transação'}</span>
+                                    <span className="text-slate-400 font-mono text-right break-all">{paymentId || preapprovalId}</span>
                                 </div>
                             )}
                         </div>

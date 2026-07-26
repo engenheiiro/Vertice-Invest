@@ -45,7 +45,7 @@ const UserSchema = new mongoose.Schema({
   },
   subscriptionStatus: {
     type: String,
-    enum: ['ACTIVE', 'PAST_DUE', 'CANCELED', 'TRIAL'],
+    enum: ['ACTIVE', 'PAST_DUE', 'PAUSED', 'CANCELED', 'TRIAL'],
     default: 'ACTIVE'
   },
   validUntil: { type: Date },
@@ -67,7 +67,23 @@ const UserSchema = new mongoose.Schema({
 
   // --- Integração Mercado Pago ---
   mpCustomerId: { type: String },      // ID do cliente no MP
-  mpSubscriptionId: { type: String },  // ID da assinatura recorrente (preapproval_id)
+  // LEGADO: guarda o id do ÚLTIMO PAGAMENTO avulso, não um preapproval. Mantido
+  // por compatibilidade com contas antigas; a recorrência usa mpPreapprovalId.
+  mpSubscriptionId: { type: String },
+
+  // --- Assinatura recorrente (PreApproval) ---
+  // ID real do preapproval no MP. É o que permite cancelar/alterar a assinatura.
+  mpPreapprovalId: { type: String, index: true, sparse: true },
+  // ONE_TIME: comprou 30 dias (Pix/boleto), sem renovação.
+  // RECURRING: cartão cadastrado, o MP cobra automaticamente todo mês.
+  subscriptionType: {
+    type: String,
+    enum: ['ONE_TIME', 'RECURRING'],
+    default: 'ONE_TIME'
+  },
+  nextBillingDate: { type: Date },      // preapproval.next_payment_date
+  cardBrand: { type: String },          // payment_method_id do preapproval (visa/master/...)
+  lastPaymentFailedAt: { type: Date },  // última cobrança recorrente recusada
 
   // Recuperação de Senha
   resetPasswordToken: { type: String },
