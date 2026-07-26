@@ -63,22 +63,40 @@ export const isValidSignature = (req) => {
         return false;
     }
 
-    // Template assinado: "id:[data.id];request-id:[x-request-id];ts:[ts];"
-    const dataId = req.body?.data?.id || req.query.id;
-    const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
+    // Template assinado: "id:[data.id];request-id:[x-request-id];ts:[ts];" — mas a
+    // regra do Mercado Pago é OMITIR o trecho cujo valor não veio na notificação.
+    // A notificação IPN legada (?topic=payment&id=X) não traz `data.id`, então ela
+    // é assinada SEM o "id:...;". Montar um único manifesto rígido rejeitava essas
+    // entregas para sempre: o MP retentava em loop o mesmo pagamento (visto em
+    // produção) e uma cobrança cuja única entrega viesse nesse formato seria
+    // descartada em silêncio.
+    //
+    // Testar variantes não enfraquece a verificação: toda candidata continua
+    // exigindo um HMAC gerado com o mesmo segredo.
+    const rawIds = [req.query['data.id'], req.body?.data?.id, req.query.id]
+        .filter((value) => value !== undefined && value !== null && value !== '')
+        .map(String);
 
-    const hmac = crypto.createHmac('sha256', WEBHOOK_SECRET);
-    hmac.update(manifest);
-    const calculatedSignature = hmac.digest('hex');
+    const idVariants = [...new Set(rawIds.flatMap((id) => [id, id.toLowerCase()]))];
 
-    // Comparação constant-time (evita timing attack na verificação da assinatura).
+    // `undefined` representa a variante sem o trecho de id (formato legado).
+    const manifests = [...idVariants, undefined].map((id) => (
+        `${id === undefined ? '' : `id:${id};`}request-id:${requestId};ts:${ts};`
+    ));
+
+    let received;
     try {
-        const a = Buffer.from(calculatedSignature, 'hex');
-        const b = Buffer.from(v1, 'hex');
-        return a.length === b.length && crypto.timingSafeEqual(a, b);
+        received = Buffer.from(v1, 'hex');
     } catch {
         return false;
     }
+
+    return manifests.some((manifest) => {
+        const calculated = crypto.createHmac('sha256', WEBHOOK_SECRET).update(manifest).digest('hex');
+        const expected = Buffer.from(calculated, 'hex');
+        // Comparação constant-time (evita timing attack na verificação).
+        return expected.length === received.length && crypto.timingSafeEqual(expected, received);
+    });
 };
 
 /**
@@ -297,7 +315,8 @@ export const handleMercadoPagoWebhook = async (req, res) => {
         }
 
         const topic = type || req.query.topic;
-        const resourceId = (data && data.id) || req.query.id;
+        // `data.id` é o nome do parâmetro no formato moderno; `id`, no IPN legado.
+        const resourceId = (data && data.id) || req.query['data.id'] || req.query.id;
 
         if (!topic || !resourceId) {
             logger.warn(`Webhook MP rejeitado: tópico ou recurso ausente. IP: ${req.ip}`);
