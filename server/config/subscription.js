@@ -8,11 +8,14 @@ export const PLANS = {
     'ELITE':     { price: 120.00, days: 30, title: 'Vértice Elite' },
     'BLACK':     { price: 299.00, days: 30, title: 'Vértice Black' },
 
-    // Variantes de teste: mesmo código, preço R$0,50 (visíveis só para admin)
-    'ESSENTIAL_TEST': { price: 0.50, days: 30, title: 'Vértice Essential' },
-    'PRO_TEST':       { price: 0.50, days: 30, title: 'Vértice Pro' },
-    'ELITE_TEST':     { price: 0.50, days: 30, title: 'Vértice Elite' },
-    'BLACK_TEST':     { price: 0.50, days: 30, title: 'Vértice Black' },
+    // Variantes de teste: mesmo código, preço reduzido (visíveis só para admin).
+    // R$5,00 e não centavos: cobrança RECORRENTE de valor irrisório é o padrão que
+    // os bancos tratam como teste de cartão roubado, e o antifraude recusava as
+    // assinaturas de teste antes de chegarem em `authorized`.
+    'ESSENTIAL_TEST': { price: 5.00, days: 30, title: 'Vértice Essential' },
+    'PRO_TEST':       { price: 5.00, days: 30, title: 'Vértice Pro' },
+    'ELITE_TEST':     { price: 5.00, days: 30, title: 'Vértice Elite' },
+    'BLACK_TEST':     { price: 5.00, days: 30, title: 'Vértice Black' },
 };
 
 // Mapeia plano de teste → plano real
@@ -23,11 +26,11 @@ export const TEST_PLAN_MAP = {
     'BLACK_TEST':     'BLACK',
 };
 
-// Uma variante _TEST cobra R$0,50 mas credita o plano real (TEST_PLAN_MAP é
+// Uma variante _TEST cobra R$5,00 mas credita o plano real (TEST_PLAN_MAP é
 // resolvido no webhook). Ela só pode nascer de POST /subscription/test-checkout,
 // que é requireAdmin. Nunca derive a lista de planos vendáveis de
 // `Object.keys(PLANS)` — isso expõe as variantes de teste ao checkout público e
-// vende BLACK por R$0,50. Use sempre PUBLIC_PLAN_KEYS / isTestPlan().
+// vende BLACK por R$5,00. Use sempre PUBLIC_PLAN_KEYS / isTestPlan().
 export const isTestPlan = (planKey) => Object.hasOwn(TEST_PLAN_MAP, planKey);
 
 // Planos realmente vendáveis pelo checkout público (fonte única).

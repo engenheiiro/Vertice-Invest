@@ -100,7 +100,7 @@ describe('handlePaymentReturn — contrato BrowserRouter do Checkout Pro', () =>
     expect(target.searchParams.get('payment_id')).toBe('123');
   });
 
-  it('mantém o checkout de teste de R$0,50 restrito ao fluxo *_TEST', async () => {
+  it('mantém o checkout de teste de R$5,00 restrito ao fluxo *_TEST', async () => {
     paymentService.createOneTimeCheckout.mockResolvedValue({ init_point: 'https://mp.test/checkout', id: 'pref-1' });
     const req = { body: { planKey: 'ELITE' }, user: { id: 'admin-1' } };
     const res = mockRes();
