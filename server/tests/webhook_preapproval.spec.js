@@ -317,6 +317,30 @@ describe('tópico payment em assinante recorrente — o cenário de duplo crédi
     expect(emails.sendCheckoutConfirmationEmail).not.toHaveBeenCalled();
   });
 
+  it('Pix de EX-assinante credita os dias normalmente (não vira cobrança de assinatura)', async () => {
+    // Quem teve cartão e depois compra no Pix mantém mpPreapprovalId/RECURRING no
+    // registro. Sem o corte por meio de pagamento, o período viria de um
+    // preapproval velho e o cliente pagaria sem receber dia nenhum.
+    const user = makeUser({
+      plan: 'PRO', subscriptionType: 'RECURRING', subscriptionStatus: 'CANCELED',
+      mpPreapprovalId: 'preapp-antigo', validUntil: null,
+    });
+    User.findById.mockResolvedValue(user);
+    Transaction.findOne.mockResolvedValue(null);
+    Transaction.create.mockResolvedValue({});
+    paymentService.getPaymentStatus.mockResolvedValue({
+      status: 'approved', transaction_amount: 39.9,
+      external_reference: 'user-1:ESSENTIAL', payment_type_id: 'bank_transfer',
+    });
+
+    await handleMercadoPagoWebhook(req('payment', 'pay-pix-ex'), mockRes());
+
+    expect(paymentService.getPreapproval).not.toHaveBeenCalled();
+    expect(user.subscriptionType).toBe('ONE_TIME');
+    expect(user.plan).toBe('ESSENTIAL');
+    expect(Math.round((user.validUntil.getTime() - Date.now()) / DAY)).toBe(30);
+  });
+
   it('Pix avulso segue no fluxo aditivo de sempre', async () => {
     const user = makeUser();
     User.findById.mockResolvedValue(user);

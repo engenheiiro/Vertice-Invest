@@ -107,20 +107,34 @@ export const isValidSignature = (req) => {
     });
 };
 
+// Meios que o Mercado Pago NÃO consegue cobrar de forma recorrente. Um pagamento
+// por aqui é sempre avulso, por definição.
+const NON_RECURRING_PAYMENT_TYPES = new Set(['bank_transfer', 'ticket', 'atm']);
+
 /**
  * Descobre se um pagamento nasceu de uma assinatura recorrente e devolve o
  * preapproval de origem. Não dá para confiar só em `user.subscriptionType`: na
  * PRIMEIRA cobrança o tópico `payment` pode chegar antes do
  * `subscription_preapproval`, com o usuário ainda marcado como ONE_TIME — e aí o
  * crédito aditivo somaria 30 dias por cima do calendário do MP.
+ *
+ * Mas o inverso também morde: sem o corte por meio de pagamento, um Pix avulso de
+ * quem JÁ teve assinatura cairia no caminho recorrente e o período viria de um
+ * preapproval velho — o cliente pagaria e não receberia dia nenhum.
  */
-const resolvePreapprovalId = (payment, user) => (
-    payment?.metadata?.preapproval_id
-    || payment?.metadata?.preapprovalId
-    || (payment?.point_of_interaction?.type === 'SUBSCRIPTIONS' ? user?.mpPreapprovalId : null)
-    || (user?.subscriptionType === 'RECURRING' ? user?.mpPreapprovalId : null)
-    || null
-);
+const resolvePreapprovalId = (payment, user) => {
+    if (NON_RECURRING_PAYMENT_TYPES.has(payment?.payment_type_id)) return null;
+
+    return payment?.metadata?.preapproval_id
+        || payment?.metadata?.preapprovalId
+        || (payment?.point_of_interaction?.type === 'SUBSCRIPTIONS' ? user?.mpPreapprovalId : null)
+        // O estado do usuário só serve de pista enquanto a assinatura governa a
+        // conta; uma cancelada não pode sequestrar uma compra avulsa posterior.
+        || (user?.subscriptionType === 'RECURRING' && user?.subscriptionStatus !== 'CANCELED'
+            ? user?.mpPreapprovalId
+            : null)
+        || null;
+};
 
 // Localiza o assinante de um evento de assinatura: primeiro pelo
 // external_reference (fonte primária), depois pelo preapproval já vinculado.
