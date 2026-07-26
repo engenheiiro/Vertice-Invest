@@ -46,13 +46,13 @@ export const sendResetPasswordEmail = async (to, token, origin) => {
       html: htmlContent,
     });
     
-    logger.info("📨 Email enviado: %s", info.messageId);
+    logger.info('📨 E-mail de redefinição de senha enviado', { messageId: info.messageId });
     // Para Ethereal (teste), logamos a URL de preview
     if (process.env.SMTP_HOST?.includes('ethereal')) {
-        logger.info("🔗 Preview URL: %s", nodemailer.getTestMessageUrl(info));
+        logger.info('🔗 Preview do e-mail', { url: nodemailer.getTestMessageUrl(info) });
     }
   } catch (error) {
-    logger.error("❌ Erro ao enviar email:", error);
+    logger.error('❌ Erro ao enviar e-mail de redefinição', { erro: error.message });
     throw new Error("Falha no serviço de email.");
   }
 };
@@ -115,12 +115,14 @@ export const sendCheckoutConfirmationEmail = async (to, plan, validUntil) => {
       html: htmlContent,
     });
 
-    logger.info("📨 Email de ativação enviado para %s: %s", to, info.messageId);
+    // O logger do projeto não interpola %s (convenção: msg + {meta}), e o
+    // destinatário fica de fora porque e-mail é PII.
+    logger.info('📨 E-mail de ativação enviado', { plano: plan, messageId: info.messageId });
     if (process.env.SMTP_HOST?.includes('ethereal')) {
-      logger.info("🔗 Preview URL: %s", nodemailer.getTestMessageUrl(info));
+      logger.info('🔗 Preview do e-mail', { url: nodemailer.getTestMessageUrl(info) });
     }
   } catch (error) {
-    logger.error("❌ Erro ao enviar email de ativação:", error);
+    logger.error('❌ Erro ao enviar e-mail de ativação', { plano: plan, erro: error.message });
     // Não propaga: falha de email não deve quebrar o fluxo de pagamento
   }
 };
