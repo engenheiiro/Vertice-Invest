@@ -25,6 +25,14 @@ import {
 // Janela fixa, interna ao serviço: não cria nem exige uma nova variável de ambiente.
 const WEBHOOK_MAX_AGE_SECONDS = 300;
 
+// Idade do `ts` da assinatura, em segundos. Separa "chegou fora da janela de
+// replay" (idade > WEBHOOK_MAX_AGE_SECONDS) de "o HMAC não confere".
+const describeSignatureAge = (signature) => {
+    const ts = Number(/(?:^|,)\s*ts=([^,]+)/.exec(signature ?? '')?.[1]);
+    if (!Number.isSafeInteger(ts)) return null;
+    return Math.floor(Date.now() / 1000) - ts;
+};
+
 export const isValidSignature = (req) => {
     const signature = req.headers['x-signature'];
     const requestId = req.headers['x-request-id'];
@@ -307,9 +315,19 @@ export const handleMercadoPagoWebhook = async (req, res) => {
             logger.warn('⛔ Webhook MP rejeitado: assinatura inválida ou expirada.', {
                 ip: req.ip,
                 topic: req.body?.type || req.query.topic || null,
-                resourceId: req.body?.data?.id || req.query.id || null,
+                resourceId: req.body?.data?.id || req.query['data.id'] || req.query.id || null,
                 hasSignature: Boolean(req.headers['x-signature']),
                 hasRequestId: Boolean(req.headers['x-request-id']),
+                // Discrimina as duas hipóteses restantes para a MESMA cobrança
+                // chegar duas vezes, uma válida e outra não:
+                // - formatos diferentes  → a montagem do manifesto é a culpada;
+                // - formatos IGUAIS      → o segredo é que diverge (duas
+                //   configurações de webhook no painel, cada uma com sua chave,
+                //   apontando para a mesma URL).
+                idSource: req.body?.data?.id ? 'body'
+                    : req.query['data.id'] ? 'query:data.id'
+                    : req.query.id ? 'query:id' : 'ausente',
+                signatureAgeSeconds: describeSignatureAge(req.headers['x-signature']),
             });
             return res.status(401).send('Invalid signature');
         }
