@@ -56,7 +56,8 @@
     "changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s",
     "changelog:first": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0",
     "prepare": "husky || true",
-    "migrate:tx-currency": "node server/scripts/migrateTransactionCurrency.js"
+    "migrate:tx-currency": "node server/scripts/migrateTransactionCurrency.js",
+    "repair:wallet-metrics-v5": "node server/scripts/repairWalletMetricsV5.js"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": "eslint --fix"

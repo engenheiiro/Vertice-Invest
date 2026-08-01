@@ -115,15 +115,12 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
 
     // 1. Calcular Valores Atuais — bucketiza pelo BALDE DE ALOCAÇÃO (C1), não pelo
     // type cru: ativos de Reserva (CASH ou RF marcada) caem em CASH e saem da base;
-    // RF não-reserva fica em FIXED_INCOME e entra na distribuição. ETF nacional é
-    // classe própria; ETFs internacionais têm type STOCK_US e contam no Exterior.
+    // RF não-reserva fica em FIXED_INCOME. ETFs usam allocationClass: BOVA11 em
+    // Ações BR; IVVB11 em Exterior, sem alterar type=ETF/currency=BRL.
     const currentValues = useMemo(() => {
         const vals: Record<string, number> = { STOCK: 0, FII: 0, STOCK_US: 0, ETF: 0, CRYPTO: 0, FIXED_INCOME: 0, OURO: 0, CASH: 0 };
         assets.forEach(asset => {
-            // ETF nacional (bucket 'ETF') conta dentro de Ações BR (STOCK) na distribuição;
-            // o detalhe Ações/ETFs aparece na ramificação (sub-metas de Ações BR).
-            const bucket = allocationBucket(asset);
-            const cls = bucket === 'ETF' ? 'STOCK' : bucket;
+            const cls = allocationBucket(asset);
             vals[cls] = (vals[cls] || 0) + asset.totalValue;
         });
         return vals;

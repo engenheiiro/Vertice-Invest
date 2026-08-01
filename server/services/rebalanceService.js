@@ -26,6 +26,7 @@ import {
 import { BUY_THRESHOLD, CAPITAL_GAINS_TAX, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { isDollarized } from '../utils/assetCurrency.js';
 import logger from '../config/logger.js';
+import { allocationBucket as resolveAllocationBucket, exteriorSubType, resolveAllocationClass } from '../utils/assetAllocation.js';
 
 // O ranking 'ETF' une nacionais + internacionais; carregamos os NACIONAIS como candidatos
 // da classe Ações BR (sub-tipo ETF — ver draft de compra), então 'ETF' segue em
@@ -46,9 +47,6 @@ const CLASS_LABELS = {
     CASH: 'Reserva',
 };
 
-// Classe de ALOCAÇÃO efetiva de um type cru: ETF nacional é absorvido por Ações BR (STOCK).
-const allocClassOf = (type) => (type === 'ETF' ? 'STOCK' : type);
-
 // Drift mínimo (em % do patrimônio) para uma classe ser considerada fora da meta.
 // Evita gerar microvendas/microcompras por flutuação de mercado.
 const MIN_GAP_PCT = 1;
@@ -61,7 +59,7 @@ const MAX_BUYS_PER_CLASS = 4;
 // Assim o rebalance NUNCA sugere liquidar a reserva de emergência (RF marcada
 // como reserva) para "acertar a alocação". O `type` real segue preservado para a
 // valuation (RF-reserva ainda rende como renda fixa), só a CLASSE muda.
-const reserveBucket = (asset) => ((asset.isReserve ?? (asset.type === 'CASH')) ? 'CASH' : allocClassOf(asset.type));
+const reserveBucket = (asset) => resolveAllocationBucket(asset);
 
 const tierFromScore = (score) => {
     if (score == null) return null;
@@ -148,7 +146,8 @@ export const computeWalletValuation = async (userId, walletId) => {
             // Taxa contratada: junto com o índice classifica o sub-tipo (%CDI manual
             // sem índice → pós-fixado quando rate > 50, espelhando o accrual).
             fixedIncomeRate: safeFloat(asset.fixedIncomeRate),
-            usSubType: asset.usSubType || null,
+            usSubType: exteriorSubType(asset),
+            allocationClass: cls,
             quantity: asset.quantity,
             currency: asset.currency,
             valueBr,
@@ -249,7 +248,9 @@ export const loadEngineData = async (riskProfile) => {
             name: r.name,
             sector: r.sector,
             type: r.type,
-            usSubType: r.usSubType || null,
+            allocationClass: resolveAllocationClass(r),
+            currency: r.currency || (r.type === 'ETF' ? 'BRL' : null),
+            usSubType: exteriorSubType(r),
             score: r.score,
             currentPrice: r.currentPrice,
             targetPrice: r.targetPrice,
@@ -258,10 +259,16 @@ export const loadEngineData = async (riskProfile) => {
         const buys = ranking.filter((r) => r.riskProfile === riskProfile && r.action === 'BUY');
 
         if (assetClass === 'ETF') {
-            // Classe ETF (Carteira Ideal) = só ETFs NACIONAIS (type 'ETF'). O ranking 'ETF'
-            // une nacionais + internacionais; os internacionais (type STOCK_US) são
-            // candidatos do Exterior, não desta classe.
-            idealBuysByClass['ETF'] = buys.filter((r) => r.type === 'ETF').map(mapItem);
+            // O ranking ETF une veículos locais e estrangeiros. Entre os locais,
+            // allocationClass separa exposição Brasil de exposição internacional:
+            // IVVB11 é candidato de Exterior, embora type=ETF/currency=BRL.
+            idealBuysByClass.ETF = buys
+                .filter((r) => r.type === 'ETF' && resolveAllocationClass(r) === 'STOCK')
+                .map(mapItem);
+            idealBuysByClass.STOCK_US = [
+                ...(idealBuysByClass.STOCK_US || []),
+                ...buys.filter((r) => resolveAllocationClass(r) === 'STOCK_US').map(mapItem),
+            ];
         } else {
             // Exterior (STOCK_US) inclui ações/REITs/ETFs internacionais/ouro lastreado do
             // seu próprio ranking. As demais classes mapeiam o ranking inteiro.
@@ -494,25 +501,28 @@ export const buildRebalancePlan = ({
                 rawType: a.rawType ?? a.type,
             }));
 
-        // Exterior/Cripto/Ouro são dolarizados (preço do ranking em USD → converte). Ações
-        // BR (incl. ETF nacional) e demais classes BRL não convertem.
+        // Exterior/Cripto/Ouro normalmente são dolarizados, mas ETFs locais de
+        // exposição internacional (IVVB11 etc.) já chegam cotados em BRL.
         const usdClass = gap.class === 'STOCK_US' || gap.class === 'CRYPTO' || gap.class === 'OURO';
         // Ações BR também recebe candidatos do ranking de ETFs NACIONAIS (sub-tipo ETF).
         const idealSources =
             gap.class === 'STOCK'
                 ? [...(covered.has('STOCK') ? idealBuysByClass.STOCK || [] : []),
                    ...(covered.has('ETF') ? idealBuysByClass.ETF || [] : [])]
-                : covered.has(gap.class) ? idealBuysByClass[gap.class] || [] : [];
+                : gap.class === 'STOCK_US'
+                    ? ((covered.has('STOCK_US') || covered.has('ETF')) ? idealBuysByClass.STOCK_US || [] : [])
+                    : covered.has(gap.class) ? idealBuysByClass[gap.class] || [] : [];
         const news = idealSources
             .filter((r) => !heldTickers.has(r.ticker))
             .map((r) => ({
                 ticker: r.ticker,
                 kind: 'NEW',
                 score: r.score,
-                priceBr: safeFloat((r.currentPrice || 0) * (usdClass ? usdRate : 1)),
+                priceBr: safeFloat((r.currentPrice || 0) * (usdClass && r.currency !== 'BRL' ? usdRate : 1)),
                 bull: r.bull,
                 usSubType: r.usSubType || null,
                 rawType: r.type,
+                currency: r.currency || null,
             }));
 
         // Dedup (reforço tem prioridade), ordena por score desc, limita o nº de tickers.

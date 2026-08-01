@@ -96,6 +96,13 @@ describe('getAssetTags', () => {
     expect(us[0].tone).toBe(br[0].tone);
   });
 
+  it('ETF local com exposição internacional explica que conta em Exterior', () => {
+    const [tag] = getAssetTags({ ticker: 'IVVB11', type: 'ETF', allocationClass: 'STOCK_US' });
+    expect(tag.label).toBe('ETF');
+    expect(tag.title).toContain('Exterior');
+    expect(tag.title).toContain('B3');
+  });
+
   it('sub-tipos do Exterior viram selo próprio; ação individual não tem selo', () => {
     expect(getAssetTags({ ticker: 'O', type: 'STOCK_US', usSubType: 'REIT' })[0].label).toBe('REIT');
     expect(getAssetTags({ ticker: 'GLD', type: 'STOCK_US', usSubType: 'GOLD' })[0].label).toBe('Ouro');

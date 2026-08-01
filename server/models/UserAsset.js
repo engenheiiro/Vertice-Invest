@@ -28,6 +28,13 @@ const UserAssetSchema = new mongoose.Schema({
   }],
 
   currency: { type: String, default: 'BRL' },
+  // Classe econômica para distribuição/rebalanceamento, desacoplada de type/currency.
+  // Principal caso: ETF da B3 com exposição internacional (IVVB11 etc.).
+  allocationClass: {
+    type: String,
+    enum: ['STOCK', 'FII', 'STOCK_US', 'CRYPTO', 'FIXED_INCOME', 'CASH', 'OURO', null],
+    default: null
+  },
   
   // Campos para Renda Fixa (Mantidos para Fallback)
   startDate: { type: Date },

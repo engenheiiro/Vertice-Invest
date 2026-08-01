@@ -8,6 +8,9 @@ const RankingItemSchema = new mongoose.Schema({
   name: String,
   sector: String,
   type: String,
+  // Classe econômica, distinta do veículo/moeda (ex.: IVVB11 = ETF/BRL/STOCK_US).
+  allocationClass: { type: String, enum: ['STOCK', 'FII', 'STOCK_US', 'CRYPTO', 'FIXED_INCOME', 'CASH', 'OURO', null], default: null },
+  currency: { type: String, enum: ['BRL', 'USD', null], default: null },
   // Sub-tipo de Exterior (STOCK_US): STOCK | ETF | REIT | DOLLAR. Propagado do
   // MarketAsset para permitir sub-filtros no Research e viés por sub-meta no rebalance.
   usSubType: { type: String, enum: ['STOCK', 'ETF', 'REIT', 'DOLLAR', 'GOLD', null], default: null },

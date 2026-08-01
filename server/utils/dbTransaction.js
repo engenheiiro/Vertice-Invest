@@ -43,9 +43,15 @@ export async function runTransaction(fn, timeoutMs = TX_TIMEOUT_MS) {
         await session.commitTransaction();
     } catch (err) {
         clearTimeout(timer);
-        await session.abortTransaction();
+        try {
+            await session.abortTransaction();
+        } catch (abortError) {
+            // A falha de rollback é contexto operacional importante, mas nunca
+            // deve esconder a causa original que levou a transação a abortar.
+            err.abortError = abortError;
+        }
         throw err;
     } finally {
-        session.endSession();
+        await session.endSession();
     }
 }

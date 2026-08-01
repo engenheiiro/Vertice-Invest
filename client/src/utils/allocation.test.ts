@@ -94,10 +94,11 @@ describe('computeSubAllocationReal', () => {
         expect(r.FIXED_INCOME.pct.IPCA).toBe(0);
     });
 
-    it('ETF nacional conta em Ações BR (sub-tipo ETF); ETF internacional e ouro no Exterior', () => {
+    it('ETF segue exposição econômica: BOVA11 em Ações BR e IVVB11 em Exterior', () => {
         const assets = [
             mkAsset({ type: 'STOCK', ticker: 'PETR4', totalValue: 400 }),                     // ação individual BR
             mkAsset({ type: 'ETF', ticker: 'BOVA11', totalValue: 600 }),                      // ETF nacional → Ações BR/ETF
+            mkAsset({ type: 'ETF', allocationClass: 'STOCK_US', ticker: 'IVVB11', currency: 'BRL', totalValue: 200 }), // B3/BRL → Exterior/ETF
             mkAsset({ type: 'STOCK_US', usSubType: 'ETF', ticker: 'VOO', totalValue: 300 }),  // internacional → ETF
             mkAsset({ type: 'STOCK_US', usSubType: 'GOLD', ticker: 'GLD', totalValue: 100 }), // ouro lastreado → ETF
             mkAsset({ type: 'STOCK_US', usSubType: 'STOCK', ticker: 'AAPL', totalValue: 500 }), // Stocks
@@ -109,12 +110,12 @@ describe('computeSubAllocationReal', () => {
         expect(r.STOCK.value.ETF).toBe(600);
         expect(r.STOCK.pct.STOCK).toBeCloseTo(40, 5);
         expect(r.STOCK.pct.ETF).toBeCloseTo(60, 5);
-        // Exterior: Stocks 500 + ETF 400 (VOO 300 + GLD 100). ETF nacional (BOVA11) não entra.
-        expect(r.STOCK_US.total).toBe(900);
+        // Exterior: Stocks 500 + ETF 600 (IVVB11 200 + VOO 300 + GLD 100).
+        expect(r.STOCK_US.total).toBe(1100);
         expect(r.STOCK_US.value.STOCK).toBe(500);
-        expect(r.STOCK_US.value.ETF).toBe(400);
-        expect(r.STOCK_US.pct.STOCK).toBeCloseTo(500 / 9, 5);
-        expect(r.STOCK_US.pct.ETF).toBeCloseTo(400 / 9, 5);
+        expect(r.STOCK_US.value.ETF).toBe(600);
+        expect(r.STOCK_US.pct.STOCK).toBeCloseTo(500 / 11, 5);
+        expect(r.STOCK_US.pct.ETF).toBeCloseTo(600 / 11, 5);
     });
 
     it('agrupa Renda Fixa por índice e calcula % dentro da classe', () => {
@@ -188,6 +189,8 @@ describe('C1 — isReserveAsset / allocationBucket / sumReserveValue', () => {
         expect(allocationBucket(mkAsset({ type: 'FIXED_INCOME', isReserve: false }))).toBe('FIXED_INCOME');
         expect(allocationBucket(mkAsset({ type: 'CASH' }))).toBe('CASH');
         expect(allocationBucket(mkAsset({ type: 'STOCK' }))).toBe('STOCK');
+        expect(allocationBucket(mkAsset({ type: 'ETF', ticker: 'BOVA11', allocationClass: null }))).toBe('STOCK');
+        expect(allocationBucket(mkAsset({ type: 'ETF', ticker: 'IVVB11', currency: 'BRL', allocationClass: 'STOCK_US' }))).toBe('STOCK_US');
     });
 
     it('sumReserveValue: soma só os ativos de reserva', () => {

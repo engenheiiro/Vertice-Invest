@@ -1,7 +1,7 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useWallet } from '../contexts/WalletContext';
+import { useWallet, type AssetType } from '../contexts/WalletContext';
 import { researchService, RankingItem } from '../services/research';
 import { walletService } from '../services/wallet';
 import { authService } from '../services/auth';
@@ -19,7 +19,8 @@ export interface PortfolioItem {
     // igual à aba Carteira.
     totalValue?: number;
     currency?: 'BRL' | 'USD';
-    type: string;
+    allocationClass?: Exclude<AssetType, 'ETF'> | null;
+    type: AssetType;
     sector?: string;
     // Sub-tipo do Exterior — define o selo (ETF/REIT/Ouro/Dólar) ao lado do ticker.
     usSubType?: 'STOCK' | 'REIT' | 'DOLLAR' | 'ETF' | 'GOLD' | null;
@@ -259,6 +260,7 @@ export const useDashboardData = () => {
                 totalValue: asset.totalValue,
                 currency: asset.currency,
                 type: asset.type,
+                allocationClass: asset.allocationClass,
                 sector: asset.sector,
                 usSubType: asset.usSubType,
                 aiScore: researchData ? researchData.score : 0,

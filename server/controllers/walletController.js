@@ -15,6 +15,8 @@ import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculate
 import { countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { accrueFixedIncomeValue, fixedIncomeDailyFactor, assetDailyFactor, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
 import { isDollarized, resolveAssetCurrency, resolveTransactionCurrency, needsCurrencyFallback } from '../utils/assetCurrency.js';
+import { sumTransactionFlowBRL, transactionsAfterSnapshotFilter } from '../utils/walletSnapshot.js';
+import { resolveAllocationClass } from '../utils/assetAllocation.js';
 import logger from '../config/logger.js';
 import AppError from '../utils/AppError.js';
 import { HISTORICAL_CDI_RATES, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
@@ -287,6 +289,14 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
         // Nome ao vivo (mercado) → nome salvo (cofrinho/renda fixa) → ticker.
         name: assetMap.get(asset.ticker)?.name || asset.name || asset.ticker,
         type: asset.type,
+        // Classe econômica independente do veículo/moeda. O fallback em tempo de
+        // leitura corrige posições legadas mesmo antes do backfill persistido.
+        allocationClass: resolveAllocationClass({
+            ticker: asset.ticker,
+            type: asset.type,
+            allocationClass: asset.allocationClass || assetMap.get(asset.ticker)?.allocationClass,
+            sector: assetMap.get(asset.ticker)?.sector,
+        }),
         quantity: asset.quantity,
         averagePrice: asset.quantity > 0 ? safePrice(asset.totalCost, asset.quantity) : 0,
         currentPrice: asset.type === 'CASH' ? 1 : currentPrice,
@@ -319,7 +329,23 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
 // --- CÁLCULO LIVE TWRR + VOLATILIDADE (SOURCE OF TRUTH BLINDADA) ---
 // Beta omitido aqui pois exigiria buscar histórico do Ibovespa (pesado) —
 // disponível em getWalletPerformance.
-const computeWalletMetrics = async ({ userId, walletId, snapshots, safeTotalEquity, totalResultPercent, currentCdi }) => {
+const computePendingFlowBRL = async ({ userId, walletId, anchor, currentUsd }) => {
+    if (!anchor) return 0;
+    const txs = await AssetTransaction.find({
+        user: userId,
+        wallet: walletId,
+        ...transactionsAfterSnapshotFilter(anchor),
+    }).lean();
+    if (txs.length === 0) return 0;
+
+    const tickers = [...new Set(txs.map((tx) => tx.ticker))];
+    const assets = await UserAsset.find({ user: userId, wallet: walletId, ticker: { $in: tickers } }).lean();
+    const assetsByTicker = new Map(assets.map((asset) => [asset.ticker, asset]));
+    const getUsdRateForDate = await financialService._loadUsdRateResolver(currentUsd || 5.75);
+    return sumTransactionFlowBRL(txs, assetsByTicker, getUsdRateForDate);
+};
+
+const computeWalletMetrics = async ({ userId, walletId, snapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd }) => {
     const now = new Date();
     let weightedRentability = 0;
     let dataQuality = 'AUDITED'; // Default Audited
@@ -335,15 +361,8 @@ const computeWalletMetrics = async ({ userId, walletId, snapshots, safeTotalEqui
         const diffDays = (now.getTime() - new Date(lastSnapshot.date).getTime()) / (1000 * 3600 * 24);
         if (diffDays > 3) dataQuality = 'ESTIMATED';
 
-        const snapshotDate = new Date(lastSnapshot.date);
-        snapshotDate.setHours(23, 59, 59, 999);
-
-        const txs = await AssetTransaction.find({ user: userId, wallet: walletId, date: { $gt: snapshotDate } });
-
-        let periodFlow = 0;
-        txs.forEach(tx => {
-            if (tx.type === 'BUY') periodFlow += tx.totalValue;
-            else if (tx.type === 'SELL') periodFlow -= tx.totalValue;
+        const periodFlow = await computePendingFlowBRL({
+            userId, walletId, anchor: lastSnapshot, currentUsd,
         });
 
         // Fonte única da cota live (utils/mathUtils.computeLiveQuota) — mesmo
@@ -466,7 +485,7 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         }
 
         const { weightedRentability, dataQuality, sharpeRatio, beta } = await computeWalletMetrics({
-            userId, walletId, snapshots, safeTotalEquity, totalResultPercent, currentCdi,
+            userId, walletId, snapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd: usdRate,
         });
 
         return {
@@ -535,20 +554,12 @@ export const getWalletPerformance = async (req, res, next) => {
                 const anchor = selectAnchorSnapshot([...history].reverse());
 
                 // Fluxo de caixa desde o âncora (aportes/resgates) — Modified Dietz.
-                let periodFlow = 0;
-                if (anchor) {
-                    const anchorDate = new Date(anchor.date);
-                    anchorDate.setHours(23, 59, 59, 999);
-                    const txsSince = await AssetTransaction.find({
-                        user: userId,
-                        wallet: walletId,
-                        date: { $gt: anchorDate }
-                    }).lean();
-                    txsSince.forEach(tx => {
-                        if (tx.type === 'BUY') periodFlow += tx.totalValue;
-                        else if (tx.type === 'SELL') periodFlow -= tx.totalValue;
-                    });
-                }
+                const periodFlow = await computePendingFlowBRL({
+                    userId,
+                    walletId,
+                    anchor,
+                    currentUsd: config?.dollar || 5.75,
+                });
 
                 // Fonte única da cota live — idêntica ao KPI (weightedRentability).
                 const liveQuotaPrice = computeLiveQuota(anchor, liveData.totalEquity, periodFlow);

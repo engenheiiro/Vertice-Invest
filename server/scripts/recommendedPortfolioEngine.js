@@ -87,9 +87,9 @@ export const selectBasket = (report, profile, typeFilter = null) => {
 };
 
 // ── Carregadores de série (reusam AssetHistory via marketDataService) ─────────
-const loadPriceMap = async (ticker) => {
+const loadPriceMap = async (ticker, type = 'INDEX') => {
     const norm = financialService.normalizeTickerForHistory(ticker);
-    const history = await marketDataService.getBenchmarkHistory(norm);
+    const history = await marketDataService.getBenchmarkHistory(norm, type);
     if (!history || history.length < 2) return null;
     return financialService.indexHistoryByDate(history);
 };
@@ -175,10 +175,11 @@ const buildCurveForClass = async (pseudoClass, profile) => {
     const todayKey = toKey(new Date());
 
     // Pré-carrega séries de preço de todos os tickers que já apareceram em alguma cesta.
-    const allTickers = [...new Set(rebalances.flatMap(r => r.holdings.map(h => h.ticker)))];
+    const allAssets = new Map();
+    rebalances.forEach((r) => r.holdings.forEach((h) => allAssets.set(h.ticker, h.type || 'STOCK')));
     const priceMaps = new Map();
-    await Promise.all(allTickers.map(async (t) => {
-        const m = await loadPriceMap(t);
+    await Promise.all([...allAssets].map(async ([t, type]) => {
+        const m = await loadPriceMap(t, type);
         if (m) priceMaps.set(t, m);
     }));
 
@@ -189,7 +190,7 @@ const buildCurveForClass = async (pseudoClass, profile) => {
         wants.has('ibov') ? loadPriceMap('^BVSP') : Promise.resolve(null),
         wants.has('spx') ? loadPriceMap('^GSPC') : Promise.resolve(null),
         wants.has('ifix') ? loadIfixMap() : Promise.resolve(null),
-        wants.has('btc') ? loadPriceMap('BTC') : Promise.resolve(null),
+        wants.has('btc') ? loadPriceMap('BTC', 'CRYPTO') : Promise.resolve(null),
     ]);
     const cdiCum = wants.has('cdi') ? await loadCdiCumulative(baseDate) : [];
     const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });

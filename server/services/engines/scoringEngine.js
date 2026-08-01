@@ -1636,6 +1636,8 @@ export const scoringEngine = {
             name: asset.name,
             sector: asset.sector,
             type: asset.type,
+            allocationClass: asset.allocationClass || null,
+            currency: asset.currency || null,
             usSubType: asset.usSubType || null,
             currentPrice: asset.price,
             targetPrice: valuationData.fairPrice,

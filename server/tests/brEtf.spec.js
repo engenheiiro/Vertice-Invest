@@ -22,6 +22,14 @@ describe('BR_ETF_LIST', () => {
         expect(new Set(tickers).size).toBe(tickers.length);
     });
 
+    it('marca ETFs locais de exposição internacional com allocationClass STOCK_US', () => {
+        const byTicker = new Map(BR_ETF_LIST.map((e) => [e.ticker, e]));
+        for (const ticker of ['IVVB11', 'SPXI11', 'NASD11', 'WRLD11', 'ACWI11', 'XINA11']) {
+            expect(byTicker.get(ticker)?.allocationClass).toBe('STOCK_US');
+        }
+        expect(byTicker.get('BOVA11')?.allocationClass).toBeUndefined();
+    });
+
     it('seedYield (quando presente) é só p/ distribuidores, positivo e plausível (<15%)', () => {
         const seeded = BR_ETF_LIST.filter((e) => e.seedYield != null);
         // Fallback curado existe apenas p/ os poucos ETFs que distribuem proventos.

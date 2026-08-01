@@ -29,6 +29,9 @@ export interface Asset {
     profit: number;
     profitPercent: number;
     currency: 'BRL' | 'USD';
+    // Classe econômica usada na alocação, independente do veículo/moeda.
+    // Ex.: IVVB11 = type ETF, currency BRL, allocationClass STOCK_US.
+    allocationClass?: Exclude<AssetType, 'ETF'> | null;
     name?: string;
     sector?: string;
     fixedIncomeRate?: number;
@@ -75,12 +78,11 @@ export type AllocationMap = Partial<Record<AssetType, number>>;
 
 // Sub-metas (ramificação) por classe. Percentuais RELATIVOS à fatia da classe
 // (somam ~100% DENTRO da classe). Tudo 0 = sem sub-meta (classe em bloco).
-// Ações BR ramifica em Ações individuais / ETFs nacionais (BRL). O ETF nacional deixou
-// de ser classe de topo da Carteira Ideal e conta aqui, no sub-tipo ETF.
+// Ações BR ramifica em ações individuais / ETFs com exposição econômica ao Brasil.
 export type StockSubKey = 'STOCK' | 'ETF';
 export type FixedIncomeSubKey = 'IPCA' | 'POS' | 'PRE';
-// Exterior ramifica em Stocks/REITs/ETFs/Dólar. ETFs internacionais (e ouro lastreado)
-// contam aqui no sub-tipo ETF; a classe própria 'ETF' (AssetType) é só p/ ETFs nacionais.
+// Exterior ramifica em Stocks/REITs/ETFs/Dólar. Inclui ETFs estrangeiros em USD e
+// ETFs locais em BRL cuja allocationClass é STOCK_US (IVVB11, NASD11, WRLD11...).
 export type UsSubKey = 'STOCK' | 'REIT' | 'ETF' | 'DOLLAR';
 export interface SubAllocationMap {
     STOCK: Record<StockSubKey, number>;

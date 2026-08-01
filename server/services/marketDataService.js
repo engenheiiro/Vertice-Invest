@@ -10,6 +10,7 @@ import { summarizeTrackRecord } from '../utils/trackRecord.js';
 // (M9) Janela de cache e fallback de Selic centralizados em financialConstants.
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { getTunablesSync } from './configService.js'; // (I13) tunables editáveis pelo admin
+import { historyStorageKey } from '../utils/assetHistory.js';
 
 const MAX_FAILURES_BEFORE_BLACKLIST = 10;
 // (Robustez) Ativos grandes/líquidos nunca são desativados automaticamente: falha
@@ -69,7 +70,8 @@ export const marketDataService = {
                 };
             }
 
-            const history = await AssetHistory.findOne({ ticker: cleanTicker });
+            const historyKey = historyStorageKey(cleanTicker, asset?.type || 'INDEX');
+            const history = await AssetHistory.findOne({ ticker: historyKey });
             if (history && history.history && history.history.length > 0) {
                 const sorted = history.history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                 const lastClose = sorted[0].close || sorted[0].adjClose;
@@ -113,10 +115,10 @@ export const marketDataService = {
 
         try {
             const assets = await MarketAsset.find({ ticker: { $in: cleanList } })
-                .select('ticker name sector lastPrice change dy');
+                .select('ticker name sector type currency allocationClass lastPrice change dy');
             const byTicker = new Map(assets.map(a => [a.ticker, a]));
 
-            const missingClean = new Set();
+            const missingKeys = new Set();
             for (const { original, clean } of pairs) {
                 const asset = byTicker.get(clean);
                 if (asset && asset.lastPrice > 0) {
@@ -125,30 +127,39 @@ export const marketDataService = {
                         change: asset.change || 0,
                         name: asset.name,
                         sector: asset.sector,
+                        ...(asset.allocationClass ? { allocationClass: asset.allocationClass } : {}),
                         dy: asset.dy || 0,
                     });
                 } else {
-                    missingClean.add(clean);
+                    missingKeys.add(historyStorageKey(clean, asset?.type || 'INDEX'));
                 }
             }
 
             // Fallback de histórico em UMA query (evita o N+1 de AssetHistory).
             let histByTicker = new Map();
-            if (missingClean.size > 0) {
-                const histories = await AssetHistory.find({ ticker: { $in: [...missingClean] } })
+            if (missingKeys.size > 0) {
+                const histories = await AssetHistory.find({ ticker: { $in: [...missingKeys] } })
                     .select('ticker history');
                 histByTicker = new Map(histories.map(h => [h.ticker, h]));
             }
 
             for (const { original, clean } of pairs) {
                 if (map.has(original)) continue;
-                const hist = histByTicker.get(clean);
-                let resolved = { price: 0, change: 0, name: original, sector: 'Outros' };
+                const asset = byTicker.get(clean);
+                const hist = histByTicker.get(historyStorageKey(clean, asset?.type || 'INDEX'));
+                let resolved = {
+                    price: 0, change: 0, name: original, sector: 'Outros',
+                    ...(asset?.allocationClass ? { allocationClass: asset.allocationClass } : {}),
+                };
                 if (hist && Array.isArray(hist.history) && hist.history.length > 0) {
                     const sorted = [...hist.history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                     const lastClose = sorted[0].close || sorted[0].adjClose;
                     if (lastClose > 0) {
-                        resolved = { price: lastClose, change: 0, name: original, sector: 'Outros', isFallback: true };
+                        resolved = {
+                            price: lastClose, change: 0, name: original, sector: 'Outros',
+                            ...(asset?.allocationClass ? { allocationClass: asset.allocationClass } : {}),
+                            isFallback: true,
+                        };
                     }
                 }
                 map.set(original, resolved);
@@ -331,14 +342,23 @@ export const marketDataService = {
         }
     },
 
-    async getBenchmarkHistory(ticker = '^BVSP') {
+    async getBenchmarkHistory(ticker = '^BVSP', type = 'INDEX') {
+        let historyEntry = null;
         try {
-            let historyEntry = await AssetHistory.findOne({ ticker });
+            const cleanTicker = this.normalizeSymbol(ticker);
+            const normalizedType = String(type || 'INDEX').trim().toUpperCase();
+            const storageKey = historyStorageKey(cleanTicker, normalizedType);
+            historyEntry = await AssetHistory.findOne({ ticker: storageKey });
             const now = new Date();
             const cacheLimit = new Date(now.getTime() - 12 * 60 * 60 * 1000);
 
             if (!historyEntry || historyEntry.lastUpdated < cacheLimit) {
-                const externalHistory = await externalMarketService.getFullHistory(ticker, 'INDEX');
+                let externalHistory = null;
+                try {
+                    externalHistory = await externalMarketService.getFullHistory(cleanTicker, normalizedType);
+                } catch (error) {
+                    logger.warn(`[MarketData] Histórico externo indisponível para ${storageKey}; usando cache stale: ${error.message}`);
+                }
                 
                 if (externalHistory && externalHistory.length > 0) {
                     if (historyEntry) {
@@ -347,7 +367,7 @@ export const marketDataService = {
                         await historyEntry.save();
                     } else {
                         historyEntry = await AssetHistory.create({
-                            ticker,
+                            ticker: storageKey,
                             history: externalHistory,
                             lastUpdated: now
                         });
@@ -356,19 +376,21 @@ export const marketDataService = {
             }
             return historyEntry ? historyEntry.history : null;
         } catch (error) {
-            return null;
+            return historyEntry?.history || null;
         }
     },
 
     async getPriceAtDate(ticker, dateStr, type) {
         const cleanTicker = this.normalizeSymbol(ticker);
+        const normalizedType = String(type || 'INDEX').trim().toUpperCase();
+        const storageKey = historyStorageKey(cleanTicker, normalizedType);
         try {
-            let historyEntry = await AssetHistory.findOne({ ticker: cleanTicker });
+            let historyEntry = await AssetHistory.findOne({ ticker: storageKey });
             if (!historyEntry) {
-                const externalHistory = await externalMarketService.getFullHistory(cleanTicker, type);
+                const externalHistory = await externalMarketService.getFullHistory(cleanTicker, normalizedType);
                 if (externalHistory && externalHistory.length > 0) {
                     historyEntry = await AssetHistory.create({
-                        ticker: cleanTicker,
+                        ticker: storageKey,
                         history: externalHistory,
                         lastUpdated: new Date()
                     });
@@ -577,6 +599,8 @@ export const marketDataService = {
                 results.push({
                     ticker: asset.ticker,
                     type: asset.type,
+                    allocationClass: asset.allocationClass || null,
+                    currency: asset.currency || (asset.type === 'STOCK_US' ? 'USD' : 'BRL'),
                     name: asset.name || asset.ticker,
                     sector: displaySector,
                     // Metadados da calibração buy-and-hold STOCK. Permanecem no

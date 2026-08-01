@@ -64,3 +64,22 @@ describe('processWalletAsset — precisão de renda fixa/caixa', () => {
         expect(processWalletAsset(asset, ctx).processed.totalValue).toBe(expectedAccrued(asset));
     });
 });
+
+describe('processWalletAsset — classe econômica', () => {
+    it('expõe IVVB11 como Exterior sem mudar ETF/BRL', () => {
+        const asset = {
+            type: 'ETF', ticker: 'IVVB11', quantity: 2, totalCost: 800,
+            currency: 'BRL', taxLots: [], realizedProfit: 0,
+        };
+        const assetMap = new Map([['IVVB11', {
+            price: 410, change: 0, name: 'iShares S&P 500',
+            sector: 'Exterior (S&P 500)', allocationClass: 'STOCK_US',
+        }]]);
+        const { processed } = processWalletAsset(asset, { ...ctx, assetMap });
+
+        expect(processed.type).toBe('ETF');
+        expect(processed.currency).toBe('BRL');
+        expect(processed.allocationClass).toBe('STOCK_US');
+        expect(processed.totalValue).toBe(820);
+    });
+});

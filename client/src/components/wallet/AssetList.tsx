@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { useWallet, AssetType, Asset } from '../../contexts/WalletContext';
+import { useWallet, AssetType, Asset, UsSubKey } from '../../contexts/WalletContext';
 import { TrendingUp, TrendingDown, Trash2, Folder, PieChart, History, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, EyeOff, Pencil } from 'lucide-react';
 import { AssetTransactionsModal } from './AssetTransactionsModal';
 import { RenameReserveModal } from './RenameReserveModal';
@@ -9,7 +9,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import AssetLogo from '../common/AssetLogo';
 import AssetTags from '../common/AssetTags';
 import { getAssetSubtitle, getAssetTags } from '../../utils/assetDisplay';
-import { allocationBucket, sumReserveValue, isReserveAsset } from '../../utils/allocation';
+import { allocationBucket, sumReserveValue, isReserveAsset, usSubKeyOf } from '../../utils/allocation';
 
 /** Título exibido na lista: cofrinhos (CASH) mostram o nome; demais, o ticker. */
 const assetTitle = (asset: Asset): string =>
@@ -40,6 +40,40 @@ const CLASS_ACCENT: Record<string, { label: string; icon: string; bar: string }>
 };
 const accentOf = (type: string) => CLASS_ACCENT[type] || CLASS_ACCENT.CASH;
 const pluralAtivos = (n: number) => `${n} ${n === 1 ? 'Ativo' : 'Ativos'}`;
+
+const wholePercentSplit = <K extends string>(values: Record<K, number>): Record<K, number> => {
+    const keys = Object.keys(values) as K[];
+    const total = keys.reduce((sum, key) => sum + Math.max(Number(values[key]) || 0, 0), 0);
+    const percentages = {} as Record<K, number>;
+    if (total <= 0) {
+        keys.forEach(key => { percentages[key] = 0; });
+        return percentages;
+    }
+
+    const fractions = {} as Record<K, number>;
+    let allocated = 0;
+    keys.forEach(key => {
+        const exact = (Math.max(Number(values[key]) || 0, 0) / total) * 100;
+        percentages[key] = Math.floor(exact);
+        fractions[key] = exact - percentages[key];
+        allocated += percentages[key];
+    });
+
+    // Maior resto: distribui os pontos faltantes sem deixar a soma arredondada fugir de 100%.
+    [...keys]
+        .sort((a, b) => fractions[b] - fractions[a])
+        .slice(0, 100 - allocated)
+        .forEach(key => { percentages[key] += 1; });
+
+    return percentages;
+};
+
+const EXTERIOR_LABELS: Record<UsSubKey, string> = {
+    STOCK: 'Stocks',
+    REIT: 'REITs',
+    ETF: 'ETFs',
+    DOLLAR: 'Dólar',
+};
 
 export const AssetList = () => {
     const { assets, removeAsset, kpis, targetAllocation, isPrivacyMode } = useWallet();
@@ -98,23 +132,39 @@ export const AssetList = () => {
 
     // Agrupa pelo BALDE DE ALOCAÇÃO (C1), coerente com a Distribuição: ativos de Reserva
     // (CASH ou RF marcada) caem em "Caixa / Reserva"; RF não-reserva fica em "Renda Fixa".
-    // ETF NACIONAL (type 'ETF') conta dentro de "Ações Brasil" (marcado com selo ETF);
-    // ETFs internacionais (type STOCK_US) listam sob "Exterior".
+    // ETFs usam a exposição econômica: BOVA11 em Ações Brasil; IVVB11 em Exterior.
+    // type/currency permanecem intactos para preço, transação e tributação.
     const groupedAssets = assets.reduce((acc, asset) => {
-        const bucket = allocationBucket(asset);
-        const cls = bucket === 'ETF' ? 'STOCK' : bucket;
+        const cls = allocationBucket(asset);
         if (!acc[cls]) acc[cls] = [];
         acc[cls].push(asset);
         return acc;
     }, {} as Record<string, Asset[]>);
 
-    // Divisão Ações individuais vs ETFs nacionais dentro de "Ações Brasil" — decompõe o %
-    // do grupo (mesma leitura da ramificação da Distribuição).
+    // Divisão Ações individuais vs ETFs de exposição Brasil. Os percentuais
+    // são relativos ao próprio grupo de Ações Brasil e, portanto, somam 100%.
     const isNationalEtf = (a: Asset) => a.type === 'ETF';
     const stockSplit = (items: Asset[]) => {
         let stock = 0, etf = 0;
         items.forEach(i => { if (isNationalEtf(i)) etf += i.totalValue || 0; else stock += i.totalValue || 0; });
-        return { stock, etf };
+        const pct = wholePercentSplit({ stock, etf });
+        return { stock, etf, stockPercent: pct.stock, etfPercent: pct.etf };
+    };
+
+    // Exterior pode reunir stocks/REITs em USD e ETFs negociados nos EUA ou na B3
+    // (ex.: IVVB11 com allocationClass STOCK_US). O detalhamento usa a própria classe.
+    const exteriorSplit = (items: Asset[]) => {
+        const values: Record<UsSubKey, number> = { STOCK: 0, REIT: 0, ETF: 0, DOLLAR: 0 };
+        items.forEach(item => {
+            const key: UsSubKey = item.type === 'ETF' ? 'ETF' : usSubKeyOf(item);
+            values[key] += item.totalValue || 0;
+        });
+        const pct = wholePercentSplit(values);
+        const label = (Object.keys(values) as UsSubKey[])
+            .filter(key => values[key] > 0)
+            .map(key => `${EXTERIOR_LABELS[key]} ${pct[key]}%`)
+            .join(' · ');
+        return { values, label };
     };
 
     // Base de alocação = patrimônio − reserva. Denominador ÚNICO dos percentuais
@@ -123,7 +173,7 @@ export const AssetList = () => {
     const reserveValue = sumReserveValue(assets);
     const allocationBase = Math.max((kpis.totalEquity || 0) - reserveValue, 0);
 
-    // ETF nacional foldado em Ações BR (STOCK). OURO no fim p/ holdings legados de ouro.
+    // ETF é distribuído pela allocationClass. OURO no fim p/ holdings legados.
     const typeOrder = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
     const visibleTypes = typeOrder.filter(type => groupedAssets[type] && groupedAssets[type].length > 0);
 
@@ -175,7 +225,9 @@ export const AssetList = () => {
                         const gm = groupMetrics(groupItems);
                         const accent = accentOf(type);
                         const sp = stockSplit(groupItems);
-                        const showStockSplit = type === 'STOCK' && sp.etf > 0 && allocationBase > 0;
+                        const exterior = exteriorSplit(groupItems);
+                        const showStockSplit = type === 'STOCK' && sp.etf > 0 && totalValueGroup > 0;
+                        const showExteriorSplit = type === 'STOCK_US' && exterior.values.ETF > 0 && totalValueGroup > 0;
 
                         return (
                             <div key={type}>
@@ -194,7 +246,12 @@ export const AssetList = () => {
                                             </span>
                                             {showStockSplit && (
                                                 <span className="text-[9px] text-slate-500 font-semibold normal-case tracking-normal">
-                                                    Ações {(sp.stock / allocationBase * 100).toFixed(0)}% · ETFs {(sp.etf / allocationBase * 100).toFixed(0)}%
+                                                    Ações {sp.stockPercent}% · ETFs {sp.etfPercent}%
+                                                </span>
+                                            )}
+                                            {showExteriorSplit && (
+                                                <span className="text-[9px] text-slate-500 font-semibold normal-case tracking-normal">
+                                                    {exterior.label}
                                                 </span>
                                             )}
                                         </span>
@@ -324,7 +381,9 @@ export const AssetList = () => {
                                 const accent = accentOf(type);
                                 // Ações BR: decompõe o % do grupo em Ações individuais vs ETFs nacionais.
                                 const sp = stockSplit(groupItems);
-                                const showStockSplit = type === 'STOCK' && sp.etf > 0 && allocationBase > 0;
+                                const exterior = exteriorSplit(groupItems);
+                                const showStockSplit = type === 'STOCK' && sp.etf > 0 && totalValueGroup > 0;
+                                const showExteriorSplit = type === 'STOCK_US' && exterior.values.ETF > 0 && totalValueGroup > 0;
 
                                 return (
                                     <React.Fragment key={type}>
@@ -349,7 +408,12 @@ export const AssetList = () => {
                                                         </span>
                                                         {showStockSplit && (
                                                             <span className="text-[10px] text-slate-500 font-semibold normal-case tracking-normal">
-                                                                Ações {(sp.stock / allocationBase * 100).toFixed(0)}% · ETFs {(sp.etf / allocationBase * 100).toFixed(0)}%
+                                                                Ações {sp.stockPercent}% · ETFs {sp.etfPercent}%
+                                                            </span>
+                                                        )}
+                                                        {showExteriorSplit && (
+                                                            <span className="text-[10px] text-slate-500 font-semibold normal-case tracking-normal">
+                                                                {exterior.label}
                                                             </span>
                                                         )}
                                                     </div>

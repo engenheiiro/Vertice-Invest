@@ -61,6 +61,7 @@ interface AssetLike {
   name?: string;
   sector?: string;
   type?: AssetType | string;
+  allocationClass?: string | null;
   /** Sub-tipo do Exterior (STOCK_US) — define o selo e a sublinha do ativo. */
   usSubType?: 'STOCK' | 'REIT' | 'DOLLAR' | 'ETF' | 'GOLD' | null;
   /** Renda Fixa vencida (accrual congelado). */
@@ -118,6 +119,12 @@ const ETF_BR_TAG: AssetTag = {
   title: 'ETF nacional — conta dentro de Ações BR na distribuição.',
 };
 
+const ETF_B3_EXTERIOR_TAG: AssetTag = {
+  label: 'ETF',
+  tone: 'etf',
+  title: 'ETF negociado na B3 com exposição internacional — conta dentro de Exterior na distribuição.',
+};
+
 /** Selo por sub-tipo do Exterior. STOCK (ação individual) não recebe selo. */
 const US_SUB_TAG: Record<string, AssetTag> = {
   ETF: { label: 'ETF', tone: 'etf', title: 'ETF internacional — conta dentro de Exterior (sub-tipo ETF) na distribuição.' },
@@ -136,7 +143,9 @@ const MATURED_TAG: AssetTag = {
 export function getAssetTags(asset: AssetLike): AssetTag[] {
   const tags: AssetTag[] = [];
 
-  if (asset.type === 'ETF') tags.push(ETF_BR_TAG);
+  if (asset.type === 'ETF') {
+    tags.push(asset.allocationClass === 'STOCK_US' ? ETF_B3_EXTERIOR_TAG : ETF_BR_TAG);
+  }
   else if (asset.type === 'STOCK_US' && asset.usSubType && US_SUB_TAG[asset.usSubType]) {
     tags.push(US_SUB_TAG[asset.usSubType]);
   }

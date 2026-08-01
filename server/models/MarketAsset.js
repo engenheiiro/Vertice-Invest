@@ -10,6 +10,14 @@ const MarketAssetSchema = new mongoose.Schema({
     required: true
   },
   currency: { type: String, enum: ['BRL', 'USD'], default: 'BRL' },
+  // Classe econômica usada na alocação da carteira. É independente do veículo e
+  // da moeda: IVVB11 permanece type=ETF/currency=BRL, mas allocationClass=STOCK_US.
+  // null preserva ativos legados; o resolver usa a lista curada/setor como fallback.
+  allocationClass: {
+    type: String,
+    enum: ['STOCK', 'FII', 'STOCK_US', 'CRYPTO', 'FIXED_INCOME', 'CASH', 'OURO', null],
+    default: null
+  },
   
   // --- Metadados de Análise ---
   sector: { type: String, default: 'Geral' },

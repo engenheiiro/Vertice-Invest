@@ -18,8 +18,11 @@ import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
 import { classifyUsAsset } from '../utils/usClassification.js';
 import { isGoldTicker } from '../utils/goldClassification.js';
-import { isDollarized as isDollarizedAsset } from '../utils/assetCurrency.js';
+import { isDollarized as isDollarizedAsset, resolveTransactionCurrency } from '../utils/assetCurrency.js';
 import logger from '../config/logger.js';
+import { historyStorageKey } from '../utils/assetHistory.js';
+import { brazilDayKey, isTwrrReturnAnomalous, isValidDayKey, snapshotInstantForDay } from '../utils/walletSnapshot.js';
+import { resolveAllocationClass } from '../utils/assetAllocation.js';
 
 export const financialService = {
     
@@ -77,11 +80,12 @@ export const financialService = {
 
     findPriceInMap(priceMap, dateStr) {
         if (!priceMap || priceMap.size === 0) return { close: 0, adjClose: 0 };
+        if (!isValidDayKey(dateStr)) return { close: 0, adjClose: 0 };
         if (priceMap.has(dateStr)) return priceMap.get(dateStr);
-        const targetDate = new Date(dateStr);
+        const targetDate = new Date(`${dateStr}T12:00:00.000Z`);
         for (let i = 1; i <= 5; i++) {
             const prevDate = new Date(targetDate);
-            prevDate.setDate(targetDate.getDate() - i);
+            prevDate.setUTCDate(targetDate.getUTCDate() - i);
             const prevKey = prevDate.toISOString().split('T')[0];
             if (priceMap.has(prevKey)) return priceMap.get(prevKey);
         }
@@ -99,11 +103,16 @@ export const financialService = {
         const usdRateByDate = new Map();
         if (usdHistoryDoc?.history) {
             usdHistoryDoc.history.forEach(h => {
-                if (h.date && (h.close || h.adjClose) > 0) {
-                    usdRateByDate.set(h.date, h.adjClose || h.close);
+                const rate = Number(h.adjClose || h.close);
+                if (isValidDayKey(h.date) && Number.isFinite(rate) && rate > 0) {
+                    usdRateByDate.set(h.date, rate);
                 }
             });
         }
+        const parsedCurrentRate = Number(currentUsdRate);
+        const safeCurrentUsdRate = Number.isFinite(parsedCurrentRate) && parsedCurrentRate > 0
+            ? parsedCurrentRate
+            : 5.75;
         // Série ordenada (asc) para busca da taxa histórica mais próxima — evita
         // cair na taxa ATUAL para datas passadas com gaps > 7 dias (P&L histórico).
         const usdSorted = [...usdRateByDate.entries()]
@@ -112,8 +121,9 @@ export const financialService = {
             .sort((a, b) => a[0] - b[0]);
 
         return (dateStr) => {
+            if (!isValidDayKey(dateStr)) throw new RangeError(`Data de câmbio inválida: ${dateStr}`);
             if (usdRateByDate.has(dateStr)) return usdRateByDate.get(dateStr);
-            if (usdSorted.length === 0) return currentUsdRate; // sem histórico: último recurso
+            if (usdSorted.length === 0) return safeCurrentUsdRate; // sem histórico: último recurso
             const targetMs = new Date(dateStr).getTime();
             // taxa mais recente em data <= alvo (busca binária)
             let lo = 0, hi = usdSorted.length - 1, best = -1;
@@ -141,16 +151,16 @@ export const financialService = {
 
             try {
                 const searchTicker = this.normalizeTickerForHistory(ticker);
-                let history = await marketDataService.getBenchmarkHistory(ticker);
+                let history = await marketDataService.getBenchmarkHistory(ticker, assetMeta?.type || 'INDEX');
 
                 if (!history || history.length < 5) {
                     const info = await MarketAsset.findOne({ ticker });
-                    const type = info?.type || 'STOCK';
+                    const type = assetMeta?.type || info?.type || 'STOCK';
                     try {
                         const extHistory = await externalMarketService.getFullHistory(searchTicker, type);
                         if (extHistory && extHistory.length > 0) {
                             await AssetHistory.updateOne(
-                                { ticker: ticker.toUpperCase() },
+                                { ticker: historyStorageKey(ticker, type) },
                                 { history: extHistory, lastUpdated: new Date() },
                                 { upsert: true }
                             );
@@ -257,8 +267,11 @@ export const financialService = {
             let trueAdjustedFlow = tx.totalValue; // Fluxo ajustado real
             const meta = assetMetadataMap.get(tx.ticker);
             const isFixed = meta?.type === 'FIXED_INCOME' || meta?.type === 'CASH';
-            const txIsDollarized = isDollarizedAsset(meta);
+            const txIsDollarized = resolveTransactionCurrency(tx, meta) === 'USD';
             const txUsdRate = txIsDollarized ? getUsdRateForDate(cursorIso) : 1;
+            if (!Number.isFinite(Number(txUsdRate)) || Number(txUsdRate) <= 0) {
+                throw new RangeError(`Câmbio USD/BRL inválido para ${cursorIso}: ${txUsdRate}`);
+            }
 
             if (!isFixed) {
                 const pMap = priceCacheMap.get(tx.ticker);
@@ -398,7 +411,6 @@ export const financialService = {
 
     /** Substitui os snapshots da carteira pelos recém-calculados (em transação, em lotes). */
     async _persistSnapshots(userId, walletId, snapshots) {
-        if (snapshots.length === 0) return;
         await runTransaction(async (session) => {
             await WalletSnapshot.deleteMany({ user: userId, wallet: walletId }).session(session);
             const CHUNK_SIZE = 5000;
@@ -408,21 +420,25 @@ export const financialService = {
         });
     },
 
-    async rebuildUserHistory(userId, walletId) {
+    async rebuildUserHistory(userId, walletId, options = {}) {
         const startTime = Date.now();
+        const calculatedAt = new Date();
+        const { dryRun = false, throughDayKey = null, source = 'REBUILD' } = options;
 
         try {
             // Log de Auditoria Inicial
-            await AuditLog.create({
-                user: userId,
-                action: 'RECALC_QUOTA',
-                details: 'Início de reconstrução de histórico (Manual/Transaction Trigger)'
-            });
+            if (!dryRun) {
+                await AuditLog.create({
+                    user: userId,
+                    action: 'RECALC_QUOTA',
+                    details: 'Início de reconstrução de histórico (Manual/Transaction Trigger)'
+                });
+            }
 
             const txs = await AssetTransaction.find({ user: userId, wallet: walletId }).sort({ date: 1 });
             if (txs.length === 0) {
-                await WalletSnapshot.deleteMany({ user: userId, wallet: walletId });
-                return;
+                if (!dryRun) await WalletSnapshot.deleteMany({ user: userId, wallet: walletId });
+                return [];
             }
 
             const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
@@ -441,10 +457,15 @@ export const financialService = {
             const priceCacheMap = await this._loadPriceCacheMap(uniqueTickers, assetMetadataMap);
             const dividendDateMap = await this._loadDividendDateMap(uniqueTickers);
 
-            const startDate = new Date(txs[0].date);
-            startDate.setHours(12, 0, 0, 0);
-            const today = new Date();
-            today.setHours(12, 0, 0, 0);
+            // Rebuild nunca antecipa o snapshot do dia corrente. O cron das 23:59
+            // é o único dono desse fechamento; durante o dia, KPI/gráfico usam o
+            // ponto live com os fluxos pendentes.
+            const currentDayKey = brazilDayKey(new Date());
+            const defaultEnd = new Date(`${currentDayKey}T12:00:00.000Z`);
+            defaultEnd.setUTCDate(defaultEnd.getUTCDate() - 1);
+            const endDayKey = throughDayKey || defaultEnd.toISOString().slice(0, 10);
+            const startDate = new Date(`${this.toDateKey(txs[0].date)}T12:00:00.000Z`);
+            const today = new Date(`${endDayKey}T12:00:00.000Z`);
 
             const { dailyFactorsMap, cdiFactorsCacheFallback } = await this._loadCdiFactors(startDate, today, currentCdiRate);
 
@@ -508,35 +529,40 @@ export const financialService = {
                     const dailyReturn = calculateDailyDietz(previousEquityNominal, totalEquityNominal, dayFlowNominal, dayDividendCash);
 
                     // Proteção contra spikes absurdos (ex: dados sujos)
-                    if (dailyReturn > -0.5 && dailyReturn < 0.5) {
+                    if (!isTwrrReturnAnomalous(dailyReturn)) {
                         currentQuota = currentQuota * (1 + dailyReturn);
                     }
                 }
 
-                if (hasPosition || totalInvested > 0 || accumulatedDividends > 0) {
+                if (isBusinessDay(cursor) && (hasPosition || totalInvested > 0 || accumulatedDividends > 0)) {
                     snapshots.push({
                         user: userId,
                         wallet: walletId,
-                        date: new Date(cursor),
+                        date: snapshotInstantForDay(cursorIso),
+                        dayKey: cursorIso,
+                        source,
+                        calculationVersion: 5,
+                        calculatedAt,
                         totalEquity: safeCurrency(totalEquityNominal),
                         totalInvested: safeCurrency(totalInvested),
                         totalDividends: safeCurrency(accumulatedDividends),
-                        profit: safeCurrency(totalEquityNominal - totalInvested),
-                        profitPercent: safeFloat(totalInvested > 0 ? ((totalEquityNominal - totalInvested) / totalInvested) * 100 : 0),
+                        profit: safeCurrency(totalEquityNominal - totalInvested + accumulatedDividends),
+                        profitPercent: safeFloat(totalInvested > 0 ? ((totalEquityNominal - totalInvested + accumulatedDividends) / totalInvested) * 100 : 0),
                         quotaPrice: safeFloat(currentQuota)
                     });
                 }
 
                 previousEquityNominal = totalEquityNominal;
-                cursor.setDate(cursor.getDate() + 1);
+                cursor.setUTCDate(cursor.getUTCDate() + 1);
             }
 
-            await this._persistSnapshots(userId, walletId, snapshots);
+            if (!dryRun) await this._persistSnapshots(userId, walletId, snapshots);
 
             const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-            logger.info(`✅ [History] Reconstrução V4.7 (Precision) concluída em ${duration}s.`, {
-                source: 'rebuildUserHistory', userId: String(userId), durationSec: Number(duration), snapshots: snapshots.length,
+            logger.info(`✅ [History] Reconstrução V5 (Typed History) concluída em ${duration}s.`, {
+                source: 'rebuildUserHistory', userId: String(userId), durationSec: Number(duration), snapshots: snapshots.length, dryRun,
             });
+            return snapshots;
 
         } catch (error) {
             logger.error(`❌ [Engine] Erro Fatal no Rebuild: ${error.message}`);
@@ -834,7 +860,13 @@ export const financialService = {
                     type: forcedType || goldDefault || marketInfo?.type || 'STOCK',
                     // Moeda explícita do cadastro tem prioridade (ETF nacional R$ vs
                     // internacional US$); senão herda do MarketAsset; senão BRL.
-                    currency: forcedCurrency || marketInfo?.currency || 'BRL'
+                    currency: forcedCurrency || marketInfo?.currency || 'BRL',
+                    allocationClass: resolveAllocationClass({
+                        ticker,
+                        type: forcedType || goldDefault || marketInfo?.type || 'STOCK',
+                        allocationClass: marketInfo?.allocationClass,
+                        sector: marketInfo?.sector,
+                    }),
                 });
 
                 // Rede de segurança: ticker sem registro de mercado (ex.: ETF nacional
@@ -844,7 +876,7 @@ export const financialService = {
                 if (!marketInfo && !['CASH', 'FIXED_INCOME'].includes(asset.type)) {
                     await MarketAsset.updateOne(
                         { ticker },
-                        { $setOnInsert: { ticker, name: asset.name || ticker, type: asset.type, currency: asset.currency || 'BRL', isActive: true } },
+                        { $setOnInsert: { ticker, name: asset.name || ticker, type: asset.type, currency: asset.currency || 'BRL', allocationClass: asset.allocationClass || null, isActive: true } },
                         { upsert: true, session }
                     ).catch(() => {});
                 }
@@ -852,6 +884,21 @@ export const financialService = {
         } else if (forcedType && asset.type !== forcedType) {
             asset.type = forcedType;
         }
+
+        // Self-heal idempotente de posições anteriores ao campo allocationClass.
+        // O MarketAsset prevalece; a lista curada/ticker e o setor são fallbacks.
+        if (!marketInfo && (asset.type === 'ETF' || !asset.allocationClass)) {
+            marketInfo = await MarketAsset.findOne({ ticker })
+                .select('sector currency name type allocationClass')
+                .lean()
+                .catch(() => null);
+        }
+        asset.allocationClass = resolveAllocationClass({
+            ticker,
+            type: asset.type,
+            allocationClass: marketInfo?.allocationClass || asset.allocationClass,
+            sector: marketInfo?.sector,
+        });
 
         asset.quantity = quantity;
         asset.totalCost = safeCurrency(totalCost); 

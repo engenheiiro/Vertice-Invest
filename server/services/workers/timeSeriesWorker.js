@@ -3,6 +3,7 @@ import MarketAsset from '../../models/MarketAsset.js';
 import AssetHistory from '../../models/AssetHistory.js';
 import SystemConfig from '../../models/SystemConfig.js';
 import { marketDataService } from '../marketDataService.js';
+import { historyStorageKey } from '../../utils/assetHistory.js';
 import { externalMarketService } from '../externalMarketService.js';
 import { ASSET_HISTORY_MAX_POINTS, HISTORY_CAP_EXEMPT_TICKERS } from '../../config/financialConstants.js';
 
@@ -138,7 +139,7 @@ export const timeSeriesWorker = {
                 // Carrega o histórico de todo o lote em uma única query. O .lean() evita
                 // hidratar o array grande de candles quando só vamos ler (e renovar
                 // lastUpdated em massa via updateMany), reduzindo overhead no caminho quente.
-                const batchTickers = batch.map(a => a.ticker);
+                const batchTickers = batch.map(a => historyStorageKey(a.ticker, a.type));
                 const histDocs = await AssetHistory.find({ ticker: { $in: batchTickers } }).lean();
                 const histByTicker = new Map(histDocs.map(d => [d.ticker, d]));
 
@@ -146,7 +147,8 @@ export const timeSeriesWorker = {
                 const touchTickers = [];    // frescos: renova lastUpdated em massa, sem .save() por doc
 
                 await Promise.all(batch.map(async (asset) => {
-                    let historyEntry = histByTicker.get(asset.ticker) || null;
+                    const storageKey = historyStorageKey(asset.ticker, asset.type);
+                    let historyEntry = histByTicker.get(storageKey) || null;
 
                     // Staleness pela data do último candle (ver isHistoryStale) — nunca por
                     // lastUpdated, que o touch renovava sem dados novos.
@@ -164,12 +166,12 @@ export const timeSeriesWorker = {
                                     ? externalHistory
                                     : externalHistory.slice(-ASSET_HISTORY_MAX_POINTS);
                                 await AssetHistory.updateOne(
-                                    { ticker: asset.ticker },
+                                    { ticker: storageKey },
                                     { $set: { history: historyToStore, lastUpdated: now, lastCheckedAt: now } },
                                     { upsert: true }
                                 );
                                 // Reaproveita o array recém-buscado para o cálculo, sem reler do banco.
-                                historyEntry = { ticker: asset.ticker, history: historyToStore, lastUpdated: now };
+                                historyEntry = { ticker: storageKey, history: historyToStore, lastUpdated: now };
                             }
                         } catch (e) {
                             logger.warn(`[TimeSeriesWorker] Falha ao buscar histórico para ${asset.ticker}`);
@@ -178,7 +180,7 @@ export const timeSeriesWorker = {
                         // "Touch" de monitoramento: renova lastCheckedAt (visita do worker),
                         // NUNCA lastUpdated — renovar lastUpdated sem buscar dados era o que
                         // mascarava a staleness e congelava as séries.
-                        touchTickers.push(asset.ticker);
+                        touchTickers.push(storageKey);
                     }
 
                     if (!historyEntry || !historyEntry.history || historyEntry.history.length < 20) return;

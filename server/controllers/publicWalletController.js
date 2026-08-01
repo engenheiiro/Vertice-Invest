@@ -7,6 +7,7 @@ import { buildWalletPayload } from './walletController.js';
 import { safeFloat, safeCurrency, safeDiv, safeMult } from '../utils/mathUtils.js';
 import AppError from '../utils/AppError.js';
 import logger from '../config/logger.js';
+import { allocationBucket as resolveAllocationBucket } from '../utils/assetAllocation.js';
 
 /**
  * (C4) Carteira pública — visão SOMENTE-LEITURA, sem autenticação, resolvida por
@@ -21,8 +22,7 @@ import logger from '../config/logger.js';
 // Classe efetiva p/ o donut público: reserva (RF/CASH marcada) cai no balde CASH;
 // ETF nacional (type 'ETF') conta dentro de Ações BR (STOCK); senão usa o type real.
 // Espelha allocationBucket + fold de ETF do front (allocation.ts / AllocationChart).
-const publicBucket = (asset) =>
-    asset.isReserve ? 'CASH' : (asset.type === 'ETF' ? 'STOCK' : asset.type);
+const publicBucket = (asset) => resolveAllocationBucket(asset);
 
 export const getPublicWallet = async (req, res, next) => {
     try {
@@ -59,6 +59,7 @@ export const getPublicWallet = async (req, res, next) => {
                     ticker: a.ticker,
                     name: a.name,
                     type: a.type,
+                    allocationClass: a.allocationClass,
                     weightPct: equity > 0 ? safeMult(safeDiv(value, equity), 100) : 0,
                     ...(showValues ? { value: safeCurrency(value) } : {}),
                 };

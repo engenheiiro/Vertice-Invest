@@ -36,14 +36,17 @@ export const BR_ETF_LIST = [
   { ticker: 'MATB11', name: 'It Now Materiais Básicos (MATB11)', sector: 'Materiais Básicos' },
 
   // --- Exterior (índices globais via B3, em BRL) ---
-  { ticker: 'IVVB11', name: 'iShares S&P 500 (IVVB11)', sector: 'Exterior (S&P 500)' },
-  { ticker: 'SPXI11', name: 'It Now S&P 500 (SPXI11)', sector: 'Exterior (S&P 500)' },
-  { ticker: 'NASD11', name: 'Nasdaq-100 (NASD11)', sector: 'Exterior (Tecnologia)' },
-  { ticker: 'WRLD11', name: 'MSCI World (WRLD11)', sector: 'Exterior (Global)' },
-  { ticker: 'ACWI11', name: 'MSCI ACWI (ACWI11)', sector: 'Exterior (Global)' },
-  { ticker: 'XINA11', name: 'MSCI China (XINA11)', sector: 'Exterior (China)' },
-  { ticker: 'EURP11', name: 'MSCI Europa (EURP11)', sector: 'Exterior (Europa)' },
-  { ticker: 'BDRX11', name: 'Índice de BDRs Globais (BDRX11)', sector: 'Exterior (BDRs)' },
+  // `allocationClass` descreve a EXPOSIÇÃO econômica, sem mudar o veículo (ETF)
+  // nem a moeda de negociação (BRL). Assim estes ativos contam em Exterior na
+  // carteira, mas continuam cotados, transacionados e tributados como ETFs da B3.
+  { ticker: 'IVVB11', name: 'iShares S&P 500 (IVVB11)', sector: 'Exterior (S&P 500)', allocationClass: 'STOCK_US' },
+  { ticker: 'SPXI11', name: 'It Now S&P 500 (SPXI11)', sector: 'Exterior (S&P 500)', allocationClass: 'STOCK_US' },
+  { ticker: 'NASD11', name: 'Nasdaq-100 (NASD11)', sector: 'Exterior (Tecnologia)', allocationClass: 'STOCK_US' },
+  { ticker: 'WRLD11', name: 'MSCI World (WRLD11)', sector: 'Exterior (Global)', allocationClass: 'STOCK_US' },
+  { ticker: 'ACWI11', name: 'MSCI ACWI (ACWI11)', sector: 'Exterior (Global)', allocationClass: 'STOCK_US' },
+  { ticker: 'XINA11', name: 'MSCI China (XINA11)', sector: 'Exterior (China)', allocationClass: 'STOCK_US' },
+  { ticker: 'EURP11', name: 'MSCI Europa (EURP11)', sector: 'Exterior (Europa)', allocationClass: 'STOCK_US' },
+  { ticker: 'BDRX11', name: 'Índice de BDRs Globais (BDRX11)', sector: 'Exterior (BDRs)', allocationClass: 'STOCK_US' },
 
   // --- Cripto ---
   { ticker: 'HASH11', name: 'Hashdex Nasdaq Crypto (HASH11)', sector: 'Cripto' },

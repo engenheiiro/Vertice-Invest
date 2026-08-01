@@ -15,6 +15,7 @@ import AssetLogo from '../common/AssetLogo';
 import AssetTags from '../common/AssetTags';
 import type { AssetType } from '../../contexts/WalletContext';
 import { getAssetSubtitle, getAssetTags } from '../../utils/assetDisplay';
+import { allocationBucket } from '../../utils/allocation';
 
 interface AssetTableProps {
     items: PortfolioItem[];
@@ -106,10 +107,13 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
 
     // (5.2) Agrupamento + ordenação só recalculam quando `items` muda — antes
     // rodavam o reduce/sort a cada render (toggle de grupo, abrir modal, etc.).
-    // ETF NACIONAL (type 'ETF') conta dentro de "Ações Brasil" (marcado com selo ETF),
-    // coerente com a Distribuição e a aba Carteira.
+    // ETF segue a exposição econômica: BOVA11 em Ações Brasil; IVVB11 em Exterior.
     const groupedItems = useMemo(() => items.reduce((acc, item) => {
-        const type = item.type === 'ETF' ? 'STOCK' : (item.type || 'OUTROS');
+        const type = allocationBucket({
+            type: item.type,
+            allocationClass: item.allocationClass,
+            isReserve: item.type === 'CASH',
+        }) || 'OUTROS';
         if (!acc[type]) acc[type] = [];
         acc[type].push(item);
         return acc;

@@ -4,6 +4,7 @@ import { logoService } from '../services/logoService.js';
 import AssetHistory from '../models/AssetHistory.js';
 import SystemConfig from '../models/SystemConfig.js';
 import MarketAsset from '../models/MarketAsset.js';
+import { historyStorageKey } from '../utils/assetHistory.js';
 import MarketAnalysis from '../models/MarketAnalysis.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 
@@ -83,8 +84,10 @@ export const getAssetStatus = async (req, res, next) => {
         const { ticker } = req.params;
         const cleanTicker = ticker.toUpperCase().trim();
         
-        const history = await AssetHistory.findOne({ ticker: cleanTicker });
         const marketAsset = await MarketAsset.findOne({ ticker: cleanTicker });
+        const history = await AssetHistory.findOne({
+            ticker: historyStorageKey(cleanTicker, marketAsset?.type || 'INDEX')
+        });
         
         res.json({
             ticker: cleanTicker,

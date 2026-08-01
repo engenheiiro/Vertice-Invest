@@ -23,8 +23,13 @@ export const isReserveAsset = (a: Pick<Asset, 'isReserve' | 'type'>): boolean =>
  * senão, a própria classe. Usado para agrupar a lista e o donut de forma
  * coerente com a base de alocação.
  */
-export const allocationBucket = (a: Pick<Asset, 'isReserve' | 'type'>): AssetType =>
-    isReserveAsset(a) ? 'CASH' : (a.type as AssetType);
+export const allocationBucket = (a: Pick<Asset, 'isReserve' | 'type' | 'allocationClass'>): AssetType => {
+    if (isReserveAsset(a)) return 'CASH';
+    // allocationClass só sobrepõe ETFs: evita que metadados inconsistentes mudem
+    // a classe de ações/FIIs. Legado sem campo mantém ETF local dentro de Ações BR.
+    if (a.type === 'ETF') return (a.allocationClass || 'STOCK') as AssetType;
+    return a.type as AssetType;
+};
 
 /** Soma (R$) de todos os ativos de Reserva — o que sai da base de alocação. */
 export const sumReserveValue = (assets: Asset[]): number =>
@@ -41,8 +46,8 @@ export const sumReserveValue = (assets: Asset[]): number =>
 //   Renda Fixa (FIXED_INCOME) → IPCA | POS (Selic/CDI) | PRE (prefixado/legado)
 //   Exterior   (STOCK_US)     → STOCK | REIT | ETF (inclui ouro lastreado) | DOLLAR
 //
-// ETF é classe própria APENAS para os fundos NACIONAIS (type 'ETF'), tratada em bloco.
-// ETFs INTERNACIONAIS (type STOCK_US + usSubType ETF/GOLD) contam no Exterior, sub-tipo ETF.
+// ETFs são classificados pela exposição econômica: type ETF + allocationClass STOCK
+// entra em Ações BR; allocationClass STOCK_US entra em Exterior. O tipo/moeda não mudam.
 //
 // Usa asset.totalValue (já em BRL, vindo do backend), igual ao AllocationChart.
 // ---------------------------------------------------------------------------
@@ -116,14 +121,16 @@ export function computeSubAllocationReal(assets: Asset[]): SubAllocationReal {
         if (v <= 0) return;
         // C1: RF/ativo marcado como Reserva não é investimento — fora da ramificação.
         if (isReserveAsset(a)) return;
-        if (a.type === 'STOCK' || a.type === 'ETF') {
-            // Ações BR = ações individuais (STOCK) + ETFs nacionais (type 'ETF', sub-tipo ETF).
+        const bucket = allocationBucket(a);
+        if (bucket === 'STOCK') {
+            // Ações BR = ações individuais + ETFs com exposição Brasil.
             stockValue[stockSubKeyOf(a)] += v;
-        } else if (a.type === 'FIXED_INCOME') {
+        } else if (bucket === 'FIXED_INCOME') {
             fiValue[fixedIncomeSubKey(a)] += v;
-        } else if (a.type === 'STOCK_US') {
-            // Inclui ETFs internacionais e ouro lastreado (usSubKeyOf → 'ETF').
-            usValue[usSubKeyOf(a)] += v;
+        } else if (bucket === 'STOCK_US') {
+            // ETF local internacional não usa usSubType, mas é ETF dentro de Exterior.
+            const subKey = a.type === 'ETF' ? 'ETF' : usSubKeyOf(a);
+            usValue[subKey] += v;
         }
     });
 

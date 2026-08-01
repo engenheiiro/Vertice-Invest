@@ -16,7 +16,7 @@ vi.mock('../models/MarketAsset.js', () => ({
 vi.mock('../models/AssetHistory.js', () => ({ default: { find: vi.fn(), findOne: vi.fn(), create: vi.fn() } }));
 vi.mock('../models/SystemConfig.js', () => ({ default: { findOne: vi.fn() } }));
 vi.mock('../services/externalMarketService.js', () => ({
-  externalMarketService: { getQuotes: vi.fn() },
+  externalMarketService: { getQuotes: vi.fn(), getFullHistory: vi.fn() },
 }));
 vi.mock('../config/logger.js', () => ({
   default: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
@@ -199,5 +199,68 @@ describe('getMarketDataMap — lote sem N+1 (5.8) / cada uma por si (5.3)', () =
 
     expect(map.get('PETR4')).toEqual({ price: 0, change: 0, name: 'PETR4', sector: 'Outros' });
     expect(map.get('MXRF11').price).toBe(0);
+  });
+});
+
+describe('histórico tipado V5 — cache e resiliência', () => {
+  const candles = [{ date: '2026-07-30', close: 64_725, adjClose: 64_725 }];
+
+  it('cripto consulta e cria BTC-USD sem colidir com a ação BTC', async () => {
+    AssetHistory.findOne.mockResolvedValue(null);
+    externalMarketService.getFullHistory.mockResolvedValue(candles);
+    AssetHistory.create.mockImplementation(async (doc) => doc);
+
+    await expect(marketDataService.getBenchmarkHistory('btc', 'crypto')).resolves.toEqual(candles);
+    expect(AssetHistory.findOne).toHaveBeenCalledWith({ ticker: 'BTC-USD' });
+    expect(externalMarketService.getFullHistory).toHaveBeenCalledWith('BTC', 'CRYPTO');
+    expect(AssetHistory.create).toHaveBeenCalledWith(expect.objectContaining({ ticker: 'BTC-USD' }));
+  });
+
+  it('ticker homônimo STOCK_US permanece na chave BTC', async () => {
+    const entry = { ticker: 'BTC', lastUpdated: new Date(), history: [{ date: '2026-07-30', close: 28.63 }] };
+    AssetHistory.findOne.mockResolvedValue(entry);
+
+    await expect(marketDataService.getBenchmarkHistory('BTC', 'STOCK_US')).resolves.toEqual(entry.history);
+    expect(AssetHistory.findOne).toHaveBeenCalledWith({ ticker: 'BTC' });
+    expect(externalMarketService.getFullHistory).not.toHaveBeenCalled();
+  });
+
+  it('cache fresco evita rede', async () => {
+    const entry = { ticker: 'BTC-USD', lastUpdated: new Date(), history: candles };
+    AssetHistory.findOne.mockResolvedValue(entry);
+    await expect(marketDataService.getBenchmarkHistory('BTC', 'CRYPTO')).resolves.toEqual(candles);
+    expect(externalMarketService.getFullHistory).not.toHaveBeenCalled();
+  });
+
+  it('provedor fora do ar devolve cache stale em vez de apagar a série', async () => {
+    const stale = { ticker: 'BTC-USD', lastUpdated: new Date(0), history: candles, save: vi.fn() };
+    AssetHistory.findOne.mockResolvedValue(stale);
+    externalMarketService.getFullHistory.mockRejectedValue(new Error('timeout'));
+
+    await expect(marketDataService.getBenchmarkHistory('BTC', 'CRYPTO')).resolves.toEqual(candles);
+    expect(stale.save).not.toHaveBeenCalled();
+  });
+
+  it('sem cache e com provedor fora do ar retorna null sem lançar', async () => {
+    AssetHistory.findOne.mockResolvedValue(null);
+    externalMarketService.getFullHistory.mockRejectedValue(new Error('timeout'));
+    await expect(marketDataService.getBenchmarkHistory('BTC', 'CRYPTO')).resolves.toBeNull();
+  });
+
+  it('getPriceAtDate usa chave tipada e somente data anterior na aproximação', async () => {
+    AssetHistory.findOne.mockResolvedValue({
+      ticker: 'ETH-USD',
+      history: [
+        { date: '2026-07-28', close: 1_800, adjClose: 1_800 },
+        { date: '2026-07-30', close: 1_900, adjClose: 1_890 },
+      ],
+    });
+    await expect(marketDataService.getPriceAtDate('ETH', '2026-07-29', 'CRYPTO')).resolves.toEqual({
+      price: 1_800,
+      adjustedPrice: 1_800,
+      source: 'history_approx',
+      foundDate: '2026-07-28',
+    });
+    expect(AssetHistory.findOne).toHaveBeenCalledWith({ ticker: 'ETH-USD' });
   });
 });

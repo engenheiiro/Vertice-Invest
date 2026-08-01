@@ -90,10 +90,9 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
             const val = asset.quantity * asset.currentPrice * (asset.currency === 'USD' ? (usdRate || 5.75) : 1);
             // Bucketiza pelo BALDE DE ALOCAÇÃO (C1), coerente com o donut: ativos de
             // Reserva (CASH ou RF marcada) contam em CASH (reserva); RF não-reserva
-            // fica em FIXED_INCOME (investimento). ETF NACIONAL conta dentro de Ações BR
-            // (STOCK); ETFs internacionais têm type STOCK_US e contam no Exterior.
-            const bucket = allocationBucket(asset);
-            const cls = bucket === 'ETF' ? 'STOCK' : bucket;
+            // fica em FIXED_INCOME (investimento). ETFs seguem sua exposição
+            // econômica (allocationClass), sem inferir pela moeda de negociação.
+            const cls = allocationBucket(asset);
             currentValues[cls] = (currentValues[cls] || 0) + val;
         });
 

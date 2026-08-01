@@ -274,12 +274,17 @@ export const usStocksFundamentalsService = {
             updateOne: {
                 filter: { ticker: etf.ticker },
                 update: {
+                    // Metadados de taxonomia são atualizados também nos documentos
+                    // existentes; o seed funciona como backfill idempotente.
+                    $set: {
+                        sector: etf.sector,
+                        allocationClass: etf.allocationClass || null,
+                    },
                     $setOnInsert: {
                         ticker: etf.ticker,
                         name: etf.name,
                         type: 'ETF',
                         currency: 'BRL',
-                        sector: etf.sector,
                         isActive: true,
                         isBlacklisted: false,
                     }
@@ -326,7 +331,14 @@ export const usStocksFundamentalsService = {
                 if (!ok) { failed++; logger.debug(`[BR ETF Fundamentals] Falhou ${etf.ticker}: ${error}`); continue; }
 
                 const f = extractFundamentals(etf.ticker, data);
-                const updatePayload = { type: 'ETF', currency: 'BRL', sector: etf.sector, isActive: true, lastFundamentalsDate: new Date() };
+                const updatePayload = {
+                    type: 'ETF',
+                    currency: 'BRL',
+                    sector: etf.sector,
+                    allocationClass: etf.allocationClass || null,
+                    isActive: true,
+                    lastFundamentalsDate: new Date(),
+                };
                 if (f.lastPrice > 0) updatePayload.lastPrice = f.lastPrice;
                 if (f.beta != null) updatePayload.beta = f.beta;
                 if (f.marketCap) updatePayload.marketCap = f.marketCap;

@@ -32,6 +32,14 @@ import {
 } from './researchPublicationService.js';
 
 import { isDollarized } from '../utils/assetCurrency.js';
+import {
+    brazilDayKey,
+    isTwrrReturnAnomalous,
+    snapshotInstantForDay,
+    sumTransactionFlowBRL,
+    transactionsAfterSnapshotFilter,
+    upsertWalletSnapshotForDay,
+} from '../utils/walletSnapshot.js';
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 
@@ -64,7 +72,7 @@ const scheduleHeavy = (expression, fn) => {
 const CATCHUP_MAX_DAYS = 14; // teto de recuperação por usuário (segurança)
 
 // Dia-calendário BR (YYYY-MM-DD) de um instante.
-const brDayStr = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d);
+const brDayStr = (d) => brazilDayKey(d);
 // Date à meia-noite UTC do dia BR — calcDate do accrual de renda fixa.
 const brCalcDate = (dayStr) => new Date(`${dayStr}T00:00:00.000Z`);
 // Dia útil a partir da STRING do dia BR — independente do fuso do servidor.
@@ -78,7 +86,7 @@ export const isBrBusinessDay = (dayStr) => {
 };
 // Instante gravado no snapshot: 23:59 BRT do dia — garante que o gráfico (que
 // bucketiza por dia LOCAL no browser BRT) coloque o ponto no dia correto.
-const brSnapshotInstant = (dayStr) => new Date(`${dayStr}T23:59:00.000-03:00`);
+const brSnapshotInstant = (dayStr) => snapshotInstantForDay(dayStr);
 // Limites do dia BR como instantes, para janelas de busca (snapshots/transações).
 const brDayBounds = (dayStr) => ({
     start: new Date(`${dayStr}T00:00:00.000-03:00`),
@@ -111,7 +119,8 @@ const loadSnapshotContext = async () => {
     // (F4) Cotações em LOTE, uma vez por run — evita N+1 de getMarketDataByTicker.
     const liveTickers = await UserAsset.distinct('ticker', { type: { $nin: ['CASH', 'FIXED_INCOME'] } });
     const priceMap = await marketDataService.getMarketDataMap(liveTickers);
-    return { usdRate, macroRates, priceMap };
+    const getUsdRateForDate = await financialService._loadUsdRateResolver(usdRate);
+    return { usdRate, macroRates, priceMap, getUsdRateForDate };
 };
 
 // Patrimônio (equity/invested) de um conjunto de ativos numa data de cálculo.
@@ -146,16 +155,12 @@ const computeEquityAt = (assets, { priceMap, macroRates, usdRate, calcDate }) =>
 // - Mantém a cadeia de cotas (TWRR) buscando o snapshot imediatamente ANTERIOR ao dia.
 // Retorna: 'created' | 'exists' | 'empty' | 'anomaly' | 'reset-guard'.
 const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = null, force = false } = {}) => {
-    const { priceMap, macroRates, usdRate } = ctx;
+    const { priceMap, macroRates, usdRate, getUsdRateForDate } = ctx;
     const bounds = brDayBounds(dayStr);
     const calcDate = brCalcDate(dayStr);
     const userId = wallet.user?._id || wallet.user;
     const walletId = wallet._id;
-
-    if (!force) {
-        const existing = await WalletSnapshot.exists({ wallet: walletId, date: { $gte: bounds.start, $lte: bounds.end } });
-        if (existing) return 'exists';
-    }
+    const calculatedAt = new Date();
 
     const positions = assets || await UserAsset.find({ user: userId, wallet: walletId });
     const { totalEquity, totalInvested } = computeEquityAt(positions, { priceMap, macroRates, usdRate, calcDate });
@@ -164,13 +169,15 @@ const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = null, f
     // Snapshot anterior (cota/Dietz) — estritamente antes deste dia BR.
     const lastSnapshot = await WalletSnapshot.findOne({ wallet: walletId, date: { $lt: bounds.start } }).sort({ date: -1 });
 
-    // Fluxo de caixa DO DIA (aportes/retiradas), no fuso BR.
-    const transactions = await AssetTransaction.find({ user: userId, wallet: walletId, date: { $gte: bounds.start, $lte: bounds.end } });
-    let dayFlow = 0;
-    transactions.forEach(tx => {
-        if (tx.type === 'BUY') dayFlow += tx.totalValue;
-        if (tx.type === 'SELL') dayFlow -= tx.totalValue;
-    });
+    // Fluxos ainda não incorporados pelo snapshot anterior. A consulta combina
+    // dia econômico + createdAt para cobrir fim de semana, lançamento retroativo
+    // e aporte do mesmo dia criado depois de um rebuild.
+    const pendingFilter = lastSnapshot
+        ? transactionsAfterSnapshotFilter(lastSnapshot)
+        : { date: { $lte: bounds.end } };
+    const transactions = await AssetTransaction.find({ user: userId, wallet: walletId, ...pendingFilter });
+    const assetsByTicker = new Map(positions.map((p) => [p.ticker, p]));
+    const dayFlow = sumTransactionFlowBRL(transactions, assetsByTicker, getUsdRateForDate || usdRate);
 
     // Proventos com EX-DATE neste dia BR (crédito de RENDA no TWRR). O preço cai
     // no dia-ex; sem somar o provento recebido à cota, essa queda vira prejuízo-
@@ -199,7 +206,7 @@ const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = null, f
     if (v0 > 0 || dayFlow > 0 || dayDividendIncome > 0) {
         const dailyReturn = calculateDailyDietz(v0, totalEquity, dayFlow, dayDividendIncome);
         // Circuit breaker: rejeita variação diária absurda (dado corrompido).
-        if (Math.abs(dailyReturn) > 0.5) {
+        if (isTwrrReturnAnomalous(dailyReturn)) {
             logger.warn(`⚠️ Anomalia TWRR wallet ${walletId} @ ${dayStr}: ${(dailyReturn * 100).toFixed(2)}%. Snapshot ignorado.`);
             if (process.env.SENTRY_DSN) {
                 Sentry.captureMessage(`TWRR Anomaly: Wallet ${walletId} @ ${dayStr} = ${dailyReturn.toFixed(2)}%. Skipped.`);
@@ -224,19 +231,35 @@ const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = null, f
     const divData = await financialService.calculateUserDividends(userId, walletId);
     const totalDividends = divData.totalAllTime;
 
-    if (force) {
-        await WalletSnapshot.deleteMany({ wallet: walletId, date: { $gte: bounds.start, $lte: bounds.end } });
-    }
-    await WalletSnapshot.create({
+    const payload = {
         user: userId,
         wallet: walletId,
         date: brSnapshotInstant(dayStr),
+        dayKey: dayStr,
+        source: force ? 'BACKFILL' : 'DAILY',
+        calculationVersion: 5,
+        calculatedAt,
         totalEquity,
         totalInvested,
         totalDividends,
         profit: totalEquity - totalInvested + totalDividends,
         profitPercent: totalInvested > 0 ? ((totalEquity - totalInvested + totalDividends) / totalInvested) * 100 : 0,
         quotaPrice,
+    };
+
+    // Upsert por dia civil: uma segunda execução recalcula o dia em vez de
+    // aceitar silenciosamente um snapshot prematuro. Remove o documento legado
+    // do mesmo dia (sem dayKey) depois que a versão nova foi persistida.
+    const saved = await upsertWalletSnapshotForDay(
+        WalletSnapshot,
+        walletId,
+        dayStr,
+        payload,
+    );
+    await WalletSnapshot.deleteMany({
+        wallet: walletId,
+        date: { $gte: bounds.start, $lte: bounds.end },
+        _id: { $ne: saved._id },
     });
     return 'created';
 };
@@ -250,12 +273,14 @@ const backfillUserGap = async (wallet, todayStr, ctx, assets) => {
     if (!last) return 0; // sem histórico: o fluxo normal cuida do 1º snapshot
     const lastDayStr = brDayStr(new Date(last.date));
     const missing = businessDaysBetween(lastDayStr, todayStr).slice(-CATCHUP_MAX_DAYS);
-    let created = 0;
-    for (const dayStr of missing) {
-        const r = await persistUserSnapshotForDay(wallet, dayStr, ctx, { assets, force: false });
-        if (r === 'created') { created++; logger.info(`🩹 Backfill snapshot ${wallet.user?.email || wallet.user} (${wallet.name}) @ ${dayStr}`); }
-    }
-    return created;
+    if (missing.length === 0) return 0;
+
+    // Nunca marca um dia passado usando as posições ATUAIS. Reconstruímos a
+    // cadeia pela linha do tempo real de transações/preços e persistimos tudo
+    // atomicamente por carteira.
+    await financialService.rebuildUserHistory(wallet.user?._id || wallet.user, wallet._id);
+    logger.info(`🩹 Backfill histórico ${wallet.user?.email || wallet.user} (${wallet.name}): ${missing.length} dia(s).`);
+    return missing.length;
 };
 
 // Varredura de recuperação (boot / pré-run diário) sem tocar no dia de hoje.

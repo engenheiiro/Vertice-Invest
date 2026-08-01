@@ -6,13 +6,15 @@
  */
 
 export const safeFloat = (value) => {
-    if (!value || isNaN(value)) return 0;
-    return parseFloat(value.toFixed(4));
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    return Number(numeric.toFixed(4));
 };
 
 export const safeCurrency = (value) => {
-    if (!value || isNaN(value)) return 0;
-    return Math.round((value + Number.EPSILON) * 100) / 100;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.round((numeric + Number.EPSILON) * 100) / 100;
 };
 
 export const safeAdd = (a, b) => safeFloat(safeFloat(a) + safeFloat(b));
@@ -33,8 +35,9 @@ export const safeDiv = (a, b) => {
 export const QUANTITY_EPSILON = 1e-9; // abaixo disto a posição é considerada zerada
 
 export const safeQuantity = (value) => {
-    if (!value || isNaN(value)) return 0;
-    return parseFloat(Number(value).toFixed(8));
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    return Number(numeric.toFixed(8));
 };
 
 export const addQty = (a, b) => safeQuantity(safeQuantity(a) + safeQuantity(b));
@@ -83,27 +86,34 @@ export const calculateDailyDietz = (startEquity, endEquity, flow, income = 0) =>
     // essa queda. Sem creditá-lo, a cota (TWRR) contabiliza a queda como prejuízo
     // PERMANENTE — o "vazamento de proventos" que fazia uma carteira de FIIs
     // (~1%/mês distribuído) parecer plana ou perdendo do CDI.
-    const inc = Number(income) || 0;
+    const finiteOrZero = (value) => {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric : 0;
+    };
+    const start = finiteOrZero(startEquity);
+    const end = finiteOrZero(endEquity);
+    const cashFlow = finiteOrZero(flow);
+    const inc = finiteOrZero(income);
 
     // Se não havia patrimônio no início do dia, o fluxo (aporte) é a base de cálculo.
     // Assumimos que o aporte ocorreu no início do dia para capturar o rendimento do primeiro dia.
-    if (startEquity <= 0.01) {
-        if (flow > 0.01) {
-            return (endEquity + inc - flow) / flow;
+    if (start <= 0.01) {
+        if (cashFlow > 0.01) {
+            return (end + inc - cashFlow) / cashFlow;
         }
         return 0;
     }
 
     // Se houve resgate total (ou maior que o patrimônio inicial)
     // O rendimento foi gerado sobre o startEquity antes do resgate.
-    if (startEquity + flow <= 0.01) {
-        return (endEquity + inc - startEquity - flow) / startEquity;
+    if (start + cashFlow <= 0.01) {
+        return (end + inc - start - cashFlow) / start;
     }
 
     // Para TWRR diário com fluxos intradiários, usamos peso 0.5 (Modified Dietz padrão)
     // Isso permite capturar a rentabilidade intradiária do fluxo sem distorcer a cota.
-    const numerator = endEquity + inc - startEquity - flow;
-    const denominator = startEquity + (0.5 * flow);
+    const numerator = end + inc - start - cashFlow;
+    const denominator = start + (0.5 * cashFlow);
 
     if (denominator <= 0.01) return 0;
     return numerator / denominator;
@@ -113,9 +123,11 @@ export const calculateDailyDietz = (startEquity, endEquity, flow, income = 0) =>
  * Calcula o Desvio Padrão de uma série de retornos.
  */
 export const calculateStdDev = (returns) => {
-    if (returns.length < 2) return 0;
-    const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
-    const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (returns.length - 1);
+    if (!Array.isArray(returns)) return 0;
+    const validReturns = returns.map(Number).filter(Number.isFinite);
+    if (validReturns.length < 2) return 0;
+    const mean = validReturns.reduce((a, b) => a + b, 0) / validReturns.length;
+    const variance = validReturns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (validReturns.length - 1);
     return Math.sqrt(variance);
 };
 
@@ -126,14 +138,20 @@ export const calculateStdDev = (returns) => {
  * @param {number} riskFreeRate Taxa livre de risco anual (%) (ex: 11.25)
  */
 export const calculateSharpeRatio = (walletReturns, riskFreeRate) => {
-    if (walletReturns.length < 10) return 0;
+    if (!Array.isArray(walletReturns)) return 0;
+    const validReturns = walletReturns.map(Number).filter(Number.isFinite);
+    if (validReturns.length < 10) return 0;
+    const parsedRiskFree = Number(riskFreeRate);
+    const safeRiskFree = Number.isFinite(parsedRiskFree) && parsedRiskFree > -100
+        ? parsedRiskFree
+        : 0;
     
     // Converte Risk Free anual para diário
-    const riskFreeDaily = (Math.pow(1 + riskFreeRate / 100, 1 / 252) - 1) * 100;
+    const riskFreeDaily = (Math.pow(1 + safeRiskFree / 100, 1 / 252) - 1) * 100;
     
-    const excessReturns = walletReturns.map(r => r - riskFreeDaily);
+    const excessReturns = validReturns.map(r => r - riskFreeDaily);
     const avgExcessReturn = excessReturns.reduce((a, b) => a + b, 0) / excessReturns.length;
-    const stdDev = calculateStdDev(walletReturns);
+    const stdDev = calculateStdDev(validReturns);
     
     if (stdDev === 0) return 0;
     
@@ -180,13 +198,17 @@ export const selectAnchorSnapshot = (snapshotsDesc) => {
  * @param {number} periodFlow fluxo líquido desde o âncora (BUY − SELL)
  */
 export const computeLiveQuota = (baseSnapshot, liveEquity, periodFlow) => {
-    const prevQuota = baseSnapshot && baseSnapshot.quotaPrice ? baseSnapshot.quotaPrice : 100;
-    const prevEquity = baseSnapshot ? (baseSnapshot.totalEquity || 0) : 0;
-    const flow = periodFlow || 0;
+    const parsedQuota = Number(baseSnapshot?.quotaPrice);
+    const prevQuota = Number.isFinite(parsedQuota) && parsedQuota > 0 ? parsedQuota : 100;
+    const prevEquity = Number(baseSnapshot?.totalEquity || 0);
+    const equity = Number(liveEquity);
+    const flow = Number(periodFlow || 0);
+
+    if (![prevEquity, equity, flow].every(Number.isFinite) || equity < 0) return prevQuota;
 
     if (prevEquity <= 0 && flow <= 0) return prevQuota;
 
-    const periodReturn = calculateDailyDietz(prevEquity, liveEquity, flow);
+    const periodReturn = calculateDailyDietz(prevEquity, equity, flow);
     // Circuit breaker: ignora variações absurdas (dados ruins) mantendo a cota.
     if (periodReturn > -0.8 && periodReturn < 1.0) {
         return prevQuota * (1 + periodReturn);
