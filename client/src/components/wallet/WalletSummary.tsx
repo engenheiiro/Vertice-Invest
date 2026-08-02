@@ -44,16 +44,16 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
 
     return (
         // (A7) região nomeada para os indicadores patrimoniais (landmark)
-        // Mobile em 2 colunas (herói ocupa a linha inteira): empilhados em 1 coluna,
-        // os 4 KPIs somavam ~700px e empurravam as abas da carteira para fora da tela.
-        <section aria-label="Resumo patrimonial" className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
+        // No celular, cada KPI ocupa a largura inteira para preservar a leitura dos
+        // valores. A partir do tablet, o resumo volta ao grid compacto.
+        <section aria-label="Resumo patrimonial" className="grid auto-rows-fr grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
 
             {/* 1. PATRIMÔNIO LÍQUIDO — card "herói" em gradiente verde (destaque da carteira) */}
             {/* Card sempre verde-escuro nos DOIS temas → texto sempre branco. Usamos valores
                 arbitrários (text-[#fff], rgba…) porque o tema claro sobrescreve .text-white
                 e .text-white/xx para tons escuros — o que apagaria o texto sobre o verde. */}
             <div
-                className="col-span-2 lg:col-span-1 relative overflow-hidden rounded-2xl p-[18px] text-[#fff]"
+                className="relative h-full overflow-hidden rounded-2xl p-[18px] text-[#fff]"
                 style={{
                     background: 'linear-gradient(180deg, #0f5f47, #0c4f3b)',
                     boxShadow: '0 14px 30px -18px rgba(12,79,59,.9)',
@@ -63,22 +63,22 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                     className="absolute right-[-30px] top-[-30px] w-[130px] h-[130px] rounded-full pointer-events-none"
                     style={{ background: 'radial-gradient(circle, rgba(255,255,255,.14), transparent 70%)' }}
                 />
-                <div className="relative flex justify-between items-start">
-                    <div className="flex items-center gap-1.5">
+                <div className="relative flex min-h-[22px] items-start pr-10">
+                    <div className="relative flex items-center gap-1.5">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-[rgba(255,255,255,0.72)]">Patrimônio Líquido</span>
                         <PrivacyToggle
                             isPrivacyMode={isPrivacyMode}
                             onToggle={togglePrivacyMode}
                             size={14}
-                            className="min-h-[36px] min-w-[36px] -m-1.5 inline-flex items-center justify-center hover:bg-white/[0.14] rounded-lg text-[rgba(255,255,255,0.6)] hover:text-[rgba(255,255,255,0.9)] transition-colors"
+                            className="absolute left-full top-1/2 ml-1 min-h-[36px] min-w-[36px] -translate-y-1/2 inline-flex items-center justify-center hover:bg-white/[0.14] rounded-lg text-[rgba(255,255,255,0.6)] hover:text-[rgba(255,255,255,0.9)] transition-colors"
                         />
                     </div>
-                    <span className="w-[30px] h-[30px] rounded-[9px] bg-white/[0.14] flex items-center justify-center text-[#eafff6]">
+                    <span className="absolute right-0 top-0 w-[30px] h-[30px] rounded-[9px] bg-white/[0.14] flex items-center justify-center text-[#eafff6]">
                         <Wallet size={16} />
                     </span>
                 </div>
 
-                <div className="relative flex items-baseline gap-2 mt-3.5">
+                <div className="relative flex items-baseline gap-2 mt-1">
                     <FitText
                         className="flex-1 font-extrabold tracking-tight"
                         max={28}
@@ -96,7 +96,7 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                     </span>
                 </div>
 
-                <div className="relative flex items-center justify-between mt-4 pt-3 border-t border-white/[0.14]">
+                <div className="relative flex items-center justify-between mt-3 pt-3 border-t border-white/[0.14]">
                     <div>
                         <p className="text-[9px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.6)] mb-0.5">Variação Hoje</p>
                         <div className="text-sm font-bold text-[#fff]">
@@ -154,8 +154,6 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
 
             {/* 4. PROVENTOS */}
             <StatCard
-                // Fecha a última linha do grid mobile (4 cards em 2 colunas deixavam um vão).
-                className="col-span-2 lg:col-span-1"
                 label="Prov. Acumulados"
                 icon={<PiggyBank size={16} />}
                 iconClass="bg-gold/10 text-gold"
@@ -174,8 +172,8 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
 // espelhando o layout do mock. Mantém os tokens de tema (bg-base/slate) p/ coerência
 // com o resto do app (dark #080C14 / light branco).
 const StatCard = ({ label, tooltipText, icon, iconClass, value, valueClass, subLabel, subValue, tag, tagClass, className = '' }: any) => (
-    <div className={`bg-base border border-slate-800 rounded-2xl p-[18px] flex flex-col justify-between transition-colors hover:border-slate-700 ${className}`}>
-        <div className="flex justify-between items-start">
+    <div className={`h-full bg-base border border-slate-800 rounded-2xl p-[18px] flex flex-col transition-colors hover:border-slate-700 ${className}`}>
+        <div className="relative flex min-h-[22px] items-start pr-10">
             <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
                 {tooltipText && (
@@ -188,25 +186,24 @@ const StatCard = ({ label, tooltipText, icon, iconClass, value, valueClass, subL
                     </div>
                 )}
             </div>
-            <span className={`w-[30px] h-[30px] rounded-[9px] flex items-center justify-center ${iconClass}`}>
+            <span className={`absolute right-0 top-0 w-[30px] h-[30px] rounded-[9px] flex items-center justify-center ${iconClass}`}>
                 {icon}
             </span>
         </div>
 
-        <FitText className={`font-extrabold tracking-tight mt-3.5 mb-4 ${valueClass || 'text-white'}`} max={26} min={14}>
+        <FitText className={`font-extrabold tracking-tight mt-1 mb-3 ${valueClass || 'text-white'}`} max={26} min={14}>
             {value}
         </FitText>
 
-        {/* Rodapé empilha no mobile: lado a lado num card de ~165px o rótulo quebrava
-            em 3 linhas e o valor era cortado ("R$ 1.2…"). Volta a ficar em linha no lg. */}
-        <div className="flex flex-col items-start gap-2 lg:flex-row lg:items-center lg:justify-between pt-3 border-t border-slate-800/80">
-            <div className="min-w-0 w-full lg:w-auto">
-                <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">{subLabel}</p>
-                <div className="text-sm font-bold text-slate-200 truncate">{subValue}</div>
+        {/* Valor secundário e selo compartilham a mesma linha para manter todos os KPIs compactos. */}
+        <div className="mt-auto pt-3 border-t border-slate-800/80">
+            <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider mb-1">{subLabel}</p>
+            <div className="flex min-w-0 items-center justify-between gap-2">
+                <div className="min-w-0 text-sm font-bold text-slate-200 truncate">{subValue}</div>
+                <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border ${tagClass}`}>
+                    {tag}
+                </span>
             </div>
-            <span className={`shrink-0 lg:ml-2 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border ${tagClass}`}>
-                {tag}
-            </span>
         </div>
     </div>
 );

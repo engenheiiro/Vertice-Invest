@@ -200,7 +200,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
     }
 
     return (
-        <div className="bg-base border border-slate-800 rounded-2xl flex flex-col h-[480px] relative group hover:border-slate-700 transition-colors">
+        <div className={`bg-base border border-slate-800 rounded-2xl flex flex-col relative group hover:border-slate-700 transition-colors ${hasAccess ? 'h-[480px]' : 'h-[360px] sm:h-[480px]'}`}>
 
             {/* Header */}
             <div className="p-4 border-b border-slate-800 bg-card flex flex-col gap-2 rounded-t-2xl">
@@ -301,17 +301,17 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
 
                 {/* Paywall para não-PRO */}
                 {!hasAccess && (
-                    <div className="absolute inset-0 z-20 backdrop-blur-md bg-deep/60 flex flex-col items-center justify-center p-6 text-center rounded-b-2xl">
-                        <div className="w-14 h-14 bg-blue-600/20 rounded-2xl flex items-center justify-center mb-4 border border-blue-500/30 shadow-2xl shadow-blue-500/20">
+                    <div className="absolute inset-0 z-20 backdrop-blur-md bg-deep/60 flex flex-col items-center justify-center p-5 sm:p-6 text-center rounded-b-2xl">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-600/20 rounded-2xl flex items-center justify-center mb-3 sm:mb-4 border border-blue-500/30 shadow-2xl shadow-blue-500/20">
                             <Crown size={24} className="text-blue-400" fill="currentColor" />
                         </div>
-                        <h4 className="text-lg font-black text-white mb-2 uppercase tracking-tight">Scanner Quantitativo</h4>
-                        <p className="text-xs text-slate-300 leading-relaxed mb-6 max-w-[220px]">
+                        <h4 className="text-base sm:text-lg font-black text-white mb-1.5 sm:mb-2 uppercase tracking-tight">Scanner Quantitativo</h4>
+                        <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed mb-4 sm:mb-6 max-w-[230px]">
                             Monitoramento de anomalias matemáticas em tempo real exclusivo para assinantes <strong>Pro</strong>.
                         </p>
                         <button
                             onClick={() => navigate('/pricing')}
-                            className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-lg hover:shadow-blue-600/30 flex items-center justify-center gap-2"
+                            className="w-full py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-lg hover:shadow-blue-600/30 flex items-center justify-center gap-2"
                         >
                             <Zap size={14} fill="currentColor" /> Desbloquear Radar
                         </button>

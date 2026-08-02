@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { walletService } from '../../services/wallet';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { TrendingUp, RefreshCw } from 'lucide-react';
 import { useDemo } from '../../contexts/DemoContext';
 import { useWallet } from '../../contexts/WalletContext';
@@ -24,24 +24,36 @@ interface PerformancePoint {
     ibovValue?: number;
 }
 
+// Datas da API sÃ£o chaves de calendÃ¡rio (YYYY-MM-DD), nÃ£o instantes UTC.
+// new Date('2026-08-01') representa 31/07 Ã  noite no fuso de SÃ£o Paulo e faz
+// o ponto do primeiro dia do mÃªs desaparecer do filtro "MÃªs".
+const parsePerformanceDate = (date: string): Date => {
+    const calendarDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if (calendarDate) {
+        const [, year, month, day] = calendarDate;
+        return new Date(Number(year), Number(month) - 1, Number(day));
+    }
+    return new Date(date);
+};
+
 
 const LABEL_MAP: Record<string, string> = {
     walletVal: 'Minha Carteira',
     cdi:       'CDI',
-    ipca:      'IPCA+6%',
+    ipca:      'Meta real · IPCA + 6% a.a.',
     ibov:      'Ibovespa',
     walletBRL: 'Minha Carteira',
     cdiBRL:    'CDI',
-    ipcaBRL:   'IPCA+6%',
+    ipcaBRL:   'Meta real · IPCA + 6% a.a.',
     ibovBRL:   'Ibovespa',
 };
 
 export const PerformanceChart = React.memo(() => {
     const [data, setData] = useState<PerformancePoint[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [metricMode, setMetricMode] = useState<'TWRR' | 'ROI'>('TWRR');
     const [timeRange, setTimeRange] = useState<'1M' | '12M' | 'YTD' | 'ALL'>('ALL');
     const [viewMode, setViewMode] = useState<'pct' | 'brl'>('pct');
+    const [showIbov, setShowIbov] = useState(false);
     const { theme } = useTheme();
     // Tooltip: no escuro usa a superfície ELEVATED do tema novo (#202631) + borda
     // slate-700 — mesma "casa" do tooltip do EvolutionChart (bg-elevated). Antes
@@ -80,7 +92,7 @@ export const PerformanceChart = React.memo(() => {
         try {
             const res = await walletService.getPerformance(activeWalletId);
             const sorted = Array.isArray(res?.history)
-                ? res.history.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                ? res.history.sort((a: any, b: any) => parsePerformanceDate(a.date).getTime() - parsePerformanceDate(b.date).getTime())
                 : [];
             setData(sorted);
         } catch (e) {
@@ -132,7 +144,14 @@ export const PerformanceChart = React.memo(() => {
             cutoffDate.setHours(0, 0, 0, 0);
         }
 
-        return base.filter(point => new Date(point.date) >= cutoffDate);
+        const firstPointInRange = base.findIndex(point => parsePerformanceDate(point.date) >= cutoffDate);
+
+        // MantÃ©m o Ãºltimo ponto anterior como base da curva. No primeiro dia do
+        // mÃªs a sÃ©rie frequentemente tem apenas o ponto live; sem a base, o
+        // Recharts nÃ£o tem um segmento para desenhar e o grÃ¡fico fica em branco.
+        if (firstPointInRange > 0) return base.slice(firstPointInRange - 1);
+        if (firstPointInRange === -1) return base.slice(-2);
+        return base;
     }, [reconciledData, timeRange]);
 
     // --- DADOS PARA MODO R$ ---
@@ -164,7 +183,7 @@ export const PerformanceChart = React.memo(() => {
         } else {
             const seenMonths = new Set();
             filteredData.forEach(point => {
-                const d = new Date(point.date);
+                const d = parsePerformanceDate(point.date);
                 const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
                 if (!seenMonths.has(key)) {
                     ticks.push(point.date);
@@ -179,7 +198,7 @@ export const PerformanceChart = React.memo(() => {
 
     if (isLoading) {
         return (
-            <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex items-center justify-center animate-pulse">
+            <div className="bg-base border border-slate-800 rounded-2xl p-4 sm:p-6 h-[400px] sm:h-[420px] flex items-center justify-center animate-pulse">
                 <div className="text-center">
                     <RefreshCw className="animate-spin text-blue-500 mx-auto mb-2" />
                     <p className="text-xs text-slate-500">Calculando rentabilidade relativa...</p>
@@ -190,7 +209,7 @@ export const PerformanceChart = React.memo(() => {
 
     if (data.length === 0) {
         return (
-            <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex items-center justify-center">
+            <div className="bg-base border border-slate-800 rounded-2xl p-4 sm:p-6 h-[400px] sm:h-[420px] flex items-center justify-center">
                 <p className="text-slate-500 text-sm">Dados insuficientes para comparação histórica.</p>
             </div>
         );
@@ -198,15 +217,15 @@ export const PerformanceChart = React.memo(() => {
 
     const lastPoint = filteredData[filteredData.length - 1];
     const lastDisplay = displayData[displayData.length - 1] as any;
-    const currentWalletValue = lastPoint ? (metricMode === 'TWRR' ? lastPoint.wallet : lastPoint.walletRoi) : 0;
+    const currentWalletValue = lastPoint?.wallet ?? 0;
     const walletWin = viewMode === 'pct'
-        ? lastPoint && currentWalletValue > lastPoint.cdi && currentWalletValue > (lastPoint.ibov || 0)
-        : lastDisplay && lastDisplay.walletBRL > lastDisplay.cdiBRL;
+        ? lastPoint && currentWalletValue > lastPoint.cdi && (!showIbov || currentWalletValue > (lastPoint.ibov || 0))
+        : lastDisplay && lastDisplay.walletBRL > lastDisplay.cdiBRL && (!showIbov || lastDisplay.walletBRL > lastDisplay.ibovBRL);
 
-    const walletDataKey = viewMode === 'brl' ? 'walletBRL' : (metricMode === 'TWRR' ? 'wallet' : 'walletRoi');
+    const walletDataKey = viewMode === 'brl' ? 'walletBRL' : 'wallet';
 
     return (
-        <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
+        <div className="bg-base border border-slate-800 rounded-2xl p-4 sm:p-6 h-[400px] sm:h-[420px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
 
             {/* HEADER COM CONTROLES */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 z-10 relative">
@@ -218,9 +237,7 @@ export const PerformanceChart = React.memo(() => {
                     <p className="text-xs text-slate-500 mt-0.5">
                         {viewMode === 'brl'
                             ? 'Evolução do patrimônio em R$ vs benchmarks'
-                            : metricMode === 'TWRR'
-                                ? 'Rentabilidade Ponderada pelo Tempo (Cotas)'
-                                : 'Variação Patrimonial Simples (Retorno Total)'}
+                            : 'Rentabilidade TWRR · neutraliza aportes e resgates'}
                     </p>
                 </div>
 
@@ -271,34 +288,6 @@ export const PerformanceChart = React.memo(() => {
                         </button>
                     </div>
 
-                    <div className="w-px h-6 bg-slate-800 hidden sm:block"></div>
-
-                    {/* CONTROLE DE MÉTRICA — só relevante em modo % */}
-                    <div className={`bg-deep p-1 rounded-lg border border-slate-800 flex gap-1 transition-opacity ${viewMode === 'brl' ? 'opacity-30 pointer-events-none' : ''}`}>
-                        <button
-                            onClick={() => setMetricMode('TWRR')}
-                            className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
-                                metricMode === 'TWRR'
-                                    ? 'bg-base text-white shadow-sm'
-                                    : 'text-slate-500 hover:text-slate-300'
-                            }`}
-                            title="Time-Weighted Rate of Return"
-                        >
-                            TWRR
-                        </button>
-                        <button
-                            onClick={() => setMetricMode('ROI')}
-                            className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
-                                metricMode === 'ROI'
-                                    ? 'bg-base text-white shadow-sm'
-                                    : 'text-slate-500 hover:text-slate-300'
-                            }`}
-                            title="Return on Investment"
-                        >
-                            ROI
-                        </button>
-                    </div>
-
                     {walletWin && (
                         <span className="hidden md:inline-block text-[10px] font-bold text-emerald-500 bg-emerald-900/20 px-2 py-1 rounded border border-emerald-900/50">
                             Superando o Mercado 🚀
@@ -307,10 +296,49 @@ export const PerformanceChart = React.memo(() => {
                 </div>
             </div>
 
+            {/* Legenda também concentra opções que afetam a escala do gráfico. */}
+            <div className="mb-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] font-bold text-slate-400 z-10">
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <span className="h-[3px] w-4 rounded-full bg-blue-500" aria-hidden="true" />
+                    Minha Carteira
+                </span>
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <span className="w-4 border-t-2 border-dashed border-yellow-400" aria-hidden="true" />
+                    CDI
+                </span>
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <span className="w-4 border-t-2 border-dotted border-fuchsia-500" aria-hidden="true" />
+                    Meta real · IPCA + 6% a.a.
+                </span>
+                <button
+                    type="button"
+                    onClick={() => setShowIbov((visible) => !visible)}
+                    aria-pressed={showIbov}
+                    aria-label={showIbov ? 'Ocultar Ibovespa' : 'Exibir Ibovespa'}
+                    className={`group inline-flex min-h-[30px] items-center gap-2 rounded-full border px-2.5 py-1 transition-all ${
+                        showIbov
+                            ? 'border-slate-500 bg-slate-700/40 text-slate-200 shadow-sm'
+                            : 'border-slate-800 bg-deep/80 text-slate-500 hover:border-slate-700 hover:text-slate-300'
+                    }`}
+                    title={showIbov ? 'Ocultar Ibovespa do gráfico' : 'Adicionar Ibovespa ao gráfico'}
+                >
+                    <span className="w-4 border-t-2 border-dashed border-slate-400" aria-hidden="true" />
+                    Ibovespa
+                    <span
+                        aria-hidden="true"
+                        className={`relative h-4 w-7 rounded-full transition-colors ${showIbov ? 'bg-blue-500' : 'bg-slate-800'}`}
+                    >
+                        <span
+                            className={`absolute left-0 top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${showIbov ? 'translate-x-3.5' : 'translate-x-0.5'}`}
+                        />
+                    </span>
+                </button>
+            </div>
+
             {/* (A1) descrição textual do gráfico para leitores de tela */}
-            <div className="flex-1 w-full text-xs min-h-0" role="img" aria-label="Gráfico de rentabilidade da carteira comparada aos benchmarks (CDI, IPCA, Ibovespa)" aria-describedby="performance-chart-desc">
+            <div className="flex-1 w-full text-xs min-h-0" role="img" aria-label={`Gráfico de rentabilidade da carteira comparada aos benchmarks CDI, IPCA${showIbov ? ' e Ibovespa' : ''}`} aria-describedby="performance-chart-desc">
                 <p id="performance-chart-desc" className="sr-only">
-                    Gráfico de área comparando a rentabilidade da carteira com CDI, IPCA+6% e Ibovespa. Use os controles de período e métrica acima para alternar entre TWRR, ROI e visão em R$.
+                    Gráfico de área comparando a rentabilidade TWRR da carteira com CDI e a meta real de IPCA mais 6% ao ano{showIbov ? ' e Ibovespa' : ''}. Use os controles acima para alterar o período e alternar entre percentual e visão em reais.
                 </p>
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={displayData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
@@ -332,7 +360,7 @@ export const PerformanceChart = React.memo(() => {
                             interval={tickInterval}
                             tickFormatter={(val) => {
                                 try {
-                                    const d = new Date(val);
+                                    const d = parsePerformanceDate(val);
                                     if (isNaN(d.getTime())) return val;
                                     if (timeRange === '1M') {
                                         return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
@@ -368,19 +396,8 @@ export const PerformanceChart = React.memo(() => {
                                 }
                                 return [`${value.toFixed(2)}%`, label];
                             }}
-                            labelFormatter={(label) => new Date(label).toLocaleDateString('pt-BR')}
+                            labelFormatter={(label) => parsePerformanceDate(label).toLocaleDateString('pt-BR')}
                             cursor={{ stroke: cursorStroke, strokeWidth: 1, strokeDasharray: '4 4' }}
-                        />
-
-                        <Legend
-                            verticalAlign="top"
-                            height={36}
-                            iconType="circle"
-                            formatter={(value) => (
-                                <span className="text-slate-400 font-bold ml-1">
-                                    {LABEL_MAP[value] ?? value}
-                                </span>
-                            )}
                         />
 
                         <Area
@@ -394,16 +411,18 @@ export const PerformanceChart = React.memo(() => {
                             activeDot={false}
                         />
 
-                        <Area
-                            type="monotone"
-                            dataKey={viewMode === 'brl' ? 'ibovBRL' : 'ibov'}
-                            name={viewMode === 'brl' ? 'ibovBRL' : 'ibov'}
-                            stroke={ibovStroke}
-                            strokeWidth={2}
-                            fill="transparent"
-                            strokeDasharray="6 3"
-                            activeDot={false}
-                        />
+                        {showIbov && (
+                            <Area
+                                type="monotone"
+                                dataKey={viewMode === 'brl' ? 'ibovBRL' : 'ibov'}
+                                name={viewMode === 'brl' ? 'ibovBRL' : 'ibov'}
+                                stroke={ibovStroke}
+                                strokeWidth={2}
+                                fill="transparent"
+                                strokeDasharray="6 3"
+                                activeDot={false}
+                            />
+                        )}
 
                         <Area
                             type="monotone"

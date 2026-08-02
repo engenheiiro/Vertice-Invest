@@ -26,6 +26,46 @@ const asset = (overrides: Record<string, unknown>) => ({
     ...overrides,
 });
 
+const setMobileViewport = (isMobile: boolean) => {
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+        matches: query === '(max-width: 767px)' ? isMobile : false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+    }));
+};
+
+beforeEach(() => setMobileViewport(false));
+
+describe('AssetList — estado inicial responsivo', () => {
+    beforeEach(() => {
+        vi.mocked(useWallet).mockReturnValue({
+            assets: [asset({ id: 'stock', ticker: 'PETR4', totalValue: 100, totalCost: 80 })],
+            removeAsset: vi.fn(),
+            kpis: { totalEquity: 100 },
+            targetAllocation: {},
+            isPrivacyMode: false,
+        } as any);
+    });
+
+    it('inicia todas as classes contraídas no mobile', () => {
+        setMobileViewport(true);
+        render(<AssetList />);
+
+        expect(screen.getByTitle('Expandir todas as classes')).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('mantém as classes expandidas por padrão fora do mobile', () => {
+        render(<AssetList />);
+
+        expect(screen.getByTitle('Contrair todas as classes')).toHaveAttribute('aria-expanded', 'true');
+    });
+});
+
 describe('AssetList — subdivisão de Ações Brasil', () => {
     beforeEach(() => {
         vi.mocked(useWallet).mockReturnValue({

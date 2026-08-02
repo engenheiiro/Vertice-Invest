@@ -138,6 +138,21 @@ export const EvolutionChart = React.memo(() => {
         return `R$ ${(val / yScale.divisor).toFixed(yScale.decimals)}${yScale.suffix}`;
     };
 
+    // The Recharts Text component can wrap the label at the space after "R$"
+    // when the axis becomes narrow. Native SVG text preserves it as one label.
+    const renderYAxisTick = ({ x, y, payload }: any): React.ReactElement => (
+        <text
+            x={x}
+            y={y}
+            dy={3}
+            textAnchor="end"
+            fill="#64748b"
+            fontSize={10}
+        >
+            {formatAxisCurrency(payload.value)}
+        </text>
+    );
+
     const summary = useMemo(() => summarizeEvolutionWindow(chartData), [chartData]);
     const showSummary = summary.variationValue !== 0 || summary.variationPercent !== null;
     const summaryPositive = summary.variationValue >= 0;
@@ -170,7 +185,7 @@ export const EvolutionChart = React.memo(() => {
 
     if (kpis.totalEquity === 0 && chartData.length === 0) {
         return (
-            <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col items-center justify-center text-center relative overflow-hidden group">
+            <div className="bg-base border border-slate-800 rounded-2xl p-4 sm:p-6 h-[400px] sm:h-[420px] flex flex-col items-center justify-center text-center relative overflow-hidden group">
                 <BarChart3 className="text-slate-700 mb-4" size={48} />
                 <h3 className="text-slate-300 font-bold text-sm">Sem dados históricos</h3>
                 <p className="text-slate-600 text-xs">O gráfico será gerado após o primeiro aporte.</p>
@@ -179,9 +194,9 @@ export const EvolutionChart = React.memo(() => {
     }
 
     return (
-        <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
+        <div className="bg-base border border-slate-800 rounded-2xl p-4 sm:p-6 h-[420px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
 
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 z-10 relative">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-6 gap-3 sm:gap-4 z-10 relative">
                 <div>
                     <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-base font-bold text-white">Evolução do Patrimônio</h3>
@@ -207,14 +222,14 @@ export const EvolutionChart = React.memo(() => {
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex w-full min-w-0 flex-nowrap items-center gap-2 sm:w-auto">
                     {/* Granularidade: Diário vs Mensal */}
-                    <div className="flex bg-deep p-1 rounded-lg border border-slate-800">
+                    <div className="flex shrink-0 bg-deep p-1 rounded-lg border border-slate-800">
                         {(['DAILY', 'MONTHLY'] as const).map((g) => (
                             <button
                                 key={g}
                                 onClick={() => switchGranularity(g)}
-                                className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
+                                className={`px-2 sm:px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
                                     granularity === g
                                     ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'
@@ -226,12 +241,12 @@ export const EvolutionChart = React.memo(() => {
                     </div>
 
                     {/* Janela — depende da granularidade */}
-                    <div className="flex bg-deep p-1 rounded-lg border border-slate-800">
+                    <div className="flex min-w-0 flex-1 bg-deep p-1 rounded-lg border border-slate-800 sm:flex-none">
                         {WINDOW_OPTIONS[granularity].map((w) => (
                             <button
                                 key={w}
                                 onClick={() => setRange(w)}
-                                className={`px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
+                                className={`min-w-0 flex-1 px-1.5 sm:flex-none sm:px-3 min-h-[32px] inline-flex items-center justify-center text-[10px] font-bold rounded transition-all ${
                                     range === w
                                     ? 'bg-base text-white shadow-sm'
                                     : 'text-slate-500 hover:text-slate-300'
@@ -251,7 +266,7 @@ export const EvolutionChart = React.memo(() => {
                     {showSummary && !isPrivacyMode && ` Resultado no período: ${formatSignedCurrency(summary.variationValue)}${summary.variationPercent !== null ? ` (${formatPercent(summary.variationPercent, { sign: true })})` : ''}.`}
                 </p>
                 <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={renderData} margin={{ top: 30, right: 14, left: -4, bottom: 0 }}>
+                    <ComposedChart data={renderData} margin={{ top: 30, right: 6, left: -4, bottom: 0 }}>
                         <defs>
                             <linearGradient id="evoEquityFill" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#0e9268" stopOpacity={0.22} />
@@ -273,8 +288,8 @@ export const EvolutionChart = React.memo(() => {
                             domain={yScale?.domain ?? ['auto', 'auto']}
                             ticks={yScale?.ticks}
                             allowDataOverflow={false}
-                            tickFormatter={formatAxisCurrency}
-                            tick={{fill: '#64748b', fontSize: 10}}
+                            width={58}
+                            tick={renderYAxisTick}
                             axisLine={false}
                             tickLine={false}
                         />
@@ -296,26 +311,26 @@ export const EvolutionChart = React.memo(() => {
                                     const variationSign = variation > 0 ? '+' : '';
 
                                     return (
-                                        <div className="bg-elevated border border-slate-700 rounded-xl p-3 shadow-2xl z-50 min-w-[210px]">
-                                            <div className="flex justify-between items-center gap-4 border-b border-slate-800 pb-1.5 mb-2">
+                                        <div className="w-[210px] max-w-[calc(100vw-2rem)] bg-elevated border border-slate-700 rounded-xl p-3 shadow-2xl z-50 sm:w-auto sm:max-w-none sm:min-w-[210px]">
+                                            <div className="flex justify-between items-center gap-2 sm:gap-4 border-b border-slate-800 pb-1.5 mb-2">
                                                 <p className="text-slate-400 text-[10px] font-bold uppercase">{displayLabel}</p>
                                                 {isLive && <span className="text-[9px] text-red-500 font-black animate-pulse flex items-center gap-1 whitespace-nowrap">● LIVE</span>}
                                             </div>
 
                                             <div className="space-y-1.5">
-                                                <div className="flex justify-between items-center gap-6 text-xs">
+                                                <div className="flex justify-between items-center gap-2 sm:gap-6 text-xs">
                                                     <span className="text-emerald-600 font-bold">Aplicado</span>
                                                     <span className="text-slate-200 tabular-nums whitespace-nowrap">{formatTooltipCurrency(data.realInvested)}</span>
                                                 </div>
-                                                <div className="flex justify-between items-center gap-6 text-xs">
+                                                <div className="flex justify-between items-center gap-2 sm:gap-6 text-xs">
                                                     <span className="text-emerald-400 font-bold">Resultado</span>
                                                     <span className={`tabular-nums font-bold whitespace-nowrap ${data.realProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
                                                         {data.realProfit >= 0 ? '+' : ''}{formatTooltipCurrency(data.realProfit)}
                                                     </span>
                                                 </div>
 
-                                                <div className="flex justify-between items-center gap-6 text-xs">
-                                                    <span className="text-slate-400 font-bold whitespace-nowrap">Variação no período</span>
+                                                <div className="flex justify-between items-center gap-2 sm:gap-6 text-xs">
+                                                    <span className="text-[10px] leading-tight text-slate-400 font-bold sm:text-xs sm:whitespace-nowrap">Variação no período</span>
                                                     <span className={`tabular-nums font-bold whitespace-nowrap text-right ${variationColor}`}>
                                                         {variationSign}{formatTooltipCurrency(variation)}
                                                         {variationPct !== null && variationPct !== undefined && (
@@ -324,7 +339,7 @@ export const EvolutionChart = React.memo(() => {
                                                     </span>
                                                 </div>
 
-                                                <div className="border-t border-slate-800 pt-1.5 mt-1 flex justify-between items-center gap-6">
+                                                <div className="border-t border-slate-800 pt-1.5 mt-1 flex justify-between items-center gap-2 sm:gap-6">
                                                     <span className="text-white font-bold text-xs uppercase whitespace-nowrap">Saldo Final</span>
                                                     <span className="text-white font-bold tabular-nums text-sm whitespace-nowrap">{formatTooltipCurrency(data.realEquity)}</span>
                                                 </div>

@@ -40,6 +40,13 @@ const CLASS_ACCENT: Record<string, { label: string; icon: string; bar: string }>
 };
 const accentOf = (type: string) => CLASS_ACCENT[type] || CLASS_ACCENT.CASH;
 const pluralAtivos = (n: number) => `${n} ${n === 1 ? 'Ativo' : 'Ativos'}`;
+const TYPE_ORDER = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
+const MOBILE_ASSET_LIST_QUERY = '(max-width: 767px)';
+
+const initialCollapsedGroups = (): Record<string, boolean> => {
+    if (typeof window === 'undefined' || !window.matchMedia?.(MOBILE_ASSET_LIST_QUERY).matches) return {};
+    return Object.fromEntries(TYPE_ORDER.map(type => [type, true]));
+};
 
 const wholePercentSplit = <K extends string>(values: Record<K, number>): Record<K, number> => {
     const keys = Object.keys(values) as K[];
@@ -81,7 +88,9 @@ export const AssetList = () => {
 
     const [historyTicker, setHistoryTicker] = useState<string | null>(null);
     const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
-    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+    // No layout mobile, mostra primeiro o resumo de cada classe; o usuário expande
+    // somente o grupo que deseja consultar. Tablet/desktop permanecem abertos.
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(initialCollapsedGroups);
 
     const formatCurrency = (val: number | null | undefined, currency: Currency = 'BRL') =>
         fmtCurrency(val, currency, { privacy: isPrivacyMode });
@@ -174,8 +183,7 @@ export const AssetList = () => {
     const allocationBase = Math.max((kpis.totalEquity || 0) - reserveValue, 0);
 
     // ETF é distribuído pela allocationClass. OURO no fim p/ holdings legados.
-    const typeOrder = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
-    const visibleTypes = typeOrder.filter(type => groupedAssets[type] && groupedAssets[type].length > 0);
+    const visibleTypes = TYPE_ORDER.filter(type => groupedAssets[type] && groupedAssets[type].length > 0);
 
     // Toggle global: se TODAS as classes estão contraídas, o botão expande; caso
     // contrário contrai tudo (inclusive quando só parte está aberta).
@@ -259,10 +267,14 @@ export const AssetList = () => {
                                     <span className="text-right shrink-0 ml-3">
                                         <span className="block text-white tabular-nums font-bold text-sm">{formatCurrency(totalValueGroup)}</span>
                                         <span className="flex items-center justify-end gap-2 text-[11px] font-bold">
-                                            <span className={gm.capital >= 0 ? 'text-emerald-500' : 'text-red-500'} title="Variação do preço (sem proventos)">
-                                                {gm.capital >= 0 ? '+' : '-'}{formatPercent(gm.variationPct)}
-                                            </span>
-                                            <span className="text-slate-700">·</span>
+                                            {Math.abs(gm.rentabilityPct - gm.variationPct) >= 0.005 && (
+                                                <>
+                                                    <span className={gm.capital >= 0 ? 'text-emerald-500' : 'text-red-500'} title="Variação do preço (sem proventos)">
+                                                        {gm.capital >= 0 ? '+' : '-'}{formatPercent(gm.variationPct)}
+                                                    </span>
+                                                    <span className="text-slate-700">·</span>
+                                                </>
+                                            )}
                                             <span className={gm.totalResult >= 0 ? 'text-emerald-500' : 'text-red-500'} title="Rentabilidade total (preço + proventos)">
                                                 {gm.totalResult >= 0 ? '+' : '-'}{formatPercent(gm.rentabilityPct)}
                                             </span>
@@ -294,10 +306,14 @@ export const AssetList = () => {
                                                 <div className="text-right">
                                                     <p className="font-bold text-white text-sm">{formatCurrency(asset.totalValue, 'BRL')}</p>
                                                     <p className="flex items-center justify-end gap-2 text-[11px] font-bold">
-                                                        <span className={isVarUp ? 'text-emerald-500' : 'text-red-500'} title="Variação do preço (sem proventos)">
-                                                            {isVarUp ? '+' : '-'}{formatPercent(m.variationPct)}
-                                                        </span>
-                                                        <span className="text-slate-700">·</span>
+                                                        {Math.abs(m.rentabilityPct - m.variationPct) >= 0.005 && (
+                                                            <>
+                                                                <span className={isVarUp ? 'text-emerald-500' : 'text-red-500'} title="Variação do preço (sem proventos)">
+                                                                    {isVarUp ? '+' : '-'}{formatPercent(m.variationPct)}
+                                                                </span>
+                                                                <span className="text-slate-700">·</span>
+                                                            </>
+                                                        )}
                                                         <span className={`flex items-center gap-0.5 ${isRentUp ? 'text-emerald-500' : 'text-red-500'}`} title="Rentabilidade total (preço + proventos)">
                                                             {isRentUp ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
                                                             {isRentUp ? '+' : '-'}{formatPercent(m.rentabilityPct)}

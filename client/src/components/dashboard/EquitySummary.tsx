@@ -49,14 +49,14 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
     }
 
     return (
-        // Mobile em 2 colunas (herói na linha inteira) — ver WalletSummary.
-        <section aria-label="Resumo patrimonial" className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+        // No celular, cada KPI ocupa a largura inteira — o mesmo comportamento da Carteira.
+        <section aria-label="Resumo patrimonial" className="grid auto-rows-fr grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
 
             {/* 1. PATRIMÔNIO LÍQUIDO — card "herói" em gradiente verde (destaque). */}
             {/* Verde-escuro nos dois temas → texto sempre branco (valores arbitrários
                 porque o tema claro sobrescreveria .text-white p/ tons escuros). */}
             <div
-                className="col-span-2 md:col-span-1 relative overflow-hidden rounded-2xl p-[18px] text-[#fff]"
+                className="relative h-full overflow-hidden rounded-2xl p-[18px] text-[#fff]"
                 style={{
                     background: 'linear-gradient(180deg, #0f5f47, #0c4f3b)',
                     boxShadow: '0 14px 30px -18px rgba(12,79,59,.9)',
@@ -66,14 +66,14 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
                     className="absolute right-[-30px] top-[-30px] w-[130px] h-[130px] rounded-full pointer-events-none"
                     style={{ background: 'radial-gradient(circle, rgba(255,255,255,.14), transparent 70%)' }}
                 />
-                <div className="relative flex justify-between items-start">
+                <div className="relative flex min-h-[22px] items-start pr-10">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-[rgba(255,255,255,0.72)]">Patrimônio Líquido</span>
-                    <span className="w-[30px] h-[30px] rounded-[9px] bg-white/[0.14] flex items-center justify-center text-[#eafff6]">
+                    <span className="absolute right-0 top-0 w-[30px] h-[30px] rounded-[9px] bg-white/[0.14] flex items-center justify-center text-[#eafff6]">
                         <Wallet size={16} />
                     </span>
                 </div>
 
-                <div className="relative flex items-baseline gap-2 mt-3.5">
+                <div className="relative flex items-baseline gap-2 mt-1">
                     <FitText
                         className="flex-1 font-extrabold tracking-tight"
                         max={28}
@@ -91,7 +91,7 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
                     </span>
                 </div>
 
-                <div className="relative flex items-center justify-between mt-4 pt-3 border-t border-white/[0.14]">
+                <div className="relative flex items-center justify-between mt-3 pt-3 border-t border-white/[0.14]">
                     <div className="min-w-0">
                         <p className="text-[9px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.6)] mb-0.5">Variação Hoje</p>
                         <div className="text-sm font-bold text-[#fff] truncate">
@@ -149,8 +149,6 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
 
             {/* 4. PROVENTOS */}
             <StatCard
-                // Fecha a última linha do grid mobile (4 cards em 2 colunas deixavam um vão).
-                className="col-span-2 md:col-span-1"
                 label="Prov. Acumulados"
                 icon={<PiggyBank size={16} />}
                 iconClass="bg-gold/10 text-gold"
@@ -168,8 +166,8 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
 // Card de indicador padrão: superfície + ícone tingido em quadrado + pílula de tag.
 // Espelha o StatCard da aba Carteira; o valor usa <FitText> p/ nunca cortar dígitos.
 const StatCard = ({ label, tooltipText, icon, iconClass, value, valueClass, subLabel, subValue, tag, tagClass, className = '' }: any) => (
-    <div className={`bg-base border border-slate-800 rounded-2xl p-[18px] flex flex-col justify-between transition-colors hover:border-slate-700 ${className}`}>
-        <div className="flex justify-between items-start">
+    <div className={`h-full bg-base border border-slate-800 rounded-2xl p-[18px] flex flex-col transition-colors hover:border-slate-700 ${className}`}>
+        <div className="relative flex min-h-[22px] items-start pr-10">
             <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
                 {tooltipText && (
@@ -182,24 +180,24 @@ const StatCard = ({ label, tooltipText, icon, iconClass, value, valueClass, subL
                     </div>
                 )}
             </div>
-            <span className={`w-[30px] h-[30px] rounded-[9px] flex items-center justify-center ${iconClass}`}>
+            <span className={`absolute right-0 top-0 w-[30px] h-[30px] rounded-[9px] flex items-center justify-center ${iconClass}`}>
                 {icon}
             </span>
         </div>
 
-        <FitText className={`font-extrabold tracking-tight mt-3.5 mb-4 ${valueClass || 'text-white'}`} max={26} min={14}>
+        <FitText className={`font-extrabold tracking-tight mt-1 mb-3 ${valueClass || 'text-white'}`} max={26} min={14}>
             {value}
         </FitText>
 
-        {/* Rodapé empilha no mobile (card de ~165px em 2 colunas) — ver WalletSummary. */}
-        <div className="flex flex-col items-start gap-2 xl:flex-row xl:items-center xl:justify-between pt-3 border-t border-slate-800/80">
-            <div className="min-w-0 w-full xl:w-auto">
-                <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">{subLabel}</p>
-                <div className="text-sm font-bold text-slate-200 truncate">{subValue}</div>
+        {/* Valor secundário e selo compartilham a mesma linha — ver WalletSummary. */}
+        <div className="mt-auto pt-3 border-t border-slate-800/80">
+            <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider mb-1">{subLabel}</p>
+            <div className="flex min-w-0 items-center justify-between gap-2">
+                <div className="min-w-0 text-sm font-bold text-slate-200 truncate">{subValue}</div>
+                <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border ${tagClass}`}>
+                    {tag}
+                </span>
             </div>
-            <span className={`shrink-0 xl:ml-2 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border ${tagClass}`}>
-                {tag}
-            </span>
         </div>
     </div>
 );

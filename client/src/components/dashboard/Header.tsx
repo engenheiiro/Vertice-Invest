@@ -196,8 +196,9 @@ export const Header: React.FC = () => {
               
               <button
                 onClick={handleLogout}
-                className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                className="hidden sm:inline-flex min-h-[40px] min-w-[40px] items-center justify-center hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
                 title="Sair"
+                aria-label="Sair"
               >
                   <LogOut size={16} />
               </button>

@@ -302,7 +302,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
     // traz a mesma mensagem e o mesmo CTA) assume o lugar de todo o bloco.
 
     return (
-        <div className="bg-base border border-slate-800 rounded-2xl p-6 h-[420px] flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors">
+        <div className={`bg-base border border-slate-800 rounded-2xl p-4 sm:p-6 flex flex-col relative overflow-hidden shadow-sm hover:border-slate-700 transition-colors ${isEditing ? 'h-[420px]' : 'h-[320px] sm:h-[420px]'}`}>
 
             {/* Header */}
             <div className="flex justify-between items-start mb-2 shrink-0">

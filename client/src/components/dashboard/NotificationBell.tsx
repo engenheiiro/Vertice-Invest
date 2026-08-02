@@ -82,16 +82,42 @@ export const NotificationBell: React.FC = () => {
 
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
 
+  const positionPanel = useCallback(() => {
+    if (!buttonRef.current) return;
+
+    const rect = buttonRef.current.getBoundingClientRect();
+    const isMobile = window.innerWidth < 640;
+
+    setPanelStyle(isMobile
+      ? {
+          position: 'fixed',
+          top: rect.bottom + 8,
+          left: 12,
+          right: 12,
+          width: 'auto',
+          maxHeight: Math.max(180, window.innerHeight - rect.bottom - 80),
+        }
+      : {
+          position: 'fixed',
+          top: rect.bottom + 8,
+          right: Math.max(12, window.innerWidth - rect.right),
+          width: 320,
+          maxHeight: Math.max(220, window.innerHeight - rect.bottom - 20),
+        });
+  }, []);
+
   useEffect(() => {
-    if (open && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPanelStyle({
-        position: 'fixed',
-        top: rect.bottom + 8,
-        right: window.innerWidth - rect.right,
-      });
-    }
-  }, [open]);
+    if (!open) return;
+
+    positionPanel();
+    window.addEventListener('resize', positionPanel);
+    window.addEventListener('scroll', positionPanel, true);
+
+    return () => {
+      window.removeEventListener('resize', positionPanel);
+      window.removeEventListener('scroll', positionPanel, true);
+    };
+  }, [open, positionPanel]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -120,7 +146,7 @@ export const NotificationBell: React.FC = () => {
           <div
             ref={panelRef}
             style={panelStyle}
-            className="z-[100] w-80 rounded-xl border border-slate-700/60 bg-panel shadow-2xl shadow-black/60 backdrop-blur-md overflow-hidden"
+            className="z-[100] flex flex-col max-w-[calc(100vw-1.5rem)] rounded-xl border border-slate-700/60 bg-panel shadow-2xl shadow-black/60 backdrop-blur-md overflow-hidden"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
@@ -158,7 +184,7 @@ export const NotificationBell: React.FC = () => {
             </div>
 
             {/* List */}
-            <div className="max-h-80 overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto sm:max-h-80">
               {notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-slate-500 gap-2">
                   <Bell size={22} className="opacity-30" />
