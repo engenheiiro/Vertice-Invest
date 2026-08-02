@@ -61,7 +61,7 @@ export default defineConfig({
       registerType: 'prompt',
       // Não cria SW em `vite dev` (evita cache atrapalhar o HMR/desktop em desenvolvimento).
       devOptions: { enabled: false },
-      includeAssets: ['icons/apple-touch-icon.png', 'og-image.png'],
+      includeAssets: ['icons/apple-touch-icon-v2.png', 'og-image.png'],
       manifest: {
         name: 'Vértice Invest',
         short_name: 'Vértice',
@@ -75,9 +75,9 @@ export default defineConfig({
         background_color: '#080C14',
         lang: 'pt-BR',
         icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          { src: '/icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/icons/icon-192-v2.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icons/icon-512-v2.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icons/icon-512-maskable-v2.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {
