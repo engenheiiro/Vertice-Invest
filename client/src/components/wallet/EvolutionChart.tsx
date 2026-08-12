@@ -1,11 +1,43 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { BarChart3 } from 'lucide-react';
+import { ComposedChart, Area, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart3, Activity } from 'lucide-react';
 import { formatCurrency as fmtCurrency, formatPercent } from '../../utils/format';
 import { buildEvolutionChartData, buildEvolutionRenderData, summarizeEvolutionWindow, type ChartGranularity, type ChartWindow } from '../../utils/evolutionChartData';
+
+// Preferência de visualização (linha ↔ barras). Persistida por navegador: é uma
+// escolha estética do usuário, não um filtro de dados.
+type ChartType = 'LINE' | 'BAR';
+const CHART_TYPE_KEY = 'evolutionChartType';
+
+const readStoredChartType = (): ChartType => {
+    try {
+        return localStorage.getItem(CHART_TYPE_KEY) === 'BAR' ? 'BAR' : 'LINE';
+    } catch {
+        return 'LINE';
+    }
+};
+
+// Cores das barras empilhadas — mesma família verde da linha, para o gráfico
+// trocar de forma sem trocar de identidade.
+const BAR_BASE = '#0e9268';    // porção "Valor Aplicado" (corpo da barra)
+const BAR_PROFIT = '#5fd6ae';  // capa clara = Resultado positivo
+const BAR_LOSS = '#ef4444';    // capa vermelha = queda abaixo do custo
+
+// Barra com o topo arredondado apenas quando é o segmento mais alto da pilha —
+// arredondar segmentos do meio abriria "degraus" entre eles.
+const RoundedBar = (props: any): React.ReactElement => {
+    const { x, y, width, height, fill, radius = 0 } = props;
+    if (!(height > 0) || !(width > 0)) return <g />;
+    const r = Math.max(0, Math.min(radius, width / 2, height));
+    if (r === 0) return <rect x={x} y={y} width={width} height={height} fill={fill} />;
+    const d = `M${x},${y + height} L${x},${y + r} Q${x},${y} ${x + r},${y}`
+        + ` L${x + width - r},${y} Q${x + width},${y} ${x + width},${y + r}`
+        + ` L${x + width},${y + height} Z`;
+    return <path d={d} fill={fill} />;
+};
 
 // Custom Tick para exibir o ponto pulsante no dia LIVE
 const CustomXAxisTick = (props: any) => {
@@ -15,10 +47,20 @@ const CustomXAxisTick = (props: any) => {
     const item = data && data[payload.index];
     const isLive = item && item.isLive;
 
+    // O ponto LIVE fica à ESQUERDA do rótulo, encostado na largura real do texto —
+    // antes vivia num deslocamento fixo (cx=14) e caía POR CIMA de rótulos com mais
+    // de ~5 caracteres ("ago/2026" virava "ago/20●6"). À esquerda também evita que
+    // ele estoure a borda direita do card no último tick, que é justamente o LIVE.
+    const label = String(payload.value ?? '');
+    const textHalf = (label.length * 5.4) / 2; // ~5,4px por caractere em fontSize 10
+    const DOT_SPACE = 16;                      // espaço reservado ao ponto + respiro
+    const shift = isLive ? DOT_SPACE / 2 : 0;  // recentra o conjunto ponto + texto
+    const dotX = shift - textHalf - 9;
+
     return (
         <g transform={`translate(${x},${y})`}>
             <text
-                x={0}
+                x={shift}
                 y={0}
                 dy={12}
                 textAnchor="middle"
@@ -26,18 +68,53 @@ const CustomXAxisTick = (props: any) => {
                 fontSize={10}
                 fontWeight={500}
             >
-                {payload.value}
+                {label}
             </text>
             {isLive && (
-                // Ponto Pulsante Vermelho
+                // Ponto Pulsante Vermelho. transformBox/transformOrigin no círculo
+                // animado fazem o `animate-ping` escalar em torno dele mesmo — sem
+                // isso o SVG usa a origem do viewBox e a onda dispara para fora do
+                // gráfico (as duas propriedades não são herdadas do <g>).
                 <g>
-                    <circle cx={14} cy={8} r={3} fill="#ef4444" className="animate-ping opacity-75" />
-                    <circle cx={14} cy={8} r={2} fill="#ef4444" />
+                    <circle
+                        cx={dotX}
+                        cy={8}
+                        r={3}
+                        fill="#ef4444"
+                        className="animate-ping opacity-75"
+                        style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
+                    />
+                    <circle cx={dotX} cy={8} r={2} fill="#ef4444" />
                 </g>
             )}
         </g>
     );
 };
+
+// Eixo Y a partir de uma faixa [min, max]: ticks em passos "redondos"
+// (1/2/2.5/5/10 × 10ⁿ) e casas decimais derivadas do próprio passo — assim os
+// rótulos ficam distintos em qualquer zoom (antes, numa faixa apertada,
+// (val/1000).toFixed(0) colava tudo em "15k").
+function buildScale(min: number, max: number) {
+    const rawStep = (max - min) / 5 || 1;
+    const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const norm = rawStep / mag;
+    const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
+
+    const domainMin = Math.max(0, Math.floor(min / step) * step);
+    const domainMax = Math.ceil(max / step) * step;
+    const ticks: number[] = [];
+    for (let v = domainMin; v <= domainMax + step * 0.5; v += step) ticks.push(Number(v.toFixed(6)));
+
+    // Unidade única para todo o eixo (mesma escala/decimais em todos os ticks).
+    const maxAbs = Math.max(Math.abs(domainMin), Math.abs(domainMax));
+    const divisor = maxAbs >= 1_000_000 ? 1_000_000 : maxAbs >= 1_000 ? 1_000 : 1;
+    const suffix = divisor === 1_000_000 ? 'M' : divisor === 1_000 ? 'k' : '';
+    const unitStep = step / divisor;
+    const decimals = unitStep >= 1 ? 0 : Math.min(4, Math.ceil(-Math.log10(unitStep)));
+
+    return { domain: [domainMin, domainMax] as [number, number], ticks, divisor, suffix, decimals };
+}
 
 // Janelas disponíveis por granularidade.
 const WINDOW_OPTIONS: Record<ChartGranularity, ChartWindow[]> = {
@@ -58,6 +135,15 @@ export const EvolutionChart = React.memo(() => {
     const dotFill = theme === 'light' ? '#ffffff' : '#0B101A';
     const [granularity, setGranularity] = useState<ChartGranularity>('MONTHLY');
     const [range, setRange] = useState<ChartWindow>('ALL');
+    const [chartType, setChartType] = useState<ChartType>(readStoredChartType);
+    const isBar = chartType === 'BAR';
+    // Largura do plot só para ancorar a bolha LIVE dentro do card no modo barra.
+    const plotRef = useRef<HTMLDivElement>(null);
+
+    const switchChartType = (t: ChartType) => {
+        setChartType(t);
+        try { localStorage.setItem(CHART_TYPE_KEY, t); } catch { /* storage indisponível */ }
+    };
 
     // Ao trocar de granularidade, reseta a janela para um default válido.
     const switchGranularity = (g: ChartGranularity) => {
@@ -79,7 +165,12 @@ export const EvolutionChart = React.memo(() => {
     );
     // A âncora existe só na camada visual; cálculos e resumos continuam usando
     // chartData. Para séries com histórico, renderData === chartData.
-    const renderData = useMemo(() => buildEvolutionRenderData(chartData), [chartData]);
+    // No modo barra ela é dispensável (uma categoria única já vira uma barra) e
+    // seria nociva: renderizaria uma barra fantasma duplicando o ponto LIVE.
+    const renderData = useMemo(
+        () => (isBar ? chartData : buildEvolutionRenderData(chartData)),
+        [chartData, isBar]
+    );
 
     // Escala do eixo Y calculada a partir dos próprios dados (Patrimônio + Aplicado),
     // em vez de deixar o Recharts decidir. Dois motivos:
@@ -97,6 +188,13 @@ export const EvolutionChart = React.memo(() => {
         });
         if (!isFinite(min) || !isFinite(max)) return null;
 
+        // Barra sempre nasce no zero: ela codifica GRANDEZA por área, então cortar
+        // a base exageraria a diferença entre períodos (o vício clássico do gráfico
+        // de barras truncado). A linha, que codifica trajetória, mantém o zoom.
+        // (o arredondamento do topo para o próximo tick "redondo" já cria a folga
+        // que a bolha do LIVE precisa; por isso a margem aqui é mínima)
+        if (isBar) return buildScale(0, max * 1.02);
+
         // Banda vertical do eixo — duas metas em tensão, resolvidas por um piso:
         //  • Movimento real pequeno (ex.: +0,16%) precisa aparecer: usa o range + 12%
         //    de folga em cada lado (span × 1,24), como antes.
@@ -107,30 +205,9 @@ export const EvolutionChart = React.memo(() => {
         const span = max - min;
         const mid = (min + max) / 2;
         const band = Math.max(span * 1.24, mid * 0.005, 10);
-        min = Math.max(0, mid - band / 2);
-        max = mid + band / 2;
 
-        // Passo "nice" (1/2/2.5/5/10 × 10ⁿ) para ~5 divisões.
-        const rawStep = (max - min) / 5 || 1;
-        const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
-        const norm = rawStep / mag;
-        const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
-
-        const domainMin = Math.max(0, Math.floor(min / step) * step);
-        const domainMax = Math.ceil(max / step) * step;
-        const ticks: number[] = [];
-        for (let v = domainMin; v <= domainMax + step * 0.5; v += step) ticks.push(Number(v.toFixed(6)));
-
-        // Unidade única para todo o eixo (mesma escala/decimais em todos os ticks).
-        const maxAbs = Math.max(Math.abs(domainMin), Math.abs(domainMax));
-        const divisor = maxAbs >= 1_000_000 ? 1_000_000 : maxAbs >= 1_000 ? 1_000 : 1;
-        const suffix = divisor === 1_000_000 ? 'M' : divisor === 1_000 ? 'k' : '';
-        const unitStep = step / divisor;
-        // Casas decimais que tornam ticks adjacentes distintos na unidade escolhida.
-        const decimals = unitStep >= 1 ? 0 : Math.min(4, Math.ceil(-Math.log10(unitStep)));
-
-        return { domain: [domainMin, domainMax] as [number, number], ticks, divisor, suffix, decimals };
-    }, [chartData]);
+        return buildScale(Math.max(0, mid - band / 2), mid + band / 2);
+    }, [chartData, isBar]);
 
     const formatAxisCurrency = (val: number) => {
         if (isPrivacyMode) return '••••••';
@@ -153,6 +230,23 @@ export const EvolutionChart = React.memo(() => {
         </text>
     );
 
+    // Legenda acompanha a forma: na linha as séries são Aplicado × Patrimônio; na
+    // barra os segmentos empilhados são Aplicado + Resultado (ou perda, quando há).
+    const legend = useMemo(() => {
+        if (!isBar) {
+            return [
+                { label: 'Valor Aplicado', color: '#8fd6bd' },
+                { label: 'Patrimônio', color: BAR_BASE },
+            ];
+        }
+        const items = [
+            { label: 'Valor Aplicado', color: BAR_BASE },
+            { label: 'Resultado', color: BAR_PROFIT },
+        ];
+        if (chartData.some((p) => p.lossBar > 0)) items.push({ label: 'Prejuízo', color: BAR_LOSS });
+        return items;
+    }, [isBar, chartData]);
+
     const summary = useMemo(() => summarizeEvolutionWindow(chartData), [chartData]);
     const showSummary = summary.variationValue !== 0 || summary.variationPercent !== null;
     const summaryPositive = summary.variationValue >= 0;
@@ -164,14 +258,20 @@ export const EvolutionChart = React.memo(() => {
         if (cx == null || cy == null || payload?.isVisualAnchor || index !== renderData.length - 1) return <g key={`d${index}`} />;
         const label = formatTooltipCurrency(payload.realEquity);
         const bw = Math.max(78, label.length * 7.2 + 18);
-        const bx = cx - bw - 6; // bolha à esquerda do ponto (o ponto vive na borda direita)
+        // Linha: bolha à esquerda do ponto (o ponto vive na borda direita).
+        // Barra: centralizada sobre a última barra, presa dentro do plot.
+        const plotWidth = plotRef.current?.clientWidth ?? cx + bw + 8;
+        const bx = isBar
+            ? Math.max(2, Math.min(cx - bw / 2, plotWidth - bw - 4))
+            : cx - bw - 6;
+        const by = isBar ? cy - 26 : cy - 30;
         return (
             <g>
-                <rect x={bx} y={cy - 30} width={bw} height={22} rx={7} fill={bubbleBg} />
-                <text x={bx + bw / 2} y={cy - 15} textAnchor="middle" fontSize={11.5} fontWeight={800} fill={bubbleText}>
+                <rect x={bx} y={by} width={bw} height={22} rx={7} fill={bubbleBg} />
+                <text x={bx + bw / 2} y={by + 15} textAnchor="middle" fontSize={11.5} fontWeight={800} fill={bubbleText}>
                     {label}
                 </text>
-                <circle cx={cx} cy={cy} r={5} fill={dotFill} stroke="#0e9268" strokeWidth={2.6} />
+                {!isBar && <circle cx={cx} cy={cy} r={5} fill={dotFill} stroke="#0e9268" strokeWidth={2.6} />}
             </g>
         );
     };
@@ -210,19 +310,37 @@ export const EvolutionChart = React.memo(() => {
                             </span>
                         )}
                     </div>
-                    <div className="flex items-center gap-3 mt-1">
-                        <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#8fd6bd' }}></span>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">Valor Aplicado</p>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#0e9268' }}></span>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">Patrimônio</p>
-                        </div>
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                        {legend.map((item) => (
+                            <div key={item.label} className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }}></span>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase">{item.label}</p>
+                            </div>
+                        ))}
                     </div>
                 </div>
 
                 <div className="flex w-full min-w-0 flex-nowrap items-center gap-2 sm:w-auto">
+                    {/* Formato: linha vs barras (preferência visual do usuário) */}
+                    <div className="flex shrink-0 bg-deep p-1 rounded-lg border border-slate-800">
+                        {([['LINE', Activity, 'Linha'], ['BAR', BarChart3, 'Barras']] as const).map(([t, Icon, title]) => (
+                            <button
+                                key={t}
+                                onClick={() => switchChartType(t)}
+                                title={`Visualizar em ${title.toLowerCase()}`}
+                                aria-label={`Visualizar em ${title.toLowerCase()}`}
+                                aria-pressed={chartType === t}
+                                className={`px-2 min-h-[32px] inline-flex items-center justify-center rounded transition-all ${
+                                    chartType === t
+                                    ? 'bg-base text-white shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-300'
+                                }`}
+                            >
+                                <Icon size={13} strokeWidth={2.5} />
+                            </button>
+                        ))}
+                    </div>
+
                     {/* Granularidade: Diário vs Mensal */}
                     <div className="flex shrink-0 bg-deep p-1 rounded-lg border border-slate-800">
                         {(['DAILY', 'MONTHLY'] as const).map((g) => (
@@ -260,13 +378,19 @@ export const EvolutionChart = React.memo(() => {
             </div>
 
             {/* (A1) descrição textual do gráfico para leitores de tela */}
-            <div className="flex-1 w-full relative min-h-0 text-xs" role="img" aria-label="Gráfico de evolução patrimonial da carteira ao longo do tempo" aria-describedby="evolution-chart-desc">
+            <div ref={plotRef} className="flex-1 w-full relative min-h-0 text-xs" role="img" aria-label="Gráfico de evolução patrimonial da carteira ao longo do tempo" aria-describedby="evolution-chart-desc">
                 <p id="evolution-chart-desc" className="sr-only">
-                    Gráfico de barras exibindo o patrimônio total da carteira. Alterne entre visão diária e mensal e use os controles de período para ajustar a janela exibida.
+                    {isBar ? 'Gráfico de barras' : 'Gráfico de linhas'} exibindo o patrimônio total da carteira. Alterne entre visão diária e mensal e use os controles de período para ajustar a janela exibida.
                     {showSummary && !isPrivacyMode && ` Resultado no período: ${formatSignedCurrency(summary.variationValue)}${summary.variationPercent !== null ? ` (${formatPercent(summary.variationPercent, { sign: true })})` : ''}.`}
                 </p>
                 <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={renderData} margin={{ top: 30, right: 6, left: -4, bottom: 0 }}>
+                    <ComposedChart
+                        data={renderData}
+                        margin={{ top: 30, right: 6, left: -4, bottom: 0 }}
+                        // Respiro entre barras na janela Diária (30/90 pontos); no
+                        // mensal o maxBarSize já governa a largura.
+                        barCategoryGap="22%"
+                    >
                         <defs>
                             <linearGradient id="evoEquityFill" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#0e9268" stopOpacity={0.22} />
@@ -351,37 +475,83 @@ export const EvolutionChart = React.memo(() => {
                             }}
                         />
 
-                        {/* Preenchimento do patrimônio (sem traço — o traço é a Line abaixo, p/ camadas) */}
-                        <Area
-                            type="monotone"
-                            dataKey="realEquity"
-                            stroke="none"
-                            fill="url(#evoEquityFill)"
-                            isAnimationActive={false}
-                        />
+                        {isBar ? (
+                            <>
+                                {/* Pilha: Aplicado (corpo) + Resultado (capa clara) OU perda (capa
+                                    vermelha até o custo). profitBar e lossBar são mutuamente
+                                    exclusivos, então só uma capa existe por barra. */}
+                                <Bar
+                                    dataKey="baseBar"
+                                    stackId="equity"
+                                    fill={BAR_BASE}
+                                    maxBarSize={46}
+                                    shape={(p: any) => (
+                                        <RoundedBar {...p} radius={p.payload.profitBar > 0 || p.payload.lossBar > 0 ? 0 : 5} />
+                                    )}
+                                    animationDuration={700}
+                                />
+                                <Bar
+                                    dataKey="profitBar"
+                                    stackId="equity"
+                                    fill={BAR_PROFIT}
+                                    maxBarSize={46}
+                                    shape={(p: any) => <RoundedBar {...p} radius={5} />}
+                                    animationDuration={700}
+                                />
+                                <Bar
+                                    dataKey="lossBar"
+                                    stackId="equity"
+                                    fill={BAR_LOSS}
+                                    maxBarSize={46}
+                                    shape={(p: any) => <RoundedBar {...p} radius={5} />}
+                                    animationDuration={700}
+                                />
 
-                        {/* Linha tracejada do Valor Aplicado (custo) */}
-                        <Line
-                            type="monotone"
-                            dataKey="realInvested"
-                            stroke="#8fd6bd"
-                            strokeWidth={1.8}
-                            strokeDasharray="5 4"
-                            dot={false}
-                            activeDot={false}
-                            isAnimationActive={false}
-                        />
+                                {/* Série invisível no topo da pilha: só carrega a bolha do LIVE. */}
+                                <Line
+                                    dataKey={(d: any) => Math.max(d.realEquity, d.realInvested)}
+                                    stroke="none"
+                                    dot={renderEndDot}
+                                    activeDot={false}
+                                    legendType="none"
+                                    isAnimationActive={false}
+                                />
+                            </>
+                        ) : (
+                            <>
+                                {/* Preenchimento do patrimônio (sem traço — o traço é a Line abaixo, p/ camadas) */}
+                                <Area
+                                    type="monotone"
+                                    dataKey="realEquity"
+                                    stroke="none"
+                                    fill="url(#evoEquityFill)"
+                                    isAnimationActive={false}
+                                />
 
-                        {/* Linha do Patrimônio (verde) + ponto/bolha do dia LIVE */}
-                        <Line
-                            type="monotone"
-                            dataKey="realEquity"
-                            stroke="#0e9268"
-                            strokeWidth={2.6}
-                            dot={renderEndDot}
-                            activeDot={renderActiveDot}
-                            animationDuration={900}
-                        />
+                                {/* Linha tracejada do Valor Aplicado (custo) */}
+                                <Line
+                                    type="monotone"
+                                    dataKey="realInvested"
+                                    stroke="#8fd6bd"
+                                    strokeWidth={1.8}
+                                    strokeDasharray="5 4"
+                                    dot={false}
+                                    activeDot={false}
+                                    isAnimationActive={false}
+                                />
+
+                                {/* Linha do Patrimônio (verde) + ponto/bolha do dia LIVE */}
+                                <Line
+                                    type="monotone"
+                                    dataKey="realEquity"
+                                    stroke="#0e9268"
+                                    strokeWidth={2.6}
+                                    dot={renderEndDot}
+                                    activeDot={renderActiveDot}
+                                    animationDuration={900}
+                                />
+                            </>
+                        )}
                     </ComposedChart>
                 </ResponsiveContainer>
             </div>

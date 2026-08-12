@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../contexts/WalletContext', () => ({
     useWallet: () => ({
@@ -33,6 +33,7 @@ vi.mock('recharts', async () => {
         ResponsiveContainer: Container,
         ComposedChart: Chart,
         Area: Empty,
+        Bar: Empty,
         Line: Empty,
         XAxis: Empty,
         YAxis: Empty,
@@ -44,6 +45,10 @@ vi.mock('recharts', async () => {
 import { EvolutionChart } from './EvolutionChart';
 
 describe('EvolutionChart — carteira sem snapshots', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
     it('ancora a linha à esquerda e mantém o ponto LIVE no final quando existe somente um dado real', () => {
         render(<EvolutionChart />);
 
@@ -51,5 +56,17 @@ describe('EvolutionChart — carteira sem snapshots', () => {
         expect(chart).toHaveAttribute('data-point-count', '2');
         expect(chart).toHaveAttribute('data-first-anchor', 'true');
         expect(chart).toHaveAttribute('data-last-live', 'true');
+    });
+
+    it('no modo barra dispensa a âncora (ela viraria uma barra fantasma) e persiste a escolha', () => {
+        render(<EvolutionChart />);
+
+        fireEvent.click(screen.getByRole('button', { name: /visualizar em barras/i }));
+
+        const chart = screen.getByTestId('composed-chart');
+        expect(chart).toHaveAttribute('data-point-count', '1');
+        expect(chart).toHaveAttribute('data-first-anchor', 'false');
+        expect(chart).toHaveAttribute('data-last-live', 'true');
+        expect(localStorage.getItem('evolutionChartType')).toBe('BAR');
     });
 });
