@@ -109,8 +109,15 @@ export const financialService = {
      * Monta o cache de preços (Map ticker → Map data→{close,adjClose}) para os
      * tickers de renda variável. Faz fallback para externalMarketService quando
      * o histórico local é curto, persistindo o resultado em AssetHistory.
+     *
+     * `requiredFromByTicker` (Map ticker → dayKey do 1º dia em que a carteira
+     * segurou o papel) é o que torna a profundidade da série uma exigência, não
+     * um acaso: o timeSeriesWorker grava `history.slice(-ASSET_HISTORY_MAX_POINTS)`
+     * (~1,6 ano) para todo ticker fora de HISTORY_CAP_EXEMPT_TICKERS. Uma série
+     * truncada tem 400 candles — passa folgada no antigo teste `length < 5` — e
+     * fazia o rebuild marcar TODO o período anterior ao cap pelo preço de compra.
      */
-    async _loadPriceCacheMap(uniqueTickers, assetMetadataMap) {
+    async _loadPriceCacheMap(uniqueTickers, assetMetadataMap, requiredFromByTicker = new Map()) {
         const priceCacheMap = new Map();
 
         await Promise.all(uniqueTickers.map(async (ticker) => {
@@ -121,18 +128,31 @@ export const financialService = {
                 const searchTicker = this.normalizeTickerForHistory(ticker);
                 let history = await marketDataService.getBenchmarkHistory(ticker, assetMeta?.type || 'INDEX');
 
-                if (!history || history.length < 5) {
+                const requiredFrom = requiredFromByTicker.get(ticker) || null;
+                const firstCandle = history?.length ? history[0]?.date : null;
+                // Rasa = sem série, ou série que não alcança o 1º dia da posição.
+                const isShallow = !history
+                    || history.length < 5
+                    || (requiredFrom && (!firstCandle || firstCandle > requiredFrom));
+
+                if (isShallow) {
                     const info = await MarketAsset.findOne({ ticker });
                     const type = assetMeta?.type || info?.type || 'STOCK';
                     try {
                         const extHistory = await externalMarketService.getFullHistory(searchTicker, type);
                         if (extHistory && extHistory.length > 0) {
-                            await AssetHistory.updateOne(
-                                { ticker: historyStorageKey(ticker, type) },
-                                { history: extHistory, lastUpdated: new Date() },
-                                { upsert: true }
-                            );
-                            history = extHistory;
+                            // Só persiste quando não havia série utilizável. Regravar a
+                            // série cheia num ticker que o worker capa todo dia às 18:30
+                            // seria escrever para ser truncado de novo — o rebuild usa a
+                            // série profunda em memória e deixa o cache como está.
+                            if (!history || history.length < 5) {
+                                await AssetHistory.updateOne(
+                                    { ticker: historyStorageKey(ticker, type) },
+                                    { history: extHistory, lastUpdated: new Date() },
+                                    { upsert: true }
+                                );
+                            }
+                            if (!history || extHistory.length > history.length) history = extHistory;
                         }
                     } catch (err) {
                         // Fallback externo é best-effort: sem histórico, o ativo é
@@ -151,6 +171,81 @@ export const financialService = {
         }));
 
         return priceCacheMap;
+    },
+
+    /**
+     * Tickers cuja série de preços NÃO cobre o período em que a carteira teve a
+     * posição. Devolve `[{ ticker, requiredFrom, availableFrom }]`.
+     *
+     * Sem esta checagem o rebuild é silenciosamente destrutivo: `_markPortfolioToMarket`
+     * cai no último preço conhecido (na prática, o preço da 1ª compra) e grava anos de
+     * patrimônio congelado no custo — cota parada em 100 — e depois um degrau de vários
+     * por cento no primeiro dia com candle, pequeno demais para o circuit breaker de
+     * TWRR (50%) barrar. Foi exatamente o que aconteceu numa carteira de produção:
+     * 1.244 dias marcados no custo e um salto de +16,01% no dia em que a série começava.
+     */
+    findPriceCoverageGaps(priceCacheMap, requiredFromByTicker) {
+        const gaps = [];
+        for (const [ticker, requiredFrom] of requiredFromByTicker) {
+            const priceMap = priceCacheMap.get(ticker);
+            if (!priceMap || priceMap.size === 0) {
+                gaps.push({ ticker, requiredFrom, availableFrom: null });
+                continue;
+            }
+            let availableFrom = null;
+            for (const day of priceMap.keys()) {
+                if (availableFrom === null || day < availableFrom) availableFrom = day;
+            }
+            // `findPriceInMap` já olha até 5 dias para trás (fim de semana/feriado);
+            // a mesma folga vale aqui para não acusar gap de uma compra na sexta.
+            const tolerated = new Date(`${requiredFrom}T12:00:00.000Z`);
+            tolerated.setUTCDate(tolerated.getUTCDate() + 5);
+            if (availableFrom > tolerated.toISOString().slice(0, 10)) {
+                gaps.push({ ticker, requiredFrom, availableFrom });
+            }
+        }
+        return gaps;
+    },
+
+    /**
+     * Proventos ACUMULADOS da carteira até um dia, pela mesma regra do rebuild:
+     * soma por EX-DATE, com a quantidade que a carteira tinha NAQUELE dia.
+     *
+     * Existe para que o job diário e o rebuild gravem o MESMO `totalDividends` no
+     * snapshot. O diário usava `calculateUserDividends().totalAllTime`, que conta
+     * por DATA DE PAGAMENTO e multiplica cada evento pela quantidade de HOJE —
+     * numa carteira que dobrou a posição, isso creditava o dobro dos proventos
+     * realmente recebidos (produção: R$ 873,78 gravado × R$ 477,50 real), e o
+     * número saltava sozinho no primeiro rebuild. `calculateUserDividends`
+     * continua servindo a tela de Proventos (recorte mensal por pagamento).
+     */
+    async accruedDividendsThroughDay(userId, walletId, throughDayKey, options = {}) {
+        const txs = options.transactions
+            || await AssetTransaction.find({ user: userId, wallet: walletId }).sort({ date: 1 });
+        if (!txs || txs.length === 0) return 0;
+
+        const dividendDateMap = options.dividendDateMap
+            || await this._loadDividendDateMap([...new Set(txs.map(t => t.ticker))]);
+
+        const days = [...dividendDateMap.keys()].filter(d => d <= throughDayKey).sort();
+        const qty = {};
+        let txIndex = 0;
+        let total = 0;
+
+        for (const day of days) {
+            // Mesma ordem do rebuild: transações do dia ANTES dos proventos do dia.
+            while (txIndex < txs.length && this.toDateKey(txs[txIndex].date) <= day) {
+                const tx = txs[txIndex];
+                const delta = tx.type === 'SELL' ? -tx.quantity : tx.quantity;
+                qty[tx.ticker] = addQty(qty[tx.ticker] || 0, delta);
+                if (qty[tx.ticker] < QUANTITY_EPSILON) qty[tx.ticker] = 0;
+                txIndex++;
+            }
+            for (const div of dividendDateMap.get(day)) {
+                if (qty[div.ticker] > 0) total = safeAdd(total, qty[div.ticker] * div.amount);
+            }
+        }
+        return safeCurrency(total);
     },
 
     /** Indexa todos os proventos dos tickers por data (chave toDateKey). */
@@ -410,7 +505,16 @@ export const financialService = {
     async rebuildUserHistory(userId, walletId, options = {}) {
         const startTime = Date.now();
         const calculatedAt = new Date();
-        const { dryRun = false, throughDayKey = null, source = 'REBUILD' } = options;
+        const {
+            dryRun = false,
+            throughDayKey = null,
+            source = 'REBUILD',
+            // Escotilha explícita para scripts que ACEITAM histórico raso (ex.: papel
+            // cuja série do provedor começa depois da 1ª compra). Nunca ligar nos
+            // gatilhos automáticos do walletController/backfill: lá a falha precisa
+            // preservar o histórico existente em vez de substituí-lo por uma ficção.
+            allowSparseHistory = false,
+        } = options;
 
         try {
             // Log de Auditoria Inicial
@@ -439,10 +543,39 @@ export const financialService = {
             const userAssets = await UserAsset.find({ user: userId, wallet: walletId });
             userAssets.forEach(ua => assetMetadataMap.set(ua.ticker, ua));
 
+            // Primeiro dia em que cada ticker entrou na carteira — é a profundidade
+            // de série que o rebuild exige para marcar a mercado sem inventar preço.
+            const requiredFromByTicker = new Map();
+            for (const tx of txs) {
+                const meta = assetMetadataMap.get(tx.ticker);
+                if (meta?.type === 'FIXED_INCOME' || meta?.type === 'CASH' || tx.ticker === 'RESERVA') continue;
+                const dayKey = this.toDateKey(tx.date);
+                const known = requiredFromByTicker.get(tx.ticker);
+                if (!known || dayKey < known) requiredFromByTicker.set(tx.ticker, dayKey);
+            }
+
             // Carregamento de contexto (cada fonte isolada num helper testável).
             const getUsdRateForDate = await this._loadUsdRateResolver(currentUsdRate);
-            const priceCacheMap = await this._loadPriceCacheMap(uniqueTickers, assetMetadataMap);
+            const priceCacheMap = await this._loadPriceCacheMap(uniqueTickers, assetMetadataMap, requiredFromByTicker);
             const dividendDateMap = await this._loadDividendDateMap(uniqueTickers);
+
+            // Fail-closed: sem série que cubra a posição, ABORTA em vez de gravar
+            // patrimônio marcado no custo. Os chamadores (walletController,
+            // backfillUserGap) tratam o rebuild como best-effort — falhar aqui
+            // preserva o histórico atual, que é sempre melhor que substituí-lo por
+            // uma reta no preço de compra.
+            const coverageGaps = this.findPriceCoverageGaps(priceCacheMap, requiredFromByTicker);
+            if (coverageGaps.length > 0) {
+                const detail = coverageGaps
+                    .map(g => `${g.ticker} (posição desde ${g.requiredFrom}, série desde ${g.availableFrom || 'nenhuma'})`)
+                    .join('; ');
+                logger.error('❌ [History] Rebuild abortado: série de preços não cobre a posição.', {
+                    source: 'rebuildUserHistory', userId: String(userId), walletId: String(walletId), gaps: coverageGaps,
+                });
+                if (!allowSparseHistory) {
+                    throw new Error(`Histórico de preços insuficiente para reconstruir a carteira: ${detail}.`);
+                }
+            }
 
             // Rebuild nunca antecipa o snapshot do dia corrente. O cron das 23:59
             // é o único dono desse fechamento; durante o dia, KPI/gráfico usam o

@@ -20,6 +20,7 @@ import UserAsset from '../models/UserAsset.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
 import AssetTransaction from '../models/AssetTransaction.js';
 import DividendEvent from '../models/DividendEvent.js';
+import AssetHistory from '../models/AssetHistory.js';
 import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
 import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
@@ -33,6 +34,7 @@ import {
 
 import { isDollarized } from '../utils/assetCurrency.js';
 import { positionCostBRL } from '../utils/fxRate.js';
+import { historyStorageKey } from '../utils/assetHistory.js';
 import {
     brazilDayKey,
     isTwrrReturnAnomalous,
@@ -111,24 +113,52 @@ const businessDaysBetween = (fromDayStr, untilDayStr) => {
     return days;
 };
 
+// Fechamentos do dia (AssetHistory) dos tickers de renda variável em carteira.
+// É a MESMA fonte que o rebuild usa para marcar a mercado; sem isso, o snapshot
+// diário gravava a cotação em cache do momento do cron (que pode estar horas
+// atrasada — em produção, TRXF11 a 79,75 contra fechamento de 81,35, ~2%) e o
+// primeiro rebuild reescrevia o dia inteiro. Só o candle do dia é projetado —
+// hidratar os arrays de ~400 candles de toda a base seria caro à toa.
+const loadDayCloses = async (assetRefs, dayStr) => {
+    const keys = [...new Set(assetRefs.map((a) => historyStorageKey(a.ticker, a.type)).filter(Boolean))];
+    if (keys.length === 0) return new Map();
+    const rows = await AssetHistory.aggregate([
+        { $match: { ticker: { $in: keys } } },
+        {
+            $project: {
+                ticker: 1,
+                candle: {
+                    $first: {
+                        $filter: { input: { $ifNull: ['$history', []] }, as: 'h', cond: { $eq: ['$$h.date', dayStr] } },
+                    },
+                },
+            },
+        },
+        { $match: { 'candle.close': { $gt: 0 } } },
+    ]);
+    return new Map(rows.map((r) => [r.ticker, r.candle.close]));
+};
+
 // Contexto compartilhado (macro + cotações em lote) de um run de snapshot.
-const loadSnapshotContext = async () => {
+export const loadSnapshotContext = async (dayStr = brDayStr(new Date())) => {
     const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
     const usdRate = sysConfig?.dollar || 5.75;
     const currentCdi = (sysConfig?.cdi > 0 ? sysConfig.cdi : null) || (sysConfig?.selic > 0 ? sysConfig.selic : null) || DEFAULT_SELIC_FALLBACK;
     const macroRates = { cdiRate: currentCdi, selic: sysConfig?.selic, ipca: sysConfig?.ipca };
     // (F4) Cotações em LOTE, uma vez por run — evita N+1 de getMarketDataByTicker.
-    const liveTickers = await UserAsset.distinct('ticker', { type: { $nin: ['CASH', 'FIXED_INCOME'] } });
-    const priceMap = await marketDataService.getMarketDataMap(liveTickers);
+    const liveAssets = await UserAsset.find({ type: { $nin: ['CASH', 'FIXED_INCOME'] } }).select('ticker type').lean();
+    const priceMap = await marketDataService.getMarketDataMap([...new Set(liveAssets.map((a) => a.ticker))]);
+    const closeMap = await loadDayCloses(liveAssets, dayStr);
     const getUsdRateForDate = await financialService._loadUsdRateResolver(usdRate);
-    return { usdRate, macroRates, priceMap, getUsdRateForDate };
+    return { usdRate, macroRates, priceMap, closeMap, getUsdRateForDate };
 };
 
 // Patrimônio (equity/invested) de um conjunto de ativos numa data de cálculo.
 // Renda fixa/caixa: accrual exato via fonte única (utils/fixedIncome). Renda
-// variável: cotação do priceMap (para dias recuperados, é a cotação corrente —
-// aproximação aceitável para um gap de poucos dias, protegida pelo circuit breaker).
-const computeEquityAt = (assets, { priceMap, macroRates, usdRate, calcDate }) => {
+// variável: FECHAMENTO do dia (mesma marcação do rebuild), caindo na cotação
+// corrente só quando o candle ainda não chegou — cripto negocia 24/7 e o candle
+// do dia corrente pode não existir às 23:59.
+const computeEquityAt = (assets, { priceMap, closeMap, macroRates, usdRate, calcDate }) => {
     let totalEquity = 0;
     let totalInvested = 0;
     for (const asset of assets) {
@@ -137,7 +167,8 @@ const computeEquityAt = (assets, { priceMap, macroRates, usdRate, calcDate }) =>
             totalEquity += accrueFixedIncomeValue(asset, { ...macroRates, calcDate });
             totalInvested += asset.totalCost;
         } else {
-            const price = priceMap.get(asset.ticker)?.price || 0;
+            const close = closeMap?.get(historyStorageKey(asset.ticker, asset.type)) || 0;
+            const price = close > 0 ? close : (priceMap.get(asset.ticker)?.price || 0);
             if (price > 0) {
                 totalEquity += asset.quantity * price * multiplier;
                 // Custo com o câmbio das compras (mesma base do fluxo de aportes,
@@ -157,8 +188,8 @@ const computeEquityAt = (assets, { priceMap, macroRates, usdRate, calcDate }) =>
 //   cron in-app e Render Cron Job.
 // - Mantém a cadeia de cotas (TWRR) buscando o snapshot imediatamente ANTERIOR ao dia.
 // Retorna: 'created' | 'exists' | 'empty' | 'anomaly' | 'reset-guard'.
-const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = null, force = false } = {}) => {
-    const { priceMap, macroRates, usdRate, getUsdRateForDate } = ctx;
+export const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = null, force = false } = {}) => {
+    const { priceMap, closeMap, macroRates, usdRate, getUsdRateForDate } = ctx;
     const bounds = brDayBounds(dayStr);
     const calcDate = brCalcDate(dayStr);
     const userId = wallet.user?._id || wallet.user;
@@ -166,7 +197,7 @@ const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = null, f
     const calculatedAt = new Date();
 
     const positions = assets || await UserAsset.find({ user: userId, wallet: walletId });
-    const { totalEquity, totalInvested } = computeEquityAt(positions, { priceMap, macroRates, usdRate, calcDate });
+    const { totalEquity, totalInvested } = computeEquityAt(positions, { priceMap, closeMap, macroRates, usdRate, calcDate });
     if (!(totalEquity > 0)) return 'empty';
 
     // Snapshot anterior (cota/Dietz) — estritamente antes deste dia BR.
@@ -231,8 +262,12 @@ const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = null, f
         }
     }
 
-    const divData = await financialService.calculateUserDividends(userId, walletId);
-    const totalDividends = divData.totalAllTime;
+    // Mesma regra do rebuild: acumulado por EX-DATE com a quantidade da época.
+    // `calculateUserDividends` (por data de PAGAMENTO, quantidade de HOJE) segue
+    // servindo a tela de Proventos, mas não pode alimentar o snapshot: as duas
+    // definições no mesmo campo faziam `profit`/`profitPercent` pular sozinhos no
+    // primeiro rebuild.
+    const totalDividends = await financialService.accruedDividendsThroughDay(userId, walletId, dayStr);
 
     const payload = {
         user: userId,
@@ -292,7 +327,7 @@ const backfillUserGap = async (wallet, todayStr, ctx, assets) => {
 export const backfillMissedSnapshots = async () => {
     try {
         const todayStr = brDayStr(new Date());
-        const ctx = await loadSnapshotContext();
+        const ctx = await loadSnapshotContext(todayStr);
         const wallets = await Wallet.find({}).populate('user', 'email').select('_id user name');
         let created = 0;
         for (const wallet of wallets) {
@@ -329,7 +364,7 @@ export const runDailySnapshot = async (force = false) => {
 
     logger.info(`📸 Iniciando Snapshot Patrimonial Diário (Auditado) [Force: ${force}]...`);
     try {
-        const ctx = await loadSnapshotContext();
+        const ctx = await loadSnapshotContext(todayStr);
         // Fase 2: itera CARTEIRAS (não usuários) — 1 snapshot/dia por carteira,
         // já que cada uma tem seu próprio histórico/TWRR desde a criação.
         const wallets = await Wallet.find({}).populate('user', 'email').select('_id user name');
