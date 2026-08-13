@@ -135,7 +135,42 @@ describe('financialService V5 — aplicação de transações', () => {
     ]);
     const result = financialService._applyDayTransactions(ctx);
     expect(result).toMatchObject({ txIndex: 2, dayFlowNominal: 0 });
-    expect(ctx.portfolio.BTC).toEqual({ qty: 0, cost: 0 });
+    expect(ctx.portfolio.BTC).toEqual({ qty: 0, cost: 0, costBrl: 0 });
+  });
+
+  it('acumula o custo em BRL pelo câmbio de CADA compra, não pelo do dia do cursor', () => {
+    // Duas compras em dias de câmbio diferente, ambas processadas no mesmo cursor.
+    const rates = { '2026-07-20': 4, '2026-07-30': 5 };
+    const ctx = context(
+      [
+        tx({ date: new Date('2026-07-20T12:00:00Z') }),
+        tx({ date: new Date('2026-07-30T12:00:00Z') }),
+      ],
+      new Map(),
+      (dayKey) => rates[dayKey] ?? 5,
+    );
+    financialService._applyDayTransactions(ctx);
+
+    // Custo nativo US$20; em reais 10×4 + 10×5 = 90 (e não 20×5 = 100).
+    expect(ctx.portfolio.BTC.cost).toBe(20);
+    expect(ctx.portfolio.BTC.costBrl).toBe(90);
+  });
+
+  it('câmbio carimbado no lançamento prevalece sobre o resolvedor', () => {
+    const ctx = context([tx({ fxRate: 4.2 })], new Map(), () => 5);
+    financialService._applyDayTransactions(ctx);
+    expect(ctx.portfolio.BTC.costBrl).toBeCloseTo(42, 6);
+  });
+
+  it('venda parcial baixa o custo em BRL proporcionalmente (não reprecifica o resto)', () => {
+    const ctx = context([
+      tx({ date: new Date('2026-07-20T12:00:00Z') }),
+      tx({ type: 'SELL', quantity: 0.0005, date: new Date('2026-07-30T12:00:00Z') }),
+    ], new Map(), (dayKey) => (dayKey === '2026-07-20' ? 4 : 5));
+    financialService._applyDayTransactions(ctx);
+
+    // Comprou 0,001 por R$40; vendeu metade → sobra R$20 de custo, no câmbio da compra.
+    expect(ctx.portfolio.BTC.costBrl).toBeCloseTo(20, 6);
   });
 
   it('não processa transação de dia futuro', () => {
@@ -164,7 +199,27 @@ describe('financialService V5 — marcação a mercado', () => {
     expect(result).toMatchObject({ totalEquityNominal: 300, totalInvested: 300, hasPosition: true });
   });
 
-  it('converte posição americana e custo pelo mesmo câmbio', () => {
+  it('marca a mercado pelo câmbio do dia mas mantém o custo no câmbio da compra', () => {
+    const result = financialService._markPortfolioToMarket({
+      cursorIso: '2026-07-30',
+      // Comprado a US$150 quando o dólar era 4,00; hoje o dólar está 5,00.
+      portfolio: { AAPL: { qty: 2, cost: 300, costBrl: 1_200 } },
+      fixedIncomeState: {},
+      assetMetadataMap: new Map([['AAPL', { type: 'STOCK_US' }]]),
+      priceCacheMap: new Map([['AAPL', new Map([['2026-07-30', { close: 200, adjClose: 195 }]])]]),
+      lastKnownPrices: {},
+      usdRateForDay: 5,
+    });
+    expect(result).toMatchObject({
+      totalEquityNominal: 2_000,  // patrimônio: marcado pelo câmbio do dia
+      totalEquityAdjusted: 1_950,
+      totalInvested: 1_200,       // custo: congelado no câmbio da compra
+    });
+    // O ganho cambial aparece no resultado em vez de se cancelar.
+    expect(result.totalEquityNominal - result.totalInvested).toBe(800);
+  });
+
+  it('portfolio sem custo em BRL (chamador antigo) cai no cálculo legado sem gerar NaN', () => {
     const result = financialService._markPortfolioToMarket({
       cursorIso: '2026-07-30',
       portfolio: { AAPL: { qty: 2, cost: 300 } },
@@ -174,10 +229,6 @@ describe('financialService V5 — marcação a mercado', () => {
       lastKnownPrices: {},
       usdRateForDay: 5,
     });
-    expect(result).toMatchObject({
-      totalEquityNominal: 2_000,
-      totalEquityAdjusted: 1_950,
-      totalInvested: 1_500,
-    });
+    expect(result.totalInvested).toBe(1_500);
   });
 });

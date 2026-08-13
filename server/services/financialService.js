@@ -219,7 +219,9 @@ export const financialService = {
             if (txDateIso > cursorIso) break;
 
             if (!portfolio[tx.ticker]) {
-                portfolio[tx.ticker] = { qty: 0, cost: 0 };
+                // cost = moeda nativa; costBrl = mesmo custo com o câmbio de cada
+                // compra congelado (é ele que alimenta o Valor Aplicado histórico).
+                portfolio[tx.ticker] = { qty: 0, cost: 0, costBrl: 0 };
                 const meta = assetMetadataMap.get(tx.ticker);
                 if (meta && (meta.type === 'FIXED_INCOME' || meta.type === 'CASH')) {
                     fixedIncomeState[tx.ticker] = {
@@ -236,7 +238,11 @@ export const financialService = {
             const meta = assetMetadataMap.get(tx.ticker);
             const isFixed = meta?.type === 'FIXED_INCOME' || meta?.type === 'CASH';
             const txIsDollarized = resolveTransactionCurrency(tx, meta) === 'USD';
-            const txUsdRate = txIsDollarized ? getUsdRateForDate(cursorIso) : 1;
+            // Câmbio do PRÓPRIO lançamento (carimbado na compra; senão reconstruído
+            // pela data dele). Antes usava o câmbio do dia do CURSOR, que difere da
+            // data real quando o lançamento cai em fim de semana/feriado e é
+            // processado no pregão seguinte.
+            const txUsdRate = txIsDollarized ? effectiveFxRate(tx, 'USD', getUsdRateForDate) : 1;
             if (!Number.isFinite(Number(txUsdRate)) || Number(txUsdRate) <= 0) {
                 throw new RangeError(`Câmbio USD/BRL inválido para ${cursorIso}: ${txUsdRate}`);
             }
@@ -258,6 +264,7 @@ export const financialService = {
             if (tx.type === 'BUY') {
                 portfolio[tx.ticker].qty += tx.quantity;
                 portfolio[tx.ticker].cost += tx.totalValue;
+                portfolio[tx.ticker].costBrl += tx.totalValue * txUsdRate;
                 if (isFixed) {
                     if (!fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker] = { currentValue: 0, rate: meta?.fixedIncomeRate || 100, index: meta?.fixedIncomeIndex || null, spread: meta?.fixedIncomeSpread || 0 };
                     fixedIncomeState[tx.ticker].currentValue += tx.totalValue;
@@ -268,9 +275,14 @@ export const financialService = {
                 if (!lastKnownPrices[tx.ticker]) lastKnownPrices[tx.ticker] = { close: tx.price, adjClose: txAdjPrice };
 
             } else if (tx.type === 'SELL') {
-                const currentAvg = portfolio[tx.ticker].qty > 0 ? portfolio[tx.ticker].cost / portfolio[tx.ticker].qty : 0;
+                const qtyBefore = portfolio[tx.ticker].qty;
+                const currentAvg = qtyBefore > 0 ? portfolio[tx.ticker].cost / qtyBefore : 0;
+                // Baixa proporcional em BRL — a venda não reprecifica o câmbio das
+                // compras que ficaram (mesma regra de recalculatePosition).
+                const soldFraction = qtyBefore > 0 ? tx.quantity / qtyBefore : 0;
                 portfolio[tx.ticker].qty -= tx.quantity;
                 portfolio[tx.ticker].cost -= (tx.quantity * currentAvg);
+                portfolio[tx.ticker].costBrl -= portfolio[tx.ticker].costBrl * soldFraction;
                 if (isFixed) {
                     fixedIncomeState[tx.ticker].currentValue = Math.max(0, fixedIncomeState[tx.ticker].currentValue - tx.totalValue);
                 }
@@ -281,6 +293,7 @@ export const financialService = {
             if (portfolio[tx.ticker].qty < QUANTITY_EPSILON) {
                 portfolio[tx.ticker].qty = 0;
                 portfolio[tx.ticker].cost = 0;
+                portfolio[tx.ticker].costBrl = 0;
                 if (fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker].currentValue = 0;
             }
             txIndex++;
@@ -344,9 +357,15 @@ export const financialService = {
             hasPosition = true;
 
             const meta = assetMetadataMap.get(ticker);
+            // Câmbio do dia vale para MARCAR A MERCADO (patrimônio), nunca para o
+            // custo: reconverter o custo faz o Valor Aplicado histórico oscilar
+            // junto com o dólar e cancela o resultado cambial contra o patrimônio.
             const fxRate = isDollarizedAsset(meta) ? usdRateForDay : 1;
 
-            totalInvested += pos.cost * fxRate;
+            // `?? ` protege contra portfolio montado por chamador antigo (sem o
+            // acumulado em BRL): melhor cair no cálculo legado do que injetar NaN
+            // num snapshot, que só estouraria lá na frente na validação do schema.
+            totalInvested += pos.costBrl ?? (pos.cost * fxRate);
 
             let markClose = 0;
             let markAdjClose = 0;
