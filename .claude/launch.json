@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "monstro",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["D:/Github/alimente-o-monstro/_dev-server.js"],
+      "port": 5599
+    }
+  ]
+}

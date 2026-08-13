@@ -1,0 +1,1499 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ALIMENTE O MONSTRO</title>
+<style>
+/* ============================ base ============================ */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07060a; --bg2:#0d0b13; --panel:#12101a; --panel2:#181524; --line:#2a2438;
+  --txt:#e6e0f0; --dim:#9a90b0; --dimmer:#6b6280;
+  --bio:#7ee787; --bile:#c6ff4d; --gene:#ff5fa2; --gold:#ffcc4d;
+  --danger:#ff5b5b; --acc:#a066ff;
+  --font:'Trebuchet MS','Segoe UI',system-ui,sans-serif;
+}
+html,body{height:100%}
+body{
+  background:radial-gradient(120% 90% at 50% 0%,#160f22 0%,var(--bg) 60%);
+  color:var(--txt);font-family:var(--font);overflow-x:hidden;
+  -webkit-tap-highlight-color:transparent;
+}
+button{font-family:inherit;color:inherit;cursor:pointer;border:0;background:none}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:#0b0910}
+::-webkit-scrollbar-thumb{background:#2e2740;border-radius:9px}
+::-webkit-scrollbar-thumb:hover{background:#413659}
+
+/* ============================ layout ============================ */
+#app{max-width:1500px;margin:0 auto;padding:8px 10px 40px}
+#topbar{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;
+  background:linear-gradient(180deg,#1a1428,#12101a);
+  border:1px solid var(--line);border-radius:12px;padding:8px 12px;
+  position:sticky;top:6px;z-index:30;box-shadow:0 8px 30px #0009;
+}
+.res{display:flex;align-items:center;gap:7px;padding:4px 10px;border-radius:9px;background:#0d0b14;border:1px solid #241e33}
+.res .ic{font-size:17px;line-height:1}
+.res .v{font-weight:bold;font-size:15px;letter-spacing:.3px}
+.res .l{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
+.res .sub{font-size:10px;color:var(--dimmer)}
+.v-bio{color:var(--bio)}.v-bile{color:var(--bile)}.v-gene{color:var(--gene)}
+#brand{font-weight:800;letter-spacing:3px;font-size:13px;color:#6f5f92;margin-right:auto;padding-left:4px}
+#topright{display:flex;gap:6px;margin-left:auto}
+.icobtn{width:32px;height:32px;border-radius:8px;background:#0d0b14;border:1px solid #241e33;font-size:15px;display:flex;align-items:center;justify-content:center}
+.icobtn:hover{background:#1c1730;border-color:#3d3357}
+
+main{display:grid;grid-template-columns:320px minmax(0,1fr) 350px;gap:12px;margin-top:12px;align-items:start}
+.panel{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.panel>h2{
+  font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#8a7ab0;
+  padding:10px 12px;border-bottom:1px solid var(--line);background:#150f22;display:flex;justify-content:space-between;align-items:center
+}
+.plist{max-height:calc(100vh - 190px);overflow-y:auto;padding:8px}
+@media(max-width:1180px){
+  main{grid-template-columns:1fr}
+  .plist{max-height:none}
+  #stage-col{order:-1}
+}
+
+/* ============================ arena ============================ */
+#arena{
+  position:relative;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  background:radial-gradient(70% 60% at 50% 42%,#241634 0%,#0e0a16 65%,#07060a 100%);
+  box-shadow:inset 0 0 90px #000a;
+}
+#cv{display:block;width:100%;height:auto;touch-action:manipulation}
+#stagename{
+  position:absolute;top:10px;left:0;right:0;text-align:center;pointer-events:none;
+  font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#c9b6ff;text-shadow:0 0 14px #a066ff88
+}
+#stagenum{font-size:10px;color:var(--dimmer);letter-spacing:2px}
+#buffs{position:absolute;top:44px;left:0;right:0;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;pointer-events:none}
+.buff{font-size:10px;padding:3px 8px;border-radius:20px;background:#2a1040cc;border:1px solid #6c3aa8;color:#e6c8ff;letter-spacing:1px}
+.buff.bad{background:#3a0f14cc;border-color:#8b2b32;color:#ffc0c0}
+#craving{
+  position:absolute;bottom:8px;left:8px;right:8px;pointer-events:none;
+  display:none;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;
+  background:#160f22e0;border:1px solid #4c3b6e
+}
+#craving.on{display:flex}
+#craving .txt{font-size:12px;color:#ffd9a0;flex:1}
+#craving .big{font-size:20px}
+.tbar{height:4px;background:#241d33;border-radius:4px;overflow:hidden;flex:1;max-width:120px}
+.tbar i{display:block;height:100%;background:var(--gold);transition:width .2s linear}
+
+#hud{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}
+.meter{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:9px 12px}
+.meter .top{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:6px;letter-spacing:1px}
+.bar{height:12px;border-radius:8px;background:#0a0810;overflow:hidden;border:1px solid #241e33;position:relative}
+.bar i{display:block;height:100%;transition:width .18s ease-out}
+#xpfill{background:linear-gradient(90deg,#6b3fa0,#c06bff)}
+#stfill{background:linear-gradient(90deg,#4d7a2b,#b6ff4d)}
+.bar .lbl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;letter-spacing:1px;color:#0009;font-weight:bold;text-shadow:0 0 3px #fff6}
+
+#foods{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+.food{
+  position:relative;min-width:70px;padding:7px 9px;border-radius:11px;background:var(--panel);
+  border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:2px;transition:.12s
+}
+.food:hover{border-color:#4d3f6b;transform:translateY(-2px)}
+.food.sel{border-color:var(--gold);background:#241a10;box-shadow:0 0 16px #ffcc4d33}
+.food.want{border-color:#ff8a4d;animation:pulseFood 1s infinite}
+.food.lock{opacity:.32;cursor:not-allowed}
+.food .e{font-size:20px}
+.food .n{font-size:9px;letter-spacing:1px;color:var(--dim);text-transform:uppercase}
+.food .m{font-size:10px;color:var(--bio);font-weight:bold}
+.food .bored{position:absolute;bottom:0;left:0;height:3px;background:var(--danger);border-radius:0 0 0 10px}
+@keyframes pulseFood{0%,100%{box-shadow:0 0 0 #ff8a4d00}50%{box-shadow:0 0 18px #ff8a4d99}}
+
+#actions{display:flex;gap:8px;margin-top:8px}
+.bigbtn{
+  flex:1;padding:12px;border-radius:12px;font-weight:bold;letter-spacing:2px;font-size:13px;
+  background:linear-gradient(180deg,#2e5a1f,#1d3a13);border:1px solid #4f8a33;color:#d6ffb0;transition:.12s
+}
+.bigbtn:hover{filter:brightness(1.2)}
+.bigbtn:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.7)}
+.bigbtn.ready{animation:readyGlow 1.1s infinite}
+.bigbtn.asc{background:linear-gradient(180deg,#5a1f45,#38122b);border-color:#a3357c;color:#ffc6e8}
+@keyframes readyGlow{0%,100%{box-shadow:0 0 0 #b6ff4d00}50%{box-shadow:0 0 24px #b6ff4d66}}
+
+/* ============================ items ============================ */
+.item{
+  width:100%;text-align:left;display:grid;grid-template-columns:38px 1fr auto;gap:9px;align-items:center;
+  padding:8px;border-radius:11px;border:1px solid transparent;background:#0e0c15;margin-bottom:6px;transition:.1s
+}
+.item:hover{background:#191330;border-color:#3a3055}
+.item.can{border-color:#2f5f2c}
+.item.no{opacity:.5}
+.item.owned{border-color:#5b3f8f;background:#160f26}
+.item .ic{font-size:22px;text-align:center;filter:drop-shadow(0 0 6px #0008)}
+.item .nm{font-size:12.5px;font-weight:bold;letter-spacing:.4px}
+.item .ds{font-size:10.5px;color:var(--dim);line-height:1.35;margin-top:2px}
+.item .rt{text-align:right}
+.item .cst{font-size:12px;font-weight:bold;white-space:nowrap}
+.item .qt{font-size:16px;font-weight:bold;color:#fff;opacity:.85}
+.item .sm{font-size:9px;color:var(--dimmer);letter-spacing:.5px}
+.tag{display:inline-block;font-size:9px;padding:1px 5px;border-radius:5px;background:#2a2140;color:#b9a6e0;margin-right:4px;letter-spacing:.5px}
+
+#tabs{display:flex;border-bottom:1px solid var(--line);background:#150f22}
+#tabs button{flex:1;padding:9px 4px;font-size:10.5px;letter-spacing:1px;color:var(--dimmer);border-bottom:2px solid transparent;text-transform:uppercase}
+#tabs button.on{color:#e6d8ff;border-bottom-color:var(--acc);background:#1d1533}
+.tabpane{display:none}
+.tabpane.on{display:block}
+
+#buymode{display:flex;gap:3px}
+#buymode button{font-size:10px;padding:2px 7px;border-radius:6px;background:#0d0b14;border:1px solid #241e33;color:var(--dim)}
+#buymode button.on{background:#2a2140;color:#fff;border-color:#4a3a6e}
+
+.emptyhint{padding:22px 14px;text-align:center;color:var(--dimmer);font-size:11.5px;line-height:1.6}
+
+/* ============================ modal / toast ============================ */
+#modalwrap{position:fixed;inset:0;background:#000c;backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;z-index:100;padding:16px}
+#modalwrap.on{display:flex}
+#modal{max-width:520px;width:100%;max-height:86vh;overflow:auto;background:linear-gradient(180deg,#1b1430,#110d1c);border:1px solid #453765;border-radius:16px;padding:22px;box-shadow:0 30px 90px #000}
+#modal h3{font-size:17px;letter-spacing:1px;margin-bottom:10px;color:#e9d9ff}
+#modal p{font-size:13px;color:var(--dim);line-height:1.65;margin-bottom:10px}
+#modal .row{display:flex;gap:8px;margin-top:16px}
+#modal .row button{flex:1;padding:11px;border-radius:10px;background:#2a2140;border:1px solid #4a3a6e;font-size:12px;letter-spacing:1px;font-weight:bold}
+#modal .row button.pri{background:linear-gradient(180deg,#5a1f45,#38122b);border-color:#a3357c;color:#ffc6e8}
+#modal .row button.dgr{background:#3a1414;border-color:#8b2b32;color:#ffb0b0}
+#modal ul{margin:8px 0 0 18px;color:var(--dim);font-size:12.5px;line-height:1.8}
+#modal b{color:var(--txt)}
+#toasts{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:120;display:flex;flex-direction:column-reverse;gap:6px;align-items:center;pointer-events:none}
+.toast{
+  padding:9px 16px;border-radius:10px;background:#1c1430ee;border:1px solid #4a3a6e;font-size:12.5px;
+  animation:tin .3s ease-out;box-shadow:0 10px 30px #000a;max-width:92vw;text-align:center
+}
+.toast.good{border-color:#3f7a35;color:#d0ffc0}
+.toast.bad{border-color:#8b2b32;color:#ffc0c0}
+.toast.gold{border-color:#8a6a1f;color:#ffe9a8}
+@keyframes tin{from{opacity:0;transform:translateY(14px)}to{opacity:1}}
+
+.ach{display:inline-flex;flex-direction:column;align-items:center;width:60px;padding:6px 2px;border-radius:9px;background:#0e0c15;border:1px solid #241e33;margin:3px;text-align:center}
+.ach.got{border-color:#7a5f1f;background:#241d0e}
+.ach .e{font-size:19px;filter:grayscale(1);opacity:.35}
+.ach.got .e{filter:none;opacity:1}
+.ach .t{font-size:8px;color:var(--dimmer);line-height:1.2;margin-top:3px}
+.ach.got .t{color:#e0c98a}
+#achwrap{display:flex;flex-wrap:wrap;justify-content:center;padding:8px}
+.foot{text-align:center;font-size:10px;color:#463c5e;margin-top:14px;letter-spacing:1px}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="topbar">
+    <div id="brand">🩸 ALIMENTE&nbsp;O&nbsp;MONSTRO</div>
+    <div class="res"><span class="ic">🟢</span><div><div class="v v-bio" id="r-bio">0</div><div class="l">Biomassa</div></div><div class="sub" id="r-bps">0/s</div></div>
+    <div class="res"><span class="ic">🧪</span><div><div class="v v-bile" id="r-bile">0</div><div class="l">Bile</div></div></div>
+    <div class="res" id="r-genewrap" style="display:none"><span class="ic">🧬</span><div><div class="v v-gene" id="r-gene">0</div><div class="l">Genes</div></div></div>
+    <div id="topright">
+      <button class="icobtn" id="btn-sound" title="Som">🔊</button>
+      <button class="icobtn" id="btn-help" title="Como jogar">❓</button>
+      <button class="icobtn" id="btn-opts" title="Opções">⚙️</button>
+    </div>
+  </div>
+
+  <main>
+    <!-- ---------- alimentadores ---------- -->
+    <section class="panel">
+      <h2>Alimentadores
+        <span id="buymode">
+          <button data-b="1" class="on">x1</button>
+          <button data-b="10">x10</button>
+          <button data-b="100">x100</button>
+          <button data-b="max">Máx</button>
+        </span>
+      </h2>
+      <div class="plist" id="feederlist"></div>
+    </section>
+
+    <!-- ---------- arena ---------- -->
+    <section id="stage-col">
+      <div id="arena">
+        <canvas id="cv" width="640" height="640"></canvas>
+        <div id="stagename">—<div id="stagenum"></div></div>
+        <div id="buffs"></div>
+        <div id="craving"><span class="big" id="cr-emoji">🦴</span><span class="txt" id="cr-txt"></span><span class="tbar"><i id="cr-bar"></i></span></div>
+      </div>
+
+      <div id="foods"></div>
+
+      <div id="hud">
+        <div class="meter">
+          <div class="top"><span>ESTÔMAGO</span><span id="st-txt">0 / 0</span></div>
+          <div class="bar"><i id="stfill" style="width:0"></i><span class="lbl" id="st-lbl"></span></div>
+        </div>
+        <div class="meter">
+          <div class="top"><span>EVOLUÇÃO</span><span id="xp-txt">0 / 0</span></div>
+          <div class="bar"><i id="xpfill" style="width:0"></i></div>
+        </div>
+      </div>
+
+      <div id="actions">
+        <button class="bigbtn" id="btn-digest">DIGERIR</button>
+        <button class="bigbtn asc" id="btn-ascend" style="display:none">METAMORFOSE</button>
+      </div>
+    </section>
+
+    <!-- ---------- evolução ---------- -->
+    <section class="panel">
+      <div id="tabs">
+        <button data-t="mut" class="on">Mutações</button>
+        <button data-t="org">Órgãos</button>
+        <button data-t="gen">Genes</button>
+        <button data-t="ach">Troféus</button>
+      </div>
+      <div class="plist">
+        <div class="tabpane on" id="pane-mut"></div>
+        <div class="tabpane" id="pane-org"></div>
+        <div class="tabpane" id="pane-gen"></div>
+        <div class="tabpane" id="pane-ach"><div id="achwrap"></div></div>
+      </div>
+    </section>
+  </main>
+  <div class="foot">clique no monstro para alimentar · o jogo salva sozinho</div>
+</div>
+
+<div id="modalwrap"><div id="modal"></div></div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   ALIMENTE O MONSTRO — idle/incremental
+   Um arquivo, zero dependências. Tudo procedural (inclusive o monstro).
+   ===================================================================== */
+
+/* ------------------------------ util ------------------------------ */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const SUF = ['','K','M','B','T','Qa','Qi','Sx','Sp','Oc','No','Dc','Ud','Dd','Td','Qd','Qq','Sd','St','Od','Nd','Vg'];
+function fmt(n){
+  if(!isFinite(n)) return '∞';
+  if(n<0) return '-'+fmt(-n);
+  if(n<10)   return (Math.round(n*10)/10).toString().replace('.0','');
+  if(n<1000) return Math.floor(n).toString();
+  let t=0; while(n>=1000 && t<SUF.length-1){ n/=1000; t++; }
+  return (n<10?n.toFixed(2):n<100?n.toFixed(1):Math.floor(n)) + SUF[t];
+}
+function fmtTime(s){
+  s=Math.max(0,Math.floor(s));
+  if(s<60) return s+'s';
+  if(s<3600) return Math.floor(s/60)+'m '+(s%60)+'s';
+  return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m';
+}
+function mulberry32(a){ return function(){ a|=0;a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const rnd  = (a,b)=>a+Math.random()*(b-a);
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+
+/* ---------------------------- balanceamento ---------------------------- */
+/* Mexa aqui pra acelerar/desacelerar o jogo inteiro. */
+const T = {
+  COST_GROWTH   : 1.15,  // encarecimento por alimentador comprado
+  STOMACH_SECS  : 30,    // segundos de renda que cabem no estômago
+  BILE_BASE     : 1.0,   // bile por digestão completa no estágio 1
+  BILE_STAGE    : 1.72,  // multiplicador de bile por estágio
+  XP_NEED       : 8,     // xp p/ sair do estágio 1
+  XP_NEED_GROW  : 1.45,
+  XP_GAIN_GROW  : 1.40,
+  FRENZY_SECS   : 15,
+  FRENZY_MULT   : 2,
+  BOREDOM_START : 18,    // mordidas na mesma comida antes do enjoo
+  BOREDOM_FULL  : 70,    // mordidas até o enjoo máximo (x0.4)
+  EVENT_MIN     : 55, EVENT_MAX: 130,
+  CRAVE_MIN     : 40, CRAVE_MAX: 85,
+  CRAVE_SECS    : 26, CRAVE_MULT: 5,
+  OFFLINE_CAP_H : 8,
+  ASCEND_STAGE  : 8,     // estágio mínimo p/ metamorfose
+};
+
+/* ------------------------------ dados ------------------------------ */
+const STAGES = ['Gosma Faminta','Larva Ocular','Saco de Dentes','Tumor Ambulante','Bocarra Pulsante',
+  'Carniceiro de Vísceras','Aberração Multiocular','Horror Tentacular','Praga Devoradora','Leviatã de Carne',
+  'Abismo com Bocas','Deus Estomacal','Carne que Sonha','Fome Primordial','Entidade Indescritível'];
+const stageName = s => s<=STAGES.length ? STAGES[s-1] : 'Coisa Sem Nome ' + '★'.repeat(Math.min(5,s-STAGES.length));
+
+const FOODS = [
+  {id:'larva',  e:'🐛', n:'Larvas',   m:1.00, stage:1},
+  {id:'carne',  e:'🍖', n:'Carne',    m:1.18, stage:1},
+  {id:'osso',   e:'🦴', n:'Ossos',    m:1.45, stage:3},
+  {id:'sangue', e:'🩸', n:'Sangue',   m:1.85, stage:5},
+  {id:'cerebro',e:'🧠', n:'Cérebros', m:2.40, stage:7},
+  {id:'alma',   e:'👻', n:'Almas',    m:3.20, stage:10},
+];
+
+const FEEDERS = [
+  {id:'larvario', e:'🪱', n:'Larvário',            d:'Um balde de vermes que nunca esvazia.',            cost:15,      bps:0.2},
+  {id:'ratos',    e:'🐀', n:'Ratos Mutantes',      d:'Se reproduzem mais rápido do que o monstro come.', cost:110,     bps:1.1},
+  {id:'poco',     e:'🕳️', n:'Poço de Carne',       d:'Ninguém pergunta de onde vem.',                    cost:1250,    bps:8},
+  {id:'colmeia',  e:'🐝', n:'Colmeia Carnívora',   d:'Insetos que trazem o jantar (e às vezes o vizinho).', cost:13000, bps:47},
+  {id:'rebanho',  e:'🐖', n:'Rebanho Aberrante',   d:'Gado de seis patas, criado no escuro.',            cost:145000,  bps:260},
+  {id:'clones',   e:'🧫', n:'Fábrica de Clones',   d:'Carne impressa em série, sem alma inclusa.',       cost:1.6e6,   bps:1400},
+  {id:'portal',   e:'🌀', n:'Portal de Abate',     d:'Abre em cima de um matadouro em outra dimensão.',  cost:2.1e7,   bps:7800},
+  {id:'almas',    e:'⛪', n:'Fazenda de Almas',     d:'Colheita silenciosa. Ninguém sente falta.',        cost:3.4e8,   bps:44000},
+  {id:'reator',   e:'☢️', n:'Reator de Vísceras',  d:'Fissão de órgãos. Extremamente ilegal.',           cost:5.2e9,   bps:2.6e5},
+  {id:'buraco',   e:'🕷️', n:'Buraco Negro Gástrico',d:'Come planetas. O monstro come o buraco.',         cost:7.8e10,  bps:1.6e6},
+];
+
+const MUTATIONS = [
+  {id:'mandibula', e:'🦷', n:'Mandíbula Dupla',      d:'Mordida x2.',                                      cost:5},
+  {id:'larvicult', e:'🪱', n:'Larvicultura',         d:'Larvário e Ratos produzem x4.',                    cost:12},
+  {id:'enzimas',   e:'🧪', n:'Enzimas Vorazes',      d:'Bile por digestão +80%.',                          cost:22},
+  {id:'salivar',   e:'💦', n:'Glândula Salivar',     d:'Desejos duram +60% e valem +50%.',                 cost:40},
+  {id:'estomago2', e:'🫃', n:'Segundo Estômago',     d:'Capacidade -30%: você digere muito mais vezes.',   cost:70},
+  {id:'serrilha',  e:'🗡️', n:'Dentes Serrilhados',   d:'12% de chance de mordida crítica (x10).',          cost:110},
+  {id:'simbiose',  e:'🦠', n:'Simbiose Parasitária', d:'+1% de produção a cada 5 alimentadores possuídos.',cost:190},
+  {id:'frenetico', e:'⚡', n:'Metabolismo Frenético', d:'Frenesi: x4 e o dobro de duração.',                cost:300},
+  {id:'carnificina',e:'🔥',n:'Carnificina',          d:'Eventos 45% mais frequentes.',                     cost:460},
+  {id:'tentaculos',e:'🐙', n:'Tentáculos Extras',    d:'+3 mordidas automáticas por segundo.',             cost:700},
+  {id:'corrosao',  e:'🧬', n:'Ácido Corrosivo',      d:'Produção global x2.',                              cost:1100},
+  {id:'hiperfagia',e:'😱', n:'Hiperfagia',           d:'Mordida ganha +1% da sua produção por segundo.',   cost:1800},
+  {id:'mitose',    e:'🧿', n:'Mitose Celular',       d:'Alimentadores produzem x2.',                       cost:3200},
+  {id:'ecolocal',  e:'📡', n:'Ecolocalização Fétida',d:'Ganho offline dobrado e limite +6h.',              cost:5500},
+  {id:'nucleo',    e:'💠', n:'Núcleo Instável',      d:'Produção global x3.',                              cost:11000},
+  {id:'singular',  e:'🕳️', n:'Singularidade Gástrica',d:'Bile x3. O estômago não tem mais fundo.',         cost:26000},
+];
+
+const ORGANS = [
+  {id:'coracao', e:'🫀', n:'Coração Extra',     d:lv=>`Mordida +${lv*25}%.`,                       base:8,  g:2.3},
+  {id:'pulmao',  e:'🫁', n:'Pulmão Séptico',    d:lv=>`${(lv*0.8).toFixed(1)} mordidas automáticas por segundo.`, base:14, g:2.4},
+  {id:'estomago',e:'🩻', n:'Estômago Adicional',d:lv=>`Bile por digestão +${lv*30}%.`,             base:20, g:2.5},
+  {id:'cerebro', e:'🧠', n:'Cérebro Encefálico',d:lv=>`Ganho offline +${lv*20}% · eventos bons +${lv*8}%.`, base:30, g:2.5},
+  {id:'glandula',e:'🧫', n:'Glândula Ácida',    d:lv=>lv?`Auto-digestão a ${Math.min(95,40+lv*11)}% de eficiência.`:'Digere sozinho quando encher (eficiência reduzida).', base:55, g:2.6},
+  {id:'olho',    e:'👁️', n:'Olho Onisciente',   d:lv=>`Produção global +${lv*15}%.`,               base:90, g:2.7},
+];
+
+const GENES = [
+  {id:'voraz',   e:'🩸', n:'Herança Voraz',    d:lv=>`Produção global +${lv*12}%.`,            cost:lv=>Math.ceil(1*Math.pow(1.6,lv)), max:50},
+  {id:'fome',    e:'👄', n:'Fome Eterna',      d:lv=>`Mordida +${lv*35}%.`,                    cost:lv=>Math.ceil(1*Math.pow(1.55,lv)), max:50},
+  {id:'memoria', e:'📜', n:'Memória Genética', d:lv=>`Começa com ${lv*10} de cada um dos 3 primeiros alimentadores.`, cost:lv=>Math.ceil(3*Math.pow(2.1,lv)), max:8},
+  {id:'casca',   e:'🥚', n:'Casca Primordial', d:lv=>`Começa no estágio ${1+lv}.`,             cost:lv=>Math.ceil(5*Math.pow(2.6,lv)), max:7},
+  {id:'antigo',  e:'🧪', n:'Sangue Antigo',    d:lv=>`Bile +${lv*20}%.`,                       cost:lv=>Math.ceil(2*Math.pow(1.8,lv)), max:25},
+  {id:'sonho',   e:'🌙', n:'Sono Profundo',    d:lv=>`Limite offline +${lv*4}h.`,              cost:lv=>Math.ceil(2*Math.pow(2,lv)),   max:10},
+  {id:'instinto',e:'🎯', n:'Instinto Predador',d:lv=>`Desejos aparecem ${lv*12}% mais rápido e o enjoo passa ${lv*15}% mais rápido.`, cost:lv=>Math.ceil(3*Math.pow(2,lv)), max:6},
+  {id:'nucleoG', e:'💀', n:'Núcleo Ancestral', d:lv=>`Genes ganhos na próxima metamorfose +${lv*25}%.`, cost:lv=>Math.ceil(8*Math.pow(2.4,lv)), max:10},
+];
+
+/* traços aleatórios sorteados a cada metamorfose — cada run fica diferente */
+const TRAITS = [
+  {id:'bocarra',   e:'👄', n:'Bocarra Abissal',    d:'Mordida x3, mas alimentadores -15%.',            f:m=>{m.bite*=3; m.prod*=0.85;}},
+  {id:'enxame',    e:'👁️', n:'Enxame de Olhos',    d:'Produção +60%.',                                 f:m=>{m.prod*=1.6;}},
+  {id:'acido',     e:'🧪', n:'Sangue Ácido',       d:'Bile x2,2.',                                     f:m=>{m.bile*=2.2;}},
+  {id:'famintos',  e:'🌀', n:'Fome Insaciável',    d:'Estômago 45% menor: digestões constantes.',      f:m=>{m.cap*=0.55;}},
+  {id:'colerico',  e:'😤', n:'Temperamento Colérico',d:'Frenesi dura 3x mais.',                        f:m=>{m.frenzy*=3;}},
+  {id:'gordo',     e:'🫄', n:'Obesidade Mórbida',  d:'Estômago 2x maior, bile x2,4 por digestão.',     f:m=>{m.cap*=2; m.bile*=2.4;}},
+  {id:'faminto',   e:'🦷', n:'Predador Nato',      d:'Desejos valem o dobro.',                          f:m=>{m.crave*=2;}},
+  {id:'simetrico', e:'♾️', n:'Corpo Simétrico',    d:'Produção +25% e mordida +80%.',                  f:m=>{m.prod*=1.25; m.bite*=1.8;}},
+  {id:'necrose',   e:'☠️', n:'Necrose Fértil',     d:'Produção x2, mas o estômago enche 60% mais devagar.', f:m=>{m.prod*=2; m.fill*=0.4;}},
+  {id:'parasita',  e:'🦠', n:'Hospedeiro Parasita',d:'Mordidas automáticas +4/s.',                     f:m=>{m.autobite+=4;}},
+];
+
+const ACHS = [
+  {id:'a1', e:'🐛', n:'Primeira mordida', c:s=>s.stats.bites>=1},
+  {id:'a2', e:'🍽️', n:'100 mordidas',    c:s=>s.stats.bites>=100},
+  {id:'a3', e:'🍴', n:'1000 mordidas',   c:s=>s.stats.bites>=1000},
+  {id:'a4', e:'🧪', n:'Primeira bile',   c:s=>s.stats.digests>=1},
+  {id:'a5', e:'🫗', n:'50 digestões',    c:s=>s.stats.digests>=50},
+  {id:'a6', e:'🪱', n:'25 larvários',    c:s=>s.feeders[0]>=25},
+  {id:'a7', e:'🐀', n:'50 ratos',        c:s=>s.feeders[1]>=50},
+  {id:'a8', e:'🕳️', n:'100 poços',       c:s=>s.feeders[2]>=100},
+  {id:'a9', e:'🌀', n:'Portal aberto',   c:s=>s.feeders[6]>=1},
+  {id:'a10',e:'🕷️', n:'Devora-mundos',   c:s=>s.feeders[9]>=1},
+  {id:'a11',e:'📈', n:'1M de biomassa',  c:s=>s.stats.totalBio>=1e6},
+  {id:'a12',e:'📊', n:'1B de biomassa',  c:s=>s.stats.totalBio>=1e9},
+  {id:'a13',e:'🌌', n:'1T de biomassa',  c:s=>s.stats.totalBio>=1e12},
+  {id:'a14',e:'🦷', n:'Estágio 5',       c:s=>s.stage>=5},
+  {id:'a15',e:'🐙', n:'Estágio 10',      c:s=>s.stage>=10},
+  {id:'a16',e:'💀', n:'Estágio 15',      c:s=>s.stage>=15},
+  {id:'a17',e:'🎯', n:'10 desejos',      c:s=>s.stats.cravings>=10},
+  {id:'a18',e:'🩸', n:'50 desejos',      c:s=>s.stats.cravings>=50},
+  {id:'a19',e:'🔥', n:'25 eventos',      c:s=>s.stats.events>=25},
+  {id:'a20',e:'🧬', n:'1ª metamorfose',  c:s=>s.stats.ascensions>=1},
+  {id:'a21',e:'👑', n:'5 metamorfoses',  c:s=>s.stats.ascensions>=5},
+  {id:'a22',e:'🦠', n:'Todas as mutações',c:s=>MUTATIONS.every(m=>s.mut[m.id])},
+];
+
+/* ------------------------------ estado ------------------------------ */
+const SAVEKEY = 'alimente-o-monstro-v1';
+
+function newGenome(seed){
+  const r = mulberry32(seed);
+  return {
+    seed,
+    hue   : Math.floor(r()*360),
+    hue2  : Math.floor(r()*360),
+    eyes  : 1 + Math.floor(r()*5),
+    arms  : Math.floor(r()*4),
+    spikes: Math.floor(r()*7),
+    horns : Math.floor(r()*3),
+    teeth : 4 + Math.floor(r()*7),
+    pust  : 2 + Math.floor(r()*7),
+    mouthW: 0.34 + r()*0.34,
+    squish: 0.82 + r()*0.34,
+    pupil : Math.floor(r()*3),      // 0 redonda · 1 fenda · 2 cruz
+    wob   : 0.6 + r()*1.1,
+  };
+}
+
+function newGame(keep){
+  const g = {
+    v:1, t:Date.now(),
+    bio:0, bile:0, gene:keep?keep.gene:0,
+    stage:1, xp:0,
+    stomach:0,
+    feeders: FEEDERS.map(()=>0),
+    mut:{}, org:{}, geneLv: keep?keep.geneLv:{},
+    ach: keep?keep.ach:{},
+    food:'larva', foodBites:0,
+    trait: null,
+    genome: newGenome(Math.floor(Math.random()*1e9)),
+    frenzy:0, buffs:{},
+    craving:null, craveT: rnd(25,45),
+    eventT: rnd(50,90),
+    stats: keep?keep.stats:{bites:0,digests:0,cravings:0,events:0,totalBio:0,ascensions:0,play:0},
+    runBio:0,
+    sound:true, buymode:1, tab:'mut',
+  };
+  // bônus de genes iniciais
+  const memo = (g.geneLv.memoria||0);
+  if(memo){ for(let i=0;i<3;i++) g.feeders[i] = memo*10; }
+  const casca = (g.geneLv.casca||0);
+  if(casca) g.stage = 1+casca;
+  if(keep) g.trait = pick(TRAITS).id;
+  return g;
+}
+
+let S = newGame();
+let offlineReport = null;
+
+function save(){ try{ S.t=Date.now(); localStorage.setItem(SAVEKEY, JSON.stringify(S)); }catch(e){} }
+function load(){
+  try{
+    const raw = localStorage.getItem(SAVEKEY); if(!raw) return false;
+    const d = JSON.parse(raw); if(!d || !d.genome) return false;
+    const base = newGame();
+    S = Object.assign(base, d);
+    S.stats   = Object.assign(base.stats, d.stats||{});
+    S.feeders = FEEDERS.map((_,i)=> (d.feeders&&d.feeders[i])||0);
+    S.mut = d.mut||{}; S.org = d.org||{}; S.geneLv = d.geneLv||{}; S.ach = d.ach||{}; S.buffs = d.buffs||{};
+    // progresso offline
+    const dt = clamp((Date.now()-(d.t||Date.now()))/1000, 0, 60*60*48);
+    if(dt>60){
+      const M = calc();
+      const capH = (T.OFFLINE_CAP_H + (S.geneLv.sonho||0)*4 + (S.mut.ecolocal?6:0));
+      const eff  = (0.5 + (S.org.cerebro||0)*0.2) * (S.mut.ecolocal?2:1);
+      const secs = Math.min(dt, capH*3600);
+      const gain = M.bps*secs*eff;
+      if(gain>0){
+        S.bio += gain; S.stats.totalBio += gain; S.runBio += gain;
+        S.stomach = Math.min(M.cap, S.stomach + gain*M.fill);
+        offlineReport = {secs, gain, eff};
+      }
+    }
+    return true;
+  }catch(e){ console.warn('save corrompido',e); return false; }
+}
+
+/* --------------------------- multiplicadores --------------------------- */
+function achCount(){ return Object.keys(S.ach).length; }
+
+function calc(){
+  const M = { bite:1, prod:1, bile:1, cap:1, fill:1, frenzy:1, crave:1, autobite:0 };
+
+  // genes permanentes
+  M.prod *= 1 + (S.geneLv.voraz||0)*0.12;
+  M.bite *= 1 + (S.geneLv.fome ||0)*0.35;
+  M.bile *= 1 + (S.geneLv.antigo||0)*0.20;
+
+  // traço da run
+  if(S.trait){ const t = TRAITS.find(x=>x.id===S.trait); if(t) t.f(M); }
+
+  // órgãos
+  M.bite *= 1 + (S.org.coracao||0)*0.25;
+  M.bile *= 1 + (S.org.estomago||0)*0.30;
+  M.prod *= 1 + (S.org.olho||0)*0.15;
+  M.autobite += (S.org.pulmao||0)*0.8;
+
+  // mutações
+  if(S.mut.mandibula) M.bite *= 2;
+  if(S.mut.enzimas)   M.bile *= 1.8;
+  if(S.mut.estomago2) M.cap  *= 0.7;
+  if(S.mut.frenetico) M.frenzy *= 2;
+  if(S.mut.salivar)   M.crave *= 1.5;
+  if(S.mut.tentaculos)M.autobite += 3;
+  if(S.mut.corrosao)  M.prod *= 2;
+  if(S.mut.mitose)    M.prod *= 2;
+  if(S.mut.nucleo)    M.prod *= 3;
+  if(S.mut.singular)  M.bile *= 3;
+  if(S.mut.simbiose){ const tot = S.feeders.reduce((a,b)=>a+b,0); M.prod *= 1 + Math.floor(tot/5)*0.01; }
+
+  // estágio + troféus
+  const stageMult = Math.pow(1.14, S.stage-1);
+  const achMult   = 1 + achCount()*0.01;
+  M.prod *= stageMult*achMult;
+  M.bite *= stageMult*achMult;
+
+  // buffs temporários
+  if(S.frenzy>0) M.prod *= (S.mut.frenetico?4:T.FRENZY_MULT), M.bite *= (S.mut.frenetico?4:T.FRENZY_MULT);
+  if(S.buffs.lua>0)  { M.prod*=3; M.bite*=3; }
+  if(S.buffs.voraz>0){ M.bite*=10; }
+  if(S.buffs.indig>0){ M.prod*=0.5; }
+  if(S.buffs.praga>0){ M.prod*=0.8; }
+
+  // produção dos alimentadores
+  let bps = 0;
+  FEEDERS.forEach((f,i)=>{
+    const q = S.feeders[i]; if(!q) return;
+    let mult = milestoneMult(q);
+    if(S.mut.larvicult && i<2) mult *= 4;
+    bps += f.bps*q*mult;
+  });
+  M.bps = bps*M.prod;
+
+  // poder de mordida
+  let bite = 1 + M.bps*(S.mut.hiperfagia?0.01:0);
+  bite *= M.bite * foodMult() * boredomMult();
+  if(S.craving && S.craving.food===S.food) bite *= T.CRAVE_MULT*M.crave;
+  M.bitePower = Math.max(1, bite);
+
+  // estômago
+  M.cap = Math.max(45, (M.bps + M.bitePower*2) * T.STOMACH_SECS) * M.cap;
+  return M;
+}
+function milestoneMult(q){ let m=1; [10,25,50,100,200,400].forEach(k=>{ if(q>=k) m*=2; }); return m; }
+function nextMilestone(q){ const ks=[10,25,50,100,200,400]; for(const k of ks) if(q<k) return k; return null; }
+function foodMult(){ const f = FOODS.find(x=>x.id===S.food); return f?f.m:1; }
+function boredomMult(){
+  const inst = 1 + (S.geneLv.instinto||0)*0.15;
+  const b = S.foodBites/inst;
+  if(b<=T.BOREDOM_START) return 1;
+  const t = (b-T.BOREDOM_START)/(T.BOREDOM_FULL-T.BOREDOM_START);
+  return clamp(1 - t*0.6, 0.4, 1);
+}
+function xpNeed(){ return T.XP_NEED*Math.pow(T.XP_NEED_GROW, S.stage-1); }
+function bileFor(fill){
+  const M = calc();
+  return T.BILE_BASE*Math.pow(T.BILE_STAGE, S.stage-1)*fill*M.bile;
+}
+function feederCost(i,qty){
+  const f=FEEDERS[i], owned=S.feeders[i], g=T.COST_GROWTH;
+  return f.cost*Math.pow(g,owned)*(Math.pow(g,qty)-1)/(g-1);
+}
+function maxAfford(i){
+  const f=FEEDERS[i], owned=S.feeders[i], g=T.COST_GROWTH;
+  const n = Math.floor(Math.log(S.bio*(g-1)/(f.cost*Math.pow(g,owned))+1)/Math.log(g));
+  return Math.max(0, n);
+}
+function organCost(o){ const lv=S.org[o.id]||0; return Math.ceil(o.base*Math.pow(o.g,lv)); }
+function ascendGain(){
+  const bonus = 1 + (S.geneLv.nucleoG||0)*0.25;
+  return Math.floor(3*Math.pow(S.runBio/1e7, 0.35)*bonus);
+}
+function canAscend(){ return S.stage>=T.ASCEND_STAGE && ascendGain()>=1; }
+
+/* ------------------------------ ações ------------------------------ */
+function gainBio(n, fromBite){
+  const M = MC;
+  S.bio += n; S.stats.totalBio += n; S.runBio += n;
+  S.stomach = Math.min(M.cap, S.stomach + n*M.fill);
+}
+
+function bite(x,y,silent){
+  const M = MC;
+  let amt = M.bitePower, crit=false;
+  if(S.mut.serrilha && Math.random()<0.12){ amt*=10; crit=true; }
+  gainBio(amt,true);
+  S.stats.bites++; S.foodBites++;
+
+  const cravingHit = S.craving && S.craving.food===S.food;
+  if(cravingHit){ S.craving.fed++; }
+
+  // visual
+  const f = FOODS.find(x=>x.id===S.food);
+  if(x!=null) throwFood(x,y,f?f.e:'🍖');
+  chomp(crit?1:0.6);
+  spawnFloat(mouth.x+rnd(-30,30), mouth.y-20, '+'+fmt(amt), crit?'#ffd24d':(cravingHit?'#ff9a4d':'#9dff8a'), crit?18:13);
+  if(!silent) sfx('chomp', crit);
+  if(crit){ shake(7); spawnFloat(mouth.x, mouth.y-52,'CRÍTICO!','#ffd24d',15); }
+}
+
+function autoBite(dt){
+  const rate = MC.autobite; if(rate<=0) return;
+  autoBite.acc = (autoBite.acc||0) + rate*dt;
+  while(autoBite.acc>=1){
+    autoBite.acc--;
+    const a = rnd(0,Math.PI*2), r = rnd(140,250);
+    bite(mon.x+Math.cos(a)*r, mon.y+Math.sin(a)*r, true);
+  }
+}
+
+function digest(auto){
+  const M = MC;
+  const fill = S.stomach/M.cap;
+  if(fill<0.999 && !auto) { toast('O estômago ainda não está cheio.','bad'); return; }
+  if(fill<=0.02) return;
+  let eff = auto ? Math.min(0.95, 0.40+(S.org.glandula||0)*0.11) : 1;
+  const bile = bileFor(fill)*eff;
+  const xp   = fill*Math.pow(T.XP_GAIN_GROW, S.stage-1)*eff;
+  S.bile += bile; S.xp += xp; S.stomach = 0; S.stats.digests++;
+  if(!auto){ S.frenzy = T.FRENZY_SECS*MC.frenzy; shake(14); }
+  burp();
+  spawnFloat(mon.x, mon.y-mon.r*0.9, '+'+fmt(bile)+' bile', '#c6ff4d', 20);
+  sfx('burp');
+  if(!auto) toast(`DIGESTÃO! +${fmt(bile)} bile · Frenesi ${Math.round(T.FRENZY_SECS*MC.frenzy)}s`,'good');
+  checkStage();
+}
+
+function checkStage(){
+  let up=false;
+  while(S.xp>=xpNeed()){
+    S.xp -= xpNeed(); S.stage++; up=true;
+  }
+  if(up){
+    shake(24); flash(0.55);
+    sfx('evolve');
+    toast(`EVOLUIU → ${stageName(S.stage)} (estágio ${S.stage})`,'gold');
+    const nf = FOODS.find(f=>f.stage===S.stage);
+    if(nf) toast(`Nova comida liberada: ${nf.e} ${nf.n}`,'gold');
+    buildFoods();
+    if(canAscend()) $('#btn-ascend').style.display='';
+  }
+}
+
+function buyFeeder(i){
+  let qty = S.buymode==='max' ? maxAfford(i) : S.buymode;
+  if(qty<=0) return;
+  let cost = feederCost(i,qty);
+  if(cost>S.bio){ // ajusta pra baixo
+    qty = Math.min(qty, maxAfford(i)); if(qty<=0){ sfx('nope'); return; }
+    cost = feederCost(i,qty);
+  }
+  S.bio -= cost; S.feeders[i]+=qty;
+  sfx('buy'); buildFeeders();
+  const nm = nextMilestone(S.feeders[i]);
+  if(S.feeders[i]>=10 && [10,25,50,100,200,400].includes(S.feeders[i]))
+    toast(`${FEEDERS[i].n}: marco de ${S.feeders[i]} — produção x2!`,'gold');
+}
+function buyMutation(m){
+  if(S.mut[m.id] || S.bile<m.cost){ sfx('nope'); return; }
+  S.bile-=m.cost; S.mut[m.id]=1; sfx('buy'); flash(.25);
+  toast(`Mutação: ${m.n}`,'good'); buildMutations();
+}
+function buyOrgan(o){
+  const c = organCost(o);
+  if(S.bile<c){ sfx('nope'); return; }
+  S.bile-=c; S.org[o.id]=(S.org[o.id]||0)+1; sfx('buy');
+  buildOrgans();
+}
+function buyGene(g){
+  const lv=S.geneLv[g.id]||0; if(lv>=g.max) return;
+  const c=g.cost(lv); if(S.gene<c){ sfx('nope'); return; }
+  S.gene-=c; S.geneLv[g.id]=lv+1; sfx('buy'); buildGenes();
+}
+
+function ascend(){
+  const gain = ascendGain();
+  const keep = { gene:S.gene+gain, geneLv:S.geneLv, ach:S.ach, stats:S.stats };
+  keep.stats.ascensions++;
+  S = newGame(keep);
+  S.genome = newGenome(Math.floor(Math.random()*1e9));
+  initMonster();
+  buildAll(); flash(1); shake(30); sfx('evolve');
+  const tr = TRAITS.find(t=>t.id===S.trait);
+  modal(`<h3>🧬 METAMORFOSE</h3>
+    <p>A carne se desfaz e volta diferente. Você ganhou <b class="v-gene">${fmt(gain)} genes</b>.</p>
+    <p>Traço desta encarnação: <b>${tr.e} ${tr.n}</b><br><span style="color:#9a90b0">${tr.d}</span></p>
+    <div class="row"><button class="pri" onclick="closeModal()">DEVORAR NOVAMENTE</button></div>`);
+  save();
+}
+
+/* ------------------------------ desejos ------------------------------ */
+function startCraving(){
+  const unlocked = FOODS.filter(f=>f.stage<=S.stage);
+  if(unlocked.length<2) return;
+  let f; do{ f=pick(unlocked); }while(f.id===S.food && unlocked.length>1);
+  const dur = T.CRAVE_SECS*(S.mut.salivar?1.6:1);
+  S.craving = {food:f.id, t:dur, max:dur, fed:0};
+  toast(`O monstro quer ${f.e} ${f.n}!`,'gold'); sfx('crave');
+}
+function endCraving(){
+  if(!S.craving) return;
+  if(S.craving.fed>0){
+    const M=MC;
+    const bile = bileFor(0.5)*0.6*M.crave;
+    S.bile += bile; S.xp += 0.35*Math.pow(T.XP_GAIN_GROW,S.stage-1);
+    S.stats.cravings++;
+    toast(`Desejo saciado! +${fmt(bile)} bile`,'good');
+    spawnFloat(mon.x, mon.y-mon.r, '+'+fmt(bile)+' bile', '#c6ff4d', 18);
+    checkStage();
+  }else{
+    S.buffs.praga = 25;
+    toast('O monstro ficou irritado. Produção -20% por 25s.','bad');
+  }
+  S.craving=null;
+  const inst = 1-(S.geneLv.instinto||0)*0.12;
+  S.craveT = rnd(T.CRAVE_MIN,T.CRAVE_MAX)*clamp(inst,0.3,1);
+}
+
+/* ------------------------------ eventos ------------------------------ */
+const EVENTS = [
+  {id:'lua', good:true, run(){
+    S.buffs.lua = 30; toast('🌕 LUA VERMELHA — tudo x3 por 30s!','gold'); flash(.5); sfx('evolve');
+  }},
+  {id:'voraz', good:true, run(){
+    S.buffs.voraz = 15; toast('😱 FOME VORAZ — mordidas x10 por 15s!','gold'); sfx('crave');
+  }},
+  {id:'chuva', good:true, run(){
+    for(let i=0;i<14;i++) spawnChunk();
+    toast('🌧️ CHUVA DE VÍSCERAS — clique nos pedaços!','gold');
+  }},
+  {id:'parasita', good:false, run(){
+    spawnParasite(); toast('🦠 Um parasita grudou! Clique nele 5x.','bad'); sfx('bad');
+  }},
+  {id:'indigestao', good:false, run(){
+    S.buffs.indig = 30; toast('🤢 INDIGESTÃO — produção -50%. Clique 15x pra arrotar.','bad');
+    S.buffs.indigClicks = 0; sfx('bad');
+  }},
+  {id:'ovo', good:true, run(){
+    spawnEgg(); toast('🥚 Um ovo estranho apareceu...','gold');
+  }},
+];
+function fireEvent(){
+  const bonus = (S.org.cerebro||0)*0.08;
+  const pool = EVENTS.filter(e=> e.good || Math.random()>0.35+bonus );
+  const ev = pick(pool.length?pool:EVENTS);
+  ev.run(); S.stats.events++;
+  const freq = S.mut.carnificina?0.55:1;
+  S.eventT = rnd(T.EVENT_MIN,T.EVENT_MAX)*freq;
+}
+
+/* ============================ CANVAS / MONSTRO ============================ */
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let W=640, H=640, DPR=1;
+const mon = {x:320,y:340,r:120,squash:0,chew:0,blink:0,blinkT:2,anger:0};
+const mouth = {x:320,y:400,open:0};
+let mouseX=320, mouseY=200, shakeAmt=0, flashAmt=0, tAnim=0;
+let particles=[], floats=[], chunks=[], parasites=[], eggs=[], spores=[];
+
+function resizeCanvas(){
+  const rect = cv.getBoundingClientRect();
+  DPR = Math.min(2, window.devicePixelRatio||1);
+  const cssW = rect.width || 640;
+  const cssH = Math.min(cssW, Math.max(380, window.innerHeight*0.62));
+  cv.style.height = cssH+'px';
+  W = Math.round(cssW*DPR); H = Math.round(cssH*DPR);
+  cv.width = W; cv.height = H;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  W = cssW; H = cssH;
+  initMonster();
+}
+function initMonster(){
+  mon.x = W/2; mon.y = H*0.54;
+  mon.r = Math.min(W,H)*0.28 * (1 + Math.min(0.55, (S.stage-1)*0.035));
+  mouth.x = mon.x; mouth.y = mon.y + mon.r*0.30;
+  spores = Array.from({length:26},()=>({x:rnd(0,W),y:rnd(0,H),r:rnd(0.6,2.4),s:rnd(4,16),a:rnd(0.05,0.3)}));
+}
+
+function shake(n){ shakeAmt = Math.min(30,shakeAmt+n); }
+function flash(a){ flashAmt = Math.max(flashAmt,a); }
+function chomp(p){ mon.chew = Math.max(mon.chew, 0.55+p*0.45); mon.squash = Math.max(mon.squash,0.16*p); }
+function burp(){ mon.chew=1.2; mon.squash=0.3; shake(10);
+  for(let i=0;i<26;i++) particles.push({x:mouth.x,y:mouth.y,vx:rnd(-2.6,2.6),vy:rnd(-6,-1.5),r:rnd(2,7),life:1,c:'#8fe36a',g:0.10});
+}
+function spawnFloat(x,y,txt,c,size){ floats.push({x,y,txt,c,size:size||13,life:1}); if(floats.length>40) floats.shift(); }
+function throwFood(x,y,emoji){
+  particles.push({x,y,tx:mouth.x,ty:mouth.y,emoji,life:1,fly:true,r:16,rot:rnd(-3,3),vr:rnd(-.2,.2)});
+}
+function splat(x,y,c,n){
+  for(let i=0;i<(n||10);i++) particles.push({x,y,vx:rnd(-4,4),vy:rnd(-5,1),r:rnd(1.5,5),life:1,c:c||'#c0392b',g:0.22});
+}
+function spawnChunk(){ chunks.push({x:rnd(W*0.12,W*0.88), y:-rnd(20,300), v:rnd(70,150), e:pick(['🫀','🧠','🦴','🍖','🩸','🦷']), r:20, life:1}); }
+function spawnParasite(){ parasites.push({x:mon.x+rnd(-mon.r*.6,mon.r*.6), y:mon.y+rnd(-mon.r*.5,mon.r*.5), hp:5, t:0, life:22}); }
+function spawnEgg(){ eggs.push({x:rnd(W*0.2,W*0.8), y:H*0.86, t:0, life:16}); }
+
+/* ----- clique no palco ----- */
+function stageClick(px,py){
+  // parasita primeiro
+  for(let i=parasites.length-1;i>=0;i--){
+    const p=parasites[i];
+    if(Math.hypot(px-p.x,py-p.y)<32){
+      p.hp--; splat(p.x,p.y,'#7ad06a',8); shake(5); sfx('chomp');
+      if(p.hp<=0){
+        parasites.splice(i,1);
+        const b = bileFor(0.4); S.bile+=b;
+        spawnFloat(p.x,p.y,'+'+fmt(b)+' bile','#c6ff4d',16);
+        toast('Parasita esmagado! +'+fmt(b)+' bile','good');
+      }
+      return;
+    }
+  }
+  for(let i=chunks.length-1;i>=0;i--){
+    const c=chunks[i];
+    if(Math.hypot(px-c.x,py-c.y)<30){
+      chunks.splice(i,1); splat(c.x,c.y,'#c0392b',12);
+      const g = MC.bitePower*35 + MC.bps*4;
+      gainBio(g); spawnFloat(c.x,c.y,'+'+fmt(g),'#ff8a6a',15); sfx('chomp');
+      return;
+    }
+  }
+  for(let i=eggs.length-1;i>=0;i--){
+    const e=eggs[i];
+    if(Math.hypot(px-e.x,py-e.y)<34){
+      eggs.splice(i,1); splat(e.x,e.y,'#e8d9a0',16); sfx('evolve');
+      // alimentador grátis do melhor tipo que você já tem
+      let idx=0; S.feeders.forEach((q,j)=>{ if(q>0) idx=j; });
+      idx = Math.min(FEEDERS.length-1, idx+1);
+      const amt = Math.max(1, Math.floor(S.feeders[idx]*0.1)+1);
+      S.feeders[idx]+=amt; buildFeeders();
+      toast(`Nasceu: +${amt} ${FEEDERS[idx].n} grátis!`,'gold');
+      return;
+    }
+  }
+  if(S.buffs.indig>0){
+    S.buffs.indigClicks=(S.buffs.indigClicks||0)+1;
+    if(S.buffs.indigClicks>=15){ S.buffs.indig=0; burp(); toast('BUUURP. Indigestão curada.','good'); }
+  }
+  bite(px,py);
+}
+
+/* ------------------------------ render ------------------------------ */
+function draw(dt){
+  tAnim += dt;
+  ctx.clearRect(0,0,W,H);
+  ctx.save();
+  if(shakeAmt>0.2){ ctx.translate(rnd(-shakeAmt,shakeAmt)*0.5, rnd(-shakeAmt,shakeAmt)*0.5); shakeAmt*=Math.pow(0.001,dt); }
+
+  drawBackground(dt);
+  drawMonster(dt);
+  drawEntities(dt);
+  drawParticles(dt);
+  ctx.restore();
+
+  if(flashAmt>0.01){
+    ctx.fillStyle = `rgba(200,150,255,${flashAmt*0.55})`;
+    ctx.fillRect(0,0,W,H); flashAmt*=Math.pow(0.02,dt);
+  }
+}
+
+function drawBackground(dt){
+  const G = S.genome;
+  // esporos flutuantes
+  ctx.save();
+  spores.forEach(s=>{
+    s.y -= s.s*dt; if(s.y<-6){ s.y=H+6; s.x=rnd(0,W); }
+    ctx.globalAlpha=s.a; ctx.fillStyle=`hsl(${G.hue},70%,70%)`;
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill();
+  });
+  ctx.restore();
+  // poça / chão
+  const y = mon.y+mon.r*0.92;
+  const gr = ctx.createRadialGradient(mon.x,y,4,mon.x,y,mon.r*1.5);
+  gr.addColorStop(0,`hsla(${G.hue},60%,25%,.55)`); gr.addColorStop(1,'transparent');
+  ctx.fillStyle=gr; ctx.beginPath(); ctx.ellipse(mon.x,y,mon.r*1.5,mon.r*0.28,0,0,7); ctx.fill();
+}
+
+/* corpo procedural: blob com pontos ruidosos + partes por genoma/estágio */
+function drawMonster(dt){
+  const G=S.genome, st=S.stage;
+  mon.chew   = Math.max(0, mon.chew - dt*2.6);
+  mon.squash = Math.max(0, mon.squash - dt*1.6);
+  mon.blinkT -= dt;
+  if(mon.blinkT<=0){ mon.blink=1; mon.blinkT=rnd(2.2,6); }
+  mon.blink = Math.max(0, mon.blink - dt*7);
+
+  const breathe = Math.sin(tAnim*1.6)*0.02 + (S.frenzy>0?Math.sin(tAnim*12)*0.02:0);
+  const sx = 1 + mon.squash*0.55 + breathe;
+  const sy = (1 - mon.squash*0.5 - breathe) * G.squish;
+  const R = mon.r;
+
+  ctx.save();
+  ctx.translate(mon.x, mon.y);
+  ctx.scale(sx, sy);
+
+  const hot = S.frenzy>0 || S.buffs.lua>0;
+  if(hot){
+    ctx.save(); ctx.globalAlpha=0.35;
+    const g2=ctx.createRadialGradient(0,0,R*0.6,0,0,R*1.7);
+    g2.addColorStop(0,`hsla(${(G.hue+180)%360},100%,60%,.6)`); g2.addColorStop(1,'transparent');
+    ctx.fillStyle=g2; ctx.beginPath(); ctx.arc(0,0,R*1.7,0,7); ctx.fill(); ctx.restore();
+  }
+
+  const arms = G.arms + Math.floor(st/4);
+  drawTentacles(R, arms, G);
+
+  // ---- corpo ----
+  const N=16, pts=[];
+  const rr = mulberry32(G.seed+7);
+  for(let i=0;i<N;i++){
+    const a = i/N*Math.PI*2;
+    const noise = (rr()-0.5)*0.20*G.wob;
+    const wave  = Math.sin(tAnim*(1.1+ (i%3)*0.35) + i)*0.035;
+    pts.push({a, r: R*(1+noise+wave)});
+  }
+  ctx.beginPath();
+  for(let i=0;i<=N;i++){
+    const p=pts[i%N], q=pts[(i+1)%N];
+    const x1=Math.cos(p.a)*p.r, y1=Math.sin(p.a)*p.r;
+    const x2=Math.cos(q.a)*q.r, y2=Math.sin(q.a)*q.r;
+    if(i===0) ctx.moveTo(x1,y1);
+    ctx.quadraticCurveTo(x1,y1,(x1+x2)/2,(y1+y2)/2);
+  }
+  ctx.closePath();
+
+  const grad = ctx.createRadialGradient(-R*0.3,-R*0.35,R*0.12, 0,0,R*1.15);
+  grad.addColorStop(0, `hsl(${G.hue},55%,${28+Math.min(14,st)}%)`);
+  grad.addColorStop(0.6,`hsl(${G.hue},58%,17%)`);
+  grad.addColorStop(1, `hsl(${(G.hue+330)%360},60%,9%)`);
+  ctx.fillStyle=grad; ctx.fill();
+  ctx.save(); ctx.clip();
+
+  // veias
+  ctx.strokeStyle=`hsla(${(G.hue+300)%360},70%,45%,.30)`; ctx.lineWidth=Math.max(1.4,R*0.018);
+  const vr = mulberry32(G.seed+31);
+  for(let i=0;i<6+st;i++){
+    const a=vr()*7, l=R*(0.4+vr()*0.9);
+    ctx.beginPath(); ctx.moveTo(Math.cos(a)*R*0.1,Math.sin(a)*R*0.1);
+    ctx.quadraticCurveTo(Math.cos(a+0.5)*l*0.6,Math.sin(a+0.5)*l*0.6,Math.cos(a)*l,Math.sin(a)*l);
+    ctx.stroke();
+  }
+  // pústulas
+  const pr = mulberry32(G.seed+53);
+  for(let i=0;i<G.pust+Math.floor(st/2);i++){
+    const a=pr()*7, d=pr()*R*0.85, s=R*(0.05+pr()*0.07);
+    const px=Math.cos(a)*d, py=Math.sin(a)*d;
+    const pulse = 1+Math.sin(tAnim*2+i)*0.12;
+    ctx.fillStyle=`hsla(${(G.hue2)%360},70%,55%,.55)`;
+    ctx.beginPath(); ctx.arc(px,py,s*pulse,0,7); ctx.fill();
+    ctx.fillStyle=`hsla(${(G.hue2)%360},90%,75%,.5)`;
+    ctx.beginPath(); ctx.arc(px-s*0.3,py-s*0.3,s*0.35,0,7); ctx.fill();
+  }
+  ctx.restore();
+
+  // brilho superior
+  ctx.save(); ctx.globalAlpha=.16; ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.ellipse(-R*0.32,-R*0.45,R*0.30,R*0.16,-0.5,0,7); ctx.fill(); ctx.restore();
+
+  drawSpikes(R,G,st);
+  drawHorns(R,G,st);
+  drawMouth(R,G,st);
+  drawEyes(R,G,st);
+
+  ctx.restore();
+
+  mouth.x = mon.x; mouth.y = mon.y + R*0.34*G.squish;
+}
+
+function drawTentacles(R,n,G){
+  if(n<=0) return;
+  ctx.save();
+  for(let i=0;i<n;i++){
+    const base = Math.PI*0.15 + (i/(Math.max(1,n-1)))*Math.PI*0.7;
+    const side = i%2?1:-1;
+    const a = Math.PI*0.5 + side*base;
+    const bx=Math.cos(a)*R*0.85, by=Math.sin(a)*R*0.7;
+    const L = R*(0.7+ (i%3)*0.22);
+    const sw = Math.sin(tAnim*(1.4+i*0.3)+i)*R*0.3;
+    ctx.strokeStyle=`hsl(${(G.hue+20)%360},50%,16%)`;
+    ctx.lineCap='round';
+    for(let seg=0;seg<3;seg++){
+      ctx.lineWidth = R*(0.16-seg*0.045);
+      ctx.beginPath();
+      ctx.moveTo(bx,by);
+      ctx.quadraticCurveTo(bx+sw*0.6, by+L*0.6, bx+sw*(1+seg*0.2), by+L*(0.8+seg*0.12));
+      ctx.stroke();
+    }
+    // ponta com olhinho
+    const tx=bx+sw, ty=by+L*0.92;
+    ctx.fillStyle=`hsl(${(G.hue+40)%360},60%,70%)`;
+    ctx.beginPath(); ctx.arc(tx,ty,R*0.055,0,7); ctx.fill();
+    ctx.fillStyle='#150a18'; ctx.beginPath(); ctx.arc(tx,ty,R*0.026,0,7); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawSpikes(R,G,st){
+  const n = G.spikes + Math.floor(st/3); if(!n) return;
+  ctx.fillStyle=`hsl(${(G.hue+330)%360},45%,${18}%)`;
+  for(let i=0;i<n;i++){
+    const a = -Math.PI*0.9 + (i/(n-1||1))*Math.PI*0.8;
+    const x=Math.cos(a)*R*0.94, y=Math.sin(a)*R*0.94;
+    const h = R*(0.16+ (i%3)*0.06);
+    ctx.save(); ctx.translate(x,y); ctx.rotate(a+Math.PI/2);
+    ctx.beginPath(); ctx.moveTo(-R*0.07,0); ctx.lineTo(0,-h); ctx.lineTo(R*0.07,0); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+function drawHorns(R,G,st){
+  const n=G.horns + (st>=9?1:0); if(!n) return;
+  ctx.strokeStyle=`hsl(${(G.hue+20)%360},25%,72%)`; ctx.lineCap='round';
+  for(let i=0;i<n;i++){
+    const side = i%2?1:-1, off = 0.28+Math.floor(i/2)*0.22;
+    const x=side*R*off, y=-R*0.9;
+    ctx.lineWidth=R*0.075;
+    ctx.beginPath(); ctx.moveTo(x,y);
+    ctx.quadraticCurveTo(x+side*R*0.18,y-R*0.32, x+side*R*0.03,y-R*0.52);
+    ctx.stroke();
+  }
+}
+function drawMouth(R,G,st){
+  const open = clamp(mon.chew,0,1);
+  const w = R*G.mouthW*(1+Math.min(0.5,st*0.03));
+  const h = R*(0.10 + open*0.42);
+  const cy = R*0.34;
+  ctx.save(); ctx.translate(0,cy);
+  // cavidade
+  ctx.beginPath(); ctx.ellipse(0,0,w,h,0,0,7);
+  const g=ctx.createRadialGradient(0,h*0.3,2,0,0,w);
+  g.addColorStop(0,'#1a0004'); g.addColorStop(.6,'#4a0512'); g.addColorStop(1,'#75091d');
+  ctx.fillStyle=g; ctx.fill();
+  // língua
+  if(open>0.25){
+    ctx.save(); ctx.beginPath(); ctx.ellipse(0,0,w,h,0,0,7); ctx.clip();
+    ctx.fillStyle='#c2416a';
+    const ty=h*0.35+Math.sin(tAnim*8)*h*0.12;
+    ctx.beginPath(); ctx.ellipse(0,ty,w*0.5,h*0.55,0,0,7); ctx.fill();
+    ctx.restore();
+  }
+  // dentes
+  const n=G.teeth+Math.floor(st/2);
+  ctx.fillStyle='#f2e9d8';
+  for(let i=0;i<n;i++){
+    const t=(i+0.5)/n, x=-w+2*w*t;
+    const yy=Math.sqrt(Math.max(0,1-Math.pow(x/w,2)))*h;
+    const size=R*(0.05+ (i%2)*0.03);
+    ctx.beginPath(); ctx.moveTo(x-size*0.55,-yy); ctx.lineTo(x+size*0.55,-yy); ctx.lineTo(x,-yy+size*1.6); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x-size*0.5, yy); ctx.lineTo(x+size*0.5, yy); ctx.lineTo(x, yy-size*1.4); ctx.closePath(); ctx.fill();
+  }
+  ctx.strokeStyle='rgba(0,0,0,.45)'; ctx.lineWidth=R*0.02;
+  ctx.beginPath(); ctx.ellipse(0,0,w,h,0,0,7); ctx.stroke();
+  ctx.restore();
+}
+function drawEyes(R,G,st){
+  const n = Math.min(14, G.eyes + Math.floor(st/2));
+  const rr = mulberry32(G.seed+101);
+  for(let i=0;i<n;i++){
+    const a = -Math.PI*0.85 + rr()*Math.PI*0.75;
+    const d = R*(0.18+rr()*0.62);
+    const x = Math.cos(a)*d, y = Math.sin(a)*d*0.9;
+    const s = R*(0.09+rr()*0.07)*(i===0?1.25:1);
+    // esclera
+    ctx.fillStyle = S.buffs.indig>0 ? '#c8d8a0' : '#f6f2e2';
+    ctx.beginPath(); ctx.ellipse(x,y,s,s*(1-mon.blink*0.92),0,0,7); ctx.fill();
+    if(mon.blink>0.5) continue;
+    // pupila mira o mouse
+    const dx=(mouseX-mon.x)-x, dy=(mouseY-mon.y)-y, dl=Math.hypot(dx,dy)||1;
+    const px=x+dx/dl*s*0.34, py=y+dy/dl*s*0.34;
+    ctx.fillStyle=`hsl(${(G.hue2)%360},80%,${28+ (i%3)*8}%)`;
+    ctx.beginPath(); ctx.arc(px,py,s*0.62,0,7); ctx.fill();
+    ctx.fillStyle='#0a0409';
+    if(G.pupil===1){ ctx.beginPath(); ctx.ellipse(px,py,s*0.16,s*0.5,0,0,7); ctx.fill(); }
+    else if(G.pupil===2){ ctx.fillRect(px-s*0.42,py-s*0.1,s*0.84,s*0.2); ctx.fillRect(px-s*0.1,py-s*0.42,s*0.2,s*0.84); }
+    else { ctx.beginPath(); ctx.arc(px,py,s*0.34,0,7); ctx.fill(); }
+    ctx.fillStyle='rgba(255,255,255,.75)';
+    ctx.beginPath(); ctx.arc(px-s*0.2,py-s*0.24,s*0.14,0,7); ctx.fill();
+  }
+}
+
+function drawEntities(dt){
+  // parasitas
+  for(let i=parasites.length-1;i>=0;i--){
+    const p=parasites[i]; p.t+=dt; p.life-=dt;
+    p.x += Math.sin(p.t*3)*0.7; p.y += Math.cos(p.t*2.2)*0.5;
+    ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(Math.sin(p.t*4)*0.3);
+    ctx.font='30px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🦠',0,0);
+    ctx.fillStyle='#ff5b5b'; ctx.fillRect(-16,20,32*(p.hp/5),3);
+    ctx.restore();
+    if(p.life<=0){ parasites.splice(i,1); S.buffs.praga=45; toast('O parasita sugou o monstro. Produção -20% por 45s.','bad'); }
+  }
+  // pedaços caindo
+  for(let i=chunks.length-1;i>=0;i--){
+    const c=chunks[i]; c.y += c.v*dt;
+    ctx.save(); ctx.translate(c.x,c.y);
+    ctx.font='30px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(c.e,0,0); ctx.restore();
+    if(c.y>H+30) chunks.splice(i,1);
+  }
+  // ovos
+  for(let i=eggs.length-1;i>=0;i--){
+    const e=eggs[i]; e.t+=dt; e.life-=dt;
+    ctx.save(); ctx.translate(e.x,e.y+Math.sin(e.t*4)*4); ctx.rotate(Math.sin(e.t*6)*0.18);
+    ctx.font='34px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🥚',0,0); ctx.restore();
+    if(e.life<=0) eggs.splice(i,1);
+  }
+}
+
+function drawParticles(dt){
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    if(p.fly){
+      p.life-=dt*2.4;
+      const t=1-clamp(p.life,0,1);
+      const x=p.x+(p.tx-p.x)*t, y=p.y+(p.ty-p.y)*t - Math.sin(t*Math.PI)*70;
+      p.rot+=p.vr;
+      ctx.save(); ctx.translate(x,y); ctx.rotate(p.rot);
+      ctx.font=(p.r*1.6)+'px serif'; ctx.fillText(p.emoji,0,0); ctx.restore();
+      if(p.life<=0){ particles.splice(i,1); chomp(0.7); splat(p.tx,p.ty,'#8a1f2a',6); }
+      continue;
+    }
+    p.vy+=(p.g||0.2)*60*dt; p.x+=p.vx*60*dt*0.4; p.y+=p.vy*60*dt*0.4; p.life-=dt*1.1;
+    ctx.globalAlpha=clamp(p.life,0,1); ctx.fillStyle=p.c;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill(); ctx.globalAlpha=1;
+    if(p.life<=0) particles.splice(i,1);
+  }
+  for(let i=floats.length-1;i>=0;i--){
+    const f=floats[i]; f.y-=34*dt; f.life-=dt*0.85;
+    ctx.globalAlpha=clamp(f.life,0,1);
+    ctx.font='bold '+f.size+'px '+getComputedStyle(document.body).fontFamily;
+    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillText(f.txt,f.x+1,f.y+1);
+    ctx.fillStyle=f.c; ctx.fillText(f.txt,f.x,f.y);
+    ctx.globalAlpha=1;
+    if(f.life<=0) floats.splice(i,1);
+  }
+}
+
+/* ------------------------------ áudio ------------------------------ */
+let AC=null;
+function sfx(kind,strong){
+  if(!S.sound) return;
+  try{
+    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    const t=AC.currentTime, o=AC.createOscillator(), g=AC.createGain();
+    o.connect(g); g.connect(AC.destination);
+    if(kind==='chomp'){ o.type='square'; o.frequency.setValueAtTime(strong?260:170,t); o.frequency.exponentialRampToValueAtTime(46,t+0.09);
+      g.gain.setValueAtTime(strong?0.10:0.055,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.11); o.start(t); o.stop(t+0.12); }
+    else if(kind==='burp'){ o.type='sawtooth'; o.frequency.setValueAtTime(90,t); o.frequency.linearRampToValueAtTime(52,t+0.45);
+      g.gain.setValueAtTime(0.11,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.5); o.start(t); o.stop(t+0.5); }
+    else if(kind==='buy'){ o.type='triangle'; o.frequency.setValueAtTime(520,t); o.frequency.exponentialRampToValueAtTime(880,t+0.09);
+      g.gain.setValueAtTime(0.07,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.14); o.start(t); o.stop(t+0.15); }
+    else if(kind==='evolve'){ o.type='sawtooth'; o.frequency.setValueAtTime(160,t); o.frequency.exponentialRampToValueAtTime(760,t+0.55);
+      g.gain.setValueAtTime(0.09,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.6); o.start(t); o.stop(t+0.62); }
+    else if(kind==='crave'){ o.type='square'; o.frequency.setValueAtTime(700,t); o.frequency.setValueAtTime(520,t+0.1); o.frequency.setValueAtTime(880,t+0.2);
+      g.gain.setValueAtTime(0.06,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.32); o.start(t); o.stop(t+0.33); }
+    else if(kind==='bad'){ o.type='sawtooth'; o.frequency.setValueAtTime(180,t); o.frequency.exponentialRampToValueAtTime(60,t+0.4);
+      g.gain.setValueAtTime(0.08,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.45); o.start(t); o.stop(t+0.46); }
+    else { o.type='square'; o.frequency.setValueAtTime(120,t); g.gain.setValueAtTime(0.04,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.08); o.start(t); o.stop(t+0.09); }
+  }catch(e){}
+}
+
+/* ------------------------------ UI ------------------------------ */
+function toast(msg,cls){
+  const el=document.createElement('div'); el.className='toast '+(cls||'');
+  el.textContent=msg; $('#toasts').appendChild(el);
+  setTimeout(()=>{ el.style.transition='opacity .4s'; el.style.opacity=0; setTimeout(()=>el.remove(),400); }, 3400);
+  const kids=$('#toasts').children; while(kids.length>5) kids[0].remove();
+}
+function modal(html){ $('#modal').innerHTML=html; $('#modalwrap').classList.add('on'); }
+function closeModal(){ $('#modalwrap').classList.remove('on'); }
+window.closeModal = closeModal;
+
+/* ---- listas ---- */
+const UI = {feeders:[],mut:[],org:[],gen:[]};
+function buildFeeders(){
+  const box=$('#feederlist'); box.innerHTML=''; UI.feeders=[];
+  FEEDERS.forEach((f,i)=>{
+    const unlocked = i===0 || S.feeders[i-1]>0 || S.bio>=f.cost*0.35 || S.stats.totalBio>=f.cost*0.5;
+    if(!unlocked){
+      const d=document.createElement('div'); d.className='item no';
+      d.innerHTML=`<div class="ic">❔</div><div><div class="nm">???</div><div class="ds">Continue devorando para descobrir.</div></div><div class="rt"></div>`;
+      box.appendChild(d); UI.feeders.push(null); return;
+    }
+    const b=document.createElement('button'); b.className='item';
+    b.innerHTML=`<div class="ic">${f.e}</div>
+      <div><div class="nm">${f.n}</div><div class="ds">${f.d}</div><div class="sm bps"></div></div>
+      <div class="rt"><div class="qt">${S.feeders[i]}</div><div class="cst v-bio"></div><div class="sm ms"></div></div>`;
+    b.onclick=()=>buyFeeder(i);
+    box.appendChild(b);
+    UI.feeders.push({el:b, cost:b.querySelector('.cst'), qty:b.querySelector('.qt'), bps:b.querySelector('.bps'), ms:b.querySelector('.ms')});
+  });
+}
+function buildMutations(){
+  const box=$('#pane-mut'); box.innerHTML=''; UI.mut=[];
+  let shown=0;
+  MUTATIONS.forEach(m=>{
+    const owned=!!S.mut[m.id];
+    if(!owned && S.bile<m.cost*0.25 && shown>=3+Object.keys(S.mut).length) return;
+    shown++;
+    const b=document.createElement('button'); b.className='item'+(owned?' owned':'');
+    b.innerHTML=`<div class="ic">${m.e}</div>
+      <div><div class="nm">${m.n}</div><div class="ds">${m.d}</div></div>
+      <div class="rt"><div class="cst v-bile">${owned?'✔':'🧪 '+fmt(m.cost)}</div></div>`;
+    if(!owned) b.onclick=()=>buyMutation(m);
+    box.appendChild(b);
+    UI.mut.push({el:b,m,owned});
+  });
+  if(!box.children.length) box.innerHTML='<div class="emptyhint">Digira o monstro para produzir <b style="color:#c6ff4d">bile</b>.<br>A bile compra mutações permanentes desta encarnação.</div>';
+}
+function buildOrgans(){
+  const box=$('#pane-org'); box.innerHTML=''; UI.org=[];
+  ORGANS.forEach(o=>{
+    const lv=S.org[o.id]||0, c=organCost(o);
+    const b=document.createElement('button'); b.className='item';
+    b.innerHTML=`<div class="ic">${o.e}</div>
+      <div><div class="nm">${o.n} ${lv?`<span class="tag">nv ${lv}</span>`:''}</div><div class="ds">${o.d(lv)}</div>
+        <div class="sm" style="color:#6b6280">próximo nível: ${o.d(lv+1)}</div></div>
+      <div class="rt"><div class="cst v-bile">🧪 ${fmt(c)}</div></div>`;
+    b.onclick=()=>buyOrgan(o);
+    box.appendChild(b); UI.org.push({el:b,o});
+  });
+}
+function buildGenes(){
+  const box=$('#pane-gen'); box.innerHTML=''; UI.gen=[];
+  const tr = S.trait? TRAITS.find(t=>t.id===S.trait) : null;
+  const head=document.createElement('div');
+  head.innerHTML=`<div style="padding:10px 8px 4px">
+    ${tr?`<div class="item owned" style="cursor:default"><div class="ic">${tr.e}</div><div><div class="nm">Traço: ${tr.n}</div><div class="ds">${tr.d}</div></div><div></div></div>`:''}
+    <div class="ds" style="font-size:11px;color:#9a90b0;line-height:1.6;padding:4px 4px 10px">
+      A <b style="color:#ff5fa2">Metamorfose</b> reinicia biomassa, bile, alimentadores, mutações e órgãos —
+      e devolve <b>genes</b> permanentes, um monstro novo e um traço aleatório.<br>
+      Requisitos: estágio ${T.ASCEND_STAGE}+ e pelo menos 1 gene de ganho.
+    </div></div>`;
+  box.appendChild(head);
+  GENES.forEach(g=>{
+    const lv=S.geneLv[g.id]||0, maxed=lv>=g.max, c=g.cost(lv);
+    const b=document.createElement('button'); b.className='item'+(maxed?' owned':'');
+    b.innerHTML=`<div class="ic">${g.e}</div>
+      <div><div class="nm">${g.n} <span class="tag">nv ${lv}/${g.max}</span></div><div class="ds">${g.d(lv)}</div>
+      ${maxed?'':`<div class="sm" style="color:#6b6280">próximo: ${g.d(lv+1)}</div>`}</div>
+      <div class="rt"><div class="cst v-gene">${maxed?'MÁX':'🧬 '+fmt(c)}</div></div>`;
+    if(!maxed) b.onclick=()=>buyGene(g);
+    box.appendChild(b); UI.gen.push({el:b,g});
+  });
+}
+function buildAchs(){
+  const box=$('#achwrap'); box.innerHTML='';
+  ACHS.forEach(a=>{
+    const got=!!S.ach[a.id];
+    const d=document.createElement('div'); d.className='ach'+(got?' got':'');
+    d.innerHTML=`<span class="e">${a.e}</span><span class="t">${got?a.n:'???'}</span>`;
+    d.title=a.n; box.appendChild(d);
+  });
+  const info=document.createElement('div');
+  info.className='emptyhint';
+  info.innerHTML=`${achCount()}/${ACHS.length} troféus · cada um dá <b style="color:#7ee787">+1%</b> de produção e mordida.`;
+  box.appendChild(info);
+}
+function buildFoods(){
+  const box=$('#foods'); box.innerHTML='';
+  FOODS.forEach(f=>{
+    const lock = S.stage<f.stage;
+    const b=document.createElement('button');
+    b.className='food'+(S.food===f.id?' sel':'')+(lock?' lock':'');
+    b.innerHTML=`<span class="e">${f.e}</span><span class="n">${f.n}</span><span class="m">x${f.m.toFixed(2)}</span><i class="bored" style="width:0"></i>`;
+    b.dataset.id=f.id;
+    if(lock){ b.innerHTML=`<span class="e">🔒</span><span class="n">Estágio ${f.stage}</span><span class="m">—</span>`; }
+    else b.onclick=()=>{ if(S.food!==f.id){ S.food=f.id; S.foodBites=0; buildFoods(); sfx('buy'); } };
+    box.appendChild(b);
+  });
+}
+function buildAll(){ buildFeeders(); buildMutations(); buildOrgans(); buildGenes(); buildAchs(); buildFoods(); }
+
+/* ---- refresh (rápido, sem recriar DOM) ---- */
+function refresh(){
+  const M=MC;
+  $('#r-bio').textContent = fmt(S.bio);
+  $('#r-bps').textContent = fmt(M.bps)+'/s';
+  $('#r-bile').textContent= fmt(S.bile);
+  if(S.gene>0 || S.stats.ascensions>0){ $('#r-genewrap').style.display=''; $('#r-gene').textContent=fmt(S.gene); }
+
+  $('#stagename').firstChild.nodeValue = stageName(S.stage);
+  $('#stagenum').textContent = 'ESTÁGIO '+S.stage+' · MORDIDA '+fmt(M.bitePower);
+
+  const fill = clamp(S.stomach/M.cap,0,1);
+  $('#stfill').style.width=(fill*100)+'%';
+  $('#st-txt').textContent = fmt(S.stomach)+' / '+fmt(M.cap);
+  $('#st-lbl').textContent = fill>=1?'CHEIO — DIGIRA!':(Math.floor(fill*100)+'%');
+  const xn=xpNeed();
+  $('#xpfill').style.width=clamp(S.xp/xn,0,1)*100+'%';
+  $('#xp-txt').textContent = fmt(S.xp)+' / '+fmt(xn)+' → '+stageName(S.stage+1);
+
+  const db=$('#btn-digest');
+  db.disabled = S.stomach<=0;
+  db.classList.toggle('ready', fill>=1);
+  db.textContent = fill>=1 ? 'DIGERIR (+'+fmt(bileFor(1))+' bile)' : 'DIGERIR ('+Math.floor(fill*100)+'%)';
+
+  const ab=$('#btn-ascend');
+  if(S.stage>=T.ASCEND_STAGE-1 || S.stats.ascensions>0){
+    ab.style.display=''; ab.disabled=!canAscend();
+    ab.textContent = canAscend()? 'METAMORFOSE (+'+fmt(ascendGain())+' 🧬)' : 'METAMORFOSE (estágio '+T.ASCEND_STAGE+')';
+  }
+
+  // buffs
+  const bl=[];
+  if(S.frenzy>0)     bl.push(['⚡ FRENESI '+Math.ceil(S.frenzy)+'s','']);
+  if(S.buffs.lua>0)  bl.push(['🌕 LUA VERMELHA '+Math.ceil(S.buffs.lua)+'s','']);
+  if(S.buffs.voraz>0)bl.push(['😱 FOME VORAZ '+Math.ceil(S.buffs.voraz)+'s','']);
+  if(S.buffs.indig>0)bl.push(['🤢 INDIGESTÃO '+Math.ceil(S.buffs.indig)+'s ('+(15-(S.buffs.indigClicks||0))+' cliques)','bad']);
+  if(S.buffs.praga>0)bl.push(['🦠 IRRITADO '+Math.ceil(S.buffs.praga)+'s','bad']);
+  const bm=boredomMult();
+  if(bm<1) bl.push(['🥱 ENJOO x'+bm.toFixed(2)+' — troque de comida','bad']);
+  $('#buffs').innerHTML = bl.map(b=>`<span class="buff ${b[1]}">${b[0]}</span>`).join('');
+
+  // desejo
+  const cw=$('#craving');
+  if(S.craving){
+    const f=FOODS.find(x=>x.id===S.craving.food);
+    cw.classList.add('on');
+    $('#cr-emoji').textContent=f.e;
+    $('#cr-txt').innerHTML = S.craving.food===S.food
+      ? `<b style="color:#9dff8a">SACIANDO!</b> mordidas valem x${(T.CRAVE_MULT*M.crave).toFixed(1)}`
+      : `Quero <b>${f.n}</b>! Troque a comida para x${(T.CRAVE_MULT*M.crave).toFixed(1)}`;
+    $('#cr-bar').style.width = (S.craving.t/S.craving.max*100)+'%';
+  } else cw.classList.remove('on');
+  $$('#foods .food').forEach(el=>{
+    const id=el.dataset.id;
+    el.classList.toggle('want', !!(S.craving&&S.craving.food===id));
+    if(id===S.food){ const i=el.querySelector('.bored'); if(i) i.style.width=((1-bm)/0.6*100)+'%'; }
+  });
+
+  // custos
+  UI.feeders.forEach((u,i)=>{
+    if(!u) return;
+    const qty = S.buymode==='max' ? Math.max(1,maxAfford(i)) : S.buymode;
+    const c = feederCost(i,qty);
+    u.cost.textContent = fmt(c)+(qty>1?` (x${qty})`:'');
+    u.qty.textContent  = S.feeders[i];
+    const q=S.feeders[i];
+    u.bps.textContent  = q? `produz ${fmt(FEEDERS[i].bps*q*milestoneMult(q)*(S.mut.larvicult&&i<2?4:1)*MC.prod)}/s` : `+${fmt(FEEDERS[i].bps*MC.prod)}/s cada`;
+    const nm=nextMilestone(q);
+    u.ms.textContent = nm? `marco: ${q}/${nm}` : 'máximo';
+    u.el.classList.toggle('can', S.bio>=c);
+    u.el.classList.toggle('no',  S.bio<c);
+  });
+  UI.mut.forEach(u=>{ if(!u.owned) u.el.classList.toggle('can', S.bile>=u.m.cost); });
+  UI.org.forEach(u=>{ u.el.classList.toggle('can', S.bile>=organCost(u.o)); });
+  UI.gen.forEach(u=>{ const lv=S.geneLv[u.g.id]||0; if(lv<u.g.max) u.el.classList.toggle('can', S.gene>=u.g.cost(lv)); });
+}
+
+/* ------------------------------ loop ------------------------------ */
+let MC = calc();
+let last = performance.now(), acc=0, uiAcc=0, saveAcc=0, buildAcc=0;
+
+function tick(dt){
+  MC = calc();
+  // produção
+  if(MC.bps>0) gainBio(MC.bps*dt);
+  autoBite(dt);
+  S.stats.play += dt;
+
+  // buffs
+  if(S.frenzy>0) S.frenzy=Math.max(0,S.frenzy-dt);
+  ['lua','voraz','indig','praga'].forEach(k=>{ if(S.buffs[k]>0) S.buffs[k]=Math.max(0,S.buffs[k]-dt); });
+
+  // desejo
+  if(S.craving){ S.craving.t-=dt; if(S.craving.t<=0) endCraving(); }
+  else { S.craveT-=dt; if(S.craveT<=0) startCraving(); }
+
+  // evento
+  S.eventT-=dt; if(S.eventT<=0) fireEvent();
+
+  // auto-digestão
+  if((S.org.glandula||0)>0 && S.stomach>=MC.cap*0.999) digest(true);
+
+  // troféus
+  ACHS.forEach(a=>{ if(!S.ach[a.id] && a.c(S)){ S.ach[a.id]=1; toast('🏆 Troféu: '+a.n,'gold'); buildAchs(); } });
+}
+
+function frame(now){
+  const dt = Math.min(0.25, (now-last)/1000); last=now;
+  acc+=dt; uiAcc+=dt; saveAcc+=dt; buildAcc+=dt;
+  while(acc>=1/20){ tick(1/20); acc-=1/20; }
+  draw(dt);
+  if(uiAcc>=0.1){ refresh(); uiAcc=0; }
+  if(buildAcc>=2){ buildFeeders(); buildMutations(); buildAcc=0; }
+  if(saveAcc>=10){ save(); saveAcc=0; }
+  requestAnimationFrame(frame);
+}
+
+/* ------------------------------ input ------------------------------ */
+function canvasPos(ev){
+  const r=cv.getBoundingClientRect();
+  const p = ev.touches? ev.touches[0] : ev;
+  return {x:(p.clientX-r.left)*(W/r.width), y:(p.clientY-r.top)*(H/r.height)};
+}
+cv.addEventListener('pointerdown', ev=>{ ev.preventDefault(); const p=canvasPos(ev); stageClick(p.x,p.y); });
+cv.addEventListener('pointermove', ev=>{ const p=canvasPos(ev); mouseX=p.x; mouseY=p.y; });
+cv.addEventListener('contextmenu', e=>e.preventDefault());
+
+$('#btn-digest').onclick = ()=>digest(false);
+$('#btn-ascend').onclick = ()=>{
+  if(!canAscend()){ toast(`Precisa do estágio ${T.ASCEND_STAGE} e de pelo menos 1 gene.`,'bad'); return; }
+  modal(`<h3>🧬 Metamorfose</h3>
+    <p>Você vai <b>perder</b>: biomassa, bile, alimentadores, mutações, órgãos e o estágio atual.</p>
+    <p>Você vai <b>ganhar</b>: <b class="v-gene">${fmt(ascendGain())} genes</b> permanentes, um monstro completamente novo e um traço aleatório para a próxima encarnação.</p>
+    <div class="row"><button onclick="closeModal()">AINDA NÃO</button><button class="pri" id="doasc">DEVORAR A SI MESMO</button></div>`);
+  $('#doasc').onclick=()=>{ closeModal(); ascend(); };
+};
+$$('#buymode button').forEach(b=>b.onclick=()=>{
+  $$('#buymode button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  S.buymode = b.dataset.b==='max'?'max':parseInt(b.dataset.b,10);
+});
+$$('#tabs button').forEach(b=>b.onclick=()=>{
+  $$('#tabs button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  $$('.tabpane').forEach(p=>p.classList.remove('on'));
+  $('#pane-'+b.dataset.t).classList.add('on'); S.tab=b.dataset.t;
+});
+$('#btn-sound').onclick = ()=>{ S.sound=!S.sound; $('#btn-sound').textContent=S.sound?'🔊':'🔇'; };
+$('#btn-help').onclick = ()=>modal(HELP);
+$('#btn-opts').onclick = ()=>modal(`<h3>⚙️ Opções</h3>
+  <p>Tempo de jogo: <b>${fmtTime(S.stats.play)}</b> · Mordidas: <b>${fmt(S.stats.bites)}</b> · Digestões: <b>${fmt(S.stats.digests)}</b><br>
+  Biomassa total de todos os tempos: <b>${fmt(S.stats.totalBio)}</b> · Metamorfoses: <b>${S.stats.ascensions}</b></p>
+  <div class="row"><button onclick="closeModal()">VOLTAR</button><button class="dgr" id="wipe">APAGAR TUDO</button></div>`);
+document.addEventListener('click', e=>{ if(e.target.id==='wipe'){
+  if(confirm('Apagar o save e recomeçar do zero?')){ localStorage.removeItem(SAVEKEY); location.reload(); }
+}});
+$('#modalwrap').addEventListener('click', e=>{ if(e.target.id==='modalwrap') closeModal(); });
+document.addEventListener('keydown', e=>{
+  if(e.code==='Space'){ e.preventDefault(); stageClick(mon.x, mon.y+mon.r*0.3); }
+  if(e.key==='d'||e.key==='D') digest(false);
+  if(e.key==='Escape') closeModal();
+  const n=parseInt(e.key,10);
+  if(n>=1&&n<=6){ const f=FOODS[n-1]; if(f && S.stage>=f.stage && S.food!==f.id){ S.food=f.id; S.foodBites=0; buildFoods(); } }
+});
+window.addEventListener('resize', ()=>{ clearTimeout(window._rz); window._rz=setTimeout(resizeCanvas,150); });
+window.addEventListener('beforeunload', save);
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden) save(); });
+
+const HELP = `<h3>🩸 Como devorar</h3>
+<ul>
+  <li><b>Clique no monstro</b> (ou barra de espaço) para alimentá-lo e ganhar <b style="color:#7ee787">biomassa</b>.</li>
+  <li>Biomassa compra <b>alimentadores</b>, que alimentam sozinhos. A cada 10/25/50/100 do mesmo tipo, a produção <b>dobra</b>.</li>
+  <li>Tudo que ele come enche o <b>estômago</b>. Cheio, aperte <b>DIGERIR</b> (tecla D): vira <b style="color:#c6ff4d">bile</b>, evolução e <b>Frenesi</b> temporário.</li>
+  <li>Bile compra <b>mutações</b> (uma vez cada) e <b>órgãos</b> (níveis infinitos).</li>
+  <li><b>Desejos:</b> ele pede uma comida específica. Troque a comida (teclas 1-6) para mordidas valerem 5x e ganhar bile extra. Ignorar deixa ele irritado.</li>
+  <li><b>Enjoo:</b> repetir a mesma comida derruba o ganho até 40%. Rotacione.</li>
+  <li><b>Eventos:</b> parasitas para esmagar, chuva de vísceras para clicar, lua vermelha, indigestão (15 cliques para arrotar), ovos.</li>
+  <li><b>Metamorfose</b> (estágio ${T.ASCEND_STAGE}+): reinicia a run, dá <b style="color:#ff5fa2">genes</b> permanentes, um monstro visualmente novo e um traço aleatório.</li>
+  <li>Ele continua comendo <b>offline</b> (até 8h, ampliável).</li>
+</ul>
+<div class="row"><button class="pri" onclick="closeModal()">ENTENDI</button></div>`;
+
+/* ------------------------------ boot ------------------------------ */
+const hadSave = load();
+$('#btn-sound').textContent = S.sound?'🔊':'🔇';
+$$('#buymode button').forEach(b=>{
+  b.classList.toggle('on', (b.dataset.b==='max'?'max':parseInt(b.dataset.b,10))===S.buymode);
+});
+resizeCanvas();
+buildAll();
+MC = calc();
+refresh();
+requestAnimationFrame(frame);
+
+if(offlineReport){
+  modal(`<h3>🌙 Enquanto você dormia...</h3>
+    <p>O monstro comeu por <b>${fmtTime(offlineReport.secs)}</b> e produziu <b class="v-bio">${fmt(offlineReport.gain)}</b> de biomassa
+    (eficiência ${Math.round(offlineReport.eff*100)}%).</p>
+    <p style="font-size:12px">Melhore o <b>Cérebro Encefálico</b> e o gene <b>Sono Profundo</b> para render mais offline.</p>
+    <div class="row"><button class="pri" onclick="closeModal()">CONTINUAR</button></div>`);
+} else if(!hadSave){
+  modal(HELP);
+}
+</script>
+</body>
+</html>
