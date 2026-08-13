@@ -35,6 +35,8 @@ const { default: SystemConfig } = await import('../models/SystemConfig.js');
 const { financialService } = await import('../services/financialService.js');
 const { loadUsdRateResolver, fxDayKey } = await import('../utils/fxRate.js');
 const { resolveTransactionCurrency } = await import('../utils/assetCurrency.js');
+const { safeFloat, safeCurrency, safeAdd, safeSub, safeQuantity, addQty, subQty } =
+    await import('../utils/mathUtils.js');
 
 const args = process.argv.slice(2);
 const DRY = args.includes('--dry');
@@ -87,25 +89,50 @@ const run = async () => {
         console.log(`   ✅ ${res.modifiedCount} lançamentos carimbados.`);
     }
 
-    // --- Prévia do impacto (dry): custo exibido hoje × custo com câmbio de compra ---
+    // --- Auditoria (dry): o custo GRAVADO bate com o extrato? ---
+    // Comparar com a fórmula antiga não prova nada (a diferença é o próprio
+    // objetivo da migração). O que importa é se `totalCostBrl` persistido
+    // corresponde aos lançamentos — é assim que se detecta posição gravada por
+    // código velho (que atualiza totalCost e deixa totalCostBrl para trás).
     if (DRY) {
-        console.log('\nPrévia do custo das posições em dólar:');
+        console.log('\nAuditoria — custo gravado × recalculado pelo extrato:');
+        let divergentes = 0, naoMigradas = 0;
         for (const a of assets) {
-            if (a.currency !== 'USD') continue;
+            const isUsd = a.currency === 'USD' || ['CRYPTO', 'STOCK_US'].includes(a.type);
             const posTxs = await AssetTransaction.find({ wallet: a.wallet, ticker: a.ticker })
                 .sort({ date: 1, createdAt: 1 }).select('type quantity price date fxRate').lean();
-            // Mesma caminhada de preço médio de recalculatePosition, em BRL.
+            // Espelha a aritmética EXATA de recalculatePosition (safeCurrency por
+            // lançamento, safeAdd/safeSub no acumulador). Somar em float cru daria
+            // alguns centavos de diferença só de arredondamento, e aí a auditoria
+            // precisaria de uma tolerância larga o bastante para esconder drift real.
             let qty = 0, costBrl = 0;
             for (const tx of posTxs) {
-                const rate = Number(tx.fxRate) > 0 ? Number(tx.fxRate) : resolver(fxDayKey(tx.date));
-                const totalBrl = tx.quantity * tx.price * rate;
-                if (tx.type === 'BUY') { qty += tx.quantity; costBrl += totalBrl; }
-                else { costBrl -= qty > 0 ? costBrl * (tx.quantity / qty) : 0; qty -= tx.quantity; }
+                const txQty = safeQuantity(tx.quantity);
+                const txTotal = safeCurrency(txQty * safeFloat(tx.price));
+                const rate = isUsd ? (Number(tx.fxRate) > 0 ? Number(tx.fxRate) : resolver(fxDayKey(tx.date))) : 1;
+                const txTotalBrl = safeCurrency(txTotal * rate);
+                if (tx.type === 'BUY') {
+                    qty = addQty(qty, txQty);
+                    costBrl = safeAdd(costBrl, txTotalBrl);
+                } else {
+                    const soldBrl = qty > 0 ? safeCurrency(costBrl * (txQty / qty)) : 0;
+                    qty = subQty(qty, txQty);
+                    costBrl = safeSub(costBrl, soldBrl);
+                }
             }
-            const legacy = (a.totalCost || 0) * (macro?.dollar || 0);
-            console.log(`   ${a.ticker.padEnd(10)} exibido ${brl(legacy)} → real ${brl(costBrl)} (${brl(costBrl - legacy)})`);
+            costBrl = safeCurrency(costBrl);
+
+            if (a.totalCostBrl == null) {
+                naoMigradas++;
+                console.log(`   ⚠️  ${a.ticker.padEnd(10)} SEM totalCostBrl (não migrada) — esperado ${brl(costBrl)}`);
+            } else if (Math.abs(a.totalCostBrl - costBrl) > 0.005) {
+                divergentes++;
+                console.log(`   ❌ ${a.ticker.padEnd(10)} gravado ${brl(a.totalCostBrl)} × extrato ${brl(costBrl)} (${brl(a.totalCostBrl - costBrl)})`);
+            }
         }
-        console.log('(estimativa: o valor gravado vem do recálculo de produção, sem --dry)');
+        console.log(divergentes === 0 && naoMigradas === 0
+            ? `   ✅ ${assets.length} posições conferem com o extrato.`
+            : `   ${divergentes} divergente(s), ${naoMigradas} não migrada(s) → rode sem --dry.`);
     }
 
     // --- Passo 2: recalcular posições (preenche totalCostBrl/realizedProfitBrl) ---
