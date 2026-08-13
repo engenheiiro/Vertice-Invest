@@ -15,6 +15,7 @@ import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculate
 import { countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { accrueFixedIncomeValue, fixedIncomeDailyFactor, assetDailyFactor, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
 import { isDollarized, resolveAssetCurrency, resolveTransactionCurrency, needsCurrencyFallback } from '../utils/assetCurrency.js';
+import { positionCostBRL, positionRealizedProfitBRL } from '../utils/fxRate.js';
 import { sumTransactionFlowBRL, transactionsAfterSnapshotFilter } from '../utils/walletSnapshot.js';
 import { resolveAllocationClass } from '../utils/assetAllocation.js';
 import logger from '../config/logger.js';
@@ -79,7 +80,9 @@ const calculateLiveKPIS = async (userId, currentCdi, walletId) => {
         }
 
         totalEquity += safeMult(val, multiplier);
-        totalInvested += safeMult(asset.totalCost, multiplier);
+        // Custo com o câmbio de cada compra congelado — o Valor Aplicado não pode
+        // oscilar sozinho quando o dólar mexe (só o saldo é marcado a mercado).
+        totalInvested += safeFloat(positionCostBRL(asset, usdRate));
     }
 
     return {
@@ -259,7 +262,15 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
         ? safeMult(accruedTotalValue, currentMultiplier)
         : safeMult(valueBase, currentMultiplier);
 
-    const totalCostBr = safeMult(asset.totalCost, currentMultiplier);
+    // Custo em BRL com o câmbio de CADA compra congelado. Reconverter o custo em
+    // dólar pela cotação de hoje (comportamento anterior, hoje só fallback de
+    // posição não migrada) cancelava o câmbio contra o saldo: o resultado passava
+    // a ser o retorno em dólar, e um stablecoin ficava travado em 0,00% eterno.
+    // safeFloat (4 casas) e não safeCurrency: o saldo do outro lado da conta
+    // também é 4 casas, e arredondar só o custo criava um percentual fantasma de
+    // ~0,05% em posições sem movimento. O arredondamento monetário acontece uma
+    // única vez, na saída (`processed.totalCost`).
+    const totalCostBr = safeFloat(positionCostBRL(asset, usdRate));
 
     // Cálculo robusto da variação diária em BRL
     // Considera tanto a variação do ativo quanto a variação cambial
@@ -275,12 +286,16 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
     const combinedChangePct = valueStartBr > 0 ? ((totalValueBr / valueStartBr) - 1) * 100 : 0;
 
     const unrealizedProfitBr = safeSub(totalValueBr, totalCostBr);
-    const realizedProfitBr = safeMult((asset.realizedProfit || 0), currentMultiplier);
+    // Cada venda convertida pelo câmbio do dia dela (não o de hoje).
+    const realizedProfitBr = safeFloat(positionRealizedProfitBRL(asset, usdRate));
     const positionTotalResult = safeAdd(unrealizedProfitBr, realizedProfitBr);
 
     let profitPercent = 0;
     if (totalCostBr > 0) {
-        profitPercent = calculatePercent(positionTotalResult, totalCostBr);
+        // calculatePercent(atual, inicial) = variação entre DOIS VALORES. Passar o
+        // lucro como "atual" devolvia lucro/custo − 100 (um ativo com +10% saía
+        // como −90%). O valor atual da posição é saldo + realizado.
+        profitPercent = calculatePercent(safeAdd(totalValueBr, realizedProfitBr), totalCostBr);
     }
 
     const processed = {

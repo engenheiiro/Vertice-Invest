@@ -32,6 +32,7 @@ import {
 } from './researchPublicationService.js';
 
 import { isDollarized } from '../utils/assetCurrency.js';
+import { positionCostBRL } from '../utils/fxRate.js';
 import {
     brazilDayKey,
     isTwrrReturnAnomalous,
@@ -139,7 +140,9 @@ const computeEquityAt = (assets, { priceMap, macroRates, usdRate, calcDate }) =>
             const price = priceMap.get(asset.ticker)?.price || 0;
             if (price > 0) {
                 totalEquity += asset.quantity * price * multiplier;
-                totalInvested += asset.totalCost * multiplier;
+                // Custo com o câmbio das compras (mesma base do fluxo de aportes,
+                // que já usava o câmbio por data em sumTransactionFlowBRL).
+                totalInvested += positionCostBRL(asset, usdRate);
             }
         }
     }

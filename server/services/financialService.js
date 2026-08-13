@@ -23,6 +23,7 @@ import logger from '../config/logger.js';
 import { historyStorageKey } from '../utils/assetHistory.js';
 import { brazilDayKey, isTwrrReturnAnomalous, isValidDayKey, snapshotInstantForDay } from '../utils/walletSnapshot.js';
 import { resolveAllocationClass } from '../utils/assetAllocation.js';
+import { loadUsdRateResolver, effectiveFxRate } from '../utils/fxRate.js';
 
 export const financialService = {
     
@@ -98,43 +99,10 @@ export const financialService = {
      * evitando cair na taxa ATUAL em datas passadas com gaps (P&L histórico).
      */
     async _loadUsdRateResolver(currentUsdRate) {
-        // G1 FIX: Load historical USD/BRL rates for per-date conversion
-        const usdHistoryDoc = await AssetHistory.findOne({ ticker: 'USD-BRL' }).lean();
-        const usdRateByDate = new Map();
-        if (usdHistoryDoc?.history) {
-            usdHistoryDoc.history.forEach(h => {
-                const rate = Number(h.adjClose || h.close);
-                if (isValidDayKey(h.date) && Number.isFinite(rate) && rate > 0) {
-                    usdRateByDate.set(h.date, rate);
-                }
-            });
-        }
-        const parsedCurrentRate = Number(currentUsdRate);
-        const safeCurrentUsdRate = Number.isFinite(parsedCurrentRate) && parsedCurrentRate > 0
-            ? parsedCurrentRate
-            : 5.75;
-        // Série ordenada (asc) para busca da taxa histórica mais próxima — evita
-        // cair na taxa ATUAL para datas passadas com gaps > 7 dias (P&L histórico).
-        const usdSorted = [...usdRateByDate.entries()]
-            .map(([d, r]) => [new Date(d).getTime(), r])
-            .filter(([t]) => !Number.isNaN(t))
-            .sort((a, b) => a[0] - b[0]);
-
-        return (dateStr) => {
-            if (!isValidDayKey(dateStr)) throw new RangeError(`Data de câmbio inválida: ${dateStr}`);
-            if (usdRateByDate.has(dateStr)) return usdRateByDate.get(dateStr);
-            if (usdSorted.length === 0) return safeCurrentUsdRate; // sem histórico: último recurso
-            const targetMs = new Date(dateStr).getTime();
-            // taxa mais recente em data <= alvo (busca binária)
-            let lo = 0, hi = usdSorted.length - 1, best = -1;
-            while (lo <= hi) {
-                const mid = (lo + hi) >> 1;
-                if (usdSorted[mid][0] <= targetMs) { best = mid; lo = mid + 1; }
-                else hi = mid - 1;
-            }
-            // alvo anterior a todo o histórico → usa a 1ª taxa conhecida (não a atual)
-            return best >= 0 ? usdSorted[best][1] : usdSorted[0][1];
-        };
+        // Implementação única em utils/fxRate.js — a mesma que carimba o câmbio de
+        // compra nos lançamentos, para que P&L histórico e custo da posição não
+        // possam divergir por terem resolvedores diferentes.
+        return loadUsdRateResolver(currentUsdRate);
     },
 
     /**
@@ -770,33 +738,79 @@ export const financialService = {
         const query = AssetTransaction.find({ user: userId, wallet: walletId, ticker }).sort({ date: 1, createdAt: 1 });
         if (session) query.session(session);
         const transactions = await query;
-        
+
+        // A posição é buscada ANTES do laço (era depois) porque o custo em BRL
+        // precisa saber a moeda nativa para resolver o câmbio de cada compra.
+        let assetQuery = UserAsset.findOne({ user: userId, wallet: walletId, ticker });
+        if (session) assetQuery.session(session);
+        let asset = await assetQuery;
+
+        let marketInfo = null;
+        if (!asset && transactions.length > 0) {
+            marketInfo = await MarketAsset.findOne({ ticker });
+        }
+
+        // Mesma precedência de moeda usada na criação da posição (cadastro
+        // explícito > MarketAsset > BRL), só que resolvida antes por necessidade.
+        const nativeCurrency = forcedCurrency || asset?.currency || marketInfo?.currency || 'BRL';
+        let usdRateForDate = null;
+        if (nativeCurrency === 'USD') {
+            // A cotação corrente entra como âncora para lançamentos posteriores ao
+            // último candle da série (compra de hoje, p.ex.).
+            const macro = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).select('dollar').lean().catch(() => null);
+            usdRateForDate = await this._loadUsdRateResolver(macro?.dollar);
+        }
+        const rateOf = (tx) => (nativeCurrency === 'USD' ? effectiveFxRate(tx, 'USD', usdRateForDate) : 1);
+
         let quantity = 0;
-        let totalCost = 0; 
+        let totalCost = 0;
         let realizedProfit = 0;
         let fifoRealizedProfit = 0; // NOVO: Lucro Realizado FIFO
-        let taxLots = []; 
+        let taxLots = [];
         let firstBuyDate = null;
+        // Espelho em BRL de totalCost/realizedProfit: mesma base de preço médio,
+        // cada lançamento convertido pelo câmbio do PRÓPRIO dia. Só assim o
+        // resultado cambial aparece (em vez de se cancelar contra o saldo).
+        let totalCostBrl = 0;
+        let realizedProfitBrl = 0;
+        const fxToStamp = [];
 
         for (const tx of transactions) {
             // Quantidade em 8 casas (cripto); valor monetário continua em 2/4 casas.
             const txQty = safeQuantity(tx.quantity);
             const txPrice = safeFloat(tx.price);
             const txTotal = safeCurrency(txQty * txPrice);
+            const txFx = rateOf(tx);
+            const txTotalBrl = safeCurrency(txTotal * txFx);
+            // Carimba o câmbio nos lançamentos legados EM DÓLAR (auto-heal): a
+            // partir daí o custo em reais não depende mais da reconstrução
+            // histórica. Posição em real não é carimbada — gravar "1" em todo
+            // lançamento do país inteiro seria escrita pura sem informação.
+            if (nativeCurrency === 'USD' && !(Number(tx.fxRate) > 0)) {
+                fxToStamp.push({ id: tx._id, fxRate: txFx });
+            }
 
             if (tx.type === 'BUY') {
                 quantity = addQty(quantity, txQty);
                 totalCost = safeAdd(totalCost, txTotal);
-                taxLots.push({ quantity: txQty, price: txPrice, date: tx.date });
+                totalCostBrl = safeAdd(totalCostBrl, txTotalBrl);
+                taxLots.push({ quantity: txQty, price: txPrice, date: tx.date, fxRate: txFx });
                 if (!firstBuyDate) firstBuyDate = tx.date;
             } else if (tx.type === 'SELL') {
                 const currentAvg = quantity > 0 ? safeFloat(totalCost / quantity) : 0;
                 const costOfSoldShares = safeCurrency(txQty * currentAvg);
                 const profit = safeSub(txTotal, costOfSoldShares);
+                // Baixa proporcional do custo em BRL — preserva o câmbio médio das
+                // compras remanescentes (a venda não reprecifica o que ficou).
+                const costOfSoldSharesBrl = quantity > 0
+                    ? safeCurrency(totalCostBrl * (txQty / quantity))
+                    : 0;
 
                 realizedProfit = safeAdd(realizedProfit, profit);
+                realizedProfitBrl = safeAdd(realizedProfitBrl, safeSub(txTotalBrl, costOfSoldSharesBrl));
                 quantity = subQty(quantity, txQty);
                 totalCost = safeSub(totalCost, costOfSoldShares);
+                totalCostBrl = safeSub(totalCostBrl, costOfSoldSharesBrl);
 
                 let remainingToSell = txQty;
                 let fifoCostOfSoldShares = 0; // NOVO
@@ -824,33 +838,50 @@ export const financialService = {
             const keptLots = taxLots.slice(100);
             let mergedQty = 0;
             let mergedCost = 0;
-            
+            let mergedCostBrl = 0;
+
             lotsToMerge.forEach(l => {
                 mergedQty = addQty(mergedQty, l.quantity);
                 mergedCost = safeAdd(mergedCost, safeCurrency(l.quantity * l.price));
+                mergedCostBrl = safeAdd(mergedCostBrl, safeCurrency(l.quantity * l.price * (l.fxRate || 1)));
             });
 
             const mergedPrice = mergedQty > 0 ? safeFloat(mergedCost / mergedQty) : 0;
-            
+            // Câmbio médio ponderado pelo custo — mantém o lote consolidado com o
+            // mesmo valor em reais que os lotes originais somavam.
+            const mergedFx = mergedCost > 0 ? safeFloat(mergedCostBrl / mergedCost) : 1;
+
             taxLots = [{
                 date: lotsToMerge[lotsToMerge.length - 1].date,
                 quantity: mergedQty,
                 price: mergedPrice,
+                fxRate: mergedFx,
                 _id: false
             }, ...keptLots];
         }
 
         if (quantity < -QUANTITY_EPSILON) throw new Error(`Saldo insuficiente para ${ticker}.`);
-        if (quantity <= QUANTITY_EPSILON) { quantity = 0; totalCost = 0; taxLots = []; }
+        if (quantity <= QUANTITY_EPSILON) { quantity = 0; totalCost = 0; totalCostBrl = 0; taxLots = []; }
 
-        let assetQuery = UserAsset.findOne({ user: userId, wallet: walletId, ticker });
-        if (session) assetQuery.session(session);
-        let asset = await assetQuery;
+        // Persistência do carimbo de câmbio: fora do laço, em uma escrita só, e
+        // best-effort — falhar aqui não pode derrubar o recálculo da posição
+        // (o valor já foi reconstruído em memória e o próximo recalc tenta de novo).
+        if (fxToStamp.length > 0) {
+            try {
+                await AssetTransaction.bulkWrite(
+                    fxToStamp.map(({ id, fxRate }) => ({
+                        updateOne: { filter: { _id: id }, update: { $set: { fxRate } } },
+                    })),
+                    session ? { session } : {},
+                );
+            } catch (err) {
+                logger.warn(`[FX] Falha ao carimbar câmbio em ${ticker}: ${err.message}`);
+            }
+        }
 
-        let marketInfo = null;
         if (!asset) {
             if (transactions.length > 0) {
-                marketInfo = await MarketAsset.findOne({ ticker });
+                // marketInfo já foi buscado acima (a moeda dele decide o câmbio).
                 // Ouro não é mais classe própria na carteira: entra como ETF lastreado
                 // (GLD/IAU/GOLD11…). Se o usuário não escolheu o tipo explicitamente
                 // (forcedType), instrumentos de ouro caem na classe ETF.
@@ -901,10 +932,13 @@ export const financialService = {
         });
 
         asset.quantity = quantity;
-        asset.totalCost = safeCurrency(totalCost); 
+        asset.totalCost = safeCurrency(totalCost);
         asset.realizedProfit = safeCurrency(realizedProfit);
         asset.fifoRealizedProfit = safeCurrency(fifoRealizedProfit); // NOVO
         asset.taxLots = taxLots;
+        // Custo/realizado em BRL com o câmbio de cada lançamento congelado.
+        asset.totalCostBrl = safeCurrency(totalCostBrl);
+        asset.realizedProfitBrl = safeCurrency(realizedProfitBrl);
         asset.updatedAt = new Date();
         
         if (firstBuyDate && (asset.type === 'FIXED_INCOME' || asset.type === 'CASH')) {

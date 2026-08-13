@@ -11,11 +11,22 @@ const UserAssetSchema = new mongoose.Schema({
   name: { type: String },
   type: { type: String, required: true },
   quantity: { type: Number, required: true, default: 0 },
+  // Custo na moeda NATIVA do ativo (US$ para CRYPTO/STOCK_US e afins).
   totalCost: { type: Number, required: true, default: 0 },
-  
+
+  // Custo em BRL com o câmbio de CADA compra congelado (posição em real → igual a
+  // totalCost). Espelha exatamente a mesma base de preço médio de `totalCost`,
+  // só que em reais — por isso é acumulado no mesmo laço de recalculatePosition,
+  // e não derivado dos taxLots (que são FIFO e divergem após venda parcial).
+  //
+  // null = posição anterior ao campo; a leitura cai no câmbio corrente (legado).
+  totalCostBrl: { type: Number, default: null },
+
   // Lucro Realizado (Base: Preço Médio Ponderado - Padrão RFB Brasil)
-  realizedProfit: { type: Number, default: 0 }, 
-  
+  realizedProfit: { type: Number, default: 0 },
+  // Mesmo lucro realizado em BRL, cada venda convertida pelo câmbio do DIA dela.
+  realizedProfitBrl: { type: Number, default: null },
+
   // Lucro Realizado (Base: FIFO - First-In, First-Out - Padrão Internacional/Gerencial)
   fifoRealizedProfit: { type: Number, default: 0 },
 
@@ -23,7 +34,8 @@ const UserAssetSchema = new mongoose.Schema({
   taxLots: [{
     date: { type: Date, required: true },
     quantity: { type: Number, required: true },
-    price: { type: Number, required: true }, // Preço unitário na compra
+    price: { type: Number, required: true }, // Preço unitário na compra (moeda nativa)
+    fxRate: { type: Number }, // Câmbio nativo→BRL na data da compra (BRL = 1)
     _id: false // Não precisa de ID próprio
   }],
 

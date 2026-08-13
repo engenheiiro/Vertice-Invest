@@ -53,7 +53,7 @@ describe('financialService V5 — preços históricos', () => {
 describe('financialService V5 — resolver histórico USD/BRL', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('resolve exato, gap pela taxa anterior, antes da série pela primeira e depois pela última', async () => {
+  it('resolve exato, gap pela taxa anterior, antes da série pela primeira e depois pela cotação corrente', async () => {
     mocks.assetHistoryFindOne.mockReturnValue({ lean: vi.fn().mockResolvedValue({
       history: [
         { date: '2026-07-01', close: 5.4 },
@@ -65,7 +65,10 @@ describe('financialService V5 — resolver histórico USD/BRL', () => {
     expect(resolve('2026-07-10')).toBe(5.5);
     expect(resolve('2026-07-15')).toBe(5.5);
     expect(resolve('2026-06-01')).toBe(5.4);
-    expect(resolve('2026-08-01')).toBe(5.3);
+    // Depois do último candle vale a cotação CORRENTE, não o último fechamento:
+    // a série fecha com 1-3 dias de atraso, e é nessa janela que caem os
+    // lançamentos de hoje, cujo câmbio é congelado no custo da posição.
+    expect(resolve('2026-08-01')).toBe(5.75);
   });
 
   it('ignora candles corrompidos e usa fallback atual saneado', async () => {

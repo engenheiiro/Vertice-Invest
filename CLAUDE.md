@@ -32,6 +32,7 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 | Setores macro | `server/config/sectorTaxonomy.js` |
 | Constantes financeiras | `server/config/financialConstants.js` |
 | Matemática financeira segura | `server/utils/mathUtils.js` |
+| Câmbio de compra e custo em BRL | `server/utils/fxRate.js` |
 | Middleware JWT + downgrade + cache de plano | `server/middleware/authMiddleware.js`, `utils/userCache.js` |
 | Guards de rota (auth/admin) | `client/src/components/auth/ProtectedRoute.tsx`, `AdminRoute.tsx` |
 | Séries temporais (worker) | `server/services/workers/timeSeriesWorker.js` |
@@ -85,7 +86,8 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 5. **ES Modules:** backend usa `import/export`. Nunca `require()`.
 6. **Secrets:** nunca hardcode. Usar variáveis do `.env`.
 7. **Matemática financeira:** sempre usar `safeFloat()`, `safeCurrency()`, `safeAdd/Sub/Mult/Div()` de `mathUtils.js`. Nunca operar com floats brutos em valores monetários.
-8. **Rate limiting em novas rotas:** usar os limiters **por usuário** de `middleware/rateLimiters.js` (`walletWriteLimiter` 50/15min em POST/PUT/DELETE de wallet; `researchHeavyLimiter` 20/15min em rotas caras). Auth já tem `authLimiter` (20/15min); geral `apiLimiter` (3000/15min). Validar escrita com schema Zod (`validate`).
+8. **Câmbio congelado no custo:** custo de posição em dólar **nunca** é reconvertido pela cotação de hoje — use `positionCostBRL()`/`positionRealizedProfitBRL()` de `utils/fxRate.js`, que leem `totalCostBrl`/`realizedProfitBrl` (acumulados com o câmbio de cada lançamento em `recalculatePosition`). Multiplicar custo **e** saldo pela mesma taxa cancela o câmbio: o resultado vira retorno em dólar e o ganho cambial some. Só o **saldo** é marcado a mercado.
+9. **Rate limiting em novas rotas:** usar os limiters **por usuário** de `middleware/rateLimiters.js` (`walletWriteLimiter` 50/15min em POST/PUT/DELETE de wallet; `researchHeavyLimiter` 20/15min em rotas caras). Auth já tem `authLimiter` (20/15min); geral `apiLimiter` (3000/15min). Validar escrita com schema Zod (`validate`).
 
 ---
 

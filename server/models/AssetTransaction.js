@@ -23,6 +23,15 @@ const AssetTransactionSchema = new mongoose.Schema({
   // indistinguíveis dos genuinamente em real e mataria o fallback pela posição
   // (ver resolveTransactionCurrency em utils/assetCurrency.js). Ausente = legado.
   currency: { type: String, enum: ['BRL', 'USD'] },
+
+  // Câmbio da moeda nativa → BRL NA DATA do lançamento (BRL sempre 1). Congela o
+  // custo em reais: sem ele, reconverter o custo pelo dólar de hoje cancela o
+  // câmbio contra o saldo e o resultado cambial some do extrato e da carteira.
+  //
+  // SEM `default` pelo mesmo motivo de `currency`: o Mongoose aplicaria o default
+  // ao hidratar lançamentos legados, tornando-os indistinguíveis dos carimbados.
+  // Ausente = legado; `utils/fxRate.js` reconstrói pelo histórico USD-BRL.
+  fxRate: { type: Number },
   date: { type: Date, required: true, default: Date.now },
   
   notes: { type: String },

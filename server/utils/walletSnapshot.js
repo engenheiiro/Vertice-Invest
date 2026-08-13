@@ -78,9 +78,15 @@ export const sumTransactionFlowBRL = (transactions, assetsByTicker, usdRateForDa
             || null;
         const currency = resolveTransactionCurrency(tx, asset);
         const dateKey = transactionDate.toISOString().slice(0, 10);
-        const usdRate = Number(typeof usdRateForDate === 'function'
-            ? usdRateForDate(dateKey)
-            : usdRateForDate);
+        // Câmbio carimbado no lançamento tem precedência sobre a reconstrução
+        // histórica — é o mesmo número que entrou no custo da posição, e usar
+        // fontes diferentes faria fluxo e custo divergirem no TWRR.
+        const stampedRate = Number(tx.fxRate);
+        const usdRate = Number.isFinite(stampedRate) && stampedRate > 0
+            ? stampedRate
+            : Number(typeof usdRateForDate === 'function'
+                ? usdRateForDate(dateKey)
+                : usdRateForDate);
         if (currency === 'USD' && (!Number.isFinite(usdRate) || usdRate <= 0)) {
             throw new RangeError(`Câmbio USD/BRL inválido para ${dateKey}: ${usdRate}`);
         }
