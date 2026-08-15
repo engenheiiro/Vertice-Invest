@@ -132,29 +132,61 @@ export const calculateStdDev = (returns) => {
 };
 
 /**
+ * Amostra MÍNIMA de retornos diários para o Sharpe ter algum significado.
+ * Exportada para que os chamadores não redeclarem o próprio limiar: havia um
+ * guard morto no walletController (`length >= 5`) que nunca decidia nada, porque
+ * a função abaixo já devolvia 0 abaixo de 10 observações.
+ */
+export const MIN_SHARPE_OBSERVATIONS = 10;
+
+/**
  * Calcula o Índice de Sharpe (Anualizado).
  * Sharpe = (Retorno Médio Carteira - Risk Free) / Volatilidade
+ *
+ * Pressupõe que cada observação cobre UM pregão — a anualização por √252 depende
+ * disso. Quem monta a série a partir de snapshots deve garantir o espaçamento
+ * (ver `utils/walletRisk.js`).
+ *
  * @param {number[]} walletReturns Array de retornos diários (%)
  * @param {number} riskFreeRate Taxa livre de risco anual (%) (ex: 11.25)
  */
 export const calculateSharpeRatio = (walletReturns, riskFreeRate) => {
     if (!Array.isArray(walletReturns)) return 0;
     const validReturns = walletReturns.map(Number).filter(Number.isFinite);
-    if (validReturns.length < 10) return 0;
     const parsedRiskFree = Number(riskFreeRate);
     const safeRiskFree = Number.isFinite(parsedRiskFree) && parsedRiskFree > -100
         ? parsedRiskFree
         : 0;
-    
+
     // Converte Risk Free anual para diário
     const riskFreeDaily = (Math.pow(1 + safeRiskFree / 100, 1 / 252) - 1) * 100;
-    
-    const excessReturns = validReturns.map(r => r - riskFreeDaily);
-    const avgExcessReturn = excessReturns.reduce((a, b) => a + b, 0) / excessReturns.length;
-    const stdDev = calculateStdDev(validReturns);
-    
+
+    return calculateSharpeFromExcess(validReturns.map(r => r - riskFreeDaily));
+};
+
+/**
+ * Sharpe anualizado a partir dos retornos EXCEDENTES (carteira − risk-free) já
+ * calculados. Existe para o caso em que a taxa livre de risco VARIA ao longo da
+ * série — o CDI muda de ano para ano, e descontar a taxa de hoje de um retorno
+ * de 2022 mede um prêmio que nunca existiu. `calculateSharpeRatio` é o atalho
+ * para taxa constante e delega aqui, então a fórmula vive num lugar só.
+ *
+ * O desvio padrão é o do EXCESSO (definição de livro). Com taxa constante isso é
+ * idêntico ao desvio dos retornos brutos — subtrair uma constante não muda a
+ * dispersão —, então o atalho acima não mudou de resultado.
+ *
+ * @param {number[]} excessReturns retornos excedentes diários (%)
+ */
+export const calculateSharpeFromExcess = (excessReturns) => {
+    if (!Array.isArray(excessReturns)) return 0;
+    const valid = excessReturns.map(Number).filter(Number.isFinite);
+    if (valid.length < MIN_SHARPE_OBSERVATIONS) return 0;
+
+    const avgExcessReturn = valid.reduce((a, b) => a + b, 0) / valid.length;
+    const stdDev = calculateStdDev(valid);
+
     if (stdDev === 0) return 0;
-    
+
     // Anualiza o Sharpe (Multiplica por raiz de 252)
     return (avgExcessReturn / stdDev) * Math.sqrt(252);
 };

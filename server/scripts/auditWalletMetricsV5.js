@@ -14,7 +14,7 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import WalletSnapshotBackup from '../models/WalletSnapshotBackup.js';
 import AssetHistory from '../models/AssetHistory.js';
 import SystemConfig from '../models/SystemConfig.js';
-import { calculateSharpeRatio } from '../utils/mathUtils.js';
+import { computeQuotaSharpe } from '../utils/walletRisk.js';
 import { isTwrrReturnAnomalous, snapshotInstantForDay } from '../utils/walletSnapshot.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -37,10 +37,6 @@ const run = async () => {
   if (!wallet) throw new Error(`Carteira não encontrada: ${walletName}`);
 
   const snapshots = await WalletSnapshot.find({ wallet: wallet._id }).sort({ date: 1 }).lean();
-  const recent = snapshots.slice(-30);
-  const returns = recent.slice(1).map((snapshot, index) => (
-    ((snapshot.quotaPrice / recent[index].quotaPrice) - 1) * 100
-  ));
   const macro = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean();
   const cdi = macro?.cdi || macro?.selic || 14.25;
   const badInstants = snapshots.filter((snapshot) => (
@@ -85,7 +81,16 @@ const run = async () => {
         : null,
       equity: last?.totalEquity || 0,
       twrrPercent: Number(((((last?.quotaPrice || 100) / 100) - 1) * 100).toFixed(4)),
-      sharpe: Number(calculateSharpeRatio(returns, cdi).toFixed(4)),
+      // Mesma janela/guardas da produção (utils/walletRisk) — auditoria que
+      // reimplementa a fórmula audita a si mesma, não o app.
+      ...(() => {
+        const { sharpe, sample, skippedGaps } = computeQuotaSharpe(snapshots, cdi);
+        return {
+          sharpe: sharpe === null ? null : Number(sharpe.toFixed(4)),
+          sharpeSample: sample,
+          sharpeSkippedGaps: skippedGaps,
+        };
+      })(),
       cdi,
       version5: snapshots.every((snapshot) => snapshot.calculationVersion === 5),
       invalidClosingInstants: badInstants.length,

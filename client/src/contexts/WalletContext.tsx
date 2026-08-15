@@ -9,6 +9,7 @@ import { useToast } from './ToastContext';
 import { DEMO_ASSETS, DEMO_KPIS, DEMO_HISTORY } from '../data/DEMO_DATA'; // Importar Dados Mock
 import { STALE_TIME } from '../config/queryConfig';
 import { computeWalletKpis } from '../utils/kpiCalculations';
+import type { SharpeConfidence } from '../utils/format';
 import { getErrorMessage } from '../utils/errorMessages';
 import { foldEtfIntoStock } from '../utils/allocation';
 
@@ -63,8 +64,16 @@ export interface WalletKPIs {
     projectedDividends: number;
     weightedRentability: number;
     dataQuality?: 'AUDITED' | 'ESTIMATED';
-    sharpeRatio?: number; // Novo
-    beta?: number; // Novo
+    /** `null` = sem amostra suficiente para medir risco (≠ Sharpe zero). */
+    sharpeRatio?: number | null;
+    /** Confiança da estimativa, derivada do tamanho da amostra. */
+    sharpeConfidence?: SharpeConfidence | null;
+    /** Margem de erro (±) do Sharpe anualizado. */
+    sharpeStandardError?: number | null;
+    /** Retornos diários que entraram no cálculo. */
+    sharpeSample?: number;
+    /** `null` = não medido neste caminho (o KPI não busca o Ibovespa). */
+    beta?: number | null;
 }
 
 export interface HistoryPoint {

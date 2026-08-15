@@ -88,6 +88,70 @@ export function formatQuantity(
   });
 }
 
+/** Confiança do Sharpe, derivada do tamanho da amostra (definida no servidor). */
+export type SharpeConfidence = 'LOW' | 'MODERATE' | 'HIGH';
+
+/**
+ * Índice de Sharpe. Devolve `null` quando não há indicador (servidor manda
+ * `null` em amostra insuficiente) — o chamador esconde o badge em vez de
+ * inventar um número.
+ *
+ * Duas casas: em carteiras dominadas por caixa o Sharpe vive perto de zero, e
+ * `toFixed(1)` transformava -0,0168 no literal `"-0.0"`, que parece defeito.
+ * Valores dentro de ±0,005 são normalizados para 0 para nunca exibir `"-0,00"`.
+ *
+ * Amostra fraca ganha o prefixo `~`: cabe no badge sem quebrar o layout e é lido
+ * universalmente como "aproximado". O detalhe fica no tooltip (`describeSharpe`).
+ */
+export function formatSharpe(
+  value: number | null | undefined,
+  options: { confidence?: SharpeConfidence | null } = {},
+): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  const normalized = Math.abs(value) < 0.005 ? 0 : value;
+  const prefix = options.confidence === 'LOW' ? '~' : '';
+  return `${prefix}${normalized.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/**
+ * Texto do tooltip do Sharpe. Existe porque o indicador sozinho num badge limpo
+ * transmite uma precisão que a amostra raramente sustenta: com poucos pregões a
+ * margem de erro chega a ser maior que o próprio valor, e quem lê precisa saber
+ * disso antes de decidir qualquer coisa.
+ */
+export function describeSharpe(params: {
+  standardError?: number | null;
+  confidence?: SharpeConfidence | null;
+  sample?: number | null;
+} = {}): string {
+  const parts = ['Índice de Sharpe (retorno ajustado ao risco)'];
+
+  if (typeof params.sample === 'number' && params.sample > 0) {
+    parts.push(`medido sobre ${params.sample} pregões`);
+  }
+
+  const base = `${parts.join(', ')}.`;
+  const detail: string[] = [];
+
+  if (typeof params.standardError === 'number' && Number.isFinite(params.standardError)) {
+    detail.push(`Margem de erro ±${params.standardError.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}.`);
+  }
+
+  if (params.confidence === 'LOW') {
+    detail.push('Amostra curta: trate como indicativo, não como medida.');
+  } else if (params.confidence === 'MODERATE') {
+    detail.push('Amostra ainda parcial (menos de 1 ano).');
+  }
+
+  return [base, ...detail].join(' ');
+}
+
 /**
  * Formata datas financeiras que representam um DIA, sem horário. Usa UTC de
  * propósito para compatibilidade com registros legados gravados à meia-noite Z:

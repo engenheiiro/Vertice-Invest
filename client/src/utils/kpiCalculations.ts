@@ -27,8 +27,12 @@ export function computeWalletKpis(
       projectedDividends: serverKpis?.projectedDividends ?? 0,
       weightedRentability: 0,
       dataQuality: 'AUDITED',
-      sharpeRatio: 0,
-      beta: 0,
+      // Sem posições não há risco medível — null, não zero.
+      sharpeRatio: null,
+      sharpeConfidence: null,
+      sharpeStandardError: null,
+      sharpeSample: 0,
+      beta: null,
     };
   }
 
@@ -57,7 +61,11 @@ export function computeWalletKpis(
     projectedDividends: serverKpis?.projectedDividends ?? 0,
     weightedRentability: serverKpis?.weightedRentability ?? resultPercent,
     dataQuality: serverKpis?.dataQuality ?? 'ESTIMATED',
-    sharpeRatio: serverKpis?.sharpeRatio ?? 0,
-    beta: serverKpis?.beta ?? 0,
+    // `?? null` e não `?? 0`: ausência de métrica é "não medido", não "risco zero".
+    sharpeRatio: serverKpis?.sharpeRatio ?? null,
+    sharpeConfidence: serverKpis?.sharpeConfidence ?? null,
+    sharpeStandardError: serverKpis?.sharpeStandardError ?? null,
+    sharpeSample: serverKpis?.sharpeSample ?? 0,
+    beta: serverKpis?.beta ?? null,
   };
 }

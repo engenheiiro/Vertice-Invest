@@ -38,7 +38,7 @@ const EMPTY_WALLET = {
     projectedDividends: 0,
     weightedRentability: 0,
     dataQuality: 'AUDITED',
-    sharpeRatio: 0,
+    sharpeRatio: null, // sem histórico de snapshots não há risco medível
     beta: 1,
   },
   meta: { usdRate: 5.75 },

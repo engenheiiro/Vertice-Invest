@@ -3,7 +3,7 @@ import React from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
 import { SkeletonKpiGrid, FitText } from '../ui';
-import { formatCurrency as fmtCurrency } from '../../utils/format';
+import { formatCurrency as fmtCurrency, formatSharpe, describeSharpe } from '../../utils/format';
 import { useCountUp } from '../../hooks/useCountUp';
 
 interface EquitySummaryProps {
@@ -40,6 +40,13 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
         : 0;
     const isCapitalPositive = capitalVariationPercent >= 0;
     const isAudited = kpis?.dataQuality === 'AUDITED';
+    // null quando o servidor não teve amostra para medir risco — o badge some.
+    const sharpeLabel = formatSharpe(kpis?.sharpeRatio, { confidence: kpis?.sharpeConfidence });
+    const sharpeTitle = describeSharpe({
+        standardError: kpis?.sharpeStandardError,
+        confidence: kpis?.sharpeConfidence,
+        sample: kpis?.sharpeSample,
+    });
 
     const totalGross = (kpis?.totalEquity || 0) + (kpis?.totalDividends || 0);
     const grossMultiple = (kpis?.totalInvested || 0) > 0 ? totalGross / kpis.totalInvested : 0;
@@ -135,9 +142,9 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
                 }
                 tag={
                     <>
-                        {kpis.sharpeRatio !== undefined && kpis.sharpeRatio !== 0 && (
-                            <span className="inline-flex items-center gap-1 mr-1 text-slate-400" title="Índice de Sharpe (Retorno vs Risco)">
-                                <Scale size={10} /> {kpis.sharpeRatio.toFixed(1)}
+                        {sharpeLabel && (
+                            <span className="inline-flex items-center gap-1 mr-1 text-slate-400" title={sharpeTitle}>
+                                <Scale size={10} /> {sharpeLabel}
                             </span>
                         )}
                         {isAudited ? <ShieldCheck size={11} /> : <AlertTriangle size={11} />}

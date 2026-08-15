@@ -15,6 +15,26 @@ export const HISTORICAL_CDI_RATES = {
     2024: 10.80
 };
 
+/**
+ * CDI anual (%) de um ANO-CALENDÁRIO. Fonte única da resolução de taxa por ano —
+ * antes cada consumidor repetia `HISTORICAL_CDI_RATES[y] || 10.0`.
+ *
+ * ATENÇÃO: a tabela acima para em 2024. Anos sem entrada caem no `fallback`, e é
+ * por isso que ele é EXPLÍCITO em vez de fixo: a curva de benchmark mantém o
+ * legado 10.0, enquanto o cálculo de risco passa a taxa corrente (estimativa
+ * muito melhor para um ano recente não mapeado). Preencher 2025+ na tabela
+ * elimina a divergência.
+ *
+ * @param {number} year ano-calendário
+ * @param {{ currentRate?: number, currentYear?: number, fallback?: number }} opts
+ */
+export const cdiAnnualRateForYear = (year, { currentRate, currentYear = new Date().getFullYear(), fallback = 10.0 } = {}) => {
+    if (year === currentYear && Number.isFinite(Number(currentRate)) && Number(currentRate) > 0) {
+        return Number(currentRate);
+    }
+    return HISTORICAL_CDI_RATES[year] ?? fallback;
+};
+
 // Data de corte do motor de sinais "v2": apenas sinais gerados a partir
 // desta data entram nos cálculos de acurácia/estatísticas do Radar.
 // Fonte única da verdade — usado em researchController e generateRadarReport.

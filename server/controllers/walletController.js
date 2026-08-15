@@ -11,7 +11,8 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
-import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, calculateSharpeRatio, calculateBeta, safeValue, safePrice, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
+import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, safeValue, safePrice, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
+import { computeQuotaSharpe, computeQuotaBeta, snapshotDayKey, SHARPE_WINDOW_SNAPSHOTS } from '../utils/walletRisk.js';
 import { countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { accrueFixedIncomeValue, fixedIncomeDailyFactor, assetDailyFactor, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
 import { isDollarized, resolveAssetCurrency, resolveTransactionCurrency, needsCurrencyFallback } from '../utils/assetCurrency.js';
@@ -20,21 +21,16 @@ import { sumTransactionFlowBRL, transactionsAfterSnapshotFilter } from '../utils
 import { resolveAllocationClass } from '../utils/assetAllocation.js';
 import logger from '../config/logger.js';
 import AppError from '../utils/AppError.js';
-import { HISTORICAL_CDI_RATES, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
+import { cdiAnnualRateForYear, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { runDailySnapshot } from '../services/schedulerService.js'; // Importado
 
 const getDailyFactorForDate = (date, currentConfigRate) => {
-    const year = date.getFullYear();
-    const currentYear = new Date().getFullYear();
-
-    let rate = DEFAULT_SELIC_FALLBACK;
-
-    if (year === currentYear) {
-        rate = currentConfigRate || DEFAULT_SELIC_FALLBACK;
-    } else {
-        rate = HISTORICAL_CDI_RATES[year] || 10.0;
-    }
-
+    // Resolução da taxa por ano centralizada em financialConstants. Fallback 10.0
+    // preservado (legado desta curva de benchmark); o cálculo de risco usa outro.
+    const rate = cdiAnnualRateForYear(date.getFullYear(), {
+        currentRate: currentConfigRate || DEFAULT_SELIC_FALLBACK,
+        fallback: 10.0,
+    });
     return Math.pow(1 + (rate / 100), 1/252);
 };
 
@@ -152,8 +148,12 @@ const buildEmptyWalletResponse = async (targets) => {
             dayVariation: 0, dayVariationPercent: 0, totalDividends: 0, projectedDividends: 0,
             weightedRentability: 0,
             dataQuality: 'AUDITED',
-            sharpeRatio: 0,
-            beta: 0
+            // Carteira vazia não tem risco medível — null, não zero.
+            sharpeRatio: null,
+            sharpeConfidence: null,
+            sharpeStandardError: null,
+            sharpeSample: 0,
+            beta: null
         },
         ...targets,
         meta: { usdRate: emptyUsdRate }
@@ -165,11 +165,21 @@ const buildEmptyWalletResponse = async (targets) => {
 // usados no TWRR/Sharpe. (5.3) Promise.allSettled: se uma falha (ex.: cálculo
 // de dividendos), a carteira ainda renderiza com degradação graciosa.
 const fetchWalletMarketContext = async (userId, liveTickers, walletId) => {
-    const [assetMapR, configR, dividendsR, snapshotsR] = await Promise.allSettled([
+    const [assetMapR, configR, dividendsR, snapshotsR, riskSnapshotsR] = await Promise.allSettled([
         marketDataService.getMarketDataMap(liveTickers),
         SystemConfig.findOne({ key: 'MACRO_INDICATORS' }),
         financialService.calculateUserDividends(userId, walletId),
         WalletSnapshot.find({ user: userId, wallet: walletId }).sort({ date: -1 }).limit(30).lean(),
+        // Série de risco (Sharpe): janela própria, MAIOR e com o mesmo filtro de
+        // patrimônio do /performance — é o que garante que os dois caminhos vejam
+        // o mesmo conjunto. Query separada de propósito: a busca acima define o
+        // snapshot-âncora do TWRR e mexer no limite dela mudaria a cota exibida.
+        // Projetada nos campos usados, então são documentos pequenos.
+        WalletSnapshot.find({ user: userId, wallet: walletId, totalEquity: { $gt: 1 } })
+            .sort({ date: -1 })
+            .limit(SHARPE_WINDOW_SNAPSHOTS)
+            .select('date quotaPrice totalEquity totalInvested')
+            .lean(),
     ]);
 
     const assetMap = assetMapR.status === 'fulfilled' ? assetMapR.value : new Map();
@@ -177,8 +187,9 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId) => {
     const { totalAllTime: totalDividends = 0, projectedMonthly = 0, receivedByTicker = {} } =
         dividendsR.status === 'fulfilled' ? dividendsR.value : {};
     const snapshots = snapshotsR.status === 'fulfilled' ? snapshotsR.value : [];
+    const riskSnapshots = riskSnapshotsR.status === 'fulfilled' ? riskSnapshotsR.value : [];
 
-    return { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots };
+    return { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots, riskSnapshots };
 };
 
 // Processa um único ativo: resolve preço/variação e devolve o card pronto +
@@ -360,12 +371,15 @@ const computePendingFlowBRL = async ({ userId, walletId, anchor, currentUsd }) =
     return sumTransactionFlowBRL(txs, assetsByTicker, getUsdRateForDate);
 };
 
-const computeWalletMetrics = async ({ userId, walletId, snapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd }) => {
+const computeWalletMetrics = async ({ userId, walletId, snapshots, riskSnapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd }) => {
     const now = new Date();
     let weightedRentability = 0;
     let dataQuality = 'AUDITED'; // Default Audited
-    let sharpeRatio = 0;
-    const beta = 0;
+    // Beta exigiria o histórico do Ibovespa (fetch extra numa rota quente) e hoje
+    // nada na UI o consome. `null` = "não medido aqui"; o /performance calcula.
+    // Antes ia como 0, que se lê como "carteira imune ao mercado" — uma afirmação
+    // que este caminho nunca fez.
+    const beta = null;
 
     // Snapshots (últimos 30) já carregados no lote paralelo acima (5.4).
     // Âncora via regra única compartilhada (paridade KPI × gráfico).
@@ -390,21 +404,22 @@ const computeWalletMetrics = async ({ userId, walletId, snapshots, safeTotalEqui
     }
 
     // --- CÁLCULO DE VOLATILIDADE (Sharpe) ---
-    // Usa as quotaPrices dos últimos 30 snapshots já carregados.
-    if (snapshots.length >= 10) {
-        const sortedSnaps = [...snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
-        const walletReturns = [];
-        for (let i = 1; i < sortedSnaps.length; i++) {
-            const prev = sortedSnaps[i - 1].quotaPrice || 100;
-            const curr = sortedSnaps[i].quotaPrice || 100;
-            if (prev > 0) walletReturns.push(((curr / prev) - 1) * 100);
-        }
-        if (walletReturns.length >= 5) {
-            sharpeRatio = calculateSharpeRatio(walletReturns, currentCdi);
-        }
-    }
+    // Janela, corte de regime, validação de espaçamento e guardas de amostra
+    // vivem em utils/walletRisk — fonte ÚNICA compartilhada com
+    // getWalletPerformance. `sharpe` vem null quando não é calculável (≠ zero,
+    // que é valor legítimo). Usa a série de risco, não os snapshots do âncora.
+    const { sharpe: sharpeRatio, confidence, standardError, sample } =
+        computeQuotaSharpe(riskSnapshots, currentCdi);
 
-    return { weightedRentability, dataQuality, sharpeRatio, beta };
+    return {
+        weightedRentability,
+        dataQuality,
+        sharpeRatio,
+        sharpeConfidence: confidence,
+        sharpeStandardError: standardError,
+        sharpeSample: sample,
+        beta,
+    };
 };
 
 /**
@@ -442,7 +457,7 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
                 .catch(err => logger.warn(`[Wallet] Refresh de cotações em background falhou: ${err.message}`));
         }
 
-        const { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots } =
+        const { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots, riskSnapshots } =
             await fetchWalletMarketContext(userId, liveTickers, walletId);
 
         const usdRate = safeFloat(config?.dollar || 5.75);
@@ -499,9 +514,10 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
             }
         }
 
-        const { weightedRentability, dataQuality, sharpeRatio, beta } = await computeWalletMetrics({
-            userId, walletId, snapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd: usdRate,
-        });
+        const { weightedRentability, dataQuality, sharpeRatio, sharpeConfidence, sharpeStandardError, sharpeSample, beta } =
+            await computeWalletMetrics({
+                userId, walletId, snapshots, riskSnapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd: usdRate,
+            });
 
         return {
             assets: processedAssets,
@@ -516,8 +532,15 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
                 projectedDividends: safeCurrency(projectedMonthly),
                 weightedRentability: safeFloat(weightedRentability),
                 dataQuality: dataQuality,
-                sharpeRatio: safeFloat(sharpeRatio),
-                beta: safeFloat(beta)
+                // null preservado de propósito: safeFloat(null) viraria 0 e a UI
+                // exibiria "sem risco" onde não houve medição.
+                sharpeRatio: sharpeRatio === null ? null : safeFloat(sharpeRatio),
+                // Acompanham o indicador para que a UI não transmita uma precisão
+                // que a amostra não sustenta.
+                sharpeConfidence,
+                sharpeStandardError: sharpeStandardError === null ? null : safeFloat(sharpeStandardError),
+                sharpeSample,
+                beta: beta === null ? null : safeFloat(beta)
             },
             ...targets,
             meta: { usdRate, lastUpdate: new Date() }
@@ -596,12 +619,17 @@ export const getWalletPerformance = async (req, res, next) => {
             ibovHistory.forEach(h => ibovMap.set(h.date, h.close || h.adjClose));
         }
 
-        const startDateStr = toDateKey(history[0].date);
+        const startDateStr = snapshotDayKey(history[0]);
         let baseIbov = ibovMap.get(startDateStr);
         if (!baseIbov) {
              const fallback = ibovHistory?.find(h => h.date >= startDateStr);
              baseIbov = fallback ? (fallback.close || fallback.adjClose) : 120000;
         }
+        // Último fechamento conhecido do índice, para dias sem cotação. Antes o
+        // código caía no `baseIbov` (o fechamento do PRIMEIRO dia da série): além
+        // de zerar o % daquele dia, virava a nova referência do passo seguinte e
+        // a curva em R$ dava um salto artificial (fator = close/baseIbov).
+        let lastKnownIbov = baseIbov;
 
         const currentRate = config?.cdi || DEFAULT_SELIC_FALLBACK;
         let accumulatedCDI = 1.0;
@@ -619,11 +647,6 @@ export const getWalletPerformance = async (req, res, next) => {
         const realRate = 6.0;
         const totalIpcaRate = ipcaRate + realRate; // ex: 10.5% a.a.
 
-        // --- CÁLCULO DE MÉTRICAS (SHARPE & BETA) ---
-        // Arrays de retornos diários para cálculo estatístico
-        const walletReturns = [];
-        const marketReturns = [];
-
         // Benchmarks cashflow-aware (modo R$): o capital cresce pelo índice e
         // recebe os MESMOS aportes/resgates nas datas reais — comparável à
         // carteira (que também inclui os aportes). Semente = invested inicial.
@@ -632,7 +655,7 @@ export const getWalletPerformance = async (req, res, next) => {
         let prevIbovForVal = baseIbov;
 
         const result = history.map((point, index) => {
-            const dateStr = toDateKey(point.date);
+            const dateStr = snapshotDayKey(point);
             const currentDate = brazilDateOnly(point.date);
 
             const daysDelta = countBusinessDays(previousDate, currentDate);
@@ -648,7 +671,10 @@ export const getWalletPerformance = async (req, res, next) => {
             if (point.isLive && !currentIbov) {
                 currentIbov = config?.ibov;
             }
-            if (!currentIbov && baseIbov) currentIbov = baseIbov;
+            // Dia sem cotação (feriado, dado faltante): repete o último fechamento
+            // conhecido — o índice "anda de lado" em vez de saltar.
+            if (!currentIbov) currentIbov = lastKnownIbov;
+            if (currentIbov) lastKnownIbov = currentIbov;
 
             const ibovPercent = baseIbov && currentIbov ? ((currentIbov / baseIbov) - 1) * 100 : 0;
             const walletTWRR = point.quotaPrice ? ((point.quotaPrice/100)-1)*100 : 0;
@@ -665,19 +691,6 @@ export const getWalletPerformance = async (req, res, next) => {
             }
             prevInvested = point.totalInvested || 0;
             if (currentIbov) prevIbovForVal = currentIbov;
-
-            // Coleta de retornos diários (para Beta/Sharpe)
-            if (index > 0) {
-                const prevPoint = history[index-1];
-                const prevQuota = prevPoint.quotaPrice || 100;
-                const currQuota = point.quotaPrice || 100;
-                const dailyWalletReturn = ((currQuota / prevQuota) - 1) * 100;
-                walletReturns.push(dailyWalletReturn);
-
-                const prevIbovVal = (index === 1 && !history[0].isLive) ? baseIbov : (ibovMap.get(toDateKey(history[index-1].date)) || baseIbov);
-                const dailyMarketReturn = prevIbovVal > 0 ? ((currentIbov / prevIbovVal) - 1) * 100 : 0;
-                marketReturns.push(dailyMarketReturn);
-            }
 
             const walletROI = point.totalInvested > 0
                 ? ((point.totalEquity - point.totalInvested + point.totalDividends) / point.totalInvested) * 100
@@ -698,22 +711,34 @@ export const getWalletPerformance = async (req, res, next) => {
             };
         });
 
-        // Forward-fill do Ibov % quando faltar cotação no dia (feriado/sem dado).
-        let lastKnownIbov = 0;
-        result.forEach(r => {
-            if (r.ibov !== 0) lastKnownIbov = r.ibov;
-            else r.ibov = lastKnownIbov;
-        });
+        // (O forward-fill do Ibov % que existia aqui saiu: o carry-forward agora é
+        // feito na fonte, sobre o FECHAMENTO do índice. Fazê-lo no percentual
+        // final tratava "0%" como sinônimo de "sem dado" e apagava um dia em que
+        // o índice genuinamente empatou com a base.)
 
         // Calcular Métricas Finais
-        const sharpe = calculateSharpeRatio(walletReturns, currentRate);
-        const beta = calculateBeta(walletReturns, marketReturns);
+        // Sharpe e Beta pela MESMA fonte do KPI (utils/walletRisk) e sobre a MESMA
+        // série: janela rolante, corte no último evento de regime, espaçamento de
+        // 1 pregão validado e ponto live fora. O histórico completo continua
+        // alimentando o gráfico — só as métricas de risco usam a janela.
+        // O índice é lido pelo dia-calendário BR: os snapshots fecham às 23:59 BRT
+        // e a chave UTC crua apontaria para o pregão seguinte.
+        const resolveIbovClose = (dayKey) => ibovMap.get(dayKey);
+        const { sharpe, sample: sharpeSample, skippedGaps: sharpeSkippedGaps, confidence, standardError, regimeBreakAt } =
+            computeQuotaSharpe(history, currentRate);
+        const { beta, sample: betaSample } = computeQuotaBeta(history, resolveIbovClose);
 
         res.json({
             history: result,
             stats: {
-                sharpe: safeFloat(sharpe),
-                beta: safeFloat(beta)
+                sharpe: sharpe === null ? null : safeFloat(sharpe),
+                sharpeSample,
+                sharpeSkippedGaps,
+                sharpeConfidence: confidence,
+                sharpeStandardError: standardError === null ? null : safeFloat(standardError),
+                regimeBreakAt,
+                beta: beta === null ? null : safeFloat(beta),
+                betaSample
             }
         });
     } catch (error) {

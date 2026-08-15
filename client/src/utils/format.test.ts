@@ -5,6 +5,8 @@ import {
   formatCompact,
   formatCalendarDate,
   formatQuantity,
+  formatSharpe,
+  describeSharpe,
   PRIVACY_MASK,
   PRIVACY_MASK_SHORT,
 } from './format';
@@ -119,6 +121,62 @@ describe('formatCompact — edge cases', () => {
   });
   it('trata Infinity como 0 (sem decimais em compacto)', () => {
     expect(norm(formatCompact(Infinity))).toBe('R$ 0');
+  });
+});
+
+describe('formatSharpe', () => {
+  it('duas casas — um Sharpe pequeno continua legível como número', () => {
+    // Regressão: com toFixed(1) este valor virava "-0.0" e parecia defeito.
+    expect(formatSharpe(-0.0168)).toBe('-0,02');
+  });
+  it('normaliza o zero negativo (nunca exibe "-0,00")', () => {
+    expect(formatSharpe(-0.001)).toBe('0,00');
+  });
+  it('zero é EXIBIDO — carteira que rende o CDI tem Sharpe neutro, não ausente', () => {
+    expect(formatSharpe(0)).toBe('0,00');
+  });
+  it('valor típico mantém as duas casas', () => {
+    expect(formatSharpe(1.8)).toBe('1,80');
+  });
+  it('null/undefined → null (o chamador esconde o badge)', () => {
+    expect(formatSharpe(null)).toBeNull();
+    expect(formatSharpe(undefined)).toBeNull();
+  });
+  it('valores não finitos não viram "NaN" na tela', () => {
+    expect(formatSharpe(NaN)).toBeNull();
+    expect(formatSharpe(Infinity)).toBeNull();
+  });
+  it('amostra fraca ganha "~" para não passar precisão que não existe', () => {
+    expect(formatSharpe(0.58, { confidence: 'LOW' })).toBe('~0,58');
+  });
+  it('amostra sólida não recebe prefixo', () => {
+    expect(formatSharpe(0.58, { confidence: 'HIGH' })).toBe('0,58');
+    expect(formatSharpe(0.58, { confidence: 'MODERATE' })).toBe('0,58');
+  });
+});
+
+describe('describeSharpe', () => {
+  it('informa o tamanho da amostra e a margem de erro', () => {
+    const texto = describeSharpe({ sample: 79, standardError: 1.79, confidence: 'LOW' });
+    expect(texto).toContain('79 pregões');
+    expect(texto).toContain('±1,79');
+  });
+  it('avisa explicitamente quando a amostra é curta', () => {
+    expect(describeSharpe({ confidence: 'LOW' })).toContain('indicativo');
+  });
+  it('sinaliza amostra parcial em confiança média', () => {
+    expect(describeSharpe({ confidence: 'MODERATE' })).toContain('menos de 1 ano');
+  });
+  it('amostra sólida não recebe ressalva', () => {
+    const texto = describeSharpe({ sample: 252, standardError: 1.0, confidence: 'HIGH' });
+    expect(texto).not.toContain('indicativo');
+    expect(texto).not.toContain('menos de 1 ano');
+  });
+  it('sem dados devolve só a definição, sem inventar números', () => {
+    const texto = describeSharpe();
+    expect(texto).toContain('Índice de Sharpe');
+    expect(texto).not.toContain('±');
+    expect(texto).not.toContain('pregões');
   });
 });
 
