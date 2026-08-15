@@ -273,6 +273,11 @@ export const markLotsToMarket = (lots, history, targetIso) => {
  */
 export const markToMarketFixedIncome = (asset, { history, calcDate }) => {
     if (!Array.isArray(history) || history.length === 0) return null;
+    // Só título público é marcável. O matcher (utils/treasuryTitle) já recusa
+    // CASH, mas a garantia é repetida aqui de propósito: é a última linha antes
+    // do número virar patrimônio, e um contexto de preço montado errado marcaria
+    // a reserva de emergência a mercado sem emitir um único aviso.
+    if (asset?.type !== 'FIXED_INCOME') return null;
 
     // Vencido: o título é resgatado ao par e para de valer preço de mercado. A
     // série termina no vencimento, então basta pedir o PU daquele dia.

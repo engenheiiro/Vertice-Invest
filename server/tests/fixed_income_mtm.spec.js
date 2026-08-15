@@ -11,7 +11,6 @@
 import { describe, it, expect } from 'vitest';
 import {
     findTreasuryPu,
-    markLotsToMarket,
     markToMarketFixedIncome,
     valueFixedIncomeAsset,
     accrueFixedIncomeValue,
@@ -163,6 +162,17 @@ describe('markToMarketFixedIncome — razão de PU', () => {
         const marked = markToMarketFixedIncome(vencido, { history, calcDate });
         expect(marked.priceDate).toBe(D2);
         expect(marked.value).toBeCloseTo(1000 * (1050 / 1010), 6);
+    });
+
+    it('caixa/reserva nunca é marcado, mesmo recebendo série (defesa em profundidade)', () => {
+        const reserva = {
+            type: 'CASH',
+            ticker: 'RESERVA-EMERGENCIA',
+            quantity: 15000,
+            totalCost: 15000,
+            taxLots: [{ date: dayDate(-4), quantity: 15000, price: 1 }],
+        };
+        expect(markToMarketFixedIncome(reserva, { history, calcDate })).toBeNull();
     });
 
     it('razão implausível é tratada como dado corrompido', () => {

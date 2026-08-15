@@ -165,7 +165,7 @@ export const loadSnapshotContext = async (dayStr = brDayStr(new Date())) => {
 // variável: FECHAMENTO do dia (mesma marcação do rebuild), caindo na cotação
 // corrente só quando o candle ainda não chegou — cripto negocia 24/7 e o candle
 // do dia corrente pode não existir às 23:59.
-const computeEquityAt = (assets, { priceMap, closeMap, macroRates, usdRate, calcDate, treasuryPricing = EMPTY_TREASURY_PRICING }) => {
+export const computeEquityAt = (assets, { priceMap, closeMap, macroRates, usdRate, calcDate, treasuryPricing = EMPTY_TREASURY_PRICING }) => {
     let totalEquity = 0;
     let totalInvested = 0;
     for (const asset of assets) {
