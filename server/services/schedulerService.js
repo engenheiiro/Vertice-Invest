@@ -25,7 +25,8 @@ import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
 import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
 import { calculateDailyDietz } from '../utils/mathUtils.js';
-import { accrueFixedIncomeValue } from '../utils/fixedIncome.js';
+import { valueFixedIncomeAsset } from '../utils/fixedIncome.js';
+import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
 import { validateFundamentalsPublicationHealth } from '../utils/ingestionHealth.js';
 import {
     activateResearchSections,
@@ -150,7 +151,13 @@ export const loadSnapshotContext = async (dayStr = brDayStr(new Date())) => {
     const priceMap = await marketDataService.getMarketDataMap([...new Set(liveAssets.map((a) => a.ticker))]);
     const closeMap = await loadDayCloses(liveAssets, dayStr);
     const getUsdRateForDate = await financialService._loadUsdRateResolver(usdRate);
-    return { usdRate, macroRates, priceMap, closeMap, getUsdRateForDate };
+    // Séries de PU do Tesouro, uma vez por run: o snapshot precisa marcar a renda
+    // fixa pela MESMA régua do KPI ao vivo, senão o histórico e o card divergem.
+    const treasuryAssets = await UserAsset.find({ type: 'FIXED_INCOME' })
+        .select('ticker type name maturityDate fixedIncomeIndex')
+        .lean();
+    const treasuryPricing = await loadTreasuryPricing(treasuryAssets);
+    return { usdRate, macroRates, priceMap, closeMap, getUsdRateForDate, treasuryPricing };
 };
 
 // Patrimônio (equity/invested) de um conjunto de ativos numa data de cálculo.
@@ -158,13 +165,15 @@ export const loadSnapshotContext = async (dayStr = brDayStr(new Date())) => {
 // variável: FECHAMENTO do dia (mesma marcação do rebuild), caindo na cotação
 // corrente só quando o candle ainda não chegou — cripto negocia 24/7 e o candle
 // do dia corrente pode não existir às 23:59.
-const computeEquityAt = (assets, { priceMap, closeMap, macroRates, usdRate, calcDate }) => {
+const computeEquityAt = (assets, { priceMap, closeMap, macroRates, usdRate, calcDate, treasuryPricing = EMPTY_TREASURY_PRICING }) => {
     let totalEquity = 0;
     let totalInvested = 0;
     for (const asset of assets) {
         const multiplier = isDollarized(asset) ? usdRate : 1;
         if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
-            totalEquity += accrueFixedIncomeValue(asset, { ...macroRates, calcDate });
+            totalEquity += valueFixedIncomeAsset(asset, {
+                ...macroRates, calcDate, history: treasuryPricing.historyFor(asset),
+            }).value;
             totalInvested += asset.totalCost;
         } else {
             const close = closeMap?.get(historyStorageKey(asset.ticker, asset.type)) || 0;
@@ -197,7 +206,7 @@ export const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = 
     const calculatedAt = new Date();
 
     const positions = assets || await UserAsset.find({ user: userId, wallet: walletId });
-    const { totalEquity, totalInvested } = computeEquityAt(positions, { priceMap, closeMap, macroRates, usdRate, calcDate });
+    const { totalEquity, totalInvested } = computeEquityAt(positions, { priceMap, closeMap, macroRates, usdRate, calcDate, treasuryPricing: ctx.treasuryPricing });
     if (!(totalEquity > 0)) return 'empty';
 
     // Snapshot anterior (cota/Dietz) — estritamente antes deste dia BR.
@@ -744,6 +753,21 @@ export const initScheduler = () => {
             await runStorageCleanup();
         } catch (error) {
             logger.error(`❌ [Scheduler] Cleanup de armazenamento: ${error.message}`);
+        }
+    });
+
+    // 12.1 SÉRIE DE PU DO TESOURO DIRETO (dias úteis 18:30)
+    // Alimenta a marcação a mercado da renda fixa. Roda DEPOIS do fechamento e
+    // ANTES do snapshot das 23:59, que precisa do PU do dia para marcar a posição.
+    // O arquivo oficial publica preços da MANHÃ — a renda variável é marcada no
+    // fechamento e a RF na abertura; é a granularidade que a fonte oferece.
+    scheduleHeavy('30 18 * * 1-5', async () => {
+        try {
+            const { ingestTreasuryPrices } = await import('./treasuryPriceService.js');
+            const result = await ingestTreasuryPrices();
+            if (!result.ok) logger.warn(`⚠️ [Scheduler] Série de PU do Tesouro não atualizada: ${result.reason}`);
+        } catch (error) {
+            logger.error(`❌ [Scheduler] Sync PU do Tesouro: ${error.message}`);
         }
     });
 

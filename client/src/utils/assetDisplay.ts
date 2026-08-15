@@ -66,6 +66,8 @@ interface AssetLike {
   usSubType?: 'STOCK' | 'REIT' | 'DOLLAR' | 'ETF' | 'GOLD' | null;
   /** Renda Fixa vencida (accrual congelado). */
   matured?: boolean;
+  /** Renda Fixa: 'MTM' = marcada pelo PU oficial; 'ACCRUAL' = valor na curva. */
+  pricingSource?: 'MTM' | 'ACCRUAL' | null;
 }
 
 /**
@@ -104,7 +106,7 @@ export function getAssetSubtitle(asset: AssetLike): string {
 // sublinha — duas leituras diferentes para a mesma informação.
 // ---------------------------------------------------------------------------
 
-export type AssetTagTone = 'etf' | 'reit' | 'gold' | 'dollar' | 'warning';
+export type AssetTagTone = 'etf' | 'reit' | 'gold' | 'dollar' | 'warning' | 'neutral';
 
 export interface AssetTag {
   label: string;
@@ -139,6 +141,27 @@ const MATURED_TAG: AssetTag = {
   title: 'Título vencido — parou de render. Considere resgatar (nada é vendido automaticamente).',
 };
 
+/**
+ * Como a renda fixa foi precificada. Só aparece em FIXED_INCOME: reserva/caixa é
+ * evidentemente na curva, e um selo ali seria só ruído.
+ *
+ * O selo existe porque os dois valores respondem a perguntas diferentes:
+ * "Mercado" é quanto a posição vale se for vendida hoje; "Na curva" é quanto ela
+ * vale se for levada até o vencimento. Num Tesouro IPCA+ longo os dois números
+ * chegam a divergir dois dígitos, e mostrar um sem dizer qual é seria enganoso.
+ */
+const MARKED_TAG: AssetTag = {
+  label: 'Mercado',
+  tone: 'etf',
+  title: 'Marcado a mercado pelo PU oficial do Tesouro Direto — é o valor de resgate hoje. O valor na curva (até o vencimento) aparece abaixo do total.',
+};
+
+const ON_CURVE_TAG: AssetTag = {
+  label: 'Na curva',
+  tone: 'neutral',
+  title: 'Valor na curva: rende a taxa contratada dia a dia. Não é marcado a mercado — ou o título não tem preço público (CDB/LCI/LCA), ou paga cupom semestral, ou a série oficial não cobre a posição.',
+};
+
 /** Selos de um ativo, na ordem de exibição (veículo primeiro, estado depois). */
 export function getAssetTags(asset: AssetLike): AssetTag[] {
   const tags: AssetTag[] = [];
@@ -148,6 +171,10 @@ export function getAssetTags(asset: AssetLike): AssetTag[] {
   }
   else if (asset.type === 'STOCK_US' && asset.usSubType && US_SUB_TAG[asset.usSubType]) {
     tags.push(US_SUB_TAG[asset.usSubType]);
+  }
+
+  if (asset.type === 'FIXED_INCOME' && asset.pricingSource) {
+    tags.push(asset.pricingSource === 'MTM' ? MARKED_TAG : ON_CURVE_TAG);
   }
 
   if (asset.matured) tags.push(MATURED_TAG);

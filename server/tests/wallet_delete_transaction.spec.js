@@ -25,6 +25,11 @@ vi.mock('../models/AssetTransaction.js', () => ({
 }));
 vi.mock('../models/MarketAsset.js', () => ({ default: {} }));
 vi.mock('../models/TreasuryBond.js', () => ({ default: {} }));
+// Marcação a mercado da RF: mockado para não arrastar o model de série de PU.
+vi.mock('../services/treasuryPriceService.js', () => {
+  const empty = { catalog: [], series: new Map(), historyFor: () => null, resolve: () => ({ key: null, reason: 'NOT_TREASURY' }) };
+  return { loadTreasuryPricing: vi.fn(async () => empty), EMPTY_TREASURY_PRICING: empty };
+});
 vi.mock('../models/WalletSnapshot.js', () => ({ default: {} }));
 vi.mock('../models/SystemConfig.js', () => ({ default: {} }));
 vi.mock('../services/marketDataService.js', () => ({ marketDataService: {} }));

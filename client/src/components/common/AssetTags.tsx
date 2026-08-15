@@ -7,6 +7,8 @@ const TONE_CLASS: Record<AssetTagTone, string> = {
   gold: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30',
   dollar: 'text-blue-400 bg-blue-500/10 border-blue-500/30',
   warning: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+  // Estado informativo, não um alerta: "na curva" é o padrão de boa parte da RF.
+  neutral: 'text-slate-400 bg-slate-500/10 border-slate-500/30',
 };
 
 const SIZE_CLASS = {

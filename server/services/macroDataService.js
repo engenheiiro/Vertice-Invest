@@ -10,6 +10,7 @@ import { DEFAULT_SELIC_FALLBACK, DEFAULT_NTNB_FALLBACK } from '../config/financi
 import AssetHistory from '../models/AssetHistory.js';
 import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
+import { fetchTesouroCsv } from './treasuryPriceService.js';
 import { isBusinessDay } from '../utils/dateUtils.js';
 
 const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391, SELIC_DAILY: 11 };
@@ -421,20 +422,13 @@ export const macroDataService = {
             // atualizado diariamente. A API `datastore_search` foi desativada nesta
             // instância CKAN (retorna 400 "ação desconhecida"); o download do CSV é
             // a fonte oficial estável. Formato: delimitador ';', decimal com vírgula,
-            // datas dd/mm/aaaa. Sem autenticação. gzip reduz o tráfego (~2–3MB).
-            const url = 'https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/precotaxatesourodireto.csv';
-
-            const res = await axios.get(url, {
-                headers: { ...BASE_HEADERS, 'Accept': 'text/csv, text/plain, */*', 'Accept-Encoding': 'gzip' },
-                httpsAgent: bcbAgent,
-                timeout: 25000,
-                responseType: 'text',
-                transformResponse: [(d) => d], // não deixa o axios tentar parsear como JSON
-                maxContentLength: 64 * 1024 * 1024,
-                maxBodyLength: 64 * 1024 * 1024,
-            });
-
-            const csv = typeof res.data === 'string' ? res.data : String(res.data ?? '');
+            // datas dd/mm/aaaa. Sem autenticação.
+            //
+            // O download mora em treasuryPriceService (que consome o MESMO arquivo
+            // para a série de PU da marcação a mercado) e é memoizado por 15 min:
+            // rodando no mesmo job, macro e PU dividem um único download de ~14 MB.
+            const csv = await fetchTesouroCsv();
+            if (!csv) return null;
             return this._parseNtnbFromCsv(csv);
         } catch (error) {
             logger.debug(`[NTN-B] Fonte oficial indisponível (${error.message}). Usando Investidor10.`);

@@ -8,8 +8,17 @@
  *
  * Convenção de datas: tudo ancorado no fuso de São Paulo (a B3 e o CDI operam
  * em dias úteis BR), evitando que o relógio UTC do servidor "ande" um dia.
+ *
+ * Duas formas de precificar convivem aqui, e `valueFixedIncomeAsset` é a porta
+ * única que escolhe entre elas:
+ *  - ACCRUAL ("na curva"): compõe a taxa contratada dia a dia. É o valor de quem
+ *    leva ao vencimento, e a única opção para RF privada (CDB/LCI/LCA), que não
+ *    tem preço público.
+ *  - MTM (marcado a mercado): o que a posição vale se vendida HOJE, pela série de
+ *    PU oficial do Tesouro Direto. Só para título público identificado sem
+ *    ambiguidade e sem cupom semestral.
  */
-import { countBusinessDays } from './dateUtils.js';
+import { countBusinessDays, toDateKey } from './dateUtils.js';
 
 /** "Hoje" no fuso de São Paulo, como Date à meia-noite UTC (dia puro). */
 export const brazilToday = () => {
@@ -143,4 +152,181 @@ export const accrueFixedIncomeValue = (asset, { cdiRate, selic, ipca, calcDate }
         value += (isCash ? lot.quantity : lot.quantity * lot.price) * compoundFactor;
     }
     return value;
+};
+
+// --- MARCAÇÃO A MERCADO (título público) --------------------------------------
+
+/**
+ * Defasagem máxima aceita entre a data pedida e a Data Base encontrada.
+ *
+ * A série é publicada em dia útil, então feriado prolongado abre buracos de até
+ * ~5 dias corridos. Além de 10 a série está quebrada (fonte fora do ar, título
+ * removido) e a posição volta para o accrual em vez de ser marcada por um preço
+ * velho — preço velho não é "quase certo", é um retorno inventado no dia em que
+ * a série voltar.
+ */
+export const MAX_PU_STALE_DAYS = 10;
+
+/** Razão de PU fora desta faixa não é preço, é dado corrompido. */
+const MIN_PU_RATIO = 0.1;
+const MAX_PU_RATIO = 10;
+
+const isoDay = (d) => toDateKey(brazilDateOnly(d));
+
+const daysBetweenIso = (fromIso, toIso) =>
+    Math.round((Date.parse(`${toIso}T00:00:00.000Z`) - Date.parse(`${fromIso}T00:00:00.000Z`)) / 86400000);
+
+/**
+ * Último ponto da série com Data Base <= `targetIso`, ou `null` se não houver
+ * nenhum (posição anterior ao início da série) ou se o encontrado estiver velho
+ * demais. Busca binária: a série tem milhares de pontos e é consultada por lote,
+ * por ativo, por dia de rebuild.
+ *
+ * @param {Array<{date: string, pu: number, puBuy: number|null}>} history ASC por data
+ * @returns {{ point: Object, index: number }|null}
+ */
+export const findTreasuryPu = (history, targetIso, { maxStaleDays = MAX_PU_STALE_DAYS } = {}) => {
+    if (!Array.isArray(history) || history.length === 0 || !targetIso) return null;
+
+    let lo = 0;
+    let hi = history.length - 1;
+    let found = -1;
+    while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (history[mid].date <= targetIso) { found = mid; lo = mid + 1; } else { hi = mid - 1; }
+    }
+    if (found < 0) return null;
+
+    const point = history[found];
+    if (!(point.pu > 0)) return null;
+    if (daysBetweenIso(point.date, targetIso) > maxStaleDays) return null;
+    return { point, index: found };
+};
+
+/**
+ * Lotes de um ativo no formato normalizado `{ dateIso, cost }`. CASH nunca chega
+ * aqui marcado, mas a normalização respeita a mesma convenção do accrual
+ * (quantidade é o próprio valor em caixa).
+ */
+export const normalizeLots = (asset) => {
+    const isCash = asset.type === 'CASH';
+    const lots = (asset.taxLots && asset.taxLots.length > 0)
+        ? asset.taxLots
+        : [{
+            date: asset.startDate || asset.createdAt || new Date(),
+            quantity: asset.quantity,
+            price: asset.quantity > 0 ? asset.totalCost / asset.quantity : 0,
+        }];
+    return lots.map((lot) => ({
+        dateIso: isoDay(lot.date),
+        cost: isCash ? lot.quantity : lot.quantity * lot.price,
+    }));
+};
+
+/**
+ * Valor de mercado de lotes normalizados numa data. `null` = não marcável (o
+ * chamador cai no accrual).
+ *
+ * Marca por RAZÃO DE PU sobre o custo de cada lote, e não por quantidade × PU de
+ * mercado. Isso é deliberado: `quantity`/`price` da posição não seguem convenção
+ * confiável (há posição real de Tesouro IPCA+ 2032 cadastrada como 2 × R$87,86,
+ * quando o PU do título passa de R$3.000). Multiplicar quantidade por PU
+ * multiplicaria o patrimônio do usuário por dezenas; a razão de PU é invariante a
+ * como quantidade e preço foram digitados, porque só usa o custo e a VARIAÇÃO
+ * percentual oficial do título.
+ *
+ * Âncora do lote: PU de COMPRA do dia da compra (o que o investidor paga), com
+ * fallback no PU de venda quando a fonte não publicou um valor plausível. Marcar
+ * o numerador pelo PU de venda e o denominador pelo de compra faz o spread de
+ * recompra aparecer como a pequena perda imediata que ele é de verdade — é o que
+ * o extrato do Tesouro Direto mostra.
+ *
+ * Fail-closed: qualquer lote sem PU utilizável derruba a marcação do ativo
+ * INTEIRO. Marcar metade dos lotes e acumular a outra metade misturaria duas
+ * réguas no mesmo número.
+ */
+export const markLotsToMarket = (lots, history, targetIso) => {
+    const current = findTreasuryPu(history, targetIso);
+    if (!current) return null;
+
+    let value = 0;
+    for (const lot of lots) {
+        const anchor = findTreasuryPu(history, lot.dateIso);
+        if (!anchor) return null;
+
+        const anchorPu = anchor.point.puBuy > 0 ? anchor.point.puBuy : anchor.point.pu;
+        if (!(anchorPu > 0)) return null;
+
+        const ratio = current.point.pu / anchorPu;
+        if (!isFinite(ratio) || ratio < MIN_PU_RATIO || ratio > MAX_PU_RATIO) return null;
+
+        value += lot.cost * ratio;
+    }
+    return value;
+};
+
+/**
+ * Valor de mercado da posição, ou `null` quando não dá para marcar. Devolve
+ * também o valor no pregão anterior, que é o que dá a variação do dia.
+ *
+ * @returns {{ value: number, previousValue: number|null, priceDate: string }|null}
+ */
+export const markToMarketFixedIncome = (asset, { history, calcDate }) => {
+    if (!Array.isArray(history) || history.length === 0) return null;
+
+    // Vencido: o título é resgatado ao par e para de valer preço de mercado. A
+    // série termina no vencimento, então basta pedir o PU daquele dia.
+    const maturity = maturityDateOnly(asset);
+    const refDate = (maturity && brazilDateOnly(calcDate).getTime() > maturity.getTime()) ? maturity : calcDate;
+
+    const current = findTreasuryPu(history, isoDay(refDate));
+    if (!current) return null;
+
+    const lots = normalizeLots(asset);
+    const value = markLotsToMarket(lots, history, current.point.date);
+    if (value === null) return null;
+
+    // O valor de ontem só considera os lotes que JÁ existiam ontem — senão a
+    // compra do dia entraria na conta como se fosse valorização.
+    const previous = current.index > 0 ? history[current.index - 1] : null;
+    const olderLots = previous ? lots.filter((lot) => lot.dateIso <= previous.date) : [];
+    const previousValue = olderLots.length > 0
+        ? markLotsToMarket(olderLots, history, previous.date)
+        : null;
+
+    return { value, previousValue, priceDate: current.point.date };
+};
+
+/** Como a posição foi precificada — acompanha o valor até a UI. */
+export const PRICING_SOURCE = { MTM: 'MTM', ACCRUAL: 'ACCRUAL' };
+
+/**
+ * Porta ÚNICA de valorização de CASH/FIXED_INCOME. Marca a mercado quando há
+ * série de PU utilizável e cai no accrual em qualquer outro caso, sempre
+ * devolvendo os DOIS números para que a UI possa mostrar "mercado" e "na curva"
+ * lado a lado.
+ *
+ * @param {Object} asset posição
+ * @param {Object} opts  { cdiRate, selic, ipca, calcDate, history }
+ *   `history` é a série de PU do título já resolvido pelo chamador (null = accrual)
+ * @returns {{ value: number, accrued: number, market: number|null,
+ *             previousMarket: number|null, source: string, priceDate: string|null }}
+ */
+export const valueFixedIncomeAsset = (asset, { cdiRate, selic, ipca, calcDate, history = null }) => {
+    const accrued = accrueFixedIncomeValue(asset, { cdiRate, selic, ipca, calcDate });
+    const base = { accrued, market: null, previousMarket: null, priceDate: null };
+
+    if (!history) return { ...base, value: accrued, source: PRICING_SOURCE.ACCRUAL };
+
+    const marked = markToMarketFixedIncome(asset, { history, calcDate });
+    if (!marked) return { ...base, value: accrued, source: PRICING_SOURCE.ACCRUAL };
+
+    return {
+        ...base,
+        value: marked.value,
+        market: marked.value,
+        previousMarket: marked.previousValue,
+        priceDate: marked.priceDate,
+        source: PRICING_SOURCE.MTM,
+    };
 };

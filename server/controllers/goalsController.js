@@ -7,7 +7,8 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import UserAsset from '../models/UserAsset.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
-import { accrueFixedIncomeValue, brazilToday } from '../utils/fixedIncome.js';
+import { valueFixedIncomeAsset, brazilToday } from '../utils/fixedIncome.js';
+import { loadTreasuryPricing } from '../services/treasuryPriceService.js';
 import { monthsRemaining, requiredMonthly, decomposeProgress, fv, annualToMonthly, computeStreak, resolveGoalStatus } from '../utils/goalMath.js';
 import { safeCurrency, safeFloat, safeSub, safeMult, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
@@ -67,13 +68,20 @@ const getLiveWalletEquity = async (userId, walletId) => {
 
         // (5.8) Cotações em lote (1 query) em vez de um findOne por ativo (N+1).
         const marketMap = await marketDataService.getMarketDataMap(tickers);
+        // Mesma régua de valorização da carteira: título público marcado a
+        // mercado, resto na curva. A meta media contra um patrimônio diferente do
+        // exibido se usasse só accrual.
+        const treasuryPricing = await loadTreasuryPricing(assets);
 
         let totalEquity = 0;
         for (const asset of assets) {
             const multiplier = isDollarized(asset) ? usdRate : 1;
             let val;
             if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
-                val = accrueFixedIncomeValue(asset, { cdiRate: cdi, calcDate });
+                val = valueFixedIncomeAsset(asset, {
+                    cdiRate: cdi, selic: config?.selic, ipca: config?.ipca, calcDate,
+                    history: treasuryPricing.historyFor(asset),
+                }).value;
             } else {
                 const mData = marketMap.get(asset.ticker);
                 val = safeValue(asset.quantity, mData?.price || 0);

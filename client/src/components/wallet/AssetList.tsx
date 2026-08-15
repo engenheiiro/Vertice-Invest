@@ -50,6 +50,18 @@ const SECTOR_PIE_CLASSES: Record<string, SectorKind | undefined> = {
     FII: 'FII',
 };
 const pluralAtivos = (n: number) => `${n} ${n === 1 ? 'Ativo' : 'Ativos'}`;
+
+/**
+ * Valor "na curva" a exibir junto do total de um título marcado a mercado.
+ *
+ * `null` quando não há o que contrastar: posição na curva (o total JÁ é a curva)
+ * ou diferença menor que um centavo — mostrar "na curva R$ 828,50" embaixo de
+ * "R$ 828,50" só ocuparia espaço.
+ */
+const curveValueOf = (asset: { pricingSource?: 'MTM' | 'ACCRUAL' | null; accruedValue?: number | null; totalValue: number }): number | null => {
+    if (asset.pricingSource !== 'MTM' || typeof asset.accruedValue !== 'number') return null;
+    return Math.abs(asset.accruedValue - asset.totalValue) >= 0.01 ? asset.accruedValue : null;
+};
 const TYPE_ORDER = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
 const MOBILE_ASSET_LIST_QUERY = '(max-width: 767px)';
 
@@ -316,7 +328,9 @@ export const AssetList = () => {
                                                     <p className="text-[10px] text-slate-500 truncate">
                                                         {isReserveAsset(asset)
                                                             ? 'Reserva / Caixa'
-                                                            : `${asset.quantity} un · PM ${formatCurrency(asset.averagePrice, asset.currency)}`}
+                                                            : curveValueOf(asset) !== null
+                                                                ? `na curva ${formatCurrency(curveValueOf(asset) as number, 'BRL')}`
+                                                                : `${asset.quantity} un · PM ${formatCurrency(asset.averagePrice, asset.currency)}`}
                                                     </p>
                                                 </div>
                                             </div>
@@ -514,6 +528,7 @@ export const AssetList = () => {
 
                                             // % da Classe
                                             const percentOfClass = totalValueGroup > 0 ? (asset.totalValue / totalValueGroup) * 100 : 0;
+                                            const curveValue = curveValueOf(asset);
 
                                             return (
                                                 <tr key={asset.id} className="hover:bg-slate-800/30 transition-colors border-b border-slate-800/30 last:border-0 group animate-fade-in">
@@ -546,7 +561,16 @@ export const AssetList = () => {
                                                                 ({formatCurrency(asset.currentPrice * asset.quantity, 'USD')})
                                                             </p>
                                                         )}
-                                                        {!isUSD && (
+                                                        {/* RF marcada: o total é o valor de RESGATE hoje. O valor na
+                                                            curva (levar ao vencimento) vem logo abaixo — num IPCA+
+                                                            longo os dois divergem de verdade, e mostrar só um número
+                                                            sem dizer qual é seria enganoso. Substitui a contagem de
+                                                            unidades, que em renda fixa não diz nada. */}
+                                                        {curveValue !== null ? (
+                                                            <p className="text-[10px] text-slate-500 tabular-nums" title="Valor na curva: quanto o título vale levado até o vencimento, pela taxa contratada.">
+                                                                na curva {formatCurrency(curveValue, 'BRL')}
+                                                            </p>
+                                                        ) : !isUSD && (
                                                             <p className="text-[10px] text-slate-500">
                                                                 {asset.quantity} un
                                                             </p>

@@ -51,6 +51,15 @@ export interface Asset {
     // C2: vencimento da RF (ISO) e flag VENCIDO (accrual congelado; sugere resgate).
     maturityDate?: string | null;
     matured?: boolean;
+    // Renda fixa: como a posição foi precificada.
+    // 'MTM'     → título público marcado pelo PU oficial do Tesouro (valor de resgate hoje);
+    // 'ACCRUAL' → valor na curva (RF privada, título com cupom semestral ou sem série).
+    // `accruedValue` acompanha SEMPRE, para a UI contrastar mercado × curva —
+    // num IPCA+ longo os dois divergem de verdade.
+    pricingSource?: 'MTM' | 'ACCRUAL' | null;
+    accruedValue?: number | null;
+    /** Data Base do PU usado na marcação (YYYY-MM-DD). */
+    priceDate?: string | null;
 }
 
 export interface WalletKPIs {

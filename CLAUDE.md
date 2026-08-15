@@ -33,6 +33,9 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 | Constantes financeiras | `server/config/financialConstants.js` |
 | Matemática financeira segura | `server/utils/mathUtils.js` |
 | Câmbio de compra e custo em BRL | `server/utils/fxRate.js` |
+| Valorização de RF (curva × mercado) | `server/utils/fixedIncome.js` |
+| Série de PU do Tesouro (ingestão) | `server/services/treasuryPriceService.js` |
+| Identidade de título do Tesouro | `server/utils/treasuryTitle.js` |
 | Middleware JWT + downgrade + cache de plano | `server/middleware/authMiddleware.js`, `utils/userCache.js` |
 | Guards de rota (auth/admin) | `client/src/components/auth/ProtectedRoute.tsx`, `AdminRoute.tsx` |
 | Séries temporais (worker) | `server/services/workers/timeSeriesWorker.js` |
@@ -87,7 +90,8 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 6. **Secrets:** nunca hardcode. Usar variáveis do `.env`.
 7. **Matemática financeira:** sempre usar `safeFloat()`, `safeCurrency()`, `safeAdd/Sub/Mult/Div()` de `mathUtils.js`. Nunca operar com floats brutos em valores monetários.
 8. **Câmbio congelado no custo:** custo de posição em dólar **nunca** é reconvertido pela cotação de hoje — use `positionCostBRL()`/`positionRealizedProfitBRL()` de `utils/fxRate.js`, que leem `totalCostBrl`/`realizedProfitBrl` (acumulados com o câmbio de cada lançamento em `recalculatePosition`). Multiplicar custo **e** saldo pela mesma taxa cancela o câmbio: o resultado vira retorno em dólar e o ganho cambial some. Só o **saldo** é marcado a mercado.
-9. **Rate limiting em novas rotas:** usar os limiters **por usuário** de `middleware/rateLimiters.js` (`walletWriteLimiter` 50/15min em POST/PUT/DELETE de wallet; `researchHeavyLimiter` 20/15min em rotas caras). Auth já tem `authLimiter` (20/15min); geral `apiLimiter` (3000/15min). Validar escrita com schema Zod (`validate`).
+9. **Renda fixa: curva × mercado.** Todo caminho de patrimônio (KPI ao vivo, snapshot diário, rebuild de histórico, metas) valoriza CASH/FIXED_INCOME por `valueFixedIncomeAsset()` de `utils/fixedIncome.js` — nunca chamando `accrueFixedIncomeValue()` direto. Título público identificado sem ambiguidade e **sem cupom semestral** é marcado pelo PU oficial do Tesouro; o resto fica na curva. A marcação é por **razão de PU** sobre o custo do lote (`custo × PU_hoje / PU_compra`), nunca quantidade × PU: `quantity`/`price` de RF não seguem convenção confiável nas posições reais. Qualquer lote sem PU derruba a marcação do ativo inteiro (fail-closed → accrual). Divergir entre os caminhos reintroduz a divergência KPI × snapshot.
+10. **Rate limiting em novas rotas:** usar os limiters **por usuário** de `middleware/rateLimiters.js` (`walletWriteLimiter` 50/15min em POST/PUT/DELETE de wallet; `researchHeavyLimiter` 20/15min em rotas caras). Auth já tem `authLimiter` (20/15min); geral `apiLimiter` (3000/15min). Validar escrita com schema Zod (`validate`).
 
 ---
 
@@ -101,6 +105,7 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 - **`UserAsset`**: holdings — `taxLots[]` para FIFO, `totalCost`, `realizedProfit`, `fifoRealizedProfit`. Índice único `{ user, ticker }`.
 - **`WalletSnapshot`**: snapshot patrimonial diário — `equity`, `invested`, `result`, `twrr`, `dividends`. Gerado por `schedulerService.runDailySnapshot()`.
 - **`QuantSignal`**: sinal técnico salvo — `ticker`, `type`, `strength`, `rsiValue`, `volumeRatio`.
+- **`TreasuryPriceHistory`**: série diária de PU por título do Tesouro (`titleKey` `FAMILIA|YYYY-MM-DD`, `history[{date, pu, puBuy, rate}]`). Base da marcação a mercado da RF. Alimentada por `npm run sync:treasury` / cron 18:30 em dia útil.
 - **`RefreshToken`**: tokens de refresh persistidos no banco — `token`, `user`, `expiresAt`.
 - **`UsageLog`**: auditoria de uso por feature e plano.
 
@@ -162,6 +167,7 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < ELITE (3) < BLACK (4). Definid
 | Google Finance | scraping `cheerio` | Fallback para dados faltantes |
 | Brapi | HTTP | Fallback BR (token: `BRAPI_TOKEN`) |
 | Fundamentus | scraping | Dados fundamentalistas BR (`fundamentusService.js`) |
+| Tesouro Transparente | CSV oficial | PU diário dos títulos públicos + taxa NTN-B. Download compartilhado (memo 15min) entre `treasuryPriceService` e `macroDataService` |
 | Gemini AI | `@google/genai` | Morning Call, narrativas (`API_KEY`) |
 | Mercado Pago | `mercadopago` | Checkout/webhook (`MP_ACCESS_TOKEN`) |
 | Sentry | `@sentry/node` + `@sentry/react` | Erros e performance (`SENTRY_DSN`) |

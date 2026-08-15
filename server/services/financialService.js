@@ -24,6 +24,8 @@ import { historyStorageKey } from '../utils/assetHistory.js';
 import { brazilDayKey, isTwrrReturnAnomalous, isValidDayKey, snapshotInstantForDay } from '../utils/walletSnapshot.js';
 import { resolveAllocationClass } from '../utils/assetAllocation.js';
 import { loadUsdRateResolver, effectiveFxRate } from '../utils/fxRate.js';
+import { markLotsToMarket, findTreasuryPu } from '../utils/fixedIncome.js';
+import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
 
 export const financialService = {
     
@@ -303,6 +305,7 @@ export const financialService = {
         const {
             txs, cursorIso, portfolio, fixedIncomeState,
             assetMetadataMap, priceCacheMap, lastKnownPrices, getUsdRateForDate,
+            treasuryPricing = EMPTY_TREASURY_PRICING,
         } = ctx;
         let txIndex = ctx.txIndex;
         let dayFlowAdjusted = 0;
@@ -324,6 +327,13 @@ export const financialService = {
                         rate: meta.fixedIncomeRate > 0 ? meta.fixedIncomeRate : (meta.type === 'CASH' ? 100 : 10),
                         index: meta.fixedIncomeIndex || null,
                         spread: meta.fixedIncomeSpread || 0,
+                        // Marcação a mercado: série de PU do título público (null =
+                        // segue na curva) + lotes em `{dateIso, cost}` para a razão
+                        // de PU, que é o que torna a marcação independente de como
+                        // quantidade e preço foram cadastrados.
+                        history: treasuryPricing.historyFor(meta),
+                        maturityIso: meta.maturityDate ? this.toDateKey(meta.maturityDate) : null,
+                        lots: [],
                     };
                 }
             }
@@ -361,8 +371,24 @@ export const financialService = {
                 portfolio[tx.ticker].cost += tx.totalValue;
                 portfolio[tx.ticker].costBrl += tx.totalValue * txUsdRate;
                 if (isFixed) {
-                    if (!fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker] = { currentValue: 0, rate: meta?.fixedIncomeRate || 100, index: meta?.fixedIncomeIndex || null, spread: meta?.fixedIncomeSpread || 0 };
-                    fixedIncomeState[tx.ticker].currentValue += tx.totalValue;
+                    if (!fixedIncomeState[tx.ticker]) {
+                        fixedIncomeState[tx.ticker] = {
+                            currentValue: 0,
+                            rate: meta?.fixedIncomeRate || 100,
+                            index: meta?.fixedIncomeIndex || null,
+                            spread: meta?.fixedIncomeSpread || 0,
+                            history: meta ? treasuryPricing.historyFor(meta) : null,
+                            maturityIso: meta?.maturityDate ? this.toDateKey(meta.maturityDate) : null,
+                            lots: [],
+                        };
+                    }
+                    const state = fixedIncomeState[tx.ticker];
+                    state.currentValue += tx.totalValue;
+                    state.lots.push({ dateIso: txDateIso, cost: tx.totalValue });
+                    // Compra anterior ao início da série: o título é abandonado pela
+                    // marcação de vez, em vez de marcar só parte dos lotes. Metade
+                    // marcada e metade na curva seria um número sem régua.
+                    if (state.history && !findTreasuryPu(state.history, txDateIso)) state.history = null;
                 }
                 dayFlowAdjusted += trueAdjustedFlow * txUsdRate;
                 dayFlowNominal += tx.totalValue * txUsdRate;
@@ -379,7 +405,15 @@ export const financialService = {
                 portfolio[tx.ticker].cost -= (tx.quantity * currentAvg);
                 portfolio[tx.ticker].costBrl -= portfolio[tx.ticker].costBrl * soldFraction;
                 if (isFixed) {
-                    fixedIncomeState[tx.ticker].currentValue = Math.max(0, fixedIncomeState[tx.ticker].currentValue - tx.totalValue);
+                    const state = fixedIncomeState[tx.ticker];
+                    state.currentValue = Math.max(0, state.currentValue - tx.totalValue);
+                    // Resgate parcial baixa os lotes na mesma proporção da posição
+                    // (mesma regra do custo acima) — a marcação continua sobre o que
+                    // ficou, sem reprecificar as compras remanescentes.
+                    if (soldFraction > 0) {
+                        const remaining = Math.max(0, 1 - soldFraction);
+                        state.lots = state.lots.map((lot) => ({ ...lot, cost: lot.cost * remaining }));
+                    }
                 }
                 dayFlowAdjusted -= trueAdjustedFlow * txUsdRate;
                 dayFlowNominal -= tx.totalValue * txUsdRate;
@@ -389,7 +423,10 @@ export const financialService = {
                 portfolio[tx.ticker].qty = 0;
                 portfolio[tx.ticker].cost = 0;
                 portfolio[tx.ticker].costBrl = 0;
-                if (fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker].currentValue = 0;
+                if (fixedIncomeState[tx.ticker]) {
+                    fixedIncomeState[tx.ticker].currentValue = 0;
+                    fixedIncomeState[tx.ticker].lots = [];
+                }
             }
             txIndex++;
         }
@@ -398,19 +435,38 @@ export const financialService = {
     },
 
     /**
-     * Acumula juros da renda fixa do dia (mutando `fixedIncomeState`). Renda fixa
-     * só rende em dia útil. Antes usava !isWeekend, que aplicava CDI também em
-     * FERIADOS (ex.: Corpus Christi) — divergindo do KPI/benchmark (que usam
-     * countBusinessDays, pulando feriados).
+     * Atualiza o valor da renda fixa do dia (mutando `fixedIncomeState`).
+     *
+     * Título público com série de PU é MARCADO A MERCADO: o valor do dia é
+     * recalculado do zero pela razão de PU sobre os lotes, e não composto a partir
+     * do dia anterior. Recompor sobre o valor anterior propagaria para sempre
+     * qualquer dia sem cotação.
+     *
+     * O resto (RF privada, título com cupom semestral, título fora da série)
+     * segue no accrual, que só rende em dia útil. Antes usava !isWeekend, que
+     * aplicava CDI também em FERIADOS (ex.: Corpus Christi) — divergindo do
+     * KPI/benchmark (que usam countBusinessDays, pulando feriados).
      */
     _accrueDailyFixedIncome(ctx) {
         const { cursor, cursorIso, portfolio, fixedIncomeState, dailyFactorsMap, cdiDailyFactor, currentIpcaRate } = ctx;
         const isMapFactor = dailyFactorsMap.has(cursorIso);
         const shouldApplyRates = isMapFactor || isBusinessDay(cursor);
+
+        for (const ticker in fixedIncomeState) {
+            const marked = fixedIncomeState[ticker];
+            if (!marked.history || portfolio[ticker].qty <= 0 || marked.lots.length === 0) continue;
+            // Vencido: resgatado ao par, o valor congela no PU do vencimento.
+            const refIso = (marked.maturityIso && cursorIso > marked.maturityIso) ? marked.maturityIso : cursorIso;
+            const value = markLotsToMarket(marked.lots, marked.history, refIso);
+            // Dia sem PU publicado (feriado, buraco na fonte): mantém o último
+            // valor, como o rebuild já faz com ação sem candle no dia.
+            if (value !== null) marked.currentValue = value;
+        }
+
         if (!shouldApplyRates) return;
 
         for (const ticker in fixedIncomeState) {
-            if (portfolio[ticker].qty > 0) {
+            if (portfolio[ticker].qty > 0 && !fixedIncomeState[ticker].history) {
                 const state = fixedIncomeState[ticker];
                 let dailyFactor = 1;
                 // Indexados (Selic/CDI/IPCA): índice + spread. Selic usa o CDI
@@ -558,6 +614,10 @@ export const financialService = {
             const getUsdRateForDate = await this._loadUsdRateResolver(currentUsdRate);
             const priceCacheMap = await this._loadPriceCacheMap(uniqueTickers, assetMetadataMap, requiredFromByTicker);
             const dividendDateMap = await this._loadDividendDateMap(uniqueTickers);
+            // Séries de PU: o histórico precisa marcar o título público pela mesma
+            // régua do KPI ao vivo e do snapshot, senão a curva de patrimônio dá um
+            // degrau no dia em que os dois caminhos se encontram.
+            const treasuryPricing = await loadTreasuryPricing(userAssets);
 
             // Fail-closed: sem série que cubra a posição, ABORTA em vez de gravar
             // patrimônio marcado no custo. Os chamadores (walletController,
@@ -611,6 +671,7 @@ export const financialService = {
                 const dayTx = this._applyDayTransactions({
                     txs, txIndex, cursorIso, portfolio, fixedIncomeState,
                     assetMetadataMap, priceCacheMap, lastKnownPrices, getUsdRateForDate,
+                    treasuryPricing,
                 });
                 txIndex = dayTx.txIndex;
                 const dayFlowNominal = dayTx.dayFlowNominal;

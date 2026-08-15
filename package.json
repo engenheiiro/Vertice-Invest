@@ -23,6 +23,8 @@
     "sync:oil-gas": "node server/scripts/syncOilGasSectorMetricsShadow.js --persist",
     "snapshot:prod": "node server/scripts/runSnapshotJob.js",
     "sync:dividends": "node server/scripts/syncDividends.js",
+    "sync:treasury": "node server/scripts/syncTreasuryPrices.js",
+    "audit:rf-mtm": "node server/scripts/auditFixedIncomeMTM.js",
     "rebuild:history": "node server/scripts/rebuildAllHistory.js",
     "scan:radar": "node server/scripts/runRadarScanner.js",
     "radar:report": "node server/scripts/generateRadarReport.js",

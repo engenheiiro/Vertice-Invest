@@ -114,4 +114,22 @@ describe('getAssetTags', () => {
     const tags = getAssetTags({ ticker: 'TESOURO IPCA+ 2029', type: 'FIXED_INCOME', matured: true });
     expect(tags.map((t) => t.label)).toEqual(['Vencido']);
   });
+
+  it('renda fixa diz como foi precificada — mercado ou curva', () => {
+    expect(
+      getAssetTags({ ticker: 'TESOURO IPCA+ 2035', type: 'FIXED_INCOME', pricingSource: 'MTM' }).map((t) => t.label)
+    ).toEqual(['Mercado']);
+    expect(
+      getAssetTags({ ticker: 'CDB', type: 'FIXED_INCOME', pricingSource: 'ACCRUAL' }).map((t) => t.label)
+    ).toEqual(['Na curva']);
+  });
+
+  it('vencido acumula com o selo de precificação, nessa ordem', () => {
+    const tags = getAssetTags({ ticker: 'TESOURO IPCA+ 2026', type: 'FIXED_INCOME', pricingSource: 'MTM', matured: true });
+    expect(tags.map((t) => t.label)).toEqual(['Mercado', 'Vencido']);
+  });
+
+  it('reserva/caixa não recebe selo de precificação (é evidentemente na curva)', () => {
+    expect(getAssetTags({ ticker: 'RESERVA', type: 'CASH', pricingSource: 'ACCRUAL' })).toEqual([]);
+  });
 });

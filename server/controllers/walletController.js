@@ -14,7 +14,8 @@ import { financialService } from '../services/financialService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, safeValue, safePrice, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
 import { computeQuotaSharpe, computeQuotaBeta, snapshotDayKey, SHARPE_WINDOW_SNAPSHOTS } from '../utils/walletRisk.js';
 import { countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
-import { accrueFixedIncomeValue, fixedIncomeDailyFactor, assetDailyFactor, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
+import { assetDailyFactor, valueFixedIncomeAsset, PRICING_SOURCE, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
+import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from '../services/treasuryPriceService.js';
 import { isDollarized, resolveAssetCurrency, resolveTransactionCurrency, needsCurrencyFallback } from '../utils/assetCurrency.js';
 import { positionCostBRL, positionRealizedProfitBRL } from '../utils/fxRate.js';
 import { sumTransactionFlowBRL, transactionsAfterSnapshotFilter } from '../utils/walletSnapshot.js';
@@ -50,10 +51,11 @@ const calculateLiveKPIS = async (userId, currentCdi, walletId) => {
 
     // (5.4 + 5.8) Dividendos, macro e cotações em lote (sem N+1): em vez de um
     // findOne por ativo, getMarketDataMap resolve todos os tickers de uma vez.
-    const [divData, usdConfig, marketMap] = await Promise.all([
+    const [divData, usdConfig, marketMap, treasuryPricing] = await Promise.all([
         financialService.calculateUserDividends(userId, walletId),
         SystemConfig.findOne({ key: 'MACRO_INDICATORS' }),
         marketDataService.getMarketDataMap(tickers),
+        loadTreasuryPricing(activeAssets),
     ]);
     totalDividends = divData.totalAllTime;
 
@@ -67,9 +69,12 @@ const calculateLiveKPIS = async (userId, currentCdi, walletId) => {
 
         let val;
         if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
-            // Fonte única de accrual (idêntica ao getWalletData) — antes este
+            // Fonte única de valorização (idêntica ao getWalletData) — antes este
             // caminho ignorava o rendimento (val = qty), divergindo do KPI.
-            val = accrueFixedIncomeValue(asset, { cdiRate: currentCdi, selic, ipca, calcDate });
+            val = valueFixedIncomeAsset(asset, {
+                cdiRate: currentCdi, selic, ipca, calcDate,
+                history: treasuryPricing.historyFor(asset),
+            }).value;
         } else {
             const mData = marketMap.get(asset.ticker);
             val = safeValue(asset.quantity, mData?.price || 0);
@@ -164,8 +169,8 @@ const buildEmptyWalletResponse = async (targets) => {
 // cotações (1 query em lote, sem N+1 — 5.8), macro, dividendos e os snapshots
 // usados no TWRR/Sharpe. (5.3) Promise.allSettled: se uma falha (ex.: cálculo
 // de dividendos), a carteira ainda renderiza com degradação graciosa.
-const fetchWalletMarketContext = async (userId, liveTickers, walletId) => {
-    const [assetMapR, configR, dividendsR, snapshotsR, riskSnapshotsR] = await Promise.allSettled([
+const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAssets = []) => {
+    const [assetMapR, configR, dividendsR, snapshotsR, riskSnapshotsR, treasuryR] = await Promise.allSettled([
         marketDataService.getMarketDataMap(liveTickers),
         SystemConfig.findOne({ key: 'MACRO_INDICATORS' }),
         financialService.calculateUserDividends(userId, walletId),
@@ -180,6 +185,9 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId) => {
             .limit(SHARPE_WINDOW_SNAPSHOTS)
             .select('date quotaPrice totalEquity totalInvested')
             .lean(),
+        // Séries de PU dos títulos públicos da carteira (marcação a mercado da RF).
+        // Sem renda fixa na carteira, não vai ao banco.
+        loadTreasuryPricing(activeAssets),
     ]);
 
     const assetMap = assetMapR.status === 'fulfilled' ? assetMapR.value : new Map();
@@ -188,30 +196,34 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId) => {
         dividendsR.status === 'fulfilled' ? dividendsR.value : {};
     const snapshots = snapshotsR.status === 'fulfilled' ? snapshotsR.value : [];
     const riskSnapshots = riskSnapshotsR.status === 'fulfilled' ? riskSnapshotsR.value : [];
+    // Falha ao carregar PU não derruba a carteira: a RF volta para o accrual.
+    const treasuryPricing = treasuryR.status === 'fulfilled' ? treasuryR.value : EMPTY_TREASURY_PRICING;
 
-    return { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots, riskSnapshots };
+    return { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots, riskSnapshots, treasuryPricing };
 };
 
 // Processa um único ativo: resolve preço/variação e devolve o card pronto +
 // as contribuições para os totais da carteira. Aritmética idêntica à original.
-export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay }) => {
+export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay, treasuryPricing = EMPTY_TREASURY_PRICING }) => {
     let currentPrice = 0;
     let dayChangePct = 0;
-    // Renda fixa/caixa: valor TOTAL acumulado (fonte da verdade). Guardado à parte
+    // Renda fixa/caixa: valor TOTAL da posição (fonte da verdade). Guardado à parte
     // porque re-derivar via quantidade × preço unitário perde precisão — safeFloat
     // arredonda o preço a 4 casas e, numa reserva com muitas "unidades" (ex.: 15.000),
     // isso descarta centavos (R$15.000 a 100% CDI → 1,000525 vira 1,0005 → perde R$0,38).
     let accruedTotalValue = null;
     let matured = false; // C2: título de RF vencido (accrual congelado, sugere resgate)
+    let pricing = null;  // diagnóstico da renda fixa (mercado × curva) para a UI
 
     if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
-        // Accrual via fonte única (utils/fixedIncome) — idêntico ao
-        // calculateLiveKPIS, garantindo KPI e ponto live do gráfico iguais.
-        const effectiveDailyFactor = assetDailyFactor(asset, macroRates);
-        dayChangePct = isTodayBusinessDay ? (effectiveDailyFactor - 1) * 100 : 0;
-
+        // Fonte única (utils/fixedIncome): marca a mercado quando o título público
+        // foi identificado, senão compõe a taxa. Idêntica ao calculateLiveKPIS e ao
+        // snapshot, garantindo que KPI, ponto live do gráfico e histórico batam.
         const calcDate = brazilToday();
-        const totalCurrentValue = accrueFixedIncomeValue(asset, { ...macroRates, calcDate });
+        const history = treasuryPricing.historyFor(asset);
+        pricing = valueFixedIncomeAsset(asset, { ...macroRates, calcDate, history });
+
+        const totalCurrentValue = pricing.value;
         accruedTotalValue = totalCurrentValue;
         const totalQuantity = asset.quantity;
 
@@ -221,18 +233,32 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
             currentPrice = asset.type === 'CASH' ? 1 : safeDiv(asset.totalCost, asset.quantity);
         }
 
-        // Ativo comprado HOJE: zera a variação do dia (evita variação irreal).
         const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-        const lotDayStr = (d) => {
-            const o = new Date(d);
-            if (o.getUTCHours() === 0 && o.getUTCMinutes() === 0 && o.getUTCSeconds() === 0) return o.toISOString().split('T')[0];
-            return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(o);
-        };
-        const boughtToday = asset.taxLots && asset.taxLots.length > 0 && asset.taxLots.every(lot => lotDayStr(lot.date) === todayStr);
-        if (boughtToday) dayChangePct = 0;
+
+        if (pricing.source === PRICING_SOURCE.MTM) {
+            // Marcado: a variação do dia é a do PU — e só existe quando o PU
+            // publicado é o de HOJE. A série oficial sai de manhã e é ingerida no
+            // fim do dia; repetir a variação de ontem enquanto isso mostraria um
+            // movimento que não aconteceu hoje.
+            dayChangePct = (pricing.priceDate === todayStr && pricing.previousMarket > 0)
+                ? ((pricing.value / pricing.previousMarket) - 1) * 100
+                : 0;
+        } else {
+            const effectiveDailyFactor = assetDailyFactor(asset, macroRates);
+            dayChangePct = isTodayBusinessDay ? (effectiveDailyFactor - 1) * 100 : 0;
+
+            // Ativo comprado HOJE: zera a variação do dia (evita variação irreal).
+            const lotDayStr = (d) => {
+                const o = new Date(d);
+                if (o.getUTCHours() === 0 && o.getUTCMinutes() === 0 && o.getUTCSeconds() === 0) return o.toISOString().split('T')[0];
+                return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(o);
+            };
+            const boughtToday = asset.taxLots && asset.taxLots.length > 0 && asset.taxLots.every(lot => lotDayStr(lot.date) === todayStr);
+            if (boughtToday) dayChangePct = 0;
+        }
 
         // C2: título vencido não rende mais — zera a variação do dia (o valor já
-        // vem congelado no vencimento pelo accrue). isMatured usa a mesma calcDate.
+        // vem congelado no vencimento). isMatured usa a mesma calcDate.
         matured = isMatured(asset, calcDate);
         if (matured) dayChangePct = 0;
 
@@ -347,6 +373,13 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
         // C2: vencimento da RF + flag VENCIDO (accrual congelado; UI sugere resgate).
         maturityDate: asset.maturityDate || null,
         matured,
+        // Renda fixa: como a posição foi precificada. 'MTM' = título público
+        // marcado pelo PU oficial; 'ACCRUAL' = valor na curva (RF privada, título
+        // com cupom semestral ou série indisponível). `accruedValue` acompanha
+        // sempre, para a UI poder mostrar mercado × curva lado a lado.
+        pricingSource: pricing ? pricing.source : null,
+        accruedValue: pricing ? safeCurrency(safeMult(pricing.accrued, currentMultiplier)) : null,
+        priceDate: pricing ? pricing.priceDate : null,
     };
 
     return { processed, totalValueBr, totalCostBr, dayChangeValueBr };
@@ -457,8 +490,8 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
                 .catch(err => logger.warn(`[Wallet] Refresh de cotações em background falhou: ${err.message}`));
         }
 
-        const { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots, riskSnapshots } =
-            await fetchWalletMarketContext(userId, liveTickers, walletId);
+        const { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots, riskSnapshots, treasuryPricing } =
+            await fetchWalletMarketContext(userId, liveTickers, walletId, activeAssets);
 
         const usdRate = safeFloat(config?.dollar || 5.75);
         const usdChange = safeFloat(config?.dollarChange || 0);
@@ -475,7 +508,7 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         const isTodayBusinessDay = isBusinessDay(new Date(brazilTodayStr + 'T00:00:00.000Z'));
 
         // Processa cada ativo e acumula os totais (mesma ordem/aritmética da versão monolítica).
-        const assetCtx = { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay };
+        const assetCtx = { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay, treasuryPricing };
         const processedAssets = [];
         let totalEquity = 0;
         let totalInvested = 0;
