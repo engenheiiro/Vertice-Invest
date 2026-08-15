@@ -90,6 +90,40 @@ describe('AssetList — subdivisão de Ações Brasil', () => {
     });
 });
 
+describe('AssetList — atalho de setores', () => {
+    const mockWallet = (assets: unknown[]) => vi.mocked(useWallet).mockReturnValue({
+        assets,
+        removeAsset: vi.fn(),
+        kpis: { totalEquity: 100 },
+        targetAllocation: {},
+        isPrivacyMode: false,
+    } as any);
+
+    it('mostra o chip nos grupos de Ações e FIIs (desktop + mobile)', () => {
+        mockWallet([
+            asset({ id: 'stock', ticker: 'PETR4', sector: 'Petróleo, Gás e Biocombustíveis', totalValue: 50, totalCost: 50 }),
+            asset({ id: 'fii-1', ticker: 'HGLG11', type: 'FII', sector: 'Logística', totalValue: 30, totalCost: 30 }),
+            asset({ id: 'fii-2', ticker: 'VISC11', type: 'FII', sector: 'Shoppings', totalValue: 20, totalCost: 20 }),
+        ]);
+
+        render(<AssetList />);
+
+        // Duas classes × (cabeçalho da tabela no desktop + card empilhado no mobile).
+        expect(screen.getAllByRole('button', { name: /setores/i })).toHaveLength(4);
+    });
+
+    it('não oferece o chip em classes sem setor (Renda Fixa / Reserva)', () => {
+        mockWallet([
+            asset({ id: 'cash', ticker: 'CAIXA', type: 'CASH', isReserve: true, totalValue: 40, totalCost: 40 }),
+            asset({ id: 'rf', ticker: 'CDB', type: 'FIXED_INCOME', totalValue: 60, totalCost: 60 }),
+        ]);
+
+        render(<AssetList />);
+
+        expect(screen.queryByRole('button', { name: /setores/i })).not.toBeInTheDocument();
+    });
+});
+
 describe('AssetList — subdivisão de Exterior', () => {
     it('inclui ETFs do Exterior e mantém todos os subtipos somando 100%', () => {
         vi.mocked(useWallet).mockReturnValue({

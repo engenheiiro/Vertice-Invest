@@ -4,6 +4,8 @@ import { useWallet, AssetType, Asset, UsSubKey } from '../../contexts/WalletCont
 import { TrendingUp, TrendingDown, Trash2, Folder, PieChart, History, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, EyeOff, Pencil } from 'lucide-react';
 import { AssetTransactionsModal } from './AssetTransactionsModal';
 import { RenameReserveModal } from './RenameReserveModal';
+import { SectorPopover } from './SectorPopover';
+import type { SectorKind } from '../../utils/sectorAllocation';
 import { formatCurrency as fmtCurrency, type Currency } from '../../utils/format';
 import { useConfirm } from '../../hooks/useConfirm';
 import AssetLogo from '../common/AssetLogo';
@@ -39,6 +41,14 @@ const CLASS_ACCENT: Record<string, { label: string; icon: string; bar: string }>
     CASH:         { label: 'text-slate-300',   icon: 'bg-slate-700/60 text-slate-300',     bar: 'bg-slate-500' },
 };
 const accentOf = (type: string) => CLASS_ACCENT[type] || CLASS_ACCENT.CASH;
+
+// Classes que ganham o donut de setores no cabeçalho, com a chave de agrupamento
+// de cada uma. Renda Fixa/Reserva não têm setor; Exterior e Cripto ficam de fora
+// por enquanto (o setor de ativo US chega em inglês e a cripto não tem setor).
+const SECTOR_PIE_CLASSES: Record<string, SectorKind | undefined> = {
+    STOCK: 'STOCK',
+    FII: 'FII',
+};
 const pluralAtivos = (n: number) => `${n} ${n === 1 ? 'Ativo' : 'Ativos'}`;
 const TYPE_ORDER = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
 const MOBILE_ASSET_LIST_QUERY = '(max-width: 767px)';
@@ -232,6 +242,7 @@ export const AssetList = () => {
                         const totalValueGroup = groupItems.reduce((acc, item) => acc + (item.totalValue || 0), 0);
                         const gm = groupMetrics(groupItems);
                         const accent = accentOf(type);
+                        const sectorKind = SECTOR_PIE_CLASSES[type];
                         const sp = stockSplit(groupItems);
                         const exterior = exteriorSplit(groupItems);
                         const showStockSplit = type === 'STOCK' && sp.etf > 0 && totalValueGroup > 0;
@@ -281,6 +292,13 @@ export const AssetList = () => {
                                         </span>
                                     </span>
                                 </button>
+
+                                {/* Fora do <button> do cabeçalho: botão dentro de botão é HTML inválido. */}
+                                {sectorKind && (
+                                    <div className="flex px-4 pb-3 -mt-1 bg-panel">
+                                        <SectorPopover items={groupItems} kind={sectorKind} isPrivacyMode={isPrivacyMode} variant="touch" />
+                                    </div>
+                                )}
 
                                 {!isCollapsed && groupItems.map((asset) => {
                                     const m = assetMetrics(asset);
@@ -395,6 +413,7 @@ export const AssetList = () => {
                                 const idealPercent = targetAllocation[type as AssetType] || 0;
                                 const gm = groupMetrics(groupItems);
                                 const accent = accentOf(type);
+                                const sectorKind = SECTOR_PIE_CLASSES[type];
                                 // Ações BR: decompõe o % do grupo em Ações individuais vs ETFs nacionais.
                                 const sp = stockSplit(groupItems);
                                 const exterior = exteriorSplit(groupItems);
@@ -422,6 +441,11 @@ export const AssetList = () => {
                                                         <span className="text-[10px] font-bold text-slate-500 bg-elevated px-2 py-0.5 rounded border border-slate-800/50">
                                                             {pluralAtivos(groupItems.length)}
                                                         </span>
+                                                        {/* Donut de concentração setorial sem sair da lista: FII por
+                                                            segmento (papel, shopping, logística…), ação por macro-setor. */}
+                                                        {sectorKind && (
+                                                            <SectorPopover items={groupItems} kind={sectorKind} isPrivacyMode={isPrivacyMode} />
+                                                        )}
                                                         {showStockSplit && (
                                                             <span className="text-[10px] text-slate-500 font-semibold normal-case tracking-normal">
                                                                 Ações {sp.stockPercent}% · ETFs {sp.etfPercent}%
