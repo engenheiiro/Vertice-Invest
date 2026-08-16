@@ -142,6 +142,7 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < ELITE (3) < BLACK (4). Definid
 
 - **Ordem de middleware por rota:** `rateLimiter` → `authenticateToken` → `requireAdmin` (se admin) → handler.
 - **Downgrade automático de plano:** `authMiddleware` verifica `validUntil` a cada request e rebaixa para GUEST se expirado — não duplicar essa lógica em handlers.
+- **Access log (`middleware/accessLog.js`):** nunca logar `req.originalUrl` nem query string crua — só `req.path` + metadados estruturados (`ms`, `walletId` **resolvido** de `req.walletId`). Entrada de cliente em linha de log vaza segredo futuro (`?token=`) e permite forjar linhas com quebra de linha.
 - **Snapshot diário TWRR:** `schedulerService.runDailySnapshot()` usa Modified Dietz (weight 0.5). Não recalcular performance histórica em query — usar `WalletSnapshot`.
 - **Alias frontend:** `@` → `src/`. Proxy de dev: `/api` → `http://localhost:5000` (configurado no `vite.config.ts`).
 
@@ -153,6 +154,7 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < ELITE (3) < BLACK (4). Definid
 - **`WalletContext`** — `assets[]`, `kpis{totalEquity, totalInvested, totalResult, totalDividends, sharpeRatio, beta}`, `isPrivacyMode`, `addAsset()`, `removeAsset()`. Demo mode retorna DEMO_ASSETS quando `isDemoMode=true`.
 - **`ToastContext`** — `addToast(message, type: 'success'|'error'|'info')`, auto-dismiss 4s.
 - **`DemoContext`** — inicia automaticamente se `user.hasSeenTutorial === false` (delay 1.2s). IDs: `tour-equity`, `tour-wallet-*`, etc.
+- **Escopo de carteira:** `activeWalletId` é **derivado** da query `wallets` (nunca copiado para estado por efeito) e toda query/efeito escopado por carteira espera `isWalletScopeReady` no `enabled`. Sem isso a busca sai uma vez sem escopo e outra quando o id chega — duas idas ao servidor por carregamento.
 - **Demo mode:** `WalletContext` injeta `DEMO_ASSETS` quando `isDemoMode=true`. Mutações de carteira devem checar `if (isDemoMode) return` antes de chamar a API.
 - **`useDashboardData`** — React Query agregando macro (cache 15min), sinais (5min), dividendos (5min), research (1h).
 - **Token refresh:** interceptor automático em 401; fila de requests aguarda novo token; redireciona para `/login` se refresh falhar.
