@@ -4,13 +4,15 @@ import { researchService, SECTION_LABEL, ResearchReport, PublishStatus } from '.
 import { marketService } from '../../services/market';
 import { authService } from '../../services/auth';
 import { subscriptionService, type BillingMode } from '../../services/subscription';
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, Settings, Play } from 'lucide-react';
+import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, Settings, Play, HeartPulse } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../hooks/useConfirm';
 import { AdminPainelTab, type MacroData } from './AdminPainelTab';
 import { AdminOperacoesTab } from './AdminOperacoesTab';
 import { AdminFerramentasTab } from './AdminFerramentasTab';
+import { AdminSaudeTab } from './AdminSaudeTab';
+import { healthService, type HealthStatus } from '../../services/health';
 import { getErrorMessage } from '../../utils/errorMessages';
 
 interface CacheData {
@@ -20,10 +22,11 @@ interface CacheData {
     dataPoints?: number;
 }
 
-type TabId = 'painel' | 'operacoes' | 'ferramentas';
+type TabId = 'painel' | 'saude' | 'operacoes' | 'ferramentas';
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
     { id: 'painel', label: 'Painel', Icon: Activity },
+    { id: 'saude', label: 'Saúde', Icon: HeartPulse },
     { id: 'operacoes', label: 'Operações', Icon: Play },
     { id: 'ferramentas', label: 'Ferramentas', Icon: Settings },
 ];
@@ -62,6 +65,7 @@ export const AdminPanel = () => {
     const [isClearingRadar, setIsClearingRadar] = useState(false);
     const [isSyncingTimeSeries, setIsSyncingTimeSeries] = useState(false);
 
+    const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
     const [qualityStats, setQualityStats] = useState<any>(null);
     const [accuracyData, setAccuracyData] = useState<any[]>([]);
     const [accuracyWindow, setAccuracyWindow] = useState<number>(30);
@@ -132,6 +136,22 @@ export const AdminPanel = () => {
     };
 
     useEffect(() => { loadHistory(); loadMacro(); loadConfig(); loadDiscardLogs(); loadPublishStatus(); }, []);
+
+    // Badge de saúde: só o veredito global, para o alerta ser visível sem abrir a
+    // aba. Revalida a cada 5 min — a sentinela só grava de hora em hora, então
+    // pesquisar mais rápido que isso gastaria orçamento do adminLimiter para
+    // reler o mesmo relatório.
+    useEffect(() => {
+        const loadHealthBadge = async () => {
+            try {
+                const data = await healthService.getDataHealth();
+                setHealthStatus(data?.report?.status ?? null);
+            } catch { setHealthStatus(null); }
+        };
+        loadHealthBadge();
+        const timer = setInterval(loadHealthBadge, 300000);
+        return () => clearInterval(timer);
+    }, []);
     useEffect(() => { loadAccuracy(); }, [accuracyWindow, accuracyAsset, accuracyProfile]);
 
     // --- HANDLERS ---
@@ -372,9 +392,17 @@ export const AdminPanel = () => {
                 {/* Tab Navigation */}
                 <div className="flex gap-1 mb-6 bg-base border border-slate-800 rounded-xl p-1">
                     {TABS.map(({ id, label, Icon }) => (
-                        <button key={id} onClick={() => setActiveTab(id)} className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${activeTab === id ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>
+                        <button key={id} onClick={() => setActiveTab(id)} className={`relative flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${activeTab === id ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>
                             <Icon size={14} />
                             {label}
+                            {/* Aviso visual: a bolinha aparece na aba Saúde sempre que a
+                                última avaliação da sentinela não fechou em OK. */}
+                            {id === 'saude' && healthStatus && healthStatus !== 'OK' && (
+                                <span
+                                    title={healthStatus === 'CRITICAL' ? 'Problema crítico nos dados' : 'Alertas na saúde dos dados'}
+                                    className={`absolute top-1.5 right-2 w-2 h-2 rounded-full ${healthStatus === 'CRITICAL' ? 'bg-red-500 animate-pulse' : 'bg-yellow-500'}`}
+                                />
+                            )}
                         </button>
                     ))}
                 </div>
@@ -405,6 +433,8 @@ export const AdminPanel = () => {
                         onRetryMacro={loadMacro}
                     />
                 )}
+
+                {activeTab === 'saude' && <AdminSaudeTab />}
 
                 {activeTab === 'operacoes' && (
                     <AdminOperacoesTab

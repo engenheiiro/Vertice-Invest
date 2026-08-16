@@ -1,0 +1,488 @@
+/**
+ * Regras da sentinela de saúde dos dados — 100% PURAS.
+ *
+ * A coleta (queries no Mongo) fica em `services/dataHealthService.js`; aqui só
+ * entra o "fato" já agregado e sai o veredito. A separação é o que torna cada
+ * limiar testável sem banco: o teste monta o fato e afirma o status.
+ *
+ * Diferença essencial para o que já existia (`utils/ingestionHealth.js`): aquele
+ * valida a EXECUÇÃO de um sync (parsed vs. aceitos, no momento em que roda). Este
+ * valida o ESTADO do banco a qualquer momento — pega o caso em que o sync nunca
+ * rodou, rodou pela metade há dois dias, ou zerou um campo sem quebrar o layout.
+ *
+ * Convenção de campo ausente: o schema de MarketAsset usa `default: 0` em quase
+ * toda métrica, então 0 é indistinguível de "não coletado". A cobertura trata 0
+ * como AUSENTE de propósito — um P/L 0 não é um P/L, é um buraco de dado.
+ */
+
+export const HEALTH_STATUS = {
+    OK: 'OK',
+    WARN: 'WARN',
+    CRITICAL: 'CRITICAL',
+};
+
+const RANK = { OK: 0, WARN: 1, CRITICAL: 2 };
+
+/** Pior entre dois status (OK < WARN < CRITICAL). */
+export const worstStatus = (a, b) => (RANK[a] >= RANK[b] ? a : b);
+
+export const CATEGORY = {
+    FRESHNESS: 'FRESCOR',
+    COVERAGE: 'COBERTURA',
+    PLAUSIBILITY: 'PLAUSIBILIDADE',
+    MACRO: 'MACRO',
+    JOBS: 'ROTINAS',
+    INGESTION: 'INGESTÃO',
+    ERRORS: 'ERROS',
+};
+
+/**
+ * Limiares padrão. Sobrescritíveis por `SystemConfig{ key: 'DATA_HEALTH_THRESHOLDS' }`
+ * (merge raso por chave), para calibrar sem deploy.
+ *
+ * Fração = proporção do universo daquela classe (0.20 = 20%).
+ */
+export const DEFAULT_THRESHOLDS = {
+    // Fração de ativos ATIVOS com cotação mais velha que `priceStaleAfterHours`.
+    priceStaleAfterHours: 30,
+    priceStaleRatio: { warn: 0.15, critical: 0.40 },
+    // Fração de ativos SEM o campo fundamentalista (0/null = ausente).
+    coverageMissingRatio: { warn: 0.25, critical: 0.50 },
+    // Fração de ativos com valor economicamente impossível.
+    implausibleRatio: { warn: 0.02, critical: 0.10 },
+    // Idade do bloco macro (SELIC/IPCA/CDI/Ibov/dólar).
+    macroAgeHours: { warn: 6, critical: 48 },
+    // Idade do último PU do Tesouro (alimenta a marcação a mercado da RF).
+    treasuryAgeHours: { warn: 40, critical: 96 },
+    // Idade média das séries temporais (AssetHistory).
+    timeSeriesAgeHours: { warn: 48, critical: 120 },
+    // Fração do universo desativada por falha consecutiva de cotação.
+    inactiveRatio: { warn: 0.05, critical: 0.15 },
+    // Erros 5xx do backend nas últimas 24h.
+    errors24h: { warn: 25, critical: 150 },
+    // Idade da confirmação de saúde dos fundamentos BR (espelha o gate de publicação).
+    fundamentalsAgeHours: { warn: 40, critical: 96 },
+};
+
+/** Faixas de plausibilidade por métrica. Fora disso, o dado está corrompido. */
+export const PLAUSIBILITY_RANGES = {
+    dy: { min: 0, max: 25, label: 'Dividend Yield', unit: '%' },
+    pl: { min: -200, max: 200, label: 'P/L', unit: '' },
+    p_vp: { min: 0, max: 30, label: 'P/VP', unit: '' },
+    beta: { min: -2, max: 4, label: 'Beta', unit: '' },
+    change: { min: -50, max: 50, label: 'Variação diária', unit: '%' },
+};
+
+/** Faixas de sanidade dos indicadores macro. */
+export const MACRO_RANGES = {
+    selic: { min: 0.5, max: 40, label: 'SELIC', unit: '%' },
+    ipca: { min: -5, max: 40, label: 'IPCA', unit: '%' },
+    cdi: { min: 0.5, max: 40, label: 'CDI', unit: '%' },
+    ibov: { min: 30000, max: 500000, label: 'Ibovespa', unit: 'pts' },
+    dollar: { min: 1, max: 30, label: 'Dólar', unit: 'R$' },
+};
+
+/**
+ * Campos cobrados por classe. Um campo só entra aqui se a ausência dele degrada
+ * o produto de verdade — cobrar campo opcional gera alarme que se aprende a ignorar,
+ * que é pior que não ter alarme.
+ */
+export const COVERAGE_SPEC = {
+    STOCK: [
+        { field: 'lastPrice', label: 'Preço', severity: 'CRITICAL' },
+        { field: 'pl', label: 'P/L', severity: 'WARN' },
+        { field: 'roe', label: 'ROE', severity: 'WARN' },
+        { field: 'dy', label: 'Dividend Yield', severity: 'WARN' },
+        { field: 'marketCap', label: 'Valor de mercado', severity: 'CRITICAL' },
+        { field: 'liquidity', label: 'Liquidez', severity: 'CRITICAL' },
+    ],
+    FII: [
+        { field: 'lastPrice', label: 'Preço', severity: 'CRITICAL' },
+        { field: 'dy', label: 'Dividend Yield', severity: 'CRITICAL' },
+        { field: 'p_vp', label: 'P/VP', severity: 'WARN' },
+        { field: 'marketCap', label: 'Valor de mercado', severity: 'WARN' },
+        { field: 'liquidity', label: 'Liquidez', severity: 'CRITICAL' },
+    ],
+    STOCK_US: [
+        { field: 'lastPrice', label: 'Preço', severity: 'CRITICAL' },
+        { field: 'pl', label: 'P/L', severity: 'WARN' },
+        { field: 'roe', label: 'ROE', severity: 'WARN' },
+        { field: 'marketCap', label: 'Valor de mercado', severity: 'WARN' },
+    ],
+    ETF: [
+        { field: 'lastPrice', label: 'Preço', severity: 'CRITICAL' },
+        { field: 'marketCap', label: 'Patrimônio', severity: 'WARN' },
+    ],
+    CRYPTO: [
+        { field: 'lastPrice', label: 'Preço', severity: 'CRITICAL' },
+        { field: 'marketCap', label: 'Valor de mercado', severity: 'WARN' },
+    ],
+};
+
+// --- helpers puros ---------------------------------------------------------
+
+// null/undefined precisam sobreviver como null até o classificador: `Number(null)`
+// é 0, e 0 é um valor VÁLIDO em quase todo check aqui — converter ausência em zero
+// faria "dado não coletado" ser lido como "dado excelente".
+const num = (v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+};
+
+/** Divisão protegida: universo vazio devolve 0, nunca NaN/Infinity. */
+export const ratio = (part, total) => {
+    const p = num(part) ?? 0;
+    const t = num(total) ?? 0;
+    return t > 0 ? p / t : 0;
+};
+
+export const hoursBetween = (from, to) => {
+    const a = from instanceof Date ? from : new Date(from);
+    const b = to instanceof Date ? to : new Date(to);
+    const ms = b.getTime() - a.getTime();
+    if (!Number.isFinite(ms)) return null;
+    return ms / 3600000;
+};
+
+/**
+ * Classifica um valor contra `{ warn, critical }` em que MAIOR é pior.
+ * `severityCap` limita o pior status possível — deixa um campo secundário
+ * (P/L ausente) alarmar no máximo como WARN mesmo estourando o limiar crítico.
+ */
+export const gradeAscending = (value, { warn, critical }, severityCap = 'CRITICAL') => {
+    const v = num(value);
+    if (v === null) return HEALTH_STATUS.WARN;
+    if (v >= critical) return severityCap === 'WARN' ? HEALTH_STATUS.WARN : HEALTH_STATUS.CRITICAL;
+    if (v >= warn) return HEALTH_STATUS.WARN;
+    return HEALTH_STATUS.OK;
+};
+
+const pct = (v) => `${(v * 100).toFixed(1)}%`;
+
+const check = ({ id, label, category, status, value, detail, hint }) => ({
+    id,
+    label,
+    category,
+    status,
+    value: value ?? null,
+    detail: detail || '',
+    // `hint` é o que o painel mostra como "onde olhar" — a razão de existir do
+    // alarme é virar conserto, não virar número.
+    hint: hint || '',
+});
+
+const mergeThresholds = (overrides) => {
+    if (!overrides || typeof overrides !== 'object') return DEFAULT_THRESHOLDS;
+    const merged = { ...DEFAULT_THRESHOLDS };
+    for (const [key, value] of Object.entries(overrides)) {
+        if (!(key in DEFAULT_THRESHOLDS)) continue;
+        const base = DEFAULT_THRESHOLDS[key];
+        if (typeof base === 'object' && base !== null && typeof value === 'object' && value !== null) {
+            const warn = num(value.warn);
+            const critical = num(value.critical);
+            merged[key] = {
+                warn: warn ?? base.warn,
+                critical: critical ?? base.critical,
+            };
+        } else {
+            merged[key] = num(value) ?? base;
+        }
+    }
+    return merged;
+};
+
+// --- construtores de check por domínio -------------------------------------
+
+const freshnessChecks = (facts, th) => {
+    const out = [];
+    for (const [assetClass, stats] of Object.entries(facts.assets || {})) {
+        const active = num(stats.active) ?? 0;
+        if (active === 0) continue; // classe não povoada não é falha
+        const r = ratio(stats.stalePrice, active);
+        out.push(check({
+            id: `freshness.price.${assetClass}`,
+            label: `Preço desatualizado — ${assetClass}`,
+            category: CATEGORY.FRESHNESS,
+            status: gradeAscending(r, th.priceStaleRatio),
+            value: r,
+            detail: `${stats.stalePrice}/${active} ativos sem cotação há mais de ${th.priceStaleAfterHours}h (${pct(r)})`,
+            hint: 'Cotações vêm de marketDataService (Yahoo → Google → Brapi). Cheque o cron de preços e o failCount dos tickers.',
+        }));
+    }
+    return out;
+};
+
+const coverageChecks = (facts, th) => {
+    const out = [];
+    for (const [assetClass, spec] of Object.entries(COVERAGE_SPEC)) {
+        const stats = facts.assets?.[assetClass];
+        const active = num(stats?.active) ?? 0;
+        if (active === 0) continue;
+        for (const { field, label, severity } of spec) {
+            const missing = num(stats.missing?.[field]) ?? 0;
+            const r = ratio(missing, active);
+            out.push(check({
+                id: `coverage.${assetClass}.${field}`,
+                label: `${label} ausente — ${assetClass}`,
+                category: CATEGORY.COVERAGE,
+                status: gradeAscending(r, th.coverageMissingRatio, severity),
+                value: r,
+                detail: `${missing}/${active} ativos sem ${label} (${pct(r)})`,
+                hint: assetClass === 'STOCK' || assetClass === 'FII'
+                    ? 'Origem: scraping do Fundamentus (fundamentusService). Campo zerado em massa costuma ser mudança de layout — rode o canário de fontes.'
+                    : 'Origem: Yahoo Finance (usStocksFundamentalsService / marketDataService).',
+            }));
+        }
+    }
+    return out;
+};
+
+const plausibilityChecks = (facts, th) => {
+    const out = [];
+    const totals = facts.implausible || {};
+    const universe = num(facts.totals?.active) ?? 0;
+    if (universe === 0) return out;
+    for (const [field, range] of Object.entries(PLAUSIBILITY_RANGES)) {
+        const count = num(totals[field]) ?? 0;
+        const r = ratio(count, universe);
+        out.push(check({
+            id: `plausibility.${field}`,
+            label: `${range.label} fora da faixa`,
+            category: CATEGORY.PLAUSIBILITY,
+            status: gradeAscending(r, th.implausibleRatio),
+            value: r,
+            detail: `${count} ativo(s) com ${range.label} fora de [${range.min}, ${range.max}]${range.unit ? ` ${range.unit}` : ''} (${pct(r)})`,
+            hint: 'Valor impossível quase sempre é coluna trocada na origem ou unidade errada (fração vs. percentual).',
+        }));
+    }
+    // Preço não-positivo é categórico: ativo ativo sem preço válido é sempre defeito,
+    // então UMA ocorrência já sai de OK (piso WARN) — mas só vira CRITICAL quando
+    // atinge fração relevante, para um ticker órfão não pintar o painel de vermelho.
+    const zeroPrice = num(facts.implausible?.nonPositivePrice) ?? 0;
+    out.push(check({
+        id: 'plausibility.nonPositivePrice',
+        label: 'Preço zerado ou negativo',
+        category: CATEGORY.PLAUSIBILITY,
+        status: zeroPrice === 0
+            ? HEALTH_STATUS.OK
+            : worstStatus(
+                HEALTH_STATUS.WARN,
+                gradeAscending(ratio(zeroPrice, universe), th.implausibleRatio),
+            ),
+        value: zeroPrice,
+        detail: `${zeroPrice} ativo(s) ativo(s) com preço ≤ 0`,
+        hint: 'Ativo ativo sem preço válido entra em ranking e carteira com valor errado. Verifique o fallback de cotação.',
+    }));
+    return out;
+};
+
+const macroChecks = (facts, th) => {
+    const out = [];
+    const macro = facts.macro || {};
+    const age = macro.updatedAt ? hoursBetween(macro.updatedAt, facts.now) : null;
+
+    out.push(check({
+        id: 'macro.freshness',
+        label: 'Idade do bloco macro',
+        category: CATEGORY.MACRO,
+        status: age === null ? HEALTH_STATUS.CRITICAL : gradeAscending(age, th.macroAgeHours),
+        value: age,
+        detail: age === null
+            ? 'Nenhum registro de macro encontrado'
+            : `Atualizado há ${age.toFixed(1)}h`,
+        hint: 'macroDataService — cadeia BCB → BrasilAPI → IBGE. Cheque o cron de 15 min e o circuito de rede.',
+    }));
+
+    for (const [field, range] of Object.entries(MACRO_RANGES)) {
+        const value = num(macro[field]);
+        const missing = value === null || value === 0;
+        const outOfRange = !missing && (value < range.min || value > range.max);
+        out.push(check({
+            id: `macro.value.${field}`,
+            label: `${range.label}`,
+            category: CATEGORY.MACRO,
+            status: missing || outOfRange ? HEALTH_STATUS.CRITICAL : HEALTH_STATUS.OK,
+            value,
+            detail: missing
+                ? 'Ausente'
+                : `${value} ${range.unit}${outOfRange ? ` — fora de [${range.min}, ${range.max}]` : ''}`,
+            hint: 'Indicador macro alimenta taxa livre de risco, Bazin e o score inteiro. Valor fora da faixa contamina todo o ranking.',
+        }));
+    }
+    return out;
+};
+
+const treasuryCheck = (facts, th) => {
+    const age = facts.treasury?.latestDate ? hoursBetween(facts.treasury.latestDate, facts.now) : null;
+    return check({
+        id: 'freshness.treasury',
+        label: 'PU do Tesouro Direto',
+        category: CATEGORY.FRESHNESS,
+        status: age === null ? HEALTH_STATUS.CRITICAL : gradeAscending(age, th.treasuryAgeHours),
+        value: age,
+        detail: age === null
+            ? 'Nenhuma série de PU encontrada'
+            : `Último PU há ${age.toFixed(1)}h (${facts.treasury.titles || 0} títulos)`,
+        hint: 'treasuryPriceService. Sem PU recente a renda fixa cai para accrual (fail-closed) e o snapshot marca na curva.',
+    });
+};
+
+const timeSeriesCheck = (facts, th) => {
+    const age = num(facts.timeSeries?.avgAgeHours);
+    return check({
+        id: 'freshness.timeSeries',
+        label: 'Séries temporais (AssetHistory)',
+        category: CATEGORY.FRESHNESS,
+        status: age === null ? HEALTH_STATUS.WARN : gradeAscending(age, th.timeSeriesAgeHours),
+        value: age,
+        detail: age === null
+            ? 'Sem séries registradas'
+            : `Idade média ${age.toFixed(1)}h em ${facts.timeSeries?.count || 0} séries`,
+        hint: 'timeSeriesWorker. Série velha achata beta/volatilidade/SMA200 e distorce o backtest.',
+    });
+};
+
+const ingestionChecks = (facts, th) => {
+    const out = [];
+    const f = facts.fundamentals || {};
+    const age = f.timestamp ? hoursBetween(f.timestamp, facts.now) : null;
+    const healthy = f.healthy === true;
+    let status = HEALTH_STATUS.OK;
+    if (!healthy) status = HEALTH_STATUS.CRITICAL;
+    else if (age === null) status = HEALTH_STATUS.CRITICAL;
+    else status = gradeAscending(age, th.fundamentalsAgeHours);
+
+    out.push(check({
+        id: 'ingestion.fundamentals',
+        label: 'Fundamentos BR (Fundamentus)',
+        category: CATEGORY.INGESTION,
+        status,
+        value: age,
+        detail: !healthy
+            ? `Último sync marcado como DEGRADADO${f.errorCode ? ` (${f.errorCode})` : ''}`
+            : age === null
+                ? 'Sem confirmação de saúde'
+                : `Saudável, confirmado há ${age.toFixed(1)}h`,
+        hint: 'Espelha o gate de ingestionHealth.js. Enquanto vermelho, a publicação de ranking BR fica bloqueada.',
+    }));
+
+    const inactive = num(facts.totals?.inactive) ?? 0;
+    const total = num(facts.totals?.all) ?? 0;
+    const r = ratio(inactive, total);
+    out.push(check({
+        id: 'ingestion.inactiveAssets',
+        label: 'Ativos desativados por falha',
+        category: CATEGORY.INGESTION,
+        status: gradeAscending(r, th.inactiveRatio),
+        value: r,
+        detail: `${inactive}/${total} ativos inativos por falha de cotação (${pct(r)})`,
+        hint: 'Cresce quando uma fonte cai por dias. O cron de reativação (seg 05:00) tenta reverter; "Resetar saúde" força.',
+    }));
+    return out;
+};
+
+const jobChecks = (facts) => {
+    const out = [];
+    for (const job of facts.jobs || []) {
+        const { jobId, label, severity = 'WARN', maxSilenceHours, lastRunAt, lastStatus, lastError } = job;
+
+        if (!lastRunAt) {
+            out.push(check({
+                id: `jobs.${jobId}`,
+                label,
+                category: CATEGORY.JOBS,
+                status: severity === 'CRITICAL' ? HEALTH_STATUS.CRITICAL : HEALTH_STATUS.WARN,
+                value: null,
+                detail: 'Nunca executado desde a instrumentação',
+                hint: 'Se o job existe no scheduler e nunca gravou execução, o scheduler pode não ter subido.',
+            }));
+            continue;
+        }
+
+        const age = hoursBetween(lastRunAt, facts.now);
+        const overdue = Number.isFinite(maxSilenceHours) && age > maxSilenceHours;
+        const failed = lastStatus === 'FAILED';
+
+        let status = HEALTH_STATUS.OK;
+        if (failed || overdue) {
+            status = severity === 'CRITICAL' ? HEALTH_STATUS.CRITICAL : HEALTH_STATUS.WARN;
+        }
+
+        const parts = [`Última execução há ${age.toFixed(1)}h`];
+        if (overdue) parts.push(`acima do teto de ${maxSilenceHours}h`);
+        if (failed) parts.push(`falhou: ${lastError || 'erro não registrado'}`);
+
+        out.push(check({
+            id: `jobs.${jobId}`,
+            label,
+            category: CATEGORY.JOBS,
+            status,
+            value: age,
+            detail: parts.join(' — '),
+            hint: failed
+                ? 'Veja o erro completo na aba de Erros do painel.'
+                : 'Silêncio acima do teto indica scheduler parado, deploy que derrubou o processo, ou EXTERNAL_SCHEDULER mal configurado.',
+        }));
+    }
+    return out;
+};
+
+const errorChecks = (facts, th) => {
+    const count = num(facts.errors?.last24h) ?? 0;
+    return [check({
+        id: 'errors.backend24h',
+        label: 'Erros do backend (24h)',
+        category: CATEGORY.ERRORS,
+        status: gradeAscending(count, th.errors24h),
+        value: count,
+        detail: `${count} erro(s) registrado(s) nas últimas 24h`,
+        hint: 'Detalhe por rota/job na aba de Erros.',
+    })];
+};
+
+// --- montagem do relatório --------------------------------------------------
+
+/**
+ * Recebe os fatos agregados e devolve o relatório completo.
+ *
+ * `facts` esperado:
+ *   { now, totals{all,active,inactive}, assets{CLASSE:{active,stalePrice,missing{}}},
+ *     implausible{campo:count,nonPositivePrice}, macro{...,updatedAt},
+ *     treasury{titles,latestDate}, timeSeries{count,avgAgeHours},
+ *     fundamentals{healthy,timestamp,errorCode}, jobs[], errors{last24h} }
+ */
+export const buildHealthReport = (facts = {}, thresholdOverrides = null) => {
+    const th = mergeThresholds(thresholdOverrides);
+    const now = facts.now instanceof Date ? facts.now : new Date(facts.now || Date.now());
+    const ctx = { ...facts, now };
+
+    const checks = [
+        ...freshnessChecks(ctx, th),
+        treasuryCheck(ctx, th),
+        timeSeriesCheck(ctx, th),
+        ...coverageChecks(ctx, th),
+        ...plausibilityChecks(ctx, th),
+        ...macroChecks(ctx, th),
+        ...ingestionChecks(ctx, th),
+        ...jobChecks(ctx),
+        ...errorChecks(ctx, th),
+    ];
+
+    const summary = { ok: 0, warn: 0, critical: 0 };
+    let status = HEALTH_STATUS.OK;
+    for (const c of checks) {
+        if (c.status === HEALTH_STATUS.CRITICAL) summary.critical += 1;
+        else if (c.status === HEALTH_STATUS.WARN) summary.warn += 1;
+        else summary.ok += 1;
+        status = worstStatus(status, c.status);
+    }
+
+    return { runAt: now, status, summary, checks, thresholds: th };
+};
+
+/** Só o que está quebrado, pior primeiro — é o que o painel destaca no topo. */
+export const failingChecks = (report) =>
+    (report?.checks || [])
+        .filter((c) => c.status !== HEALTH_STATUS.OK)
+        .sort((a, b) => RANK[b.status] - RANK[a.status]);

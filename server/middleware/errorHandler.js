@@ -25,6 +25,7 @@
 import logger from '../config/logger.js';
 import { getRequestId } from '../utils/requestContext.js';
 import { STATUS_CODE } from '../utils/AppError.js';
+import { recordError } from '../services/errorLogService.js';
 
 // Erros conhecidos de libs → status + code padronizados.
 const KNOWN_BY_NAME = {
@@ -81,6 +82,25 @@ export const errorHandler = (err, req, res, _next) => {
     logger.error(`Erro [${body.error.code}]: ${err.message}${err.stack ? `\n${err.stack}` : ''}`);
   } else {
     logger.warn(`Erro [${body.error.code}] ${status}: ${err.message}`);
+  }
+
+  // Persiste no ErrorLog para o painel do Admin. Só 5xx: 4xx é erro do cliente
+  // (senha errada, validação) e encheria o painel de ruído que não é defeito nosso.
+  //
+  // `req.path` e nunca `req.originalUrl` — a mesma regra do access log: query
+  // string vinda do cliente vaza segredo e permite forjar conteúdo no registro.
+  //
+  // Sem await: a resposta não deve esperar a gravação, e recordError já engole
+  // a própria falha.
+  if (status >= 500) {
+    recordError({
+      origin: 'HTTP',
+      source: `${req?.method || '?'} ${req?.path || '?'}`,
+      code: body.error.code,
+      message: err.message,
+      stack: err.stack || null,
+      statusCode: status,
+    });
   }
 
   res.status(status).json(body);

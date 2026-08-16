@@ -46,24 +46,37 @@ import {
 } from '../utils/walletSnapshot.js';
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
+import { trackJobSafe } from '../utils/jobRun.js';
+import { runDataHealthCheck } from './dataHealthService.js';
 
 // (TZ) Todos os crons rodam em horário de Brasília. Sem o timezone explícito,
 // node-cron usa o fuso do servidor (UTC no Render), fazendo '30 18' disparar
 // às 15:30 BRT em vez de 18:30. Wrapper centraliza isso em todas as chamadas.
 const SCHEDULER_TZ = 'America/Sao_Paulo';
-const schedule = (expression, fn) => cron.schedule.call(cron, expression, fn, { timezone: SCHEDULER_TZ });
+
+// (OBSERVABILIDADE) Todo cron passa por `trackJobSafe`, que grava um JobRun por
+// execução. É o que permite ao painel de Saúde dos Dados acusar cron PARADO — a
+// ausência de execução não produz log, então sem esse registro um scheduler morto
+// é indistinguível de um scheduler ocioso. O `jobId` deve existir em jobCatalog.js,
+// que define o teto de silêncio tolerado de cada rotina.
+const schedule = (expression, jobId, fn) => cron.schedule.call(
+    cron,
+    expression,
+    () => trackJobSafe(jobId, fn),
+    { timezone: SCHEDULER_TZ },
+);
 
 // (EXTERNAL_SCHEDULER) Os jobs pesados (sync pós-mercado + snapshot) podem ser
 // rodados por Render Cron Jobs — independentes do web service, que hiberna e
 // perde execuções. Defina EXTERNAL_SCHEDULER=true no web service para desativar
 // essas rotinas in-app e evitar execução dupla. Default = roda in-app (atual).
 const EXTERNAL_SCHEDULER = process.env.EXTERNAL_SCHEDULER === 'true';
-const scheduleHeavy = (expression, fn) => {
+const scheduleHeavy = (expression, jobId, fn) => {
     if (EXTERNAL_SCHEDULER) {
         logger.info(`⏭️ Cron pesado '${expression}' desativado in-app (EXTERNAL_SCHEDULER=true → Render Cron Job).`);
         return null;
     }
-    return schedule(expression, fn);
+    return schedule(expression, jobId, fn);
 };
 
 // --- LÓGICA DE SNAPSHOT ISOLADA (Reutilizável) ---
@@ -509,7 +522,7 @@ export const initScheduler = () => {
     }, 15000);
 
     // 1. Sync Leve: Macroeconomia (A cada 15 minutos)
-    schedule('5,20,35,50 * * * *', async () => {
+    schedule('5,20,35,50 * * * *', 'macro-sync', async () => {
         try {
             await macroDataService.performMacroSync();
         } catch (error) {
@@ -518,7 +531,7 @@ export const initScheduler = () => {
     });
 
     // 2. Sync Preços (Yahoo/Brapi 15min)
-    schedule('*/15 * * * *', async () => {
+    schedule('*/15 * * * *', 'quotes-sync', async () => {
         try {
             const assets = await MarketAsset.find({ 
                 isActive: true,
@@ -543,7 +556,7 @@ export const initScheduler = () => {
     });
 
     // 3. RADAR ALPHA 3.1
-    schedule('2,17,32,47 * * * *', async () => {
+    schedule('2,17,32,47 * * * *', 'radar-alpha', async () => {
         try {
             await signalEngine.runScanner();
         } catch (e) {
@@ -552,7 +565,7 @@ export const initScheduler = () => {
     });
 
     // 4. BACKTEST INTRADAY
-    schedule('5,35 * * * *', async () => {
+    schedule('5,35 * * * *', 'backtest-intraday', async () => {
         try {
             await signalEngine.runBacktest();
         } catch (e) {
@@ -561,7 +574,7 @@ export const initScheduler = () => {
     });
 
     // 5a. Sync Manhã (09:00) — dados do pregão anterior consolidados, antes de abrir
-    schedule('0 9 * * *', async () => {
+    schedule('0 9 * * *', 'daily-morning', async () => {
         logger.info("⏰ Rotina Diária V3 — Manhã (09:00)");
         try {
             const syncResult = await syncService.performFullSync();
@@ -591,7 +604,7 @@ export const initScheduler = () => {
     });
 
     // 5b. Sync Tarde/Pós-Mercado (18:30) — B3 fecha às 17:30, dados completos do dia
-    scheduleHeavy('30 18 * * *', async () => {
+    scheduleHeavy('30 18 * * *', 'daily-evening', async () => {
         logger.info("⏰ Rotina Diária V3 — Pós-Mercado (18:30)");
         try {
             const syncResult = await syncService.performFullSync();
@@ -624,7 +637,7 @@ export const initScheduler = () => {
 
     // 5c. Auto-publish semanal (Segunda 09:30) — publica o ranking + Explainable IA
     // mais recente de cada classe automaticamente, para semanas sem publicação manual.
-    schedule('30 9 * * 1', async () => {
+    schedule('30 9 * * 1', 'weekly-autopublish', async () => {
         try {
             await runWeeklyAutoPublish();
         } catch (e) {
@@ -634,12 +647,12 @@ export const initScheduler = () => {
     });
 
     // 6. Snapshot Patrimonial Inteligente (23:59)
-    schedule('59 23 * * *', async () => {
+    schedule('59 23 * * *', 'daily-snapshot', async () => {
         await runDailySnapshot(false); // false = não força, respeita feriados
     });
 
     // 7. Verificação de Assinaturas (Diário 03:00 AM)
-    schedule('0 3 * * *', async () => {
+    schedule('0 3 * * *', 'subscriptions-check', async () => {
         try {
             const now = new Date();
             // Assinatura recorrente ativa ganha carência: o MP cobra na data de
@@ -680,7 +693,7 @@ export const initScheduler = () => {
 
     // 7.1 Sync de Proventos (Diário 04:00 AM) — popula DividendEvent dos tickers
     // que aparecem nas carteiras, mantendo os proventos atualizados.
-    schedule('0 4 * * *', async () => {
+    schedule('0 4 * * *', 'dividends-sync', async () => {
         try {
             const assets = await UserAsset.find({
                 type: { $nin: ['CRYPTO', 'FIXED_INCOME', 'CASH'] },
@@ -694,12 +707,12 @@ export const initScheduler = () => {
     });
 
     // 8. Sync Feriados (Anual)
-    schedule('0 6 1 1 *', async () => {
+    schedule('0 6 1 1 *', 'holidays-sync', async () => {
         await holidayService.sync();
     });
 
     // 9. Fundamentals S&P 500 (dias úteis 07:30 — antes do pipeline de análise)
-    schedule('30 7 * * 1-5', async () => {
+    schedule('30 7 * * 1-5', 'us-fundamentals', async () => {
         try {
             logger.info("⏰ [Scheduler] Sync Fundamentals S&P 500...");
             await usStocksFundamentalsService.syncUSStocksFundamentals();
@@ -715,7 +728,7 @@ export const initScheduler = () => {
     });
 
     // 10. Taxa USD/BRL histórica (toda segunda-feira 06:00 — antes dos outros syncs)
-    schedule('0 6 * * 1', async () => {
+    schedule('0 6 * * 1', 'fx-history', async () => {
         try {
             logger.info("⏰ [Scheduler] Sync taxa USD/BRL histórica...");
             await macroDataService.syncHistoricalUSDRate();
@@ -728,7 +741,7 @@ export const initScheduler = () => {
     // 11. REATIVAÇÃO AUTOMÁTICA DE ATIVOS INATIVOS (Toda segunda-feira 05:00)
     // Tenta reobter cotação de ativos que foram desativados por falhas consecutivas.
     // Se a cotação voltar, o ativo é reativado automaticamente sem intervenção manual.
-    schedule('0 5 * * 1', async () => {
+    schedule('0 5 * * 1', 'assets-reactivation', async () => {
         try {
             logger.info("🔄 [Scheduler] Iniciando reativação automática de ativos inativos...");
             const result = await marketDataService.tryReactivateAssets();
@@ -747,7 +760,7 @@ export const initScheduler = () => {
     // 12. LIMPEZA DE ARMAZENAMENTO (Diário 01:00 — janela de menor tráfego)
     // Diário (antes semanal): o pipeline grava ~14 análises/dia e o fullAuditLog só é
     // removido após 7 dias, então rodar todo dia mantém a coleção enxuta continuamente.
-    schedule('0 1 * * *', async () => {
+    schedule('0 1 * * *', 'storage-cleanup', async () => {
         try {
             const { runStorageCleanup } = await import('./cleanupService.js');
             await runStorageCleanup();
@@ -761,7 +774,7 @@ export const initScheduler = () => {
     // ANTES do snapshot das 23:59, que precisa do PU do dia para marcar a posição.
     // O arquivo oficial publica preços da MANHÃ — a renda variável é marcada no
     // fechamento e a RF na abertura; é a granularidade que a fonte oferece.
-    scheduleHeavy('30 18 * * 1-5', async () => {
+    scheduleHeavy('30 18 * * 1-5', 'treasury-prices', async () => {
         try {
             const { ingestTreasuryPrices } = await import('./treasuryPriceService.js');
             const result = await ingestTreasuryPrices();
@@ -775,7 +788,7 @@ export const initScheduler = () => {
     // O TTL index em RefreshToken.expiryDate e AuditLog.timestamp já limpa automaticamente.
     // Este job é belt-and-suspenders: remove RefreshTokens expirados não capturados pelo TTL
     // (ex.: atraso do processo TTL do MongoDB em coleções grandes).
-    scheduleHeavy('30 2 * * *', async () => {
+    scheduleHeavy('30 2 * * *', 'lgpd-retention', async () => {
         try {
             const result = await RefreshToken.deleteMany({ expiryDate: { $lt: new Date() } });
             if (result.deletedCount > 0) {
@@ -785,4 +798,24 @@ export const initScheduler = () => {
             logger.error(`❌ [LGPD] Cleanup RefreshToken: ${error.message}`);
         }
     });
+
+    // 14. SENTINELA DE SAÚDE DOS DADOS (de hora em hora, minuto 10)
+    //
+    // Independente do sync: audita o ESTADO do banco, não a execução de quem
+    // escreveu nele. É o que faz o alarme funcionar mesmo quando o sync completo
+    // roda de forma irregular/manual — e é o único check que enxerga "o cron X
+    // parou de rodar", já que compara o último JobRun com o teto do jobCatalog.
+    //
+    // Minuto 10 evita competir com os crons de :00 e com os de 15 min (:05/:15/:20…),
+    // medindo o banco fora do pico de escrita.
+    schedule('10 * * * *', 'data-health', async () => {
+        await runDataHealthCheck({ trigger: 'CRON' });
+    });
+
+    // Primeira avaliação 45s após o boot: um deploy que quebrou ingestão não
+    // deveria esperar até o próximo minuto 10 para aparecer no painel.
+    setTimeout(() => {
+        runDataHealthCheck({ trigger: 'CRON' }).catch((e) =>
+            logger.debug(`[DataHealth] Check de boot falhou: ${e.message}`));
+    }, 45000);
 };

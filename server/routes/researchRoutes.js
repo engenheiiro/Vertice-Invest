@@ -31,6 +31,12 @@ import {
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 import { researchHeavyLimiter, researchReadLimiter, adminLimiter } from '../middleware/rateLimiters.js';
 import { getTunablesHandler, updateTunablesHandler } from '../controllers/configController.js'; // (I13)
+import {
+    getDataHealth,
+    runDataHealth,
+    listErrors,
+    resolveError,
+} from '../controllers/healthController.js';
 import validate from '../middleware/validateResource.js';
 import { tunablesPatchSchema } from '../schemas/configSchemas.js';
 import { enhanceResearchSchema, publishResearchSchema } from '../schemas/researchSchemas.js';
@@ -77,6 +83,14 @@ router.post('/cleanup-storage', researchHeavyLimiter, requireAdmin, runStorageCl
 // Monitor de Qualidade & Acurácia
 router.get('/data-quality', adminLimiter, requireAdmin, getDataQualityStats);
 router.post('/reset-health', adminLimiter, requireAdmin, resetAssetHealth);
+
+// Sentinela de saúde dos dados + log de erros do backend (painel "Saúde").
+// A leitura é barata (último relatório persistido), então usa adminLimiter; o
+// recálculo sob demanda varre a base inteira e vai no researchHeavyLimiter.
+router.get('/data-health', adminLimiter, requireAdmin, getDataHealth);
+router.post('/data-health/run', researchHeavyLimiter, requireAdmin, runDataHealth);
+router.get('/errors', adminLimiter, requireAdmin, listErrors);
+router.post('/errors/:id/resolve', adminLimiter, requireAdmin, resolveError);
 router.get('/accuracy', adminLimiter, requireAdmin, getAlgorithmAccuracy);
 // Motivos internos de descarte — só admin (único consumidor é o AdminPanel).
 router.get('/discard-logs', adminLimiter, requireAdmin, getDiscardLogs);

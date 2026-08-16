@@ -17,6 +17,7 @@ import {
     finalizeFundamentusStats,
     validateFundamentusIngestion,
 } from '../utils/ingestionHealth.js';
+import { trackJob } from '../utils/jobRun.js';
 
 const yahooFinanceLTM = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 const LTM_BATCH_SIZE = 10;
@@ -108,8 +109,26 @@ const KNOWN_TYPOS = {
 export const syncService = {
     /**
      * Orquestrador Principal de Sincronização.
+     *
+     * Envelopado em `trackJob` para que TODA execução — script manual, botão do
+     * Admin ou rotina diária — deixe registro no painel de Saúde dos Dados. Ao
+     * final dispara a sentinela: o momento logo após o sync é justamente quando
+     * uma quebra de fonte é mais detectável.
      */
     async performFullSync() {
+        const result = await trackJob('full-sync', () => this._runFullSync());
+        // Fora do trackJob: uma falha ao avaliar a saúde não deve marcar o sync
+        // (que pode ter ido bem) como falho.
+        try {
+            const { runDataHealthCheck } = await import('./dataHealthService.js');
+            await runDataHealthCheck({ trigger: 'SYNC' });
+        } catch (err) {
+            logger.debug(`[Sync] Sentinela de saúde não rodou: ${err.message}`);
+        }
+        return result;
+    },
+
+    async _runFullSync() {
         try {
             logger.info("ℹ️ [Sync] Etapa 1: Macroeconomia");
             await macroDataService.performMacroSync();

@@ -8,6 +8,15 @@ import {
     FUNDAMENTUS_FIIS_LAYOUT,
     validateFundamentusLayout,
 } from '../config/scraperSchemas.js';
+import { recordIngestionError } from './errorLogService.js';
+
+// Separa as duas falhas que chegam pelo mesmo catch, porque exigem conserto
+// diferente: LAYOUT_MISMATCH é mudança na estrutura do site (precisa atualizar
+// scraperSchemas.js); SOURCE_UNAVAILABLE é rede/403 (esperado no IP do Render).
+const layoutFailure = (error) =>
+    (/Layout de .* incompatível/.test(error?.message || '')
+        ? 'FUNDAMENTUS_LAYOUT_MISMATCH'
+        : 'FUNDAMENTUS_SOURCE_UNAVAILABLE');
 
 // Headers completos mimetizando um navegador Chrome Desktop Real
 const HEADERS = {
@@ -182,6 +191,10 @@ export const fundamentusService = {
             logger.warn(`⚠️ Scraping Ações indisponível: ${error.message} (usando cache)`, {
                 source: 'fundamentus', kind: 'STOCK', status: error.response?.status ?? null,
             });
+            // Vai para o painel do Admin agrupado por fingerprint: um 403 recorrente
+            // vira UMA linha com contador, não uma enxurrada. Mantém a decisão de não
+            // alarmar (segue warn no log) e ainda assim deixa a degradação visível.
+            recordIngestionError('fundamentus/STOCK', error, layoutFailure(error));
             return new Map();
         }
     },
@@ -267,6 +280,7 @@ export const fundamentusService = {
             logger.warn(`⚠️ Scraping FIIs indisponível: ${error.message} (usando cache)`, {
                 source: 'fundamentus', kind: 'FII', status: error.response?.status ?? null,
             });
+            recordIngestionError('fundamentus/FII', error, layoutFailure(error));
             return new Map();
         }
     }
