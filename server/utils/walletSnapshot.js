@@ -1,5 +1,6 @@
 import { resolveTransactionCurrency } from './assetCurrency.js';
 import { safeAdd, safeMult } from './mathUtils.js';
+import { holidayService } from '../services/holidayService.js';
 
 export const MAX_DAILY_TWRR_ABS_RETURN = 0.5;
 
@@ -18,6 +19,21 @@ const assertDayKey = (dayKey) => {
 
 export const brazilDayKey = (date = new Date()) =>
     new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(date));
+
+// Dia útil a partir da STRING do dia BR — independente do fuso do servidor.
+// getUTCDay() sobre a âncora ao meio-dia UTC dá o dia da semana correto do dia BR;
+// o feriado é checado pela própria string YYYY-MM-DD. (isBusinessDay usa getDay()
+// local, que só é correto num servidor UTC — evitamos essa dependência aqui.)
+//
+// Mora aqui, ao lado de brazilDayKey, e não no schedulerService: a sentinela de
+// saúde precisa contar dias úteis e importá-la do scheduler criaria ciclo, já que
+// o scheduler é quem dispara a sentinela. O schedulerService re-exporta para
+// preservar o ponto de importação histórico.
+export const isBrBusinessDay = (dayStr) => {
+    const dow = new Date(`${dayStr}T12:00:00.000Z`).getUTCDay(); // 0=Dom .. 6=Sáb
+    if (dow === 0 || dow === 6) return false;
+    return !holidayService.isHoliday(dayStr);
+};
 
 export const snapshotInstantForDay = (dayKey) => {
     assertDayKey(dayKey);

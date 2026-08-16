@@ -23,6 +23,7 @@ import ErrorLog from '../models/ErrorLog.js';
 import JobRun from '../models/JobRun.js';
 import logger from '../config/logger.js';
 import { JOB_CATALOG } from '../config/jobCatalog.js';
+import { brazilDayKey, isBrBusinessDay } from '../utils/walletSnapshot.js';
 import {
     COVERAGE_SPEC,
     DEFAULT_THRESHOLDS,
@@ -55,17 +56,46 @@ const outOfRangeExpr = (field, { min, max }) => ({
 
 const sumIf = (condition) => ({ $sum: { $cond: [condition, 1, 0] } });
 
+/**
+ * Dias ÚTEIS entre a data do último PU ('YYYY-MM-DD') e hoje.
+ *
+ * Em horas o check acusaria ~52h todo domingo, porque o Tesouro só publica em dia
+ * útil e a última data disponível no fim de semana é sempre a sexta. Contar em
+ * dias úteis (pulando feriado, via holidayService) faz "0 = em dia" valer também
+ * no domingo, e um atraso de verdade aparecer no primeiro dia útil sem publicação.
+ */
+const businessDaysStale = (latestDateStr, now) => {
+    if (!latestDateStr) return null;
+    const todayKey = brazilDayKey(now);
+    let count = 0;
+    let cursor = latestDateStr;
+    // Teto de 30 iterações: série abandonada não deve virar laço longo.
+    for (let i = 0; i < 30; i += 1) {
+        const d = new Date(`${cursor}T12:00:00.000Z`);
+        d.setUTCDate(d.getUTCDate() + 1);
+        cursor = brazilDayKey(d);
+        if (cursor > todayKey) break;
+        if (isBrBusinessDay(cursor)) count += 1;
+    }
+    return count;
+};
+
 /** Todos os campos cobrados, sem repetição entre classes. */
 const allCoverageFields = () => [
     ...new Set(Object.values(COVERAGE_SPEC).flatMap((spec) => spec.map((s) => s.field))),
 ];
 
-const collectAssetFacts = async (staleCutoff) => {
+const collectAssetFacts = async (staleCutoff, fundamentalsCutoff) => {
     const group = {
         _id: '$type',
         active: { $sum: 1 },
         stalePrice: sumIf({ $lt: [{ $ifNull: ['$updatedAt', new Date(0)] }, staleCutoff] }),
         nonPositivePrice: sumIf({ $lte: [{ $ifNull: ['$lastPrice', 0] }, 0] }),
+        // Nulo OU mais velho que o corte. `$ifNull` para a época zero faz o nunca
+        // coletado cair naturalmente do lado "velho" da comparação.
+        staleFundamentals: sumIf({
+            $lt: [{ $ifNull: ['$lastFundamentalsDate', new Date(0)] }, fundamentalsCutoff],
+        }),
     };
 
     for (const field of allCoverageFields()) {
@@ -98,6 +128,7 @@ const collectAssetFacts = async (staleCutoff) => {
         assets[assetClass] = {
             active: row.active,
             stalePrice: row.stalePrice || 0,
+            staleFundamentals: row.staleFundamentals || 0,
             missing,
         };
     }
@@ -143,6 +174,12 @@ const collectFacts = async (now) => {
         || DEFAULT_THRESHOLDS.priceStaleAfterHours;
     const staleCutoff = new Date(now.getTime() - staleAfterHours * 3600000);
     const since24h = new Date(now.getTime() - 24 * 3600000);
+    const fundamentalsDays = Number(overrides?.fundamentalsDateStaleAfterDays)
+        || DEFAULT_THRESHOLDS.fundamentalsDateStaleAfterDays;
+    const fundamentalsCutoff = new Date(now.getTime() - fundamentalsDays * 86400000);
+    const tsStaleHours = Number(overrides?.timeSeriesStaleAfterHours)
+        || DEFAULT_THRESHOLDS.timeSeriesStaleAfterHours;
+    const tsCutoff = new Date(now.getTime() - tsStaleHours * 3600000);
 
     const [
         assetFacts,
@@ -153,8 +190,9 @@ const collectFacts = async (now) => {
         historyStats,
         errors24h,
         jobs,
+        oldestRun,
     ] = await Promise.all([
-        collectAssetFacts(staleCutoff),
+        collectAssetFacts(staleCutoff, fundamentalsCutoff),
         MarketAsset.countDocuments({}),
         MarketAsset.countDocuments({ isActive: false, failCount: { $gte: 10 } }),
         SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean(),
@@ -165,13 +203,26 @@ const collectFacts = async (now) => {
             { $group: { _id: null, latest: { $max: { $max: '$history.date' } }, titles: { $sum: 1 } } },
         ]),
         AssetHistory.aggregate([
-            { $group: { _id: null, count: { $sum: 1 }, avgUpdated: { $avg: { $toLong: '$lastUpdated' } } } },
+            {
+                $group: {
+                    _id: null,
+                    count: { $sum: 1 },
+                    stale: {
+                        $sum: {
+                            $cond: [{ $lt: [{ $ifNull: ['$lastUpdated', new Date(0)] }, tsCutoff] }, 1, 0],
+                        },
+                    },
+                },
+            },
         ]),
         ErrorLog.aggregate([
             { $match: { lastSeenAt: { $gte: since24h } } },
             { $group: { _id: null, total: { $sum: '$count' } } },
         ]),
         collectJobFacts(),
+        // Marco zero da instrumentação: sem ele, todo cron diário apareceria como
+        // "nunca executado" nas primeiras horas depois do deploy.
+        JobRun.findOne().sort({ startedAt: 1 }).select('startedAt').lean(),
     ]);
 
     const treasury = treasuryRows[0] || {};
@@ -202,12 +253,11 @@ const collectFacts = async (now) => {
                 // history.date é 'YYYY-MM-DD'; ancorar ao meio-dia UTC evita que o
                 // fuso jogue o dia para trás na conversão.
                 latestDate: treasury.latest ? new Date(`${treasury.latest}T12:00:00.000Z`) : null,
+                businessDaysStale: businessDaysStale(treasury.latest, now),
             },
             timeSeries: {
                 count: history.count || 0,
-                avgAgeHours: history.avgUpdated
-                    ? (now.getTime() - history.avgUpdated) / 3600000
-                    : null,
+                stale: history.stale || 0,
             },
             fundamentals: {
                 healthy: macroConfig?.lastSyncStats?.fundamentalsHealthy === true,
@@ -216,6 +266,7 @@ const collectFacts = async (now) => {
             },
             jobs,
             errors: { last24h: errors24h[0]?.total || 0 },
+            instrumentationSince: oldestRun?.startedAt || now,
         },
         overrides,
     };

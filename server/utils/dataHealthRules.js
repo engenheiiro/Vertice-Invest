@@ -52,10 +52,19 @@ export const DEFAULT_THRESHOLDS = {
     implausibleRatio: { warn: 0.02, critical: 0.10 },
     // Idade do bloco macro (SELIC/IPCA/CDI/Ibov/dólar).
     macroAgeHours: { warn: 6, critical: 48 },
-    // Idade do último PU do Tesouro (alimenta a marcação a mercado da RF).
-    treasuryAgeHours: { warn: 40, critical: 96 },
-    // Idade média das séries temporais (AssetHistory).
-    timeSeriesAgeHours: { warn: 48, critical: 120 },
+    // Atraso do último PU do Tesouro em DIAS ÚTEIS — não em horas. O Tesouro só
+    // publica em dia útil, então em horas todo domingo acusaria ~52h de atraso
+    // sobre a sexta e o painel amanheceria amarelo todo fim de semana.
+    treasuryBusinessDaysStale: { warn: 2, critical: 4 },
+    // Fração de séries temporais (AssetHistory) mais velhas que `timeSeriesStaleAfterHours`.
+    // Fração, e não média: a base real tem cauda longa (série morta de 199 dias)
+    // que puxa a média para 115h enquanto 84% das séries estão abaixo de 72h — a
+    // média mediria a cauda, não a saúde.
+    timeSeriesStaleAfterHours: 168,
+    timeSeriesStaleRatio: { warn: 0.25, critical: 0.50 },
+    // Fração de ativos sem fundamentos coletados (nulo ou mais velho que N dias).
+    fundamentalsDateStaleAfterDays: 7,
+    fundamentalsDateStaleRatio: { warn: 0.25, critical: 0.50 },
     // Fração do universo desativada por falha consecutiva de cotação.
     inactiveRatio: { warn: 0.05, critical: 0.15 },
     // Erros 5xx do backend nas últimas 24h.
@@ -64,11 +73,21 @@ export const DEFAULT_THRESHOLDS = {
     fundamentalsAgeHours: { warn: 40, critical: 96 },
 };
 
-/** Faixas de plausibilidade por métrica. Fora disso, o dado está corrompido. */
+/**
+ * Faixas de plausibilidade por métrica. Fora disso, o dado está corrompido.
+ *
+ * Calibração importante para P/L e P/VP: são RAZÕES cujo denominador tende a zero
+ * (lucro ou patrimônio perto de zero), então valor extremo é matematicamente
+ * esperado e NÃO é defeito. Contra a base real, a faixa antiga acusava 24 ações
+ * com P/VP negativo — que são empresas de patrimônio líquido negativo (AZUL3,
+ * AALR3, RCSL4), condição econômica real e não erro de coleta. A faixa larga
+ * mantém só o que não tem explicação econômica nenhuma: PLTO5/PLTO6 com P/VP na
+ * casa de 700.000, que é estouro de divisão na origem.
+ */
 export const PLAUSIBILITY_RANGES = {
     dy: { min: 0, max: 25, label: 'Dividend Yield', unit: '%' },
-    pl: { min: -200, max: 200, label: 'P/L', unit: '' },
-    p_vp: { min: 0, max: 30, label: 'P/VP', unit: '' },
+    pl: { min: -5000, max: 5000, label: 'P/L', unit: '' },
+    p_vp: { min: -5000, max: 5000, label: 'P/VP', unit: '' },
     beta: { min: -2, max: 4, label: 'Beta', unit: '' },
     change: { min: -50, max: 50, label: 'Variação diária', unit: '%' },
 };
@@ -83,22 +102,30 @@ export const MACRO_RANGES = {
 };
 
 /**
- * Campos cobrados por classe. Um campo só entra aqui se a ausência dele degrada
- * o produto de verdade — cobrar campo opcional gera alarme que se aprende a ignorar,
- * que é pior que não ter alarme.
+ * Campos cobrados por classe. Um campo só entra aqui se (a) a ausência degrada o
+ * produto de verdade e (b) `0` é INDISTINGUÍVEL de ausente para aquele campo.
+ *
+ * O critério (b) é o que exclui `dy`: o schema usa `default: 0`, e DY zero é um
+ * valor econômico legítimo — PRIO3, ENEV3 e PETZ3 simplesmente não pagam dividendo.
+ * Contra a base real isso acusava 100/346 ações "sem DY", um alarme que nunca
+ * fecharia. A cobertura de fundamentos de verdade é medida por
+ * `ingestion.fundamentalsDate`, que usa `lastFundamentalsDate` — esse sim é nulo
+ * quando o dado não foi coletado, sem ambiguidade.
+ *
+ * Mesma razão exclui `marketCap` de ETF: o Yahoo não devolve valor de mercado
+ * para ETF (reporta patrimônio sob outro nome), então os 23/23 "ausentes" da base
+ * são um limite da fonte, não um defeito — e alarme que não tem conserto é ruído.
  */
 export const COVERAGE_SPEC = {
     STOCK: [
         { field: 'lastPrice', label: 'Preço', severity: 'CRITICAL' },
         { field: 'pl', label: 'P/L', severity: 'WARN' },
         { field: 'roe', label: 'ROE', severity: 'WARN' },
-        { field: 'dy', label: 'Dividend Yield', severity: 'WARN' },
         { field: 'marketCap', label: 'Valor de mercado', severity: 'CRITICAL' },
         { field: 'liquidity', label: 'Liquidez', severity: 'CRITICAL' },
     ],
     FII: [
         { field: 'lastPrice', label: 'Preço', severity: 'CRITICAL' },
-        { field: 'dy', label: 'Dividend Yield', severity: 'CRITICAL' },
         { field: 'p_vp', label: 'P/VP', severity: 'WARN' },
         { field: 'marketCap', label: 'Valor de mercado', severity: 'WARN' },
         { field: 'liquidity', label: 'Liquidez', severity: 'CRITICAL' },
@@ -111,13 +138,15 @@ export const COVERAGE_SPEC = {
     ],
     ETF: [
         { field: 'lastPrice', label: 'Preço', severity: 'CRITICAL' },
-        { field: 'marketCap', label: 'Patrimônio', severity: 'WARN' },
     ],
     CRYPTO: [
         { field: 'lastPrice', label: 'Preço', severity: 'CRITICAL' },
         { field: 'marketCap', label: 'Valor de mercado', severity: 'WARN' },
     ],
 };
+
+/** Classes cujos fundamentos vêm do scraping BR e têm `lastFundamentalsDate`. */
+export const FUNDAMENTALS_DATE_CLASSES = ['STOCK', 'FII', 'STOCK_US'];
 
 // --- helpers puros ---------------------------------------------------------
 
@@ -314,31 +343,45 @@ const macroChecks = (facts, th) => {
 };
 
 const treasuryCheck = (facts, th) => {
-    const age = facts.treasury?.latestDate ? hoursBetween(facts.treasury.latestDate, facts.now) : null;
+    const days = num(facts.treasury?.businessDaysStale);
+    const hasSeries = (num(facts.treasury?.titles) ?? 0) > 0;
     return check({
         id: 'freshness.treasury',
         label: 'PU do Tesouro Direto',
         category: CATEGORY.FRESHNESS,
-        status: age === null ? HEALTH_STATUS.CRITICAL : gradeAscending(age, th.treasuryAgeHours),
-        value: age,
-        detail: age === null
+        status: !hasSeries || days === null
+            ? HEALTH_STATUS.CRITICAL
+            : gradeAscending(days, th.treasuryBusinessDaysStale),
+        value: days,
+        detail: !hasSeries
             ? 'Nenhuma série de PU encontrada'
-            : `Último PU há ${age.toFixed(1)}h (${facts.treasury.titles || 0} títulos)`,
+            : `Último PU tem ${days} dia(s) útil(eis) de atraso (${facts.treasury.titles} títulos)`,
         hint: 'treasuryPriceService. Sem PU recente a renda fixa cai para accrual (fail-closed) e o snapshot marca na curva.',
     });
 };
 
 const timeSeriesCheck = (facts, th) => {
-    const age = num(facts.timeSeries?.avgAgeHours);
+    const count = num(facts.timeSeries?.count) ?? 0;
+    if (count === 0) {
+        return check({
+            id: 'freshness.timeSeries',
+            label: 'Séries temporais (AssetHistory)',
+            category: CATEGORY.FRESHNESS,
+            status: HEALTH_STATUS.WARN,
+            value: null,
+            detail: 'Sem séries registradas',
+            hint: 'timeSeriesWorker nunca populou AssetHistory.',
+        });
+    }
+    const r = ratio(facts.timeSeries?.stale, count);
     return check({
         id: 'freshness.timeSeries',
         label: 'Séries temporais (AssetHistory)',
         category: CATEGORY.FRESHNESS,
-        status: age === null ? HEALTH_STATUS.WARN : gradeAscending(age, th.timeSeriesAgeHours),
-        value: age,
-        detail: age === null
-            ? 'Sem séries registradas'
-            : `Idade média ${age.toFixed(1)}h em ${facts.timeSeries?.count || 0} séries`,
+        status: gradeAscending(r, th.timeSeriesStaleRatio),
+        value: r,
+        detail: `${facts.timeSeries?.stale || 0}/${count} séries sem atualizar há mais de `
+            + `${th.timeSeriesStaleAfterHours}h (${pct(r)})`,
         hint: 'timeSeriesWorker. Série velha achata beta/volatilidade/SMA200 e distorce o backtest.',
     });
 };
@@ -367,6 +410,27 @@ const ingestionChecks = (facts, th) => {
         hint: 'Espelha o gate de ingestionHealth.js. Enquanto vermelho, a publicação de ranking BR fica bloqueada.',
     }));
 
+    // Cobertura de fundamentos SEM ambiguidade: `lastFundamentalsDate` é nulo
+    // quando nunca foi coletado, ao contrário das métricas que têm `default: 0`
+    // e confundem "empresa não paga dividendo" com "não raspamos o dado".
+    for (const assetClass of FUNDAMENTALS_DATE_CLASSES) {
+        const stats = facts.assets?.[assetClass];
+        const active = num(stats?.active) ?? 0;
+        if (active === 0) continue;
+        const stale = num(stats.staleFundamentals) ?? 0;
+        const rate = ratio(stale, active);
+        out.push(check({
+            id: `ingestion.fundamentalsDate.${assetClass}`,
+            label: `Fundamentos não coletados — ${assetClass}`,
+            category: CATEGORY.INGESTION,
+            status: gradeAscending(rate, th.fundamentalsDateStaleRatio),
+            value: rate,
+            detail: `${stale}/${active} ativos sem fundamentos há mais de `
+                + `${th.fundamentalsDateStaleAfterDays} dias ou nunca coletados (${pct(rate)})`,
+            hint: 'Ativo que sumiu da varredura da fonte para de receber fundamento e envelhece calado — o preço continua atualizando, então nada mais denuncia.',
+        }));
+    }
+
     const inactive = num(facts.totals?.inactive) ?? 0;
     const total = num(facts.totals?.all) ?? 0;
     const r = ratio(inactive, total);
@@ -384,18 +448,36 @@ const ingestionChecks = (facts, th) => {
 
 const jobChecks = (facts) => {
     const out = [];
+    // Há quanto tempo existe registro de execução. Um cron diário legitimamente
+    // não tem histórico se a instrumentação subiu há duas horas — sem esta carência
+    // o painel nasceria vermelho acusando 12 rotinas de "nunca executadas", e um
+    // monitor cuja primeira impressão é um alarme falso é um monitor que se aprende
+    // a ignorar. A carência de cada job é o próprio teto de silêncio dele.
+    const instrumentedForHours = facts.instrumentationSince
+        ? hoursBetween(facts.instrumentationSince, facts.now)
+        : 0;
+
     for (const job of facts.jobs || []) {
         const { jobId, label, severity = 'WARN', maxSilenceHours, lastRunAt, lastStatus, lastError } = job;
 
         if (!lastRunAt) {
+            const withinGrace = Number.isFinite(maxSilenceHours)
+                && instrumentedForHours < maxSilenceHours;
             out.push(check({
                 id: `jobs.${jobId}`,
                 label,
                 category: CATEGORY.JOBS,
-                status: severity === 'CRITICAL' ? HEALTH_STATUS.CRITICAL : HEALTH_STATUS.WARN,
+                status: withinGrace
+                    ? HEALTH_STATUS.OK
+                    : (severity === 'CRITICAL' ? HEALTH_STATUS.CRITICAL : HEALTH_STATUS.WARN),
                 value: null,
-                detail: 'Nunca executado desde a instrumentação',
-                hint: 'Se o job existe no scheduler e nunca gravou execução, o scheduler pode não ter subido.',
+                detail: withinGrace
+                    ? `Aguardando primeira execução (monitorado há ${instrumentedForHours.toFixed(1)}h, `
+                      + `roda a cada ${maxSilenceHours}h)`
+                    : 'Nunca executado desde a instrumentação',
+                hint: withinGrace
+                    ? 'Normal logo após subir a instrumentação — o job ainda não teve a vez dele.'
+                    : 'Se o job existe no scheduler e nunca gravou execução, o scheduler pode não ter subido.',
             }));
             continue;
         }

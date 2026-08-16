@@ -38,6 +38,7 @@ import { positionCostBRL } from '../utils/fxRate.js';
 import { historyStorageKey } from '../utils/assetHistory.js';
 import {
     brazilDayKey,
+    isBrBusinessDay,
     isTwrrReturnAnomalous,
     snapshotInstantForDay,
     sumTransactionFlowBRL,
@@ -92,15 +93,10 @@ const CATCHUP_MAX_DAYS = 14; // teto de recuperação por usuário (segurança)
 const brDayStr = (d) => brazilDayKey(d);
 // Date à meia-noite UTC do dia BR — calcDate do accrual de renda fixa.
 const brCalcDate = (dayStr) => new Date(`${dayStr}T00:00:00.000Z`);
-// Dia útil a partir da STRING do dia BR — independente do fuso do servidor.
-// getUTCDay() sobre a âncora ao meio-dia UTC dá o dia da semana correto do dia BR;
-// o feriado é checado pela própria string YYYY-MM-DD. (isBusinessDay usa getDay()
-// local, que só é correto num servidor UTC — evitamos essa dependência aqui.)
-export const isBrBusinessDay = (dayStr) => {
-    const dow = new Date(`${dayStr}T12:00:00.000Z`).getUTCDay(); // 0=Dom .. 6=Sáb
-    if (dow === 0 || dow === 6) return false;
-    return !holidayService.isHoliday(dayStr);
-};
+// Implementação mora em utils/walletSnapshot.js, ao lado de brazilDayKey — a
+// sentinela de saúde também precisa dela e importá-la daqui criaria ciclo. Segue
+// re-exportada para preservar o ponto de importação histórico (testes inclusive).
+export { isBrBusinessDay };
 // Instante gravado no snapshot: 23:59 BRT do dia — garante que o gráfico (que
 // bucketiza por dia LOCAL no browser BRT) coloque o ponto no dia correto.
 const brSnapshotInstant = (dayStr) => snapshotInstantForDay(dayStr);

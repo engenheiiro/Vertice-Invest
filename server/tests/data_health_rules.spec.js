@@ -14,6 +14,7 @@ import {
     failingChecks,
     gradeAscending,
     hoursBetween,
+    PLAUSIBILITY_RANGES,
     ratio,
     worstStatus,
 } from '../utils/dataHealthRules.js';
@@ -29,19 +30,22 @@ const healthyFacts = (overrides = {}) => ({
         STOCK: {
             active: 400,
             stalePrice: 5,
-            missing: { lastPrice: 0, pl: 20, roe: 15, dy: 30, marketCap: 2, liquidity: 3 },
+            staleFundamentals: 20,
+            missing: { lastPrice: 0, pl: 20, roe: 15, marketCap: 2, liquidity: 3 },
         },
         FII: {
             active: 300,
             stalePrice: 3,
-            missing: { lastPrice: 0, dy: 5, p_vp: 8, marketCap: 4, liquidity: 2 },
+            staleFundamentals: 15,
+            missing: { lastPrice: 0, p_vp: 8, marketCap: 4, liquidity: 2 },
         },
         STOCK_US: {
             active: 250,
             stalePrice: 2,
+            staleFundamentals: 5,
             missing: { lastPrice: 0, pl: 10, roe: 12, marketCap: 1 },
         },
-        ETF: { active: 30, stalePrice: 0, missing: { lastPrice: 0, marketCap: 1 } },
+        ETF: { active: 30, stalePrice: 0, missing: { lastPrice: 0 } },
         CRYPTO: { active: 20, stalePrice: 0, missing: { lastPrice: 0, marketCap: 0 } },
     },
     implausible: { dy: 1, pl: 2, p_vp: 0, beta: 1, change: 0, nonPositivePrice: 0 },
@@ -49,13 +53,15 @@ const healthyFacts = (overrides = {}) => ({
         selic: 12.43, ipca: 4.2, cdi: 12.33, ibov: 138000, dollar: 5.4,
         updatedAt: hoursAgo(0.5),
     },
-    treasury: { titles: 14, latestDate: hoursAgo(20) },
-    timeSeries: { count: 900, avgAgeHours: 12 },
+    treasury: { titles: 14, businessDaysStale: 1 },
+    timeSeries: { count: 900, stale: 100 },
     fundamentals: { healthy: true, timestamp: hoursAgo(6), errorCode: null },
     jobs: [
         { jobId: 'quotes-sync', label: 'Cotações', severity: 'CRITICAL', maxSilenceHours: 2, lastRunAt: hoursAgo(0.3), lastStatus: 'SUCCESS' },
         { jobId: 'daily-snapshot', label: 'Snapshot', severity: 'CRITICAL', maxSilenceHours: 30, lastRunAt: hoursAgo(12), lastStatus: 'SUCCESS' },
     ],
+    // Instrumentação madura: sem isso a carência mascararia os testes de cron parado.
+    instrumentationSince: hoursAgo(24 * 30),
     errors: { last24h: 3 },
     ...overrides,
 });
@@ -132,33 +138,61 @@ describe('FRESCOR', () => {
 
     it('ausência total de PU do Tesouro é CRITICAL', () => {
         const facts = healthyFacts();
-        facts.treasury = { titles: 0, latestDate: null };
+        facts.treasury = { titles: 0, businessDaysStale: null };
         expect(byId(buildHealthReport(facts), 'freshness.treasury').status)
             .toBe(HEALTH_STATUS.CRITICAL);
     });
 
-    it('PU do Tesouro velho de 5 dias é CRITICAL', () => {
+    it('fim de semana NÃO alarma o Tesouro (atraso contado em dias úteis)', () => {
+        // Regressão da base real: num domingo o último PU é de sexta — ~52h de
+        // atraso corrido, mas ZERO dia útil. Contar em horas pintava o painel de
+        // amarelo todo fim de semana, que é como se ensina alguém a ignorar alarme.
         const facts = healthyFacts();
-        facts.treasury = { titles: 14, latestDate: hoursAgo(120) };
+        facts.treasury = { titles: 81, businessDaysStale: 0 };
+        expect(byId(buildHealthReport(facts), 'freshness.treasury').status)
+            .toBe(HEALTH_STATUS.OK);
+    });
+
+    it('Tesouro sem publicar por 4 dias úteis é CRITICAL', () => {
+        const facts = healthyFacts();
+        facts.treasury = { titles: 81, businessDaysStale: 4 };
         expect(byId(buildHealthReport(facts), 'freshness.treasury').status)
             .toBe(HEALTH_STATUS.CRITICAL);
     });
 
-    it('série temporal envelhecida alarma sem derrubar tudo', () => {
+    it('séries temporais medem FRAÇÃO velha, não média', () => {
+        // Base real: 1519 séries com média 115h, puxada por uma série morta de 199
+        // dias, enquanto 84% estavam abaixo de 72h. A média media a cauda, não a saúde.
         const facts = healthyFacts();
-        facts.timeSeries = { count: 900, avgAgeHours: 60 };
+        facts.timeSeries = { count: 1519, stale: 237 }; // 15.6% — saudável
         expect(byId(buildHealthReport(facts), 'freshness.timeSeries').status)
-            .toBe(HEALTH_STATUS.WARN);
+            .toBe(HEALTH_STATUS.OK);
+
+        facts.timeSeries = { count: 1519, stale: 800 }; // 52.7%
+        expect(byId(buildHealthReport(facts), 'freshness.timeSeries').status)
+            .toBe(HEALTH_STATUS.CRITICAL);
     });
 });
 
 describe('COBERTURA', () => {
     it('campo crítico ausente em massa derruba para CRITICAL', () => {
         const facts = healthyFacts();
-        facts.assets.FII.missing.dy = 200; // 66% de 300
-        const check = byId(buildHealthReport(facts), 'coverage.FII.dy');
+        facts.assets.FII.missing.liquidity = 200; // 66% de 300
+        const check = byId(buildHealthReport(facts), 'coverage.FII.liquidity');
         expect(check.status).toBe(HEALTH_STATUS.CRITICAL);
         expect(check.detail).toContain('200/300');
+    });
+
+    it('DY não entra na cobertura — zero é valor econômico legítimo', () => {
+        // PRIO3, ENEV3 e PETZ3 não pagam dividendo. Com `default: 0` no schema,
+        // DY=0 é indistinguível de "não coletado", e cobrar cobertura de DY acusava
+        // 100/346 ações na base real — alarme que nunca fecharia.
+        const report = buildHealthReport(healthyFacts());
+        expect(report.checks.some((c) => c.id.endsWith('.dy') && c.category === CATEGORY.COVERAGE)).toBe(false);
+    });
+
+    it('marketCap de ETF não entra na cobertura — a fonte não fornece', () => {
+        expect(byId(buildHealthReport(healthyFacts()), 'coverage.ETF.marketCap')).toBeUndefined();
     });
 
     it('campo secundário ausente em massa fica em WARN (teto de severidade)', () => {
@@ -193,6 +227,18 @@ describe('PLAUSIBILIDADE', () => {
         facts.implausible.dy = 150; // 15% de 1000
         expect(byId(buildHealthReport(facts), 'plausibility.dy').status)
             .toBe(HEALTH_STATUS.CRITICAL);
+    });
+
+    it('P/VP negativo não é defeito — patrimônio líquido negativo é real', () => {
+        // AZUL3, AALR3 e RCSL4 têm PL negativo de verdade. A faixa antiga (min: 0)
+        // acusava 24 ações da base como dado corrompido.
+        expect(PLAUSIBILITY_RANGES.p_vp.min).toBeLessThan(-100);
+        expect(PLAUSIBILITY_RANGES.pl.min).toBeLessThan(-500);
+    });
+
+    it('P/VP em ordem de grandeza absurda continua sendo defeito', () => {
+        // PLTO5/PLTO6 na base real marcam ~700.000 — estouro de divisão na origem.
+        expect(700000).toBeGreaterThan(PLAUSIBILITY_RANGES.p_vp.max);
     });
 
     it('um único preço ≤ 0 já sai de OK', () => {
@@ -267,6 +313,26 @@ describe('INGESTÃO', () => {
             .toBe(HEALTH_STATUS.CRITICAL);
     });
 
+    it('fundamentos não coletados usam lastFundamentalsDate, sem ambiguidade', () => {
+        // Substitui a cobertura de DY: `lastFundamentalsDate` é NULO quando o dado
+        // nunca foi coletado, então não confunde "empresa sem dividendo" com
+        // "ativo que sumiu da varredura da fonte".
+        const facts = healthyFacts();
+        facts.assets.STOCK.staleFundamentals = 240; // 60% de 400
+        const check = byId(buildHealthReport(facts), 'ingestion.fundamentalsDate.STOCK');
+        expect(check.status).toBe(HEALTH_STATUS.CRITICAL);
+        expect(check.detail).toContain('240/400');
+    });
+
+    it('fração pequena de fundamentos velhos permanece OK', () => {
+        // Base real: 34/346 ações (9.8%) e 54/367 FIIs (14.7%) — normal.
+        const facts = healthyFacts();
+        facts.assets.STOCK.staleFundamentals = 34;
+        facts.assets.STOCK.active = 346;
+        expect(byId(buildHealthReport(facts), 'ingestion.fundamentalsDate.STOCK').status)
+            .toBe(HEALTH_STATUS.OK);
+    });
+
     it('massa de ativos desativados por falha alarma', () => {
         const facts = healthyFacts();
         facts.totals = { all: 1200, active: 1000, inactive: 240 }; // 20%
@@ -303,13 +369,43 @@ describe('ROTINAS (crons)', () => {
         expect(check.detail).toContain('ECONNRESET no Yahoo');
     });
 
-    it('cron que nunca rodou aparece como falha, não como ausência', () => {
+    it('cron que nunca rodou, com instrumentação madura, é falha', () => {
         const facts = healthyFacts();
         facts.jobs[1].lastRunAt = null;
         facts.jobs[1].lastStatus = null;
         const check = byId(buildHealthReport(facts), 'jobs.daily-snapshot');
         expect(check.status).toBe(HEALTH_STATUS.CRITICAL);
         expect(check.detail).toContain('Nunca executado');
+    });
+
+    it('cron sem histórico fica OK enquanto o período dele não passou', () => {
+        // Regressão da base real: 2h após instrumentar, 12 rotinas apareciam como
+        // "nunca executadas" — 4 delas críticas. O painel nascia vermelho por um
+        // motivo falso, na primeira vez que o dono fosse olhar.
+        const facts = healthyFacts();
+        facts.instrumentationSince = hoursAgo(2);
+        facts.jobs[1].lastRunAt = null;   // snapshot diário, teto de 30h
+        facts.jobs[1].lastStatus = null;
+        const check = byId(buildHealthReport(facts), 'jobs.daily-snapshot');
+        expect(check.status).toBe(HEALTH_STATUS.OK);
+        expect(check.detail).toContain('Aguardando primeira execução');
+    });
+
+    it('passada a carência, o mesmo cron sem histórico vira falha', () => {
+        const facts = healthyFacts();
+        facts.instrumentationSince = hoursAgo(40); // > teto de 30h
+        facts.jobs[1].lastRunAt = null;
+        facts.jobs[1].lastStatus = null;
+        expect(byId(buildHealthReport(facts), 'jobs.daily-snapshot').status)
+            .toBe(HEALTH_STATUS.CRITICAL);
+    });
+
+    it('carência não silencia cron que JÁ rodou e depois parou', () => {
+        const facts = healthyFacts();
+        facts.instrumentationSince = hoursAgo(2);
+        facts.jobs[0].lastRunAt = hoursAgo(6); // teto de 2h
+        expect(byId(buildHealthReport(facts), 'jobs.quotes-sync').status)
+            .toBe(HEALTH_STATUS.CRITICAL);
     });
 
     it('cron dentro do teto e com sucesso fica OK', () => {
@@ -366,8 +462,8 @@ describe('agregação do veredito', () => {
 
     it('failingChecks ordena crítico antes de alerta', () => {
         const facts = healthyFacts();
-        facts.macro.dollar = 0;              // CRITICAL
-        facts.timeSeries.avgAgeHours = 60;   // WARN
+        facts.macro.dollar = 0;                            // CRITICAL
+        facts.timeSeries = { count: 1000, stale: 300 };     // 30% → WARN
         const failing = failingChecks(buildHealthReport(facts));
         expect(failing[0].status).toBe(HEALTH_STATUS.CRITICAL);
         expect(failing.at(-1).status).toBe(HEALTH_STATUS.WARN);
