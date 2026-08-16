@@ -46,6 +46,14 @@ export const DEFAULT_THRESHOLDS = {
     // Fração de ativos ATIVOS com cotação mais velha que `priceStaleAfterHours`.
     priceStaleAfterHours: 30,
     priceStaleRatio: { warn: 0.15, critical: 0.40 },
+    // CONTAGEM (não fração) de ativos com preço congelado há semanas.
+    // Existe porque o check de fração é cego para este caso: 9 ativos congelados
+    // em 1342 dão 0,7% e jamais encostam no limiar de 15% — mas entre eles havia
+    // NEOE3, ODPV3, BK e CTRA, parados por 26 a 134 dias, todos ainda elegíveis
+    // para ranking e carteira com preço de meses atrás. Poucos ativos, dano alto:
+    // o alarme certo conta cabeças, não percentual.
+    frozenPriceAfterDays: 30,
+    frozenAssets: { warn: 1, critical: 10 },
     // Fração de ativos SEM o campo fundamentalista (0/null = ausente).
     coverageMissingRatio: { warn: 0.25, critical: 0.50 },
     // Fração de ativos com valor economicamente impossível.
@@ -225,6 +233,24 @@ const mergeThresholds = (overrides) => {
 
 const freshnessChecks = (facts, th) => {
     const out = [];
+
+    // Congelados: contagem absoluta, com os tickers no detalhe — um alarme que diz
+    // "9 ativos parados" sem dizer QUAIS obriga a mesma investigação toda vez.
+    const frozen = num(facts.frozen?.count) ?? 0;
+    const sample = facts.frozen?.tickers || [];
+    out.push(check({
+        id: 'freshness.frozenAssets',
+        label: 'Ativos com preço congelado',
+        category: CATEGORY.FRESHNESS,
+        status: frozen === 0 ? HEALTH_STATUS.OK : gradeAscending(frozen, th.frozenAssets),
+        value: frozen,
+        detail: frozen === 0
+            ? `Nenhum ativo parado há mais de ${th.frozenPriceAfterDays} dias`
+            : `${frozen} ativo(s) sem cotação nova há mais de ${th.frozenPriceAfterDays} dias`
+              + (sample.length ? `: ${sample.join(', ')}` : ''),
+        hint: 'Ativo grande é poupado da desativação automática (proteção contra queda de fonte), então some do radar sem sair do ranking. Confirme se ainda cota na origem — pode ter sido deslistado, adquirido ou trocado de ticker.',
+    }));
+
     for (const [assetClass, stats] of Object.entries(facts.assets || {})) {
         const active = num(stats.active) ?? 0;
         if (active === 0) continue; // classe não povoada não é falha

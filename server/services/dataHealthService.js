@@ -180,6 +180,9 @@ const collectFacts = async (now) => {
     const tsStaleHours = Number(overrides?.timeSeriesStaleAfterHours)
         || DEFAULT_THRESHOLDS.timeSeriesStaleAfterHours;
     const tsCutoff = new Date(now.getTime() - tsStaleHours * 3600000);
+    const frozenDays = Number(overrides?.frozenPriceAfterDays)
+        || DEFAULT_THRESHOLDS.frozenPriceAfterDays;
+    const frozenCutoff = new Date(now.getTime() - frozenDays * 86400000);
 
     const [
         assetFacts,
@@ -191,6 +194,7 @@ const collectFacts = async (now) => {
         errors24h,
         jobs,
         oldestRun,
+        frozenAssets,
     ] = await Promise.all([
         collectAssetFacts(staleCutoff, fundamentalsCutoff),
         MarketAsset.countDocuments({}),
@@ -223,6 +227,10 @@ const collectFacts = async (now) => {
         // Marco zero da instrumentação: sem ele, todo cron diário apareceria como
         // "nunca executado" nas primeiras horas depois do deploy.
         JobRun.findOne().sort({ startedAt: 1 }).select('startedAt').lean(),
+        // Congelados há semanas. Traz os tickers (limitado) porque o alarme só vira
+        // conserto se disser QUAIS — e ordenado do mais parado para o menos.
+        MarketAsset.find({ ...ACTIVE_UNIVERSE, updatedAt: { $lt: frozenCutoff } })
+            .select('ticker updatedAt').sort({ updatedAt: 1 }).limit(200).lean(),
     ]);
 
     const treasury = treasuryRows[0] || {};
@@ -267,6 +275,11 @@ const collectFacts = async (now) => {
             jobs,
             errors: { last24h: errors24h[0]?.total || 0 },
             instrumentationSince: oldestRun?.startedAt || now,
+            frozen: {
+                count: frozenAssets.length,
+                // Só os 10 mais parados no detalhe — a lista inteira não cabe num card.
+                tickers: frozenAssets.slice(0, 10).map((a) => a.ticker),
+            },
         },
         overrides,
     };

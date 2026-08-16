@@ -54,6 +54,7 @@ const healthyFacts = (overrides = {}) => ({
         updatedAt: hoursAgo(0.5),
     },
     treasury: { titles: 14, businessDaysStale: 1 },
+    frozen: { count: 0, tickers: [] },
     timeSeries: { count: 900, stale: 100 },
     fundamentals: { healthy: true, timestamp: hoursAgo(6), errorCode: null },
     jobs: [
@@ -134,6 +135,33 @@ describe('FRESCOR', () => {
         facts.assets.STOCK.stalePrice = 100; // 25% → entre warn(15%) e critical(40%)
         expect(byId(buildHealthReport(facts), 'freshness.price.STOCK').status)
             .toBe(HEALTH_STATUS.WARN);
+    });
+
+    it('conta ativos congelados por CABEÇA, não por fração', () => {
+        // Achado real: 9 ativos parados de 26 a 134 dias em 1342 = 0,7%, longe do
+        // limiar de 15% do check de fração — mas entre eles NEOE3, ODPV3, BK e CTRA,
+        // todos elegíveis a ranking com preço de meses atrás.
+        const facts = healthyFacts();
+        facts.frozen = { count: 9, tickers: ['DAWN', 'FOLD', 'CTRA', 'BK', 'NEOE3'] };
+        const check = byId(buildHealthReport(facts), 'freshness.frozenAssets');
+        expect(check.status).toBe(HEALTH_STATUS.WARN);
+        // O alarme precisa nomear os culpados para virar conserto.
+        expect(check.detail).toContain('NEOE3');
+    });
+
+    it('um único congelado já sai de OK; dez viram CRITICAL', () => {
+        const facts = healthyFacts();
+        facts.frozen = { count: 1, tickers: ['PORT3'] };
+        expect(byId(buildHealthReport(facts), 'freshness.frozenAssets').status)
+            .toBe(HEALTH_STATUS.WARN);
+        facts.frozen = { count: 12, tickers: ['PORT3'] };
+        expect(byId(buildHealthReport(facts), 'freshness.frozenAssets').status)
+            .toBe(HEALTH_STATUS.CRITICAL);
+    });
+
+    it('sem congelados o check fica OK', () => {
+        expect(byId(buildHealthReport(healthyFacts()), 'freshness.frozenAssets').status)
+            .toBe(HEALTH_STATUS.OK);
     });
 
     it('ausência total de PU do Tesouro é CRITICAL', () => {
