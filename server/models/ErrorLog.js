@@ -34,7 +34,9 @@ const ErrorLogSchema = new mongoose.Schema({
     resolvedAt: { type: Date, default: null },
 });
 
-ErrorLogSchema.index({ lastSeenAt: -1 });
+// Um índice só: o do TTL. Índice de campo único é percorrido nas duas direções,
+// então este também atende o `sort({ lastSeenAt: -1 })` do painel. Declarar um
+// `{ lastSeenAt: -1 }` separado só custaria escrita a cada erro registrado.
 ErrorLogSchema.index({ lastSeenAt: 1 }, { expireAfterSeconds: 14 * 24 * 3600 });
 
 const ErrorLog = mongoose.models.ErrorLog || mongoose.model('ErrorLog', ErrorLogSchema);
