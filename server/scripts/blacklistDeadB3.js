@@ -32,6 +32,9 @@
  *   node server/scripts/blacklistDeadB3.js --days=60       # dry-run, days=60
  *   node server/scripts/blacklistDeadB3.js --apply         # grava
  *   node server/scripts/blacklistDeadB3.js --tickers=IGBR3,BLUT4 --apply  # alvo explícito
+ *   node server/scripts/blacklistDeadB3.js --tickers=NEOE3,BK --verified-dead --apply
+ *                                          # ^ libera a guarda de blue-chip p/ papéis
+ *                                          #   já conferidos na fonte (ver --verified-dead)
  *
  * Requer MONGO_URI no .env.
  */
@@ -57,6 +60,23 @@ const BLUE_CHIP_MCAP = 1_000_000_000; // R$1B — mesmo teto da guarda de blue-c
 const explicitTickers = tickersArg
     ? tickersArg.replace('--tickers=', '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean)
     : null;
+
+// (--verified-dead) Libera a guarda de blue-chip APENAS para tickers nomeados um a
+// um, quando o operador já confirmou na fonte que o papel não resolve mais.
+//
+// A guarda existe porque "grande e inativo" costuma ser lacuna de integração e não
+// delisting — foi o caso B3SA3. Mas ela transforma em impasse o cenário oposto:
+// NEOE3, BK e CTRA saíram da fonte de verdade e, por serem grandes, nunca podiam
+// ser limpos. Esta flag é a forma de registrar "eu verifiquei", sem afrouxar nada
+// no caminho automático (que continua sem --tickers e sem esta flag).
+//
+// A guarda de CARTEIRA nunca é liberada: ticker detido por usuário sempre exige
+// decisão caso a caso.
+const verifiedDead = args.includes('--verified-dead');
+if (verifiedDead && !explicitTickers) {
+    console.error('❌ --verified-dead só é válido junto com --tickers=A,B,C (a verificação é por papel).');
+    process.exit(1);
+}
 
 const daysAgo = (d) => d ? Math.floor((Date.now() - new Date(d).getTime()) / 86400000) : Infinity;
 
@@ -96,7 +116,10 @@ const run = async () => {
             if (!staleEnough) continue;
 
             if (held > 0) { manual.push({ a, stale, reason: `em ${held} carteira(s)` }); continue; }
-            if ((a.marketCap || 0) >= BLUE_CHIP_MCAP) { manual.push({ a, stale, reason: `blue-chip mcap=${a.marketCap} (suspeito de lacuna de fonte, não delisting)` }); continue; }
+            if ((a.marketCap || 0) >= BLUE_CHIP_MCAP && !verifiedDead) {
+                manual.push({ a, stale, reason: `blue-chip mcap=${a.marketCap} (suspeito de lacuna de fonte, não delisting)` });
+                continue;
+            }
             toBlacklist.push({ a, stale });
         }
 

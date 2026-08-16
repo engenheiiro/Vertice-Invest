@@ -13,12 +13,20 @@ import { getTunablesSync } from './configService.js'; // (I13) tunables editáve
 import { historyStorageKey } from '../utils/assetHistory.js';
 
 const MAX_FAILURES_BEFORE_BLACKLIST = 10;
-// (Robustez) Ativos grandes/líquidos nunca são desativados automaticamente: falha
-// prolongada de cotação aqui indica problema de integração (provedor fora do ar,
-// símbolo mudou), não delisting. Evita que uma janela de instabilidade do Yahoo
-// derrube blue chips (PETR4, VALE3...) do ranking, como já ocorreu.
+// (Robustez) Ativos grandes/líquidos ganham prazo extra antes da desativação
+// automática: falha de cotação neles costuma ser problema de integração (provedor
+// fora do ar, símbolo mudou), não delisting. Evita que uma janela de instabilidade
+// do Yahoo derrube blue chips (PETR4, VALE3...) do ranking, como já ocorreu.
 const LARGE_ASSET_MARKETCAP = 1_000_000_000; // R$ 1B
 const LARGE_ASSET_LIQUIDITY = 1_000_000;     // R$ 1M/dia
+// ...mas a proteção tem PRAZO. Sem teto ela era permanente, e um ativo que deixou
+// de existir ficava ativo para sempre com o último preço congelado — a auditoria
+// de ago/2026 achou 9 ativos grandes assim, entre eles NEOE3 e BK, parados de 26
+// a 134 dias e ainda elegíveis para ranking. Instabilidade real de provedor dura
+// dias (o caso B3SA3 que motivou a guarda); 45 dias distintos de falha não é mais
+// lacuna de fonte, é ativo que sumiu. O sinal correto continua sendo o painel de
+// Saúde, que acusa o congelamento antes deste teto ser atingido.
+const LARGE_ASSET_FAILURE_CAP = 45;
 
 const FALLBACK_MACRO = {
     selic: { value: DEFAULT_SELIC_FALLBACK },
@@ -222,7 +230,9 @@ export const marketDataService = {
             const currentFail = Number.isFinite(asset.failCount) ? asset.failCount : 0;
             const newFailCount = Math.min(currentFail + 1, 999);
             const isLargeAsset = (asset.marketCap || 0) >= LARGE_ASSET_MARKETCAP || (asset.liquidity || 0) >= LARGE_ASSET_LIQUIDITY;
-            const shouldDeactivate = newFailCount >= MAX_FAILURES_BEFORE_BLACKLIST && !isLargeAsset;
+            // A proteção de porte adia a desativação, não a cancela.
+            const protectedBySize = isLargeAsset && newFailCount < LARGE_ASSET_FAILURE_CAP;
+            const shouldDeactivate = newFailCount >= MAX_FAILURES_BEFORE_BLACKLIST && !protectedBySize;
             const updatePayload = { failCount: newFailCount, lastFailDate: new Date() };
             if (shouldDeactivate) updatePayload.isActive = false;
             ops.push({ updateOne: { filter: { ticker: asset.ticker }, update: { $set: updatePayload } } });
