@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import zlib from 'zlib';
 
 /**
  * E2E do tutorial de primeiro acesso (DemoContext + TutorialOverlay).
@@ -57,6 +58,25 @@ async function login(page: Page) {
 
 /** Card do tutorial (role=dialog cujo aria-label começa com "Tutorial:"). */
 const tourCard = (page: Page) => page.getByRole('dialog', { name: /^Tutorial:/ });
+
+/** Decodifica um PNG 1x1 (sem paleta) e devolve [R, G, B]. */
+function decodePixel(buf: Buffer): [number, number, number] {
+  let off = 8;
+  const idat: Buffer[] = [];
+  while (off < buf.length) {
+    const len = buf.readUInt32BE(off);
+    const type = buf.toString('ascii', off + 4, off + 8);
+    if (type === 'IDAT') idat.push(buf.subarray(off + 8, off + 8 + len));
+    off += 12 + len;
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  return [raw[1], raw[2], raw[3]]; // raw[0] = byte de filtro da linha
+}
+
+/** Cor real de um pixel da tela — a única prova de que o véu escurece de fato. */
+async function corDoPixel(page: Page, x: number, y: number) {
+  return decodePixel(await page.screenshot({ clip: { x, y, width: 1, height: 1 } }));
+}
 
 /**
  * Confere que o card cabe na viewport e devolve o título do passo corrente.
@@ -213,6 +233,62 @@ test.describe('Tutorial de primeiro acesso', () => {
     });
     expect(captura).toMatchObject({ w: 1440, h: 900, pe: 'auto' });
   });
+
+  // O tour roda nos dois temas e o véu tem um valor por tema (`--tour-scrim`).
+  // Testar só o escuro deixava o claro sem cobertura nenhuma.
+  for (const tema of ['dark', 'light'] as const) {
+    test(`véu cobre a tela no tema ${tema}`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await mockBackend(page);
+      if (tema === 'light') {
+        await page.addInitScript(() => localStorage.setItem('vertice-theme-v2', 'light'));
+      }
+      await login(page);
+      await expect(tourCard(page)).toBeVisible({ timeout: 10_000 });
+
+      // Avança para um passo COM alvo (o 2º: navegação).
+      await page.waitForTimeout(700);
+      await tourCard(page).getByRole('button', { name: /Próximo/i }).click();
+      await page.waitForTimeout(1200);
+
+      // Amostra um ponto longe do alvo e do card: tem de estar sob o véu.
+      const claridade = await page.evaluate(() => {
+        const dlg = document.querySelector('[role="dialog"][aria-label^="Tutorial:"]');
+        const overlay = dlg?.parentElement as HTMLElement | null;
+        // [0] captura de cliques, [1] véu, [2] anel.
+        const scrim = overlay?.children[1] as HTMLElement | undefined;
+        const ring = overlay?.children[2] as HTMLElement | undefined;
+        return {
+          veu: scrim ? getComputedStyle(scrim).boxShadow : null,
+          veuAnimado: scrim ? getComputedStyle(scrim).animationName : null,
+          anelAnimado: ring ? getComputedStyle(ring).animationName : null,
+        };
+      });
+
+      // O véu existe, cobre a tela e NÃO é animado (só o anel é).
+      expect(claridade.veu, `véu ausente no tema ${tema}`).toMatch(/0px 0px 0px 9999px/);
+      expect(claridade.veuAnimado).toBe('none');
+      expect(claridade.anelAnimado).toBe('tourRing');
+
+      // E a prova que importa: o pixel ESCURECE de fato. Declarar a sombra não
+      // basta — inspecionar computed style não distingue um véu que pinta de um
+      // que não pinta, e olhar screenshot engana. Aqui a régua é a cor real.
+      const P = { x: 1300, y: 300 };
+      const comVeu = await corDoPixel(page, P.x, P.y);
+      await page.evaluate(() => {
+        const dlg = document.querySelector('[role="dialog"][aria-label^="Tutorial:"]');
+        (dlg!.parentElement as HTMLElement).style.display = 'none';
+      });
+      await page.waitForTimeout(300);
+      const semVeu = await corDoPixel(page, P.x, P.y);
+
+      const luma = ([r, g, b]: number[]) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      expect(
+        luma(comVeu),
+        `véu não escureceu no tema ${tema}: com=${comVeu} sem=${semVeu}`
+      ).toBeLessThan(luma(semVeu) * 0.55);
+    });
+  }
 
   test('banner de cookies sai de cena durante o tour', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });

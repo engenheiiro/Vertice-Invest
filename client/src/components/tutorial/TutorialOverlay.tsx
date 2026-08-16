@@ -212,20 +212,27 @@ export const TutorialOverlay: React.FC = () => {
                 spread de uma sombra não recebe eventos de ponteiro. */}
             <div className="absolute inset-0 pointer-events-auto" aria-hidden="true" />
 
-            {/* VÉU + ANEL DE DESTAQUE
-                O recorte do alvo vem do spread de 9999px (`animate-tour-glow`), que
-                escurece tudo menos a área do elemento. A animação mexe só no anel;
-                o véu fica constante — animar a opacity daqui piscava a tela toda. */}
+            {/* VÉU + ANEL DE DESTAQUE — duas camadas sobre o MESMO retângulo.
+                O recorte do alvo vem do spread de 9999px da `.tour-scrim`, que
+                escurece tudo menos a área do elemento e é estática. A `.tour-ring`
+                só desenha o anel e é a única animada: juntas num elemento só, o véu
+                deixava de ser pintado no tema claro (ver comentário em index.css). */}
             {targetRect ? (
-                <div
-                    className="absolute rounded-xl bg-transparent animate-tour-glow transition-[top,left,width,height] duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)]"
-                    style={{
+                (() => {
+                    const box = {
                         top: targetRect.top - 4,
                         left: targetRect.left - 4,
                         width: targetRect.width + 8,
                         height: targetRect.height + 8,
-                    }}
-                />
+                    };
+                    const transicao = 'absolute rounded-xl bg-transparent transition-[top,left,width,height] duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)]';
+                    return (
+                        <>
+                            <div className={`${transicao} tour-scrim`} style={box} />
+                            <div className={`${transicao} tour-ring`} style={box} />
+                        </>
+                    );
+                })()
             ) : (
                 <div className="absolute inset-0 bg-[var(--tour-scrim)] backdrop-blur-sm transition-opacity duration-700"></div>
             )}
