@@ -249,7 +249,10 @@ export const TutorialOverlay: React.FC = () => {
                 className={`pointer-events-auto absolute focus:outline-none transition-all duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)] w-[90%] max-w-[420px] flex flex-col ${cardPosition.placement === 'center' ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2' : ''}`}
                 style={cardPosition.placement !== 'center' ? { top: cardPosition.top, left: cardPosition.left } : {}}
             >
-                <div className="bg-elevated border border-slate-700/60 rounded-2xl shadow-2xl relative overflow-hidden group">
+                {/* bg-card (#141922) e não bg-elevated (#202631): com o véu forte
+                    atrás, a superfície mais clara lia como um clarão destacado do
+                    resto da UI. Um card mais fundo volta a parecer parte da página. */}
+                <div className="bg-card border border-slate-700/60 rounded-2xl shadow-2xl relative overflow-hidden group">
 
                     {/* Barra de Progresso Superior */}
                     <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
@@ -333,8 +336,8 @@ export const TutorialOverlay: React.FC = () => {
                 {/* Seta Indicativa */}
                 {cardPosition.placement !== 'center' && cardPosition.placement !== 'left-side' && (
                     <div
-                        className={`absolute w-4 h-4 bg-elevated border-l border-t border-slate-700/60 transform rotate-45 left-8
-                        ${cardPosition.placement === 'bottom' ? '-top-2 border-b-0 border-r-0 bg-elevated' : '-bottom-2 border-l-0 border-t-0 border-r border-b border-slate-700/60 bg-elevated'}
+                        className={`absolute w-4 h-4 bg-card border-l border-t border-slate-700/60 transform rotate-45 left-8
+                        ${cardPosition.placement === 'bottom' ? '-top-2 border-b-0 border-r-0 bg-card' : '-bottom-2 border-l-0 border-t-0 border-r border-b border-slate-700/60 bg-card'}
                         `}
                     ></div>
                 )}
@@ -342,7 +345,7 @@ export const TutorialOverlay: React.FC = () => {
                 {/* Seta Indicativa Lateral (Direita do card) */}
                 {cardPosition.placement === 'left-side' && (
                     <div
-                        className="absolute top-8 -right-2 w-4 h-4 bg-elevated border-t border-r border-slate-700/60 transform rotate-45"
+                        className="absolute top-8 -right-2 w-4 h-4 bg-card border-t border-r border-slate-700/60 transform rotate-45"
                     ></div>
                 )}
             </div>
