@@ -61,10 +61,25 @@ const DEMO_EQUITY_ANCHORS = [
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
+/**
+ * Janela do histórico demo: sempre os últimos 365 dias TERMINANDO HOJE.
+ *
+ * Antes era fixa em 2024 — o tutorial dizia "como estaria seu patrimônio HOJE"
+ * enquanto o eixo do gráfico mostrava jan/24 a dez/24. Ancorar em `hoje` faz a
+ * demo envelhecer junto com o produto, sem manutenção.
+ */
+const DEMO_TOTAL_DAYS = 365;
+const demoStartDate = () => {
+    const today = new Date();
+    const start = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+    start.setUTCDate(start.getUTCDate() - (DEMO_TOTAL_DAYS - 1));
+    return start;
+};
+
 function buildDemoHistory() {
     const points: { date: string; totalEquity: number; totalInvested: number; profit: number }[] = [];
-    const start = new Date(Date.UTC(2024, 0, 1));
-    const totalDays = 365;
+    const start = demoStartDate();
+    const totalDays = DEMO_TOTAL_DAYS;
 
     for (let i = 0; i < totalDays; i++) {
         const d = new Date(start);
@@ -97,39 +112,59 @@ function buildDemoHistory() {
 
 export const DEMO_HISTORY = buildDemoHistory();
 
-export const DEMO_PERFORMANCE = [
-    { date: '2024-01-01', wallet: 0,     walletRoi: 0,     cdi: 0.8,  ibov: -1.5, ipca: 0.6,  equity: 322.34 },
-    { date: '2024-02-01', wallet: 5.5,   walletRoi: 2.5,   cdi: 1.6,  ibov: -3.2, ipca: 1.3,  equity: 340.07 },
-    { date: '2024-03-01', wallet: 12.2,  walletRoi: 7.1,   cdi: 2.5,  ibov: -2.1, ipca: 2.0,  equity: 361.67 },
-    { date: '2024-04-01', wallet: 22.5,  walletRoi: 11.3,  cdi: 3.4,  ibov: 0.5,  ipca: 2.8,  equity: 394.87 },
-    { date: '2024-05-01', wallet: 35.4,  walletRoi: 18.0,  cdi: 4.3,  ibov: -1.8, ipca: 3.6,  equity: 436.45 },
-    { date: '2024-06-01', wallet: 31.1,  walletRoi: 16.3,  cdi: 5.2,  ibov: 2.4,  ipca: 4.4,  equity: 422.59 },
-    { date: '2024-07-01', wallet: 48.6,  walletRoi: 25.8,  cdi: 6.1,  ibov: 4.1,  ipca: 5.2,  equity: 479.00 },
-    { date: '2024-08-01', wallet: 62.3,  walletRoi: 35.2,  cdi: 7.0,  ibov: 6.5,  ipca: 6.1,  equity: 523.16 },
-    { date: '2024-09-01', wallet: 75.8,  walletRoi: 42.7,  cdi: 7.9,  ibov: 3.2,  ipca: 7.0,  equity: 566.67 },
-    { date: '2024-10-01', wallet: 84.2,  walletRoi: 49.6,  cdi: 8.8,  ibov: 1.8,  ipca: 7.9,  equity: 593.75 },
-    { date: '2024-11-01', wallet: 92.5,  walletRoi: 56.7,  cdi: 9.7,  ibov: 4.5,  ipca: 8.8,  equity: 620.50 },
-    { date: '2024-12-01', wallet: 96.44, walletRoi: 42.54, cdi: 10.8, ibov: 3.2,  ipca: 9.8,  equity: 633.09 },
+// Mesma janela do DEMO_HISTORY: 12 meses terminando no mês corrente, para que a
+// aba Rentabilidade não contradiga o gráfico de Evolução da Visão Geral.
+const DEMO_PERFORMANCE_POINTS = [
+    { wallet: 0,     walletRoi: 0,     cdi: 0.8,  ibov: -1.5, ipca: 0.6,  equity: 322.34 },
+    { wallet: 5.5,   walletRoi: 2.5,   cdi: 1.6,  ibov: -3.2, ipca: 1.3,  equity: 340.07 },
+    { wallet: 12.2,  walletRoi: 7.1,   cdi: 2.5,  ibov: -2.1, ipca: 2.0,  equity: 361.67 },
+    { wallet: 22.5,  walletRoi: 11.3,  cdi: 3.4,  ibov: 0.5,  ipca: 2.8,  equity: 394.87 },
+    { wallet: 35.4,  walletRoi: 18.0,  cdi: 4.3,  ibov: -1.8, ipca: 3.6,  equity: 436.45 },
+    { wallet: 31.1,  walletRoi: 16.3,  cdi: 5.2,  ibov: 2.4,  ipca: 4.4,  equity: 422.59 },
+    { wallet: 48.6,  walletRoi: 25.8,  cdi: 6.1,  ibov: 4.1,  ipca: 5.2,  equity: 479.00 },
+    { wallet: 62.3,  walletRoi: 35.2,  cdi: 7.0,  ibov: 6.5,  ipca: 6.1,  equity: 523.16 },
+    { wallet: 75.8,  walletRoi: 42.7,  cdi: 7.9,  ibov: 3.2,  ipca: 7.0,  equity: 566.67 },
+    { wallet: 84.2,  walletRoi: 49.6,  cdi: 8.8,  ibov: 1.8,  ipca: 7.9,  equity: 593.75 },
+    { wallet: 92.5,  walletRoi: 56.7,  cdi: 9.7,  ibov: 4.5,  ipca: 8.8,  equity: 620.50 },
+    { wallet: 96.44, walletRoi: 42.54, cdi: 10.8, ibov: 3.2,  ipca: 9.8,  equity: 633.09 },
 ];
+
+export const DEMO_PERFORMANCE = DEMO_PERFORMANCE_POINTS.map((point, i) => {
+    const today = new Date();
+    const d = new Date(Date.UTC(today.getFullYear(), today.getMonth() - (DEMO_PERFORMANCE_POINTS.length - 1 - i), 1));
+    return { date: d.toISOString().slice(0, 10), ...point };
+});
+
+// Meses/datas relativos ao mês corrente: o histórico termina no mês passado e os
+// provisionados caem nos próximos meses. Fixá-los em 2024/2025 fazia a demo
+// exibir "pagamentos futuros confirmados" com datas já vencidas.
+const demoMonthKey = (monthsAgo: number) => {
+    const t = new Date();
+    return new Date(Date.UTC(t.getFullYear(), t.getMonth() - monthsAgo, 1)).toISOString().slice(0, 7);
+};
+const demoFutureDate = (monthsAhead: number, day: number) => {
+    const t = new Date();
+    return new Date(Date.UTC(t.getFullYear(), t.getMonth() + monthsAhead, day)).toISOString().slice(0, 10);
+};
 
 export const DEMO_DIVIDENDS = {
     history: [
-        { month: '2024-02', value: 2.50, breakdown: [{ ticker: 'SBSP3', amount: 2.50 }] },
-        { month: '2024-03', value: 3.80, breakdown: [{ ticker: 'WEGE3', amount: 3.80 }] },
-        { month: '2024-04', value: 1.20, breakdown: [{ ticker: 'TESOURO', amount: 1.20 }] },
-        { month: '2024-05', value: 5.50, breakdown: [{ ticker: 'NVDA', amount: 5.50 }] },
-        { month: '2024-06', value: 3.10, breakdown: [{ ticker: 'SBSP3', amount: 3.10 }] },
-        { month: '2024-07', value: 4.20, breakdown: [{ ticker: 'WEGE3', amount: 4.20 }] },
-        { month: '2024-08', value: 6.80, breakdown: [{ ticker: 'NVDA', amount: 6.80 }] },
-        { month: '2024-09', value: 2.50, breakdown: [{ ticker: 'TESOURO', amount: 2.50 }] },
-        { month: '2024-10', value: 4.90, breakdown: [{ ticker: 'SBSP3', amount: 4.90 }] },
-        { month: '2024-11', value: 5.10, breakdown: [{ ticker: 'WEGE3', amount: 5.10 }] },
-        { month: '2024-12', value: 7.12, breakdown: [{ ticker: 'NVDA', amount: 7.12 }] },
+        { month: demoMonthKey(11), value: 2.50, breakdown: [{ ticker: 'SBSP3', amount: 2.50 }] },
+        { month: demoMonthKey(10), value: 3.80, breakdown: [{ ticker: 'WEGE3', amount: 3.80 }] },
+        { month: demoMonthKey(9),  value: 1.20, breakdown: [{ ticker: 'TESOURO', amount: 1.20 }] },
+        { month: demoMonthKey(8),  value: 5.50, breakdown: [{ ticker: 'NVDA', amount: 5.50 }] },
+        { month: demoMonthKey(7),  value: 3.10, breakdown: [{ ticker: 'SBSP3', amount: 3.10 }] },
+        { month: demoMonthKey(6),  value: 4.20, breakdown: [{ ticker: 'WEGE3', amount: 4.20 }] },
+        { month: demoMonthKey(5),  value: 6.80, breakdown: [{ ticker: 'NVDA', amount: 6.80 }] },
+        { month: demoMonthKey(4),  value: 2.50, breakdown: [{ ticker: 'TESOURO', amount: 2.50 }] },
+        { month: demoMonthKey(3),  value: 4.90, breakdown: [{ ticker: 'SBSP3', amount: 4.90 }] },
+        { month: demoMonthKey(2),  value: 5.10, breakdown: [{ ticker: 'WEGE3', amount: 5.10 }] },
+        { month: demoMonthKey(1),  value: 7.12, breakdown: [{ ticker: 'NVDA', amount: 7.12 }] },
     ],
     provisioned: [
-        { ticker: 'WEGE3', date: '2025-01-20', amount: 2.80 },
-        { ticker: 'SBSP3', date: '2025-02-15', amount: 3.15 },
-        { ticker: 'NVDA', date: '2025-02-28', amount: 5.20 }
+        { ticker: 'WEGE3', date: demoFutureDate(1, 20), amount: 2.80 },
+        { ticker: 'SBSP3', date: demoFutureDate(2, 15), amount: 3.15 },
+        { ticker: 'NVDA', date: demoFutureDate(2, 28), amount: 5.20 }
     ],
     totalAllTime: 46.72,
     projectedMonthly: 3.89,
@@ -149,7 +184,8 @@ export const DEMO_TRANSACTIONS = {
         quantity: asset.quantity,
         price: asset.averagePrice,
         totalValue: asset.totalCost,
-        date: '2024-01-05',
+        // Início da janela demo — coerente com o primeiro ponto do DEMO_HISTORY.
+        date: demoStartDate().toISOString().slice(0, 10),
         isCashOp: false
     })),
     pagination: { hasMore: false, currentPage: 1, totalPages: 1, totalItems: DEMO_ASSETS.length }

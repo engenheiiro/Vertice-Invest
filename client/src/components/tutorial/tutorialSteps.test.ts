@@ -4,9 +4,23 @@ import { DASHBOARD_STEPS, WALLET_STEPS, TUTORIAL_TARGET_IDS } from './tutorialSt
 const ALLOWED_TABS = ['OVERVIEW', 'PERFORMANCE', 'DIVIDENDS', 'STATEMENT'];
 
 describe('tutorialSteps — invariantes de estrutura', () => {
-    it('mantém a contagem esperada de passos (9 + 9)', () => {
-        expect(DASHBOARD_STEPS).toHaveLength(9);
-        expect(WALLET_STEPS).toHaveLength(9);
+    // O tour foi enxugado de 18 para 12 passos. O teto existe para impedir que o
+    // fluxo volte a inchar: onboarding longo é abandonado no meio.
+    it('mantém a contagem esperada de passos (7 + 5)', () => {
+        expect(DASHBOARD_STEPS).toHaveLength(7);
+        expect(WALLET_STEPS).toHaveLength(5);
+    });
+
+    it('nenhum alvo é destacado em dois passos seguidos do mesmo fluxo', () => {
+        for (const steps of [DASHBOARD_STEPS, WALLET_STEPS]) {
+            for (let i = 1; i < steps.length; i++) {
+                const prev = steps[i - 1].highlightId;
+                const curr = steps[i].highlightId;
+                if (prev !== null && curr !== null) {
+                    expect(curr, `passo ${i + 1} repete o alvo do anterior`).not.toBe(prev);
+                }
+            }
+        }
     });
 
     it('cada fluxo tem exatamente um passo final, e é o último', () => {
@@ -53,6 +67,15 @@ describe('tutorialSteps — invariantes de estrutura', () => {
                 expect(step.icon).toBeTruthy();
                 expect(step.content).toBeTruthy();
             }
+        }
+    });
+
+    it('não sobra alvo canônico sem passo que o use', () => {
+        const usados = new Set(
+            [...DASHBOARD_STEPS, ...WALLET_STEPS].flatMap(s => [s.highlightId, s.mobileHighlightId]).filter(Boolean)
+        );
+        for (const id of TUTORIAL_TARGET_IDS) {
+            expect(usados, `alvo órfão na lista canônica: ${id}`).toContain(id);
         }
     });
 

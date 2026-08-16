@@ -32,6 +32,9 @@ export const CookieNotice: React.FC = () => {
     <div
       role="dialog"
       aria-label="Aviso sobre cookies"
+      // Sai de cena enquanto o tutorial de primeiro acesso está no ar (regra em
+      // index.css). O CookieNotice vive fora do DemoProvider — daí o CSS global.
+      data-tour-hide=""
       // No mobile o aviso sobe acima da BottomNav (h-16 + safe area) e vira uma
       // faixa compacta: ancorado em bottom-4 ele cobria a navegação e, no /login,
       // o próprio botão "Entrar" — o usuário só conseguia agir depois de fechar.

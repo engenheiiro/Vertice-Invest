@@ -117,7 +117,7 @@ export const Wallet = () => {
             <main id="main-content" tabIndex={-1} className="max-w-[1360px] mx-auto p-4 md:p-6 animate-fade-in relative">
                 
                 {/* Header Actions */}
-                <div id="tour-wallet-intro" className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 mb-5 md:mb-8">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 mb-5 md:mb-8">
                     <div>
                         <div className="flex items-center gap-2.5 min-w-0">
                             <div className="xl:hidden shrink-0">
@@ -185,11 +185,13 @@ export const Wallet = () => {
                     <WalletSummary />
                 </div>
 
-                <div aria-label="Seções da carteira" className={`flex gap-1 sm:gap-2 mb-5 md:mb-6 border-b border-slate-800/60 overflow-x-auto overscroll-x-contain snap-x snap-proximity no-scrollbar transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
-                    <TabButton id="tour-tab-overview" active={activeTab === 'OVERVIEW'} onClick={() => setActiveTab('OVERVIEW')} icon={<PieChart size={14} />} label="Visão Geral" />
-                    <TabButton id="tour-tab-performance" active={activeTab === 'PERFORMANCE'} onClick={() => setActiveTab('PERFORMANCE')} icon={<BarChart2 size={14} />} label="Rentabilidade" />
-                    <TabButton id="tour-tab-dividends" active={activeTab === 'DIVIDENDS'} onClick={() => setActiveTab('DIVIDENDS')} icon={<Coins size={14} />} label="Proventos" />
-                    <TabButton id="tour-tab-statement" active={activeTab === 'STATEMENT'} onClick={() => setActiveTab('STATEMENT')} icon={<FileText size={14} />} label="Extrato" />
+                {/* A barra INTEIRA é o alvo do tutorial: destacar um botão de aba
+                    isolado deixava o card por cima justamente do conteúdo descrito. */}
+                <div id="tour-wallet-tabs" aria-label="Seções da carteira" className={`flex gap-1 sm:gap-2 mb-5 md:mb-6 border-b border-slate-800/60 overflow-x-auto overscroll-x-contain snap-x snap-proximity no-scrollbar transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
+                    <TabButton active={activeTab === 'OVERVIEW'} onClick={() => setActiveTab('OVERVIEW')} icon={<PieChart size={14} />} label="Visão Geral" />
+                    <TabButton active={activeTab === 'PERFORMANCE'} onClick={() => setActiveTab('PERFORMANCE')} icon={<BarChart2 size={14} />} label="Rentabilidade" />
+                    <TabButton active={activeTab === 'DIVIDENDS'} onClick={() => setActiveTab('DIVIDENDS')} icon={<Coins size={14} />} label="Proventos" />
+                    <TabButton active={activeTab === 'STATEMENT'} onClick={() => setActiveTab('STATEMENT')} icon={<FileText size={14} />} label="Extrato" />
                     <TabButton active={activeTab === 'TAX'} onClick={handleTaxTab} icon={canAccessTax ? <Landmark size={14} /> : <Lock size={14} />} label="Imposto de Renda" />
                 </div>
 
@@ -241,7 +243,7 @@ export const Wallet = () => {
                                             />
                                         </div>
                                     </div>
-                                    <div id="tour-wallet-list" className="mb-8 animate-fade-in">
+                                    <div className="mb-8 animate-fade-in">
                                         <AssetList />
                                     </div>
                                 </>

@@ -102,6 +102,7 @@ vite.config.js.timestamp-*.mjs
 playwright-report/
 test-results/
 playwright/.cache/
+e2e-artifacts/
 
 # Relatorios gerados por scripts (radar/ranking) — artefatos, nao versionar
 reports/*_latest.txt

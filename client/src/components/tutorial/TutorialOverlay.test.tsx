@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // Controles mockáveis do contexto de demo, roteamento e viewport.
@@ -51,11 +51,11 @@ describe('TutorialOverlay — renderização', () => {
     });
 
     it('renderiza centralizado (sem quebrar) quando o alvo está ausente/oculto', () => {
-        // passo de navegação aponta para #tour-nav-links, que não existe no DOM de teste
-        demo.currentStep = 2;
+        // O passo de navegação aponta para #tour-nav-links, ausente no DOM de teste.
+        const navIndex = DASHBOARD_STEPS.findIndex(s => s.highlightId === 'tour-nav-links');
+        demo.currentStep = navIndex;
         render(<TutorialOverlay />);
-        expect(screen.getByText('Navegação Estratégica')).toBeInTheDocument();
-        expect(screen.getByText(/Aqui no topo/)).toBeInTheDocument();
+        expect(screen.getByText(DASHBOARD_STEPS[navIndex].title)).toBeInTheDocument();
     });
 });
 
@@ -126,11 +126,36 @@ describe('TutorialOverlay — teclado', () => {
 
 describe('TutorialOverlay — variante mobile', () => {
     it('usa o conteúdo mobile no passo de navegação quando em mobile', () => {
-        mobile.value = true;
-        demo.currentStep = 2;
+        const navIndex = DASHBOARD_STEPS.findIndex(s => s.highlightId === 'tour-nav-links');
         nav.pathname = '/dashboard';
+
+        // Desktop e mobile renderizam textos DIFERENTES no mesmo passo — sem depender
+        // de frase literal, que quebra a cada ajuste de copy.
+        mobile.value = false;
+        const desktopText = render(<TutorialOverlay />).container.textContent;
+        cleanup();
+
+        mobile.value = true;
+        demo.currentStep = navIndex;
+        const mobileText = render(<TutorialOverlay />).container.textContent;
+
+        expect(mobileText).not.toBe(desktopText);
+        expect(mobileText).toMatch(/polegar|embaixo/i);
+    });
+});
+
+describe('TutorialOverlay — rotas sem alvo', () => {
+    it('não renderiza fora do Terminal e da Carteira', () => {
+        // Sem esse guard, ligar o demo em /research (ou pelo painel Admin) mostrava
+        // passos do Dashboard apontando para elementos que não existem na página.
+        nav.pathname = '/research';
         render(<TutorialOverlay />);
-        expect(screen.getByText(/barra de navegação principal/i)).toBeInTheDocument();
-        expect(screen.queryByText(/Aqui no topo/)).toBeNull();
+        expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('renderiza na Carteira com o fluxo da Carteira', () => {
+        nav.pathname = '/wallet';
+        render(<TutorialOverlay />);
+        expect(screen.getByText(WALLET_STEPS[0].title)).toBeInTheDocument();
     });
 });

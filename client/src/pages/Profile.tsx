@@ -1,7 +1,8 @@
 import React, { Suspense, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Eye, EyeOff, Download, Sun, Moon, Palette, Database, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Loader2, Eye, EyeOff, Download, Sun, Moon, Palette, Database, AlertTriangle, PlayCircle, Compass } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useDemo } from '../contexts/DemoContext';
 import { Header } from '../components/dashboard/Header';
 import { ProfileIdentity } from '../components/profile/ProfileIdentity';
 import { ProfileSettings } from '../components/profile/ProfileSettings';
@@ -17,6 +18,14 @@ export const Profile = () => {
     const { addToast } = useToast();
     const navigate = useNavigate();
     const { theme, toggleTheme } = useTheme();
+    const { startDemo } = useDemo();
+
+    // O tour só existe no Terminal e na Carteira, então ele começa levando o
+    // usuário para o Terminal — ligar o demo aqui deixaria o card sem alvo.
+    const handleReplayTutorial = () => {
+        startDemo();
+        navigate('/dashboard');
+    };
 
     const [showDeactivate, setShowDeactivate] = useState(false);
     const [deactivatePassword, setDeactivatePassword] = useState('');
@@ -110,6 +119,24 @@ export const Profile = () => {
 
                         {/* Segurança */}
                         <SecuritySection />
+
+                        {/* Tour guiado — antes do fix, quem fechasse o tutorial de
+                            primeiro acesso (ou apertasse Esc) não tinha como revê-lo. */}
+                        <div className="p-6 rounded-2xl border border-slate-800 bg-card">
+                            <div className="flex items-center gap-2 mb-1">
+                                <Compass size={16} className="text-blue-500" />
+                                <h4 className="text-sm font-bold text-white">Tour Guiado</h4>
+                            </div>
+                            <p className="text-xs text-slate-500 mb-4">
+                                Refaça a apresentação do Terminal e da Carteira com uma carteira de demonstração. Seus dados reais não são alterados.
+                            </p>
+                            <button
+                                onClick={handleReplayTutorial}
+                                className="inline-flex items-center gap-2 px-4 py-2 border border-slate-700 text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors"
+                            >
+                                <PlayCircle size={14} /> Rever tutorial
+                            </button>
+                        </div>
 
                         {/* Aparência */}
                         <div className="p-6 rounded-2xl border border-slate-800 bg-card">

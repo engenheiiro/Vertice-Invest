@@ -1,5 +1,6 @@
 import React from 'react';
-import { Zap, TrendingUp, BarChart3, Lock, Navigation, MousePointerClick, Eye, Trophy, Radar, PieChart, Layout, Coins, FileText, Settings, Check } from 'lucide-react';
+import { Zap, TrendingUp, BarChart3, Lock, Navigation, MousePointerClick, Trophy, Radar, PieChart, Layers, Check } from 'lucide-react';
+import { DEMO_KPIS } from '../../data/DEMO_DATA';
 
 // --- TIPAGEM DOS PASSOS DO TUTORIAL ---
 // Centraliza a definição dos fluxos para que o overlay apenas consuma os dados,
@@ -32,30 +33,30 @@ export const TUTORIAL_TARGET_IDS = [
     'tour-radar',
     'tour-allocation',
     'tour-dividends',
-    'tour-wallet-intro',
     'tour-wallet-kpis',
     'tour-wallet-actions',
     'tour-wallet-charts',
-    'tour-tab-performance',
-    'tour-tab-dividends',
-    'tour-tab-statement',
-    'tour-wallet-list',
+    'tour-wallet-tabs',
 ] as const;
 
-// --- PASSOS DO DASHBOARD ---
+// Números da carteira simulada saem de DEMO_KPIS — a mesma fonte que alimenta os
+// cards ao fundo. Escritos à mão no texto, eles divergiam do que o usuário via na
+// tela assim que alguém mexesse na demo.
+const pct = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v)}%`;
+const DEMO_WEIGHTED = pct(DEMO_KPIS.weightedRentability);
+const DEMO_ROI = pct(DEMO_KPIS.totalResultPercent);
+
+// --- PASSOS DO TERMINAL (DASHBOARD) ---
 export const DASHBOARD_STEPS: TutorialStep[] = [
     {
         title: "Bem-vindo à Elite",
         content: (
             <>
                 <p className="mb-3">
-                    Bem-vindo à elite da análise de dados. Está na hora de você <span className="text-emerald-400 font-bold">aumentar seu patrimônio</span>.
+                    Está na hora de você <span className="text-emerald-400 font-bold">aumentar seu patrimônio</span> sem depender de vídeos ou casas de análise com <span className="text-red-400 font-bold">interesses comerciais</span>.
                 </p>
-                <p className="mb-3">
-                    Deixe de depender de <span className="text-yellow-400 font-bold">vídeos</span> ou <span className="text-yellow-400 font-bold">casas de análises</span> com <span className="text-red-500 font-bold">interesses comerciais</span>.
-                </p>
-                <p className="text-xs text-slate-300 italic border-t border-slate-700 pt-2 mt-2">
-                    Um bom investidor precisa saber as ferramentas que tem, <span className="text-white font-bold underline decoration-blue-500">não pule</span>!
+                <p>
+                    Ao fundo você vê uma <span className="text-blue-400 font-bold">carteira simulada</span> com os ativos que nossa IA recomenda. Em 2 minutos, mostro como o terminal funciona.
                 </p>
             </>
         ),
@@ -64,35 +65,15 @@ export const DASHBOARD_STEPS: TutorialStep[] = [
         badge: "VÉRTICE INVEST"
     },
     {
-        title: "Simulação de Carteira",
+        title: "Navegação",
         content: (
             <>
-                <p className="mb-3">
-                    O que você verá ao fundo é uma carteira preenchida com os ativos que nossa <span className="text-blue-400 font-bold">IA</span> recomenda para você.
-                </p>
-                <p className="mb-3">
-                    Ela mostra como estaria seu patrimônio <span className="text-emerald-400 font-bold">HOJE</span> se você tivesse começado a investir com a gente em <span className="text-blue-400 font-bold">2024</span>, comprando algumas cotas dos ativos que indicamos na carteira.
-                </p>
-                <p>
-                    Mas antes, vou te mostrar a estrutura do nosso site:
-                </p>
-            </>
-        ),
-        highlightId: null,
-        icon: <Eye className="text-emerald-400" size={24} />,
-        badge: "DEMO MODE"
-    },
-    {
-        title: "Navegação Estratégica",
-        content: (
-            <>
-                Aqui no topo você tem acesso a todos os módulos do ecossistema:
+                No topo ficam todos os módulos:
                 <ul className="list-disc pl-4 mt-2 space-y-1">
-                    <li><strong className="text-emerald-400">Terminal:</strong> Seu cockpit de comando geral (onde estamos).</li>
-                    <li><strong className="text-blue-400">Carteira:</strong> Gestão profunda de ativos e rebalanceamento.</li>
-                    <li><strong className="text-purple-400">Research:</strong> Relatórios detalhados da nossa IA.</li>
-                    <li><strong className="text-pink-400">Indicadores:</strong> Monitoramento Macro (Selic, IPCA, Bonds).</li>
-                    <li><strong className="text-gold">Cursos:</strong> Acesso à Vértice Academy.</li>
+                    <li><strong className="text-emerald-400">Terminal:</strong> seu cockpit (onde estamos).</li>
+                    <li><strong className="text-blue-400">Carteira:</strong> gestão dos seus ativos.</li>
+                    <li><strong className="text-purple-400">Análise:</strong> relatórios da nossa IA.</li>
+                    <li><strong className="text-pink-400">Ferramentas:</strong> macro, metas e cursos.</li>
                 </ul>
             </>
         ),
@@ -100,15 +81,9 @@ export const DASHBOARD_STEPS: TutorialStep[] = [
         mobileHighlightId: 'tour-nav-mobile',
         mobileContent: (
             <>
-                Aqui embaixo fica sua barra de navegação principal, sempre ao alcance do polegar:
-                <ul className="list-disc pl-4 mt-2 space-y-1">
-                    <li><strong className="text-emerald-400">Terminal:</strong> Seu cockpit de comando geral (onde estamos).</li>
-                    <li><strong className="text-blue-400">Carteira:</strong> Gestão profunda de ativos.</li>
-                    <li><strong className="text-purple-400">Research:</strong> Relatórios da nossa IA.</li>
-                    <li><strong className="text-pink-400">Radar:</strong> Oportunidades em tempo real.</li>
-                </ul>
+                Sua navegação fica aqui embaixo, ao alcance do polegar: <strong className="text-emerald-400">Terminal</strong>, <strong className="text-blue-400">Carteira</strong>, <strong className="text-purple-400">Research</strong> e <strong className="text-pink-400">Radar</strong>.
                 <p className="mt-2">
-                    Toque em <strong className="text-white">Mais</strong> para acessar Indicadores, Cursos, Metas e seu perfil.
+                    Em <strong className="text-white">Mais</strong> você acessa Indicadores, Cursos, Metas e seu perfil.
                 </p>
             </>
         ),
@@ -116,25 +91,14 @@ export const DASHBOARD_STEPS: TutorialStep[] = [
         badge: "MENU PRINCIPAL"
     },
     {
-        title: "Patrimônio vs. Benchmark",
-        content: (
-            <>
-                Acompanhe sua evolução contra o mercado. A maioria das <span className="text-red-400 font-bold">carteiras da internet</span> luta para empatar com o CDI. Aqui, buscamos superar o <span className="text-blue-400 font-bold">Ibovespa</span> e o <span className="text-yellow-400 font-bold">S&P 500</span> através de alocação tática inteligente.
-            </>
-        ),
-        highlightId: 'tour-equity',
-        icon: <TrendingUp className="text-emerald-500" size={24} />,
-        badge: "PERFORMANCE REAL"
-    },
-    {
         title: "Resultado Comprovado",
         content: (
             <>
-                <p className="mb-4">
-                    Veja nos painéis destacados o poder da tecnologia: nesta carteira simulada, a rentabilidade ponderada dos ativos passou de <span className="text-emerald-400 font-black text-lg">+96%</span>, com um retorno total da carteira de <span className="text-emerald-400 font-bold">+42%</span>.
+                <p className="mb-3">
+                    Acompanhe sua evolução contra o mercado. A maioria das carteiras da internet luta para empatar com o CDI — aqui buscamos superar o <span className="text-blue-400 font-bold">Ibovespa</span> e o <span className="text-yellow-400 font-bold">S&amp;P 500</span>.
                 </p>
                 <p>
-                    Isso foi feito comprando ativos que nossa IA classifica como <span className="text-blue-400 font-bold">ultra seguros</span>, eliminando o risco de perda a longo prazo. É a inteligência artificial trabalhando pela sua aposentadoria.
+                    Nesta carteira simulada, a rentabilidade ponderada dos ativos passou de <span className="text-emerald-400 font-black">{DEMO_WEIGHTED}</span>, com retorno total de <span className="text-emerald-400 font-bold">{DEMO_ROI}</span> — comprando apenas o que a IA classifica como <span className="text-blue-400 font-bold">ultra seguro</span>.
                 </p>
             </>
         ),
@@ -143,35 +107,16 @@ export const DASHBOARD_STEPS: TutorialStep[] = [
         badge: "CASE DE SUCESSO"
     },
     {
-        title: "Radar Alpha",
-        content: (
-            <>
-                <p className="mb-3">
-                    Enquanto você dorme, nossa <span className="text-purple-400 font-bold">IA monitora o mercado</span> em tempo real.
-                </p>
-                <p>
-                    O Radar Alpha identifica oportunidades de <span className="text-emerald-400 font-bold">Compra</span> e alertas de <span className="text-red-400 font-bold">Risco</span> baseados em fluxo institucional e assimetria de preço, antes que virem notícia.
-                </p>
-            </>
-        ),
-        highlightId: 'tour-radar',
-        icon: <Radar className="text-purple-500" size={24} />,
-        badge: "INTELIGÊNCIA 24/7"
-    },
-    {
         title: "Curadoria Quantitativa",
         content: (
             <>
                 <p className="mb-3">
-                    Esqueça a análise subjetiva. Nossa tabela classifica ativos por <strong className="text-blue-400">Score de Qualidade (0-100)</strong>.
+                    Esqueça a análise subjetiva: cada ativo recebe um <strong className="text-blue-400">Score de 0 a 100</strong>. O algoritmo penaliza <span className="text-red-400 font-bold">riscos ocultos</span> e premia <span className="text-emerald-400 font-bold">consistência</span> de balanço e caixa.
                 </p>
-                <p className="mb-3">
-                    O algoritmo penaliza <span className="text-red-400 font-bold">Riscos Ocultos</span> e <span className="text-emerald-400 font-bold">Premia Consistência</span> de balanço e fluxo de caixa.
-                </p>
-                <div className="mt-4 p-2 bg-slate-800/50 border border-slate-700 rounded-lg flex items-center gap-2">
-                    <Lock size={12} className="text-slate-400" />
+                <div className="p-2 bg-slate-800/50 border border-slate-700 rounded-lg flex items-center gap-2">
+                    <Lock size={12} className="text-slate-400 shrink-0" />
                     <p className="text-[10px] text-slate-400 italic">
-                        Nomes dos ativos ocultos nesta demonstração para proteção da estratégia.
+                        Nomes ocultos nesta demonstração para proteção da estratégia.
                     </p>
                 </div>
             </>
@@ -181,25 +126,34 @@ export const DASHBOARD_STEPS: TutorialStep[] = [
         badge: "SELEÇÃO IA"
     },
     {
-        title: "Previsibilidade de Renda",
+        title: "Radar Alpha",
         content: (
             <>
-                Diferente de outras plataformas que focam apenas na cotação, focamos na sua <span className="text-emerald-400 font-bold">Liberdade Financeira</span>.
-                <br /><br />
-                O <strong className="text-gold">Cofre de Dividendos</strong> projeta exatamente quanto vai cair na sua conta, filtrando <span className="text-red-400 font-bold">Yield Traps</span> (armadilhas de dividendos).
+                Enquanto você dorme, nossa <span className="text-purple-400 font-bold">IA monitora o mercado</span> em tempo real, sinalizando oportunidades de <span className="text-emerald-400 font-bold">compra</span> e alertas de <span className="text-red-400 font-bold">risco</span> antes que virem notícia.
+            </>
+        ),
+        highlightId: 'tour-radar',
+        icon: <Radar className="text-purple-500" size={24} />,
+        badge: "INTELIGÊNCIA 24/7"
+    },
+    {
+        title: "Cofre de Dividendos",
+        content: (
+            <>
+                Focamos na sua <span className="text-emerald-400 font-bold">liberdade financeira</span>, não só na cotação: aqui você projeta quanto vai cair na conta todo mês — já filtrando <span className="text-red-400 font-bold">yield traps</span>.
             </>
         ),
         highlightId: 'tour-dividends',
         icon: <Lock className="text-gold" size={24} />,
-        badge: "CASH FLOW"
+        badge: "RENDA PASSIVA"
     },
     {
         title: "Próximos Passos",
         content: (
             <>
-                Demonstração da sessão <span className="text-emerald-400 font-bold">Terminal</span> concluída. Agora é com você:
+                Tour do <span className="text-emerald-400 font-bold">Terminal</span> concluído.
                 <br /><br />
-                Gostaria de continuar a demonstração, seguindo para a aba <span className="text-emerald-400 font-bold">Carteira</span>?
+                Quer ver como funciona a sua <span className="text-emerald-400 font-bold">Carteira</span>? São só mais 4 passos.
             </>
         ),
         highlightId: null,
@@ -212,47 +166,30 @@ export const DASHBOARD_STEPS: TutorialStep[] = [
 // --- PASSOS DA CARTEIRA ---
 export const WALLET_STEPS: TutorialStep[] = [
     {
-        title: "Módulo de Gestão",
+        title: "Sua Carteira",
         content: (
             <>
                 <p className="mb-3">
-                    Bem-vindo à sua <strong>Carteira</strong>.
+                    Se o Terminal é onde você <strong>observa</strong>, aqui é onde você <strong>age</strong>.
                 </p>
                 <p>
-                    Diferente do <span className="text-emerald-400 font-bold">Terminal</span> (focado em dados de mercado), aqui é onde você <strong>age</strong>. É o seu centro de controle operacional para aportes, rebalanceamento e controle tributário.
+                    Estes cards consolidam <span className="text-emerald-400 font-bold">patrimônio</span>, <span className="text-purple-400 font-bold">custo</span> e <span className="text-yellow-400 font-bold">resultado</span> — os mesmos números do Terminal, prontos para auditoria.
                 </p>
-            </>
-        ),
-        highlightId: 'tour-wallet-intro',
-        tab: 'OVERVIEW',
-        icon: <Layout className="text-emerald-500" size={24} />,
-        badge: "VISÃO GERAL"
-    },
-    {
-        title: "Dados Unificados",
-        content: (
-            <>
-                Os mesmos indicadores essenciais que você vê no Terminal aparecem aqui, mas consolidados para auditoria.
-                <br /><br />
-                Acompanhe <span className="text-emerald-400 font-bold">Patrimônio</span>, <span className="text-purple-400 font-bold">Custo</span> e <span className="text-yellow-400 font-bold">Resultado</span> em um único bloco.
             </>
         ),
         highlightId: 'tour-wallet-kpis',
         tab: 'OVERVIEW',
-        icon: <TrendingUp className="text-blue-500" size={24} />,
-        badge: "AUDITORIA"
+        icon: <TrendingUp className="text-emerald-500" size={24} />,
+        badge: "VISÃO GERAL"
     },
     {
         title: "Ferramentas de Ação",
         content: (
-            <>
-                Aqui você opera sua estratégia:
-                <ul className="list-disc pl-4 mt-3 space-y-2 text-xs">
-                    <li><strong className="text-emerald-400">Nova Transação:</strong> Registro manual rápido.</li>
-                    <li><strong className="text-blue-400">Aporte Inteligente:</strong> Algoritmo que diz onde investir dinheiro novo para manter o equilíbrio.</li>
-                    <li><strong className="text-gold">Rebalanceamento IA:</strong> (Black) Automação de venda e compra.</li>
-                </ul>
-            </>
+            <ul className="list-disc pl-4 space-y-2">
+                <li><strong className="text-emerald-400">Nova Transação:</strong> registra compra, venda ou provento.</li>
+                <li><strong className="text-blue-400">Aporte Inteligente:</strong> diz onde investir dinheiro novo para manter o equilíbrio.</li>
+                <li><strong className="text-gold">Rebalanceamento IA:</strong> sugere as vendas e compras do ajuste.</li>
+            </ul>
         ),
         highlightId: 'tour-wallet-actions',
         tab: 'OVERVIEW',
@@ -264,13 +201,10 @@ export const WALLET_STEPS: TutorialStep[] = [
         content: (
             <>
                 <p className="mb-3">
-                    À esquerda, veja sua <strong>Evolução Patrimonial</strong>. À direita, o gráfico de <strong>Distribuição</strong>.
+                    À esquerda, sua <strong>evolução patrimonial</strong>. À direita, a <strong>distribuição</strong> por classe — clique na engrenagem dela para definir a <strong className="text-white">% ideal</strong> que você quer em cada uma.
                 </p>
-                <p className="flex items-center gap-2 p-2 bg-slate-800 rounded border border-slate-700">
-                    <Settings size={14} className="text-slate-400" />
-                    <span className="text-[10px]">
-                        Você pode clicar na engrenagem do gráfico de Distribuição para definir manualmente a <strong className="text-white">% Ideal</strong> que deseja para cada classe de ativo.
-                    </span>
+                <p className="text-xs text-slate-400">
+                    Logo abaixo fica a lista completa dos ativos, com preço médio, cotação e IA Score.
                 </p>
             </>
         ),
@@ -280,68 +214,27 @@ export const WALLET_STEPS: TutorialStep[] = [
         badge: "ESTRATÉGIA"
     },
     {
-        title: "Rentabilidade Detalhada",
+        title: "Aprofunde por Aba",
         content: (
-            <>
-                Na aba <strong>Rentabilidade</strong>, você encontra um gráfico comparativo avançado.
-                <br /><br />
-                Ele mostra o retorno real da sua carteira (cotas) comparado contra o <span className="text-yellow-400 font-bold">CDI</span> e o <span className="text-slate-400 font-bold">Ibovespa</span>, além de uma tabela mês a mês.
-            </>
+            <ul className="list-disc pl-4 space-y-1.5">
+                <li><strong className="text-emerald-400">Rentabilidade:</strong> sua cota contra CDI e Ibovespa, mês a mês.</li>
+                <li><strong className="text-gold">Proventos:</strong> histórico e pagamentos já confirmados.</li>
+                <li><strong className="text-blue-400">Extrato:</strong> cada lançamento registrado, para conferência.</li>
+                <li><strong className="text-slate-300">Imposto de Renda:</strong> apuração pronta para a declaração.</li>
+            </ul>
         ),
-        highlightId: 'tour-tab-performance',
-        tab: 'PERFORMANCE',
-        icon: <BarChart3 className="text-emerald-500" size={24} />,
-        badge: "PERFORMANCE"
-    },
-    {
-        title: "Controle de Proventos",
-        content: (
-            <>
-                A aba <strong>Proventos</strong> organiza todos os dividendos recebidos e provisionados.
-                <br /><br />
-                Veja o histórico mensal em barras e a lista futura de pagamentos confirmados.
-            </>
-        ),
-        highlightId: 'tour-tab-dividends',
-        tab: 'DIVIDENDS',
-        icon: <Coins className="text-gold" size={24} />,
-        badge: "RENDA PASSIVA"
-    },
-    {
-        title: "Extrato Completo",
-        content: (
-            <>
-                Por fim, a aba <strong>Extrato</strong> funciona como sua conta corrente de investimentos.
-                <br /><br />
-                Cada compra, venda, aporte ou recebimento de dividendo fica registrado aqui de forma imutável para sua conferência.
-            </>
-        ),
-        highlightId: 'tour-tab-statement',
-        tab: 'STATEMENT',
-        icon: <FileText className="text-blue-400" size={24} />,
-        badge: "HISTÓRICO"
-    },
-    {
-        title: "Detalhamento de Ativos",
-        content: (
-            <>
-                Abaixo dos gráficos, você tem a lista completa dos seus ativos, separados por classe (Ações, FIIs, etc).
-                <br /><br />
-                Você pode expandir cada grupo para ver preço médio, cotação atual e o <strong>IA Score</strong> individual.
-            </>
-        ),
-        highlightId: 'tour-wallet-list',
+        highlightId: 'tour-wallet-tabs',
         tab: 'OVERVIEW',
-        icon: <Layout className="text-slate-400" size={24} />,
-        badge: "INVENTÁRIO"
+        icon: <Layers className="text-blue-400" size={24} />,
+        badge: "APROFUNDAMENTO"
     },
     {
-        title: "Tour Concluído",
+        title: "Tudo Pronto",
         content: (
             <>
-                Você agora domina as principais ferramentas da plataforma Vértice Invest.
+                Você já sabe o essencial para operar a plataforma.
                 <br /><br />
-                O <strong>Modo Demonstração</strong> será encerrado para que você possa começar a construir seu próprio legado.
+                Encerrando o <strong>modo demonstração</strong> — a partir daqui, os números são os seus. Precisar rever o tour, ele está no seu <strong className="text-white">Perfil</strong>.
             </>
         ),
         highlightId: null,

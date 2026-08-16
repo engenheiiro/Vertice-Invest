@@ -31,8 +31,21 @@ export default {
         'scroll': 'scroll 40s linear infinite',
         'shimmer': 'shimmer 2s linear infinite',
         'pulse-slow': 'pulseSlow 6s ease-in-out infinite',
+        // Respiro do anel de destaque do tutorial. Anima o box-shadow (e não a
+        // opacity) porque o MESMO elemento carrega o véu de spread 9999px: animar
+        // opacity faz a tela inteira piscar de escuro a claro a cada ciclo — era
+        // o motivo de o spotlight ficar imperceptível.
+        'tour-glow': 'tourGlow 2.4s ease-in-out infinite',
       },
       keyframes: {
+        tourGlow: {
+          '0%, 100%': {
+            boxShadow: '0 0 0 9999px var(--tour-scrim), 0 0 0 2px rgba(96,165,250,0.55), 0 0 22px 3px rgba(59,130,246,0.30)',
+          },
+          '50%': {
+            boxShadow: '0 0 0 9999px var(--tour-scrim), 0 0 0 3px rgba(96,165,250,0.95), 0 0 38px 7px rgba(59,130,246,0.55)',
+          },
+        },
         pulseSlow: {
           '0%, 100%': { opacity: '0.4' },
           '50%': { opacity: '0.15' },

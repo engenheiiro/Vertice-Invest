@@ -13,8 +13,14 @@ export const TutorialOverlay: React.FC = () => {
     const location = useLocation();
     const isMobile = useIsMobile();
 
+    // O tour só tem alvos nestas duas rotas. Em qualquer outra (o usuário clicou
+    // num link antes do bloqueio existir, ou o demo foi ligado pelo Admin fora do
+    // Terminal) renderizar DASHBOARD_STEPS mostraria passos apontando pro vazio.
+    const isTourRoute = location.pathname === '/dashboard' || location.pathname === '/wallet';
+    const isWalletFlow = location.pathname === '/wallet';
+
     // Seleciona os passos baseados na rota atual
-    const steps = location.pathname === '/wallet' ? WALLET_STEPS : DASHBOARD_STEPS;
+    const steps = isWalletFlow ? WALLET_STEPS : DASHBOARD_STEPS;
 
     // Proteção contra índice inválido ao trocar de rota
     const safeStepIndex = Math.min(currentStep, steps.length - 1);
@@ -139,10 +145,26 @@ export const TutorialOverlay: React.FC = () => {
         };
     }, [safeStepIndex, isDemoMode, effectiveHighlightId, location.pathname]);
 
+    // Enquanto o tour está no ar, some com avisos flutuantes marcados
+    // (`data-tour-hide`) — hoje o banner de cookies, que disputava a atenção do
+    // usuário de primeiro acesso em toda a jornada do desktop.
+    useEffect(() => {
+        if (!isDemoMode || !isTourRoute) return;
+        document.documentElement.setAttribute('data-tour-active', '');
+        return () => document.documentElement.removeAttribute('data-tour-active');
+    }, [isDemoMode, isTourRoute]);
+
+    // Leitores de tela precisam ouvir o passo novo; teclado precisa do foco no
+    // card para que Tab/Enter caiam nos botões do tour, e não na página atrás.
+    useEffect(() => {
+        if (!isDemoMode || !isTourRoute) return;
+        cardRef.current?.focus({ preventScroll: true });
+    }, [safeStepIndex, isDemoMode, isTourRoute, location.pathname]);
+
     const handleNext = useCallback(() => {
         if (!rawStep) return;
         if (rawStep.isFinal) {
-            if (location.pathname === '/wallet') {
+            if (isWalletFlow) {
                 // Fim do tour da carteira -> Encerra Demo
                 skipTutorial();
                 navigate('/dashboard');
@@ -154,11 +176,11 @@ export const TutorialOverlay: React.FC = () => {
         } else {
             nextStep();
         }
-    }, [rawStep, location.pathname, skipTutorial, navigate, resetStep, nextStep]);
+    }, [rawStep, isWalletFlow, skipTutorial, navigate, resetStep, nextStep]);
 
     // Navegação por teclado (Esc fecha, setas/Enter navegam)
     useEffect(() => {
-        if (!isDemoMode) return;
+        if (!isDemoMode || !isTourRoute) return;
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 e.preventDefault();
@@ -173,9 +195,9 @@ export const TutorialOverlay: React.FC = () => {
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [isDemoMode, handleNext, prevStep, skipTutorial, safeStepIndex]);
+    }, [isDemoMode, isTourRoute, handleNext, prevStep, skipTutorial, safeStepIndex]);
 
-    if (!isDemoMode || !rawStep) return null;
+    if (!isDemoMode || !isTourRoute || !rawStep) return null;
 
     const isFinal = !!rawStep.isFinal;
     const canGoBack = safeStepIndex > 0;
@@ -183,20 +205,29 @@ export const TutorialOverlay: React.FC = () => {
     return (
         <div className="fixed inset-0 z-[9999] overflow-hidden pointer-events-none font-sans">
 
-            {/* BACKDROP INTELIGENTE */}
+            {/* CAPTURA DE CLIQUES — transparente, cobre a tela inteira.
+                Sem ela o resto da página segue clicável: o usuário sai da rota no
+                meio do tour e os passos seguintes apontam para alvos inexistentes.
+                O véu escuro NÃO serve para isso: ele é um box-shadow, e a área de
+                spread de uma sombra não recebe eventos de ponteiro. */}
+            <div className="absolute inset-0 pointer-events-auto" aria-hidden="true" />
+
+            {/* VÉU + ANEL DE DESTAQUE
+                O recorte do alvo vem do spread de 9999px (`animate-tour-glow`), que
+                escurece tudo menos a área do elemento. A animação mexe só no anel;
+                o véu fica constante — animar a opacity daqui piscava a tela toda. */}
             {targetRect ? (
                 <div
-                    className="absolute transition-all duration-700 ease-[cubic-bezier(0.25,0.1,0.25,1)] border border-blue-500/30 rounded-xl shadow-[0_0_40px_rgba(59,130,246,0.2)] animate-pulse bg-transparent"
+                    className="absolute rounded-xl bg-transparent animate-tour-glow transition-[top,left,width,height] duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)]"
                     style={{
                         top: targetRect.top - 4,
                         left: targetRect.left - 4,
                         width: targetRect.width + 8,
                         height: targetRect.height + 8,
-                        boxShadow: '0 0 0 9999px rgba(2, 4, 10, 0.45)'
                     }}
                 />
             ) : (
-                <div className="absolute inset-0 bg-deep/45 backdrop-blur-sm transition-opacity duration-700"></div>
+                <div className="absolute inset-0 bg-[var(--tour-scrim)] backdrop-blur-sm transition-opacity duration-700"></div>
             )}
 
             {/* CARD DE CONTEÚDO */}
@@ -205,7 +236,10 @@ export const TutorialOverlay: React.FC = () => {
                 role="dialog"
                 aria-modal="true"
                 aria-label={`Tutorial: ${rawStep.title}`}
-                className={`pointer-events-auto absolute transition-all duration-700 ease-[cubic-bezier(0.25,0.1,0.25,1)] w-[90%] max-w-[420px] flex flex-col ${cardPosition.placement === 'center' ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2' : ''}`}
+                // Foco programático a cada passo (a11y): -1 mantém o card fora da
+                // ordem natural de Tab, mas focável via .focus().
+                tabIndex={-1}
+                className={`pointer-events-auto absolute focus:outline-none transition-all duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)] w-[90%] max-w-[420px] flex flex-col ${cardPosition.placement === 'center' ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2' : ''}`}
                 style={cardPosition.placement !== 'center' ? { top: cardPosition.top, left: cardPosition.left } : {}}
             >
                 <div className="bg-elevated border border-slate-700/60 rounded-2xl shadow-2xl relative overflow-hidden group">
