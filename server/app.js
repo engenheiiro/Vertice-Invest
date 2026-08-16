@@ -11,10 +11,10 @@ import cookieParser from 'cookie-parser';
 import * as Sentry from "@sentry/node";
 import { fileURLToPath } from 'url';
 import swaggerUi from 'swagger-ui-express';
-import logger from './config/logger.js';
 import { initScheduler } from './services/schedulerService.js';
 import { sanitizeInput } from './middleware/sanitize.js'; // (S8) anti-injeção NoSQL
 import { correlationId } from './middleware/correlationId.js'; // (D12) correlation id
+import { accessLog } from './middleware/accessLog.js'; // (D12) log de request concluída
 import { csrfProtection } from './middleware/csrf.js'; // (1.4) CSRF double-submit
 import { errorHandler } from './middleware/errorHandler.js'; // (6.1) erro estruturado
 import { productionErrorSanitizer } from './middleware/productionErrorSanitizer.js';
@@ -50,14 +50,7 @@ app.use(productionErrorSanitizer);
 
 // (D12) Log de conclusão da requisição (método, rota, status, duração) no nível
 // `http` — sai em dev, silencioso em produção. Pula probes/docs para não poluir.
-app.use((req, res, next) => {
-  const start = Date.now();
-  res.on('finish', () => {
-    if (req.path === '/api/health' || req.path.startsWith('/api/docs')) return;
-    logger.http(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
-  });
-  next();
-});
+app.use(accessLog);
 
 initScheduler();
 
