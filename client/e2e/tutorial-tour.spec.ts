@@ -178,14 +178,23 @@ test.describe('Tutorial de primeiro acesso', () => {
           const ring = overlay?.children[1] as HTMLElement | undefined;
           if (!ring) return null;
           const cs = getComputedStyle(ring);
-          return { opacity: cs.opacity, veu: cs.boxShadow.split(',')[0].trim() };
+          // A sombra do véu é a de spread 9999px. Não dá para fatiar por vírgula:
+          // ela cai DENTRO do rgba(...) e devolve "rgba(2" — constante, o que fazia
+          // esta checagem passar mesmo com box-shadow ausente.
+          const veu = cs.boxShadow.match(/rgba?\([^)]*\)\s+0px\s+0px\s+0px\s+9999px/)?.[0] ?? null;
+          return { opacity: cs.opacity, veu };
         })
       );
       await page.waitForTimeout(350);
     }
 
-    const validas = amostras.filter(Boolean) as { opacity: string; veu: string }[];
+    const validas = amostras.filter(Boolean) as { opacity: string; veu: string | null }[];
     expect(validas.length).toBeGreaterThan(4);
+
+    // O véu EXISTE de fato. Sem esta asserção o teste passava com box-shadow
+    // "none" — exatamente o estado em que um CSS desatualizado apagava o
+    // destaque inteiro sem quebrar nada.
+    for (const a of validas) expect(a.veu, 'véu do spotlight ausente').not.toBeNull();
 
     // O elemento que carrega o véu nunca fica translúcido — era o bug que fazia
     // a página inteira piscar de escuro a claro a cada 2s.

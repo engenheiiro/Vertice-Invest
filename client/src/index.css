@@ -66,6 +66,43 @@
    um usuário de primeiro acesso não deve escolher entre ler o tour e o banner. */
 html[data-tour-active] [data-tour-hide] { display: none !important; }
 
+/* ─── Spotlight do tutorial ──────────────────────────────────────────────────
+ * O MESMO elemento carrega o véu (sombra de spread 9999px, que escurece tudo
+ * menos o recorte do alvo) e o anel. Por isso o respiro anima `box-shadow` e
+ * nunca `opacity`: opacity faria a tela inteira piscar de escuro a claro.
+ *
+ * Mora aqui, e não no tailwind.config.js, porque keyframe declarado no config
+ * só entra no bundle quando o dev server reinicia — com `npm run dev` aberto, o
+ * JS novo chegava por HMR e o CSS velho ficava, apagando o destaque em silêncio.
+ * ─────────────────────────────────────────────────────────────────────────── */
+@keyframes tourGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 9999px var(--tour-scrim),
+      0 0 0 2px rgba(96, 165, 250, 0.55),
+      0 0 22px 3px rgba(59, 130, 246, 0.30);
+  }
+  50% {
+    box-shadow:
+      0 0 0 9999px var(--tour-scrim),
+      0 0 0 3px rgba(96, 165, 250, 0.95),
+      0 0 38px 7px rgba(59, 130, 246, 0.55);
+  }
+}
+
+.animate-tour-glow {
+  /* Fallback estático: se a animação não rodar (prefers-reduced-motion, motor de
+     animação suspenso), o véu e o anel continuam desenhados. */
+  box-shadow:
+    0 0 0 9999px var(--tour-scrim),
+    0 0 0 2px rgba(96, 165, 250, 0.75);
+  animation: tourGlow 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-tour-glow { animation: none; }
+}
+
 /* ─── Dark mode: neutros do mockup "Minha Carteira" ──────────────────────────
  * O dark usa classes Tailwind soltas (não tokens semânticos). Aqui remapeamos
  * os neutros mais usados para a paleta do mockup: texto #E6EDF3 (primário) /
