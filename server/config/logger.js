@@ -37,10 +37,24 @@ const levels = {
   debug: 4,
 };
 
+// Nível máximo do logger. O padrão é `debug` em desenvolvimento e `info` em
+// produção, mas duas variáveis do .env sobrepõem isso sem tocar em código:
+//   LOG_LEVEL=info          → silencia tudo abaixo de info em TODA parte (terminal e arquivos)
+//   CONSOLE_LOG_LEVEL=info  → deixa só o TERMINAL limpo; combined.log segue guardando o access log
+// Na prática é assim que se desliga o ruído de `http` (uma linha por request).
+// Valor inválido é ignorado (cai no padrão) — errar o nome do nível no .env não
+// pode apagar log de erro em produção.
+const resolveLevel = (raw, fallback) => {
+  const requested = String(raw || '').trim().toLowerCase();
+  return Object.hasOwn(levels, requested) ? requested : fallback;
+};
+
 const level = () => {
   const env = process.env.NODE_ENV || 'development';
-  return env === 'development' ? 'debug' : 'info';
+  return resolveLevel(process.env.LOG_LEVEL, env === 'development' ? 'debug' : 'info');
 };
+
+const consoleLevel = () => resolveLevel(process.env.CONSOLE_LOG_LEVEL, level());
 
 const colors = {
   error: 'red',
@@ -124,7 +138,7 @@ const jsonCombined = winston.format.combine(
 );
 
 const transports = [
-  new winston.transports.Console({ format: consoleCombined }),
+  new winston.transports.Console({ format: consoleCombined, level: consoleLevel() }),
   new winston.transports.File({
     filename: path.join(logDir, 'error.log'),
     level: 'error',
