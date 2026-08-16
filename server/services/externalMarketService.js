@@ -4,6 +4,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio'; // Necessário para o scraping
 import logger from '../config/logger.js';
 import { createCircuitBreaker, withRetry } from '../utils/resilience.js'; // (I4)
+import { recordIngestionError } from './errorLogService.js';
 
 // Instancia a classe com supressão de avisos
 const yahooFinance = new YahooFinance({
@@ -240,6 +241,11 @@ export const externalMarketService = {
                 brapiQuotaWarned = true;
                 const msg = error.response?.data?.message || 'limite de requisições atingido';
                 logger.warn(`🔻 [brapi] HTTP 429 — cota do plano esgotada: ${msg} Fallback BR indisponível até o reset.`);
+                // Também no painel de Saúde: a cota estourada derruba o ÚLTIMO elo do
+                // fallback BR e só aparecia como uma linha de log, que ninguém relê.
+                // Enquanto está esgotada, qualquer falha de Yahoo+Google vira ativo sem
+                // preço sem que nada explique por quê.
+                recordIngestionError('brapi', new Error(`Cota mensal esgotada: ${msg}`), 'BRAPI_QUOTA_EXHAUSTED');
             }
             return null;
         }

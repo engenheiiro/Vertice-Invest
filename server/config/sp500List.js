@@ -129,7 +129,11 @@ export const SP500_STOCKS = [
   { ticker: 'HRL', name: 'Hormel Foods', sector: 'Consumer Staples', subsector: 'Food Products' },
   { ticker: 'TAP', name: 'Molson Coors Beverage', sector: 'Consumer Staples', subsector: 'Beverages' },
   { ticker: 'STZ', name: 'Constellation Brands', sector: 'Consumer Staples', subsector: 'Beverages' },
-  { ticker: 'BF-B', name: 'Brown-Forman Corp.', sector: 'Consumer Staples', subsector: 'Beverages' },
+  // Forma canônica do banco é com PONTO (igual BRK.B). Com hífen, o seed criava um
+  // registro paralelo que nunca casava com a cotação: getQuotes devolve o símbolo
+  // canonizado por fromYahooSymbol ('BF.B'), então 'BF-B' contava falha todo dia
+  // para sempre — chegou a 58 — enquanto o BF.B correto atualizava normalmente.
+  { ticker: 'BF.B', name: 'Brown-Forman Corp.', sector: 'Consumer Staples', subsector: 'Beverages' },
 
   // Healthcare
   { ticker: 'UNH', name: 'UnitedHealth Group', sector: 'Healthcare', subsector: 'Managed Care' },

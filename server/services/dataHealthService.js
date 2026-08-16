@@ -37,6 +37,10 @@ const THRESHOLD_KEY = 'DATA_HEALTH_THRESHOLDS';
 /** Classes que a sentinela audita. Fora daqui não há dado de mercado a validar. */
 const MONITORED_CLASSES = Object.keys(COVERAGE_SPEC);
 
+// Espelha MIN_LIQUIDITY_FOR_LIVE_QUOTE do syncService: abaixo disso o ativo nunca
+// entra no lote de cotação, então preço parado é o esperado e não vira alarme.
+const MIN_LIQUIDITY_FOR_LIVE_QUOTE = 100000;
+
 /** Universo auditável: o que o produto realmente usa. */
 const ACTIVE_UNIVERSE = {
     isActive: true,
@@ -227,10 +231,16 @@ const collectFacts = async (now) => {
         // Marco zero da instrumentação: sem ele, todo cron diário apareceria como
         // "nunca executado" nas primeiras horas depois do deploy.
         JobRun.findOne().sort({ startedAt: 1 }).select('startedAt').lean(),
-        // Congelados há semanas. Traz os tickers (limitado) porque o alarme só vira
-        // conserto se disser QUAIS — e ordenado do mais parado para o menos.
-        MarketAsset.find({ ...ACTIVE_UNIVERSE, updatedAt: { $lt: frozenCutoff } })
-            .select('ticker updatedAt').sort({ updatedAt: 1 }).limit(200).lean(),
+        // Congelados há semanas, restrito a quem o sync REALMENTE cotiza: abaixo de
+        // MIN_LIQUIDITY_FOR_LIVE_QUOTE o ativo está fora do lote por decisão de
+        // projeto e congelar é o comportamento esperado, não defeito.
+        // Traz os tickers (limitado) porque o alarme só vira conserto se disser
+        // QUAIS — ordenado do mais parado para o menos.
+        MarketAsset.find({
+            ...ACTIVE_UNIVERSE,
+            updatedAt: { $lt: frozenCutoff },
+            liquidity: { $gt: MIN_LIQUIDITY_FOR_LIVE_QUOTE },
+        }).select('ticker updatedAt').sort({ updatedAt: 1 }).limit(200).lean(),
     ]);
 
     const treasury = treasuryRows[0] || {};

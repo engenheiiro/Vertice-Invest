@@ -50,8 +50,17 @@ export const DEFAULT_THRESHOLDS = {
     // Existe porque o check de fração é cego para este caso: 9 ativos congelados
     // em 1342 dão 0,7% e jamais encostam no limiar de 15% — mas entre eles havia
     // NEOE3, ODPV3, BK e CTRA, parados por 26 a 134 dias, todos ainda elegíveis
-    // para ranking e carteira com preço de meses atrás. Poucos ativos, dano alto:
-    // o alarme certo conta cabeças, não percentual.
+    // para ranking com preço de meses atrás. Poucos ativos, dano alto: o alarme
+    // certo conta cabeças, não percentual.
+    //
+    // Só conta quem DEVERIA estar sendo cotado. O sync pede cotação apenas para
+    // liquidez acima de MIN_LIQUIDITY_FOR_LIVE_QUOTE, então 244 ativos BR (34% do
+    // universo) estão fora do lote POR DECISÃO DE PROJETO e congelam sem que isso
+    // seja defeito — carteira não é afetada, porque walletController recotiza os
+    // tickers detidos sob demanda. Contá-los deixaria o painel permanentemente
+    // vermelho por algo que ninguém pretende consertar, que é a maneira mais rápida
+    // de tornar o alarme inútil. Ativo sem liquidez e sem preço continua coberto
+    // pelo check de preço ≤ 0.
     frozenPriceAfterDays: 30,
     frozenAssets: { warn: 1, critical: 10 },
     // Fração de ativos SEM o campo fundamentalista (0/null = ausente).
@@ -245,10 +254,10 @@ const freshnessChecks = (facts, th) => {
         status: frozen === 0 ? HEALTH_STATUS.OK : gradeAscending(frozen, th.frozenAssets),
         value: frozen,
         detail: frozen === 0
-            ? `Nenhum ativo parado há mais de ${th.frozenPriceAfterDays} dias`
-            : `${frozen} ativo(s) sem cotação nova há mais de ${th.frozenPriceAfterDays} dias`
+            ? `Nenhum ativo líquido parado há mais de ${th.frozenPriceAfterDays} dias`
+            : `${frozen} ativo(s) líquido(s) sem cotação nova há mais de ${th.frozenPriceAfterDays} dias`
               + (sample.length ? `: ${sample.join(', ')}` : ''),
-        hint: 'Ativo grande é poupado da desativação automática (proteção contra queda de fonte), então some do radar sem sair do ranking. Confirme se ainda cota na origem — pode ter sido deslistado, adquirido ou trocado de ticker.',
+        hint: 'Só conta ativo que o sync realmente pede cotação (liquidez acima do mínimo). Se está aqui, a cotação deveria estar chegando e não está: confira se o ticker ainda resolve na origem — pode ter sido deslistado, adquirido ou RENOMEADO (BK→BNY foi um desses), ou estar gravado numa forma que não casa com a canônica (foi o caso de BF-B contra BF.B).',
     }));
 
     for (const [assetClass, stats] of Object.entries(facts.assets || {})) {
