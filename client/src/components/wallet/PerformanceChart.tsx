@@ -25,7 +25,7 @@ interface PerformancePoint {
 }
 
 // Datas da API sÃ£o chaves de calendÃ¡rio (YYYY-MM-DD), nÃ£o instantes UTC.
-// new Date('2026-08-01') representa 31/07 Ã  noite no fuso de SÃ£o Paulo e faz
+// new Date('2026-08-01') representa 31/07 Ã  noite no fuso de SÃ£o Paulo e faz
 // o ponto do primeiro dia do mÃªs desaparecer do filtro "MÃªs".
 const parsePerformanceDate = (date: string): Date => {
     const calendarDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
@@ -76,7 +76,7 @@ export const PerformanceChart = React.memo(() => {
     const axisTick = theme === 'light' ? '#64748b' : '#6A7480';
 
     const { isDemoMode } = useDemo();
-    const { kpis, activeWalletId } = useWallet();
+    const { kpis, activeWalletId, isWalletScopeReady } = useWallet();
 
     const loadPerformance = async () => {
         setIsLoading(true);
@@ -104,8 +104,11 @@ export const PerformanceChart = React.memo(() => {
     };
 
     useEffect(() => {
+        // Espera a carteira ativa ser resolvida: buscar antes traria a performance
+        // sem escopo e o efeito rodaria de novo com o id (duas chamadas caras).
+        if (!isWalletScopeReady) return;
         loadPerformance();
-    }, [isDemoMode, activeWalletId]);
+    }, [isDemoMode, activeWalletId, isWalletScopeReady]);
 
     // --- RECONCILIAÇÃO COM OS KPIs ---
     // O último ponto representa "agora". O ponto live do backend pode divergir

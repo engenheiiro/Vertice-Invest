@@ -63,7 +63,7 @@ const ChainArrow: React.FC = () => (
 );
 
 export const Goals: React.FC = () => {
-  const { isPrivacyMode, activeWalletId } = useWallet();
+  const { isPrivacyMode, activeWalletId, isWalletScopeReady } = useWallet();
   const { addToast } = useToast();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -73,6 +73,7 @@ export const Goals: React.FC = () => {
   const { data, isLoading } = useQuery({
     queryKey: ['goals', activeWalletId],
     queryFn: () => goalsService.getGoals(activeWalletId),
+    enabled: isWalletScopeReady, // evita uma busca sem escopo + outra com o id
     staleTime: STALE_TIME.REALTIME,
   });
 

@@ -92,7 +92,7 @@ interface QuantSignal {
 }
 
 export const useDashboardData = () => {
-    const { assets, kpis, isLoading: isWalletLoading, activeWalletId } = useWallet();
+    const { assets, kpis, isLoading: isWalletLoading, activeWalletId, isWalletScopeReady } = useWallet();
 
     // 1. Dados Macro
     const macroQuery = useQuery({
@@ -105,6 +105,7 @@ export const useDashboardData = () => {
     const dividendsQuery = useQuery({
         queryKey: ['dividends', activeWalletId],
         queryFn: () => walletService.getDividends(activeWalletId),
+        enabled: isWalletScopeReady, // evita uma busca sem escopo + outra com o id
         staleTime: STALE_TIME.SHORT,
     });
 

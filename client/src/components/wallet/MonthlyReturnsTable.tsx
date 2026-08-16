@@ -19,14 +19,14 @@ interface YearRow {
 }
 
 export const MonthlyReturnsTable = () => {
-    const { isPrivacyMode, activeWalletId } = useWallet();
+    const { isPrivacyMode, activeWalletId, isWalletScopeReady } = useWallet();
     const { isDemoMode } = useDemo();
 
     const { data: rawData, isLoading } = useQuery({
         queryKey: ['walletPerformance', activeWalletId],
         queryFn: () => walletService.getPerformance(activeWalletId),
         staleTime: 1000 * 60 * 10,
-        enabled: !isDemoMode // Desativa query real se for Demo
+        enabled: !isDemoMode && isWalletScopeReady // Desativa query real se for Demo; espera o escopo da carteira
     });
 
     const tableData = useMemo(() => {

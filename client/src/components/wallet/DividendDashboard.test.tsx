@@ -25,7 +25,8 @@ vi.mock('../common/AssetLogo', () => ({ default: () => null }));
   disconnect() {}
 };
 
-const walletStub = { kpis: { totalEquity: 10000 } };
+// `isWalletScopeReady` é o portão que segura a busca até a carteira ativa existir.
+const walletStub = { kpis: { totalEquity: 10000 }, isWalletScopeReady: true };
 
 beforeEach(() => {
   vi.clearAllMocks();

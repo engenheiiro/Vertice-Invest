@@ -139,6 +139,13 @@ interface WalletContextType {
     // --- Fase 2: múltiplas carteiras ---
     wallets: WalletSummary[];
     activeWalletId: string | undefined;
+    /**
+     * `false` enquanto a carteira ativa ainda não foi resolvida. Toda query escopada
+     * por carteira deve entrar em `enabled` — senão ela busca uma vez sem escopo e
+     * outra quando o id chega, dobrando as chamadas caras (dividendos, performance,
+     * fluxo de caixa, metas) a cada carregamento.
+     */
+    isWalletScopeReady: boolean;
     activeWalletName: string;
     isWalletsLoading: boolean;
     isSwitchingWallet: boolean;
@@ -160,7 +167,12 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const [targetReserve, setTargetReserve] = useState(10000);
     const [targetMonthlyDividendIncome, setTargetMonthlyDividendIncome] = useState(0);
     const [targetSubAllocation, setTargetSubAllocation] = useState<SubAllocationMap>(DEFAULT_SUB_ALLOCATION);
-    const [activeWalletId, setActiveWalletId] = useState<string | undefined>(undefined);
+
+    // Escolha EXPLÍCITA de carteira (seletor, criação, exclusão). Guardada junto do
+    // dono para que a seleção de uma conta nunca vaze para a próxima após um
+    // logout/login — um walletId alheio derrubaria as queries em 403 no resolveWallet.
+    const [selection, setSelection] = useState<{ userId?: string; walletId?: string }>({});
+    const selectWallet = (walletId?: string) => setSelection({ userId: user?.id, walletId });
 
     const [isPrivacyMode, setIsPrivacyMode] = useState(() => {
         const saved = localStorage.getItem('isPrivacyMode');
@@ -183,27 +195,34 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         staleTime: STALE_TIME.MEDIUM,
     });
 
-    // A carteira ativa é resolvida pelo servidor (User.activeWalletId) e sincronizada
-    // aqui; a partir daí, cada troca via setActiveWallet atualiza o estado local
-    // otimisticamente, e as queries wallet-scoped (chave inclui activeWalletId)
-    // buscam de novo sozinhas — sem precisar de invalidação manual em cada uma.
-    useEffect(() => {
-        if (isDemoMode) return;
-        const serverActive = walletsQuery.data?.activeWalletId;
-        if (serverActive && serverActive !== activeWalletId) setActiveWalletId(serverActive);
-    }, [walletsQuery.data?.activeWalletId, isDemoMode]); // eslint-disable-line react-hooks/exhaustive-deps
+    // A carteira ativa é resolvida pelo servidor (User.activeWalletId) e DERIVADA da
+    // query — não copiada para o estado por efeito. Copiar fazia a primeira renderização
+    // sair com activeWalletId indefinido: toda query wallet-scoped disparava uma busca
+    // sem escopo e refazia a mesma busca assim que o id chegava (duas idas ao servidor
+    // por carregamento). A partir daí, cada troca via setActiveWallet atualiza a seleção
+    // local otimisticamente, e as queries (cuja chave inclui activeWalletId) buscam de
+    // novo sozinhas — sem precisar de invalidação manual em cada uma.
+    const activeWalletId = selection.userId === user?.id
+        ? (selection.walletId ?? walletsQuery.data?.activeWalletId)
+        : walletsQuery.data?.activeWalletId;
+
+    // Portão único de tudo que é escopado por carteira: só busca depois que
+    // GET /wallets respondeu — sucesso OU erro. No erro seguimos sem id, porque aí o
+    // backend (resolveWallet) resolve a carteira ativa sozinho; travar aqui deixaria a
+    // carteira em loading eterno se a listagem falhasse.
+    const isWalletScopeReady = isDemoMode || (!!user?.id && !walletsQuery.isPending);
 
     const walletQuery = useQuery({
         queryKey: ['wallet', user?.id, activeWalletId],
         queryFn: () => walletService.getWallet(activeWalletId),
-        enabled: !!user?.id && !isDemoMode, // Não busca se estiver em Demo
+        enabled: !!user?.id && !isDemoMode && isWalletScopeReady, // Não busca se estiver em Demo
         staleTime: STALE_TIME.REALTIME,
     });
 
     const historyQuery = useQuery({
         queryKey: ['walletHistory', user?.id, activeWalletId],
         queryFn: () => walletService.getHistory(activeWalletId),
-        enabled: !!user?.id && !isDemoMode,
+        enabled: !!user?.id && !isDemoMode && isWalletScopeReady,
         staleTime: STALE_TIME.MEDIUM,
     });
 
@@ -295,7 +314,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const setActiveWalletMutation = useMutation({
         mutationFn: (walletId: string) => walletsService.setActive(walletId),
         onSuccess: (_data, walletId) => {
-            setActiveWalletId(walletId);
+            selectWallet(walletId);
             queryClient.invalidateQueries({ queryKey: ['wallets', user?.id] });
         },
         onError: (err: any) => addToast(err?.message || 'Erro ao trocar de carteira.', 'error')
@@ -363,7 +382,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         // apagada era a corrente, e devolve o novo id — seta direto em vez de
         // esperar o próximo GET /wallets, senão a query key ['wallet', undefined]
         // busca uma vez e depois refaz pra ['wallet', novoId] (flash de loading).
-        if (walletId === activeWalletId) setActiveWalletId(res.activeWalletId || undefined);
+        if (walletId === activeWalletId) selectWallet(res.activeWalletId || undefined);
     };
 
     // --- STATES & MEMOIZED CALCULATIONS ---
@@ -383,7 +402,10 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }, [assets, serverKpis, isDemoMode]);
 
     const usdRate = walletQuery.data?.meta?.usdRate || 5.75;
-    const isLoading = !isDemoMode && (walletQuery.isLoading || historyQuery.isLoading);
+    // `!isWalletScopeReady` entra aqui porque enquanto GET /wallets não responde as
+    // queries estão desligadas — e query desligada tem isLoading=false. Sem isso a
+    // carteira piscaria "vazia" antes de começar a carregar.
+    const isLoading = !isDemoMode && !!user?.id && (!isWalletScopeReady || walletQuery.isLoading || historyQuery.isLoading);
 
     const isRefreshing = !isDemoMode && (
                          (walletQuery.isFetching && !walletQuery.isLoading) ||
@@ -416,6 +438,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             updateTargets,
             wallets,
             activeWalletId,
+            isWalletScopeReady,
             activeWalletName,
             isWalletsLoading: !isDemoMode && walletsQuery.isLoading,
             isSwitchingWallet: setActiveWalletMutation.isPending,

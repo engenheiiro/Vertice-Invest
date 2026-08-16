@@ -29,7 +29,7 @@ type FilterType = 'ALL' | 'CASH' | 'TRADE';
 
 export const CashFlowHistory = () => {
     const { user } = useAuth();
-    const { activeWalletId } = useWallet();
+    const { activeWalletId, isWalletScopeReady } = useWallet();
     const { isDemoMode } = useDemo();
     const [page, setPage] = useState(1);
     const [activeFilter, setActiveFilter] = useState<FilterType>('ALL');
@@ -39,7 +39,7 @@ export const CashFlowHistory = () => {
         queryKey: ['cashFlow', user?.id, activeWalletId, page, activeFilter],
         queryFn: () => walletService.getCashFlow(page, 15, activeFilter, activeWalletId),
         staleTime: 1000 * 60 * 2,
-        enabled: !!user?.id && !isDemoMode // Desativa query real no demo
+        enabled: !!user?.id && !isDemoMode && isWalletScopeReady // Desativa query real no demo; espera o escopo da carteira
     });
 
     useEffect(() => {

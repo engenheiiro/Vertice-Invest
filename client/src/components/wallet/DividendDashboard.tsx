@@ -34,7 +34,7 @@ export const DividendDashboard = () => {
     const [simulatorContribution, setSimulatorContribution] = useState<string>('0');
 
     const { isDemoMode } = useDemo();
-    const { kpis, activeWalletId } = useWallet();
+    const { kpis, activeWalletId, isWalletScopeReady } = useWallet();
 
     useEffect(() => {
         const load = async () => {
@@ -68,8 +68,11 @@ export const DividendDashboard = () => {
                 setIsLoading(false);
             }
         };
+        // Espera a carteira ativa ser resolvida: buscar antes traria os proventos
+        // sem escopo e o efeito rodaria de novo com o id (duas chamadas caras).
+        if (!isWalletScopeReady) return;
         load();
-    }, [isDemoMode, activeWalletId]);
+    }, [isDemoMode, activeWalletId, isWalletScopeReady]);
 
     const filteredHistory = useMemo(() => {
         if (timeRange === '12M') {
