@@ -1,4 +1,4 @@
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useState, startTransition } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, Eye, EyeOff, Download, Sun, Moon, Palette, Database, AlertTriangle, PlayCircle, Compass } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
@@ -22,9 +22,16 @@ export const Profile = () => {
 
     // O tour só existe no Terminal e na Carteira, então ele começa levando o
     // usuário para o Terminal — ligar o demo aqui deixaria o card sem alvo.
+    //
+    // startTransition é o que mata a piscada: o Dashboard é um chunk lazy, e sem
+    // transição o React pinta o fallback de Suspense (PageLoader opaco de tela
+    // cheia) antes de montar a página. Dentro da transição ele segura o Perfil na
+    // tela até o Terminal estar pronto e troca de uma vez só.
     const handleReplayTutorial = () => {
-        startDemo();
-        navigate('/dashboard');
+        startTransition(() => {
+            startDemo();
+            navigate('/dashboard');
+        });
     };
 
     const [showDeactivate, setShowDeactivate] = useState(false);

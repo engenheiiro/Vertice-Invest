@@ -46,9 +46,10 @@
   --tw-color-elevated: 32 38 49;     /* #202631 – hover/dropdowns (chip)            */
 
   /* Véu do tutorial (spotlight). Aplicado como box-shadow de spread gigante no
-     anel de destaque: escurece TUDO menos o recorte do alvo. Precisa ser forte
-     (0.78) — num tema já quase-preto, um véu fraco não separa alvo de fundo. */
-  --tour-scrim: rgba(2, 4, 10, 0.78);
+     anel de destaque: escurece TUDO menos o recorte do alvo. Precisa ser forte —
+     num tema já quase-preto, um véu fraco não separa alvo de fundo. Em 0.78 os
+     painéis `bg-base` ainda vazavam como retângulos claros atrás do card. */
+  --tour-scrim: rgba(2, 4, 10, 0.88);
 }
 
 [data-theme="light"] {
@@ -57,9 +58,9 @@
   --tw-color-card:     255 255 255;  /* #FFFFFF                                         */
   --tw-color-panel:    255 255 255;  /* #FFFFFF – modais brancos                        */
   --tw-color-elevated: 240 244 250;  /* #F0F4FA – hover/dropdowns (cinza sutil)         */
-  /* No claro o véu é mais leve: a página já é clara, então 0.78 de preto vira
-     um borrão. 0.55 mantém legível o que está por baixo sem perder o foco. */
-  --tour-scrim: rgba(15, 23, 42, 0.55);
+  /* No claro o véu é mais leve: a página já é clara, então o mesmo valor do
+     escuro vira um borrão. Mantém legível o que está por baixo sem perder foco. */
+  --tour-scrim: rgba(15, 23, 42, 0.64);
 }
 
 /* Enquanto o tutorial está no ar, avisos flutuantes (cookies) saem de cena —
