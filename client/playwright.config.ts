@@ -24,7 +24,10 @@ export default defineConfig({
 
   use: {
     baseURL: 'http://localhost:4173',
-    trace: 'on-first-retry',
+    // `on-first-retry` nunca gravava nada local (retries=0 fora do CI): quando um
+    // teste falhava uma única vez, não sobrava trace para investigar. Guardar em
+    // toda falha custa disco só quando algo quebra e mantém o flake diagnosticável.
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
 
@@ -36,7 +39,13 @@ export default defineConfig({
   webServer: {
     command: 'npm run build && npm run preview -- --port 4173 --strictPort',
     url: 'http://localhost:4173',
-    reuseExistingServer: !process.env.CI,
+    // NUNCA reusar: com `reuseExistingServer`, qualquer `vite preview` esquecido na
+    // 4173 faz o Playwright PULAR o `npm run build` e rodar a suíte contra o `dist/`
+    // antigo. O sintoma é um teste isolado falhando de forma "intermitente" (o
+    // bundle velho ainda tem o bug que o teste cobre) e voltando ao verde no run
+    // seguinte, quando o servidor órfão já morreu. Com `false` + `--strictPort`, a
+    // porta ocupada vira erro alto e claro em vez de um bundle silenciosamente velho.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });
