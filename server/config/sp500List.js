@@ -201,7 +201,12 @@ export const SP500_STOCKS = [
   { ticker: 'AFL', name: 'Aflac Inc.', sector: 'Financials', subsector: 'Life Insurance' },
   { ticker: 'ALL', name: 'Allstate Corp.', sector: 'Financials', subsector: 'Property & Casualty Insurance' },
   { ticker: 'SCHW', name: 'Charles Schwab', sector: 'Financials', subsector: 'Investment Banking' },
-  { ticker: 'BK', name: 'Bank of New York Mellon', sector: 'Financials', subsector: 'Asset Management' },
+  // (ago/2026) Renomeação de ticker: BK → BNY. A empresa não saiu da bolsa — a
+  // marca virou "BNY" e o símbolo antigo parou de resolver na fonte, o que fazia
+  // um papel de US$94bi congelar no ranking com o último preço de 80 dias atrás
+  // sem nada acusar. Ao trocar aqui, o seed cria BNY; o BK antigo fica
+  // isBlacklisted no banco (histórico e posições preservados).
+  { ticker: 'BNY', name: 'The Bank of New York Mellon', sector: 'Financials', subsector: 'Asset Management' },
   { ticker: 'STT', name: 'State Street Corp.', sector: 'Financials', subsector: 'Asset Management' },
   { ticker: 'FIS', name: 'Fidelity National Information Services', sector: 'Financials', subsector: 'Data Processing' },
   { ticker: 'FISV', name: 'Fiserv Inc.', sector: 'Financials', subsector: 'Data Processing' },
