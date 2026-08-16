@@ -85,6 +85,38 @@ describe('ResearchAporteModal — aba ETFs respeita a origem', () => {
   });
 });
 
+describe('ResearchAporteModal — moeda por classe', () => {
+  // REIT é o ranking imobiliário US: preço em dólar. Era tratado como BRL, o que
+  // rotulava o aporte errado (e ficou visível ao vir do Aporte da Carteira, que já
+  // converte o valor para a moeda da aba).
+  it('REIT usa US$ e aceita fração', () => {
+    const ranking: RankingItem[] = [mk('O', 'REIT', 'BUY', 55), mk('VICI', 'REIT', 'BUY', 32)];
+    render(<ResearchAporteModal isOpen onClose={() => {}} ranking={ranking} assetClass="REIT" />);
+    fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '1000' } });
+
+    expect(screen.getByText(/Valor do Aporte \(US\$\)/)).toBeInTheDocument();
+    expect(screen.getAllByText(/US\$/).length).toBeGreaterThan(0);
+  });
+});
+
+describe('ResearchAporteModal — valor herdado da Carteira', () => {
+  it('pré-preenche o campo com initialAmount ao abrir', () => {
+    const ranking: RankingItem[] = [mk('AAA3', 'STOCK', 'BUY', 20)];
+    render(
+      <ResearchAporteModal isOpen onClose={() => {}} ranking={ranking} assetClass="STOCK" initialAmount={750.5} />,
+    );
+    expect(screen.getByPlaceholderText('0,00')).toHaveValue(750.5);
+    expect(suggestedTickers()).toContain('AAA3');
+  });
+
+  it('sem initialAmount não mexe no que o usuário digitou', () => {
+    const ranking: RankingItem[] = [mk('AAA3', 'STOCK', 'BUY', 20)];
+    render(<ResearchAporteModal isOpen onClose={() => {}} ranking={ranking} assetClass="STOCK" />);
+    fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '120' } });
+    expect(screen.getByPlaceholderText('0,00')).toHaveValue(120);
+  });
+});
+
 describe('ResearchAporteModal — só distribui em COMPRAR', () => {
   it('ignora ativos AGUARDAR na sugestão', () => {
     const ranking: RankingItem[] = [

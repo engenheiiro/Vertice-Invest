@@ -33,7 +33,9 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('../components/dashboard/Header', () => ({ Header: () => null }));
 vi.mock('../components/research/ResearchViewer', () => ({
-  ResearchViewer: () => <div data-testid="research-viewer" />,
+  ResearchViewer: ({ initialEtfOrigin }: any) => (
+    <div data-testid="research-viewer" data-initial-etf-origin={initialEtfOrigin ?? ''} />
+  ),
 }));
 vi.mock('../components/research/AssetDetailModal', () => ({
   AssetDetailModal: ({ isOpen }: any) =>
@@ -43,7 +45,15 @@ vi.mock('../components/research/ExplainableAIRenderer', () => ({
   ExplainableAIRenderer: () => null,
 }));
 vi.mock('../components/research/ResearchAporteModal', () => ({
-  ResearchAporteModal: () => null,
+  ResearchAporteModal: ({ isOpen, assetClass, etfOrigin, initialAmount }: any) =>
+    isOpen ? (
+      <div
+        data-testid="aporte-modal"
+        data-asset-class={assetClass}
+        data-etf-origin={etfOrigin}
+        data-initial-amount={String(initialAmount)}
+      />
+    ) : null,
 }));
 vi.mock('../components/research/TreasuryPanel', () => ({
   TreasuryPanel: () => <div data-testid="treasury-panel" />,
@@ -298,3 +308,76 @@ describe('deep link openTicker', () => {
     expect(screen.queryByTestId('asset-detail-modal')).not.toBeInTheDocument();
   });
 });
+
+// ─── Deep link do Aporte Inteligente da Carteira ─────────────────────────────
+
+describe('deep link do Aporte (carteira → research)', () => {
+  const ranking = [{ ticker: 'IVVB11', name: 'iShares S&P 500', score: 80, action: 'BUY', type: 'ETF' }];
+
+  beforeEach(() => {
+    vi.mocked(useAuth).mockReturnValue({ user: makeUser('BLACK') } as any);
+    vi.mocked(researchService.getLatest).mockResolvedValue({
+      ...makeReport(ranking),
+      isRankingPublished: true,
+    } as any);
+  });
+
+  it('busca SÓ a classe pedida — nunca o BRASIL_10 do estado inicial', async () => {
+    // Regressão: aplicar o deep link por efeito disparava duas buscas concorrentes
+    // e a resposta mais lenta (BRASIL_10) sobrescrevia o ranking da classe pedida.
+    mockLocationState = { aporte: { assetClass: 'STOCK', amount: 500, currency: 'BRL' } };
+
+    renderResearch();
+
+    await waitFor(() =>
+      expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledWith('STOCK', 'BUY_HOLD')
+    );
+    expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(researchService.getLatest)).not.toHaveBeenCalledWith('BRASIL_10', 'BUY_HOLD');
+  });
+
+  it('abre o modal de Aporte com o valor e a classe da linha clicada', async () => {
+    mockLocationState = { aporte: { assetClass: 'STOCK', amount: 1234.5, currency: 'BRL' } };
+
+    renderResearch();
+
+    const modal = await screen.findByTestId('aporte-modal');
+    expect(modal).toHaveAttribute('data-asset-class', 'STOCK');
+    expect(modal).toHaveAttribute('data-initial-amount', '1234.5');
+  });
+
+  it('linha "ETFs" de Ações BR abre a aba ETFs na origem Nacional', async () => {
+    mockLocationState = { aporte: { assetClass: 'ETF', etfOrigin: 'BR', amount: 300, currency: 'BRL' } };
+
+    renderResearch();
+
+    await waitFor(() =>
+      expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledWith('ETF', 'BUY_HOLD')
+    );
+    const modal = await screen.findByTestId('aporte-modal');
+    expect(modal).toHaveAttribute('data-etf-origin', 'BR');
+    // O TopPicksCard precisa montar já no Nacional, senão a lista visível diverge do modal.
+    expect(screen.getByTestId('research-viewer')).toHaveAttribute('data-initial-etf-origin', 'BR');
+  });
+
+  it('linha de REITs busca o ranking REIT, não o de ações US', async () => {
+    mockLocationState = { aporte: { assetClass: 'STOCK_US', exteriorView: 'REIT', amount: 100, currency: 'USD' } };
+
+    renderResearch();
+
+    await waitFor(() =>
+      expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledWith('REIT', 'BUY_HOLD')
+    );
+    expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledTimes(1);
+  });
+
+  it('sem valor (Renda Fixa) troca de aba sem abrir o modal', async () => {
+    mockLocationState = { aporte: { assetClass: 'FIXED_INCOME', currency: 'BRL' } };
+
+    renderResearch();
+
+    await waitFor(() => expect(screen.getByTestId('treasury-panel')).toBeInTheDocument());
+    expect(screen.queryByTestId('aporte-modal')).not.toBeInTheDocument();
+  });
+});
+

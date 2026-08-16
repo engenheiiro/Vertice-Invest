@@ -1,12 +1,16 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Calculator, Target, CheckCircle2, Info } from 'lucide-react';
+import { X, Calculator, Target, CheckCircle2, Info, Copy, Check, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { useWallet, AssetType, StockSubKey, FixedIncomeSubKey, UsSubKey } from '../../contexts/WalletContext';
+import { useToast } from '../../contexts/ToastContext';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
 import { computeSubAllocationReal, splitContributionBySubMeta, hasSubTargets, SUB_LABELS, allocationBucket } from '../../utils/allocation';
+import { researchTargetFor, amountForTarget } from '../../utils/researchAporte';
+import type { ResearchTarget } from '../../utils/researchAporte';
 
 interface SmartContributionModalProps {
     isOpen: boolean;
@@ -33,9 +37,12 @@ const US_KEYS: UsSubKey[] = ['STOCK', 'REIT', 'ETF', 'DOLLAR'];
 
 export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ isOpen, onClose }) => {
     const { assets, targetAllocation, targetReserve, targetSubAllocation, usdRate } = useWallet();
+    const { addToast } = useToast();
+    const navigate = useNavigate();
     const [amount, setAmount] = useState('');
     const [prioritizeReserve, setPrioritizeReserve] = useState(true);
     const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+    const [copied, setCopied] = useState(false);
     const panelRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -46,6 +53,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
         } else {
             document.body.style.overflow = '';
             document.documentElement.style.overflow = '';
+            setCopied(false);
         }
         return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
     }, [amount, prioritizeReserve, isOpen]);
@@ -170,6 +178,75 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
 
     const formatCurrency = (val: number) => fmtCurrency(val);
 
+    // ---------------------------------------------------------------------
+    // Exportação para texto. Colunas alinhadas com padding (o Bloco de Notas
+    // usa fonte monoespaçada por padrão) e quebra CRLF — destino declarado é
+    // o Notepad, que só é garantido com \r\n em editores antigos do Windows.
+    // ---------------------------------------------------------------------
+    const buildPlanText = (): string => {
+        const total = parseFloat(amount) || 0;
+        const allocated = suggestions.reduce((acc, s) => acc + s.amount, 0);
+        // Intl pt-BR separa símbolo e número com NBSP; vira espaço comum no txt.
+        const money = (val: number) => fmtCurrency(val).replace(/\u00A0/g, ' ');
+        const LABEL_W = 24;
+        const VALUE_W = 15;
+        const row = (label: string, value: string, tail = '') =>
+            `${label.padEnd(LABEL_W)}${value.padStart(VALUE_W)}${tail}`;
+        const pct = (val: number) =>
+            `   ${(total > 0 ? (val / total) * 100 : 0).toFixed(1).replace('.', ',').padStart(5)}%`;
+
+        const lines: string[] = [];
+        lines.push('APORTE INTELIGENTE — Vértice');
+        lines.push(`Data: ${new Date().toLocaleDateString('pt-BR')}`);
+        lines.push(`Valor do aporte: ${money(total)}`);
+        lines.push(`Reserva primeiro: ${prioritizeReserve ? `sim (meta ${money(targetReserve)})` : 'não'}`);
+        lines.push('');
+        lines.push('DISTRIBUIÇÃO SUGERIDA');
+        lines.push('-'.repeat(LABEL_W + VALUE_W + 9));
+        suggestions.forEach((s) => {
+            lines.push(row(LABELS[s.type] || s.type, money(s.amount), pct(s.amount)));
+            (s.children || []).forEach((c) => lines.push(row(`   -> ${c.label}`, money(c.amount))));
+        });
+        lines.push('-'.repeat(LABEL_W + VALUE_W + 9));
+        lines.push(row('TOTAL', money(allocated), pct(allocated)));
+        lines.push('');
+        lines.push('Metas definidas em Carteira > Distribuição > Ideal.');
+        lines.push('Simulação — não executa ordens. Confira antes de investir.');
+        return lines.join('\r\n');
+    };
+
+    const handleCopy = async () => {
+        if (suggestions.length === 0) return;
+        try {
+            await navigator.clipboard.writeText(buildPlanText());
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+            addToast('Aporte copiado para a área de transferência.', 'success');
+        } catch {
+            addToast('Não foi possível copiar o aporte.', 'error');
+        }
+    };
+
+    /**
+     * Leva para a aba do Research daquela linha, já com o valor da linha no
+     * modal de Aporte de lá (convertido para a moeda da aba).
+     */
+    const openResearch = (target: ResearchTarget, lineAmount: number) => {
+        const converted = Math.round(amountForTarget(lineAmount, target, usdRate) * 100) / 100;
+        onClose();
+        navigate('/research', {
+            state: {
+                aporte: {
+                    assetClass: target.assetClass,
+                    exteriorView: target.exteriorView,
+                    etfOrigin: target.etfOrigin,
+                    amount: target.hasRanking ? converted : undefined,
+                    currency: target.currency,
+                },
+            },
+        });
+    };
+
     if (!isOpen) return null;
 
     return createPortal(
@@ -252,15 +329,30 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                                         <span className="text-xs font-bold text-black bg-gold px-2 py-0.5 rounded shadow-sm">Total: {formatCurrency(parseFloat(amount))}</span>
                                     </div>
 
-                                    {suggestions.map((item) => (
+                                    {suggestions.map((item) => {
+                                        const parentTarget = researchTargetFor(item.type);
+                                        return (
                                         <div key={item.type} className="p-3 rounded-xl bg-card border border-slate-800 animate-fade-in">
-                                            <div className="flex items-center justify-between">
+                                            {/* Header da classe — clicável quando existe aba no Research */}
+                                            <div
+                                                role={parentTarget ? 'button' : undefined}
+                                                tabIndex={parentTarget ? 0 : undefined}
+                                                onClick={parentTarget ? () => openResearch(parentTarget, item.amount) : undefined}
+                                                onKeyDown={parentTarget ? (e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openResearch(parentTarget, item.amount); }
+                                                } : undefined}
+                                                title={parentTarget ? `Ver ${parentTarget.label} no Research com este valor` : undefined}
+                                                className={`group flex items-center justify-between rounded-lg ${parentTarget ? 'cursor-pointer -m-1 p-1 hover:bg-slate-800/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60' : ''}`}
+                                            >
                                                 <div className="flex items-center gap-3">
                                                     <div className={`p-2 rounded-lg bg-slate-800/50 border border-slate-700 ${item.type === 'CASH' ? 'text-gold' : 'text-blue-400'}`}>
                                                         <Target size={16} />
                                                     </div>
                                                     <div>
-                                                        <p className="text-sm font-bold text-white">{LABELS[item.type]}</p>
+                                                        <p className="text-sm font-bold text-white flex items-center gap-1">
+                                                            {LABELS[item.type]}
+                                                            {parentTarget && <ChevronRight size={13} className="text-slate-600 group-hover:text-blue-400 transition-colors" />}
+                                                        </p>
                                                         <p className="text-[10px] text-slate-500">{item.percentage.toFixed(1)}% do aporte</p>
                                                     </div>
                                                 </div>
@@ -273,20 +365,46 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
 
                                             {/* Linhas-filhas: quanto vai em cada sub-tipo (ramificação) */}
                                             {item.children && item.children.length > 0 && (
-                                                <div className="mt-2.5 pt-2.5 border-t border-slate-800/70 space-y-1.5 pl-1">
-                                                    {item.children.map((c) => (
-                                                        <div key={c.sub} className="flex items-center justify-between text-[11px]">
-                                                            <span className="text-slate-400 flex items-center gap-1.5">
-                                                                <span className="text-slate-600">→</span> {c.label}
-                                                            </span>
-                                                            <span className="font-semibold text-emerald-400/90">+ {formatCurrency(c.amount)}</span>
-                                                        </div>
-                                                    ))}
+                                                <div className="mt-2.5 pt-2.5 border-t border-slate-800/70 space-y-1 pl-1">
+                                                    {item.children.map((c) => {
+                                                        const childTarget = researchTargetFor(item.type, c.sub);
+                                                        const Row = (
+                                                            <>
+                                                                <span className="text-slate-400 flex items-center gap-1.5">
+                                                                    <span className="text-slate-600">→</span> {c.label}
+                                                                    {childTarget && <ChevronRight size={11} className="text-slate-700 group-hover/sub:text-blue-400 transition-colors" />}
+                                                                </span>
+                                                                <span className="font-semibold text-emerald-400/90">+ {formatCurrency(c.amount)}</span>
+                                                            </>
+                                                        );
+                                                        return childTarget ? (
+                                                            <button
+                                                                key={c.sub}
+                                                                type="button"
+                                                                onClick={() => openResearch(childTarget, c.amount)}
+                                                                title={`Ver ${childTarget.label} no Research com este valor`}
+                                                                className="group/sub w-full flex items-center justify-between text-[11px] rounded-lg px-1 py-0.5 -mx-1 hover:bg-slate-800/40 transition-colors"
+                                                            >
+                                                                {Row}
+                                                            </button>
+                                                        ) : (
+                                                            <div key={c.sub} className="flex items-center justify-between text-[11px] px-1 py-0.5">
+                                                                {Row}
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             )}
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                     {suggestions.length === 0 && <p className="text-center text-xs text-slate-500 py-4">Sem sugestões. Sua carteira está equilibrada.</p>}
+
+                                    {suggestions.length > 0 && (
+                                        <p className="text-[10px] text-slate-600 leading-relaxed pt-1">
+                                            Clique em uma linha para abrir o ranking daquela classe no Research já com o valor sugerido.
+                                        </p>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="text-center py-6 opacity-50">
@@ -296,8 +414,16 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                             )}
                         </div>
                         
-                        <div className="p-5 border-t border-slate-800 bg-card flex justify-end rounded-b-2xl shrink-0">
-                            <Button onClick={onClose} variant="outline" className="w-auto px-6">Fechar</Button>
+                        <div className="p-5 border-t border-slate-800 bg-card flex justify-end gap-2 rounded-b-2xl shrink-0">
+                            <Button
+                                onClick={handleCopy}
+                                variant="outline"
+                                className="!w-auto px-4 gap-2"
+                                disabled={suggestions.length === 0}
+                            >
+                                {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? 'Copiado' : 'Copiar aporte'}
+                            </Button>
+                            <Button onClick={onClose} variant="outline" className="!w-auto px-6">Fechar</Button>
                         </div>
                     </div>
                 </div>

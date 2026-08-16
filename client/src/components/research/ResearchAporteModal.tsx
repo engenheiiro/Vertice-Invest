@@ -15,6 +15,9 @@ interface ResearchAporteModalProps {
     // Aba ETFs: origem selecionada (Nacional B3 / Internacional US). O aporte deve
     // considerar APENAS o universo visível — nunca misturar B3 (BRL) com US (USD).
     etfOrigin?: 'BR' | 'US';
+    // Valor pré-preenchido (já na moeda da aba) quando o modal é aberto pelo
+    // Aporte Inteligente da Carteira. Editável — é só o ponto de partida.
+    initialAmount?: number | null;
 }
 
 type Profile = 'DEFENSIVE' | 'MODERATE' | 'BOLD';
@@ -31,11 +34,12 @@ interface Allocation {
     cost: number;
 }
 
-export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen, onClose, ranking, assetClass, etfOrigin = 'US' }) => {
+export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen, onClose, ranking, assetClass, etfOrigin = 'US', initialAmount = null }) => {
     const { usdRate } = useWallet();
     const isEtf = assetClass === 'ETF';
     // Na aba ETFs a moeda depende da origem: Nacional (B3) é BRL; Internacional (US) é USD.
-    const isUsd = assetClass === 'CRYPTO' || assetClass === 'STOCK_US' || (isEtf && etfOrigin === 'US');
+    // REIT é o ranking imobiliário US — preço em dólar, como STOCK_US.
+    const isUsd = assetClass === 'CRYPTO' || assetClass === 'STOCK_US' || assetClass === 'REIT' || (isEtf && etfOrigin === 'US');
     const currency: 'BRL' | 'USD' = isUsd ? 'USD' : 'BRL';
     const isFractional = isUsd;
 
@@ -73,6 +77,12 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
     useEffect(() => { setExcludedTickers(new Set()); }, [profile]);
     useEffect(() => { setExcludedTickers(new Set()); }, [etfOrigin]);
     useEffect(() => { if (!isOpen) setExcludedTickers(new Set()); }, [isOpen]);
+
+    // Semente vinda da Carteira (deep link). Só escreve quando há valor: numa
+    // abertura manual (initialAmount null) o que o usuário digitou é preservado.
+    useEffect(() => {
+        if (isOpen && initialAmount != null && initialAmount > 0) setAmount(initialAmount.toFixed(2));
+    }, [isOpen, initialAmount]);
 
     useEffect(() => {
         if (isOpen) { document.body.style.overflow = 'hidden'; document.documentElement.style.overflow = 'hidden'; }

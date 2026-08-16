@@ -10,9 +10,11 @@ interface ResearchViewerProps {
     onAporte?: () => void;
     onExteriorViewChange?: (view: 'STOCK' | 'REIT') => void;
     onEtfOriginChange?: (origin: 'BR' | 'US') => void;
+    // Origem inicial da aba ETFs (deep link do Aporte da Carteira).
+    initialEtfOrigin?: 'BR' | 'US';
 }
 
-export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view, onAporte, onExteriorViewChange, onEtfOriginChange }) => {
+export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view, onAporte, onExteriorViewChange, onEtfOriginChange, initialEtfOrigin }) => {
     
     // Renderizador seguro de Markdown Básico
     const renderMarkdown = (text: string) => {
@@ -65,7 +67,7 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view, on
     };
 
     if (view === 'RANKING') {
-        return <TopPicksCard picks={report.content?.ranking || []} assetClass={report.assetClass} onAporte={onAporte} onExteriorViewChange={onExteriorViewChange} onEtfOriginChange={onEtfOriginChange} />;
+        return <TopPicksCard picks={report.content?.ranking || []} assetClass={report.assetClass} onAporte={onAporte} onExteriorViewChange={onExteriorViewChange} onEtfOriginChange={onEtfOriginChange} initialEtfOrigin={initialEtfOrigin} />;
     }
 
     return (

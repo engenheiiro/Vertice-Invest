@@ -145,6 +145,37 @@ describe('TopPicksCard — sub-filtro da aba ETFs (Nacional/Internacional)', () 
     expect(tickers).not.toContain('BOVA11');
     expect(tickers).not.toContain('IVVB11');
   });
+
+  // Deep link do Aporte da Carteira: a linha "ETFs" dentro de Ações BR pede o
+  // universo Nacional. O reset de origem por troca de classe não pode atropelar
+  // isso na montagem — era o que fazia o modal abrir com os ETFs errados.
+  it('respeita initialEtfOrigin="BR" na montagem', () => {
+    const onEtfOriginChange = vi.fn();
+    render(
+      <TopPicksCard
+        picks={ETF_PICKS}
+        assetClass="ETF"
+        initialEtfOrigin="BR"
+        onEtfOriginChange={onEtfOriginChange}
+      />
+    );
+    const tickers = listTickers();
+    expect(tickers).toEqual(expect.arrayContaining(['BOVA11', 'IVVB11']));
+    expect(tickers).not.toContain('VOO');
+    expect(onEtfOriginChange).toHaveBeenCalledWith('BR');
+    expect(onEtfOriginChange).not.toHaveBeenCalledWith('US');
+  });
+
+  it('volta ao Internacional quando a classe muda depois da montagem', () => {
+    const { rerender } = render(
+      <TopPicksCard picks={ETF_PICKS} assetClass="ETF" initialEtfOrigin="BR" />
+    );
+    rerender(<TopPicksCard picks={ETF_PICKS} assetClass="STOCK" initialEtfOrigin="BR" />);
+    rerender(<TopPicksCard picks={ETF_PICKS} assetClass="ETF" initialEtfOrigin="BR" />);
+    const tickers = listTickers();
+    expect(tickers).toEqual(expect.arrayContaining(['VOO', 'IVV']));
+    expect(tickers).not.toContain('BOVA11');
+  });
 });
 
 describe('TopPicksCard — toggle Ações/REITs do Exterior (na barra Perfil)', () => {

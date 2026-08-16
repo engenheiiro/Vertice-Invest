@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Trophy, BarChart2, Layers, Shield, Target, Zap, Minus, Wallet, PieChart, PlusCircle, Crown, Medal, Calculator } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 import { AssetDetailModal } from './AssetDetailModal';
@@ -18,6 +18,9 @@ interface TopPicksCardProps {
     // Aba ETFs: notifica o pai (Research) da origem selecionada (Nacional/Internacional)
     // para que o modal de Aporte considere o mesmo universo. O estado segue interno aqui.
     onEtfOriginChange?: (origin: 'BR' | 'US') => void;
+    // Origem inicial da aba ETFs. Só vale na montagem — serve ao deep link do Aporte
+    // da Carteira (linha "ETFs" de Ações BR abre no Nacional, não no Internacional).
+    initialEtfOrigin?: 'BR' | 'US';
 }
 
 type RiskFilter = 'DEFENSIVE' | 'MODERATE' | 'BOLD';
@@ -48,12 +51,12 @@ const COLORS = [
     '#EF4444', '#84CC16', '#14B8A6', '#F97316', '#A855F7', '#0EA5E9'
 ];
 
-export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, onAporte, onExteriorViewChange, onEtfOriginChange }) => {
+export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, onAporte, onExteriorViewChange, onEtfOriginChange, initialEtfOrigin }) => {
     const { assets, kpis, isPrivacyMode } = useWallet();
     const navigate = useNavigate();
     const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
     const [riskFilter, setRiskFilter] = useState<RiskFilter>('DEFENSIVE');
-    const [etfOrigin, setEtfOrigin] = useState<EtfOriginFilter>('US');
+    const [etfOrigin, setEtfOrigin] = useState<EtfOriginFilter>(initialEtfOrigin || 'US');
 
     const isBrasil10 = assetClass === 'BRASIL_10';
     // Exterior (STOCK_US) e REIT já vêm como rankings puros do backend; o badge de
@@ -69,8 +72,14 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
         }
     }, [assetClass, isBrasil10]);
 
-    // Reseta o sub-filtro de origem (default Internacional) ao trocar de classe.
-    useEffect(() => { setEtfOrigin('US'); }, [assetClass]);
+    // Reseta o sub-filtro de origem (default Internacional) ao TROCAR de classe. Na
+    // montagem o reset é pulado: senão ele apagaria a origem pedida pelo deep link
+    // (initialEtfOrigin) antes mesmo do usuário ver a lista.
+    const mountedRef = useRef(false);
+    useEffect(() => {
+        if (!mountedRef.current) { mountedRef.current = true; return; }
+        setEtfOrigin('US');
+    }, [assetClass]);
 
     // Mantém o pai (Research → modal de Aporte) em sincronia com a origem visível.
     useEffect(() => { onEtfOriginChange?.(etfOrigin); }, [etfOrigin, onEtfOriginChange]);

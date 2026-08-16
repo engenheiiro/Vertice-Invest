@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Header } from '../components/dashboard/Header';
 import { researchService, ResearchReport, RankingItem } from '../services/research';
 import { ResearchViewer } from '../components/research/ResearchViewer';
@@ -12,6 +12,7 @@ import { SkeletonCard, SkeletonTableRows } from '../components/ui';
 import { friendlyError } from '../utils/errorMessages';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
+import type { ResearchAporteRequest } from '../utils/researchAporte';
 
 const ASSETS = [
     { id: 'BRASIL_10', label: 'Brasil 10 (Mix)', color: 'bg-emerald-600', minPlan: 'ESSENTIAL' },
@@ -28,21 +29,34 @@ export const Research = () => {
     const navigate = useNavigate();
     const location = useLocation(); // Hook de location para pegar state
     
-    const [selectedAsset, setSelectedAsset] = useState('BRASIL_10');
+    // Deep link do Aporte Inteligente da Carteira. Lido UMA vez, no estado inicial:
+    // aplicado por efeito, a página buscaria BRASIL_10 primeiro e a classe pedida
+    // depois — duas respostas concorrentes, e a mais lenta sobrescrevia a outra
+    // (o modal abria com o ranking errado).
+    const [aporteLink] = useState<ResearchAporteRequest | null>(
+        () => (location.state as { aporte?: ResearchAporteRequest } | null)?.aporte ?? null
+    );
+
+    const [selectedAsset, setSelectedAsset] = useState(aporteLink?.assetClass || 'BRASIL_10');
     // Dentro do Exterior, alterna entre dois rankings INDEPENDENTES: Ações US (STOCK_US)
     // e REITs (classe própria). Não é filtro client-side — troca a fonte buscada.
-    const [exteriorView, setExteriorView] = useState<'STOCK' | 'REIT'>('STOCK');
+    const [exteriorView, setExteriorView] = useState<'STOCK' | 'REIT'>(aporteLink?.exteriorView || 'STOCK');
     // Aba ETFs: origem visível (Nacional B3 / Internacional US). Espelha o sub-filtro do
     // TopPicksCard aqui em cima para que o modal de Aporte respeite a mesma seleção.
-    const [etfOrigin, setEtfOrigin] = useState<'BR' | 'US'>('US');
+    const [etfOrigin, setEtfOrigin] = useState<'BR' | 'US'>(aporteLink?.etfOrigin || 'US');
     const [viewMode, setViewMode] = useState<'ANALYSIS' | 'RANKING'>('RANKING');
     const [report, setReport] = useState<ResearchReport | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    
+    // Sequência de busca: só a resposta do último pedido pode escrever no estado.
+    const fetchSeq = useRef(0);
+
     // Estado para controle do modal de asset direto
     const [directAsset, setDirectAsset] = useState<RankingItem | null>(null);
     // Modal "Aporte Inteligente" por ativo (distribui valor entre os COMPRAR).
-    const [showAporte, setShowAporte] = useState(false);
+    const [showAporte, setShowAporte] = useState(!!aporteLink?.amount);
+    // Valor herdado do Aporte Inteligente da Carteira (deep link). Zerado ao fechar
+    // o modal para não re-semear um valor antigo numa abertura manual posterior.
+    const [aporteSeed, setAporteSeed] = useState<number | null>(aporteLink?.amount ?? null);
     // Perfil selecionado na aba "Relatório Semanal" (narrativa por perfil).
     const [analysisProfile, setAnalysisProfile] = useState<'DEFENSIVE' | 'MODERATE' | 'BOLD'>('DEFENSIVE');
 
@@ -64,6 +78,11 @@ export const Research = () => {
     };
 
     const fetchReport = async () => {
+        // Toda entrada invalida buscas anteriores: trocar de aba (ou entrar na Renda
+        // Fixa) enquanto uma resposta está a caminho não pode deixá-la escrever depois.
+        const seq = ++fetchSeq.current;
+        const isCurrent = () => seq === fetchSeq.current;
+
         // Renda Fixa não tem relatório de ranking — o TreasuryPanel busca seus próprios dados.
         if (isFixedIncome) {
             setIsLoading(false);
@@ -81,6 +100,7 @@ export const Research = () => {
             const strategy = 'BUY_HOLD';
             try {
                 const data = await researchService.getLatest(effectiveAsset, strategy);
+                if (!isCurrent()) return;
                 setReport(data);
 
                 // LÓGICA DE LINK DIRETO (DEEP LINKING VIA STATE)
@@ -94,13 +114,13 @@ export const Research = () => {
                 }
             } catch (err: unknown) {
                 console.error("Erro ao buscar análise:", err);
-                setReport(null);
+                if (isCurrent()) setReport(null);
             }
 
         } catch (err: unknown) {
             console.error("Erro geral:", err);
         } finally {
-            setIsLoading(false);
+            if (isCurrent()) setIsLoading(false);
         }
     };
 
@@ -114,6 +134,12 @@ export const Research = () => {
 
     // Ao sair do Exterior, volta o sub-toggle para Ações (evita herdar REIT noutra aba).
     useEffect(() => { if (!isExterior) setExteriorView('STOCK'); }, [isExterior]);
+
+    // O state do deep link já foi consumido no estado inicial; limpa o history para
+    // que voltar/atualizar não reabra o modal de Aporte.
+    useEffect(() => {
+        if (aporteLink) window.history.replaceState({}, document.title);
+    }, [aporteLink]);
 
     const hasAccessToSelected = checkAccess(selectedAsset);
     const requiredPlanLabel = ASSETS.find(a => a.id === selectedAsset)?.minPlan || 'PRO';
@@ -290,6 +316,7 @@ export const Research = () => {
                             onAporte={() => setShowAporte(true)}
                             onExteriorViewChange={isExterior ? setExteriorView : undefined}
                             onEtfOriginChange={setEtfOrigin}
+                            initialEtfOrigin={aporteLink?.etfOrigin}
                         />
                     ) : (
                         <div className="flex flex-col items-center justify-center py-20 bg-base border border-dashed border-slate-800 rounded-3xl text-center">
@@ -312,10 +339,11 @@ export const Research = () => {
                 {report?.content?.ranking && (
                     <ResearchAporteModal
                         isOpen={showAporte}
-                        onClose={() => setShowAporte(false)}
+                        onClose={() => { setShowAporte(false); setAporteSeed(null); }}
                         ranking={report.content.ranking}
                         assetClass={effectiveAsset}
                         etfOrigin={etfOrigin}
+                        initialAmount={aporteSeed}
                     />
                 )}
 
