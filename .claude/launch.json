@@ -2,6 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "vertice",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5000,
+      "autoPort": false
+    },
+    {
       "name": "monstro",
       "runtimeExecutable": "node",
       "runtimeArgs": ["D:/Github/alimente-o-monstro/_dev-server.js"],

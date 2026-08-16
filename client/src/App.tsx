@@ -92,7 +92,10 @@ export default function App() {
       <ConfirmProvider>
       <ReloadPrompt />
       <AuthProvider>
-        <BrowserRouter>
+        {/* future flags da v6: adotam desde já o comportamento da v7 (startTransition
+            nos updates de rota e resolução de rota relativa dentro de splat), o que
+            silencia os warnings de deprecação e evita surpresa no upgrade. */}
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <CookieNotice />
           {/* Dentro do Router: usa useLocation p/ não cobrir o CTA das telas de auth. */}
           <InstallPrompt />

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node --max-old-space-size=400 index.js",
-    "dev": "npx nodemon index.js --ignore logs/ --ignore **/*.log --ignore crash-report.txt",
+    "dev": "nodemon index.js --ignore logs/ --ignore **/*.log --ignore crash-report.txt",
     "test": "vitest",
     "test:wallet": "vitest run tests/wallet_snapshot.spec.js",
     "test:regression": "vitest run tests/quant_regression.spec.js",
