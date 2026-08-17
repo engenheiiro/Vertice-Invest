@@ -47,6 +47,10 @@ export const updateGoalSchema = z.object({
     monthlyTarget: z.coerce.number().finite('Aporte mensal inválido').nonnegative('Aporte não pode ser negativo').optional(),
     expectedAnnualRate: z.coerce.number().finite('Taxa inválida').min(0, 'Taxa não pode ser negativa').max(100, 'Taxa muito alta').optional(),
     targetDate: z.coerce.date({ invalid_type_error: 'Data inválida' }).nullable().optional(),
+    startValue: z.coerce.number({ invalid_type_error: 'Patrimônio inicial inválido' })
+      .finite('Patrimônio inicial inválido')
+      .nonnegative('Patrimônio inicial não pode ser negativo')
+      .optional(),
     mirrorWallet: z.coerce.boolean().optional(),
     status: z.enum(['ACTIVE', 'ACHIEVED', 'ARCHIVED']).optional(),
     lastCelebratedMilestone: z.coerce.number().int('Marco inválido').min(0).max(100).optional(),
@@ -63,6 +67,18 @@ export const addContributionSchema = z.object({
       .refine((v) => v !== 0, 'Valor não pode ser zero'),
     date: z.coerce.date({ invalid_type_error: 'Data inválida' }).optional(),
     note: z.string().trim().max(120, 'Nota muito longa').optional(),
+  }),
+});
+
+// PUT /goals/:id/journey — nomeia a jornada da cadeia à qual a meta pertence.
+// Mesmo teto de 60 do nome da meta: o cabeçalho vive na mesma linha.
+export const renameJourneySchema = z.object({
+  params: z.object({ id: objectId }),
+  body: z.object({
+    name: z.string({ required_error: 'Nome é obrigatório' })
+      .trim()
+      .min(1, 'Nome é obrigatório')
+      .max(60, 'Nome muito longo'),
   }),
 });
 

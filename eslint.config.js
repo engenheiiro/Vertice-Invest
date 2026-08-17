@@ -20,6 +20,10 @@ export default tseslint.config(// --- Ignorados globais ---
     'coverage/**',
     '**/*.config.{js,ts,cjs,mjs}',
     '.husky/**',
+    // Worktrees de agente são CHECKOUTS separados do próprio repo: lintá-los
+    // duplica cada arquivo e afoga o relatório (1300+ erros de um código que
+    // nem está nesta árvore), deixando `npm run lint` sem serventia.
+    '.claude/**',
   ],
 }, // --- Base JS recomendada (todos os arquivos) ---
 js.configs.recommended, // --- Client: TypeScript + React ---
@@ -57,6 +61,14 @@ js.configs.recommended, // --- Client: TypeScript + React ---
   rules: {
     'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     'no-empty': ['warn', { allowEmptyCatch: true }],
+  },
+}, // --- Scripts de build do client (Node ESM, fora de src) ---
+{
+  files: ['client/build-assets/**/*.{js,mjs}'],
+  languageOptions: {
+    ecmaVersion: 2022,
+    sourceType: 'module',
+    globals: { ...globals.node },
   },
 }, // --- E2E (Playwright, TypeScript fora de client/src) ---
 {

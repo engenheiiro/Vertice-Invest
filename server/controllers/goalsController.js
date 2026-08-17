@@ -1,6 +1,7 @@
 
 import mongoose from 'mongoose';
 import InvestmentGoal from '../models/InvestmentGoal.js';
+import GoalJourney from '../models/GoalJourney.js';
 import GoalContribution from '../models/GoalContribution.js';
 import AssetTransaction from '../models/AssetTransaction.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
@@ -9,13 +10,36 @@ import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { valueFixedIncomeAsset, brazilToday } from '../utils/fixedIncome.js';
 import { loadTreasuryPricing } from '../services/treasuryPriceService.js';
-import { monthsRemaining, requiredMonthly, decomposeProgress, fv, annualToMonthly, computeStreak, resolveGoalStatus } from '../utils/goalMath.js';
+import { monthsRemaining, requiredMonthly, decomposeProgress, fv, annualToMonthly, computeStreak, resolveGoalStatus, calendarMonthsBetween } from '../utils/goalMath.js';
+import { orderChainFrom } from '../utils/goalChain.js';
 import { safeCurrency, safeFloat, safeSub, safeMult, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { isDollarized } from '../utils/assetCurrency.js';
 import logger from '../config/logger.js';
 
 const MS_DAY = 24 * 60 * 60 * 1000;
+
+/** Carrega as metas da carteira e devolve a cadeia inteira da meta informada. */
+const collectChain = async (goal, userId, walletId) => {
+    const all = await InvestmentGoal.find({ user: userId, wallet: walletId });
+    return orderChainFrom(goal, all);
+};
+
+/** Apaga jornadas que ficaram sem nenhum marco (a cadeia foi desfeita). */
+const pruneOrphanJourneys = async (userId, walletId, journeyIds = []) => {
+    const ids = journeyIds.filter(Boolean);
+    if (ids.length === 0) return;
+    const stillUsed = await InvestmentGoal.distinct('journey', {
+        user: userId,
+        wallet: walletId,
+        journey: { $in: ids },
+    });
+    const used = new Set(stillUsed.map(String));
+    const orphans = ids.filter((id) => !used.has(String(id)));
+    if (orphans.length > 0) {
+        await GoalJourney.deleteMany({ _id: { $in: orphans }, user: userId, wallet: walletId });
+    }
+};
 
 // Soma N meses a uma data, tratando a parte fracionária como ~30 dias.
 const addMonths = (base, months) => {
@@ -108,8 +132,13 @@ const computeGoalProjection = (goal, walletEquity, opts = {}) => {
         : 0;
 
     const n = monthsRemaining(currentValue, goal.monthlyTarget, goal.expectedAnnualRate, goal.targetAmount);
-    const monthsLeft = isFinite(n) ? Math.ceil(n) : null;
-    const projectedDate = isFinite(n) ? addMonths(new Date(), n) : null;
+    const now = new Date();
+    const projectedDate = isFinite(n) ? addMonths(now, n) : null;
+    // Contador DERIVADO da data prevista (ver calendarMonthsBetween): "Faltam N
+    // meses" e o mês exibido apontam para o mesmo lugar, sem exceção. Zero é um
+    // resultado legítimo — chegada dentro do mês corrente — e o front o escreve
+    // como "este mês"; não forçar um piso aqui, que reintroduziria a divergência.
+    const monthsLeft = projectedDate ? calendarMonthsBetween(now, projectedDate) : null;
 
     // Se há prazo (targetDate), calcula o aporte necessário para batê-lo.
     let requiredMonthlyForDeadline = null;
@@ -156,6 +185,22 @@ const computeGoalProjection = (goal, walletEquity, opts = {}) => {
         onTrack,
         achieved: currentValue >= goal.targetAmount,
     };
+};
+
+/**
+ * Baseline da curva "Plano". Usa o `startValue` congelado na criação; metas
+ * anteriores ao campo ficam com 0 e caem no 1º snapshot a partir do início.
+ *
+ * Compartilhado por listGoals e getGoal DE PROPÓSITO: resolver o fallback só no
+ * detalhe fazia o card da lista e o modal divergirem em plannedDate,
+ * valueVsPlan e dateDeltaMonths — o card dizia "no plano" e o modal "3 meses
+ * adiantado" para a mesma meta.
+ */
+const resolveStartValue = (goal, snapshots) => {
+    if (goal.startValue || !goal.mirrorWallet) return goal.startValue;
+    const startDate = goal.startDate ? new Date(goal.startDate) : null;
+    const anchor = startDate ? snapshots.find((s) => new Date(s.date) >= startDate) : snapshots[0];
+    return safeCurrency((anchor?.totalEquity || 0) + safeFloat(goal.manualBalance));
 };
 
 /**
@@ -241,11 +286,13 @@ const buildMonthlyHistory = async (userId, walletId, goal, months = 12) => {
 /**
  * Série da trajetória: Real (passado, patrimônio + manual acumulado na data),
  * Plano (início→alvo) e Projeção (hoje→data prevista) num eixo de tempo único.
+ *
+ * `now` é injetável para teste: as quebras desta série moram justamente nas
+ * fronteiras de mês (ver goal_trajectory.spec.js).
  */
-const buildTrajectory = (goal, snapshots, contributions, projection) => {
+export const buildTrajectory = (goal, snapshots, contributions, projection, now = new Date()) => {
     const r = annualToMonthly(goal.expectedAnnualRate);
     const start = goal.startDate ? new Date(goal.startDate) : new Date();
-    const now = new Date();
     const target = goal.targetAmount;
     const startValue = projection.startValue;
 
@@ -277,33 +324,72 @@ const buildTrajectory = (goal, snapshots, contributions, projection) => {
     const totalMonths = Math.max(1, Math.round(monthsBetween(start, horizonEnd)));
     const step = totalMonths > 120 ? 12 : totalMonths > 48 ? 6 : totalMonths > 18 ? 3 : 1;
 
-    // Conjunto de timestamps (1º de cada mês) a plotar.
+    // Todo ponto é um DIA-CALENDÁRIO ancorado ao MEIO-DIA UTC — mesma convenção de
+    // parseCalendarDate (dateUtils). O eixo é mensal, mas as datas de CHEGADA caem
+    // no meio do mês e precisam de um ponto próprio (ver `landing` abaixo), então
+    // a chave é o dia, não o mês. O meio-dia mantém o dia correto tanto num
+    // processo UTC (prod) quanto num browser em BRT: ancorado à meia-noite LOCAL
+    // do servidor, todo rótulo do eixo saía um mês adiantado.
+    const dayKey = (date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12);
+
+    // Conjunto de timestamps a plotar: o 1º de cada mês do horizonte…
     const keys = new Set();
     for (let m = 0; m <= totalMonths; m += step) {
-        const d = new Date(start); d.setMonth(d.getMonth() + m); keys.add(firstOfMonth(d).getTime());
+        const d = new Date(start); d.setMonth(d.getMonth() + m); keys.add(dayKey(firstOfMonth(d)));
     }
     realMap.forEach((_, k) => {
-        const [y, mm] = k.split('-'); keys.add(new Date(Number(y), Number(mm) - 1, 1).getTime());
+        const [y, mm] = k.split('-'); keys.add(dayKey(new Date(Number(y), Number(mm) - 1, 1)));
     });
     [now, horizonEnd, projection.plannedDate, projection.projectedDate].forEach((d) => {
-        if (d) keys.add(firstOfMonth(new Date(d)).getTime());
+        if (d) keys.add(dayKey(firstOfMonth(new Date(d))));
     });
+
+    // …mais as CHEGADAS, no dia real. Cada curva termina no instante em que encosta
+    // no alvo, e esse instante quase nunca é dia 1º: a meta de R$ 35 mil chegava em
+    // 26/02, então a série morria no ponto de 01/02 valendo R$ 33,2 mil e a Projeção
+    // nunca tocava a linha da Meta. Arredondar a chegada para o 1º do mês é o que
+    // criava o degrau — e ainda faria o gráfico discordar da "Data prevista" do
+    // cabeçalho. No ponto de chegada o valor é o alvo POR DEFINIÇÃO, não um fv:
+    // addMonths trabalha com mês fracionário (~30 dias) e reavaliar a fórmula ali
+    // devolveria alguns reais a menos, deixando a curva de novo raspando a linha.
+    const plannedEndTs = projection.plannedDate ? dayKey(new Date(projection.plannedDate)) : null;
+    const projectedEndTs = projection.projectedDate ? dayKey(new Date(projection.projectedDate)) : null;
+    // Só há chegada se ainda existe caminho até o alvo. Numa meta já batida a
+    // "chegada" é hoje e forçar o alvo puxaria a curva para BAIXO do patrimônio.
+    const plannedLanding = (plannedEndTs !== null && startValue < target) ? plannedEndTs : null;
+    const projectedLanding = (projectedEndTs !== null && projection.currentValue < target) ? projectedEndTs : null;
+    if (plannedLanding !== null) keys.add(plannedLanding);
+    if (projectedLanding !== null) keys.add(projectedLanding);
+
+    // Âncora da projeção: o PONTO do mês corrente. Todo ponto mensal é o dia 1º,
+    // então medir a distância de `now` até ele em meses dá sempre um negativo que
+    // cresce ao longo do mês — o corte antigo (`>= -0.5`) derrubava esse ponto a
+    // partir do dia 16 e a Projeção perdia a âncora que a liga ao Real. Com passo
+    // trimestral o próximo ponto elegível ficava 3 meses adiante, abrindo um vão
+    // no gráfico que se fechava sozinho no dia 1º. Comparar o mês elimina a borda.
+    const currentMonthTs = dayKey(firstOfMonth(now));
 
     return [...keys].sort((a, b) => a - b).map((ts) => {
         const d = new Date(ts);
-        const mk = monthKey(d);
-        const point = { t: d.toISOString() };
-        if (realMap.has(mk)) point.real = realMap.get(mk);
-        // Plano: do início até atingir o alvo.
-        if (!projection.plannedDate || d <= new Date(projection.plannedDate)) {
-            const p = fv(r, Math.max(0, monthsBetween(start, d)), startValue, goal.monthlyTarget);
+        const point = { t: new Date(ts).toISOString() };
+        // Real só existe nos pontos MENSAIS: a chegada é um marcador sintético no
+        // futuro e herdaria o patrimônio do mês corrente se caísse dentro dele.
+        if (d.getUTCDate() === 1 && realMap.has(monthKey(d))) point.real = realMap.get(monthKey(d));
+        // Plano: do início até encostar no alvo.
+        if (plannedEndTs === null || ts <= plannedEndTs) {
+            const p = ts === plannedLanding
+                ? target
+                : fv(r, Math.max(0, monthsBetween(start, d)), startValue, goal.monthlyTarget);
             point.planned = safeCurrency(Math.min(p, target));
         }
-        // Projeção: de hoje até a data prevista.
-        const mFromNow = monthsBetween(now, d);
-        if (mFromNow >= -0.5 && (!projection.projectedDate || d <= new Date(projection.projectedDate))) {
-            const pj = fv(r, Math.max(0, mFromNow), projection.currentValue, goal.monthlyTarget);
-            point.projected = safeCurrency(Math.min(pj, target * 1.02));
+        // Projeção: do mês corrente até encostar no alvo.
+        if (ts >= currentMonthTs && (projectedEndTs === null || ts <= projectedEndTs)) {
+            const pj = ts === projectedLanding
+                ? target
+                : fv(r, Math.max(0, monthsBetween(now, d)), projection.currentValue, goal.monthlyTarget);
+            // Teto acima do alvo, mas nunca abaixo do patrimônio atual: numa meta
+            // já batida o clamp puxaria a âncora para baixo do Real.
+            point.projected = safeCurrency(Math.min(pj, Math.max(target * 1.02, projection.currentValue)));
         }
         return point;
     });
@@ -315,13 +401,21 @@ export const listGoals = async (req, res, next) => {
         const userId = req.user.id;
         const walletId = req.walletId;
         const [goals, { equity: walletEquity, snapshot }] = await Promise.all([
-            InvestmentGoal.find({ user: userId, wallet: walletId, status: { $ne: 'ARCHIVED' } }).sort({ createdAt: 1 }),
+            InvestmentGoal.find({ user: userId, wallet: walletId, status: { $ne: 'ARCHIVED' } })
+                .sort({ createdAt: 1 })
+                .populate('journey', 'name'),
             getLiveWalletEquity(userId, walletId),
         ]);
 
+        // Snapshots só quando alguma meta precisa do fallback de baseline (metas
+        // antigas sem startValue) — evita carregar o histórico à toa.
+        const snapshots = goals.some((g) => !g.startValue && g.mirrorWallet)
+            ? await WalletSnapshot.find({ user: userId, wallet: walletId }).sort({ date: 1 }).lean()
+            : [];
+
         const result = [];
         for (const goal of goals) {
-            const projection = computeGoalProjection(goal, walletEquity);
+            const projection = computeGoalProjection(goal, walletEquity, { startValue: resolveStartValue(goal, snapshots) });
             await syncGoalStatus(goal, projection);
             result.push({ ...goal.toObject(), status: goal.status, ...projection });
         }
@@ -345,16 +439,7 @@ export const getGoal = async (req, res, next) => {
         // Histórico patrimonial p/ a trajetória (ordem cronológica).
         const snapshots = await WalletSnapshot.find({ user: userId, wallet: walletId }).sort({ date: 1 }).lean();
 
-        // Baseline do "Plano": usa startValue salvo; p/ metas antigas sem o campo,
-        // estima pelo 1º snapshot a partir do início (ou 0).
-        let effectiveStartValue = goal.startValue;
-        if (!effectiveStartValue && goal.mirrorWallet) {
-            const startDate = goal.startDate ? new Date(goal.startDate) : null;
-            const anchor = startDate ? snapshots.find((s) => new Date(s.date) >= startDate) : snapshots[0];
-            effectiveStartValue = safeCurrency((anchor?.totalEquity || 0) + safeFloat(goal.manualBalance));
-        }
-
-        const projection = computeGoalProjection(goal, walletEquity, { startValue: effectiveStartValue });
+        const projection = computeGoalProjection(goal, walletEquity, { startValue: resolveStartValue(goal, snapshots) });
         await syncGoalStatus(goal, projection);
 
         // Aportes manuais (ledger).
@@ -432,7 +517,15 @@ export const createGoal = async (req, res, next) => {
         const { name, icon, color, targetAmount, monthlyTarget, expectedAnnualRate, startDate, targetDate, mirrorWallet, manualBalance, previousGoalId } = req.body;
 
         const useMirror = mirrorWallet !== undefined ? mirrorWallet : true;
-        const { equity: liveEquity, snapshot } = await getLiveWalletEquity(userId, walletId);
+        const { equity: liveEquity } = await getLiveWalletEquity(userId, walletId);
+
+        // Marco novo herda a jornada do anterior: quem já nomeou a jornada não
+        // precisa renomear a cada meta que acrescenta.
+        let journey = null;
+        if (previousGoalId) {
+            const previous = await InvestmentGoal.findOne({ _id: previousGoalId, user: userId, wallet: walletId });
+            journey = previous?.journey || null;
+        }
         // Baseline da curva "Plano": valor da meta no momento da criação.
         const startValue = safeCurrency((useMirror ? liveEquity : 0) + (manualBalance || 0));
 
@@ -451,6 +544,7 @@ export const createGoal = async (req, res, next) => {
             manualBalance: safeCurrency(manualBalance || 0),
             startValue,
             previousGoalId: previousGoalId || null,
+            journey,
         });
 
         const projection = computeGoalProjection(goal, liveEquity);
@@ -477,8 +571,26 @@ export const updateGoal = async (req, res, next) => {
         if (req.body.monthlyTarget !== undefined) goal.monthlyTarget = safeCurrency(req.body.monthlyTarget);
         if (req.body.expectedAnnualRate !== undefined) goal.expectedAnnualRate = safeFloat(req.body.expectedAnnualRate);
         if (req.body.targetDate !== undefined) goal.targetDate = req.body.targetDate || undefined;
+        // Baseline do "Plano": congelado na criação, mas corrigível. Quem cria a
+        // meta ANTES de lançar a carteira fica com um baseline perto de zero, e o
+        // "adiantado vs. plano" passa a comparar contra uma carteira que não
+        // existia. Sem isso a única saída seria recriar a meta.
+        if (req.body.startValue !== undefined) goal.startValue = safeCurrency(req.body.startValue);
+
+        // Religar a meta a outra cadeia troca a jornada junto: sem isso ela
+        // carregaria para a cadeia nova o nome da antiga.
+        let releasedJourney = null;
+        if (req.body.previousGoalId !== undefined) {
+            releasedJourney = goal.journey || null;
+            const previous = req.body.previousGoalId
+                ? await InvestmentGoal.findOne({ _id: req.body.previousGoalId, user: userId, wallet: walletId })
+                : null;
+            goal.journey = previous?.journey || null;
+        }
+
         goal.updatedAt = Date.now();
         await goal.save();
+        if (releasedJourney) await pruneOrphanJourneys(userId, walletId, [releasedJourney]);
 
         const { equity: walletEquity } = await getLiveWalletEquity(userId, walletId);
         const projection = computeGoalProjection(goal, walletEquity);
@@ -497,9 +609,65 @@ export const deleteGoal = async (req, res, next) => {
         const goal = await InvestmentGoal.findOneAndDelete({ _id: req.params.id, user: userId, wallet: walletId });
         if (!goal) return res.status(404).json({ message: 'Meta não encontrada.' });
         await GoalContribution.deleteMany({ user: userId, wallet: walletId, goal: goal._id });
+        // Era o último marco da jornada? Então o nome não tem mais o que nomear.
+        await pruneOrphanJourneys(userId, walletId, [goal.journey]);
         res.json({ message: 'Meta removida.' });
     } catch (error) {
         logger.error(`Erro ao remover meta: ${error.message}`);
+        next(error);
+    }
+};
+
+/**
+ * PUT /goals/:id/journey — nomeia (ou renomeia) a jornada da cadeia da meta.
+ *
+ * Aceita QUALQUER marco da cadeia: o servidor percorre a cadeia inteira e aplica
+ * o vínculo a todos. É isso que dispensa migração — cadeia criada antes da
+ * jornada existir ganha a sua no primeiro rename.
+ */
+export const renameJourney = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const walletId = req.walletId;
+        const { name } = req.body;
+
+        const goal = await InvestmentGoal.findOne({ _id: req.params.id, user: userId, wallet: walletId });
+        if (!goal) return res.status(404).json({ message: 'Meta não encontrada.' });
+
+        const chain = await collectChain(goal, userId, walletId);
+        if (chain.length < 2) {
+            return res.status(400).json({ message: 'Só uma jornada encadeada pode ser nomeada.' });
+        }
+
+        // Cadeia legada pode ter marcos com jornada e outros sem — o primeiro id
+        // encontrado manda, e o vínculo é reaplicado a todos ao final.
+        const presentIds = [...new Set(chain.map((g) => g.journey).filter(Boolean).map(String))];
+        const existingId = presentIds[0] || null;
+        let journey = existingId
+            ? await GoalJourney.findOneAndUpdate(
+                { _id: existingId, user: userId, wallet: walletId },
+                { name, updatedAt: Date.now() },
+                { new: true },
+            )
+            : null;
+        if (!journey) journey = await GoalJourney.create({ user: userId, wallet: walletId, name });
+
+        await InvestmentGoal.updateMany(
+            { _id: { $in: chain.map((g) => g._id) }, user: userId, wallet: walletId },
+            { journey: journey._id, updatedAt: Date.now() },
+        );
+
+        // Cadeia que carregava mais de uma jornada (fruto de religamento) deixa
+        // as perdedoras sem nenhum marco — some com elas em vez de acumular lixo.
+        await pruneOrphanJourneys(
+            userId,
+            walletId,
+            presentIds.filter((id) => id !== String(journey._id)),
+        );
+
+        res.json({ journey: { _id: journey._id, name: journey.name } });
+    } catch (error) {
+        logger.error(`Erro ao nomear jornada: ${error.message}`);
         next(error);
     }
 };
@@ -512,6 +680,7 @@ export const clearAllGoals = async (req, res, next) => {
         const walletId = req.walletId;
         const { deletedCount } = await InvestmentGoal.deleteMany({ user: userId, wallet: walletId });
         await GoalContribution.deleteMany({ user: userId, wallet: walletId });
+        await GoalJourney.deleteMany({ user: userId, wallet: walletId });
         res.json({ message: 'Todas as metas removidas.', deletedCount: deletedCount || 0 });
     } catch (error) {
         logger.error(`Erro ao limpar metas: ${error.message}`);

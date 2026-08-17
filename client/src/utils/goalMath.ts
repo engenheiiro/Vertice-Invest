@@ -78,6 +78,15 @@ export const monthsSaved = (
   return saved > 0 ? saved : 0;
 };
 
+/**
+ * Distância em MESES-CALENDÁRIO entre duas datas (jan→fev = 1, ignora o dia).
+ * Espelha server/utils/goalMath.js: o contador "faltam N meses" é derivado da
+ * data prevista, nunca de um arredondamento independente de `monthsRemaining` —
+ * ver o comentário do backend para o porquê.
+ */
+export const calendarMonthsBetween = (from: Date, to: Date): number =>
+  (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+
 /** Soma N meses (fracionário ≈ 30 dias) a uma data. */
 export const addMonths = (base: Date, months: number): Date | null => {
   if (!isFinite(months)) return null;

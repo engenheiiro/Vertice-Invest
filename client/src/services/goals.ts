@@ -23,6 +23,8 @@ export interface Goal {
     achievedAt?: string | null;
     lastCelebratedMilestone: number;
     previousGoalId?: string | null;
+    /** Jornada (nome da cadeia). Null enquanto a cadeia não foi nomeada. */
+    journey?: { _id: string; name: string } | null;
     mirrorWallet: boolean;
     manualBalance: number;
     status: 'ACTIVE' | 'ACHIEVED' | 'ARCHIVED';
@@ -103,6 +105,23 @@ export const goalsService = {
     async getGoal(id: string, walletId?: string): Promise<GoalDetail> {
         const response = await authService.api(withWallet(`/api/goals/${id}`, walletId));
         if (!response.ok) throw new Error('Falha ao carregar meta');
+        return await response.json();
+    },
+
+    /**
+     * Nomeia a jornada a partir de qualquer marco dela — o servidor percorre a
+     * cadeia e aplica o vínculo a todos, inclusive em cadeias criadas antes de a
+     * jornada existir.
+     */
+    async renameJourney(goalId: string, name: string, walletId?: string): Promise<{ journey: { _id: string; name: string } }> {
+        const response = await authService.api(withWallet(`/api/goals/${goalId}/journey`, walletId), {
+            method: 'PUT',
+            body: JSON.stringify({ name }),
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || 'Falha ao renomear jornada');
+        }
         return await response.json();
     },
 

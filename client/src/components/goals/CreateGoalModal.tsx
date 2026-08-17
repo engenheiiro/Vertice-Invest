@@ -12,7 +12,7 @@ import { researchService } from '../../services/research';
 import { STALE_TIME } from '../../config/queryConfig';
 import { parseCurrencyToFloat } from '../../utils/assetTransaction';
 import { formatCurrency } from '../../utils/format';
-import { monthsRemaining, requiredMonthly, addMonths } from '../../utils/goalMath';
+import { monthsRemaining, requiredMonthly, addMonths, calendarMonthsBetween } from '../../utils/goalMath';
 import { ICON_OPTIONS, COLOR_OPTIONS, getGoalIcon, getGoalTheme, formatMonths } from './goalTheme';
 
 interface CreateGoalModalProps {
@@ -43,6 +43,9 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
   const [targetDate, setTargetDate] = useState(goal?.targetDate ? new Date(goal.targetDate).toISOString().slice(0, 10) : '');
   const [manualBalance, setManualBalance] = useState('');
   const [previousGoalId, setPreviousGoalId] = useState<string>(goal?.previousGoalId || '');
+  // Baseline da curva "Plano" — só editável, nunca na criação (lá ele é
+  // capturado do patrimônio ao vivo).
+  const [startValue, setStartValue] = useState(goal ? String((goal.startValue || 0).toFixed(2)).replace('.', ',') : '');
 
   // Sugestão de taxa: CDI atual (macro) e TWRR real da carteira.
   const { data: macro } = useQuery({ queryKey: ['macroData'], queryFn: researchService.getMacroData, staleTime: STALE_TIME.LONG });
@@ -75,15 +78,19 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
     if (target <= 0) return null;
     const baseline = (mirrorWallet ? kpis.totalEquity : 0) + num(manualBalance);
     const rateN = parseFloat(rate) || 0;
+    const now = new Date();
     const n = monthsRemaining(baseline, num(monthlyTarget), rateN, target);
-    const projDate = Number.isFinite(n) ? addMonths(new Date(), n) : null;
+    const projDate = Number.isFinite(n) ? addMonths(now, n) : null;
+    // Meses derivados da data (não de Math.ceil(n)): "tempo estimado" e "data
+    // prevista" ficam lado a lado no preview e não podem se contradizer.
+    const months = projDate ? calendarMonthsBetween(now, projDate) : null;
     let required: number | null = null;
     if (targetDate) {
       const months = (new Date(targetDate).getTime() - Date.now()) / (30.4375 * 24 * 3600 * 1000);
       const req = requiredMonthly(baseline, rateN, target, months);
       required = Number.isFinite(req) ? req : null;
     }
-    return { baseline, n, projDate, required };
+    return { baseline, n, months, projDate, required };
   }, [targetAmount, monthlyTarget, rate, mirrorWallet, manualBalance, targetDate, kpis.totalEquity]);
 
   const handleSubmit = () => {
@@ -103,6 +110,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
       previousGoalId: previousGoalId || null,
     };
     if (!isEdit && num(manualBalance) > 0) payload.manualBalance = num(manualBalance);
+    if (isEdit) payload.startValue = num(startValue);
     mutation.mutate(payload);
   };
 
@@ -234,12 +242,24 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
           </div>
         </button>
 
-        {!isEdit && (
+        {!isEdit ? (
           <CurrencyInput
             label="Já tenho guardado fora da carteira (opcional)"
             value={manualBalance}
             onChange={setManualBalance}
           />
+        ) : (
+          <div>
+            <CurrencyInput
+              label="Patrimônio no início da meta"
+              value={startValue}
+              onChange={setStartValue}
+            />
+            <p className="text-[11px] text-slate-500 mt-1.5">
+              Ponto de partida da linha <span className="text-slate-400 font-semibold">Plano</span> no gráfico e base do
+              “adiantado/atrasado”. Foi capturado na criação da meta — corrija se a carteira ainda não estava lançada.
+            </p>
+          </div>
         )}
 
         {/* Preview ao vivo */}
@@ -253,7 +273,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-400">Tempo estimado</span>
               <span className={`font-bold ${Number.isFinite(preview.n) ? 'text-emerald-400' : 'text-yellow-400'}`}>
-                {Number.isFinite(preview.n) ? `~${formatMonths(Math.ceil(preview.n))}` : 'Sem caminho de chegada'}
+                {preview.months !== null ? `~${formatMonths(preview.months)}` : 'Sem caminho de chegada'}
               </span>
             </div>
             {preview.projDate && (

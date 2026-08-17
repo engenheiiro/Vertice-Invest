@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { annualToMonthly, fv, monthsRemaining, requiredMonthly, decomposeProgress, monthsSaved, computeStreak, resolveGoalStatus } from '../utils/goalMath.js';
+import { annualToMonthly, fv, monthsRemaining, requiredMonthly, decomposeProgress, monthsSaved, computeStreak, resolveGoalStatus, calendarMonthsBetween } from '../utils/goalMath.js';
 
 describe('goalMath', () => {
   describe('annualToMonthly', () => {
@@ -179,6 +179,52 @@ describe('goalMath', () => {
     it('alvo zero não promove (evita divisão/estado inválido)', () => {
       const d = resolveGoalStatus('ACTIVE', 0, 0, 0, 0);
       expect(d.changed).toBe(false);
+    });
+  });
+
+  describe('calendarMonthsBetween', () => {
+    // Réplica de computeGoalProjection: a data prevista vem de addMonths(hoje, n)
+    // e o contador "Faltam N meses" é derivado DELA, nunca de arredondar `n`.
+    const addMonths = (base, months) => {
+      const d = new Date(base);
+      const whole = Math.floor(months);
+      d.setMonth(d.getMonth() + whole);
+      d.setDate(d.getDate() + Math.round((months - whole) * 30));
+      return d;
+    };
+    const monthsLeftFor = (now, n) => calendarMonthsBetween(now, addMonths(now, n));
+
+    it('conta meses-calendário ignorando o dia', () => {
+      expect(calendarMonthsBetween(new Date(2026, 7, 31), new Date(2026, 8, 1))).toBe(1);
+      expect(calendarMonthsBetween(new Date(2026, 7, 1), new Date(2027, 1, 26))).toBe(6);
+      expect(calendarMonthsBetween(new Date(2026, 7, 17), new Date(2026, 7, 30))).toBe(0);
+    });
+
+    it('regressão: 6,31 meses em 17/08 são "6 meses" e fevereiro, não "7"', () => {
+      // Com Math.ceil(n) o cartão dizia "Faltam 7 meses" ao lado de "fevereiro de
+      // 2027" — e agosto + 7 é março.
+      const now = new Date(2026, 7, 17);
+      const projected = addMonths(now, 6.309);
+      expect(projected.getMonth()).toBe(1); // fevereiro
+      expect(monthsLeftFor(now, 6.309)).toBe(6);
+    });
+
+    it('"faltam N meses" sempre aponta para o mês da data prevista', () => {
+      // Varre todo dia do mês e a faixa fracionária: é justamente onde ceil/round
+      // divergiam, porque addMonths soma a fração como ~30 dias.
+      for (let day = 1; day <= 28; day++) {
+        for (const frac of [0.05, 0.3, 0.49, 0.5, 0.51, 0.7, 0.95]) {
+          for (const whole of [0, 1, 6, 11, 17]) {
+            const now = new Date(2026, 7, day);
+            const n = whole + frac;
+            const projected = addMonths(now, n);
+            const monthsLeft = monthsLeftFor(now, n);
+            const labelled = new Date(now.getFullYear(), now.getMonth() + monthsLeft, 1);
+            expect(labelled.getMonth(), `dia ${day}, n=${n}`).toBe(projected.getMonth());
+            expect(labelled.getFullYear(), `dia ${day}, n=${n}`).toBe(projected.getFullYear());
+          }
+        }
+      }
     });
   });
 });

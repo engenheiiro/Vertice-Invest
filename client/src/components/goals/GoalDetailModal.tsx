@@ -1,9 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useTheme } from '../../contexts/ThemeContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
-} from 'recharts';
 import {
   Plus, Pencil, Trash2, Loader2, ArrowUpRight, TrendingUp, TrendingDown, CheckCircle2,
   AlertTriangle, Info, Calendar, Target as TargetIcon, Flame, Sparkles, Trophy,
@@ -19,6 +15,7 @@ import { getCoachMessages, type CoachTone, type CoachMessage } from '../../utils
 import { getGoalTheme, getGoalIcon, formatMonths } from './goalTheme';
 import { ContributionModal } from './ContributionModal';
 import { CreateGoalModal } from './CreateGoalModal';
+import { GoalTrajectoryChart } from './GoalTrajectoryChart';
 
 interface GoalDetailModalProps {
   isOpen: boolean;
@@ -61,10 +58,6 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
   const { activeWalletId } = useWallet();
   const confirm = useConfirm();
   const queryClient = useQueryClient();
-  const { theme: uiTheme } = useTheme();
-  const chartTooltipStyle = uiTheme === 'light'
-    ? { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, color: '#0f172a' }
-    : { background: '#0B101A', border: '1px solid #1e293b', borderRadius: 8, fontSize: 12 };
   const [contribOpen, setContribOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [whatIfPmt, setWhatIfPmt] = useState<number | null>(null);
@@ -115,6 +108,10 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
       addToast(crossed >= 100 ? '🏆 Meta conquistada!' : `🎉 Você cruzou ${crossed}% da meta!`, 'success');
       updateMutation.mutate({ lastCelebratedMilestone: crossed });
     }
+    // Deps propositalmente curtas: `updateMutation.mutate` invalida ['goal', id],
+    // o refetch devolve um objeto `goal` novo e, com `goal`/`updateMutation` nas
+    // deps, o efeito voltaria a rodar — laço infinito de mutação e toast.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goal?.progressPct, goal?.lastCelebratedMilestone]);
 
   const chartData = data?.trajectory || [];
@@ -162,7 +159,6 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
 
   const theme = goal ? getGoalTheme(goal.color) : getGoalTheme('emerald');
   const Icon = getGoalIcon(goal?.icon);
-  const fmtAxis = (t: string) => new Date(t).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
 
   const hero = coachMessages[0];
   const monthAportado = data?.currentMonth.contributions ?? 0;
@@ -262,39 +258,7 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
             </div>
 
             {/* Gráfico: Real + Plano + Projeção */}
-            {chartData.length > 1 && (
-              <div className="bg-base border border-slate-800 rounded-xl p-4">
-                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-3">Trajetória da meta</p>
-                <ResponsiveContainer width="100%" height={220}>
-                  <ComposedChart data={chartData} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="goalReal" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={theme.stroke} stopOpacity={0.35} />
-                        <stop offset="100%" stopColor={theme.stroke} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="t" tickFormatter={fmtAxis} tick={{ fontSize: 9, fill: '#64748b' }} interval="preserveStartEnd" minTickGap={28} />
-                    <YAxis tick={{ fontSize: 9, fill: '#64748b' }} width={48} tickFormatter={(v) => formatCompact(v, null)} />
-                    <Tooltip
-                      contentStyle={chartTooltipStyle}
-                      labelStyle={{ color: '#94a3b8' }}
-                      labelFormatter={(t) => new Date(t).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-                      formatter={(value: number, key: string) => [formatCurrency(value), key === 'real' ? 'Real' : key === 'planned' ? 'Plano' : 'Projeção']}
-                    />
-                    <ReferenceLine y={goal.targetAmount} stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1} />
-                    <Area type="monotone" dataKey="real" stroke={theme.stroke} strokeWidth={2} fill="url(#goalReal)" connectNulls={false} dot={false} />
-                    <Line type="monotone" dataKey="planned" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls />
-                    <Line type="monotone" dataKey="projected" stroke="#60a5fa" strokeWidth={2} strokeDasharray="2 3" dot={false} connectNulls />
-                  </ComposedChart>
-                </ResponsiveContainer>
-                <div className="flex flex-wrap items-center gap-4 mt-2 text-[10px] text-slate-500">
-                  <span className="inline-flex items-center gap-1"><span className="w-3 h-0.5 rounded" style={{ background: theme.stroke }} /> Real</span>
-                  <span className="inline-flex items-center gap-1"><span className="w-3 h-0.5 rounded bg-slate-400" /> Plano</span>
-                  <span className="inline-flex items-center gap-1"><span className="w-3 h-0.5 rounded bg-blue-400" /> Projeção</span>
-                  <span className="inline-flex items-center gap-1"><span className="w-3 h-0.5 rounded bg-amber-500" /> Meta</span>
-                </div>
-              </div>
-            )}
+            <GoalTrajectoryChart points={chartData} targetAmount={goal.targetAmount} stroke={theme.stroke} />
 
             {/* Aporte do mês */}
             {!goal.achieved && goal.monthlyTarget > 0 && (

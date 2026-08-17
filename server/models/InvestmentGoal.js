@@ -35,6 +35,10 @@ const InvestmentGoalSchema = new mongoose.Schema({
 
   // Encadeamento sequencial: aponta para a meta "anterior" nesta jornada.
   previousGoalId: { type: mongoose.Schema.Types.ObjectId, ref: 'InvestmentGoal', default: null },
+  // Jornada (nome da cadeia) à qual este marco pertence. A ORDEM continua vindo
+  // de previousGoalId; isto aqui carrega só a identidade. Null = cadeia ainda
+  // sem nome, e o front cai no rótulo derivado da meta final.
+  journey: { type: mongoose.Schema.Types.ObjectId, ref: 'GoalJourney', default: null },
 
   status: { type: String, enum: ['ACTIVE', 'ACHIEVED', 'ARCHIVED'], default: 'ACTIVE' },
   achievedAt: { type: Date }, // quando cruzou o alvo (vira a "Data real")

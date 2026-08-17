@@ -11,6 +11,7 @@ import {
     updateGoal,
     deleteGoal,
     clearAllGoals,
+    renameJourney,
     addContribution,
     deleteContribution,
 } from '../controllers/goalsController.js';
@@ -20,6 +21,7 @@ import {
     addContributionSchema,
     goalIdParamSchema,
     contributionIdParamSchema,
+    renameJourneySchema,
 } from '../schemas/goalsSchemas.js';
 
 const router = express.Router();
@@ -39,6 +41,9 @@ router.post('/', writeLimiter, validate(createGoalSchema), createGoal);
 router.get('/:id', validate(goalIdParamSchema), getGoal);
 router.put('/:id', writeLimiter, validate(updateGoalSchema), updateGoal);
 router.delete('/:id', writeLimiter, validate(goalIdParamSchema), deleteGoal);
+
+// Nomeia a jornada a partir de QUALQUER marco dela — o controller percorre a cadeia.
+router.put('/:id/journey', writeLimiter, validate(renameJourneySchema), renameJourney);
 
 router.post('/:id/contributions', writeLimiter, validate(addContributionSchema), addContribution);
 router.delete('/:id/contributions/:cid', writeLimiter, validate(contributionIdParamSchema), deleteContribution);

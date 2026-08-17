@@ -45,7 +45,10 @@ export const getGoalIcon = (icon?: string): LucideIcon => GOAL_ICONS[icon || 'ta
 /** Formata meses como "Xa Ym" (ou "Y meses" se < 1 ano). */
 export const formatMonths = (months: number | null): string => {
   if (months === null || !Number.isFinite(months)) return '—';
-  if (months <= 0) return 'concluído';
+  if (months < 0) return 'concluído';
+  // Zero é chegada DENTRO do mês corrente, não meta batida (essa tem estado
+  // próprio, "Conquistada"). Escrever "concluído" aqui mentia na reta final.
+  if (months === 0) return 'este mês';
   const years = Math.floor(months / 12);
   const rest = months % 12;
   if (years === 0) return `${rest} ${rest === 1 ? 'mês' : 'meses'}`;

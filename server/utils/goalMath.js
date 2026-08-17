@@ -89,6 +89,21 @@ export const requiredMonthly = (pv, annualRate, target, monthsToDeadline) => {
 };
 
 /**
+ * Distância em MESES-CALENDÁRIO entre duas datas (jan→fev = 1, ignorando o dia).
+ *
+ * O contador "Faltam N meses" tem que ser derivado daqui, e não de um
+ * arredondamento independente de `monthsRemaining`: a data prevista vem de
+ * addMonths(hoje, n), que soma a parte fracionária como ~30 dias, então o mês em
+ * que ela cai depende do DIA do mês de hoje. Qualquer regra de arredondamento
+ * sobre `n` (ceil, round) diverge do mês exibido em alguma borda — com ceil,
+ * 6,31 meses virava "Faltam 7 meses" ao lado de "fevereiro de 2027", e agosto
+ * + 7 é março. Contando meses-calendário até a própria data prevista, o número e
+ * o mês apontam para o mesmo lugar em qualquer dia.
+ */
+export const calendarMonthsBetween = (from, to) =>
+    (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+
+/**
  * Decompõe a variação do patrimônio entre o que veio de APORTE e o que veio do
  * MERCADO (valorização/proventos). fromMarket = Δpatrimônio − aportes.
  */
