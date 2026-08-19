@@ -72,7 +72,19 @@ export const DEFAULT_THRESHOLDS = {
     // Atraso do último PU do Tesouro em DIAS ÚTEIS — não em horas. O Tesouro só
     // publica em dia útil, então em horas todo domingo acusaria ~52h de atraso
     // sobre a sexta e o painel amanheceria amarelo todo fim de semana.
-    treasuryBusinessDaysStale: { warn: 2, critical: 4 },
+    //
+    // O piso saudável NÃO é zero: o arquivo oficial sai na manhã do dia D com a
+    // Data Base D-1 — medido em 19/08/2026, o arquivo publicado em 18/08 às 10:20
+    // trazia 17/08 como linha mais recente. Somado ao cron das 18:30, o painel
+    // fica estruturalmente em 1 dia útil de atraso à noite e 2 na manhã seguinte,
+    // antes da ingestão do dia. Alarmar em 2 é alarmar todo dia útil de manhã por
+    // algo que ninguém pode consertar — a forma mais rápida de tornar o alarme inútil.
+    //
+    // Os limiares ficam ancorados no que de fato dói: MAX_PU_STALE_DAYS = 10 dias
+    // CORRIDOS de utils/fixedIncome.js, ponto em que a marcação a mercado desliga
+    // e a posição volta para o accrual. 3 dias úteis (~5 corridos) avisa com folga;
+    // 5 (~7 corridos) é crítico e ainda sobra margem antes do desligamento.
+    treasuryBusinessDaysStale: { warn: 3, critical: 5 },
     // Fração de séries temporais (AssetHistory) mais velhas que `timeSeriesStaleAfterHours`.
     // Fração, e não média: a base real tem cauda longa (série morta de 199 dias)
     // que puxa a média para 115h enquanto 84% das séries estão abaixo de 72h — a
@@ -391,7 +403,7 @@ const treasuryCheck = (facts, th) => {
         detail: !hasSeries
             ? 'Nenhuma série de PU encontrada'
             : `Último PU tem ${days} dia(s) útil(eis) de atraso (${facts.treasury.titles} títulos)`,
-        hint: 'treasuryPriceService. Sem PU recente a renda fixa cai para accrual (fail-closed) e o snapshot marca na curva.',
+        hint: 'treasuryPriceService. A fonte publica com 1 dia útil de defasagem, então 1–2 dias é o normal. Passando de 10 dias corridos a renda fixa cai para accrual (fail-closed) e o snapshot marca na curva.',
     });
 };
 
