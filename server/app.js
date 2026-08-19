@@ -16,6 +16,7 @@ import { sanitizeInput } from './middleware/sanitize.js'; // (S8) anti-injeção
 import { correlationId } from './middleware/correlationId.js'; // (D12) correlation id
 import { accessLog } from './middleware/accessLog.js'; // (D12) log de request concluída
 import { csrfProtection } from './middleware/csrf.js'; // (1.4) CSRF double-submit
+import { collectShellScriptHashes, isStaticAssetPath } from './utils/staticShell.js';
 import { errorHandler } from './middleware/errorHandler.js'; // (6.1) erro estruturado
 import { productionErrorSanitizer } from './middleware/productionErrorSanitizer.js';
 import { mongoCircuitBreaker, getMongoBreakerState } from './middleware/mongoCircuitBreaker.js'; // (6.9) disjuntor do MongoDB
@@ -69,6 +70,19 @@ if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_API_DOCS === 'tr
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { customSiteTitle: 'Vértice Invest API' }));
 }
 
+// Caminho do shell buildado. Declarado aqui em cima porque a CSP abaixo precisa
+// ler os HTML do build para autorizar os scripts inline do próprio app.
+const distPath = path.resolve(__dirname, '../client/dist');
+
+// Scripts inline que o shell realmente executa: anti-FOUC de tema, GA4 e a
+// auto-recuperação de build velho. Sem estes hashes o navegador bloqueia os três
+// — foi o que aconteceu em produção: o Analytics nunca registrou um evento e o
+// anti-FOUC nunca rodou (flash escuro em quem usa tema claro).
+//
+// Hash e não nonce: o service worker precacheia o index.html, então um nonce por
+// request seria servido do cache com valor velho e a CSP bloquearia igual.
+const shellScriptHashes = collectShellScriptHashes(distPath);
+
 app.use(helmet({
   hsts: process.env.NODE_ENV === 'production'
     ? { maxAge: 31536000, includeSubDomains: true }
@@ -76,11 +90,26 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "https://www.mercadopago.com.br", "https://sdk.mercadopago.com", "https://secure.mlstatic.com"],
+      scriptSrc: [
+        "'self'",
+        "https://www.mercadopago.com.br",
+        "https://sdk.mercadopago.com",
+        "https://secure.mlstatic.com",
+        "https://www.googletagmanager.com", // GA4 (gtag.js)
+        ...shellScriptHashes,
+      ],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https://images.unsplash.com", "https://*.unsplash.com", "https://http2.mlstatic.com"],
-      connectSrc: ["'self'", ...(process.env.SENTRY_DSN ? ["https://*.sentry.io"] : []), "https://api.mercadopago.com"],
+      imgSrc: ["'self'", "data:", "https://images.unsplash.com", "https://*.unsplash.com", "https://http2.mlstatic.com", "https://www.googletagmanager.com", "https://*.google-analytics.com"],
+      // GA4 manda os eventos por fetch/beacon: sem estes o gtag carrega e mede nada.
+      connectSrc: [
+        "'self'",
+        ...(process.env.SENTRY_DSN ? ["https://*.sentry.io"] : []),
+        "https://api.mercadopago.com",
+        "https://*.google-analytics.com",
+        "https://*.analytics.google.com",
+        "https://*.googletagmanager.com",
+      ],
       objectSrc: ["'none'"],
       upgradeInsecureRequests: [],
     },
@@ -247,7 +276,6 @@ app.use('/api/public', publicRoutes);
 
 app.use(sitemapRouter);
 
-const distPath = path.resolve(__dirname, '../client/dist');
 if (fs.existsSync(distPath)) {
   // Cache-Control consciente do build:
   // - index.html / service worker / manifest → no-cache (revalida sempre): o navegador
@@ -265,11 +293,23 @@ if (fs.existsSync(distPath)) {
     },
   }));
   app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      // O shell SPA nunca deve ser cacheado sem revalidação, senão referencia chunks antigos.
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(path.join(distPath, 'index.html'));
+    // Rota de API inexistente responde 404 — antes caía aqui e a requisição
+    // ficava pendurada até o timeout do cliente, sem status e sem log de erro.
+    if (req.path.startsWith('/api')) {
+      return res.status(404).json({ error: 'Rota não encontrada' });
     }
+    // ARQUIVO que não existe no build é 404, nunca o shell. Devolver index.html
+    // com 200 para /assets/algo.js entrega HTML onde o navegador esperava um
+    // módulo ("Expected a JavaScript-or-Wasm module script but the server
+    // responded with a MIME type of text/html") e trava o app inteiro num erro
+    // que não diz o que aconteceu. É também o 404 que a auto-recuperação do
+    // index.html usa para saber que o shell em cache está velho.
+    if (isStaticAssetPath(req.path)) {
+      return res.status(404).type('text/plain').send('Not Found');
+    }
+    // O shell SPA nunca deve ser cacheado sem revalidação, senão referencia chunks antigos.
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(path.join(distPath, 'index.html'));
   });
 } else {
   app.get('/', (req, res) => {

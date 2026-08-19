@@ -68,6 +68,89 @@
         } catch (_) { /* padrão escuro: não faz nada */ }
       })();
     </script>
+    <!-- Auto-recuperação de shell velho. O service worker roda em 'prompt': ele
+         continua servindo o index.html de um build antigo até o usuário aceitar o
+         <ReloadPrompt> — que mora DENTRO do bundle que acabou de falhar. Se os
+         chunks daquele build já saíram do ar, o app não inicia, não consegue
+         pedir a atualização e o usuário fica trancado do lado de fora vendo tela
+         branca. Este script é a única parte que ainda roda nesse estado.
+
+         Precisa vir ANTES do módulo para já estar escutando quando ele falhar. -->
+    <script>
+      (function () {
+        var KEY = 'vertice-shell-recovery';
+        var recovering = false;
+
+        function jaTentou() {
+          try { return !!sessionStorage.getItem(KEY); } catch (_) { return false; }
+        }
+
+        // Segunda falha na mesma aba: a limpeza não resolveu (build realmente
+        // quebrado, ou rede fora). Recarregar de novo viraria loop infinito, então
+        // trocamos a tela branca por algo que diga o que houve.
+        function avisar() {
+          var root = document.getElementById('root');
+          if (!root || root.getAttribute('data-recovery-notice')) return;
+          root.setAttribute('data-recovery-notice', '1');
+          root.innerHTML =
+            '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;'
+            + 'background:#090C11;color:#e6edf3;font-family:Manrope,system-ui,sans-serif;padding:24px;text-align:center">'
+            + '<div style="max-width:420px">'
+            + '<h1 style="font-size:18px;font-weight:800;margin:0 0 8px">Não foi possível carregar o app</h1>'
+            + '<p style="font-size:14px;line-height:1.5;color:#8b949e;margin:0 0 16px">'
+            + 'Limpamos o cache local e mesmo assim não carregou. Verifique sua conexão e tente novamente.</p>'
+            + '<button onclick="location.reload()" style="background:#2563EB;color:#fff;border:0;border-radius:10px;'
+            + 'padding:10px 18px;font-size:14px;font-weight:700;cursor:pointer">Tentar de novo</button>'
+            + '</div></div>';
+        }
+
+        function recuperar(motivo) {
+          if (recovering) return;
+          if (jaTentou()) { avisar(); return; }
+          recovering = true;
+          try { sessionStorage.setItem(KEY, motivo); } catch (_) { /* modo privado: segue */ }
+
+          var limpezas = [];
+          if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+            limpezas.push(
+              navigator.serviceWorker.getRegistrations()
+                .then(function (regs) { return Promise.all(regs.map(function (r) { return r.unregister(); })); })
+                .catch(function () {})
+            );
+          }
+          if (window.caches && caches.keys) {
+            limpezas.push(
+              caches.keys()
+                .then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+                .catch(function () {})
+            );
+          }
+          Promise.all(limpezas).then(function () { location.reload(); });
+        }
+
+        // Falha de <script>/<link> não borbulha: só a fase de captura no window vê.
+        window.addEventListener('error', function (e) {
+          var el = e.target;
+          if (!el || el === window || !el.tagName) return;
+          var tag = el.tagName.toUpperCase();
+          var rel = (el.rel || '').toLowerCase();
+          if (tag === 'SCRIPT' || (tag === 'LINK' && /stylesheet|modulepreload|preload/.test(rel))) {
+            recuperar('asset');
+          }
+        }, true);
+
+        // Chunk lazy (import dinâmico) que sumiu do servidor. Mensagens são
+        // específicas de propósito: 'Failed to fetch' cru também aparece em
+        // chamada de API offline, e ali limpar cache seria destrutivo à toa.
+        window.addEventListener('unhandledrejection', function (e) {
+          var reason = e && e.reason;
+          var msg = String((reason && reason.message) || reason || '');
+          if (/dynamically imported module|Importing a module script failed|error loading dynamically imported/i.test(msg)) {
+            recuperar('chunk');
+          }
+        });
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/index.tsx"></script>
   </body>
