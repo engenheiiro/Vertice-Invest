@@ -1,0 +1,974 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plano de Divulgação — Vértice Invest (ago/2026)</title>
+<style>
+  @font-face{
+    font-family:'Manrope';
+    src:url('../client/src/assets/fonts/manrope-latin.woff2') format('woff2');
+    font-weight:200 800; font-style:normal; font-display:swap;
+  }
+
+  :root{
+    --ground:#E7EBF2; --surface:#FFFFFF; --raised:#F4F7FC;
+    --line:#D3DAE6; --line-soft:#E2E8F1;
+    --ink:#131922; --ink-2:#3E4A5C; --ink-3:#68758A;
+    --accent:#2563EB; --accent-soft:#E5EDFF;
+    --ok:#047857; --ok-soft:#D9F2E6;
+    --warn:#A25C00; --warn-soft:#FCEED6;
+    --risk:#C2312B; --risk-soft:#FBE3E1;
+    --plum:#6D3FBF; --plum-soft:#EDE5FC;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --measure:74ch;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#090C11; --surface:#141922; --raised:#1B222D;
+      --line:#2A3341; --line-soft:#212936;
+      --ink:#EAEFF7; --ink-2:#A8B4C6; --ink-3:#76839A;
+      --accent:#5B94FF; --accent-soft:#16233C;
+      --ok:#34D399; --ok-soft:#0F2A22;
+      --warn:#FBBF24; --warn-soft:#2C2210;
+      --risk:#F87171; --risk-soft:#2E1618;
+      --plum:#A78BFA; --plum-soft:#231C38;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#090C11; --surface:#141922; --raised:#1B222D;
+    --line:#2A3341; --line-soft:#212936;
+    --ink:#EAEFF7; --ink-2:#A8B4C6; --ink-3:#76839A;
+    --accent:#5B94FF; --accent-soft:#16233C;
+    --ok:#34D399; --ok-soft:#0F2A22;
+    --warn:#FBBF24; --warn-soft:#2C2210;
+    --risk:#F87171; --risk-soft:#2E1618;
+    --plum:#A78BFA; --plum-soft:#231C38;
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;background:var(--ground);color:var(--ink);
+    font-family:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    font-size:16px;line-height:1.62;-webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px 110px;}
+
+  header.top{padding:64px 0 36px;border-bottom:1px solid var(--line);}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--accent);margin:0 0 16px;}
+  h1{font-size:clamp(32px,5vw,48px);line-height:1.07;letter-spacing:-.028em;
+    font-weight:800;margin:0 0 16px;text-wrap:balance;}
+  .standfirst{font-size:17.5px;color:var(--ink-2);max-width:var(--measure);margin:0;}
+  .docmeta{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;}
+  .docmeta span{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
+    text-transform:uppercase;background:var(--raised);color:var(--ink-3);
+    padding:5px 10px;border-radius:5px;border:1px solid var(--line-soft);}
+
+  nav.toc{margin:36px 0 0;padding:20px 22px;background:var(--surface);
+    border:1px solid var(--line);border-radius:10px;}
+  nav.toc h2{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-3);margin:0 0 12px;font-weight:600;}
+  nav.toc ol{margin:0;padding-left:20px;columns:2;column-gap:32px;font-size:14.5px;}
+  nav.toc li{margin-bottom:5px;break-inside:avoid;}
+  nav.toc a{color:var(--ink-2);text-decoration:none;border-bottom:1px solid transparent;}
+  nav.toc a:hover,nav.toc a:focus{color:var(--accent);border-bottom-color:var(--accent);}
+  @media (max-width:640px){nav.toc ol{columns:1;}}
+
+  section.block{margin-top:72px;scroll-margin-top:24px;}
+  section.block > h2{font-size:27px;font-weight:800;letter-spacing:-.022em;
+    margin:0 0 10px;line-height:1.2;padding-bottom:14px;border-bottom:2px solid var(--ink);}
+  section.block > .lede{margin:16px 0 24px;color:var(--ink-2);
+    max-width:var(--measure);font-size:15.5px;}
+  h3.sub{font-size:18px;font-weight:800;letter-spacing:-.015em;margin:34px 0 10px;}
+  p{max-width:var(--measure);}
+  section.block p{color:var(--ink-2);font-size:15px;}
+  section.block p b,section.block li b{color:var(--ink);}
+  ul.plain{max-width:var(--measure);font-size:15px;color:var(--ink-2);padding-left:20px;}
+  ul.plain li{margin-bottom:7px;}
+
+  code{font-family:var(--mono);font-size:.87em;background:var(--raised);
+    padding:1.5px 5px;border-radius:4px;border:1px solid var(--line-soft);
+    color:var(--ink);word-break:break-word;}
+
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);
+    border-radius:10px;background:var(--surface);margin-top:8px;}
+  table{border-collapse:collapse;width:100%;min-width:640px;font-size:14.5px;}
+  th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line-soft);
+    vertical-align:top;color:var(--ink-2);}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-3);font-weight:600;background:var(--raised);}
+  td b{color:var(--ink);}
+  tbody tr:last-child td{border-bottom:none;}
+  td.num{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap;color:var(--ink);}
+  td small{display:block;margin-top:3px;font-size:11px;font-weight:600;color:var(--ink-3);
+    font-family:var(--mono);letter-spacing:.04em;}
+
+  .st{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+    padding:3px 7px;border-radius:5px;font-weight:700;white-space:nowrap;display:inline-block;}
+  .st-ok{background:var(--ok-soft);color:var(--ok);}
+  .st-no{background:var(--risk-soft);color:var(--risk);}
+  .st-open{background:var(--warn-soft);color:var(--warn);}
+
+  .phase-head{display:flex;gap:18px;align-items:flex-start;
+    padding-bottom:18px;border-bottom:2px solid var(--ink);margin-top:56px;}
+  .phase-num{font-family:var(--mono);font-size:13px;font-weight:700;
+    color:var(--ground);background:var(--ink);width:34px;height:34px;flex:0 0 34px;
+    border-radius:8px;display:grid;place-items:center;margin-top:2px;}
+  .phase-title{flex:1;min-width:0;}
+  .phase-title h3{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:0 0 4px;line-height:1.2;}
+  .phase-title p{margin:0;color:var(--ink-2);font-size:14.5px;}
+  .phase-when{font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+    color:var(--ink-3);white-space:nowrap;padding-top:8px;}
+
+  .tasks{display:flex;flex-direction:column;gap:1px;background:var(--line-soft);
+    border:1px solid var(--line);border-top:none;border-radius:0 0 10px 10px;overflow:hidden;}
+  .task{background:var(--surface);padding:20px 22px;
+    display:grid;grid-template-columns:30px 1fr;gap:0 16px;align-items:start;}
+  .task-n{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);
+    font-variant-numeric:tabular-nums;padding-top:3px;}
+  .task-body h4{font-size:16.5px;font-weight:700;margin:0 0 8px;
+    letter-spacing:-.01em;line-height:1.35;color:var(--ink);}
+  .task-body p{margin:0;color:var(--ink-2);font-size:14.5px;}
+  .task-body p + p{margin-top:8px;}
+  .task-body ul{margin:9px 0 0;padding-left:19px;font-size:14.5px;color:var(--ink-2);}
+  .task-body li{margin-bottom:5px;}
+  .meta{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 9px;}
+  .chip{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+    padding:3px 8px;border-radius:5px;font-weight:700;white-space:nowrap;}
+  .c-site{background:var(--accent-soft);color:var(--accent);}
+  .c-yt{background:var(--risk-soft);color:var(--risk);}
+  .c-ig{background:var(--plum-soft);color:var(--plum);}
+  .c-law{background:var(--warn-soft);color:var(--warn);}
+  .c-data{background:var(--ok-soft);color:var(--ok);}
+  .c-cost{background:var(--raised);color:var(--ink-3);}
+
+  .callout{display:flex;gap:13px;align-items:flex-start;margin-top:22px;
+    padding:17px 19px;border-radius:10px;border:1px solid;}
+  .callout p{margin:0;font-size:14.5px;color:var(--ink);max-width:var(--measure);}
+  .callout p + p{margin-top:7px;}
+  .callout ul{margin:8px 0 0;padding-left:19px;font-size:14.5px;color:var(--ink);}
+  .callout strong.lbl{display:block;font-family:var(--mono);font-size:11px;
+    letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;}
+  .co-gate{border-style:dashed;border-color:var(--ok);background:var(--ok-soft);}
+  .co-gate strong.lbl{color:var(--ok);}
+  .co-warn{border-color:var(--warn);background:var(--warn-soft);}
+  .co-warn strong.lbl{color:var(--warn);}
+  .co-open{border-color:var(--accent);background:var(--accent-soft);}
+  .co-open strong.lbl{color:var(--accent);}
+
+  .avoid{display:grid;gap:1px;background:var(--line-soft);border:1px solid var(--line);
+    border-radius:10px;overflow:hidden;margin-top:8px;}
+  .avoid > div{background:var(--surface);padding:16px 20px;}
+  .avoid b{font-weight:800;color:var(--ink);display:block;margin-bottom:5px;}
+  .avoid p{margin:0;color:var(--ink-2);font-size:14px;}
+  .avoid p + p{margin-top:7px;}
+
+  footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--line);
+    color:var(--ink-3);font-size:13.5px;max-width:var(--measure);}
+  footer p{margin:0 0 10px;color:var(--ink-3);}
+  footer b{color:var(--ink-2);}
+
+  @media (max-width:640px){
+    .wrap{padding:0 18px 70px;}
+    header.top{padding:44px 0 28px;}
+    .phase-head{flex-wrap:wrap;gap:12px;}
+    .phase-when{width:100%;padding-top:0;}
+    .task{grid-template-columns:24px 1fr;gap:0 12px;padding:18px 15px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">Vértice Invest · Documento de planejamento</p>
+  <h1>Plano de divulgação e aquisição</h1>
+  <p class="standfirst">
+    Como sair de zero tráfego e zero seguidores até o primeiro assinante pago, com
+    R$&nbsp;500 por mês e uma pessoa. O documento serve a dois leitores: o dono do
+    projeto, que executa, e agentes de IA em conversas futuras, que precisam do
+    contexto verificado sem repetir a investigação.
+  </p>
+  <div class="docmeta">
+    <span>Criado 18/ago/2026</span>
+    <span>Escopo: site · YouTube · Instagram</span>
+    <span>Horizonte 12 semanas</span>
+    <span>Status: aguardando decisão D-01</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <h2>Índice</h2>
+  <ol>
+    <li><a href="#uso">Como usar este documento</a></li>
+    <li><a href="#contexto">Contexto do produto</a></li>
+    <li><a href="#estado">Estado verificado do código</a></li>
+    <li><a href="#restricoes">Restrições e premissas</a></li>
+    <li><a href="#decisoes">Decisões tomadas</a></li>
+    <li><a href="#abertas">Decisões em aberto</a></li>
+    <li><a href="#fase0">Fase 0 — Destravar</a></li>
+    <li><a href="#fase1">Fase 1 — Construir o que compõe</a></li>
+    <li><a href="#fase2">Fase 2 — Só então, dinheiro</a></li>
+    <li><a href="#metricas">Métricas</a></li>
+    <li><a href="#naofazer">O que não fazer</a></li>
+    <li><a href="#riscos">Riscos e revisão</a></li>
+  </ol>
+</nav>
+
+<!-- 1 -->
+<section class="block" id="uso">
+  <h2>1 · Como usar este documento</h2>
+
+  <h3 class="sub">Se você é o dono do projeto</h3>
+  <p>Execute na ordem numerada. As tarefas 01 a 21 são sequenciais por dependência,
+  não por calendário: as semanas indicadas são estimativa, os <b>portões</b> entre
+  fases é que mandam. Pular um portão é o único erro que compromete o plano inteiro.</p>
+
+  <h3 class="sub">Se você é um agente de IA lendo isto num chat novo</h3>
+  <p>Este documento é a fonte de verdade sobre a estratégia de aquisição do Vértice.
+  Antes de sugerir qualquer coisa:</p>
+  <ul class="plain">
+    <li>Leia a <a href="#estado">seção 3</a> — são afirmações sobre o código <b>verificadas
+      em 18/ago/2026</b>, com arquivo e linha. Reconfira antes de agir: o código muda.</li>
+    <li>Leia a <a href="#decisoes">seção 5</a> — várias alternativas óbvias
+      (prospecção fria, trial de 7 dias, vídeo de review) já foram avaliadas e
+      <b>rejeitadas com motivo</b>. Não as re-proponha sem argumento novo.</li>
+    <li>Leia a <a href="#abertas">seção 6</a> — o que ainda depende do dono.
+      Não trate decisão aberta como decidida.</li>
+    <li>Este é um plano de marketing e produto. Não é parecer jurídico nem
+      recomendação de investimento, e o projeto tem exposição regulatória real
+      (ver <a href="#abertas">D-02</a>).</li>
+  </ul>
+</section>
+
+<!-- 2 -->
+<section class="block" id="contexto">
+  <h2>2 · Contexto do produto</h2>
+  <p class="lede">O que um leitor novo precisa saber para as decisões abaixo fazerem sentido.</p>
+
+  <p>O Vértice Invest é uma plataforma de análise quantitativa de Ações, FIIs e Cripto:
+  um motor próprio pontua ativos em três eixos estruturais, monta rankings por perfil de
+  risco e emite <code>COMPRAR</code> / <code>AGUARDAR</code> por ativo. O produto tem
+  carteira com KPIs, sinais técnicos e uma trilha de cursos. Detalhes de arquitetura
+  estão no <code>CLAUDE.md</code> da raiz.</p>
+
+  <p>Para efeito de aquisição, o que importa é a estrutura de planos:</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Plano</th><th>Preço/mês</th><th>O que entrega de diferente</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><b>GUEST</b></td><td class="num">R$ 0</td>
+          <td>Carteira e cursos gratuitos. <b>Hoje não vê o Brasil 10</b> — é o problema central da Fase 0.</td></tr>
+        <tr><td><b>ESSENTIAL</b></td><td class="num">R$ 39,90</td>
+          <td>Brasil 10, sinais com atraso de 60 min, cursos Essential, 1 relatório.</td></tr>
+        <tr><td><b>PRO</b></td><td class="num">R$ 89,90</td>
+          <td>Research completo de Ações/FIIs/Cripto/ETF, Radar Alpha, Aporte Inteligente.</td></tr>
+        <tr><td><b>ELITE</b></td><td class="num">R$ 120,00</td>
+          <td>Ativos Globais (US/REIT), rebalanceamento por IA.</td></tr>
+        <tr><td><b>BLACK</b></td><td class="num">R$ 299,00</td>
+          <td>Masterclass e teto de todos os limites.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top:18px;"><b>O ticket de entrada de R$ 39,90 é a âncora de todo o
+  raciocínio de mídia paga deste plano.</b> Um CAC de R$ 400 significa dez meses de
+  assinatura só para empatar, antes de churn — é por isso que quase tudo aqui é
+  canal orgânico.</p>
+</section>
+
+<!-- 3 -->
+<section class="block" id="estado">
+  <h2>3 · Estado verificado do código</h2>
+  <p class="lede">Auditoria feita em 18/ago/2026 contra o repositório, na branch
+  <code>main</code>. Cada linha foi confirmada abrindo o arquivo — nada aqui é suposição.
+  Reconfira antes de agir se estiver lendo isto muito depois dessa data.</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Afirmação</th><th>Status</th><th>Onde</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>O backend já libera o Brasil 10 para GUEST</b><br>
+            <code>BRASIL_10</code> fica fora do gate de plano de propósito, com comentário explícito.</td>
+          <td><span class="st st-ok">Confirmado</span></td>
+          <td><code>server/controllers/researchController.js</code> (~l. 533, <code>RESEARCH_FEATURE_BY_CLASS</code>)</td>
+        </tr>
+        <tr>
+          <td><b>Quem bloqueia o Brasil 10 é o frontend</b><br>
+            A aba exige plano ESSENTIAL. É aqui que a tarefa 01 mexe.</td>
+          <td><span class="st st-ok">Confirmado</span></td>
+          <td><code>client/src/pages/Research.tsx:18</code> — <code>minPlan: 'ESSENTIAL'</code></td>
+        </tr>
+        <tr>
+          <td><b><code>research_br10</code> tem <code>GUEST: 0</code></b><br>
+            Não é o gate da rota; alimenta <code>check-access</code> e registro de uso. Precisa ser alinhado junto.</td>
+          <td><span class="st st-ok">Confirmado</span></td>
+          <td><code>server/config/subscription.js:108</code></td>
+        </tr>
+        <tr>
+          <td><b><code>/pricing</code> exige login</b><br>
+            Está dentro do <code>ProtectedAppLayout</code>, que envolve <code>ProtectedRoute</code> e redireciona para <code>/login</code>.</td>
+          <td><span class="st st-ok">Confirmado</span></td>
+          <td><code>client/src/App.tsx:119</code> · <code>components/auth/ProtectedRoute.tsx:23</code></td>
+        </tr>
+        <tr>
+          <td><b><code>robots.txt</code> bloqueia <code>/pricing</code></b> (e research, indicators, courses).</td>
+          <td><span class="st st-ok">Confirmado</span></td>
+          <td><code>client/public/robots.txt</code></td>
+        </tr>
+        <tr>
+          <td><b>O sitemap tem 2 URLs fixas</b> — <code>/</code> e <code>/terms</code>, hardcoded.</td>
+          <td><span class="st st-ok">Confirmado</span></td>
+          <td><code>server/routes/sitemapRouter.js</code></td>
+        </tr>
+        <tr>
+          <td><b>GA4 está instalado mas só mede pageview</b><br>
+            Zero chamadas <code>gtag(</code> em todo o <code>client/src</code>.</td>
+          <td><span class="st st-ok">Confirmado</span></td>
+          <td><code>client/index.html</code> (tag <code>G-V9QW6ZJEQW</code>)</td>
+        </tr>
+        <tr>
+          <td><b>O ranking publica 1× por semana</b> — segunda, 9h30 (<code>weekly-autopublish</code>). Decisivo contra o trial de 7 dias.</td>
+          <td><span class="st st-ok">Confirmado</span></td>
+          <td><code>server/services/schedulerService.js:636</code></td>
+        </tr>
+        <tr>
+          <td><b>Existe carteira pública compartilhável</b> com CTA de cadastro — loop de indicação pronto, faltando imagem de preview.</td>
+          <td><span class="st st-ok">Confirmado</span></td>
+          <td><code>client/src/pages/PublicWallet.tsx</code> · rota <code>/p/:token</code></td>
+        </tr>
+        <tr>
+          <td><b>Existe track record do algoritmo</b> — endpoint de acurácia (admin-only) e backtest contínuo.</td>
+          <td><span class="st st-ok">Confirmado</span></td>
+          <td><code>server/routes/researchRoutes.js:94</code> · <code>scripts/runBacktestEngine.js</code></td>
+        </tr>
+        <tr>
+          <td><b>O site está no ar e a home renderiza conteúdo</b> — sitemap responde, landing tem texto real (hero, planos, depoimentos).</td>
+          <td><span class="st st-ok">Confirmado</span></td>
+          <td><code>verticeinvest.com.br</code></td>
+        </tr>
+        <tr>
+          <td><b>O site aparece na busca por "Vértice Invest"</b></td>
+          <td><span class="st st-open">Não verificado</span></td>
+          <td>Só o Search Console responde — ver tarefa 03. Busca externa retornou apenas homônimos.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-warn">
+    <div>
+      <strong class="lbl">Concorrência de marca</strong>
+      <p>Existem pelo menos cinco empresas financeiras com nome parecido no Brasil:
+      Vértice Investimentos, Vértice Capital Management, Vertice Cred, Vertice
+      Corporation e Vértiq Invest. Elas são mais antigas e têm mais autoridade de
+      domínio. <b>Consequência prática:</b> mesmo a busca pelo seu próprio nome é
+      disputada — é o que justifica a tarefa 18.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section class="block" id="restricoes">
+  <h2>4 · Restrições e premissas</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Variável</th><th>Valor</th><th>Consequência no plano</th></tr></thead>
+      <tbody>
+        <tr><td><b>Orçamento</b></td><td class="num">R$ 500/mês</td>
+          <td>R$ 1.500 por trimestre. Suficiente para defesa de marca e retargeting; insuficiente para prospecção fria como motor.</td></tr>
+        <tr><td><b>Ticket de entrada</b></td><td class="num">R$ 39,90</td>
+          <td>Teto de CAC saudável ≈ R$ 120 (3 meses). Acima disso, desligue a campanha.</td></tr>
+        <tr><td><b>Equipe</b></td><td class="num">1 pessoa</td>
+          <td>Dev e conteúdo competem pelas mesmas horas. Fase 1 precisa de corte consciente.</td></tr>
+        <tr><td><b>Dedicação</b></td><td class="num">meio período</td>
+          <td>12 semanas é estimativa otimista. Com dedicação integral vira ~8 — não menos, porque indexação depende de calendário.</td></tr>
+        <tr><td><b>Base inicial</b></td><td class="num">zero</td>
+          <td>0 seguidores no Instagram, canal do YouTube sem monetização, 2 URLs no sitemap.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="block" id="decisoes">
+  <h2>5 · Decisões tomadas</h2>
+  <p class="lede">Alternativas já avaliadas e descartadas, com o motivo. Registradas para
+  não serem re-propostas a cada conversa nova.</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Decisão</th><th>Por quê</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Não usar Google Ads para prospecção fria</b><br>
+            <span class="st st-no">Rejeitado</span></td>
+          <td>R$ 500/mês a ~R$ 4/clique dão 125 cliques → ~4 cadastros → menos de 1 assinante. CAC acima de R$ 400 para ticket de R$ 39,90, e o volume não gera nem aprendizado estatístico.</td>
+        </tr>
+        <tr>
+          <td><b>Usar a verba em defesa de marca</b><br>
+            <span class="st st-ok">Adotado</span></td>
+          <td>CPC no próprio nome custa R$ 0,30–1,00 porque ninguém disputa. Dados os cinco homônimos, é o único gasto que se paga nesse orçamento: protege demanda já gerada em vez de comprar demanda nova.</td>
+        </tr>
+        <tr>
+          <td><b>YouTube por busca, não por monetização</b><br>
+            <span class="st st-ok">Adotado</span></td>
+          <td>Monetização rende ~R$ 20/mil views; um assinante rende R$ 39,90/mês recorrente. Perseguir tempo de exibição levaria a vídeos longos e genéricos. Vídeo é ativo buscável que compõe — mesma lógica do SEO programático.</td>
+        </tr>
+        <tr>
+          <td><b>Não fazer vídeo de "review" da própria plataforma</b><br>
+            <span class="st st-no">Rejeitado</span></td>
+          <td>"Testei a MELHOR plataforma do Brasil" posiciona o dono como terceiro avaliando o próprio produto. CDC art. 36 e CONAR exigem que anúncio seja identificável como tal, e superlativo exige comprovação. Converte pior: "eu construí" é mais forte quando é verdade.</td>
+        </tr>
+        <tr>
+          <td><b>Uma produção, três destinos</b><br>
+            <span class="st st-ok">Adotado</span></td>
+          <td>O mesmo vídeo vertical serve Reels, Shorts e TikTok. O canal não é a escolha; o formato e a narrativa são.</td>
+        </tr>
+        <tr>
+          <td><b>Perfil antes de alcance no Instagram</b><br>
+            <span class="st st-ok">Adotado</span></td>
+          <td>Reels alcançam por algoritmo, então zero seguidores não impede distribuição. O gargalo é o perfil vazio no momento do clique.</td>
+        </tr>
+        <tr>
+          <td><b>Trial de 7 dias do Brasil 10</b><br>
+            <span class="st st-no">Rejeitado</span></td>
+          <td>O ranking publica só às segundas: em 7 dias o usuário vê <b>um único</b> ranking, nunca a lista mudar nem as setas de delta — justamente o que justifica assinatura recorrente. O tráfego da Fase 1 é frio e converte em meses, não em dias, e trial expirado fecha a porta de um contato caro. Alternativa proposta: limite de <b>profundidade</b>, permanente (ver D-01).</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 6 -->
+<section class="block" id="abertas">
+  <h2>6 · Decisões em aberto</h2>
+  <p class="lede">Dependem do dono. Nenhum agente deve tratá-las como resolvidas.</p>
+
+  <div class="callout co-open">
+    <div>
+      <strong class="lbl">D-01 · Formato do acesso gratuito ao Brasil 10</strong>
+      <p><b>Status: aguardando decisão do dono.</b> O dono propôs liberar por 1 semana
+      ao usuário novo. A recomendação técnica foi rejeitar o trial (motivo na seção 5)
+      e adotar limite de profundidade permanente:</p>
+      <ul>
+        <li><b>GUEST vê:</b> a lista do Brasil 10, o score e a ação COMPRAR/AGUARDAR, mais o delta de posição — atualizado toda segunda, para sempre.</li>
+        <li><b>GUEST não vê:</b> a tese bull/bear, o <code>auditLog</code> e o modal de deep-dive do ativo.</li>
+      </ul>
+      <p>A lógica: a pessoa volta toda semana para ver o que mudou, quer saber
+      <i>por quê</i>, e o "por quê" é o paywall. O ESSENTIAL não fica oco — mantém
+      sinais, cursos e relatório. O <code>CLAUDE.md</code> já documenta o Brasil 10
+      como gratuito para todos os planos, então permanente é o desenho original.</p>
+      <p><b>Enquanto D-01 não for decidida, a tarefa 01 não pode ser implementada.</b></p>
+    </div>
+  </div>
+
+  <div class="callout co-open">
+    <div>
+      <strong class="lbl">D-02 · Enquadramento regulatório (CVM)</strong>
+      <p><b>Status: sem parecer.</b> A plataforma publica <code>COMPRAR</code> /
+      <code>AGUARDAR</code> por ativo. A Resolução CVM 20 trata publicação de
+      recomendação de valores mobiliários como atividade de analista, sujeita a
+      credenciamento. Enquanto o projeto era pessoal o risco era baixo; divulgação
+      em massa aumenta a exposição.</p>
+      <p>Isto não é parecer jurídico — é sinalização de que a consulta precisa
+      acontecer. A resposta define o que pode ir ao ar, principalmente a série de
+      track record (tarefa 17), que é o conteúdo mais forte disponível.</p>
+    </div>
+  </div>
+
+  <div class="callout co-open">
+    <div>
+      <strong class="lbl">D-03 · Certificação de serviços financeiros do Google Ads</strong>
+      <p><b>Status: não iniciada.</b> Anunciar serviços financeiros no Brasil exige
+      verificação via G2 Risk Solutions, comprovando autorização do regulador
+      (BACEN/CVM) ou qualificação para isenção. Sem isso a conta é reprovada.
+      O processo leva semanas e trava toda a Fase 2.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FASE 0 -->
+<section class="block" id="fase0">
+  <h2>7 · Fase 0 — Destravar</h2>
+  <p class="lede">Hoje todo visitante que chega ao site vaza. Enquanto isso for verdade,
+  qualquer esforço de tráfego é desperdício. Nada nesta fase depende de audiência —
+  é tudo trabalho interno.</p>
+
+  <div class="phase-head">
+    <div class="phase-num">0</div>
+    <div class="phase-title">
+      <h3>Fechar os vazamentos do funil</h3>
+      <p>Sete tarefas, nenhuma delas dependente de tráfego.</p>
+    </div>
+    <div class="phase-when">Semanas 1–2</div>
+  </div>
+
+  <div class="tasks">
+    <div class="task">
+      <div class="task-n">01</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-site">Site</span><span class="chip c-cost">~30 min</span><span class="chip c-law">Bloqueada por D-01</span></div>
+        <h4>Liberar o Brasil 10 para o plano GUEST</h4>
+        <p>A tarefa mais importante do plano. Hoje quem se cadastra de graça encontra
+        um produto vazio e precisa pagar R$ 39,90 no escuro.</p>
+        <p><b>O backend já está pronto</b> — só o frontend bloqueia. Implementação:</p>
+        <ul>
+          <li><code>client/src/pages/Research.tsx:18</code> — trocar <code>minPlan: 'ESSENTIAL'</code> por <code>'GUEST'</code> na aba <code>BRASIL_10</code>.</li>
+          <li><code>server/config/subscription.js:108</code> — alinhar <code>research_br10</code> para <code>GUEST: 1</code>, senão a UI libera e o <code>check-access</code>/registro de uso discordam.</li>
+          <li>Se D-01 confirmar o limite de profundidade: manter tese, <code>auditLog</code> e modal de deep-dive atrás do paywall.</li>
+          <li>Ajustar os testes que hoje fixam o comportamento antigo (<code>client/src/pages/Research.test.tsx</code> tem caso explícito de GUEST bloqueado).</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">02</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-site">Site</span><span class="chip c-cost">~1h</span></div>
+        <h4>Tirar <code>/pricing</code> de trás do login</h4>
+        <p>Quem clica em "ver planos" hoje bate num muro de login, e a página também
+        não existe para a busca. Mover a rota para fora do <code>ProtectedAppLayout</code>
+        e remover a linha correspondente do <code>robots.txt</code>.</p>
+        <p>A landing já mostra os planos numa seção, então o prejuízo hoje é parcial —
+        mas a URL <code>/pricing</code> é o destino natural de quem pesquisa
+        "vértice invest preço" e de qualquer anúncio futuro.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">03</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-data">Medição</span><span class="chip c-cost">~3h</span></div>
+        <h4>Search Console e eventos de conversão no GA4</h4>
+        <p>Sem isto, nenhuma outra tarefa é avaliável — é a instrumentação de todo o plano.</p>
+        <ul>
+          <li>Registrar o domínio no Google Search Console e submeter o sitemap. É a única fonte confiável sobre o que está indexado.</li>
+          <li>Instrumentar três eventos no GA4: <b>cadastro concluído</b>, <b>checkout iniciado</b>, <b>assinatura paga</b>.</li>
+          <li>Marcá-los como conversão no painel do GA4, senão não aparecem nos relatórios de aquisição.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">04</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-law">Jurídico</span><span class="chip c-cost">custo externo</span></div>
+        <h4>Consultar advogado sobre a Resolução CVM 20</h4>
+        <p>Ver <a href="#abertas">D-02</a>. Define o que pode ser publicado, em especial
+        a série de track record (tarefa 17). Não bloqueia nada da Fase 1 exceto essa tarefa.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">05</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-law">Jurídico</span><span class="chip c-cost">~1h + espera</span></div>
+        <h4>Abrir a certificação de serviços financeiros do Google Ads</h4>
+        <p>Ver <a href="#abertas">D-03</a>. Leva semanas e trava a Fase 2 inteira —
+        abra agora mesmo que só vá anunciar daqui a dois meses. O pedido precisa partir
+        de um admin da conta do Google Ads ou do perfil de pagamentos.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">06</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-yt">YouTube</span><span class="chip c-cost">~4h</span></div>
+        <h4>Montar o canal e ignorar a monetização</h4>
+        <p>Nome, banner, descrição com link para o site e um trailer de 60 segundos
+        explicando o que a plataforma faz.</p>
+        <p>Deixe explícito para si mesmo que os 1.000 inscritos e 4.000 horas <b>não são
+        meta</b>. O retorno é assinatura, não RPM — e otimizar para monetização levaria
+        aos vídeos errados.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">07</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-ig">Instagram</span><span class="chip c-cost">~3h</span></div>
+        <h4>Transformar o perfil em landing page</h4>
+        <p>Bio com a proposta em uma linha, link para o site, foto e destaques.
+        Zero seguidores não impede alcance — Reels são distribuídos por algoritmo —
+        mas perfil vazio derruba a conversão de quem clica.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">08</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-ig">Instagram</span><span class="chip c-cost">~6h</span></div>
+        <h4>Publicar 9 posts antes de buscar alcance</h4>
+        <p>Grade preenchida é pré-requisito de credibilidade. Use o que o produto já
+        gera: ranking da semana, um indicador explicado, um recorte do Brasil 10.
+        Ainda sem buscar tráfego — isto é cenário, não campanha.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout co-gate">
+    <div>
+      <strong class="lbl">Portão para a Fase 1</strong>
+      <p>Não avance sem estas duas respostas serem "sim":</p>
+      <ul>
+        <li>Um cadastro gratuito enxerga valor real em menos de 60 segundos?</li>
+        <li><code>/pricing</code> abre sem login, para qualquer visitante?</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- FASE 1 -->
+<section class="block" id="fase1">
+  <h2>8 · Fase 1 — Construir o que compõe</h2>
+  <p class="lede">Tudo aqui continua rendendo depois de pronto — o oposto de anúncio,
+  que deixa de existir no dia em que se para de pagar. É a fase mais longa e a que
+  decide o ano seguinte.</p>
+
+  <div class="phase-head">
+    <div class="phase-num">1</div>
+    <div class="phase-title">
+      <h3>Ativos permanentes: páginas e vídeos</h3>
+      <p>Quatro tarefas de site, três de conteúdo, uma condicionada ao jurídico.</p>
+    </div>
+    <div class="phase-when">Semanas 3–8</div>
+  </div>
+
+  <div class="tasks">
+    <div class="task">
+      <div class="task-n">09</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-site">Site</span><span class="chip c-cost">alto esforço</span></div>
+        <h4>SEO programático: uma página pública por ativo</h4>
+        <p><b>O maior ativo escondido do projeto.</b> O banco já tem
+        <code>MarketAsset</code> e <code>MarketAnalysis</code> com fundamentos de
+        centenas de tickers. Isso vira <code>/acoes/petr4</code>,
+        <code>/fiis/mxrf11</code>, com indicadores, score e tese.</p>
+        <p>"PETR4" sozinho tem dezenas de milhares de buscas por mês no Brasil. É
+        tráfego qualificado e recorrente, e nenhum concorrente copia sem ter
+        construído o mesmo motor.</p>
+        <p>Cuidados: cada página precisa de conteúdo suficiente para não ser tratada
+        como thin content; ativos sem dados devem sair do sitemap em vez de gerar
+        página vazia; e a página precisa de CTA para cadastro, senão vira tráfego sem funil.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">10</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-site">Site</span><span class="chip c-cost">~3h</span></div>
+        <h4>Sitemap dinâmico</h4>
+        <p>O <code>sitemapRouter.js</code> tem duas URLs hardcoded. Precisa gerar a
+        partir do banco, junto das páginas da tarefa 09, e revisar o
+        <code>robots.txt</code> — hoje ele bloqueia rotas que deveriam ranquear.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">11</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-site">Site</span><span class="chip c-cost">médio</span></div>
+        <h4>Pré-renderizar as páginas públicas</h4>
+        <p>SPA renderizada só no cliente ranqueia mal e devagar. As páginas públicas
+        precisam chegar ao Google como HTML pronto, não como shell mais JavaScript.
+        Vale para a landing, para <code>/pricing</code> e sobretudo para as páginas da tarefa 09.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">12</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-site">Site</span><span class="chip c-cost">~4h</span></div>
+        <h4>Imagem de preview dinâmica na carteira compartilhada</h4>
+        <p>A rota <code>/p/:token</code> já existe e já tem CTA para cadastro — é um
+        loop de indicação pronto e desligado. Falta a imagem de preview refletir a
+        rentabilidade daquela carteira.</p>
+        <p>Um link no WhatsApp exibindo "+18% no ano", publicado por um usuário real,
+        é mais persuasivo que qualquer anúncio comprado — e quem produz é o usuário.
+        Atenção à privacidade: o preview deve mostrar percentual, nunca valores absolutos.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">13</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-yt">YouTube</span><span class="chip c-cost">~10h</span></div>
+        <h4>O vídeo âncora: a história de construção</h4>
+        <p>"Passei 2 anos construindo um algoritmo para escolher ações — esse é o
+        resultado." Verdadeiro, identificável como conteúdo próprio, sem superlativo a
+        comprovar, e raro: quase ninguém no nicho tem essa história.</p>
+        <p>É o vídeo que fica fixado no canal e linkado em todo lugar. Mostre o motor
+        de verdade — os três eixos de score, o draft por perfil, a marcação a mercado
+        da renda fixa. A profundidade técnica <i>é</i> o diferencial.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">14</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-yt">YouTube</span><span class="chip c-cost">1 vídeo/semana</span></div>
+        <h4>Série de busca, não de entretenimento</h4>
+        <p>Títulos que casam com o que se pesquisa de verdade: "Como analisar um FII em
+        5 minutos", "A fórmula de Graham na prática", "P/VP: o que é e quando ignorar".</p>
+        <p>Estrutura fixa: explica o conceito, mostra a plataforma fazendo aquilo em
+        dois cliques, encerra com CTA. Descrição com link e capítulos.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">15</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-ig">Instagram</span><span class="chip c-cost">custo marginal zero</span></div>
+        <h4>Recortar 3–4 Reels de cada vídeo</h4>
+        <p>O mesmo vertical vai para Reels, Shorts e TikTok. Reels dão alcance barato e
+        morrem em 48h; servem para cadência e para descobrir qual gancho funciona antes
+        de investir dez horas num vídeo longo.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">16</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-ig">Instagram</span><span class="chip c-cost">~1h/semana</span></div>
+        <h4>Carrossel semanal do ranking</h4>
+        <p>Aqui o produto vira fábrica de conteúdo: o ranking é publicado toda segunda
+        às 9h30 pelo <code>weekly-autopublish</code>. Transformá-lo em carrossel é
+        formatação, não criação — e carrossel de dados é o formato que mais gera
+        salvamento no nicho.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">17</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-yt">YouTube</span><span class="chip c-ig">Instagram</span><span class="chip c-law">Bloqueada por D-02</span></div>
+        <h4>Série de track record</h4>
+        <p>O endpoint de acurácia e o backtest contínuo alimentam uma série inteira:
+        "meu algoritmo escolheu estas 10 ações em janeiro; olha onde estão hoje."
+        Verificável e impossível de imitar.</p>
+        <p>É também exatamente onde a CVM 20 morde. <b>Só publique depois da tarefa 04.</b></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout co-warn">
+    <div>
+      <strong class="lbl">Atenção à capacidade</strong>
+      <p>Em meio período, uma pessoa não entrega nove tarefas em seis semanas.
+      Se precisar cortar, <b>corte cadência de conteúdo</b> — as tarefas 14 e 15 viram
+      quinzenais — e nunca as tarefas de site. Vídeo parado deixa de render; página
+      publicada continua rendendo sozinha.</p>
+    </div>
+  </div>
+
+  <div class="callout co-gate">
+    <div>
+      <strong class="lbl">Portão para a Fase 2 (parcial)</strong>
+      <p>A distinção importa: a defesa de marca (tarefa 18) só depende de existir
+      conteúdo publicado — ligue assim que o primeiro vídeo sair, porque é aí que
+      começam as buscas pelo seu nome. As demais precisam de público acumulado:</p>
+      <ul>
+        <li>Retargeting (19): o site recebe ao menos 1.000 visitantes/mês?</li>
+        <li>Teste de prospecção (20): os eventos da tarefa 03 já mostram qual conteúdo vira cadastro?</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- FASE 2 -->
+<section class="block" id="fase2">
+  <h2>9 · Fase 2 — Só então, dinheiro</h2>
+  <p class="lede">R$ 500 por mês viram R$ 1.500 por trimestre, o suficiente para
+  aprender algo. Mas a ordem de gasto é sempre: defender primeiro, remarcar depois,
+  prospectar por último.</p>
+
+  <div class="phase-head">
+    <div class="phase-num">2</div>
+    <div class="phase-title">
+      <h3>Mídia paga com disciplina</h3>
+      <p>Distribuição sugerida da verba mensal, sujeita ao portão acima e a D-03.</p>
+    </div>
+    <div class="phase-when">Semanas 9–12, depois recorrente</div>
+  </div>
+
+  <div class="tasks">
+    <div class="task">
+      <div class="task-n">18</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-site">Google Ads</span><span class="chip c-cost">~R$ 100/mês</span></div>
+        <h4>Campanha de defesa de marca</h4>
+        <p>Com cinco homônimos no mesmo setor, quem ouvir falar do Vértice e pesquisar
+        o nome pode cair em qualquer um deles. CPC na própria marca custa R$ 0,30–1,00
+        porque ninguém disputa, então R$ 100/mês já saturam a demanda pelo nome neste
+        estágio.</p>
+        <p>É a primeira campanha a ligar e a última a desligar.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">19</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-site">Google Ads</span><span class="chip c-cost">~R$ 250/mês</span></div>
+        <h4>Retargeting de quem já visitou</h4>
+        <p>Converte muito melhor que tráfego frio porque a pessoa já conhece o produto,
+        e é barato porque o público é pequeno. Exige o portão da Fase 1 — antes disso
+        não há audiência para remarcar.</p>
+        <p>Priorize quem chegou às páginas de ativo da tarefa 09 e não se cadastrou:
+        é a intenção mais alta disponível.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">20</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-site">Google Ads</span><span class="chip c-cost">~R$ 150/mês</span></div>
+        <h4>Teste de prospecção — só a partir do 3º mês</h4>
+        <p>É aqui que a verba mensal faz diferença. R$ 150/mês dão uns 40 cliques:
+        inúteis isoladamente, mas ao longo de um trimestre são ~120 cliques na
+        <i>mesma</i> palavra-chave, e isso já diz alguma coisa.</p>
+        <p><b>Regra:</b> escolha 3 a 5 termos específicos de cauda longa e não mexa
+        neles por 90 dias. Trocar de palavra-chave todo mês transforma o orçamento
+        inteiro em ruído.</p>
+      </div>
+    </div>
+
+    <div class="task">
+      <div class="task-n">21</div>
+      <div class="task-body">
+        <div class="meta"><span class="chip c-data">Medição</span><span class="chip c-cost">~2h/mês</span></div>
+        <h4>Revisar o funil todo mês</h4>
+        <p>Com os eventos da tarefa 03 no lugar, dá para ver onde o funil vaza:
+        visitante que não cadastra, cadastro que não ativa, ativo que não paga.
+        Corrigir vazamento é sempre mais barato que comprar tráfego.</p>
+        <p><b>Regra de corte:</b> se o CAC de qualquer campanha passar de R$ 120
+        (três meses de Essential), desligue sem esperar o trimestre fechar.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MÉTRICAS -->
+<section class="block" id="metricas">
+  <h2>10 · Métricas</h2>
+  <p class="lede">Cinco números, revisados semanalmente. Repare na separação entre o que
+  se controla e o que apenas se observa — confundir os dois é a forma mais comum de
+  achar que o plano falhou quando ele está no prazo.</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Métrica</th><th>Onde</th><th>Meta na semana 12</th><th>Por que importa</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Páginas publicadas</b><br><small>você controla</small></td>
+          <td>seu banco</td><td class="num">300+</td>
+          <td>Hoje o sitemap tem 2. É o teto de todo o tráfego orgânico possível.</td>
+        </tr>
+        <tr>
+          <td><b>Páginas indexadas</b><br><small>você não controla</small></td>
+          <td>Search Console</td><td class="num">30–50%</td>
+          <td>Domínio novo e sem autoridade é indexado devagar e parcialmente. Metade em 90 dias é resultado normal, não fracasso.</td>
+        </tr>
+        <tr>
+          <td><b>Visitantes únicos/mês</b></td>
+          <td>GA4</td><td class="num">400–600</td>
+          <td>A maior parte virá de YouTube e Instagram; o SEO só começa a pesar entre o 4º e o 6º mês.</td>
+        </tr>
+        <tr>
+          <td><b>Visitante → cadastro</b></td>
+          <td>GA4 (evento)</td><td class="num">3–5%</td>
+          <td>Mede se a landing e a isca gratuita fazem sentido.</td>
+        </tr>
+        <tr>
+          <td><b>Cadastro → pagante</b></td>
+          <td>GA4 + banco</td><td class="num">5–10%</td>
+          <td>O número que decide se o negócio fecha a conta.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- NÃO FAZER -->
+<section class="block" id="naofazer">
+  <h2>11 · O que não fazer</h2>
+  <p class="lede">Cada item parece produtivo e custa mais do que entrega, neste orçamento.</p>
+  <div class="avoid">
+    <div>
+      <b>Prospecção fria como canal principal</b>
+      <p>R$ 500 a ~R$ 4/clique dão 125 cliques no mês, uns 4 cadastros, menos de 1
+      assinante — CAC acima de R$ 400 para um ticket de R$ 39,90. Um mês isolado
+      também não revela qual termo funcionou.</p>
+      <p>É por isso que a tarefa 20 existe em outro formato: verba pequena, poucos
+      termos, trimestre inteiro sem mexer.</p>
+    </div>
+    <div>
+      <b>Vídeo de "review" da própria plataforma</b>
+      <p>Posiciona o dono como terceiro avaliando o próprio produto. CDC e CONAR exigem
+      que anúncio seja identificável como tal, e superlativo exige comprovação. Além do
+      risco, converte pior que a narrativa de construção.</p>
+    </div>
+    <div>
+      <b>Perseguir a monetização do YouTube</b>
+      <p>Otimizar para tempo de exibição leva a vídeos longos e genéricos. O objetivo é
+      trazer 300 pessoas certas, não 50 mil erradas.</p>
+    </div>
+    <div>
+      <b>Publicar o vídeo âncora antes da Fase 0</b>
+      <p>Um vídeo que funciona joga tráfego num produto onde o cadastro gratuito não vê
+      nada. O pico passa, as pessoas não voltam, e o melhor conteúdo disponível foi
+      queimado — e ele só estreia uma vez.</p>
+    </div>
+    <div>
+      <b>Trial por tempo na porta de entrada</b>
+      <p>Ver seção 5. O lugar certo para trial é o <b>upgrade</b> — 7 dias de PRO
+      oferecidos a um GUEST já ativo há semanas —, não a primeira visita.</p>
+    </div>
+  </div>
+</section>
+
+<!-- RISCOS -->
+<section class="block" id="riscos">
+  <h2>12 · Riscos e revisão</h2>
+
+  <h3 class="sub">As datas são sequência, não calendário</h3>
+  <p>As fases avançam por portão. Se o portão da Fase 1 abrir no mês 5 em vez do 3,
+  o plano está funcionando — apenas mais devagar. O único erro real é pular um portão.</p>
+
+  <h3 class="sub">Riscos conhecidos</h3>
+  <ul class="plain">
+    <li><b>Jurídico atrasa.</b> D-02 e D-03 não dependem do dono e podem estourar. Nenhum deles bloqueia a Fase 1, exceto a tarefa 17.</li>
+    <li><b>Capacidade.</b> Fase 1 é a mais provável de estourar. O plano de corte está na própria fase.</li>
+    <li><b>Indexação lenta.</b> Domínio novo com cinco homônimos mais antigos disputa até o próprio nome. Por isso a tarefa 18 existe.</li>
+    <li><b>Conteúdo sem funil.</b> O maior risco do plano inteiro é publicar antes da Fase 0 estar fechada.</li>
+  </ul>
+
+  <h3 class="sub">Quando revisar este documento</h3>
+  <p>Ao fechar cada portão, e sempre que uma decisão em aberto for resolvida. Ao
+  concluir tarefas, siga a convenção do diretório: remova o item do
+  <code>BACKLOG.md</code> e registre no <code>CHANGELOG.md</code>, em vez de acumular
+  itens marcados como feitos.</p>
+</section>
+
+<footer>
+  <p><b>Premissas.</b> Orçamento de R$ 500 mensais, dedicação de meio período,
+  base inicial zero. Com dedicação integral as doze semanas viram cerca de oito —
+  não menos, porque indexação e alcance dependem de tempo de calendário, não de
+  horas trabalhadas.</p>
+  <p><b>Validade.</b> As afirmações sobre o código foram verificadas em 18/ago/2026
+  na branch <code>main</code>. Reconfira antes de agir se estiver lendo muito depois.</p>
+  <p>Este é um plano de marketing e produto. Não é aconselhamento jurídico nem
+  recomendação de investimento.</p>
+</footer>
+
+</div>
+</body>
+</html>
