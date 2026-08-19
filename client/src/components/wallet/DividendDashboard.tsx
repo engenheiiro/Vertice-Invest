@@ -120,18 +120,25 @@ export const DividendDashboard = () => {
         return target <= today;
     };
 
-    // Mes com muitos pagadores estourava a altura do card: o tooltip era cortado
-    // e o container do grafico ainda ganhava barra de rolagem (overflow-x auto
-    // forca overflow-y auto). Mostra os maiores e agrega a cauda numa linha so.
-    const TOOLTIP_MAX_ROWS = 6;
+    // Mes com muitos pagadores estourava a altura da area do grafico: o tooltip
+    // era cortado e o container ainda ganhava barra de rolagem (overflow-x auto
+    // forca overflow-y auto). O limite real e de ALTURA: a area util tem ~195px
+    // e este layout gasta 154px no teto (4 ativos + cauda). Subir o teto para 6
+    // devolve 220px e o Total volta a ser cortado -- medido no dev.
+    const TOOLTIP_MAX_ROWS = 4;
 
     const CustomTooltip = ({ active, payload, label }: any) => {
         if (active && payload && payload.length) {
             const dataPoint = payload[0].payload;
             const breakdown = [...(dataPoint.breakdown || [])]
                 .sort((a: any, b: any) => (b.amount || 0) - (a.amount || 0));
-            const visible = breakdown.slice(0, TOOLTIP_MAX_ROWS);
-            const hidden = breakdown.slice(TOOLTIP_MAX_ROWS);
+            // Um unico excedente ocuparia a mesma linha que a cauda: nesse caso
+            // vale mais mostrar o ticker do que "+1 ativo".
+            const visibleCount = breakdown.length <= TOOLTIP_MAX_ROWS + 1
+                ? breakdown.length
+                : TOOLTIP_MAX_ROWS;
+            const visible = breakdown.slice(0, visibleCount);
+            const hidden = breakdown.slice(visibleCount);
             const hiddenTotal = hidden.reduce((acc: number, item: any) => acc + (item.amount || 0), 0);
 
             const parts = label.split('-'); 
@@ -143,19 +150,19 @@ export const DividendDashboard = () => {
             }
 
             return (
-                <div className="bg-elevated border border-gold rounded-lg p-3 shadow-xl min-w-[180px] max-w-[240px] z-50">
-                    <p className="text-xs text-gold font-bold uppercase mb-2 border-b border-gold/30 pb-1">
+                <div className="bg-elevated border border-gold rounded-lg p-2.5 shadow-xl min-w-[180px] max-w-[240px] z-50">
+                    <p className="text-xs text-gold font-bold uppercase mb-1.5 border-b border-gold/30 pb-1">
                         {formattedLabel}
                     </p>
-                    <div className="space-y-1 mb-2">
+                    <div className="space-y-0.5 mb-1.5">
                         {visible.map((item: any, idx: number) => (
-                            <div key={idx} className="flex justify-between gap-4 text-[10px] text-slate-300 whitespace-nowrap">
+                            <div key={idx} className="flex justify-between gap-4 text-[10px] leading-[14px] text-slate-300 whitespace-nowrap">
                                 <span>{item.ticker}</span>
                                 <span className="tabular-nums">{formatCurrency(item.amount)}</span>
                             </div>
                         ))}
                         {hidden.length > 0 && (
-                            <div className="flex justify-between gap-4 text-[10px] text-slate-500 whitespace-nowrap">
+                            <div className="flex justify-between gap-4 text-[10px] leading-[14px] text-slate-500 whitespace-nowrap">
                                 <span>+{hidden.length} {hidden.length === 1 ? 'ativo' : 'ativos'}</span>
                                 <span className="tabular-nums">{formatCurrency(hiddenTotal)}</span>
                             </div>
