@@ -427,6 +427,16 @@ export const EvolutionChart = React.memo(() => {
                                     const displayLabel = data.fullDate || label;
                                     const variation = data.periodVariation || 0;
                                     const variationPct = data.periodVariationPercent;
+                                    // O rótulo NOMEIA o ponto de comparação: num ponto diário a
+                                    // medida é contra ontem; num mensal, contra o mês anterior. O
+                                    // texto genérico "no período" repetia a palavra que o cabeçalho
+                                    // usa para a JANELA INTEIRA, fazendo três medidas diferentes
+                                    // (variação do dia, do ponto anterior e da janela) parecerem a
+                                    // mesma coisa. Sem ponto anterior o número é o acumulado, e aí
+                                    // o texto genérico continua sendo o honesto.
+                                    const variationLabel = data.previousLabel
+                                        ? `Variação vs ${data.previousLabel}`
+                                        : 'Variação no período';
                                     const isLive = data.isLive;
                                     // Zero é NEUTRO (cinza), não verde nem vermelho — dia sem
                                     // movimento (ex.: fim de semana de renda fixa) não é ganho
@@ -454,7 +464,7 @@ export const EvolutionChart = React.memo(() => {
                                                 </div>
 
                                                 <div className="flex justify-between items-center gap-2 sm:gap-6 text-xs">
-                                                    <span className="text-[10px] leading-tight text-slate-400 font-bold sm:text-xs sm:whitespace-nowrap">Variação no período</span>
+                                                    <span className="text-[10px] leading-tight text-slate-400 font-bold sm:text-xs sm:whitespace-nowrap">{variationLabel}</span>
                                                     <span className={`tabular-nums font-bold whitespace-nowrap text-right ${variationColor}`}>
                                                         {variationSign}{formatTooltipCurrency(variation)}
                                                         {variationPct !== null && variationPct !== undefined && (

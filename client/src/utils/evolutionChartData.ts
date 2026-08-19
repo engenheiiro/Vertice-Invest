@@ -20,6 +20,9 @@ export interface EvolutionChartPoint {
     realProfit: number;
     periodVariation: number;         // variação de mercado do período em R$ (desconta aportes)
     periodVariationPercent: number | null; // % sobre o patrimônio do ponto anterior
+    // Rótulo do ponto CONTRA o qual a variação foi medida ('30/06', 'jun/2026').
+    // null quando não há ponto anterior — aí a "variação" é o resultado acumulado.
+    previousLabel: string | null;
     isLive?: boolean;
     // Somente para renderização: âncora que estende uma série unitária.
     isVisualAnchor?: boolean;
@@ -64,7 +67,7 @@ const makeBars = (equity: number, invested: number) => ({
     lossBar: Math.max(0, invested - equity),
 });
 
-type RawPoint = Omit<EvolutionChartPoint, 'periodVariation' | 'periodVariationPercent'>;
+type RawPoint = Omit<EvolutionChartPoint, 'periodVariation' | 'periodVariationPercent' | 'previousLabel'>;
 
 export function buildEvolutionChartData(params: BuildParams): EvolutionChartPoint[] {
     const { history, kpis, granularity, window } = params;
@@ -85,7 +88,9 @@ export function buildEvolutionChartData(params: BuildParams): EvolutionChartPoin
             ? buildDaily(sortedHistory, kpis, window, now)
             : buildMonthly(sortedHistory, kpis, window, now);
 
-    return withVariation(points, sortedHistory);
+    // O rótulo do ponto de comparação segue a granularidade: dia contra dia,
+    // mês contra mês.
+    return withVariation(points, sortedHistory, granularity === 'DAILY' ? dayLabel : monthLabel);
 }
 
 /**
@@ -249,14 +254,20 @@ function appendLive(
 
 // Variação de mercado do período = ΔEquity − ΔInvested vs. ponto anterior.
 // Para o 1º ponto visível, busca o snapshot global imediatamente anterior.
-function withVariation(points: RawPoint[], sortedHistory: HistoryPoint[]): EvolutionChartPoint[] {
+function withVariation(
+    points: RawPoint[],
+    sortedHistory: HistoryPoint[],
+    labelFn: (d: Date) => string
+): EvolutionChartPoint[] {
     return points.map((item, index) => {
         let prevEquity = 0;
         let prevInvested = 0;
+        let previousLabel: string | null = null;
 
         if (index > 0) {
             prevEquity = points[index - 1].realEquity;
             prevInvested = points[index - 1].realInvested;
+            previousLabel = points[index - 1].label;
         } else {
             const prevSnapshot = sortedHistory
                 .filter((h) => new Date(h.date) < item.sortDate)
@@ -264,6 +275,9 @@ function withVariation(points: RawPoint[], sortedHistory: HistoryPoint[]): Evolu
             if (prevSnapshot) {
                 prevEquity = prevSnapshot.totalEquity || 0;
                 prevInvested = prevSnapshot.totalInvested || 0;
+                // Snapshot ANTERIOR à janela visível: nomeia a data real dele, que
+                // pode estar dias atrás se houve buraco no histórico.
+                previousLabel = labelFn(new Date(prevSnapshot.date));
             }
         }
 
@@ -279,7 +293,7 @@ function withVariation(points: RawPoint[], sortedHistory: HistoryPoint[]): Evolu
             ? (periodVariation === 0 ? 0 : (periodVariation / prevEquity) * 100)
             : null;
 
-        return { ...item, periodVariation, periodVariationPercent };
+        return { ...item, periodVariation, periodVariationPercent, previousLabel };
     });
 }
 

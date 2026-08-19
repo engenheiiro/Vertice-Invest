@@ -174,6 +174,64 @@ describe('buildEvolutionChartData — DIÁRIO (forward-fill)', () => {
     });
 });
 
+describe('previousLabel — o tooltip nomeia CONTRA QUEM mediu', () => {
+    it('DIÁRIO: cada ponto aponta para o dia anterior, e o LIVE para ontem', () => {
+        const history = [
+            snap(2026, 5, 29, 1000, 1000), // 29/06
+            snap(2026, 5, 30, 1010, 1000), // 30/06
+        ];
+        const pts = build(history, kpis(1020, 1000, 20), 'DAILY', '30D');
+
+        expect(byLabel(pts, '30/06')!.previousLabel).toBe('29/06');
+        expect(pts[pts.length - 1].isLive).toBe(true);
+        expect(pts[pts.length - 1].previousLabel).toBe('30/06');
+    });
+
+    it('DIÁRIO: 1º ponto da janela nomeia a DATA REAL do snapshot anterior, não o início da janela', () => {
+        // Buraco no histórico: o último dado antes da janela (25/06) é de 20/06.
+        // O ponto de 25/06 é forward-fill daquele snapshot, então a variação dele
+        // foi medida contra 20/06 — e o rótulo tem que dizer isso.
+        const history = [
+            snap(2026, 5, 20, 900, 900),   // 20/06 (semente, fora da janela)
+            snap(2026, 5, 26, 1000, 900),  // 26/06
+        ];
+        const pts = build(history, kpis(1000, 900, 100), 'DAILY', '7D');
+
+        expect(pts[0].label).toBe('25/06');
+        expect(pts[0].previousLabel).toBe('20/06');
+    });
+
+    it('MENSAL: aponta para o mês anterior, não para o dia', () => {
+        const history = [
+            snap(2026, 4, 31, 1000, 1000), // maio
+            snap(2026, 5, 30, 1100, 1050), // junho
+        ];
+        const pts = build(history, kpis(1200, 1100, 100), 'MONTHLY', 'ALL');
+
+        expect(byLabel(pts, 'mai/2026')!.previousLabel).toBeNull(); // nada antes dele
+        expect(byLabel(pts, 'jun/2026')!.previousLabel).toBe('mai/2026');
+        expect(byLabel(pts, 'jul/2026')!.previousLabel).toBe('jun/2026'); // LIVE
+    });
+
+    it('MENSAL: o corte de janela (6M) não apaga o rótulo do 1º ponto visível', () => {
+        // 10 meses (set/2025 → jun/2026); 6M mostra fev/2026 em diante. fev foi
+        // medido contra jan/2026, que ficou de fora do recorte.
+        const history: HistoryPoint[] = [];
+        for (let i = 0; i < 10; i++) history.push(snap(2025, 8 + i, 28, 1000 + i, 1000));
+
+        const pts = build(history, kpis(2000, 1000), 'MONTHLY', '6M');
+
+        expect(pts[0].label).toBe('fev/2026');
+        expect(pts[0].previousLabel).toBe('jan/2026');
+    });
+
+    it('sem nenhum ponto anterior → null (o tooltip cai no texto genérico)', () => {
+        const pts = build([], kpis(500, 400), 'DAILY', '30D');
+        expect(pts.length).toBe(1);
+        expect(pts[0].previousLabel).toBeNull();
+    });
+});
+
 describe('summarizeEvolutionWindow', () => {
     // Só realEquity/realInvested importam para o resumo.
     const pt = (realEquity: number, realInvested: number): EvolutionChartPoint =>
