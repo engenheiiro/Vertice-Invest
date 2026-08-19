@@ -120,28 +120,11 @@ export const DividendDashboard = () => {
         return target <= today;
     };
 
-    // Mes com muitos pagadores estourava a altura da area do grafico: o tooltip
-    // era cortado e o container ainda ganhava barra de rolagem (overflow-x auto
-    // forca overflow-y auto). O orcamento aqui e de ALTURA, nao de itens: no
-    // maximo 4 linhas de grade (~160px). Em duas colunas isso cabe 8 ativos; se
-    // houver mais, 6 aparecem e a cauda ocupa a 4a linha agregada.
-    const TOOLTIP_MAX_GRID_ROWS = 4;
-    const TOOLTIP_COLUMNS = 2;
-
     const CustomTooltip = ({ active, payload, label }: any) => {
         if (active && payload && payload.length) {
             const dataPoint = payload[0].payload;
-            const breakdown = [...(dataPoint.breakdown || [])]
-                .sort((a: any, b: any) => (b.amount || 0) - (a.amount || 0));
-            const budget = TOOLTIP_MAX_GRID_ROWS * TOOLTIP_COLUMNS;
-            // Cabendo tudo, mostra tudo; senao reserva a ultima linha para a cauda.
-            const visibleCount = breakdown.length <= budget
-                ? breakdown.length
-                : budget - TOOLTIP_COLUMNS;
-            const visible = breakdown.slice(0, visibleCount);
-            const hidden = breakdown.slice(visibleCount);
-            const hiddenTotal = hidden.reduce((acc: number, item: any) => acc + (item.amount || 0), 0);
-
+            const breakdown = dataPoint.breakdown || [];
+            
             const parts = label.split('-'); 
             let formattedLabel = label;
             if (parts.length === 2) {
@@ -151,23 +134,17 @@ export const DividendDashboard = () => {
             }
 
             return (
-                <div className="bg-elevated border border-gold rounded-lg p-3 shadow-xl min-w-[180px] max-w-[320px] z-50">
+                <div className="bg-elevated border border-gold rounded-lg p-3 shadow-xl min-w-[180px] z-50">
                     <p className="text-xs text-gold font-bold uppercase mb-2 border-b border-gold/30 pb-1">
                         {formattedLabel}
                     </p>
-                    <div className={`grid gap-x-5 gap-y-1 mb-2 ${visible.length > 4 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                        {visible.map((item: any, idx: number) => (
-                            <div key={idx} className="flex justify-between gap-3 text-[10px] text-slate-300 whitespace-nowrap">
+                    <div className="space-y-1 mb-2">
+                        {breakdown.map((item: any, idx: number) => (
+                            <div key={idx} className="flex justify-between text-[10px] text-slate-300">
                                 <span>{item.ticker}</span>
                                 <span className="tabular-nums">{formatCurrency(item.amount)}</span>
                             </div>
                         ))}
-                        {hidden.length > 0 && (
-                            <div className={`flex justify-between gap-3 text-[10px] text-slate-500 whitespace-nowrap ${visible.length > 4 ? 'col-span-2' : ''}`}>
-                                <span>+{hidden.length} {hidden.length === 1 ? 'ativo' : 'ativos'}</span>
-                                <span className="tabular-nums">{formatCurrency(hiddenTotal)}</span>
-                            </div>
-                        )}
                     </div>
                     <div className="flex justify-between border-t border-gold/30 pt-1">
                         <span className="text-xs text-white font-bold">Total</span>
