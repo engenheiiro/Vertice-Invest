@@ -120,11 +120,20 @@ export const DividendDashboard = () => {
         return target <= today;
     };
 
+    // Mes com muitos pagadores estourava a altura do card: o tooltip era cortado
+    // e o container do grafico ainda ganhava barra de rolagem (overflow-x auto
+    // forca overflow-y auto). Mostra os maiores e agrega a cauda numa linha so.
+    const TOOLTIP_MAX_ROWS = 6;
+
     const CustomTooltip = ({ active, payload, label }: any) => {
         if (active && payload && payload.length) {
             const dataPoint = payload[0].payload;
-            const breakdown = dataPoint.breakdown || [];
-            
+            const breakdown = [...(dataPoint.breakdown || [])]
+                .sort((a: any, b: any) => (b.amount || 0) - (a.amount || 0));
+            const visible = breakdown.slice(0, TOOLTIP_MAX_ROWS);
+            const hidden = breakdown.slice(TOOLTIP_MAX_ROWS);
+            const hiddenTotal = hidden.reduce((acc: number, item: any) => acc + (item.amount || 0), 0);
+
             const parts = label.split('-'); 
             let formattedLabel = label;
             if (parts.length === 2) {
@@ -134,17 +143,23 @@ export const DividendDashboard = () => {
             }
 
             return (
-                <div className="bg-elevated border border-gold rounded-lg p-3 shadow-xl min-w-[180px] z-50">
+                <div className="bg-elevated border border-gold rounded-lg p-3 shadow-xl min-w-[180px] max-w-[240px] z-50">
                     <p className="text-xs text-gold font-bold uppercase mb-2 border-b border-gold/30 pb-1">
                         {formattedLabel}
                     </p>
                     <div className="space-y-1 mb-2">
-                        {breakdown.map((item: any, idx: number) => (
-                            <div key={idx} className="flex justify-between text-[10px] text-slate-300">
+                        {visible.map((item: any, idx: number) => (
+                            <div key={idx} className="flex justify-between gap-4 text-[10px] text-slate-300 whitespace-nowrap">
                                 <span>{item.ticker}</span>
                                 <span className="tabular-nums">{formatCurrency(item.amount)}</span>
                             </div>
                         ))}
+                        {hidden.length > 0 && (
+                            <div className="flex justify-between gap-4 text-[10px] text-slate-500 whitespace-nowrap">
+                                <span>+{hidden.length} {hidden.length === 1 ? 'ativo' : 'ativos'}</span>
+                                <span className="tabular-nums">{formatCurrency(hiddenTotal)}</span>
+                            </div>
+                        )}
                     </div>
                     <div className="flex justify-between border-t border-gold/30 pt-1">
                         <span className="text-xs text-white font-bold">Total</span>
