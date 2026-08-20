@@ -85,12 +85,35 @@ export const DEFAULT_THRESHOLDS = {
     // e a posição volta para o accrual. 3 dias úteis (~5 corridos) avisa com folga;
     // 5 (~7 corridos) é crítico e ainda sobra margem antes do desligamento.
     treasuryBusinessDaysStale: { warn: 3, critical: 5 },
-    // Fração de séries temporais (AssetHistory) mais velhas que `timeSeriesStaleAfterHours`.
-    // Fração, e não média: a base real tem cauda longa (série morta de 199 dias)
-    // que puxa a média para 115h enquanto 84% das séries estão abaixo de 72h — a
-    // média mediria a cauda, não a saúde.
-    timeSeriesStaleAfterHours: 168,
-    timeSeriesStaleRatio: { warn: 0.25, critical: 0.50 },
+    // Atraso das séries temporais medido pela data do último CANDLE — nunca por
+    // `AssetHistory.lastUpdated`, que diz quando o worker BUSCOU e não o que ele
+    // trouxe. Medida pelo fetch contra um corte de 168h, a regra antiga deu tudo
+    // verde em 20/08/2026 com 910 de ~1.264 ativos parados em 17/08 e BOVA11/IVVB11
+    // com lastUpdated daquela manhã e candle de 18/08. Ver `utils/candleStaleness.js`.
+    //
+    // Duas coortes porque o dano é de naturezas diferentes:
+    //
+    // (1) ATIVOS EM CARTEIRA — tolerância mínima. Candle atrasado aqui não degrada
+    // indicador, corrompe patrimônio: o snapshot das 23:59 marca a renda variável
+    // pelo fechamento do dia e cai no preço do instante quando o candle falta, e
+    // `WalletSnapshot` é a base do TWRR e do Sharpe. Desde 1db3df0 o snapshot GARANTE
+    // o candle do dia desses tickers antes de gravar, então este check é a verificação
+    // de que a garantia está de pé. 2 dias = um pregão inteiro perdido, ou seja, o
+    // snapshot de ontem já usou o fallback. Contagem, e não fração: são algumas
+    // dezenas de tickers e um só pode valer a maior parte do patrimônio em renda
+    // variável — BOVA11 + IVVB11 eram 68% de uma carteira real em 19/08/2026.
+    timeSeriesWalletDaysStale: 2,
+    timeSeriesWalletStale: { warn: 1, critical: 3 },
+    // (2) UNIVERSO DE PESQUISA — tolerância maior, porque o dano é gradual: SMA200,
+    // RSI, beta e volatilidade envelhecem e o ranking deriva, mas nada fica errado
+    // de imediato. 3 dias úteis é o primeiro valor que o regime normal do worker não
+    // alcança: ele só re-busca acima de HISTORY_MAX_CANDLE_AGE_DAYS (2 dias corridos),
+    // o que deixa a série oscilando entre 1 e 2 dias úteis de atraso — 3 significa um
+    // ciclo perdido de verdade. Fração, e não contagem: aqui são ~1.000 ativos e a
+    // pergunta é se o worker está cobrindo a base (72% parados no mesmo dia) ou se
+    // sobrou uma cauda de casos isolados.
+    timeSeriesUniverseDaysStale: 3,
+    timeSeriesUniverseStaleRatio: { warn: 0.25, critical: 0.50 },
     // Fração de ativos sem fundamentos coletados (nulo ou mais velho que N dias).
     fundamentalsDateStaleAfterDays: 7,
     fundamentalsDateStaleRatio: { warn: 0.25, critical: 0.50 },
@@ -407,30 +430,70 @@ const treasuryCheck = (facts, th) => {
     });
 };
 
-const timeSeriesCheck = (facts, th) => {
-    const count = num(facts.timeSeries?.count) ?? 0;
-    if (count === 0) {
-        return check({
-            id: 'freshness.timeSeries',
-            label: 'Séries temporais (AssetHistory)',
-            category: CATEGORY.FRESHNESS,
-            status: HEALTH_STATUS.WARN,
-            value: null,
-            detail: 'Sem séries registradas',
-            hint: 'timeSeriesWorker nunca populou AssetHistory.',
-        });
-    }
-    const r = ratio(facts.timeSeries?.stale, count);
-    return check({
-        id: 'freshness.timeSeries',
-        label: 'Séries temporais (AssetHistory)',
+/** "TICKER (última data)" para os N mais parados — alarme sem nome não vira conserto. */
+const candleSample = (worst) => (worst || [])
+    .map((s) => `${s.ticker} (${s.lastCandle || 'sem série'})`)
+    .join(', ');
+
+/** "17/08 (652)" — concentração das paradas por data. */
+const candleDates = (dates) => (dates || [])
+    .map((d) => `${d.date} (${d.count})`)
+    .join(', ');
+
+const timeSeriesChecks = (facts, th) => {
+    const out = [];
+
+    // Carteira: conta CABEÇAS, com os tickers no detalhe. A régua é dia útil para
+    // B3/EUA e dia corrido para cripto (ver utils/candleStaleness.js).
+    const wallet = facts.timeSeries?.wallet || {};
+    const walletTotal = num(wallet.total) ?? 0;
+    const walletStale = num(wallet.stale) ?? 0;
+    out.push(check({
+        id: 'freshness.timeSeriesWallet',
+        label: 'Candle do dia — ativos em carteira',
         category: CATEGORY.FRESHNESS,
-        status: gradeAscending(r, th.timeSeriesStaleRatio),
-        value: r,
-        detail: `${facts.timeSeries?.stale || 0}/${count} séries sem atualizar há mais de `
-            + `${th.timeSeriesStaleAfterHours}h (${pct(r)})`,
-        hint: 'timeSeriesWorker. Série velha achata beta/volatilidade/SMA200 e distorce o backtest.',
-    });
+        status: walletTotal === 0 || walletStale === 0
+            ? HEALTH_STATUS.OK
+            : gradeAscending(walletStale, th.timeSeriesWalletStale),
+        value: walletStale,
+        detail: walletTotal === 0
+            ? 'Nenhuma posição de renda variável em carteira'
+            : walletStale === 0
+                ? `${walletTotal} ativo(s) em carteira com candle em dia`
+                : `${walletStale}/${walletTotal} ativo(s) em carteira sem candle novo há `
+                  + `${th.timeSeriesWalletDaysStale}+ dias úteis (corridos, na cripto): `
+                  + candleSample(wallet.worst),
+        hint: 'O snapshot das 23:59 marca a renda variável pelo FECHAMENTO do dia e só cai no '
+            + 'preço do instante quando o candle falta — e WalletSnapshot é a base do TWRR e do '
+            + 'Sharpe. Se estes tickers aparecem aqui, a garantia de candle do snapshot '
+            + '(walletDayCandleService) falhou para eles: confira o job daily-snapshot e se o '
+            + 'ticker ainda resolve na fonte.',
+    }));
+
+    // Universo: FRAÇÃO. A pergunta é de cobertura do worker, não de nomes.
+    const universe = facts.timeSeries?.universe || {};
+    const universeTotal = num(universe.total) ?? 0;
+    const universeStale = num(universe.stale) ?? 0;
+    const r = ratio(universeStale, universeTotal);
+    out.push(check({
+        id: 'freshness.timeSeriesUniverse',
+        label: 'Séries temporais — universo de pesquisa',
+        category: CATEGORY.FRESHNESS,
+        status: universeTotal === 0
+            ? HEALTH_STATUS.WARN
+            : gradeAscending(r, th.timeSeriesUniverseStaleRatio),
+        value: universeTotal === 0 ? null : r,
+        detail: universeTotal === 0
+            ? 'Sem séries registradas para o universo auditável'
+            : `${universeStale}/${universeTotal} séries sem candle novo há `
+              + `${th.timeSeriesUniverseDaysStale}+ dias úteis (${pct(r)})`
+              + (universe.dates?.length ? ` — paradas em ${candleDates(universe.dates)}` : ''),
+        hint: 'timeSeriesWorker (roda no daily-evening, 18:30). Fração alta com todas as séries '
+            + 'paradas na MESMA data é ciclo perdido/cobertura incompleta do worker, não ticker '
+            + 'morto. Série velha achata SMA200/beta/volatilidade e distorce ranking e backtest.',
+    }));
+
+    return out;
 };
 
 const ingestionChecks = (facts, th) => {
@@ -578,7 +641,8 @@ const errorChecks = (facts, th) => {
  * `facts` esperado:
  *   { now, totals{all,active,inactive}, assets{CLASSE:{active,stalePrice,missing{}}},
  *     implausible{campo:count,nonPositivePrice}, macro{...,updatedAt},
- *     treasury{titles,latestDate}, timeSeries{count,avgAgeHours},
+ *     treasury{titles,latestDate},
+ *     timeSeries{wallet{total,stale,worst[],dates[]}, universe{idem}},
  *     fundamentals{healthy,timestamp,errorCode}, jobs[], errors{last24h} }
  */
 export const buildHealthReport = (facts = {}, thresholdOverrides = null) => {
@@ -589,7 +653,7 @@ export const buildHealthReport = (facts = {}, thresholdOverrides = null) => {
     const checks = [
         ...freshnessChecks(ctx, th),
         treasuryCheck(ctx, th),
-        timeSeriesCheck(ctx, th),
+        ...timeSeriesChecks(ctx, th),
         ...coverageChecks(ctx, th),
         ...plausibilityChecks(ctx, th),
         ...macroChecks(ctx, th),

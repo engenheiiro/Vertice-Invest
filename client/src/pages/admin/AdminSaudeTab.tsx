@@ -44,7 +44,8 @@ const relativeTime = (iso: string | null | undefined) => {
 const formatValue = (check: HealthCheck) => {
     if (check.value === null) return '—';
     if (check.id.startsWith('coverage.') || check.id.startsWith('freshness.price.')
-        || check.id.startsWith('plausibility.') || check.id === 'ingestion.inactiveAssets') {
+        || check.id.startsWith('plausibility.') || check.id === 'ingestion.inactiveAssets'
+        || check.id === 'freshness.timeSeriesUniverse') {
         return `${(check.value * 100).toFixed(1)}%`;
     }
     return null;

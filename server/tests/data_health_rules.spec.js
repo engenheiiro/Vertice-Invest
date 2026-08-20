@@ -55,7 +55,10 @@ const healthyFacts = (overrides = {}) => ({
     },
     treasury: { titles: 14, businessDaysStale: 1 },
     frozen: { count: 0, tickers: [] },
-    timeSeries: { count: 900, stale: 100 },
+    timeSeries: {
+        wallet: { total: 17, stale: 0, worst: [], dates: [] },
+        universe: { total: 1022, stale: 120, worst: [], dates: [] },
+    },
     fundamentals: { healthy: true, timestamp: hoursAgo(6), errorCode: null },
     jobs: [
         { jobId: 'quotes-sync', label: 'Cotações', severity: 'CRITICAL', maxSilenceHours: 2, lastRunAt: hoursAgo(0.3), lastStatus: 'SUCCESS' },
@@ -199,17 +202,79 @@ describe('FRESCOR', () => {
             .toBe(HEALTH_STATUS.CRITICAL);
     });
 
-    it('séries temporais medem FRAÇÃO velha, não média', () => {
-        // Base real: 1519 séries com média 115h, puxada por uma série morta de 199
-        // dias, enquanto 84% estavam abaixo de 72h. A média media a cauda, não a saúde.
+    it('universo de pesquisa mede FRAÇÃO de séries com candle velho, não média', () => {
+        // Fração, e não média: a base real tem cauda longa (série morta de 199 dias)
+        // que puxava a média para 115h enquanto a maioria estava fresca — a média
+        // media a cauda, não a saúde.
         const facts = healthyFacts();
-        facts.timeSeries = { count: 1519, stale: 237 }; // 15.6% — saudável
-        expect(byId(buildHealthReport(facts), 'freshness.timeSeries').status)
+        facts.timeSeries.universe = { total: 1022, stale: 160, worst: [], dates: [] }; // 15.7%
+        expect(byId(buildHealthReport(facts), 'freshness.timeSeriesUniverse').status)
             .toBe(HEALTH_STATUS.OK);
 
-        facts.timeSeries = { count: 1519, stale: 800 }; // 52.7%
-        expect(byId(buildHealthReport(facts), 'freshness.timeSeries').status)
+        facts.timeSeries.universe = { total: 1022, stale: 300, worst: [], dates: [] }; // 29.4%
+        expect(byId(buildHealthReport(facts), 'freshness.timeSeriesUniverse').status)
+            .toBe(HEALTH_STATUS.WARN);
+    });
+
+    it('REGRESSÃO 20/08/2026: 72% da base parada há 3 dias úteis é CRITICAL', () => {
+        // O cenário que a regra antiga (lastUpdated vs. corte de 168h) classificou
+        // como saudável: 910 de ~1.264 ativos com último candle em 17/08, nenhum ETF
+        // com candle de 19/08 — e lastUpdated de todos renovado naquela manhã.
+        const facts = healthyFacts();
+        facts.timeSeries.universe = {
+            total: 1022,
+            stale: 674,
+            worst: [{ ticker: 'VALE3', lastCandle: '2026-08-17', daysStale: 3 }],
+            dates: [{ date: '2026-08-17', count: 652 }],
+        };
+        const check = byId(buildHealthReport(facts), 'freshness.timeSeriesUniverse');
+        expect(check.status).toBe(HEALTH_STATUS.CRITICAL);
+        // A concentração numa única data é o que separa "worker perdeu um ciclo"
+        // de "alguns tickers morreram na fonte" — precisa estar no detalhe.
+        expect(check.detail).toContain('2026-08-17');
+    });
+
+    it('carteira conta CABEÇAS: um único ativo atrasado já sai de OK', () => {
+        // Candle atrasado em ativo detido corrompe WalletSnapshot → TWRR e Sharpe.
+        // BOVA11 + IVVB11 eram 68% da renda variável de uma carteira real, então
+        // fração aqui (2/17 = 12%) esconderia o dano.
+        const facts = healthyFacts();
+        facts.timeSeries.wallet = {
+            total: 17,
+            stale: 2,
+            worst: [
+                { ticker: 'BOVA11', lastCandle: '2026-08-18', daysStale: 2 },
+                { ticker: 'IVVB11', lastCandle: '2026-08-18', daysStale: 2 },
+            ],
+            dates: [{ date: '2026-08-18', count: 2 }],
+        };
+        const check = byId(buildHealthReport(facts), 'freshness.timeSeriesWallet');
+        expect(check.status).toBe(HEALTH_STATUS.WARN);
+        expect(check.detail).toContain('BOVA11');
+    });
+
+    it('carteira com 3+ ativos sem candle é CRITICAL', () => {
+        const facts = healthyFacts();
+        facts.timeSeries.wallet = { total: 17, stale: 4, worst: [], dates: [] };
+        expect(byId(buildHealthReport(facts), 'freshness.timeSeriesWallet').status)
             .toBe(HEALTH_STATUS.CRITICAL);
+    });
+
+    it('carteira em dia (e carteira vazia) ficam OK', () => {
+        expect(byId(buildHealthReport(healthyFacts()), 'freshness.timeSeriesWallet').status)
+            .toBe(HEALTH_STATUS.OK);
+        const facts = healthyFacts();
+        facts.timeSeries.wallet = { total: 0, stale: 0, worst: [], dates: [] };
+        expect(byId(buildHealthReport(facts), 'freshness.timeSeriesWallet').status)
+            .toBe(HEALTH_STATUS.OK);
+    });
+
+    it('ausência total de séries do universo é WARN (fail-closed)', () => {
+        const facts = healthyFacts();
+        facts.timeSeries.universe = { total: 0, stale: 0, worst: [], dates: [] };
+        const check = byId(buildHealthReport(facts), 'freshness.timeSeriesUniverse');
+        expect(check.status).toBe(HEALTH_STATUS.WARN);
+        expect(check.value).toBeNull();
     });
 });
 
@@ -502,7 +567,7 @@ describe('agregação do veredito', () => {
     it('failingChecks ordena crítico antes de alerta', () => {
         const facts = healthyFacts();
         facts.macro.dollar = 0;                            // CRITICAL
-        facts.timeSeries = { count: 1000, stale: 300 };     // 30% → WARN
+        facts.timeSeries.universe = { total: 1000, stale: 300, worst: [], dates: [] }; // 30% → WARN
         const failing = failingChecks(buildHealthReport(facts));
         expect(failing[0].status).toBe(HEALTH_STATUS.CRITICAL);
         expect(failing.at(-1).status).toBe(HEALTH_STATUS.WARN);

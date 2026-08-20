@@ -18,12 +18,14 @@ import MarketAsset from '../models/MarketAsset.js';
 import SystemConfig from '../models/SystemConfig.js';
 import AssetHistory from '../models/AssetHistory.js';
 import TreasuryPriceHistory from '../models/TreasuryPriceHistory.js';
+import UserAsset from '../models/UserAsset.js';
 import DataHealthReport from '../models/DataHealthReport.js';
 import ErrorLog from '../models/ErrorLog.js';
 import JobRun from '../models/JobRun.js';
 import logger from '../config/logger.js';
 import { JOB_CATALOG } from '../config/jobCatalog.js';
 import { brazilDayKey, isBrBusinessDay } from '../utils/walletSnapshot.js';
+import { buildCandleClock, summarizeCandleStaleness } from '../utils/candleStaleness.js';
 import {
     COVERAGE_SPEC,
     DEFAULT_THRESHOLDS,
@@ -82,6 +84,58 @@ const businessDaysStale = (latestDateStr, now) => {
         if (isBrBusinessDay(cursor)) count += 1;
     }
     return count;
+};
+
+/** Posições de mercado da carteira: só o que tem candle. Espelha loadSnapshotContext. */
+const NON_MARKET_WALLET_TYPES = ['CASH', 'FIXED_INCOME'];
+
+/**
+ * Atraso do último candle, por coorte.
+ *
+ * Duas coortes, porque o dano é diferente (ver DEFAULT_THRESHOLDS):
+ *   - CARTEIRA: `UserAsset` com quantidade > 0, fora caixa/renda fixa — exatamente
+ *     o conjunto que `loadSnapshotContext` marca a fechamento no snapshot diário.
+ *   - UNIVERSO: universo ativo COM liquidez acima de MIN_LIQUIDITY_FOR_LIVE_QUOTE.
+ *     O filtro de liquidez é o mesmo critério do check de preço congelado, e pela
+ *     mesma razão: abaixo dele o ativo não negocia todo pregão, então candle velho
+ *     é o esperado e não defeito. Sem esse recorte o alarme nasceria vermelho por
+ *     algo que ninguém pretende consertar.
+ *
+ * Séries órfãs de `AssetHistory` (SMAL parado em 2018, chaves legadas de cripto
+ * como MATIC/RNDR/IMX/GRT/TAO) não entram em nenhuma das duas: a conta é dirigida
+ * pela coorte, não pelo que está guardado na coleção.
+ */
+const collectCandleFacts = async (now, th) => {
+    const clock = buildCandleClock(now);
+
+    const [seriesRows, holdings, universe] = await Promise.all([
+        // Data do ÚLTIMO CANDLE de cada série. `history.date` é 'YYYY-MM-DD', então
+        // `$max` devolve a mais recente sem depender da ordenação do array — e é o
+        // dado que interessa, ao contrário de `lastUpdated`, que só diz quando o
+        // worker passou por ali.
+        AssetHistory.aggregate([
+            { $project: { _id: 0, ticker: 1, lastCandle: { $max: '$history.date' } } },
+        ]),
+        UserAsset.find({
+            type: { $nin: NON_MARKET_WALLET_TYPES },
+            quantity: { $gt: 0 },
+        }).select('ticker type').lean(),
+        MarketAsset.find({
+            ...ACTIVE_UNIVERSE,
+            liquidity: { $gt: MIN_LIQUIDITY_FOR_LIVE_QUOTE },
+        }).select('ticker type').lean(),
+    ]);
+
+    const lastCandleByKey = new Map(seriesRows.map((r) => [r.ticker, r.lastCandle || null]));
+
+    return {
+        wallet: summarizeCandleStaleness(
+            holdings, lastCandleByKey, clock, th.timeSeriesWalletDaysStale,
+        ),
+        universe: summarizeCandleStaleness(
+            universe, lastCandleByKey, clock, th.timeSeriesUniverseDaysStale,
+        ),
+    };
 };
 
 /** Todos os campos cobrados, sem repetição entre classes. */
@@ -181,9 +235,14 @@ const collectFacts = async (now) => {
     const fundamentalsDays = Number(overrides?.fundamentalsDateStaleAfterDays)
         || DEFAULT_THRESHOLDS.fundamentalsDateStaleAfterDays;
     const fundamentalsCutoff = new Date(now.getTime() - fundamentalsDays * 86400000);
-    const tsStaleHours = Number(overrides?.timeSeriesStaleAfterHours)
-        || DEFAULT_THRESHOLDS.timeSeriesStaleAfterHours;
-    const tsCutoff = new Date(now.getTime() - tsStaleHours * 3600000);
+    // Tolerâncias de atraso do candle (em dias). Precisam ser resolvidas ANTES da
+    // coleta: quem separa "parado" de "em dia" aqui é a régua, não o corte de datas.
+    const candleTolerances = {
+        timeSeriesWalletDaysStale: Number(overrides?.timeSeriesWalletDaysStale)
+            || DEFAULT_THRESHOLDS.timeSeriesWalletDaysStale,
+        timeSeriesUniverseDaysStale: Number(overrides?.timeSeriesUniverseDaysStale)
+            || DEFAULT_THRESHOLDS.timeSeriesUniverseDaysStale,
+    };
     const frozenDays = Number(overrides?.frozenPriceAfterDays)
         || DEFAULT_THRESHOLDS.frozenPriceAfterDays;
     const frozenCutoff = new Date(now.getTime() - frozenDays * 86400000);
@@ -194,7 +253,7 @@ const collectFacts = async (now) => {
         totalInactive,
         macroConfig,
         treasuryRows,
-        historyStats,
+        candleFacts,
         errors24h,
         jobs,
         oldestRun,
@@ -210,19 +269,7 @@ const collectFacts = async (now) => {
         TreasuryPriceHistory.aggregate([
             { $group: { _id: null, latest: { $max: { $max: '$history.date' } }, titles: { $sum: 1 } } },
         ]),
-        AssetHistory.aggregate([
-            {
-                $group: {
-                    _id: null,
-                    count: { $sum: 1 },
-                    stale: {
-                        $sum: {
-                            $cond: [{ $lt: [{ $ifNull: ['$lastUpdated', new Date(0)] }, tsCutoff] }, 1, 0],
-                        },
-                    },
-                },
-            },
-        ]),
+        collectCandleFacts(now, candleTolerances),
         ErrorLog.aggregate([
             { $match: { lastSeenAt: { $gte: since24h } } },
             { $group: { _id: null, total: { $sum: '$count' } } },
@@ -244,7 +291,6 @@ const collectFacts = async (now) => {
     ]);
 
     const treasury = treasuryRows[0] || {};
-    const history = historyStats[0] || {};
 
     return {
         facts: {
@@ -273,10 +319,7 @@ const collectFacts = async (now) => {
                 latestDate: treasury.latest ? new Date(`${treasury.latest}T12:00:00.000Z`) : null,
                 businessDaysStale: businessDaysStale(treasury.latest, now),
             },
-            timeSeries: {
-                count: history.count || 0,
-                stale: history.stale || 0,
-            },
+            timeSeries: candleFacts,
             fundamentals: {
                 healthy: macroConfig?.lastSyncStats?.fundamentalsHealthy === true,
                 timestamp: macroConfig?.lastSyncStats?.timestamp || null,
