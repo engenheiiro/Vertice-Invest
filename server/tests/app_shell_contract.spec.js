@@ -14,16 +14,29 @@ vi.mock('../services/schedulerService.js', () => ({
     backfillMissedSnapshots: async () => ({ status: 'SKIPPED' }),
 }));
 
+// Feriados vêm da BrasilAPI por HTTP. Um teste de contrato do shell não pode
+// depender de rede externa: sem o mock ele fica lento e falha de forma
+// intermitente quando a suíte roda em paralelo (visto na prática).
+vi.mock('../services/holidayService.js', () => ({
+    holidayService: {
+        sync: async () => {},
+        isHoliday: () => false,
+        getHolidays: () => [],
+    },
+}));
+
 let server;
 let base;
 
+// Importar o app puxa rotas, controllers e models — é pesado, e o default de 5s
+// do vitest estoura quando a suíte inteira roda junto.
 beforeAll(async () => {
     const { default: app } = await import('../app.js');
     await new Promise((resolve) => {
         server = app.listen(0, '127.0.0.1', resolve);
     });
     base = `http://127.0.0.1:${server.address().port}`;
-});
+}, 30000);
 
 afterAll(async () => {
     if (server) await new Promise((resolve) => server.close(resolve));

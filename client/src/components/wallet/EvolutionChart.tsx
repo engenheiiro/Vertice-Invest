@@ -427,16 +427,20 @@ export const EvolutionChart = React.memo(() => {
                                     const displayLabel = data.fullDate || label;
                                     const variation = data.periodVariation || 0;
                                     const variationPct = data.periodVariationPercent;
-                                    // O rótulo NOMEIA o ponto de comparação: num ponto diário a
-                                    // medida é contra ontem; num mensal, contra o mês anterior. O
-                                    // texto genérico "no período" repetia a palavra que o cabeçalho
-                                    // usa para a JANELA INTEIRA, fazendo três medidas diferentes
-                                    // (variação do dia, do ponto anterior e da janela) parecerem a
-                                    // mesma coisa. Sem ponto anterior o número é o acumulado, e aí
-                                    // o texto genérico continua sendo o honesto.
-                                    const variationLabel = data.previousLabel
-                                        ? `Variação vs ${data.previousLabel}`
-                                        : 'Variação no período';
+                                    // O rótulo diz CONTRA O QUE a variação foi medida, porque na
+                                    // mesma tela convivem três réguas: a do dia (card), a do ponto
+                                    // anterior e a da janela inteira (cabeçalho). Chamar as três de
+                                    // "no período" fazia parecer que os números se contradiziam.
+                                    //   • ponto de HOJE no diário → "Variação hoje", com o MESMO
+                                    //     número do card (buildEvolutionChartData força isso);
+                                    //   • demais pontos → nomeia o comparativo ("vs 30/06");
+                                    //   • sem ponto anterior → o número é o acumulado, e aí o
+                                    //     texto genérico é o honesto.
+                                    const variationLabel = data.isDayVariation
+                                        ? 'Variação hoje'
+                                        : data.previousLabel
+                                            ? `Variação vs ${data.previousLabel}`
+                                            : 'Variação no período';
                                     const isLive = data.isLive;
                                     // Zero é NEUTRO (cinza), não verde nem vermelho — dia sem
                                     // movimento (ex.: fim de semana de renda fixa) não é ganho

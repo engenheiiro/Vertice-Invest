@@ -23,12 +23,16 @@ export interface EvolutionChartPoint {
     // Rótulo do ponto CONTRA o qual a variação foi medida ('30/06', 'jun/2026').
     // null quando não há ponto anterior — aí a "variação" é o resultado acumulado.
     previousLabel: string | null;
+    // O ponto LIVE do modo DIÁRIO mede a variação do DIA (mesma régua do card
+    // "Variação Hoje"), não a distância até o snapshot de ontem. Ver withVariation.
+    isDayVariation?: boolean;
     isLive?: boolean;
     // Somente para renderização: âncora que estende uma série unitária.
     isVisualAnchor?: boolean;
 }
 
-type KpiSubset = Pick<WalletKPIs, 'totalEquity' | 'totalInvested' | 'totalResult'>;
+type KpiSubset = Pick<WalletKPIs, 'totalEquity' | 'totalInvested' | 'totalResult'>
+    & Partial<Pick<WalletKPIs, 'dayVariation' | 'dayVariationPercent'>>;
 
 interface BuildParams {
     history: HistoryPoint[];
@@ -67,7 +71,7 @@ const makeBars = (equity: number, invested: number) => ({
     lossBar: Math.max(0, invested - equity),
 });
 
-type RawPoint = Omit<EvolutionChartPoint, 'periodVariation' | 'periodVariationPercent' | 'previousLabel'>;
+type RawPoint = Omit<EvolutionChartPoint, 'periodVariation' | 'periodVariationPercent' | 'previousLabel' | 'isDayVariation'>;
 
 export function buildEvolutionChartData(params: BuildParams): EvolutionChartPoint[] {
     const { history, kpis, granularity, window } = params;
@@ -88,9 +92,24 @@ export function buildEvolutionChartData(params: BuildParams): EvolutionChartPoin
             ? buildDaily(sortedHistory, kpis, window, now)
             : buildMonthly(sortedHistory, kpis, window, now);
 
+    // No modo DIÁRIO o ponto LIVE É o dia de hoje, então a variação dele tem de ser
+    // a MESMA do card "Variação Hoje" — as duas coisas aparecem juntas na tela e
+    // divergir ali é o que fazia o usuário achar que um dos dois estava errado.
+    //
+    // As réguas eram diferentes: o card parte do FECHAMENTO de ontem, e o ponto
+    // anterior do gráfico é o snapshot das 23:59. Entre um e outro cabe o pregão
+    // americano, a cripto (que negocia 24h) e o câmbio — e a diferença chegou a
+    // R$ 14,86 numa carteira de R$ 21 mil. Quem manda no "hoje" é o KPI.
+    //
+    // No modo MENSAL isso NÃO se aplica: lá o ponto LIVE representa o mês corrente
+    // inteiro, e a comparação certa continua sendo contra o mês anterior.
+    const dayOverride = granularity === 'DAILY' && kpis.dayVariation !== undefined
+        ? { value: kpis.dayVariation, percent: kpis.dayVariationPercent ?? null }
+        : null;
+
     // O rótulo do ponto de comparação segue a granularidade: dia contra dia,
     // mês contra mês.
-    return withVariation(points, sortedHistory, granularity === 'DAILY' ? dayLabel : monthLabel);
+    return withVariation(points, sortedHistory, granularity === 'DAILY' ? dayLabel : monthLabel, dayOverride);
 }
 
 /**
@@ -257,9 +276,21 @@ function appendLive(
 function withVariation(
     points: RawPoint[],
     sortedHistory: HistoryPoint[],
-    labelFn: (d: Date) => string
+    labelFn: (d: Date) => string,
+    dayOverride: { value: number; percent: number | null } | null = null
 ): EvolutionChartPoint[] {
     return points.map((item, index) => {
+        // Ponto de HOJE no modo diário: a variação é a do dia, vinda do KPI.
+        if (item.isLive && dayOverride) {
+            return {
+                ...item,
+                periodVariation: dayOverride.value,
+                periodVariationPercent: dayOverride.percent,
+                previousLabel: null,
+                isDayVariation: true,
+            };
+        }
+
         let prevEquity = 0;
         let prevInvested = 0;
         let previousLabel: string | null = null;

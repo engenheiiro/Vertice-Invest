@@ -232,6 +232,77 @@ describe('previousLabel — o tooltip nomeia CONTRA QUEM mediu', () => {
     });
 });
 
+describe('ponto LIVE do diário usa a régua do card (variação do DIA)', () => {
+    // Caso real de 20/08/2026: o card mostrava +R$ 16,59 e o tooltip +R$ 31,45,
+    // porque o card parte do FECHAMENTO de ontem e o gráfico partia do snapshot
+    // das 23:59. Entre os dois cabe o pregão americano, a cripto (24h) e o câmbio.
+    const kpisComDia = (equity: number, invested: number, dia: number, diaPct: number) => ({
+        totalEquity: equity, totalInvested: invested, totalResult: equity - invested,
+        dayVariation: dia, dayVariationPercent: diaPct,
+    });
+
+    it('o ponto de hoje repete o número do card, não a distância até o snapshot', () => {
+        const history = [
+            snap(2026, 5, 29, 21032.40, 20971.70),
+            snap(2026, 5, 30, 21049.76, 20971.70), // snapshot das 23:59 de ontem
+        ];
+        const pts = build(history, kpisComDia(21081.21, 20971.70, 16.59, 0.08), 'DAILY', '7D');
+        const live = pts[pts.length - 1];
+
+        expect(live.isLive).toBe(true);
+        expect(live.periodVariation).toBeCloseTo(16.59);   // card
+        expect(live.periodVariation).not.toBeCloseTo(31.45); // snapshot
+        expect(live.periodVariationPercent).toBeCloseTo(0.08);
+        expect(live.isDayVariation).toBe(true);
+        expect(live.previousLabel).toBeNull(); // o rótulo vira "Variação hoje"
+    });
+
+    it('os pontos HISTÓRICOS continuam medindo snapshot a snapshot', () => {
+        const history = [
+            snap(2026, 5, 29, 21032.40, 20971.70),
+            snap(2026, 5, 30, 21049.76, 20971.70),
+        ];
+        const pts = build(history, kpisComDia(21081.21, 20971.70, 16.59, 0.08), 'DAILY', '7D');
+        const ontem = byLabel(pts, '30/06')!;
+
+        expect(ontem.periodVariation).toBeCloseTo(17.36); // 21049.76 - 21032.40
+        expect(ontem.isDayVariation).toBeUndefined();
+        expect(ontem.previousLabel).toBe('29/06');
+    });
+
+    it('MENSAL não usa a variação do dia: o ponto LIVE é o MÊS corrente', () => {
+        const history = [
+            snap(2026, 4, 31, 1000, 1000),
+            snap(2026, 5, 30, 1100, 1000),
+        ];
+        const pts = build(history, kpisComDia(1200, 1000, 5, 0.4), 'MONTHLY', 'ALL');
+        const live = byLabel(pts, 'jul/2026')!;
+
+        expect(live.isLive).toBe(true);
+        expect(live.isDayVariation).toBeUndefined();
+        expect(live.periodVariation).toBeCloseTo(100); // 1200 - 1100, contra o mês anterior
+        expect(live.previousLabel).toBe('jun/2026');
+    });
+
+    it('sem dayVariation no KPI (payload antigo) mantém o comportamento anterior', () => {
+        const history = [snap(2026, 5, 30, 1000, 1000)];
+        const pts = build(history, kpis(1010, 1000, 10), 'DAILY', '7D');
+        const live = pts[pts.length - 1];
+
+        expect(live.isDayVariation).toBeUndefined();
+        expect(live.periodVariation).toBeCloseTo(10); // volta a medir contra o snapshot
+    });
+
+    it('dayVariation = 0 é respeitado (dia sem movimento não vira variação do snapshot)', () => {
+        const history = [snap(2026, 5, 30, 21000, 20971.70)];
+        const pts = build(history, kpisComDia(21050, 20971.70, 0, 0), 'DAILY', '7D');
+        const live = pts[pts.length - 1];
+
+        expect(live.isDayVariation).toBe(true);
+        expect(live.periodVariation).toBe(0);
+    });
+});
+
 describe('summarizeEvolutionWindow', () => {
     // Só realEquity/realInvested importam para o resumo.
     const pt = (realEquity: number, realInvested: number): EvolutionChartPoint =>
