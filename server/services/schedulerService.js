@@ -46,6 +46,7 @@ import {
     upsertWalletSnapshotForDay,
 } from '../utils/walletSnapshot.js';
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
+import { ensureWalletDayCandles } from './walletDayCandleService.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { trackJobSafe } from '../utils/jobRun.js';
 import { runDataHealthCheck } from './dataHealthService.js';
@@ -150,15 +151,25 @@ const loadDayCloses = async (assetRefs, dayStr) => {
 };
 
 // Contexto compartilhado (macro + cotações em lote) de um run de snapshot.
-export const loadSnapshotContext = async (dayStr = brDayStr(new Date())) => {
+// `ensureDayCandles` só é ligado por quem vai GRAVAR o snapshot de hoje: o
+// backfill/boot reconstrói a série pelo rebuild (que tem o próprio cache de
+// preços) e não deve pagar dezenas de buscas externas a cada reinício.
+export const loadSnapshotContext = async (dayStr = brDayStr(new Date()), { ensureDayCandles = false } = {}) => {
     const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
     const usdRate = sysConfig?.dollar || 5.75;
     const currentCdi = (sysConfig?.cdi > 0 ? sysConfig.cdi : null) || (sysConfig?.selic > 0 ? sysConfig.selic : null) || DEFAULT_SELIC_FALLBACK;
     const macroRates = { cdiRate: currentCdi, selic: sysConfig?.selic, ipca: sysConfig?.ipca };
     // (F4) Cotações em LOTE, uma vez por run — evita N+1 de getMarketDataByTicker.
-    const liveAssets = await UserAsset.find({ type: { $nin: ['CASH', 'FIXED_INCOME'] } }).select('ticker type').lean();
+    const liveAssets = await UserAsset.find({ type: { $nin: ['CASH', 'FIXED_INCOME'] } }).select('ticker type quantity').lean();
     const priceMap = await marketDataService.getMarketDataMap([...new Set(liveAssets.map((a) => a.ticker))]);
     const closeMap = await loadDayCloses(liveAssets, dayStr);
+    // Antes de marcar o dia, garante o candle de fechamento dos ativos que estão
+    // em carteira. Sem isso o fallback abaixo (preço corrente às 23:59) valia para
+    // metade do patrimônio, porque a série de AssetHistory atrasa por design.
+    if (ensureDayCandles) {
+        const resolved = await ensureWalletDayCandles(liveAssets, dayStr, closeMap);
+        for (const [key, close] of resolved) closeMap.set(key, close);
+    }
     const getUsdRateForDate = await financialService._loadUsdRateResolver(usdRate);
     // Séries de PU do Tesouro, uma vez por run: o snapshot precisa marcar a renda
     // fixa pela MESMA régua do KPI ao vivo, senão o histórico e o card divergem.
@@ -172,8 +183,10 @@ export const loadSnapshotContext = async (dayStr = brDayStr(new Date())) => {
 // Patrimônio (equity/invested) de um conjunto de ativos numa data de cálculo.
 // Renda fixa/caixa: accrual exato via fonte única (utils/fixedIncome). Renda
 // variável: FECHAMENTO do dia (mesma marcação do rebuild), caindo na cotação
-// corrente só quando o candle ainda não chegou — cripto negocia 24/7 e o candle
-// do dia corrente pode não existir às 23:59.
+// corrente só quando o candle ainda não chegou. Esse fallback é o último recurso:
+// `ensureWalletDayCandles` busca o candle do dia dos ativos em carteira antes do
+// snapshot, então ele só entra quando a fonte externa falhou ou o ativo não
+// negociou no dia.
 export const computeEquityAt = (assets, { priceMap, closeMap, macroRates, usdRate, calcDate, treasuryPricing = EMPTY_TREASURY_PRICING }) => {
     let totalEquity = 0;
     let totalInvested = 0;
@@ -382,7 +395,7 @@ export const runDailySnapshot = async (force = false) => {
 
     logger.info(`📸 Iniciando Snapshot Patrimonial Diário (Auditado) [Force: ${force}]...`);
     try {
-        const ctx = await loadSnapshotContext(todayStr);
+        const ctx = await loadSnapshotContext(todayStr, { ensureDayCandles: true });
         // Fase 2: itera CARTEIRAS (não usuários) — 1 snapshot/dia por carteira,
         // já que cada uma tem seu próprio histórico/TWRR desde a criação.
         const wallets = await Wallet.find({}).populate('user', 'email').select('_id user name');
