@@ -67,8 +67,15 @@ const SystemConfigSchema = new mongoose.Schema({
   },
 
   // NOVO: Relatório de Séries Temporais
+  // `visited/total/complete` existem porque um run truncado (processo morto no meio)
+  // não deixa log: sem o denominador gravado, cobertura parcial passa por run normal.
   lastTimeSeriesStats: {
-    assetsProcessed: { type: Number, default: 0 },
+    assetsProcessed: { type: Number, default: 0 }, // métricas efetivamente gravadas
+    visited: { type: Number, default: 0 },
+    total: { type: Number, default: 0 },
+    fetched: { type: Number, default: 0 },
+    failed: { type: Number, default: 0 },
+    complete: { type: Boolean, default: false },
     timestamp: { type: Date }
   },
 

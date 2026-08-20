@@ -82,6 +82,39 @@ export const computeEtfAvgLiquidity = (sortedHistory, window = ETF_LIQUIDITY_WIN
     return avg > 0 ? Math.round(avg) : null;
 };
 
+// (RETOMADA) Ordem de atendimento do run: quem foi visitado há mais tempo primeiro.
+//
+// O worker sempre varreu a lista na ordem natural do Mongo, que é estável entre
+// runs. Como todo run recomeça do zero, um run truncado sempre reatende a MESMA
+// cabeça e a cauda nunca chega a ser processada. Foi o que aconteceu em 19/08/2026:
+// o processo morreu 62s depois de começar, o run cobriu exatamente as posições
+// 0–233 e os outros 1.066 ativos (82% do universo) ficaram sem visita — 660 séries
+// congeladas na mesma data, que é a assinatura desse tipo de falha.
+//
+// Ordenar por `lastCheckedAt` faz a retomada cair de graça: o que não foi alcançado
+// ontem tem a visita mais antiga e encabeça a fila hoje. Sem cursor persistido para
+// corromper, idempotente, e correto mesmo com dois schedulers rodando em paralelo.
+// Ativo sem série ainda vai primeiro (checkedAt 0) — é quem mais precisa.
+// Exportada para teste.
+export const orderByStaleness = (assets = [], lastCheckedByKey = new Map()) => assets
+    .map((asset, index) => ({
+        asset,
+        index,
+        checkedAt: lastCheckedByKey.get(historyStorageKey(asset?.ticker, asset?.type)) ?? 0,
+    }))
+    // Empate (lote inteiro tocado no mesmo updateMany) mantém a ordem natural.
+    .sort((a, b) => a.checkedAt - b.checkedAt || a.index - b.index)
+    .map(({ asset }) => asset);
+
+// (DURABILIDADE) Métricas pendentes antes de irem ao banco.
+//
+// O bulkWrite único no fim do run era all-or-nothing: quando o processo morria no
+// meio, beta/SMA/EMA/volatilidade de TODOS os ativos já processados iam junto — os
+// candles sobreviviam (gravados um a um dentro do loop), as métricas não. Falha cara
+// e silenciosa. Com flush parcial, um run interrompido perde no máximo o último lote.
+// Exportada para teste.
+export const METRICS_FLUSH_SIZE = 200;
+
 const calculateBeta = (assetReturns, benchmarkReturns) => {
     if (assetReturns.length < 2 || benchmarkReturns.length < 2) return 1;
     const length = Math.min(assetReturns.length, benchmarkReturns.length);
@@ -106,8 +139,22 @@ const calculateBeta = (assetReturns, benchmarkReturns) => {
 export const timeSeriesWorker = {
     async run() {
         logger.info("📈 [TimeSeriesWorker] Iniciando cálculo de Volatilidade, Beta, SMA e EMA...");
+        // Contabilidade do run. Sem isso a cobertura incompleta não deixa rastro:
+        // em 19/08/2026 o run parou em 234/1300 sem uma linha de log dizendo isso.
+        const stats = { total: 0, visited: 0, fetched: 0, fresh: 0, failed: 0, metrics: 0 };
+        const operations = [];
+
+        // Grava o que já foi calculado e esvazia o buffer (ver METRICS_FLUSH_SIZE).
+        // Fora do try de propósito: o caminho de erro também precisa chamá-la.
+        const flushMetrics = async () => {
+            if (operations.length === 0) return;
+            const pending = operations.splice(0, operations.length);
+            await MarketAsset.bulkWrite(pending);
+            stats.metrics += pending.length;
+        };
+
         try {
-            const assets = await MarketAsset.find({ isActive: true }).select('ticker type');
+            const assets = await MarketAsset.find({ isActive: true }).select('ticker type').lean();
             if (assets.length === 0) return;
 
             // Puxa o histórico do IBOV para calcular o Beta das ações/FIIs.
@@ -127,13 +174,18 @@ export const timeSeriesWorker = {
                     }
                 }
             }
-            const operations = [];
-            let processedCount = 0;
-            const totalAssets = assets.length;
+            // Fila por defasagem de visita (ver orderByStaleness). Projeção enxuta:
+            // `history` fica de fora, senão isto puxaria a coleção inteira.
+            const checkedDocs = await AssetHistory.find({}, { ticker: 1, lastCheckedAt: 1 }).lean();
+            const lastCheckedByKey = new Map(checkedDocs.map(
+                d => [d.ticker, d.lastCheckedAt ? new Date(d.lastCheckedAt).getTime() : 0]));
+            const queue = orderByStaleness(assets, lastCheckedByKey);
+
+            stats.total = queue.length;
             const BATCH_SIZE = 5;
 
-            for (let i = 0; i < totalAssets; i += BATCH_SIZE) {
-                const batch = assets.slice(i, i + BATCH_SIZE);
+            for (let i = 0; i < stats.total; i += BATCH_SIZE) {
+                const batch = queue.slice(i, i + BATCH_SIZE);
                 const now = new Date();
 
                 // Carrega o histórico de todo o lote em uma única query. O .lean() evita
@@ -144,7 +196,7 @@ export const timeSeriesWorker = {
                 const histByTicker = new Map(histDocs.map(d => [d.ticker, d]));
 
                 let batchDidFetch = false;  // só dorme entre lotes que realmente bateram no Yahoo
-                const touchTickers = [];    // frescos: renova lastUpdated em massa, sem .save() por doc
+                const visitedTickers = [];  // frescos + falhos: renova lastCheckedAt em massa, sem .save() por doc
 
                 await Promise.all(batch.map(async (asset) => {
                     const storageKey = historyStorageKey(asset.ticker, asset.type);
@@ -156,6 +208,7 @@ export const timeSeriesWorker = {
 
                     if (!historyEntry || isStale || !historyEntry.history || historyEntry.history.length < 20) {
                         batchDidFetch = true;
+                        let fetched = false;
                         try {
                             const externalHistory = await externalMarketService.getFullHistory(asset.ticker, asset.type);
                             if (externalHistory && externalHistory.length > 0) {
@@ -172,15 +225,27 @@ export const timeSeriesWorker = {
                                 );
                                 // Reaproveita o array recém-buscado para o cálculo, sem reler do banco.
                                 historyEntry = { ticker: storageKey, history: historyToStore, lastUpdated: now };
+                                fetched = true;
                             }
                         } catch (e) {
                             logger.warn(`[TimeSeriesWorker] Falha ao buscar histórico para ${asset.ticker}`);
+                        }
+                        if (fetched) {
+                            stats.fetched += 1;
+                        } else {
+                            // Falha na fonte também é VISITA. Sem marcar lastCheckedAt, um
+                            // ticker morto no Yahoo voltaria ao topo da fila todo run e
+                            // travaria a rotação. (Sem upsert de propósito: criar doc vazio
+                            // aqui inflaria a contagem de "sem série" da sentinela de saúde.)
+                            stats.failed += 1;
+                            visitedTickers.push(storageKey);
                         }
                     } else {
                         // "Touch" de monitoramento: renova lastCheckedAt (visita do worker),
                         // NUNCA lastUpdated — renovar lastUpdated sem buscar dados era o que
                         // mascarava a staleness e congelava as séries.
-                        touchTickers.push(storageKey);
+                        stats.fresh += 1;
+                        visitedTickers.push(storageKey);
                     }
 
                     if (!historyEntry || !historyEntry.history || historyEntry.history.length < 20) return;
@@ -255,17 +320,21 @@ export const timeSeriesWorker = {
                     });
                 }));
 
-                // Renova lastCheckedAt dos ativos frescos em uma única operação por lote.
+                // Renova lastCheckedAt dos ativos visitados em uma única operação por lote.
                 // (lastUpdated fica intocado — só muda quando candles são realmente re-buscados.)
-                if (touchTickers.length > 0) {
+                if (visitedTickers.length > 0) {
                     await AssetHistory.updateMany(
-                        { ticker: { $in: touchTickers } },
+                        { ticker: { $in: visitedTickers } },
                         { $set: { lastCheckedAt: now } }
                     );
                 }
 
-                processedCount += batch.length;
-                logger.info(`[TimeSeriesWorker] Processando lote... ${processedCount}/${totalAssets} ativos.`);
+                stats.visited += batch.length;
+                logger.info(`[TimeSeriesWorker] Processando lote... ${stats.visited}/${stats.total} ativos.`);
+
+                // Grava as métricas acumuladas antes que o buffer cresça demais: o run
+                // pode ser interrompido a qualquer lote (ver METRICS_FLUSH_SIZE).
+                if (operations.length >= METRICS_FLUSH_SIZE) await flushMetrics();
 
                 // Rate limit protection — só pausa entre lotes que dispararam busca externa no Yahoo.
                 // Em runs "quentes" (tudo fresco) não há throttle a aplicar, eliminando o piso ocioso.
@@ -274,27 +343,53 @@ export const timeSeriesWorker = {
                 }
             }
 
-            if (operations.length > 0) {
-                await MarketAsset.bulkWrite(operations);
-                logger.info(`✅ [TimeSeriesWorker] Atualizados ${operations.length} ativos com métricas temporais.`);
-
-                // Atualiza estatísticas no SystemConfig
-                await SystemConfig.findOneAndUpdate(
-                    { key: 'MACRO_INDICATORS' },
-                    {
-                        $set: {
-                            lastTimeSeriesStats: {
-                                assetsProcessed: operations.length,
-                                timestamp: new Date()
-                            }
-                        }
-                    },
-                    { upsert: true }
-                );
-            }
+            await flushMetrics();
+            await this.reportRun(stats);
 
         } catch (error) {
-            logger.error(`❌ [TimeSeriesWorker] Erro: ${error.message}`);
+            // O que já foi calculado não pode morrer com o erro.
+            try { await flushMetrics(); } catch { /* já estamos no caminho de falha */ }
+            logger.error(`❌ [TimeSeriesWorker] Erro após ${stats.visited}/${stats.total} ativos: ${error.message}`);
+            await this.reportRun(stats);
+        }
+    },
+
+    /**
+     * Fecha o run: log de contabilidade + registro em SystemConfig.
+     *
+     * Um run que cobre 234 de 1.300 ativos é indistinguível de um run completo pelo
+     * log antigo (`✅ Atualizados N ativos`), que só contava o bulkWrite final. O
+     * denominador é o que denuncia cobertura parcial — e fica gravado também no
+     * banco, porque um processo morto não escreve log nenhum.
+     */
+    async reportRun(stats) {
+        const complete = stats.total > 0 && stats.visited >= stats.total;
+        const linha = `${stats.visited}/${stats.total} visitados · ${stats.fetched} re-buscados · `
+            + `${stats.fresh} já frescos · ${stats.failed} sem dado na fonte · `
+            + `${stats.metrics} métricas gravadas.`;
+        if (complete) logger.info(`✅ [TimeSeriesWorker] ${linha}`);
+        else logger.warn(`⚠️ [TimeSeriesWorker] Cobertura INCOMPLETA — ${linha}`);
+
+        try {
+            await SystemConfig.findOneAndUpdate(
+                { key: 'MACRO_INDICATORS' },
+                {
+                    $set: {
+                        lastTimeSeriesStats: {
+                            assetsProcessed: stats.metrics,
+                            visited: stats.visited,
+                            total: stats.total,
+                            fetched: stats.fetched,
+                            failed: stats.failed,
+                            complete,
+                            timestamp: new Date()
+                        }
+                    }
+                },
+                { upsert: true }
+            );
+        } catch (e) {
+            logger.warn(`[TimeSeriesWorker] Falha ao registrar estatísticas: ${e.message}`);
         }
     }
 };
