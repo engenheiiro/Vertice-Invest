@@ -21,6 +21,9 @@ import { errorHandler } from './middleware/errorHandler.js'; // (6.1) erro estru
 import { productionErrorSanitizer } from './middleware/productionErrorSanitizer.js';
 import { mongoCircuitBreaker, getMongoBreakerState } from './middleware/mongoCircuitBreaker.js'; // (6.9) disjuntor do MongoDB
 import { swaggerSpec } from './config/swagger.js'; // (I7) OpenAPI/Swagger
+import logger from './config/logger.js';
+import AppError from './utils/AppError.js';
+import { buildAllowedOrigins, resolveCorsOrigin, sanitizeOriginForLog } from './utils/corsOrigins.js';
 
 // Rotas
 import authRoutes from './routes/authRoutes.js';
@@ -126,17 +129,55 @@ app.use(express.json({ limit: '1mb' }));
 // logo após o parse do corpo e antes de qualquer rota.
 app.use(sanitizeInput);
 
-const ALLOWED_ORIGINS = [process.env.CLIENT_URL, 'http://localhost:5173'].filter(Boolean);
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    return callback(new Error('Origem não permitida por CORS'));
-  },
-  credentials: true,
-  // (1.4) Libera o header CSRF no preflight (as mutações já são preflighted por
-  // usarem Content-Type: application/json).
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+// CORS por delegate (recebe `req`) e NUNCA por exceção. Origem desconhecida não
+// é defeito do servidor: antes o callback lançava `Error`, o errorHandler global
+// devolvia 500 e o painel de Saúde enchia de "Origem não permitida por CORS" sem
+// dizer qual origem era. Pior: script de módulo do Vite (`crossorigin`) e POST
+// mandam `Origin` mesmo na MESMA origem, então quem abrisse o app por um endereço
+// diferente do `CLIENT_URL` exato (www, `*.onrender.com`, `localhost:5000`
+// servindo o dist) levava 500 no bundle — tela branca — e no `/api/refresh`.
+//
+// A negação agora é a do próprio protocolo: não emitir `Access-Control-Allow-*`.
+// O navegador bloqueia a leitura da resposta; CSRF continua coberto pelo
+// double-submit de `middleware/csrf.js`, que não depende disto.
+const ALLOWED_ORIGINS = buildAllowedOrigins(process.env);
+const CORS_ALLOWED_HEADERS = ['Content-Type', 'Authorization', 'X-CSRF-Token'];
+
+app.use(cors((req, callback) => {
+  const selfOrigin = `${req.protocol}://${req.get('host') || ''}`;
+  const decision = resolveCorsOrigin({
+    origin: req.headers.origin,
+    selfOrigin,
+    allowed: ALLOWED_ORIGINS,
+    isProduction: process.env.NODE_ENV === 'production',
+  });
+  req.corsDenied = !decision.allowed;
+  callback(null, {
+    // `true` reflete a origem da requisição (obrigatório com credentials);
+    // `false` só omite os headers — a requisição segue e o navegador decide.
+    origin: decision.allowed,
+    credentials: true,
+    // (1.4) Libera o header CSRF no preflight (as mutações já são preflighted
+    // por usarem Content-Type: application/json).
+    allowedHeaders: CORS_ALLOWED_HEADERS,
+  });
 }));
+
+// Origem negada: 403 explícito nas rotas de API (sinal limpo, `warn` no log, não
+// entra no painel como erro interno) e passagem livre para o shell/estático —
+// derrubar o `index.html` por causa de um header de origem é o bug que se está
+// consertando aqui. A origem vai sanitizada: entrada de cliente em linha de log
+// forja registro.
+app.use((req, res, next) => {
+  if (!req.corsDenied) return next();
+  logger.warn('CORS: origem bloqueada', {
+    origin: sanitizeOriginForLog(req.headers.origin),
+    method: req.method,
+    path: req.path,
+  });
+  if (!req.path.startsWith('/api')) return next();
+  return next(new AppError('Origem não permitida.', { status: 403, code: 'CORS_ORIGIN_DENIED' }));
+});
 
 // Respostas da API podem conter dados pessoais, financeiros ou de sessão. A PWA
 // já usa NetworkOnly, mas este header também impede caches de navegador, proxy e

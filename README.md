@@ -68,7 +68,8 @@ Veja [`.env.example`](.env.example) para a lista completa. As principais:
 | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` | Mercado Pago (checkout + webhook) |
 | `SMTP_*` | Envio de email (reset de senha, recibos) |
 | `SENTRY_DSN` | Monitoramento de erros |
-| `CLIENT_URL` | Origem permitida no CORS |
+| `CLIENT_URL` | Origem do app no CORS (apex e www entram juntos) |
+| `CORS_EXTRA_ORIGINS` | Origens extras no CORS, separadas por vírgula (opcional) |
 
 Tunáveis opcionais (têm default): `PLAN_CACHE_TTL_MS`, `BUY_THRESHOLD`, `MAX_CRYPTO_PER_PROFILE`, `MARKET_CACHE_MINUTES`, `DEFAULT_SELIC_FALLBACK`.
 Para upload de sourcemaps ao Sentry no build do client: `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`.
