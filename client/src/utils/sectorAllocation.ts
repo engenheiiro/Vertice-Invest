@@ -139,7 +139,7 @@ const US_SECTOR_MAP: Record<string, string> = {
  * "Não classificado" quando não há setor reconhecível — em vez de um balde
  * "Outros" que se confundiria com a dobra da cauda.
  */
-export const stockSectorLabel = (asset: Pick<Asset, 'type' | 'sector'>): string => {
+export const stockSectorLabel = (asset: Pick<Asset, 'sector'> & Partial<Pick<Asset, 'type'>>): string => {
     // Um ETF de índice amplo não pertence a setor nenhum; forçá-lo em um distorceria
     // a leitura de concentração (BOVA11 não é "Financeiro" por ter bancos dentro).
     if (asset.type === 'ETF') return ETF_SECTOR_LABEL;
@@ -179,10 +179,23 @@ export interface SectorSlice {
     tickers: string[];
 }
 
-const KIND_CONFIG: Record<SectorKind, { labelOf: (a: Asset) => string; foldLabel: string }> = {
+/**
+ * Entrada mínima da agregação. É um subconjunto de `Asset` (que continua sendo
+ * aceito) para que a MESMA repartição possa ser calculada sobre linhas que ainda
+ * não são posições — a sugestão do Aporte Inteligente é uma lista de
+ * (ticker, setor, valor) que só existiria na carteira depois da compra.
+ */
+export type SectorAllocationInput = Pick<Asset, 'ticker' | 'sector'> &
+    Partial<Pick<Asset, 'type'>> & { totalValue: number };
+
+const KIND_CONFIG: Record<SectorKind, { labelOf: (a: SectorAllocationInput) => string; foldLabel: string }> = {
     FII: { labelOf: (a) => fiiSectorLabel(a.sector), foldLabel: 'Outros segmentos' },
     STOCK: { labelOf: stockSectorLabel, foldLabel: 'Outros setores' },
 };
+
+/** Rótulo de setor de uma linha, na granularidade da classe (segmento p/ FII). */
+export const sectorLabelFor = (item: SectorAllocationInput, kind: SectorKind): string =>
+    KIND_CONFIG[kind].labelOf(item);
 
 /**
  * Reparte o saldo da classe por setor, do maior para o menor.
@@ -193,7 +206,7 @@ const KIND_CONFIG: Record<SectorKind, { labelOf: (a: Asset) => string; foldLabel
  *  • acima de MAX_SECTOR_SLICES baldes, a cauda (mais o não classificado) dobra
  *    num balde cinza — gerar mais tons quebraria a validação da paleta.
  */
-export const computeSectorAllocation = (items: Asset[], kind: SectorKind): SectorSlice[] => {
+export const computeSectorAllocation = (items: SectorAllocationInput[], kind: SectorKind): SectorSlice[] => {
     const { labelOf, foldLabel } = KIND_CONFIG[kind];
     const buckets = new Map<string, { label: string; value: number; holdings: { ticker: string; value: number }[] }>();
     let total = 0;

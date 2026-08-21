@@ -3,7 +3,9 @@
  *  - Aba ETFs: o aporte respeita a origem visível (Nacional B3 / Internacional US),
  *    nunca mistura os dois universos (moedas diferentes: BRL vs USD).
  *  - Só distribui entre ativos COMPRAR; itens AGUARDAR nunca entram na sugestão.
- * Mocka o WalletContext (usdRate) para isolar a lógica de alocação.
+ *  - Aba FIIs: mostra o setor de cada sugestão e a alocação setorial (do aporte e
+ *    da carteira depois dele).
+ * Mocka o WalletContext (usdRate + posições) para isolar a lógica de alocação.
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -11,8 +13,17 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { ResearchAporteModal } from './ResearchAporteModal';
 import type { RankingItem } from '../../services/research';
 
+// jsdom não implementa ResizeObserver — usado pelo ResponsiveContainer do recharts.
+(global as any).ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
+const wallet = vi.hoisted(() => ({ usdRate: 5, assets: [] as any[], isPrivacyMode: false }));
+
 vi.mock('../../contexts/WalletContext', () => ({
-  useWallet: () => ({ usdRate: 5 }),
+  useWallet: () => wallet,
 }));
 
 const mk = (
@@ -53,7 +64,11 @@ const suggestedTickers = () =>
     .getAllByText(/^[A-Z]+\d*$/)
     .map((el) => el.textContent);
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  wallet.assets = [];
+  wallet.isPrivacyMode = false;
+});
 
 describe('ResearchAporteModal — aba ETFs respeita a origem', () => {
   it('Internacional (default US): sugere apenas ETFs US e usa US$', () => {
@@ -129,5 +144,129 @@ describe('ResearchAporteModal — só distribui em COMPRAR', () => {
     const tickers = suggestedTickers();
     expect(tickers).toContain('AAA3');
     expect(tickers).not.toContain('BBB3');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Aba FIIs — leitura setorial.
+//
+// A sugestão de compra sozinha não diz que risco está sendo comprado: 6 FIIs de
+// papel e 6 segmentos diferentes têm a mesma cara na lista. Estes testes fixam
+// que o setor aparece por linha e que as duas pizzas (aporte e carteira depois)
+// usam a mesma chave de segmento do backend.
+// ---------------------------------------------------------------------------
+
+const fiiItem = (ticker: string, sector: string, currentPrice: number, score: number): RankingItem => ({
+  ...mk(ticker, 'FII', 'BUY', currentPrice, score),
+  sector,
+});
+
+// Preços iguais e scores próximos: KNCR11 e VISC11 recebem 2 cotas cada (R$ 200
+// de um aporte de R$ 400) — 50% para cada segmento.
+const FII_RANKING: RankingItem[] = [
+  fiiItem('KNCR11', 'Títulos e Val. Mob.', 100, 99),
+  fiiItem('VISC11', 'Shoppings', 100, 90),
+];
+
+const walletFii = (ticker: string, totalValue: number, sector: string) => ({
+  id: ticker, ticker, type: 'FII', quantity: 1, averagePrice: totalValue, currentPrice: totalValue,
+  totalValue, totalCost: totalValue, profit: 0, profitPercent: 0, currency: 'BRL', sector,
+});
+
+const renderFiiAporte = (amount = '400') => {
+  render(<ResearchAporteModal isOpen onClose={() => {}} ranking={FII_RANKING} assetClass="FII" />);
+  fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: amount } });
+};
+
+describe('ResearchAporteModal — aba FIIs mostra o setor', () => {
+  it('rotula cada sugestão com o segmento canônico do FII', () => {
+    renderFiiAporte();
+
+    const rows = rowsContainer();
+    // Sinônimo do Fundamentus ("Títulos e Val. Mob.") normalizado para o rótulo de carteira.
+    expect(within(rows).getAllByText('Papel (CRI)').length).toBeGreaterThan(0);
+    expect(within(rows).getAllByText('Shoppings').length).toBeGreaterThan(0);
+  });
+
+  it('conta setores pela chave de segmento, não pelo rótulo cru', () => {
+    render(
+      <ResearchAporteModal
+        isOpen
+        onClose={() => {}}
+        // Dois rótulos distintos na origem, um único risco de crédito (CRI).
+        ranking={[fiiItem('KNCR11', 'Títulos e Val. Mob.', 100, 99), fiiItem('KNSC11', 'Papel', 100, 90)]}
+        assetClass="FII"
+      />,
+    );
+    fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '400' } });
+
+    expect(screen.getByText(/2 ativos · 1 setor$/)).toBeInTheDocument();
+  });
+
+  it('não mostra setor nas classes ainda não cobertas (ex. Ações BR)', () => {
+    render(
+      <ResearchAporteModal isOpen onClose={() => {}} ranking={[mk('AAA3', 'STOCK', 'BUY', 20)]} assetClass="STOCK" />,
+    );
+    fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '500' } });
+
+    expect(screen.queryByText('Alocação setorial')).not.toBeInTheDocument();
+  });
+});
+
+describe('ResearchAporteModal — pizzas de alocação setorial', () => {
+  it('reparte o aporte por setor', () => {
+    renderFiiAporte();
+
+    expect(screen.getByText('Alocação setorial')).toBeInTheDocument();
+    const doAporte = screen.getByText('Do aporte').closest('div')!.parentElement as HTMLElement;
+    expect(within(doAporte).getByText('2 setores')).toBeInTheDocument();
+    // R$ 200 em cada segmento.
+    expect(within(doAporte).getAllByText('50.0%')).toHaveLength(2);
+  });
+
+  it('projeta a carteira depois do aporte, com o antes de cada segmento', () => {
+    wallet.assets = [
+      walletFii('VISC11', 600, 'Shoppings'),
+      // Ação BR não entra num donut de segmento de FII.
+      { ...walletFii('PETR4', 5000, 'Petróleo'), type: 'STOCK' },
+    ];
+    renderFiiAporte();
+
+    const depois = screen.getByText('Sua carteira depois').closest('div')!.parentElement as HTMLElement;
+    // VISC11 600 + 200 = 800 e KNCR11 200, sobre 1000.
+    expect(within(depois).getByText('80.0%')).toBeInTheDocument();
+    expect(within(depois).getByText('20.0%')).toBeInTheDocument();
+    // Antes do aporte a carteira de FII era 100% shopping; o papel entra do zero.
+    expect(within(depois).getByText(/antes 100\.0%/)).toBeInTheDocument();
+    expect(within(depois).getByText(/antes 0\.0%/)).toBeInTheDocument();
+    expect(within(depois).queryByText('Petróleo')).not.toBeInTheDocument();
+  });
+
+  it('mostra TODOS os FIIs da carteira, inclusive segmentos ausentes do ranking', () => {
+    // O "depois" é a carteira do usuário, não um recorte do ranking: hotel e laje
+    // não estão no ranking desta semana, mas continuam sendo risco que ele carrega —
+    // omiti-los mostraria uma concentração menor do que a real.
+    wallet.assets = [
+      walletFii('VISC11', 400, 'Shoppings'),
+      walletFii('HTMX11', 300, 'Hotéis'),
+      walletFii('BRCR11', 100, 'Lajes Corporativas'),
+    ];
+    renderFiiAporte();
+
+    const depois = screen.getByText('Sua carteira depois').closest('div')!.parentElement as HTMLElement;
+    // VISC11 600, KNCR11 200, HTMX11 300, BRCR11 100 — sobre 1200.
+    expect(within(depois).getByText('Hotéis')).toBeInTheDocument();
+    expect(within(depois).getByText('25.0%')).toBeInTheDocument();
+    expect(within(depois).getByText('Lajes Corporativas')).toBeInTheDocument();
+    expect(within(depois).getByText('8.3%')).toBeInTheDocument();
+    // Os 4 segmentos da carteira, contra os 2 comprados no aporte.
+    expect(within(depois).getByText('4')).toBeInTheDocument();
+  });
+
+  it('sem posição na classe, explica em vez de repetir a mesma pizza', () => {
+    renderFiiAporte();
+
+    expect(screen.queryByText('Sua carteira depois')).not.toBeInTheDocument();
+    expect(screen.getByText(/ainda não tem essa classe na carteira/i)).toBeInTheDocument();
   });
 });

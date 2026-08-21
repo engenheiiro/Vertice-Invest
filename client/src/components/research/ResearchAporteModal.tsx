@@ -5,6 +5,10 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { useWallet } from '../../contexts/WalletContext';
 import { formatCurrency } from '../../utils/format';
+import { allocationBucket } from '../../utils/allocation';
+import { type SectorKind } from '../../utils/sectorAllocation';
+import { computeAporteSectorView } from '../../utils/aporteSectorAllocation';
+import { AporteSectorBreakdown } from './AporteSectorBreakdown';
 import type { RankingItem } from '../../services/research';
 
 interface ResearchAporteModalProps {
@@ -35,7 +39,7 @@ interface Allocation {
 }
 
 export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen, onClose, ranking, assetClass, etfOrigin = 'US', initialAmount = null }) => {
-    const { usdRate } = useWallet();
+    const { usdRate, assets, isPrivacyMode } = useWallet();
     const isEtf = assetClass === 'ETF';
     // Na aba ETFs a moeda depende da origem: Nacional (B3) é BRL; Internacional (US) é USD.
     // REIT é o ranking imobiliário US — preço em dólar, como STOCK_US.
@@ -197,6 +201,31 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
         };
     }, [amount, scopedRanking, profile, availableProfiles, isFractional, excludedTickers]);
 
+    // ── Leitura setorial ─────────────────────────────────────────────────────
+    // Habilitada na aba FIIs, onde o setor É a informação de risco que falta na
+    // lista (shopping ≠ papel ≠ logística) e a carteira do usuário está na mesma
+    // moeda da sugestão — comparar aporte em US$ com saldo em R$ no mesmo donut
+    // daria um "depois" sem significado. STOCK usa a mesma mecânica quando for
+    // estendido: basta acrescentar a classe ao mapa.
+    const sectorKind: SectorKind | null = assetClass === 'FII' ? 'FII' : null;
+
+    // Posições da MESMA classe hoje — base do "como fica a carteira depois".
+    const classHoldings = useMemo(() => {
+        if (!sectorKind) return [];
+        return (assets || []).filter(a => allocationBucket(a) === (sectorKind === 'FII' ? 'FII' : 'STOCK'));
+    }, [assets, sectorKind]);
+
+    const sectorView = useMemo(() => {
+        if (!sectorKind || allocations.length === 0) return null;
+        return computeAporteSectorView(
+            allocations.map(({ item, cost }) => ({ ticker: item.ticker, sector: item.sector, cost })),
+            classHoldings,
+            sectorKind,
+        );
+    }, [sectorKind, allocations, classHoldings]);
+
+    const effectiveSectorCount = sectorView?.aporteSectorCount ?? sectorCount;
+
     // Ativos excluídos com seus dados originais do ranking (para exibir os chips).
     const excludedItems = useMemo(() =>
         scopedRanking.filter(r => excludedTickers.has(r.ticker) && r.riskProfile === profile),
@@ -289,7 +318,10 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                         <>
                                             <div className="flex items-center justify-between mb-2">
                                                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sugestão de compra</h4>
-                                                <span className="text-[10px] font-bold text-slate-500">{allocations.length} ativos · {sectorCount} {sectorCount === 1 ? 'setor' : 'setores'}</span>
+                                                {/* Onde há leitura setorial, o contador vem da MESMA chave do donut —
+                                                    o `sectorCount` cru conta rótulos do Fundamentus ("Papel" e "Títulos
+                                                    e Val. Mob." seriam 2 setores para uma única fatia). */}
+                                                <span className="text-[10px] font-bold text-slate-500">{allocations.length} ativos · {effectiveSectorCount} {effectiveSectorCount === 1 ? 'setor' : 'setores'}</span>
                                             </div>
 
                                             <div className="space-y-2">
@@ -312,8 +344,25 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                                                 <span className="text-sm font-black text-white">{item.ticker}</span>
                                                                 <span className="text-[9px] font-bold text-slate-500">Score {item.score}</span>
                                                             </div>
-                                                            <p className="text-[10px] text-slate-500 truncate mt-0.5">
-                                                                {fmtShares(shares)} {unitLabel} × {formatCurrency(item.currentPrice, currency)}
+                                                            <p className="text-[10px] text-slate-500 truncate mt-0.5 flex items-center gap-1.5">
+                                                                {/* O setor vem antes do preço porque é o que diferencia o risco
+                                                                    de dois FIIs de score parecido. O ponto usa a cor da fatia
+                                                                    do donut abaixo, ligando a linha à alocação. */}
+                                                                {sectorKind && (
+                                                                    <>
+                                                                        <span className="inline-flex items-center gap-1 min-w-0">
+                                                                            <span
+                                                                                className="w-1.5 h-1.5 rounded-full shrink-0"
+                                                                                style={{ backgroundColor: sectorView?.colorByTicker.get(item.ticker) || '#64748B' }}
+                                                                            />
+                                                                            <span className="text-slate-400 truncate">{sectorView?.labelByTicker.get(item.ticker)}</span>
+                                                                        </span>
+                                                                        <span className="text-slate-700 shrink-0">·</span>
+                                                                    </>
+                                                                )}
+                                                                <span className="truncate">
+                                                                    {fmtShares(shares)} {unitLabel} × {formatCurrency(item.currentPrice, currency)}
+                                                                </span>
                                                             </p>
                                                         </div>
                                                         <div className="flex items-center gap-2 shrink-0">
@@ -345,6 +394,14 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                                     <span className="font-bold text-yellow-500">{formatCurrency(leftover, currency)}</span>
                                                 </div>
                                             </div>
+
+                                            {sectorView && (
+                                                <AporteSectorBreakdown
+                                                    view={sectorView}
+                                                    currency={currency}
+                                                    isPrivacyMode={isPrivacyMode}
+                                                />
+                                            )}
                                         </>
                                     )}
 
