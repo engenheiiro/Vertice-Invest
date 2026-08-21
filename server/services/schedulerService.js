@@ -766,12 +766,35 @@ export const initScheduler = () => {
         }
     });
 
-    // 10. Taxa USD/BRL histórica (toda segunda-feira 06:00 — antes dos outros syncs)
-    schedule('0 6 * * 1', 'fx-history', async () => {
+    // 10. Taxa USD/BRL histórica (DIÁRIO 18:10 — depois do fechamento do câmbio à
+    // vista (17:00) e ANTES dos dois consumidores que resolvem câmbio POR DATA:
+    // o 'daily-evening' (18:30) e o snapshot patrimonial (23:59).
+    //
+    // Era semanal ('0 6 * * 1'). A série 'USD-BRL' então envelhecia ao longo da
+    // semana (em 21/08/2026 o último candle era de 14/08) e, para todo dia após
+    // o último candle, buildUsdRateResolver devolve a cotação CORRENTE — certo
+    // para carimbar uma compra de hoje, mas no rebuild de histórico fazia cinco
+    // dias seguidos receberem a MESMA taxa: a variação cambial do período era
+    // achatada em zero e reaparecia de uma vez quando a série alcançava. Como o
+    // WalletSnapshot é a base do TWRR e do Sharpe, o degrau virava ruído de risco.
+    //
+    // Cabe num cron próprio e leve (uma requisição HTTP devolve 730 dias) em vez
+    // de entrar no 'daily-evening': aquele é `heavy` e some in-app quando
+    // EXTERNAL_SCHEDULER=true — o snapshot das 23:59 ficaria sem câmbio fresco
+    // justamente na configuração em que os jobs pesados saem daqui.
+    //
+    // Roda todo dia, não só em dia útil: a fonte só tem candle de pregão, então
+    // fim de semana/feriado é uma re-merge inofensiva — e uma segunda feriado
+    // não adia a atualização para terça.
+    schedule('10 18 * * *', 'fx-history', async () => {
         try {
             logger.info("⏰ [Scheduler] Sync taxa USD/BRL histórica...");
-            await macroDataService.syncHistoricalUSDRate();
-            logger.info("✅ [Scheduler] Taxa USD/BRL histórica sincronizada.");
+            const result = await macroDataService.syncHistoricalUSDRate();
+            logger.info("✅ [Scheduler] Taxa USD/BRL histórica sincronizada.", {
+                dias: result?.total ?? null,
+                ultimoCandle: result?.lastDate ?? null,
+                fonte: result?.source ?? null,
+            });
         } catch (error) {
             logger.error(`❌ [Scheduler] Sync USD/BRL histórico: ${error.message}`);
         }

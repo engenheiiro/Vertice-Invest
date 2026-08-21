@@ -79,9 +79,13 @@ export const JOB_CATALOG = {
         severity: 'WARN',
     },
     'fx-history': {
-        label: 'Taxa USD/BRL histórica (seg 06:00)',
-        maxSilenceHours: 192,
-        severity: 'WARN',
+        label: 'Taxa USD/BRL histórica (18:10)',
+        maxSilenceHours: 30,
+        // CRITICAL: a série por data é o que converte posição dolarizada no
+        // rebuild de histórico e no snapshot das 23:59. Parada, o resolver cai na
+        // cotação de hoje para todo dia posterior ao último candle e a variação
+        // cambial some da curva de patrimônio — e do TWRR/Sharpe que saem dela.
+        severity: 'CRITICAL',
     },
     'assets-reactivation': {
         label: 'Reativação de ativos inativos (seg 05:00)',

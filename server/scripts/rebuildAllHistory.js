@@ -19,6 +19,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import AssetTransaction from '../models/AssetTransaction.js';
 import { financialService } from '../services/financialService.js';
+import { macroDataService } from '../services/macroDataService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,6 +31,19 @@ const run = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('📡 Conectado ao MongoDB...\n');
+
+    // Câmbio ANTES de qualquer reconstrução. A curva é remarcada dia a dia por
+    // getUsdRateForDate, e para toda data posterior ao último candle da série o
+    // resolvedor devolve a cotação CORRENTE — reconstruir com a série atrasada
+    // dá a MESMA taxa a vários dias seguidos e achata a variação cambial do
+    // período. Uma requisição HTTP (730 dias de uma vez) evita gravar um
+    // histórico patrimonial que depois vira ruído no TWRR e no Sharpe.
+    try {
+      const fx = await macroDataService.syncHistoricalUSDRate();
+      console.log(`💱 Câmbio USD/BRL: ${fx?.total ?? '?'} dias, último candle ${fx?.lastDate ?? '?'} (${fx?.source ?? 'falhou'}).\n`);
+    } catch (err) {
+      console.warn(`⚠️ Sync de câmbio falhou (${err.message}); seguindo com a série já em banco.\n`);
+    }
 
     const userArg = process.argv.find((a) => a.startsWith('--user='));
     const walletArg = process.argv.find((a) => a.startsWith('--wallet='));

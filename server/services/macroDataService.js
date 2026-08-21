@@ -661,8 +661,72 @@ export const macroDataService = {
         return { ntnbLong: ntnbLongRate, ntnbSource };
     },
 
-    // Busca e armazena série histórica diária de USD/BRL (últimos 2 anos)
-    // Usada por financialService.rebuildUserHistory() para converter USD corretamente por data
+    /**
+     * Grava a série USD/BRL fazendo UNIÃO com o que já está no banco.
+     *
+     * Nunca sobrescrever o array inteiro: `USD-BRL` está em
+     * HISTORY_CAP_EXEMPT_TICKERS porque o rebuild da carteira converte compras
+     * ANTIGAS pela taxa da data delas, e a AwesomeAPI só devolve os últimos 730
+     * dias. Um `$set` cru descarta tudo que for mais velho que a janela da fonte
+     * — e uma resposta curta/parcial (que ainda passa no teste de "não-vazia")
+     * amputaria a série inteira. Com a união, data repetida fica com o valor
+     * novo (correção da fonte vale) e o passado sobrevive.
+     *
+     * Passou a importar quando a sincronização virou DIÁRIA: o que antes era uma
+     * escrita destrutiva por semana são agora sete, e basta uma resposta ruim
+     * para o rebuild remarcar posições antigas pelo câmbio errado.
+     */
+    async _persistUsdHistory(entries, source) {
+        const incoming = new Map();
+        for (const entry of entries || []) {
+            const close = Number(entry?.close);
+            const adj = Number(entry?.adjClose ?? entry?.close);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(entry?.date || '')) continue;
+            if (!Number.isFinite(close) || close <= 0) continue;
+            incoming.set(entry.date, {
+                date: entry.date,
+                close,
+                adjClose: Number.isFinite(adj) && adj > 0 ? adj : close,
+            });
+        }
+
+        if (incoming.size === 0) {
+            logger.warn(`⚠️ [Câmbio] Nenhuma entrada válida na resposta (${source}); série preservada.`);
+            return null;
+        }
+
+        const existing = await AssetHistory.findOne({ ticker: 'USD-BRL' }).select('history').lean();
+        const merged = new Map();
+        for (const entry of existing?.history || []) {
+            if (entry?.date && !incoming.has(entry.date)) merged.set(entry.date, entry);
+        }
+        for (const [date, entry] of incoming) merged.set(date, entry);
+
+        const history = [...merged.values()].sort((a, b) => a.date.localeCompare(b.date));
+
+        await AssetHistory.findOneAndUpdate(
+            { ticker: 'USD-BRL' },
+            { $set: { ticker: 'USD-BRL', history, lastUpdated: new Date() } },
+            { upsert: true, new: true },
+        );
+
+        const lastDate = history[history.length - 1].date;
+        logger.debug(`✅ [Câmbio] Histórico USD/BRL (${source}): ${history.length} dias, último ${lastDate}.`);
+        return { total: history.length, fetched: incoming.size, lastDate, source };
+    },
+
+    // Busca e armazena série histórica diária de USD/BRL (últimos 2 anos).
+    //
+    // Roda DIARIAMENTE (cron 'fx-history', 18:10 BRT), não mais uma vez por
+    // semana: a série é resolvida POR DATA no rebuild de histórico e no snapshot
+    // patrimonial. Enquanto ela ficava parada em D-7, `buildUsdRateResolver`
+    // devolvia a cotação corrente para TODOS os dias posteriores ao último
+    // candle — de propósito, para não carimbar uma compra de hoje com o câmbio
+    // da semana passada, mas com o efeito colateral de achatar em zero a
+    // variação cambial de vários dias seguidos na curva de patrimônio (e, por
+    // tabela, no TWRR e no Sharpe, que saem do WalletSnapshot).
+    //
+    // Custo: uma requisição HTTP — a fonte devolve 730 dias de uma vez.
     async syncHistoricalUSDRate() {
         try {
             logger.info('💱 [Câmbio] Sincronizando histórico USD/BRL...');
@@ -675,8 +739,7 @@ export const macroDataService = {
 
             if (!res.data || !Array.isArray(res.data) || res.data.length === 0) {
                 logger.warn('⚠️ [Câmbio] AwesomeAPI não retornou dados históricos. Tentando fallback Yahoo Finance...');
-                await this._syncHistoricalUSDRateYahoo();
-                return;
+                return await this._syncHistoricalUSDRateYahoo();
             }
 
             // AwesomeAPI retorna do mais recente para o mais antigo
@@ -692,52 +755,23 @@ export const macroDataService = {
                     };
                 });
 
-            if (historyEntries.length === 0) {
-                logger.warn('⚠️ [Câmbio] Nenhuma entrada válida na resposta da AwesomeAPI.');
-                return;
-            }
-
-            // Remover duplicatas por data (manter mais recente)
-            const byDate = {};
-            for (const entry of historyEntries) {
-                if (!byDate[entry.date]) byDate[entry.date] = entry;
-            }
-            const deduped = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
-
-            await AssetHistory.findOneAndUpdate(
-                { ticker: 'USD-BRL' },
-                {
-                    $set: {
-                        ticker: 'USD-BRL',
-                        history: deduped,
-                        lastUpdated: new Date()
-                    }
-                },
-                { upsert: true, new: true }
-            );
-
-            logger.debug(`✅ [Câmbio] Histórico USD/BRL atualizado: ${deduped.length} dias.`);
+            return await this._persistUsdHistory(historyEntries, 'AwesomeAPI');
         } catch (error) {
             logger.error(`❌ [Câmbio] Erro ao sincronizar histórico USD/BRL: ${error.message}`);
             // Tenta fallback via Yahoo Finance (BRL=X)
             try {
-                await this._syncHistoricalUSDRateYahoo();
+                return await this._syncHistoricalUSDRateYahoo();
             } catch (e) {
                 logger.error(`❌ [Câmbio] Fallback Yahoo também falhou: ${e.message}`);
+                return null;
             }
         }
     },
 
     async _syncHistoricalUSDRateYahoo() {
         const history = await externalMarketService.getFullHistory('USD-BRL', 'CURRENCY');
-        if (!history || history.length === 0) return;
-
-        await AssetHistory.findOneAndUpdate(
-            { ticker: 'USD-BRL' },
-            { $set: { ticker: 'USD-BRL', history, lastUpdated: new Date() } },
-            { upsert: true, new: true }
-        );
-        logger.debug(`✅ [Câmbio] Histórico USD/BRL via Yahoo: ${history.length} dias.`);
+        if (!history || history.length === 0) return null;
+        return await this._persistUsdHistory(history, 'Yahoo');
     },
 
     async performMacroSync() {
