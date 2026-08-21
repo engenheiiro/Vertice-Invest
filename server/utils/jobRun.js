@@ -12,6 +12,7 @@
  *  2. Nunca engole o erro do job em silêncio — registra no ErrorLog e relança,
  *     preservando o try/catch que o chamador já tinha.
  */
+import os from 'os';
 import mongoose from 'mongoose';
 import JobRun from '../models/JobRun.js';
 import logger from '../config/logger.js';
@@ -19,6 +20,10 @@ import { getJobLabel } from '../config/jobCatalog.js';
 import { recordJobError } from '../services/errorLogService.js';
 
 const canPersist = () => mongoose.connection?.readyState === 1;
+
+// Identidade da instância que grava a execução. Resolvida uma vez: hostname não
+// muda em runtime e a chamada é síncrona.
+const INSTANCE_ID = `${os.hostname()}#${process.pid}`;
 
 const safeCreate = async (doc) => {
     if (!canPersist()) return null;
@@ -56,6 +61,7 @@ export const trackJob = async (jobId, fn) => {
         label: getJobLabel(jobId),
         startedAt,
         status: 'RUNNING',
+        instance: INSTANCE_ID,
     });
 
     try {

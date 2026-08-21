@@ -68,6 +68,26 @@ const schedule = (expression, jobId, fn) => cron.schedule.call(
     { timezone: SCHEDULER_TZ },
 );
 
+// (DISABLE_SCHEDULER) Desliga o scheduler INTEIRO nesta instância — nenhum cron
+// registrado e nenhuma rotina de boot disparada. Existe para o ambiente de
+// DESENVOLVIMENTO: o .env local aponta para o Mongo de PRODUÇÃO, então todo
+// `npm run dev` subia um segundo scheduler competindo com o do host (visto em
+// 19/08/2026: dois JobRun de 'daily-evening' abertos no mesmo segundo, ambos
+// mortos no meio; mesmo rastro em 'full-sync', 'daily-morning' e 'quotes-sync').
+//
+// NÃO se confunde com EXTERNAL_SCHEDULER, que move os 3 jobs pesados para Render
+// Cron Jobs mantendo os outros 15 in-app. Os dois mecanismos coexistem.
+//
+// Flag EXPLÍCITA e não derivada de NODE_ENV de propósito: staging e os scripts
+// pontuais que sobem o app rodam com NODE_ENV !== 'production' e dependem do
+// comportamento atual — derivar silenciaria os dois sem ninguém pedir. Default =
+// registra tudo: variável ausente ou escrita errada nunca pode calar produção,
+// porque scheduler mudo não deixa rastro nenhum.
+//
+// Lida no momento da chamada (não no import) para não depender da ordem entre o
+// dotenv do index.js e o import de app.js.
+const isSchedulerDisabled = () => process.env.DISABLE_SCHEDULER === 'true';
+
 // (EXTERNAL_SCHEDULER) Os jobs pesados (sync pós-mercado + snapshot) podem ser
 // rodados por Render Cron Jobs — independentes do web service, que hiberna e
 // perde execuções. Defina EXTERNAL_SCHEDULER=true no web service para desativar
@@ -521,6 +541,16 @@ export const runWeeklyAutoPublish = async () => {
 };
 
 export const initScheduler = () => {
+    // Guard de instância: sai ANTES de registrar qualquer cron e antes das duas
+    // rotinas de boot (backfill de snapshot e sentinela de saúde), que escrevem
+    // no banco. Log em WARN e nomeando a flag de propósito: a sentinela alarma
+    // job em silêncio (jobCatalog.js) e quem for diagnosticar precisa distinguir
+    // "desligado de propósito" de "morreu no meio".
+    if (isSchedulerDisabled()) {
+        logger.warn('⏸️ Scheduler DESLIGADO nesta instância (DISABLE_SCHEDULER=true): nenhum cron registrado, nenhuma rotina de boot disparada. As rotinas ficam a cargo do host de produção.');
+        return { started: false, reason: 'DISABLE_SCHEDULER' };
+    }
+
     logger.info("⏰ Scheduler Service Inicializado");
 
     // (RESILIÊNCIA) Recuperação de snapshots perdidos no BOOT. Um deploy/reinício
@@ -833,4 +863,6 @@ export const initScheduler = () => {
         runDataHealthCheck({ trigger: 'CRON' }).catch((e) =>
             logger.debug(`[DataHealth] Check de boot falhou: ${e.message}`));
     }, 45000);
+
+    return { started: true };
 };

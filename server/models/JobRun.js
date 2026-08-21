@@ -25,6 +25,11 @@ const JobRunSchema = new mongoose.Schema({
         index: true,
     },
     error: { type: String, default: null },
+    // Quem escreveu esta linha ("host#pid"). Dois schedulers no mesmo banco (a
+    // máquina de dev com .env de produção, um deploy sobrepondo o anterior) abrem
+    // execuções indistinguíveis sem isto — provar que dois JobRun simultâneos
+    // vinham de máquinas diferentes deu trabalho justamente por faltar o campo.
+    instance: { type: String, default: null },
     // Payload livre por job (contadores, ids) — só para leitura humana no painel.
     meta: { type: mongoose.Schema.Types.Mixed, default: null },
     createdAt: { type: Date, default: Date.now },
