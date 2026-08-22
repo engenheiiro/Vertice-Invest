@@ -15,6 +15,51 @@
 
 export const BUY_AND_HOLD_VERSION = 'BH_V1';
 
+/**
+ * Teto de beta dos BANCOS — UMA constante nomeada, trivial de flipar.
+ *
+ * Banco brasileiro tem beta estruturalmente acima de 1 porque é proxy do ciclo
+ * econômico local. Cobrar dele o mesmo teto de uma transmissora de energia não
+ * é rigor, é comparar coisas diferentes: com `maxBeta` 1,00 valendo para todo
+ * mundo, TODO banco grande do país ficava fora do universo âncora — os seis
+ * falhavam por um único motivo, literalmente "beta acima de 1", nenhum por
+ * fundamento (medição de 22/08/2026 contra a base de produção):
+ *
+ *   BRSR6 1,0110 · BBAS3 1,0663 · ITUB4 1,1079 · SANB11 1,1506 · BBDC4 1,2717
+ *   · BPAC11 1,4762   (todos com Basileia >= 13 e ROE recorrente >= 10)
+ *
+ * 1,20 deixa entrar BRSR6, BBAS3, ITUB4 e SANB11; mantém fora BBDC4 e BPAC11.
+ *
+ * Por que NÃO 1,15: SANB11 está em 1,1506 e cairia fora por seis milésimos —
+ * o defeito V-10 do estudo de maturidade (degraus em vez de rampas) se
+ * materializando num número escolhido por acidente.
+ *
+ * BPAC11 fica fora por beta, mas o motivo certo seria outro: BTG Pactual é
+ * banco de investimento, não franquia de depósitos. Se um dia o teto subir a
+ * ponto de deixá-lo entrar, barre por modelo de negócio (denyTickers), não por
+ * volatilidade.
+ *
+ * Passar no portão não faz banco virar COMPRAR — só devolve o direito de
+ * disputar. O freio de preço e o threshold de 70 continuam valendo.
+ */
+export const BANK_MAX_BETA = 1.20;
+
+/**
+ * Largura da RAMPA de beta dentro do portão, em unidades de beta.
+ *
+ * O teto é degrau por natureza (segurança é portão: quem passa disputa, quem
+ * não passa some). Mas dentro da faixa permitida o beta deixa de ser binário:
+ * o ativo é notado numa rampa que vai de `teto − largura` (ótimo) até o próprio
+ * teto (pior admissível), no eixo de resiliência. Assim um banco em 1,19 não
+ * pontua igual a um em 1,02, e a fronteira para de ser a única coisa que
+ * distingue os dois.
+ *
+ * A rampa é ancorada no teto do ARQUÉTIPO, então ela se calibra sozinha: 0,60 →
+ * 1,00 para operacional, 0,80 → 1,20 para banco. Beta baixo para o próprio
+ * arquétipo é que vale nota alta.
+ */
+export const BETA_RAMP_WIDTH = 0.40;
+
 // Sub-setores (rótulo fino do ativo) elegíveis como buy-and-hold. Normalizados
 // (sem acento, minúsculo) no engine. Macro-setor é grosseiro demais aqui: colapsa
 // Telecom com tech de crescimento e consumo básico com varejo cíclico. Curamos
@@ -38,7 +83,12 @@ export const BUY_AND_HOLD_CONFIG = Object.freeze({
 
   gate: Object.freeze({
     minMarketCap: 5_000_000_000, // R$ 5 bi — piso de estabilidade/porte
-    maxBeta: 1.0, // âncora não pode ser mais volátil que o mercado
+    maxBeta: 1.0, // padrão: âncora não pode ser mais volátil que o mercado
+    // Teto por ARQUÉTIPO, sobrepondo o padrão. Ver BANK_MAX_BETA: aplicar o teto
+    // de uma transmissora a um banco não é rigor, é comparar coisas diferentes.
+    // Só BANK diverge hoje; seguradora e operacional seguem em 1,00.
+    maxBetaByArchetype: Object.freeze({ BANK: BANK_MAX_BETA }),
+    betaRampWidth: BETA_RAMP_WIDTH, // ver BETA_RAMP_WIDTH: dentro do portão, rampa
     minAvgLiquidity: 5_000_000, // R$ 5 M/dia
     minRoe: 10, // rentabilidade mínima através do ciclo (roeTtm p/ banco, roe senão)
     maxNetDebtEbitda: 3.0, // alavancagem operacional

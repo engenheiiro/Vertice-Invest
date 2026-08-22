@@ -54,6 +54,16 @@ const part = (metric, value, weight) => ({ metric, value, weight });
 
 const upper = ticker => String(ticker || '').trim().toUpperCase();
 
+/**
+ * Teto de beta aplicável ao arquétipo (padrão quando não há override).
+ * Banco é proxy do ciclo econômico local e tem beta estruturalmente acima de 1;
+ * ver BANK_MAX_BETA em config/buyAndHold.js.
+ */
+export const resolveMaxBeta = (archetype, config = BUY_AND_HOLD_CONFIG) => {
+  const override = config.gate.maxBetaByArchetype?.[archetype];
+  return Number(Number.isFinite(Number(override)) ? override : config.gate.maxBeta);
+};
+
 // Resiliência de controle: privada domina; estatal (dividendo/capex discricionário
 // e político) é penalizada. Coerente com o eixo de governança do sistema.
 const controlResilience = (ticker, controlType) => {
@@ -98,8 +108,11 @@ export const passesBuyAndHoldGate = (asset, config = BUY_AND_HOLD_CONFIG) => {
   const marketCap = Number(metrics.marketCap ?? asset.marketCap);
   if (!(marketCap >= gate.minMarketCap)) failures.push(`market cap abaixo de ${gate.minMarketCap}`);
 
+  // Teto de beta é POR ARQUÉTIPO: 1,00 no geral, mais alto para banco. Beta
+  // ausente continua reprovando — dado que falta não vira aprovação de graça.
   const beta = Number(metrics.beta ?? asset.beta);
-  if (!(Number.isFinite(beta) && beta <= gate.maxBeta)) failures.push(`beta acima de ${gate.maxBeta}`);
+  const maxBeta = resolveMaxBeta(archetype, config);
+  if (!(Number.isFinite(beta) && beta <= maxBeta)) failures.push(`beta acima de ${maxBeta}`);
 
   const liquidity = Number(metrics.avgLiquidity ?? asset.avgLiquidity);
   if (!(liquidity >= gate.minAvgLiquidity)) failures.push(`liquidez abaixo de ${gate.minAvgLiquidity}`);
@@ -132,8 +145,25 @@ export const passesBuyAndHoldGate = (asset, config = BUY_AND_HOLD_CONFIG) => {
   return { passed: failures.length === 0, failures, archetype };
 };
 
+/**
+ * Nota de beta DENTRO do portão, numa rampa ancorada no teto do próprio
+ * arquétipo: `teto − largura` vale 100, o teto vale 0. Tira o caráter binário do
+ * limite — um banco em 1,19 não pontua igual a um em 1,02 — sem transformar o
+ * portão em score, que é a regra nº 1 do motor. Beta ausente vira `null`
+ * (AUSENTE, peso redistribuído), nunca zero: quem não tem beta nem chega aqui,
+ * porque o portão já reprovou.
+ */
+export const betaResilience = (asset, archetype, config = BUY_AND_HOLD_CONFIG) => {
+  const beta = Number(asset.metrics?.beta ?? asset.beta);
+  if (!Number.isFinite(beta)) return null;
+  const ceiling = resolveMaxBeta(archetype, config);
+  const width = Number(config.gate.betaRampWidth);
+  if (!Number.isFinite(ceiling) || !Number.isFinite(width) || width <= 0) return null;
+  return lowerBetter(beta, ceiling - width, ceiling);
+};
+
 /** Eixos 0–100 + flags de observação. Só faz sentido para quem passou no portão. */
-export const computeBuyAndHoldAxes = (asset, archetype = 'OPERATIONAL') => {
+export const computeBuyAndHoldAxes = (asset, archetype = 'OPERATIONAL', config = BUY_AND_HOLD_CONFIG) => {
   const metrics = asset.metrics || {};
   const structural = metrics.structural || {};
   const consistencyInput = asset.consistency || {};
@@ -164,9 +194,12 @@ export const computeBuyAndHoldAxes = (asset, archetype = 'OPERATIONAL') => {
   }
 
   const resilience = averageObserved([
-    part('structuralRisk', clamp(structural.risk), 0.35),
-    part('financialStrength', leverageAxis, 0.35),
-    part('control', controlResilience(asset.ticker, readMetric(asset, 'controlType')), 0.30),
+    part('structuralRisk', clamp(structural.risk), 0.30),
+    part('financialStrength', leverageAxis, 0.30),
+    part('control', controlResilience(asset.ticker, readMetric(asset, 'controlType')), 0.25),
+    // Peso deliberadamente menor que os demais: o beta é a RAMPA que substitui o
+    // degrau do teto, não um quarto pilar de resiliência.
+    part('beta', betaResilience(asset, archetype, config), 0.15),
   ]);
 
   const consistency = averageObserved([
@@ -228,7 +261,7 @@ export const scoreBuyAndHold = (asset, config = BUY_AND_HOLD_CONFIG) => {
     };
   }
 
-  const axes = computeBuyAndHoldAxes(asset, gate.archetype);
+  const axes = computeBuyAndHoldAxes(asset, gate.archetype, config);
   const weights = config.weights;
   const activeWeight = (axes.observed.durability ? weights.durability : 0)
     + (axes.observed.resilience ? weights.resilience : 0)

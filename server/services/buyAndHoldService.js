@@ -121,6 +121,7 @@ export const generateBuyAndHoldRanking = async ({ includeExcluded = false } = {}
     config: {
       minMarketCap: BUY_AND_HOLD_CONFIG.gate.minMarketCap,
       maxBeta: BUY_AND_HOLD_CONFIG.gate.maxBeta,
+      maxBetaByArchetype: BUY_AND_HOLD_CONFIG.gate.maxBetaByArchetype,
       weights: BUY_AND_HOLD_CONFIG.weights,
     },
     macro,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { passesBuyAndHoldGate } from '../services/engines/buyAndHoldEngine.js';
-import { BUY_AND_HOLD_CONFIG } from '../config/buyAndHold.js';
+import { betaResilience, passesBuyAndHoldGate, resolveMaxBeta } from '../services/engines/buyAndHoldEngine.js';
+import { BANK_MAX_BETA, BUY_AND_HOLD_CONFIG } from '../config/buyAndHold.js';
 
 // Fixtures ancoradas em dados reais do snapshot 2026-07-20.
 const abcb4 = {
@@ -87,5 +87,89 @@ describe('passesBuyAndHoldGate', () => {
     const gate = passesBuyAndHoldGate(pssa3, { ...BUY_AND_HOLD_CONFIG, denyTickers: ['PSSA3'] });
     expect(gate.passed).toBe(false);
     expect(gate.failures).toContain('denylist manual');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Teto de beta POR ARQUÉTIPO. Com 1,00 valendo para todo mundo, os seis maiores
+// bancos do país ficavam fora por um único motivo — "beta acima de 1" — nenhum
+// por fundamento. Banco é proxy do ciclo econômico local: cobrar dele o teto de
+// uma transmissora é comparar coisas diferentes. Betas reais de 22/08/2026.
+// ---------------------------------------------------------------------------
+describe('teto de beta por arquétipo', () => {
+  const bank = (ticker, beta) => ({
+    ...abcb4, ticker, metrics: { ...abcb4.metrics, beta },
+  });
+
+  it.each([
+    ['BRSR6', 1.0110],
+    ['BBAS3', 1.0663],
+    ['ITUB4', 1.1079],
+    ['SANB11', 1.1506],
+  ])('banco sólido acima de 1,0 entra no universo âncora (%s, beta %f)', (ticker, beta) => {
+    const gate = passesBuyAndHoldGate(bank(ticker, beta), BUY_AND_HOLD_CONFIG);
+    expect(gate.passed).toBe(true);
+  });
+
+  it.each([
+    ['BBDC4', 1.2717],
+    ['BPAC11', 1.4762],
+  ])('banco acima do teto próprio continua fora (%s, beta %f)', (ticker, beta) => {
+    const gate = passesBuyAndHoldGate(bank(ticker, beta), BUY_AND_HOLD_CONFIG);
+    expect(gate.passed).toBe(false);
+    expect(gate.failures).toContain(`beta acima de ${BANK_MAX_BETA}`);
+  });
+
+  // O teto do banco não vaza para o resto: uma utility em 1,01 segue fora. Foi a
+  // razão de o teto ser por arquétipo em vez de simplesmente subir maxBeta.
+  it('operacional acima de 1,0 continua fora — o teto do banco não é geral', () => {
+    const utility = {
+      ...pssa3, ticker: 'CPLE3', sector: 'Saneamento', stockArchetype: 'OPERATIONAL',
+      metrics: { ...pssa3.metrics, beta: 1.0743 },
+      sectorMetrics: { controlType: 'STATE_DIRECT' },
+    };
+    const gate = passesBuyAndHoldGate(utility, BUY_AND_HOLD_CONFIG);
+    expect(gate.passed).toBe(false);
+    expect(gate.failures).toContain('beta acima de 1');
+  });
+
+  it('seguradora segue no teto padrão (1,0), não no do banco', () => {
+    expect(resolveMaxBeta('INSURER', BUY_AND_HOLD_CONFIG)).toBe(BUY_AND_HOLD_CONFIG.gate.maxBeta);
+    expect(resolveMaxBeta('BANK', BUY_AND_HOLD_CONFIG)).toBe(BANK_MAX_BETA);
+    // Arquétipo desconhecido nunca "herda" folga: cai no padrão.
+    expect(resolveMaxBeta('QUALQUER_COISA', BUY_AND_HOLD_CONFIG)).toBe(BUY_AND_HOLD_CONFIG.gate.maxBeta);
+  });
+
+  // Beta ausente é AUSENTE, e ausente não vira aprovação de graça.
+  it('beta ausente reprova mesmo em banco', () => {
+    const gate = passesBuyAndHoldGate(
+      { ...abcb4, metrics: { ...abcb4.metrics, beta: null } },
+      BUY_AND_HOLD_CONFIG,
+    );
+    expect(gate.passed).toBe(false);
+    expect(gate.failures.some(f => f.startsWith('beta'))).toBe(true);
+  });
+});
+
+// A rampa é o que impede o teto de ser um degrau puro: dentro da faixa
+// permitida, beta mais alto vale menos resiliência.
+describe('rampa de beta dentro do portão', () => {
+  it('banco perto do teto pontua menos que banco de beta baixo', () => {
+    const calmo = betaResilience({ metrics: { beta: 0.82 } }, 'BANK', BUY_AND_HOLD_CONFIG);
+    const nervoso = betaResilience({ metrics: { beta: 1.19 } }, 'BANK', BUY_AND_HOLD_CONFIG);
+    expect(calmo).toBeGreaterThan(nervoso);
+    expect(nervoso).toBeGreaterThanOrEqual(0);
+  });
+
+  it('a rampa é ancorada no teto do arquétipo — mesmo beta, notas diferentes', () => {
+    // 0,95 é quase o limite de uma operacional e folgado para um banco.
+    const operacional = betaResilience({ metrics: { beta: 0.95 } }, 'OPERATIONAL', BUY_AND_HOLD_CONFIG);
+    const banco = betaResilience({ metrics: { beta: 0.95 } }, 'BANK', BUY_AND_HOLD_CONFIG);
+    expect(banco).toBeGreaterThan(operacional);
+  });
+
+  it('beta ausente vira AUSENTE (null), nunca nota zero', () => {
+    expect(betaResilience({ metrics: {} }, 'BANK', BUY_AND_HOLD_CONFIG)).toBeNull();
+    expect(betaResilience({ metrics: { beta: null } }, 'BANK', BUY_AND_HOLD_CONFIG)).toBeNull();
   });
 });
