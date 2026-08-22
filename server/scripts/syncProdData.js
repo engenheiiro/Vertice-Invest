@@ -10,6 +10,7 @@ import { signalEngine } from '../services/engines/signalEngine.js';
 import { timeSeriesWorker } from '../services/workers/timeSeriesWorker.js';
 import { runBacktestAnalysis } from './runBacktestEngine.js';
 import { logDir } from '../config/logger.js';
+import { MONGO_CONNECT_OPTIONS } from '../config/db.js';
 import { createSyncReporter } from './syncReporter.js';
 
 // Configuração de ambiente para rodar via terminal
@@ -38,7 +39,11 @@ const syncProd = async () => {
         }
 
         await reporter.runStage('Conexão com o banco', async () => {
-            await mongoose.connect(process.env.MONGO_URI);
+            // As MESMAS opções do servidor (ver config/db.js). Conectar "pelado"
+            // aqui deixava o run de ~20min com os defaults do driver — sem pool
+            // mínimo, sem IPv4 forçado e com handshake de 30s. Foi assim que a
+            // etapa de séries temporais morreu em 570/1300 em 22/08/2026.
+            await mongoose.connect(process.env.MONGO_URI, MONGO_CONNECT_OPTIONS);
         });
 
         // 1. Coleta de Dados (Scraping + APIs)
@@ -107,9 +112,12 @@ const syncProd = async () => {
     } catch (error) {
         reporter.fatalError(error);
     } finally {
-        reporter.finish({ success });
+        // O veredito tem TRÊS níveis, não dois: uma etapa pode ter concluído com
+        // erro no meio (ex.: séries temporais em 570/1300 no run de 22/08/2026) —
+        // isso não é sucesso, mas também não é o pipeline parado. Ver exitCodeFor.
+        const verdict = reporter.finish({ success });
         await mongoose.disconnect().catch(() => {});
-        process.exit(success ? 0 : 1);
+        process.exit(verdict.exitCode);
     }
 };
 

@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { timeSeriesWorker } from '../services/workers/timeSeriesWorker.js';
+import { MONGO_CONNECT_OPTIONS } from '../config/db.js';
 
 // Configuração de ambiente para rodar via terminal
 const __filename = fileURLToPath(import.meta.url);
@@ -23,7 +24,9 @@ const syncTimeSeries = async () => {
             throw new Error("MONGO_URI não definida.");
         }
 
-        await mongoose.connect(process.env.MONGO_URI);
+        // Mesmas opções do servidor (ver config/db.js): este script é a retomada
+        // natural de um run truncado e roda tão longo quanto o sync completo.
+        await mongoose.connect(process.env.MONGO_URI, MONGO_CONNECT_OPTIONS);
         console.log("info: ℹ️ Conexão DB estabelecida.");
 
         console.log("info: 📈 Iniciando Cálculo de Séries Temporais (Volatilidade, Beta, SMA/EMA)...");

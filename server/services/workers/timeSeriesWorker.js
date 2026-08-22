@@ -6,6 +6,7 @@ import { marketDataService } from '../marketDataService.js';
 import { historyStorageKey } from '../../utils/assetHistory.js';
 import { externalMarketService } from '../externalMarketService.js';
 import { ASSET_HISTORY_MAX_POINTS, HISTORY_CAP_EXEMPT_TICKERS } from '../../config/financialConstants.js';
+import { isTransientMongoError, withMongoRetry } from '../../utils/mongoResilience.js';
 
 // Funções matemáticas auxiliares
 const calculateSMA = (prices, period) => {
@@ -115,6 +116,27 @@ export const orderByStaleness = (assets = [], lastCheckedByKey = new Map()) => a
 // Exportada para teste.
 export const METRICS_FLUSH_SIZE = 200;
 
+// (RESILIÊNCIA) Quantos lotes seguidos podem falhar por queda de conexão antes de
+// desistir do run.
+//
+// Até 22/08/2026 QUALQUER erro de Mongo no meio do laço matava a etapa inteira:
+// o run daquele dia parou em 570/1300 quando o pool tentou abrir um socket novo e
+// o handshake TLS estourou o `connectTimeoutMS`. Um flap de 30s custou 730 ativos
+// com beta/volatilidade/SMA/EMA velhos — dado que alimenta o portão do ranking.
+//
+// Agora cada operação do lote já re-tenta sozinha (withMongoRetry) e, se o lote
+// ainda assim cair, ele é PULADO em vez de abortar: os ~15 ativos seguintes têm
+// chance de passar. Só desistimos quando o banco está de fato fora — 5 lotes
+// seguidos, ou seja ~1 minuto sem conseguir uma única operação. Lote pulado não
+// renova `lastCheckedAt`, então volta para a cabeça da fila no próximo run.
+// Exportada para teste.
+export const MAX_CONSECUTIVE_BATCH_FAILURES = 5;
+
+// Pausa após lote que caiu: 2s, 4s, 8s, 16s (teto de 30s). Dá tempo de a malha
+// refazer o caminho antes de martelar o banco de novo.
+const batchFailureBackoffMs = (consecutiveFailures) =>
+    Math.min(30_000, 2_000 * 2 ** (consecutiveFailures - 1));
+
 const calculateBeta = (assetReturns, benchmarkReturns) => {
     if (assetReturns.length < 2 || benchmarkReturns.length < 2) return 1;
     const length = Math.min(assetReturns.length, benchmarkReturns.length);
@@ -141,20 +163,34 @@ export const timeSeriesWorker = {
         logger.info("📈 [TimeSeriesWorker] Iniciando cálculo de Volatilidade, Beta, SMA e EMA...");
         // Contabilidade do run. Sem isso a cobertura incompleta não deixa rastro:
         // em 19/08/2026 o run parou em 234/1300 sem uma linha de log dizendo isso.
-        const stats = { total: 0, visited: 0, fetched: 0, fresh: 0, failed: 0, metrics: 0 };
+        const stats = {
+            total: 0, visited: 0, fetched: 0, fresh: 0, failed: 0, metrics: 0,
+            // Lotes perdidos por queda de conexão (ver MAX_CONSECUTIVE_BATCH_FAILURES).
+            batchesFailed: 0, skipped: 0,
+        };
         const operations = [];
 
         // Grava o que já foi calculado e esvazia o buffer (ver METRICS_FLUSH_SIZE).
         // Fora do try de propósito: o caminho de erro também precisa chamá-la.
+        // Só devolve os itens ao buffer se o bulkWrite falhar de vez — assim uma
+        // queda no flush não descarta métricas já calculadas.
         const flushMetrics = async () => {
             if (operations.length === 0) return;
             const pending = operations.splice(0, operations.length);
-            await MarketAsset.bulkWrite(pending);
+            try {
+                // $set idempotente: re-aplicar o mesmo valor é seguro (ver mongoResilience).
+                await withMongoRetry(() => MarketAsset.bulkWrite(pending), { label: 'métricas' });
+            } catch (err) {
+                operations.unshift(...pending);
+                throw err;
+            }
             stats.metrics += pending.length;
         };
 
         try {
-            const assets = await MarketAsset.find({ isActive: true }).select('ticker type').lean();
+            const assets = await withMongoRetry(
+                () => MarketAsset.find({ isActive: true }).select('ticker type').lean(),
+                { label: 'universo de ativos' });
             if (assets.length === 0) return;
 
             // Puxa o histórico do IBOV para calcular o Beta das ações/FIIs.
@@ -176,41 +212,61 @@ export const timeSeriesWorker = {
             }
             // Fila por defasagem de visita (ver orderByStaleness). Projeção enxuta:
             // `history` fica de fora, senão isto puxaria a coleção inteira.
-            const checkedDocs = await AssetHistory.find({}, { ticker: 1, lastCheckedAt: 1 }).lean();
+            const checkedDocs = await withMongoRetry(
+                () => AssetHistory.find({}, { ticker: 1, lastCheckedAt: 1 }).lean(),
+                { label: 'fila de staleness' });
             const lastCheckedByKey = new Map(checkedDocs.map(
                 d => [d.ticker, d.lastCheckedAt ? new Date(d.lastCheckedAt).getTime() : 0]));
             const queue = orderByStaleness(assets, lastCheckedByKey);
 
             stats.total = queue.length;
             const BATCH_SIZE = 5;
+            let consecutiveFailures = 0;
 
             for (let i = 0; i < stats.total; i += BATCH_SIZE) {
                 const batch = queue.slice(i, i + BATCH_SIZE);
                 const now = new Date();
 
-                // Carrega o histórico de todo o lote em uma única query. O .lean() evita
-                // hidratar o array grande de candles quando só vamos ler (e renovar
-                // lastUpdated em massa via updateMany), reduzindo overhead no caminho quente.
-                const batchTickers = batch.map(a => historyStorageKey(a.ticker, a.type));
-                const histDocs = await AssetHistory.find({ ticker: { $in: batchTickers } }).lean();
-                const histByTicker = new Map(histDocs.map(d => [d.ticker, d]));
+                // Um lote que cai por queda de conexão é PULADO, não fatal
+                // (ver MAX_CONSECUTIVE_BATCH_FAILURES).
+                try {
+                    // Carrega o histórico de todo o lote em uma única query. O .lean() evita
+                    // hidratar o array grande de candles quando só vamos ler (e renovar
+                    // lastUpdated em massa via updateMany), reduzindo overhead no caminho quente.
+                    const batchTickers = batch.map(a => historyStorageKey(a.ticker, a.type));
+                    const histDocs = await withMongoRetry(
+                        () => AssetHistory.find({ ticker: { $in: batchTickers } }).lean(),
+                        { label: 'histórico do lote' });
+                    const histByTicker = new Map(histDocs.map(d => [d.ticker, d]));
 
-                let batchDidFetch = false;  // só dorme entre lotes que realmente bateram no Yahoo
-                const visitedTickers = [];  // frescos + falhos: renova lastCheckedAt em massa, sem .save() por doc
+                    let batchDidFetch = false;  // só dorme entre lotes que realmente bateram no Yahoo
+                    const visitedTickers = [];  // frescos + falhos: renova lastCheckedAt em massa, sem .save() por doc
 
-                await Promise.all(batch.map(async (asset) => {
-                    const storageKey = historyStorageKey(asset.ticker, asset.type);
-                    let historyEntry = histByTicker.get(storageKey) || null;
+                    await Promise.all(batch.map(async (asset) => {
+                        const storageKey = historyStorageKey(asset.ticker, asset.type);
+                        let historyEntry = histByTicker.get(storageKey) || null;
 
-                    // Staleness pela data do último candle (ver isHistoryStale) — nunca por
-                    // lastUpdated, que o touch renovava sem dados novos.
-                    const isStale = isHistoryStale(historyEntry, now);
+                        // Staleness pela data do último candle (ver isHistoryStale) — nunca por
+                        // lastUpdated, que o touch renovava sem dados novos.
+                        const isStale = isHistoryStale(historyEntry, now);
 
-                    if (!historyEntry || isStale || !historyEntry.history || historyEntry.history.length < 20) {
-                        batchDidFetch = true;
-                        let fetched = false;
-                        try {
-                            const externalHistory = await externalMarketService.getFullHistory(asset.ticker, asset.type);
+                        if (!historyEntry || isStale || !historyEntry.history || historyEntry.history.length < 20) {
+                            batchDidFetch = true;
+                            let fetched = false;
+
+                            // O catch cobre SÓ a fonte externa. Antes ele envolvia
+                            // também a gravação, então uma queda de banco virava
+                            // "Falha ao buscar histórico" — o ticker era contado como
+                            // sem dado na fonte e a queda passava batida. São coisas
+                            // diferentes: falha de fonte é normal e local; falha de
+                            // banco é do run inteiro e sobe para o tratamento de lote.
+                            let externalHistory = null;
+                            try {
+                                externalHistory = await externalMarketService.getFullHistory(asset.ticker, asset.type);
+                            } catch {
+                                logger.warn(`[TimeSeriesWorker] Falha ao buscar histórico para ${asset.ticker}`);
+                            }
+
                             if (externalHistory && externalHistory.length > 0) {
                                 // Cap de armazenamento: guarda só os últimos ASSET_HISTORY_MAX_POINTS
                                 // candles (a série vem oldest→newest do Yahoo, então .slice(-N) mantém os
@@ -218,129 +274,145 @@ export const timeSeriesWorker = {
                                 const historyToStore = HISTORY_CAP_EXEMPT_TICKERS.has(asset.ticker)
                                     ? externalHistory
                                     : externalHistory.slice(-ASSET_HISTORY_MAX_POINTS);
-                                await AssetHistory.updateOne(
+                                await withMongoRetry(() => AssetHistory.updateOne(
                                     { ticker: storageKey },
                                     { $set: { history: historyToStore, lastUpdated: now, lastCheckedAt: now } },
                                     { upsert: true }
-                                );
+                                ), { label: `candles de ${asset.ticker}` });
                                 // Reaproveita o array recém-buscado para o cálculo, sem reler do banco.
                                 historyEntry = { ticker: storageKey, history: historyToStore, lastUpdated: now };
                                 fetched = true;
                             }
-                        } catch (e) {
-                            logger.warn(`[TimeSeriesWorker] Falha ao buscar histórico para ${asset.ticker}`);
-                        }
-                        if (fetched) {
-                            stats.fetched += 1;
+                            if (fetched) {
+                                stats.fetched += 1;
+                            } else {
+                                // Falha na fonte também é VISITA. Sem marcar lastCheckedAt, um
+                                // ticker morto no Yahoo voltaria ao topo da fila todo run e
+                                // travaria a rotação. (Sem upsert de propósito: criar doc vazio
+                                // aqui inflaria a contagem de "sem série" da sentinela de saúde.)
+                                stats.failed += 1;
+                                visitedTickers.push(storageKey);
+                            }
                         } else {
-                            // Falha na fonte também é VISITA. Sem marcar lastCheckedAt, um
-                            // ticker morto no Yahoo voltaria ao topo da fila todo run e
-                            // travaria a rotação. (Sem upsert de propósito: criar doc vazio
-                            // aqui inflaria a contagem de "sem série" da sentinela de saúde.)
-                            stats.failed += 1;
+                            // "Touch" de monitoramento: renova lastCheckedAt (visita do worker),
+                            // NUNCA lastUpdated — renovar lastUpdated sem buscar dados era o que
+                            // mascarava a staleness e congelava as séries.
+                            stats.fresh += 1;
                             visitedTickers.push(storageKey);
                         }
-                    } else {
-                        // "Touch" de monitoramento: renova lastCheckedAt (visita do worker),
-                        // NUNCA lastUpdated — renovar lastUpdated sem buscar dados era o que
-                        // mascarava a staleness e congelava as séries.
-                        stats.fresh += 1;
-                        visitedTickers.push(storageKey);
-                    }
 
-                    if (!historyEntry || !historyEntry.history || historyEntry.history.length < 20) return;
+                        if (!historyEntry || !historyEntry.history || historyEntry.history.length < 20) return;
 
-                    // Ordena do mais recente para o mais antigo
-                    const sortedHistory = historyEntry.history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                    const prices = sortedHistory.map(h => h.close);
+                        // Ordena do mais recente para o mais antigo
+                        const sortedHistory = historyEntry.history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                        const prices = sortedHistory.map(h => h.close);
 
-                    const sma200 = calculateSMA(prices, 200);
-                    const ema50 = calculateEMA(prices.slice(0, 50), 50); // Passa os últimos 50 dias
+                        const sma200 = calculateSMA(prices, 200);
+                        const ema50 = calculateEMA(prices.slice(0, 50), 50); // Passa os últimos 50 dias
 
-                    // Volatilidade baseada nos últimos 252 dias úteis (1 ano)
-                    const volatilityPrices = prices.slice(0, 252);
-                    const volatility = calculateVolatility(volatilityPrices);
+                        // Volatilidade baseada nos últimos 252 dias úteis (1 ano)
+                        const volatilityPrices = prices.slice(0, 252);
+                        const volatility = calculateVolatility(volatilityPrices);
 
-                    // Liquidez média (R$/dia) via candles — SÓ ETF nacional (.SA). As fontes
-                    // devolvem averageVolume=0 p/ tickers .SA, então o sync cai num snapshot de
-                    // volume de 1 dia (Brapi): ruidoso e que SUBCONTA (ex.: SMAL11 ~52M no
-                    // snapshot vs ~250M na média real). O worker roda SEMPRE após o sync e antes
-                    // do ranking (sync:prod e cron das 09h) → este valor supera o snapshot.
-                    const etfAvgLiquidity = asset.type === 'ETF' ? computeEtfAvgLiquidity(sortedHistory) : null;
+                        // Liquidez média (R$/dia) via candles — SÓ ETF nacional (.SA). As fontes
+                        // devolvem averageVolume=0 p/ tickers .SA, então o sync cai num snapshot de
+                        // volume de 1 dia (Brapi): ruidoso e que SUBCONTA (ex.: SMAL11 ~52M no
+                        // snapshot vs ~250M na média real). O worker roda SEMPRE após o sync e antes
+                        // do ranking (sync:prod e cron das 09h) → este valor supera o snapshot.
+                        const etfAvgLiquidity = asset.type === 'ETF' ? computeEtfAvgLiquidity(sortedHistory) : null;
 
-                    // Beta só é recalculado aqui para STOCK/FII (benchmark IBOV). Para os
-                    // demais tipos (STOCK_US/ETF/CRYPTO) o beta vem do Yahoo no sync de
-                    // fundamentos — gravá-lo aqui sobrescrevia esse valor com 1.0 a cada run,
-                    // neutralizando os gates de beta do scoring. Só entra no $set quando é BR.
-                    const isBrBetaType = asset.type === 'STOCK' || asset.type === 'FII';
-                    let beta = 1;
-                    if (isBrBetaType && ibovReturnsByDate.size > 0) {
-                        // Alinha retornos do ativo com IBOV por data, evitando desalinhamento
-                        // causado por dias com preço=0 (gaps) que encurtam a série do ativo mas
-                        // não a do IBOV, corrompendo a covariância e zerando o beta.
-                        // sortedHistory já está newest→oldest; filtrar e inverter evita um
-                        // segundo sort O(n log n) sobre a mesma série (reverse opera sobre
-                        // o array novo do filter, sem mutar a série original).
-                        const sortedForBeta = sortedHistory
-                            .filter(h => h.close > 0 && isFinite(h.close))
-                            .reverse(); // → oldest→newest
+                        // Beta só é recalculado aqui para STOCK/FII (benchmark IBOV). Para os
+                        // demais tipos (STOCK_US/ETF/CRYPTO) o beta vem do Yahoo no sync de
+                        // fundamentos — gravá-lo aqui sobrescrevia esse valor com 1.0 a cada run,
+                        // neutralizando os gates de beta do scoring. Só entra no $set quando é BR.
+                        const isBrBetaType = asset.type === 'STOCK' || asset.type === 'FII';
+                        let beta = 1;
+                        if (isBrBetaType && ibovReturnsByDate.size > 0) {
+                            // Alinha retornos do ativo com IBOV por data, evitando desalinhamento
+                            // causado por dias com preço=0 (gaps) que encurtam a série do ativo mas
+                            // não a do IBOV, corrompendo a covariância e zerando o beta.
+                            // sortedHistory já está newest→oldest; filtrar e inverter evita um
+                            // segundo sort O(n log n) sobre a mesma série (reverse opera sobre
+                            // o array novo do filter, sem mutar a série original).
+                            const sortedForBeta = sortedHistory
+                                .filter(h => h.close > 0 && isFinite(h.close))
+                                .reverse(); // → oldest→newest
 
-                        const alignedAssetReturns = [];
-                        const alignedIbovReturns = [];
+                            const alignedAssetReturns = [];
+                            const alignedIbovReturns = [];
 
-                        for (let j = 1; j < sortedForBeta.length; j++) {
-                            const dateKey = new Date(sortedForBeta[j].date).toISOString().slice(0, 10);
-                            if (!ibovReturnsByDate.has(dateKey)) continue;
+                            for (let j = 1; j < sortedForBeta.length; j++) {
+                                const dateKey = new Date(sortedForBeta[j].date).toISOString().slice(0, 10);
+                                if (!ibovReturnsByDate.has(dateKey)) continue;
 
-                            const assetReturn = (sortedForBeta[j].close - sortedForBeta[j - 1].close) / sortedForBeta[j - 1].close;
-                            if (!isFinite(assetReturn) || isNaN(assetReturn) || Math.abs(assetReturn) >= 0.50) continue;
+                                const assetReturn = (sortedForBeta[j].close - sortedForBeta[j - 1].close) / sortedForBeta[j - 1].close;
+                                if (!isFinite(assetReturn) || isNaN(assetReturn) || Math.abs(assetReturn) >= 0.50) continue;
 
-                            alignedAssetReturns.push(assetReturn);
-                            alignedIbovReturns.push(ibovReturnsByDate.get(dateKey));
+                                alignedAssetReturns.push(assetReturn);
+                                alignedIbovReturns.push(ibovReturnsByDate.get(dateKey));
+                            }
+
+                            if (alignedAssetReturns.length >= 20) beta = calculateBeta(alignedAssetReturns, alignedIbovReturns);
                         }
 
-                        if (alignedAssetReturns.length >= 20) beta = calculateBeta(alignedAssetReturns, alignedIbovReturns);
+                        const setFields = {
+                            volatility: isNaN(volatility) ? 0 : volatility,
+                            sma200: isNaN(sma200) ? 0 : sma200,
+                            ema50: isNaN(ema50) ? 0 : ema50
+                        };
+                        if (isBrBetaType) setFields.beta = isNaN(beta) ? 1 : beta;
+                        // ETF nacional: liquidez média dos candles é a autoridade (supera o
+                        // snapshot Brapi gravado no sync). Só grava quando há janela suficiente.
+                        if (etfAvgLiquidity !== null) setFields.liquidity = etfAvgLiquidity;
+
+                        operations.push({
+                            updateOne: {
+                                filter: { ticker: asset.ticker },
+                                update: { $set: setFields }
+                            }
+                        });
+                    }));
+
+                    // Renova lastCheckedAt dos ativos visitados em uma única operação por lote.
+                    // (lastUpdated fica intocado — só muda quando candles são realmente re-buscados.)
+                    if (visitedTickers.length > 0) {
+                        await withMongoRetry(() => AssetHistory.updateMany(
+                            { ticker: { $in: visitedTickers } },
+                            { $set: { lastCheckedAt: now } }
+                        ), { label: 'visitas do lote' });
                     }
 
-                    const setFields = {
-                        volatility: isNaN(volatility) ? 0 : volatility,
-                        sma200: isNaN(sma200) ? 0 : sma200,
-                        ema50: isNaN(ema50) ? 0 : ema50
-                    };
-                    if (isBrBetaType) setFields.beta = isNaN(beta) ? 1 : beta;
-                    // ETF nacional: liquidez média dos candles é a autoridade (supera o
-                    // snapshot Brapi gravado no sync). Só grava quando há janela suficiente.
-                    if (etfAvgLiquidity !== null) setFields.liquidity = etfAvgLiquidity;
+                    stats.visited += batch.length;
+                    logger.info(`[TimeSeriesWorker] Processando lote... ${stats.visited}/${stats.total} ativos.`);
 
-                    operations.push({
-                        updateOne: {
-                            filter: { ticker: asset.ticker },
-                            update: { $set: setFields }
-                        }
-                    });
-                }));
+                    // Grava as métricas acumuladas antes que o buffer cresça demais: o run
+                    // pode ser interrompido a qualquer lote (ver METRICS_FLUSH_SIZE).
+                    if (operations.length >= METRICS_FLUSH_SIZE) await flushMetrics();
 
-                // Renova lastCheckedAt dos ativos visitados em uma única operação por lote.
-                // (lastUpdated fica intocado — só muda quando candles são realmente re-buscados.)
-                if (visitedTickers.length > 0) {
-                    await AssetHistory.updateMany(
-                        { ticker: { $in: visitedTickers } },
-                        { $set: { lastCheckedAt: now } }
-                    );
+                    // Rate limit protection — só pausa entre lotes que dispararam busca externa no Yahoo.
+                    // Em runs "quentes" (tudo fresco) não há throttle a aplicar, eliminando o piso ocioso.
+                    if (batchDidFetch) {
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                } catch (error) {
+                    // Erro que não é de transporte (bug de cálculo, schema) segue fatal:
+                    // re-tentar 260 vezes o mesmo defeito só esconderia o problema.
+                    if (!isTransientMongoError(error)) throw error;
+
+                    consecutiveFailures += 1;
+                    stats.batchesFailed += 1;
+                    stats.skipped += batch.length;
+                    logger.warn(`⚠️ [TimeSeriesWorker] Lote ${i / BATCH_SIZE + 1} perdido por queda de `
+                        + `conexão (${error.message}). Falhas seguidas: ${consecutiveFailures}/${MAX_CONSECUTIVE_BATCH_FAILURES}.`);
+
+                    // O que já foi calculado não espera pelo próximo lote.
+                    try { await flushMetrics(); } catch { /* tenta de novo no flush seguinte */ }
+
+                    if (consecutiveFailures >= MAX_CONSECUTIVE_BATCH_FAILURES) throw error;
+                    await new Promise(r => setTimeout(r, batchFailureBackoffMs(consecutiveFailures)));
+                    continue;
                 }
-
-                stats.visited += batch.length;
-                logger.info(`[TimeSeriesWorker] Processando lote... ${stats.visited}/${stats.total} ativos.`);
-
-                // Grava as métricas acumuladas antes que o buffer cresça demais: o run
-                // pode ser interrompido a qualquer lote (ver METRICS_FLUSH_SIZE).
-                if (operations.length >= METRICS_FLUSH_SIZE) await flushMetrics();
-
-                // Rate limit protection — só pausa entre lotes que dispararam busca externa no Yahoo.
-                // Em runs "quentes" (tudo fresco) não há throttle a aplicar, eliminando o piso ocioso.
-                if (batchDidFetch) {
-                    await new Promise(r => setTimeout(r, 1000));
-                }
+                consecutiveFailures = 0;
             }
 
             await flushMetrics();
@@ -364,9 +436,14 @@ export const timeSeriesWorker = {
      */
     async reportRun(stats) {
         const complete = stats.total > 0 && stats.visited >= stats.total;
+        // Lotes pulados por queda de conexão são citados só quando existem — a
+        // linha do run normal continua idêntica à de antes.
+        const perdidos = stats.batchesFailed
+            ? ` · ${stats.skipped} pulados em ${stats.batchesFailed} lote(s) com queda de conexão`
+            : '';
         const linha = `${stats.visited}/${stats.total} visitados · ${stats.fetched} re-buscados · `
             + `${stats.fresh} já frescos · ${stats.failed} sem dado na fonte · `
-            + `${stats.metrics} métricas gravadas.`;
+            + `${stats.metrics} métricas gravadas${perdidos}.`;
         if (complete) logger.info(`✅ [TimeSeriesWorker] ${linha}`);
         else logger.warn(`⚠️ [TimeSeriesWorker] Cobertura INCOMPLETA — ${linha}`);
 
@@ -381,6 +458,8 @@ export const timeSeriesWorker = {
                             total: stats.total,
                             fetched: stats.fetched,
                             failed: stats.failed,
+                            batchesFailed: stats.batchesFailed || 0,
+                            skipped: stats.skipped || 0,
                             complete,
                             timestamp: new Date()
                         }

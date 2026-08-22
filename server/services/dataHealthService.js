@@ -23,6 +23,7 @@ import DataHealthReport from '../models/DataHealthReport.js';
 import ErrorLog from '../models/ErrorLog.js';
 import JobRun from '../models/JobRun.js';
 import logger from '../config/logger.js';
+import { isTransientMongoError } from '../utils/mongoResilience.js';
 import { JOB_CATALOG } from '../config/jobCatalog.js';
 import { brazilDayKey, isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { buildCandleClock, summarizeCandleStaleness } from '../utils/candleStaleness.js';
@@ -375,7 +376,18 @@ export const runDataHealthCheck = async ({ trigger = 'CRON', persist = true } = 
 
         return { ...report, durationMs, trigger };
     } catch (error) {
-        logger.error(`❌ [DataHealth] Falha ao avaliar saúde dos dados: ${error.message}`);
+        // A sentinela NUNCA derruba quem a chamou: erro fica contido aqui e o
+        // retorno null diz "não avaliei" (confirmado no run de 22/08/2026 — o
+        // sync seguiu normalmente depois da falha). O que muda é o nível do log:
+        // uma queda de conexão é ruído de rede, não defeito de dado, e logá-la
+        // como ERROR virava o veredito do sync:prod inteiro para "SUCESSO COM
+        // ERROS" — barulho que competia com os erros de verdade. Só o restante
+        // (bug na coleta, schema quebrado) continua ERROR.
+        if (isTransientMongoError(error)) {
+            logger.warn(`⚠️ [DataHealth] Sentinela não avaliou (queda de conexão, não fatal): ${error.message}`);
+        } else {
+            logger.error(`❌ [DataHealth] Falha ao avaliar saúde dos dados: ${error.message}`);
+        }
         return null;
     }
 };

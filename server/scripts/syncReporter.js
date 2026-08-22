@@ -139,14 +139,30 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         origConsole = null;
     }
 
-    // status da etapa a partir dos eventos que pertencem a ela: 'ok' | 'warn'
+    // Status da etapa a partir dos eventos que pertencem a ela.
+    //
+    //   'ok'    — nada a relatar
+    //   'warn'  — avisos operacionais (fallback de fonte, ticker sem cotação): a
+    //             etapa entregou o que devia
+    //   'error' — a etapa RETORNOU, mas com erro no meio: entregou menos do que
+    //             devia (ex.: séries temporais paradas em 570/1300 em 22/08/2026)
+    //   'fail'  — a etapa LANÇOU e não entregou nada (atribuído em runStage)
+    //
+    // Separar 'error' de 'warn' é o ponto: no relatório antigo os dois viravam ⚠,
+    // então uma etapa truncada pela metade ficava com o mesmo ícone de uma etapa
+    // que só usou o fallback do Google para 3 tickers.
     function stageStatus(idx) {
         const own = collector.entries.filter((e) => e.stageIdx === idx);
+        if (own.some((e) => e.level === 'error')) return 'error';
         // Alertas de performance não marcam a etapa como ⚠ (a etapa concluiu ok;
         // o alerta é uma saída informativa, não uma falha operacional).
-        if (own.some((e) => e.level === 'error' || (e.level === 'warn' && !isPerfAlert(e)))) return 'warn';
+        if (own.some((e) => e.level === 'warn' && !isPerfAlert(e))) return 'warn';
         return 'ok';
     }
+
+    // Ícones por status — terminal (compacto) e TXT (emoji).
+    const TERM_ICON = { ok: '✔', warn: '⚠', error: '❗', fail: '✖' };
+    const TXT_ICON = { ok: '✅', warn: '⚠️ ', error: '❗', fail: '❌' };
 
     function begin() {
         prevLevel = logger.level;
@@ -175,15 +191,15 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
             const res = await fn();
             current.end = Date.now();
             current.status = stageStatus(current.idx);
-            const icon = current.status === 'warn' ? '⚠' : '✔';
-            const text = stageLine(icon, label, fmtDuration(current.end - current.start));
+            const text = stageLine(TERM_ICON[current.status], label, fmtDuration(current.end - current.start))
+                + (current.status === 'error' ? '  (incompleta — ver TXT)' : '');
             out(isTTY ? `\r${text}${CLR}\n` : `${text}\n`);
             current = null;
             return res;
         } catch (err) {
             current.end = Date.now();
             current.status = 'fail';
-            const text = stageLine('✖', label, fmtDuration(current.end - current.start));
+            const text = stageLine(TERM_ICON.fail, label, fmtDuration(current.end - current.start));
             out(isTTY ? `\r${text}  (erro — ver TXT)${CLR}\n` : `${text}  (erro — ver TXT)\n`);
             logger.error(`[${label}] ${err.message}`, { stage: label });
             current = null;
@@ -204,6 +220,22 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         fatal = err;
     }
 
+    /**
+     * Código de saída do processo, para que o resultado seja legível por script
+     * (e não só por olho humano no TXT):
+     *   0 — concluiu; no máximo avisos operacionais
+     *   1 — FALHOU: uma etapa crítica lançou e o pipeline parou
+     *   2 — concluiu, mas alguma etapa ficou INCOMPLETA (erro no meio)
+     *
+     * `errs` entra na conta para cobrir o erro logado FORA de qualquer etapa
+     * (entre etapas, no encerramento): ele não marca etapa nenhuma, mas também
+     * não pode fazer o run passar por limpo.
+     */
+    function exitCodeFor({ success, incomplete, errs = [] }) {
+        if (!success) return 1;
+        return (incomplete.length || errs.length) ? 2 : 0;
+    }
+
     function finish({ success }) {
         // Restaura logger e console antes de imprimir o resumo.
         restoreConsole();
@@ -217,24 +249,35 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         const perfAlerts = allWarns.filter(isPerfAlert);       // picks caídos — informativo
         const warns = allWarns.filter((e) => !isPerfAlert(e)); // avisos operacionais
 
+        const failedStages = stages.filter((s) => s.status === 'fail');
+        const incomplete = stages.filter((s) => s.status === 'error');
+
         const overall = !success
             ? '✖ FALHOU'
-            : errs.length
-                ? '⚠ concluído com erros'
-                : warns.length
-                    ? '⚠ concluído com avisos'
-                    : '✔ concluído';
+            : incomplete.length
+                ? '❗ concluído com etapa(s) INCOMPLETA(S)'
+                : errs.length
+                    ? '❗ concluído com erros (fora das etapas)'
+                    : warns.length
+                        ? '⚠ concluído com avisos'
+                        : '✔ concluído';
 
         out(`\n  ${RULE}\n`);
         out(`  ${overall} em ${totalDur}   ·   ${warns.length} avisos   ·   ${perfAlerts.length} alertas perf   ·   ${errs.length} erros\n`);
+        if (incomplete.length) {
+            // O dono precisa saber O QUE não terminou sem abrir o TXT.
+            out(`  Incompleta(s): ${incomplete.map((s) => s.label).join(', ')} — o run seguiu, mas entregou menos.\n`);
+        }
         out(`  Relatório detalhado: ${path.relative(process.cwd(), reportFile)}\n`);
         out(`  ${RULE}\n\n`);
 
         try {
-            writeReport({ success, totalDur, errs, warns, perfAlerts });
+            writeReport({ success, totalDur, errs, warns, perfAlerts, failedStages, incomplete });
         } catch (err) {
             out(`  (não foi possível gravar o TXT: ${err.message})\n`);
         }
+
+        return { exitCode: exitCodeFor({ success, incomplete, errs }), incomplete: incomplete.map((s) => s.label) };
     }
 
     // ── Geração do TXT ──────────────────────────────────────────────────────
@@ -301,7 +344,7 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         return line;
     }
 
-    function writeReport({ success, totalDur, errs, warns, perfAlerts = [] }) {
+    function writeReport({ success, totalDur, errs, warns, perfAlerts = [], failedStages = [], incomplete = [] }) {
         const finishedAt = new Date();
         const L = [];
         const box = '═'.repeat(58);
@@ -314,8 +357,13 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         L.push(`Gerado em ....... ${finishedAt.toISOString().slice(0, 10)} ${clockOf(finishedAt)}`);
         L.push(`Duração total ... ${totalDur}`);
         L.push(
-            `Resultado ....... ${!success ? '❌ FALHA' : errs.length ? '⚠️  SUCESSO COM ERROS' : warns.length ? '⚠️  SUCESSO COM AVISOS' : perfAlerts.length ? '✅ SUCESSO · com alertas de performance' : '✅ SUCESSO'}`
+            `Resultado ....... ${!success ? '❌ FALHA' : incomplete.length ? '❗ CONCLUÍDO COM ETAPA(S) INCOMPLETA(S)' : errs.length ? '❗ CONCLUÍDO COM ERROS (fora das etapas)' : warns.length ? '⚠️  SUCESSO COM AVISOS' : perfAlerts.length ? '✅ SUCESSO · com alertas de performance' : '✅ SUCESSO'}`
         );
+        // Distinção que faltava: etapa que PAROU o pipeline ≠ etapa que seguiu
+        // entregando menos. As duas apareciam como "⚠️ SUCESSO COM ERROS".
+        if (failedStages.length) L.push(`Etapas que falharam ... ${failedStages.map((s) => s.label).join(', ')}`);
+        if (incomplete.length) L.push(`Etapas incompletas .... ${incomplete.map((s) => s.label).join(', ')}`);
+        L.push(`Código de saída . ${exitCodeFor({ success, incomplete, errs })}  (0 ok · 1 falhou · 2 incompleto)`);
         L.push('');
 
         // ── PARTE 1 — humanos ────────────────────────────────────────────────
@@ -329,10 +377,11 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         L.push('');
         L.push('Etapas:');
         for (const s of stages) {
-            const icon = s.status === 'fail' ? '❌' : s.status === 'warn' ? '⚠️ ' : '✅';
+            const icon = TXT_ICON[s.status] || '✅';
             const dur = fmtDuration((s.end || Date.now()) - s.start);
             const dots = '.'.repeat(Math.max(3, 34 - [...s.label].length));
-            const extra = s.detail ? `   (${s.detail})` : '';
+            const parts = [s.status === 'error' ? 'INCOMPLETA' : null, s.detail].filter(Boolean);
+            const extra = parts.length ? `   (${parts.join(' · ')})` : '';
             L.push(`  ${icon} ${s.label} ${dots} ${dur.padStart(6)}${extra}`);
         }
         L.push('');
@@ -391,7 +440,7 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         L.push('[LOG COMPLETO POR ETAPA]');
         L.push('');
         for (const s of stages) {
-            const icon = s.status === 'fail' ? '✖' : s.status === 'warn' ? '⚠' : '✔';
+            const icon = TERM_ICON[s.status] || '✔';
             const dur = fmtDuration((s.end || Date.now()) - s.start);
             const tail = '─'.repeat(Math.max(2, 30 - [...s.label].length));
             L.push(`  ── ${icon} ${s.label}  (${dur})${s.detail ? ` · ${s.detail}` : ''} ${tail}`);

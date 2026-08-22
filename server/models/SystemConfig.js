@@ -75,6 +75,9 @@ const SystemConfigSchema = new mongoose.Schema({
     total: { type: Number, default: 0 },
     fetched: { type: Number, default: 0 },
     failed: { type: Number, default: 0 },
+    // Lotes perdidos por queda de conexão no meio do run (o worker pula e segue).
+    batchesFailed: { type: Number, default: 0 },
+    skipped: { type: Number, default: 0 },
     complete: { type: Boolean, default: false },
     timestamp: { type: Date }
   },
