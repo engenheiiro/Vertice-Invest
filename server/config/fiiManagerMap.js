@@ -4,10 +4,11 @@
 export const FII_MANAGER_MAP = {
     // KINEA (Itaú)
     KNCR: 'KINEA', KNRI: 'KINEA', KNIP: 'KINEA', KNCA: 'KINEA', KNHY: 'KINEA',
+    KNSC: 'KINEA', KNHF: 'KINEA', KNUQ: 'KINEA',
     // CSHG / Hedge
     HGCR: 'CSHG', HGLG: 'CSHG', HGBS: 'CSHG', HGRU: 'CSHG', HGRE: 'CSHG', HGFF: 'CSHG',
     // BTG Pactual
-    BTLG: 'BTG', BTHF: 'BTG', BTCI: 'BTG', BTCR: 'BTG',
+    BTLG: 'BTG', BTHF: 'BTG', BTCI: 'BTG', BTCR: 'BTG', BRCR: 'BTG',
     // RBR Asset
     RBRD: 'RBR', RBRE: 'RBR', RBRF: 'RBR', RBRY: 'RBR', RBVA: 'RBR',
     // Vinci Partners
@@ -27,7 +28,13 @@ export const FII_MANAGER_MAP = {
     // Mauá Capital
     MXRF: 'MAUA',
     // Pátria Investimentos
-    PATC: 'PATRIA', PATL: 'PATRIA',
+    PATC: 'PATRIA', PATL: 'PATRIA', PMLL: 'PATRIA',
+    // HSI (Hemisfério Sul Investimentos)
+    HSLG: 'HSI', HSRE: 'HSI', HSML: 'HSI', HSAF: 'HSI',
+    // VBI Real Estate
+    LVBI: 'VBI', PVBI: 'VBI', VBIP: 'VBI',
+    // Guardian Gestora
+    GARE: 'GUARDIAN',
     // Rio Bravo
     RBFF: 'RIOBRAVO', FLMA: 'RIOBRAVO',
     // GGR / Greenman
