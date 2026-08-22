@@ -194,6 +194,28 @@ describe('rampa de beta dentro do portão', () => {
   });
 });
 
+describe('arquétipo ausente', () => {
+  it('banco sem stockArchetype é julgado como banco, não como operacional', () => {
+    // Sem a dedução, o portão cobraria DL/EBITDA em vez de Basileia e aplicaria
+    // teto de beta 1,00 — reprovando por volatilidade um banco que o teto de
+    // banco admite. BPAN4 está assim no banco de dados hoje.
+    const semCampo = { ...abcb4, ticker: 'BPAN4', stockArchetype: undefined };
+    expect(passesBuyAndHoldGate(semCampo).archetype).toBe('BANK');
+  });
+
+  it('operacional sem stockArchetype continua OPERATIONAL — o vazio é o normal delas', () => {
+    const utility = {
+      ...pssa3, ticker: 'TAEE11', name: 'Taesa', sector: 'Energia Elétrica', stockArchetype: undefined,
+    };
+    expect(passesBuyAndHoldGate(utility).archetype).toBe('OPERATIONAL');
+  });
+
+  it('o campo explícito continua tendo precedência sobre a dedução', () => {
+    const forcado = { ...abcb4, stockArchetype: 'OPERATIONAL' };
+    expect(passesBuyAndHoldGate(forcado).archetype).toBe('OPERATIONAL');
+  });
+});
+
 // O par que expôs o defeito da ancoragem por arquétipo (medição de 22/08/2026).
 describe('holding não é punida pela volatilidade que o controlado é perdoado', () => {
   it('Itaúsa (beta 0,923) tira nota MAIOR que Itaú (beta 1,108)', () => {

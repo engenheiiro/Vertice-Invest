@@ -13,6 +13,7 @@
 import { BUY_THRESHOLD } from '../../config/financialConstants.js';
 import { isCyclicalSector, isStateControlled } from '../../config/sectorTaxonomy.js';
 import { BUY_AND_HOLD_CONFIG, BUY_AND_HOLD_VERSION } from '../../config/buyAndHold.js';
+import { classifyStockArchetype } from '../../config/stockCalibration.js';
 
 const norm = value => String(value || '')
   .normalize('NFD')
@@ -91,7 +92,16 @@ export const passesBuyAndHoldGate = (asset, config = BUY_AND_HOLD_CONFIG) => {
   const ticker = upper(asset.ticker);
   const metrics = asset.metrics || {};
   const sector = asset.sector || metrics.sector;
-  const archetype = asset.stockArchetype || asset.archetype || 'OPERATIONAL';
+  // `stockArchetype` vazio é o caso NORMAL de uma operacional: das 8 utilities
+  // elegíveis hoje nenhuma tem o campo, e OPERATIONAL é exatamente o que elas
+  // são. Só que cair direto em OPERATIONAL trata como operacional TUDO que não
+  // foi populado — e um banco sem o campo passaria a ser cobrado por DL/EBITDA
+  // em vez de Basileia, com teto de beta 1,00 em vez de 1,20. Não é hipotético:
+  // BPAN4 está no banco sem `stockArchetype` (medição de 22/08/2026; hoje ele
+  // nem chega ao portão, então isso é defesa, não correção de ranking).
+  // classifyStockArchetype deduz do ticker/setor/nome e mantém o override do
+  // campo com precedência, então a linha só age onde antes se chutava.
+  const archetype = asset.stockArchetype || asset.archetype || classifyStockArchetype(asset);
   const gate = config.gate;
 
   const deny = (config.denyTickers || []).map(upper);
