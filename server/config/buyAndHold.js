@@ -108,6 +108,15 @@ export const BUY_AND_HOLD_CONFIG = Object.freeze({
     }),
   }),
 
+  // Janela de medição do eixo de CONSISTÊNCIA. O drawdown só é comparável entre
+  // ativos se todos forem medidos no mesmo período — ver maxDrawdownPct em
+  // services/buyAndHoldService.js, onde a janela desigual fazia a Itaúsa parecer
+  // o ativo mais instável do universo por ter série mais funda que os pares.
+  // `windowCandles` casa com ASSET_HISTORY_MAX_POINTS (400), a profundidade que
+  // 343 dos 362 documentos de STOCK realmente têm; `minCandles` é o piso de
+  // cobertura abaixo do qual o drawdown vira AUSENTE em vez de nota.
+  consistency: Object.freeze({ drawdownWindowCandles: 400, drawdownMinCandles: 250 }),
+
   anchorSectors: ANCHOR_SECTORS,
 
   // Curadoria fina, editável. allowTickers força inclusão em setor limítrofe;
