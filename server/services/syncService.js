@@ -18,6 +18,7 @@ import {
     validateFundamentusIngestion,
 } from '../utils/ingestionHealth.js';
 import { trackJob } from '../utils/jobRun.js';
+import { withMongoRetry } from '../utils/mongoResilience.js';
 
 const yahooFinanceLTM = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 const LTM_BATCH_SIZE = 10;
@@ -402,12 +403,24 @@ export const syncService = {
             await usStocksFundamentalsService.seedBrEtfAssets();
 
             if (operations.length > 0) {
-                await MarketAsset.bulkWrite(operations);
+                // A gravação do acervo é o ÚNICO write desta etapa sem rede de
+                // proteção: um timeout aqui derruba o sync inteiro (a etapa é
+                // crítica). Todos os ops são $set+upsert por ticker, então
+                // re-aplicar é seguro. Ver utils/mongoResilience.js.
+                await withMongoRetry(() => MarketAsset.bulkWrite(operations), { label: 'acervo de ativos' });
 
                 // (Fase 3) Anexa a leitura mensal de fundamentos à série temporal (track record).
                 // Idempotente por mês; falha aqui não pode derrubar o sync.
+                //
+                // Perdido no run de 22/08/2026 11:30 por um flap de conexão de ~2min
+                // ("secureConnect timed out after 60397ms"): a série de fundamentos
+                // ficou sem a leitura daquele run, e 11s depois o banco já respondia.
+                // A função inteira é idempotente (lê a série, reescreve o mês), então
+                // re-tentar o conjunto é seguro.
                 try {
-                    const snap = await appendSnapshots(snapshotRecords, timestamp);
+                    const snap = await withMongoRetry(
+                        () => appendSnapshots(snapshotRecords, timestamp),
+                        { label: 'snapshots de fundamentos' });
                     if (snap.appended > 0) logger.info(`🗂️ [Sync] Snapshots de fundamentos atualizados: ${snap.appended}`);
                 } catch (err) {
                     logger.error(`❌ [Sync] Append de snapshots de fundamentos falhou: ${err.message}`);
@@ -416,7 +429,7 @@ export const syncService = {
                 // Backfill de setores: corrige setores incorretos/ausentes em
                 // TODO o acervo (inclusive ativos fora do scraping). Idempotente.
                 try {
-                    const bf = await backfillSectors();
+                    const bf = await withMongoRetry(() => backfillSectors(), { label: 'backfill de setores' });
                     if (bf.updated > 0) logger.info(`🩹 [Sync] Setores corrigidos no backfill: ${bf.updated}`);
                 } catch (err) {
                     logger.error(`❌ [Sync] Backfill de setores falhou: ${err.message}`);
@@ -426,8 +439,10 @@ export const syncService = {
                 // Idempotente; só grava quando a classificação heurística muda. O sub-tipo
                 // alimenta os sub-filtros do Research e o viés por sub-meta do rebalance (PR3).
                 try {
-                    const usAssets = await MarketAsset.find({ type: 'STOCK_US' })
-                        .select('ticker sector name currency usSubType type').lean();
+                    const usAssets = await withMongoRetry(
+                        () => MarketAsset.find({ type: 'STOCK_US' })
+                            .select('ticker sector name currency usSubType type').lean(),
+                        { label: 'ativos do Exterior' });
                     const usOps = [];
                     for (const a of usAssets) {
                         const sub = classifyUsAsset({
@@ -439,7 +454,7 @@ export const syncService = {
                         }
                     }
                     if (usOps.length > 0) {
-                        await MarketAsset.bulkWrite(usOps);
+                        await withMongoRetry(() => MarketAsset.bulkWrite(usOps), { label: 'sub-tipos do Exterior' });
                         logger.info(`🩹 [Sync] Sub-tipos de Exterior classificados: ${usOps.length}`);
                     }
                 } catch (err) {
@@ -447,7 +462,7 @@ export const syncService = {
                 }
 
                 // SALVA ESTATÍSTICAS DE QUALIDADE
-                await SystemConfig.findOneAndUpdate(
+                await withMongoRetry(() => SystemConfig.findOneAndUpdate(
                     { key: 'MACRO_INDICATORS' },
                     {
                         $set: {
@@ -462,7 +477,7 @@ export const syncService = {
                         }
                     },
                     { upsert: true }
-                );
+                ), { label: 'estatísticas do sync' });
 
                 logger.info(
                     `ℹ️ [Sync] Etapa 2: STOCK ${ingestionHealth.stats.STOCK.accepted}/${ingestionHealth.stats.STOCK.parsed} · ` +

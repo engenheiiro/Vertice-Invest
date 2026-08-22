@@ -50,21 +50,28 @@ export const MONGO_CONNECT_OPTIONS = {
   serverSelectionTimeoutMS: 30000,
   // Aumentado para 60s para permitir queries complexas de agregação
   socketTimeoutMS: 60000,
-  // Handshake (TCP + TLS) de conexão NOVA. O default de 30s é curto demais para
-  // um link doméstico degradado: foi exatamente ele que estourou no run de 22/08
-  // ("Socket 'secureConnect' timed out after 30214ms"). 60s dá folga ao TLS sem
-  // travar o run — o retry de `utils/mongoResilience.js` cobre o resto.
+  // Handshake (TCP + TLS) de conexão NOVA — o passo caro deste cluster (ver
+  // minPoolSize). Foi ele que estourou nos dois runs de 22/08 ("Socket
+  // 'secureConnect' timed out after 30214ms" e depois after 60397ms). Subir o
+  // teto sozinho NÃO resolve: 60s já não bastou. Ele só dá folga; quem resolve é
+  // não precisar de conexão nova no meio do run (minPoolSize) e re-tentar quando
+  // precisar (utils/mongoResilience.js).
   connectTimeoutMS: 60000,
   // Garante reconexão automática
   autoIndex: true,
   // Limita conexões simultâneas para não afogar o banco (essencial para planos shared)
   maxPoolSize: 10,
-  // Mantém conexões quentes: nas rotinas longas há trechos de vários minutos só
-  // raspando fonte externa, sem tocar o banco. Com o pool em zero, a volta ao
-  // Mongo exigiria handshake novo — justamente o que falhou. (maxIdleTimeMS fica
-  // no default 0 = o cliente nunca aposenta conexão ociosa por idade; aposentar
-  // por tempo aqui só criaria mais handshakes, que é o passo frágil.)
-  minPoolSize: 2,
+  // Pool PRÉ-AQUECIDO. Medição de 22/08/2026 contra o cluster Atlas: abrir uma
+  // conexão nova custa 9,5s no melhor caso (e estourou 30s e 60s nos dois runs
+  // que falharam naquela manhã), enquanto um socket JÁ ESTABELECIDO responde em
+  // 131ms, estável. Ou seja: o gargalo é exclusivamente o handshake TLS, não o
+  // banco. Como o driver preenche o pool até o mínimo logo após conectar, subir
+  // esse número move o custo para o começo do run — onde ninguém está esperando
+  // — em vez de deixá-lo estourar no meio do laço. 5 cobre a concorrência real
+  // do sync (lotes de 5 em Promise.all) sem chegar perto do teto de 10.
+  // (maxIdleTimeMS fica no default 0 = o cliente nunca aposenta conexão ociosa
+  // por idade; aposentar por tempo aqui só criaria mais handshakes.)
+  minPoolSize: 5,
   // Defaults do driver, explicitados: uma leitura/escrita que cai por rede é
   // re-tentada uma vez pelo próprio driver antes de chegar ao nosso retry.
   retryReads: true,
