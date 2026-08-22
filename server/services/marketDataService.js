@@ -647,6 +647,11 @@ export const marketDataService = {
                         vacancy: asset.vacancy || 0,
                         capRate: asset.capRate || 0,
                         qtdImoveis: asset.qtdImoveis || 0,
+                        // FFO do FII (0 = fonte não publicou). vpCota alimenta o VP do preço
+                        // justo em calculateIntrinsicValue, que sem ele usa o fallback price/pvp.
+                        ffoYield: asset.ffoYield || 0,
+                        vpCota: asset.vpCota || 0,
+                        ffoCota: asset.ffoCota || 0,
                         volatility: asset.volatility || 0,
                         beta: asset.beta || 0,
                         sma200: asset.sma200 || 0,

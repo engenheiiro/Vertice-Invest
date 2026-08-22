@@ -214,6 +214,13 @@ export const syncService = {
                     vacancy: Number(data.vacancy) || 0,
                     capRate: Number(data.capRate) || 0,
                     qtdImoveis: Number(data.qtdImoveis) || 0,
+                    // FFO do FII. O scraper já entregava estes três campos; sem esta linha
+                    // eles morriam aqui (o schema também não os tinha) e o P/FFO — múltiplo
+                    // padrão do setor — ficava indisponível para todo o universo de FIIs.
+                    // Ação não devolve FFO: cai em 0, mesma convenção de vacancy/capRate.
+                    ffoYield: Number(data.ffoYield) || 0,
+                    vpCota: Number(data.vpCota) || 0,
+                    ffoCota: Number(data.ffoCota) || 0,
 
                     sector: finalSector,
                     fiiSubType: type === 'FII' ? deriveFiiSubType(finalSector) : null,

@@ -276,9 +276,10 @@ const calculateIntrinsicValue = (m, type, price, context, usSubType = null) => {
         }
         if (fairPrice > price * 2.5) fairPrice = price * 2.5;
     } else if (type === 'FII') {
-        // vpCota é calculado no scraper mas não persiste no MarketAsset — sem o fallback
-        // por P/VP (mesma fórmula: price/pvp), o VP colapsava para o próprio preço e o
-        // prêmio/deságio patrimonial sumia do preço justo de FII (upside sempre ~0).
+        // vpCota agora persiste no MarketAsset; o fallback por P/VP (mesma fórmula:
+        // price/pvp) continua valendo para documentos gravados antes disso e para FIIs
+        // cuja fonte não publica o valor patrimonial. Sem ele o VP colapsava para o
+        // próprio preço e o prêmio/deságio patrimonial sumia do preço justo (upside ~0).
         const vp = m.vpCota || (m.pvp > 0 ? price / m.pvp : price);
         // Usa fiiSubType (explícito) ou sector como fallback — corrige bug anterior onde
         // m.sector não existia em metrics e isPapel nunca era detectado

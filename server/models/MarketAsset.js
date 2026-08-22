@@ -135,6 +135,15 @@ const MarketAssetSchema = new mongoose.Schema({
   dy: { type: Number, default: 0 },
   capRate: { type: Number, default: 0 },
   qtdImoveis: { type: Number, default: 0 },
+  // FFO (Funds From Operations) — múltiplo padrão do setor imobiliário desde 1991.
+  // O scraper já lia "FFO Yield" e derivava FFO/VP por cota, mas os três campos não
+  // existiam aqui nem no update do sync: o Mongoose os descartava em silêncio e TODO
+  // FII chegava ao scoring com ffoYield 0. `vpCota` também alimenta o preço justo de
+  // FII (calculateIntrinsicValue), que sem ele caía no fallback price/pvp.
+  // 0 = a fonte não publicou o dado — consumidores devem tratar como AUSENTE, não como ruim.
+  ffoYield: { type: Number, default: 0 },
+  vpCota: { type: Number, default: 0 },
+  ffoCota: { type: Number, default: 0 },
   
   // --- Séries Temporais (Workers) ---
   volatility: { type: Number, default: 0 },
