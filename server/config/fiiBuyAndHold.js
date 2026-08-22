@@ -140,6 +140,16 @@ export const FII_BUY_AND_HOLD_CONFIG = Object.freeze({
   allowTickers: Object.freeze([]),
   denyTickers: Object.freeze([]),
 
+  // Janela de medição do drawdown, no eixo de CONSISTÊNCIA. Mesmos valores do
+  // motor de ações de propósito: o drawdown só é comparável entre ativos se
+  // todos forem medidos no mesmo período, e a profundidade da série no banco é
+  // desigual de forma PERMANENTE (a catraca de walletDayCandleService mantém
+  // funda a série dos tickers em carteira — entre os FIIs elegíveis, 8 estão
+  // acima do cap de 400 e o resto exatamente nele). Ver maxDrawdownPct em
+  // utils/assetHistory.js. `minCandles` é o piso abaixo do qual o drawdown vira
+  // AUSENTE em vez de nota.
+  consistency: Object.freeze({ drawdownWindowCandles: 400, drawdownMinCandles: 250 }),
+
   // Durabilidade do imóvel/inquilino manda. Consistência entra com peso menor na
   // Fase 1 (série de fundamentos dormente) e sobe quando o track record acordar.
   // Valuation NÃO é peso positivo — é freio.

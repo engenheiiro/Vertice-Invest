@@ -14,53 +14,9 @@ import { scoringEngine } from './engines/scoringEngine.js';
 import { buildBuyAndHoldRanking } from './engines/buyAndHoldEngine.js';
 import { BUY_AND_HOLD_CONFIG } from '../config/buyAndHold.js';
 import { DEFAULT_NTNB_FALLBACK, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
+import { maxDrawdownPct } from '../utils/assetHistory.js';
 
-/**
- * Máximo drawdown (%) pico→vale, medido numa JANELA COMUM a todo o universo.
- *
- * A janela não é detalhe de implementação: o drawdown entra no eixo de
- * consistência, que é comparado entre ativos numa lista única. Medir cada um na
- * série inteira compara janelas de tamanhos diferentes, e o número deixa de
- * dizer "quem caiu mais" para dizer "quem tem série mais longa".
- *
- * Não é hipótese — é o que a base faz hoje (medição de 22/08/2026): o
- * timeSeriesWorker guarda `ASSET_HISTORY_MAX_POINTS` (400) candles por ticker,
- * mas 4 documentos de STOCK escaparam do corte e ainda têm 1653 (CMIG4, ITSA4,
- * PETR4, SHUL4). Dois deles estão no universo âncora, e a janela extra alcança
- * o crash de março/2020:
- *
- *   ITSA4  série inteira 44,8%  ·  últimos 400 candles 17,7%
- *   CMIG4  série inteira 50,4%  ·  últimos 400 candles 25,1%
- *
- * Ou seja: a Itaúsa aparecia como o ativo mais instável da lista (consistência
- * 34/100, que derrubava o score de 76 para 67 e o tirava de COMPRAR) por ter
- * série mais funda que os pares, não por ter caído mais que eles no mesmo
- * período. Truncar todo mundo na mesma janela devolve a comparação.
- *
- * Série curta demais para cobrir a janela vira AUSENTE (null) — peso
- * redistribuído —, nunca nota. Sem esse piso, um ticker com 70 candles exibiria
- * um drawdown pequeno só porque quase não foi observado, e ausência de dado
- * viraria nota alta (o defeito de `Number(null) === 0` pela ponta oposta).
- *
- * Quando a profundidade da série crescer para o universo INTEIRO, a janela deve
- * crescer junto: 400 candles (~1,6 ano) não contêm um ciclo completo, e ciclo
- * completo é exatamente o que um ranking de âncora quer medir.
- */
-export const maxDrawdownPct = (history, config = BUY_AND_HOLD_CONFIG) => {
-  const { drawdownWindowCandles, drawdownMinCandles } = config.consistency;
-  const closes = (history || [])
-    .slice(-drawdownWindowCandles)
-    .map(point => Number(point.adjClose ?? point.close))
-    .filter(Number.isFinite);
-  if (closes.length < drawdownMinCandles) return null;
-  let peak = closes[0];
-  let worst = 0;
-  for (const close of closes) {
-    if (close > peak) peak = close;
-    if (peak > 0) worst = Math.max(worst, (peak - close) / peak);
-  }
-  return Math.round(worst * 1000) / 10;
-};
+
 
 /** Constrói os candidatos processados (scoring + metadados setoriais + drawdown). */
 const buildCandidates = async () => {
@@ -107,7 +63,7 @@ const buildCandidates = async () => {
       metrics: processed.metrics,
       currentPrice: processed.currentPrice,
       targetPrice: processed.targetPrice,
-      consistency: { maxDrawdownPct: maxDrawdownPct(histByTicker.get(rawAsset.ticker)) },
+      consistency: { maxDrawdownPct: maxDrawdownPct(histByTicker.get(rawAsset.ticker), BUY_AND_HOLD_CONFIG.consistency) },
     });
   }
 

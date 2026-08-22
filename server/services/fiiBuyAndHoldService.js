@@ -15,21 +15,9 @@ import { scoringEngine } from './engines/scoringEngine.js';
 import { buildBuyAndHoldRanking } from './engines/fiiBuyAndHoldEngine.js';
 import { FII_BUY_AND_HOLD_CONFIG } from '../config/fiiBuyAndHold.js';
 import { DEFAULT_NTNB_FALLBACK, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
+import { maxDrawdownPct } from '../utils/assetHistory.js';
 
-// Máximo drawdown (%) a partir da série de fechamentos ajustados (pico→vale).
-const maxDrawdownPct = history => {
-  const closes = (history || [])
-    .map(point => Number(point.adjClose ?? point.close))
-    .filter(Number.isFinite);
-  if (closes.length < 2) return null;
-  let peak = closes[0];
-  let worst = 0;
-  for (const close of closes) {
-    if (close > peak) peak = close;
-    if (peak > 0) worst = Math.max(worst, (peak - close) / peak);
-  }
-  return Math.round(worst * 1000) / 10;
-};
+
 
 /** Constrói os candidatos processados (scoring estrutural + metadados + drawdown). */
 const buildCandidates = async () => {
@@ -75,7 +63,7 @@ const buildCandidates = async () => {
       // `distributionStreakYears`/`dyVolatility` ficam ausentes de propósito: o
       // FundamentalSnapshot ainda não tem profundidade (1 leitura por FII) e
       // inventar o streak seria pior que assumir o teto de confiança.
-      consistency: { maxDrawdownPct: maxDrawdownPct(histByTicker.get(rawAsset.ticker)) },
+      consistency: { maxDrawdownPct: maxDrawdownPct(histByTicker.get(rawAsset.ticker), FII_BUY_AND_HOLD_CONFIG.consistency) },
     });
   }
 
