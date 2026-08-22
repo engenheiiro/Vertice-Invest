@@ -1,0 +1,963 @@
+<title>Maturidade do Ranking Vértice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap">
+
+<style>
+:root{
+  --ground:#E8ECF3; --surface:#FFFFFF; --surface-2:#F2F5FA; --surface-3:#E4E9F1;
+  --ink:#0E141C; --ink-2:#2A3542; --muted:#5C6878; --line:#D2DAE6; --line-soft:#E2E8F1;
+  --accent:#1E5FBF; --accent-soft:#DCE7FA; --accent-ink:#14468F;
+  --ok:#0E7C55; --ok-soft:#DAF2E8; --warn:#9A6608; --warn-soft:#FBEFD5; --crit:#B23A34; --crit-soft:#FAE2E0;
+  --shadow:0 1px 2px rgba(14,20,28,.06),0 8px 24px -12px rgba(14,20,28,.18);
+  --rail:264px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#090C11; --surface:#141922; --surface-2:#191F29; --surface-3:#202631;
+    --ink:#E7ECF3; --ink-2:#C3CCD9; --muted:#8B97A7; --line:#28303C; --line-soft:#1E2530;
+    --accent:#78A6F7; --accent-soft:#16233A; --accent-ink:#A7C4FA;
+    --ok:#3FD39B; --ok-soft:#0F2A23; --warn:#F0B429; --warn-soft:#2C2312; --crit:#F0736C; --crit-soft:#2E1817;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#090C11; --surface:#141922; --surface-2:#191F29; --surface-3:#202631;
+  --ink:#E7ECF3; --ink-2:#C3CCD9; --muted:#8B97A7; --line:#28303C; --line-soft:#1E2530;
+  --accent:#78A6F7; --accent-soft:#16233A; --accent-ink:#A7C4FA;
+  --ok:#3FD39B; --ok-soft:#0F2A23; --warn:#F0B429; --warn-soft:#2C2312; --crit:#F0736C; --crit-soft:#2E1817;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px -14px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:Manrope,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent-ink); text-decoration:none; border-bottom:1px solid color-mix(in srgb, var(--accent) 35%, transparent)}
+a:hover{border-bottom-color:var(--accent)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:3px}
+
+/* ── shell ─────────────────────────────────────────────── */
+.shell{display:grid; grid-template-columns:var(--rail) minmax(0,1fr); gap:48px; max-width:1400px; margin:0 auto; padding:0 32px}
+.rail{position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto; padding:40px 0 48px; display:flex; flex-direction:column; gap:24px}
+.doc{padding:56px 0 120px; min-width:0}
+@media (max-width:1000px){
+  .shell{grid-template-columns:minmax(0,1fr); gap:0; padding:0 20px}
+  .rail{position:static; height:auto; padding:32px 0 0; border-bottom:1px solid var(--line)}
+  .doc{padding:32px 0 80px}
+}
+
+.brand{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted)}
+.rail nav{display:flex; flex-direction:column; gap:2px}
+.rail nav a{
+  display:grid; grid-template-columns:26px 1fr; gap:8px; align-items:baseline;
+  padding:7px 10px; border-radius:7px; border:0; color:var(--ink-2); font-size:13.5px; font-weight:600; line-height:1.3;
+}
+.rail nav a span{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--muted); font-weight:500}
+.rail nav a:hover{background:var(--surface-2); color:var(--ink)}
+.verdict{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px; box-shadow:var(--shadow)}
+.verdict h4{margin:0 0 10px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700; font-family:"IBM Plex Mono",monospace}
+.verdict p{margin:0; font-size:13.5px; color:var(--ink-2); line-height:1.5}
+.verdict .big{font-family:"IBM Plex Serif",Georgia,serif; font-size:34px; line-height:1; color:var(--ink); font-weight:600; display:block; margin-bottom:6px}
+.verdict .big small{font-size:15px; color:var(--muted); font-weight:500}
+
+/* ── tipografia ────────────────────────────────────────── */
+.doc>*{max-width:74ch}
+.doc>.wide,.doc>section>.wide{max-width:none}
+section{margin:0 0 72px; scroll-margin-top:24px}
+section>*{max-width:74ch}
+section>.wide{max-width:none}
+h1{
+  font-family:"IBM Plex Serif",Georgia,serif; font-weight:600; font-size:clamp(34px,4.4vw,52px);
+  line-height:1.06; letter-spacing:-.02em; margin:0 0 16px; text-wrap:balance; max-width:20ch;
+}
+h2{
+  font-family:"IBM Plex Serif",Georgia,serif; font-weight:600; font-size:clamp(24px,2.6vw,31px);
+  line-height:1.18; letter-spacing:-.015em; margin:0 0 6px; text-wrap:balance;
+}
+h3{font-size:18px; font-weight:800; letter-spacing:-.01em; margin:36px 0 8px; text-wrap:balance}
+h4{font-size:14.5px; font-weight:800; margin:26px 0 6px; color:var(--ink)}
+p{margin:0 0 16px; color:var(--ink-2)}
+strong{color:var(--ink); font-weight:700}
+ul,ol{margin:0 0 18px; padding-left:22px; color:var(--ink-2)}
+li{margin-bottom:7px}
+li::marker{color:var(--muted)}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent-ink); font-weight:600; margin:0 0 10px; display:block;
+}
+.lede{font-size:18.5px; line-height:1.55; color:var(--ink-2)}
+.dek{font-size:15px; color:var(--muted); margin:0 0 28px; max-width:70ch}
+hr{border:0; border-top:1px solid var(--line); margin:44px 0}
+
+/* ── cabeçalho do documento ────────────────────────────── */
+.head{border-bottom:1px solid var(--line); padding-bottom:28px; margin-bottom:44px; max-width:none}
+.meta{display:flex; flex-wrap:wrap; gap:8px 20px; font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted); margin-top:18px}
+.meta b{color:var(--ink-2); font-weight:500}
+
+/* ── evidência ─────────────────────────────────────────── */
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.88em}
+code{background:var(--surface-2); border:1px solid var(--line-soft); border-radius:4px; padding:.1em .35em; color:var(--ink)}
+.ev{
+  display:inline-flex; align-items:center; gap:6px; font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+  background:var(--surface-2); border:1px solid var(--line-soft); border-radius:5px; padding:2px 7px; color:var(--muted);
+  white-space:nowrap; margin:2px 4px 2px 0;
+}
+.ev::before{content:"↳"; opacity:.6}
+.evrow{display:flex; flex-wrap:wrap; margin:-2px 0 18px}
+
+/* ── tabelas ───────────────────────────────────────────── */
+.tw{overflow-x:auto; margin:0 0 12px; border:1px solid var(--line); border-radius:10px; background:var(--surface)}
+table{border-collapse:collapse; width:100%; font-size:13.5px; min-width:520px}
+th,td{padding:9px 13px; text-align:left; border-bottom:1px solid var(--line-soft); vertical-align:top}
+thead th{
+  background:var(--surface-2); font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted);
+  font-weight:700; white-space:nowrap; position:sticky; top:0;
+}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right; font-variant-numeric:tabular-nums; font-family:"IBM Plex Mono",monospace}
+caption,.cap{caption-side:bottom; text-align:left; font-size:12.5px; color:var(--muted); padding:8px 2px 0}
+.cap{display:block; margin-bottom:24px}
+tbody td.t{font-family:"IBM Plex Mono",monospace; font-weight:500; color:var(--ink); white-space:nowrap}
+
+/* ── chips ─────────────────────────────────────────────── */
+.chip{display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.06em; font-weight:600;
+  padding:2px 7px; border-radius:20px; border:1px solid; white-space:nowrap}
+.chip.ok{color:var(--ok); border-color:color-mix(in srgb,var(--ok) 40%,transparent); background:var(--ok-soft)}
+.chip.warn{color:var(--warn); border-color:color-mix(in srgb,var(--warn) 40%,transparent); background:var(--warn-soft)}
+.chip.crit{color:var(--crit); border-color:color-mix(in srgb,var(--crit) 45%,transparent); background:var(--crit-soft)}
+.chip.neutral{color:var(--muted); border-color:var(--line); background:var(--surface-2)}
+.chip.acc{color:var(--accent-ink); border-color:color-mix(in srgb,var(--accent) 40%,transparent); background:var(--accent-soft)}
+
+/* ── achados ───────────────────────────────────────────── */
+.finding{
+  background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--muted);
+  border-radius:10px; padding:18px 20px; margin:0 0 14px; box-shadow:var(--shadow); max-width:none;
+}
+.finding.crit{border-left-color:var(--crit)}
+.finding.high{border-left-color:var(--warn)}
+.finding.med{border-left-color:var(--accent)}
+.finding header{display:flex; flex-wrap:wrap; align-items:baseline; gap:10px; margin-bottom:8px}
+.finding header .id{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted); font-weight:600}
+.finding header h4{margin:0; font-size:16px; flex:1 1 260px}
+.finding p{margin:0 0 10px; font-size:14.5px}
+.finding p:last-child{margin-bottom:0}
+.finding .fix{
+  background:var(--surface-2); border-radius:8px; padding:11px 14px; font-size:14px; color:var(--ink-2);
+  border:1px solid var(--line-soft);
+}
+.finding .fix b{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:3px}
+
+/* ── cartões e grades ──────────────────────────────────── */
+.grid{display:grid; gap:14px; margin:0 0 22px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 18px; box-shadow:var(--shadow)}
+.card h4{margin:0 0 6px; font-size:14px}
+.card p{margin:0; font-size:13.5px}
+.stat{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 18px; box-shadow:var(--shadow)}
+.stat .k{display:block; font-family:"IBM Plex Serif",Georgia,serif; font-size:34px; line-height:1.05; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+.stat .l{display:block; font-size:12.5px; color:var(--muted); margin-top:5px; line-height:1.4}
+.stat.crit .k{color:var(--crit)} .stat.warn .k{color:var(--warn)} .stat.ok .k{color:var(--ok)}
+
+.callout{background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin:0 0 22px}
+.callout.acc{background:var(--accent-soft); border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+.callout p:last-child{margin-bottom:0}
+.callout h4{margin:0 0 6px; font-size:14px}
+
+/* ── barras de nota ────────────────────────────────────── */
+.score{display:flex; gap:3px; align-items:center}
+.score i{width:13px; height:13px; border-radius:3px; background:var(--line); display:inline-block}
+.score i.on{background:var(--accent)}
+.score i.on.low{background:var(--crit)}
+.score i.on.mid{background:var(--warn)}
+.score i.on.high{background:var(--ok)}
+.score b{font-family:"IBM Plex Mono",monospace; font-size:12px; margin-left:6px; color:var(--muted); font-weight:600}
+
+/* ── diagrama ──────────────────────────────────────────── */
+figure{margin:0 0 24px; max-width:none}
+figure svg{display:block; width:100%; height:auto}
+.figwrap{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:20px; overflow-x:auto; box-shadow:var(--shadow)}
+figcaption{font-size:12.5px; color:var(--muted); margin-top:10px}
+
+.foot{border-top:1px solid var(--line); padding-top:22px; font-size:13px; color:var(--muted); max-width:none}
+ol.refs{font-size:13.5px; padding-left:20px}
+ol.refs li{margin-bottom:10px}
+@media print{.rail{display:none} .shell{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+
+<div class="shell">
+<aside class="rail">
+  <div class="brand">Vértice Invest · Estudo interno</div>
+  <div class="verdict">
+    <h4>Veredito</h4>
+    <span class="big">2,7<small>/5</small></span>
+    <p>Engenharia de dados e publicação maduras. A <b>tese</b> de comprar e segurar ainda não está no motor: a lista rotaciona como um screener semanal.</p>
+  </div>
+  <nav>
+    <a href="#s1"><span>01</span>Sumário executivo</a>
+    <a href="#s2"><span>02</span>Como o Vértice decide</a>
+    <a href="#s3"><span>03</span>Retrato de hoje</a>
+    <a href="#s4"><span>04</span>Como o mercado faz</a>
+    <a href="#s5"><span>05</span>Achados</a>
+    <a href="#s6"><span>06</span>Resiliência</a>
+    <a href="#s7"><span>07</span>O que não sabemos</a>
+    <a href="#s8"><span>08</span>Roteiro</a>
+    <a href="#s9"><span>09</span>Anexos</a>
+  </nav>
+</aside>
+
+<main class="doc">
+
+<header class="head">
+  <span class="eyebrow">Estudo de maturidade · Motor de ranking</span>
+  <h1>O ranking está alinhado com a carteira de aposentadoria?</h1>
+  <p class="lede">Um confronto entre o que o motor da Vértice faz hoje, o que o mercado institucional e a literatura fazem, e o que falta para a recomendação ser digna de uma tese de décadas.</p>
+  <div class="meta">
+    <span><b>Data</b> 22/08/2026</span>
+    <span><b>Branch</b> main · 9f728d3</span>
+    <span><b>Escopo</b> Ações B3 e FIIs</span>
+    <span><b>Dados vivos</b> leitura do banco de produção, sem escrita</span>
+    <span><b>Autor</b> análise técnica sob encomenda do dono do produto</span>
+  </div>
+</header>
+
+<!-- ══════════════════════════ 1 ══════════════════════════ -->
+<section id="s1">
+  <span class="eyebrow">01 · Sumário executivo</span>
+  <h2>O motor é sólido; a tese ainda não é dele</h2>
+  <p class="dek">O que sustenta esta seção está medido nas seções 3 e 5 — nenhum número aqui é estimativa.</p>
+
+  <p>A Vértice promete uma coisa muito específica: ajudar quem monta <strong>carteira de aposentadoria comprando para segurar</strong>. Um produto assim vive de duas propriedades — a lista precisa <em>discriminar</em> (nem tudo pode ser "comprar") e precisa ser <em>estável</em> (uma âncora não muda de nome a cada semana). Nas duas, hoje, o sistema falha de forma mensurável.</p>
+
+  <div class="grid g3 wide">
+    <div class="stat crit"><span class="k">34</span><span class="l">tickers distintos passaram pela lista <b>Brasil 10</b> em 40 publicações (90 dias). Nenhum esteve presente em todas.</span></div>
+    <div class="stat crit"><span class="k">30/30</span><span class="l">dos FIIs selecionados hoje estão como <b>COMPRAR</b> — e assim foi em 12 das últimas 12 publicações (28 a 30 de 30).</span></div>
+    <div class="stat warn"><span class="k">0</span><span class="l">ativos com histórico suficiente para o eixo de <b>consistência</b>. O motor exige 6 leituras mensais; o máximo existente é 3.</span></div>
+  </div>
+
+  <p>Nada disso é um bug de código. São consequências diretas de uma escolha de arquitetura: o score que decide COMPRAR mistura, num único número de 0 a 100, <strong>qualidade da empresa, preço justo, momentum de curto prazo, macro, governança e adequação ao perfil</strong>. Como três desses ingredientes se movem toda semana (preço, momentum, macro), a decisão também se move toda semana — mesmo quando a empresa não mudou nada.</p>
+
+  <p>Do outro lado, há maturidade real e comprovável. A ingestão fundamental hoje falha fechada quando a fonte muda de layout, a publicação é feita por ponteiro imutável por seção dentro de transação, e o contrato do ranking (<code>ação ⇔ score ≥ 70</code>, ordenação, posição) é revalidado antes de ir ao ar. O veto da IA virou um campo separado e não reescreve mais a decisão quantitativa. São exatamente os pontos críticos apontados na auditoria de julho — e foram fechados.</p>
+
+  <h3>Notas por dimensão</h3>
+  <p>Escala de 0 a 5. Critério: <b>5</b> = padrão institucional verificável; <b>4</b> = sólido com lacuna conhecida; <b>3</b> = funciona, com fragilidade estrutural; <b>2</b> = entrega resultado de baixa informação; <b>1</b> = ausente ou contraditório com a tese. As notas são julgamento deste estudo, ancorado nas evidências citadas — não em benchmark externo.</p>
+
+  <div class="tw wide">
+  <table>
+    <thead><tr><th>Dimensão</th><th style="width:150px">Nota</th><th>Por quê, em uma linha</th></tr></thead>
+    <tbody>
+      <tr><td><b>Frescor e integridade dos dados</b></td><td><span class="score"><i class="on high"></i><i class="on high"></i><i class="on high"></i><i class="on high"></i><i></i><b>4</b></span></td><td>Fundamentos com <b>0 dia</b> de defasagem mediana; parser versionado com assinatura de cabeçalho fail-closed.</td></tr>
+      <tr><td><b>Cobertura do universo</b></td><td><span class="score"><i class="on mid"></i><i class="on mid"></i><i class="on mid"></i><i></i><i></i><b>3</b></span></td><td>82 ações e 245 FIIs cortados por liquidez; métricas de banco/seguradora vêm de snapshots manuais de 1T26.</td></tr>
+      <tr><td><b>Aplicabilidade setorial</b></td><td><span class="score"><i class="on high"></i><i class="on high"></i><i class="on high"></i><i class="on high"></i><i></i><b>4</b></span></td><td>Arquétipos (banco, seguradora, holding, O&amp;G) resolveram a penalização indevida por margem inaplicável.</td></tr>
+      <tr><td><b>Estabilidade da recomendação</b></td><td><span class="score"><i class="on low"></i><i></i><i></i><i></i><i></i><b>1</b></span></td><td>Rotatividade de 3,4× o tamanho da lista em um trimestre, sem banda de histerese.</td></tr>
+      <tr><td><b>Poder discriminante</b></td><td><span class="score"><i class="on low"></i><i class="on low"></i><i></i><i></i><i></i><b>2</b></span></td><td>Em FII, praticamente tudo que entra na lista é COMPRAR; mediana do perfil Moderado a 2 pontos do limiar.</td></tr>
+      <tr><td><b>Explicabilidade e auditoria</b></td><td><span class="score"><i class="on high"></i><i class="on high"></i><i class="on high"></i><i class="on high"></i><i></i><b>4</b></span></td><td><code>auditLog</code> fator a fator reconcilia com o score; teto de confiança é registrado como dedução.</td></tr>
+      <tr><td><b>Integridade de publicação</b></td><td><span class="score"><i class="on high"></i><i class="on high"></i><i class="on high"></i><i class="on high"></i><i></i><b>4</b></span></td><td>Ponteiro ativo por seção, ativação transacional e validação de contrato antes de publicar.</td></tr>
+      <tr><td><b>Evidência empírica</b></td><td><span class="score"><i class="on low"></i><i></i><i></i><i></i><i></i><b>1</b></span></td><td>Não existe série point-in-time suficiente; nenhum número de retorno do algoritmo é defensável hoje.</td></tr>
+      <tr><td><b>Governança de mudança</b></td><td><span class="score"><i class="on mid"></i><i class="on mid"></i><i class="on mid"></i><i></i><i></i><b>3</b></span></td><td><code>algorithmVersion</code> existe, mas mistura commit hash e <code>1.0.0</code>; pesos não são versionados à parte.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <span class="cap">Média simples: <b>2,7 / 5</b>. A dispersão é a informação relevante: a metade "engenharia" está em 4, a metade "investimento" está em 1–2.</span>
+
+  <h3>As cinco decisões que mais movem o ponteiro</h3>
+  <ol>
+    <li><strong>Separar "boa empresa para segurar" de "bom preço agora".</strong> Hoje é um número só. Enquanto for, momentum e macro continuarão trocando a carteira de aposentadoria de alguém.</li>
+    <li><strong>Colocar banda de histerese na lista.</strong> Entrar exige score alto; sair deveria exigir score baixo — não apenas cair um ponto abaixo de 70. É o que MSCI faz com <em>buffer rules</em> e o que a literatura de custos de transação recomenda explicitamente.</li>
+    <li><strong>Recalibrar a escala dos FIIs.</strong> Uma lista em que tudo é COMPRAR não informa nada. Não se resolve baixando o limiar nem criando cota: resolve-se medindo a distribuição e reescalando os bônus.</li>
+    <li><strong>Dar história ao motor.</strong> O eixo de consistência existe, está correto e está dormente por falta de série. Sem ele, "Dividend Aristocrat" no Vértice significa uma foto do trimestre; no índice de mesmo nome significa 25 anos.</li>
+    <li><strong>Enquadrar o produto.</strong> Publicar "COMPRAR/AGUARDAR" por ticker é, na definição da Resolução CVM 20, relatório de análise. Isso precisa de uma resposta jurídica explícita — não de uma nota de rodapé.</li>
+  </ol>
+</section>
+
+<!-- ══════════════════════════ 2 ══════════════════════════ -->
+<section id="s2">
+  <span class="eyebrow">02 · Anatomia</span>
+  <h2>Como o Vértice decide hoje</h2>
+  <p class="dek">Tudo nesta seção foi lido no código em <code>main</code>, não em documentação.</p>
+
+  <figure class="wide">
+    <div class="figwrap">
+      <svg viewBox="0 0 1080 300" role="img" aria-label="Pipeline: fontes de dados, scoring, draft competitivo, contrato, publicação e tela">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+          <style>
+            .bx{fill:var(--surface-2); stroke:var(--line); stroke-width:1}
+            .bxa{fill:var(--accent-soft); stroke:var(--accent); stroke-width:1}
+            .tt{fill:var(--ink); font:600 13px Manrope,sans-serif}
+            .ts{fill:var(--muted); font:400 11px "IBM Plex Mono",monospace}
+            .ln{stroke:var(--muted); stroke-width:1.4; fill:none; color:var(--muted)}
+            .lb{fill:var(--muted); font:500 10.5px "IBM Plex Mono",monospace; letter-spacing:.06em}
+          </style>
+        </defs>
+
+        <text x="0" y="16" class="lb">INGESTÃO</text>
+        <rect class="bx" x="0" y="28" width="164" height="74" rx="8"/>
+        <text x="14" y="52" class="tt">Fontes externas</text>
+        <text x="14" y="70" class="ts">Fundamentus · Yahoo</text>
+        <text x="14" y="86" class="ts">BCB · Tesouro</text>
+
+        <path class="ln" d="M172,65 H208" marker-end="url(#ar)"/>
+
+        <rect class="bx" x="216" y="28" width="164" height="74" rx="8"/>
+        <text x="230" y="52" class="tt">MarketAsset</text>
+        <text x="230" y="70" class="ts">cache + flags</text>
+        <text x="230" y="86" class="ts">dedup por raiz</text>
+
+        <path class="ln" d="M388,65 H424" marker-end="url(#ar)"/>
+
+        <text x="432" y="16" class="lb">DECISÃO</text>
+        <rect class="bxa" x="432" y="28" width="196" height="74" rx="8"/>
+        <text x="446" y="52" class="tt">scoringEngine</text>
+        <text x="446" y="70" class="ts">3 perfis · 3 estruturais</text>
+        <text x="446" y="86" class="ts">confiança · teses</text>
+
+        <path class="ln" d="M636,65 H672" marker-end="url(#ar)"/>
+
+        <rect class="bxa" x="680" y="28" width="184" height="74" rx="8"/>
+        <text x="694" y="52" class="tt">draft competitivo</text>
+        <text x="694" y="70" class="ts">D → M → B, 10 vagas</text>
+        <text x="694" y="86" class="ts">caps de setor</text>
+
+        <path class="ln" d="M872,65 H908" marker-end="url(#ar)"/>
+
+        <rect class="bx" x="916" y="28" width="164" height="74" rx="8"/>
+        <text x="930" y="52" class="tt">finalizeRanking</text>
+        <text x="930" y="70" class="ts">ação ⇔ score ≥ 70</text>
+        <text x="930" y="86" class="ts">ordem · posição</text>
+
+        <path class="ln" d="M998,110 V148 H120 V186" marker-end="url(#ar)"/>
+
+        <text x="0" y="176" class="lb">PUBLICAÇÃO</text>
+        <rect class="bx" x="0" y="186" width="196" height="74" rx="8"/>
+        <text x="14" y="210" class="tt">rascunho</text>
+        <text x="14" y="228" class="ts">MarketAnalysis</text>
+        <text x="14" y="244" class="ts">7 classes · runId</text>
+
+        <path class="ln" d="M204,223 H240" marker-end="url(#ar)"/>
+
+        <rect class="bx" x="248" y="186" width="212" height="74" rx="8"/>
+        <text x="262" y="210" class="tt">gate + ponteiro</text>
+        <text x="262" y="228" class="ts">validateRankingContract</text>
+        <text x="262" y="244" class="ts">transação por seção</text>
+
+        <path class="ln" d="M468,223 H504" marker-end="url(#ar)"/>
+
+        <rect class="bx" x="512" y="186" width="196" height="74" rx="8"/>
+        <text x="526" y="210" class="tt">GET /research/latest</text>
+        <text x="526" y="228" class="ts">só seção publicada</text>
+
+        <path class="ln" d="M716,223 H752" marker-end="url(#ar)"/>
+
+        <rect class="bx" x="760" y="186" width="196" height="74" rx="8"/>
+        <text x="774" y="210" class="tt">Research (tela)</text>
+        <text x="774" y="228" class="ts">filtra por perfil</text>
+        <text x="774" y="244" class="ts">Defensivo por padrão</text>
+      </svg>
+    </div>
+    <figcaption>O caminho de um ativo até virar "COMPRAR" na tela. A caixa em destaque é onde a decisão de investimento acontece — as demais são transporte e integridade.</figcaption>
+  </figure>
+
+  <h3>O que compõe o score que decide COMPRAR</h3>
+  <p>Cada ativo recebe três notas de perfil (Defensivo, Moderado, Arrojado). O draft atribui a cada ticker <em>um</em> perfil e o score daquele perfil vira o número público. Acima de 70, COMPRAR.</p>
+  <div class="evrow"><span class="ev">financialConstants.js:50 — BUY_THRESHOLD = 70</span><span class="ev">scoringEngine.js:304-708 — scoreStockProfiles</span></div>
+
+  <div class="tw wide">
+  <table>
+    <thead><tr><th>Perfil</th><th>Base</th><th>Somam pontos</th><th>Subtraem / limitam</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Defensivo</b><br><span class="chip neutral">gate de elegibilidade</span></td>
+        <td class="num">40<br><span class="chip neutral">30 se inelegível</span></td>
+        <td>DY (+22/+16/+10/+5) · ROE (+15/+10/+5) · porte (+10/+4) · upside (+8/+5/+3) · beta&lt;0,7 (+5) · payout saudável (+5) · Dividend Aristocrat (+10) · liquidez</td>
+        <td>P/VP (−10/−5) · beta alto (−15/−8) · volatilidade (−20/−10) · payout &gt;100% (−20/−30) · DL/EBITDA (−15/−8) · sobrepreço (−10/−20) · SMA200 (−6/−12/−20) · cíclica (−6/−12) · estatal (−8) · teto por confiança</td>
+      </tr>
+      <tr>
+        <td><b>Moderado</b></td>
+        <td class="num">40<br><span class="chip neutral">25 se &lt; R$ 2 bi</span></td>
+        <td>crescimento de receita (+22/+16/+10/+4) · ROE (+15/+10/+7/+3) · upside (+20/+15/+10/+5) · Aristocrat (+5)</td>
+        <td>margem &lt;5% (−15) · ROE &lt; Selic (−10/−20) · payout (−10) · sobrepreço (−25/−40) · SMA200 · ciclo (−4/−8) · estatal (−4) · alavancagem (−10/−20) e teto 70 · sem lucro: teto 72</td>
+      </tr>
+      <tr>
+        <td><b>Arrojado</b></td>
+        <td class="num">35</td>
+        <td>PEG (+30/+22/+12/+5) · crescimento (+25/+15/+8) · upside (+30/+20/+10/+5)</td>
+        <td>volatilidade (−10/−20) · payout (−20) · sobrepreço (−25/−40) · SMA200 (×0,7) · alavancagem (−8/−15) e teto 75 · sem lucro: teto 82</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <span class="cap">Ações B3. Para FIIs o desenho é análogo, com <em>spread</em> de DY contra a NTN-B longa no lugar do DY absoluto, P/VP por tipo (papel × tijolo), vacância, número de imóveis, cap rate e beta. <span class="ev">scoringEngine.js:711-864</span></span>
+
+  <h3>O que <em>não</em> compõe</h3>
+  <p>Três coisas aparecem na tela ao lado do score e não entram nele: <strong>Qualidade, Valuation e Segurança</strong> (os "estruturais"). Eles servem de critério de desempate no draft e de exibição. Um ativo pode ter Qualidade 100 e score de compra 60.</p>
+  <div class="evrow"><span class="ev">portfolioEngine.js:11-21 — structuralComposite (desempate)</span><span class="ev">scoringEngine.js:1223-1534 — calculateStructuralScores</span></div>
+
+  <p>E há um quarto eixo, o mais importante para a tese, que existe no código e está <strong>inativo</strong>: o <em>track record</em> — consistência de ROE, de dividendo e de crescimento ao longo de períodos distintos. Ele devolve <code>null</code> abaixo de 6 leituras mensais e, por isso, não concede nem desconta nada hoje.</p>
+  <div class="evrow"><span class="ev">utils/trackRecord.js:25 — TRACK_RECORD_MIN_PERIODS = 6</span><span class="ev">scoringEngine.js:396-409 · 777-783</span></div>
+
+  <h3>Gates: quem nem chega a disputar</h3>
+  <ul>
+    <li><b>Liquidez</b> — ação abaixo de R$ 200 mil/dia e FII abaixo de R$ 500 mil/dia são descartados antes do scoring. <span class="ev">scoringEngine.js:1604-1610</span></li>
+    <li><b>Elegibilidade defensiva</b> — ação precisa de R$ 1 bi de valor de mercado, beta &lt; 1,5, ROE ≥ 5%, margem ≥ 3%, payout ≤ 200%, e setor "seguro" (ou DY ≥ 6% com P/L ≤ 10). Setor cíclico é <em>veto categórico</em>. <span class="ev">scoringEngine.js:151-204</span></li>
+    <li><b>Cobertura de dados (ações)</b> — desde a calibração V3, quem não tem todos os campos obrigatórios do seu arquétipo é excluído do ranking, não rebaixado. <span class="ev">stockCalibrationShadowEngine.js:290</span></li>
+    <li><b>Concentração</b> — teto por balde no tier GOLD: 4 ativos por macro-setor no Defensivo de ações (override da calibração V3) e 3 no caminho legado, contra 2 nos demais perfis. A penalidade pós-draft (−5 a partir do 3º ativo do balde, −15 a partir do 4º) vale para FIIs; <b>no ranking de ações ela não é mais aplicada</b> — ali o teto decide quem entra e a nota não é reescrita depois. FIIs concentram por segmento fino (shopping ≠ logística ≠ papel), não por macro-setor. <span class="ev">portfolioEngine.js:52-58 · 149-162</span> <span class="ev">stockCalibrationShadowEngine.js:295-301</span></li>
+  </ul>
+
+  <h3>A camada nova: calibração por arquétipo (ações)</h3>
+  <p>Desde julho, o ranking de ações não sai mais do scorer genérico puro. Cada empresa é classificada em um arquétipo econômico — operacional, banco, seguradora, corretora, holding, produtora de óleo e gás — e recebe eixos próprios (durabilidade, preço, resiliência). O score final é uma mistura de <strong>80% do score histórico e 20% dos eixos</strong>, invertida para 20/80 em óleo e gás.</p>
+  <div class="evrow"><span class="ev">stockCalibrationShadowEngine.js:7-16</span><span class="ev">stockSectorAxisEngine.js:134-237</span></div>
+  <p>Isso corrigiu um viés real: bancos e seguradoras perdiam confiança por "margem líquida ausente" — uma métrica que simplesmente não se aplica a eles. Hoje a matriz de aplicabilidade distingue <em>dado ausente</em> de <em>métrica sem sentido</em>. É uma das melhores peças do sistema.</p>
+
+  <div class="callout">
+    <h4>Existe um segundo motor, desligado</h4>
+    <p>O <code>buyAndHoldEngine</code> implementa exatamente a filosofia que o produto vende: segurança como <em>portão</em> (setor âncora + filtros quantitativos), durabilidade e resiliência com peso, e valuation apenas como <strong>freio</strong> — nunca somando pontos. "Ótima âncora, porém cara" vira AGUARDAR, não some da lista. Ele roda em shadow, é read-only e não aparece para o usuário. <span class="ev">buyAndHoldEngine.js:1-319</span> <span class="ev">config/buyAndHold.js</span></p>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 3 ══════════════════════════ -->
+<section id="s3">
+  <span class="eyebrow">03 · Medição</span>
+  <h2>Retrato do sistema em 22/08/2026</h2>
+  <p class="dek">Números extraídos do banco de produção por leitura, na data deste estudo. Macro vigente: Selic 14,00%, IPCA 4,44%, NTN-B longa 7,96%, taxas não defasadas.</p>
+
+  <h3>O funil, das fontes até a lista</h3>
+  <div class="tw wide">
+  <table>
+    <thead><tr><th>Etapa</th><th class="num">Ações</th><th class="num">FIIs</th><th>Observação</th></tr></thead>
+    <tbody>
+      <tr><td>Universo elegível por flags, após deduplicação por raiz</td><td class="num">282</td><td class="num">367</td><td>classes de mesma empresa colapsam na de maior liquidez</td></tr>
+      <tr><td>Descartados por liquidez no scoring</td><td class="num">82</td><td class="num">245</td><td>corte de R$ 200 mil/dia (ação) e R$ 500 mil/dia (FII)</td></tr>
+      <tr><td>Efetivamente pontuados</td><td class="num">200</td><td class="num">122</td><td>67% dos FIIs do cadastro não chegam a ser avaliados</td></tr>
+      <tr><td>Excluídos por cobertura de campos obrigatórios</td><td class="num">1</td><td class="num">—</td><td>regra só existe para ações (arquétipos)</td></tr>
+      <tr><td>Elegíveis ao perfil Defensivo</td><td class="num">49</td><td class="num">52</td><td>gate de porte, beta, setor, rentabilidade</td></tr>
+      <tr><td>Com melhor score ≥ 70 em algum perfil</td><td class="num">25</td><td class="num">76</td><td><b>62% dos FIIs pontuados</b> cruzam o limiar</td></tr>
+      <tr><td>Selecionados pelo draft (10 por perfil)</td><td class="num">30</td><td class="num">30</td><td>—</td></tr>
+      <tr><td><b>Publicados como COMPRAR</b></td><td class="num"><b>20</b></td><td class="num"><b>30</b></td><td>ações 10/4/6 por perfil; FIIs 10/10/10</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <span class="cap">Reprodução fiel do caminho de produção (mesmos motores e mesmas opções de draft), executada em leitura pura — sem gravar rascunho nem log de descarte.</span>
+
+  <h3>Distribuição dos scores</h3>
+  <div class="tw wide">
+  <table>
+    <thead><tr><th>Classe · perfil</th><th class="num">mín</th><th class="num">p25</th><th class="num">mediana</th><th class="num">p75</th><th class="num">máx</th><th class="num">≥ 70</th></tr></thead>
+    <tbody>
+      <tr><td>Ações · Defensivo</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">84</td><td class="num">14</td></tr>
+      <tr><td>Ações · Moderado</td><td class="num">0</td><td class="num">16</td><td class="num">21</td><td class="num">34</td><td class="num">91</td><td class="num">7</td></tr>
+      <tr><td>Ações · Arrojado</td><td class="num">0</td><td class="num">17</td><td class="num">25</td><td class="num">47</td><td class="num">92</td><td class="num">12</td></tr>
+      <tr><td>FIIs · Defensivo</td><td class="num">25</td><td class="num">25</td><td class="num">25</td><td class="num">76</td><td class="num">99</td><td class="num">43</td></tr>
+      <tr><td>FIIs · Moderado</td><td class="num">27</td><td class="num">52</td><td class="num"><b>68</b></td><td class="num">80</td><td class="num">92</td><td class="num">58</td></tr>
+      <tr><td>FIIs · Arrojado</td><td class="num">33</td><td class="num">45</td><td class="num">60</td><td class="num">75</td><td class="num">100</td><td class="num">43</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <span class="cap">Nas ações, a massa em zero é estrutural: o ativo inelegível a um perfil recebe 0 naquele perfil na calibração V3. Nos FIIs a leitura é outra — a mediana do Moderado está a <b>dois pontos</b> do limiar de compra, e mais da metade do universo pontuado cruza 70 em algum perfil.</span>
+
+  <h3>As listas de hoje</h3>
+  <p>Abaixo, o ranking recalculado em 22/08. A versão <b>publicada</b> no ar é o documento gerado em 21/08 às 21h32 e ativado hoje às 11h50 — nele as ações somam 17 COMPRAR (contra 20 no cálculo de hoje) e os FIIs, 30 de 30.</p>
+  <div class="grid g2 wide">
+    <div class="card">
+      <h4>Ações · Defensivo (top 10)</h4>
+      <p class="mono" style="font-size:13px">CMIG4 84 · ITUB4 80 · WIZC3 79 · ITSA4 79 · CPFE3 77 · ABCB4 77 · TAEE11 76 · JHSF3 73 · INTB3 72 · TGMA3 71</p>
+      <p style="margin-top:8px; color:var(--muted); font-size:13px">Todos COMPRAR. Sete são utility, banco, seguro ou transmissão — coerentes com a tese. <b>JHSF3</b> (incorporação de luxo) e <b>TGMA3</b> (logística automotiva) entram por pontuação, não por durabilidade.</p>
+    </div>
+    <div class="card">
+      <h4>Ações · Arrojado (top 6, todos COMPRAR)</h4>
+      <p class="mono" style="font-size:13px">EZTC3 80 · DIRR3 80 · MTRE3 75 · AZZA3 74 · CSED3 72 · GMAT3 72</p>
+      <p style="margin-top:8px; color:var(--muted); font-size:13px">As três primeiras posições são incorporadoras. É o efeito combinado de PEG barato, upside alto e crescimento — o padrão típico do topo do ciclo imobiliário.</p>
+    </div>
+    <div class="card">
+      <h4>FIIs · Defensivo (top 10)</h4>
+      <p class="mono" style="font-size:13px">KNCR11 99 · GGRC11 96 · KNSC11 96 · TRXF11 94 · BTLG11 92 · RZTR11 89 · VGIR11 87 · HGRU11 87 · HGBS11 86 · XPLG11 81</p>
+      <p style="margin-top:8px; color:var(--muted); font-size:13px">Três fundos de papel (crédito) no perfil mais conservador. Defensável — mas é risco de crédito, não de imóvel, e o motor não avalia a carteira de CRI.</p>
+    </div>
+    <div class="card">
+      <h4>Brasil 10 (lista de entrada, todos os planos)</h4>
+      <p class="mono" style="font-size:13px">KNCR11 · GGRC11 · KNSC11 · TRXF11 · VGIR11 · CMIG4 · ITUB4 · WIZC3 · ITSA4 · ABCB4</p>
+      <p style="margin-top:8px; color:var(--muted); font-size:13px">Cinco FIIs (três deles de papel, ou seja, crédito imobiliário), quatro nomes do sistema financeiro e uma elétrica. Não há penalidade de concentração no Brasil 10 — por desenho.</p>
+    </div>
+  </div>
+
+  <h3 id="turnover">Estabilidade: o dado mais duro deste estudo</h3>
+  <p>Foram analisadas as 40 publicações de ranking dos últimos 90 dias (02/06 a 21/08/2026), comparando as listas de COMPRAR entre publicações consecutivas.</p>
+
+  <div class="tw wide">
+  <table>
+    <thead><tr><th>Classe</th><th class="num">Publicações</th><th class="num">Tamanho da lista COMPRAR</th><th class="num">Tickers distintos que já foram COMPRAR</th><th class="num">Presentes em todas</th></tr></thead>
+    <tbody>
+      <tr><td><b>Brasil 10</b></td><td class="num">40</td><td class="num">9 – 10</td><td class="num"><b>34</b></td><td class="num"><b>0</b></td></tr>
+      <tr><td><b>Ações</b></td><td class="num">40</td><td class="num">8 – 26</td><td class="num">45</td><td class="num">2 <span class="mono" style="font-size:11px">(ITSA4, CMIG4)</span></td></tr>
+      <tr><td><b>FIIs</b></td><td class="num">40</td><td class="num">20 – 30</td><td class="num">68</td><td class="num">2 <span class="mono" style="font-size:11px">(TRXF11, RZTR11)</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <span class="cap">Similaridade de Jaccard entre publicações consecutivas do Brasil 10 chegou a <b>0,538</b> — o equivalente a trocar 3 dos 10 nomes de uma publicação para a seguinte, com intervalo de 3 a 4 dias.</span>
+
+  <div class="callout acc">
+    <h4>Leia de novo: 34 nomes distintos em uma lista de 10, em 90 dias</h4>
+    <p>Para um produto de "comprar e segurar até a aposentadoria", isso significa que um usuário que seguisse a lista à risca teria girado a carteira inteira mais de três vezes em um trimestre — pagando corretagem, spread e, nas ações, imposto sobre ganho de capital a cada saída. A literatura sobre custos de transação mostra que estratégias com giro alto perdem grande parte do prêmio bruto justamente aí.</p>
+  </div>
+
+  <h3>Profundidade dos dados</h3>
+  <div class="tw wide">
+  <table>
+    <thead><tr><th>Insumo</th><th class="num">Ações</th><th class="num">FIIs</th><th>Situação</th></tr></thead>
+    <tbody>
+      <tr><td>Defasagem dos fundamentais (mediana / máxima, em dias)</td><td class="num">0 / 16</td><td class="num">0 / 0</td><td><span class="chip ok">saudável</span> nenhum ativo acima de 90 dias</td></tr>
+      <tr><td>Confiança dos dados abaixo de 100 (de 200 pontuados)</td><td class="num">31</td><td class="num">—</td><td>mínimo observado 60 <span class="chip neutral">teto de 85</span></td></tr>
+      <tr><td>Séries de preço (mediana de candles)</td><td class="num">400</td><td class="num">400</td><td>teto de 400 pontos por desenho ≈ 1,6 ano</td></tr>
+      <tr><td>Ativos sem SMA200</td><td class="num">7</td><td class="num">60</td><td>sem a guarda anti-value-trap; registrado no audit</td></tr>
+      <tr><td>Ativos sem payout</td><td class="num">105</td><td class="num">365</td><td>payout não é publicado para FII pela fonte</td></tr>
+      <tr><td><b>Leituras mensais de fundamentos (máx. por ticker)</b></td><td class="num"><b>2</b></td><td class="num"><b>3</b></td><td><span class="chip crit">exige 6</span> eixo de consistência 100% dormente</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <span class="cap">A série de fundamentos começou em 06/2026 (FIIs) e 07/2026 (ações) e acumula uma leitura por mês. No ritmo atual, as ações alcançam as 6 leituras mínimas por volta de <b>dezembro de 2026</b>.</span>
+
+  <h3>O contrafactual interno: o motor âncora, ligado sobre os mesmos dados</h3>
+  <p>Rodando o <code>buyAndHoldEngine</code> shadow sobre exatamente o mesmo universo e o mesmo macro de hoje, o resultado é outro produto:</p>
+
+  <div class="tw wide">
+  <table>
+    <thead><tr><th>#</th><th>Ticker</th><th>Setor</th><th class="num">Score</th><th>Ação</th><th class="num">Durab.</th><th class="num">Resil.</th><th class="num">Consist.</th><th class="num">Prêmio s/ justo</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td class="t">TAEE11</td><td>Elétricas</td><td class="num">78</td><td><span class="chip ok">COMPRAR</span></td><td class="num">84</td><td class="num">68</td><td class="num">81</td><td class="num">−1,3%</td></tr>
+      <tr><td class="num">2</td><td class="t">CPFE3</td><td>Elétricas</td><td class="num">77</td><td><span class="chip ok">COMPRAR</span></td><td class="num">78</td><td class="num">89</td><td class="num">44</td><td class="num">+1,5%</td></tr>
+      <tr><td class="num">3</td><td class="t">PSSA3</td><td>Seguros</td><td class="num">74</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">91</td><td class="num">76</td><td class="num">45</td><td class="num">+14,3%</td></tr>
+      <tr><td class="num">4</td><td class="t">BBSE3</td><td>Seguros</td><td class="num">72</td><td><span class="chip ok">COMPRAR</span></td><td class="num">73</td><td class="num">64</td><td class="num">85</td><td class="num">−1,6%</td></tr>
+      <tr><td class="num">5</td><td class="t">ITSA4</td><td>Holding</td><td class="num">72</td><td><span class="chip ok">COMPRAR</span></td><td class="num">72</td><td class="num">89</td><td class="num">34</td><td class="num">−9,3%</td></tr>
+      <tr><td class="num">6</td><td class="t">ALUP11</td><td>Elétricas</td><td class="num">63</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">51</td><td class="num">81</td><td class="num">99</td><td class="num">+16,7%</td></tr>
+      <tr><td class="num">7</td><td class="t">VIVT3</td><td>Telecom</td><td class="num">61</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">37</td><td class="num">95</td><td class="num">70</td><td class="num">+7,7%</td></tr>
+      <tr><td class="num">8</td><td class="t">CXSE3</td><td>Seguros</td><td class="num">59</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">74</td><td class="num">73</td><td class="num">92</td><td class="num">+38,9%</td></tr>
+      <tr><td class="num">9</td><td class="t">CMIG4</td><td>Elétricas</td><td class="num">57</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">69</td><td class="num">56</td><td class="num">21</td><td class="num">−28,6%</td></tr>
+      <tr><td class="num">10</td><td class="t">ABEV3</td><td>Bebidas</td><td class="num">56</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">69</td><td class="num">95</td><td class="num">91</td><td class="num">+59,7%</td></tr>
+      <tr><td class="num">11</td><td class="t">EGIE3</td><td>Elétricas</td><td class="num">49</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">70</td><td class="num">81</td><td class="num">74</td><td class="num">+110,6%</td></tr>
+      <tr><td class="num">12</td><td class="t">CSMG3</td><td>Saneamento</td><td class="num">43</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">66</td><td class="num">64</td><td class="num">87</td><td class="num">+81,4%</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <span class="cap">200 ativos analisados, <b>12 elegíveis</b>, <b>4 COMPRAR</b>. Motivos de exclusão mais frequentes: setor cíclico (56), fora do universo âncora — varejo (27), construção civil (19) —, valor de mercado abaixo de R$ 5 bi (14), beta acima de 1 (13).</span>
+
+  <p>Repare no contraste: os três primeiros do ranking Arrojado de produção (EZTC3, DIRR3, MTRE3) sequer entram no universo âncora, e nenhum dos quatro COMPRAR do motor âncora — TAEE11, CPFE3, BBSE3, ITSA4 — está no topo da lista de produção. <strong>Mesmos dados, mesma data, duas respostas diferentes para "o que eu compro para a aposentadoria".</strong> A pergunta que o produto precisa responder é qual das duas ele vende.</p>
+</section>
+
+<!-- ══════════════════════════ 4 ══════════════════════════ -->
+<section id="s4">
+  <span class="eyebrow">04 · Referência externa</span>
+  <h2>Como o mercado e a literatura fazem</h2>
+  <p class="dek">Cada afirmação abaixo foi conferida na fonte primária ou, quando indicado, na fonte oficial do emissor. A bibliografia completa com links está no anexo C.</p>
+
+  <h3>Índices que fazem exatamente o que a Vértice promete</h3>
+
+  <div class="tw wide">
+  <table>
+    <thead><tr><th>Índice</th><th>Critério de entrada</th><th>Janela de histórico</th><th>Revisão</th><th>Anti-giro</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>S&amp;P 500 Dividend Aristocrats</b></td>
+        <td>estar no S&amp;P 500 e ter <b>aumentado</b> o dividendo todo ano</td>
+        <td class="num"><b>25 anos</b></td>
+        <td>universo revisto uma vez por ano (janeiro); rebalanceamento trimestral</td>
+        <td>seleção anual; hoje 69 empresas</td>
+      </tr>
+      <tr>
+        <td><b>MSCI Quality</b></td>
+        <td>z-score composto de ROE, dívida/patrimônio e <b>variabilidade de lucro</b>, winsorizados nos percentis 5 e 95</td>
+        <td class="num"><b>5 anos</b> de EPS</td>
+        <td>semestral (fecho de maio e novembro)</td>
+        <td><em>buffer rules</em> explícitas; "giro moderado" é objetivo declarado da metodologia</td>
+      </tr>
+      <tr>
+        <td><b>IDIV / IFIX (B3)</b></td>
+        <td>seleção por remuneração ao acionista (IDIV) e por liquidez/presença em pregão (IFIX)</td>
+        <td>plurianual</td>
+        <td>periódica, por carteira de vigência</td>
+        <td>carteira fixa entre revisões</td>
+      </tr>
+      <tr>
+        <td><b>Vértice (hoje)</b></td>
+        <td>score composto ≥ 70 no perfil atribuído</td>
+        <td class="num"><b>0 — foto atual</b></td>
+        <td>a cada 3 a 4 dias</td>
+        <td><span class="chip crit">nenhum</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <span class="cap">A linha da Vértice usa os mesmos critérios de leitura das demais, medidos nas seções 2 e 3.</span>
+
+  <p><b>O que isso implica.</b> Não é que 25 anos seja o número certo para o Brasil — não é: a B3 tem poucas empresas com esse histórico e nossa moeda e regulação passaram por rupturas. O que importa é a <em>estrutura</em>: quem publica lista de longo prazo seleciona por <strong>histórico verificado</strong> e revisa a carteira em ciclos longos, com regras explícitas para evitar entradas e saídas por oscilação marginal. A Vértice hoje não tem nenhum dos dois.</p>
+
+  <h3>O que a pesquisa acadêmica diz sobre os fatores que o motor usa</h3>
+
+  <div class="grid g2 wide">
+    <div class="card">
+      <h4>Qualidade compensa — e tem definição consolidada</h4>
+      <p>Asness, Frazzini e Pedersen definem qualidade em quatro dimensões: <b>rentabilidade, crescimento, segurança e payout</b>, e mostram prêmio ajustado a risco em 24 países. Novy-Marx mostrou que a rentabilidade bruta sobre ativos prevê retorno com poder parecido ao do book-to-market. O Vértice cobre rentabilidade e payout; segurança entra por beta e alavancagem; <b>crescimento sustentado não entra</b>, porque depende de série.</p>
+    </div>
+    <div class="card">
+      <h4>Solidez contábil binária funciona</h4>
+      <p>O F-Score de Piotroski soma <b>nove sinais binários</b> de rentabilidade, alavancagem/liquidez e eficiência operacional, todos exigindo <b>variação ano contra ano</b>. É a prova de conceito mais simples de que "ficou melhor ou pior" carrega informação que o nível atual não carrega — exatamente o que falta ao Vértice.</p>
+    </div>
+    <div class="card">
+      <h4>Baixa volatilidade não é penalidade</h4>
+      <p>Baker, Bradley e Wurgler documentam que ações de baixa volatilidade e baixo beta <b>superaram</b> as de alta volatilidade por décadas nos EUA. O Vértice já premia beta baixo no Defensivo — está do lado certo da evidência. Mas o portão do motor âncora exige <code>beta ≤ 1,0</code>, e isso hoje elimina todos os grandes bancos brasileiros.</p>
+    </div>
+    <div class="card">
+      <h4>Giro destrói prêmio</h4>
+      <p>Novy-Marx e Velikov mediram custo de execução de 20 a 57 pontos-base para anomalias de giro médio e concluem: as que giram <b>menos de 50% ao mês</b> mantêm spread líquido; poucas das mais rápidas mantêm. A técnica de mitigação mais eficaz que eles identificam é o <b>buy/hold spread</b> — exigência mais dura para entrar do que para permanecer. É a correção direta do achado V‑01.</p>
+    </div>
+  </div>
+
+  <h3>Dividend yield: o sinal mais perigoso do arsenal</h3>
+  <p>O DY é o insumo mais pesado do perfil Defensivo do Vértice — vale até +22 pontos diretos, alimenta o preço justo de Bazin (que gera o upside, mais +8), integra o predicado "Dividend Aristocrat" (mais +10) e interage com o payout (mais +5). Em CMIG4, esse conjunto responde por boa parte do score.</p>
+  <p>O problema é conhecido no mercado como <em>yield trap</em>: um yield alto raramente vem de dividendo crescente; costuma vir de <strong>preço caindo</strong> ou de payout insustentável. A leitura de mercado convergente é que o payout — e a cobertura do dividendo pelo fluxo de caixa — antecipa o corte melhor do que o yield. O Vértice já penaliza payout acima de 100% e já implantou uma trava de yield-trap para FIIs acima de 20%; o que falta é não somar o mesmo sinal quatro vezes.</p>
+
+  <h3>Bazin, o método que o próprio motor invoca</h3>
+  <p>O preço justo de ação BR usa "Bazin" com yield-alvo ancorado na NTN-B mais prêmio. O método original de Décio Bazin, porém, exige que a ação tenha pago <strong>mais de 6% ao ano nos últimos três pagamentos</strong>, endividamento moderado, e prevê <strong>rebalanceamento semestral</strong>. O Vértice aplica a fórmula do preço-teto sobre o DY dos últimos 12 meses, sem o requisito de histórico e com revisão a cada 3–4 dias. Usa-se o nome sem os dois filtros que faziam o método funcionar.</p>
+  <div class="evrow"><span class="ev">scoringEngine.js:245-265 — bazinYieldPct</span><span class="ev">financialConstants.js:83-84</span></div>
+
+  <h3>FIIs: o múltiplo que o mercado usa e o Vértice não</h3>
+  <p>A Nareit criou o <strong>FFO</strong> em 1991 justamente porque o lucro contábil de um veículo imobiliário é distorcido pela depreciação: FFO é o lucro líquido excluindo depreciação e amortização de imóveis e ganhos/perdas de venda de propriedades. P/FFO é, no mercado de REITs e FIIs, o análogo do P/L.</p>
+  <p>O Vértice <strong>raspa o FFO Yield de todo FII e o descarta antes de gravar</strong>. O scraper lê a coluna, calcula o FFO por cota — e o <code>syncService</code> não inclui nenhum dos três campos (<code>ffoYield</code>, <code>vpCota</code>, <code>ffoCota</code>) no update, que também não existem no schema do <code>MarketAsset</code>. O Mongoose descarta em silêncio. Medido no banco em 22/08: <b>0 de 122 FIIs pontuados têm FFO diferente de zero</b>.</p>
+  <div class="evrow"><span class="ev">scraperSchemas.js:100 — coluna ffoYield</span><span class="ev">fundamentusService.js:237-248 — parse e ffoCota</span><span class="ev">syncService.js:200-226 — updateFields sem ffoYield</span><span class="ev">MarketAsset.js:132-137 — campo inexistente</span></div>
+  <p>Além do FFO, a análise profissional de FII olha rotineiramente para itens que o motor ignora: alavancagem do fundo, proporção de contratos atípicos, prazo médio remanescente dos contratos, concentração por inquilino, e — nos fundos de papel — o indexador e a qualidade de crédito dos CRIs. Hoje o motor decide com DY, P/VP, vacância, número de imóveis, cap rate, liquidez e beta.</p>
+
+  <h3>Como se valida um modelo assim (e por que ainda não dá)</h3>
+  <p>Três resultados metodológicos delimitam o que se pode afirmar:</p>
+  <ul>
+    <li><b>Harvey, Liu e Zhu (2016)</b> — dado o volume de fatores já testados na literatura, um fator novo precisa de <b>t &gt; 3,0</b> para ser levado a sério. O padrão usual de 2,0 produz falsos positivos em massa.</li>
+    <li><b>Bailey e López de Prado (2014)</b> — quando se testam muitas variações e se escolhe a melhor, o Sharpe máximo é inflado <em>mesmo que todas sejam ruído</em>. O Deflated Sharpe Ratio corrige por seleção, número de tentativas, tamanho da amostra e não-normalidade.</li>
+    <li>Consequência prática: qualquer recalibração de pesos ou do limiar 70 feita hoje, olhando o resultado atual, é sobreajuste por construção — não há amostra out-of-sample para desempatar.</li>
+  </ul>
+
+  <h3>Enquadramento regulatório</h3>
+  <div class="callout">
+    <p>A Resolução CVM nº 20/2021 define, no <b>art. 1º</b>, analista de valores mobiliários como quem, em caráter profissional, elabora relatórios de análise destinados a publicação ou distribuição a terceiros — e enquadra como relatório de análise textos, estudos e análises que <b>possam influenciar decisões de investimento</b>. O <b>art. 2º</b> restringe a atividade a profissionais credenciados; o <b>art. 3º</b> lista quem precisa se credenciar; o <b>art. 20</b> exige que o relatório seja assinado por ao menos um analista credenciado; os <b>arts. 21 e 22</b> obrigam declarações de independência e de conflito de interesse.</p>
+    <p>Um ranking que publica <b>COMPRAR</b> e <b>AGUARDAR</b> por ticker, semanalmente, para assinantes, tem forte aparência de relatório de análise. O disclaimer atual na tela de Research diz que o conteúdo é informativo e não constitui recomendação — mas o rótulo exibido ao lado do ativo é literalmente "COMPRAR". <b>Isto não é opinião jurídica</b>: é a indicação de que o enquadramento precisa de uma resposta formal de um especialista, e de que a decisão de manter o verbo "COMPRAR" é, também, uma decisão regulatória.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 5 ══════════════════════════ -->
+<section id="s5">
+  <span class="eyebrow">05 · Diagnóstico</span>
+  <h2>Achados</h2>
+  <p class="dek">Catorze achados, ordenados por impacto sobre a tese de comprar e segurar. Cada um traz a evidência que o sustenta e a correção proposta. Nenhum foi implementado — este estudo não altera código.</p>
+
+  <div class="grid g3 wide" style="margin-bottom:26px">
+    <div class="card"><h4><span class="chip crit">CRÍTICO</span> 3 achados</h4><p>Contradizem diretamente a promessa do produto.</p></div>
+    <div class="card"><h4><span class="chip warn">ALTO</span> 6 achados</h4><p>Distorcem a seleção ou o significado do que é publicado.</p></div>
+    <div class="card"><h4><span class="chip acc">MÉDIO</span> 5 achados</h4><p>Fragilidades estruturais e dívidas de dado.</p></div>
+  </div>
+
+  <!-- V-01 -->
+  <article class="finding crit">
+    <header><span class="id">V-01</span><h4>A lista rotaciona como screener, não como âncora</h4><span class="chip crit">CRÍTICO</span></header>
+    <p>Em 90 dias e 40 publicações, <b>34 tickers distintos</b> passaram pela lista Brasil 10 — de dez posições — e <b>nenhum</b> esteve presente em todas. Nas ações, o número de COMPRAR variou de 8 a 26. A causa é mecânica: <code>action</code> é derivada de um corte duro em 70, sem banda. Um ativo que cai de 70 para 69 sai da recomendação; volta na semana seguinte se subir um ponto.</p>
+    <div class="evrow"><span class="ev">medição: 40 publicações, 02/06–21/08/2026</span><span class="ev">rankingContract.js:27-29 — deriveRankingAction</span><span class="ev">Jaccard mínimo 0,538 no Brasil 10</span></div>
+    <div class="fix"><b>Correção proposta</b>Banda de histerese explícita, no padrão <em>buy/hold spread</em>: entrar exige score ≥ 70; <b>permanecer</b> exige apenas ≥ 62. Um ativo já recomendado só sai quando cruza para baixo o limiar inferior, e a saída é registrada com motivo. Complementarmente, desacoplar a cadência: manter o cálculo diário para o painel, mas publicar a <b>lista âncora</b> em ciclo mensal. Aceite: giro medido por Jaccard entre publicações consecutivas ≥ 0,85 no Brasil 10 durante três meses, sem que nenhuma saída deixe de ter causa fundamentalista registrada.</div>
+  </article>
+
+  <!-- V-02 -->
+  <article class="finding crit">
+    <header><span class="id">V-02</span><h4>Em FIIs, quase tudo que entra na lista é COMPRAR</h4><span class="chip crit">CRÍTICO</span></header>
+    <p>Hoje, <b>30 de 30</b> FIIs selecionados estão como COMPRAR; nas últimas doze publicações o número ficou entre 28 e 30. Entre os 122 FIIs pontuados, <b>76 (62%)</b> cruzam o limiar em algum perfil, e a mediana do score Moderado é <b>68</b> — dois pontos abaixo do corte. Uma lista em que tudo é compra transfere a decisão inteira de volta para o usuário: o ranking vira ordenação, não recomendação.</p>
+    <div class="evrow"><span class="ev">funil FII 22/08/2026</span><span class="ev">scoringEngine.js:790 — base MODERATE 45</span><span class="ev">scoringEngine.js:795-805 — spread até +25</span></div>
+    <div class="fix"><b>Correção proposta</b>Reescalar o scorer de FII, não o limiar: base do Moderado de 45 para ~35 e compressão dos tiers de spread (hoje +25 para spread ≥ 5 pp sobre a NTN-B, num momento em que quase todo FII de papel entrega isso). Antes de mexer, medir: rodar a distribuição atual e a proposta lado a lado sobre o mesmo snapshot e comparar quantos ativos cruzam 70. Aceite: proporção de COMPRAR entre os selecionados no intervalo de 30% a 60%, com a distribuição documentada — e nenhuma cota fixa de compras.</div>
+  </article>
+
+  <!-- V-03 -->
+  <article class="finding crit">
+    <header><span class="id">V-03</span><h4>O eixo que sustentaria a tese está desligado</h4><span class="chip crit">CRÍTICO</span></header>
+    <p>O <em>track record</em> — consistência de ROE, de dividendo e de crescimento ao longo do tempo — é o único eixo do motor que mede durabilidade em vez de instante. Ele exige 6 leituras mensais. Hoje o máximo existente é <b>3</b> (FIIs) e <b>2</b> (ações): <b>zero ativos</b> têm track record ativo. No ritmo de uma leitura por mês, as ações chegam ao mínimo por volta de dezembro de 2026.</p>
+    <div class="evrow"><span class="ev">FundamentalSnapshot: períodos 2026-06 a 2026-08</span><span class="ev">utils/trackRecord.js:25</span><span class="ev">distribuição: 19 tickers com 1 período, 353 com 2, 304 com 3</span></div>
+    <div class="fix"><b>Correção proposta</b>Duas frentes. (a) <b>Backfill de histórico de proventos</b> — o histórico de dividendos e JCP por ticker é obtido de fontes com profundidade real (informações periódicas da CVM, séries de proventos da B3), o que permite calcular <em>streak</em> de pagamento e crescimento de dividendo por anos, não por meses. (b) Enquanto o backfill não existe, deixar explícito na tela que a avaliação usa a foto atual. Aceite: pelo menos 80% do universo pontuado com 5 anos de histórico de proventos e o eixo de consistência ativo com peso declarado.</div>
+  </article>
+
+  <!-- V-04 -->
+  <article class="finding high">
+    <header><span class="id">V-04</span><h4>"Dividend Aristocrat" mede um trimestre, não um histórico</h4><span class="chip warn">ALTO</span></header>
+    <p>O bônus concede <b>+10 no Defensivo e +5 no Moderado</b> a quem tiver, <em>no snapshot atual</em>, crescimento de receita &gt; 5%, ROE &gt; 12%, DY &gt; 4%, margem &gt; 8% e payout entre 20% e 90%. Não há nenhuma verificação de continuidade. O índice de mesmo nome exige 25 anos consecutivos de <b>aumento</b> de dividendo. O nome promete uma evidência que o cálculo não produz.</p>
+    <div class="evrow"><span class="ev">scoringEngine.js:145-149 — isDividendAristocrat</span><span class="ev">scoringEngine.js:1171-1177 — aplicação do bônus</span><span class="ev">S&amp;P 500 Dividend Aristocrats: 25 anos, 69 empresas</span></div>
+    <div class="fix"><b>Correção proposta</b>Renomear já — "Perfil de pagadora consistente" ou "Perfil de renda" — e, quando houver série (V‑03), condicionar o bônus a <code>dividendConsistency ≥ 0,8</code> e a um streak mínimo de anos. Aceite: nenhum rótulo do produto afirma histórico que o dado não comprova.</div>
+  </article>
+
+  <!-- V-05 -->
+  <article class="finding high">
+    <header><span class="id">V-05</span><h4>O FII é avaliado sem o múltiplo padrão do setor</h4><span class="chip warn">ALTO</span></header>
+    <p>O FFO Yield é raspado do Fundamentus e convertido em FFO por cota — e então <b>perdido na gravação</b>: o <code>syncService</code> não o inclui no update e o <code>MarketAsset</code> não tem o campo. Resultado medido: <b>0 de 122 FIIs</b> chegam ao scoring com FFO. O FII é decidido por DY, P/VP, vacância, quantidade de imóveis, cap rate, liquidez e beta. Ficam de fora: <b>P/FFO</b>, alavancagem do fundo, proporção de contratos atípicos, prazo médio dos contratos, concentração por inquilino e, nos fundos de papel, indexador e qualidade de crédito da carteira de CRI — que hoje ocupam três das dez vagas do perfil <em>Defensivo</em>.</p>
+    <div class="evrow"><span class="ev">scraperSchemas.js:100 · fundamentusService.js:237-248</span><span class="ev">syncService.js:200-226 — updateFields sem ffoYield/vpCota/ffoCota</span><span class="ev">MarketAsset.js:132-137</span><span class="ev">Nareit: FFO criado em 1991</span></div>
+    <div class="fix"><b>Correção proposta</b>Passo 0 (pré-requisito, não sabido até agora): declarar <code>ffoYield</code>/<code>vpCota</code>/<code>ffoCota</code> no <code>MarketAsset</code> e incluí-los no update do sync — sem isso não há dado para usar. Passo 1: incluir o FFO Yield no eixo de preço do FII, fail-closed quando a fonte não publicar. Passo 2: alavancagem e concentração de inquilino como eixo de resiliência, a partir dos informes mensais. Aceite: o modal de um FII de tijolo mostra P/FFO e alavancagem no breakdown.</div>
+  </article>
+
+  <!-- V-06 -->
+  <article class="finding high">
+    <header><span class="id">V-06</span><h4>Bazin sem os filtros de Bazin</h4><span class="chip warn">ALTO</span></header>
+    <p>O preço justo usa a fórmula do preço-teto (dividendo ÷ yield-alvo), com o yield-alvo ancorado na NTN-B mais 2 pp — uma melhoria real sobre o 6% fixo. Mas o método original exige <b>histórico</b> (mais de 6% nos três últimos pagamentos) e <b>rebalanceamento semestral</b>. O Vértice usa o DY dos últimos 12 meses e revisa a cada 3–4 dias. O preço justo, por sua vez, gera o <em>upside</em>, que vale até +8 no Defensivo e +20 no Moderado — então um DY inflado por evento não recorrente entra duas vezes.</p>
+    <div class="evrow"><span class="ev">scoringEngine.js:245-265</span><span class="ev">financialConstants.js:83-84 — BAZIN_MIN_YIELD, BAZIN_NTNB_PREMIUM</span></div>
+    <div class="fix"><b>Correção proposta</b>Usar dividendo <b>médio</b> de janela plurianual no numerador do preço-teto assim que houver série; até lá, aplicar o teto de DY já existente (14%) também na origem e registrar no audit quando o DY corrente divergir mais de 30% da média disponível.</div>
+  </article>
+
+  <!-- V-07 -->
+  <article class="finding high">
+    <header><span class="id">V-07</span><h4>Um sinal correlacionado entra até quatro vezes no mesmo score</h4><span class="chip warn">ALTO</span></header>
+    <p>No perfil Defensivo, o dividend yield: (1) concede bônus direto de até +22; (2) alimenta o preço justo de Bazin, que gera o upside, +8; (3) integra o predicado "Dividend Aristocrat", +10; (4) interage com a faixa de payout, +5. São quatro entradas de um único fato econômico, tratadas como quatro evidências independentes. O mesmo padrão aparece no Arrojado, onde PEG e crescimento de receita somam de forma acumulativa.</p>
+    <div class="evrow"><span class="ev">scoringEngine.js:329-332 · 346-348 · 367-369 · 1171-1177</span><span class="ev">scoringEngine.js:479-489 — PEG e crescimento acumulativos</span></div>
+    <div class="fix"><b>Correção proposta</b>Agrupar os fatores por <b>eixo econômico</b> (renda, rentabilidade, preço, risco, tendência) e aplicar teto por eixo, não por fator. É o desenho que os eixos do <code>buyAndHoldEngine</code> e da calibração V3 já usam (<code>averageObserved</code> com redistribuição de peso). Aceite: nenhum eixo isolado pode responder por mais de X% do score final, com X declarado.</div>
+  </article>
+
+  <!-- V-08 -->
+  <article class="finding high">
+    <header><span class="id">V-08</span><h4>O motor âncora exclui todos os bancos brasileiros por um flag de FII</h4><span class="chip warn">ALTO</span></header>
+    <p>O portão do <code>buyAndHoldEngine</code> exige <code>isTier1</code> para arquétipo BANK. Esse campo, porém, só é populado para uma lista de FIIs de elite e para dez mega caps americanas — <b>nenhum banco brasileiro</b> jamais recebe <code>true</code>. Resultado observado: ITUB4, BBAS3, BBDC4, SANB11, BPAC11 e ABCB4 falham com "banco não tier‑1". Um ranking âncora de aposentadoria no Brasil sem nenhum banco é um artefato de implementação, não uma tese.</p>
+    <div class="evrow"><span class="ev">buyAndHoldEngine.js:111 — requireTier1</span><span class="ev">migrateHardcodedData.js:65 — isTier1 só para FII_TIER_1</span><span class="ev">auditoria B&amp;H 22/08: 6 bancos reprovados por este critério</span></div>
+    <div class="fix"><b>Correção proposta</b>Substituir <code>isTier1</code> por critério observável e já disponível: índice de Basileia mínimo (o gate já exige 13%), ROE recorrente e porte — todos presentes em <code>sectorMetrics</code> via IF.data do BCB. Aceite: os grandes bancos passam ou são reprovados por um número, com o número no relatório de exclusão.</div>
+  </article>
+
+  <!-- V-09 -->
+  <article class="finding high">
+    <header><span class="id">V-09</span><h4>Métricas setoriais dependem de curadoria manual congelada em 1T26</h4><span class="chip warn">ALTO</span></header>
+    <p>Bancos, seguradoras, holdings e produtoras de óleo e gás só entram no ranking se estiverem nos mapas manuais: 11 raízes de banco no <code>bankIfDataMap</code>, 6 emissores no snapshot não-bancário e 5 em óleo e gás — todos com <code>asOf: 2026-03-31</code>. Hoje a cobertura está em 100% dos 32 tickers financeiros presentes no universo, o que é bom; a fragilidade é o mecanismo. Um emissor não mapeado é classificado pelo setor, falha na cobertura obrigatória e é <b>excluído em silêncio</b> — não rebaixado, não sinalizado ao usuário.</p>
+    <div class="evrow"><span class="ev">bankIfDataMap.js — 11 emissores</span><span class="ev">stockSectorMetricsSnapshot1Q26.js — 6 emissores</span><span class="ev">readiness 22/08 — 32/32 financeiros e O&amp;G cobertos</span><span class="ev">16 de 308 ações operacionais do cadastro sem campo obrigatório (1 no universo pontuado)</span></div>
+    <div class="fix"><b>Correção proposta</b>Automatizar a ingestão do IF.data (já há serviço e script) com job periódico e alerta quando o <code>asOf</code> passar de um trimestre; e transformar exclusão por cobertura em <b>item visível</b> no painel de saúde, com a lista de tickers e o campo faltante. Aceite: nenhum emissor sai do ranking sem aparecer em um relatório de exclusão consultável.</div>
+  </article>
+
+  <!-- V-10 -->
+  <article class="finding med">
+    <header><span class="id">V-10</span><h4>Degraus rígidos onde deveria haver rampa</h4><span class="chip acc">MÉDIO</span></header>
+    <p>Praticamente todo bônus e penalidade é um degrau: DY 9,9% vale +16 e 10,0% vale +22; valor de mercado de R$ 1,99 bi dá base 25 no Moderado e R$ 2,01 bi dá base 40 <em>mais todo o bloco de bônus</em>; o desvio da SMA200 salta de −6 para −12 e para −20. Isso produz troca de posição por variação irrelevante de preço — e alimenta diretamente o giro medido em V‑01.</p>
+    <div class="evrow"><span class="ev">scoringEngine.js:329-337 · 417-419 · 556-575</span><span class="ev">contraste: stockSectorAxisEngine.js:10-20 — higherBetter/lowerBetter já interpolam</span></div>
+    <div class="fix"><b>Correção proposta</b>Migrar os fatores contínuos para interpolação linear entre piso e alvo, reutilizando <code>higherBetter</code>/<code>lowerBetter</code> — que já existem, são testados e são usados pelos eixos novos. Manter degrau apenas onde a descontinuidade é real (payout &gt; 100%, prejuízo). Aceite: teste de propriedade mostrando que variação de 1% no insumo nunca muda o score em mais de N pontos.</div>
+  </article>
+
+  <!-- V-11 -->
+  <article class="finding med">
+    <header><span class="id">V-11</span><h4>Qualidade, Valuation e Segurança parecem compor o score — e não compõem</h4><span class="chip acc">MÉDIO</span></header>
+    <p>Os três eixos estruturais aparecem em barras e radar ao lado do score de compra, mas servem só de desempate e exibição. A foto de hoje expõe a desconexão: <b>ITUB4</b> é COMPRAR e o segundo colocado do Defensivo com Qualidade estrutural <b>30</b>; <b>ABCB4</b> é COMPRAR com Qualidade estrutural <b>20</b>; enquanto <b>WIZC3</b>, com Qualidade 100, fica atrás dos dois. Quem lê o radar conclui, razoavelmente, que o número grande deriva das três barras. Não deriva.</p>
+    <div class="evrow"><span class="ev">portfolioEngine.js:11-21</span><span class="ev">ranking vivo 22/08 — ITUB4 80 · Q/V/R 30/75/80</span><span class="ev">ABCB4 77 · Q/V/R 20/100/60</span></div>
+    <div class="fix"><b>Correção proposta</b>Ou explicitar na interface que são leituras independentes ("como a empresa é" × "o que o modelo recomenda agora"), ou — a opção estrutural — fazer os eixos <b>serem</b> o score, como já ocorre no motor âncora. A segunda resolve V‑07 e V‑11 de uma vez.</div>
+  </article>
+
+  <!-- V-12 -->
+  <article class="finding med">
+    <header><span class="id">V-12</span><h4>Taxonomia de setor com viés de FII contamina a concentração de ações</h4><span class="chip acc">MÉDIO</span></header>
+    <p>O macro-setor <code>REAL_ESTATE</code> agrega "Construção Civil", "Shoppings", "Lajes", "Logística", "Hotéis" — categorias pensadas para FII. Aplicado a ações, joga TGMA3 (logística automotiva, transporte) no mesmo balde de concentração de JHSF3 (incorporação) e EZTC3. Os dois primeiros aparecem juntos no top 10 Defensivo de hoje. A penalidade de concentração passa a proteger de um risco que não é o risco real.</p>
+    <div class="evrow"><span class="ev">sectorTaxonomy.js:38-50</span><span class="ev">ranking vivo: JHSF3 e TGMA3, ambos key=REAL_ESTATE</span></div>
+    <div class="fix"><b>Correção proposta</b>Separar a taxonomia de ação da de FII (a segunda já é tratada por segmento fino) e mover "Logística"/"Transporte" de ação para <code>INDUSTRIAL</code>. Aceite: teste que fixa o balde esperado para uma amostra de tickers-âncora.</div>
+  </article>
+
+  <!-- V-13 -->
+  <article class="finding med">
+    <header><span class="id">V-13</span><h4>Lista de estatais desatualizada — sem efeito hoje, mas é dívida ativa</h4><span class="chip acc">MÉDIO</span></header>
+    <p>O desconto de governança (−8 Defensivo / −4 Moderado) incide sobre uma lista manual de 13 tickers que ainda contém <b>CSMG3</b> (Copasa, desestatizada em junho de 2026) e omite 18 classes de dez emissores efetivamente controlados — BAZA3, BNBR3, CLSC3/4, CEBR3/5/6, TELB3/4, CASN3/4, BPAR3, BEES3/4, BSLI3/4, BGIP3/4. Rodando os cenários hoje, remover o desconto por completo não muda a lista: 12 COMPRAR com e sem ele; CMIG4 ganha os 8 pontos e sobe da 2ª para a 1ª posição, e PETR4 entra no lugar de PINE4 — sem virar COMPRAR.</p>
+    <div class="evrow"><span class="ev">sectorTaxonomy.js:239-249</span><span class="ev">auditStateGovernance 22/08 — cenários A a E, 12 BUY em todos</span></div>
+    <div class="fix"><b>Correção proposta</b>Transformar controle acionário em <b>metadado com vigência</b> (controlador, tipo de controle, data-base, fonte) alimentado do cadastro, e manter o efeito no score apenas como desconto graduado — nunca como gate. Aceite: cada ticker classificado resolve por data e cita a fonte.</div>
+  </article>
+
+  <!-- V-14 -->
+  <article class="finding med">
+    <header><span class="id">V-14</span><h4>Veto categórico de setor cíclico decide por rótulo, não por fundamento</h4><span class="chip acc">MÉDIO</span></header>
+    <p>Toda ação de macro-setor INDUSTRIAL ou COMMODITIES é inelegível ao perfil Defensivo, independentemente de qualidade, porte, dívida ou preço. A justificativa é boa — evitar a armadilha do lucro de pico do ciclo. O efeito colateral é que PETR4, que hoje pontua <b>75 e é COMPRAR no perfil Moderado</b>, nem disputa o Defensivo, enquanto três incorporadoras — igualmente cíclicas, mas classificadas em REAL_ESTATE — lideram o Arrojado.</p>
+    <div class="evrow"><span class="ev">scoringEngine.js:165 · sectorTaxonomy.js:208</span><span class="ev">ranking vivo 22/08: PETR4 M=75 BUY; EZTC3/DIRR3/MTRE3 no topo do BOLD</span></div>
+    <div class="fix"><b>Correção proposta</b>Trocar o veto por rótulo por um teste de ciclo <b>medido</b>: para óleo e gás os dados já existem no arquétipo (vida de reservas, lifting cost, dívida líquida/EBITDA, margem). Onde não houver dado setorial, manter o veto — mas registrar que é por ausência de dado, não por convicção. E aplicar o mesmo critério às incorporadoras, hoje isentas por acidente de taxonomia.</div>
+  </article>
+
+  <div class="callout" style="margin-top:26px">
+    <h4>Achado de produto, fora da escala técnica: o verbo</h4>
+    <p>Ver seção 4 — o enquadramento do rótulo "COMPRAR" perante a Resolução CVM 20 precisa de resposta formal de especialista. É o único item deste estudo cuja correção não é técnica.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 6 ══════════════════════════ -->
+<section id="s6">
+  <span class="eyebrow">06 · Confiabilidade</span>
+  <h2>O que já está maduro</h2>
+  <p class="dek">A metade de engenharia do sistema está em bom estado, e vale registrar com a mesma precisão dos problemas.</p>
+
+  <h3>Ingestão que falha fechada</h3>
+  <p>O raspador do Fundamentus é o ponto mais frágil por natureza — depende da ordem das colunas de uma tabela HTML de terceiro. Em julho, uma coluna nova ("Mrg Bruta") deslocou nove campos e o sistema passou a ler ROE onde esperava liquidez, sem lançar erro. Hoje o layout é versionado com <b>assinatura de cabeçalho</b>: largura exata, nomes e ordem. Divergiu, o scraping para — não grava dado errado.</p>
+  <div class="evrow"><span class="ev">scraperSchemas.js:25-134 — layouts v2</span><span class="ev">scraperSchemas.js:199-220 — validação de assinatura</span></div>
+
+  <h3>Publicação por ponteiro, com contrato validado</h3>
+  <p>Cada seção publicável (ranking, morning call, relatório, IA explicável) tem seu próprio ponteiro ativo, gravado em transação junto com as flags do documento. Antes de o ranking ir ao ar, ele passa por <code>finalizeRanking</code> (que re-deriva ação, reordena e renumera) e por <code>validateRankingContract</code>, que rejeita ticker duplicado, perfil inválido, ação incoerente com o score, posição fora de ordem. Uma seção sem conteúdo não pode ser ativada.</p>
+  <div class="evrow"><span class="ev">researchPublicationService.js:47-139</span><span class="ev">rankingContract.js:50-74</span><span class="ev">22/08: 21 ponteiros ativos, 7 classes × 3 seções</span></div>
+
+  <h3>A IA deixou de mexer na decisão</h3>
+  <p>O enriquecimento por IA agora escreve em um campo <code>riskVeto</code> separado e devolve a lista por <code>finalizeRanking</code> — não altera mais <code>action</code> nem a ordenação. Era o achado mais grave de integridade da auditoria de julho.</p>
+  <div class="evrow"><span class="ev">aiEnhancementService.js:23-51</span></div>
+
+  <h3>Explicabilidade fator a fator</h3>
+  <p>Cada ativo carrega um <code>auditLog</code> com todos os fatores, o valor em pontos, o tipo e a categoria — inclusive a dedução do teto por confiança de dados e a penalidade de concentração aplicada depois do draft. A waterfall reconcilia com o score exibido. Poucos produtos de varejo expõem isso.</p>
+  <div class="evrow"><span class="ev">scoringEngine.js:1200-1218 — clampProfile registra o teto</span><span class="ev">portfolioEngine.js:174-177 — penalidade vai ao audit</span></div>
+
+  <h3>Aplicabilidade setorial resolvida</h3>
+  <p>A matriz por arquétipo distingue <em>não aplicável</em> de <em>ausente</em>. Bancos deixaram de perder confiança por margem líquida — uma métrica que não faz sentido para eles — e passaram a ser avaliados por Basileia, inadimplência, custo operacional e ROE recorrente. Na foto de hoje, os 32 tickers financeiros e de óleo e gás do universo têm 100% dos campos obrigatórios cobertos.</p>
+  <div class="evrow"><span class="ev">stockCalibration.js:43-209</span><span class="ev">readiness 22/08: BANK 20/20, INSURER 2/2, O&amp;G 5/5</span></div>
+
+  <h3>O que continua aberto do diagnóstico de julho</h3>
+  <div class="tw wide">
+  <table>
+    <thead><tr><th>Achado de 19/07</th><th>Status em 22/08</th><th>Evidência</th></tr></thead>
+    <tbody>
+      <tr><td>A-01 · parser deslocava 9 campos</td><td><span class="chip ok">CORRIGIDO</span></td><td>layout v2 com assinatura; defasagem mediana 0 dia</td></tr>
+      <tr><td>A-05/A-27 · IA alterava <code>action</code></td><td><span class="chip ok">CORRIGIDO</span></td><td><code>riskVeto</code> separado + <code>finalizeRanking</code></td></tr>
+      <tr><td>A-07/A-25 · API podia servir rascunho</td><td><span class="chip ok">CORRIGIDO</span></td><td>ponteiro por seção; ranking zerado se não publicado</td></tr>
+      <tr><td>A-10 · bancos punidos por margem N/A</td><td><span class="chip ok">CORRIGIDO</span></td><td>matriz de aplicabilidade por arquétipo</td></tr>
+      <tr><td>A-22 · seções publicadas vazias</td><td><span class="chip ok">CORRIGIDO</span></td><td><code>hasSectionContent</code> bloqueia ativação</td></tr>
+      <tr><td>A-24 · batch sem identidade</td><td><span class="chip warn">PARCIAL</span></td><td><code>runId</code> e <code>algorithmVersion</code> existem, mas a versão mistura commit hash e <code>1.0.0</code></td></tr>
+      <tr><td>A-13 · track record dormente</td><td><span class="chip crit">ABERTO</span></td><td>máx. 3 períodos; mínimo 6 → ver V‑03</td></tr>
+      <tr><td>A-14 · "Aristocrat" sem histórico</td><td><span class="chip crit">ABERTO</span></td><td>predicado inalterado → V‑04</td></tr>
+      <tr><td>A-20 · master data de estatais</td><td><span class="chip crit">ABERTO</span></td><td>CSMG3 ainda listada; 18 classes ausentes → V‑13</td></tr>
+      <tr><td>A-18 · veto categórico de cíclicas</td><td><span class="chip crit">ABERTO</span></td><td>decisão filosófica pendente → V‑14</td></tr>
+      <tr><td>A-34 · sem evidência econômica</td><td><span class="chip crit">ABERTO</span></td><td>série point-in-time ainda insuficiente → seção 7</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <span class="cap">Status re-verificado contra o código de 22/08/2026, não copiado do documento de julho.</span>
+</section>
+
+<!-- ══════════════════════════ 7 ══════════════════════════ -->
+<section id="s7">
+  <span class="eyebrow">07 · Limites</span>
+  <h2>O que este estudo não pode afirmar</h2>
+
+  <p>Um relatório que se propõe a medir maturidade tem obrigação de declarar sua própria fronteira. Nenhuma das afirmações abaixo pode ser feita hoje, por ninguém, com os dados que existem:</p>
+
+  <ul>
+    <li><b>Que o ranking gera retorno, alpha ou acerto acima do acaso.</b> Não há série point-in-time com profundidade: a coleta de fundamentos começou em junho de 2026, o histórico de publicações vai a três meses e a versão do algoritmo mudou várias vezes nesse intervalo. Misturar essas publicações mede várias estratégias diferentes como se fossem uma.</li>
+    <li><b>Que o limiar 70 é melhor do que 65 ou 75.</b> Calibrar hoje, olhando o resultado atual, é sobreajuste por construção — o problema formalizado por Bailey e López de Prado.</li>
+    <li><b>Que qualquer das correções propostas melhora o retorno.</b> Elas melhoram <em>coerência com a tese declarada</em> e <em>qualidade de informação</em>. São coisas diferentes e não devem ser vendidas uma pela outra.</li>
+    <li><b>Que as notas de 0 a 5 da seção 1 são comparáveis a algum benchmark de mercado.</b> São julgamento estruturado deste estudo, com critério declarado e evidência ligada a cada linha.</li>
+  </ul>
+
+  <div class="callout acc">
+    <h4>O que dá para medir agora, e deveria ser medido continuamente</h4>
+    <p>Cobertura do universo por etapa; distribuição dos scores e distância ao limiar; contagem de COMPRAR por perfil; <b>persistência e turnover entre publicações</b>; upgrades e downgrades com a causa na waterfall; e diferenças causais em shadow sobre o <em>mesmo</em> snapshot. Tudo isso é descritivo, honesto e já viável — e as três primeiras seções deste documento são a prova.</p>
+  </div>
+
+  <p>A consequência prática é uma só: <strong>não recalibrar pesos nem limiar agora</strong>. Corrigir o que é inequivocamente incoerente (nome que promete histórico inexistente, dado raspado e ignorado, flag de FII barrando banco, taxonomia errada) não exige evidência econômica. Mudar peso e limiar exige — e a evidência começa a existir no momento em que a coleta prospectiva versionada começar.</p>
+</section>
+
+<!-- ══════════════════════════ 8 ══════════════════════════ -->
+<section id="s8">
+  <span class="eyebrow">08 · Caminho</span>
+  <h2>Roteiro até a maturidade</h2>
+  <p class="dek">Quatro ondas, ordenadas por (impacto na tese ÷ risco de introduzir erro). A onda 1 não depende de nenhuma decisão filosófica.</p>
+
+  <div class="tw wide">
+  <table>
+    <thead><tr><th style="width:64px">Onda</th><th>Escopo</th><th>Achados</th><th>Risco</th><th>Critério de aceite</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>1</b><br><span class="chip ok">sem decisão</span></td>
+        <td>Correções inequívocas: renomear o bônus de Aristocrat; usar o FFO já raspado; trocar <code>isTier1</code> por Basileia no portão âncora; separar taxonomia de ação e FII; atualizar master data de estatais com vigência; tornar visível a exclusão por cobertura.</td>
+        <td>V‑04, V‑05, V‑08, V‑09, V‑12, V‑13</td>
+        <td><span class="chip ok">baixo</span></td>
+        <td>Testes de regressão verdes; nenhum rótulo do produto afirma histórico que o dado não comprova; relatório de exclusão consultável no painel.</td>
+      </tr>
+      <tr>
+        <td><b>2</b></td>
+        <td>Estabilidade: banda de histerese (entra em 70, sai em 62), cadência de publicação da lista âncora, interpolação linear no lugar dos degraus.</td>
+        <td>V‑01, V‑10</td>
+        <td><span class="chip warn">médio</span></td>
+        <td>Jaccard ≥ 0,85 entre publicações consecutivas do Brasil 10 por três meses; toda saída com causa registrada; teste de propriedade limitando o salto de score por variação de 1% no insumo.</td>
+      </tr>
+      <tr>
+        <td><b>3</b><br><span class="chip acc">decisão do dono</span></td>
+        <td>Arquitetura da decisão: separar <b>durabilidade</b> (a empresa serve para segurar?) de <b>entrada</b> (o preço está bom?), com valuation atuando como freio. Reescalar FIIs. Substituir o veto de cíclicas por teste medido.</td>
+        <td>V‑02, V‑07, V‑11, V‑14</td>
+        <td><span class="chip crit">alto</span></td>
+        <td>Rodar em shadow ao lado do motor atual por N publicações; comparar composição, giro, concentração e proporção de COMPRAR; promover só com decisão explícita e registrada.</td>
+      </tr>
+      <tr>
+        <td><b>4</b></td>
+        <td>Evidência: backfill de proventos plurianual, ativação do eixo de consistência, coleta prospectiva versionada (snapshot imutável com <code>publishedAt</code> e data efetiva de execução), e só então discutir pesos e limiar.</td>
+        <td>V‑03, seção 7</td>
+        <td><span class="chip warn">médio</span></td>
+        <td>80% do universo com 5 anos de histórico de proventos; curva prospectiva reconciliando custos e proventos; nenhuma recalibração antes de amostra fora da janela de desenvolvimento.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>O que não deve mudar até haver evidência</h3>
+  <ul>
+    <li><b>O limiar 70</b> como contrato único de <code>action</code>, em todo o sistema.</li>
+    <li><b>A ordenação soberana</b> por score com desempate estrutural.</li>
+    <li><b>Um perfil por ticker</b> — a alternativa (mesmo ativo em três listas) confunde mais do que informa.</li>
+    <li><b>Ausência de cota de COMPRAR.</b> Escassez legítima de oportunidade é informação, não defeito. Se o motor passar a recomendar pouco, isso deve gerar alerta explicado — nunca um piso artificial.</li>
+    <li><b>O motor atual como controle</b> de qualquer experimento. Nenhum candidato entra em produção sem rodar ao lado dele.</li>
+  </ul>
+
+  <div class="callout">
+    <h4>A pergunta que precede tudo</h4>
+    <p>O Brasil 10 e o ranking por perfil são <b>duas listas de compra por oportunidade</b> ou <b>uma carteira para carregar</b>? Enquanto a resposta não for explícita, cada correção técnica vai empurrar o sistema para um dos dois lados sem que ninguém tenha decidido qual. O <code>buyAndHoldEngine</code> já é a resposta escrita em código para a segunda opção — falta decidir se ele sobe ou se é desligado.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 9 ══════════════════════════ -->
+<section id="s9">
+  <span class="eyebrow">09 · Anexos</span>
+  <h2>Anexos</h2>
+
+  <h3>A · Procedência dos números</h3>
+  <p>Todos os dados vivos deste estudo vieram de leitura do banco de produção em 22/08/2026, entre 12:09 e 12:15 UTC, sem nenhuma escrita — nenhum <code>MarketAnalysis</code>, <code>DiscardLog</code>, configuração ou publicação foi criado ou alterado. Os caminhos usados:</p>
+  <ul>
+    <li><code>inspectRanking.js</code> — rankings salvos por classe e sinais de auditoria.</li>
+    <li><code>auditStockCalibrationReadiness.js</code> — cobertura por arquétipo.</li>
+    <li><code>auditBuyAndHoldShadowRanking.js --excluded</code> — ranking âncora e motivos de exclusão por ticker.</li>
+    <li><code>auditStateGovernance.js</code> — cenários A–E de governança sobre o mesmo snapshot.</li>
+    <li>Reprodução do funil de STOCK e FII chamando os mesmos motores de produção em leitura pura (sem <code>calculateRanking</code>, que grava log de descarte), e consultas de agregação a <code>MarketAnalysis</code>, <code>FundamentalSnapshot</code> e <code>AssetHistory</code>.</li>
+  </ul>
+
+  <h3>B · Glossário</h3>
+  <div class="tw wide">
+  <table>
+    <thead><tr><th>Termo</th><th>No Vértice significa</th></tr></thead>
+    <tbody>
+      <tr><td class="t">score de perfil</td><td>Nota 0–100 de adequação a Defensivo, Moderado ou Arrojado. É o número que decide COMPRAR.</td></tr>
+      <tr><td class="t">score estrutural</td><td>Qualidade, Valuation e Risco. Exibidos ao usuário, usados como desempate — não compõem o score de perfil.</td></tr>
+      <tr><td class="t">draft competitivo</td><td>Seleção sequencial de 10 ativos por perfil, sem repetir ticker, com teto por balde de concentração.</td></tr>
+      <tr><td class="t">tier GOLD/SILVER/BRONZE</td><td>Rodada mecânica de preenchimento do draft (≥55, ≥40, &gt;30). Não é grau de recomendação.</td></tr>
+      <tr><td class="t">confiança de dados</td><td>0–100 conforme campos ausentes, liquidez e defasagem. Vira teto de score: &lt;60 → 70; 60–79 → 85.</td></tr>
+      <tr><td class="t">track record</td><td>Consistência histórica de ROE, dividendo e crescimento. Exige 6 leituras mensais — hoje inativo.</td></tr>
+      <tr><td class="t">arquétipo</td><td>Classificação econômica do emissor (operacional, banco, seguradora, holding, óleo e gás) que define quais métricas são obrigatórias, opcionais ou inaplicáveis.</td></tr>
+      <tr><td class="t">upside</td><td>Preço justo ÷ preço atual − 1. O preço justo vem de Graham, Bazin ou VP ajustado conforme a classe.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>C · Bibliografia</h3>
+  <p style="font-size:14px; color:var(--muted)">Todas as fontes foram abertas e conferidas em 22/08/2026. Onde a fonte primária é um PDF que não pôde ser lido programaticamente, a afirmação foi ancorada na página oficial do emissor e assim está indicada.</p>
+  <ol class="refs">
+    <li><b>S&amp;P Dow Jones Indices — S&amp;P 500 Dividend Aristocrats.</b> Exigência de 25 anos consecutivos de aumento de dividendo; 69 constituintes na data de acesso. Confirmado na descrição do índice pela ProShares, emissora do ETF NOBL que o replica. <a href="https://www.proshares.com/our-etfs/strategic/nobl">proshares.com/our-etfs/strategic/nobl</a> · página do índice: <a href="https://www.spglobal.com/spdji/en/indices/dividends-factors/sp-500-dividend-aristocrats/">spglobal.com</a> <span class="chip neutral">metodologia em PDF retornou 403</span></li>
+    <li><b>MSCI Quality Indexes Methodology (junho/2017).</b> Quality Score = z-scores de ROE, Dívida/Patrimônio e Variabilidade de Lucro (desvio-padrão do crescimento anual de LPA nos últimos 5 exercícios), winsorizados nos percentis 5 e 95; rebalanceamento semestral (maio e novembro) com <em>buffer rules</em>; "giro moderado" declarado como objetivo. Texto extraído do documento oficial. <a href="https://www.msci.com/eqb/methodology/meth_docs/MSCI_Quality_Indexes_Meth_June2017.pdf">msci.com</a></li>
+    <li><b>Piotroski, J. (2000). Value Investing: The Use of Historical Financial Statement Information to Separate Winners from Losers.</b> Nove sinais binários de rentabilidade, alavancagem/liquidez e eficiência operacional. <a href="https://en.wikipedia.org/wiki/Piotroski_F-score">verbete de referência</a></li>
+    <li><b>Novy-Marx, R. (2013). The other side of value: the gross profitability premium.</b> Journal of Financial Economics 108(1), 1–28. <a href="https://www.sciencedirect.com/science/article/abs/pii/S0304405X13000044">sciencedirect.com</a></li>
+    <li><b>Asness, C., Frazzini, A., Pedersen, L. Quality Minus Junk.</b> Qualidade em quatro dimensões — rentabilidade, crescimento, segurança e payout; prêmio ajustado a risco em 24 países. <a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2312432">SSRN 2312432</a></li>
+    <li><b>Baker, M., Bradley, B., Wurgler, J. (2011). Benchmarks as Limits to Arbitrage: Understanding the Low-Volatility Anomaly.</b> Financial Analysts Journal 67(1), 40–54. <a href="https://www.tandfonline.com/doi/abs/10.2469/faj.v67.n1.4">tandfonline.com</a></li>
+    <li><b>Harvey, C., Liu, Y., Zhu, H. (2016). … and the Cross-Section of Expected Returns.</b> Review of Financial Studies 29(1), 5–68. Fator novo exige t &gt; 3,0. <a href="https://academic.oup.com/rfs/article/29/1/5/1843824">academic.oup.com</a></li>
+    <li><b>Bailey, D., López de Prado, M. (2014). The Deflated Sharpe Ratio: Correcting for Selection Bias, Backtest Overfitting and Non-Normality.</b> Journal of Portfolio Management 40(5), 94–107. <a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551">SSRN 2460551</a></li>
+    <li><b>Novy-Marx, R., Velikov, M. (2016). A Taxonomy of Anomalies and Their Trading Costs.</b> Review of Financial Studies 29(1), 104–147. Custos de 20 a 57 pontos-base; <em>buy/hold spread</em> como técnica de mitigação mais eficaz. <a href="https://academic.oup.com/rfs/article-abstract/29/1/104/1844518">academic.oup.com</a></li>
+    <li><b>Nareit — Funds From Operations (FFO).</b> Métrica criada em 1991; lucro líquido GAAP excluindo depreciação e amortização de imóveis e ganhos/perdas na venda de propriedades. <a href="https://www.reit.com/glossary/funds-operation-ffo">reit.com</a> · white paper 2018: <a href="https://www.reit.com/sites/default/files/2018-FFO-white-paper-(11-27-18).pdf">restatement</a></li>
+    <li><b>B3 — Índice Dividendos (IDIV) e Índice de Fundos Imobiliários (IFIX).</b> Metodologias públicas com critérios plurianuais e carteira de vigência periódica. <a href="https://www.b3.com.br/pt_br/market-data-e-indices/indices/indices-de-segmentos-e-setoriais/indice-dividendos-idiv-b3.htm">IDIV</a> · <a href="https://www.b3.com.br/pt_br/market-data-e-indices/indices/indices-de-segmentos-e-setoriais/indice-de-fundos-de-investimentos-imobiliarios-ifix-b3.htm">IFIX</a> <span class="chip neutral">números exatos dos manuais em PDF não puderam ser lidos programaticamente</span></li>
+    <li><b>Resolução CVM nº 20/2021.</b> Art. 1º define analista e relatório de análise; art. 2º restringe a atividade a credenciados; art. 3º lista quem se credencia; art. 20 exige assinatura de analista credenciado; arts. 21 e 22, declarações de independência e conflito. <a href="https://conteudo.cvm.gov.br/export/sites/cvm/legislacao/resolucoes/anexos/001/resol020consolid.pdf">texto consolidado (CVM)</a></li>
+    <li><b>Bazin, D. Faça Fortuna com Ações.</b> Preço-teto = dividendo anual ÷ yield desejado; exigência de mais de 6% nos três últimos pagamentos; endividamento moderado; rebalanceamento semestral. Método descrito em fontes secundárias consolidadas do mercado brasileiro. <span class="chip neutral">fonte secundária</span></li>
+    <li><b>Documento interno.</b> <code>planejamento/AUDITORIA-RANKING-END-TO-END-2026-07-19.md</code> — auditoria de 19/07/2026, achados A‑01 a A‑38, cujo status foi re-verificado na seção 6.</li>
+  </ol>
+</section>
+
+<footer class="foot">
+  <p>Estudo técnico interno da Vértice Invest · 22 de agosto de 2026 · elaborado sobre o código em <code>main</code> e dados de produção lidos na data. Conteúdo de engenharia e metodologia; não constitui recomendação de investimento nem opinião jurídica.</p>
+</footer>
+
+</main>
+</div>
