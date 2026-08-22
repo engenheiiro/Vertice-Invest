@@ -233,9 +233,16 @@ export const isCyclicalSector = (sector) => {
 //
 // Lista curada (conhecimento de domínio estável, como as listas de setor seguro):
 // só empresas com controlador estatal DE FATO hoje. Exclui deliberadamente as já
-// PRIVATIZADAS — SBSP3 (2024), CPLE3/6 (2023), ELET3/6 (2022, só golden share) —
-// que passaram a ser corporations sem controlador estatal. Revisar quando houver
-// nova privatização/estatização. Tickers por classe (ON/PN/Unit) explícitos.
+// PRIVATIZADAS — SBSP3 (2024), CPLE3/6 (2023), ELET3/6 (2022, só golden share),
+// CSMG3 (2026, ver abaixo) — que passaram a ser corporations sem controlador
+// estatal. Revisar quando houver nova privatização/estatização. Tickers por
+// classe (ON/PN/Unit) explícitos.
+//
+// A lista NÃO é exaustiva: cobre os nomes de maior peso nos rankings, mas o
+// estudo de maturidade aponta cerca de 18 classes de controladas estatais fora
+// dela. Quem ler daqui não deve concluir "não está na lista, logo é privada" —
+// ausência aqui significa "não verificado", não "verificado como privado".
+// Ampliar exige a mesma verificação em fonte primária que se exige para remover.
 export const STATE_CONTROLLED_TICKERS = new Set([
     // Federal
     'PETR3', 'PETR4',      // Petrobras
@@ -244,8 +251,23 @@ export const STATE_CONTROLLED_TICKERS = new Set([
     // Estaduais
     'SAPR3', 'SAPR4', 'SAPR11', // Sanepar (PR)
     'CMIG3', 'CMIG4',      // Cemig (MG)
-    'CSMG3',               // Copasa (MG)
     'BRSR3', 'BRSR5', 'BRSR6',  // Banrisul (RS)
+    // REMOVIDA: CSMG3 (Copasa) — desestatizada em 16/06/2026. Verificado em
+    // 22/08/2026 fora do material interno que primeiro reportou o fato:
+    //  · Fato Relevante da Equatorial S.A. de 11/06/2026 entregue à CVM (IPE,
+    //    art. 157 §4º da Lei das S.A. + Res. CVM 44/2021): a controlada Gerais
+    //    Saneamento confirmada como Investidor de Referência Selecionado, com
+    //    alocação mínima de 30% do capital da COPASA;
+    //  · precificação a R$ 49,03 aprovada pelo Estado de MG em 12/06/2026,
+    //    negociação em 15/06 e liquidação física/financeira em 16/06/2026,
+    //    reportada de forma convergente por veículos independentes;
+    //  · Estado de MG saiu de 50,03% para ~5% mais golden share.
+    // NÃO foi possível abrir o fato relevante da própria Copasa no RI nem no RAD
+    // da CVM (páginas dependentes de JS devolveram só navegação) — o que fica
+    // inconclusivo é a formalização pela emissora, não o fato do controle.
+    // O resíduo (golden share + acordo de acionistas enquanto o Estado tiver
+    // >= 5%) é o mesmo caso de ELET3/6, que esta lista já trata como privatizada:
+    // poder de veto pontual não é controle discricionário de payout e capex.
 ]);
 
 // True se o ativo tem controlador estatal de fato (federal/estadual). Normaliza o

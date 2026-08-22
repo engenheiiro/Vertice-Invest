@@ -82,7 +82,6 @@ describe('isStateControlled — eixo de governança', () => {
         expect(isStateControlled('BBSE3')).toBe(true);   // BB Seguridade (indireta)
         expect(isStateControlled('SAPR11')).toBe(true);  // Sanepar (PR)
         expect(isStateControlled('CMIG4')).toBe(true);   // Cemig (MG)
-        expect(isStateControlled('CSMG3')).toBe(true);   // Copasa (MG)
         expect(isStateControlled('BRSR6')).toBe(true);   // Banrisul (RS)
     });
     it('normaliza caixa/espaço e sufixo fracionário F', () => {
@@ -95,6 +94,7 @@ describe('isStateControlled — eixo de governança', () => {
         expect(isStateControlled('SBSP3')).toBe(false);  // Sabesp — privatizada 2024
         expect(isStateControlled('CPLE6')).toBe(false);  // Copel — privatizada 2023
         expect(isStateControlled('ELET3')).toBe(false);  // Eletrobras — só golden share
+        expect(isStateControlled('CSMG3')).toBe(false);  // Copasa — desestatizada em 16/06/2026
         expect(isStateControlled('WIZC3')).toBe(false);
         expect(isStateControlled('')).toBe(false);
         expect(isStateControlled(null)).toBe(false);
