@@ -18,6 +18,51 @@ export const historyStorageKey = (ticker, type = 'INDEX') => {
     return clean;
 };
 
+const normalizeCandle = (candle) => ({
+    date: candle.date,
+    close: candle.close,
+    adjClose: candle.adjClose ?? candle.close,
+    volume: candle.volume || 0,
+});
+
+/**
+ * Une a série ARMAZENADA com a recém-buscada (a nova vence em datas repetidas) e
+ * devolve oldest→newest, respeitando o teto de armazenamento.
+ *
+ * Mesclar, nunca substituir. Substituir a série inteira pelo que a fonte devolve
+ * transforma qualquer degradação da fonte em perda permanente de dado nosso —
+ * e não é hipótese: em 22/08/2026 a série do HSRE11 tinha UM candle, porque o
+ * Yahoo passou a devolver um só e a gravação por substituição apagou os 623 que
+ * estavam guardados (a cópia sob a chave legada `HSRE11.SA` ainda os tem). O
+ * mesmo padrão explica outras séries de 1 candle na base.
+ *
+ * O teto respeita o tamanho JÁ ARMAZENADO (`existing.length`): o cap governa
+ * quanto se guarda de série nova, não autoriza encurtar série profunda. É disso
+ * que o rebuild da carteira depende para não marcar pelo preço de compra todo o
+ * período anterior ao cap.
+ *
+ * Candle da fonte com `close <= 0` é descartado — é dia sem dado, não dia de
+ * preço zero, e gravá-lo criaria um buraco que a mescla seguinte trataria como
+ * preenchido.
+ *
+ * @param {Array} existing série já gravada
+ * @param {Array} fetched série vinda da fonte
+ * @param {{maxPoints?: number}} [options] teto de pontos (Infinity para isentos)
+ */
+export const mergeCandleSeries = (existing = [], fetched = [], { maxPoints } = {}) => {
+    const byDate = new Map();
+    for (const candle of existing) {
+        if (candle?.date) byDate.set(candle.date, normalizeCandle(candle));
+    }
+    for (const candle of fetched) {
+        if (candle?.date && candle.close > 0) byDate.set(candle.date, normalizeCandle(candle));
+    }
+    const merged = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const cap = Number.isFinite(maxPoints) ? maxPoints : Infinity;
+    const limit = Math.max(cap, existing.length);
+    return Number.isFinite(limit) ? merged.slice(-limit) : merged;
+};
+
 /**
  * Máximo drawdown (%) pico→vale de uma série, medido numa JANELA COMUM.
  *

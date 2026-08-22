@@ -1,7 +1,7 @@
 import logger from '../config/logger.js';
 import AssetHistory from '../models/AssetHistory.js';
 import { externalMarketService } from './externalMarketService.js';
-import { historyStorageKey } from '../utils/assetHistory.js';
+import { historyStorageKey, mergeCandleSeries } from '../utils/assetHistory.js';
 import { ASSET_HISTORY_MAX_POINTS } from '../config/financialConstants.js';
 
 /**
@@ -31,16 +31,10 @@ export const DAY_CANDLE_BATCH_PAUSE_MS = 400;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const normalizeCandle = (candle) => ({
-    date: candle.date,
-    close: candle.close,
-    adjClose: candle.adjClose ?? candle.close,
-    volume: candle.volume || 0,
-});
-
 /**
- * Une a série armazenada com a recém-buscada (a nova vence em datas repetidas) e
- * devolve oldest→newest.
+ * Une a série armazenada com a recém-buscada. Implementação compartilhada em
+ * `utils/assetHistory.js` — o timeSeriesWorker grava na MESMA coleção e precisa
+ * das mesmas regras, senão os dois escritores desfazem o trabalho um do outro.
  *
  * Duas razões para mesclar em vez de só empurrar o candle do dia:
  * 1) empurrar o candle de hoje numa série parada há 2 dias deixaria um buraco
@@ -49,20 +43,10 @@ const normalizeCandle = (candle) => ({
  * 2) sobrescrever a série inteira pelo que veio da fonte encurtaria séries mais
  *    profundas que o cap, e é justamente a profundidade que o rebuild exige para
  *    não marcar o período anterior ao cap pelo preço de compra.
- * Por isso o teto respeita o tamanho já armazenado (`existing.length`).
  */
-export const mergeDayCandles = (existing = [], fetched = []) => {
-    const byDate = new Map();
-    for (const candle of existing) {
-        if (candle?.date) byDate.set(candle.date, normalizeCandle(candle));
-    }
-    for (const candle of fetched) {
-        if (candle?.date && candle.close > 0) byDate.set(candle.date, normalizeCandle(candle));
-    }
-    const merged = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-    const limit = Math.max(ASSET_HISTORY_MAX_POINTS, existing.length);
-    return merged.slice(-limit);
-};
+export const mergeDayCandles = (existing = [], fetched = []) => mergeCandleSeries(
+    existing, fetched, { maxPoints: ASSET_HISTORY_MAX_POINTS },
+);
 
 /**
  * Busca e persiste o candle de `dayStr` dos ativos de renda variável em carteira

@@ -3,7 +3,7 @@ import MarketAsset from '../../models/MarketAsset.js';
 import AssetHistory from '../../models/AssetHistory.js';
 import SystemConfig from '../../models/SystemConfig.js';
 import { marketDataService } from '../marketDataService.js';
-import { historyStorageKey } from '../../utils/assetHistory.js';
+import { historyStorageKey, mergeCandleSeries } from '../../utils/assetHistory.js';
 import { externalMarketService } from '../externalMarketService.js';
 import { ASSET_HISTORY_MAX_POINTS, HISTORY_CAP_EXEMPT_TICKERS } from '../../config/financialConstants.js';
 import { isTransientMongoError, withMongoRetry } from '../../utils/mongoResilience.js';
@@ -268,12 +268,24 @@ export const timeSeriesWorker = {
                             }
 
                             if (externalHistory && externalHistory.length > 0) {
-                                // Cap de armazenamento: guarda só os últimos ASSET_HISTORY_MAX_POINTS
-                                // candles (a série vem oldest→newest do Yahoo, então .slice(-N) mantém os
-                                // mais recentes). Câmbio/benchmarks ficam de fora — precisam de série longa.
-                                const historyToStore = HISTORY_CAP_EXEMPT_TICKERS.has(asset.ticker)
-                                    ? externalHistory
-                                    : externalHistory.slice(-ASSET_HISTORY_MAX_POINTS);
+                                // MESCLA com o que já está guardado — nunca substitui.
+                                //
+                                // Substituir transformava qualquer degradação da fonte em perda
+                                // permanente: o Yahoo passou a devolver UM candle para HSRE11 e a
+                                // gravação apagou os 623 que tínhamos (a cópia sob a chave legada
+                                // `HSRE11.SA` ainda os tem). O mesmo padrão explica as outras séries
+                                // de 1 candle na base — e, uma vez encurtadas, elas não se recuperam
+                                // sozinhas, porque `isHistoryStale` só olha a DATA do último candle:
+                                // um único candle de ontem parece uma série perfeitamente em dia.
+                                //
+                                // O cap continua governando quanto se guarda de série nova, mas
+                                // deixa de autorizar encurtar série profunda (ver mergeCandleSeries).
+                                // Câmbio/benchmarks seguem isentos — precisam de série longa.
+                                const historyToStore = mergeCandleSeries(
+                                    historyEntry?.history || [],
+                                    externalHistory,
+                                    { maxPoints: HISTORY_CAP_EXEMPT_TICKERS.has(asset.ticker) ? Infinity : ASSET_HISTORY_MAX_POINTS },
+                                );
                                 await withMongoRetry(() => AssetHistory.updateOne(
                                     { ticker: storageKey },
                                     { $set: { history: historyToStore, lastUpdated: now, lastCheckedAt: now } },
