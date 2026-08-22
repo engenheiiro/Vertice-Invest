@@ -45,20 +45,48 @@ export const BUY_AND_HOLD_VERSION = 'BH_V1';
 export const BANK_MAX_BETA = 1.20;
 
 /**
- * Largura da RAMPA de beta dentro do portão, em unidades de beta.
+ * RAMPA de beta dentro do portão — escala ABSOLUTA, igual para todo arquétipo.
  *
  * O teto é degrau por natureza (segurança é portão: quem passa disputa, quem
  * não passa some). Mas dentro da faixa permitida o beta deixa de ser binário:
- * o ativo é notado numa rampa que vai de `teto − largura` (ótimo) até o próprio
- * teto (pior admissível), no eixo de resiliência. Assim um banco em 1,19 não
- * pontua igual a um em 1,02, e a fronteira para de ser a única coisa que
- * distingue os dois.
+ * o ativo é notado numa rampa que vai de `best` (ótimo) até `worst` (pior beta
+ * admissível em qualquer canto do universo âncora), no eixo de resiliência.
+ * Assim um banco em 1,19 não pontua igual a um em 1,02, e a fronteira para de
+ * ser a única coisa que distingue os dois — que era o defeito V-10 do estudo.
  *
- * A rampa é ancorada no teto do ARQUÉTIPO, então ela se calibra sozinha: 0,60 →
- * 1,00 para operacional, 0,80 → 1,20 para banco. Beta baixo para o próprio
- * arquétipo é que vale nota alta.
+ * A rampa NASCEU ancorada no teto do arquétipo (0,60 → 1,00 para operacional,
+ * 0,80 → 1,20 para banco), "para se calibrar sozinha". Ancorar assim mede
+ * distância até a própria fronteira administrativa, e isso inverte a ordem de
+ * risco entre arquétipos. O par que expôs a inversão (medição de 22/08/2026):
+ *
+ *   ITSA4  beta 0,923  teto 1,00 (DIVERSIFIED_HOLDING)  →  nota 19
+ *   ITUB4  beta 1,108  teto 1,20 (BANK)                 →  nota 23
+ *
+ * A Itaúsa tem beta MENOR e tirava nota MENOR. Ela é, em substância,
+ * majoritariamente Itaú dentro de um invólucro: o modelo cobrava da holding a
+ * volatilidade do ativo que ela carrega e perdoava a mesma volatilidade no
+ * ativo. Não é tese, é artefato de ancoragem — e nem é específico da Itaúsa: com
+ * escala por arquétipo, QUALQUER par de arquétipos com tetos diferentes pode
+ * inverter, porque a nota deixa de falar de risco e passa a falar de folga
+ * regulatória.
+ *
+ * Beta é a única métrica do eixo medida do mesmo jeito para todo emissor —
+ * mesma unidade, mesmo significado, mesma janela. Basileia, solvência e
+ * DL/EBITDA precisam de escala por arquétipo porque são grandezas diferentes
+ * entre si; beta não precisa, e normalizá-lo por arquétipo inventa uma
+ * incomparabilidade que o dado não tem. Todos os 17 elegíveis disputam UMA
+ * lista: um componente que só vale dentro do grupo corrompe a ordem entre grupos.
+ *
+ * A tolerância a banco continua existindo — mas onde ela pertence, no PORTÃO
+ * (BANK_MAX_BETA). Admitir é uma decisão; notar é outra. O banco entra na
+ * disputa e entra carregando a volatilidade que realmente tem.
+ *
+ * `worst` acompanha o teto mais alto do universo (hoje o dos bancos): abaixo
+ * dele a nota clampa em 0 e o arquétipo mais tolerante perderia a rampa inteira.
+ * Um teto novo acima de `worst` derruba um teste, em vez de degradar em silêncio.
+ * `best` = 0,60 preserva a âncora de "ótimo" que a largura de 0,40 já usava.
  */
-export const BETA_RAMP_WIDTH = 0.40;
+export const BETA_SCALE = Object.freeze({ best: 0.60, worst: BANK_MAX_BETA });
 
 // Sub-setores (rótulo fino do ativo) elegíveis como buy-and-hold. Normalizados
 // (sem acento, minúsculo) no engine. Macro-setor é grosseiro demais aqui: colapsa
@@ -88,7 +116,10 @@ export const BUY_AND_HOLD_CONFIG = Object.freeze({
     // de uma transmissora a um banco não é rigor, é comparar coisas diferentes.
     // Só BANK diverge hoje; seguradora e operacional seguem em 1,00.
     maxBetaByArchetype: Object.freeze({ BANK: BANK_MAX_BETA }),
-    betaRampWidth: BETA_RAMP_WIDTH, // ver BETA_RAMP_WIDTH: dentro do portão, rampa
+    // Ver BETA_SCALE: o teto acima é tolerância de ADMISSÃO (por arquétipo); a
+    // nota de beta roda numa escala única para todos, senão a folga do arquétipo
+    // é concedida duas vezes e a ordem de risco entre arquétipos inverte.
+    betaScale: BETA_SCALE,
     minAvgLiquidity: 5_000_000, // R$ 5 M/dia
     minRoe: 10, // rentabilidade mínima através do ciclo (roeTtm p/ banco, roe senão)
     maxNetDebtEbitda: 3.0, // alavancagem operacional

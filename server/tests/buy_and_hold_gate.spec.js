@@ -152,24 +152,53 @@ describe('teto de beta por arquétipo', () => {
 });
 
 // A rampa é o que impede o teto de ser um degrau puro: dentro da faixa
-// permitida, beta mais alto vale menos resiliência.
+// permitida, beta mais alto vale menos resiliência. A escala é ABSOLUTA — o teto
+// por arquétipo é tolerância de admissão e fica no portão, não na nota.
 describe('rampa de beta dentro do portão', () => {
   it('banco perto do teto pontua menos que banco de beta baixo', () => {
-    const calmo = betaResilience({ metrics: { beta: 0.82 } }, 'BANK', BUY_AND_HOLD_CONFIG);
-    const nervoso = betaResilience({ metrics: { beta: 1.19 } }, 'BANK', BUY_AND_HOLD_CONFIG);
+    const calmo = betaResilience({ metrics: { beta: 0.82 } }, BUY_AND_HOLD_CONFIG);
+    const nervoso = betaResilience({ metrics: { beta: 1.19 } }, BUY_AND_HOLD_CONFIG);
     expect(calmo).toBeGreaterThan(nervoso);
     expect(nervoso).toBeGreaterThanOrEqual(0);
   });
 
-  it('a rampa é ancorada no teto do arquétipo — mesmo beta, notas diferentes', () => {
-    // 0,95 é quase o limite de uma operacional e folgado para um banco.
-    const operacional = betaResilience({ metrics: { beta: 0.95 } }, 'OPERATIONAL', BUY_AND_HOLD_CONFIG);
-    const banco = betaResilience({ metrics: { beta: 0.95 } }, 'BANK', BUY_AND_HOLD_CONFIG);
-    expect(banco).toBeGreaterThan(operacional);
+  it('a fronteira do teto não é o único discriminador — beta baixo vale mais', () => {
+    // Três betas admissíveis, todos longe de qualquer teto: a nota tem que
+    // ordená-los, senão a rampa não está fazendo trabalho nenhum.
+    const notas = [0.70, 0.85, 1.00].map(beta => betaResilience({ metrics: { beta } }, BUY_AND_HOLD_CONFIG));
+    expect(notas[0]).toBeGreaterThan(notas[1]);
+    expect(notas[1]).toBeGreaterThan(notas[2]);
+  });
+
+  it('mesmo beta vale a mesma nota em qualquer arquétipo', () => {
+    // Antes a nota vinha da distância até o teto do arquétipo, então 0,95 valia
+    // mais para banco (teto 1,20) que para operacional (teto 1,00) — a folga de
+    // admissão era concedida uma segunda vez, dentro do score.
+    const semArquetipo = betaResilience({ metrics: { beta: 0.95 } }, BUY_AND_HOLD_CONFIG);
+    const comBanco = betaResilience({ ticker: 'BBAS3', metrics: { beta: 0.95 } }, BUY_AND_HOLD_CONFIG);
+    expect(comBanco).toBe(semArquetipo);
+  });
+
+  it('nenhum teto de arquétipo passa do pior beta da escala', () => {
+    // Um teto acima de BETA_SCALE.worst clampa a nota em 0 para todo o arquétipo,
+    // matando a rampa dele em silêncio. Falhar aqui é mais barato que descobrir
+    // depois num ranking em que todo banco tirou zero de beta.
+    const { betaScale, maxBeta, maxBetaByArchetype } = BUY_AND_HOLD_CONFIG.gate;
+    const tetos = [maxBeta, ...Object.values(maxBetaByArchetype)];
+    for (const teto of tetos) expect(teto).toBeLessThanOrEqual(betaScale.worst);
   });
 
   it('beta ausente vira AUSENTE (null), nunca nota zero', () => {
-    expect(betaResilience({ metrics: {} }, 'BANK', BUY_AND_HOLD_CONFIG)).toBeNull();
-    expect(betaResilience({ metrics: { beta: null } }, 'BANK', BUY_AND_HOLD_CONFIG)).toBeNull();
+    expect(betaResilience({ metrics: {} }, BUY_AND_HOLD_CONFIG)).toBeNull();
+    expect(betaResilience({ metrics: { beta: null } }, BUY_AND_HOLD_CONFIG)).toBeNull();
+  });
+});
+
+// O par que expôs o defeito da ancoragem por arquétipo (medição de 22/08/2026).
+describe('holding não é punida pela volatilidade que o controlado é perdoado', () => {
+  it('Itaúsa (beta 0,923) tira nota MAIOR que Itaú (beta 1,108)', () => {
+    const itsa4 = betaResilience({ ticker: 'ITSA4', metrics: { beta: 0.9234 } }, BUY_AND_HOLD_CONFIG);
+    const itub4 = betaResilience({ ticker: 'ITUB4', metrics: { beta: 1.1079 } }, BUY_AND_HOLD_CONFIG);
+    expect(itsa4).toBeGreaterThan(itub4);
   });
 });

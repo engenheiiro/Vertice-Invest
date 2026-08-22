@@ -146,20 +146,26 @@ export const passesBuyAndHoldGate = (asset, config = BUY_AND_HOLD_CONFIG) => {
 };
 
 /**
- * Nota de beta DENTRO do portão, numa rampa ancorada no teto do próprio
- * arquétipo: `teto − largura` vale 100, o teto vale 0. Tira o caráter binário do
- * limite — um banco em 1,19 não pontua igual a um em 1,02 — sem transformar o
- * portão em score, que é a regra nº 1 do motor. Beta ausente vira `null`
- * (AUSENTE, peso redistribuído), nunca zero: quem não tem beta nem chega aqui,
- * porque o portão já reprovou.
+ * Nota de beta DENTRO do portão, numa rampa de escala ABSOLUTA: `best` vale 100,
+ * `worst` vale 0, igual para todo arquétipo. Tira o caráter binário do limite —
+ * um banco em 1,19 não pontua igual a um em 1,02 — sem transformar o portão em
+ * score, que é a regra nº 1 do motor.
+ *
+ * A escala NÃO é por arquétipo de propósito: ver BETA_SCALE em
+ * config/buyAndHold.js. O teto por arquétipo é tolerância de admissão e vive no
+ * portão; repeti-lo aqui daria a mesma folga duas vezes e inverteria a ordem de
+ * risco (a Itaúsa, com beta menor que o do Itaú, tirava nota menor que ele).
+ *
+ * Beta ausente vira `null` (AUSENTE, peso redistribuído), nunca zero: quem não
+ * tem beta nem chega aqui, porque o portão já reprovou.
  */
-export const betaResilience = (asset, archetype, config = BUY_AND_HOLD_CONFIG) => {
+export const betaResilience = (asset, config = BUY_AND_HOLD_CONFIG) => {
   const beta = Number(asset.metrics?.beta ?? asset.beta);
   if (!Number.isFinite(beta)) return null;
-  const ceiling = resolveMaxBeta(archetype, config);
-  const width = Number(config.gate.betaRampWidth);
-  if (!Number.isFinite(ceiling) || !Number.isFinite(width) || width <= 0) return null;
-  return lowerBetter(beta, ceiling - width, ceiling);
+  const best = Number(config.gate.betaScale?.best);
+  const worst = Number(config.gate.betaScale?.worst);
+  if (!Number.isFinite(best) || !Number.isFinite(worst) || worst <= best) return null;
+  return lowerBetter(beta, best, worst);
 };
 
 /** Eixos 0–100 + flags de observação. Só faz sentido para quem passou no portão. */
@@ -199,7 +205,7 @@ export const computeBuyAndHoldAxes = (asset, archetype = 'OPERATIONAL', config =
     part('control', controlResilience(asset.ticker, readMetric(asset, 'controlType')), 0.25),
     // Peso deliberadamente menor que os demais: o beta é a RAMPA que substitui o
     // degrau do teto, não um quarto pilar de resiliência.
-    part('beta', betaResilience(asset, archetype, config), 0.15),
+    part('beta', betaResilience(asset, config), 0.15),
   ]);
 
   const consistency = averageObserved([
