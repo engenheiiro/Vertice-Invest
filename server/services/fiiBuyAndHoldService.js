@@ -103,6 +103,9 @@ const compactRow = item => ({
   // qual era). Nunca confundir com vacância zero.
   vacancy: round1(item.vacancy?.value),
   vacancyRaw: round1(item.vacancy?.raw),
+  // Presente só quando o fundo seria COMPRAR e foi segurado pelo teto de
+  // composição da lista publicável (papel ou gestora).
+  publicationLimit: item.publicationLimit,
   reason: item.reason,
 });
 
@@ -125,6 +128,11 @@ export const generateFiiBuyAndHoldRanking = async ({ includeExcluded = false } =
 
   const managers = new Set(result.ranking.map(item => item.manager));
 
+  // Composição da lista PUBLICÁVEL — é ela que o assinante vê, e é sobre ela que
+  // o teto de papel/gestora incide. Contar só os elegíveis escondia o problema.
+  const buyList = result.ranking.filter(item => item.action === 'BUY');
+  const heldByLimit = result.ranking.filter(item => item.publicationLimit);
+
   return {
     version: result.version,
     generatedAt: new Date().toISOString(),
@@ -135,9 +143,16 @@ export const generateFiiBuyAndHoldRanking = async ({ includeExcluded = false } =
       maxVacancy: FII_BUY_AND_HOLD_CONFIG.gate.maxVacancy,
       weights: FII_BUY_AND_HOLD_CONFIG.weights,
       entry: FII_BUY_AND_HOLD_CONFIG.entry,
+      publication: FII_BUY_AND_HOLD_CONFIG.publication,
     },
     macro,
-    counts: { ...result.counts, distinctManagers: managers.size },
+    counts: {
+      ...result.counts,
+      distinctManagers: managers.size,
+      buyPaper: buyList.filter(item => item.subType === 'PAPEL').length,
+      buyManagers: new Set(buyList.map(item => item.manager)).size,
+      heldByPublicationLimit: heldByLimit.length,
+    },
     ranking: result.ranking.map(compactRow),
     excludedByReason,
     excluded: includeExcluded

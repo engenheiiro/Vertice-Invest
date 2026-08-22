@@ -535,6 +535,78 @@ const applyManagerConcentration = (items, config) => {
 };
 
 /**
+ * Teto de COMPOSIÇÃO da lista publicável (os COMPRAR), aplicado sobre o ranking
+ * já ordenado. Diferente de `applyManagerConcentration`, que penaliza pontos na
+ * lista de ELEGÍVEIS e por isso nunca morde o topo: em 22/08/2026 os dois
+ * primeiros COMPRAR eram papel e da mesma gestora, com a penalidade intacta.
+ *
+ * O excedente vira AGUARDAR com motivo explícito — não sai da lista, não perde
+ * score e não muda de posição. O limite é de carteira, não de mérito.
+ *
+ * Os tetos são frações da lista publicável, resolvidas por PONTO FIXO: demover
+ * um fundo encurta a lista, o que pode apertar o teto e demover outro. O laço
+ * só encolhe (nada volta a ser COMPRAR), então converge, e o limite guarda a
+ * fração sobre a lista FINAL — não sobre a lista de partida.
+ */
+export const applyPublicationLimits = (items, config = FII_BUY_AND_HOLD_CONFIG) => {
+  const rule = config.publication;
+  if (!rule) return items;
+
+  const isPaper = item => item.gate?.isPaper ?? item.subType === 'PAPEL';
+  const blocked = new Map();
+
+  // Teto: nunca abaixo de minPerBucket — um único nome não é concentração.
+  const capFor = (total, share) => Math.max(rule.minPerBucket, Math.floor(total * share));
+
+  // No pior caso cada passada bloqueia um item; +1 para a passada que confirma.
+  for (let pass = 0; pass <= items.length; pass += 1) {
+    const admitted = items.filter(item => item.action === 'BUY' && !blocked.has(item.ticker));
+    const paperCap = capFor(admitted.length, rule.maxPaperShare);
+    const managerCap = capFor(admitted.length, rule.maxManagerShare);
+
+    let paperCount = 0;
+    const perManager = new Map();
+    let changed = false;
+
+    for (const item of admitted) {
+      if (isPaper(item) && paperCount + 1 > paperCap) {
+        blocked.set(item.ticker, { bucket: 'PAPER', cap: paperCap });
+        changed = true;
+        continue;
+      }
+      const managerRank = (perManager.get(item.manager) || 0) + 1;
+      if (managerRank > managerCap) {
+        blocked.set(item.ticker, { bucket: 'MANAGER', cap: managerCap, manager: item.manager });
+        changed = true;
+        continue;
+      }
+      // Só quem entrou de fato consome vaga.
+      if (isPaper(item)) paperCount += 1;
+      perManager.set(item.manager, managerRank);
+    }
+
+    if (!changed) break;
+  }
+
+  if (blocked.size === 0) return items;
+
+  return items.map(item => {
+    const limit = blocked.get(item.ticker);
+    if (!limit) return item;
+    const because = limit.bucket === 'PAPER'
+      ? `a lista de COMPRAR já leva ${limit.cap} de papel — teto de crédito na carteira publicável`
+      : `a lista de COMPRAR já leva ${limit.cap} de ${limit.manager} — teto por gestora na carteira publicável`;
+    return {
+      ...item,
+      action: 'WAIT',
+      publicationLimit: limit,
+      // Não é demérito do fundo: o motivo diz que o limite é de composição.
+      reason: `${item.reason} · Fora do COMPRAR por composição de carteira: ${because}`,
+    };
+  });
+};
+
+/**
  * Constrói o ranking âncora de FIIs a partir de candidatos já processados.
  * Só entram os elegíveis. Ordenação soberana por score; tiebreaker pela média
  * dos eixos.
@@ -554,8 +626,12 @@ export const buildBuyAndHoldRanking = (candidates, context = {}, config = FII_BU
     || String(a.ticker).localeCompare(String(b.ticker))
   );
 
-  const ranking = applyManagerConcentration(eligible.sort(bySovereignOrder), config)
-    .sort(bySovereignOrder)
+  // Ordem soberana primeiro; o teto de composição só decide QUEM é publicável
+  // como COMPRAR, nunca mexe em score nem em posição.
+  const ordered = applyManagerConcentration(eligible.sort(bySovereignOrder), config)
+    .sort(bySovereignOrder);
+
+  const ranking = applyPublicationLimits(ordered, config)
     .map((item, index) => ({ position: index + 1, ...item }));
 
   return {

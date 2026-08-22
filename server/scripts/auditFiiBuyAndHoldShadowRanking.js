@@ -59,6 +59,9 @@ try {
     console.log(`\nAnalisados ${counts.analyzed} · elegíveis ${counts.eligible} (${counts.distinctManagers} gestoras) · excluídos ${counts.excluded}`);
     console.log(`COMPRAR ${counts.buy} · AGUARDAR ${counts.wait}`
       + (counts.eligible ? `  (${Math.round((counts.buy / counts.eligible) * 100)}% da lista sai como COMPRAR)` : ''));
+    // A composição que importa é a da lista PUBLICÁVEL: é ela que o assinante vê.
+    console.log(`Composição do COMPRAR: ${counts.buyPaper} de papel · ${counts.buyManagers} gestoras`
+      + ` · ${counts.heldByPublicationLimit} segurado(s) pelo teto de composição`);
 
     console.log('\nTop motivos de exclusão:');
     for (const { reason, count } of result.excludedByReason.slice(0, 12)) {

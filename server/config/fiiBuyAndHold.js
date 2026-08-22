@@ -158,4 +158,35 @@ export const FII_BUY_AND_HOLD_CONFIG = Object.freeze({
   // Concentração por gestora no ranking final: o 3º fundo da mesma casa perde
   // pontos, o 4º+ perde muito. Espelha a penalidade pós-draft do portfolioEngine.
   concentration: Object.freeze({ maxPerManager: 2, thirdPenalty: 10, overflowPenalty: 20 }),
+
+  /**
+   * Teto de composição da LISTA PUBLICÁVEL — o subconjunto COMPRAR, não os
+   * elegíveis.
+   *
+   * A penalidade de `concentration` acima incide sobre a lista de elegíveis e
+   * por isso nunca morde o topo: em 22/08/2026 ela começava no 3º fundo da casa
+   * e os 4 COMPRAR eram KNCR11, KNSC11 (ambos papel, ambos Kinea, 1º e 2º da
+   * lista), PMLL11 e HSLG11. Metade crédito e metade Kinea, com a penalidade
+   * intacta. Um teto que não morde o topo não é teto.
+   *
+   * O crédito voltou pela porta do score: o portão B ("Equilibrado") já barra 40
+   * fundos de papel fora do tier-1 justamente para não concentrar em crédito,
+   * mas papel tem FFO limpo e previsível enquanto tijolo carrega o ruído de
+   * vacância da fonte. O portão segurou; o score não.
+   *
+   * Aqui o excedente NÃO some da lista: vira AGUARDAR com motivo explícito. O
+   * fundo continua rastreável, mantém score e posição, e o assinante entende por
+   * que ele não subiu — o motivo é composição de carteira, não demérito.
+   *
+   * Os tetos são FRAÇÕES da lista publicável, não números fixos: com 4 COMPRAR o
+   * limite é 1, com 12 é 4. Resolvidos por ponto fixo (demover encurta a lista,
+   * o que pode apertar o teto de novo), então a fração vale sobre o resultado
+   * final, não sobre a lista de partida — sem isso 8 candidatos de papel para 2
+   * de tijolo publicariam 60% de crédito.
+   */
+  publication: Object.freeze({
+    maxPaperShare: 0.34, // crédito no máximo ~1/3 da lista publicável
+    maxManagerShare: 0.34, // mesma casa gestora no máximo ~1/3
+    minPerBucket: 1, // com lista curta sempre cabe um de cada — 1 nome não é concentração
+  }),
 });

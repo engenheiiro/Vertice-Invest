@@ -302,3 +302,120 @@ describe('buildBuyAndHoldRanking (FII)', () => {
     expect(result.ranking.filter(item => !item.concentration)).toHaveLength(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Teto de COMPOSIÇÃO da lista publicável.
+//
+// A penalidade de gestora incide sobre os ELEGÍVEIS e só começa no 3º fundo da
+// casa, então nunca tocava o topo: em 22/08/2026 os 4 COMPRAR eram KNCR11 e
+// KNSC11 (papel, Kinea, 1º e 2º), PMLL11 e HSLG11 — metade crédito, metade
+// Kinea, com a penalidade intacta. Um teto que não morde o topo não é teto.
+// ---------------------------------------------------------------------------
+describe('teto de composição da lista publicável (COMPRAR)', () => {
+  const { publication } = FII_BUY_AND_HOLD_CONFIG;
+
+  // Clones de fundos que já saem como COMPRAR nos casos de referência acima.
+  const paperClone = (ticker, dy) => ({
+    ...knsc11, ticker, name: `Papel ${ticker}`, metrics: { ...knsc11.metrics, dy },
+  });
+  // Tijolo de porte que sai como COMPRAR por mérito próprio — o alvo do teto é a
+  // composição da lista, então os fixtures precisam disputar de verdade.
+  const brickClone = (ticker, sector, dy) => fii({
+    ticker, name: `Tijolo ${ticker}`, sector, fiiSubType: 'TIJOLO',
+    marketCap: 3_409_810_000, liquidity: 8_531_640, dy, vacancy: 3.69, qtdImoveis: 12,
+    ffoYield: 10.32, ffoCota: 10.41, price: 100.83, volatility: 8.70, quality: 80, risk: 85,
+  });
+
+  /** Invariante do produto: a lista publicável nunca pode violar os tetos. */
+  const assertPublishable = ranking => {
+    const buys = ranking.filter(item => item.action === 'BUY');
+    const paperCap = Math.max(publication.minPerBucket, Math.floor(buys.length * publication.maxPaperShare));
+    const managerCap = Math.max(publication.minPerBucket, Math.floor(buys.length * publication.maxManagerShare));
+
+    expect(buys.filter(item => item.subType === 'PAPEL').length).toBeLessThanOrEqual(paperCap);
+    const perManager = new Map();
+    for (const item of buys) perManager.set(item.manager, (perManager.get(item.manager) || 0) + 1);
+    for (const count of perManager.values()) expect(count).toBeLessThanOrEqual(managerCap);
+    return buys;
+  };
+
+  it('metade da lista em papel não é publicável — o excedente vira AGUARDAR', () => {
+    // Reprodução da lista real: 2 papéis Kinea no topo + 2 tijolos de casas distintas.
+    const result = buildBuyAndHoldRanking([
+      paperClone('KNCR11', 11.3), paperClone('KNSC11', 11.25),
+      brickClone('PMLL11', 'Shoppings', 10.02), brickClone('HSLG11', 'Logística', 10.28),
+    ], CONTEXT);
+
+    const buys = assertPublishable(result.ranking);
+    expect(buys.filter(item => item.subType === 'PAPEL')).toHaveLength(1);
+    expect(buys.map(item => item.ticker)).not.toContain('KNSC11');
+  });
+
+  it('metade da lista na mesma gestora não é publicável', () => {
+    // Dois tijolos Pátria (PMLL e MALL) + um de outra casa: só um Pátria publica.
+    const result = buildBuyAndHoldRanking([
+      brickClone('PMLL11', 'Shoppings', 10.1), brickClone('MALL11', 'Shoppings', 10.02),
+      brickClone('HSLG11', 'Logística', 10.28),
+    ], CONTEXT);
+
+    const buys = assertPublishable(result.ranking);
+    expect(buys.filter(item => item.manager === 'PATRIA')).toHaveLength(1);
+  });
+
+  // O ponto do desenho: o fundo NÃO some, e o motivo não é demérito dele.
+  it('o excedente mantém score e posição, e o motivo diz que o limite é de carteira', () => {
+    const result = buildBuyAndHoldRanking([
+      paperClone('KNCR11', 11.3), paperClone('KNSC11', 11.25),
+      brickClone('PMLL11', 'Shoppings', 10.02), brickClone('HSLG11', 'Logística', 10.28),
+    ], CONTEXT);
+
+    const held = result.ranking.find(item => item.publicationLimit);
+    expect(held.ticker).toBe('KNSC11');
+    expect(held.action).toBe('WAIT');
+    expect(held.publicationLimit.bucket).toBe('PAPER');
+    expect(held.reason).toMatch(/composição de carteira/i);
+    // Continua na lista, com o score que mereceu e a posição que a ordem soberana deu.
+    expect(held.score).toBe(scoreBuyAndHold(paperClone('KNSC11', 11.25), CONTEXT).score);
+    expect(held.position).toBeLessThan(result.ranking.length);
+  });
+
+  // Sem o ponto fixo, o teto seria calculado sobre a lista de PARTIDA: 8 papéis
+  // e 2 tijolos dariam cap 3 e publicariam 3 de papel para 2 de tijolo — 60% de
+  // crédito numa regra que promete 1/3.
+  it('teto é resolvido por ponto fixo: demover encurta a lista e aperta o teto', () => {
+    const papers = ['KNCR11', 'KNSC11', 'KNIP11', 'KNHY11', 'BTCR11', 'BTHF11', 'CPTS11', 'RECR11']
+      .map((ticker, index) => paperClone(ticker, 11.3 - index * 0.01));
+    const bricks = [
+      brickClone('PMLL11', 'Shoppings', 10.02),
+      brickClone('HSLG11', 'Logística', 10.01),
+    ];
+
+    const result = buildBuyAndHoldRanking([...papers, ...bricks], CONTEXT);
+    const buys = assertPublishable(result.ranking);
+    expect(buys.filter(item => item.subType === 'PAPEL')).toHaveLength(1);
+    expect(buys).toHaveLength(3);
+  });
+
+  // Um nome só não é concentração: o teto não pode zerar a categoria.
+  it('um único fundo de papel na lista continua publicável', () => {
+    const result = buildBuyAndHoldRanking([
+      paperClone('KNCR11', 11.3),
+      brickClone('PMLL11', 'Shoppings', 10.02), brickClone('HSLG11', 'Logística', 10.28),
+    ], CONTEXT);
+
+    const buys = assertPublishable(result.ranking);
+    expect(buys.filter(item => item.subType === 'PAPEL')).toHaveLength(1);
+    expect(result.ranking.some(item => item.publicationLimit)).toBe(false);
+  });
+
+  // O teto é de COMPOSIÇÃO: não pode virar mais um motivo de reprovação para
+  // quem já era AGUARDAR por preço ou por renda não operacional.
+  it('não marca quem já era AGUARDAR por outro motivo', () => {
+    const result = buildBuyAndHoldRanking([knsc11, hglg11, trxf11, pmll11], CONTEXT);
+    for (const item of result.ranking) {
+      if (item.publicationLimit) expect(item.entry.expensive).toBe(false);
+    }
+    expect(result.ranking.find(item => item.ticker === 'TRXF11').publicationLimit).toBeUndefined();
+    expect(result.ranking.find(item => item.ticker === 'HGLG11').publicationLimit).toBeUndefined();
+  });
+});
