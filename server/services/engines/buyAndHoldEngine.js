@@ -67,6 +67,11 @@ export const resolveMaxBeta = (archetype, config = BUY_AND_HOLD_CONFIG) => {
 
 // Resiliência de controle: privada domina; estatal (dividendo/capex discricionário
 // e político) é penalizada. Coerente com o eixo de governança do sistema.
+//
+// O desconto é desconto, não veto — estatal pode disputar. Conferido na base em
+// 22/08/2026: dos elegíveis, BRSR6 (STATE_DIRECT) e BBSE3 (STATE_INDIRECT) levam
+// 45, CXSE3 65, e CMIG4/BBAS3 caem em 45 pela lista curada mesmo sem
+// `controlType` no `sectorMetrics`. Nenhum passa sem o desconto aplicado.
 const controlResilience = (ticker, controlType) => {
   if (isStateControlled(ticker)) return 45;
   return ({
@@ -295,6 +300,25 @@ export const scoreBuyAndHold = (asset, config = BUY_AND_HOLD_CONFIG) => {
   const score = Math.min(rawScore, confidenceCap);
 
   // BUY exige score >= threshold E preço justo. "Ótima âncora, porém cara" => WAIT.
+  //
+  // O limiar é um degrau puro, e a lista publicada é fina demais para isso.
+  // Medição de 22/08/2026 sobre os 17 elegíveis:
+  //
+  //   ±3 pontos do limiar: 2 nomes (ABCB4 73, BRSR6 69)
+  //   ±5 pontos do limiar: 4 nomes (BBSE3 74, ABCB4 73, BRSR6 69, CMIG4 65) — 24%
+  //
+  // Um quarto do universo elegível troca de lado com uma oscilação de dado que
+  // não é notícia sobre o negócio. O Banrisul já mostrou isso duas vezes na
+  // mesma semana: entrou em COMPRAR pousado em exatamente 70 e saiu com 69,
+  // pelos ajustes de medição destes commits, sem nada ter acontecido com o banco.
+  //
+  // Isso é o giro de screener que a estratégia âncora existe para NÃO ter (V-01
+  // do estudo de maturidade: 34 tickers distintos em 40 publicações do Brasil 10
+  // em 90 dias). A histerese planejada (entra >= 70, permanece >= 62) resolve, e
+  // esta medição diz que ela é pré-requisito de lançamento, não melhoria: sem
+  // ela, publicar mensalmente já nasce girando. Deliberadamente NÃO implementada
+  // aqui — o motor segue em shadow e a histerese precisa de estado entre runs
+  // (a lista anterior), que este módulo, sendo função pura, não tem.
   const action = (score >= BUY_THRESHOLD && !entry.expensive) ? 'BUY' : 'WAIT';
 
   let reason;
