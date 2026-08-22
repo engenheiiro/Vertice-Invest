@@ -22,10 +22,30 @@ const pssa3 = {
 };
 
 describe('passesBuyAndHoldGate', () => {
-  it('exclui banco não tier-1 (ABCB4) mesmo com fundamentos fortes', () => {
+  // A flag `isTier1` só é populada para FIIs de elite e mega caps US, então exigi-la
+  // reprovava TODO banco brasileiro. O portão passou a medir Basileia e ROE recorrente.
+  it('aprova banco sólido mesmo sem a flag isTier1 (ABCB4)', () => {
     const gate = passesBuyAndHoldGate(abcb4, BUY_AND_HOLD_CONFIG);
+    expect(gate.passed).toBe(true);
+    expect(gate.archetype).toBe('BANK');
+  });
+
+  it('reprova banco com Basileia abaixo do piso', () => {
+    const gate = passesBuyAndHoldGate({
+      ...abcb4,
+      sectorMetrics: { ...abcb4.sectorMetrics, capitalRatio: 11.2 },
+    }, BUY_AND_HOLD_CONFIG);
     expect(gate.passed).toBe(false);
-    expect(gate.failures).toContain('banco não tier-1');
+    expect(gate.failures.some(f => f.startsWith('Basileia'))).toBe(true);
+  });
+
+  it('reprova banco com ROE recorrente abaixo do piso', () => {
+    const gate = passesBuyAndHoldGate({
+      ...abcb4,
+      sectorMetrics: { ...abcb4.sectorMetrics, roeTtm: 6.5 },
+    }, BUY_AND_HOLD_CONFIG);
+    expect(gate.passed).toBe(false);
+    expect(gate.failures.some(f => f.startsWith('ROE recorrente'))).toBe(true);
   });
 
   it('exclui setor cíclico (BRAV3 / Petróleo)', () => {

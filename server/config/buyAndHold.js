@@ -42,7 +42,13 @@ export const BUY_AND_HOLD_CONFIG = Object.freeze({
     minAvgLiquidity: 5_000_000, // R$ 5 M/dia
     minRoe: 10, // rentabilidade mínima através do ciclo (roeTtm p/ banco, roe senão)
     maxNetDebtEbitda: 3.0, // alavancagem operacional
-    bank: Object.freeze({ requireTier1: true, minCapitalRatio: 13 }),
+    // Banco: qualidade medida por número, não por curadoria. `requireTier1` exigia a
+    // flag `isTier1`, que só é populada para uma lista de FIIs de elite e dez mega caps
+    // US — nenhum banco brasileiro jamais recebia `true`, então TODOS eram reprovados
+    // ("banco não tier-1"). Um ranking âncora de aposentadoria no Brasil sem banco algum
+    // era artefato de implementação, não tese. Basileia e ROE recorrente vêm do IF.data
+    // do BCB (sectorMetrics) e são observáveis para todo emissor mapeado.
+    bank: Object.freeze({ minCapitalRatio: 13, minRoeTtm: 10 }),
     insurer: Object.freeze({ minSolvency: 130, maxCombined: 100 }),
     dividend: Object.freeze({
       minStreakYears: 5, // dividendo pago em todos os últimos N anos

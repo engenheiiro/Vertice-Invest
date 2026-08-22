@@ -108,9 +108,15 @@ export const passesBuyAndHoldGate = (asset, config = BUY_AND_HOLD_CONFIG) => {
   if (!(roe >= gate.minRoe)) failures.push(`ROE abaixo de ${gate.minRoe}`);
 
   if (archetype === 'BANK') {
-    if (gate.bank.requireTier1 && !asset.isTier1) failures.push('banco não tier-1');
+    // Solidez de banco é Basileia + rentabilidade recorrente, ambas do IF.data.
+    // `roeTtm` ausente cai no ROE genérico já cobrado acima — aqui só reprova quando
+    // o dado EXISTE e está abaixo do piso, para não punir emissor sem cobertura.
     const capitalRatio = Number(readMetric(asset, 'capitalRatio'));
     if (!(capitalRatio >= gate.bank.minCapitalRatio)) failures.push(`Basileia abaixo de ${gate.bank.minCapitalRatio}`);
+    const bankRoe = Number(readMetric(asset, 'roeTtm'));
+    if (Number.isFinite(bankRoe) && bankRoe < gate.bank.minRoeTtm) {
+      failures.push(`ROE recorrente abaixo de ${gate.bank.minRoeTtm}`);
+    }
   } else if (archetype === 'INSURER') {
     const solvency = Number(readMetric(asset, 'solvencyRatio'));
     const combined = Number(readMetric(asset, 'combinedRatio'));

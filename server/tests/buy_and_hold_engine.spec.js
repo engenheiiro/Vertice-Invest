@@ -39,9 +39,15 @@ describe('scoreBuyAndHold — casos de referência', () => {
     expect(r.action).toBe('WAIT');
   });
 
-  it('ABCB4 (banco não tier-1) é inelegível', () => {
+  it('ABCB4 é âncora elegível: Basileia e ROE recorrente no lugar da flag isTier1', () => {
     const r = scoreBuyAndHold(abcb4);
-    expect(r.eligible).toBe(false);
+    expect(r.eligible).toBe(true);
+    expect(r.archetype).toBe('BANK');
+  });
+
+  it('banco com Basileia insuficiente segue inelegível', () => {
+    const weakBank = { ...abcb4, ticker: 'WEAK4', sectorMetrics: { ...abcb4.sectorMetrics, capitalRatio: 10.9 } };
+    expect(scoreBuyAndHold(weakBank).eligible).toBe(false);
   });
 
   it('PSSA3 é âncora elegível, mas cara → WAIT ("aguarde preço")', () => {
@@ -113,13 +119,13 @@ describe('buildBuyAndHoldRanking', () => {
     const tickers = result.ranking.map(item => item.ticker);
     expect(tickers).toContain('GOOD3');
     expect(tickers).toContain('PSSA3');
+    expect(tickers).toContain('ABCB4');
     expect(tickers).not.toContain('BRAV3');
-    expect(tickers).not.toContain('ABCB4');
     // ordenação soberana por score
     for (let i = 1; i < result.ranking.length; i += 1) {
       expect(result.ranking[i - 1].score).toBeGreaterThanOrEqual(result.ranking[i].score);
     }
-    expect(result.counts.eligible).toBe(2);
-    expect(result.counts.excluded).toBe(2);
+    expect(result.counts.eligible).toBe(3);
+    expect(result.counts.excluded).toBe(1);
   });
 });
