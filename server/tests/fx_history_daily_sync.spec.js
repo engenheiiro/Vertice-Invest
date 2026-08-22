@@ -228,16 +228,30 @@ describe('cadência do cron fx-history', () => {
 
     it('roda todo dia, não uma vez por semana', () => {
         const expressao = expressaoDe.get('fx-history');
-        expect(expressao).toBe('10 18 * * *');
+        expect(expressao).toBe('45 19 * * *');
         // Dia-da-semana curinga: uma segunda feriado não pode adiar a série para terça.
         expect(expressao.split(' ')[4]).toBe('*');
     });
 
-    it('dispara ANTES dos consumidores que resolvem câmbio por data no mesmo dia', () => {
+    it('dispara depois de a FONTE publicar o candle do dia e antes do snapshot', () => {
         const fx = minutoDoDia(expressaoDe.get('fx-history'));
-        // daily-evening: sync + timeSeriesWorker + ranking. daily-snapshot: WalletSnapshot.
-        expect(fx).toBeLessThan(minutoDoDia(expressaoDe.get('daily-evening')));
+
+        // A régua de baixo é a fonte, não o pregão. O fechamento do câmbio à vista
+        // é 17:00, mas o candle diário da AwesomeAPI só é carimbado ~19:30 (medido
+        // em 17-20/08/2026: 19:30:07, 19:31:33, 19:30:05, 19:30:06). Às 18:10 —
+        // a cadência original — o job trazia D-1 todo dia e a série ficava
+        // permanentemente um dia atrás do presente.
+        expect(fx).toBeGreaterThanOrEqual(19 * 60 + 30);
+
+        // A régua de cima é o snapshot patrimonial: ele resolve câmbio POR DATA e
+        // é a base do TWRR e do Sharpe.
         expect(fx).toBeLessThan(minutoDoDia(expressaoDe.get('daily-snapshot')));
+
+        // O 'daily-evening' (18:30) passou a rodar ANTES do câmbio de propósito, e
+        // não perde nada com isso: ele trabalha o DIA CORRENTE, para o qual o
+        // resolvedor usa o spot de qualquer forma. O candle do dia só passa a
+        // importar quando aquele dia vira passado.
+        expect(fx).toBeGreaterThan(minutoDoDia(expressaoDe.get('daily-evening')));
     });
 
     it('é cron leve — não some in-app quando os pesados vão para o Render', () => {

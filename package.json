@@ -38,6 +38,8 @@
     "backfill:logos": "node server/scripts/backfillLogos.js",
     "drop:sample": "node server/scripts/dropSampleData.js",
     "trim:history": "node server/scripts/trimAssetHistory.js",
+    "prune:crypto-series": "node server/scripts/pruneOrphanCryptoSeries.js",
+    "blacklist:dead-b3": "node server/scripts/blacklistDeadB3.js",
     "cleanup:now": "node server/scripts/runCleanupNow.js",
     "test": "npm test --prefix server -- run && npm test --prefix client -- run",
     "test:backtest": "node server/scripts/runBacktestEngine.js",

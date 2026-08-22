@@ -46,6 +46,10 @@ npm run backfill:logos             # preenche logos de ativos
 npm run drop:sample      # remove dados de amostra
 npm run trim:history     # enxuga histórico
 npm run cleanup:now      # limpeza imediata
+
+# Ambos são DRY-RUN por padrão — só gravam com --apply.
+npm run prune:crypto-series          # apaga séries de cripto órfãs (ticker nu, sem -USD)
+npm run blacklist:dead-b3 -- --tickers=XPTO3   # marca ticker B3 morto (tira do sync e da reativação)
 ```
 
 ## 3. Inteligência & Dados (rotinas de produção)

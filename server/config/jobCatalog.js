@@ -79,7 +79,7 @@ export const JOB_CATALOG = {
         severity: 'WARN',
     },
     'fx-history': {
-        label: 'Taxa USD/BRL histórica (18:10)',
+        label: 'Taxa USD/BRL histórica (19:45)',
         maxSilenceHours: 30,
         // CRITICAL: a série por data é o que converte posição dolarizada no
         // rebuild de histórico e no snapshot das 23:59. Parada, o resolver cai na

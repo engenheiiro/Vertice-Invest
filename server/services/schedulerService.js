@@ -766,9 +766,9 @@ export const initScheduler = () => {
         }
     });
 
-    // 10. Taxa USD/BRL histórica (DIÁRIO 18:10 — depois do fechamento do câmbio à
-    // vista (17:00) e ANTES dos dois consumidores que resolvem câmbio POR DATA:
-    // o 'daily-evening' (18:30) e o snapshot patrimonial (23:59).
+    // 10. Taxa USD/BRL histórica (DIÁRIO 19:45 — depois de a fonte publicar o
+    // candle DO DIA e ANTES do snapshot patrimonial das 23:59, que resolve câmbio
+    // POR DATA.
     //
     // Era semanal ('0 6 * * 1'). A série 'USD-BRL' então envelhecia ao longo da
     // semana (em 21/08/2026 o último candle era de 14/08) e, para todo dia após
@@ -778,6 +778,18 @@ export const initScheduler = () => {
     // achatada em zero e reaparecia de uma vez quando a série alcançava. Como o
     // WalletSnapshot é a base do TWRR e do Sharpe, o degrau virava ruído de risco.
     //
+    // Passou de 18:10 para 19:45 depois de medir a FONTE, não o pregão: o candle
+    // diário da AwesomeAPI é carimbado ~19:30 (17/08 19:30:07, 18/08 19:31:33,
+    // 19/08 19:30:05, 20/08 19:30:06), e não às 17:00 do fechamento à vista. Às
+    // 18:10 o job trazia D-1 e a série ficava PERMANENTEMENTE um dia atrás — o
+    // gap de vários dias sumia, mas todo rebuild rodado antes das 19:30 ainda
+    // marcava o dia corrente pelo spot e precisava ser refeito no dia seguinte.
+    //
+    // Sair de antes do 'daily-evening' (18:30) não custa nada: aquele resolve o
+    // DIA CORRENTE, e para o dia corrente o resolvedor usa o spot de qualquer
+    // forma — o candle do dia só passa a importar quando ele vira passado, e às
+    // 19:45 ainda sobram 4h14 até o snapshot das 23:59.
+    //
     // Cabe num cron próprio e leve (uma requisição HTTP devolve 730 dias) em vez
     // de entrar no 'daily-evening': aquele é `heavy` e some in-app quando
     // EXTERNAL_SCHEDULER=true — o snapshot das 23:59 ficaria sem câmbio fresco
@@ -786,7 +798,7 @@ export const initScheduler = () => {
     // Roda todo dia, não só em dia útil: a fonte só tem candle de pregão, então
     // fim de semana/feriado é uma re-merge inofensiva — e uma segunda feriado
     // não adia a atualização para terça.
-    schedule('10 18 * * *', 'fx-history', async () => {
+    schedule('45 19 * * *', 'fx-history', async () => {
         try {
             logger.info("⏰ [Scheduler] Sync taxa USD/BRL histórica...");
             const result = await macroDataService.syncHistoricalUSDRate();

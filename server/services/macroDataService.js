@@ -717,7 +717,7 @@ export const macroDataService = {
 
     // Busca e armazena série histórica diária de USD/BRL (últimos 2 anos).
     //
-    // Roda DIARIAMENTE (cron 'fx-history', 18:10 BRT), não mais uma vez por
+    // Roda DIARIAMENTE (cron 'fx-history', 19:45 BRT), não mais uma vez por
     // semana: a série é resolvida POR DATA no rebuild de histórico e no snapshot
     // patrimonial. Enquanto ela ficava parada em D-7, `buildUsdRateResolver`
     // devolvia a cotação corrente para TODOS os dias posteriores ao último
