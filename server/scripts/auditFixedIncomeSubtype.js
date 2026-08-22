@@ -14,6 +14,7 @@
  *   node server/scripts/auditFixedIncomeSubtype.js email@dominio  # só um usuário
  */
 import mongoose from 'mongoose';
+import { connectScriptDb } from './lib/scriptDb.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -42,7 +43,7 @@ const legacySubKey = (index) => {
 };
 
 const run = async () => {
-    await mongoose.connect(process.env.MONGO_URI);
+    await connectScriptDb({ label: 'auditFixedIncomeSubtype' });
 
     let userFilter = {};
     if (EMAIL) {

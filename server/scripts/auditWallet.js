@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { connectScriptDb } from './lib/scriptDb.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -38,7 +39,7 @@ const countBusinessDays = (start, end) => {
 };
 
 const run = async () => {
-  await mongoose.connect(process.env.MONGO_URI);
+  await connectScriptDb({ label: 'auditWallet' });
   const user = await U.findOne({ email: EMAIL }).lean();
   if (!user) { console.error('Usuário não encontrado'); process.exit(1); }
 

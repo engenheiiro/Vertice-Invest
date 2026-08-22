@@ -8,6 +8,7 @@
  * Uso: node server/scripts/auditStateGovernance.js
  */
 import mongoose from 'mongoose';
+import { connectScriptDb } from './lib/scriptDb.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -207,7 +208,7 @@ const correctedDataAssets = (rawData, context) => {
 };
 
 const run = async () => {
-    await mongoose.connect(process.env.MONGO_URI);
+    await connectScriptDb({ label: 'auditStateGovernance' });
     try {
         const rawData = await marketDataService.getMarketData('STOCK');
         const macroConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean();

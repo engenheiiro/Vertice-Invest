@@ -5,6 +5,7 @@
  *   node server/scripts/auditWalletMetricsV5.js --email=x@y.com --wallet="Carteira" --run-id=id
  */
 import mongoose from 'mongoose';
+import { connectScriptDb } from './lib/scriptDb.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -29,7 +30,7 @@ const runId = valueOf('--run-id');
 const run = async () => {
   if (!process.env.MONGO_URI) throw new Error('MONGO_URI não definida');
   if (!email || !walletName) throw new Error('Informe --email e --wallet');
-  await mongoose.connect(process.env.MONGO_URI);
+  await connectScriptDb({ label: 'auditWalletMetricsV5' });
 
   const user = await User.findOne({ email }).select('_id email').lean();
   if (!user) throw new Error(`Usuário não encontrado: ${email}`);

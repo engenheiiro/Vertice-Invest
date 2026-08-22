@@ -9,6 +9,7 @@
  *   node server/scripts/auditBuyAndHoldShadowRanking.js --excluded # + motivos de exclusão
  */
 import mongoose from 'mongoose';
+import { connectScriptDb } from './lib/scriptDb.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -21,7 +22,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const SHOW_EXCLUDED = process.argv.includes('--excluded');
 
-await mongoose.connect(process.env.MONGO_URI);
+await connectScriptDb({ label: 'auditBuyAndHoldShadowRanking' });
 try {
   const result = await buyAndHoldService.generateBuyAndHoldRanking({ includeExcluded: SHOW_EXCLUDED });
   console.log(JSON.stringify(result, null, 2));

@@ -10,6 +10,7 @@
  *   npm run audit:rf-mtm -- email@dominio   # só um usuário
  */
 import mongoose from 'mongoose';
+import { connectScriptDb } from './lib/scriptDb.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -42,7 +43,7 @@ const annualVolatility = (history, days = 252) => {
 
 const run = async () => {
     if (!process.env.MONGO_URI) { console.error('❌ MONGO_URI não definida.'); process.exit(1); }
-    await mongoose.connect(process.env.MONGO_URI);
+    await connectScriptDb({ label: 'auditFixedIncomeMTM' });
 
     let filter = { type: { $in: ['FIXED_INCOME', 'CASH'] }, quantity: { $gt: 0 } };
     if (EMAIL) {

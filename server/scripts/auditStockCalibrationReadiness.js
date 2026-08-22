@@ -4,6 +4,7 @@
  * Uso: node server/scripts/auditStockCalibrationReadiness.js
  */
 import mongoose from 'mongoose';
+import { connectScriptDb } from './lib/scriptDb.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -56,7 +57,7 @@ const increment = (target, key) => {
   target[key] = (target[key] || 0) + 1;
 };
 
-await mongoose.connect(process.env.MONGO_URI);
+await connectScriptDb({ label: 'auditStockCalibrationReadiness' });
 try {
   const assets = await MarketAsset.find({
     type: 'STOCK',

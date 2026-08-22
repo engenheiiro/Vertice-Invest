@@ -7,6 +7,7 @@
  * Uso: node server/scripts/auditPublicationIntegrity.js [--compact]
  */
 import mongoose from 'mongoose';
+import { connectScriptDb } from './lib/scriptDb.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -74,7 +75,7 @@ const validateRanking = (doc) => {
 };
 
 const run = async () => {
-    await mongoose.connect(process.env.MONGO_URI);
+    await connectScriptDb({ label: 'auditPublicationIntegrity' });
     try {
         const docs = await MarketAnalysis.find({ strategy: 'BUY_HOLD' })
             .select([

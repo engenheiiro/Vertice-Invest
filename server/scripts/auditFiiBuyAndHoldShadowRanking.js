@@ -10,6 +10,7 @@
  *   node server/scripts/auditFiiBuyAndHoldShadowRanking.js --excluded # + motivos de exclusão
  */
 import mongoose from 'mongoose';
+import { connectScriptDb } from './lib/scriptDb.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,7 +27,7 @@ const AS_JSON = process.argv.includes('--json');
 const pad = (value, width) => String(value ?? '').padEnd(width).slice(0, width);
 const num = (value, width) => String(value ?? '—').padStart(width);
 
-await mongoose.connect(process.env.MONGO_URI);
+await connectScriptDb({ label: 'auditFiiBuyAndHoldShadowRanking' });
 try {
   const result = await fiiBuyAndHoldService.generateFiiBuyAndHoldRanking({ includeExcluded: SHOW_EXCLUDED });
 

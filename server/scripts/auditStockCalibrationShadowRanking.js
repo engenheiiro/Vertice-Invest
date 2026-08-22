@@ -7,6 +7,7 @@
  * Uso: node server/scripts/auditStockCalibrationShadowRanking.js
  */
 import mongoose from 'mongoose';
+import { connectScriptDb } from './lib/scriptDb.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -93,7 +94,7 @@ const compareSets = (current, shadow) => Object.fromEntries(PROFILES.map(profile
   }];
 }));
 
-await mongoose.connect(process.env.MONGO_URI);
+await connectScriptDb({ label: 'auditStockCalibrationShadowRanking' });
 try {
   const [rawData, macroConfig, activeCount, currentReport] = await Promise.all([
     marketDataService.getMarketData('STOCK'),
