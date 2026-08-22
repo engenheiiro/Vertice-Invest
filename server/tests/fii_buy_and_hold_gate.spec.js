@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { passesBuyAndHoldGate, resolveFiiSubType } from '../services/engines/fiiBuyAndHoldEngine.js';
+import { assessVacancy, passesBuyAndHoldGate, resolveFiiSubType } from '../services/engines/fiiBuyAndHoldEngine.js';
 import { FII_BUY_AND_HOLD_CONFIG } from '../config/fiiBuyAndHold.js';
 
 // Fixtures ancoradas na base de produção de 22/08/2026 (após o sync que consertou
@@ -24,6 +24,23 @@ const knsc11 = fii({
   sector: 'Papel', fiiSubType: 'PAPEL', isTier1: true,
   marketCap: 1_821_840_000, liquidity: 4_333_200, dy: 11.25,
   ffoYield: 13.68, ffoCota: 1.23, price: 9.01, volatility: 9.56,
+});
+
+// XPML11: 14 shoppings, R$ 6,3 bi, DY de 10,01% e FFO positivo — e a fonte
+// publica 91,81% de vacância. O número se desmente sozinho.
+const xpml11 = fii({
+  ticker: 'XPML11', name: 'Xp Malls Fundo Investimentos Imobiliarios',
+  sector: 'Shoppings', fiiSubType: 'TIJOLO',
+  marketCap: 6_327_910_000, liquidity: 16_255_300, dy: 10.01, vacancy: 91.81, qtdImoveis: 14,
+  ffoYield: 8.32, ffoCota: 8.19, price: 98.40, volatility: 9.4,
+});
+
+// PVBI11: 24,49% de vacância em 9 lajes corporativas — alto, mas plausível.
+const pvbi11 = fii({
+  ticker: 'PVBI11', name: 'Fundo De Investimento Imobiliario Vbi Prime Properties',
+  sector: 'Lajes Corporativas', fiiSubType: 'TIJOLO',
+  marketCap: 1_808_000_000, liquidity: 4_100_000, dy: 7.04, vacancy: 24.49, qtdImoveis: 9,
+  ffoYield: 8.11, ffoCota: 6.9, price: 85.1, volatility: 11.2,
 });
 
 // FII de papel de porte e liquidez sobrando, mas SEM a curadoria tier-1.
@@ -137,10 +154,8 @@ describe('passesBuyAndHoldGate (FII) — pisos quantitativos', () => {
     expect(gate.failures.some(f => f.startsWith('liquidez'))).toBe(true);
   });
 
-  // XPML11 chega da fonte com vacância de 91,81%. Certo ou errado o dado, o
-  // portão é fail-closed: não se carrega âncora com vacância que não se explica.
-  it('barra vacância acima do teto (XPML11, 91,81% na fonte)', () => {
-    const gate = passesBuyAndHoldGate({ ...hglg11, ticker: 'XPML11', metrics: { ...hglg11.metrics, vacancy: 91.81 } });
+  it('barra vacância alta e crível (PVBI11, 24,49% em 9 imóveis)', () => {
+    const gate = passesBuyAndHoldGate(pvbi11, FII_BUY_AND_HOLD_CONFIG);
     expect(gate.passed).toBe(false);
     expect(gate.failures.some(f => f.startsWith('vacância'))).toBe(true);
   });
@@ -166,6 +181,68 @@ describe('passesBuyAndHoldGate (FII) — pisos quantitativos', () => {
     const gate = passesBuyAndHoldGate(levered);
     expect(gate.passed).toBe(false);
     expect(gate.failures.some(f => f.startsWith('alavancagem'))).toBe(true);
+  });
+
+  // O campo que existe de verdade no MarketAsset é `debtToEquity` (`leverage` não
+  // existe em documento nenhum). Zero é "a fonte não publicou" — 371 de 371 FIIs
+  // estão assim —, então não pode reprovar nem virar nota.
+  it('lê alavancagem de debtToEquity e trata zero como ausente', () => {
+    const zeroed = { ...hglg11, metrics: { ...hglg11.metrics, debtToEquity: 0 } };
+    expect(passesBuyAndHoldGate(zeroed).passed).toBe(true);
+    const levered = { ...hglg11, metrics: { ...hglg11.metrics, debtToEquity: 45 } };
+    expect(passesBuyAndHoldGate(levered).failures.some(f => f.startsWith('alavancagem'))).toBe(true);
+  });
+});
+
+// A coluna "Vacância Média" do Fundamentus é inconfiável em parte da base — vem
+// errada DE LÁ (conferido na fonte em 22/08/2026, a raspagem lê a coluna certa).
+// A leitura só é descartada quando se contradiz; alta e crível continua barrando.
+describe('assessVacancy (FII) — leitura da fonte que se contradiz', () => {
+  it('descarta os 91,81% do XPML11: 14 imóveis pagando DY de 10% com FFO positivo', () => {
+    const assessment = assessVacancy(xpml11, FII_BUY_AND_HOLD_CONFIG);
+    expect(assessment.credible).toBe(false);
+    expect(assessment.value).toBeNull();
+    expect(assessment.raw).toBe(91.81);
+    expect(assessment.discardReason).toContain('desmentida pelo próprio caixa');
+
+    // Descartada => não barra, mas também não vira vacância zero.
+    expect(passesBuyAndHoldGate(xpml11, FII_BUY_AND_HOLD_CONFIG).passed).toBe(true);
+  });
+
+  it('descarta vacância impossível (LKDV11, 100,02%)', () => {
+    const impossible = { ...hglg11, metrics: { ...hglg11.metrics, vacancy: 100.02 } };
+    const assessment = assessVacancy(impossible, FII_BUY_AND_HOLD_CONFIG);
+    expect(assessment.credible).toBe(false);
+    expect(assessment.discardReason).toContain('impossível');
+  });
+
+  it('NÃO resgata fundo de fato vazio: sem renda para desmentir a leitura', () => {
+    // CPOF11 na base: 99,98% de vacância em 5 imóveis com DY de 3,19%. A vacância
+    // e o caixa contam a MESMA história — logo a leitura vale, e barra.
+    const empty = fii({
+      ticker: 'CPOF11', name: 'Capitania Office Properties FII', sector: 'Lajes Corporativas',
+      fiiSubType: 'TIJOLO', marketCap: 631_000_000, liquidity: 1_500_000, dy: 5.2,
+      vacancy: 99.98, qtdImoveis: 5, ffoYield: 3.12, ffoCota: 1.2, price: 38.5,
+    });
+    const assessment = assessVacancy(empty, FII_BUY_AND_HOLD_CONFIG);
+    expect(assessment.credible).toBe(true);
+    expect(passesBuyAndHoldGate(empty, FII_BUY_AND_HOLD_CONFIG).failures.some(f => f.startsWith('vacância'))).toBe(true);
+  });
+
+  it('NÃO resgata mono/bi-ativo esvaziado: poucos imóveis não desmentem nada', () => {
+    const concentrated = { ...xpml11, metrics: { ...xpml11.metrics, qtdImoveis: 2 } };
+    expect(assessVacancy(concentrated, FII_BUY_AND_HOLD_CONFIG).credible).toBe(true);
+    expect(passesBuyAndHoldGate(concentrated).failures.some(f => f.startsWith('vacância'))).toBe(true);
+  });
+
+  it('o resgate não é escape: vacância alta porém plausível continua barrando', () => {
+    // PVBI11 (24,49%) e BRCO11 (12,62%) estão abaixo do piso de implausibilidade:
+    // nem chegam a ser avaliados como contraditórios.
+    for (const vacancy of [12.62, 24.49, 42.96]) {
+      const asset = { ...xpml11, metrics: { ...xpml11.metrics, vacancy } };
+      expect(assessVacancy(asset, FII_BUY_AND_HOLD_CONFIG).credible).toBe(true);
+      expect(passesBuyAndHoldGate(asset).passed).toBe(false);
+    }
   });
 });
 

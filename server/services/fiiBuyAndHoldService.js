@@ -99,6 +99,10 @@ const compactRow = item => ({
   spreadPp: item.entry.spread,
   pFfo: round1(item.entry.pFfo),
   ffoCoverage: round1(item.ffoCoverage),
+  // `vacancy` null = leitura da fonte descartada por implausível (o motivo diz
+  // qual era). Nunca confundir com vacância zero.
+  vacancy: round1(item.vacancy?.value),
+  vacancyRaw: round1(item.vacancy?.raw),
   reason: item.reason,
 });
 

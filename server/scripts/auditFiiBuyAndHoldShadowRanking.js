@@ -39,7 +39,7 @@ try {
     console.log([
       pad('#', 4), pad('TICKER', 9), pad('SEGMENTO', 20), pad('GESTORA', 13),
       num('SCORE', 6), num('COMP', 5), num('DUR', 4), num('RES', 4), num('CON', 4),
-      num('SPRD', 6), num('P/FFO', 6), num('COB', 5), pad('  AÇÃO', 9), 'MOTIVO',
+      num('SPRD', 6), num('P/FFO', 6), num('COB', 5), num('VAC', 6), pad('  AÇÃO', 9), 'MOTIVO',
     ].join(' '));
     console.log('-'.repeat(160));
     for (const row of result.ranking) {
@@ -48,6 +48,8 @@ try {
         num(row.score, 6), num(row.composite, 5),
         num(row.axes.durability, 4), num(row.axes.resilience, 4), num(row.axes.consistency, 4),
         num(row.spreadPp, 6), num(row.pFfo, 6), num(row.ffoCoverage, 5),
+        // "!" = a fonte publicou um número e ele foi descartado por implausível.
+        num(row.vacancy === null && row.vacancyRaw !== null ? `!${row.vacancyRaw}` : row.vacancy, 6),
         pad(`  ${row.action === 'BUY' ? 'COMPRAR' : 'AGUARDAR'}`, 9), row.reason,
       ].join(' '));
     }

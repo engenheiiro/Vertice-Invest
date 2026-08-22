@@ -33,13 +33,22 @@ const upper = ticker => String(ticker || '').trim().toUpperCase();
 
 const clamp = value => Math.min(100, Math.max(0, Number(value) || 0));
 
+// AUSENTE tem que chegar como null nas duas pontas: `Number(null)` é 0, e 0 numa
+// escala lowerBetter viraria NOTA MÁXIMA de graça (alavancagem que a fonte não
+// publica) e numa escala higherBetter viraria NOTA ZERO (cobertura de FFO que a
+// fonte não publica). Dado que não existe não vira nota nenhuma — o peso é
+// redistribuído em averageObserved.
+const absent = value => value === null || value === undefined || value === '';
+
 const higherBetter = (value, floor, target) => {
+  if (absent(value)) return null;
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return null;
   return clamp(((numeric - floor) / (target - floor)) * 100);
 };
 
 const lowerBetter = (value, target, ceiling) => {
+  if (absent(value)) return null;
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return null;
   return clamp(((ceiling - numeric) / (ceiling - target)) * 100);
@@ -117,6 +126,67 @@ export const computeFfoCoverage = asset => {
 };
 
 /**
+ * Alavancagem em % do PL. Vem de `debtToEquity` (o campo que o MarketAsset tem
+ * de fato); `leverage` fica aceito por compatibilidade caso a ingestão passe a
+ * publicá-lo. Zero é AUSENTE, não "sem dívida": a fonte não publica dívida de
+ * FII, e tratar 0 como ótimo daria nota máxima de graça a 371 fundos.
+ */
+const readLeverage = asset => {
+  const explicit = Number(readMetric(asset, 'leverage'));
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  const debtToEquity = Number(readMetric(asset, 'debtToEquity'));
+  if (Number.isFinite(debtToEquity) && debtToEquity > 0) return debtToEquity;
+  return null;
+};
+
+/**
+ * Vacância utilizável, ou nada. A coluna "Vacância Média" do Fundamentus publica
+ * valores impossíveis e atribui vacância de dois dígitos altos a fundos de
+ * ocupação plena (XPML11 91,81%, HSML11 85,82% — conferido na fonte). Quando a
+ * leitura se contradiz, ela é descartada: vira AUSENTE (sem penalidade e sem
+ * bônus, com teto de confiança), nunca vacância zero.
+ *
+ * Descartar é estreito de propósito — só cai o impossível e o auto-contraditório
+ * (carteira meio vazia pagando renda normal, com FFO positivo, em vários
+ * imóveis). Fundo de fato vazio continua com a vacância valendo, e barrando.
+ */
+export const assessVacancy = (asset, config = FII_BUY_AND_HOLD_CONFIG) => {
+  const rule = config.gate.vacancy;
+  const raw = Number(readMetric(asset, 'vacancy'));
+
+  if (!Number.isFinite(raw) || raw < 0) {
+    return { value: null, credible: false, raw: null, discardReason: 'vacância ausente na fonte' };
+  }
+  if (raw > rule.maxPossible) {
+    return {
+      value: null,
+      credible: false,
+      raw,
+      discardReason: `vacância de ${raw.toFixed(2)}% é impossível — dado inválido na fonte`,
+    };
+  }
+  if (raw < rule.implausibleFrom) return { value: raw, credible: true, raw, discardReason: null };
+
+  // Metade ou mais da carteira vazia: só acreditamos se o caixa do fundo
+  // acompanhar. Vários imóveis + renda normal + FFO positivo desmentem a leitura.
+  const properties = Number(readMetric(asset, 'qtdImoveis'));
+  const dy = Number(readMetric(asset, 'dy'));
+  const ffoYield = sanitizeFfoYield(readMetric(asset, 'ffoYield'), config);
+  const contradicted = properties >= rule.minPropertiesForImplausible
+    && dy >= rule.minDyForImplausible
+    && ffoYield !== null && ffoYield > 0;
+
+  if (!contradicted) return { value: raw, credible: true, raw, discardReason: null };
+  return {
+    value: null,
+    credible: false,
+    raw,
+    discardReason: `vacância de ${raw.toFixed(2)}% desmentida pelo próprio caixa `
+      + `(${properties} imóveis pagando DY de ${dy.toFixed(2)}% com FFO de ${ffoYield.toFixed(2)}%)`,
+  };
+};
+
+/**
  * Qualidade da casa gestora: tier-1 curado > gestora conhecida e mapeada >
  * gestora desconhecida. Proxy honesto — mede reputação e rastreabilidade da
  * casa, não performance passada do fundo.
@@ -182,17 +252,19 @@ export const passesBuyAndHoldGate = (asset, config = FII_BUY_AND_HOLD_CONFIG) =>
 
   // Alavancagem: fail-open — o Fundamentus não publica o dado para FII hoje, então
   // só reprova quando o número EXISTE e estoura. Não punir ausência de cobertura.
-  const leverage = Number(readMetric(asset, 'leverage'));
-  if (Number.isFinite(leverage) && leverage > gate.maxLeverage) {
+  const leverage = readLeverage(asset);
+  if (leverage !== null && leverage > gate.maxLeverage) {
     failures.push(`alavancagem acima de ${gate.maxLeverage}%`);
   }
 
   // 6. Pisos de tijolo: vacância e número de imóveis. Inaplicáveis a papel — cobrá-los
   // de um FII de CRI seria reprovar por dado estruturalmente inexistente. É também o
   // filtro que separa "híbrido de tijolo" de "híbrido de papel": sem imóveis, cai aqui.
+  const vacancy = assessVacancy(asset, config);
   if (!isPaper && !excludedByNature) {
-    const vacancy = Number(readMetric(asset, 'vacancy'));
-    if (!(Number.isFinite(vacancy) && vacancy <= gate.maxVacancy)) {
+    // Só barra por vacância CRÍVEL. Leitura descartada não reprova nem aprova:
+    // vira lacuna declarada, com teto de confiança no score.
+    if (vacancy.credible && vacancy.value > gate.maxVacancy) {
       failures.push(`vacância acima de ${gate.maxVacancy}%`);
     }
     const properties = Number(readMetric(asset, 'qtdImoveis'));
@@ -201,7 +273,7 @@ export const passesBuyAndHoldGate = (asset, config = FII_BUY_AND_HOLD_CONFIG) =>
     }
   }
 
-  return { passed: failures.length === 0, failures, subType, isPaper };
+  return { passed: failures.length === 0, failures, subType, isPaper, vacancy };
 };
 
 /** Eixos 0–100 + flags de observação. Só faz sentido para quem passou no portão. */
@@ -211,13 +283,14 @@ export const computeBuyAndHoldAxes = (asset, gateInfo = {}, config = FII_BUY_AND
   const consistencyInput = asset.consistency || {};
 
   const coverage = computeFfoCoverage(asset);
+  const vacancy = gateInfo.vacancy || assessVacancy(asset, config);
 
   // Durabilidade — qualidade do imóvel e do inquilino. Vacância e diversificação
   // são inaplicáveis a papel: ficam ausentes e o peso é redistribuído (mesmo
   // princípio do teto de confiança de FII no scoringEngine).
   const durability = averageObserved([
     part('structuralQuality', clamp(structural.quality), 0.30),
-    part('vacancy', isPaper ? null : lowerBetter(readMetric(asset, 'vacancy'), 3, 15), 0.25),
+    part('vacancy', isPaper ? null : lowerBetter(vacancy.value, 3, 15), 0.25),
     // Acima de ~10 imóveis a diversificação adiciona pouco; pesa menos que a
     // cobertura do provento, que é de primeira ordem numa âncora de renda.
     part('propertyDiversification', isPaper ? null : higherBetter(readMetric(asset, 'qtdImoveis'), 1, 30), 0.15),
@@ -232,7 +305,7 @@ export const computeBuyAndHoldAxes = (asset, gateInfo = {}, config = FII_BUY_AND
     part('liquidity', higherBetter(readMetric(asset, 'avgLiquidity'), 1_000_000, 20_000_000), 0.25),
     part('size', higherBetter(readMetric(asset, 'marketCap'), 500_000_000, 5_000_000_000), 0.20),
     part('manager', managerQuality(asset), 0.15),
-    part('leverage', lowerBetter(readMetric(asset, 'leverage'), 10, 40), 0.15),
+    part('leverage', lowerBetter(readLeverage(asset), 10, 40), 0.15),
   ]);
 
   // Consistência — regularidade da renda através do ciclo. O streak plurianual
@@ -250,6 +323,7 @@ export const computeBuyAndHoldAxes = (asset, gateInfo = {}, config = FII_BUY_AND
   const distributionVerified = Number.isFinite(Number(consistencyInput.distributionStreakYears));
 
   return {
+    vacancy,
     durability: durability.score,
     resilience: resilience.score,
     consistency: consistency.score,
@@ -389,7 +463,14 @@ export const scoreBuyAndHold = (asset, context = {}, config = FII_BUY_AND_HOLD_C
   const entry = computeEntryPenalty(asset, context, config);
   const rawScore = clamp(composite - entry.penalty);
 
-  const confidenceCap = axes.distributionVerified ? 100 : config.gate.distribution.capWhenUnverified;
+  // Tetos de confiança: o menor manda. Um fundo de tijolo cuja vacância teve de
+  // ser descartada não é reprovado por isso, mas também não sobe até o topo com
+  // uma lacuna no eixo que mais pesa na durabilidade.
+  const vacancyUnverified = !gate.isPaper && !axes.vacancy.credible;
+  const confidenceCap = Math.min(
+    axes.distributionVerified ? 100 : config.gate.distribution.capWhenUnverified,
+    vacancyUnverified ? config.gate.vacancy.capWhenUnverified : 100,
+  );
   const score = Math.min(rawScore, confidenceCap);
 
   // Provento não coberto pelo FFO veta o COMPRAR sem excluir o fundo da lista:
@@ -416,8 +497,12 @@ export const scoreBuyAndHold = (asset, context = {}, config = FII_BUY_AND_HOLD_C
     confidenceCap,
     score,
     action,
-    reason: buildReason({ action, entry, composite, axes, payoutUncovered }),
+    // A lacuna vai escrita no motivo: quem lê a lista precisa saber que a
+    // vacância daquele fundo foi descartada, não que ela é zero.
+    reason: buildReason({ action, entry, composite, axes, payoutUncovered })
+      + (vacancyUnverified && axes.vacancy.raw !== null ? ` · ${axes.vacancy.discardReason}` : ''),
     audit: axes.audit,
+    vacancy: axes.vacancy,
     ffoCoverage: axes.ffoCoverage,
     payoutUncovered,
     distributionVerified: axes.distributionVerified,

@@ -207,6 +207,57 @@ describe('eixos — dados inaplicáveis não viram nota baixa', () => {
     expect(paper.axes.durability).toBeGreaterThan(0);
     expect(brick.audit.durability.map(c => c.metric)).toContain('vacancy');
   });
+
+  // Alavancagem de FII não existe na base (371 de 371 com debtToEquity = 0). Se o
+  // ausente entrasse na escala como zero, "sem dívida publicada" viraria nota 100
+  // de resiliência de graça — o oposto do que o dado diz.
+  it('alavancagem ausente não vira nota máxima de resiliência', () => {
+    const r = scoreBuyAndHold(pmll11, CONTEXT);
+    expect(r.audit.resilience.map(c => c.metric)).not.toContain('leverage');
+
+    const levered = { ...pmll11, metrics: { ...pmll11.metrics, debtToEquity: 12 } };
+    expect(scoreBuyAndHold(levered, CONTEXT).audit.resilience.map(c => c.metric)).toContain('leverage');
+  });
+
+  // Espelho do anterior na outra ponta da escala: cobertura de FFO ausente não
+  // pode virar nota ZERO de durabilidade.
+  it('cobertura de FFO ausente não vira nota zero de durabilidade', () => {
+    const noFfo = { ...pmll11, metrics: { ...pmll11.metrics, ffoYield: 0, ffoCota: 0 } };
+    const r = scoreBuyAndHold(noFfo, CONTEXT);
+    expect(r.ffoCoverage).toBeNull();
+    expect(r.audit.durability.map(c => c.metric)).not.toContain('ffoCoverage');
+    expect(r.axes.durability).toBeGreaterThan(scoreBuyAndHold(pmll11, CONTEXT).axes.durability - 30);
+  });
+});
+
+// A fonte publica 91,81% de vacância para o XPML11 (14 shoppings, R$ 6,3 bi,
+// DY de 10% e FFO positivo). Descartar o número não pode virar "vacância zero".
+describe('vacância descartada — lacuna declarada, não nota', () => {
+  const xpml11 = fii({
+    ticker: 'XPML11', name: 'XP Malls FII', sector: 'Shoppings', fiiSubType: 'TIJOLO',
+    marketCap: 6_327_910_000, liquidity: 16_255_300, dy: 10.01, vacancy: 91.81, qtdImoveis: 14,
+    ffoYield: 8.32, ffoCota: 8.19, price: 98.40, volatility: 9.4, quality: 80, risk: 80,
+  });
+
+  it('entra no universo, mas sem componente de vacância na durabilidade', () => {
+    const r = scoreBuyAndHold(xpml11, CONTEXT);
+    expect(r.eligible).toBe(true);
+    expect(r.vacancy.credible).toBe(false);
+    expect(r.audit.durability.map(c => c.metric)).not.toContain('vacancy');
+  });
+
+  it('paga teto de confiança de 85 e escreve a lacuna no motivo', () => {
+    const r = scoreBuyAndHold(xpml11, CONTEXT);
+    expect(r.confidenceCap).toBe(85);
+    expect(r.score).toBeLessThanOrEqual(85);
+    expect(r.reason).toContain('desmentida pelo próprio caixa');
+  });
+
+  it('descartar não é dar nota boa: 0% de vacância pontua mais', () => {
+    const clean = { ...xpml11, metrics: { ...xpml11.metrics, vacancy: 2 } };
+    expect(scoreBuyAndHold(clean, CONTEXT).axes.durability)
+      .toBeGreaterThan(scoreBuyAndHold(xpml11, CONTEXT).axes.durability);
+  });
 });
 
 describe('buildBuyAndHoldRanking (FII)', () => {

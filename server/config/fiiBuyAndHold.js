@@ -57,14 +57,39 @@ export const FII_BUY_AND_HOLD_CONFIG = Object.freeze({
     minMarketCap: 500_000_000, // R$ 500 M — piso de porte/estabilidade do setor
     minAvgLiquidity: 1_000_000, // R$ 1 M/dia — execução real sem slippage
     maxVacancy: 12, // % — mesmo teto do gate Defensivo do scoringEngine
+    // O campo "Vacância Média" do Fundamentus não é confiável em toda a base.
+    // Conferido contra a página da fonte em 22/08/2026 (a raspagem lê a coluna
+    // certa): a própria fonte publica valores impossíveis — EDFO11 100,03%,
+    // LKDV11 100,02% — e atribui 91,81% ao XPML11 e 85,82% ao HSML11, dois dos
+    // maiores FIIs de shopping do país, ambos com ocupação real acima de 95% e
+    // pagando renda normal. O número vem errado de lá, não daqui.
+    //
+    // Não há como consertá-lo (a fonte não expõe a base de cálculo), então ele é
+    // DESCARTADO quando se contradiz — e descartar significa AUSENTE (sem
+    // penalidade, sem bônus, com teto de confiança), nunca "vacância zero".
+    // O descarte é estreito de propósito: só cai o que é impossível (> 100%) ou
+    // o que reporta metade da carteira vazia enquanto paga renda normal, com FFO
+    // positivo, em vários imóveis — combinação que não existe no mundo real.
+    // Fundo de fato vazio continua barrado: CPOF11 (99,98% com DY 3,19%) e
+    // FTCE11 (63% com DY 1,93%) não são resgatados.
+    vacancy: Object.freeze({
+      maxPossible: 100, // acima disso não é taxa de vacância, é lixo
+      implausibleFrom: 50, // metade da carteira vazia…
+      minPropertiesForImplausible: 5, // …num fundo multi-imóvel…
+      minDyForImplausible: 6, // …que ainda paga renda normal com FFO positivo
+      capWhenUnverified: 85,
+    }),
     minProperties: 2, // mono-ativo de tijolo não é âncora
     minDy: 4, // sem renda corrente não é âncora de renda
     // Armadilha de yield: acima disso o DY é amortização/evento não recorrente,
     // não renda. Mesmo limiar que o scoringEngine já usa para FII.
     maxDy: FII_YIELD_TRAP_THRESHOLD,
-    // Alavancagem (% do PL). O Fundamentus não publica esse dado para FII hoje —
-    // o critério fica fail-open (só reprova quando o número EXISTE e estoura),
-    // pronto para o dia em que a ingestão cobrir alavancagem.
+    // Alavancagem (% do PL, lida de `debtToEquity` — o campo que existe no
+    // MarketAsset; `leverage` não existe em nenhum documento). O Fundamentus não
+    // publica dívida de FII: o campo é 0 em 371 de 371 fundos, e 0 aqui significa
+    // "não publicado", não "sem dívida" — por isso entra como AUSENTE, sem virar
+    // nota máxima de resiliência. Critério fail-open: só reprova quando o número
+    // EXISTE e estoura, pronto para o dia em que a ingestão cobrir alavancagem.
     maxLeverage: 30,
     // Papel/CRI só entra se for tier-1. Ao contrário das ações — onde `isTier1`
     // nunca é populada e exigi-la reprovava todo banco (commit 54e62a5) — em FII
