@@ -10,11 +10,25 @@
  * permanece intocada. Este módulo é data-only; a lógica vive em
  * server/services/engines/fiiBuyAndHoldEngine.js.
  *
- * Pisos calibrados contra a base de produção em 22/08/2026 (371 FIIs não
- * blacklistados): a configuração abaixo deixa 28 elegíveis de 19 gestoras
- * distintas — a "configuração B (Equilibrado)" do estudo de maturidade
+ * Pisos calibrados contra a base de produção (371 FIIs não blacklistados) na
+ * "configuração B (Equilibrado)" do estudo de maturidade
  * (planejamento/ESTUDO-MATURIDADE-RANKING-2026-08.html). A configuração ampla
  * testada dava 54 nomes, 28 deles de papel: concentração inaceitável em crédito.
+ *
+ * A CONTAGEM DE ELEGÍVEIS NÃO MORA AQUI. Ela muda a cada sync e envelhece mais
+ * rápido que o comentário: a leitura de 28 elegíveis / 19 gestoras registrada
+ * neste cabeçalho já estava errada no dia seguinte ao commit — o resgate de
+ * vacância implausível (1c0c739) devolveu XPML11 e HSML11 à lista, e a
+ * consolidação de prefixos do fiiManagerMap juntou fundos que antes contavam
+ * como casas distintas (menos gestoras porque a contagem ficou mais correta,
+ * não porque a lista piorou). A fonte de verdade é o script de auditoria:
+ *
+ *   node server/scripts/auditFiiBuyAndHoldShadowRanking.js
+ *
+ * Ele imprime analisados/elegíveis/gestoras, a composição da lista de COMPRAR e
+ * os motivos de exclusão, sempre contra o estado atual da base. Em 22/08/2026,
+ * como referência histórica, ele dava 122 analisados · 30 elegíveis (15
+ * gestoras) · 3 COMPRAR.
  */
 
 import { FII_YIELD_TRAP_THRESHOLD } from './financialConstants.js';
