@@ -3,6 +3,7 @@ import MarketAnalysis from '../models/MarketAnalysis.js';
 import TreasuryBond from '../models/TreasuryBond.js';
 import QuantSignal from '../models/QuantSignal.js';
 import MarketAsset from '../models/MarketAsset.js';
+import AssetHistory from '../models/AssetHistory.js';
 import SystemConfig from '../models/SystemConfig.js';
 import RecommendedPortfolioCurve from '../models/RecommendedPortfolioCurve.js';
 import DiscardLog from '../models/DiscardLog.js'; // Novo
@@ -18,7 +19,8 @@ import { backfillSectors } from '../services/sectorBackfillService.js';
 import { signalEngine } from '../services/engines/signalEngine.js';
 import { LIMITS_CONFIG, getSignalAccess } from '../config/subscription.js';
 import { normalizeTreasuryBonds } from '../utils/fixedIncomeView.js';
-import { V2_SIGNAL_START_DATE } from '../config/financialConstants.js';
+import { HISTORY_CAP_EXEMPT_TICKERS, V2_SIGNAL_START_DATE } from '../config/financialConstants.js';
+import { historyStorageKey } from '../utils/assetHistory.js';
 import logger from '../config/logger.js';
 import { validateFundamentalsPublicationHealth } from '../utils/ingestionHealth.js';
 import {
@@ -262,15 +264,46 @@ export const getDataQualityStats = async (req, res, next) => {
         const inactiveCount = await MarketAsset.countDocuments({ isActive: false, failCount: { $gte: 10 } });
         const totalAssets = await MarketAsset.countDocuments({});
         
-        // Calcular Idade Média das Séries Temporais
-        const { AssetHistory } = await import('../models/AssetHistory.js').then(m => m.default ? { AssetHistory: m.default } : m);
-        const histories = await AssetHistory.find({}, 'lastUpdated');
+        // Idade média das séries temporais — só da COORTE QUE O SISTEMA MANTÉM.
+        //
+        // A média era tirada sobre `AssetHistory.find({})`, a coleção inteira. Só que
+        // a coleção guarda documentos que ninguém atualiza: chaves de uma convenção
+        // de armazenamento antiga (163 documentos com sufixo `.SA`, congelados em
+        // 31/07/2026) e séries de ativos que saíram do universo. Eles não envelhecem
+        // por defeito — envelhecem porque não têm dono.
+        //
+        // O efeito no painel não era cosmético: o card fica VERMELHO acima de 48h, e
+        // a média contaminada marcava 116,7h contra 40,0h da coorte real (medição de
+        // 22/08/2026, 166 órfãos em 1.472 documentos). Ou seja, alarme permanente de
+        // uma defasagem que não existia — o tipo de alerta que ensina a ignorar alerta.
+        //
+        // A coorte é a MESMA do timeSeriesWorker (`isActive: true`, chave resolvida
+        // por historyStorageKey), mais os tickers isentos de cap, que o macro e o
+        // câmbio mantêm por fora. Assim a métrica responde "as séries que eu cuido
+        // estão atualizadas?" em vez de "o que existe na coleção é recente?".
+        const maintainedAssets = await MarketAsset.find({ isActive: true }).select('ticker type').lean();
+        const cohortKeys = [...new Set([
+            ...maintainedAssets.map(a => historyStorageKey(a.ticker, a.type)).filter(Boolean),
+            ...HISTORY_CAP_EXEMPT_TICKERS,
+        ])];
+
+        const [histories, totalSeries] = await Promise.all([
+            AssetHistory.find({ ticker: { $in: cohortKeys } }, 'lastUpdated').lean(),
+            AssetHistory.countDocuments({}),
+        ]);
+
+        // `lastUpdated` ausente vira documento IGNORADO, nunca idade zero: sem o
+        // filtro, `new Date(undefined)` é NaN e contamina a soma inteira, zerando a
+        // métrica em vez de acusar o problema.
+        const dated = histories.filter(h => h.lastUpdated);
         let avgAgeHours = 0;
-        if (histories.length > 0) {
-            const now = new Date();
-            const totalAgeMs = histories.reduce((sum, h) => sum + (now - new Date(h.lastUpdated)), 0);
-            avgAgeHours = (totalAgeMs / histories.length) / (1000 * 60 * 60);
+        if (dated.length > 0) {
+            const now = Date.now();
+            const totalAgeMs = dated.reduce((sum, h) => sum + (now - new Date(h.lastUpdated).getTime()), 0);
+            avgAgeHours = (totalAgeMs / dated.length) / (1000 * 60 * 60);
         }
+        // Fora da coorte deixa de ser distorção invisível e passa a ser número.
+        const orphanSeries = Math.max(0, totalSeries - histories.length);
 
         res.json({
             typosFixed: config?.lastSyncStats?.typosFixed || 0,
@@ -280,6 +313,8 @@ export const getDataQualityStats = async (req, res, next) => {
             blacklistedAssets: inactiveCount,
             totalAssets,
             timeSeriesAgeHours: avgAgeHours,
+            timeSeriesTracked: dated.length,
+            timeSeriesOrphans: orphanSeries,
             timeSeriesStats: config?.lastTimeSeriesStats || { assetsProcessed: 0, timestamp: null },
             lastUSFundamentalsSync: config?.lastUSFundamentalsSync || null
         });

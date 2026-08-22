@@ -140,6 +140,16 @@ export const AdminPainelTab: React.FC<Props> = ({
                             </div>
                             <p className={`text-[9px] mt-0.5 font-bold ${qualityStats?.timeSeriesAgeHours > 48 ? 'text-red-500' : 'text-emerald-500'}`}>
                                 {qualityStats ? (qualityStats.timeSeriesAgeHours > 48 ? 'ALERTA: Defasado' : 'Saudável') : '...'}
+                                {/* A idade é a da coorte mantida. Mostrar o tamanho dela e o
+                                    que ficou de fora deixa explícito o que o número cobre —
+                                    a média sobre a coleção inteira acendia o vermelho por
+                                    documentos que ninguém atualiza. */}
+                                {qualityStats?.timeSeriesTracked ? (
+                                    <span className="text-slate-500 font-medium">
+                                        {' '}· {qualityStats.timeSeriesTracked} séries
+                                        {qualityStats.timeSeriesOrphans ? ` · ${qualityStats.timeSeriesOrphans} fora da coorte` : ''}
+                                    </span>
+                                ) : null}
                             </p>
                         </div>
                     </div>
