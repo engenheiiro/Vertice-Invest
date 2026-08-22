@@ -27,6 +27,20 @@
  * custaram um parágrafo de explicação em `dataHealthService` e mantinham o card
  * "Séries Temporais" do painel admin vermelho a 116,8h contra 13,8h reais.
  *
+ * DECISÃO (22/08/2026): MANTER. Nem apagar, nem mesclar nas chaves vivas.
+ *  · Elas provaram valer: o `HSRE11.SA` era a ÚNICA cópia dos 623 candles que a
+ *    série viva perdeu quando a fonte degradou, e foi de onde a restauração saiu
+ *    (`restoreOrphanSeriesDepth.js`). Depois de o worker passar a gravar por
+ *    mescla, elas seguem sendo a rede para esse tipo de falha.
+ *  · Mesclar as 160 de "profundidade" não é de graça e nem é reversível na
+ *    prática: a catraca de `mergeCandleSeries` fixa o teto no tamanho já
+ *    guardado, então aprofundar 160 séries CONGELA esses ~24 MB em regime
+ *    permanente. Isso é decisão de custo de armazenamento, do dono, e não é
+ *    urgente — a coleção está em 78,6 MB contra os ~161 MB que motivaram o cap.
+ *  · Apagar troca uma rede de segurança por 24 MB que ninguém está precisando.
+ * Revisitar se a coleção se aproximar do limite do cluster, ou se o roadmap
+ * decidir levantar o cap para o universo de pesquisa.
+ *
  * Uso:
  *   node server/scripts/auditOrphanSeries.js            # resumo
  *   node server/scripts/auditOrphanSeries.js --listar   # + uma linha por documento
