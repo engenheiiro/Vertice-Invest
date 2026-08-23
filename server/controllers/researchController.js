@@ -13,6 +13,9 @@ import { aiResearchService } from '../services/aiResearchService.js';
 import { aiEnhancementService } from '../services/aiEnhancementService.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { buyAndHoldService } from '../services/buyAndHoldService.js';
+import { fiiBuyAndHoldService } from '../services/fiiBuyAndHoldService.js';
+import { anchorPublicationService } from '../services/anchorPublicationService.js';
+import { ANCHOR_STRATEGY } from '../config/buyAndHoldPublication.js';
 import { macroDataService } from '../services/macroDataService.js';
 import { syncService } from '../services/syncService.js';
 import { backfillSectors } from '../services/sectorBackfillService.js';
@@ -555,7 +558,34 @@ export const getReportDetails = async (req, res, next) => { try { const report =
 export const getBuyAndHoldShadow = async (req, res, next) => {
     try {
         const includeExcluded = req.query.excluded === 'true' || req.query.excluded === '1';
-        const result = await buyAndHoldService.generateBuyAndHoldRanking({ includeExcluded });
+        const assetClass = req.query.assetClass === 'FII' ? 'FII' : 'STOCK';
+        const result = assetClass === 'FII'
+            ? await fiiBuyAndHoldService.generateFiiBuyAndHoldRanking({ includeExcluded })
+            : await buyAndHoldService.generateBuyAndHoldRanking({ includeExcluded });
+        res.json(result);
+    } catch (error) { next(error); }
+};
+
+// Publicação sob demanda da lista âncora (estratégia BUY_AND_HOLD). O cron é
+// mensal; isto é a válvula manual do admin — e, com `dryRun`, a prévia do que
+// iria ao ar, calculada pelo MESMO caminho que o cron usa.
+//
+// Não toca na estratégia legada BUY_HOLD: outro ponteiro, outro documento.
+export const publishAnchorRankingHandler = async (req, res, next) => {
+    try {
+        const { assetClass, dryRun } = req.body || {};
+        if (assetClass) {
+            const result = await anchorPublicationService.publishAnchorRanking({
+                assetClass,
+                dryRun,
+                activatedBy: req.user?.id || null,
+            });
+            return res.json({ strategy: ANCHOR_STRATEGY, dryRun: !!dryRun, results: [result] });
+        }
+        const result = await anchorPublicationService.runAnchorPublication({
+            dryRun,
+            activatedBy: req.user?.id || null,
+        });
         res.json(result);
     } catch (error) { next(error); }
 };

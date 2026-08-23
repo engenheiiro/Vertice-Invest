@@ -94,6 +94,12 @@ const compactRow = item => ({
   // Presente só quando o fundo seria COMPRAR e foi segurado pelo teto de
   // composição da lista publicável (papel ou gestora).
   publicationLimit: item.publicationLimit,
+  currentPrice: item.currentPrice ?? null,
+  targetPrice: item.targetPrice ?? null,
+  // Travamentos de AGUARDAR que NÃO são o limiar de score. A histerese da
+  // publicação cede no score e em mais nada — precisa saber distinguir.
+  expensive: !!item.entry.expensive,
+  payoutUncovered: !!item.payoutUncovered,
   reason: item.reason,
 });
 
@@ -105,6 +111,14 @@ const compactRow = item => ({
 export const generateFiiBuyAndHoldRanking = async ({ includeExcluded = false } = {}) => {
   const { candidates, macro } = await buildCandidates();
   const result = buildBuyAndHoldRanking(candidates, { MACRO: macro }, FII_BUY_AND_HOLD_CONFIG);
+  // O motor é função pura de SCORE e não devolve preço; a tela âncora precisa
+  // mostrar preço atual x preço justo, então recolamos os dois do candidato.
+  const priceByTicker = new Map(candidates.map(c => [c.ticker, c]));
+  for (const item of result.ranking) {
+    const source = priceByTicker.get(item.ticker);
+    item.currentPrice = source?.currentPrice ?? null;
+    item.targetPrice = source?.targetPrice ?? null;
+  }
 
   const excludedByReason = Object.entries(
     result.excluded.reduce((counts, item) => {

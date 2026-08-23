@@ -20,3 +20,13 @@ export const enhanceResearchSchema = z.object({
     strategy: z.literal('BUY_HOLD').default('BUY_HOLD'),
   }).strict(),
 });
+
+// Publicação sob demanda da estratégia âncora (BUY_AND_HOLD). Só STOCK e FII
+// têm motor âncora; `dryRun` calcula e valida sem escrever nada, que é como o
+// admin confere o que iria ao ar antes de mandar ao ar.
+export const anchorPublishSchema = z.object({
+  body: z.object({
+    assetClass: z.enum(['STOCK', 'FII']).optional(),
+    dryRun: z.boolean().optional().default(false),
+  }).strict(),
+});

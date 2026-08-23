@@ -26,7 +26,8 @@ import {
     generateExplainableAI,
     runStorageCleanupHandler,
     backfillSectorsHandler,
-    getBuyAndHoldShadow
+    getBuyAndHoldShadow,
+    publishAnchorRankingHandler
 } from '../controllers/researchController.js';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 import { researchHeavyLimiter, researchReadLimiter, adminLimiter } from '../middleware/rateLimiters.js';
@@ -39,7 +40,7 @@ import {
 } from '../controllers/healthController.js';
 import validate from '../middleware/validateResource.js';
 import { tunablesPatchSchema } from '../schemas/configSchemas.js';
-import { enhanceResearchSchema, publishResearchSchema } from '../schemas/researchSchemas.js';
+import { anchorPublishSchema, enhanceResearchSchema, publishResearchSchema } from '../schemas/researchSchemas.js';
 
 const router = express.Router();
 
@@ -64,9 +65,14 @@ router.post('/publish', adminLimiter, requireAdmin, validate(publishResearchSche
 router.get('/history', adminLimiter, requireAdmin, listReports);
 router.get('/details/:id', adminLimiter, requireAdmin, getReportDetails);
 
-// Ranking Buy-and-Hold em shadow (admin-only). Cálculo on-demand sobre todo o
-// universo STOCK — usa o limiter pesado (20/15min).
+// Ranking âncora cru, sem histerese nem publicação (admin-only). Cálculo
+// on-demand sobre todo o universo STOCK ou FII — usa o limiter pesado (20/15min).
 router.get('/buy-and-hold/shadow', researchHeavyLimiter, requireAdmin, getBuyAndHoldShadow);
+
+// Válvula manual da publicação âncora (o cron é mensal). `dryRun: true` devolve
+// exatamente o que iria ao ar sem escrever nada. Rota cara: varre o universo
+// inteiro e roda os dois motores, então vai no researchHeavyLimiter.
+router.post('/anchor/publish', researchHeavyLimiter, requireAdmin, validate(anchorPublishSchema), publishAnchorRankingHandler);
 
 router.post('/sync-market', researchHeavyLimiter, requireAdmin, triggerMarketSync);
 router.post('/backfill-sectors', researchHeavyLimiter, requireAdmin, backfillSectorsHandler);

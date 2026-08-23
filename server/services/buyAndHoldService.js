@@ -77,11 +77,17 @@ const compactRow = item => ({
   sector: item.sector,
   archetype: item.archetype,
   score: item.score,
+  composite: item.composite,
   action: item.action,
   axes: item.axes,
+  currentPrice: item.currentPrice ?? null,
+  targetPrice: item.targetPrice ?? null,
   premiumPct: item.entry.premium === null || item.entry.premium === undefined
     ? null
     : Math.round(item.entry.premium * 1000) / 10,
+  // Travamento de AGUARDAR que NÃO é o limiar de score. A histerese da
+  // publicação precisa distinguir os dois: ela cede no score, nunca no preço.
+  expensive: !!item.entry.expensive,
   reason: item.reason,
 });
 
@@ -93,6 +99,14 @@ const compactRow = item => ({
 export const generateBuyAndHoldRanking = async ({ includeExcluded = false } = {}) => {
   const { candidates, macro } = await buildCandidates();
   const result = buildBuyAndHoldRanking(candidates, BUY_AND_HOLD_CONFIG);
+  // O motor é função pura de SCORE e não devolve preço; a tela âncora precisa
+  // mostrar preço atual x preço justo, então recolamos os dois do candidato.
+  const priceByTicker = new Map(candidates.map(c => [c.ticker, c]));
+  for (const item of result.ranking) {
+    const source = priceByTicker.get(item.ticker);
+    item.currentPrice = source?.currentPrice ?? null;
+    item.targetPrice = source?.targetPrice ?? null;
+  }
 
   const excludedByReason = Object.entries(
     result.excluded.reduce((counts, item) => {

@@ -45,8 +45,14 @@ export const pendingSectionsFor = (analysis) => (
 );
 
 export const prepareRankingForPublication = (analysis) => {
-  const finalized = finalizeRanking(analysis?.content?.ranking || []);
-  const validation = validateRankingContract(finalized);
+  // O contrato de ranking é POR ESTRATÉGIA: o semanal deriva `action` do score;
+  // a lista âncora traz a `action` pronta do motor (freio de preço, teto de
+  // composição, banda de histerese). Passar a strategy aqui é o que mantém as
+  // duas garantias separadas — sem isso, publicar a âncora reescreveria a
+  // `action` dela pela regra do semanal.
+  const strategy = analysis?.strategy || 'BUY_HOLD';
+  const finalized = finalizeRanking(analysis?.content?.ranking || [], null, { strategy });
+  const validation = validateRankingContract(finalized, { strategy });
   if (!validation.ok) {
     const error = new Error(`Ranking inválido: ${validation.errors.join('; ')}`);
     error.code = 'INVALID_RANKING';

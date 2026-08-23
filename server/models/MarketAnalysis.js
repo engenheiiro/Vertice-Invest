@@ -20,7 +20,10 @@ const RankingItemSchema = new mongoose.Schema({
   score: Number,       
   probability: Number, 
   
-  riskProfile: { type: String, enum: ['DEFENSIVE', 'MODERATE', 'BOLD'], default: 'MODERATE' },
+  // ANCHOR é o perfil ÚNICO da estratégia BUY_AND_HOLD (lista âncora): ela não
+  // tem os três perfis do Research semanal, e forçá-la a um deles mentiria sobre
+  // o que a lista é. Valor adicional — nenhum documento legado muda.
+  riskProfile: { type: String, enum: ['DEFENSIVE', 'MODERATE', 'BOLD', 'ANCHOR'], default: 'MODERATE' },
 
   thesis: String, 
   auditLog: [{
@@ -51,6 +54,12 @@ const RankingItemSchema = new mongoose.Schema({
   // contrato versionado sem expor eixos internos como um segundo ranking público.
   stockCalibration: { type: mongoose.Schema.Types.Mixed, default: null },
   coverage: { type: mongoose.Schema.Types.Mixed, default: null },
+  // Payload da estratégia âncora (BUY_AND_HOLD): eixos durabilidade/resiliência/
+  // consistência, prêmio sobre o preço justo, estado da histerese e motivo de
+  // saída. Mixed pelo mesmo motivo de stockCalibration — é um contrato versionado
+  // de UMA estratégia, e tipá-lo aqui obrigaria o schema do semanal a conhecê-lo.
+  // Null em todo item do ranking legado.
+  anchor: { type: mongoose.Schema.Types.Mixed, default: null },
   metrics: {
     grahamPrice: Number,
     bazinPrice: Number,
@@ -131,6 +140,20 @@ const MarketAnalysisSchema = new mongoose.Schema({
     MODERATE: { type: String, default: '' },
     BOLD: { type: String, default: '' },
   },
+
+  // Quem SAIU da lista âncora nesta apuração, com motivo legível. Vive no
+  // documento (e não só no item) porque o caso mais importante é o ticker que
+  // desapareceu do ranking inteiro por ter perdido o portão: ele não tem item
+  // onde morar. Uma âncora que some sem explicação é pior que uma que fica —
+  // o assinante montou posição com base nela. Vazio para a estratégia legada.
+  anchorExits: [{
+    ticker: String,
+    name: String,
+    reason: String,
+    score: { type: Number, default: null },
+    previousScore: { type: Number, default: null },
+    stillListed: { type: Boolean, default: false },
+  }],
 
   content: {
     morningCall: { type: String, default: "" },
