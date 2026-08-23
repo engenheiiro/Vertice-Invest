@@ -234,6 +234,79 @@ export const classifyStockArchetype = (asset = {}) => {
   return STOCK_ARCHETYPES.OPERATIONAL;
 };
 
+/**
+ * Arquétipos cujo balanço é PRUDENCIAL, não industrial: o passivo é o próprio
+ * negócio (depósitos, provisões técnicas), então alavancagem contábil e margem
+ * líquida no padrão de indústria simplesmente não são publicadas.
+ *
+ * Existe além da matriz de aplicabilidade porque a matriz responde "esta métrica
+ * vale para este arquétipo?" e aqui a pergunta é outra: "um ZERO neste campo é
+ * medição ou é campo em branco?". Para uma indústria, `debtToEquity = 0` é uma
+ * medição legítima (empresa sem dívida). Para um banco, é o campo vazio — e lido
+ * como medição vira "Estrutura de Capital Excelente", que foi exatamente o
+ * defeito corrigido em agosto/2026.
+ */
+export const FINANCIAL_ARCHETYPES = Object.freeze([
+  STOCK_ARCHETYPES.BANK,
+  STOCK_ARCHETYPES.INSURER,
+  STOCK_ARCHETYPES.INSURANCE_BROKER,
+  STOCK_ARCHETYPES.FINANCIAL_HOLDING,
+  STOCK_ARCHETYPES.INSURANCE_HOLDING_DISTRIBUTOR,
+  STOCK_ARCHETYPES.DIVERSIFIED_HOLDING,
+]);
+
+export const isFinancialArchetype = archetype => FINANCIAL_ARCHETYPES.includes(archetype);
+
+/**
+ * Métricas do bloco de QUALIDADE ESTRUTURAL (scoringEngine) que são
+ * CONTABILMENTE INAPLICÁVEIS ao arquétipo — o emissor não as publica, ou publica
+ * um número que não é comparável ao da mesma métrica numa indústria.
+ *
+ * NÃO confunda com `APPLICABILITY_BY_ARCHETYPE` acima. Aquela matriz responde
+ * "de quais métricas o EIXO SETORIAL deste arquétipo é feito?" e por isso marca
+ * `netMargin`/`debtToEquity` como N/A para uma petroleira — não porque uma
+ * petroleira não tenha margem ou dívida (tem, e são as duas informativas), mas
+ * porque o eixo dela prefere `ebitdaMargin` e `netDebtEbitda`. Reusar aquela
+ * matriz aqui derrubaria a qualidade da PRIO3 de 90 para 60 apagando dois
+ * fundamentos perfeitamente legítimos — medido em 22/08/2026.
+ *
+ * A pergunta AQUI é outra: "este número existe e significa a mesma coisa que
+ * significaria numa indústria?". Só o balanço prudencial (banco, seguradora) e a
+ * consolidação de holding respondem "não".
+ *
+ * Fora desta tabela a métrica é tratada como PRESENTE e vale nota. Métrica
+ * inaplicável vira AUSENTE — peso redistribuído, nunca nota máxima nem zero.
+ */
+export const STRUCTURAL_QUALITY_NOT_APPLICABLE = Object.freeze({
+  // Passivo é o próprio negócio (depósitos): não há "dívida/patrimônio" a
+  // comparar. "Receita" de banco oscila com intermediação e marcação, e margem
+  // líquida no padrão industrial não é publicada.
+  [STOCK_ARCHETYPES.BANK]: Object.freeze(['netMargin', 'debtToEquity', 'revenueGrowth']),
+  // Provisões técnicas ocupam o lugar da dívida; margem sobre prêmios e
+  // crescimento de prêmios, esses sim, são leitura legítima.
+  [STOCK_ARCHETYPES.INSURER]: Object.freeze(['debtToEquity']),
+  // Holdings: o consolidado mistura contabilidade prudencial com industrial.
+  [STOCK_ARCHETYPES.FINANCIAL_HOLDING]: Object.freeze(['netMargin', 'debtToEquity', 'revenueGrowth']),
+  [STOCK_ARCHETYPES.INSURANCE_HOLDING_DISTRIBUTOR]: Object.freeze(['netMargin', 'debtToEquity', 'revenueGrowth']),
+  [STOCK_ARCHETYPES.DIVERSIFIED_HOLDING]: Object.freeze(['netMargin', 'debtToEquity', 'revenueGrowth']),
+  // Corretora de seguros e produtora de óleo e gás são, para efeito desta régua,
+  // empresas operacionais: margem, alavancagem e crescimento significam o de sempre.
+});
+
+export const isStructuralQualityMetricApplicable = (archetype, metric) => (
+  !(STRUCTURAL_QUALITY_NOT_APPLICABLE[archetype] || []).includes(metric)
+);
+
+/**
+ * Onde vive o ROE RECORRENTE por arquétipo, quando existe fonte melhor que o
+ * ROE contábil do Fundamentus. Hoje só banco: o IF.data do BCB publica `roeTtm`,
+ * e o portão âncora e o eixo de durabilidade JÁ o preferem — o scoringEngine era
+ * o único lugar que ainda lia o número deprimido (BBAS3 7,99% contra 13,54%).
+ */
+export const RECURRING_ROE_FIELD_BY_ARCHETYPE = Object.freeze({
+  [STOCK_ARCHETYPES.BANK]: 'roeTtm',
+});
+
 export const getStockMetricApplicability = (assetOrArchetype) => {
   const archetype = typeof assetOrArchetype === 'string'
     ? assetOrArchetype
