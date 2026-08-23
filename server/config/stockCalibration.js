@@ -314,6 +314,41 @@ export const RECURRING_ROE_FIELD_BY_ARCHETYPE = Object.freeze({
   [STOCK_ARCHETYPES.BANK]: 'roeTtm',
 });
 
+/**
+ * Régua do ROE RECORRENTE, em rampa contínua (`floor` → nota 0, `cap` → nota 100).
+ *
+ * Existe porque trocar a FONTE do ROE sem trocar a RÉGUA junto deixou a nota de
+ * qualidade de banco sem poder de separação. A escada industrial de
+ * `QUALITY_GRADES.roe` (>15 → 100, >10 → 60) foi calibrada para o ROE CONTÁBIL,
+ * e o recorrente é sistematicamente ~1,5× maior (razão medida na base em
+ * 23/08/2026: mediana 1,52; faixa 1,44–1,98). Aplicar a escada antiga ao número
+ * novo faz 10 dos 11 bancos empatarem em 100.
+ *
+ * RAMPA e não degrau, ao contrário de todo o resto do bloco de qualidade, porque
+ * o número de insumos colapsou. Uma indústria é avaliada por quatro métricas: os
+ * degraus de cada uma se somam na média e produzem uma grade fina (22 notas
+ * distintas entre 179 ações operacionais, medido). Um banco é avaliado por UMA —
+ * margem, alavancagem e crescimento de receita são inaplicáveis ao balanço
+ * prudencial (ver SCORING_NOT_APPLICABLE) — e sem média não há o que suavizar a
+ * quantização: três degraus viram três notas possíveis para o setor inteiro. A
+ * rampa devolve resolução equivalente onde a contagem de métricas não permite
+ * obtê-la por composição.
+ *
+ * `floor: 12` fica logo abaixo do juro básico: banco que não bate o risk-free
+ * com capital próprio não é "qualidade", é ciclo ruim. `cap: 30` é o topo útil
+ * medido — acima disso a distribuição rarefaz (p75 = 32,4 e máximo 51,9, sem
+ * nada entre 34,7 e 49,1) e ROE extra deixa de informar sobre durabilidade.
+ *
+ * PENDÊNCIA anotada, não resolvida aqui: `stockSectorAxisEngine` e
+ * `buyAndHoldEngine` avaliam o MESMO `roeTtm` por `higherBetter(roeTtm, 8, 25)`,
+ * uma rampa cujo teto de 25 fica ABAIXO do terceiro quartil medido — ela satura
+ * 4 dos 11 bancos. Migrar aquelas duas para esta constante é mudança de ranking
+ * própria e merece commit próprio.
+ */
+export const RECURRING_ROE_SCALE_BY_ARCHETYPE = Object.freeze({
+  [STOCK_ARCHETYPES.BANK]: Object.freeze({ floor: 12, cap: 30 }),
+});
+
 export const getStockMetricApplicability = (assetOrArchetype) => {
   const archetype = typeof assetOrArchetype === 'string'
     ? assetOrArchetype

@@ -147,7 +147,10 @@ describe('inaplicabilidade vale para o scorer INTEIRO, não só para o bloco de 
 describe('structural.quality — ROE recorrente do banco', () => {
     it('usa roeTtm do IF.data no lugar do ROE contábil deprimido', () => {
         // BBAS3: 7,99% no Fundamentus (reprovaria em tudo) contra 13,54% recorrente.
-        expect(qualityFactors(bbas3)).toContain('ROE Saudável (>10%)');
+        // O rótulo cita o número recorrente, não o contábil — é como a auditoria
+        // mostra ao leitor QUAL ROE entrou na conta.
+        expect(qualityFactors(bbas3).some(f => f.includes('13.5%'))).toBe(true);
+        expect(qualityFactors(bbas3).some(f => f.includes('7.99') || f.includes('8.0'))).toBe(false);
     });
 
     it('sem roeTtm o banco cai no ROE genérico, sem inventar dado', () => {
@@ -166,10 +169,51 @@ describe('structural.quality — crescimento de RECEITA não separa banco', () =
         expect(factors.some(f => f.startsWith('revenueGrowth:'))).toBe(true);
     });
 
-    it('dois bancos de prudencial semelhante não ficam a 65 pontos de distância', () => {
-        // Basileia 14,23 x 14,77 e ROE recorrente 13,54 x 32,37: há diferença real,
-        // mas o abismo de 21 x 90 vinha da régua industrial, não do fundamento.
-        expect(Math.abs(qualityOf(itub4) - qualityOf(bbas3))).toBeLessThan(65);
+    it('a distância entre dois bancos vem do ROE recorrente, não de ruído', () => {
+        // Esta asserção substitui um teto fixo de 65 pontos, escrito quando o
+        // abismo entre BBAS3 e ITUB4 (21 x 90) vinha da régua industrial —
+        // crescimento de RECEITA e alavancagem não publicada. Aquele teto media a
+        // MAGNITUDE do desvio para provar a ATRIBUIÇÃO, e virou falso-positivo
+        // quando a atribuição foi corrigida: com o ROE recorrente como único
+        // insumo, 13,54% contra 32,37% é distância legítima, e a régua industrial
+        // dá 0 a 8% das operacionais e 100 a 11% delas — os extremos não são
+        // privilégio de banco.
+        //
+        // O que importa é a atribuição, e é isso que se trava aqui: zerar a única
+        // diferença de fundamento tem que zerar a diferença de nota.
+        const mesmoRoe = { ...bbas3, sectorMetrics: { ...bbas3.sectorMetrics, roeTtm: 32.37 } };
+        const mesmoRoeEPayout = { ...mesmoRoe, metrics: { ...mesmoRoe.metrics, payout: 73.68 } };
+        expect(qualityOf(mesmoRoeEPayout)).toBe(qualityOf(itub4));
+    });
+
+    it('bancos com ROE recorrente diferente não empatam na nota máxima', () => {
+        // O defeito que esta rampa existe para impedir: a escada industrial
+        // (>15 → 100) aplicada ao ROE RECORRENTE, que é ~1,5× o contábil, fazia
+        // 10 dos 11 bancos da base empatarem em 100 — a nota deixava de separar.
+        const roes = [20.80, 24.03, 32.37, 49.07];
+        const notas = roes.map(roeTtm => qualityOf({
+            ...itub4, sectorMetrics: { ...itub4.sectorMetrics, roeTtm },
+        }));
+        expect(new Set(notas).size).toBeGreaterThan(1);
+        // E a ordem tem que acompanhar o fundamento, sem inversão.
+        expect([...notas].sort((a, b) => a - b)).toEqual(notas);
+    });
+
+    it('bancos com ROE recorrente quase igual tiram nota quase igual', () => {
+        // BAZA3 19,86 e BRSR6 19,82 na base: a diferença é ruído de medição e a
+        // régua não pode transformá-la em degrau.
+        const nota = roeTtm => qualityOf({ ...itub4, sectorMetrics: { ...itub4.sectorMetrics, roeTtm } });
+        expect(Math.abs(nota(19.86) - nota(19.82))).toBeLessThan(2);
+    });
+
+    it('banco sem roeTtm é medido pela escada industrial, não pela rampa do recorrente', () => {
+        // A régua acompanha a FONTE. Ler um ROE contábil de 14% pela rampa do
+        // recorrente (12–30) o rebaixaria a 11 por ausência de dado — que é
+        // exatamente o defeito que este módulo existe para impedir.
+        const semRecorrente = makeStock('BMGB4', 'Bancos', {
+            roe: 14.47, netMargin: 0, debtToEquity: 0, revenueGrowth: 0, payout: 42.7,
+        }, { sectorMetrics: { capitalRatio: 12.10 } });
+        expect(qualityFactors(semRecorrente)).toContain('ROE Saudável (>10%)');
     });
 });
 

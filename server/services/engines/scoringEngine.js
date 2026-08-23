@@ -24,6 +24,7 @@ import {
 import { isCyclicalSector, isStateControlled } from '../../config/sectorTaxonomy.js';
 import {
     RECURRING_ROE_FIELD_BY_ARCHETYPE,
+    RECURRING_ROE_SCALE_BY_ARCHETYPE,
     classifyStockArchetype,
     getScoringNotApplicableMetrics,
     isFinancialArchetype,
@@ -1261,6 +1262,23 @@ const QUALITY_GRADES = Object.freeze({
     revenueGrowth: value => (value > 10 ? 100 : value > 5 ? 40 : 0),
 });
 
+/**
+ * Nota 0–100 do ROE RECORRENTE em rampa contínua. Ver
+ * RECURRING_ROE_SCALE_BY_ARCHETYPE (config/stockCalibration.js) para por que
+ * este insumo é rampa enquanto todos os outros são degrau.
+ */
+const gradeRecurringRoe = (value, { floor, cap }) => (
+    Math.max(0, Math.min(100, ((value - floor) / (cap - floor)) * 100))
+);
+
+const recurringRoeLabel = (value, grade) => {
+    const band = grade >= 75 ? 'Elevado'
+        : grade >= 50 ? 'Saudável'
+        : grade >= 25 ? 'Modesto'
+        : 'Baixo';
+    return `ROE Recorrente ${band} (${value.toFixed(1)}%)`;
+};
+
 const QUALITY_LABELS = Object.freeze({
     roe: { 100: 'ROE Elevado (>15%)', 60: 'ROE Saudável (>10%)', 0: 'ROE Modesto / Baixo' },
     netMargin: { 100: 'Margem Líquida Robusta (>10%)', 60: 'Margem Líquida Regular (>5%)', 0: 'Margem Líquida Estreita' },
@@ -1323,7 +1341,20 @@ const resolveStockQualityInputs = (asset, m) => {
         : m._missing?.revenueGrowth ? mark('revenueGrowth', 'não informado')
         : rawRevenueGrowth;
 
-    return { archetype, roe, netMargin, debtToEquity, revenueGrowth, absent, usedRecurringRoe: recurringRoe !== null };
+    // A régua do ROE acompanha a FONTE, não o arquétipo: só vale a rampa do
+    // recorrente quando foi o recorrente que entrou. Banco sem `roeTtm` cai no
+    // ROE contábil do Fundamentus e tem que ser lido pela escada industrial —
+    // medir um número contábil com a régua do recorrente o rebaixaria por
+    // ausência de dado, que é justamente o defeito que este módulo combate.
+    const recurringRoeScale = recurringRoe === null
+        ? null
+        : RECURRING_ROE_SCALE_BY_ARCHETYPE[archetype] || null;
+
+    return {
+        archetype, roe, netMargin, debtToEquity, revenueGrowth, absent,
+        usedRecurringRoe: recurringRoe !== null,
+        recurringRoeScale,
+    };
 };
 
 const calculateStructuralScores = (asset, context) => {
@@ -1411,10 +1442,14 @@ const calculateStructuralScores = (asset, context) => {
         // redistribuído entre as observadas. Com os quatro insumos presentes o
         // resultado é idêntico ao modelo aditivo anterior.
         const qualityInputs = resolveStockQualityInputs(asset, m);
+        const roeScale = qualityInputs.recurringRoeScale;
+        const gradeQuality = (key, value) => (
+            key === 'roe' && roeScale ? gradeRecurringRoe(value, roeScale) : QUALITY_GRADES[key](value)
+        );
         const qualityAverage = observedWeightedAverage(
             ['roe', 'netMargin', 'debtToEquity', 'revenueGrowth'].map(key => observedPart(
                 key,
-                qualityInputs[key] === null ? null : QUALITY_GRADES[key](qualityInputs[key]),
+                qualityInputs[key] === null ? null : gradeQuality(key, qualityInputs[key]),
                 0.25,
             )),
         );
@@ -1424,8 +1459,11 @@ const calculateStructuralScores = (asset, context) => {
         for (const component of qualityAverage.components) {
             const points = Math.round(component.value * component.effectiveWeight);
             qScore += points;
+            const factor = component.metric === 'roe' && roeScale
+                ? recurringRoeLabel(qualityInputs.roe, component.value)
+                : QUALITY_LABELS[component.metric][String(component.value)] || component.metric;
             audit.QUALITY.push({
-                factor: QUALITY_LABELS[component.metric][String(component.value)] || component.metric,
+                factor,
                 points,
                 type: points > 0 ? 'bonus' : points < 0 ? 'penalty' : 'base',
             });
@@ -1434,7 +1472,13 @@ const calculateStructuralScores = (asset, context) => {
             audit.QUALITY.push({ factor: `${key}: ${why} — peso redistribuído`, points: 0, type: 'base' });
         }
         if (qualityInputs.usedRecurringRoe) {
-            audit.QUALITY.push({ factor: 'ROE recorrente (IF.data/BCB) no lugar do ROE contábil', points: 0, type: 'base' });
+            audit.QUALITY.push({
+                factor: roeScale
+                    ? `ROE recorrente (IF.data/BCB) no lugar do ROE contábil — régua ${roeScale.floor}%–${roeScale.cap}%`
+                    : 'ROE recorrente (IF.data/BCB) no lugar do ROE contábil',
+                points: 0,
+                type: 'base',
+            });
         }
 
         // --- NOVO: SUSTENTABILIDADE DE DIVIDENDOS (PAYOUT) ---
