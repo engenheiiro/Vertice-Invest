@@ -23,12 +23,11 @@ import {
 } from '../../config/financialConstants.js';
 import { isCyclicalSector, isStateControlled } from '../../config/sectorTaxonomy.js';
 import {
-    RECURRING_ROE_FIELD_BY_ARCHETYPE,
-    RECURRING_ROE_SCALE_BY_ARCHETYPE,
     classifyStockArchetype,
     getScoringNotApplicableMetrics,
     isFinancialArchetype,
     isStructuralQualityMetricApplicable,
+    resolveRoeReading,
 } from '../../config/stockCalibration.js';
 import { asObservedNumber, observedPart, observedWeightedAverage } from '../../utils/metricObservation.js';
 
@@ -1297,16 +1296,12 @@ const resolveStockQualityInputs = (asset, m) => {
     const absent = [];
     const mark = (key, why) => { absent.push({ key, why }); return null; };
 
-    // ROE recorrente do IF.data/BCB quando o arquétipo tem fonte própria (hoje,
-    // banco). O ROE do Fundamentus para banco vem deprimido por tratamento
-    // contábil; o resto do sistema (portão âncora, eixo de durabilidade) já
-    // prefere o roeTtm, e o scorer era o único lugar que não preferia.
-    const recurringRoeField = RECURRING_ROE_FIELD_BY_ARCHETYPE[archetype];
-    const recurringRoe = recurringRoeField
-        ? asObservedNumber(asset.sectorMetrics?.[recurringRoeField])
-        : null;
-    const genericRoe = m._missing?.roe ? null : asObservedNumber(m.roe);
-    const roe = recurringRoe ?? genericRoe;
+    // QUAL ROE e por QUAL régua: a decisão é uma só para o sistema inteiro
+    // (resolveRoeReading). O ROE do Fundamentus para banco vem deprimido por
+    // tratamento contábil, então o arquétipo com fonte própria lê o recorrente do
+    // IF.data/BCB — e junto vem a escala dele, que NÃO é a do contábil.
+    const roeReading = resolveRoeReading(asset, archetype);
+    const roe = roeReading.value;
     if (roe === null) mark('roe', 'não informado');
 
     // Margem: holdings (>100%) e financeiras (0%) são contabilmente incomparáveis
@@ -1341,18 +1336,15 @@ const resolveStockQualityInputs = (asset, m) => {
         : m._missing?.revenueGrowth ? mark('revenueGrowth', 'não informado')
         : rawRevenueGrowth;
 
-    // A régua do ROE acompanha a FONTE, não o arquétipo: só vale a rampa do
-    // recorrente quando foi o recorrente que entrou. Banco sem `roeTtm` cai no
-    // ROE contábil do Fundamentus e tem que ser lido pela escada industrial —
-    // medir um número contábil com a régua do recorrente o rebaixaria por
-    // ausência de dado, que é justamente o defeito que este módulo combate.
-    const recurringRoeScale = recurringRoe === null
-        ? null
-        : RECURRING_ROE_SCALE_BY_ARCHETYPE[archetype] || null;
+    // A régua acompanha a FONTE: só vale a rampa do recorrente quando foi o
+    // recorrente que entrou. Banco sem `roeTtm` cai no ROE contábil e é lido pela
+    // escada industrial — medir um número contábil com a régua do recorrente o
+    // rebaixaria por ausência de dado, o defeito que este módulo combate.
+    const recurringRoeScale = roeReading.recurring ? roeReading.scale : null;
 
     return {
         archetype, roe, netMargin, debtToEquity, revenueGrowth, absent,
-        usedRecurringRoe: recurringRoe !== null,
+        usedRecurringRoe: roeReading.recurring,
         recurringRoeScale,
     };
 };

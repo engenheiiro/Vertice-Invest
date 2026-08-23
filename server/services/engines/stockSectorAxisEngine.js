@@ -1,4 +1,5 @@
 import {
+  RECURRING_ROE_SCALE_BY_ARCHETYPE,
   STOCK_ARCHETYPES,
   classifyStockArchetype,
 } from '../../config/stockCalibration.js';
@@ -108,7 +109,14 @@ export const calculateStockShadowAxes = asset => {
   if (archetype === STOCK_ARCHETYPES.BANK) {
     durability = averageObserved([
       part('structuralQuality', quality, 0.25),
-      part('roeTtm', higherBetter(sector.roeTtm, 8, 25), 0.30),
+      // Régua do RECORRENTE, não a do contábil: este parâmetro só lê `roeTtm`.
+      // Ausente continua ausente (peso redistribuído) — sem cair no ROE genérico,
+      // que é medido por outra escala.
+      part('roeTtm', higherBetter(
+        sector.roeTtm,
+        RECURRING_ROE_SCALE_BY_ARCHETYPE[STOCK_ARCHETYPES.BANK].floor,
+        RECURRING_ROE_SCALE_BY_ARCHETYPE[STOCK_ARCHETYPES.BANK].cap,
+      ), 0.30),
       part('earningsGrowth', higherBetter(sector.earningsGrowth, -30, 30), 0.20),
       part('operatingCostRatio', lowerBetter(sector.operatingCostRatio, 30, 100), 0.25),
     ]);

@@ -13,7 +13,7 @@
 import { BUY_THRESHOLD } from '../../config/financialConstants.js';
 import { isCyclicalSector, isStateControlled } from '../../config/sectorTaxonomy.js';
 import { BUY_AND_HOLD_CONFIG, BUY_AND_HOLD_VERSION } from '../../config/buyAndHold.js';
-import { classifyStockArchetype } from '../../config/stockCalibration.js';
+import { classifyStockArchetype, resolveRoeReading } from '../../config/stockCalibration.js';
 
 const norm = value => String(value || '')
   .normalize('NFD')
@@ -188,10 +188,16 @@ export const computeBuyAndHoldAxes = (asset, archetype = 'OPERATIONAL', config =
   const metrics = asset.metrics || {};
   const structural = metrics.structural || {};
   const consistencyInput = asset.consistency || {};
+  const roeReading = resolveRoeReading(asset, archetype);
 
   const durability = averageObserved([
     part('structuralQuality', clamp(structural.quality), 0.40),
-    part('roe', higherBetter(readMetric(asset, 'roeTtm') ?? metrics.roe, 8, 25), 0.35),
+    // ROE recorrente (banco) e ROE contábil (o resto) chegavam MISTURADOS neste
+    // mesmo parâmetro e eram medidos pela mesma régua de 8 a 25. São escalas
+    // diferentes — o recorrente é ~1,5× o contábil — e o banco levava vantagem
+    // de escala, não de fundamento. `resolveRoeReading` devolve o número E a
+    // régua dele.
+    part('roe', higherBetter(roeReading.value, roeReading.scale.floor, roeReading.scale.cap), 0.35),
     part(
       'earningsGrowth',
       higherBetter(

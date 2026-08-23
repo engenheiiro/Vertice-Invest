@@ -339,15 +339,60 @@ export const RECURRING_ROE_FIELD_BY_ARCHETYPE = Object.freeze({
  * medido — acima disso a distribuição rarefaz (p75 = 32,4 e máximo 51,9, sem
  * nada entre 34,7 e 49,1) e ROE extra deixa de informar sobre durabilidade.
  *
- * PENDÊNCIA anotada, não resolvida aqui: `stockSectorAxisEngine` e
- * `buyAndHoldEngine` avaliam o MESMO `roeTtm` por `higherBetter(roeTtm, 8, 25)`,
- * uma rampa cujo teto de 25 fica ABAIXO do terceiro quartil medido — ela satura
- * 4 dos 11 bancos. Migrar aquelas duas para esta constante é mudança de ranking
- * própria e merece commit próprio.
+ * Régua ÚNICA do ROE recorrente: `stockSectorAxisEngine` e `buyAndHoldEngine`
+ * leem a mesma constante. Enquanto cada um trazia a sua (`8, 25` inline), o
+ * mesmo `roeTtm` era medido por duas réguas diferentes dentro do mesmo score.
  */
 export const RECURRING_ROE_SCALE_BY_ARCHETYPE = Object.freeze({
   [STOCK_ARCHETYPES.BANK]: Object.freeze({ floor: 12, cap: 30 }),
 });
+
+/**
+ * Régua do ROE CONTÁBIL — o do Fundamentus, que é o que existe para quem não
+ * tem fonte recorrente. Deliberadamente mais baixa que a do recorrente: são
+ * escalas diferentes do mesmo conceito, e a razão medida entre elas é ~1,5×.
+ */
+export const GENERIC_ROE_SCALE = Object.freeze({ floor: 8, cap: 25 });
+
+const numericOrNull = value => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+/**
+ * QUAL ROE entra na conta e por QUAL régua ele é medido — resposta única para
+ * todo o sistema (scoringEngine, stockSectorAxisEngine, buyAndHoldEngine).
+ *
+ * Existe porque a régua tem que acompanhar a FONTE, e essa decisão estava
+ * duplicada em três lugares com três respostas: o scorer preferia `roeTtm` e o
+ * media de 12 a 30; o eixo setorial preferia `roeTtm` e o media de 8 a 25; a
+ * âncora misturava os dois números no MESMO parâmetro — `roeTtm` para banco,
+ * ROE contábil para o resto — e passava a régua de 8 a 25 nos dois. Duplicar a
+ * decisão é como o defeito reaparece; um banco a 22,19% valia 83 num eixo e 57
+ * no outro.
+ *
+ * `_missing` é honrado aqui pelo mesmo motivo que no scorer: `roe = 0` num
+ * emissor que simplesmente não teve o dado coletado é campo em branco, não
+ * rentabilidade zero, e nota 0 numa escala `higherBetter` é medição.
+ *
+ * @returns {{value: number|null, scale: {floor: number, cap: number}, recurring: boolean}}
+ *   `value: null` significa AUSENTE — quem consome redistribui o peso.
+ */
+export const resolveRoeReading = (asset = {}, archetype = classifyStockArchetype(asset)) => {
+  const field = RECURRING_ROE_FIELD_BY_ARCHETYPE[archetype];
+  const recurring = field
+    ? numericOrNull(asset.sectorMetrics?.[field] ?? asset.metrics?.[field])
+    : null;
+  if (recurring !== null) {
+    return {
+      value: recurring,
+      scale: RECURRING_ROE_SCALE_BY_ARCHETYPE[archetype] || GENERIC_ROE_SCALE,
+      recurring: true,
+    };
+  }
+  const generic = asset.metrics?._missing?.roe ? null : numericOrNull(asset.metrics?.roe);
+  return { value: generic, scale: GENERIC_ROE_SCALE, recurring: false };
+};
 
 export const getStockMetricApplicability = (assetOrArchetype) => {
   const archetype = typeof assetOrArchetype === 'string'
