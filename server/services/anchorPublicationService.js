@@ -21,7 +21,8 @@ import logger from '../config/logger.js';
 import { buyAndHoldService } from './buyAndHoldService.js';
 import { fiiBuyAndHoldService } from './fiiBuyAndHoldService.js';
 import { activateResearchSections } from './researchPublicationService.js';
-import { applyAnchorHysteresis, toHysteresisBaseline } from '../utils/anchorHysteresis.js';
+import { applyAnchorHysteresis, HYSTERESIS_STATES, toHysteresisBaseline } from '../utils/anchorHysteresis.js';
+import { applyPublicationLimits } from './engines/fiiBuyAndHoldEngine.js';
 import { validateFundamentalsPublicationHealth } from '../utils/ingestionHealth.js';
 import {
   ANCHOR_ASSET_CLASSES,
@@ -66,6 +67,13 @@ const ADAPTERS = Object.freeze({
       }
       return { blocked: false, blockReason: null };
     },
+    // O teto de composição roda DENTRO do motor, sobre os COMPRAR daquele
+    // instante — e a histerese, que vem depois, pode devolver ao COMPRAR um
+    // fundo que o motor tinha deixado de fora por SCORE (e que, por isso, nunca
+    // foi contado nas vagas). Sem reaplicar o teto, um segundo fundo de papel
+    // (ou um terceiro da mesma gestora) entraria pela porta da histerese
+    // furando o limite de 1/3 que o motor acabara de aplicar.
+    enforcePublicationLimits: rows => applyPublicationLimits(rows),
     anchorPayload: row => ({
       subType: row.subType ?? null,
       manager: row.manager ?? null,
@@ -134,6 +142,51 @@ const asRankingItem = (row, { assetClass, adapter, version }) => ({
 });
 
 /**
+ * Reaplica o TETO DE COMPOSIÇÃO sobre a lista JÁ passada pela histerese.
+ *
+ * Ordem importa e é o que torna isto seguro: o ranking está em ordem soberana de
+ * score, e a histerese só promove abaixo do limiar de entrada (< 70), enquanto
+ * todo COMPRAR do motor está em 70+. Logo os promovidos ficam SEMPRE depois dos
+ * admitidos pelo motor, e a passada gulosa do teto reconfirma os mesmos itens
+ * antes de olhar para os promovidos: nada que o motor já tinha admitido é
+ * demovido aqui. O teto só pode encolher, então também não há laço — quem o teto
+ * demove não volta a ser promovido, porque a histerese já rodou.
+ *
+ * Demover um promovido é uma SAÍDA da lista publicada, e a lista âncora não
+ * descarta em silêncio: o fundo estava em COMPRAR na publicação anterior, então
+ * ele sai com motivo escrito como qualquer outro.
+ */
+const enforcePublicationLimits = (rows, adapter) => {
+  if (!adapter.enforcePublicationLimits) return { ranking: rows, exits: [] };
+
+  const limited = adapter.enforcePublicationLimits(rows);
+  const exits = [];
+  const ranking = limited.map((row, index) => {
+    if (rows[index].action !== 'BUY' || row.action === 'BUY') return row;
+
+    const { blockReason } = adapter.blockersOf(row);
+    const reason = `Saiu da lista: ${blockReason}`;
+    exits.push({
+      ticker: String(row.ticker || '').trim().toUpperCase(),
+      name: row.name || null,
+      reason,
+      score: Number(row.score) || 0,
+      previousScore: row.hysteresis?.previousScore ?? null,
+      stillListed: true,
+    });
+    // O estado deixa de ser HELD: ele não está mais na lista, e um rótulo
+    // "mantido" numa linha de AGUARDAR mentiria na tela e na contagem.
+    return {
+      ...row,
+      hysteresis: { ...row.hysteresis, state: HYSTERESIS_STATES.OUT },
+      exitReason: reason,
+    };
+  });
+
+  return { ranking, exits };
+};
+
+/**
  * Monta o ranking âncora publicável de uma classe. READ-ONLY: não persiste nada,
  * não toca em ponteiro. É o mesmo caminho que o cron usa, para que a prévia do
  * admin e o que vai ao ar sejam literalmente o mesmo cálculo.
@@ -158,8 +211,11 @@ export const buildAnchorRanking = async (assetClass) => {
     gateFailuresByTicker,
   });
 
+  const limited = enforcePublicationLimits(hysteresis.ranking, adapter);
+  const exits = [...hysteresis.exits, ...limited.exits];
+
   const version = result.version;
-  const ranking = hysteresis.ranking.map(row => asRankingItem(row, { assetClass, adapter, version }));
+  const ranking = limited.ranking.map(row => asRankingItem(row, { assetClass, adapter, version }));
 
   return {
     assetClass,
@@ -174,16 +230,18 @@ export const buildAnchorRanking = async (assetClass) => {
     bootstrap: hysteresis.bootstrap,
     previousAnalysisId: published?.analysisId || null,
     ranking,
-    exits: hysteresis.exits,
+    exits,
     excludedByReason: result.excludedByReason,
     counts: {
       ...result.counts,
-      // `buy` do motor não conhece a histerese; o que vale é a lista final.
+      // Nem o motor nem a histerese conhecem sozinhos a lista final: o motor não
+      // sabe da banda de permanência, e a histerese não sabe do teto que roda
+      // depois dela. O que vale é contar o ranking já pronto.
       buy: ranking.filter(item => item.action === 'BUY').length,
       wait: ranking.filter(item => item.action !== 'BUY').length,
-      held: hysteresis.counts.held,
-      entered: hysteresis.counts.entered,
-      exits: hysteresis.counts.exits,
+      held: ranking.filter(item => item.anchor?.hysteresis?.state === HYSTERESIS_STATES.HELD).length,
+      entered: ranking.filter(item => item.anchor?.hysteresis?.state === HYSTERESIS_STATES.ENTERED).length,
+      exits: exits.length,
     },
   };
 };
