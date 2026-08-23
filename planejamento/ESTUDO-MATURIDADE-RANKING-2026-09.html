@@ -1,0 +1,1139 @@
+<title>Segunda Leitura do Motor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap">
+
+<style>
+:root{
+  --ground:#E8ECF3; --surface:#FFFFFF; --surface-2:#F2F5FA; --surface-3:#E4E9F1;
+  --ink:#0E141C; --ink-2:#2A3542; --muted:#5C6878; --line:#D2DAE6; --line-soft:#E2E8F1;
+  --accent:#1E5FBF; --accent-soft:#DCE7FA; --accent-ink:#14468F;
+  --anchor:#0F6E7B; --anchor-soft:#D7EEF1; --anchor-ink:#0B535D;
+  --ok:#0E7C55; --ok-soft:#DAF2E8; --warn:#9A6608; --warn-soft:#FBEFD5; --crit:#B23A34; --crit-soft:#FAE2E0;
+  --shadow:0 1px 2px rgba(14,20,28,.06),0 8px 24px -12px rgba(14,20,28,.18);
+  --rail:264px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#090C11; --surface:#141922; --surface-2:#191F29; --surface-3:#202631;
+    --ink:#E7ECF3; --ink-2:#C3CCD9; --muted:#8B97A7; --line:#28303C; --line-soft:#1E2530;
+    --accent:#78A6F7; --accent-soft:#16233A; --accent-ink:#A7C4FA;
+    --anchor:#4FC2D0; --anchor-soft:#0E2A2F; --anchor-ink:#84D9E4;
+    --ok:#3FD39B; --ok-soft:#0F2A23; --warn:#F0B429; --warn-soft:#2C2312; --crit:#F0736C; --crit-soft:#2E1817;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#090C11; --surface:#141922; --surface-2:#191F29; --surface-3:#202631;
+  --ink:#E7ECF3; --ink-2:#C3CCD9; --muted:#8B97A7; --line:#28303C; --line-soft:#1E2530;
+  --accent:#78A6F7; --accent-soft:#16233A; --accent-ink:#A7C4FA;
+  --anchor:#4FC2D0; --anchor-soft:#0E2A2F; --anchor-ink:#84D9E4;
+  --ok:#3FD39B; --ok-soft:#0F2A23; --warn:#F0B429; --warn-soft:#2C2312; --crit:#F0736C; --crit-soft:#2E1817;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px -14px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:Manrope,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent-ink); text-decoration:none; border-bottom:1px solid color-mix(in srgb, var(--accent) 35%, transparent)}
+a:hover{border-bottom-color:var(--accent)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:3px}
+
+/* ── shell ─────────────────────────────────────────────── */
+.shell{display:grid; grid-template-columns:var(--rail) minmax(0,1fr); gap:48px; max-width:1400px; margin:0 auto; padding:0 32px}
+.rail{position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto; padding:40px 0 48px; display:flex; flex-direction:column; gap:24px}
+.doc{padding:56px 0 120px; min-width:0}
+@media (max-width:1000px){
+  .shell{grid-template-columns:minmax(0,1fr); gap:0; padding:0 20px}
+  .rail{position:static; height:auto; padding:32px 0 0; border-bottom:1px solid var(--line)}
+  .doc{padding:32px 0 80px}
+}
+
+.brand{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted)}
+.rail nav{display:flex; flex-direction:column; gap:2px}
+.rail nav a{
+  display:grid; grid-template-columns:26px 1fr; gap:8px; align-items:baseline;
+  padding:7px 10px; border-radius:7px; border:0; color:var(--ink-2); font-size:13.5px; font-weight:600; line-height:1.3;
+}
+.rail nav a span{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--muted); font-weight:500}
+.rail nav a:hover{background:var(--surface-2); color:var(--ink)}
+.verdict{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px; box-shadow:var(--shadow)}
+.verdict h4{margin:0 0 10px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700; font-family:"IBM Plex Mono",monospace}
+.verdict p{margin:0; font-size:13.5px; color:var(--ink-2); line-height:1.5}
+.verdict .big{font-family:"IBM Plex Serif",Georgia,serif; font-size:34px; line-height:1; color:var(--ink); font-weight:600; display:block; margin-bottom:2px}
+.verdict .big small{font-size:15px; color:var(--muted); font-weight:500}
+.verdict .was{display:block; font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--muted); margin-bottom:8px}
+
+/* ── tipografia ────────────────────────────────────────── */
+.doc>*{max-width:74ch}
+.doc>.wide,.doc>section>.wide{max-width:none}
+section{margin:0 0 72px; scroll-margin-top:24px}
+section>*{max-width:74ch}
+section>.wide{max-width:none}
+h1{
+  font-family:"IBM Plex Serif",Georgia,serif; font-weight:600; font-size:clamp(34px,4.4vw,52px);
+  line-height:1.06; letter-spacing:-.02em; margin:0 0 16px; text-wrap:balance; max-width:20ch;
+}
+h2{
+  font-family:"IBM Plex Serif",Georgia,serif; font-weight:600; font-size:clamp(24px,2.6vw,31px);
+  line-height:1.18; letter-spacing:-.015em; margin:0 0 6px; text-wrap:balance;
+}
+h3{font-size:18px; font-weight:800; letter-spacing:-.01em; margin:36px 0 8px; text-wrap:balance}
+h4{font-size:14.5px; font-weight:800; margin:26px 0 6px; color:var(--ink)}
+p{margin:0 0 16px; color:var(--ink-2)}
+strong{color:var(--ink); font-weight:700}
+ul,ol{margin:0 0 18px; padding-left:22px; color:var(--ink-2)}
+li{margin-bottom:7px}
+li::marker{color:var(--muted)}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent-ink); font-weight:600; margin:0 0 10px; display:block;
+}
+.eyebrow.anc{color:var(--anchor-ink)}
+.lede{font-size:18.5px; line-height:1.55; color:var(--ink-2)}
+.dek{font-size:15px; color:var(--muted); margin:0 0 28px; max-width:70ch}
+hr{border:0; border-top:1px solid var(--line); margin:44px 0}
+
+/* ── cabeçalho ─────────────────────────────────────────── */
+.head{border-bottom:1px solid var(--line); padding-bottom:28px; margin-bottom:44px; max-width:none}
+.meta{display:flex; flex-wrap:wrap; gap:8px 20px; font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted); margin-top:18px}
+.meta b{color:var(--ink-2); font-weight:500}
+
+/* ── evidência ─────────────────────────────────────────── */
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.88em}
+code{background:var(--surface-2); border:1px solid var(--line-soft); border-radius:4px; padding:.1em .35em; color:var(--ink)}
+.ev{
+  display:inline-flex; align-items:center; gap:6px; font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+  background:var(--surface-2); border:1px solid var(--line-soft); border-radius:5px; padding:2px 7px; color:var(--muted);
+  white-space:normal; max-width:100%; margin:2px 4px 2px 0;
+}
+.ev::before{content:"↳"; opacity:.6}
+.evrow{display:flex; flex-wrap:wrap; margin:-2px 0 18px}
+
+/* ── tabelas ───────────────────────────────────────────── */
+.tw{overflow-x:auto; margin:0 0 12px; border:1px solid var(--line); border-radius:10px; background:var(--surface)}
+table{border-collapse:collapse; width:100%; font-size:13.5px; min-width:520px}
+th,td{padding:9px 13px; text-align:left; border-bottom:1px solid var(--line-soft); vertical-align:top}
+thead th{
+  background:var(--surface-2); font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted);
+  font-weight:700; white-space:nowrap; position:sticky; top:0;
+}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right; font-variant-numeric:tabular-nums; font-family:"IBM Plex Mono",monospace}
+caption,.cap{caption-side:bottom; text-align:left; font-size:12.5px; color:var(--muted); padding:8px 2px 0}
+.cap{display:block; margin-bottom:24px}
+tbody td.t{font-family:"IBM Plex Mono",monospace; font-weight:500; color:var(--ink); white-space:nowrap}
+
+/* ── chips ─────────────────────────────────────────────── */
+.chip{display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.06em; font-weight:600;
+  padding:2px 7px; border-radius:20px; border:1px solid; white-space:nowrap}
+.chip.ok{color:var(--ok); border-color:color-mix(in srgb,var(--ok) 40%,transparent); background:var(--ok-soft)}
+.chip.warn{color:var(--warn); border-color:color-mix(in srgb,var(--warn) 40%,transparent); background:var(--warn-soft)}
+.chip.crit{color:var(--crit); border-color:color-mix(in srgb,var(--crit) 45%,transparent); background:var(--crit-soft)}
+.chip.neutral{color:var(--muted); border-color:var(--line); background:var(--surface-2)}
+.chip.acc{color:var(--accent-ink); border-color:color-mix(in srgb,var(--accent) 40%,transparent); background:var(--accent-soft)}
+.chip.anc{color:var(--anchor-ink); border-color:color-mix(in srgb,var(--anchor) 45%,transparent); background:var(--anchor-soft)}
+
+/* ── delta: linha de base → hoje ───────────────────────── */
+.delta{display:inline-flex; align-items:baseline; gap:6px; font-family:"IBM Plex Mono",monospace;
+  font-size:12.5px; font-variant-numeric:tabular-nums; white-space:nowrap}
+.delta .from{color:var(--muted); text-decoration:line-through; text-decoration-thickness:1px; opacity:.75}
+.delta .arr{color:var(--muted)}
+.delta .to{color:var(--ink); font-weight:600}
+.delta.up .to{color:var(--ok)} .delta.down .to{color:var(--crit)} .delta.flat .to{color:var(--muted); font-weight:500}
+
+/* ── achados ───────────────────────────────────────────── */
+.finding{
+  background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--muted);
+  border-radius:10px; padding:18px 20px; margin:0 0 14px; box-shadow:var(--shadow); max-width:none;
+}
+.finding.crit{border-left-color:var(--crit)}
+.finding.high{border-left-color:var(--warn)}
+.finding.med{border-left-color:var(--accent)}
+.finding.fixed{border-left-color:var(--ok)}
+.finding header{display:flex; flex-wrap:wrap; align-items:baseline; gap:10px; margin-bottom:8px}
+.finding header .id{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted); font-weight:600}
+.finding header h4{margin:0; font-size:16px; flex:1 1 260px}
+.finding p{margin:0 0 10px; font-size:14.5px}
+.finding p:last-child{margin-bottom:0}
+.finding .fix{
+  background:var(--surface-2); border-radius:8px; padding:11px 14px; font-size:14px; color:var(--ink-2);
+  border:1px solid var(--line-soft);
+}
+.finding .fix b{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:3px}
+
+/* ── cartões e grades ──────────────────────────────────── */
+.grid{display:grid; gap:14px; margin:0 0 22px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 18px; box-shadow:var(--shadow)}
+.card h4{margin:0 0 6px; font-size:14px}
+.card p{margin:0; font-size:13.5px}
+.card.anc{border-color:color-mix(in srgb,var(--anchor) 32%,var(--line))}
+.stat{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 18px; box-shadow:var(--shadow)}
+.stat .k{display:block; font-family:"IBM Plex Serif",Georgia,serif; font-size:34px; line-height:1.05; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+.stat .l{display:block; font-size:12.5px; color:var(--muted); margin-top:5px; line-height:1.4}
+.stat.crit .k{color:var(--crit)} .stat.warn .k{color:var(--warn)} .stat.ok .k{color:var(--ok)} .stat.anc .k{color:var(--anchor-ink)}
+
+.callout{background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin:0 0 22px}
+.callout.acc{background:var(--accent-soft); border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+.callout.anc{background:var(--anchor-soft); border-color:color-mix(in srgb,var(--anchor) 32%,transparent)}
+.callout.crit{background:var(--crit-soft); border-color:color-mix(in srgb,var(--crit) 32%,transparent)}
+.callout p:last-child{margin-bottom:0}
+.callout h4{margin:0 0 6px; font-size:14px}
+
+/* ── barras de nota ────────────────────────────────────── */
+.score{display:flex; gap:3px; align-items:center}
+.score i{width:13px; height:13px; border-radius:3px; background:var(--line); display:inline-block}
+.score i.on{background:var(--accent)}
+.score i.on.low{background:var(--crit)}
+.score i.on.mid{background:var(--warn)}
+.score i.on.high{background:var(--ok)}
+.score b{font-family:"IBM Plex Mono",monospace; font-size:12px; margin-left:6px; color:var(--muted); font-weight:600}
+
+/* ── diagrama ──────────────────────────────────────────── */
+figure{margin:0 0 24px; max-width:none}
+figure svg{display:block; width:100%; height:auto}
+.figwrap{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:20px; overflow-x:auto; box-shadow:var(--shadow)}
+figcaption{font-size:12.5px; color:var(--muted); margin-top:10px}
+
+.foot{border-top:1px solid var(--line); padding-top:22px; font-size:13px; color:var(--muted); max-width:none}
+ol.refs{font-size:13.5px; padding-left:20px}
+ol.refs li{margin-bottom:10px}
+@media print{.rail{display:none} .shell{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+
+<div class="shell">
+<aside class="rail">
+  <div class="brand">Vértice Invest · Estudo interno · 2ª leitura</div>
+  <div class="verdict">
+    <h4>Veredito</h4>
+    <span class="big">3,0<small>/5</small></span>
+    <span class="was">era 2,7 em 22/08/2026</span>
+    <p>Os consertos são reais e mensuráveis — <b>no motor âncora</b>. O ranking semanal, que é o que o assinante vê, saiu praticamente intocado. E <b>nenhuma publicação</b> saiu sob o código novo.</p>
+  </div>
+  <nav>
+    <a href="#s1"><span>01</span>Sumário executivo</a>
+    <a href="#s2"><span>02</span>O que mudou</a>
+    <a href="#s3"><span>03</span>Retrato de hoje</a>
+    <a href="#s4"><span>04</span>A âncora auditada</a>
+    <a href="#s5"><span>05</span>As duas listas</a>
+    <a href="#s6"><span>06</span>Como o mercado faz</a>
+    <a href="#s7"><span>07</span>Achados</a>
+    <a href="#s8"><span>08</span>O que não sabemos</a>
+    <a href="#s9"><span>09</span>Roteiro</a>
+    <a href="#s10"><span>10</span>Anexos</a>
+  </nav>
+</aside>
+
+<main class="doc">
+
+<header class="head">
+  <span class="eyebrow">Estudo de maturidade · 2ª edição</span>
+  <h1>O que um mês de consertos fez com a lista?</h1>
+  <p class="lede">Segunda leitura do motor de ranking da Vértice, agora com a estratégia âncora <span class="mono">BUY_AND_HOLD</span> dentro do escopo. A pergunta de origem não mudou: o motor está alinhado com a tese de comprar e segurar até a aposentadoria, e quão confiável ele é?</p>
+  <div class="meta">
+    <span><b>Data</b> 23/08/2026</span>
+    <span><b>Branch</b> main · 20f1297</span>
+    <span><b>Baseline</b> estudo de 22/08/2026 · 9f728d3</span>
+    <span><b>Escopo</b> Ações B3, FIIs e a estratégia âncora</span>
+    <span><b>Dados vivos</b> leitura do banco de produção, sem escrita</span>
+  </div>
+</header>
+
+<!-- ══════════════════════════ 1 ══════════════════════════ -->
+<section id="s1">
+  <span class="eyebrow">01 · Sumário executivo</span>
+  <h2>O conserto foi para o motor que ninguém vê ainda</h2>
+  <p class="dek">Todo número desta seção está medido nas seções 3, 4 e 5. Nada aqui é estimativa, e nada foi copiado do estudo anterior.</p>
+
+  <p>A primeira coisa a corrigir é a premissa do pedido. O trabalho que separa esta leitura da anterior <strong>não levou um mês</strong>: os 34 commits entre o estudo e hoje têm data de <strong>22 e 23 de agosto de 2026</strong> — dois dias de calendário. Isso importa para a pergunta central, porque muda o que é possível medir.</p>
+
+  <div class="grid g3">
+    <div class="stat crit"><span class="k">0</span><span class="l">publicações de ranking saíram sob o código consertado. A última foi em 21/08 21:32 UTC, antes do primeiro commit.</span></div>
+    <div class="stat crit"><span class="k">0</span><span class="l">documentos e ponteiros da estratégia âncora existem no banco. Ela nunca foi publicada — o cron é mensal e roda dia 1.</span></div>
+    <div class="stat warn"><span class="k">30/30</span><span class="l">FIIs do ranking semanal continuam como COMPRAR. A lista Defensiva de FII é idêntica, nome por nome, à de 22/08.</span></div>
+  </div>
+
+  <h3>A resposta franca às duas perguntas do pedido</h3>
+
+  <p><strong>“A lista girou menos depois dos consertos?”</strong> — Não dá para saber, e não por omissão de método: <em>nenhuma lista foi publicada desde os consertos</em>. O que está no ar para o assinante agora foi calculado em 21/08 às 21:32 UTC pelo código antigo e ativado em 22/08 às 11:50. O giro medido continua sendo o giro do motor velho: em 40 publicações e 90 dias, o Brasil 10 passou por <strong>34 tickers distintos</strong>, nenhum presente em todas, com Jaccard mediano de <strong>0,818</strong> entre publicações consecutivas e 23 dos 39 pares abaixo de 0,85. É o mesmo retrato de antes, porque é literalmente o mesmo período.</p>
+
+  <p>O que dá para medir é o <em>contrafactual</em>: recalculando hoje, com o código novo, sobre a base de hoje. E aí aparece o dado mais desconfortável do estudo — o efeito dos consertos sobre o ranking semanal é quase nulo em FII e modesto em ações:</p>
+
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Lista</th><th class="num">Publicada 21/08</th><th class="num">Recalculada 23/08</th><th class="num">Jaccard</th><th>Quem muda</th></tr></thead>
+      <tbody>
+        <tr><td>FIIs</td><td class="num">30 COMPRAR</td><td class="num">30 COMPRAR</td><td class="num">1,000</td><td class="mono" style="color:var(--muted)">ninguém</td></tr>
+        <tr><td>Brasil 10</td><td class="num">10</td><td class="num">10</td><td class="num">0,818</td><td class="mono">sai ABCB4 · entra PSSA3</td></tr>
+        <tr><td>Ações</td><td class="num">17 COMPRAR</td><td class="num">18 COMPRAR</td><td class="num">0,750</td><td class="mono">saem ABCB4, COGN3 · entram VTRU3, PSSA3, CSED3</td></tr>
+      </tbody>
+    </table>
+    <span class="cap">Mesmo universo, mesma macro, códigos diferentes. Em FII o conjunto de COMPRAR é <b>idêntico</b>: os consertos de scoring não tocaram o caminho que decide a lista de FII. Em ações a mudança de régua do ROE de banco tirou o ABCB4 do Defensivo.</span>
+  </div>
+
+  <p><strong>“A âncora é carteira ou é lista curta demais para ser uma?”</strong> — Hoje ela publicaria <strong>6 ações e 3 FIIs</strong>. Nove nomes, dos quais quatro do sistema financeiro. Isso não é uma carteira de aposentadoria; é uma <em>lista de convicção</em>. E não é defeito de calibragem: é a consequência aritmética de um portão duro aplicado a um mercado pequeno. A pergunta que o produto precisa responder não é “como faço a lista crescer”, e sim “o que eu digo ao assinante que a lista tem três FIIs”.</p>
+
+  <h3>O que melhorou de verdade</h3>
+  <p>Três coisas mudaram de estado e são verificáveis:</p>
+  <ul>
+    <li><strong>O FFO deixou de ser jogado fora.</strong> Era o achado V‑05: o scraper lia, o <span class="mono">syncService</span> não gravava, e 0 de 122 FIIs chegavam ao scoring com FFO. Hoje <strong>295 dos 371</strong> FIIs da base têm <span class="mono">ffoYield</span> maior que zero, e <strong>115 dos 122</strong> pontuados. O motor âncora de FIIs usa isso como freio principal.</li>
+    <li><strong>Os bancos voltaram ao universo âncora.</strong> Era o V‑08: um flag de FII (<span class="mono">isTier1</span>) reprovava todo banco brasileiro. Hoje o portão cobra Basileia ≥ 13 e ROE recorrente ≥ 10, com teto de beta próprio, e <strong>cinco bancos</strong> disputam — três deles saem como COMPRAR.</li>
+    <li><strong>A qualidade estrutural parou de medir banco com régua de indústria.</strong> ITUB4 saiu de <span class="delta up"><span class="from">30</span><span class="arr">→</span><span class="to">100</span></span> e ABCB4 de <span class="delta up"><span class="from">20</span><span class="arr">→</span><span class="to">72</span></span>. O exemplo que o estudo anterior usou para ilustrar o V‑11 não existe mais.</li>
+  </ul>
+
+  <h3>O que não melhorou</h3>
+  <p>Dos catorze achados, <strong>um foi fechado</strong> (V‑08), <strong>quatro estão parciais</strong> (V‑01, V‑05, V‑10, V‑13) e <strong>nove continuam abertos sem uma linha de código alterada</strong>. Entre eles, os três críticos da tese: a lista semanal ainda gira por um ponto de score, o FII ainda publica tudo como COMPRAR, e o eixo de consistência continua dormente — <strong>a profundidade da série de fundamentos não avançou um período</strong> desde a medição anterior.</p>
+
+  <h3>Notas por dimensão</h3>
+  <p class="dek">Escala de 0 a 5, mesmo critério da 1ª edição: 5 = padrão institucional verificável; 4 = sólido com lacuna conhecida; 3 = funciona, com fragilidade estrutural; 2 = entrega resultado de baixa informação; 1 = ausente ou contraditório com a tese. São julgamento deste estudo ancorado nas evidências citadas, não benchmark externo.</p>
+
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Dimensão</th><th class="num">22/08</th><th class="num">23/08</th><th>Por quê</th></tr></thead>
+      <tbody>
+        <tr><td>Frescor e integridade dos dados</td><td class="num">4</td><td class="num">4</td><td>Mediana de defasagem em 0,1 dia. Mas a cauda piorou: 24 ações e 18 FIIs acima de 90 dias, contra “nenhum” na medição anterior.</td></tr>
+        <tr><td>Cobertura do universo</td><td class="num">3</td><td class="num">3</td><td>Mesmo funil: 200 de 355 ações e 122 de 371 FIIs chegam a ser pontuados. Snapshots setoriais continuam <span class="mono">asOf 2026‑03‑31</span>.</td></tr>
+        <tr><td>Aplicabilidade setorial</td><td class="num">4</td><td class="num">5</td><td>Tabela única <span class="mono">SCORING_NOT_APPLICABLE</span> e régua de ROE que acompanha a fonte, nos três motores. É a peça mais madura do sistema.</td></tr>
+        <tr><td>Estabilidade da recomendação</td><td class="num">1</td><td class="num">2</td><td>Histerese 70/62 existe, está correta e testável — mas só na âncora, que nunca publicou. O semanal segue com corte duro em 70.</td></tr>
+        <tr><td>Poder discriminante</td><td class="num">2</td><td class="num">2</td><td>FII inalterado: 76 de 122 cruzam 70, mediana do Moderado em 68, 30 de 30 COMPRAR. A âncora discrimina (3 de 30), o semanal não.</td></tr>
+        <tr><td>Explicabilidade e auditoria</td><td class="num">4</td><td class="num">5</td><td>Motivo obrigatório na saída, teto de composição que declara ser composição e não demérito, e uma tela que diz ao assinante o que AGUARDAR significa.</td></tr>
+        <tr><td>Integridade de publicação</td><td class="num">4</td><td class="num">5</td><td>Contrato de ranking agora é paramétrico por estratégia e o isolamento por <span class="mono">(assetClass, strategy, section)</span> está íntegro: 21 ponteiros, todos <span class="mono">BUY_HOLD</span>.</td></tr>
+        <tr><td>Evidência empírica</td><td class="num">1</td><td class="num">1</td><td>Nada mudou. Máximo de 3 leituras mensais contra as 6 exigidas; zero ativos com track record ativo.</td></tr>
+        <tr><td>Governança de mudança</td><td class="num">3</td><td class="num">2</td><td>Piorou ao ser medido: 27 valores distintos de <span class="mono">algorithmVersion</span> em 90 dias, incluindo <span class="mono">null</span>, <span class="mono">unknown</span> e o rótulo da calibração de ações carimbado em CRYPTO e REIT.</td></tr>
+      </tbody>
+    </table>
+    <span class="cap">Média simples: <b>3,0 / 5</b>, contra 2,7. A dispersão continua sendo a informação: engenharia entre 4 e 5, investimento entre 1 e 2. O que subiu foi quase tudo engenharia.</span>
+  </div>
+
+  <h3>As cinco decisões que este estudo pede</h3>
+  <ol>
+    <li><strong>Publicar a âncora com alguém olhando.</strong> O cron dispara sozinho em 01/09 às 07:30 e a primeira lista da história do produto iria ao ar sem revisão humana. O botão manual existe e o portão passa hoje — usar o <span class="mono">dryRun</span> antes é praticamente de graça.</li>
+    <li><strong>Levar a histerese para o semanal, ou parar de chamar o semanal de buy-and-hold.</strong> A banda 70/62 está escrita, testada e correta. Ela protege a lista que ninguém viu ainda e não protege a lista que todo assinante vê.</li>
+    <li><strong>Decidir o teto de beta de banco.</strong> BBDC4 está em 1,277 e fica fora por causa de um número escolhido para caber SANB11, que hoje está em 1,155 — a 0,045 do teto. É uma fronteira administrativa decidindo a composição de uma carteira de décadas.</li>
+    <li><strong>Dar teto de composição à lista âncora de ações.</strong> O FII ganhou um (1/3 papel, 1/3 gestora) porque metade dos COMPRAR era Kinea de papel. A lista de ações tem hoje 4 nomes financeiros em 6 e nenhum teto.</li>
+    <li><strong>Explicar a divergência na tela do Research, não só na do Buy-and-Hold.</strong> Dos 30 FIIs que o semanal publica como COMPRAR, <strong>18 sequer entram no universo âncora</strong>. A página da âncora explica a diferença; a do Research não a menciona uma única vez.</li>
+  </ol>
+</section>
+
+<!-- ══════════════════════════ 2 ══════════════════════════ -->
+<section id="s2">
+  <span class="eyebrow">02 · Delta</span>
+  <h2>O que mudou, e onde o efeito apareceu</h2>
+  <p class="dek">Trinta e quatro commits entre <span class="mono">61d1262</span> (o estudo anterior) e <span class="mono">20f1297</span> (hoje), todos datados de 22 ou 23 de agosto de 2026. Abaixo, agrupados por tema, com o efeito que foi possível <em>medir</em> — não o que o commit se propôs a fazer.</p>
+
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Tema</th><th>Commits</th><th>Efeito medido hoje</th><th>Alcança o semanal?</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Métrica inaplicável = ausente; qualidade e ROE de banco</td>
+          <td class="mono" style="font-size:11.5px">bbb1268 727f5b6 6b530ef cad4fa7 a00ced7 729a61a</td>
+          <td>Qualidade estrutural de banco deixa de ser régua industrial: ITUB4 30→100, ABCB4 20→72. ROE recorrente separa os bancos numa rampa 12–30 em vez de empatá-los em 100.</td>
+          <td>Sim, mas só no <b>desempate</b> e na exibição. Muda a lista de ações em 2 nomes; não muda nada em FII.</td>
+        </tr>
+        <tr>
+          <td>Motor âncora de FIIs, vacância implausível, teto de composição</td>
+          <td class="mono" style="font-size:11.5px">57d65a1 1c0c739 27a677e</td>
+          <td>122 FIIs analisados, 30 elegíveis, 3 COMPRAR. O teto demoveu 1 fundo (KNSC11). A vacância implausível resgatou XPML11 e HSML11 para o universo.</td>
+          <td>Não. O <span class="mono">scoringEngine</span> continua sem qualquer noção de FFO ou de vacância implausível.</td>
+        </tr>
+        <tr>
+          <td>Beta por arquétipo, escala absoluta, arquétipo ausente</td>
+          <td class="mono" style="font-size:11.5px">92e04dd a848f0e 7370316</td>
+          <td>Universo âncora de ações vai de 12 para 17 elegíveis; 5 bancos entram. A nota de beta deixa de inverter a ordem entre Itaúsa e Itaú.</td>
+          <td>Não. Vive só em <span class="mono">config/buyAndHold.js</span>.</td>
+        </tr>
+        <tr>
+          <td>Janela de drawdown comparável</td>
+          <td class="mono" style="font-size:11.5px">10cd60a dd926bd</td>
+          <td>Janela comum de 400 candles nos dois motores âncora. Relevante: 282 dos 1.472 documentos de série estão acima do cap e distorciam a comparação.</td>
+          <td>Não.</td>
+        </tr>
+        <tr>
+          <td>Publicação âncora: histerese, ponteiro, cron, página, Admin</td>
+          <td class="mono" style="font-size:11.5px">7fbf0a9 d4cb8b6 18450dd f3e7da9 395b904 b0c7b79 20f1297</td>
+          <td>Camada completa e funcional — e <b>nunca executada</b>: zero documentos, zero ponteiros, <span class="mono">bootstrap = true</span> nas duas classes.</td>
+          <td>Não, por desenho. O contrato ficou paramétrico justamente para não afrouxar o do semanal.</td>
+        </tr>
+        <tr>
+          <td>Integridade de série temporal</td>
+          <td class="mono" style="font-size:11.5px">12b3b83 61516bb d259be8 e332ab8</td>
+          <td>Gravação por mescla em vez de substituição; HSRE11 restaurado de 1 para 623 candles. 1.472 séries, 44 abaixo do piso de 250 candles.</td>
+          <td>Indiretamente — alimenta SMA200 e drawdown nos dois caminhos.</td>
+        </tr>
+        <tr>
+          <td>FFO/VP por cota persistidos; portão de banco por Basileia</td>
+          <td class="mono" style="font-size:11.5px">9bd589f 54e62a5</td>
+          <td>295 de 371 FIIs com FFO gravado (era 0). Bancos deixam de ser reprovados por flag inexistente.</td>
+          <td><b>Metade.</b> O dado chegou ao banco; o <span class="mono">scoringEngine</span> não o consome.</td>
+        </tr>
+      </tbody>
+    </table>
+    <span class="cap">A coluna da direita é a leitura mais importante da tabela: cinco dos sete temas não tocam o produto que o assinante consome hoje.</span>
+  </div>
+
+  <div class="callout crit">
+    <h4>A janela de medição fechou antes dos consertos</h4>
+    <p>A última publicação de ranking em qualquer classe tem <span class="mono">createdAt = 2026‑08‑21T21:32Z</span> e foi ativada em <span class="mono">2026‑08‑22T11:50Z</span>. O primeiro commit desta leva é de 22/08. Portanto, <strong>as 40 publicações analisadas em 90 dias são, todas elas, produto do motor antigo</strong> — e qualquer afirmação de que “o giro caiu” seria inventada. O sistema continua gerando rascunhos (229 documentos de <span class="mono">MarketAnalysis</span> em 90 dias, o mais recente de hoje), mas publicar é ato manual e não aconteceu desde então.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 3 ══════════════════════════ -->
+<section id="s3">
+  <span class="eyebrow">03 · Medição</span>
+  <h2>Retrato do sistema em 23/08/2026</h2>
+  <p class="dek">Leitura pura do banco de produção, entre 11:29 e 14:30 UTC. Macro vigente: Selic 14,00%, IPCA 4,44%, NTN‑B longa 7,96%, taxas não defasadas. Nenhuma escrita.</p>
+
+  <h3>O funil, das fontes até a lista</h3>
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Etapa</th><th class="num">Ações 22/08</th><th class="num">Ações 23/08</th><th class="num">FIIs 22/08</th><th class="num">FIIs 23/08</th></tr></thead>
+      <tbody>
+        <tr><td>Documentos não blacklistados na base</td><td class="num" style="color:var(--muted)">—</td><td class="num">355</td><td class="num" style="color:var(--muted)">—</td><td class="num">371</td></tr>
+        <tr><td>Universo elegível após deduplicação por raiz</td><td class="num">282</td><td class="num" style="color:var(--muted)">—</td><td class="num">367</td><td class="num" style="color:var(--muted)">—</td></tr>
+        <tr><td>Efetivamente pontuados</td><td class="num">200</td><td class="num">200</td><td class="num">122</td><td class="num">122</td></tr>
+        <tr><td>Excluídos por cobertura de campos obrigatórios</td><td class="num">1</td><td class="num">1</td><td class="num">—</td><td class="num">—</td></tr>
+        <tr><td>Elegíveis ao perfil Defensivo</td><td class="num">49</td><td class="num">48</td><td class="num">52</td><td class="num" style="color:var(--muted)">—</td></tr>
+        <tr><td>Com melhor score ≥ 70 em algum perfil</td><td class="num">25</td><td class="num">25</td><td class="num">76</td><td class="num">76</td></tr>
+        <tr><td>Selecionados pelo draft (10 por perfil)</td><td class="num">30</td><td class="num">30</td><td class="num">30</td><td class="num">30</td></tr>
+        <tr><td>Publicados como COMPRAR</td><td class="num">20</td><td class="num">18</td><td class="num">30</td><td class="num">30</td></tr>
+      </tbody>
+    </table>
+    <span class="cap">Reprodução do caminho de produção (<span class="mono">aiResearchService.calculateRanking</span>) com a única escrita do caminho — <span class="mono">DiscardLog.insertMany</span> — neutralizada antes do import. Colunas de 22/08 vêm do estudo anterior; travessões marcam o que aquele estudo não mediu nesse formato.</span>
+  </div>
+
+  <h3>Distribuição dos scores</h3>
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Classe · perfil</th><th class="num">mín</th><th class="num">p25</th><th class="num">mediana</th><th class="num">p75</th><th class="num">máx</th><th class="num">≥ 70</th><th class="num">≥ 70 em 22/08</th></tr></thead>
+      <tbody>
+        <tr><td>Ações · Defensivo</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">84</td><td class="num">14</td><td class="num" style="color:var(--muted)">14</td></tr>
+        <tr><td>Ações · Moderado</td><td class="num">0</td><td class="num">16</td><td class="num">21</td><td class="num">34</td><td class="num">91</td><td class="num">7</td><td class="num" style="color:var(--muted)">7</td></tr>
+        <tr><td>Ações · Arrojado</td><td class="num">0</td><td class="num">17</td><td class="num">26</td><td class="num">47</td><td class="num">92</td><td class="num">11</td><td class="num" style="color:var(--muted)">12</td></tr>
+        <tr><td>FIIs · Defensivo</td><td class="num">25</td><td class="num">25</td><td class="num">25</td><td class="num">76</td><td class="num">99</td><td class="num">43</td><td class="num" style="color:var(--muted)">43</td></tr>
+        <tr><td>FIIs · Moderado</td><td class="num">27</td><td class="num">52</td><td class="num">68</td><td class="num">80</td><td class="num">92</td><td class="num">58</td><td class="num" style="color:var(--muted)">58</td></tr>
+        <tr><td>FIIs · Arrojado</td><td class="num">33</td><td class="num">45</td><td class="num">60</td><td class="num">75</td><td class="num">100</td><td class="num">43</td><td class="num" style="color:var(--muted)">43</td></tr>
+      </tbody>
+    </table>
+    <span class="cap">Cinco das seis distribuições são <b>idênticas</b> às de 22/08, incluindo todos os quartis de FII. A mediana do Moderado de FII segue a dois pontos do limiar de compra. Nenhum conserto desta leva alterou a régua que decide COMPRAR em FII.</span>
+  </div>
+
+  <h3>As listas de hoje</h3>
+  <p>Ranking recalculado em 23/08. A versão <em>no ar</em> é a de 21/08, e as diferenças estão na tabela do sumário.</p>
+
+  <h4>Ações · Defensivo</h4>
+  <p class="mono" style="font-size:13.5px; color:var(--ink)">CMIG4 84 · ITUB4 81 · ITSA4 80 · PSSA3 79 · WIZC3 79 · CPFE3 77 · TAEE11 76 · JHSF3 73 · INTB3 72 · TGMA3 71</p>
+  <p>Todos COMPRAR. Quatro nomes financeiros (ITUB4, ITSA4, PSSA3, WIZC3) ocupam exatamente o teto de 4 ativos por macro-setor do Defensivo — e é por isso que o ABCB4, que estava aqui em 22/08 com 77, foi empurrado para o Moderado, onde marca 64. JHSF3 (incorporação de luxo) e TGMA3 (logística automotiva) continuam entrando por pontuação, não por durabilidade.</p>
+
+  <h4>FIIs · Defensivo</h4>
+  <p class="mono" style="font-size:13.5px; color:var(--ink)">KNCR11 99 · GGRC11 96 · KNSC11 96 · TRXF11 94 · BTLG11 92 · RZTR11 89 · VGIR11 87 · HGRU11 87 · HGBS11 86 · XPLG11 81</p>
+  <p>Dez nomes, dez scores, mesma ordem — <strong>idêntica à lista de 22/08</strong>. Três fundos de papel no perfil mais conservador, e o motor continua sem avaliar a carteira de CRI.</p>
+
+  <h4>FIIs · Moderado e Arrojado — onde o V‑11 fica visível</h4>
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Ticker</th><th class="num">Score</th><th>Ação</th><th class="num">Qualidade estrutural</th><th class="num">Risco estrutural</th><th>O que a âncora diz do mesmo fundo</th></tr></thead>
+      <tbody>
+        <tr><td class="t">TRBL11</td><td class="num">84</td><td><span class="chip ok">COMPRAR</span></td><td class="num" style="color:var(--crit)">1,48</td><td class="num">10</td><td>fora do universo: patrimônio &lt; 500 M, liquidez &lt; 1 M/dia, vacância &gt; 12%</td></tr>
+        <tr><td class="t">RZAT11</td><td class="num">80</td><td><span class="chip ok">COMPRAR</span></td><td class="num" style="color:var(--crit)">0</td><td class="num">10</td><td>fora do universo: patrimônio &lt; 500 M, liquidez &lt; 1 M/dia, vacância &gt; 12%</td></tr>
+        <tr><td class="t">TEPP11</td><td class="num">78</td><td><span class="chip ok">COMPRAR</span></td><td class="num" style="color:var(--crit)">9,55</td><td class="num">20</td><td>fora do universo: patrimônio &lt; 500 M, vacância &gt; 12%</td></tr>
+        <tr><td class="t">RBRX11</td><td class="num">85</td><td><span class="chip ok">COMPRAR</span></td><td class="num">50</td><td class="num">20</td><td>fora do universo: menos de 2 imóveis</td></tr>
+        <tr><td class="t">SNEL11</td><td class="num">85</td><td><span class="chip ok">COMPRAR</span></td><td class="num">50</td><td class="num">25</td><td>fora do universo: segmento Infraestrutura, menos de 2 imóveis</td></tr>
+        <tr><td class="t">LIFE11</td><td class="num">85</td><td><span class="chip ok">COMPRAR</span></td><td class="num">80</td><td class="num">30</td><td>fora do universo: fundo de fundos, patrimônio e liquidez abaixo do piso</td></tr>
+      </tbody>
+    </table>
+    <span class="cap">Seis dos trinta COMPRAR de FII de hoje. As duas primeiras linhas são o ponto: um fundo com <b>qualidade estrutural 1,48</b> e outro com <b>0</b> saem publicados como COMPRAR, com o radar de Q/V/R exibido ao lado do score. O número <span class="mono">1,4799999999999898</span> chega ao ranking sem arredondamento.</span>
+  </div>
+
+  <h3>Estabilidade: 40 publicações, 90 dias</h3>
+  <p>Foram comparadas as listas de COMPRAR entre publicações consecutivas de cada classe, considerando apenas documentos efetivamente publicados (<span class="mono">isRankingPublished</span>), de 02/06 a 21/08/2026.</p>
+
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Classe</th><th class="num">Publicações</th><th class="num">Tamanho da lista</th><th class="num">Tickers distintos</th><th>Presentes em todas</th><th class="num">Jaccard mín</th><th class="num">mediana</th><th class="num">pares &lt; 0,85</th></tr></thead>
+      <tbody>
+        <tr><td>Brasil 10</td><td class="num">40</td><td class="num">9 – 10</td><td class="num">34</td><td class="mono" style="color:var(--crit)">nenhum</td><td class="num">0,250</td><td class="num">0,818</td><td class="num">23 / 39</td></tr>
+        <tr><td>Ações</td><td class="num">40</td><td class="num">8 – 26</td><td class="num">45</td><td class="mono">ITSA4, CMIG4</td><td class="num">0,350</td><td class="num">0,900</td><td class="num">14 / 39</td></tr>
+        <tr><td>FIIs</td><td class="num">40</td><td class="num">20 – 30</td><td class="num">68</td><td class="mono">TRXF11, RZTR11</td><td class="num">0,316</td><td class="num">0,875</td><td class="num">17 / 39</td></tr>
+        <tr><td>Ações US</td><td class="num">40</td><td class="num">13 – 27</td><td class="num">61</td><td class="mono">TGTX, VZ</td><td class="num">0,297</td><td class="num">0,875</td><td class="num">19 / 39</td></tr>
+        <tr><td>Cripto</td><td class="num">40</td><td class="num">2 – 16</td><td class="num">22</td><td class="mono">BTC, ETH</td><td class="num">0,188</td><td class="num">1,000</td><td class="num">17 / 39</td></tr>
+        <tr><td>ETF</td><td class="num">33</td><td class="num">10 – 16</td><td class="num">23</td><td class="mono">XLF, XLV, VNQ, SMH</td><td class="num">0,250</td><td class="num">0,938</td><td class="num">3 / 32</td></tr>
+        <tr><td>REIT</td><td class="num">31</td><td class="num">12 – 16</td><td class="num">16</td><td class="mono">O, VICI, CPT, FRT, EQR, PLD, HST</td><td class="num">0,688</td><td class="num">0,938</td><td class="num">5 / 30</td></tr>
+      </tbody>
+    </table>
+    <span class="cap">O estudo anterior registrou 0,538 como Jaccard mínimo do Brasil 10; esta medição encontra 0,250. A diferença é de método — aqui o par é medido sobre o subconjunto COMPRAR de cada documento publicado, inclusive quando ele encolhe — e não altera a conclusão: 34 nomes distintos numa lista de 10, nenhum presente em todas as 40 publicações.</span>
+  </div>
+
+  <p>Vale registrar o contraste interno: <strong>ETF e REIT são as listas mais estáveis do sistema</strong> (3 e 5 pares abaixo de 0,85, contra 23 no Brasil 10). Não é virtude do motor — é consequência de um universo pequeno e de métricas que não oscilam diariamente. Serve como controle: quando o insumo é estável, a saída é estável. O giro do Brasil 10 é do desenho da decisão, não do mercado.</p>
+
+  <h3>Profundidade dos dados</h3>
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Insumo</th><th class="num">Ações</th><th class="num">FIIs</th><th>Situação</th></tr></thead>
+      <tbody>
+        <tr><td>Defasagem dos fundamentais — mediana</td><td class="num">0,1 d</td><td class="num">0,1 d</td><td><span class="chip ok">saudável</span></td></tr>
+        <tr><td>Defasagem — p90 / máxima</td><td class="num">0,1 / 187,9 d</td><td class="num">26,7 / 187,9 d</td><td><span class="chip warn">cauda longa</span></td></tr>
+        <tr><td>Documentos acima de 90 dias de defasagem</td><td class="num">24</td><td class="num">18</td><td>o estudo anterior registrou nenhum acima de 90 dias</td></tr>
+        <tr><td>FIIs com <span class="mono">ffoYield</span> &gt; 0 (base inteira)</td><td class="num">—</td><td class="num">295 / 371</td><td><span class="chip ok">era 0</span></td></tr>
+        <tr><td>FIIs pontuados com FFO</td><td class="num">—</td><td class="num">115 / 122</td><td><span class="chip ok">era 0 de 122</span></td></tr>
+        <tr><td>Leituras mensais de fundamentos — máximo por ticker</td><td class="num">2</td><td class="num">3</td><td><span class="chip crit">exige 6 · inalterado</span></td></tr>
+        <tr><td>Séries de preço acima do cap de 400 candles</td><td class="num" colspan="2" style="text-align:right">282 de 1.472 documentos</td><td>44 abaixo do piso de 250 candles do eixo de consistência</td></tr>
+      </tbody>
+    </table>
+    <span class="cap">A série de fundamentos tem exatamente três períodos: 2026‑06 (319 linhas), 2026‑07 (663) e 2026‑08 (655). A distribuição por profundidade — 19 tickers com 1 período, 353 com 2, 304 com 3 — é rigorosamente a mesma de 22/08.</span>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 4 ══════════════════════════ -->
+<section id="s4">
+  <span class="eyebrow anc">04 · A peça nova</span>
+  <h2>A estratégia âncora, auditada como produto</h2>
+  <p class="dek">Quando o primeiro estudo foi escrito, o <span class="mono">buyAndHoldEngine</span> era shadow e ficou fora do escopo. Hoje tem motor de ações, motor de FIIs, histerese, teto de composição, camada de publicação, cron mensal, página <span class="mono">/buy-and-hold</span> e fluxo de publicação no Admin. Esta seção aplica a ela o mesmo rigor aplicado ao semanal.</p>
+
+  <div class="callout anc">
+    <h4>O fato que precede toda a análise</h4>
+    <p>A lista âncora <strong>nunca foi publicada</strong>. Consultando o banco de produção: <span class="mono">MarketAnalysis</span> com <span class="mono">strategy: 'BUY_AND_HOLD'</span> → <strong>0 documentos</strong>. <span class="mono">PublishedResearchPointer</span> com a mesma estratégia → <strong>0 ponteiros</strong> (os 21 existentes são todos <span class="mono">BUY_HOLD</span>). O motivo é banal e já estava diagnosticado: o cron <span class="mono">monthly-anchor-publish</span> nasceu em 22/08 e roda dia 1 — a primeira execução seria <strong>01/09/2026 às 07:30</strong>. Consequência para este estudo: tudo abaixo é o que a lista <em>seria</em>, calculado pelo mesmo caminho que o cron usa, e a histerese roda em <span class="mono">bootstrap = true</span> nas duas classes — ela nunca teve uma lista anterior para segurar.</p>
+    <div class="evrow">
+      <span class="ev">server/services/anchorPublicationService.js:98‑116</span>
+      <span class="ev">server/services/schedulerService.js:712</span>
+      <span class="ev">server/config/jobCatalog.js:56‑64</span>
+    </div>
+  </div>
+
+  <h3>O desenho: portão binário, três eixos, valuation só como freio</h3>
+  <p>A filosofia está escrita no topo dos dois motores e é coerente entre eles: segurança é <strong>portão</strong>, não score — fora do portão o ativo desaparece, por mais barato que esteja; durabilidade e resiliência mandam; e o preço só pode <em>subtrair</em>.</p>
+
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Camada</th><th>Ações</th><th>FIIs</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Portão</td>
+          <td>setor na lista âncora curada · não cíclico · market cap ≥ R$ 5 bi · liquidez ≥ R$ 5 M/dia · ROE ≥ 10 · beta ≤ 1,00 (BANK: 1,20) · DL/EBITDA ≤ 3,0 · banco: Basileia ≥ 13 e ROE recorrente ≥ 10 · seguradora: solvência ≥ 130 e combined ≤ 100</td>
+          <td>segmento de tijolo de renda curado · natureza elegível (fora: desenvolvimento, FOF, FIAGRO) · patrimônio ≥ R$ 500 M · liquidez ≥ R$ 1 M/dia · DY entre 4% e 20% · ≥ 2 imóveis · vacância crível ≤ 12% · papel só se tier‑1</td>
+        </tr>
+        <tr>
+          <td>Eixos (peso)</td>
+          <td>durabilidade 0,50 · resiliência 0,35 · consistência 0,15</td>
+          <td>durabilidade 0,45 · resiliência 0,35 · consistência 0,20</td>
+        </tr>
+        <tr>
+          <td>Freio de preço</td>
+          <td>prêmio sobre <span class="mono">targetPrice</span>; tolerância 5%, penalidade cheia a 50% de prêmio, máximo −25</td>
+          <td>spread de DY sobre a NTN‑B longa, banda [2,0; 6,0] p.p. · <b>e</b> P/FFO (justo 16, penalidade cheia a 26); vale o freio que morde mais forte, máximo −25</td>
+        </tr>
+        <tr>
+          <td>Veto adicional ao COMPRAR</td>
+          <td class="mono" style="color:var(--muted)">nenhum</td>
+          <td>cobertura da distribuição pelo FFO abaixo de 0,70×</td>
+        </tr>
+        <tr>
+          <td>Teto de composição da lista publicável</td>
+          <td class="mono" style="color:var(--crit)">não existe</td>
+          <td>papel ≤ 1/3 · mesma gestora ≤ 1/3, resolvido por ponto fixo e reaplicado depois da histerese</td>
+        </tr>
+      </tbody>
+    </table>
+    <span class="cap">A assimetria da última linha é um achado, não uma nota de rodapé — ver V‑18.</span>
+  </div>
+  <div class="evrow">
+    <span class="ev">config/buyAndHold.js:109‑165</span>
+    <span class="ev">config/fiiBuyAndHold.js:67‑215</span>
+    <span class="ev">engines/buyAndHoldEngine.js:95‑161 · 277‑367</span>
+    <span class="ev">engines/fiiBuyAndHoldEngine.js:204‑277 · 438‑510</span>
+  </div>
+
+  <h3>A lista âncora de ações, hoje</h3>
+  <p><strong>200 analisados · 17 elegíveis · 6 COMPRAR.</strong> Contra 12 elegíveis e 4 COMPRAR na medição de 22/08 — o crescimento veio inteiro do retorno dos bancos.</p>
+
+  <div class="wide tw">
+    <table>
+      <thead><tr><th class="num">#</th><th>Ticker</th><th>Setor</th><th>Arquétipo</th><th class="num">Score</th><th class="num">Comp.</th><th>Ação</th><th class="num">Dur.</th><th class="num">Resil.</th><th class="num">Consist.</th><th class="num">Prêmio</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td class="t">ITSA4</td><td>Bancos</td><td class="mono" style="font-size:11px">DIVERSIFIED_HOLDING</td><td class="num">85</td><td class="num">85</td><td><span class="chip ok">COMPRAR</span></td><td class="num">86</td><td class="num">80</td><td class="num">94</td><td class="num">−9,3%</td></tr>
+        <tr><td class="num">2</td><td class="t">BBSE3</td><td>Seguros</td><td class="mono" style="font-size:11px">INSUR_HOLDING_DISTR</td><td class="num">84</td><td class="num">84</td><td><span class="chip ok">COMPRAR</span></td><td class="num">93</td><td class="num">72</td><td class="num">85</td><td class="num">−1,6%</td></tr>
+        <tr><td class="num">3</td><td class="t">CPFE3</td><td>Elétricas</td><td class="mono" style="font-size:11px">OPERATIONAL</td><td class="num">82</td><td class="num">82</td><td><span class="chip ok">COMPRAR</span></td><td class="num">78</td><td class="num">85</td><td class="num">85</td><td class="num">+1,5%</td></tr>
+        <tr><td class="num">4</td><td class="t">PSSA3</td><td>Seguros</td><td class="mono" style="font-size:11px">INSURER</td><td class="num">81</td><td class="num">86</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">91</td><td class="num">76</td><td class="num">90</td><td class="num">+14,3%</td></tr>
+        <tr><td class="num">5</td><td class="t">TAEE11</td><td>Elétricas</td><td class="mono" style="font-size:11px">OPERATIONAL</td><td class="num">81</td><td class="num">81</td><td><span class="chip ok">COMPRAR</span></td><td class="num">84</td><td class="num">68</td><td class="num">99</td><td class="num">−1,3%</td></tr>
+        <tr><td class="num">6</td><td class="t">ITUB4</td><td>Bancos</td><td class="mono" style="font-size:11px">BANK</td><td class="num">81</td><td class="num">83</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">94</td><td class="num">68</td><td class="num">83</td><td class="num">+8,2%</td></tr>
+        <tr><td class="num">7</td><td class="t">SANB11</td><td>Bancos</td><td class="mono" style="font-size:11px">BANK</td><td class="num">74</td><td class="num">74</td><td><span class="chip ok">COMPRAR</span></td><td class="num">80</td><td class="num">69</td><td class="num">65</td><td class="num">−12,4%</td></tr>
+        <tr><td class="num">8</td><td class="t">CXSE3</td><td>Seguros</td><td class="mono" style="font-size:11px">INSUR_HOLDING_DISTR</td><td class="num">71</td><td class="num">88</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">94</td><td class="num">78</td><td class="num">92</td><td class="num">+38,9%</td></tr>
+        <tr><td class="num">9</td><td class="t">ABCB4</td><td>Bancos</td><td class="mono" style="font-size:11px">BANK</td><td class="num">70</td><td class="num">70</td><td><span class="chip ok">COMPRAR</span></td><td class="num">59</td><td class="num">74</td><td class="num">95</td><td class="num">−35,9%</td></tr>
+        <tr><td class="num">10</td><td class="t">CMIG4</td><td>Elétricas</td><td class="mono" style="font-size:11px">OPERATIONAL</td><td class="num">65</td><td class="num">65</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">69</td><td class="num">53</td><td class="num">78</td><td class="num">−28,6%</td></tr>
+        <tr><td class="num">11</td><td class="t">BRSR6</td><td>Bancos</td><td class="mono" style="font-size:11px">BANK</td><td class="num">63</td><td class="num">63</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">63</td><td class="num">62</td><td class="num">68</td><td class="num">−54,1%</td></tr>
+        <tr><td class="num">12</td><td class="t">ALUP11</td><td>Elétricas</td><td class="mono" style="font-size:11px">OPERATIONAL</td><td class="num">61</td><td class="num">67</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">51</td><td class="num">77</td><td class="num">99</td><td class="num">+16,7%</td></tr>
+        <tr><td class="num">13</td><td class="t">VIVT3</td><td>Telecom</td><td class="mono" style="font-size:11px">OPERATIONAL</td><td class="num">60</td><td class="num">61</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">37</td><td class="num">90</td><td class="num">70</td><td class="num">+7,7%</td></tr>
+        <tr><td class="num">14</td><td class="t">ABEV3</td><td>Bebidas</td><td class="mono" style="font-size:11px">OPERATIONAL</td><td class="num">56</td><td class="num">81</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">69</td><td class="num">94</td><td class="num">91</td><td class="num">+59,7%</td></tr>
+        <tr><td class="num">15</td><td class="t">CSMG3</td><td>Saneamento</td><td class="mono" style="font-size:11px">OPERATIONAL</td><td class="num">50</td><td class="num">75</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">66</td><td class="num">83</td><td class="num">87</td><td class="num">+81,4%</td></tr>
+        <tr><td class="num">16</td><td class="t">EGIE3</td><td>Elétricas</td><td class="mono" style="font-size:11px">OPERATIONAL</td><td class="num">49</td><td class="num">74</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">70</td><td class="num">79</td><td class="num">74</td><td class="num">+110,6%</td></tr>
+        <tr><td class="num">17</td><td class="t">BBAS3</td><td>Bancos</td><td class="mono" style="font-size:11px">BANK</td><td class="num">30</td><td class="num">30</td><td><span class="chip warn">AGUARDAR</span></td><td class="num" style="color:var(--crit)">7</td><td class="num">53</td><td class="num">50</td><td class="num">−9,3%</td></tr>
+      </tbody>
+    </table>
+    <span class="cap">Motivos de exclusão mais frequentes entre os 183 descartados: setor cíclico (56), varejo (27), construção civil (19), market cap abaixo de R$ 5 bi (14), logística (13), tecnologia (11), saúde (10), beta acima de 1 (7).</span>
+  </div>
+
+  <div class="callout crit">
+    <h4>BBAS3 com durabilidade 7 é a coisa mais reveladora desta lista</h4>
+    <p>O Banco do Brasil é o pior nome do universo âncora — abaixo de todas as utilities, abaixo de todos os pares. Não é um bug; é a régua nova funcionando com uma inclinação muito íngreme. A rampa de ROE recorrente vai de 12% (nota 0) a 30% (nota 100). O <span class="mono">roeTtm</span> do BBAS3 é <strong>13,54%</strong> → nota <strong>8,6</strong>. E como para um arquétipo <span class="mono">BANK</span> margem líquida, dívida/patrimônio e crescimento de receita são todos <em>inaplicáveis</em>, a qualidade estrutural do banco <strong>é</strong> a nota de ROE. Ela entra na durabilidade com peso 0,40, e o ROE entra de novo com 0,35 — <strong>o ROE responde por ~75% do eixo</strong>, que por sua vez pesa 0,50 no score. Cada ponto percentual de ROE recorrente move o score âncora de um banco em cerca de 2 pontos.</p>
+    <div class="evrow">
+      <span class="ev">config/stockCalibration.js:346‑348 · 381‑395</span>
+      <span class="ev">engines/buyAndHoldEngine.js:193‑212</span>
+      <span class="ev">roeTtm na base: BBAS3 13,54 · BRSR6 19,82 · ABCB4 22,19</span><span class="ev">SANB11 24,03 · ITUB4 32,37 · BPAC11 34,71</span>
+    </div>
+  </div>
+
+  <h3>A lista âncora de FIIs, hoje</h3>
+  <p><strong>122 analisados · 30 elegíveis (15 gestoras) · 3 COMPRAR.</strong> Dez por cento dos elegíveis. É o oposto exato do semanal, que publica 30 de 30.</p>
+
+  <div class="wide tw">
+    <table>
+      <thead><tr><th class="num">#</th><th>Ticker</th><th>Segmento</th><th>Gestora</th><th class="num">Score</th><th>Ação</th><th class="num">Spread</th><th class="num">P/FFO</th><th class="num">Cob. FFO</th><th>Motivo dominante</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td class="t">KNCR11</td><td>Papel</td><td>Kinea</td><td class="num">79</td><td><span class="chip ok">COMPRAR</span></td><td class="num">4,03</td><td class="num">10,2</td><td class="num">0,8</td><td>âncora de renda com preço justo</td></tr>
+        <tr><td class="num">2</td><td class="t">KNSC11</td><td>Papel</td><td>Kinea</td><td class="num">76</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">3,29</td><td class="num">7,3</td><td class="num">1,2</td><td><b>teto de composição</b>: a lista já leva 1 de papel</td></tr>
+        <tr><td class="num">3</td><td class="t">GGRC11</td><td>Logística</td><td>GGR</td><td class="num">75</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">5,01</td><td class="num">16,4</td><td class="num" style="color:var(--crit)">0,5</td><td>distribuição não coberta pelo FFO</td></tr>
+        <tr><td class="num">4</td><td class="t">TRXF11</td><td>Renda Urbana</td><td>Tordesilhas</td><td class="num">75</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">6,86</td><td class="num">16,9</td><td class="num" style="color:var(--crit)">0,4</td><td>distribuição não coberta pelo FFO</td></tr>
+        <tr><td class="num">5</td><td class="t">PMLL11</td><td>Shoppings</td><td>Pátria</td><td class="num">71</td><td><span class="chip ok">COMPRAR</span></td><td class="num">2,06</td><td class="num">9,7</td><td class="num">1,0</td><td>âncora de renda com preço justo</td></tr>
+        <tr><td class="num">6</td><td class="t">HSLG11</td><td>Logística</td><td>HSI</td><td class="num">71</td><td><span class="chip ok">COMPRAR</span></td><td class="num">2,32</td><td class="num">8,2</td><td class="num">1,2</td><td>âncora de renda com preço justo</td></tr>
+        <tr><td class="num">7</td><td class="t">HGRU11</td><td>Renda Urbana</td><td>CSHG</td><td class="num">70</td><td><span class="chip warn">AGUARDAR</span></td><td class="num" style="color:var(--warn)">1,41</td><td class="num">11,6</td><td class="num">0,9</td><td>spread comprimido — cara</td></tr>
+        <tr><td class="num">8</td><td class="t">HGCR11</td><td>Papel</td><td>CSHG</td><td class="num">69</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">3,53</td><td class="num">8,3</td><td class="num">1,1</td><td>convicção insuficiente (resiliência 47)</td></tr>
+        <tr><td class="num">11</td><td class="t">BTLG11</td><td>Logística</td><td>BTG</td><td class="num">62</td><td><span class="chip warn">AGUARDAR</span></td><td class="num" style="color:var(--warn)">0,72</td><td class="num">16,3</td><td class="num">0,7</td><td>spread comprimido — cara</td></tr>
+        <tr><td class="num">15</td><td class="t">HGLG11</td><td>Logística</td><td>CSHG</td><td class="num">57</td><td><span class="chip warn">AGUARDAR</span></td><td class="num" style="color:var(--warn)">0,14</td><td class="num">15,1</td><td class="num">0,8</td><td>cara + 3º fundo CSHG (−10)</td></tr>
+        <tr><td class="num">25</td><td class="t">XPML11</td><td>Shoppings</td><td>XP</td><td class="num">44</td><td><span class="chip warn">AGUARDAR</span></td><td class="num">2,05</td><td class="num">12,0</td><td class="num">0,8</td><td>durabilidade 21 · vacância de 91,81% descartada</td></tr>
+        <tr><td class="num">27</td><td class="t">KNRI11</td><td>Híbrido</td><td>Kinea</td><td class="num">35</td><td><span class="chip warn">AGUARDAR</span></td><td class="num" style="color:var(--crit)">−0,41</td><td class="num">13,5</td><td class="num">1,0</td><td>DY abaixo da própria NTN‑B + 4º Kinea (−20)</td></tr>
+      </tbody>
+    </table>
+    <span class="cap">Recorte de 12 dos 30 elegíveis, escolhido para mostrar cada mecanismo em ação. Exclusões mais frequentes entre os 92 descartados: papel fora do tier‑1 (40), FIAGRO (10), patrimônio abaixo de R$ 500 M (9), menos de 2 imóveis (5), liquidez (5), segmento Multicategoria (5), vacância acima de 12% (4), fundo de fundos (4).</span>
+  </div>
+
+  <h3>Os freios funcionam? A distribuição diz que sim</h3>
+  <p>A pergunta do pedido era direta: o freio de FII foi criado porque o preço justo genérico era tautologia do P/VP — com o setor a P/VP 0,70–0,95, <em>100% dos elegíveis</em> apareciam “dentro do valor justo”. O substituto virou outra tautologia?</p>
+
+  <div class="grid g3">
+    <div class="stat anc"><span class="k">16 / 30</span><span class="l">FIIs elegíveis com spread <b>dentro</b> da banda [2,0; 6,0] p.p. sobre a NTN‑B</span></div>
+    <div class="stat warn"><span class="k">13 / 30</span><span class="l">com spread <b>comprimido</b> (&lt; 2,0 p.p.) — o freio marca “cara” e força AGUARDAR</span></div>
+    <div class="stat warn"><span class="k">1 / 30</span><span class="l">com spread <b>esticado</b> (&gt; 6,0 p.p.) — prêmio de risco, penaliza pontos mas não é barganha</span></div>
+  </div>
+
+  <p>Os spreads observados vão de <strong>−0,41 p.p.</strong> (KNRI11, pagando menos que o Tesouro IPCA+) a <strong>+6,86 p.p.</strong> (TRXF11). Isso é uma distribuição, não uma constante: o freio <strong>separa</strong>. O mesmo vale para o freio de ações, onde o prêmio sobre o valor justo vai de −54,1% (BRSR6) a +110,6% (EGIE3), e oito dos dezessete elegíveis são marcados como caros. Nenhum dos dois é tautológico hoje.</p>
+
+  <p>O veto de cobertura de FFO é o instrumento mais afiado da âncora e não tem paralelo em nenhum outro lugar do sistema: <strong>sete dos trinta elegíveis</strong> perdem o COMPRAR porque distribuem mais do que geram operacionalmente — TRXF11 a 0,40× (distribui 2,5 vezes o próprio FFO com DY de 14,8%), GGRC11 a 0,47×, GARE11 a 0,48×, CPTS11 a 0,50×, VISC11 a 0,68×, RBVA11 a 0,69×, CPSH11 a 0,28×. Cinco desses sete <em>estão publicados como COMPRAR no ranking semanal de hoje</em>.</p>
+
+  <h3>A histerese: correta, e ainda sem trabalho para fazer</h3>
+  <p>A banda 70/62 está implementada como função pura, com contrato explícito: a folga vale <strong>só</strong> para o limiar de score; um travamento substantivo — preço acima do justo, distribuição não coberta, teto de composição, saída do portão — derruba o COMPRAR na hora, porque é fato novo sobre o ativo e não ruído de medição. E toda saída sai com motivo escrito, inclusive quando o ticker some do ranking inteiro.</p>
+
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Classe</th><th class="num">Elegíveis</th><th class="num">Na banda [62, 70)</th><th>Quem</th><th class="num">Mantidos pela banda hoje</th><th class="num">Saídas</th></tr></thead>
+      <tbody>
+        <tr><td>Ações</td><td class="num">17</td><td class="num">2 (12%)</td><td class="mono">CMIG4 65 · BRSR6 63</td><td class="num">0</td><td class="num">0</td></tr>
+        <tr><td>FIIs</td><td class="num">30</td><td class="num">4 (13%)</td><td class="mono">HGCR11 69 · BTHF11 67 · KNHF11 63 · BTLG11 62</td><td class="num">0</td><td class="num">0</td></tr>
+      </tbody>
+    </table>
+    <span class="cap">Zero em todas as colunas de efeito porque <span class="mono">bootstrap = true</span>: sem publicação anterior, vale o limiar de entrada para todo mundo. A banda só age a partir da <b>segunda</b> publicação — ou seja, a partir de outubro, se a primeira sair em setembro.</span>
+  </div>
+
+  <p>O caso que a histerese existe para resolver está a um ponto de acontecer: <strong>ABCB4 pousou em exatamente 70</strong>. Se cair para 69 na apuração seguinte, hoje sairia da lista; com a banda em vigor, ficará — e é exatamente o comportamento que o commit <span class="mono">0ecacd2</span> registrou ao ver o BRSR6 trocar de COMPRAR para AGUARDAR entre duas rodadas da mesma sessão, caindo de 70 para 69 sem que nada tivesse acontecido com o banco.</p>
+
+  <h3>O teto de composição morde — e diz que morde</h3>
+  <p>Com 3 COMPRAR, o teto de papel é <span class="mono">max(1, ⌊3 × 0,34⌋) = 1</span>. KNCR11 (papel, Kinea, 1º da lista) ocupa a vaga; <strong>KNSC11 é demovido</strong> — segundo colocado, score 76, sem nenhum demérito. E o texto que ele carrega diz isso: “Fora do COMPRAR por composição de carteira: a lista de COMPRAR já leva 1 de papel — teto de crédito na carteira publicável”. O motivo bate com a causa.</p>
+  <p>Há um detalhe de engenharia que merece registro por ser sutil e estar certo: o teto roda <em>dentro</em> do motor, sobre os COMPRAR daquele instante, e é <strong>reaplicado depois da histerese</strong>, porque a banda pode devolver ao COMPRAR um fundo que o motor havia deixado de fora por score e que, por isso, nunca foi contado nas vagas. Sem essa reaplicação, um segundo fundo de papel entraria pela porta da histerese furando o limite que o motor acabara de aplicar. O commit <span class="mono">b0c7b79</span> ainda corrigiu o efeito colateral: o teto reescreve o motivo <em>original</em> do motor, para não produzir a linha autocontraditória “Mantido na lista … · Fora do COMPRAR”.</p>
+  <div class="evrow">
+    <span class="ev">utils/anchorHysteresis.js:48‑163</span>
+    <span class="ev">engines/fiiBuyAndHoldEngine.js:551‑607</span>
+    <span class="ev">services/anchorPublicationService.js:159‑194</span>
+    <span class="ev">config/buyAndHoldPublication.js:48‑51</span>
+  </div>
+
+  <h3>O portão de publicação passa hoje</h3>
+  <p>Rodando o caminho real do cron em <span class="mono">dryRun</span>: <span class="mono">fundamentalsHealthy = true</span>, timestamp de 23/08 09:00 BRT, idade 2,18 h contra o teto de 36 h → <strong>as duas classes passam</strong>, sem bloqueio. O gate de qualidade próprio da âncora (mínimo 50 analisados e 10 elegíveis) também passa com folga: 200/17 e 122/30.</p>
+  <p>A fragilidade que sobra não é a idade, é a <em>flag</em>: quando o Fundamentus responde 403, o sync grava <span class="mono">fundamentalsHealthy: false</span> com timestamp fresco, e o portão reprova pela flag. Como o job é mensal, um único sync degradado na janela errada custa <strong>um mês inteiro</strong> de lista parada — com aviso apenas por <span class="mono">Sentry.captureMessage</span>. O botão manual do Admin é o caminho de recuperação, e é o que torna essa fragilidade tolerável em vez de crítica.</p>
+
+  <h3>Nove nomes é uma carteira de aposentadoria?</h3>
+  <div class="callout anc">
+    <p><strong>Não, e o estudo não vai fingir que sim.</strong> Seis ações e três FIIs, com quatro dos seis nomes de ações no sistema financeiro (ITSA4, BBSE3, SANB11, ABCB4), não formam uma carteira diversificada para carregar por décadas. Formam uma <em>lista de convicção</em> — o subconjunto do mercado brasileiro que passa num portão duro <b>e</b> está a preço justo hoje.</p>
+    <p>Mas a conclusão correta não é “afrouxe o portão”. O portão está fazendo exatamente o que foi desenhado para fazer, e afrouxá-lo para encher a lista seria trocar a tese por um número bonito. As três saídas honestas são: <b>(a)</b> vender a lista pelo que ela é — poucos nomes, alta convicção, revisão mensal — e deixar a diversificação para a alocação, que é outro produto; <b>(b)</b> publicar a lista completa de elegíveis, separando COMPRAR de AGUARDAR, que é o que a página <span class="mono">/buy-and-hold</span> já faz e explica bem; <b>(c)</b> aceitar que uma âncora brasileira tem 15 a 25 nomes possíveis e que, em qualquer momento, só uma fração estará barata. A terceira é a mais próxima da verdade do mercado.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 5 ══════════════════════════ -->
+<section id="s5">
+  <span class="eyebrow">05 · Convivência</span>
+  <h2>Duas listas, o mesmo verbo, o mesmo dia</h2>
+  <p class="dek">A divergência entre o Research semanal e a lista âncora é <em>esperada por construção</em> — são teses diferentes sobre horizontes diferentes. A pergunta que ninguém respondeu é se ela é <em>explicável na tela</em>.</p>
+
+  <h3>Primeiro, o isolamento técnico está íntegro</h3>
+  <p>Verificado no banco: 21 ponteiros publicados, 7 classes × 3 seções, <strong>todos com <span class="mono">strategy: 'BUY_HOLD'</span></strong>. Nenhum documento de <span class="mono">MarketAnalysis</span> com outra estratégia existe. O contrato de ranking virou paramétrico — o semanal deriva <span class="mono">action</span> do score e recusa qualquer divergência; a âncora preserva a <span class="mono">action</span> que vem do motor e da histerese, e exige que um COMPRAR abaixo de 70 <em>declare</em> que veio da banda de permanência. Afrouxar o contrato do semanal para acomodar a âncora teria destruído a garantia que ele existe para dar; parametrizá-lo não destruiu.</p>
+  <div class="evrow">
+    <span class="ev">utils/rankingContract.js:42 · 62‑96 · 108‑126</span>
+    <span class="ev">services/anchorPublicationService.js:9‑14</span>
+  </div>
+
+  <h3>Agora o número que o produto precisa encarar</h3>
+
+  <figure class="wide">
+    <div class="figwrap">
+      <svg viewBox="0 0 860 250" role="img" aria-label="Dos 30 FIIs publicados como COMPRAR no ranking semanal, 18 estão fora do universo âncora, 10 são elegíveis mas ficam em AGUARDAR, e 2 são COMPRAR nas duas listas.">
+        <defs>
+          <style>
+            .lbl{font-family:Manrope,sans-serif;font-size:13px;font-weight:700;fill:var(--ink)}
+            .sub{font-family:Manrope,sans-serif;font-size:11.5px;fill:var(--muted)}
+            .big{font-family:"IBM Plex Serif",Georgia,serif;font-size:30px;font-weight:600;fill:var(--ink)}
+            .tag{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;fill:var(--muted)}
+          </style>
+        </defs>
+        <rect x="8" y="34" width="196" height="92" rx="9" fill="var(--surface-2)" stroke="var(--line)"/>
+        <text class="tag" x="20" y="22">Research semanal · FIIs</text>
+        <text class="big" x="20" y="80">30</text>
+        <text class="lbl" x="74" y="72">publicados</text>
+        <text class="lbl" x="74" y="89">como COMPRAR</text>
+        <text class="sub" x="20" y="112">todos os 30 selecionados pelo draft</text>
+
+        <path d="M204 62 H244" stroke="var(--line)" stroke-width="1.5" fill="none"/>
+        <path d="M204 80 H244" stroke="var(--line)" stroke-width="1.5" fill="none"/>
+        <path d="M204 98 H244" stroke="var(--line)" stroke-width="1.5" fill="none"/>
+
+        <rect x="248" y="16" width="290" height="62" rx="9" fill="var(--crit-soft)" stroke="var(--crit)" stroke-opacity=".45"/>
+        <text class="big" x="264" y="52" fill="var(--crit)">18</text>
+        <text class="lbl" x="312" y="43">fora do universo âncora</text>
+        <text class="sub" x="312" y="61">sub-escala, ilíquidos, vagos, FOF, FIAGRO, papel não tier‑1</text>
+
+        <rect x="248" y="86" width="290" height="62" rx="9" fill="var(--warn-soft)" stroke="var(--warn)" stroke-opacity=".45"/>
+        <text class="big" x="264" y="122" fill="var(--warn)">10</text>
+        <text class="lbl" x="312" y="113">elegíveis, mas AGUARDAR</text>
+        <text class="sub" x="312" y="131">cobertura de FFO, spread comprimido ou convicção</text>
+
+        <rect x="248" y="156" width="290" height="62" rx="9" fill="var(--ok-soft)" stroke="var(--ok)" stroke-opacity=".45"/>
+        <text class="big" x="264" y="192" fill="var(--ok)">2</text>
+        <text class="lbl" x="312" y="183">COMPRAR nas duas listas</text>
+        <text class="sub" x="312" y="201">KNCR11 · HSLG11</text>
+
+        <path d="M538 47 H578" stroke="var(--line)" stroke-width="1.5" fill="none"/>
+        <path d="M538 117 H578" stroke="var(--line)" stroke-width="1.5" fill="none"/>
+        <path d="M538 187 H578" stroke="var(--line)" stroke-width="1.5" fill="none"/>
+
+        <rect x="582" y="34" width="266" height="92" rx="9" fill="var(--anchor-soft)" stroke="var(--anchor)" stroke-opacity=".5"/>
+        <text class="tag" x="594" y="22">Buy-and-Hold · FIIs</text>
+        <text class="big" x="594" y="80" fill="var(--anchor-ink)">3</text>
+        <text class="lbl" x="634" y="72">COMPRAR</text>
+        <text class="lbl" x="634" y="89">de 30 elegíveis</text>
+        <text class="sub" x="594" y="112">KNCR11 · PMLL11 · HSLG11 — PMLL11 não é COMPRAR no semanal</text>
+      </svg>
+    </div>
+    <figcaption>Mesmo dia, mesma base, mesmos preços. As caixas do meio somam os 30 da esquerda; a caixa da direita é a lista âncora, que tem um nome (PMLL11) que a lista da esquerda não recomenda.</figcaption>
+  </figure>
+
+  <p>Dos <strong>30 FIIs que o Research publica como COMPRAR</strong>, dezoito não são “âncoras esperando preço” — <strong>não entram no universo</strong>. Os motivos não são sutis:</p>
+
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Ticker</th><th class="num">Score semanal</th><th>Por que a âncora não o avalia</th></tr></thead>
+      <tbody>
+        <tr><td class="t">TRBL11</td><td class="num">84</td><td>patrimônio &lt; R$ 500 M; liquidez &lt; R$ 1 M/dia; vacância acima de 12%</td></tr>
+        <tr><td class="t">RZAT11</td><td class="num">80</td><td>patrimônio &lt; R$ 500 M; liquidez &lt; R$ 1 M/dia; vacância acima de 12%</td></tr>
+        <tr><td class="t">TEPP11</td><td class="num">78</td><td>patrimônio &lt; R$ 500 M; vacância acima de 12%</td></tr>
+        <tr><td class="t">LIFE11</td><td class="num">85</td><td>fundo de fundos; patrimônio e liquidez abaixo do piso</td></tr>
+        <tr><td class="t">RVBI11</td><td class="num">78</td><td>fundo de fundos; liquidez &lt; R$ 1 M/dia</td></tr>
+        <tr><td class="t">RZTR11</td><td class="num">89</td><td>FIAGRO — crédito/commodity agrícola, não imóvel de renda</td></tr>
+        <tr><td class="t">RBRX11</td><td class="num">85</td><td>menos de 2 imóveis</td></tr>
+        <tr><td class="t">VGHF11</td><td class="num">85</td><td>menos de 2 imóveis</td></tr>
+        <tr><td class="t">SNEL11</td><td class="num">85</td><td>segmento Infraestrutura; menos de 2 imóveis</td></tr>
+        <tr><td class="t">GTWR11</td><td class="num">85</td><td>liquidez &lt; R$ 1 M/dia</td></tr>
+        <tr><td class="t">BPML11</td><td class="num">85</td><td>liquidez &lt; R$ 1 M/dia</td></tr>
+        <tr><td class="t">TRXB11</td><td class="num">70</td><td>liquidez &lt; R$ 1 M/dia</td></tr>
+        <tr><td class="t">BBIG11</td><td class="num">92</td><td>patrimônio &lt; R$ 500 M</td></tr>
+        <tr><td class="t">RBRY11 · KORE11 · VGIR11 · PCIP11 · PSEC11</td><td class="num">95 · 95 · 87 · 85 · 85</td><td>FII de papel fora do tier‑1 — crédito sem curadoria</td></tr>
+      </tbody>
+    </table>
+    <span class="cap">Nenhum desses fundos é “ruim” por decreto — a âncora simplesmente não afirma nada sobre eles. Mas o Research afirma COMPRAR, e um assinante PRO vê as duas telas.</span>
+  </div>
+
+  <p>Em ações a contradição é menor em número e maior em natureza. Dos 18 COMPRAR do semanal, <strong>12 estão fora do universo âncora</strong> — sendo que as três primeiras posições do perfil Arrojado são incorporadoras (EZTC3, DIRR3, MDNE3), todas barradas por construção civil, beta acima de 1 e, em dois casos, porte. E o cruzamento inverso é igualmente eloquente: <strong>três nomes são COMPRAR na âncora e não são COMPRAR no semanal</strong> — BBSE3, SANB11 e ABCB4.</p>
+
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Situação</th><th class="num">Ações</th><th class="num">FIIs</th><th>Exemplos</th></tr></thead>
+      <tbody>
+        <tr><td>COMPRAR nas duas listas</td><td class="num">3</td><td class="num">2</td><td class="mono">ITSA4, CPFE3, TAEE11 · KNCR11, HSLG11</td></tr>
+        <tr><td>COMPRAR no semanal, fora do universo âncora</td><td class="num">12</td><td class="num">18</td><td class="mono">EZTC3, PETR4, JHSF3 · TRBL11, RZAT11, LIFE11</td></tr>
+        <tr><td>COMPRAR no semanal, elegível na âncora, mas AGUARDAR</td><td class="num">3</td><td class="num">10</td><td class="mono">CMIG4, ITUB4, PSSA3 · GGRC11, TRXF11, BTLG11</td></tr>
+        <tr><td>COMPRAR na âncora, não COMPRAR no semanal</td><td class="num">3</td><td class="num">1</td><td class="mono">BBSE3, SANB11, ABCB4 · PMLL11</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>A tela explica — em uma direção só</h3>
+  <p>A página <span class="mono">/buy-and-hold</span> foi construída para comunicar a diferença, e o faz bem: a primeira linha lida diz “não é a lista das melhores oportunidades da semana — para isso existe o Research”, explicita que segurança é portão e não nota, informa que a revisão é mensal e que a inércia é deliberada (“entra com score 70 e só sai abaixo de 62”), separa visualmente COMPRAR de AGUARDANDO com o texto “quem está aqui só pelo preço é uma boa âncora esperando ponto de entrada — vale acompanhar, não descartar”, mostra a seção “saíram da lista nesta apuração” e carrega o disclaimer no próprio conteúdo.</p>
+  <p><strong>A página do Research não menciona a lista âncora uma única vez.</strong> Busca por <span class="mono">buy-and-hold</span>, <span class="mono">âncora</span> ou <span class="mono">ancora</span> em <span class="mono">client/src/pages/Research.tsx</span>: zero ocorrências. O menu tem as duas entradas, mas a ponte é de mão única — quem entra pelo Research e vê TRBL11 como COMPRAR nunca descobre que o outro motor do mesmo produto o considera fora de escopo.</p>
+  <div class="evrow">
+    <span class="ev">client/src/pages/BuyAndHold.tsx:22‑31 · 268‑280 · 338‑352 · 359‑366</span>
+    <span class="ev">client/src/pages/Research.tsx — nenhuma menção</span>
+    <span class="ev">client/src/App.tsx:127</span>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 6 ══════════════════════════ -->
+<section id="s6">
+  <span class="eyebrow">06 · Referência externa</span>
+  <h2>Como o mercado e a literatura fazem</h2>
+  <p class="dek">Cada afirmação foi conferida na fonte primária, aberta na data deste estudo. Onde o PDF oficial pôde ser lido, o texto foi extraído dele; onde não pôde, isso está declarado. A bibliografia com links está no anexo C.</p>
+
+  <h3>Quem publica lista de longo prazo constrói inércia na regra</h3>
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Índice</th><th>Critério de entrada</th><th>Janela de histórico</th><th>Revisão</th><th>Mecanismo anti-giro</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>S&amp;P 500 Dividend Aristocrats</td>
+          <td>estar no S&amp;P 500 e ter aumentado o dividendo todo ano</td>
+          <td>25 anos</td>
+          <td>universo revisto uma vez por ano</td>
+          <td>seleção anual; 69 empresas em 31/07/2026</td>
+        </tr>
+        <tr>
+          <td>MSCI Quality</td>
+          <td>z-score composto de ROE, dívida/patrimônio e variabilidade de lucro, winsorizados nos percentis 5 e 95</td>
+          <td>5 exercícios (desvio-padrão do crescimento anual de LPA)</td>
+          <td>semestral, no fechamento do último dia útil de maio e novembro</td>
+          <td><b>buffer de 20%</b> do número fixo de ativos: o índice World Quality mira 300 nomes e a banda vai do rank 241 ao 360</td>
+        </tr>
+        <tr>
+          <td>IFIX (B3)</td>
+          <td>95% da soma do Índice de Negociabilidade <b>e</b> 95% de presença em pregão</td>
+          <td>vigência das 3 carteiras anteriores</td>
+          <td>quadrimestral</td>
+          <td>carteira fixa entre revisões</td>
+        </tr>
+        <tr style="background:var(--anchor-soft)">
+          <td>Vértice · <b>âncora</b></td>
+          <td>portão binário + score ≥ 70 + preço justo + renda operacional</td>
+          <td>0 — foto atual (streak plurianual não verificável)</td>
+          <td>mensal, dia 1</td>
+          <td><b>banda 70/62</b>, com motivo obrigatório na saída</td>
+        </tr>
+        <tr>
+          <td>Vértice · <b>semanal</b></td>
+          <td>score composto ≥ 70 no perfil atribuído</td>
+          <td>0 — foto atual</td>
+          <td>a cada 2 a 4 dias</td>
+          <td>nenhum</td>
+        </tr>
+      </tbody>
+    </table>
+    <span class="cap">A linha da âncora é o avanço estrutural mais importante desta leva de commits: pela primeira vez o sistema tem um índice cuja regra de permanência é diferente da regra de entrada, revisado em ciclo longo. É a estrutura que a 1ª edição apontou como ausente.</span>
+  </div>
+
+  <div class="callout acc">
+    <h4>O que isso implica para o Vértice</h4>
+    <p>O desenho da âncora está do lado certo de todas as três referências — em <em>estrutura</em>. O que ainda falta é a <em>janela de histórico</em>: as três referências selecionam por histórico verificado ao longo de anos, e a âncora ainda seleciona por foto. Nos dois motores isso é assumido e tratado com honestidade: o streak de dividendo e de distribuição não é verificável, então em vez de reprovar, o motor aplica <strong>teto de confiança 85</strong>. Isso é a resposta certa para o dado que falta — mas é um curativo, não a série.</p>
+  </div>
+
+  <h3>Quando um dado falta, o MSCI exclui; o Vértice redistribui o peso</h3>
+  <p>Há uma diferença metodológica de fundo que vale nomear, porque atravessa os dois motores âncora. Ambos usam <span class="mono">averageObserved</span>: as partes ausentes têm o peso redistribuído entre as observadas. É elegante e evita punir por falta de coleta. O MSCI faz o contrário no limite — a metodologia declara explicitamente que, se dívida/patrimônio e variabilidade de lucro estiverem ambas ausentes e só o ROE existir, <strong>o score composto não é calculado e o ativo não entra no índice</strong>.</p>
+  <p>É exatamente o caso do arquétipo <span class="mono">BANK</span> no Vértice, onde três das quatro métricas de qualidade são inaplicáveis por construção. O resultado é que a durabilidade de um banco passa a ser essencialmente uma leitura só — e ela decide sozinha se o Banco do Brasil vale 7 ou 94. Não é errado; é uma escolha diferente da institucional, e merece ser feita com os olhos abertos.</p>
+
+  <h3>Giro destrói prêmio — e a técnica que funciona é exatamente a que foi implementada</h3>
+  <p>Novy-Marx e Velikov mediram o custo de execução de anomalias e concluíram que a técnica de mitigação mais eficaz é o <strong>buy/hold spread</strong>: exigências mais duras para <em>estabelecer</em> uma posição do que para <em>mantê-la</em>. Encontraram custos de 20 a 57 pontos-base para anomalias de giro médio, e que a maioria das que giram menos de 50% ao mês mantém spread líquido significativo enquanto poucas das mais rápidas mantêm.</p>
+  <p><strong>A histerese 70/62 é literalmente um buy/hold spread.</strong> É a correção do achado V‑01, feita da forma que a literatura recomenda. O problema é que ela foi aplicada à lista que ainda não existe, e não à lista que gira: o Brasil 10, com 34 nomes distintos em 90 dias, continua derivando <span class="mono">action</span> de um corte duro em 70.</p>
+
+  <h3>Solidez contábil é sobre variação, não sobre nível</h3>
+  <p>O F-Score de Piotroski soma nove sinais binários de rentabilidade, alavancagem/liquidez e eficiência operacional — e <strong>sete dos nove são comparações ano contra ano</strong>. O score não pergunta se a empresa é boa em termos absolutos; pergunta se os fundamentos estão melhorando. É a prova de conceito mais simples de que “ficou melhor ou pior” carrega informação que o nível atual não carrega — e é precisamente a informação que o Vértice não tem, em nenhum dos dois motores, enquanto a série de fundamentos tiver três períodos.</p>
+
+  <h3>Qualidade compensa, e tem definição consolidada</h3>
+  <p>Asness, Frazzini e Pedersen definem qualidade em quatro dimensões — rentabilidade, crescimento, segurança e payout — e mostram que um fator QMJ comprado em alta qualidade e vendido em baixa qualidade rende retorno ajustado a risco significativo nos EUA e em 24 países. O motor âncora cobre rentabilidade (ROE), segurança (beta, alavancagem, Basileia, controle acionário) e, parcialmente, crescimento (<span class="mono">earningsGrowth</span>). Payout entra só de lado, via o streak de dividendo que não é verificável. Novy-Marx mostrou separadamente que a rentabilidade bruta sobre ativos prevê retorno com poder comparável ao do book-to-market.</p>
+
+  <h3>Concentração é limitada por regra, não por bom senso</h3>
+  <p>A metodologia do MSCI Quality cappeia o peso por emissor em <strong>5%</strong> nos índices regionais amplos e em <span class="mono">max(10%, maior peso no índice pai)</span> nos mais estreitos. É um teto explícito, escrito, que não depende de a lista “parecer concentrada”. A lista âncora de FIIs tem o equivalente (1/3 por gestora, 1/3 por papel). <strong>A lista âncora de ações não tem nenhum</strong> — e hoje quatro dos seis COMPRAR são do sistema financeiro.</p>
+
+  <h3>FII e REIT: o múltiplo padrão e a cobertura do provento</h3>
+  <p>A Nareit criou o FFO em 1991 porque a depreciação contábil distorce o lucro de um veículo imobiliário. A definição oficial é lucro líquido GAAP <em>excluindo</em> depreciação e amortização de imóveis, ganhos e perdas na venda de certos ativos imobiliários, ganhos e perdas por mudança de controle, e impairments de imóveis. O P/FFO é, no mercado de REITs e FIIs, o análogo do P/L.</p>
+  <p>Esse é o achado V‑05 fechado do lado do dado e <strong>aberto do lado do consumo</strong>: o FFO chegou ao banco (295 de 371 fundos) e o motor âncora o usa em dois lugares — como múltiplo (P/FFO justo 16) e como veto de cobertura da distribuição. A busca por <span class="mono">ffo</span> em <span class="mono">server/services/engines/scoringEngine.js</span> retorna <strong>zero ocorrências</strong>: o ranking semanal, que é o publicado, continua decidindo FII sem o múltiplo padrão do setor.</p>
+  <p>Sobre a cobertura em si: que um payout acima do que o veículo gera operacionalmente seja sinal de alerta é <em>prática de mercado</em> convergente, não norma da Nareit — os limiares usuais (70–80% saudável, acima de 100% bandeira vermelha) vêm de fontes secundárias e entram aqui rotulados como tal. O que <em>é</em> definicional, e sustenta o veto de 0,70×, é a própria construção do FFO: distribuir mais do que o FFO significa, por definição, pagar renda com algo que não é resultado operacional.</p>
+
+  <h3>Como se valida um modelo assim — e por que ainda não dá</h3>
+  <p>Harvey, Liu e Zhu argumentam que, dado o volume de fatores já testados na literatura, um fator novo precisa de <strong>t &gt; 3,0</strong> para ser levado a sério; o padrão usual de 2,0 produz falsos positivos em massa. Bailey e López de Prado mostram que, quando se testam muitas variações e se escolhe a melhor, o Sharpe máximo é inflado mesmo que todas sejam ruído, e propõem o Deflated Sharpe Ratio, que corrige por seleção múltipla, tamanho da amostra e não-normalidade.</p>
+  <p>A consequência prática é a mesma da 1ª edição, e vale com mais força agora que existem dois motores e mais parâmetros: <strong>qualquer recalibração de pesos, do limiar 70 ou da banda 62 feita hoje, olhando o resultado atual, é sobreajuste por construção.</strong></p>
+
+  <h3>Enquadramento regulatório</h3>
+  <p>A Resolução CVM nº 20/2021 define, no art. 1º, analista de valores mobiliários como “a pessoa natural ou jurídica que, em caráter profissional, elabora relatórios de análise destinados à publicação, divulgação ou distribuição a terceiros, ainda que restrita a clientes”, e enquadra como relatório de análise os textos, relatórios de acompanhamento, estudos ou análises sobre valores mobiliários específicos que possam auxiliar ou influenciar investidores na tomada de decisão. O art. 2º torna a atividade privativa de analistas credenciados em entidade autorizada pela CVM.</p>
+  <p>Isso <strong>não mudou</strong> desde a 1ª edição, e o lançamento da âncora aumenta a exposição em vez de reduzi-la: agora são duas listas publicando COMPRAR e AGUARDAR por ticker, uma delas descrita ao assinante como o que “dá para carregar por décadas”. O disclaimer novo viaja com o conteúdo e é persistido no relatório — isso é uma melhoria real de higiene. Continua não sendo uma resposta jurídica, que segue pendente e não é técnica.</p>
+</section>
+
+<!-- ══════════════════════════ 7 ══════════════════════════ -->
+<section id="s7">
+  <span class="eyebrow">07 · Diagnóstico</span>
+  <h2>Achados</h2>
+  <p class="dek">Primeiro o status re-verificado dos catorze achados da 1ª edição — cada um lido no código de hoje, não herdado do texto anterior. Depois, nove achados novos, numerados na mesma série.</p>
+
+  <h3>Status dos achados V‑01 a V‑14</h3>
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>#</th><th>Achado</th><th>Status</th><th>Evidência re-verificada em 23/08</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">V‑01</td><td>Lista rotaciona como screener</td><td><span class="chip warn">PARCIAL</span></td><td>Histerese existe e está correta — só na âncora, que nunca publicou. O semanal segue em <span class="mono">rankingContract.js:42</span> derivando <span class="mono">action</span> de um corte duro em 70. Giro medido inalterado: 34 tickers no Brasil 10, Jaccard mediano 0,818.</td></tr>
+        <tr><td class="mono">V‑02</td><td>Em FIIs, quase tudo é COMPRAR</td><td><span class="chip crit">ABERTO</span></td><td>Zero alteração. Base do Moderado ainda 45 (<span class="mono">scoringEngine.js:799</span>), tier de spread ainda +25 acima de 5 p.p. (<span class="mono">:804</span>). 30/30 COMPRAR; 76 de 122 cruzam 70; mediana 68. Lista Defensiva idêntica à de 22/08.</td></tr>
+        <tr><td class="mono">V‑03</td><td>Eixo de consistência desligado</td><td><span class="chip crit">ABERTO</span></td><td>Mínimo segue em 6 (<span class="mono">trackRecord.js:25</span>). Profundidade máxima: 3 períodos (FII), 2 (ações). Distribuição 19/353/304 — <b>idêntica</b>. Ações alcançam o mínimo por volta de dezembro/2026.</td></tr>
+        <tr><td class="mono">V‑04</td><td>“Dividend Aristocrat” mede um trimestre</td><td><span class="chip crit">ABERTO</span></td><td>Predicado inalterado em <span class="mono">scoringEngine.js:153‑157</span>; bônus +10/+5 em <span class="mono">:1180‑1186</span>. O índice homônimo exige 25 anos e tem 69 empresas.</td></tr>
+        <tr><td class="mono">V‑05</td><td>FII avaliado sem o múltiplo do setor</td><td><span class="chip warn">PARCIAL</span></td><td>Dado resolvido: campos existem (<span class="mono">MarketAsset.js:144‑146</span>), sync grava (<span class="mono">syncService.js:222‑224</span>), 295/371 têm FFO. Âncora usa. <b><span class="mono">ffo</span> aparece 0 vez em <span class="mono">scoringEngine.js</span></b>.</td></tr>
+        <tr><td class="mono">V‑06</td><td>Bazin sem os filtros de Bazin</td><td><span class="chip crit">ABERTO</span></td><td><span class="mono">scoringEngine.js:253‑272</span> e <span class="mono">financialConstants.js:83‑84</span> inalterados. Agravante novo: o freio de preço da âncora de ações consome esse mesmo <span class="mono">targetPrice</span> — ver V‑19.</td></tr>
+        <tr><td class="mono">V‑07</td><td>Sinal correlacionado entra 4 vezes</td><td><span class="chip crit">ABERTO</span></td><td>Semanal inalterado. Agravante novo: o padrão se repete <em>dentro</em> da âncora — ver V‑17.</td></tr>
+        <tr><td class="mono">V‑08</td><td>Âncora exclui bancos por flag de FII</td><td><span class="chip ok">CORRIGIDO</span></td><td><span class="mono">requireTier1</span> não existe mais. Portão de banco por Basileia ≥ 13 e ROE recorrente ≥ 10 (<span class="mono">config/buyAndHold.js:132</span>), teto de beta por arquétipo (<span class="mono">:118</span>). Cinco bancos elegíveis, três COMPRAR.</td></tr>
+        <tr><td class="mono">V‑09</td><td>Métricas setoriais congeladas em 1T26</td><td><span class="chip crit">ABERTO</span></td><td>Piorou pela passagem do tempo: <span class="mono">asOf: '2026-03-31'</span> em todos os registros de <span class="mono">stockSectorMetricsSnapshot1Q26.js</span> e <span class="mono">stockOilGasMetricsSnapshot1Q26.js</span> — quase cinco meses.</td></tr>
+        <tr><td class="mono">V‑10</td><td>Degraus rígidos onde deveria haver rampa</td><td><span class="chip warn">PARCIAL</span></td><td>A âncora usa rampas contínuas (<span class="mono">higherBetter</span>/<span class="mono">lowerBetter</span>) e o beta ganhou escala absoluta (<span class="mono">buyAndHold.js:89</span>) exatamente para tirar o caráter binário do teto. O semanal segue todo em degraus.</td></tr>
+        <tr><td class="mono">V‑11</td><td>Q/V/R parecem compor o score e não compõem</td><td><span class="chip crit">ABERTO</span></td><td>O exemplo antigo morreu (ITUB4 30→100, ABCB4 20→72) e nasceu um pior: TRBL11 publicado COMPRAR com score 84 e qualidade estrutural <b>1,48</b>; RZAT11 COMPRAR 80 com qualidade <b>0</b>. Desempate continua em <span class="mono">portfolioEngine.js:11‑21</span>.</td></tr>
+        <tr><td class="mono">V‑12</td><td>Taxonomia de FII contamina ações</td><td><span class="chip crit">ABERTO</span></td><td><span class="mono">sectorTaxonomy.js:38‑50</span> inalterado — “Logística”, “Shoppings” e “Construção Civil” no mesmo balde <span class="mono">REAL_ESTATE</span>. JHSF3 e TGMA3 seguem juntos no top 10 Defensivo.</td></tr>
+        <tr><td class="mono">V‑13</td><td>Master data de estatais desatualizado</td><td><span class="chip warn">PARCIAL</span></td><td>CSMG3 removida com fonte primária documentada, e o código agora <em>avisa</em> que a lista não é exaustiva (<span class="mono">sectorTaxonomy.js:241</span>). Mas as classes ausentes continuam ausentes — ver V‑24, com consequência medida.</td></tr>
+        <tr><td class="mono">V‑14</td><td>Veto categórico de setor cíclico</td><td><span class="chip crit">ABERTO</span></td><td><span class="mono">scoringEngine.js:173</span> e <span class="mono">sectorTaxonomy.js:216‑221</span> inalterados. A âncora aplica o mesmo veto <em>duas vezes</em>: <span class="mono">isCyclicalSector</span> e a whitelist de setores (<span class="mono">buyAndHoldEngine.js:116‑121</span>) — 56 exclusões por “setor cíclico” hoje.</td></tr>
+      </tbody>
+    </table>
+    <span class="cap">Placar: <b>1 corrigido</b>, <b>4 parciais</b>, <b>9 abertos</b>. Todos os três achados classificados como CRÍTICOS na 1ª edição seguem abertos ou parciais.</span>
+  </div>
+
+  <h3>Achados novos</h3>
+
+  <div class="finding crit">
+    <header><span class="id">V‑15</span><h4>A estratégia âncora é produto no código e não existe no banco</h4><span class="chip crit">CRÍTICO</span></header>
+    <p>Motor de ações, motor de FIIs, histerese, teto de composição, camada de publicação transacional, cron mensal, página e botão de Admin — tudo pronto, nada executado. Zero documentos de <span class="mono">MarketAnalysis</span> e zero ponteiros com <span class="mono">strategy: 'BUY_AND_HOLD'</span>; <span class="mono">bootstrap = true</span> nas duas classes. O cron dispara em 01/09 às 07:30 e a <b>primeira lista da história do produto iria ao ar sem nenhum humano ter visto</b>.</p>
+    <div class="evrow"><span class="ev">MarketAnalysis.distinct('strategy') → ['BUY_HOLD']</span><span class="ev">21 ponteiros, todos BUY_HOLD</span><span class="ev">schedulerService.js:712</span></div>
+    <div class="fix"><b>Correção proposta</b>Rodar <span class="mono">publishAnchorRanking({ dryRun: true })</span> pelo botão do Admin, revisar as duas listas, e publicar manualmente antes de 01/09 — para que a primeira publicação seja deliberada e a segunda, a do cron, já encontre um baseline de histerese. <b>Aceite:</b> ponteiro <span class="mono">BUY_AND_HOLD/RANKING</span> ativo nas duas classes antes do primeiro disparo automático.</div>
+  </div>
+
+  <div class="finding crit">
+    <header><span class="id">V‑16</span><h4>Nenhuma publicação saiu sob o código consertado — o giro não foi remedido</h4><span class="chip crit">CRÍTICO</span></header>
+    <p>A última publicação de ranking em qualquer classe é de 21/08 21:32 UTC; o primeiro commit desta leva é de 22/08. As 40 publicações de 90 dias analisadas são integralmente do motor antigo. O sistema segue gerando rascunhos (229 documentos em 90 dias), mas publicar é ato manual e não aconteceu. Consequência: <b>a pergunta “a lista girou menos?” não tem resposta empírica</b>, e o contrafactual disponível diz que, em FII, o conjunto de COMPRAR não mudaria em nada (Jaccard 1,000).</p>
+    <div class="evrow"><span class="ev">isRankingPublished: última em 2026‑08‑21T21:32Z</span><span class="ev">ponteiros ativados em 2026‑08‑22T11:50Z</span></div>
+    <div class="fix"><b>Correção proposta</b>Publicar uma vez, deliberadamente, e a partir daí medir Jaccard entre publicações consecutivas como métrica de acompanhamento no painel de Saúde — não como estudo pontual. <b>Aceite:</b> a série de turnover por classe visível no Admin, com a data do primeiro ponto sob o código atual marcada.</div>
+  </div>
+
+  <div class="finding high">
+    <header><span class="id">V‑17</span><h4>Na âncora, o ROE de um banco decide sozinho três quartos da durabilidade</h4><span class="chip warn">ALTO</span></header>
+    <p>O eixo de durabilidade combina <span class="mono">structuralQuality</span> (0,40), <span class="mono">roe</span> (0,35) e <span class="mono">earningsGrowth</span> (0,25). Para o arquétipo <span class="mono">BANK</span>, margem líquida, dívida/patrimônio e crescimento de receita são inaplicáveis, então a qualidade estrutural <em>é</em> a nota de ROE — que assim entra duas vezes, somando peso efetivo de ~0,75 no eixo que pesa 0,50 do score. Com a rampa de 12 a 30, cada ponto percentual de ROE recorrente vale ~5,6 pontos de nota e ~2 pontos de score. É o V‑07 reproduzido dentro do motor que foi desenhado para não repeti-lo.</p>
+    <div class="evrow"><span class="ev">buyAndHoldEngine.js:193‑212</span><span class="ev">scoringEngine.js:1441‑1446</span><span class="ev">stockCalibration.js:346‑348</span><span class="ev">BBAS3 roeTtm 13,54 → durabilidade 7 → score 30</span></div>
+    <div class="fix"><b>Correção proposta</b>Quando a qualidade estrutural de um arquétipo reduzir-se a uma única métrica que já entra no eixo por conta própria, remover a duplicata em vez de redistribuir peso — ou, alternativamente, adotar a regra do MSCI e declarar o eixo não calculável, aplicando teto de confiança. <b>Aceite:</b> nenhum insumo isolado responde por mais de X% de um eixo, com X declarado no config.</div>
+  </div>
+
+  <div class="finding high">
+    <header><span class="id">V‑18</span><h4>A lista âncora de ações não tem teto de composição</h4><span class="chip warn">ALTO</span></header>
+    <p>O adaptador de FII declara <span class="mono">enforcePublicationLimits</span>; o de STOCK não declara nada. A justificativa escrita para o teto de FII — “os dois primeiros COMPRAR eram papel e da mesma gestora; um teto que não morde o topo não é teto” — vale igualmente para ações: <b>quatro dos seis COMPRAR de hoje são do sistema financeiro</b> (ITSA4, BBSE3, SANB11, ABCB4), sendo três bancos. Não há nem penalidade de concentração nem teto.</p>
+    <div class="evrow"><span class="ev">anchorPublicationService.js:42‑54 (STOCK) × 55‑88 (FII)</span><span class="ev">fiiBuyAndHold.js:211‑215</span><span class="ev">MSCI Quality: teto de 5% por emissor nos índices amplos</span></div>
+    <div class="fix"><b>Correção proposta</b>Espelhar <span class="mono">applyPublicationLimits</span> no adaptador de ações, com balde por macro-setor e fração de ~1/3, resolvido por ponto fixo e reaplicado depois da histerese, exatamente como em FII. Reusar o mesmo código, não escrever um segundo. <b>Aceite:</b> nenhum macro-setor passa de 1/3 da lista publicável de ações, com o motivo de demoção declarando que é composição e não demérito.</div>
+  </div>
+
+  <div class="finding high">
+    <header><span class="id">V‑19</span><h4>O freio de preço das ações herda o Bazin sem filtros</h4><span class="chip warn">ALTO</span></header>
+    <p><span class="mono">computeEntryPenalty</span> mede o prêmio sobre <span class="mono">asset.targetPrice</span> — o mesmo preço justo Graham/Bazin do motor semanal, que aplica a fórmula do preço-teto sobre o DY dos últimos 12 meses sem o requisito de histórico do método original. O freio de FII foi reescrito do zero precisamente para não depender de um preço justo tautológico; o de ações não foi. Hoje ele discrimina (prêmios de −54,1% a +110,6%, 8 de 17 marcados como caros), então não é tautologia — mas é o V‑06 propagado para dentro da tese de décadas.</p>
+    <div class="evrow"><span class="ev">buyAndHoldEngine.js:259‑271</span><span class="ev">scoringEngine.js:253‑272</span><span class="ev">EGIE3 +110,6% · CSMG3 +81,4% · ABEV3 +59,7%</span></div>
+    <div class="fix"><b>Correção proposta</b>Enquanto não houver série de proventos plurianual, registrar no audit da âncora quando o DY corrente divergir da média disponível acima de um limiar, e exibir o método do preço justo na página. Depois do backfill, usar dividendo médio plurianual no numerador. <b>Aceite:</b> o cartão de um ativo caro mostra <em>por qual preço justo</em> ele é caro.</div>
+  </div>
+
+  <div class="finding high">
+    <header><span class="id">V‑20</span><h4>A mesma vacância impossível é descartada num motor e punida no outro</h4><span class="chip warn">ALTO</span></header>
+    <p>O Fundamentus publica vacância de 91,81% para o XPML11 e 85,82% para o HSML11 — dois dos maiores fundos de shopping do país, ambos pagando renda normal com FFO positivo. O motor âncora reconhece a contradição e descarta a leitura como ausente, com teto de confiança e motivo escrito. O motor semanal aplica <span class="mono">(vacancy − 10) × 3</span> <b>sem teto</b>: 245 pontos de penalidade para o XPML11, clampados a 0 na saída, e o veto de vacância &gt; 12% no gate Defensivo. Resultado medido: qualidade estrutural <b>0</b> e score Defensivo 25 para os dois fundos. Há 17 FIIs na base com vacância ≥ 50%, sete deles no universo pontuado.</p>
+    <div class="evrow"><span class="ev">fiiBuyAndHoldEngine.js:153‑187 (descarta)</span><span class="ev">scoringEngine.js:1568‑1571 · 188 (pune)</span><span class="ev">clamp em scoringEngine.js:1589</span></div>
+    <div class="fix"><b>Correção proposta</b>Extrair <span class="mono">assessVacancy</span> para um utilitário compartilhado e chamá-lo dos dois motores, como já foi feito com <span class="mono">resolveRoeReading</span> para o ROE. É o mesmo defeito de família que a régua de banco tinha: a decisão sobre um dado vivendo em dois lugares com duas respostas. <b>Aceite:</b> o mesmo ticker tem a mesma leitura de vacância nos dois rankings, e a penalidade tem teto explícito.</div>
+  </div>
+
+  <div class="finding high">
+    <header><span class="id">V‑21</span><h4>Duas listas contradizem-se no mesmo ticker e só uma tela explica</h4><span class="chip warn">ALTO</span></header>
+    <p>Dos 30 FIIs que o Research publica como COMPRAR, <b>18 não entram no universo âncora</b> e 10 entram mas ficam em AGUARDAR; apenas 2 são COMPRAR nos dois. Em ações, 12 dos 18 COMPRAR do semanal estão fora do universo, e 3 nomes são COMPRAR na âncora sem serem COMPRAR no semanal. A divergência é legítima e esperada. O problema é a assimetria de comunicação: <span class="mono">BuyAndHold.tsx</span> explica a diferença em três lugares distintos da tela, e <span class="mono">Research.tsx</span> <b>não menciona a lista âncora uma única vez</b>.</p>
+    <div class="evrow"><span class="ev">BuyAndHold.tsx:268‑280 · 338‑352</span><span class="ev">Research.tsx: 0 ocorrências de “buy-and-hold”, “âncora” ou “ancora”</span></div>
+    <div class="fix"><b>Correção proposta</b>Uma linha recíproca no Research, e — melhor — um selo por ativo no ranking semanal quando aquele ticker também é avaliado pela âncora, com o veredito de lá. O dado já existe no mesmo request cycle. <b>Aceite:</b> um assinante que vê COMPRAR nas duas telas para tickers diferentes consegue dizer, sem sair da tela, por que elas discordam.</div>
+  </div>
+
+  <div class="finding med">
+    <header><span class="id">V‑22</span><h4>A identidade da versão do algoritmo continua sem significado</h4><span class="chip acc">MÉDIO</span></header>
+    <p>Em 90 dias, os documentos de <span class="mono">MarketAnalysis</span> carregam <b>27 valores distintos</b> de <span class="mono">algorithmVersion</span>: <span class="mono">null</span>, <span class="mono">'1.0.0'</span>, <span class="mono">'unknown'</span>, <span class="mono">'1.6.2'</span>, <span class="mono">'STOCK_BH_SHADOW_V3'</span> e 22 hashes de commit. A cadeia de fallback termina na versão da calibração de <em>ações</em>, que por isso aparece carimbada em documentos de CRYPTO, REIT e ETF. Sem identidade estável, nenhuma série prospectiva é interpretável — é o pré-requisito da onda de evidência.</p>
+    <div class="evrow"><span class="ev">aiResearchService.js:477‑480</span><span class="ev">medido nas 229 análises de 90 dias</span></div>
+    <div class="fix"><b>Correção proposta</b>Versionar os pesos e thresholds à parte do commit — um identificador de configuração que só muda quando a régua muda — e falhar alto quando nenhuma fonte de versão estiver disponível, em vez de cair num rótulo de outra classe. <b>Aceite:</b> duas publicações com a mesma régua têm o mesmo identificador; duas com réguas diferentes, nunca.</div>
+  </div>
+
+  <div class="finding med">
+    <header><span class="id">V‑23</span><h4>A cauda de frescor regrediu</h4><span class="chip acc">MÉDIO</span></header>
+    <p>A mediana de defasagem dos fundamentos é de 0,1 dia nas duas classes — saudável. Mas <b>24 documentos de ação e 18 de FII passam de 90 dias</b>, com máximo de 187,9, contra “nenhum ativo acima de 90 dias” na medição de 22/08. São provavelmente tickers mortos que a blacklist não alcançou — a pendência de triagem de B3 mortos já está registrada no backlog —, e por isso o achado é médio e não alto. Mas “provavelmente” é a palavra que este estudo não deveria precisar usar.</p>
+    <div class="evrow"><span class="ev">lastFundamentalsDate: p90 STOCK 0,1 d · FII 26,7 d</span><span class="ev">máximo 187,9 d nas duas classes</span></div>
+    <div class="fix"><b>Correção proposta</b>Listar no painel de Saúde os documentos acima de 90 dias com nome, liquidez e último preço, para separar ticker morto de falha de coleta — e blacklistar o que for morto. <b>Aceite:</b> a contagem acima de 90 dias tem explicação nominal, não estatística.</div>
+  </div>
+
+  <div class="finding med">
+    <header><span class="id">V‑24</span><h4>Uma estatal está a um degrau de liquidez de entrar na lista âncora sem desconto</h4><span class="chip acc">MÉDIO</span></header>
+    <p>Continuação medida do V‑13. Dos 22 emissores de controle estatal verificados, <b>18 existem na base, nenhum blacklistado e nenhum na lista de governança</b> — entre eles CEEB3 (R$ 12,1 bi), BNBR3 (R$ 10,6 bi), CLSC3/CLSC4 (R$ 5,1 e 5,9 bi) e as três classes da CEB. O caso concreto: <b>CLSC4 falha o portão âncora por um único critério, liquidez</b>. Setor (Elétricas), porte, beta e ROE já passam. Se a liquidez subir, a Celesc entra no universo âncora com resiliência de controle 100 — a nota de uma empresa privada.</p>
+    <div class="evrow"><span class="ev">sectorTaxonomy.js:246‑271 — 12 tickers listados</span><span class="ev">buyAndHoldEngine.js:75‑83 — controlResilience</span><span class="ev">CLSC4: única falha “liquidez abaixo de 5000000”</span></div>
+    <div class="fix"><b>Correção proposta</b>Transformar controle acionário em metadado com vigência (controlador, tipo, data-base, fonte), alimentado do cadastro, e usar <span class="mono">controlType</span> do <span class="mono">sectorMetrics</span> como fonte primária em vez da lista curada. O eixo já lê esse campo — hoje ele é apenas o fallback. <b>Aceite:</b> nenhum emissor de controle estatal recebe nota de controle de empresa privada por ausência na lista.</div>
+  </div>
+
+  <div class="finding med">
+    <header><span class="id">V‑25</span><h4>Números de ponto flutuante cru chegam ao ranking publicado</h4><span class="chip acc">MÉDIO</span></header>
+    <p>A qualidade estrutural do TRBL11 no ranking de hoje é <span class="mono">1,4799999999999898</span>; a do TEPP11, <span class="mono">9,550000000000004</span>. O caminho de FII acumula bônus e penalidades em ponto flutuante e o clamp final não arredonda, ao contrário do caminho de ações, que arredonda contribuição por contribuição justamente para que a auditoria reconcilie com o número exibido. Baixa gravidade, alto custo de credibilidade: é o tipo de detalhe que um assinante fotografa.</p>
+    <div class="evrow"><span class="ev">scoringEngine.js:1589 — clamp sem arredondamento</span><span class="ev">contraste: scoringEngine.js:1452</span></div>
+    <div class="fix"><b>Correção proposta</b>Arredondar no clamp dos três eixos estruturais de FII, como já é feito no de ações. <b>Aceite:</b> nenhum score exibido tem mais de uma casa decimal.</div>
+  </div>
+
+  <h3>O que ficou visivelmente mais maduro</h3>
+  <div class="grid g2">
+    <div class="card anc">
+      <h4>Uma decisão, um lugar</h4>
+      <p>A régua do ROE parou de estar duplicada em três motores com três respostas: <span class="mono">resolveRoeReading</span> devolve o número <em>e</em> a régua dele, e os três consomem. É o padrão que o V‑20 pede para a vacância.</p>
+    </div>
+    <div class="card anc">
+      <h4>Motivo obrigatório na saída</h4>
+      <p>Todo ticker que estava em COMPRAR e não está mais sai com texto legível — inclusive quando some do ranking inteiro por ter perdido o portão. Uma âncora que desaparece sem explicação é pior que uma que fica.</p>
+    </div>
+    <div class="card anc">
+      <h4>Contrato paramétrico</h4>
+      <p>A âncora ganhou regra própria de coerência entre score e ação sem afrouxar a do semanal. Um COMPRAR abaixo de 70 só é válido se <em>declarar</em> que veio da banda de permanência.</p>
+    </div>
+    <div class="card anc">
+      <h4>Auditoria read-only de verdade</h4>
+      <p>Os scripts de auditoria usam conector endurecido, neutralizam a única escrita do caminho de cálculo e devolvem <span class="mono">writesPerformed: false</span>. Este estudo inteiro foi feito com eles.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 8 ══════════════════════════ -->
+<section id="s8">
+  <span class="eyebrow">08 · Limites</span>
+  <h2>O que este estudo não pode afirmar</h2>
+  <p class="dek">Esta seção é parte do relatório, não rodapé. A lista cresceu em relação à 1ª edição, porque a âncora acrescentou incertezas novas.</p>
+
+  <ul>
+    <li><strong>Que a lista girou menos depois dos consertos.</strong> Nenhuma publicação saiu sob o código novo. O contrafactual medido (Jaccard 1,000 em FII, 0,750 em ações contra a última publicada) descreve o <em>salto de versão</em>, não uma tendência de giro. Só a partir de duas publicações consecutivas sob o mesmo código isso passa a ser mensurável.</li>
+    <li><strong>Que a histerese vai reduzir o giro da âncora.</strong> A banda está correta e é a técnica que a literatura recomenda, mas ela roda em <span class="mono">bootstrap</span> hoje. O primeiro dado real sobre seu efeito só existe na <em>segunda</em> publicação — outubro, se a primeira sair em setembro.</li>
+    <li><strong>Que o portão âncora seleciona bons ativos.</strong> Ele seleciona ativos que atendem a critérios declarados. Se esses critérios prevêem retorno, ninguém sabe — e ninguém pode saber com três meses de publicações e uma versão de algoritmo que mudou 27 vezes.</li>
+    <li><strong>Que o ranking gera retorno, alpha ou acerto acima do acaso.</strong> Inalterado desde a 1ª edição, e por causa inalterada: não há série point-in-time com profundidade.</li>
+    <li><strong>Que o limiar 70, a banda 62 ou os pesos 0,50/0,35/0,15 são melhores que alternativas.</strong> Calibrar olhando o resultado atual é sobreajuste por construção. Com dois motores e mais parâmetros, o risco aumentou, não diminuiu.</li>
+    <li><strong>Que a lista âncora de 9 nomes é curta “demais”.</strong> Este estudo afirma que ela não é uma carteira diversificada — o que é aritmética. Se 9 nomes de alta convicção batem 30 de convicção média é uma questão empírica, e a evidência não existe.</li>
+    <li><strong>Que os 42 documentos com defasagem acima de 90 dias são tickers mortos.</strong> É a hipótese mais provável e está rotulada como hipótese, não como fato.</li>
+    <li><strong>Que as notas de 0 a 5 são comparáveis a algum benchmark de mercado.</strong> São julgamento estruturado deste estudo, com critério declarado e evidência ligada a cada linha.</li>
+  </ul>
+
+  <h3>O que dá para medir agora, e deveria virar rotina</h3>
+  <p>Turnover por classe entre publicações consecutivas; proporção de COMPRAR sobre selecionados; distância ao limiar e ocupação da banda de histerese; cobertura de FFO e de vacância crível; profundidade da série de fundamentos; e a divergência entre as duas estratégias no mesmo ticker. Tudo isso é descritivo, honesto, já viável — e as seções 3, 4 e 5 são a prova. A diferença entre um estudo e um produto maduro é que num produto maduro esses números vivem no painel, não num HTML.</p>
+</section>
+
+<!-- ══════════════════════════ 9 ══════════════════════════ -->
+<section id="s9">
+  <span class="eyebrow">09 · Caminho</span>
+  <h2>Roteiro</h2>
+  <p class="dek">Quatro ondas, ordenadas por impacto na tese dividido pelo risco de introduzir erro. A onda 0 é nova e tem prazo: 01/09.</p>
+
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Onda</th><th>Escopo</th><th>Achados</th><th>Risco</th><th>Critério de aceite</th></tr></thead>
+      <tbody>
+        <tr style="background:var(--anchor-soft)">
+          <td><b>0</b><br><span class="chip anc">antes de 01/09</span></td>
+          <td>Publicar a lista âncora deliberadamente: <span class="mono">dryRun</span> pelo Admin, revisão humana das duas listas, publicação manual. Assim o cron mensal encontra um baseline e a histerese começa a existir.</td>
+          <td class="mono">V‑15</td>
+          <td>baixo</td>
+          <td>Ponteiro <span class="mono">BUY_AND_HOLD/RANKING</span> ativo em STOCK e FII antes do primeiro disparo automático, com a lista revisada por uma pessoa.</td>
+        </tr>
+        <tr>
+          <td><b>1</b><br><span class="chip neutral">sem decisão</span></td>
+          <td>Correções inequívocas: vacância compartilhada entre os dois motores; teto de composição na âncora de ações; arredondamento dos estruturais de FII; menção recíproca no Research; relatório nominal dos documentos defasados.</td>
+          <td class="mono">V‑20, V‑18, V‑25, V‑21, V‑23</td>
+          <td>baixo</td>
+          <td>O mesmo ticker tem a mesma leitura de vacância nos dois rankings; nenhum macro-setor passa de 1/3 da lista âncora de ações; nenhum score exibido com mais de uma casa decimal.</td>
+        </tr>
+        <tr>
+          <td><b>2</b></td>
+          <td>Estabilidade e identidade: levar a banda de histerese ao ranking semanal; versionar régua à parte do commit; interpolação linear no lugar dos degraus do semanal.</td>
+          <td class="mono">V‑01, V‑10, V‑22</td>
+          <td>médio</td>
+          <td>Jaccard entre publicações consecutivas do Brasil 10 acima de 0,85 por três meses, com toda saída tendo causa registrada; duas publicações com a mesma régua compartilham identificador.</td>
+        </tr>
+        <tr>
+          <td><b>3</b><br><span class="chip warn">decisão do dono</span></td>
+          <td>Arquitetura da decisão: reescalar o scorer de FII; remover a dupla contagem de ROE na durabilidade; decidir o teto de beta de banco; trocar o veto de cíclicas por teste medido; resolver o que Q/V/R significam na tela.</td>
+          <td class="mono">V‑02, V‑17, V‑11, V‑14, V‑07</td>
+          <td>alto</td>
+          <td>Rodar em shadow ao lado do motor atual por N publicações; comparar composição, giro, concentração e proporção de COMPRAR; promover só com decisão explícita e registrada.</td>
+        </tr>
+        <tr>
+          <td><b>4</b></td>
+          <td>Evidência: backfill de proventos plurianual, ativação do eixo de consistência, renomear o bônus de Aristocrat, atualizar os snapshots setoriais, e só então discutir pesos e limiares.</td>
+          <td class="mono">V‑03, V‑04, V‑06, V‑09, V‑19</td>
+          <td>médio</td>
+          <td>80% do universo pontuado com 5 anos de histórico de proventos; eixo de consistência ativo com peso declarado; nenhuma recalibração antes de amostra fora da janela de desenvolvimento.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>O que não deve mudar até haver evidência</h3>
+  <ul>
+    <li>O limiar 70 como contrato de entrada, nas duas estratégias.</li>
+    <li>A ordenação soberana por score com desempate estrutural.</li>
+    <li>Um perfil por ticker no semanal, e perfil único na âncora.</li>
+    <li>Ausência de cota de COMPRAR. Que a âncora publique 3 FIIs é informação, não defeito.</li>
+    <li>O isolamento por <span class="mono">(assetClass, strategy, section)</span>. Ele está íntegro e é o que permite as duas listas coexistirem.</li>
+    <li>O motor atual como controle de qualquer experimento.</li>
+  </ul>
+
+  <h3>A pergunta que a 1ª edição deixou, e que o código já respondeu</h3>
+  <p>O estudo anterior terminou perguntando se o Brasil 10 e o ranking por perfil eram duas listas de oportunidade ou uma carteira para carregar, e observou que o <span class="mono">buyAndHoldEngine</span> era a resposta escrita em código para a segunda opção — faltando decidir se subia ou era desligado.</p>
+  <p><strong>Ele subiu.</strong> A decisão foi tomada e implementada: a âncora é a carteira para carregar, o Research é a lista de oportunidades, e as duas coexistem sob estratégias isoladas. Essa era a decisão difícil, e ela está feita. A pergunta que sobra é menor e mais gerenciável — <em>como o assinante navega entre as duas</em> — e é uma pergunta de produto, não de arquitetura.</p>
+</section>
+
+<!-- ══════════════════════════ 10 ═════════════════════════ -->
+<section id="s10">
+  <span class="eyebrow">10 · Anexos</span>
+  <h2>Anexos</h2>
+
+  <h3>A · Procedência dos números</h3>
+  <p>Todos os dados vivos vieram de leitura do banco de produção em 23/08/2026, entre 11:29 e 14:30 UTC, <strong>sem nenhuma escrita</strong> — nenhum <span class="mono">MarketAnalysis</span>, <span class="mono">DiscardLog</span>, ponteiro, configuração ou publicação foi criado ou alterado. Domingo, mercado fechado. Caminhos usados:</p>
+  <ul>
+    <li><span class="mono">auditBuyAndHoldShadowRanking.js --excluded</span> — ranking âncora de ações e motivos de exclusão por ticker.</li>
+    <li><span class="mono">auditFiiBuyAndHoldShadowRanking.js --excluded</span> — ranking âncora de FIIs, composição e exclusões.</li>
+    <li><span class="mono">anchorPublicationService.buildAnchorRanking</span> e <span class="mono">runAnchorPublication({ dryRun: true })</span> — o mesmo caminho do cron, sem persistir.</li>
+    <li>Reprodução do funil semanal chamando <span class="mono">aiResearchService.calculateRanking</span> com <span class="mono">DiscardLog.insertMany</span> neutralizado antes do import — a única escrita desse caminho.</li>
+    <li>Agregações de leitura sobre <span class="mono">MarketAnalysis</span>, <span class="mono">MarketAsset</span>, <span class="mono">FundamentalSnapshot</span>, <span class="mono">AssetHistory</span> e <span class="mono">PublishedResearchPointer</span>.</li>
+  </ul>
+  <p>Todos os scripts foram lidos antes de executar, para confirmar ausência de <span class="mono">save/update/insert/bulkWrite/delete</span> e de inicialização de scheduler, e usaram o conector endurecido <span class="mono">server/scripts/lib/scriptDb.js</span>. Os scripts temporários criados para as agregações foram removidos ao fim; a árvore de trabalho ficou limpa.</p>
+
+  <h3>B · Glossário — só o que é novo desde a 1ª edição</h3>
+  <div class="wide tw">
+    <table>
+      <thead><tr><th>Termo</th><th>No Vértice significa</th></tr></thead>
+      <tbody>
+        <tr><td class="t">estratégia âncora</td><td><span class="mono">BUY_AND_HOLD</span>. Lista de perfil único, revisão mensal, portão binário. Distinta da legada <span class="mono">BUY_HOLD</span> (Research semanal, 3 perfis).</td></tr>
+        <tr><td class="t">histerese 70/62</td><td>Entra em COMPRAR com score ≥ 70; permanece enquanto ≥ 62. A folga vale só para o limiar de score — travamento substantivo derruba na hora.</td></tr>
+        <tr><td class="t">travamento substantivo</td><td>Motivo de AGUARDAR que não é oscilação de medição: preço acima do justo, distribuição não coberta pelo FFO, teto de composição, saída do portão.</td></tr>
+        <tr><td class="t">teto de composição</td><td>Fração máxima da lista <em>publicável</em> por balde (papel, gestora). Resolvido por ponto fixo; o excedente vira AGUARDAR com motivo, não sai da lista.</td></tr>
+        <tr><td class="t">cobertura de FFO</td><td>FFO por cota ÷ provento por cota. Abaixo de 0,70× o provento não é operacional e o COMPRAR é vetado.</td></tr>
+        <tr><td class="t">spread comprimido</td><td>DY do FII menos NTN‑B longa abaixo de 2,0 p.p. Marca o fundo como caro e força AGUARDAR.</td></tr>
+        <tr><td class="t">bootstrap</td><td>Estado da histerese quando não existe publicação anterior da mesma estratégia e classe: vale o limiar de entrada para todos.</td></tr>
+        <tr><td class="t">ROE recorrente</td><td>Rentabilidade de banco pelo IF.data do BCB (<span class="mono">roeTtm</span>), medida na rampa 12–30 — distinta do ROE contábil do Fundamentus, medido na rampa 8–25.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>C · Bibliografia</h3>
+  <p class="dek">Todas as fontes foram abertas e conferidas em 23/08/2026. Onde o PDF oficial pôde ser lido, a citação vem do texto extraído dele; onde não pôde, isso está indicado.</p>
+  <ol class="refs">
+    <li><strong>MSCI Quality Indexes Methodology</strong> (maio/2022). Quality Score = z-scores de ROE, Dívida/Patrimônio e Variabilidade de Lucro, winsorizados nos percentis 5 e 95; variabilidade definida como desvio-padrão do crescimento a/a de LPA nos últimos cinco exercícios; rebalanceamento semestral no fechamento do último dia útil de maio e novembro; <em>buffer rules</em> aplicadas a 20% do número fixo de ativos; teto de peso por emissor de 5% nos índices regionais amplos; ativo com apenas ROE disponível não tem score composto calculado e não entra no índice. <a href="https://www.msci.com/eqb/methodology/meth_docs/MSCI_Quality_Indexes_Methodology_May2022.pdf">PDF oficial, texto extraído</a></li>
+    <li><strong>S&amp;P 500 Dividend Aristocrats.</strong> Exigência de 25 anos consecutivos de aumento de dividendo; 69 constituintes em 31/07/2026. A página do índice na S&amp;P Dow Jones retornou 403; a afirmação está ancorada na página da ProShares, emissora do ETF NOBL que o replica. <a href="https://www.proshares.com/our-etfs/strategic/nobl">proshares.com/our-etfs/strategic/nobl</a></li>
+    <li><strong>B3 — Metodologia do Índice de Fundos de Investimentos Imobiliários (IFIX).</strong> Critérios 4.1 e 4.2: ativos que, na vigência das 3 carteiras anteriores, representem 95% do somatório do Índice de Negociabilidade, e com 95% de presença em pregão no mesmo período. Carteira fixa entre revisões. <a href="https://www.b3.com.br/data/files/2A/56/E3/DD/A3943710DB551337AC094EA8/IFIX-Metodologia-pt-br.pdf">PDF oficial, texto extraído</a></li>
+    <li><strong>Nareit — Funds From Operations (FFO).</strong> Lucro líquido GAAP excluindo depreciação e amortização de imóveis, ganhos e perdas na venda de certos ativos imobiliários, ganhos e perdas por mudança de controle, e impairments de imóveis. Medida criada em 1991 para corrigir a distorção da depreciação histórica. <a href="https://www.reit.com/glossary/funds-operation-ffo">reit.com/glossary/funds-operation-ffo</a></li>
+    <li><strong>Novy-Marx, R., Velikov, M. (2016).</strong> <em>A Taxonomy of Anomalies and Their Trading Costs.</em> Review of Financial Studies 29(1), 104–147. Custos de execução de 20 a 57 pontos-base para anomalias de giro médio; o <em>buy/hold spread</em> — exigências mais duras para estabelecer posições do que para mantê-las — é a técnica de mitigação mais eficaz; a maioria das anomalias com giro abaixo de 50% ao mês mantém spread líquido, poucas das mais rápidas mantêm. <a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2535173">SSRN 2535173</a> · <a href="https://academic.oup.com/rfs/article-abstract/29/1/104/1844518">RFS</a></li>
+    <li><strong>Asness, C., Frazzini, A., Pedersen, L.</strong> <em>Quality Minus Junk.</em> Review of Accounting Studies 24(1), 34–112. Qualidade em rentabilidade, crescimento, segurança e payout; retorno ajustado a risco significativo nos EUA e em 24 países (os do MSCI World Developed em 31/12/2012). <a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2312432">SSRN 2312432</a></li>
+    <li><strong>Piotroski, J. (2000).</strong> <em>Value Investing: The Use of Historical Financial Statement Information to Separate Winners from Losers.</em> Nove sinais binários em rentabilidade, alavancagem/liquidez e eficiência operacional; sete dos nove são comparações ano contra ano. <a href="https://www.gurufocus.com/term/fscore">verbete de referência</a></li>
+    <li><strong>Novy-Marx, R. (2013).</strong> <em>The other side of value: the gross profitability premium.</em> Journal of Financial Economics 108(1), 1–28.</li>
+    <li><strong>Harvey, C., Liu, Y., Zhu, H. (2016).</strong> <em>… and the Cross-Section of Expected Returns.</em> Review of Financial Studies 29(1), 5–68. Um fator novo precisa superar t &gt; 3,0; a maior parte das descobertas publicadas em economia financeira é provavelmente falsa. <a href="https://academic.oup.com/rfs/article/29/1/5/1843824">RFS</a> · <a href="https://www.nber.org/papers/w20592">NBER w20592</a></li>
+    <li><strong>Bailey, D., López de Prado, M. (2014).</strong> <em>The Deflated Sharpe Ratio: Correcting for Selection Bias, Backtest Overfitting and Non-Normality.</em> Journal of Portfolio Management 40(5), 94–107. <a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551">SSRN 2460551</a></li>
+    <li><strong>Baker, M., Bradley, B., Wurgler, J. (2011).</strong> <em>Benchmarks as Limits to Arbitrage: Understanding the Low-Volatility Anomaly.</em> Financial Analysts Journal 67(1), 40–54.</li>
+    <li><strong>Resolução CVM nº 20/2021</strong> (texto consolidado). Art. 1º define analista de valores mobiliários e, no § 1º, o que é relatório de análise; art. 2º torna a atividade privativa de credenciados. <a href="https://conteudo.cvm.gov.br/export/sites/cvm/legislacao/resolucoes/anexos/001/resol020consolid.pdf">PDF consolidado, texto extraído</a></li>
+    <li><strong>Cobertura de dividendo por FFO/AFFO em REITs.</strong> A prática de tratar payout acima de 100% do AFFO como bandeira vermelha e a faixa de 70–80% como saudável vêm de <em>fontes secundárias de mercado</em>, não de norma da Nareit, e entram neste estudo com esse rótulo. O que sustenta o veto de 0,70× é a definição de FFO acima, não um limiar normativo.</li>
+    <li><strong>Documentos internos.</strong> <span class="mono">planejamento/ESTUDO-MATURIDADE-RANKING-2026-08.html</span> (1ª edição, 22/08/2026, achados V‑01 a V‑14, cujo status foi re-verificado na seção 7); <span class="mono">planejamento/AUDITORIA-RANKING-END-TO-END-2026-07-19.md</span>; <span class="mono">planejamento/DIAGNOSTICO-PORTAO-ANCORA-2026-08-23.md</span>; <span class="mono">planejamento/AUDITORIA-CALIBRACAO-BUY-AND-HOLD-STOCK-2026-07-19.md</span>; <span class="mono">planejamento/DESIGN-BUY-AND-HOLD-2026-07-20.md</span>.</li>
+  </ol>
+
+  <p class="foot">Estudo técnico interno da Vértice Invest · 2ª edição · 23 de agosto de 2026 · elaborado sobre o código em <span class="mono">main · 20f1297</span> e dados de produção lidos na data, sem escrita. Conteúdo de engenharia e metodologia; não constitui recomendação de investimento nem opinião jurídica.</p>
+</section>
+
+</main>
+</div>
