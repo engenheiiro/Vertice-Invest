@@ -20,7 +20,7 @@ const retention = {
   previousScore: 73,
   previousProfile: 'DEFENSIVE',
   displaced: { ticker: 'EUCA4', score: 58 },
-  reason: 'Assento mantido: score 67 segue acima do piso de permanência (62)',
+  reason: 'Na lista desde a apuração anterior: score 67 segue acima do mínimo para manter a vaga (62)',
 };
 
 const buildDoc = () => new MarketAnalysis({
@@ -35,7 +35,7 @@ const buildDoc = () => new MarketAnalysis({
   retentionExits: [{
     ticker: 'PINE4',
     name: 'Banco Pine',
-    reason: 'Saiu da lista: score caiu para 60, abaixo do piso de permanência (62)',
+    reason: 'Saiu da lista: score caiu para 60, abaixo do mínimo para manter a vaga (62)',
     outcome: 'BELOW_HOLD',
     score: 60,
     previousScore: 74,
@@ -61,7 +61,7 @@ describe('persistência do rastro de retenção', () => {
       score: 60,
       previousScore: 74,
     });
-    expect(exit.reason).toMatch(/abaixo do piso de permanência \(62\)/);
+    expect(exit.reason).toMatch(/abaixo do mínimo para manter a vaga \(62\)/);
   });
 
   it('`action` continua coerente com o score mesmo no item retido', () => {

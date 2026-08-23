@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Trophy, BarChart2, Layers, Shield, Target, Zap, Minus, Wallet, PieChart, PlusCircle, Crown, Medal, Calculator } from 'lucide-react';
+import { Trophy, BarChart2, Layers, Shield, Target, Zap, Minus, Wallet, PieChart, PlusCircle, Crown, Medal, Calculator, History } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 import { AssetDetailModal } from './AssetDetailModal';
 import { useWallet, AssetType } from '../../contexts/WalletContext';
@@ -520,7 +520,26 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                                                 <div className="text-[8px] font-black uppercase text-slate-500 mb-1">Score</div>
                                                 <span className={`text-lg font-black ${getScoreTextColor(pick.score)}`}>{pick.score}</span>
                                             </div>
-                                            <div className={`px-3 py-1.5 rounded-lg border flex flex-col items-center min-w-[80px] ${pick.action === 'BUY' ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' : 'text-slate-400 bg-slate-800 border-slate-700'}`}><span className="text-[9px] font-black tracking-tighter">{pick.action === 'BUY' ? 'COMPRAR' : 'AGUARDAR'}</span></div>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <div className={`px-3 py-1.5 rounded-lg border flex flex-col items-center min-w-[80px] ${pick.action === 'BUY' ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' : 'text-slate-400 bg-slate-800 border-slate-700'}`}><span className="text-[9px] font-black tracking-tighter">{pick.action === 'BUY' ? 'COMPRAR' : 'AGUARDAR'}</span></div>
+                                                {/* Um AGUARDAR no MEIO do ranking é o que mais confunde: o ativo
+                                                    aparece acima de outros e sem sinal de compra. Ele está ali por
+                                                    continuidade — a lista mantém quem já estava enquanto o score não
+                                                    cai abaixo do mínimo. Sem este marcador o rastro existe no
+                                                    documento e nada chega ao leitor. O selo NÃO fala de ação:
+                                                    COMPRAR/AGUARDAR continua vindo só do score. */}
+                                                {pick.retention?.retained && (
+                                                    <span
+                                                        title={pick.retention.reason
+                                                            + (pick.retention.previousPosition
+                                                                ? ` · era ${pick.retention.previousScore} na posição ${pick.retention.previousPosition}`
+                                                                : '')}
+                                                        className="flex items-center gap-1 text-[8px] font-black text-blue-400 bg-blue-900/10 px-1.5 py-0.5 rounded border border-blue-900/30 uppercase tracking-wider whitespace-nowrap"
+                                                    >
+                                                        <History size={8} /> Já estava
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

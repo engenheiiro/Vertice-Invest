@@ -92,9 +92,23 @@ export const WEEKLY_HYSTERESIS = Object.freeze({
   shadow: false,
 });
 
-/** True se a classe está na lista de retenção. */
-export const isWeeklyRetentionEnabled = (assetClass, config = WEEKLY_HYSTERESIS) => (
-  (config.enabledClasses || []).includes(assetClass)
+/** A única estratégia a que esta retenção pertence. */
+export const WEEKLY_STRATEGY = 'BUY_HOLD';
+
+/**
+ * True se a classe está na lista de retenção — E se a estratégia é a do
+ * semanal.
+ *
+ * O guard por estratégia é explícito de propósito. Hoje `calculateRanking` só é
+ * chamado com `BUY_HOLD`, mas isso é uma convenção não escrita: a lista âncora
+ * (`BUY_AND_HOLD`) tem motor, histerese e teto de composição próprios, e um
+ * reuso da função com outra estratégia bastaria para a retenção do semanal
+ * começar a mexer nos assentos dela. `strategy` não tem default — quem esquecer
+ * de passá-la recebe `false` (fail-closed), que é o comportamento anterior à
+ * retenção existir.
+ */
+export const isWeeklyRetentionEnabled = (assetClass, strategy, config = WEEKLY_HYSTERESIS) => (
+  strategy === WEEKLY_STRATEGY && (config.enabledClasses || []).includes(assetClass)
 );
 
 /**

@@ -165,3 +165,67 @@ Apareceram no mesmo sync e ficam registrados aqui só para não se perderem — 
 - **brapi estourou a cota mensal** (HTTP 429, 15.000 req do plano gratuito). Fallback BR indisponível até o reset.
 - **FII segue publicando 30 de 30 COMPRAR** — achado V-02 do estudo, item #9 do roteiro.
 - **80 ativos com fundamento acima de 36h**; os piores são tickers mortos (PORT3 4756h, OIBR4, OSXB3). É o item pendente da blacklist da B3. Não bloqueia publicação: o portão de 36h olha a saúde do último sync, que passou (Ações 331/994 aceitos).
+
+---
+
+## Resolução — 23/08/2026
+
+Todos os seis achados fechados. Medição ao vivo, somente leitura, pelo
+`server/scripts/auditWeeklyRetentionGuard.js` (roda o motor nas 7 classes contra
+o banco e imprime os critérios de aceite).
+
+**Achado 1 — regra escolhida: a de ESCOPO ESTREITO.** A readmissão é recusada
+quando reduziria o número de COMPRAR da lista (`canDisplace` em
+`utils/weeklyRetention.js`, desfecho `WOULD_DROP_BUY`). A alternativa
+conservadora foi medida e descartada com número na mão: ela barraria a única
+retenção do Brasil 10 desta apuração — ABCB4 volta com 77 deslocando PSSA3, que
+pontua 79 — e o Jaccard cairia de **1,000 para 0,818**, abaixo da meta de 0,90.
+O motivo é estrutural, não deste dia: um incumbente sai do draft justamente
+quando fica abaixo do corte, e aí todo assento não-incumbente pontua acima dele.
+
+**Números da apuração de verificação:**
+
+| classe | itens | COMPRAR | Jaccard | BUY < 70 | retidos | barrados pela guarda |
+|---|---|---|---|---|---|---|
+| STOCK | 30 | 18 | 0,765 | 0 | 0 | 1 (COGN3) |
+| FII | 30 | 30 | 0,935 | 0 | 1 | 0 |
+| CRYPTO | 16 | 5 | 0,882 | 0 | 0 | 0 |
+| STOCK_US | 30 | 16 | 0,935 | 0 | 0 | 0 |
+| REIT | 24 | 12 | 1,000 | 0 | 0 | 0 |
+| ETF | 42 | 15 | 0,976 | 0 | 0 | 0 |
+| **BRASIL_10** | 10 | 10 | **1,000** | 0 | 1 (ABCB4) | 0 |
+
+- Critério 1: nenhum `BUY` com score < 70, em nenhuma classe. Contrato de
+  ranking válido nas sete.
+- Critério 2: zero trocas que reduzem COMPRAR. O caso nominal é o do card —
+  COGN3@67 barrado, CSED3@72/COMPRAR mantém o assento.
+- Critério 3: Brasil 10 em 1,000, 5 ações + 5 FIIs.
+- **Custo medido:** STOCK volta de 0,818 para 0,765 de Jaccard nesta apuração —
+  é a retenção de COGN3 que deixou de acontecer. Foi o preço de não publicar uma
+  lista pior pela régua dela mesma.
+
+**Achado 2.** `applyConcentrationPenalty` e `sectorCapByProfile` passam da
+classe para a retenção (`aiResearchService.calculateRanking`). Ações não cobram
+a dedução (o draft delas não cobra) e usam o mesmo teto de balde do draft —
+`STOCK_STRICT_SECTOR_CAP_BY_PROFILE`, agora exportado do
+`stockCalibrationShadowEngine` para não haver dois números.
+
+**Achado 3.** Selo "Já estava" na linha do item quando `retention.retained`, ao
+lado do semáforo, com o motivo e o par score/posição anteriores no tooltip
+(`TopPicksCard.tsx`). O selo não fala de ação.
+
+**Achado 4.** Os seis textos de `describeRetentionExit` reescritos para o
+leitor, mais o novo `WOULD_DROP_BUY`. PSEC11 hoje sai como *"não havia vaga no
+perfil Moderado sem tirar outro ativo que já estava na lista"*.
+
+**Achado 5a.** O caminho legado do `getLatestReport` zera `retentionExits` junto
+com `content.ranking`. **5b.** `isWeeklyRetentionEnabled` exige a estratégia e é
+fail-closed sem ela.
+
+**Âncora verificada intacta** depois da mudança: os dois documentos publicados
+(`BUY_AND_HOLD` STOCK 17/6 e FII 30/3) seguem sem `item.retention`, sem
+`retentionExits`, sem `retentionAudit`, e sem COMPRAR abaixo de 70.
+
+**Não feito (fora de escopo, como o card pede):** nada de recalibração, nada de
+`STOCK_US`, `holdScore` e `maxRetentionShare` intocados, e **nenhuma
+publicação**.

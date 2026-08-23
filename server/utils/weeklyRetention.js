@@ -33,6 +33,7 @@
  */
 
 import { deriveRankingAction, normalizeRankingTicker } from './rankingContract.js';
+import { BUY_THRESHOLD } from '../config/financialConstants.js';
 import { concentrationPenaltyFor, CONCENTRATION_SCORE_FLOOR } from './concentrationPenalty.js';
 import { WEEKLY_HYSTERESIS, weeklyRetentionBudget } from '../config/weeklyHysteresis.js';
 import { getConcentrationKey } from '../config/sectorTaxonomy.js';
@@ -56,6 +57,7 @@ export const RETENTION_OUTCOMES = Object.freeze({
   INELIGIBLE: 'INELIGIBLE',
   SECTOR_CAP: 'SECTOR_CAP',
   NO_DISPLACEABLE_SEAT: 'NO_DISPLACEABLE_SEAT',
+  WOULD_DROP_BUY: 'WOULD_DROP_BUY',
   BUDGET_EXHAUSTED: 'BUDGET_EXHAUSTED',
 });
 
@@ -108,7 +110,7 @@ const buildRetainedItem = ({ asset, profile, score, penalty, previous, holdScore
     // NUNCA um valor próprio: a ação do semanal é derivada do score, ponto.
     action: deriveRankingAction(finalScore),
     tier: 'GOLD',
-    thesis: `${label}: assento mantido (incumbente acima do piso de permanência)`
+    thesis: `${label}: na lista desde a apuração anterior (score acima do mínimo para manter a vaga)`
       + (penalty > 0 ? ` | [Penalidade Concentração: -${penalty}]` : ''),
     auditLog: [
       ...(asset.auditLog || []),
@@ -123,27 +125,87 @@ const buildRetainedItem = ({ asset, profile, score, penalty, previous, holdScore
       previousScore: previous?.score ?? null,
       previousProfile: previous?.riskProfile ?? null,
       displaced: displaced ? { ticker: displaced.ticker, score: displaced.score } : null,
-      reason: `Assento mantido: score ${finalScore} segue acima do piso de permanência (${holdScore})`,
+      // Copy do LEITOR: o que ele precisa saber é que este ativo está na lista
+      // por continuidade, não porque o draft o escolheu de novo.
+      reason: `Na lista desde a apuração anterior: score ${finalScore} segue acima do mínimo para manter a vaga (${holdScore})`,
     },
   };
 };
 
-/** Texto de saída — todo incumbente não retido sai com motivo escrito. */
-export const describeRetentionExit = ({ outcome, score, holdScore, profile, key }) => {
+/**
+ * A CATRACA — a guarda que decide se é lícito tirar AQUELE assento.
+ *
+ * Achado 1 do card de 23/08/2026, medido na primeira apuração real: no Arrojado
+ * de ações COGN3 caiu de 73 para 67, foi retido e, para abrir a vaga, deslocou
+ * CSED3, que entrava com 72 e COMPRAR. A regra do 70 não caiu — COGN3 publicou
+ * AGUARDAR, como o desenho manda — mas a lista ficou pior pela régua dela mesma:
+ * saiu um 72/COMPRAR, entrou um 67/AGUARDAR.
+ *
+ * Não foi azar. A vítima é o menor score NÃO-incumbente, e a própria retenção
+ * deixa a lista quase toda de incumbentes: naquele perfil havia SEIS assentos
+ * com score menor que o de CSED3, todos protegidos por serem de incumbentes, e
+ * CSED3 era o único deslocável. Quanto mais a retenção funciona, mais o único
+ * alvo possível passa a ser justamente quem está chegando — e o teto de
+ * `maxRetentionShare` não protege disso: ele limita retenções POR APURAÇÃO, não
+ * o travamento acumulado.
+ *
+ * ── A REGRA ESCOLHIDA, E POR QUE NÃO A OUTRA ───────────────────────────────
+ *
+ * Vale a de ESCOPO ESTREITO: a readmissão é recusada quando a troca REDUZIRIA O
+ * NÚMERO DE COMPRAR da lista — deslocado em COMPRAR, retido abaixo do limiar.
+ *
+ * A alternativa considerada — nunca deslocar assento com score maior que o do
+ * retido — fecha a catraca inteira, mas é ESTRITAMENTE mais restritiva (todo
+ * caso que ela barra a mais tem deslocado > retido) e cobra caro onde a
+ * retenção mais entrega: um incumbente sai do draft justamente quando fica
+ * abaixo do corte, e aí TODO assento não-incumbente pontua acima dele. No
+ * Brasil 10 desta apuração ela barraria a única retenção — ABCB4 volta com 77
+ * deslocando PSSA3, que pontua 79 — devolvendo o Jaccard de 1,000 para 0,818,
+ * abaixo da meta de 0,90.
+ *
+ * Não confundir com relaxar o piso de permanência: `holdScore` continua 62. O
+ * que esta guarda muda é A QUEM é lícito tirar o assento.
+ *
+ * Como a vítima é o MENOR não-incumbente do perfil, `victim` em COMPRAR implica
+ * que TODOS os não-incumbentes estão em COMPRAR: não existe outra vítima que
+ * salve a troca, e recusar a readmissão é a única saída coerente.
+ */
+const canDisplace = (retainedItem, victim) => (
+  deriveRankingAction(victim?.score) !== 'BUY' || Number(retainedItem?.score) >= BUY_THRESHOLD
+);
+
+/**
+ * Texto de saída — todo incumbente não retido sai com motivo escrito.
+ *
+ * A régua da copy é o LEITOR, não o algoritmo. Na primeira apuração real o FII
+ * publicou "PSEC11 — Saiu da lista: todos os assentos do perfil Moderado já são
+ * de incumbentes", num ativo com score 85: isso descreve o código, e quem lê
+ * conclui que o sistema quebrou. Uma saída que o assinante não entende é pior
+ * que uma saída sem texto, porque ocupa espaço prometendo explicação.
+ *
+ * Daí nenhum destes textos citar "incumbente", "assento", "balde de
+ * concentração" ou "teto de retenções" — todos dizem o que aconteceu com o
+ * ATIVO. "Score" fica, porque é o vocabulário que a própria lista exibe.
+ */
+export const describeRetentionExit = ({ outcome, score, holdScore, profile, key, displacedTicker }) => {
   const label = PROFILE_LABEL[profile] || profile;
   switch (outcome) {
     case RETENTION_OUTCOMES.LEFT_UNIVERSE:
       return 'Saiu da lista: não apareceu entre os ativos avaliados nesta apuração';
     case RETENTION_OUTCOMES.BELOW_HOLD:
-      return `Saiu da lista: score caiu para ${score}, abaixo do piso de permanência (${holdScore})`;
+      return `Saiu da lista: score caiu para ${score}, abaixo do mínimo para manter a vaga (${holdScore})`;
     case RETENTION_OUTCOMES.INELIGIBLE:
-      return `Saiu da lista: deixou de ser elegível ao perfil ${label}`;
+      return `Saiu da lista: deixou de atender aos critérios do perfil ${label}`;
     case RETENTION_OUTCOMES.SECTOR_CAP:
-      return `Saiu da lista: teto de concentração do balde ${key} no perfil ${label}`;
+      return `Saiu da lista: o perfil ${label} já está no limite de ativos de ${key}`;
     case RETENTION_OUTCOMES.NO_DISPLACEABLE_SEAT:
-      return `Saiu da lista: todos os assentos do perfil ${label} já são de incumbentes`;
+      return `Saiu da lista: não havia vaga no perfil ${label} sem tirar outro ativo que já estava na lista`;
+    case RETENTION_OUTCOMES.WOULD_DROP_BUY:
+      return displacedTicker
+        ? `Saiu da lista: manter a vaga custaria a de ${displacedTicker}, que está em COMPRAR`
+        : 'Saiu da lista: manter a vaga custaria a de um ativo que está em COMPRAR';
     case RETENTION_OUTCOMES.BUDGET_EXHAUSTED:
-      return 'Saiu da lista: teto de retenções da apuração';
+      return 'Saiu da lista: nesta apuração outros ativos de score maior ficaram à frente para manter a vaga';
     default:
       return 'Saiu da lista';
   }
@@ -182,6 +244,7 @@ const buildExits = (entries, holdScore, fallbackProfile) => entries.map(entry =>
     holdScore,
     profile: entry.profile || fallbackProfile || entry.prev?.riskProfile,
     key: entry.key,
+    displacedTicker: entry.displacedTicker,
   }),
   outcome: entry.outcome,
   score: entry.score ?? null,
@@ -198,7 +261,8 @@ const buildExits = (entries, holdScore, fallbackProfile) => entries.map(entry =>
  *   1. o melhor score dele entre os perfis elegíveis é >= `holdScore`;
  *   2. ele ainda passa no gate do perfil em que entraria;
  *   3. o balde de concentração daquele perfil comporta mais um;
- *   4. o teto de retenções da apuração não estourou.
+ *   4. o teto de retenções da apuração não estourou;
+ *   5. a troca não REDUZ o número de COMPRAR da lista (ver `canDisplace`).
  *
  * Readmitir desloca o MENOR score NÃO-INCUMBENTE do perfil — ninguém é
  * readmitido por cima de outro incumbente, e o número de assentos por perfil não
@@ -215,6 +279,12 @@ const buildExits = (entries, holdScore, fallbackProfile) => entries.map(entry =>
  * @param {object} [params.options.config]  WEEKLY_HYSTERESIS ou equivalente.
  * @param {Array}  [params.options.profiles]  perfis considerados.
  * @param {number} [params.options.sectorCap]  sobrepõe o teto do balde.
+ * @param {object} [params.options.sectorCapByProfile]  teto do balde POR PERFIL,
+ *   para acompanhar o draft da classe quando ele usa um teto próprio (ações:
+ *   4 no Defensivo). Tem precedência sobre `sectorCap`.
+ * @param {boolean} [params.options.applyConcentrationPenalty=true]  cobrar do
+ *   readmitido a mesma dedução de concentração que o draft da classe cobra.
+ *   `false` nas classes cujo draft NÃO penaliza (ações).
  * @param {boolean} [params.options.relaxSectorConcentration]  ranking mono-setor.
  * @returns {{ranking:Array, exits:Array, retained:Array, bootstrap:boolean, counts:object}}
  */
@@ -228,9 +298,24 @@ export const applyWeeklyRetention = ({
   const { holdScore } = config;
   const profiles = options.profiles || RETENTION_PROFILES;
   const relaxSectorConcentration = !!options.relaxSectorConcentration;
-  const sectorCap = relaxSectorConcentration
-    ? Number.POSITIVE_INFINITY
-    : (Number.isFinite(options.sectorCap) ? options.sectorCap : config.sectorCap);
+  // Teto do balde: por perfil quando a classe declara um (ações usam 4 no
+  // Defensivo, o mesmo override que `buildCompetitiveCohesiveShadowTop10s` passa
+  // ao draft), senão o teto único da config. Sem isso a retenção barra uma
+  // readmissão que o próprio draft da classe aceitaria montar — duas réguas.
+  const sectorCapFor = (profile) => {
+    if (relaxSectorConcentration) return Number.POSITIVE_INFINITY;
+    const byProfile = Number(options.sectorCapByProfile?.[profile]);
+    if (Number.isFinite(byProfile)) return byProfile;
+    return Number.isFinite(options.sectorCap) ? options.sectorCap : config.sectorCap;
+  };
+  // A dedução de concentração é da RÉGUA DA CLASSE, não da retenção: em ações o
+  // draft decide por cap e não reescreve a avaliação fundamental depois da
+  // seleção (stockCalibrationShadowEngine), então cobrar -5 de um readmitido
+  // colocaria na mesma lista um item pagando o que nenhum outro pagou — e -5 é
+  // o bastante para virar 72 em 67, convertendo COMPRAR em AGUARDAR pelo caminho
+  // que o motor da classe recusa usar. O módulo compartilhado
+  // (utils/concentrationPenalty.js) igualou a TABELA; esta opção iguala o QUANDO.
+  const penalizesConcentration = options.applyConcentrationPenalty !== false;
 
   const baseline = toRetentionBaseline(previous);
   const bootstrap = baseline === null;
@@ -336,19 +421,21 @@ export const applyWeeklyRetention = ({
     const [victim] = profileSeats.splice(victimIdx, 1);
     const key = getConcentrationKey(candidate.asset);
     const occupancy = bucketCount(profile, key);
-    if (occupancy >= sectorCap) {
+    if (occupancy >= sectorCapFor(profile)) {
       profileSeats.splice(victimIdx, 0, victim); // desfaz
       rejected.push({ ...candidate, score, profile, key, outcome: RETENTION_OUTCOMES.SECTOR_CAP });
       continue;
     }
 
     const isFII = candidate.asset.type === 'FII';
-    const penalty = concentrationPenaltyFor({
-      sectorCount: occupancy,
-      managerCount: isFII ? managerCount(profile, getFiiManager(candidate.asset.ticker)) : 0,
-      isFII,
-      relaxSectorConcentration,
-    });
+    const penalty = penalizesConcentration
+      ? concentrationPenaltyFor({
+        sectorCount: occupancy,
+        managerCount: isFII ? managerCount(profile, getFiiManager(candidate.asset.ticker)) : 0,
+        isFII,
+        relaxSectorConcentration,
+      })
+      : 0;
     const item = buildRetainedItem({
       asset: candidate.asset,
       profile,
@@ -358,6 +445,14 @@ export const applyWeeklyRetention = ({
       holdScore,
       displaced: victim,
     });
+    if (!canDisplace(item, victim)) {
+      profileSeats.splice(victimIdx, 0, victim); // desfaz
+      rejected.push({
+        ...candidate, score, profile, displacedTicker: victim.ticker,
+        outcome: RETENTION_OUTCOMES.WOULD_DROP_BUY,
+      });
+      continue;
+    }
     profileSeats.push(item);
 
     retained.push({
@@ -512,6 +607,16 @@ export const applyBrasil10Retention = ({
       holdScore,
       displaced: victim,
     });
+    // Mesma guarda da catraca do caso geral (ver `canDisplace`): aqui a metade é
+    // de cinco assentos, então trocar um COMPRAR por um AGUARDAR pesa ainda mais.
+    if (!canDisplace(item, victim)) {
+      half.selected.splice(victimIdx, 0, victim); // desfaz
+      rejected.push({
+        ...candidate, displacedTicker: victim.ticker,
+        outcome: RETENTION_OUTCOMES.WOULD_DROP_BUY,
+      });
+      continue;
+    }
     half.selected.push(item);
     retained.push({
       ticker: candidate.ticker,

@@ -279,6 +279,16 @@ export const buildCohesiveShadowTop10 = (candidates, profile) => {
 };
 
 /**
+ * Teto de ativos por macro-setor no GOLD defensivo de ACOES. A especificacao do
+ * produto estabelece 4; o core legado ainda usa 3 por default, e o override fica
+ * isolado a esta calibracao. Exportado porque a retencao de assento
+ * (utils/weeklyRetention.js) precisa do MESMO teto: readmitir com um teto mais
+ * apertado que o do draft barraria uma composicao que o proprio draft aceita
+ * montar — duas reguas na mesma lista.
+ */
+export const STOCK_STRICT_SECTOR_CAP_BY_PROFILE = Object.freeze({ DEFENSIVE: 4 });
+
+/**
  * Monta os tres Top 10 em um unico draft competitivo. Cada ticker pode ocupar
  * somente um perfil e reutiliza os limites/penalidades de concentracao vigentes.
  */
@@ -289,12 +299,9 @@ export const buildCompetitiveCohesiveShadowTop10s = candidates => {
     .map(calibrateStockCandidate)
     .filter(candidate => candidate.stockCalibration.eligible);
 
-  // A especificacao do produto estabelece 4 ativos por macro-setor no GOLD
-  // defensivo. O core legado ainda usa 3 por default; o override fica isolado
-  // ao shadow ate a calibracao ser aprovada.
   const drafted = portfolioEngine.performCompetitiveDraft(eligible, {
     trace,
-    strictSectorCapByProfile: { DEFENSIVE: 4 },
+    strictSectorCapByProfile: STOCK_STRICT_SECTOR_CAP_BY_PROFILE,
   });
   // Em STOCK, o cap decide quem entra; concentracao nao reescreve a avaliacao
   // fundamental nem converte BUY em WAIT depois da selecao.

@@ -652,7 +652,15 @@ export const getLatestReport = async (req, res, next) => {
         if (!legacyReport) return res.status(404).json({ message: "Indisponível" });
         const response = legacyReport.toObject ? legacyReport.toObject() : structuredClone(legacyReport);
         response.content = response.content || {};
-        if (!response.isRankingPublished) response.content.ranking = [];
+        // As saídas por retenção pertencem à seção RANKING: sem zerá-las junto, o
+        // cliente receberia as saídas de uma lista que não está no ar — nomes
+        // "que saíram" de um ranking que ele nunca viu. O caminho novo
+        // (`composeActiveResearchReport`) já amarra as duas coisas ao documento
+        // da seção; aqui o documento é um só, então o vínculo é a flag.
+        if (!response.isRankingPublished) {
+            response.content.ranking = [];
+            response.retentionExits = [];
+        }
         if (!response.isMorningCallPublished) response.content.morningCall = '';
         if (!response.isReportPublished) response.comparisonReport = null;
         if (!response.isExplainableAIPublished) {

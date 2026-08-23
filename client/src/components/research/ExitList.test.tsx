@@ -22,7 +22,7 @@ const exits: RetentionExit[] = [
   {
     ticker: 'PINE4',
     name: 'Banco Pine',
-    reason: 'Saiu da lista: score caiu para 60, abaixo do piso de permanência (62)',
+    reason: 'Saiu da lista: score caiu para 60, abaixo do mínimo para manter a vaga (62)',
     outcome: 'BELOW_HOLD',
     score: 60,
     previousScore: 74,
@@ -52,7 +52,7 @@ describe('ExitList', () => {
   it('mostra o motivo escrito de cada saída, com o score de antes e de agora', () => {
     render(<ExitList exits={exits} />);
     expect(screen.getByText('PINE4')).toBeInTheDocument();
-    expect(screen.getByText(/score caiu para 60, abaixo do piso de permanência \(62\)/)).toBeInTheDocument();
+    expect(screen.getByText(/score caiu para 60, abaixo do mínimo para manter a vaga \(62\)/)).toBeInTheDocument();
     expect(screen.getByText('74 → 60')).toBeInTheDocument();
   });
 

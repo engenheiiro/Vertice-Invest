@@ -72,13 +72,26 @@ describe('config — teto de retenções', () => {
   });
 
   it('liga só nas três classes de giro dominado por assento', () => {
-    expect(isWeeklyRetentionEnabled('BRASIL_10')).toBe(true);
-    expect(isWeeklyRetentionEnabled('STOCK')).toBe(true);
-    expect(isWeeklyRetentionEnabled('FII')).toBe(true);
-    expect(isWeeklyRetentionEnabled('STOCK_US')).toBe(false);
-    expect(isWeeklyRetentionEnabled('CRYPTO')).toBe(false);
-    expect(isWeeklyRetentionEnabled('ETF')).toBe(false);
-    expect(isWeeklyRetentionEnabled('REIT')).toBe(false);
+    expect(isWeeklyRetentionEnabled('BRASIL_10', 'BUY_HOLD')).toBe(true);
+    expect(isWeeklyRetentionEnabled('STOCK', 'BUY_HOLD')).toBe(true);
+    expect(isWeeklyRetentionEnabled('FII', 'BUY_HOLD')).toBe(true);
+    expect(isWeeklyRetentionEnabled('STOCK_US', 'BUY_HOLD')).toBe(false);
+    expect(isWeeklyRetentionEnabled('CRYPTO', 'BUY_HOLD')).toBe(false);
+    expect(isWeeklyRetentionEnabled('ETF', 'BUY_HOLD')).toBe(false);
+    expect(isWeeklyRetentionEnabled('REIT', 'BUY_HOLD')).toBe(false);
+  });
+
+  it('não liga fora do semanal — a lista âncora tem histerese própria', () => {
+    // O que separava a retenção do semanal da lista âncora era uma convenção não
+    // escrita ("calculateRanking só é chamado com BUY_HOLD"). Agora é um guard.
+    expect(isWeeklyRetentionEnabled('STOCK', 'BUY_AND_HOLD')).toBe(false);
+    expect(isWeeklyRetentionEnabled('FII', 'BUY_AND_HOLD')).toBe(false);
+    expect(isWeeklyRetentionEnabled('BRASIL_10', 'BUY_AND_HOLD')).toBe(false);
+  });
+
+  it('sem estratégia, fail-closed: quem esquecer de passá-la não retém nada', () => {
+    expect(isWeeklyRetentionEnabled('STOCK')).toBe(false);
+    expect(isWeeklyRetentionEnabled('BRASIL_10', undefined)).toBe(false);
   });
 
   it('a retenção está agindo (shadow desligado desde 23/08/2026)', () => {
@@ -94,7 +107,10 @@ describe('A REGRA INVIOLÁVEL — a histerese age no assento, nunca na ação', 
         seat('INCB3', 80, 'DEFENSIVE', { sector: 'Saúde' }),
         seat('INCC3', 75, 'DEFENSIVE', { sector: 'Varejo' }),
       ],
-      fresh: [seat('NOVO3', 71, 'DEFENSIVE', { sector: 'Tecnologia' })],
+      // O assento deslocável está ABAIXO do limiar de propósito: trocar um
+      // COMPRAR por um AGUARDAR é o que a guarda da catraca recusa, e não é
+      // disso que este teste trata.
+      fresh: [seat('NOVO3', 66, 'DEFENSIVE', { sector: 'Tecnologia' })],
       missing: [seat('INCUM3', 74)],
     });
     const result = applyWeeklyRetention({
@@ -166,7 +182,7 @@ describe('quem sai, sai com motivo escrito', () => {
     expect(result.retained).toHaveLength(0);
     const exit = result.exits.find(e => e.ticker === 'CAI3');
     expect(exit.outcome).toBe(RETENTION_OUTCOMES.BELOW_HOLD);
-    expect(exit.reason).toBe(`Saiu da lista: score caiu para 61, abaixo do piso de permanência (${HOLD})`);
+    expect(exit.reason).toBe(`Saiu da lista: score caiu para 61, abaixo do mínimo para manter a vaga (${HOLD})`);
   });
 
   it('incumbente que sumiu do universo sai dizendo isso', () => {
@@ -190,7 +206,7 @@ describe('quem sai, sai com motivo escrito', () => {
     expect(result.retained).toHaveLength(0);
     const exit = result.exits.find(e => e.ticker === 'BARRADO3');
     expect(exit.outcome).toBe(RETENTION_OUTCOMES.INELIGIBLE);
-    expect(exit.reason).toBe('Saiu da lista: deixou de ser elegível ao perfil Defensivo');
+    expect(exit.reason).toBe('Saiu da lista: deixou de atender aos critérios do perfil Defensivo');
   });
 });
 
@@ -217,7 +233,7 @@ describe('identidade entre apurações — ticker, nunca (ticker, perfil)', () =
         seat('KB3', 80, 'DEFENSIVE', { sector: 'Saúde' }),
         seat('KC3', 75, 'DEFENSIVE', { sector: 'Varejo' }),
       ],
-      fresh: [seat('NOVO3', 71, 'DEFENSIVE', { sector: 'Tecnologia' })],
+      fresh: [seat('NOVO3', 66, 'DEFENSIVE', { sector: 'Tecnologia' })],
       missing: [seat('PETR4.SA', 75)],
     });
     const result = applyWeeklyRetention({
@@ -235,7 +251,7 @@ describe('identidade entre apurações — ticker, nunca (ticker, perfil)', () =
         seat('KB3', 80, 'MODERATE', { sector: 'Saúde' }),
         seat('KC3', 75, 'MODERATE', { sector: 'Varejo' }),
       ],
-      fresh: [seat('NOVO3', 71, 'MODERATE', { sector: 'Tecnologia' })],
+      fresh: [seat('NOVO3', 66, 'MODERATE', { sector: 'Tecnologia' })],
       missing: [seat('MUDOU3', 77, 'DEFENSIVE')],
     });
     const result = applyWeeklyRetention({
@@ -292,7 +308,7 @@ describe('quem é deslocado, e quem nunca é', () => {
     expect(result.ranking.map(i => i.ticker).sort()).toEqual(['I1', 'I2', 'I3', 'I4']);
     const exit = result.exits.find(e => e.ticker === 'FORA3');
     expect(exit.outcome).toBe(RETENTION_OUTCOMES.NO_DISPLACEABLE_SEAT);
-    expect(exit.reason).toMatch(/todos os assentos do perfil Defensivo já são de incumbentes/);
+    expect(exit.reason).toMatch(/não havia vaga no perfil Defensivo sem tirar outro ativo que já estava na lista/);
   });
 
   it('quando o teto morde, quem fica é o incumbente mais forte', () => {
@@ -317,7 +333,7 @@ describe('quem é deslocado, e quem nunca é', () => {
     expect(result.retained.map(r => r.ticker)).toEqual(['C90', 'C80', 'C70']);
     const exit = result.exits.find(e => e.ticker === 'C65');
     expect(exit.outcome).toBe(RETENTION_OUTCOMES.BUDGET_EXHAUSTED);
-    expect(exit.reason).toBe('Saiu da lista: teto de retenções da apuração');
+    expect(exit.reason).toBe('Saiu da lista: nesta apuração outros ativos de score maior ficaram à frente para manter a vaga');
     expect(result.ranking).toHaveLength(10); // o número de assentos não muda
   });
 });
@@ -345,7 +361,7 @@ describe('a retenção respeita o balde de concentração', () => {
     expect(result.retained).toHaveLength(0);
     const exit = result.exits.find(e => e.ticker === 'B4');
     expect(exit.outcome).toBe(RETENTION_OUTCOMES.SECTOR_CAP);
-    expect(exit.reason).toMatch(/teto de concentração do balde .* no perfil Defensivo/);
+    expect(exit.reason).toMatch(/o perfil Defensivo já está no limite de ativos de /);
   });
 
   it('a saída da vítima do MESMO balde é o que libera o espaço', () => {
@@ -388,6 +404,173 @@ describe('a retenção respeita o balde de concentração', () => {
       processedAssets: [asset('B3', { def: 71, mod: 30, bold: 30, sector: 'Bancos' })],
     });
     expect(result.retained[0]).toMatchObject({ rawScore: 71, penalty: 5, score: 66, action: 'WAIT' });
+  });
+});
+
+
+describe('A CATRACA — a retenção não pode expulsar o estreante que está em COMPRAR', () => {
+  /**
+   * Regressão NOMINAL do caso medido em 23/08/2026, no Arrojado de ações:
+   * COGN3 caiu de 73 para 67, foi retido, e para abrir a vaga deslocou CSED3,
+   * que entrava com 72 e COMPRAR. As duas são de Educação — mesmo balde. A regra
+   * do 70 ficou intacta (COGN3 publicou AGUARDAR), mas a lista ficou pior pela
+   * régua dela mesma: saiu um 72/COMPRAR, entrou um 67/AGUARDAR.
+   *
+   * Os nove assentos abaixo são os medidos, e SEIS deles pontuam menos que
+   * CSED3 — todos protegidos por serem de incumbentes. CSED3 era o único
+   * deslocável: foi expulso por ser novo, não por ser pior.
+   */
+  const arrojadoDeHoje = () => scenario({
+    keep: [
+      seat('MILS3', 55, 'BOLD', { sector: 'Bens Industriais' }),
+      seat('SHUL4', 57, 'BOLD', { sector: 'Máquinas e Equipamentos' }),
+      seat('VLID3', 58, 'BOLD', { sector: 'Tecnologia' }),
+      seat('FIQE3', 61, 'BOLD', { sector: 'Telecomunicações' }),
+      seat('BRSR6', 65, 'BOLD', { sector: 'Bancos' }),
+      seat('RECV3', 68, 'BOLD', { sector: 'Petróleo' }),
+      seat('AZZA3', 74, 'BOLD', { sector: 'Comércio' }),
+      seat('DIRR3', 80, 'BOLD', { sector: 'Construção Civil' }),
+      seat('EZTC3', 80, 'BOLD', { sector: 'Exploração de Imóveis' }),
+    ],
+    fresh: [seat('CSED3', 72, 'BOLD', { sector: 'Educação' })],
+    missing: [seat('COGN3', 73, 'BOLD', { sector: 'Educação' })],
+  });
+
+  // A régua de ações: o draft decide por cap e não penaliza concentração.
+  const comoAcoes = { applyConcentrationPenalty: false };
+  const cognCaindo = () => [asset('COGN3', { def: 30, mod: 45, bold: 67, sector: 'Educação' })];
+
+  it('COGN3 (67) não desloca CSED3 (72, COMPRAR) — o caso medido', () => {
+    const { current, previous } = arrojadoDeHoje();
+    const result = applyWeeklyRetention({
+      current, previous, processedAssets: cognCaindo(), options: comoAcoes,
+    });
+
+    expect(result.retained).toEqual([]);
+    expect(result.ranking.map(i => i.ticker)).toContain('CSED3');
+    expect(result.ranking.map(i => i.ticker)).not.toContain('COGN3');
+    expect(result.ranking).toHaveLength(10);
+
+    const exit = result.exits.find(e => e.ticker === 'COGN3');
+    expect(exit.outcome).toBe(RETENTION_OUTCOMES.WOULD_DROP_BUY);
+    expect(exit.reason).toBe('Saiu da lista: manter a vaga custaria a de CSED3, que está em COMPRAR');
+  });
+
+  it('nenhuma troca reduz o número de COMPRAR da lista', () => {
+    const { current, previous } = arrojadoDeHoje();
+    const antes = current.filter(i => i.score >= 70).length;
+    const result = applyWeeklyRetention({
+      current, previous, processedAssets: cognCaindo(), options: comoAcoes,
+    });
+    const depois = finalizeRanking(result.ranking, null, { strategy: 'BUY_HOLD' })
+      .filter(i => i.action === 'BUY').length;
+    expect(depois).toBe(antes);
+  });
+
+  it('a guarda é ESTREITA: um COMPRAR ainda pode deslocar outro COMPRAR melhor', () => {
+    // A alternativa descartada ("nunca deslocar assento com score maior") teria
+    // barrado esta troca também — e é ela que faz a retenção valer a pena, porque
+    // um incumbente sai do draft justamente quando fica abaixo do corte, e aí
+    // todo assento não-incumbente pontua acima dele.
+    const { current, previous } = scenario({
+      keep: [seat('ALTO3', 90, 'DEFENSIVE', { sector: 'Energia Elétrica' })],
+      fresh: [
+        seat('NOVOA3', 80, 'DEFENSIVE', { sector: 'Saúde' }),
+        seat('NOVOB3', 75, 'DEFENSIVE', { sector: 'Varejo' }),
+        seat('NOVOC3', 72, 'DEFENSIVE', { sector: 'Tecnologia' }),
+      ],
+      missing: [seat('VOLTA3', 78)],
+    });
+    const result = applyWeeklyRetention({
+      current,
+      previous,
+      processedAssets: [asset('VOLTA3', { def: 71, mod: 30, bold: 30 })],
+    });
+    expect(result.retained.map(r => r.ticker)).toEqual(['VOLTA3']);
+    expect(result.retained[0].displaced).toEqual({ ticker: 'NOVOC3', score: 72 });
+  });
+
+  it('a guarda olha o score DEPOIS da penalidade, não o cru', () => {
+    // 71 cru vira 66 pela dedução do 3º ativo do balde: é o score publicado que
+    // decide se a troca reduz o número de COMPRAR, não o de antes da régua.
+    const { current, previous } = scenario({
+      keep: [
+        seat('B1', 80, 'DEFENSIVE', { sector: 'Bancos' }),
+        seat('B2', 78, 'DEFENSIVE', { sector: 'Bancos' }),
+        seat('K1', 60, 'DEFENSIVE', { sector: 'Saúde' }),
+        seat('K2', 55, 'DEFENSIVE', { sector: 'Varejo' }),
+      ],
+      fresh: [seat('FRESCO3', 71, 'DEFENSIVE', { sector: 'Tecnologia' })],
+      missing: [seat('B3', 74, 'DEFENSIVE', { sector: 'Bancos' })],
+    });
+    const result = applyWeeklyRetention({
+      current,
+      previous,
+      processedAssets: [asset('B3', { def: 71, mod: 30, bold: 30, sector: 'Bancos' })],
+    });
+    expect(result.retained).toEqual([]);
+    expect(result.exits.find(e => e.ticker === 'B3').outcome)
+      .toBe(RETENTION_OUTCOMES.WOULD_DROP_BUY);
+  });
+
+});
+
+describe('a régua de concentração é a da CLASSE, não a da retenção', () => {
+  const bancoNoBalde = () => scenario({
+    keep: [
+      seat('B1', 80, 'DEFENSIVE', { sector: 'Bancos' }),
+      seat('B2', 78, 'DEFENSIVE', { sector: 'Bancos' }),
+      seat('K1', 60, 'DEFENSIVE', { sector: 'Saúde' }),
+      seat('K2', 55, 'DEFENSIVE', { sector: 'Varejo' }),
+    ],
+    fresh: [seat('FRESCO3', 30, 'DEFENSIVE', { sector: 'Tecnologia' })],
+    missing: [seat('B3', 74, 'DEFENSIVE', { sector: 'Bancos' })],
+  });
+  const banco = () => [asset('B3', { def: 71, mod: 30, bold: 30, sector: 'Bancos' })];
+
+  it('readmitido de AÇÕES não paga penalidade — o draft de ações também não cobra', () => {
+    // stockCalibrationShadowEngine: "em STOCK o cap decide quem entra;
+    // concentração não reescreve a avaliação fundamental depois da seleção".
+    // Cobrar -5 aqui viraria 71 em 66 — COMPRAR em AGUARDAR pelo caminho que o
+    // motor da classe recusa usar.
+    const result = applyWeeklyRetention({
+      ...bancoNoBalde(),
+      processedAssets: banco(),
+      options: { applyConcentrationPenalty: false },
+    });
+    expect(result.retained[0]).toMatchObject({ rawScore: 71, penalty: 0, score: 71, action: 'BUY' });
+    expect(result.retained[0].displaced.ticker).toBe('FRESCO3');
+  });
+
+  it('readmitido de FII paga — o draft de FII cobra', () => {
+    const result = applyWeeklyRetention({ ...bancoNoBalde(), processedAssets: banco() });
+    expect(result.retained[0]).toMatchObject({ rawScore: 71, penalty: 5, score: 66, action: 'WAIT' });
+  });
+
+  it('o teto do balde acompanha o da classe: 4 no Defensivo de ações, 3 no default', () => {
+    const quatroBancos = () => scenario({
+      keep: [
+        seat('B1', 80, 'DEFENSIVE', { sector: 'Bancos' }),
+        seat('B2', 78, 'DEFENSIVE', { sector: 'Bancos' }),
+        seat('B3', 76, 'DEFENSIVE', { sector: 'Bancos' }),
+        seat('K1', 50, 'DEFENSIVE', { sector: 'Saúde' }),
+      ],
+      fresh: [seat('FRESCO3', 40, 'DEFENSIVE', { sector: 'Tecnologia' })],
+      missing: [seat('B4', 74, 'DEFENSIVE', { sector: 'Bancos' })],
+    });
+    const processedAssets = [asset('B4', { def: 70, mod: 30, bold: 30, sector: 'Bancos' })];
+
+    const comDefault = applyWeeklyRetention({ ...quatroBancos(), processedAssets });
+    expect(comDefault.exits.find(e => e.ticker === 'B4').outcome)
+      .toBe(RETENTION_OUTCOMES.SECTOR_CAP);
+
+    const comoAcoes = applyWeeklyRetention({
+      ...quatroBancos(),
+      processedAssets,
+      options: { applyConcentrationPenalty: false, sectorCapByProfile: { DEFENSIVE: 4 } },
+    });
+    expect(comoAcoes.retained.map(r => r.ticker)).toEqual(['B4']);
+    expect(comoAcoes.retained[0].score).toBe(70);
   });
 });
 
@@ -454,7 +637,13 @@ describe('Brasil 10 — retenção própria, 5 + 5 e perfil único', () => {
 
   it('incumbente Defensivo retido abaixo de 70 fica na lista como AGUARDAR', () => {
     const h = halves();
-    h[0].universe = [...stockUniverse.slice(0, 5), asset('SEGURA3', { def: 65 })];
+    // O único assento deslocável da metade de ações precisa estar ABAIXO do
+    // limiar: com ele em COMPRAR, a guarda da catraca recusaria a troca — que é
+    // outro teste, logo adiante.
+    h[0].selected = [...h[0].selected.slice(0, 4), seat('FRACO3', 66)];
+    h[0].universe = [
+      ...stockUniverse.slice(0, 4), asset('FRACO3', { def: 66 }), asset('SEGURA3', { def: 65 }),
+    ];
     const previous = published([
       ...h[1].selected, seat('SEGURA3', 74), ...h[0].selected.slice(0, 4),
     ]);
@@ -463,6 +652,24 @@ describe('Brasil 10 — retenção própria, 5 + 5 e perfil único', () => {
     expect(kept).toBeDefined();
     expect(kept.score).toBe(65);
     expect(kept.action).toBe('WAIT');
+  });
+
+  it('no Brasil 10 a guarda vale igual — e a metade continua com cinco', () => {
+    const h = halves();
+    // S5 (82, COMPRAR) é o único deslocável da metade de ações; o incumbente
+    // ausente volta com 65. Trocar um COMPRAR por um AGUARDAR numa lista de dez
+    // pesa ainda mais que num perfil de trinta.
+    h[0].universe = [...stockUniverse.slice(0, 5), asset('SEGURA3', { def: 65 })];
+    const previous = published([
+      ...h[1].selected, seat('SEGURA3', 74), ...h[0].selected.slice(0, 4),
+    ]);
+    const result = applyBrasil10Retention({ halves: h, previous });
+    expect(result.retained).toEqual([]);
+    expect(result.halves[0].selected).toHaveLength(5);
+    expect(result.halves[0].selected.map(i => i.ticker)).toContain('S5');
+    const exit = result.exits.find(e => e.ticker === 'SEGURA3');
+    expect(exit.outcome).toBe(RETENTION_OUTCOMES.WOULD_DROP_BUY);
+    expect(exit.reason).toBe('Saiu da lista: manter a vaga custaria a de S5, que está em COMPRAR');
   });
 
   it('perder o gate Defensivo é saída imediata, mesmo com score 90', () => {
@@ -475,7 +682,7 @@ describe('Brasil 10 — retenção própria, 5 + 5 e perfil único', () => {
     expect(result.retained).toEqual([]);
     const exit = result.exits.find(e => e.ticker === 'BARRADO3');
     expect(exit.outcome).toBe(RETENTION_OUTCOMES.INELIGIBLE);
-    expect(exit.reason).toBe('Saiu da lista: deixou de ser elegível ao perfil Defensivo');
+    expect(exit.reason).toBe('Saiu da lista: deixou de atender aos critérios do perfil Defensivo');
   });
 
   it('um FII incumbente nunca disputa assento da metade de ações', () => {

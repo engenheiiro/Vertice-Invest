@@ -79,7 +79,7 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view, on
                     <div className="max-w-[1360px] mx-auto px-1 pb-8">
                         <ExitList
                             exits={exits}
-                            subtitle="A lista mantém quem já estava enquanto o score não cai abaixo do piso de permanência. Estes caíram."
+                            subtitle="A lista mantém quem já estava enquanto o score não cai abaixo do mínimo. Estes caíram."
                         />
                     </div>
                 )}

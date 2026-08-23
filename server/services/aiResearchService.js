@@ -15,7 +15,7 @@ import { GEMINI_TEXT_MODEL } from '../config/aiModels.js';
 import { randomUUID } from 'crypto';
 import ResearchBatch from '../models/ResearchBatch.js';
 import { finalizeRanking, normalizeRankingTicker } from '../utils/rankingContract.js';
-import { WEEKLY_HYSTERESIS, isWeeklyRetentionEnabled } from '../config/weeklyHysteresis.js';
+import { WEEKLY_HYSTERESIS, WEEKLY_STRATEGY, isWeeklyRetentionEnabled } from '../config/weeklyHysteresis.js';
 import { applyWeeklyRetention, applyBrasil10Retention } from '../utils/weeklyRetention.js';
 import {
     calculateStockCalibrationConfidence,
@@ -23,6 +23,7 @@ import {
 } from './engines/stockSectorAxisEngine.js';
 import {
     STOCK_CALIBRATION_SHADOW_VERSION,
+    STOCK_STRICT_SECTOR_CAP_BY_PROFILE,
     buildCompetitiveCohesiveShadowTop10s,
 } from './engines/stockCalibrationShadowEngine.js';
 import { assessStockMetricCoverage } from '../config/stockCalibration.js';
@@ -306,6 +307,10 @@ export const getTop5Defensive = (processedAssets) => {
 // @param {object} [options]
 // @param {Map|Array|null} [options.previous] baseline publicado de BRASIL_10.
 //   Ausente (`undefined`) = não avaliar retenção; `null` = primeira apuração.
+// @param {string} [options.strategy] estratégia da apuração. O Brasil 10 é, por
+//   definição, uma lista do semanal — daí o default — mas o guard de retenção é
+//   consultado com ela do mesmo jeito, para não haver um caminho que decida
+//   retenção sem olhar a estratégia.
 // @param {function} [options.onRetentionAudit] recebe a auditoria (padrão
 //   `options.trace` do portfolioEngine: coleta sem mudar o valor de retorno).
 export const buildBrasil10 = (stockProcessed, fiiProcessed, options = {}) => {
@@ -314,7 +319,8 @@ export const buildBrasil10 = (stockProcessed, fiiProcessed, options = {}) => {
         { selected: getTop5Defensive(fiiProcessed), universe: fiiProcessed || [] },
     ];
 
-    if (options.previous !== undefined && isWeeklyRetentionEnabled('BRASIL_10')) {
+    if (options.previous !== undefined
+        && isWeeklyRetentionEnabled('BRASIL_10', options.strategy || WEEKLY_STRATEGY)) {
         const retention = applyBrasil10Retention({ halves, previous: options.previous });
         if (options.onRetentionAudit) {
             options.onRetentionAudit(buildRetentionAudit({
@@ -498,6 +504,20 @@ export const aiResearchService = {
                 : assetClass === 'CRYPTO' ? { relaxCryptoCap: true }
                 : {};
 
+            // A RÉGUA DA CLASSE, para a retenção não cobrar o que o draft dela não
+            // cobra. Ações são a exceção: o draft de calibração decide por CAP e não
+            // reescreve a avaliação fundamental depois da seleção — cobrar -5 de
+            // concentração de um readmitido colocaria na mesma lista um item pagando
+            // o que nenhum outro pagou, e -5 basta para virar 72 em 67. O teto do
+            // balde vem da MESMA constante que o draft de ações usa (4 no Defensivo),
+            // senão a retenção barraria uma composição que o draft aceita montar.
+            const retentionOptions = assetClass === 'STOCK'
+                ? {
+                    applyConcentrationPenalty: false,
+                    sectorCapByProfile: STOCK_STRICT_SECTOR_CAP_BY_PROFILE,
+                }
+                : { applyConcentrationPenalty: true };
+
             // draft + penalidade de concentração sobre um conjunto de ativos já processados.
             const draftAndPenalize = (assets, opts = draftOptions) =>
                 portfolioEngine.applyConcentrationPenalty(
@@ -539,12 +559,13 @@ export const aiResearchService = {
             // próprio passo lá; excluí-lo evita duas semânticas para a mesma classe.
             let retentionAudit = null;
             const baseline = await loadPublishedRankingBaseline(assetClass, strategy);
-            if (isWeeklyRetentionEnabled(assetClass) && assetClass !== 'BRASIL_10') {
+            if (isWeeklyRetentionEnabled(assetClass, strategy) && assetClass !== 'BRASIL_10') {
                 const retention = applyWeeklyRetention({
                     current: ranking,
                     previous: baseline,
                     processedAssets,
                     options: {
+                        ...retentionOptions,
                         relaxSectorConcentration: !!draftOptions.relaxSectorConcentration,
                     },
                 });
@@ -745,6 +766,7 @@ export const aiResearchService = {
             let brasil10Retention = null;
             let brasil10List = buildBrasil10(stockData.processedAssets, fiiData.processedAssets, {
                 previous: brasil10Baseline,
+                strategy: strat,
                 onRetentionAudit: audit => { brasil10Retention = audit; },
             });
             brasil10List = await calculateRankingDelta(brasil10List, 'BRASIL_10', strat, brasil10Baseline);
