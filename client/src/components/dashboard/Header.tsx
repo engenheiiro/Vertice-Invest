@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck, LayoutGrid, PieChart, Bot,
   GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
-  Radar, Calculator, Target, ChevronRight, ChevronDown, Sun, Moon
+  Radar, Calculator, Target, ChevronRight, ChevronDown, Sun, Moon, Anchor
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
@@ -38,6 +38,7 @@ export const Header: React.FC = () => {
       if (path.includes('/dashboard')) return 'terminal';
       if (path.includes('/wallet')) return 'wallet';
       if (path.includes('/goals')) return 'goals';
+      if (path.includes('/buy-and-hold')) return 'buy-and-hold';
       if (path.includes('/research')) return 'research';
       if (path.includes('/radar')) return 'radar';
       if (path.includes('/indicators')) return 'indicators';
@@ -96,6 +97,7 @@ export const Header: React.FC = () => {
                 onNavigate={navigate}
                 items={[
                   { to: '/research',   label: 'Research',     icon: <Bot size={14} /> },
+                  { to: '/buy-and-hold', label: 'Buy-and-Hold', icon: <Anchor size={14} /> },
                   { to: '/radar',      label: 'Radar',        icon: <Radar size={14} /> },
                   { to: '/indicators', label: 'Indicadores',  icon: <BarChart3 size={14} /> },
                 ]}

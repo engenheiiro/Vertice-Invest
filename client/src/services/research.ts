@@ -187,6 +187,87 @@ export interface BuyAndHoldShadow {
     excludedByReason: { reason: string; count: number }[];
 }
 
+// ─── Estratégia âncora (BUY_AND_HOLD) ────────────────────────────────────────
+// Lista para carregar por décadas, distinta do Research semanal (BUY_HOLD).
+// Convivem: outra `strategy`, outro ponteiro publicado, outro contrato.
+
+export const ANCHOR_STRATEGY = 'BUY_AND_HOLD';
+
+export interface AnchorAxes {
+    durability: number;
+    resilience: number;
+    consistency: number;
+}
+
+export interface AnchorHysteresis {
+    state: 'ENTERED' | 'MAINTAINED' | 'HELD' | 'OUT';
+    entryScore: number;
+    holdScore: number;
+    previousScore: number | null;
+}
+
+/** Payload âncora de um item do ranking. Null em todo item do ranking legado. */
+export interface AnchorPayload {
+    version?: string;
+    axes?: AnchorAxes;
+    composite?: number | null;
+    hysteresis?: AnchorHysteresis | null;
+    exitReason?: string | null;
+    // Ações
+    archetype?: string | null;
+    premiumPct?: number | null;
+    // FIIs
+    subType?: string | null;
+    manager?: string | null;
+    spreadPp?: number | null;
+    pFfo?: number | null;
+    ffoCoverage?: number | null;
+    vacancy?: number | null;
+    publicationLimit?: { bucket: string; cap: number; manager?: string } | null;
+    expensive?: boolean;
+    payoutUncovered?: boolean;
+}
+
+/** Quem saiu da lista nesta apuração, e por quê. */
+export interface AnchorExit {
+    ticker: string;
+    name: string | null;
+    reason: string;
+    score: number | null;
+    previousScore: number | null;
+    /** false = sumiu do ranking inteiro (perdeu o portão). */
+    stillListed: boolean;
+}
+
+export interface AnchorRankingItem extends RankingItem {
+    anchor?: AnchorPayload | null;
+}
+
+export interface AnchorReport extends Omit<ResearchReport, 'content'> {
+    anchorExits?: AnchorExit[];
+    inputManifest?: {
+        thresholds?: { entryScore: number; holdScore: number };
+        counts?: Record<string, number>;
+        bootstrap?: boolean;
+        disclaimer?: string;
+        macro?: Record<string, number | boolean | undefined>;
+    };
+    content: {
+        morningCall: string;
+        ranking: AnchorRankingItem[];
+    };
+}
+
+/** Motivo pelo qual a lista âncora não pôde ser exibida. */
+export type AnchorUnavailable = 'FORBIDDEN' | 'EMPTY';
+
+export class AnchorReportError extends Error {
+    constructor(public kind: AnchorUnavailable, message: string) {
+        super(message);
+        this.name = 'AnchorReportError';
+    }
+}
+
 export interface ResearchReport {
     _id: string;
     date: string;
@@ -324,6 +405,26 @@ export const researchService = {
     async getLatest(assetClass: string, strategy: string) {
         const response = await authService.api(`/api/research/latest?assetClass=${assetClass}&strategy=${strategy}`);
         if (!response.ok) return null;
+        return await response.json();
+    },
+
+    /**
+     * Lista âncora publicada de uma classe. Diferente de `getLatest`, distingue
+     * 403 (plano abaixo de PRO) de 404 (ainda não há publicação): a tela precisa
+     * oferecer upgrade num caso e explicar a ausência no outro, e um `null` para
+     * os dois transformaria bloqueio de plano em "indisponível".
+     */
+    async getAnchorReport(assetClass: string): Promise<AnchorReport> {
+        const response = await authService.api(
+            `/api/research/latest?assetClass=${assetClass}&strategy=${ANCHOR_STRATEGY}`,
+        );
+        if (response.status === 403) {
+            const data = await response.json().catch(() => ({}));
+            throw new AnchorReportError('FORBIDDEN', data.message || 'Disponível a partir do plano Pro.');
+        }
+        if (!response.ok) {
+            throw new AnchorReportError('EMPTY', 'Nenhuma lista publicada para esta classe ainda.');
+        }
         return await response.json();
     },
 

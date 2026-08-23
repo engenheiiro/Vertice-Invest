@@ -33,6 +33,7 @@ const Profile = lazy(() => import('./pages/Profile').then(module => ({ default: 
 const Pricing = lazy(() => import('./pages/Pricing').then(module => ({ default: module.Pricing }))); 
 const Wallet = lazy(() => import('./pages/Wallet').then(module => ({ default: module.Wallet })));
 const Research = lazy(() => import('./pages/Research').then(module => ({ default: module.Research })));
+const BuyAndHold = lazy(() => import('./pages/BuyAndHold').then(module => ({ default: module.BuyAndHold })));
 const RadarPage = lazy(() => import('./pages/Radar').then(module => ({ default: module.RadarPage }))); // Nova
 const Courses = lazy(() => import('./pages/Courses').then(module => ({ default: module.Courses })));
 const CoursePlayer = lazy(() => import('./pages/CoursePlayer').then(module => ({ default: module.CoursePlayer })));
@@ -121,6 +122,9 @@ export default function App() {
               <Route path="/wallet" element={<Wallet />} />
               <Route path="/goals" element={<Goals />} />
               <Route path="/research" element={<Research />} />
+              {/* Estratégia âncora (BUY_AND_HOLD) — irmã do /research, não substituta.
+                  O gate real é do backend (research_general, PRO+); a página só esconde. */}
+              <Route path="/buy-and-hold" element={<BuyAndHold />} />
               <Route path="/comparador" element={<Comparator />} />
               <Route path="/radar" element={<RadarPage />} /> {/* Rota Nova */}
               <Route path="/indicators" element={<Indicators />} />

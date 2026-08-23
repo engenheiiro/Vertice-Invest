@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutGrid, PieChart, BrainCircuit, Radar, MoreHorizontal,
   BarChart3, Calculator, GraduationCap, Crown, User as UserIcon, Settings, LogOut, X, Target, GitCompare,
+  Anchor,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDemo } from '../../contexts/DemoContext';
@@ -34,6 +35,9 @@ export const BottomNav: React.FC = () => {
   const isActive = (to: string) => path === to || path.startsWith(`${to}/`);
 
   const secondary = [
+    // Estratégia âncora — mora ao lado do Research no desktop; no mobile entra
+    // no "Mais" porque a barra principal só comporta quatro destinos.
+    { to: '/buy-and-hold', label: 'Buy-and-Hold', icon: Anchor },
     { to: '/goals', label: 'Metas', icon: Target },
     { to: '/comparador', label: 'Comparar', icon: GitCompare, disabled: true },
     { to: '/indicators', label: 'Indicadores', icon: BarChart3 },
