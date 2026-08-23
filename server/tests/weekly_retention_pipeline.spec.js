@@ -78,16 +78,40 @@ describe('buildBrasil10 — compatibilidade', () => {
   });
 });
 
-describe('shadow: true — mede, não age', () => {
-  it('a lista publicada é byte a byte a do draft, mesmo com retenção disponível', () => {
-    expect(WEEKLY_HYSTERESIS.shadow).toBe(true); // a premissa do teste
-    const semRetencao = buildBrasil10(stocks, fiis).map(i => `${i.position}:${i.ticker}:${i.score}:${i.action}`);
-    const comShadow = buildBrasil10(stocks, fiis, { previous: previousWithIncumbent() })
-      .map(i => `${i.position}:${i.ticker}:${i.score}:${i.action}`);
-    expect(comShadow).toEqual(semRetencao);
+describe('retenção agindo — o incumbente entra na lista publicada', () => {
+  it('o incumbente ausente do top-5 volta, deslocando o menor não-incumbente', () => {
+    expect(WEEKLY_HYSTERESIS.shadow).toBe(false); // a premissa do teste
+    const semRetencao = buildBrasil10(stocks, fiis).map(i => i.ticker);
+    const comRetencao = buildBrasil10(stocks, fiis, { previous: previousWithIncumbent() }).map(i => i.ticker);
+
+    expect(semRetencao).not.toContain('S53');
+    expect(comRetencao).toContain('S53');
+    expect(comRetencao).not.toContain('S43'); // o menor não-incumbente saiu
+    expect(comRetencao).toHaveLength(10);
   });
 
-  it('mas a auditoria registra o que a retenção TERIA feito', () => {
+  it('a lista continua 5 + 5, com posições contíguas e action derivada do score', () => {
+    const list = buildBrasil10(stocks, fiis, { previous: previousWithIncumbent() });
+    expect(list.filter(i => i.type === 'STOCK')).toHaveLength(5);
+    expect(list.filter(i => i.type === 'FII')).toHaveLength(5);
+    expect(list.map(i => i.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(list.every(i => i.action === (i.score >= 70 ? 'BUY' : 'WAIT'))).toBe(true);
+    expect(list.every(i => i.riskProfile === 'DEFENSIVE')).toBe(true);
+  });
+
+  it('o item retido carrega o rastro da retenção, sem inventar action', () => {
+    const kept = buildBrasil10(stocks, fiis, { previous: previousWithIncumbent() })
+      .find(i => i.ticker === 'S53');
+    expect(kept.retention).toMatchObject({
+      retained: true,
+      holdScore: WEEKLY_HYSTERESIS.holdScore,
+      previousScore: 76,
+    });
+    expect(kept.retention.displaced.ticker).toBe('S43');
+    expect(kept.action).toBe(kept.score >= 70 ? 'BUY' : 'WAIT');
+  });
+
+  it('a auditoria registra o que foi aplicado', () => {
     let audit = null;
     buildBrasil10(stocks, fiis, {
       previous: previousWithIncumbent(),
@@ -96,8 +120,8 @@ describe('shadow: true — mede, não age', () => {
     expect(audit).toMatchObject({
       version: 'WEEKLY_RETENTION_V1',
       assetClass: 'BRASIL_10',
-      shadow: true,
-      applied: false,
+      shadow: false,
+      applied: true,
       holdScore: WEEKLY_HYSTERESIS.holdScore,
       bootstrap: false,
     });

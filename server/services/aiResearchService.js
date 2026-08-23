@@ -687,9 +687,15 @@ export const aiResearchService = {
                     batchId: batch._id,
                     runId,
                     algorithmVersion,
-                    // A auditoria de retenção viaja com o documento: em shadow ela é
-                    // a ÚNICA evidência do que a retenção teria feito nesta apuração.
+                    // A auditoria completa (retidos, deslocados, contagens) é
+                    // metadado da apuração e fica no manifesto.
                     inputManifest: { ...batch.inputManifest, retentionAudit },
+                    // As SAÍDAS sobem para o topo do documento porque são conteúdo
+                    // de produto, não metadado: a tela as mostra ao assinante, e o
+                    // endpoint público não devolve o manifesto por item.
+                    // `applied: false` (shadow) mantém a lista publicada igual à do
+                    // draft — e então as saídas são contrafactuais e não vão à tela.
+                    retentionExits: retentionAudit?.applied ? retentionAudit.exits : [],
                     content: { ranking: publicRanking, fullAuditLog: fullList },
                     generatedBy: adminId,
                     comparisonReport,

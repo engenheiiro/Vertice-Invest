@@ -33,6 +33,22 @@ export interface RankingItem {
         riskRationale?: string;
         evaluatedAt?: string;
     };
+    /**
+     * Retenção de assento (semanal): presente só no item que está na lista
+     * porque JÁ estava — o draft não o teria escolhido de novo.
+     *
+     * Não confundir com a `action`: ela continua derivada do score
+     * (score >= 70 ⇔ COMPRAR). Um retido abaixo de 70 aparece como AGUARDAR.
+     */
+    retention?: {
+        retained: boolean;
+        holdScore: number;
+        previousPosition: number | null;
+        previousScore: number | null;
+        previousProfile: 'DEFENSIVE' | 'MODERATE' | 'BOLD' | null;
+        displaced: { ticker: string; score: number } | null;
+        reason: string;
+    } | null;
     thesis: string;
     auditLog?: AuditEntry[];
     bullThesis?: string[]; 
@@ -335,6 +351,17 @@ export class AnchorReportError extends Error {
     }
 }
 
+/** Quem perdeu o ASSENTO no ranking semanal nesta apuração, e por quê. */
+export interface RetentionExit {
+    ticker: string;
+    name: string | null;
+    reason: string;
+    /** Código do desfecho (BELOW_HOLD, INELIGIBLE, SECTOR_CAP, ...). */
+    outcome?: string;
+    score: number | null;
+    previousScore: number | null;
+}
+
 export interface ResearchReport {
     _id: string;
     date: string;
@@ -346,6 +373,12 @@ export interface ResearchReport {
     isReportPublished?: boolean;
     isExplainableAIPublished?: boolean;
     comparisonReport?: ComparisonReport;
+    /**
+     * Quem perdeu o assento nesta apuração, com motivo legível. Só vem
+     * preenchido quando a retenção está agindo (fora do modo shadow) — em
+     * shadow as saídas são contrafactuais e o backend não as envia.
+     */
+    retentionExits?: RetentionExit[];
     explainableAIPrompt?: string;
     generatedExplainableAI?: string;
     generatedExplainableAIByProfile?: { DEFENSIVE?: string; MODERATE?: string; BOLD?: string };

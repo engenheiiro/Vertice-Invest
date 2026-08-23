@@ -74,12 +74,22 @@ export const WEEKLY_HYSTERESIS = Object.freeze({
   enabledClasses: Object.freeze(['BRASIL_10', 'STOCK', 'FII']),
 
   /**
-   * v1 entra MEDINDO, não agindo: a retenção é calculada, logada e persistida
-   * em `inputManifest.retentionAudit`, mas o ranking publicado é o do draft.
-   * Virar para `false` é decisão do dono do produto, com o número do
-   * `auditWeeklyRetentionShadow` na mão.
+   * `true` = MEDE e não age (a retenção é calculada, logada e persistida em
+   * `inputManifest.retentionAudit`, mas o ranking publicado é o do draft).
+   * `false` = a retenção decide os assentos de verdade.
+   *
+   * LIGADA em 23/08/2026, com o número do `auditWeeklyRetentionShadow` na mão:
+   *   - BRASIL_10, 39 transições replicadas: Jaccard mediano 0,818 → 1,000
+   *     (média 0,783 → 0,890), 34 → 28 tickers distintos, 75 retenções;
+   *   - apuração do dia, sem aproximação: BRASIL_10 0,818 → 1,000 (retém ABCB4
+   *     em 77, COMPRAR); STOCK 0,765 → 0,818 (retém COGN3 caindo de 73 para 67,
+   *     publicado AGUARDAR — a regra do 70 intacta);
+   *   - zero itens com COMPRAR e score < 70 em qualquer classe replicada.
+   *
+   * Voltar para `true` desliga a retenção sem remover nada: a auditoria continua
+   * sendo calculada e persistida, e a lista volta a ser a do draft puro.
    */
-  shadow: true,
+  shadow: false,
 });
 
 /** True se a classe está na lista de retenção. */

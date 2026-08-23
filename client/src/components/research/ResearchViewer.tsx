@@ -2,6 +2,7 @@
 import React from 'react';
 import { ResearchReport } from '../../services/research';
 import { TopPicksCard } from './TopPicksCard';
+import { ExitList } from './ExitList';
 import { ShieldCheck, Share2, Zap, AlignLeft } from 'lucide-react';
 
 interface ResearchViewerProps {
@@ -67,7 +68,23 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view, on
     };
 
     if (view === 'RANKING') {
-        return <TopPicksCard picks={report.content?.ranking || []} assetClass={report.assetClass} onAporte={onAporte} onExteriorViewChange={onExteriorViewChange} onEtfOriginChange={onEtfOriginChange} initialEtfOrigin={initialEtfOrigin} />;
+        const exits = report.retentionExits || [];
+        return (
+            <>
+                <TopPicksCard picks={report.content?.ranking || []} assetClass={report.assetClass} onAporte={onAporte} onExteriorViewChange={onExteriorViewChange} onEtfOriginChange={onEtfOriginChange} initialEtfOrigin={initialEtfOrigin} />
+                {/* Um ativo que some da lista sem explicação é pior que um que
+                    fica: quem montou posição nele precisa saber se o motivo foi o
+                    negócio, o preço, ou só outro ativo ter ficado à frente. */}
+                {exits.length > 0 && (
+                    <div className="max-w-[1360px] mx-auto px-1 pb-8">
+                        <ExitList
+                            exits={exits}
+                            subtitle="A lista mantém quem já estava enquanto o score não cai abaixo do piso de permanência. Estes caíram."
+                        />
+                    </div>
+                )}
+            </>
+        );
     }
 
     return (

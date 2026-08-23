@@ -2,18 +2,20 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
     Anchor, Crown, Lock, ShieldCheck, TrendingDown, TrendingUp,
-    Clock, LogOut, Info, Landmark, Building2,
+    Clock, Info, Landmark, Building2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Header } from '../components/dashboard/Header';
+// Extraido desta pagina quando o semanal ganhou retencao de assento: as duas
+// estrategias explicam saidas da mesma forma.
+import { ExitList } from '../components/research/ExitList';
 import { SkeletonCard } from '../components/ui';
 import { STALE_TIME } from '../config/queryConfig';
 import { useAuth } from '../contexts/AuthContext';
 import {
     researchService,
     AnchorReportError,
-    type AnchorExit,
     type AnchorRankingItem,
     type AnchorReport,
 } from '../services/research';
@@ -176,35 +178,6 @@ const AssetCard = ({ item }: { item: AnchorRankingItem }) => {
         </div>
     );
 };
-
-const ExitList = ({ exits }: { exits: AnchorExit[] }) => (
-    <section className="mt-8">
-        <h2 className="flex items-center gap-2 text-sm font-bold text-slate-300 mb-3">
-            <LogOut size={15} className="text-slate-500" />
-            Saíram da lista nesta apuração
-        </h2>
-        <div className="space-y-2">
-            {exits.map(exit => (
-                <div key={exit.ticker} className="rounded-xl border border-slate-800 bg-card px-4 py-3">
-                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <span className="text-sm font-black text-slate-200">{exit.ticker}</span>
-                        {exit.previousScore !== null && (
-                            <span className="text-[11px] text-slate-500 tabular-nums">
-                                {exit.previousScore} → {exit.score === null ? 'fora do universo' : exit.score}
-                            </span>
-                        )}
-                        {!exit.stillListed && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-700/50 text-slate-400">
-                                não aparece mais no ranking
-                            </span>
-                        )}
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">{exit.reason}</p>
-                </div>
-            ))}
-        </div>
-    </section>
-);
 
 const PlanGate = () => {
     const navigate = useNavigate();

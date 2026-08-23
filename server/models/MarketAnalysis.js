@@ -60,6 +60,14 @@ const RankingItemSchema = new mongoose.Schema({
   // de UMA estratégia, e tipá-lo aqui obrigaria o schema do semanal a conhecê-lo.
   // Null em todo item do ranking legado.
   anchor: { type: mongoose.Schema.Types.Mixed, default: null },
+  // Retenção de assento do semanal (BUY_HOLD): marca o item que só está na lista
+  // porque já estava, e guarda de onde ele veio. Mixed pelo mesmo motivo de
+  // `anchor` — é um contrato versionado, e tipá-lo aqui obrigaria o schema a
+  // conhecê-lo. Null em todo item que entrou pelo draft normal.
+  //
+  // ATENÇÃO: `action` NÃO vive aqui e nunca deve viver. Ela continua derivada do
+  // score (score >= 70 ⇔ COMPRAR); um retido abaixo de 70 é AGUARDAR na lista.
+  retention: { type: mongoose.Schema.Types.Mixed, default: null },
   metrics: {
     grahamPrice: Number,
     bazinPrice: Number,
@@ -153,6 +161,20 @@ const MarketAnalysisSchema = new mongoose.Schema({
     score: { type: Number, default: null },
     previousScore: { type: Number, default: null },
     stillListed: { type: Boolean, default: false },
+  }],
+
+  // Quem perdeu o ASSENTO no ranking semanal nesta apuração, com motivo legível.
+  // Mesmo desenho (e mesmo motivo) de `anchorExits`: vive no documento, e não no
+  // item, porque o caso que mais precisa de explicação é justamente o ticker que
+  // sumiu da lista inteira — ele não tem item onde morar. Vazio na âncora.
+  retentionExits: [{
+    ticker: String,
+    name: String,
+    reason: String,
+    // Código do desfecho (RETENTION_OUTCOMES) — para agregar sem parsear texto.
+    outcome: String,
+    score: { type: Number, default: null },
+    previousScore: { type: Number, default: null },
   }],
 
   content: {

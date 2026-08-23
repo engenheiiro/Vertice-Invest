@@ -81,8 +81,8 @@ describe('config — teto de retenções', () => {
     expect(isWeeklyRetentionEnabled('REIT')).toBe(false);
   });
 
-  it('v1 entra em shadow: mede, não age', () => {
-    expect(WEEKLY_HYSTERESIS.shadow).toBe(true);
+  it('a retenção está agindo (shadow desligado desde 23/08/2026)', () => {
+    expect(WEEKLY_HYSTERESIS.shadow).toBe(false);
   });
 });
 

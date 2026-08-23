@@ -75,6 +75,10 @@ export const composeActiveResearchReport = ({ pointers = [], documents = [] }) =
   const response = structuredClone(base);
   response.content = response.content || {};
   response.content.ranking = rankingDoc?.content?.ranking || [];
+  // As saídas por retenção de assento pertencem à seção RANKING: puxá-las do
+  // `base` (que pode ser o documento de outra seção, quando o ranking não está
+  // publicado) mostraria saídas de uma apuração que não é a da lista exibida.
+  response.retentionExits = rankingDoc?.retentionExits || [];
   response.content.morningCall = morningDoc?.content?.morningCall || '';
   response.comparisonReport = reportDoc?.comparisonReport || null;
   response.generatedExplainableAI = aiDoc?.generatedExplainableAI || '';
