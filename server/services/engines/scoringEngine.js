@@ -22,6 +22,13 @@ import {
     GOVERNANCE_STATE_MOD_DISCOUNT,
 } from '../../config/financialConstants.js';
 import { isCyclicalSector, isStateControlled } from '../../config/sectorTaxonomy.js';
+import {
+    RECURRING_ROE_FIELD_BY_ARCHETYPE,
+    classifyStockArchetype,
+    isFinancialArchetype,
+    isStructuralQualityMetricApplicable,
+} from '../../config/stockCalibration.js';
+import { asObservedNumber, observedPart, observedWeightedAverage } from '../../utils/metricObservation.js';
 
 const safeVal = (val) => {
     if (val === Infinity || val === -Infinity || isNaN(val) || val === null || val === undefined) return 0;
@@ -1221,6 +1228,103 @@ const calculateProfileScores = (asset, valuationData, context) => {
     return { scores: finalScores, audit, isAristocrat };
 };
 
+// ---------------------------------------------------------------------------
+// QUALIDADE ESTRUTURAL DE AÇÃO: métrica inaplicável = AUSENTE
+// ---------------------------------------------------------------------------
+// O bloco de QUALITY foi escrito com a régua de uma empresa industrial: ROE,
+// margem líquida, dívida/patrimônio e crescimento de RECEITA. Três dos quatro
+// não existem para um banco — e o código lia o campo vazio como medição:
+//
+//   `debtToEquity = 0`   -> "Estrutura de Capital Excelente" (+25) para TODO banco
+//   `revenueGrowth`      -> 25 dos 100 pontos decididos por um número que, para
+//                           banco, oscila com intermediação e marcação a mercado
+//   `roe` (Fundamentus)  -> BBAS3 marcava 7,99% enquanto o ROE recorrente do
+//                           IF.data/BCB (`roeTtm`, que o portão âncora e o eixo
+//                           de durabilidade JÁ usam) dizia 13,54%
+//
+// O autor do bloco já tinha reconhecido o problema para UMA das quatro (ver o
+// comentário da margem líquida abaixo, sobre ITSA4 e BBDC4). Isto estende o
+// mesmo raciocínio às outras três, com STRUCTURAL_QUALITY_NOT_APPLICABLE
+// (config/stockCalibration.js) como fonte única em vez de heurística de setor.
+//
+// A composição deixa de ser soma de pontos e passa a ser MÉDIA PONDERADA das
+// observadas (utils/metricObservation.js). Para uma ação com os quatro dados
+// presentes o resultado é IDÊNTICO ao anterior — pesos iguais de 0,25 sobre
+// notas de 0–100 reproduzem exatamente a soma de 25/15/0 pontos. A diferença só
+// aparece onde havia dado ausente sendo lido como medição, que é o defeito.
+const QUALITY_GRADES = Object.freeze({
+    // Notas 0–100 equivalentes aos degraus originais de 25/15/0 pontos (×4).
+    roe: value => (value > 15 ? 100 : value > 10 ? 60 : 0),
+    netMargin: value => (value > 10 ? 100 : value > 5 ? 60 : 0),
+    debtToEquity: value => (value < 1.0 ? 100 : value < 2.0 ? 60 : -40),
+    revenueGrowth: value => (value > 10 ? 100 : value > 5 ? 40 : 0),
+});
+
+const QUALITY_LABELS = Object.freeze({
+    roe: { 100: 'ROE Elevado (>15%)', 60: 'ROE Saudável (>10%)', 0: 'ROE Modesto / Baixo' },
+    netMargin: { 100: 'Margem Líquida Robusta (>10%)', 60: 'Margem Líquida Regular (>5%)', 0: 'Margem Líquida Estreita' },
+    debtToEquity: { 100: 'Estrutura Capital Excelente (D/P < 1.0)', 60: 'Alavancagem Controlada (D/P < 2.0)', '-40': 'Alavancagem Elevada' },
+    revenueGrowth: { 100: 'Crescimento de Receita Sólido (>10%)', 40: 'Crescimento de Receita Moderado', 0: 'Crescimento de Receita Fraco' },
+});
+
+/**
+ * Resolve os quatro insumos de QUALITY distinguindo medição de campo em branco.
+ * Cada saída é um número (observado) ou `null` (AUSENTE, peso redistribuído).
+ */
+const resolveStockQualityInputs = (asset, m) => {
+    const archetype = classifyStockArchetype(asset);
+    const notApplicable = key => !isStructuralQualityMetricApplicable(archetype, key);
+    const financialArchetype = isFinancialArchetype(archetype);
+    const absent = [];
+    const mark = (key, why) => { absent.push({ key, why }); return null; };
+
+    // ROE recorrente do IF.data/BCB quando o arquétipo tem fonte própria (hoje,
+    // banco). O ROE do Fundamentus para banco vem deprimido por tratamento
+    // contábil; o resto do sistema (portão âncora, eixo de durabilidade) já
+    // prefere o roeTtm, e o scorer era o único lugar que não preferia.
+    const recurringRoeField = RECURRING_ROE_FIELD_BY_ARCHETYPE[archetype];
+    const recurringRoe = recurringRoeField
+        ? asObservedNumber(asset.sectorMetrics?.[recurringRoeField])
+        : null;
+    const genericRoe = m._missing?.roe ? null : asObservedNumber(m.roe);
+    const roe = recurringRoe ?? genericRoe;
+    if (roe === null) mark('roe', 'não informado');
+
+    // Margem: holdings (>100%) e financeiras (0%) são contabilmente incomparáveis
+    // com indústria. Regra original preservada, agora somada à matriz por arquétipo.
+    const financialBySector = isFinancialSector(asset.sector, ['Holding']);
+    const rawNetMargin = asObservedNumber(m.netMargin);
+    const netMargin = notApplicable('netMargin') ? mark('netMargin', `não aplicável ao arquétipo ${archetype}`)
+        : m._missing?.netMargin ? mark('netMargin', 'não informada')
+        : rawNetMargin === null ? mark('netMargin', 'não informada')
+        : rawNetMargin > 100 ? mark('netMargin', 'acima de 100% (holding)')
+        : ((financialBySector || financialArchetype) && rawNetMargin === 0)
+            ? mark('netMargin', 'não publicada (setor financeiro)')
+            : rawNetMargin;
+
+    // Alavancagem: para indústria `0` é medição ("sem dívida"); para balanço
+    // prudencial é campo em branco — e virava a nota MÁXIMA de estrutura de capital.
+    const rawDebtToEquity = asObservedNumber(m.debtToEquity);
+    const debtToEquity = notApplicable('debtToEquity') ? mark('debtToEquity', `não aplicável ao arquétipo ${archetype}`)
+        : rawDebtToEquity === null ? mark('debtToEquity', 'não informada')
+        : (financialArchetype && rawDebtToEquity === 0)
+            ? mark('debtToEquity', 'não publicada (balanço prudencial)')
+            : rawDebtToEquity;
+
+    // Crescimento de RECEITA não tem significado para banco nem para holding: o
+    // crescimento próprio desses arquétipos (earningsGrowth,
+    // recurringEarningsGrowth) é medido pelos eixos setoriais, não aqui — trazê-lo
+    // para cá duplicaria o mesmo fundamento dentro da durabilidade. Prêmio de
+    // seguradora e receita de petroleira, ao contrário, são receita de verdade e
+    // continuam pontuando.
+    const rawRevenueGrowth = asObservedNumber(m.revenueGrowth);
+    const revenueGrowth = notApplicable('revenueGrowth') ? mark('revenueGrowth', `não aplicável ao arquétipo ${archetype}`)
+        : m._missing?.revenueGrowth ? mark('revenueGrowth', 'não informado')
+        : rawRevenueGrowth;
+
+    return { archetype, roe, netMargin, debtToEquity, revenueGrowth, absent, usedRecurringRoe: recurringRoe !== null };
+};
+
 const calculateStructuralScores = (asset, context) => {
     const m = asset.metrics;
     const type = asset.type;
@@ -1301,29 +1405,36 @@ const calculateStructuralScores = (asset, context) => {
 
     if (isPlainStock) {
         // --- QUALITY SCORE ---
+        // Ver resolveStockQualityInputs: métrica que o arquétipo não publica é
+        // AUSENTE — nunca nota máxima (`lowerBetter`) nem nota zero — e seu peso é
+        // redistribuído entre as observadas. Com os quatro insumos presentes o
+        // resultado é idêntico ao modelo aditivo anterior.
+        const qualityInputs = resolveStockQualityInputs(asset, m);
+        const qualityAverage = observedWeightedAverage(
+            ['roe', 'netMargin', 'debtToEquity', 'revenueGrowth'].map(key => observedPart(
+                key,
+                qualityInputs[key] === null ? null : QUALITY_GRADES[key](qualityInputs[key]),
+                0.25,
+            )),
+        );
+        // Contribuições arredondadas SOMAM o score: a auditoria reconcilia com o
+        // número exibido em vez de "quase" reconciliar.
         let qScore = 0;
-        if (m.roe > 15) { qScore += 25; audit.QUALITY.push({ factor: 'ROE Elevado (>15%)', points: 25, type: 'bonus' }); }
-        else if (m.roe > 10) { qScore += 15; audit.QUALITY.push({ factor: 'ROE Saudável (>10%)', points: 15, type: 'bonus' }); }
-        else { audit.QUALITY.push({ factor: 'ROE Modesto / Baixo', points: 0, type: 'base' }); }
-        
-        // Holdings (>100%) e bancos (0%) têm margens contabilmente incomparáveis com empresas industriais.
-        // Tratar como dado ausente evita bônus indevido para ITSA4 (200%) e penalidade falsa para BBDC4 (0%).
-        const isFinancialForQuality = isFinancialSector(asset.sector, ['Holding']);
-        const netMarginForScoring = (m.netMargin > 100 || (isFinancialForQuality && m.netMargin === 0)) ? null : m.netMargin;
-        if (netMarginForScoring !== null) {
-            if (netMarginForScoring > 10) { qScore += 25; audit.QUALITY.push({ factor: 'Margem Líquida Robusta (>10%)', points: 25, type: 'bonus' }); }
-            else if (netMarginForScoring > 5) { qScore += 15; audit.QUALITY.push({ factor: 'Margem Líquida Regular (>5%)', points: 15, type: 'bonus' }); }
-            else { audit.QUALITY.push({ factor: 'Margem Líquida Estreita', points: 0, type: 'base' }); }
-        } else {
-            audit.QUALITY.push({ factor: 'Margem N/A (Setor Financeiro/Holding)', points: 0, type: 'base' });
+        for (const component of qualityAverage.components) {
+            const points = Math.round(component.value * component.effectiveWeight);
+            qScore += points;
+            audit.QUALITY.push({
+                factor: QUALITY_LABELS[component.metric][String(component.value)] || component.metric,
+                points,
+                type: points > 0 ? 'bonus' : points < 0 ? 'penalty' : 'base',
+            });
         }
-
-        if (m.debtToEquity < 1.0) { qScore += 25; audit.QUALITY.push({ factor: 'Estrutura Capital Excelente (D/P < 1.0)', points: 25, type: 'bonus' }); }
-        else if (m.debtToEquity < 2.0) { qScore += 15; audit.QUALITY.push({ factor: 'Alavancagem Controlada (D/P < 2.0)', points: 15, type: 'bonus' }); }
-        else { audit.QUALITY.push({ factor: 'Alavancagem Elevada', points: -10, type: 'penalty' }); qScore -= 10; }
-
-        if (m.revenueGrowth > 10) { qScore += 25; audit.QUALITY.push({ factor: 'Crescimento de Receita Sólido (>10%)', points: 25, type: 'bonus' }); }
-        else if (m.revenueGrowth > 5) { qScore += 10; audit.QUALITY.push({ factor: 'Crescimento de Receita Moderado', points: 10, type: 'bonus' }); }
+        for (const { key, why } of qualityInputs.absent) {
+            audit.QUALITY.push({ factor: `${key}: ${why} — peso redistribuído`, points: 0, type: 'base' });
+        }
+        if (qualityInputs.usedRecurringRoe) {
+            audit.QUALITY.push({ factor: 'ROE recorrente (IF.data/BCB) no lugar do ROE contábil', points: 0, type: 'base' });
+        }
 
         // --- NOVO: SUSTENTABILIDADE DE DIVIDENDOS (PAYOUT) ---
         const payout = m.payout || 0;
