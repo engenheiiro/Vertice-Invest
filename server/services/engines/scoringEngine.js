@@ -25,6 +25,7 @@ import { isCyclicalSector, isStateControlled } from '../../config/sectorTaxonomy
 import {
     RECURRING_ROE_FIELD_BY_ARCHETYPE,
     classifyStockArchetype,
+    getScoringNotApplicableMetrics,
     isFinancialArchetype,
     isStructuralQualityMetricApplicable,
 } from '../../config/stockCalibration.js';
@@ -1705,6 +1706,45 @@ const generateDynamicTheses = (m, type, ticker, context, valuationData, currentP
 
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'USDE'];
 
+/**
+ * Marca como AUSENTES as métricas que o arquétipo do emissor não publica, ou
+ * publica num padrão incomparável com o de uma indústria (`SCORING_NOT_APPLICABLE`).
+ * `NaN` funciona como N/A nas fórmulas e `_missing = false` desliga a penalidade
+ * de dado não coletado — o dado não falta, ele NÃO EXISTE. Nenhum fundamento é
+ * inventado, e nenhum fundamento legítimo é apagado.
+ *
+ * Roda DENTRO do scorer, e não no chamador, porque enquanto morou no chamador o
+ * mesmo ticker tirava notas diferentes conforme quem chamava: o Research semanal
+ * preparava o ativo e o motor âncora não. Aqui os dois recebem o mesmo tratamento
+ * por construção — não há caminho "cru" e caminho "preparado" para divergirem.
+ *
+ * A autoridade é `SCORING_NOT_APPLICABLE`, nunca `APPLICABILITY_BY_ARCHETYPE`:
+ * aquela matriz descreve de que o EIXO SETORIAL é feito, e é uma pergunta outra.
+ */
+const applyArchetypeApplicability = (asset) => {
+    const notApplicable = getScoringNotApplicableMetrics(classifyStockArchetype(asset));
+    if (notApplicable.length === 0) return asset;
+
+    const metrics = { ...asset.metrics, _missing: { ...(asset.metrics?._missing || {}) } };
+    for (const metric of notApplicable) {
+        if (Object.hasOwn(metrics, metric)) metrics[metric] = Number.NaN;
+        metrics._missing[metric] = false;
+    }
+    return { ...asset, metrics };
+};
+
+/**
+ * `NaN` é o marcador transitório de N/A aceito pelas fórmulas, mas não é um
+ * número BSON válido e a saída do scorer é persistida. Converte apenas números
+ * não finitos; zero e negativos legítimos permanecem intactos.
+ */
+const withoutTransientNaN = (value) => {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (Array.isArray(value)) return value.map(withoutTransientNaN);
+    if (!value || typeof value !== 'object' || value instanceof Date) return value;
+    return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, withoutTransientNaN(nested)]));
+};
+
 export const scoringEngine = {
     processAsset(asset, context) {
         // --- LOG DE DESCARTE (CRITÉRIOS DE CORTE) ---
@@ -1722,10 +1762,15 @@ export const scoringEngine = {
         if (asset.metrics.avgLiquidity < liquidityFloor && asset.type !== 'CRYPTO' && asset.type !== 'ETF') return { _discarded: true, reason: "Liquidez Insuficiente", details: `${asset.metrics.avgLiquidity} (Mínimo: ${asset.type === 'FII' ? '500k' : '200k'})` };
         if (asset.dbFlags && asset.dbFlags.isBlacklisted) return { _discarded: true, reason: "Blacklist Manual", details: "Banido pelo Admin" }; 
 
-        const valuationData = calculateIntrinsicValue(asset.metrics, asset.type, asset.price, context, asset.usSubType);
-        const profileResult = calculateProfileScores(asset, valuationData, context);
-        const structuralResult = calculateStructuralScores(asset, context);
-        const thesisData = generateDynamicTheses(asset.metrics, asset.type, asset.ticker, context, valuationData, asset.price, asset.sector, asset.fiiSubType);
+        // Métrica que o arquétipo do emissor não publica é AUSENTE — e a régua é
+        // aplicada AQUI DENTRO, não no chamador, para que motor âncora e Research
+        // semanal não possam divergir sobre o mesmo ticker (ver a função).
+        const scored = asset.type === 'STOCK' ? applyArchetypeApplicability(asset) : asset;
+
+        const valuationData = calculateIntrinsicValue(scored.metrics, scored.type, scored.price, context, scored.usSubType);
+        const profileResult = calculateProfileScores(scored, valuationData, context);
+        const structuralResult = calculateStructuralScores(scored, context);
+        const thesisData = generateDynamicTheses(scored.metrics, scored.type, scored.ticker, context, valuationData, scored.price, scored.sector, scored.fiiSubType);
         const aristocrat = profileResult.isAristocrat;
 
         if (aristocrat) {
@@ -1743,21 +1788,22 @@ export const scoringEngine = {
             ...structuralResult.audit.RISK.map(a => ({ ...a, category: 'Risco' }))
         ];
 
-        return {
-            ticker: asset.ticker,
-            name: asset.name,
-            sector: asset.sector,
-            type: asset.type,
-            allocationClass: asset.allocationClass || null,
-            currency: asset.currency || null,
-            usSubType: asset.usSubType || null,
-            currentPrice: asset.price,
+        // NaN é marcador interno de N/A e a saída daqui é persistida.
+        return withoutTransientNaN({
+            ticker: scored.ticker,
+            name: scored.name,
+            sector: scored.sector,
+            type: scored.type,
+            allocationClass: scored.allocationClass || null,
+            currency: scored.currency || null,
+            usSubType: scored.usSubType || null,
+            currentPrice: scored.price,
             targetPrice: valuationData.fairPrice,
-            metrics: { 
-                ...asset.metrics, 
-                structural: { quality: structuralResult.quality, valuation: structuralResult.valuation, risk: structuralResult.risk }, 
-                ...valuationData 
-            }, 
+            metrics: {
+                ...scored.metrics,
+                structural: { quality: structuralResult.quality, valuation: structuralResult.valuation, risk: structuralResult.risk },
+                ...valuationData
+            },
             scores: profileResult.scores, 
             auditLog: auditLog, // O NOVO CAMPO PARA O FRONT
             riskProfile: '', 
@@ -1769,7 +1815,7 @@ export const scoringEngine = {
             isDividendAristocrat: aristocrat,
             // Consumido pelo Brasil 10 (getTop5Defensive): sem este flag, ativos
             // reprovados no gate defensivo entravam na lista rotulados DEFENSIVE.
-            isDefensiveEligible: isEligibleForDefensive(asset, context)
-        };
+            isDefensiveEligible: isEligibleForDefensive(scored, context)
+        });
     }
 };

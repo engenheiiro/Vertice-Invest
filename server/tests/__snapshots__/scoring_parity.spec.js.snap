@@ -1366,9 +1366,33 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
   "auditLog": [
     {
       "category": "Perfil Defensivo",
-      "factor": "Ineligível para Carteira Defensiva",
-      "points": 30,
+      "factor": "Score Base (Setor Defensivo)",
+      "points": 40,
       "type": "base",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Large Cap (>10B)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Dividend Yield > 6%",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "ROE Robusto (≥15%)",
+      "points": 10,
+      "type": "bonus",
+    },
+    {
+      "category": "Perfil Defensivo",
+      "factor": "Payout Saudável (60.0%)",
+      "points": 5,
+      "type": "bonus",
     },
     {
       "category": "Perfil Defensivo",
@@ -1387,12 +1411,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "factor": "Score Base (Mid/Large Cap)",
       "points": 40,
       "type": "base",
-    },
-    {
-      "category": "Perfil Moderado",
-      "factor": "Crescimento Receita Alto (>20%)",
-      "points": 16,
-      "type": "bonus",
     },
     {
       "category": "Perfil Moderado",
@@ -1417,18 +1435,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
       "factor": "Base Arrojada",
       "points": 35,
       "type": "base",
-    },
-    {
-      "category": "Perfil Arrojado",
-      "factor": "PEG Excepcional (<0.5)",
-      "points": 30,
-      "type": "bonus",
-    },
-    {
-      "category": "Perfil Arrojado",
-      "factor": "Hyper Growth (>25%)",
-      "points": 15,
-      "type": "bonus",
     },
     {
       "category": "Perfil Arrojado",
@@ -1498,12 +1504,6 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Valuation",
-      "factor": "EV/EBITDA Atrativo (<8)",
-      "points": 20,
-      "type": "bonus",
-    },
-    {
-      "category": "Valuation",
       "factor": "Dividend Yield > 6%",
       "points": 20,
       "type": "bonus",
@@ -1533,14 +1533,14 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
   ],
   "isDividendAristocrat": false,
   "scores": {
-    "BOLD": 47,
-    "DEFENSIVE": 10,
-    "MODERATE": 29,
+    "BOLD": 10,
+    "DEFENSIVE": 53,
+    "MODERATE": 13,
   },
   "structural": {
     "quality": 100,
     "risk": 70,
-    "valuation": 80,
+    "valuation": 60,
   },
   "targetPrice": 26.34,
   "ticker": "ITUB4",

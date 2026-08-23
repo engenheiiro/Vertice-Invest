@@ -20,7 +20,6 @@ import { scoringEngine } from '../services/engines/scoringEngine.js';
 import {
   calculateStockShadowAxes,
   calculateStockCalibrationConfidence,
-  prepareStockForSectorScoring,
 } from '../services/engines/stockSectorAxisEngine.js';
 import {
   STOCK_CALIBRATION_SHADOW_VERSION,
@@ -140,12 +139,13 @@ try {
 
   for (const rawAsset of rawData) {
     const metadata = metadataByTicker.get(rawAsset.ticker) || {};
-    const preparedRawAsset = prepareStockForSectorScoring({
+    // A regra de 'metrica inaplicavel = ausente' vive dentro do scorer.
+    const scoringAsset = {
       ...rawAsset,
       stockArchetype: metadata.stockArchetype,
       sectorMetrics: metadata.sectorMetrics || {},
-    });
-    const processed = scoringEngine.processAsset(preparedRawAsset, context);
+    };
+    const processed = scoringEngine.processAsset(scoringAsset, context);
     if (!processed || processed._discarded) {
       discarded.push({
         ticker: rawAsset.ticker,
@@ -156,7 +156,7 @@ try {
     }
 
     const calibrationAsset = {
-      ...preparedRawAsset,
+      ...scoringAsset,
       stockArchetype: metadata.stockArchetype,
       sectorMetrics: metadata.sectorMetrics || {},
       metrics: processed.metrics,

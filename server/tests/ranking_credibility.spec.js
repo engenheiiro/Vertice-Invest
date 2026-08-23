@@ -155,11 +155,21 @@ describe('VP de FII sem vpCota persiste via price/pvp', () => {
 
 // ── Financeiras: crescimento capado, não zerado ──────────────────────────────
 describe('Crescimento de financeiras >30% é capado em 30 (não zerado)', () => {
-    it('banco crescendo 35% mantém bônus de crescimento (tier >20)', () => {
+    it('seguradora crescendo 35% mantém bônus de crescimento (tier >20)', () => {
+        // Prêmio emitido é receita de verdade: o crescimento pontua, mas capado.
         const res = scoringEngine.processAsset(
-            makeStock('STOCK', { metrics: { revenueGrowth: 35, sector: 'Bancos' }, sector: 'Bancos' }), CTX);
+            makeStock('STOCK', { metrics: { revenueGrowth: 35, sector: 'Seguros' }, sector: 'Seguros' }), CTX);
         expect(hasFactor(res, 'Crescimento Receita Alto (>20%)')).toBe(true);
         // Mas o tier excepcional (>30) não dispara — o cap segura em 30
+        expect(hasFactor(res, 'Crescimento Receita Excepcional (>30%)')).toBe(false);
+    });
+
+    it('banco não pontua crescimento de receita — para ele a métrica é inaplicável', () => {
+        // O cap segurava o exagero; o arquétipo BANK vai além e não lê o campo:
+        // "receita" de banco oscila com intermediação e marcação a mercado.
+        const res = scoringEngine.processAsset(
+            makeStock('STOCK', { metrics: { revenueGrowth: 35, sector: 'Bancos' }, sector: 'Bancos' }), CTX);
+        expect(hasFactor(res, 'Crescimento Receita Alto (>20%)')).toBe(false);
         expect(hasFactor(res, 'Crescimento Receita Excepcional (>30%)')).toBe(false);
     });
 });

@@ -1,7 +1,6 @@
 import {
   STOCK_ARCHETYPES,
   classifyStockArchetype,
-  getScoringNotApplicableMetrics,
 } from '../../config/stockCalibration.js';
 
 const clamp = value => Math.min(100, Math.max(0, Number(value) || 0));
@@ -66,47 +65,6 @@ const oilGasEntry = asset => {
     part('pvp', Number(metrics.pvp) > 0 ? lowerBetter(metrics.pvp, 0.8, 3) : null, 0.15),
     part('dy', higherBetter(metrics.dy, 0, 8), 0.10),
   ]);
-};
-
-/**
- * Marca como AUSENTES, para o scorer genérico, as métricas que o arquétipo não
- * publica ou publica num padrão incomparável (`SCORING_NOT_APPLICABLE`). `NaN`
- * funciona como N/A nas fórmulas e `_missing = false` desliga a penalidade de
- * dado não coletado — o dado não falta, ele não existe. Nenhum fundamento é
- * inventado e nenhum fundamento legítimo é apagado.
- *
- * A autoridade AQUI é `SCORING_NOT_APPLICABLE`, nunca `APPLICABILITY_BY_ARCHETYPE`:
- * aquela matriz descreve de que o EIXO SETORIAL é feito, e usá-la aqui apagava do
- * semanal a margem, a alavancagem e o crescimento de receita das petroleiras
- * (PRIO3: qualidade 90 -> 60, ARROJADO 80 -> 35), fundamentos que existem e são
- * informativos. Medido em 22/08/2026.
- */
-export const prepareStockForSectorScoring = asset => {
-  const prepared = structuredClone(asset);
-  prepared.metrics ||= {};
-  prepared.metrics._missing = { ...(prepared.metrics._missing || {}) };
-
-  for (const metric of getScoringNotApplicableMetrics(classifyStockArchetype(prepared))) {
-    if (Object.hasOwn(prepared.metrics, metric)) prepared.metrics[metric] = Number.NaN;
-    prepared.metrics._missing[metric] = false;
-  }
-
-  return prepared;
-};
-
-/**
- * `NaN` é um marcador transitório de N/A aceito pelas fórmulas, mas não é um
- * número BSON válido. Converte apenas números não finitos na saída do scorer;
- * zero e valores negativos legítimos permanecem intactos.
- */
-export const normalizeStockScoringOutputForPersistence = value => {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (Array.isArray(value)) return value.map(normalizeStockScoringOutputForPersistence);
-  if (!value || typeof value !== 'object' || value instanceof Date) return value;
-  return Object.fromEntries(Object.entries(value).map(([key, nested]) => [
-    key,
-    normalizeStockScoringOutputForPersistence(nested),
-  ]));
 };
 
 /**

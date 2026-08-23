@@ -16,7 +16,6 @@
  */
 import { describe, expect, it } from 'vitest';
 import { scoringEngine } from '../services/engines/scoringEngine.js';
-import { prepareStockForSectorScoring } from '../services/engines/stockSectorAxisEngine.js';
 import { observedPart, observedWeightedAverage } from '../utils/metricObservation.js';
 
 const CONTEXT = { MACRO: { SELIC: 14.75, IPCA: 4.62, RISK_FREE: 14.75, NTNB_LONG: 7.25 } };
@@ -72,10 +71,76 @@ describe('structural.quality — alavancagem não publicada não vira nota', () 
         expect(factors).toContain('Estrutura Capital Excelente (D/P < 1.0)');
     });
 
-    it('a nota é a mesma no caminho cru e no preparado (NaN) — era 90 x 30', () => {
-        const cru = qualityOf(itub4);
-        const preparado = qualityOf(prepareStockForSectorScoring(itub4));
-        expect(preparado).toBe(cru);
+    it('a régua roda dentro do scorer: chamador que já apagou as métricas tira a mesma nota', () => {
+        // Era aqui que o mesmo ticker tirava 90 na âncora e 30 no semanal: o
+        // semanal apagava as métricas antes de chamar, a âncora não.
+        const jaApagado = {
+            ...itub4,
+            metrics: {
+                ...itub4.metrics,
+                netMargin: Number.NaN, debtToEquity: Number.NaN, revenueGrowth: Number.NaN,
+                _missing: { ...NOTHING_MISSING },
+            },
+        };
+        expect(qualityOf(jaApagado)).toBe(qualityOf(itub4));
+        expect(scoringEngine.processAsset(jaApagado, CONTEXT).scores)
+            .toEqual(scoringEngine.processAsset(itub4, CONTEXT).scores);
+    });
+
+    it('NaN não escapa para quem persiste o resultado', () => {
+        const metrics = scoringEngine.processAsset(itub4, CONTEXT).metrics;
+        expect(metrics.netMargin).toBeNull();
+        expect(metrics.debtToEquity).toBeNull();
+        expect(metrics.roe).toBe(22.45);
+    });
+});
+
+describe('inaplicabilidade vale para o scorer INTEIRO, não só para o bloco de qualidade', () => {
+    const scoresOf = asset => scoringEngine.processAsset(asset, CONTEXT).scores;
+    const factorsOf = asset => scoringEngine.processAsset(asset, CONTEXT).auditLog.map(e => e.factor);
+
+    it('banco não é penalizado por "dado ausente" num campo que ninguém deixou de coletar', () => {
+        // netMargin = 0 num banco é campo em branco, não coleta falha: cobrar
+        // −15 de confiança por isso é cobrar duas vezes pela mesma inaplicabilidade.
+        expect(factorsOf(itub4)).not.toContain('Dados de Rentabilidade Ausentes');
+    });
+
+    it('banco não ganha bônus de crescimento nem PEG por "receita" de intermediação', () => {
+        const factors = factorsOf(itub4);
+        expect(factors).not.toContain('Crescimento Receita Alto (>20%)');
+        expect(factors.some(f => f.startsWith('PEG '))).toBe(false);
+    });
+
+    it('EV/EBITDA de seguradora não vira bônus de valuation', () => {
+        // PSSA3 publica EV/EBITDA 0,44 — não existe EBITDA de seguradora, e o
+        // número passava no teste de "< 8" valendo +20 de valuation.
+        const pssa3 = makeStock('PSSA3', 'Seguros', {
+            roe: 22.84, netMargin: 8.72, debtToEquity: -0.9, revenueGrowth: 14.34,
+            evEbitda: 0.44, pl: 8.17, pvp: 1.87, payout: 40,
+        });
+        expect(factorsOf(pssa3)).not.toContain('EV/EBITDA Atrativo (<8)');
+    });
+
+    it('crescimento de PRÊMIO da seguradora continua pontuando — é receita de verdade', () => {
+        const pssa3 = makeStock('PSSA3', 'Seguros', {
+            roe: 22.84, netMargin: 8.72, debtToEquity: -0.9, revenueGrowth: 14.34,
+            evEbitda: 0.44, pl: 8.17, pvp: 1.87, payout: 40,
+        });
+        expect(factorsOf(pssa3)).toContain('Crescimento de Receita Sólido (>10%)');
+    });
+
+    it('petroleira continua sendo premiada pelo crescimento de receita que ela publica', () => {
+        // A matriz do eixo setorial apagava os +35,96% da PRIO3 e derrubava o
+        // ARROJADO de 80 para 35 — medido na base em 22/08/2026.
+        const prio3 = makeStock('PRIO3', 'Petróleo e Gás', {
+            roe: 13.71, netMargin: 18.11, debtToEquity: 0.77, revenueGrowth: 35.96,
+            evEbitda: 5.93, pl: 14.17, pvp: 1.94, payout: 0,
+        });
+        expect(factorsOf(prio3)).toContain('Hyper Growth (>25%)');
+        expect(scoresOf(prio3).BOLD).toBeGreaterThan(scoresOf({
+            ...prio3,
+            metrics: { ...prio3.metrics, revenueGrowth: 0, _missing: { ...NOTHING_MISSING, revenueGrowth: true } },
+        }).BOLD);
     });
 });
 

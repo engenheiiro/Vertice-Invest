@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateStockCalibrationConfidence,
   calculateStockShadowAxes,
-  normalizeStockScoringOutputForPersistence,
-  prepareStockForSectorScoring,
 } from '../services/engines/stockSectorAxisEngine.js';
 
 const base = {
@@ -17,14 +15,6 @@ const base = {
 };
 
 describe('stockSectorAxisEngine', () => {
-  it('converte apenas numeros nao finitos antes de persistir', () => {
-    const normalized = normalizeStockScoringOutputForPersistence({
-      metrics: { netMargin: Number.NaN, evEbitda: Infinity, debt: 0, growth: -5 },
-      auditLog: [{ points: 10 }],
-    });
-    expect(normalized.metrics).toEqual({ netMargin: null, evEbitda: null, debt: 0, growth: -5 });
-    expect(normalized.auditLog).toEqual([{ points: 10 }]);
-  });
   it('usa cobertura como teto e reduz confiança por liquidez e macro stale', () => {
     const confidence = calculateStockCalibrationConfidence(
       { metrics: { avgLiquidity: 500_000, _staleDays: 10, _missing: {} } },
@@ -33,59 +23,6 @@ describe('stockSectorAxisEngine', () => {
     );
     expect(confidence).toBe(60);
   });
-  it('marca como N/A apenas metricas inaplicaveis a bancos', () => {
-    const prepared = prepareStockForSectorScoring({
-      ticker: 'ITUB4',
-      sector: 'Bancos',
-      stockArchetype: 'BANK',
-      metrics: {
-        netMargin: 0,
-        revenueGrowth: 0,
-        roe: 22,
-        _missing: { netMargin: true, revenueGrowth: true, roe: false },
-      },
-    });
-
-    expect(Number.isNaN(prepared.metrics.netMargin)).toBe(true);
-    expect(Number.isNaN(prepared.metrics.revenueGrowth)).toBe(true);
-    expect(prepared.metrics._missing.netMargin).toBe(false);
-    expect(prepared.metrics._missing.revenueGrowth).toBe(false);
-    expect(prepared.metrics.roe).toBe(22);
-  });
-
-  it('petroleira mantem margem, alavancagem e crescimento — a matriz do eixo nao manda aqui', () => {
-    // APPLICABILITY_BY_ARCHETYPE marca as tres como N/A para OIL_GAS_PRODUCER
-    // porque o EIXO dela prefere ebitdaMargin/netDebtEbitda. Apagá-las do scorer
-    // derrubava a PRIO3 de 90 para 60 em qualidade e de 80 para 35 no ARROJADO.
-    const prepared = prepareStockForSectorScoring({
-      ticker: 'PRIO3',
-      sector: 'Petróleo e Gás',
-      stockArchetype: 'OIL_GAS_PRODUCER',
-      metrics: { netMargin: 18.11, debtToEquity: 0.77, revenueGrowth: 35.96, evEbitda: 5.93 },
-    });
-
-    expect(prepared.metrics.netMargin).toBe(18.11);
-    expect(prepared.metrics.debtToEquity).toBe(0.77);
-    expect(prepared.metrics.revenueGrowth).toBe(35.96);
-    expect(prepared.metrics.evEbitda).toBe(5.93);
-  });
-
-  it('seguradora perde EV/EBITDA mas mantem crescimento de premio', () => {
-    // Nao existe EBITDA de seguradora (PSSA3 publica 0,44, que passava no
-    // "< 8" valendo +20 de valuation). Premio emitido, ao contrario, e receita.
-    const prepared = prepareStockForSectorScoring({
-      ticker: 'PSSA3',
-      sector: 'Seguros',
-      stockArchetype: 'INSURER',
-      metrics: { netMargin: 8.72, debtToEquity: -0.9, revenueGrowth: 14.34, evEbitda: 0.44 },
-    });
-
-    expect(Number.isNaN(prepared.metrics.evEbitda)).toBe(true);
-    expect(Number.isNaN(prepared.metrics.debtToEquity)).toBe(true);
-    expect(prepared.metrics.revenueGrowth).toBe(14.34);
-    expect(prepared.metrics.netMargin).toBe(8.72);
-  });
-
   it('melhora resiliencia bancaria quando capital sobe e inadimplencia cai', () => {
     const weaker = calculateStockShadowAxes({
       ...base,

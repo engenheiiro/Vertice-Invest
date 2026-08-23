@@ -18,8 +18,6 @@ import { finalizeRanking } from '../utils/rankingContract.js';
 import {
     calculateStockCalibrationConfidence,
     calculateStockShadowAxes,
-    normalizeStockScoringOutputForPersistence,
-    prepareStockForSectorScoring,
 } from './engines/stockSectorAxisEngine.js';
 import {
     STOCK_CALIBRATION_SHADOW_VERSION,
@@ -314,13 +312,10 @@ export const aiResearchService = {
             const runId = Date.now().toString();
 
             rawData.forEach(asset => {
-                const scoringAsset = assetClass === 'STOCK'
-                    ? prepareStockForSectorScoring(asset)
-                    : asset;
-                const scoringResult = scoringEngine.processAsset(scoringAsset, context);
-                const result = assetClass === 'STOCK' && scoringResult && !scoringResult._discarded
-                    ? normalizeStockScoringOutputForPersistence(scoringResult)
-                    : scoringResult;
+                // A régua de 'métrica inaplicável = ausente' vive DENTRO do scorer
+                // (applyArchetypeApplicability), para que o semanal e o motor âncora
+                // não possam divergir sobre o mesmo ticker.
+                const result = scoringEngine.processAsset(asset, context);
                 if (result) {
                     if (result._discarded) {
                         // Log de Descarte
@@ -334,10 +329,7 @@ export const aiResearchService = {
                     } else {
                         processedAssets.push(result);
                         if (assetClass === 'STOCK') {
-                            const calibrationAsset = {
-                                ...scoringAsset,
-                                metrics: result.metrics,
-                            };
+                            const calibrationAsset = { ...asset, metrics: result.metrics };
                             const coverage = assessStockMetricCoverage(calibrationAsset);
                             const axes = calculateStockShadowAxes(calibrationAsset);
                             stockCalibrationCandidates.push({
@@ -346,7 +338,7 @@ export const aiResearchService = {
                                 sector: result.sector,
                                 type: result.type,
                                 metrics: result.metrics,
-                                sectorMetrics: scoringAsset.sectorMetrics || {},
+                                sectorMetrics: asset.sectorMetrics || {},
                                 archetype: coverage.archetype,
                                 eligibleByProfile: {
                                     DEFENSIVE: result.isDefensiveEligible !== false,

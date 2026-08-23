@@ -52,7 +52,7 @@ export const observedPart = (metric, value, weight) => ({ metric, value, weight 
 
 /**
  * Normaliza para `null` (AUSENTE) o que não é uma medição utilizável.
- * `NaN` entra aqui porque `prepareStockForSectorScoring` usa NaN como marcador
+ * `NaN` entra aqui porque `applyArchetypeApplicability` usa NaN como marcador
  * transitório de N/A antes do scorer.
  */
 export const asObservedNumber = (value) => {
