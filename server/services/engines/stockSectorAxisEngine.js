@@ -1,8 +1,7 @@
 import {
-  METRIC_APPLICABILITY,
   STOCK_ARCHETYPES,
   classifyStockArchetype,
-  getStockMetricApplicability,
+  getScoringNotApplicableMetrics,
 } from '../../config/stockCalibration.js';
 
 const clamp = value => Math.min(100, Math.max(0, Number(value) || 0));
@@ -70,17 +69,24 @@ const oilGasEntry = asset => {
 };
 
 /**
- * Remove somente penalidades de missingness para metricas sem significado no
- * arquetipo. NaN funciona como N/A no scorer; nenhum fundamento e inventado.
+ * Marca como AUSENTES, para o scorer genérico, as métricas que o arquétipo não
+ * publica ou publica num padrão incomparável (`SCORING_NOT_APPLICABLE`). `NaN`
+ * funciona como N/A nas fórmulas e `_missing = false` desliga a penalidade de
+ * dado não coletado — o dado não falta, ele não existe. Nenhum fundamento é
+ * inventado e nenhum fundamento legítimo é apagado.
+ *
+ * A autoridade AQUI é `SCORING_NOT_APPLICABLE`, nunca `APPLICABILITY_BY_ARCHETYPE`:
+ * aquela matriz descreve de que o EIXO SETORIAL é feito, e usá-la aqui apagava do
+ * semanal a margem, a alavancagem e o crescimento de receita das petroleiras
+ * (PRIO3: qualidade 90 -> 60, ARROJADO 80 -> 35), fundamentos que existem e são
+ * informativos. Medido em 22/08/2026.
  */
 export const prepareStockForSectorScoring = asset => {
   const prepared = structuredClone(asset);
   prepared.metrics ||= {};
   prepared.metrics._missing = { ...(prepared.metrics._missing || {}) };
-  const applicability = getStockMetricApplicability(prepared);
 
-  for (const [metric, status] of Object.entries(applicability)) {
-    if (status !== METRIC_APPLICABILITY.NOT_APPLICABLE) continue;
+  for (const metric of getScoringNotApplicableMetrics(classifyStockArchetype(prepared))) {
     if (Object.hasOwn(prepared.metrics, metric)) prepared.metrics[metric] = Number.NaN;
     prepared.metrics._missing[metric] = false;
   }

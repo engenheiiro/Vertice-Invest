@@ -258,43 +258,50 @@ export const FINANCIAL_ARCHETYPES = Object.freeze([
 export const isFinancialArchetype = archetype => FINANCIAL_ARCHETYPES.includes(archetype);
 
 /**
- * Métricas do bloco de QUALIDADE ESTRUTURAL (scoringEngine) que são
- * CONTABILMENTE INAPLICÁVEIS ao arquétipo — o emissor não as publica, ou publica
- * um número que não é comparável ao da mesma métrica numa indústria.
+ * Métricas que o SCORER GENÉRICO (scoringEngine) deve tratar como AUSENTES para
+ * o arquétipo — o emissor não as publica, ou publica um número que não é
+ * comparável ao da mesma métrica numa indústria.
  *
  * NÃO confunda com `APPLICABILITY_BY_ARCHETYPE` acima. Aquela matriz responde
  * "de quais métricas o EIXO SETORIAL deste arquétipo é feito?" e por isso marca
  * `netMargin`/`debtToEquity` como N/A para uma petroleira — não porque uma
  * petroleira não tenha margem ou dívida (tem, e são as duas informativas), mas
  * porque o eixo dela prefere `ebitdaMargin` e `netDebtEbitda`. Reusar aquela
- * matriz aqui derrubaria a qualidade da PRIO3 de 90 para 60 apagando dois
- * fundamentos perfeitamente legítimos — medido em 22/08/2026.
+ * matriz aqui derruba a qualidade da PRIO3 de 90 para 60 apagando dois
+ * fundamentos perfeitamente legítimos, e apaga da PRIO3 o crescimento de receita
+ * de +35,96% que o perfil ARROJADO tinha todo direito de premiar — medido em
+ * 22/08/2026.
  *
  * A pergunta AQUI é outra: "este número existe e significa a mesma coisa que
  * significaria numa indústria?". Só o balanço prudencial (banco, seguradora) e a
  * consolidação de holding respondem "não".
  *
  * Fora desta tabela a métrica é tratada como PRESENTE e vale nota. Métrica
- * inaplicável vira AUSENTE — peso redistribuído, nunca nota máxima nem zero.
+ * inaplicável vira AUSENTE — peso redistribuído, nunca nota máxima nem zero, e
+ * nunca a PENALIDADE de missingness de um dado que ninguém deixou de coletar.
  */
-export const STRUCTURAL_QUALITY_NOT_APPLICABLE = Object.freeze({
+export const SCORING_NOT_APPLICABLE = Object.freeze({
   // Passivo é o próprio negócio (depósitos): não há "dívida/patrimônio" a
-  // comparar. "Receita" de banco oscila com intermediação e marcação, e margem
-  // líquida no padrão industrial não é publicada.
-  [STOCK_ARCHETYPES.BANK]: Object.freeze(['netMargin', 'debtToEquity', 'revenueGrowth']),
-  // Provisões técnicas ocupam o lugar da dívida; margem sobre prêmios e
-  // crescimento de prêmios, esses sim, são leitura legítima.
-  [STOCK_ARCHETYPES.INSURER]: Object.freeze(['debtToEquity']),
+  // comparar. "Receita" de banco oscila com intermediação e marcação, margem
+  // líquida no padrão industrial não é publicada, e EBITDA de banco não existe.
+  [STOCK_ARCHETYPES.BANK]: Object.freeze(['netMargin', 'debtToEquity', 'revenueGrowth', 'evEbitda']),
+  // Provisões técnicas ocupam o lugar da dívida e não há EBITDA de seguradora.
+  // Margem sobre prêmios e CRESCIMENTO DE PRÊMIOS, esses sim, são leitura
+  // legítima — prêmio emitido é receita de verdade.
+  [STOCK_ARCHETYPES.INSURER]: Object.freeze(['debtToEquity', 'evEbitda']),
   // Holdings: o consolidado mistura contabilidade prudencial com industrial.
-  [STOCK_ARCHETYPES.FINANCIAL_HOLDING]: Object.freeze(['netMargin', 'debtToEquity', 'revenueGrowth']),
-  [STOCK_ARCHETYPES.INSURANCE_HOLDING_DISTRIBUTOR]: Object.freeze(['netMargin', 'debtToEquity', 'revenueGrowth']),
-  [STOCK_ARCHETYPES.DIVERSIFIED_HOLDING]: Object.freeze(['netMargin', 'debtToEquity', 'revenueGrowth']),
+  [STOCK_ARCHETYPES.FINANCIAL_HOLDING]: Object.freeze(['netMargin', 'debtToEquity', 'revenueGrowth', 'evEbitda']),
+  [STOCK_ARCHETYPES.INSURANCE_HOLDING_DISTRIBUTOR]: Object.freeze(['netMargin', 'debtToEquity', 'revenueGrowth', 'evEbitda']),
+  [STOCK_ARCHETYPES.DIVERSIFIED_HOLDING]: Object.freeze(['netMargin', 'debtToEquity', 'revenueGrowth', 'evEbitda']),
   // Corretora de seguros e produtora de óleo e gás são, para efeito desta régua,
   // empresas operacionais: margem, alavancagem e crescimento significam o de sempre.
 });
 
+/** Lista (nunca `undefined`) de métricas inaplicáveis ao arquétipo. */
+export const getScoringNotApplicableMetrics = archetype => SCORING_NOT_APPLICABLE[archetype] || [];
+
 export const isStructuralQualityMetricApplicable = (archetype, metric) => (
-  !(STRUCTURAL_QUALITY_NOT_APPLICABLE[archetype] || []).includes(metric)
+  !getScoringNotApplicableMetrics(archetype).includes(metric)
 );
 
 /**

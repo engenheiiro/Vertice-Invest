@@ -53,6 +53,39 @@ describe('stockSectorAxisEngine', () => {
     expect(prepared.metrics.roe).toBe(22);
   });
 
+  it('petroleira mantem margem, alavancagem e crescimento — a matriz do eixo nao manda aqui', () => {
+    // APPLICABILITY_BY_ARCHETYPE marca as tres como N/A para OIL_GAS_PRODUCER
+    // porque o EIXO dela prefere ebitdaMargin/netDebtEbitda. Apagá-las do scorer
+    // derrubava a PRIO3 de 90 para 60 em qualidade e de 80 para 35 no ARROJADO.
+    const prepared = prepareStockForSectorScoring({
+      ticker: 'PRIO3',
+      sector: 'Petróleo e Gás',
+      stockArchetype: 'OIL_GAS_PRODUCER',
+      metrics: { netMargin: 18.11, debtToEquity: 0.77, revenueGrowth: 35.96, evEbitda: 5.93 },
+    });
+
+    expect(prepared.metrics.netMargin).toBe(18.11);
+    expect(prepared.metrics.debtToEquity).toBe(0.77);
+    expect(prepared.metrics.revenueGrowth).toBe(35.96);
+    expect(prepared.metrics.evEbitda).toBe(5.93);
+  });
+
+  it('seguradora perde EV/EBITDA mas mantem crescimento de premio', () => {
+    // Nao existe EBITDA de seguradora (PSSA3 publica 0,44, que passava no
+    // "< 8" valendo +20 de valuation). Premio emitido, ao contrario, e receita.
+    const prepared = prepareStockForSectorScoring({
+      ticker: 'PSSA3',
+      sector: 'Seguros',
+      stockArchetype: 'INSURER',
+      metrics: { netMargin: 8.72, debtToEquity: -0.9, revenueGrowth: 14.34, evEbitda: 0.44 },
+    });
+
+    expect(Number.isNaN(prepared.metrics.evEbitda)).toBe(true);
+    expect(Number.isNaN(prepared.metrics.debtToEquity)).toBe(true);
+    expect(prepared.metrics.revenueGrowth).toBe(14.34);
+    expect(prepared.metrics.netMargin).toBe(8.72);
+  });
+
   it('melhora resiliencia bancaria quando capital sobe e inadimplencia cai', () => {
     const weaker = calculateStockShadowAxes({
       ...base,
