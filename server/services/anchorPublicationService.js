@@ -156,13 +156,20 @@ const asRankingItem = (row, { assetClass, adapter, version }) => ({
  * descarta em silêncio: o fundo estava em COMPRAR na publicação anterior, então
  * ele sai com motivo escrito como qualquer outro.
  */
-const enforcePublicationLimits = (rows, adapter) => {
+const enforcePublicationLimits = (rows, adapter, engineReasons = new Map()) => {
   if (!adapter.enforcePublicationLimits) return { ranking: rows, exits: [] };
 
-  const limited = adapter.enforcePublicationLimits(rows);
+  // O teto escreve o motivo dele NO FIM do `reason`, e num item que a histerese
+  // acabou de manter esse texto já diz "Mantido na lista". Emendar um no outro
+  // produziria a linha "Mantido na lista … · Fora do COMPRAR", que se contradiz
+  // na tela. Por isso o teto roda sobre o motivo ORIGINAL do motor — e a linha
+  // da histerese é devolvida intacta para quem o teto não demoveu.
+  const limited = adapter.enforcePublicationLimits(
+    rows.map(row => ({ ...row, reason: engineReasons.get(row.ticker) ?? row.reason })),
+  );
   const exits = [];
   const ranking = limited.map((row, index) => {
-    if (rows[index].action !== 'BUY' || row.action === 'BUY') return row;
+    if (rows[index].action !== 'BUY' || row.action === 'BUY') return rows[index];
 
     const { blockReason } = adapter.blockersOf(row);
     const reason = `Saiu da lista: ${blockReason}`;
@@ -211,7 +218,8 @@ export const buildAnchorRanking = async (assetClass) => {
     gateFailuresByTicker,
   });
 
-  const limited = enforcePublicationLimits(hysteresis.ranking, adapter);
+  const engineReasons = new Map(result.ranking.map(row => [row.ticker, row.reason]));
+  const limited = enforcePublicationLimits(hysteresis.ranking, adapter, engineReasons);
   const exits = [...hysteresis.exits, ...limited.exits];
 
   const version = result.version;

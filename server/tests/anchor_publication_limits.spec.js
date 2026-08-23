@@ -117,6 +117,10 @@ describe('teto de composição reaplicado DEPOIS da histerese', () => {
     expect(barrado.action).toBe('WAIT');
     expect(barrado.anchor.hysteresis.state).toBe(HYSTERESIS_STATES.OUT);
     expect(barrado.anchor.exitReason).toContain('teto de composição');
+    // O motivo na linha não pode se contradizer: quem o teto demoveu não é
+    // "mantido na lista". O teto escreve sobre o motivo original do motor.
+    expect(barrado.reason).toContain('Fora do COMPRAR por composição de carteira');
+    expect(barrado.reason).not.toContain('Mantido na lista');
     expect(built.exits.map(exit => exit.ticker)).toContain('HGCR11');
     expect(built.counts.held).toBe(0);
     expect(built.counts.buy).toBe(3);
