@@ -2,7 +2,7 @@ import React from 'react';
 import { Bot, RefreshCw, CheckCircle2, AlertCircle, BarChart3, Layers, Globe, Zap, Search, Play, Server, Share2, Send, Copy, X, MessageSquare, ShieldCheck } from 'lucide-react';
 import { SECTION_LABEL } from '../../services/research';
 import type { ResearchReport, PublishStatus } from '../../services/research';
-import { BuyAndHoldShadowCard } from '../../components/admin/BuyAndHoldShadowCard';
+import { AnchorPublicationCard } from '../../components/admin/AnchorPublicationCard';
 
 const ASSET_CLASSES = [
     { id: 'BRASIL_10', label: 'Brasil 10 (Mix)', icon: <ShieldCheck size={18} className="text-emerald-500" />, desc: 'Carteira Defensiva Top Picks' },
@@ -208,9 +208,11 @@ export const AdminOperacoesTab: React.FC<Props> = ({
                 </table>
             </div>
 
-            {/* Ranking Buy-and-Hold (shadow, admin-only) */}
+            {/* Publicação da lista âncora BUY_AND_HOLD — fluxo próprio, mensal e
+                deliberado. Fica FORA da tabela do Research semanal de propósito:
+                o "Publicar Tudo Pendente" acima não pode levar a âncora a reboque. */}
             <div className="mt-6">
-                <BuyAndHoldShadowCard />
+                <AnchorPublicationCard />
             </div>
 
             {/* Modal — Prompt + Explainable IA */}

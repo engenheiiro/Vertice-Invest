@@ -44,6 +44,11 @@ const MUTATIONS: [string, Call][] = [
   ['triggerSnapshot', () => researchService.triggerSnapshot()],
   ['syncTimeSeries', () => researchService.syncTimeSeries()],
   ['generateExplainableAI', () => researchService.generateExplainableAI('id')],
+  // Publicação âncora: mesmo o dryRun é POST e passa pelo researchHeavyLimiter,
+  // então um 429 tem de virar exceção — um rascunho que "deu certo" sem calcular
+  // nada levaria o dono a publicar às cegas.
+  ['publishAnchorRanking (dryRun)', () => researchService.publishAnchorRanking({ assetClass: 'STOCK', dryRun: true })],
+  ['publishAnchorRanking (publica)', () => researchService.publishAnchorRanking({ assetClass: 'FII' })],
 ];
 
 // Leituras: fallback declarado. `undefined` = também deve lançar (auditoria e
@@ -60,7 +65,7 @@ const READS: [string, Call, unknown][] = [
   ['getDiscardLogs', () => researchService.getDiscardLogs(), []],
   ['getPublishStatus', () => researchService.getPublishStatus(), []],
   ['getReportDetails', () => researchService.getReportDetails('id'), undefined],
-  ['getBuyAndHoldShadow', () => researchService.getBuyAndHoldShadow(), undefined],
+  ['getBuyAndHoldShadow', () => researchService.getBuyAndHoldShadow('FII'), undefined],
 ];
 
 describe('researchService — contrato de erro HTTP', () => {
@@ -126,5 +131,109 @@ describe('researchService — contrato de erro HTTP', () => {
     } as unknown as Response);
 
     await expect(researchService.publish('id', 'ALL')).resolves.toEqual({ success: true });
+  });
+});
+
+/**
+ * Contrato de REQUISIÇÃO da publicação âncora.
+ *
+ * O que estes testes travam é a diferença entre "prévia" e "foi ao ar", que no
+ * cliente é um único booleano no corpo do POST. Se `dryRun` se perder no
+ * caminho, o botão "Ver rascunho" publica de verdade — sem confirmação, sem
+ * ninguém ter olhado a lista. É o defeito mais caro que este card pode ter.
+ *
+ * E `assetClass` precisa ir SEMPRE: o servidor roda as duas classes quando o
+ * campo não vem, então omiti-lo transforma "publicar Ações" em "publicar Ações
+ * e FIIs". O mesmo default silencioso já escondia os FIIs na leitura do shadow.
+ */
+describe('researchService.publishAnchorRanking — contrato de requisição', () => {
+  let apiSpy: ReturnType<typeof vi.spyOn>;
+
+  const okResponse = (body: unknown = { strategy: 'BUY_AND_HOLD', dryRun: true, results: [] }) => ({
+    ok: true,
+    status: 200,
+    json: async () => body,
+  });
+
+  const bodyOf = (call: unknown[]) => JSON.parse((call[1] as RequestInit).body as string);
+
+  beforeEach(() => {
+    apiSpy = vi.spyOn(authService, 'api');
+    apiSpy.mockResolvedValue(okResponse() as unknown as Response);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('manda POST para a rota âncora, nunca para a do Research semanal', async () => {
+    await researchService.publishAnchorRanking({ assetClass: 'STOCK', dryRun: true });
+    const [url, init] = apiSpy.mock.calls[0];
+    expect(url).toBe('/api/research/anchor/publish');
+    expect((init as RequestInit).method).toBe('POST');
+  });
+
+  it('dryRun: true viaja no corpo — é o que separa prévia de publicação', async () => {
+    await researchService.publishAnchorRanking({ assetClass: 'STOCK', dryRun: true });
+    expect(bodyOf(apiSpy.mock.calls[0])).toEqual({ assetClass: 'STOCK', dryRun: true });
+  });
+
+  it('sem dryRun explícito, publica de verdade (dryRun: false)', async () => {
+    await researchService.publishAnchorRanking({ assetClass: 'FII' });
+    expect(bodyOf(apiSpy.mock.calls[0])).toEqual({ assetClass: 'FII', dryRun: false });
+  });
+
+  it('a classe pedida é a classe enviada — FII não pode virar STOCK', async () => {
+    await researchService.publishAnchorRanking({ assetClass: 'FII', dryRun: true });
+    expect(bodyOf(apiSpy.mock.calls[0]).assetClass).toBe('FII');
+  });
+
+  it('sem assetClass, o campo é OMITIDO (servidor roda as duas classes)', async () => {
+    await researchService.publishAnchorRanking({ dryRun: true });
+    expect(bodyOf(apiSpy.mock.calls[0])).toEqual({ dryRun: true });
+  });
+
+  it('devolve o envelope do servidor intacto, com o built da prévia', async () => {
+    const payload = {
+      strategy: 'BUY_AND_HOLD',
+      dryRun: true,
+      results: [{ assetClass: 'STOCK', published: false, dryRun: true, built: { counts: { buy: 6 } } }],
+    };
+    apiSpy.mockResolvedValue(okResponse(payload) as unknown as Response);
+    await expect(researchService.publishAnchorRanking({ assetClass: 'STOCK', dryRun: true })).resolves.toEqual(payload);
+  });
+
+  it('propaga o bloqueio do portão como resultado, não como exceção', async () => {
+    // `blocked` é 200 com corpo — a tela precisa MOSTRAR o motivo, e um throw
+    // aqui viraria um toast de erro genérico sem o rascunho que não foi ao ar.
+    const payload = {
+      strategy: 'BUY_AND_HOLD',
+      dryRun: false,
+      results: [{ assetClass: 'STOCK', published: false, blocked: true, reason: 'último sync de fundamentos BR não está saudável' }],
+    };
+    apiSpy.mockResolvedValue(okResponse(payload) as unknown as Response);
+    const result = await researchService.publishAnchorRanking({ assetClass: 'STOCK' });
+    expect(result.results[0].blocked).toBe(true);
+    expect(result.results[0].reason).toContain('fundamentos');
+  });
+});
+
+describe('researchService.getBuyAndHoldShadow — classe explícita', () => {
+  let apiSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    apiSpy = vi.spyOn(authService, 'api');
+    apiSpy.mockResolvedValue({ ok: true, status: 200, json: async () => ({}) } as unknown as Response);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // O servidor faz default para STOCK quando o parâmetro não vem. Enquanto o
+  // cliente o omitia, os FIIs não apareciam em lugar nenhum do Admin.
+  it.each(['STOCK', 'FII'] as const)('manda assetClass=%s na query', async (assetClass) => {
+    await researchService.getBuyAndHoldShadow(assetClass);
+    expect(apiSpy.mock.calls[0][0]).toContain(`assetClass=${assetClass}`);
   });
 });

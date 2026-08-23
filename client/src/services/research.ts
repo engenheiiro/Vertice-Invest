@@ -258,6 +258,73 @@ export interface AnchorReport extends Omit<ResearchReport, 'content'> {
     };
 }
 
+/** Classes com motor âncora. CRYPTO/ETF/US não têm — a lista é BR e de renda. */
+export type AnchorAssetClass = 'STOCK' | 'FII';
+
+/**
+ * Rascunho publicável de uma classe — a saída de `buildAnchorRanking` no
+ * servidor. É o MESMO objeto que o cron mensal leva ao ar: já passou pelo
+ * portão de elegibilidade do motor, pela histerese contra a lista publicada
+ * anterior e pelo teto de composição. Não é a saída crua do motor (essa é a do
+ * endpoint `/buy-and-hold/shadow`, que não conhece histerese nem teto).
+ */
+export interface AnchorBuilt {
+    assetClass: AnchorAssetClass;
+    label: string;
+    strategy: string;
+    version: string;
+    generatedAt: string;
+    macro: { SELIC?: number; IPCA?: number; NTNB_LONG?: number; RATES_STALE?: boolean };
+    config: { minMarketCap: number; maxBeta: number; weights: AnchorAxes };
+    thresholds: { entryScore: number; holdScore: number };
+    disclaimer: string;
+    /** true = nunca houve publicação desta classe; sem lista anterior, vale o limiar de entrada para todos. */
+    bootstrap: boolean;
+    previousAnalysisId: string | null;
+    ranking: AnchorRankingItem[];
+    exits: AnchorExit[];
+    excludedByReason: { reason: string; count: number }[];
+    counts: {
+        analyzed: number;
+        eligible: number;
+        excluded: number;
+        buy: number;
+        wait: number;
+        held: number;
+        entered: number;
+        exits: number;
+    };
+}
+
+/**
+ * Desfecho da publicação âncora de UMA classe. Os estados são mutuamente
+ * exclusivos e a tela precisa distinguir todos:
+ *  - `blocked`   → o portão de qualidade reprovou; `reason` diz por quê e
+ *                  `built` traz o rascunho que NÃO foi ao ar.
+ *  - `dryRun`    → prévia; nada foi escrito, `built` é o que iria ao ar.
+ *  - `published` → foi ao ar; sem `built` (o servidor devolve só os agregados).
+ *  - `error`     → a classe falhou sozinha, sem derrubar a outra.
+ */
+export interface AnchorPublishOutcome {
+    assetClass: AnchorAssetClass;
+    published: boolean;
+    blocked?: boolean;
+    reason?: string;
+    dryRun?: boolean;
+    error?: string;
+    built?: AnchorBuilt;
+    analysisId?: string;
+    counts?: AnchorBuilt['counts'];
+    exits?: AnchorExit[];
+    bootstrap?: boolean;
+}
+
+export interface AnchorPublishResponse {
+    strategy: string;
+    dryRun: boolean;
+    results: AnchorPublishOutcome[];
+}
+
 /** Motivo pelo qual a lista âncora não pôde ser exibida. */
 export type AnchorUnavailable = 'FORBIDDEN' | 'EMPTY';
 
@@ -393,11 +460,50 @@ export const researchService = {
         return await response.json();
     },
 
-    async getBuyAndHoldShadow(): Promise<BuyAndHoldShadow> {
-        const response = await authService.api('/api/research/buy-and-hold/shadow');
+    /**
+     * Saída CRUA do motor âncora, sem histerese e sem teto de composição —
+     * diagnóstico do cálculo, não prévia de publicação (para essa, use
+     * `publishAnchorRanking({ dryRun: true })`).
+     *
+     * `assetClass` é explícito de propósito: o servidor faz default para STOCK
+     * quando o parâmetro não vem, e omiti-lo escondia os FIIs sem avisar.
+     */
+    async getBuyAndHoldShadow(assetClass: AnchorAssetClass = 'STOCK'): Promise<BuyAndHoldShadow> {
+        const response = await authService.api(`/api/research/buy-and-hold/shadow?assetClass=${assetClass}`);
         if (!response.ok) {
             const data = await response.json().catch(() => ({}));
             throw new Error(data.message || "Erro ao gerar ranking Buy-and-Hold.");
+        }
+        return await response.json();
+    },
+
+    /**
+     * Válvula manual da publicação âncora (BUY_AND_HOLD). O cron é MENSAL —
+     * isto é como o admin publica fora dessa janela, e como ele confere antes.
+     *
+     * `dryRun: true` percorre o MESMO caminho do cron (motor → portão de
+     * qualidade → histerese → teto de composição) e devolve o rascunho em
+     * `built` sem escrever nada. Por isso a prévia e o que vai ao ar são
+     * literalmente o mesmo cálculo, e não duas aproximações que podem divergir.
+     *
+     * Sem `assetClass` o servidor roda Ações E FIIs. O card sempre manda a
+     * classe: publicar as duas de uma vez não pode acontecer por engano.
+     *
+     * NÃO toca no Research semanal (BUY_HOLD): outra strategy, outro ponteiro.
+     */
+    async publishAnchorRanking(
+        { assetClass, dryRun = false }: { assetClass?: AnchorAssetClass; dryRun?: boolean } = {},
+    ): Promise<AnchorPublishResponse> {
+        const response = await authService.api('/api/research/anchor/publish', {
+            method: 'POST',
+            body: JSON.stringify(assetClass ? { assetClass, dryRun } : { dryRun }),
+        });
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(
+                data.message
+                || (dryRun ? 'Erro ao gerar o rascunho da lista âncora.' : 'Erro ao publicar a lista âncora.'),
+            );
         }
         return await response.json();
     },
