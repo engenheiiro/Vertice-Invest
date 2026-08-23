@@ -4,6 +4,10 @@ import { getFiiManager } from '../../config/fiiManagerMap.js';
 // (M9) Threshold global centralizado em financialConstants.
 import { BUY_THRESHOLD } from '../../config/financialConstants.js';
 import { getTunablesSync } from '../configService.js'; // (I13) cap de cripto editável pelo admin
+// Tabela de dedução compartilhada com a retenção de assento do semanal
+// (utils/weeklyRetention.js): um incumbente readmitido entra por último no balde
+// e precisa da MESMA régua, senão a mesma lista publica dois critérios.
+import { concentrationPenaltyFor, CONCENTRATION_SCORE_FLOOR } from '../../utils/concentrationPenalty.js';
 
 // Composite estrutural = média de quality, valuation e risk (0–100 cada).
 // Usado como critério de desempate quando dois ativos têm o mesmo score de perfil.
@@ -144,25 +148,20 @@ export const portfolioEngine = {
                 const isFII = asset.type === 'FII';
                 const managerProxy = isFII ? getFiiManager(asset.ticker) : 'N/A';
 
-                let penalty = 0;
-
-                // 1. Penalidade por Concentração Setorial (desligada em ranking mono-setor)
-                if (!relax) {
-                    const sCount = sectorCounts[macroSector] || 0;
-                    if (sCount >= 3) penalty += 15; // A partir do 4º ativo no mesmo macro-setor
-                    else if (sCount >= 2) penalty += 5;  // A partir do 3º ativo
-                    sectorCounts[macroSector] = sCount + 1;
-                }
-
-                // 2. Penalidade por Concentração de Gestora (FIIs)
-                if (isFII) {
-                    const mCount = managerCounts[managerProxy] || 0;
-                    if (mCount >= 2) penalty += 20; // A partir do 3º FII da mesma gestora
-                    managerCounts[managerProxy] = mCount + 1;
-                }
+                // Régua única (utils/concentrationPenalty.js): 3º ativo do balde -5,
+                // 4º+ -15, 3º FII da mesma gestora -20. Em ranking mono-setor a
+                // dedução setorial fica desligada (puniria a lista inteira).
+                const penalty = concentrationPenaltyFor({
+                    sectorCount: sectorCounts[macroSector] || 0,
+                    managerCount: isFII ? (managerCounts[managerProxy] || 0) : 0,
+                    isFII,
+                    relaxSectorConcentration: relax,
+                });
+                if (!relax) sectorCounts[macroSector] = (sectorCounts[macroSector] || 0) + 1;
+                if (isFII) managerCounts[managerProxy] = (managerCounts[managerProxy] || 0) + 1;
 
                 if (penalty > 0) {
-                    const newScore = Math.max(10, asset.score - penalty);
+                    const newScore = Math.max(CONCENTRATION_SCORE_FLOOR, asset.score - penalty);
                     return {
                         ...asset,
                         score: newScore,

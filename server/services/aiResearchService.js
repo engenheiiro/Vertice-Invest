@@ -14,7 +14,9 @@ import { BUY_THRESHOLD, DEFAULT_SELIC_FALLBACK, DEFAULT_NTNB_FALLBACK } from '..
 import { GEMINI_TEXT_MODEL } from '../config/aiModels.js';
 import { randomUUID } from 'crypto';
 import ResearchBatch from '../models/ResearchBatch.js';
-import { finalizeRanking } from '../utils/rankingContract.js';
+import { finalizeRanking, normalizeRankingTicker } from '../utils/rankingContract.js';
+import { WEEKLY_HYSTERESIS, isWeeklyRetentionEnabled } from '../config/weeklyHysteresis.js';
+import { applyWeeklyRetention, applyBrasil10Retention } from '../utils/weeklyRetention.js';
 import {
     calculateStockCalibrationConfidence,
     calculateStockShadowAxes,
@@ -50,6 +52,65 @@ export const stripStockCalibrationInternals = item => {
         ...publicItem
     } = item || {};
     return publicItem;
+};
+
+/**
+ * Auditoria da retenção de assento, no formato que vai para o `inputManifest` do
+ * documento. Enxuta de propósito: o manifesto é metadado da apuração, não uma
+ * segunda cópia do ranking.
+ */
+const buildRetentionAudit = ({ assetClass, result, applied }) => ({
+    version: 'WEEKLY_RETENTION_V1',
+    assetClass,
+    // `shadow: true` = calculado e registrado, mas o ranking publicado é o do draft.
+    shadow: WEEKLY_HYSTERESIS.shadow,
+    applied,
+    holdScore: WEEKLY_HYSTERESIS.holdScore,
+    maxRetentionShare: WEEKLY_HYSTERESIS.maxRetentionShare,
+    bootstrap: result.bootstrap,
+    counts: result.counts,
+    retained: result.retained.map(r => ({
+        ticker: r.ticker,
+        profile: r.profile,
+        previousProfile: r.previousProfile ?? null,
+        previousScore: r.previousScore ?? null,
+        score: r.score,
+        // Registrado para tornar visível o que a regra inviolável garante: um
+        // incumbente retido abaixo de 70 aparece na lista como AGUARDAR.
+        action: r.action,
+        displaced: r.displaced,
+    })),
+    exits: result.exits.map(e => ({
+        ticker: e.ticker,
+        outcome: e.outcome,
+        reason: e.reason,
+        score: e.score ?? null,
+        previousScore: e.previousScore ?? null,
+    })),
+});
+
+/** Log + Sentry do resultado da retenção. Estourar o teto é sinal, não rotina. */
+const reportRetention = (assetClass, result) => {
+    const mode = WEEKLY_HYSTERESIS.shadow ? 'shadow' : 'ativo';
+    logger.info(
+        `[Retenção ${assetClass}] ${mode}: ${result.counts.retained} retidos, `
+        + `${result.counts.exits} saídas (teto ${result.counts.maxRetentions}/${result.counts.seats})`,
+        {
+            assetClass,
+            shadow: WEEKLY_HYSTERESIS.shadow,
+            bootstrap: result.bootstrap,
+            ...result.counts,
+            retained: result.retained.map(r => `${r.ticker}:${r.previousScore}->${r.score}/${r.action}`),
+        },
+    );
+    if (result.counts.budgetExhausted) {
+        // Base degradada (sync parcial, fonte fora do ar) congelaria a lista em
+        // incumbentes; o teto impede, mas o fato de ele ter mordido é um aviso.
+        const msg = `Teto de retenções estourado em ${assetClass} `
+            + `(${result.counts.maxRetentions} de ${result.counts.seats} assentos)`;
+        logger.warn(`⚠️ [Retenção ${assetClass}] ${msg}`);
+        Sentry.captureMessage(msg, 'warning');
+    }
 };
 
 // Exportado para teste (T6). Função pura: calcula o delta entre dois rankings.
@@ -235,8 +296,38 @@ export const getTop5Defensive = (processedAssets) => {
 // Exportado para teste. Monta o Brasil 10 (≤5 STOCK + ≤5 FII) a partir dos universos
 // já processados, reaplica action pelo threshold global e ordena/posiciona. Função pura
 // (sem I/O); o delta de posição é aplicado por quem chama via calculateRankingDelta.
-export const buildBrasil10 = (stockProcessed, fiiProcessed) => {
-    const merged = [...getTop5Defensive(stockProcessed), ...getTop5Defensive(fiiProcessed)]
+//
+// RETENÇÃO DE ASSENTO: o Brasil 10 não passa pelo draft, então ganha o seu passo
+// próprio aqui. Ele mora em `buildBrasil10` — e não dentro de `getTop5Defensive` —
+// porque o teto de retenções é do POOL DE 10 (3 assentos), não de cada metade de 5:
+// dar meio orçamento a cada chamada daria teto 1, apertado demais para as 112
+// trocas de assento medidas. As metades continuam fixas em 5+5.
+//
+// @param {object} [options]
+// @param {Map|Array|null} [options.previous] baseline publicado de BRASIL_10.
+//   Ausente (`undefined`) = não avaliar retenção; `null` = primeira apuração.
+// @param {function} [options.onRetentionAudit] recebe a auditoria (padrão
+//   `options.trace` do portfolioEngine: coleta sem mudar o valor de retorno).
+export const buildBrasil10 = (stockProcessed, fiiProcessed, options = {}) => {
+    let halves = [
+        { selected: getTop5Defensive(stockProcessed), universe: stockProcessed || [] },
+        { selected: getTop5Defensive(fiiProcessed), universe: fiiProcessed || [] },
+    ];
+
+    if (options.previous !== undefined && isWeeklyRetentionEnabled('BRASIL_10')) {
+        const retention = applyBrasil10Retention({ halves, previous: options.previous });
+        if (options.onRetentionAudit) {
+            options.onRetentionAudit(buildRetentionAudit({
+                assetClass: 'BRASIL_10',
+                result: retention,
+                applied: !WEEKLY_HYSTERESIS.shadow,
+            }));
+        }
+        reportRetention('BRASIL_10', retention);
+        if (!WEEKLY_HYSTERESIS.shadow) halves = retention.halves;
+    }
+
+    const merged = halves.flatMap(half => half.selected)
         .map(item => ({ ...item, action: item.score >= BUY_THRESHOLD ? 'BUY' : 'WAIT' }))
         .sort((a, b) => {
             const scoreDiff = b.score - a.score;
@@ -250,28 +341,62 @@ export const buildBrasil10 = (stockProcessed, fiiProcessed) => {
     return merged.map((item, idx) => ({ ...item, position: idx + 1 }));
 };
 
-const normalize = (ticker) => {
-    if (!ticker) return '';
-    return ticker.toUpperCase().replace('.SA', '').replace(/[^A-Z0-9]/g, '').trim();
+// Uma chave de identidade só entre apurações. `normalizeRankingTicker` é a mesma
+// função que o contrato de ranking usa; o delta de posição e a retenção de
+// assento precisam concordar sobre o que é "o mesmo ticker", senão a retenção
+// veria uma saída onde o delta vê permanência.
+const normalize = normalizeRankingTicker;
+
+/**
+ * Baseline PUBLICADO da classe: `Map<tickerNormalizado, {ticker, name, position,
+ * score, action, riskProfile}>`, ou `null` quando não há publicação anterior
+ * (primeira apuração — `bootstrap`, e a retenção não retém ninguém).
+ *
+ * Filtra por `isRankingPublished` pelo mesmo motivo do `generateComparisonReport`:
+ * sem o filtro, o baseline seria um rascunho que o TTL apaga.
+ *
+ * Extraído para ser lido UMA vez por apuração e consumido pelos dois clientes
+ * (delta de posição e retenção de assento) — antes eram duas idas ao banco pela
+ * mesma linha.
+ */
+export const loadPublishedRankingBaseline = async (assetClass, strategy) => {
+    try {
+        const lastReport = await MarketAnalysis.findOne(
+            { assetClass, strategy, isRankingPublished: true },
+        ).sort({ createdAt: -1 }).select('content.ranking').lean();
+        if (!lastReport?.content?.ranking) return null;
+        const baseline = new Map();
+        lastReport.content.ranking.forEach(item => {
+            const key = normalize(item.ticker);
+            if (!key) return;
+            baseline.set(key, {
+                ticker: item.ticker,
+                name: item.name ?? null,
+                position: item.position ?? null,
+                score: Number.isFinite(Number(item.score)) ? Number(item.score) : null,
+                action: item.action ?? null,
+                riskProfile: item.riskProfile ?? null,
+            });
+        });
+        return baseline;
+    } catch (e) {
+        // Fail-closed: sem baseline, o delta fica nulo e a retenção não age —
+        // exatamente o comportamento anterior a ela existir.
+        logger.warn(`[Ranking ${assetClass}] baseline publicado indisponível: ${e.message}`);
+        return null;
+    }
 };
 
 // Exportado para teste (baseline publicado — ver comentário interno).
-export const calculateRankingDelta = async (currentList, assetClass, strategy) => {
+// `baseline` opcional evita a segunda leitura quando quem chama já o carregou.
+export const calculateRankingDelta = async (currentList, assetClass, strategy, baseline) => {
     try {
-        // Baseline PUBLICADO — mesmo critério do generateComparisonReport. Sem o filtro,
-        // as setas de posição comparavam contra rascunhos não publicados (que o TTL apaga).
-        const lastReport = await MarketAnalysis.findOne({ assetClass, strategy, isRankingPublished: true }).sort({ createdAt: -1 });
-        const prevPosMap = new Map();
-        if (lastReport && lastReport.content && lastReport.content.ranking) {
-            lastReport.content.ranking.forEach(r => {
-                const t = normalize(r.ticker);
-                if (t) prevPosMap.set(t, r.position);
-            });
-        }
+        const prev = baseline !== undefined
+            ? baseline
+            : await loadPublishedRankingBaseline(assetClass, strategy);
         return currentList.map(item => {
-            const t = normalize(item.ticker);
-            const prev = prevPosMap.get(t);
-            return { ...item, previousPosition: prev !== undefined ? prev : null };
+            const entry = prev?.get(normalize(item.ticker));
+            return { ...item, previousPosition: entry?.position ?? null };
         });
     } catch (e) {
         return currentList;
@@ -403,6 +528,35 @@ export const aiResearchService = {
                 ranking = draftAndPenalize(processedAssets);
             }
 
+            // ── RETENÇÃO DE ASSENTO ────────────────────────────────────────────
+            // Passo ÚNICO na fresta entre o draft e o sort global: as três
+            // seleções acima (calibração de ações, draft duplo de ETF, draft
+            // padrão) convergem aqui, então nenhuma delas precisa conhecer a
+            // retenção. Ela decide QUEM FICA na lista — nunca a `action`, que
+            // segue derivada do score logo adiante por `finalizeRanking`.
+            // BRASIL_10 não passa por aqui no pipeline real (é montado por
+            // `buildBrasil10` a partir dos universos de STOCK e FII) e tem o seu
+            // próprio passo lá; excluí-lo evita duas semânticas para a mesma classe.
+            let retentionAudit = null;
+            const baseline = await loadPublishedRankingBaseline(assetClass, strategy);
+            if (isWeeklyRetentionEnabled(assetClass) && assetClass !== 'BRASIL_10') {
+                const retention = applyWeeklyRetention({
+                    current: ranking,
+                    previous: baseline,
+                    processedAssets,
+                    options: {
+                        relaxSectorConcentration: !!draftOptions.relaxSectorConcentration,
+                    },
+                });
+                reportRetention(assetClass, retention);
+                retentionAudit = buildRetentionAudit({
+                    assetClass,
+                    result: retention,
+                    applied: !WEEKLY_HYSTERESIS.shadow,
+                });
+                if (!WEEKLY_HYSTERESIS.shadow) ranking = retention.ranking;
+            }
+
             // Ordenação Global por Score. Empates (pós-penalidade de concentração) desempatados
             // pelo composite estrutural para evitar que ordem de inserção do draft determine posição.
             ranking.sort((a, b) => {
@@ -416,7 +570,7 @@ export const aiResearchService = {
             // Atribuição de Posição Global (Essencial para o cálculo de Delta/Setas nas próximas revisões)
             ranking = ranking.map((item, idx) => ({ ...item, position: idx + 1 }));
 
-            ranking = await calculateRankingDelta(ranking, assetClass, strategy);
+            ranking = await calculateRankingDelta(ranking, assetClass, strategy, baseline);
 
             // Estatísticas de Tier para Monitoramento
             const tierStats = {
@@ -463,11 +617,11 @@ export const aiResearchService = {
 
             // discardLogs em memória: o relatório TXT usa isto diretamente em vez de
             // reconsultar o banco por janela de tempo (que perdia/misturava runs).
-            return { ranking, fullList, processedAssets, tierStats, discardLogs: discardOperations };
+            return { ranking, fullList, processedAssets, tierStats, discardLogs: discardOperations, retentionAudit, baseline };
 
         } catch (error) {
             logger.error(`Erro ranking: ${error.message}`);
-            return { ranking: [], fullList: [], processedAssets: [], discardLogs: [] };
+            return { ranking: [], fullList: [], processedAssets: [], discardLogs: [], retentionAudit: null, baseline: null };
         }
     },
 
@@ -499,7 +653,7 @@ export const aiResearchService = {
             };
             await batch.save();
 
-            const saveAnalysis = async (assetClass, ranking, fullList) => {
+            const saveAnalysis = async (assetClass, ranking, fullList, retentionAudit = null) => {
                 if (!ranking || ranking.length === 0) {
                     logger.warn(`🚨 [Research] Ranking VAZIO gerado para ${assetClass}`);
                     Sentry.captureMessage(`Ranking vazio gerado para ${assetClass}`, 'warning');
@@ -533,7 +687,9 @@ export const aiResearchService = {
                     batchId: batch._id,
                     runId,
                     algorithmVersion,
-                    inputManifest: batch.inputManifest,
+                    // A auditoria de retenção viaja com o documento: em shadow ela é
+                    // a ÚNICA evidência do que a retenção teria feito nesta apuração.
+                    inputManifest: { ...batch.inputManifest, retentionAudit },
                     content: { ranking: publicRanking, fullAuditLog: fullList },
                     generatedBy: adminId,
                     comparisonReport,
@@ -547,12 +703,12 @@ export const aiResearchService = {
             currentClass = 'STOCK';
             logger.info("ℹ️ [AI Research] Processando Ações...");
             const stockData = await this.calculateRanking('STOCK', strat);
-            await saveAnalysis('STOCK', stockData.ranking, stockData.fullList);
+            await saveAnalysis('STOCK', stockData.ranking, stockData.fullList, stockData.retentionAudit);
 
             currentClass = 'FII';
             logger.info("ℹ️ [AI Research] Processando FIIs...");
             const fiiData = await this.calculateRanking('FII', strat);
-            await saveAnalysis('FII', fiiData.ranking, fiiData.fullList);
+            await saveAnalysis('FII', fiiData.ranking, fiiData.fullList, fiiData.retentionAudit);
 
             currentClass = 'CRYPTO';
             logger.info("ℹ️ [AI Research] Processando Criptomoedas...");
@@ -576,9 +732,17 @@ export const aiResearchService = {
 
             currentClass = 'BRASIL_10';
             logger.info("ℹ️ [AI Research] Processando Brasil 10...");
-            let brasil10List = buildBrasil10(stockData.processedAssets, fiiData.processedAssets);
-            brasil10List = await calculateRankingDelta(brasil10List, 'BRASIL_10', strat);
-            await saveAnalysis('BRASIL_10', brasil10List, brasil10List);
+            // O baseline do Brasil 10 é o documento publicado da própria classe
+            // BRASIL_10 — separado do de STOCK e do de FII — e é lido uma vez só,
+            // servindo tanto à retenção de assento quanto ao delta de posição.
+            const brasil10Baseline = await loadPublishedRankingBaseline('BRASIL_10', strat);
+            let brasil10Retention = null;
+            let brasil10List = buildBrasil10(stockData.processedAssets, fiiData.processedAssets, {
+                previous: brasil10Baseline,
+                onRetentionAudit: audit => { brasil10Retention = audit; },
+            });
+            brasil10List = await calculateRankingDelta(brasil10List, 'BRASIL_10', strat, brasil10Baseline);
+            await saveAnalysis('BRASIL_10', brasil10List, brasil10List, brasil10Retention);
 
             try {
                 const allData = {
