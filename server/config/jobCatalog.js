@@ -53,6 +53,15 @@ export const JOB_CATALOG = {
         maxSilenceHours: 192, // 8 dias
         severity: 'WARN',
     },
+    'monthly-anchor-publish': {
+        label: 'Publicação da lista âncora Buy-and-Hold (dia 1, 07:30)',
+        // 31 dias + 3 de folga. Um job MENSAL é o mais fácil de morrer sem que
+        // ninguém note — o web service hiberna, o tick some, e a lista fica
+        // parada até alguém reparar. Este teto é o que transforma o silêncio em
+        // alarme. Não é heavy: ver o comentário do cron em schedulerService.js.
+        maxSilenceHours: 816,
+        severity: 'WARN',
+    },
     'daily-snapshot': {
         label: 'Snapshot patrimonial (23:59)',
         maxSilenceHours: 30,

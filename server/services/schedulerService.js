@@ -28,6 +28,7 @@ import { calculateDailyDietz } from '../utils/mathUtils.js';
 import { valueFixedIncomeAsset } from '../utils/fixedIncome.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
 import { validateFundamentalsPublicationHealth } from '../utils/ingestionHealth.js';
+import { runAnchorPublication } from './anchorPublicationService.js';
 import {
     activateResearchSections,
     hasSectionContent,
@@ -681,6 +682,51 @@ export const initScheduler = () => {
             await runWeeklyAutoPublish();
         } catch (e) {
             logger.error(`❌ Auto-publish semanal: ${e.message}`);
+            Sentry.captureException(e);
+        }
+    });
+
+    // 5d. Publicação MENSAL da lista âncora (estratégia BUY_AND_HOLD) — dia 1, 07:30.
+    //
+    // Cadência mensal é decisão de produto, não de custo: a tese é carregar por
+    // décadas, e recalcular toda semana convida exatamente o giro que a histerese
+    // existe para evitar. Mensal + histerese é o par; um sem o outro não resolve.
+    //
+    // 07:30 fica FORA do pregão da B3 (10:00–18:00, after até 18:25). Rodar durante
+    // o pregão leria candle parcial como fechamento. Às 07:30 os dados vêm da rotina
+    // pós-mercado do último dia útil — fechamento consolidado, que é o que a lista
+    // âncora quer. Dia 1 caindo em fim de semana ou feriado não é problema: a lista
+    // não muda por um pregão, e forçar dia útil só adiciona uma engrenagem a mais.
+    //
+    // NÃO usa `scheduleHeavy` DE PROPÓSITO. `EXTERNAL_SCHEDULER` move os 3 jobs
+    // pesados DIÁRIOS para Render Cron Jobs; um job diário perdido é recuperado no
+    // dia seguinte, um job MENSAL perdido deixa a lista um mês inteiro parada. Como
+    // a flag é ligada no web service sem que ninguém cadastre um Cron Job novo por
+    // ela, marcar este como pesado significaria desligá-lo em silêncio. Ele fica
+    // in-app sempre, e o silêncio é vigiado pelo jobCatalog.
+    //
+    // `DISABLE_SCHEDULER=true` continua desligando este cron junto com todos os
+    // outros: o guard sai de `initScheduler` ANTES de qualquer `schedule()`. É o que
+    // impede a máquina do desenvolvedor de publicar no Mongo de PRODUÇÃO, para onde
+    // o `.env` local aponta.
+    schedule('30 7 1 * *', 'monthly-anchor-publish', async () => {
+        logger.info("⚓ Publicação mensal da lista âncora (BUY_AND_HOLD)");
+        try {
+            const result = await runAnchorPublication();
+            const blocked = result.results.filter(item => item.blocked);
+            for (const item of blocked) {
+                Sentry.captureMessage(`Publicação âncora bloqueada (${item.assetClass}): ${item.reason}`, "warning");
+            }
+            const published = result.results.filter(item => item.published).map(item => item.assetClass);
+            if (published.length) {
+                await createBroadcast({
+                    type: 'RANKING_PUBLISHED',
+                    title: 'Lista Buy-and-Hold atualizada',
+                    message: 'A lista de ativos para carregar por décadas foi reavaliada. Confira o que entrou, o que ficou e o que saiu.',
+                });
+            }
+        } catch (e) {
+            logger.error(`❌ Publicação âncora mensal: ${e.message}`);
             Sentry.captureException(e);
         }
     });

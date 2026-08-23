@@ -5,7 +5,7 @@ import { JOB_CATALOG } from '../config/jobCatalog.js';
 // GUARD DE INSTÂNCIA DO SCHEDULER (DISABLE_SCHEDULER)
 //
 // initScheduler() era chamado incondicionalmente no import de app.js. Como o .env
-// local aponta para o Mongo de PRODUÇÃO, todo `npm run dev` registrava os 18 crons
+// local aponta para o Mongo de PRODUÇÃO, todo `npm run dev` registrava os crons
 // e passava a executá-los contra o mesmo banco do host — em 19/08/2026 dois JobRun
 // de 'daily-evening' abriram no mesmo segundo (21:30:00.021 e 21:30:00.038) e
 // ambos ficaram RUNNING.
@@ -18,7 +18,7 @@ import { JOB_CATALOG } from '../config/jobCatalog.js';
 //  1. COM a flag: nenhum cron registrado E nenhuma rotina de boot agendada — o
 //     backfill de snapshot dos 15s escreve no banco, então o guard tem que vir
 //     antes dele, não só antes do cron.schedule.
-//  2. SEM a flag: comportamento idêntico ao de hoje (os 18 jobs + as rotinas de
+//  2. SEM a flag: comportamento idêntico ao de hoje (todos os jobs + as rotinas de
 //     boot). Produção não pode ficar muda por variável ausente ou escrita errada
 //     — silêncio de scheduler não deixa rastro, é pior que duplicação.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,10 +36,10 @@ const { initScheduler } = await import('../services/schedulerService.js');
 // Os jobs que initScheduler registra hoje, na ordem em que aparecem no arquivo.
 const JOBS_ESPERADOS = [
     'macro-sync', 'quotes-sync', 'radar-alpha', 'backtest-intraday', 'daily-morning',
-    'daily-evening', 'weekly-autopublish', 'daily-snapshot', 'subscriptions-check',
-    'dividends-sync', 'holidays-sync', 'us-fundamentals', 'fx-history',
-    'assets-reactivation', 'storage-cleanup', 'treasury-prices', 'lgpd-retention',
-    'data-health',
+    'daily-evening', 'weekly-autopublish', 'monthly-anchor-publish', 'daily-snapshot',
+    'subscriptions-check', 'dividends-sync', 'holidays-sync', 'us-fundamentals',
+    'fx-history', 'assets-reactivation', 'storage-cleanup', 'treasury-prices',
+    'lgpd-retention', 'data-health',
 ];
 
 const flagOriginal = process.env.DISABLE_SCHEDULER;
@@ -102,7 +102,7 @@ describe('sem a flag — comportamento idêntico ao de hoje', () => {
         delete process.env.DISABLE_SCHEDULER;
     });
 
-    it('registra os 18 crons', () => {
+    it('registra todos os crons do catálogo', () => {
         const resultado = initScheduler();
 
         expect(cron.schedule).toHaveBeenCalledTimes(JOBS_ESPERADOS.length);
@@ -113,6 +113,11 @@ describe('sem a flag — comportamento idêntico ao de hoje', () => {
         const expressoes = vi.mocked(cron.schedule).mock.calls.map(([expr]) => expr);
         expect(expressoes).toContain('*/15 * * * *');   // quotes-sync
         expect(expressoes).toContain('30 18 * * *');    // daily-evening (heavy)
+        // Publicação âncora mensal: dia 1 às 07:30, FORA do pregão da B3
+        // (10:00–18:00). Rodar durante o pregão gravaria candle parcial como
+        // fechamento. É o cron que mais depende deste guard: mensal, publica no
+        // Mongo de produção e não é `heavy` — logo, só DISABLE_SCHEDULER o cala.
+        expect(expressoes).toContain('30 7 1 * *');     // monthly-anchor-publish
     });
 
     it('todo job esperado existe no catálogo da sentinela', () => {
