@@ -136,3 +136,48 @@ Termine com um resumo curto, em português claro, contendo:
 | ETF | 41 | 15 |
 
 Brasil 10: Jaccard 1,000 contra a publicação de 21/08. Fundamentos: Ações 331/994 aceitos, FIIs 310/560. Zero erros, 9 avisos operacionais, 11 alertas de performance.
+
+---
+
+## Execução — 23/08/2026, 18:13–18:26 BRT (domingo, pregão fechado)
+
+**Veredito: LIMPO em 1 ciclo de sync.** Nenhum dos sete gatilhos disparou.
+
+Ferramenta: `server/scripts/auditRankingRun.js` (somente leitura; sai 0 = LIMPO,
+1 = CRÍTICO, 2 = falha do próprio auditor). Ele lê o que foi PERSISTIDO, não
+recalcula ao vivo — é exatamente o que a publicação levaria ao ar.
+
+| classe | itens | anterior | COMPRAR | retidos | saídas | crítico |
+|---|---|---|---|---|---|---|
+| Brasil 10 | 10 | 10 | 10 | 1 | 0 | não |
+| Ações | 30 | 30 | 18 | 0 | 4 | não |
+| FIIs | 30 | 30 | 30 | 1 | 1 | não |
+| Cripto | 16 | 16 | 5 | 0 | 0 | não |
+| Ações US | 30 | 30 | 16 | 0 | 0 | não |
+| REIT | 24 | 24 | 13 | 0 | 0 | não |
+| ETF | 41 | 41 | 15 | 0 | 0 | não |
+
+Brasil 10: 5 ações + 5 FIIs, Jaccard 1,000 contra a publicação de 21/08.
+Fundamentos: Ações 331/994, FIIs 310/560 aceitos — portão aprovado.
+Sync: 12m45s, `[ERROS] (0)`, 9 avisos operacionais, 11 alertas de performance.
+Contaminação entre estratégias: nenhuma nas duas direções.
+
+**Nada foi publicado.** Todos os documentos seguem com `isRankingPublished:false`.
+
+### Registrado e não tratado (fora da definição de crítico)
+
+- **brapi com cota mensal estourada** (HTTP 429, circuit breaker aberto 2×) —
+  limite externo do plano gratuito, não tem conserto em código.
+- **Lacunas de símbolo já documentadas** (HOLX, MMC, SEE, CFLT, EXAS, MRUS) —
+  vivos, o Yahoo/Google não servem o símbolo; não blacklistar.
+- **Yahoo falhou pontualmente** para EA, NGRD3, HSRE11 e um lote de 30 —
+  fallback acionado; nenhum deles entrou nas listas com fundamento velho.
+- **FII em 30/30 COMPRAR** — achado V-02 do estudo de maturidade; exige
+  recalibração de escala, fora de escopo.
+- **11 alertas de performance do backtest** (MTRE3, POMO4, PETR4, TRXF11,
+  TGAR11, BBIG11) — picks publicados que caíram; é informação, não falha.
+- **30 ativos ainda inativos** após a reativação — item conhecido.
+- **Recálculo de outra origem às 18:37 BRT** — 12 min depois do sync deste
+  ciclo, `runId` distinto e sem log nesta máquina (veio do host de produção).
+  Virou o rascunho corrente e é ele que a auditoria leu; contagens idênticas às
+  do sync deste ciclo, contrato limpo. Não é nenhum dos sete gatilhos.
