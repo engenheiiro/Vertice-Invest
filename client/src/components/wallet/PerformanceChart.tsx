@@ -108,6 +108,10 @@ export const PerformanceChart = React.memo(() => {
         // sem escopo e o efeito rodaria de novo com o id (duas chamadas caras).
         if (!isWalletScopeReady) return;
         loadPerformance();
+        // `loadPerformance` é recriada a cada render; como dependência ela anularia
+        // justamente o cuidado descrito acima, refazendo a chamada cara a cada
+        // render em vez de só quando o escopo/carteira muda.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isDemoMode, activeWalletId, isWalletScopeReady]);
 
     // --- RECONCILIAÇÃO COM OS KPIs ---

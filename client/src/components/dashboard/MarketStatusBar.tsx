@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { TrendingUp, TrendingDown, Minus, Percent, Clock } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Percent } from 'lucide-react';
 import { MarketIndex } from '../../hooks/useDashboardData';
 
 interface MarketStatusBarProps {

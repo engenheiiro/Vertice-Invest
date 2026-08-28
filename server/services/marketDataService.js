@@ -96,7 +96,7 @@ export const marketDataService = {
             }
 
             return { price: 0, change: 0, name: ticker, sector: 'Outros' };
-        } catch (error) {
+        } catch {
             return { price: 0, change: 0, name: ticker, sector: 'Outros' };
         }
     },
@@ -385,7 +385,7 @@ export const marketDataService = {
                 }
             }
             return historyEntry ? historyEntry.history : null;
-        } catch (error) {
+        } catch {
             return historyEntry?.history || null;
         }
     },
@@ -428,7 +428,7 @@ export const marketDataService = {
                 };
             }
             return null;
-        } catch (error) {
+        } catch {
             return null;
         }
     },
@@ -457,7 +457,7 @@ export const marketDataService = {
                 };
             }
             return FALLBACK_MACRO;
-        } catch (e) {
+        } catch {
             return FALLBACK_MACRO;
         }
     },

@@ -55,6 +55,10 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
             document.documentElement.style.overflow = '';
         }
         return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
+        // Recarrega só ao ABRIR ou trocar de ativo. `loadTransactions` é recriada a
+        // cada render: incluí-la buscaria a primeira página em loop, e cada resposta
+        // muda o estado que dispara o render seguinte.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, ticker]);
 
     const loadTransactions = async (pageNum: number, isInitial = false) => {
@@ -102,7 +106,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
             loadTransactions(1, true);
             refreshWallet(); // Invalida queries globais
             addToast('Movimentação excluída.', 'success');
-        } catch (e) {
+        } catch {
             addToast('Erro ao excluir a movimentação.', 'error');
         }
     };

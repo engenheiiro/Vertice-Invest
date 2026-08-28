@@ -388,7 +388,14 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // --- STATES & MEMOIZED CALCULATIONS ---
 
     // LÓGICA DE INJEÇÃO DO MODO DEMO
-    const assets = isDemoMode ? DEMO_ASSETS : (walletQuery.data?.assets || []);
+    // Memoizado porque o fallback `|| []` produzia um array NOVO a cada render:
+    // `assets` é dependência do useMemo de `kpis` (e vai no value do contexto),
+    // então sem isso os KPIs eram recalculados em todo render enquanto a query
+    // não tivesse dados, e todo consumidor do contexto re-renderizava junto.
+    const assets = useMemo(
+        () => (isDemoMode ? DEMO_ASSETS : (walletQuery.data?.assets || [])),
+        [isDemoMode, walletQuery.data?.assets]
+    );
     const history = isDemoMode ? DEMO_HISTORY : (historyQuery.data || []);
     const serverKpis = isDemoMode ? DEMO_KPIS : walletQuery.data?.kpis;
 

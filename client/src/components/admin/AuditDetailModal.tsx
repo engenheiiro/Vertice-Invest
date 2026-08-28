@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Calculator, Search, List, Activity, DollarSign, BarChart2, Shield, Target, Zap, Filter, RefreshCw } from 'lucide-react';
+import { X, Calculator, Search, List, Activity, DollarSign, Shield, Target, Zap, Filter, RefreshCw } from 'lucide-react';
 import { ResearchReport, RankingItem } from '../../services/research';
 import { formatCurrency as fmtCurrency } from '../../utils/format';
 

@@ -244,7 +244,7 @@ export const macroDataService = {
                 }
                 return;
             }
-        } catch (error) {
+        } catch {
             // Tenta o endpoint de últimos se o filtrado por data falhar (Bypass de bugs de range do BCB)
             try {
                 const urlUltimos = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.SELIC_DAILY}/dados/ultimos/50?formato=json`;
@@ -349,7 +349,7 @@ export const macroDataService = {
             const btcUsd = parseFloat(res.data.BTCUSD.bid);
             const btcChange = parseFloat(res.data.BTCUSD.pctChange);
             return { usd, usdChange, btcUsd, btcChange };
-        } catch (error) {
+        } catch {
             return null;
         }
     },
@@ -558,7 +558,7 @@ export const macroDataService = {
                     bonds.push(data);
                 }
             });
-        } catch (error) {
+        } catch {
             // Silencioso
         }
         return bonds;

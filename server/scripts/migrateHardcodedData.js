@@ -81,7 +81,7 @@ const runMigration = async () => {
                     { $set: { ticker: correct } }
                 );
                 if (resAssets.modifiedCount > 0) console.log(`   - ${resAssets.modifiedCount} carteiras migradas.`);
-            } catch (e) {
+            } catch {
                 console.log(`   - Aviso: Alguns usuários já possuíam ${correct}, fusão manual necessária se houver duplicata.`);
             }
 

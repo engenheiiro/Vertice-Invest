@@ -30,7 +30,9 @@ export const DemoProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             
             // LÓGICA V5: Verifica a flag persistida no banco, não no localStorage.
             if (user.hasSeenTutorial === false) {
-                console.log(`✨ Novo usuário detectado (${user.name}): Agendando Tutorial...`);
+                // Loga o id, não o nome: o id já é dependência deste efeito (o nome
+                // não era, e obrigaria a reagendar o tutorial numa troca de nome).
+                console.log(`✨ Novo usuário detectado (${user.id}): Agendando Tutorial...`);
                 
                 const timer = setTimeout(() => {
                     startDemo(); 

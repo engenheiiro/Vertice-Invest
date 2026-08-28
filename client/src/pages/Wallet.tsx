@@ -19,20 +19,19 @@ import { RenameWalletModal } from '../components/wallet/RenameWalletModal';
 import { WalletSwitcher } from '../components/wallet/WalletSwitcher';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { SkeletonChart, SkeletonTableRows, EmptyState, Button } from '../components/ui'; // (I12) skeletons padronizados + (U3) empty state
-import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, CircleDollarSign, FileText, Loader2, DollarSign, Landmark, Pencil } from 'lucide-react';
+import { Plus, Lock, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, CircleDollarSign, FileText, Loader2, DollarSign, Landmark, Pencil } from 'lucide-react';
 import { PieSlices } from '../components/ui/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useToast } from '../contexts/ToastContext';
 import { useDemo } from '../contexts/DemoContext'; 
 import { useNavigate, useLocation } from 'react-router-dom';
-import { authService } from '../services/auth';
 import { FEATURE_LIMITS } from '../constants/subscription';
 import { WALLET_STEPS } from '../components/tutorial/tutorialSteps';
 
 export const Wallet = () => {
     const { user } = useAuth();
-    const { assets, kpis, resetWallet, isLoading, isRefreshing, usdRate, activeWalletId, activeWalletName } = useWallet();
+    const { assets, resetWallet, isLoading, isRefreshing, usdRate, activeWalletId, activeWalletName } = useWallet();
     const { addToast } = useToast();
     const { isDemoMode, currentStep } = useDemo();
     const navigate = useNavigate();

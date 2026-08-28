@@ -29,7 +29,7 @@ const WATCH = (process.argv[3] || 'VISC11,HSRE11,HGLG11,KNRI11,GGRC11,TRXF11,BTL
 const { marketDataService } = await import('../services/marketDataService.js');
 const { scoringEngine } = await import('../services/engines/scoringEngine.js');
 const { portfolioEngine } = await import('../services/engines/portfolioEngine.js');
-const { getMacroSector, getFiiSegment, getConcentrationKey } = await import('../config/sectorTaxonomy.js');
+const { getMacroSector, getConcentrationKey } = await import('../config/sectorTaxonomy.js');
 const SystemConfig = (await import('../models/SystemConfig.js')).default;
 const { DEFAULT_SELIC_FALLBACK } = await import('../config/financialConstants.js');
 
@@ -92,7 +92,6 @@ const run = async () => {
     let ranking = portfolioEngine.performCompetitiveDraft(processed, { trace });
     const draftScoreByTicker = new Map(ranking.map(r => [r.ticker, r.score]));
     ranking = portfolioEngine.applyConcentrationPenalty(ranking);
-    const finalByTicker = new Map(ranking.map(r => [r.ticker, r]));
 
     console.log('── Selecionados por perfil (draft → pós-penalidade) ─────');
     for (const profile of ['DEFENSIVE', 'MODERATE', 'BOLD']) {

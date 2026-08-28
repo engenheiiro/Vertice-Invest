@@ -19,14 +19,12 @@ class HolidayService {
         try {
             const currentYear = new Date().getFullYear();
             const years = [currentYear, currentYear + 1];
-            let count = 0;
 
             for (const year of years) {
                 const response = await axios.get(`https://brasilapi.com.br/api/feriados/v1/${year}`, { timeout: 5000 });
                 if (response.data && Array.isArray(response.data)) {
                     response.data.forEach(h => {
                         this.holidays.add(h.date);
-                        count++;
                     });
                 }
             }

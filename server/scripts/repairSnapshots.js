@@ -129,7 +129,6 @@ const run = async () => {
         ...allAffected.slice(-5),
     ].filter(x => x !== undefined);
 
-    let lastShown = -1;
     for (const item of preview) {
         if (item === null) {
             console.log('   ...');

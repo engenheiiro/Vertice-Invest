@@ -1,7 +1,5 @@
 
-import mongoose from 'mongoose';
 import { runTransaction, txError } from '../utils/dbTransaction.js';
-import User from '../models/User.js';
 import Wallet from '../models/Wallet.js';
 import UserAsset from '../models/UserAsset.js';
 import AssetTransaction from '../models/AssetTransaction.js';
@@ -11,7 +9,7 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
-import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, calculateDailyDietz, safeValue, safePrice, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
+import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, safeValue, safePrice, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
 import { computeQuotaSharpe, computeQuotaBeta, snapshotDayKey, SHARPE_WINDOW_SNAPSHOTS } from '../utils/walletRisk.js';
 import { countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { assetDailyFactor, valueFixedIncomeAsset, PRICING_SOURCE, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
@@ -1136,12 +1134,10 @@ export const getAssetTransactions = async (req, res, next) => {
 export const deleteTransaction = async (req, res, next) => {
     const userId = req.user.id;
     const walletId = req.walletId;
-    let txTicker;
     try {
         await runTransaction(async (session) => {
             const tx = await AssetTransaction.findOneAndDelete({ _id: req.params.id, user: userId, wallet: walletId }, { session });
             if (!tx) throw txError(404, "Transação não encontrada");
-            txTicker = tx.ticker;
             // Recalcula a posição na MESMA transação: se o recálculo falhar (ex.: saldo
             // insuficiente), o delete é revertido — sem estado financeiro inconsistente.
             await financialService.recalculatePosition(userId, tx.ticker, null, session, null, walletId);
@@ -1288,7 +1284,6 @@ export const getCashFlow = async (req, res, next) => {
 
 export const runCorporateAction = async (req, res, next) => {
     try {
-        const { ticker, type } = req.body;
         res.json({ message: "Comando recebido.", details: { updates: 0 } });
     } catch (error) { next(error); }
 };

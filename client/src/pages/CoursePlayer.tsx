@@ -3,7 +3,6 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, Circle, PlayCircle, Lock, Award } from 'lucide-react';
 import ReactPlayer from 'react-player';
 const Player = ReactPlayer as any;
-import { COURSES, LESSONS } from '../data/academy';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { authService } from '../services/auth';
@@ -22,7 +21,6 @@ export const CoursePlayer = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [completedLessons, setCompletedLessons] = useState<string[]>([]);
-    const [hasAccess, setHasAccess] = useState(true);
     const [showQuiz, setShowQuiz] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [useNativeIframe, setUseNativeIframe] = useState(true);
@@ -59,7 +57,6 @@ export const CoursePlayer = () => {
                     console.log('Course data received from server:', data);
                     setCourse(data.course);
                     setLessons(data.lessons);
-                    setHasAccess(data.hasAccess);
                     
                     if (data.lessons.length > 0) {
                         const lessonIdParam = searchParams.get('lesson');

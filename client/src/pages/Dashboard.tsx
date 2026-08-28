@@ -1,19 +1,16 @@
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useDashboardData } from '../hooks/useDashboardData';
-import { researchService } from '../services/research';
 import { Header } from '../components/dashboard/Header';
 import { MarketStatusBar } from '../components/dashboard/MarketStatusBar';
 import { EquitySummary } from '../components/dashboard/EquitySummary';
 import { AssetTable } from '../components/dashboard/AssetTable';
 import { AiRadar } from '../components/dashboard/AiRadar';
-import { InstantReportModal } from '../components/dashboard/InstantReportModal';
 import { useWallet } from '../contexts/WalletContext';
 import { useDemo } from '../contexts/DemoContext';
 import { Lock, Target } from 'lucide-react';
 import { FitText } from '../components/ui';
 import { formatCurrency as fmtCurrency } from '../utils/format';
-import { friendlyError } from '../utils/errorMessages';
 import { useNavigate } from 'react-router-dom';
 
 export const Dashboard = () => {
@@ -26,41 +23,14 @@ export const Dashboard = () => {
       dividendGoal,
       marketIndices,
       isLoading,
-      isResearchLoading,
-      systemHealth
+      isResearchLoading
   } = useDashboardData();
   const navigate = useNavigate();
   
   const { isPrivacyMode, kpis } = useWallet();
   const { isDemoMode } = useDemo();
 
-  // Estados do Modal de Relatório
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [reportText, setReportText] = useState('');
-  const [reportDate, setReportDate] = useState('');
-  const [isReportLoading, setIsReportLoading] = useState(false);
-
   const formatCurrency = (val: number) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
-
-  const handleGenerateReport = async () => {
-      setIsReportModalOpen(true);
-      setIsReportLoading(true);
-      try {
-          const report = await researchService.getLatest('BRASIL_10', 'BUY_HOLD');
-          
-          if (report && report.content?.morningCall) {
-              setReportText(report.content.morningCall);
-              setReportDate(new Date(report.date || report.createdAt).toLocaleDateString('pt-BR'));
-          } else {
-              setReportText("Ainda não há um Morning Call gerado para hoje. Tente novamente mais tarde.");
-              setReportDate(new Date().toLocaleDateString('pt-BR'));
-          }
-      } catch (e) {
-          setReportText(friendlyError(e));
-      } finally {
-          setIsReportLoading(false);
-      }
-  };
 
   const displayDividends = dividends > 0 ? dividends : (kpis.projectedDividends || 0);
   const isProjected = dividends === 0 && kpis.projectedDividends > 0;
@@ -156,14 +126,6 @@ export const Dashboard = () => {
             </div>
         </div>
       </main>
-
-      <InstantReportModal 
-          isOpen={isReportModalOpen} 
-          onClose={() => setIsReportModalOpen(false)} 
-          isLoading={isReportLoading}
-          reportText={reportText}
-          date={reportDate}
-      />
     </div>
   );
 };

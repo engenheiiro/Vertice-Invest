@@ -4,7 +4,6 @@ import MarketAsset from '../../models/MarketAsset.js';
 import AssetHistory from '../../models/AssetHistory.js';
 import QuantSignal from '../../models/QuantSignal.js';
 import SystemConfig from '../../models/SystemConfig.js';
-import { marketDataService } from '../marketDataService.js';
 import { externalMarketService } from '../externalMarketService.js';
 
 const DEFENSIVE_SECTORS = ['Saneamento', 'Elétricas', 'Seguros', 'Bancos', 'Telecom'];
@@ -64,7 +63,7 @@ export const signalEngine = {
                 isCrashDay: ibov ? ibov.change < -2.5 : false,
                 isUSCrashDay: spx ? spx.change < -2.5 : false
             };
-        } catch (e) {
+        } catch {
             logger.warn("⚠️ [SignalEngine] Falha ao obter contexto macro. Assumindo neutro.");
             return { oilChange: 0, ibovChange: 0, spxChange: 0, isCrashDay: false, isUSCrashDay: false };
         }
@@ -404,7 +403,7 @@ export const signalEngine = {
                         }
                     }
 
-                } catch (innerErr) { continue; }
+                } catch { continue; }
             }
 
             // 5. PERSISTÊNCIA — UPSERT atômico (sem acúmulo: máximo 1 ACTIVE por ticker/tipo)

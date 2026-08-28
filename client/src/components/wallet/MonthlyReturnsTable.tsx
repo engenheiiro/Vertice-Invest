@@ -92,7 +92,6 @@ export const MonthlyReturnsTable = () => {
                 }
             }
 
-            const lastMonthWithData = [...months].reverse().find(m => m.value !== null);
             const lastVal = monthEndValues.get(`${year}-12`) || Array.from(monthEndValues.entries()).filter(([k]) => k.startsWith(`${year}-`)).pop()?.[1];
             
             let ytd = 0;

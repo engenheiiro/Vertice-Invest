@@ -42,7 +42,7 @@ vi.mock('../config/logger.js', () => ({
 }));
 
 const { updateWalletTargets, getWalletDividends } = await import('../controllers/walletController.js');
-const User = (await import('../models/User.js')).default;
+await import('../models/User.js');
 const Wallet = (await import('../models/Wallet.js')).default;
 const { financialService } = await import('../services/financialService.js');
 

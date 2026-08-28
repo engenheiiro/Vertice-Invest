@@ -21,7 +21,8 @@ vi.mock('../services/subscription', () => ({
 }));
 vi.mock('../services/auth', () => ({ authService: { api: mocks.api } }));
 
-import { CheckoutSuccess, getCheckoutReturnDetails, isActivationRecorded, isSubscriptionActivated } from './CheckoutSuccess';
+import { CheckoutSuccess } from './CheckoutSuccess';
+import { getCheckoutReturnDetails, isActivationRecorded, isSubscriptionActivated } from '../utils/checkoutStatus';
 
 beforeEach(() => {
   mocks.query = 'plan=PRO&payment_id=pay-123&status=approved';

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock, PlayCircle, Clock, BookOpen } from 'lucide-react';
+import { Lock, Clock, BookOpen } from 'lucide-react';
 
 interface CourseCardProps {
     course: any;

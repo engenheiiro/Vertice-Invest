@@ -143,6 +143,11 @@ export const TutorialOverlay: React.FC = () => {
             window.removeEventListener('resize', updatePosition);
             window.removeEventListener('scroll', updatePosition, true);
         };
+        // O passo já entra aqui pelo índice (`safeStepIndex`) e pelo alvo
+        // (`effectiveHighlightId`), que é o que muda a posição do spotlight.
+        // `rawStep` é o objeto do passo, recriado a cada render: como dependência
+        // remontaria listeners e timers de scroll a cada render do overlay.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [safeStepIndex, isDemoMode, effectiveHighlightId, location.pathname]);
 
     // Enquanto o tour está no ar, some com avisos flutuantes marcados

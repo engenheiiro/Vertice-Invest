@@ -226,12 +226,6 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
 
     const effectiveSectorCount = sectorView?.aporteSectorCount ?? sectorCount;
 
-    // Ativos excluídos com seus dados originais do ranking (para exibir os chips).
-    const excludedItems = useMemo(() =>
-        scopedRanking.filter(r => excludedTickers.has(r.ticker) && r.riskProfile === profile),
-        [scopedRanking, excludedTickers, profile]
-    );
-
     const removeExcluded = (ticker: string) =>
         setExcludedTickers(prev => { const s = new Set(prev); s.delete(ticker); return s; });
 
@@ -421,7 +415,6 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                             </div>
                                             <div className="flex flex-wrap gap-1.5">
                                                 {[...excludedTickers].map(ticker => {
-                                                    const meta = excludedItems.find(r => r.ticker === ticker);
                                                     return (
                                                         <button
                                                             key={ticker}

@@ -4,7 +4,7 @@ import { researchService, SECTION_LABEL, ResearchReport, PublishStatus } from '.
 import { marketService } from '../../services/market';
 import { authService } from '../../services/auth';
 import { subscriptionService, type BillingMode } from '../../services/subscription';
-import { Bot, RefreshCw, CheckCircle2, AlertCircle, Activity, Settings, Play, HeartPulse } from 'lucide-react';
+import { Bot, CheckCircle2, AlertCircle, Activity, Settings, Play, HeartPulse } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -152,6 +152,9 @@ export const AdminPanel = () => {
         const timer = setInterval(loadHealthBadge, 300000);
         return () => clearInterval(timer);
     }, []);
+    // Recarrega a acurácia só quando um FILTRO muda. `loadAccuracy` é recriada a
+    // cada render e grava estado — como dependência, buscaria em loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { loadAccuracy(); }, [accuracyWindow, accuracyAsset, accuracyProfile]);
 
     // --- HANDLERS ---

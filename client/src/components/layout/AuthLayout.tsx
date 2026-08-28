@@ -47,7 +47,9 @@ export const AuthLayout: React.FC = () => {
       setActiveSlide((prev) => (prev + 1) % slides.length);
     }, 5000);
     return () => clearInterval(interval);
-  }, []);
+    // `slides` é literal recriado a cada render, mas `.length` é um número fixo:
+    // como dependência ele é estável e o carrossel não reinicia por re-render.
+  }, [slides.length]);
 
   return (
     // Desktop (lg+): h-screen + overflow-hidden — tela cheia, sem scroll.

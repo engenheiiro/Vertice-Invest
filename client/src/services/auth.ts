@@ -97,7 +97,7 @@ export const authService = {
           headers,
           credentials: 'include'
         });
-    } catch (networkError) {
+    } catch {
         throw new Error("Erro de conexão. Verifique se o servidor está rodando.");
     }
 
@@ -199,7 +199,7 @@ export const authService = {
             return data.accessToken;
         }
         return null;
-    } catch (e) {
+    } catch {
         return null;
     }
   },

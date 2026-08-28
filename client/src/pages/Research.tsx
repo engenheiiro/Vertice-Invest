@@ -9,7 +9,6 @@ import { ResearchAporteModal } from '../components/research/ResearchAporteModal'
 import { TreasuryPanel } from '../components/research/TreasuryPanel';
 import { Bot, Newspaper, Trophy, Lock, Crown, Info, RefreshCcw } from 'lucide-react';
 import { SkeletonCard, SkeletonTableRows } from '../components/ui';
-import { friendlyError } from '../utils/errorMessages';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { ResearchAporteRequest } from '../utils/researchAporte';

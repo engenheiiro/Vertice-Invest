@@ -55,7 +55,7 @@ const panicLog = (message) => {
 
     try {
         await import('./instrument.js');
-    } catch (e) {
+    } catch {
         // Ignora falha de instrumentação
     }
 
@@ -71,7 +71,7 @@ const panicLog = (message) => {
         process.exit(1); 
     });
 
-    process.on('unhandledRejection', (reason, promise) => {
+    process.on('unhandledRejection', (reason, _promise) => {
         const msg = `🔥 UNHANDLED REJECTION! Promessa sem catch.\nMotivo: ${reason instanceof Error ? reason.stack : reason}`;
         if (logger) logger.error(msg);
         panicLog(msg);

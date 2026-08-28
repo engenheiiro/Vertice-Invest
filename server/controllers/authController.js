@@ -2,7 +2,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import mongoose from 'mongoose';
 import { runTransaction, txError } from '../utils/dbTransaction.js';
 import User from '../models/User.js';
 import Wallet from '../models/Wallet.js';
@@ -45,14 +44,6 @@ const CONSENT_VERSION = '1.0';
 // um JPEG/WebP 256×256, abaixo do limite de 1mb do express.json (app.js).
 const AVATAR_MAX_LENGTH = 400_000; // chars da data-URL
 const AVATAR_DATAURL_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
-
-// (3.21a) Corretoras conhecidas. O usuário pode escolher uma delas ou "Outra"
-// (texto livre) — por isso o backend valida só comprimento, não a allowlist.
-const KNOWN_BROKERAGES = [
-  'XP Investimentos', 'BTG Pactual', 'Rico', 'Clear', 'Inter',
-  'Nubank/NuInvest', 'Itaú/Íon', 'Toro', 'Genial', 'Ágora', 'Modalmais',
-  'Guide', 'Órama', 'Santander Corretora', 'Caixa Corretora',
-];
 
 // Configurações
 const ACCESS_TOKEN_EXPIRATION = '15m';

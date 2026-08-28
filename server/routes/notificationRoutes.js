@@ -3,7 +3,6 @@ import express from 'express';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 import { researchReadLimiter } from '../middleware/rateLimiters.js';
 import Notification from '../models/Notification.js';
-import logger from '../config/logger.js';
 
 const router = express.Router();
 

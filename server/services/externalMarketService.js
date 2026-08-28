@@ -190,7 +190,7 @@ export const externalMarketService = {
                 }
             }
             return null;
-        } catch (error) {
+        } catch {
             // Silencioso no nível de função, quem chama decide o log
             return null;
         }
@@ -389,7 +389,7 @@ export const externalMarketService = {
             if (spx) result.spx = { value: spx.regularMarketPrice, change: spx.regularMarketChangePercent };
 
             return result;
-        } catch (error) {
+        } catch {
             return {};
         }
     },
@@ -620,7 +620,7 @@ export const externalMarketService = {
         }
     },
 
-    async getSplitsHistory(ticker, type) {
+    async getSplitsHistory(_ticker, _type) {
         return [];
     }
 };

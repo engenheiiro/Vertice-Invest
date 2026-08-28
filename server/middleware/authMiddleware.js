@@ -83,7 +83,7 @@ export const authenticateToken = async (req, res, next) => {
     req.user = userData; // Injeta o usuário (possivelmente atualizado) na requisição
     next();
 
-  } catch (err) {
+  } catch {
     return res.status(401).json({ message: "Token inválido ou expirado." });
   }
 };

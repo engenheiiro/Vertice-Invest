@@ -76,7 +76,7 @@ const allocPct = z.coerce.number().finite('Percentual inválido').min(0).max(100
 // Sub-meta de uma classe: percentuais RELATIVOS à fatia da classe (somam ~100%
 // DENTRO da classe). Se TODAS as sub-chaves forem 0, considera-se "sem sub-meta"
 // (comportamento legado, classe em bloco) e a soma 100% NÃO é exigida.
-const subAllocSum100 = (label) => (obj) => {
+const subAllocSum100 = (_label) => (obj) => {
   if (!obj) return true;
   const sum = Object.values(obj).reduce((a, v) => a + (Number(v) || 0), 0);
   return sum === 0 || Math.abs(sum - 100) <= 0.5;

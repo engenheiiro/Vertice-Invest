@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { X, Shield, Activity, Target, Zap, TrendingUp, AlertTriangle, AlertOctagon, ThumbsUp, ThumbsDown, BarChart2, DollarSign, Database, ArrowUpCircle } from 'lucide-react';
+import { X, Shield, Activity, Target, Zap, AlertTriangle, AlertOctagon, ThumbsUp, ThumbsDown, BarChart2, DollarSign, Database } from 'lucide-react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { RankingItem } from '../../services/research';
 import { formatCompact as fmtCompact, type Currency } from '../../utils/format';
@@ -72,8 +72,6 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
         if (val === undefined || val === null) return '-';
         return val.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
     };
-
-    const fairValueLabel = type === 'FII' ? 'VP por Cota' : 'Preço Teto';
 
     // Lógica de cores do Yield (Visualização 3.0)
     // Verde > 6%, Amarelo > 0%, Cinza = 0%
@@ -575,18 +573,6 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
         document.body
     );
 };
-
-const ScoreBar = ({ label, value, color, icon }: any) => (
-    <div>
-        <div className="flex justify-between text-xs font-bold text-slate-400 mb-1.5">
-            <span className="flex items-center gap-1.5">{icon} {label}</span>
-            <span className="text-white">{value}/100</span>
-        </div>
-        <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-            <div className={`h-full ${color} transition-all duration-1000`} style={{ width: `${value}%` }}></div>
-        </div>
-    </div>
-);
 
 const DetailRow = ({ label, value, status }: { label: string, value: string, status: MetricStatus }) => {
     let colorClass = 'text-white';

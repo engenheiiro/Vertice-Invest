@@ -156,7 +156,7 @@ const isDividendAristocrat = (m, type) => {
     return (m.revenueGrowth > 5 && m.roe > 12 && m.dy > 4.0 && m.netMargin > 8 && m.payout > 20 && m.payout < 90);
 };
 
-const isEligibleForDefensive = (asset, context) => {
+const isEligibleForDefensive = (asset, _context) => {
     const m = asset.metrics;
     if (m.avgLiquidity < 200000) return false;
     if (asset.type === 'STOCK') {

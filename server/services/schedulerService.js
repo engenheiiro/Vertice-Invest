@@ -358,7 +358,7 @@ export const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = 
 // exclusivo). node-cron não reexecuta ticks perdidos (deploy/reinício/erro
 // transitório sobre 23:59) — este catch-up é a rede de segurança que fecha os
 // buracos, com data retroativa correta e accrual exato de renda fixa.
-const backfillUserGap = async (wallet, todayStr, ctx, assets) => {
+const backfillUserGap = async (wallet, todayStr, _ctx, _assets) => {
     const last = await WalletSnapshot.findOne({ wallet: wallet._id }).sort({ date: -1 });
     if (!last) return 0; // sem histórico: o fluxo normal cuida do 1º snapshot
     const lastDayStr = brDayStr(new Date(last.date));

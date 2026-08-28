@@ -72,8 +72,6 @@ const run = async () => {
         if (anomalies === 0) console.log('   Nenhuma.');
 
         // --- INVESTIGAR 06/02/2026 especificamente ---
-        const resetDate = new Date('2026-02-06');
-        const prevDate = new Date('2026-02-05');
         const resetSnap = snapshots.find(s => {
             const d = new Date(s.date);
             return d >= new Date('2026-02-06') && d < new Date('2026-02-07');

@@ -128,7 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           try {
             setUser(JSON.parse(storedUser));
-          } catch (e) {
+          } catch {
             await logout();
           }
         }
@@ -140,6 +140,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     initializeAuth();
+    // Bootstrap de sessão: roda UMA vez na montagem. `logout` só é usado no caminho
+    // de erro (storedUser corrompido) e é recriado a cada render — incluí-lo faria
+    // a inicialização inteira (refresh token + CSRF) repetir a cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = (userData: User, token: string) => {

@@ -1,7 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
-import * as cheerio from 'cheerio';
 import iconv from 'iconv-lite';
 import { fundamentusService } from '../services/fundamentusService.js';
 

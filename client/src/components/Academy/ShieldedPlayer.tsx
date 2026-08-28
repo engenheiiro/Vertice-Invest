@@ -57,6 +57,10 @@ export const ShieldedPlayer: React.FC<ShieldedPlayerProps> = ({ videoId, onProgr
                 playerRef.current.destroy();
             }
         };
+        // O player é criado uma vez por vídeo. `onPlayerStateChange` é recriada a
+        // cada render: como dependência, destruiria e recriaria o iframe do YouTube
+        // durante a reprodução, voltando o vídeo ao início.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [videoId]);
 
     useEffect(() => {

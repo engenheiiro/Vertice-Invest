@@ -797,7 +797,7 @@ export const financialService = {
                         { upsert: true },
                     );
                     if (res.upsertedCount > 0) eventCount++;
-                } catch (e) {
+                } catch {
                     // Corrida no índice único (evento já inserido) — ignora.
                 }
             }
@@ -1183,7 +1183,7 @@ export const financialService = {
         return asset;
     },
 
-    async applyCorporateEvents(ticker, type) {
+    async applyCorporateEvents(_ticker, _type) {
         return { processed: false, reason: "Feature disabled in optimization mode" };
     }
 };

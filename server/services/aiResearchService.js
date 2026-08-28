@@ -404,7 +404,7 @@ export const calculateRankingDelta = async (currentList, assetClass, strategy, b
             const entry = prev?.get(normalize(item.ticker));
             return { ...item, previousPosition: entry?.position ?? null };
         });
-    } catch (e) {
+    } catch {
         return currentList;
     }
 };
@@ -818,6 +818,6 @@ export const aiResearchService = {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({ model: GEMINI_TEXT_MODEL, contents: prompt });
             return response.text;
-        } catch (e) { return "Análise IA indisponível."; }
+        } catch { return "Análise IA indisponível."; }
     }
 };

@@ -200,7 +200,7 @@ const formatMetrics = (m, type, sector) => {
     return out;
 };
 
-const formatRankingItem = (item, idx) => {
+const formatRankingItem = (item, _idx) => {
     const m = item.metrics || {};
     const currency = item.type === 'CRYPTO' || item.type === 'STOCK_US' ? '$' : 'R$';
     const priceStr = (val) => {

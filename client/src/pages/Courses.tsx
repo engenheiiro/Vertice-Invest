@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, ChevronRight, PlayCircle, ArrowLeft, BookOpen, Clock, Lock } from 'lucide-react';
+import { GraduationCap, ChevronRight, PlayCircle, ArrowLeft, Clock, Lock } from 'lucide-react';
 import { Header } from '../components/dashboard/Header';
 import { CourseCard } from '../components/Academy/CourseCard';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,7 +14,7 @@ const PLAN_LEVELS: Record<string, number> = {
     'BLACK': 4
 };
 
-const LessonCard = ({ lesson, onClick, isLocked: propIsLocked }: { lesson: any, onClick: () => void, isLocked?: boolean }) => {
+const LessonCard = ({ lesson, onClick, isLocked: _propIsLocked }: { lesson: any, onClick: () => void, isLocked?: boolean }) => {
     const isLocked = true; // Bloqueio global para manutenção
     return (
         <div 

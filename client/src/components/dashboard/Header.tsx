@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   ShieldCheck, LayoutGrid, Wallet, Bot,
-  GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
+  GraduationCap, LogOut, User as UserIcon, Crown, Settings, BarChart3,
   Radar, Calculator, Target, ChevronRight, ChevronDown, Sun, Moon, Anchor
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -20,14 +20,6 @@ export const Header: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const [time, setTime] = useState(new Date());
-
-  // Relógio em Tempo Real
-  useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
   const handleLogout = async () => {
     await logout();
     navigate('/login');
@@ -161,7 +153,13 @@ export const Header: React.FC = () => {
 
            {/* User Info */}
            <div className="flex items-center gap-3">
-              {/* Relógio desativado — manter código para reativação futura
+              {/* Relógio desativado — manter código para reativação futura.
+                  Ao reativar, restaurar também o que sustentava este bloco e foi
+                  removido junto: o import de `Clock` (lucide-react), o estado
+                  `const [time, setTime] = useState(new Date())` e o efeito com
+                  `setInterval(() => setTime(new Date()), 1000)`. Ficaram fora
+                  porque, com o JSX comentado, o intervalo seguia re-renderizando
+                  o header inteiro uma vez por segundo sem nada exibir.
               <div className="hidden xl:flex items-center gap-2 text-slate-400 bg-slate-900/50 px-2 py-1 rounded border border-slate-800/50">
                 <Clock size={12} />
                 <span className="text-[10px] font-mono font-medium">

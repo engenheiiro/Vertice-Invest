@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Trophy, BarChart2, Layers, Shield, Target, Zap, Minus, Wallet, PieChart, PlusCircle, Crown, Medal, Calculator, History } from 'lucide-react';
+import { Trophy, BarChart2, Layers, Target, Wallet, PieChart, PlusCircle, Crown, Medal, Calculator, History } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 import { AssetDetailModal } from './AssetDetailModal';
 import { useWallet, AssetType } from '../../contexts/WalletContext';
@@ -53,7 +53,6 @@ const COLORS = [
 
 export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, onAporte, onExteriorViewChange, onEtfOriginChange, initialEtfOrigin }) => {
     const { assets, kpis, isPrivacyMode } = useWallet();
-    const navigate = useNavigate();
     const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
     const [riskFilter, setRiskFilter] = useState<RiskFilter>('DEFENSIVE');
     const [etfOrigin, setEtfOrigin] = useState<EtfOriginFilter>(initialEtfOrigin || 'US');
@@ -152,13 +151,6 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
         if (!dy || dy <= 0) return 'text-slate-500';
         if (dy > 6) return 'text-emerald-400';
         return 'text-yellow-400';
-    };
-
-    const getRiskBadge = (profile?: string) => {
-        if (profile === 'DEFENSIVE') return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-900/30 text-emerald-400 border border-emerald-900/50 flex items-center gap-1"><Shield size={8} /> Defensivo</span>;
-        if (profile === 'MODERATE') return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-400 border border-blue-900/50 flex items-center gap-1"><Target size={8} /> Moderado</span>;
-        if (profile === 'BOLD') return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-900/30 text-purple-400 border border-purple-900/50 flex items-center gap-1"><Zap size={8} /> Arrojado</span>;
-        return null;
     };
 
     const getTierBadge = (tier?: string) => {

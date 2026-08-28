@@ -10,18 +10,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-// Esta lista base serve apenas para criar os documentos iniciais.
-// O setor será "corrigido" em tempo de execução pelo SECTOR_OVERRIDES.
-const ASSETS_BASE_LIST = [
-    // EXEMPLOS CRÍTICOS (FIIs)
-    { ticker: 'HGLG11', type: 'FII' }, { ticker: 'KNRI11', type: 'FII' },
-    { ticker: 'MXRF11', type: 'FII' }, { ticker: 'HGRU11', type: 'FII' },
-    { ticker: 'RBHG11', type: 'FII' }, // <--- Seu ativo problemático
-    
-    // A lista completa seria enorme, então no SEED vamos confiar que o sistema 
-    // vai criar os ativos automaticamente via Sync ou Migration.
-    // Mas para garantir os principais, vamos iterar sobre o SECTOR_OVERRIDES.
-];
 
 const seed = async () => {
     try {
