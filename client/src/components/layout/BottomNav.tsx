@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutGrid, PieChart, BrainCircuit, Radar, MoreHorizontal,
+  LayoutGrid, Wallet, BrainCircuit, Radar, MoreHorizontal,
   BarChart3, Calculator, GraduationCap, Crown, User as UserIcon, Settings, LogOut, X, Target, GitCompare,
   Anchor,
 } from 'lucide-react';
@@ -19,7 +19,7 @@ import { useDemo } from '../../contexts/DemoContext';
  */
 const PRIMARY = [
   { to: '/dashboard', label: 'Terminal', icon: LayoutGrid },
-  { to: '/wallet', label: 'Carteira', icon: PieChart },
+  { to: '/wallet', label: 'Carteira', icon: Wallet },
   { to: '/research', label: 'Research', icon: BrainCircuit },
   { to: '/radar', label: 'Radar', icon: Radar },
 ];
@@ -114,7 +114,7 @@ export const BottomNav: React.FC = () => {
 
       <nav
         id="tour-nav-mobile"
-        className={`xl:hidden fixed bottom-0 inset-x-0 bg-deep/95 backdrop-blur-md border-t border-slate-800/60 pb-[env(safe-area-inset-bottom)] ${isDemoMode ? 'z-[100]' : 'z-50'}`}
+        className={`xl:hidden fixed bottom-0 inset-x-0 app-bottomnav backdrop-blur-md border-t border-slate-800/60 pb-[env(safe-area-inset-bottom)] ${isDemoMode ? 'z-[100]' : 'z-50'}`}
         aria-label="Navegação principal"
       >
         {/* max-w: em tablet/laptop pequeno (até xl) os 5 destinos ficariam esparramados

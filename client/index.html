@@ -58,11 +58,26 @@
     <!-- Anti-FOUC: aplica data-theme antes do React hidratar para evitar flash de tema errado.
          Padrão = ESCURO (ausência de data-theme); só aplica claro se o usuário escolheu
          'light' explicitamente. Chave v2: reseta todo mundo pro escuro (a v1 auto-salvava
-         'light' mesmo sem escolha do usuário). -->
+         'light' mesmo sem escolha do usuário).
+
+         O claro é preferência DE CONTA: vale só na área logada. Aqui ainda não existe
+         React nem sessão, então o portão é o caminho — a lista abaixo espelha as rotas
+         de dentro do <ProtectedRoute> (App.tsx). Fora delas (landing, login, cadastro,
+         termos, /p/:token) nada é aplicado e a vitrine fica escura.
+         Falha fechada: rota nova esquecida aqui custa no máximo um flash escuro→claro
+         no F5, nunca uma landing clara. O <ThemeScope> do React manda logo depois —
+         ao desmontar (logout) o documento volta ao escuro sozinho. -->
     <script>
       (function () {
+        // Primeiro segmento do caminho — sem regex para não depender de escape.
+        var AREA_LOGADA = ['dashboard','wallet','goals','research','buy-and-hold','comparador',
+                           'radar','indicators','calculadora','courses','profile','pricing',
+                           'admin','checkout'];
         try {
-          if (localStorage.getItem('vertice-theme-v2') === 'light') {
+          if (
+            AREA_LOGADA.indexOf(location.pathname.split('/')[1]) !== -1 &&
+            localStorage.getItem('vertice-theme-v2') === 'light'
+          ) {
             document.documentElement.setAttribute('data-theme', 'light');
           }
         } catch (_) { /* padrão escuro: não faz nada */ }

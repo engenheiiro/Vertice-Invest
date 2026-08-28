@@ -38,18 +38,33 @@
      superfícies grafite-azuladas quase-pretas p/ eliminar a sensação "leitosa/fosca"
      do grafite claro, mantendo o hue azul (canal B sempre o maior) e abrindo o
      contraste entre níveis. Ordem de luminância preservada (deep < base < card <
-     panel < elevated) p/ que o layering existente (header bg-card sobre bg-base) siga ok. */
-  --tw-color-base:     15 20 26;     /* #0F141A – superfície de cards (surface)    */
+     panel < elevated) p/ que o layering existente (header bg-card sobre bg-base) siga ok.
+     AJUSTE (ago/2026): a página (deep) ficou onde estava — é a identidade quase-preta —
+     mas a ESCADA de superfícies subiu +4 pontos de canal. O card no fundo antigo (#0F141A)
+     ficava a 6 pontos do deep e sumia contra a página; o mockup usa #161B22. Paramos em
+     #131820 — o card se descola da página sem clarear a ponto de virar cinza. Os níveis
+     acima sobem junto porque a separação entre eles é o que sustenta o layering: subir só
+     o base colaria base e card (20 25 34) no mesmo tom e apagaria os headers de tabela. */
+  --tw-color-base:     19 24 32;     /* #131820 – superfície de cards (surface)    */
   --tw-color-deep:      9 12 17;     /* #090C11 – fundo da página (bg, quase-preto) */
-  --tw-color-card:     20 25 34;     /* #141922 – headers/superfície 2 (surface-2)  */
-  --tw-color-panel:    25 31 41;     /* #191F29 – modais/painéis                    */
-  --tw-color-elevated: 32 38 49;     /* #202631 – hover/dropdowns (chip)            */
+  --tw-color-card:     24 30 39;     /* #181E27 – headers/superfície 2 (surface-2)  */
+  --tw-color-panel:    29 36 46;     /* #1D242E – modais/painéis                    */
+  --tw-color-elevated: 36 43 55;     /* #242B37 – hover/dropdowns (chip)            */
 
   /* Véu do tutorial (spotlight). Aplicado como box-shadow de spread gigante no
      anel de destaque: escurece TUDO menos o recorte do alvo. Precisa ser forte —
      num tema já quase-preto, um véu fraco não separa alvo de fundo. Em 0.78 os
      painéis `bg-base` ainda vazavam como retângulos claros atrás do card. */
   --tour-scrim: rgba(2, 4, 10, 0.88);
+
+  /* Superficie da CHROME (barra do topo, faixa de indices, barra inferior).
+     No escuro ela e o proprio fundo da pagina translucido — a separacao vem do
+     blur e da borda, como no mockup (--nav-bg: rgba(13,17,23,.85) sobre --bg).
+     Fica como token, e nao como classe Tailwind no componente, porque o claro
+     precisa de uma cor DIFERENTE da pagina (ver bloco [data-theme="light"]). */
+  --nav-surface:        rgb(9 12 17 / 0.85);   /* header (sticky, sobre conteudo)   */
+  --nav-surface-solid:  rgb(9 12 17);          /* faixa de indices (rola com a pag) */
+  --nav-surface-strong: rgb(9 12 17 / 0.95);   /* bottom nav mobile (mais opaca)    */
 }
 
 [data-theme="light"] {
@@ -62,6 +77,17 @@
      0.64 já a leva a ~#3B4254 (medido) — escuro o bastante para separar o alvo
      sem transformar o tema claro num modal preto. */
   --tour-scrim: rgba(15, 23, 42, 0.64);
+
+  /* No claro a chrome NAO acompanha a pagina: ela e BRANCA sobre o cinza
+     #E4EAF4, como no mockup (--nav-bg: rgba(255,255,255,.82) sobre --bg
+     #f2f4f7). Antes header e pagina eram a mesma cor e a barra do topo so
+     existia pela borda de 1px — que no claro (#e2e8f0 sobre #E4EAF4) e quase
+     invisivel, entao a chrome sumia. Branca, ela ganha plano proprio, alinha
+     com os cards (tambem brancos) e limita o conteudo que rola por baixo.
+     Levemente translucida p/ o backdrop-blur ainda ter o que borrar. */
+  --nav-surface:        rgb(255 255 255 / 0.82);
+  --nav-surface-solid:  rgb(255 255 255);
+  --nav-surface-strong: rgb(255 255 255 / 0.95);
 }
 
 /* Enquanto o tutorial está no ar, avisos flutuantes (cookies) saem de cena —
@@ -155,7 +181,39 @@ html[data-tour-active] [data-tour-hide] { display: none !important; }
   }
 }
 
+/* ─── Recharts: caixa de foco ao CLICAR numa fatia de pizza ─────────────────
+ * O recharts marca cada setor com tabIndex="-1" (polar/Pie.js). Isso não coloca
+ * o setor na ordem do Tab, mas TORNA o <g> focável por clique — e aí o navegador
+ * desenha o anel de foco padrão em volta da caixa delimitadora do setor: o
+ * retângulo que aparecia por cima da fatia clicada. Como o setor é inalcançável
+ * pelo teclado, esse anel nunca serve de pista de navegação para ninguém; só
+ * suja o gráfico. O anel do <g class="recharts-pie"> (esse sim tabulável) fica
+ * de pé. Vale para todos os donuts do app: Carteira, Radar, Aporte, Calculadora
+ * e Carteira Pública tinham o mesmo retângulo. ───────────────────────────────*/
+.recharts-pie-sector:focus,
+.recharts-sector:focus {
+  outline: none;
+}
+
+/* ─── Chrome do app: header, faixa de indices e bottom nav ──────────────────
+ * Estas tres barras compartilham UM plano visual: sao moldura, nao conteudo.
+ * A cor sai de token (--nav-surface*) em vez de classe Tailwind no componente
+ * porque a relacao com a pagina INVERTE entre os temas:
+ *
+ *   escuro → chrome = cor da pagina translucida  (separa por blur + borda)
+ *   claro  → chrome = BRANCA sobre a pagina cinza (separa por contraste)
+ *
+ * O bloco fica depois do @tailwind utilities, entao a mesma especificidade
+ * resolve por ordem e a classe vence um `bg-*` esquecido no componente — as
+ * tres barras nao voltam a divergir por descuido.
+ * Para reverter ao comportamento antigo basta apagar este bloco e os tokens
+ * --nav-surface* (o header volta a acompanhar a pagina nos dois temas). ────*/
+.app-header    { background-color: var(--nav-surface); }
+.app-ticker    { background-color: var(--nav-surface-solid); }
+.app-bottomnav { background-color: var(--nav-surface-strong); }
+
 /* ─── Light mode: cor do html/body ──────────────────────────────────────── */
+
 html[data-theme="light"] {
   color-scheme: light;
 }
@@ -207,6 +265,34 @@ html[data-theme="light"] body {
 }
 [data-theme="light"] .hover\:bg-slate-800:hover { background-color: #e2e8f0; }
 [data-theme="light"] .hover\:bg-slate-800\/60:hover { background-color: rgb(226 232 240 / 0.6); }
+
+/* ─── Light mode: FAIXA DE AGRUPAMENTO dentro de card branco ─────────────────
+ * No escuro a hierarquia dentro de um card vem da escada de superfícies:
+ * base #131820 (linhas de ativo) < card #181E27 (thead) < panel #1D242E (linha
+ * de classe). No claro os TRÊS tokens valem #FFFFFF — e por bom motivo: card
+ * branco destaca da página cinza, e modal branco é a identidade do tema. O
+ * efeito colateral é que, dentro do card, a hierarquia inteira desaparece: a
+ * linha de "AÇÕES BRASIL" fica exatamente da cor das linhas de ativo abaixo
+ * dela, sobrando só as bordas para separar.
+ *
+ * Consertar pelos TOKENS não serve: tingir --tw-color-panel acinzentaria todo
+ * modal e dropdown do app. A tinta entra só onde o panel é usado como FAIXA
+ * dentro de uma tabela — <tr> (desktop) e <button> de grupo (mobile), que são
+ * usos exclusivos desse idioma. Pega Carteira, Dashboard e Retornos Mensais.
+ *
+ * O <thead> fica branco de propósito: ele já é separado pela borda do cabeçalho
+ * do card e por rótulos cinza — é assim no mockup também. Duas faixas cinza
+ * seguidas empilhariam bandas sem hierarquia. ───────────────────────────────*/
+[data-theme="light"] tr.bg-panel,
+[data-theme="light"] button.bg-panel,
+[data-theme="light"] button.bg-panel + .bg-panel {
+  background-color: #f1f5f9; /* slate-100 */
+}
+/* O hover de origem (hover:bg-elevated → #F0F4FA no claro) é MAIS CLARO que a
+   faixa nova: a linha pareceria apagar ao passar o mouse. Sobe um degrau. */
+[data-theme="light"] tr.bg-panel:hover {
+  background-color: #e2e8f0; /* slate-200 */
+}
 
 /* ─── Light mode: inputs ─────────────────────────────────────────────────── */
 [data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
@@ -295,6 +381,28 @@ html[data-theme="light"] body {
  * slate-600 (#475569, ~6.5:1) para garantir AA em todas as superfícies. ──────*/
 [data-theme="light"] .text-slate-400 { color: #64748b; }
 [data-theme="light"] .text-slate-500 { color: #475569; }
+
+/* ─── Light mode: contraste do CABEÇALHO ────────────────────────────────────
+ * A barra do topo é semitransparente sobre um fundo BRANCO (--nav-surface).
+ * O secundário global do claro (#64748b) passa AA ali por pouco (4,76:1) e os
+ * links de navegação têm 13px — margem estreita demais para uma barra que
+ * também fica sobre cards brancos e conteúdo borrado enquanto a página rola.
+ * Dentro do header o secundário desce um degrau (#54606F, 6,4:1 no branco —
+ * praticamente o --text-3 #5c6675 do mockup) e os textos de identidade
+ * (marca, nome do usuário) vão a preto-azulado. Escopo restrito ao header:
+ * o resto do app mantém a régua de sempre. ──────────────────────────────── */
+[data-theme="light"] .app-header .text-slate-400 { color: #54606F; }
+[data-theme="light"] .app-header .text-slate-200,
+[data-theme="light"] .app-header .text-slate-300 { color: #0F172A; }
+
+/* Com a chrome branca, .bg-slate-800 (que no claro vira #f1f5f9) deixa de ter
+   contraste: os dois divisores verticais e a pílula do link ATIVO sumiam — antes
+   apareciam por serem mais CLAROS que a página cinza, e sobre branco não há mais
+   para onde clarear. Um degrau abaixo (#e2e8f0) devolve o divisor e volta a
+   marcar em qual seção o usuário está. Só dentro da chrome: no resto do app o
+   .bg-slate-800 continua caindo sobre superfícies onde #f1f5f9 já funciona. */
+[data-theme="light"] .app-header .bg-slate-800,
+[data-theme="light"] .app-bottomnav .bg-slate-800 { background-color: #e2e8f0; }
 
 /* ─── Light mode: HOVER de texto claro → escuro ─────────────────────────────
  * hover:text-white / hover:text-slate-300 etc. são classes próprias (não as

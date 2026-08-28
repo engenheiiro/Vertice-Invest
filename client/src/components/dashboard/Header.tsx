@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  ShieldCheck, LayoutGrid, PieChart, Bot,
+  ShieldCheck, LayoutGrid, Wallet, Bot,
   GraduationCap, LogOut, Clock, User as UserIcon, Crown, Settings, BarChart3,
   Radar, Calculator, Target, ChevronRight, ChevronDown, Sun, Moon, Anchor
 } from 'lucide-react';
@@ -61,7 +61,7 @@ export const Header: React.FC = () => {
     >
       Pular para o conteúdo
     </a>
-    <nav className="border-b border-slate-800 bg-deep/85 backdrop-blur-[14px] sticky top-0 z-50 pt-[env(safe-area-inset-top)]">
+    <nav className="app-header border-b border-slate-800 backdrop-blur-[14px] sticky top-0 z-50 pt-[env(safe-area-inset-top)]">
       <div className="max-w-[1360px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-6">
            <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/dashboard')}>
@@ -76,23 +76,23 @@ export const Header: React.FC = () => {
                p/ enxugar o topo: Carteira (sua grana), Análise (descoberta), Ferramentas. */}
            <div id="tour-nav-links" className="hidden xl:flex items-center gap-1">
               <Link to="/dashboard">
-                <NavLink icon={<LayoutGrid size={14} />} label="Terminal" active={activeTab === 'terminal'} />
+                <NavLink icon={<LayoutGrid size={16} />} label="Terminal" active={activeTab === 'terminal'} />
               </Link>
 
               <NavGroup
                 label="Carteira"
-                icon={<PieChart size={14} />}
+                icon={<Wallet size={16} />}
                 currentPath={location.pathname}
                 onNavigate={navigate}
                 items={[
-                  { to: '/wallet', label: 'Carteira', icon: <PieChart size={14} /> },
+                  { to: '/wallet', label: 'Carteira', icon: <Wallet size={14} /> },
                   { to: '/goals',  label: 'Metas',    icon: <Target size={14} /> },
                 ]}
               />
 
               <NavGroup
                 label="Análise"
-                icon={<Bot size={14} />}
+                icon={<Bot size={16} />}
                 currentPath={location.pathname}
                 onNavigate={navigate}
                 items={[
@@ -105,7 +105,7 @@ export const Header: React.FC = () => {
 
               <NavGroup
                 label="Ferramentas"
-                icon={<Calculator size={14} />}
+                icon={<Calculator size={16} />}
                 currentPath={location.pathname}
                 onNavigate={navigate}
                 items={[
@@ -115,18 +115,18 @@ export const Header: React.FC = () => {
               />
 
               <Link to="/pricing">
-                 <NavLink icon={<Crown size={14} />} label="Planos" active={activeTab === 'pricing'} />
+                 <NavLink icon={<Crown size={16} />} label="Planos" active={activeTab === 'pricing'} />
               </Link>
 
               {isAdmin && (
                   <Link to="/admin">
                      <div className={`
-                        flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ml-2
+                        flex items-center gap-[7px] px-2.5 py-[7px] rounded-lg text-[13px] leading-4 font-bold transition-all cursor-pointer ml-2
                         ${activeTab === 'admin' 
                             ? 'bg-indigo-900/50 text-indigo-300 border border-indigo-700/50 shadow-sm' 
                             : 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-900/20 border border-transparent'}
                      `}>
-                        <Settings size={14} />
+                        <Settings size={16} />
                         Admin
                      </div>
                   </Link>
@@ -215,7 +215,7 @@ export const Header: React.FC = () => {
 
 const NavLink = ({ icon, label, active = false }: { icon: React.ReactNode, label: string, active?: boolean }) => (
     <div className={`
-        flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer
+        flex items-center gap-[7px] px-2.5 py-[7px] rounded-lg text-[13px] leading-4 font-semibold transition-all cursor-pointer
         ${active ? 'bg-slate-800 text-white shadow-sm border border-slate-700/50' : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'}
     `}>
         {icon}
@@ -248,7 +248,7 @@ const NavGroup = ({ label, icon, items, currentPath, onNavigate }: {
                 onClick={() => onNavigate(items[0].to)}
                 aria-haspopup="menu"
                 className={`
-                    flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer
+                    flex items-center gap-[7px] px-2.5 py-[7px] rounded-lg text-[13px] leading-4 font-semibold transition-all cursor-pointer
                     ${active ? 'bg-slate-800 text-white shadow-sm border border-slate-700/50' : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'}
                 `}
             >

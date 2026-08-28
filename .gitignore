@@ -114,3 +114,6 @@ PLANO-LGPD.txt
 
 # Backups do mongodump (dados reais de produção — nunca versionar)
 backup_*/
+
+# Patches de rollback gerados localmente (nao versionados)
+.revert/

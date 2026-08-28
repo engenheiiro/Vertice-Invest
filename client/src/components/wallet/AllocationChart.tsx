@@ -4,7 +4,7 @@ import { useWallet, AssetType, AllocationMap, SubAllocationMap, DEFAULT_SUB_ALLO
 import { useTheme } from '../../contexts/ThemeContext';
 import { Settings, Check, X, DollarSign, ChevronDown, ChevronRight, ShieldCheck, PlusCircle, ArrowRight } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Sector } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Sector } from 'recharts';
 import { formatCompact as fmtCompact } from '../../utils/format';
 import { useToast } from '../../contexts/ToastContext';
 import { computeSubAllocationReal, hasSubTargets, allocationBucket } from '../../utils/allocation';
@@ -57,6 +57,10 @@ const cloneSub = (s: SubAllocationMap): SubAllocationMap => ({
     STOCK_US: { ...DEFAULT_SUB_ALLOCATION.STOCK_US, ...s.STOCK_US },
 });
 
+// Dado único do anel de trilho (fundo do donut). Fica fora do componente: é constante
+// e não deve virar um objeto novo a cada render.
+const TRACK_DATA = [{ value: 1 }];
+
 // Fatia ativa (hover): mesma fatia com o raio externo um pouco maior — realce sutil,
 // sem deslocar o donut. Recharts injeta a geometria do setor nas props.
 const renderActiveSlice = (props: any) => {
@@ -89,12 +93,9 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
     const { assets, kpis, targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation, updateTargets, isPrivacyMode } = useWallet();
     const { addToast } = useToast();
     const { theme } = useTheme();
-    // Tooltip alinhado ao Evolution/PerformanceChart: superfície ELEVATED do tema novo
-    // (#202631) + borda slate-700 no escuro. Antes usava #0F1729/#1e293b (navy legado,
-    // fora da paleta grafite atual).
-    const chartTooltipStyle = theme === 'light'
-        ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '10px', color: '#0f172a' }
-        : { backgroundColor: '#202631', borderColor: '#334155', borderRadius: '8px', fontSize: '10px' };
+    // Trilho do donut: um degrau acima da superfície do card em cada tema (no escuro o
+    // card agora é #131820, então #232B36 lê como sulco; no claro, cinza-gelo sobre branco).
+    const trackColor = theme === 'light' ? '#EDF1F7' : '#232B36';
     const [viewMode, setViewMode] = useState<'CURRENT' | 'IDEAL'>(initialViewMode);
     const [isEditing, setIsEditing] = useState(false);
     // Fatia sob o cursor: cresce um pouco (activeShape) para dar feedback tátil ao donut.
@@ -250,6 +251,11 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
     // então mostramos um empty-state dedicado no lugar do gráfico + legenda.
     const hasInvestments = chartData.length > 0;
 
+    // Fatia destacada no momento (hover no desktop, toque no mobile). Resolvida com
+    // guarda porque o índice pode sobreviver a uma troca de Atual/Ideal que encurta
+    // a lista — nesse instante chartData[activeIndex] seria undefined.
+    const activeSlice = activeIndex === undefined ? null : (chartData[activeIndex] || null);
+
     // Sub-linhas (drill-down) de uma classe ramificada na legenda.
     const renderSubRows = (type: AssetType) => {
         const keys = SUB_KEYS[type];
@@ -278,7 +284,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
             return (
                 <div key={`${type}-${k}`} className="flex justify-between items-center text-[11px] py-[3px] pl-2.5 pr-1">
                     <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-1.5 h-1.5 rounded-full shrink-0 opacity-60" style={{ backgroundColor: COLORS[type] }}></div>
+                        <div className="w-2 h-2 rounded-[2px] shrink-0 opacity-60" style={{ backgroundColor: COLORS[type] }}></div>
                         <span className="text-slate-500 truncate">{SUB_LABELS[type][k]}</span>
                     </div>
                     <div className="text-right shrink-0 ml-2">
@@ -378,35 +384,73 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                 >
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
+                            {/* Trilho: anel completo por baixo das fatias. Sem ele uma carteira
+                                concentrada desenha um arco solto no vazio — o donut só 'fecha'
+                                quando existe a circunferência de fundo, e é isso que faz a cor
+                                parecer aplicada sobre algo em vez de flutuar. */}
+                            <Pie
+                                data={TRACK_DATA}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={46}
+                                outerRadius={64}
+                                dataKey="value"
+                                stroke="none"
+                                fill={trackColor}
+                                isAnimationActive={false}
+                            />
+                            {/* Folga e canto arredondado só com 2+ classes: numa fatia única o
+                                recharts desenha um setor de 360° que se corta a si mesmo e abre
+                                uma fenda no topo do anel. */}
                             <Pie
                                 data={chartData}
                                 cx="50%"
                                 cy="50%"
-                                innerRadius={40}
-                                outerRadius={55}
-                                paddingAngle={3}
+                                innerRadius={46}
+                                outerRadius={64}
+                                paddingAngle={chartData.length > 1 ? 2 : 0}
+                                cornerRadius={chartData.length > 1 ? 3 : 0}
                                 dataKey="value"
                                 stroke="none"
                                 activeIndex={activeIndex}
                                 activeShape={renderActiveSlice}
                                 onMouseEnter={(_, index) => setActiveIndex(index)}
                                 onMouseLeave={() => setActiveIndex(undefined)}
+                                onClick={(_, index) => setActiveIndex(index)}
                             >
                                 {chartData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={entry.color} />
                                 ))}
                             </Pie>
-                            <Tooltip
-                                formatter={(value: number) => `${value.toFixed(1)}%`}
-                                contentStyle={chartTooltipStyle}
-                            />
                         </PieChart>
                     </ResponsiveContainer>
 
-                    {/* Center Text */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span className="text-[9px] text-slate-500 uppercase font-bold">Invest.</span>
-                        <span className="text-xs text-white tabular-nums font-bold">100%</span>
+                    {/* Center Text — o miolo do donut é o maior espaço vazio do card e
+                        estava ocupado por dois rótulos de 9/12px. Invertida a hierarquia:
+                        o número vira o título (18px) e a etiqueta desce a legenda.
+
+                        É AQUI que a fatia sob o cursor é lida, no lugar do tooltip
+                        flutuante do recharts. O tooltip não tinha como funcionar neste
+                        card: a caixa nasce dentro do quadrado de 140px do gráfico, tem
+                        quase a largura dele, é pintada ANTES deste bloco (que é irmão
+                        posterior e por isso cobria o texto) e o que escapava para fora
+                        era decepado pelo overflow-hidden do card. Ler no miolo elimina
+                        a caixa flutuante inteira: nada a posicionar, nada a recortar,
+                        e o mesmo alvo serve para toque. Cor da classe entra como
+                        quadradinho (igual à legenda) e não no texto — as cores do donut
+                        são claras demais para carregar texto sobre o branco do tema claro. */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none leading-none px-1 text-center">
+                        <span className="text-[18px] text-white tabular-nums font-extrabold">
+                            {activeSlice ? `${Number(activeSlice.value).toFixed(1)}%` : '100%'}
+                        </span>
+                        {activeSlice ? (
+                            <span className="mt-1.5 flex items-center gap-1.5 max-w-[92px]">
+                                <span className="w-1.5 h-1.5 rounded-[2px] shrink-0" style={{ backgroundColor: activeSlice.color }} />
+                                <span className="text-[10.5px] font-bold text-slate-300 truncate">{activeSlice.name}</span>
+                            </span>
+                        ) : (
+                            <span className="text-[9.5px] text-slate-500 uppercase font-bold tracking-wider mt-1">Invest.</span>
+                        )}
                     </div>
                 </div>
 
@@ -481,8 +525,11 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                                         ) : (
                                             <span className="w-3 shrink-0" />
                                         )}
-                                        <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[type] }}></div>
-                                        <span className={`font-medium truncate ${isCash ? 'text-slate-200 font-bold' : 'text-slate-400'}`}>{LABELS[type]}</span>
+                                        {/* Quadrado de cantos arredondados, não bolinha: a mesma
+                                            área de cor num retângulo lê a cor com mais firmeza que
+                                            num círculo de 8px, e casa com a espessura nova do anel. */}
+                                        <div className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ backgroundColor: COLORS[type] }}></div>
+                                        <span className={`truncate ${isCash ? 'text-slate-200 font-bold' : 'text-slate-300 font-semibold'}`}>{LABELS[type]}</span>
                                     </div>
                                     <div className="text-right shrink-0 ml-2">
                                         <span className="font-bold text-white block leading-none">{displayValue}</span>

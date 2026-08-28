@@ -19,7 +19,8 @@ import { RenameWalletModal } from '../components/wallet/RenameWalletModal';
 import { WalletSwitcher } from '../components/wallet/WalletSwitcher';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { SkeletonChart, SkeletonTableRows, EmptyState, Button } from '../components/ui'; // (I12) skeletons padronizados + (U3) empty state
-import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, PieChart, Coins, FileText, Loader2, DollarSign, Landmark, Pencil } from 'lucide-react';
+import { Plus, Download, Lock, Crown, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, CircleDollarSign, FileText, Loader2, DollarSign, Landmark, Pencil } from 'lucide-react';
+import { PieSlices } from '../components/ui/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useToast } from '../contexts/ToastContext';
@@ -123,7 +124,7 @@ export const Wallet = () => {
                             <div className="xl:hidden shrink-0">
                                 <WalletSwitcher compact />
                             </div>
-                            <h1 className="text-2xl font-bold text-white truncate">
+                            <h1 className="text-2xl md:text-[27px] font-extrabold text-white tracking-[-0.02em] truncate">
                                 {activeWalletName || 'Minha Carteira'}
                             </h1>
                             <button
@@ -188,11 +189,11 @@ export const Wallet = () => {
                 {/* A barra INTEIRA é o alvo do tutorial: destacar um botão de aba
                     isolado deixava o card por cima justamente do conteúdo descrito. */}
                 <div id="tour-wallet-tabs" aria-label="Seções da carteira" className={`flex gap-1 sm:gap-2 mb-5 md:mb-6 border-b border-slate-800/60 overflow-x-auto overscroll-x-contain snap-x snap-proximity no-scrollbar transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
-                    <TabButton active={activeTab === 'OVERVIEW'} onClick={() => setActiveTab('OVERVIEW')} icon={<PieChart size={14} />} label="Visão Geral" />
-                    <TabButton active={activeTab === 'PERFORMANCE'} onClick={() => setActiveTab('PERFORMANCE')} icon={<BarChart2 size={14} />} label="Rentabilidade" />
-                    <TabButton active={activeTab === 'DIVIDENDS'} onClick={() => setActiveTab('DIVIDENDS')} icon={<Coins size={14} />} label="Proventos" />
-                    <TabButton active={activeTab === 'STATEMENT'} onClick={() => setActiveTab('STATEMENT')} icon={<FileText size={14} />} label="Extrato" />
-                    <TabButton active={activeTab === 'TAX'} onClick={handleTaxTab} icon={canAccessTax ? <Landmark size={14} /> : <Lock size={14} />} label="Imposto de Renda" />
+                    <TabButton active={activeTab === 'OVERVIEW'} onClick={() => setActiveTab('OVERVIEW')} icon={<PieSlices size={16} />} label="Visão Geral" />
+                    <TabButton active={activeTab === 'PERFORMANCE'} onClick={() => setActiveTab('PERFORMANCE')} icon={<BarChart2 size={16} />} label="Rentabilidade" />
+                    <TabButton active={activeTab === 'DIVIDENDS'} onClick={() => setActiveTab('DIVIDENDS')} icon={<CircleDollarSign size={16} />} label="Proventos" />
+                    <TabButton active={activeTab === 'STATEMENT'} onClick={() => setActiveTab('STATEMENT')} icon={<FileText size={16} />} label="Extrato" />
+                    <TabButton active={activeTab === 'TAX'} onClick={handleTaxTab} icon={canAccessTax ? <Landmark size={16} /> : <Lock size={16} />} label="Imposto de Renda" />
                 </div>
 
                 {isLoading ? (
@@ -212,7 +213,7 @@ export const Wallet = () => {
                                     <div className="lg:col-span-2 bg-base border border-slate-800 rounded-2xl flex">
                                         <EmptyState
                                             className="h-full w-full"
-                                            icon={<PieChart size={28} />}
+                                            icon={<PieSlices size={28} />}
                                             title="Sua carteira está vazia"
                                             description="Defina sua alocação ideal na engrenagem ao lado e adicione seu primeiro ativo para acompanhar patrimônio, rentabilidade e proventos em tempo real."
                                             action={
@@ -343,7 +344,7 @@ const TabButton = ({ active, onClick, icon, label, id }: any) => (
         onClick={onClick}
         aria-current={active ? 'page' : undefined}
         className={`
-            relative snap-start flex items-center gap-2 px-3 sm:px-4 py-[11px] -mb-px text-[13.5px] font-bold whitespace-nowrap
+            relative snap-start flex items-center gap-[7px] px-3 sm:px-4 py-[11px] -mb-px text-[13.5px] font-bold whitespace-nowrap
             border-b-[2.5px] transition-colors duration-200
             ${active
                 ? 'text-emerald-400 border-emerald-400'
