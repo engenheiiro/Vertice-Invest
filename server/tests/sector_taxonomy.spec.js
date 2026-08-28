@@ -116,3 +116,42 @@ describe('getConcentrationKey — por tipo de ativo', () => {
         expect(getConcentrationKey(null)).toBe('OUTROS');
     });
 });
+
+/**
+ * Vocabulário de setor × taxonomia — a catraca do lote de agosto/2026.
+ *
+ * Os setores dos ativos são escritos à mão em `sectorOverrides.js` e
+ * `stockSectorsByBase.js`; a taxonomia é quem os traduz em macro-setor. Um
+ * rótulo novo que não exista nas listas da taxonomia não quebra nada visível:
+ * ele simplesmente cai em OUTROS, e o ativo volta a ser invisível para o draft,
+ * para a penalidade de concentração e para o gate defensivo — exatamente o
+ * defeito que esse lote foi corrigir. Este teste é a catraca.
+ */
+describe('vocabulário de setor — todo rótulo cadastrado tem macro-setor', () => {
+    it('nenhum valor de SECTOR_OVERRIDES ou STOCK_SECTOR_BY_BASE cai em OUTROS', async () => {
+        const { SECTOR_OVERRIDES } = await import('../config/sectorOverrides.js');
+        const { STOCK_SECTOR_BY_BASE } = await import('../config/stockSectorsByBase.js');
+
+        const orphans = [...new Set([
+            ...Object.values(SECTOR_OVERRIDES),
+            ...Object.values(STOCK_SECTOR_BY_BASE),
+        ])].filter(sector => getMacroSector(sector) === 'OUTROS');
+
+        expect(orphans).toEqual([]);
+    });
+
+    it('os subsetores do lote de agosto/2026 caem no macro certo', () => {
+        expect(getMacroSector('Holdings Diversificadas')).toBe('FINANCEIRO');
+        expect(getMacroSector('Utilidades Domésticas')).toBe('CONSUMO');
+        expect(getMacroSector('Produtos de Limpeza')).toBe('CONSUMO');
+        expect(getMacroSector('Hotelaria')).toBe('CONSUMO');
+        expect(getMacroSector('Cemitérios')).toBe('REAL_ESTATE');
+    });
+
+    it('FII de papel cadastrado no lote deixa de ser tijolo no balde de concentração', () => {
+        // O default TIJOLO furava o teto de composição da lista âncora, que limita
+        // justamente o balde de papel.
+        expect(getFiiSegment('Papel')).toBe('FII_PAPEL');
+        expect(getConcentrationKey({ type: 'FII', sector: 'Papel' })).toBe('FII_PAPEL');
+    });
+});

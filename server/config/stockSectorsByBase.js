@@ -101,4 +101,64 @@ export const STOCK_SECTOR_BY_BASE = {
 
     // Serviços
     GGPS: 'Serviços', ARML: 'Serviços',
+
+    // --- Lote de agosto/2026: 108 ações que resolviam para 'Outros' -----------
+    // Setor lido um a um no detalhes.php do Fundamentus (a tabela resultado.php,
+    // que o sync usa, não traz setor de ação). Onde a fonte devolve um balde
+    // genérico ("Diversos", "Comércio"), vale o subsetor dela.
+
+    // Bancos e financeiro
+    BEES: 'Bancos', BGIP: 'Bancos', BMIN: 'Bancos', BNBR: 'Bancos', BSLI: 'Bancos',
+    RPAD: 'Bancos', MERC: 'Financeiro',
+    ADMF: 'Holdings Diversificadas', MOAR: 'Holdings Diversificadas', PEAB: 'Holdings Diversificadas',
+
+    // Energia, gás e saneamento
+    AXIA: 'Energia Elétrica', CBEE: 'Energia Elétrica', CEEB: 'Energia Elétrica', EKTR: 'Energia Elétrica',
+    ENMT: 'Energia Elétrica', EQPA: 'Energia Elétrica', GEPA: 'Energia Elétrica', REDE: 'Energia Elétrica',
+    RNEW: 'Energia Elétrica', EQMA3B: 'Energia Elétrica',
+    CGAS: 'Gás', PASS: 'Gás',
+
+    // Petróleo, químicos e materiais
+    AZTE: 'Petróleo', OSXB: 'Petróleo', RPMG: 'Petróleo',
+    CRPG: 'Químicos', FHER: 'Químicos', NUTR: 'Químicos', PLTO: 'Químicos',
+    SNSY: 'Materiais Básicos',
+    MGEL: 'Siderurgia', PATI: 'Siderurgia', TKNO: 'Siderurgia',
+
+    // Bens de capital e material de transporte
+    EALT: 'Máquinas e Equipamentos', FRIO: 'Máquinas e Equipamentos', INEP: 'Máquinas e Equipamentos',
+    MTSA: 'Máquinas e Equipamentos', NORD: 'Máquinas e Equipamentos',
+    MWET: 'Material de Transporte', RSUL: 'Material de Transporte',
+
+    // Construção, engenharia e imobiliário
+    AVLL: 'Construção Civil', FIEI: 'Construção Civil', HAGA: 'Construção Civil', JFEN: 'Construção Civil',
+    RSID: 'Construção Civil', SOND: 'Construção Civil', TCSA: 'Construção Civil', VIVR: 'Construção Civil',
+    IGBR: 'Exploração de Imóveis', NEXP: 'Exploração de Imóveis',
+
+    // Consumo e comércio
+    AMAR: 'Comércio', AMOB: 'Comércio', AUAU: 'Comércio', EPAR: 'Comércio', RIAA: 'Comércio',
+    VSTE: 'Comércio', WLMM: 'Comércio',
+    CEDO: 'Tecidos, Vestuário e Calçados', CTKA: 'Tecidos, Vestuário e Calçados',
+    DOHL: 'Tecidos, Vestuário e Calçados', MNDL: 'Tecidos, Vestuário e Calçados',
+    PTNT: 'Tecidos, Vestuário e Calçados',
+    UCAS: 'Utilidades Domésticas', WHRL: 'Utilidades Domésticas', BOBR: 'Produtos de Limpeza',
+    BMKS: 'Consumo Cíclico', RVEE: 'Consumo Cíclico', HOOT: 'Hotelaria',
+
+    // Alimentos e agro
+    BAUH: 'Alimentos', FICT: 'Alimentos', JOPA: 'Alimentos', MNPR: 'Alimentos', AGXY: 'Agropecuária',
+
+    // Saúde
+    BALM: 'Saúde', SAUD: 'Saúde', OFSA: 'Medicamentos e Outros Produtos',
+
+    // Tecnologia, telecom, serviços e educação
+    ECOM: 'Programas e Serviços', TOKY: 'Programas e Serviços', TRAD: 'Programas e Serviços',
+    WDCN: 'Programas e Serviços', WEST: 'Programas e Serviços',
+    TELB: 'Telecomunicações',
+    // Padtec fabrica equipamento óptico; o Fundamentus a classifica como "Gestão de
+    // Recursos", que descreve a holding e não o negócio.
+    PDTC: 'Telecomunicações',
+    CTAX: 'Serviços', DOTZ: 'Serviços',
+    ATED: 'Educação', BIED: 'Educação', OBTC: 'Educação',
+
+    // Transporte
+    LUXM: 'Transporte', MOTV: 'Transporte',
 };

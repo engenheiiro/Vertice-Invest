@@ -85,5 +85,26 @@ export const SECTOR_OVERRIDES = {
     'GFSA3': 'Construção Civil', 'BRKM5': 'Química', 'BHIA3': 'Varejo', 'PCAR3': 'Varejo', 'AMER3': 'Varejo',
     'ONCO3': 'Saúde', 'RAIZ4': 'Petróleo', 'SHOW3': 'Varejo', 'VVEO3': 'Logística', 'IFCM3': 'Tecnologia',
     'AZEV4': 'Construção Civil', 'AERI3': 'Indústria', 'PMAM3': 'Indústria', 'PDGR3': 'Construção Civil', 'OIBR3': 'Telecom',
-    'SEQL3': 'Logística'
+    'SEQL3': 'Logística',
+
+    // --- Lote de agosto/2026: FIIs que o Fundamentus publica como "Outros" ----
+    // O segmento veio do NOME/mandato de cada fundo — o Fundamentus não os
+    // classifica. Sem isto os 43 ficavam em 'Outros' e, pior, o fiiSubType
+    // derivado caía no default TIJOLO, inclusive nos fundos de papel, que é
+    // justamente o balde limitado pelo teto de composição da lista âncora.
+    'FLCR11': 'Papel', 'HCHG11': 'Papel', 'IBCR11': 'Papel', 'NCRI11': 'Papel', 'RBHY11': 'Papel',
+    'RECD11': 'Papel', 'VCRI11': 'Papel', 'XLPR11': 'Papel', 'ZAVC11': 'Papel',
+    'DCRA11': 'Fiagro', 'FTCA11': 'Fiagro', 'FZDA11': 'Fiagro', 'FZDB11': 'Fiagro', 'GRWA11': 'Fiagro',
+    'IAAG11': 'Fiagro', 'LAFI11': 'Fiagro', 'NCRA11': 'Fiagro', 'OIAG11': 'Fiagro', 'QAGR11': 'Fiagro',
+    'VHFA11': 'Fiagro',
+    'AFHF11': 'Multiestratégia', 'BIME11': 'Multiestratégia', 'DAYM11': 'Multiestratégia',
+    'NAVT11': 'Multiestratégia', 'ONDA11': 'Multiestratégia', 'PATA11': 'Multiestratégia',
+    'REME11': 'Multiestratégia',
+    'DVFF11': 'Fundo de Fundos', 'ITIP11': 'Fundo de Fundos', 'ITIT11': 'Fundo de Fundos',
+    'RBFM11': 'Fundo de Fundos',
+    'BTSI11': 'Desenvolvimento', 'BTYU11': 'Desenvolvimento', 'ONDV11': 'Desenvolvimento',
+    'BMLC11': 'Lajes Corporativas', 'SPTW11': 'Lajes Corporativas',
+    'BBRC11': 'Renda Urbana', 'FAED11': 'Renda Urbana', 'RBOP11': 'Renda Urbana',
+    'HIRE11': 'Logística',
+    'MCEM11': 'Cemitérios'
 };

@@ -12,7 +12,9 @@ export const MACRO_SECTORS = {
         'Previdência e Seguros',
         'Fundo de Fundos', // FIIs
         'Papel', // FIIs de Papel (Recebíveis Imobiliários - CRI/CRA)
-        'Multiestratégia' // FIIs
+        'Multiestratégia', // FIIs
+        // Holding sem operação própria (Monteiro Aranha, Aliança da Bahia).
+        'Holdings Diversificadas'
     ],
     'UTILITIES': [
         'Elétricas', 
@@ -46,7 +48,8 @@ export const MACRO_SECTORS = {
         'Imobiliário',
         'Híbrido', // FIIs Híbridos (Geralmente Tijolo + Papel)
         'Desenvolvimento', // FIIs
-        'Infraestrutura' // FIIs de Infra (Geralmente Dívida/Equity de Infra) -> Pode ser Utilities, mas mercado trata como FII/Infra
+        'Infraestrutura', // FIIs de Infra (Geralmente Dívida/Equity de Infra) -> Pode ser Utilities, mas mercado trata como FII/Infra
+        'Cemitérios' // FII de death care (MCEM11): imóvel de renda com ciclo próprio
     ],
     'CONSUMO': [
         'Varejo', 
@@ -55,7 +58,11 @@ export const MACRO_SECTORS = {
         'Consumo Cíclico', 
         'Tecidos, Vestuário e Calçados',
         'Comércio',
-        'Educação' // Educação é cíclico/consumo
+        'Educação', // Educação é cíclico/consumo
+        // Subsetores de consumo do Fundamentus que antes caíam em OUTROS.
+        'Utilidades Domésticas',
+        'Produtos de Limpeza',
+        'Hotelaria'
     ],
     'INDUSTRIAL': [
         'Indústria',
