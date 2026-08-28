@@ -13,6 +13,10 @@ import type { Asset } from '../contexts/WalletContext';
 //            e separá-los faria uma carteira concentrada parecer diversificada.
 //            ETFs nacionais não são um setor — ganham balde próprio.
 //
+// Fora da Carteira existe um terceiro balde: o SUBSETOR da ação, usado nas listas
+// de seleção, onde a leitura é reconhecer o ativo e não medir risco sistêmico
+// (ver stockSubsectorLabel).
+//
 // O `sector` chega do Fundamentus/Yahoo via MarketAsset e é devolvido pelo
 // walletController junto de cada posição.
 // ---------------------------------------------------------------------------
@@ -31,6 +35,13 @@ export const MAX_SECTOR_SLICES = 6;
 
 export const UNKNOWN_SECTOR_LABEL = 'Não classificado';
 export const ETF_SECTOR_LABEL = 'ETFs / Índices';
+
+/**
+ * Entrada mínima para rotular uma linha: só o setor (e o tipo, que distingue ETF).
+ * É um subconjunto de Asset para que a MESMA régua sirva a linhas que ainda
+ * não são posições — um item de ranking, por exemplo, não tem saldo.
+ */
+export type SectorLabelInput = Pick<Asset, 'sector'> & Partial<Pick<Asset, 'ticker' | 'type'>>;
 
 const normalize = (s: string): string =>
     s
@@ -101,11 +112,11 @@ const MACRO_LABELS: Record<string, string> = {
 //   • INDUSTRIAL por último: seu termo "serviços" engoliria "Serviços Médico -
 //     Hospitalares" e "Programas e Serviços".
 const MACRO_SECTORS: Record<string, string[]> = {
-    FINANCEIRO: ['bancos', 'seguros', 'holdings financeiras', 'financeiro', 'servicos financeiros diversos', 'previdencia e seguros'],
+    FINANCEIRO: ['bancos', 'seguros', 'holdings financeiras', 'holdings diversificadas', 'financeiro', 'servicos financeiros diversos', 'previdencia e seguros'],
     COMMODITIES: ['mineracao', 'petroleo', 'gas e biocombustiveis', 'siderurgia', 'papel e celulose', 'agro', 'agropecuaria', 'quimica', 'quimicos', 'materiais basicos'],
     UTILITIES: ['eletricas', 'energia eletrica', 'saneamento', 'agua e saneamento', 'gas', 'utilidade publica'],
-    REAL_ESTATE: ['construcao civil', 'exploracao de imoveis', 'imobiliario'],
-    CONSUMO: ['varejo', 'alimentos', 'bebidas', 'consumo ciclico', 'tecidos, vestuario e calcados', 'comercio', 'educacao'],
+    REAL_ESTATE: ['construcao civil', 'exploracao de imoveis', 'imobiliario', 'cemiterios'],
+    CONSUMO: ['varejo', 'alimentos', 'bebidas', 'consumo ciclico', 'tecidos, vestuario e calcados', 'comercio', 'educacao', 'utilidades domesticas', 'produtos de limpeza', 'hotelaria'],
     SAUDE: ['saude', 'medicamentos e outros produtos', 'servicos medico - hospitalares', 'analises e diagnosticos'],
     TECNOLOGIA: ['tecnologia', 'computadores e equipamentos', 'programas e servicos', 'telecom', 'telecomunicacoes', 'midia'],
     INDUSTRIAL: ['industria', 'bens industriais', 'maquinas e equipamentos', 'transporte', 'material de transporte', 'servicos'],
@@ -139,7 +150,7 @@ const US_SECTOR_MAP: Record<string, string> = {
  * "Não classificado" quando não há setor reconhecível — em vez de um balde
  * "Outros" que se confundiria com a dobra da cauda.
  */
-export const stockSectorLabel = (asset: Pick<Asset, 'sector'> & Partial<Pick<Asset, 'type'>>): string => {
+export const stockSectorLabel = (asset: SectorLabelInput): string => {
     // Um ETF de índice amplo não pertence a setor nenhum; forçá-lo em um distorceria
     // a leitura de concentração (BOVA11 não é "Financeiro" por ter bancos dentro).
     if (asset.type === 'ETF') return ETF_SECTOR_LABEL;
@@ -162,9 +173,84 @@ export const stockSectorLabel = (asset: Pick<Asset, 'sector'> & Partial<Pick<Ass
     return UNKNOWN_SECTOR_LABEL;
 };
 
+// --- Ações: subsetor (granularidade do próprio ativo) ------------------------
+
+/**
+ * Rótulos de exibição do SUBSETOR de uma ação — a granularidade em que o ativo
+ * foi cadastrado (`resolveSector` no servidor), sem colapsar no macro-setor.
+ *
+ * Existe porque as duas leituras respondem perguntas diferentes. Na Carteira o
+ * que importa é risco sistêmico: banco e seguradora sobem e caem juntos, então
+ * somá-los em "Financeiro" é a leitura CORRETA de concentração. Numa lista de
+ * seleção, não: quem lê quer reconhecer o ativo que está vendo, e uma CPFL
+ * rotulada "Utilidade Pública" (junto do saneamento) ou uma operadora de telefonia
+ * rotulada "Tecnologia" contradiz o próprio cartão ao lado, que diz "Elétricas".
+ *
+ * A tabela só CANONIZA: expande abreviação ("Telecom" → "Telecomunicações"),
+ * junta sinônimos da mesma coisa ("Agro"/"Agropecuária" → "Agronegócio") e nada
+ * mais. Subsetor desconhecido preserva o texto da fonte — um setor novo aparece
+ * com o nome dele em vez de sumir dentro de "Outros".
+ */
+const STOCK_SUBSECTOR_LABELS: Record<string, string> = {
+    'eletricas': 'Energia Elétrica',
+    'energia eletrica': 'Energia Elétrica',
+    'saneamento': 'Saneamento Básico',
+    'agua e saneamento': 'Saneamento Básico',
+    'telecom': 'Telecomunicações',
+    'telecomunicacoes': 'Telecomunicações',
+    'petroleo': 'Petróleo e Gás',
+    'gas e biocombustiveis': 'Petróleo e Gás',
+    'agro': 'Agronegócio',
+    'agropecuaria': 'Agronegócio',
+    'quimicos': 'Química',
+    'comercio': 'Varejo',
+    'bens industriais': 'Indústria',
+    'material de transporte': 'Transporte',
+    'exploracao de imoveis': 'Imobiliário',
+    'programas e servicos': 'Tecnologia',
+    'computadores e equipamentos': 'Tecnologia',
+    'midia': 'Mídia',
+    'maquinas e equipamentos': 'Máquinas e Equipamentos',
+    'tecidos, vestuario e calcados': 'Vestuário e Calçados',
+    'consumo ciclico': 'Consumo Cíclico',
+    'medicamentos e outros produtos': 'Saúde',
+    'servicos medico - hospitalares': 'Saúde',
+    'analises e diagnosticos': 'Saúde',
+    'previdencia e seguros': 'Seguros',
+    'financeiro': 'Serviços Financeiros',
+    'servicos financeiros diversos': 'Serviços Financeiros',
+};
+
+/** Subsetor de exibição de uma ação. Nunca colapsa no macro-setor. */
+export const stockSubsectorLabel = (asset: SectorLabelInput): string => {
+    if (asset.type === 'ETF') return ETF_SECTOR_LABEL;
+
+    const n = normalize(asset.sector || '');
+    if (!n) return UNKNOWN_SECTOR_LABEL;
+    if (STOCK_SUBSECTOR_LABELS[n]) return STOCK_SUBSECTOR_LABELS[n];
+
+    // Setor em inglês (Yahoo) não tem subsetor equivalente: cai no macro
+    // traduzido, que é a informação mais fina que existe para esse ativo.
+    if (US_SECTOR_MAP[n]) return MACRO_LABELS[US_SECTOR_MAP[n]];
+
+    // "Outros" é o default do resolver quando NÃO se sabe o setor; deixá-lo
+    // passar criaria uma fatia "Outros" que se confunde com a dobra da cauda.
+    if (n === 'outros') return UNKNOWN_SECTOR_LABEL;
+
+    return (asset.sector || '').trim();
+};
+
 // --- Agregação ---------------------------------------------------------------
 
+/** Granularidade do balde na Carteira: macro-setor em ação, segmento em FII. */
 export type SectorKind = 'FII' | 'STOCK';
+
+/**
+ * Granularidades aceitas pela agregação. Superconjunto de `SectorKind`: a lista
+ * âncora reparte ação por SUBSETOR (ver `stockSubsectorLabel`), enquanto a
+ * Carteira segue no macro-setor. FII já é fino nas duas — não há um segundo nível.
+ */
+export type SectorGranularity = SectorKind | 'STOCK_SUBSECTOR';
 
 export interface SectorSlice {
     /** Chave estável da fatia (rótulo, ou sentinela da dobra). */
@@ -185,16 +271,16 @@ export interface SectorSlice {
  * não são posições — a sugestão do Aporte Inteligente é uma lista de
  * (ticker, setor, valor) que só existiria na carteira depois da compra.
  */
-export type SectorAllocationInput = Pick<Asset, 'ticker' | 'sector'> &
-    Partial<Pick<Asset, 'type'>> & { totalValue: number };
+export type SectorAllocationInput = SectorLabelInput & Pick<Asset, 'ticker'> & { totalValue: number };
 
-const KIND_CONFIG: Record<SectorKind, { labelOf: (a: SectorAllocationInput) => string; foldLabel: string }> = {
+const KIND_CONFIG: Record<SectorGranularity, { labelOf: (a: SectorLabelInput) => string; foldLabel: string }> = {
     FII: { labelOf: (a) => fiiSectorLabel(a.sector), foldLabel: 'Outros segmentos' },
     STOCK: { labelOf: stockSectorLabel, foldLabel: 'Outros setores' },
+    STOCK_SUBSECTOR: { labelOf: stockSubsectorLabel, foldLabel: 'Outros setores' },
 };
 
-/** Rótulo de setor de uma linha, na granularidade da classe (segmento p/ FII). */
-export const sectorLabelFor = (item: SectorAllocationInput, kind: SectorKind): string =>
+/** Rótulo de setor de uma linha, na granularidade pedida. Só precisa do setor. */
+export const sectorLabelFor = (item: SectorLabelInput, kind: SectorGranularity): string =>
     KIND_CONFIG[kind].labelOf(item);
 
 /**
@@ -206,7 +292,7 @@ export const sectorLabelFor = (item: SectorAllocationInput, kind: SectorKind): s
  *  • acima de MAX_SECTOR_SLICES baldes, a cauda (mais o não classificado) dobra
  *    num balde cinza — gerar mais tons quebraria a validação da paleta.
  */
-export const computeSectorAllocation = (items: SectorAllocationInput[], kind: SectorKind): SectorSlice[] => {
+export const computeSectorAllocation = (items: SectorAllocationInput[], kind: SectorGranularity): SectorSlice[] => {
     const { labelOf, foldLabel } = KIND_CONFIG[kind];
     const buckets = new Map<string, { label: string; value: number; holdings: { ticker: string; value: number }[] }>();
     let total = 0;

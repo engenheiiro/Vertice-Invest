@@ -8,6 +8,7 @@ import {
     computeSectorAllocation,
     fiiSectorLabel,
     stockSectorLabel,
+    stockSubsectorLabel,
 } from './sectorAllocation';
 
 const holding = (ticker: string, totalValue: number, sector?: string, type = 'FII'): Asset => ({
@@ -71,6 +72,61 @@ describe('stockSectorLabel', () => {
     it('cai em não classificado quando o setor é desconhecido ou ausente', () => {
         expect(stockSectorLabel(stock('X', 1))).toBe(UNKNOWN_SECTOR_LABEL);
         expect(stockSectorLabel(stock('X', 1, 'Setor Inexistente'))).toBe(UNKNOWN_SECTOR_LABEL);
+    });
+
+    it('conhece o vocabulário novo do lote de agosto/2026', () => {
+        // O espelho do MACRO_SECTORS do servidor: sem estas entradas, quem tem
+        // WHRL4 ou MOAR3 na carteira vê a posição em 'Não classificado'.
+        expect(stockSectorLabel(stock('WHRL4', 1, 'Utilidades Domésticas'))).toBe('Consumo');
+        expect(stockSectorLabel(stock('BOBR4', 1, 'Produtos de Limpeza'))).toBe('Consumo');
+        expect(stockSectorLabel(stock('HOOT4', 1, 'Hotelaria'))).toBe('Consumo');
+        expect(stockSectorLabel(stock('MOAR3', 1, 'Holdings Diversificadas'))).toBe('Financeiro');
+    });
+});
+
+describe('stockSubsectorLabel — granularidade das listas de seleção', () => {
+    it('mantém o setor do ATIVO em vez de colapsar no macro-setor', () => {
+        // A leitura que a Carteira faz (banco + seguradora = 'Financeiro') é a
+        // certa para risco sistêmico e a errada para reconhecer o ativo na lista.
+        expect(stockSubsectorLabel(stock('ITUB4', 1, 'Bancos'))).toBe('Bancos');
+        expect(stockSubsectorLabel(stock('BBSE3', 1, 'Seguros'))).toBe('Seguros');
+    });
+
+    it('separa energia elétrica de saneamento — os dois eram Utilidade Pública', () => {
+        expect(stockSubsectorLabel(stock('CPFE3', 1, 'Elétricas'))).toBe('Energia Elétrica');
+        expect(stockSubsectorLabel(stock('TAEE11', 1, 'Energia Elétrica'))).toBe('Energia Elétrica');
+        expect(stockSubsectorLabel(stock('SAPR11', 1, 'Saneamento'))).toBe('Saneamento Básico');
+    });
+
+    it('telefonia não é Tecnologia', () => {
+        expect(stockSubsectorLabel(stock('VIVT3', 1, 'Telecom'))).toBe('Telecomunicações');
+    });
+
+    it('junta sinônimos da mesma coisa, sem inventar balde novo', () => {
+        expect(stockSubsectorLabel(stock('AGRO3', 1, 'Agro'))).toBe('Agronegócio');
+        expect(stockSubsectorLabel(stock('SLCE3', 1, 'Agropecuária'))).toBe('Agronegócio');
+        expect(stockSubsectorLabel(stock('PETR4', 1, 'Petróleo'))).toBe('Petróleo e Gás');
+    });
+
+    it('setor desconhecido preserva o texto da fonte em vez de sumir', () => {
+        // 'Não classificado' aqui seria pior que o nome real: um setor novo do
+        // Fundamentus apareceria como buraco cinza na primeira apuração.
+        expect(stockSubsectorLabel(stock('X', 1, 'Setor Inexistente'))).toBe('Setor Inexistente');
+    });
+
+    it('"Outros" e vazio continuam não classificados', () => {
+        // 'Outros' é o default do resolver quando não se sabe o setor — deixá-lo
+        // passar criaria uma fatia que se confunde com a dobra da cauda.
+        expect(stockSubsectorLabel(stock('X', 1, 'Outros'))).toBe(UNKNOWN_SECTOR_LABEL);
+        expect(stockSubsectorLabel(stock('X', 1))).toBe(UNKNOWN_SECTOR_LABEL);
+    });
+
+    it('setor em inglês cai no macro traduzido, não no texto cru', () => {
+        expect(stockSubsectorLabel(stock('AAPL', 1, 'Technology'))).toBe('Tecnologia');
+    });
+
+    it('ETF de índice segue fora de qualquer setor', () => {
+        expect(stockSubsectorLabel(holding('BOVA11', 1, 'Índice Amplo', 'ETF'))).toBe(ETF_SECTOR_LABEL);
     });
 });
 

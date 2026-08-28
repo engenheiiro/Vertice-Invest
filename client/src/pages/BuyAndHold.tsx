@@ -1,22 +1,29 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-    Anchor, Crown, Lock, ShieldCheck, TrendingDown, TrendingUp,
-    Clock, Info, Landmark, Building2,
-} from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Anchor, Crown, Info, Lock, Landmark, Building2, ChevronDown } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { Header } from '../components/dashboard/Header';
 // Extraido desta pagina quando o semanal ganhou retencao de assento: as duas
 // estrategias explicam saidas da mesma forma.
 import { ExitList } from '../components/research/ExitList';
+import { AnchorAssetCard } from '../components/research/AnchorAssetCard';
+import { AnchorSectorMix } from '../components/research/AnchorSectorMix';
+import { anchorStatusIcon, anchorTone } from '../components/research/anchorStatusTheme';
 import { SkeletonCard } from '../components/ui';
+import type { SectorGranularity } from '../utils/sectorAllocation';
 import { STALE_TIME } from '../config/queryConfig';
 import { useAuth } from '../contexts/AuthContext';
 import {
+    anchorStatusById,
+    averageAnchorScore,
+    groupByAnchorStatus,
+    type AnchorStatus,
+    type AnchorStatusId,
+} from '../utils/anchorStatus';
+import {
     researchService,
     AnchorReportError,
-    type AnchorRankingItem,
     type AnchorReport,
 } from '../services/research';
 
@@ -28,9 +35,11 @@ import {
  * A tela existe para comunicar a diferença. O Research semanal responde "quais
  * são as melhores oportunidades agora"; esta responde "o que eu poderia comprar
  * e esquecer". Duas listas com o mesmo verbo COMPRAR e propósitos opostos
- * confundem — por isso a página fala de portão, de eixos e, principalmente, de
- * quem está AGUARDANDO PREÇO: uma âncora boa esperando ponto de entrada é
- * informação útil, não rejeição.
+ * confundem — por isso a página fala de portão e, principalmente, do que separa
+ * quem está fora do COMPRAR: uma âncora boa esperando ponto de entrada, um
+ * fundo barrado pelo teto de composição da carteira e um ativo sem convicção
+ * são três coisas diferentes, e a tela as separa em vez de chamar tudo de
+ * AGUARDAR (ver `utils/anchorStatus.ts`).
  */
 
 const TABS = [
@@ -40,141 +49,85 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id'];
 
+/**
+ * Seções que ganham a repartição por setor.
+ *
+ * São as três que o assinante lê como uma cesta — o que comprar hoje, o que
+ * acompanhar e o que ainda amadurece — e onde a concentração muda a decisão.
+ * Fora ficam as duas seções de bloqueio: "fora por composição" é, por definição,
+ * o excedente de um balde já cheio (a pizza repetiria o próprio critério) e
+ * "renda não operacional" é uma lista de defeitos de tese, não uma carteira.
+ */
+const SECTOR_MIX_SECTIONS = new Set<AnchorStatusId>(['BUY', 'PRICE', 'CONVICTION']);
+
 const PLAN_LEVELS: Record<string, number> = { GUEST: 0, ESSENTIAL: 1, PRO: 2, ELITE: 3, BLACK: 4 };
 /** Gate PRO reusando a feature `research_general` — a mesma das abas de Research. */
 const MIN_PLAN = 'PRO';
 
-/** Magnitude em pt-BR, sem sinal: o rótulo (Prêmio/Desconto) já diz a direção. */
-const pctMagnitude = (value: number) => (
-    `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(value))}%`
-);
-
-const brl = (value: number | null | undefined) => (
-    value === null || value === undefined || !Number.isFinite(value)
-        ? '—'
-        : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
-);
+const decimal = (value: number, digits = 1) => new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+}).format(value);
 
 const dateLabel = (value?: string | null) => (
     value ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(value)) : '—'
 );
 
-/** Barra de um eixo (0–100). Os três juntos são a leitura rápida da tese. */
-const AxisBar = ({ label, value }: { label: string; value?: number }) => {
-    const safe = Number.isFinite(value) ? Math.max(0, Math.min(100, value as number)) : 0;
+/** Célula do painel de apuração. Números grandes, rótulo pequeno, uma cor só. */
+const Stat = ({ label, value, tone }: { label: string; value: string; tone: string }) => (
+    <div className="bg-card px-4 py-3.5">
+        <div className={`text-[10px] uppercase tracking-[0.12em] font-bold ${tone}`}>{label}</div>
+        <div className="text-2xl font-black text-slate-100 tabular-nums mt-1 leading-none">{value}</div>
+    </div>
+);
+
+/** Cabeçalho de seção: régua colorida, título e a linha que explica o grupo. */
+const SectionHeading = ({ status, count }: { status: AnchorStatus; count: number }) => {
+    const tone = anchorTone(status.tone);
+    const Icon = anchorStatusIcon(status.id);
     return (
-        <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wide text-slate-500 w-24 shrink-0">{label}</span>
-            <div className="flex-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
-                <div className="h-full rounded-full bg-blue-500/80" style={{ width: `${safe}%` }} />
-            </div>
-            <span className="text-[11px] font-bold text-slate-300 w-8 text-right tabular-nums">
-                {Number.isFinite(value) ? Math.round(value as number) : '—'}
-            </span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-4">
+            <span className={`w-[3px] h-[18px] rounded-sm shrink-0 ${tone.rule}`} aria-hidden />
+            <h2 className={`flex items-center gap-2 text-base font-bold ${tone.score}`}>
+                <Icon size={15} /> {status.section}
+                <span className="text-slate-500 font-black tabular-nums">{count}</span>
+            </h2>
+            <p className="text-xs text-slate-500 leading-relaxed basis-full lg:basis-auto lg:flex-1 lg:min-w-[16rem]">
+                {status.description}
+            </p>
         </div>
     );
 };
 
-const ActionBadge = ({ action }: { action: string }) => (
-    action === 'BUY'
-        ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                <ShieldCheck size={12} /> COMPRAR
-            </span>
-        )
-        : (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-black bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">
-                <Clock size={12} /> AGUARDAR
-            </span>
-        )
-);
-
 /**
- * Prêmio/desconto sobre o preço justo. É o dado que transforma "AGUARDAR" de
- * rejeição em instrução: a âncora está boa, falta o preço chegar.
+ * Método da lista, recolhido. O texto longo explicando portão, eixos e histerese
+ * é o que dá credibilidade à palavra COMPRAR, mas não pode ser a primeira coisa
+ * que o assinante lê — a chamada da página tem que caber em duas linhas, como a
+ * da Carteira.
  */
-const PremiumTag = ({ premiumPct }: { premiumPct?: number | null }) => {
-    if (premiumPct === null || premiumPct === undefined || !Number.isFinite(premiumPct)) return null;
-    const expensive = premiumPct > 0;
+const MethodDisclosure = ({ entryScore, holdScore }: { entryScore: number; holdScore: number }) => {
+    const [open, setOpen] = useState(false);
     return (
-        <span
-            className={`inline-flex items-center gap-1 text-[11px] font-bold ${expensive ? 'text-yellow-400' : 'text-emerald-400'}`}
-            title={expensive ? 'Negociando acima do preço justo estimado' : 'Negociando abaixo do preço justo estimado'}
-        >
-            {expensive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            {expensive ? 'Prêmio' : 'Desconto'} {pctMagnitude(premiumPct)}
-        </span>
-    );
-};
-
-const HysteresisTag = ({ item }: { item: AnchorRankingItem }) => {
-    const state = item.anchor?.hysteresis?.state;
-    if (state === 'HELD') {
-        return (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25">
-                mantida na lista
-            </span>
-        );
-    }
-    if (state === 'ENTERED') {
-        return (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
-                entrou agora
-            </span>
-        );
-    }
-    return null;
-};
-
-const AssetCard = ({ item }: { item: AnchorRankingItem }) => {
-    const axes = item.anchor?.axes;
-    const isBuy = item.action === 'BUY';
-    return (
-        <div className={`rounded-2xl border p-4 md:p-5 bg-card transition-colors ${isBuy ? 'border-emerald-500/25' : 'border-slate-800'}`}>
-            <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-                <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base font-black text-slate-100">{item.ticker}</span>
-                        <HysteresisTag item={item} />
-                    </div>
-                    <p className="text-xs text-slate-500 truncate max-w-[22rem]">{item.name || item.sector}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="text-right">
-                        <div className="text-2xl font-black text-slate-100 tabular-nums leading-none">{item.score}</div>
-                        <div className="text-[10px] uppercase tracking-wide text-slate-500">score</div>
-                    </div>
-                    <ActionBadge action={item.action} />
-                </div>
-            </div>
-
-            <div className="space-y-1.5 mb-3">
-                <AxisBar label="Durabilidade" value={axes?.durability} />
-                <AxisBar label="Resiliência" value={axes?.resilience} />
-                <AxisBar label="Consistência" value={axes?.consistency} />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2 text-[11px] text-slate-400">
-                <PremiumTag premiumPct={item.anchor?.premiumPct} />
-                {Number.isFinite(item.currentPrice) && (
-                    <span className="tabular-nums">Preço {brl(item.currentPrice)}</span>
-                )}
-                {Number.isFinite(item.targetPrice) && (
-                    <span className="tabular-nums">Justo {brl(item.targetPrice)}</span>
-                )}
-                {Number.isFinite(item.anchor?.spreadPp as number) && (
-                    <span className="tabular-nums">Spread {new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.anchor?.spreadPp as number)} p.p.</span>
-                )}
-                {Number.isFinite(item.anchor?.pFfo as number) && (
-                    <span className="tabular-nums">P/FFO {new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(item.anchor?.pFfo as number)}x</span>
-                )}
-                {item.anchor?.manager && <span>Gestora {item.anchor.manager}</span>}
-            </div>
-
-            {/* O motivo em texto é o produto tanto quanto o score: uma lista âncora
-                que não explica por que um ativo está fora do COMPRAR obriga o
-                assinante a adivinhar se é o negócio ou o preço. */}
-            <p className="text-xs text-slate-400 leading-relaxed">{item.reason}</p>
+        <div className="mt-2">
+            <button
+                type="button"
+                onClick={() => setOpen(value => !value)}
+                aria-expanded={open}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
+            >
+                Como a lista é montada
+                <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+            {open && (
+                <p className="text-xs text-slate-400 leading-relaxed max-w-2xl mt-2 animate-fade-in">
+                    Segurança é <span className="text-slate-300 font-semibold">portão, não nota</span>: setor previsível,
+                    porte e liquidez de sobra, dívida sob controle e resultado através do ciclo. Quem não passa não
+                    aparece, por mais barato que esteja. Quem passa é medido em três eixos — durabilidade, resiliência e
+                    consistência — e o preço entra só como <span className="text-slate-300 font-semibold">freio</span>,
+                    nunca como bônus. A lista é revista uma vez por mês e tem inércia deliberada: um ativo entra com
+                    score {entryScore} e só sai abaixo de {holdScore}, para não girar por oscilação de medição.
+                </p>
+            )}
         </div>
     );
 };
@@ -218,11 +171,20 @@ export const BuyAndHold = () => {
         retry: false,
     });
 
-    const ranking = useMemo(() => data?.content?.ranking || [], [data]);
-    const buys = useMemo(() => ranking.filter(item => item.action === 'BUY'), [ranking]);
-    const waits = useMemo(() => ranking.filter(item => item.action !== 'BUY'), [ranking]);
-    const exits = useMemo(() => data?.anchorExits || [], [data]);
     const thresholds = data?.inputManifest?.thresholds;
+    const entryScore = thresholds?.entryScore ?? 70;
+    const holdScore = thresholds?.holdScore ?? 62;
+
+    const ranking = useMemo(() => data?.content?.ranking || [], [data]);
+    const groups = useMemo(() => groupByAnchorStatus(ranking, entryScore), [ranking, entryScore]);
+    const buyCount = useMemo(() => ranking.filter(item => item.action === 'BUY').length, [ranking]);
+    const averageScore = useMemo(() => averageAnchorScore(ranking), [ranking]);
+    const exits = useMemo(() => data?.anchorExits || [], [data]);
+
+    // Ação é repartida pelo SUBSETOR do próprio ativo (Energia Elétrica,
+    // Saneamento Básico, Telecomunicações), não pelo macro-setor da Carteira:
+    // numa lista de seleção o rótulo do gráfico tem que bater com o do cartão.
+    const sectorKind: SectorGranularity = tab === 'FII' ? 'FII' : 'STOCK_SUBSECTOR';
 
     const forbidden = error instanceof AnchorReportError && error.kind === 'FORBIDDEN';
 
@@ -230,43 +192,45 @@ export const BuyAndHold = () => {
         <div className="min-h-screen bg-deep text-white font-sans pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-0">
             <Header />
 
-            <main id="main-content" tabIndex={-1} className="max-w-[1360px] mx-auto p-4 md:p-8">
-                <header className="mb-6 md:mb-8">
-                    <h1 className="text-2xl md:text-4xl font-black text-slate-100 tracking-tighter flex items-center gap-3 md:gap-4">
-                        <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/20 shrink-0">
-                            <Anchor size={22} className="text-white" />
-                        </div>
-                        Buy-and-Hold
-                    </h1>
-                    {/* A distinção com o Research semanal precisa estar na primeira
-                        linha lida — as duas listas usam o verbo COMPRAR. */}
-                    <p className="text-sm text-slate-400 mt-3 max-w-3xl leading-relaxed">
-                        Não é a lista das melhores oportunidades da semana — para isso existe o{' '}
-                        <span className="text-slate-300 font-semibold">Research</span>. Aqui ficam os ativos que
-                        passam num portão de segurança e dão para carregar por <span className="text-slate-300 font-semibold">décadas</span>:
-                        setor previsível, porte e liquidez de sobra, dívida sob controle, resultado através do ciclo.
-                        Segurança é portão, não nota — quem não passa não aparece, por mais barato que esteja.
-                        A lista é revista <span className="text-slate-300 font-semibold">uma vez por mês</span> e tem
-                        inércia deliberada: um ativo entra com score {thresholds?.entryScore ?? 70} e só sai abaixo
-                        de {thresholds?.holdScore ?? 62}, para não girar por oscilação de medição.
-                    </p>
-                </header>
+            <main id="main-content" tabIndex={-1} className="max-w-[1360px] mx-auto p-4 md:p-6 animate-fade-in">
+                {/* Título e ícone na MESMA régua do Research — as duas listas são
+                    irmãs e trocar de escala tipográfica entre elas faria a página
+                    parecer de outro produto. */}
+                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 md:gap-6 mb-5 md:mb-8">
+                    <div className="min-w-0">
+                        <h1 className="text-2xl md:text-4xl font-black text-white tracking-tighter flex items-center gap-3 md:gap-4">
+                            <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/20 shrink-0">
+                                <Anchor size={22} className="md:hidden" />
+                                <Anchor size={28} className="hidden md:block" />
+                            </div>
+                            Buy-and-Hold
+                        </h1>
+                        <p className="text-slate-400 text-sm leading-relaxed max-w-xl mt-2">
+                            A lista para carregar por décadas: ativos que passam num portão de segurança, com o que
+                            ainda falta escrito em cada um. Para a melhor oportunidade de agora existe o{' '}
+                            <Link to="/research" className="text-slate-300 font-semibold hover:text-blue-400 transition-colors">
+                                Research
+                            </Link>.
+                        </p>
+                        <MethodDisclosure entryScore={entryScore} holdScore={holdScore} />
+                    </div>
 
-                <div className="flex items-center gap-2 mb-6">
-                    {TABS.map(({ id, label, icon: Icon }) => (
-                        <button
-                            key={id}
-                            type="button"
-                            onClick={() => setTab(id)}
-                            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors border ${
-                                tab === id
-                                    ? 'bg-blue-600 text-white border-blue-500'
-                                    : 'bg-card text-slate-400 border-slate-800 hover:text-slate-200'
-                            }`}
-                        >
-                            <Icon size={15} /> {label}
-                        </button>
-                    ))}
+                    <div className="flex items-center gap-2 shrink-0">
+                        {TABS.map(({ id, label, icon: Icon }) => (
+                            <button
+                                key={id}
+                                type="button"
+                                onClick={() => setTab(id)}
+                                className={`inline-flex items-center gap-2 px-4 py-2 h-10 rounded-xl text-sm font-bold transition-colors border ${
+                                    tab === id
+                                        ? 'bg-blue-600 text-white border-blue-500'
+                                        : 'bg-card text-slate-400 border-slate-800 hover:text-slate-200'
+                                }`}
+                            >
+                                <Icon size={15} /> {label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {!hasAccess || forbidden ? <PlanGate /> : isLoading ? (
@@ -283,49 +247,59 @@ export const BuyAndHold = () => {
                     </div>
                 ) : (
                     <>
-                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-6 text-xs text-slate-500">
-                            <span>Publicada em <span className="text-slate-300 font-semibold">{dateLabel(data?.createdAt || data?.date)}</span></span>
-                            <span><span className="text-emerald-400 font-bold">{buys.length}</span> para comprar</span>
-                            <span><span className="text-yellow-400 font-bold">{waits.length}</span> aguardando</span>
-                            {exits.length > 0 && <span><span className="text-slate-300 font-bold">{exits.length}</span> saíram</span>}
+                        {/* Painel da apuração: o gap-px vira a divisória entre as
+                            células, sem contas de borda por breakpoint. */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-800 border border-slate-800 rounded-2xl overflow-hidden mb-3">
+                            <Stat label="Para comprar" value={String(buyCount)} tone="text-emerald-400" />
+                            <Stat label="Aguardando" value={String(ranking.length - buyCount)} tone="text-yellow-400" />
+                            <Stat label="Saíram" value={String(exits.length)} tone="text-slate-400" />
+                            <Stat
+                                label="Score médio da lista"
+                                value={averageScore === null ? '—' : decimal(averageScore)}
+                                tone="text-blue-400"
+                            />
                         </div>
+                        <p className="text-xs text-slate-500 mb-8">
+                            Publicada em <span className="text-slate-300 font-semibold">{dateLabel(data?.createdAt || data?.date)}</span>
+                            {' · '}revista no primeiro dia de cada mês
+                        </p>
 
-                        <section className="mb-10">
-                            <h2 className="flex items-center gap-2 text-sm font-bold text-emerald-400 mb-1">
-                                <ShieldCheck size={15} /> Para comprar
-                            </h2>
-                            <p className="text-xs text-slate-500 mb-3">
-                                Âncora aprovada no portão e negociando dentro do valor justo.
-                            </p>
-                            {buys.length ? (
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                                    {buys.map(item => <AssetCard key={item.ticker} item={item} />)}
-                                </div>
-                            ) : (
+                        {/* A página abre por "Para comprar" mesmo quando ninguém
+                            passa: sem o cabeçalho, uma apuração sem COMPRAR
+                            parece uma apuração que não rodou. */}
+                        {buyCount === 0 && (
+                            <section className="mb-10">
+                                <SectionHeading status={anchorStatusById('BUY')} count={0} />
                                 <p className="text-sm text-slate-500 rounded-xl border border-slate-800 bg-card px-4 py-6 text-center">
                                     Nenhum ativo reúne segurança e preço justo neste momento. Esperar é uma posição.
                                 </p>
-                            )}
-                        </section>
-
-                        {waits.length > 0 && (
-                            <section>
-                                <h2 className="flex items-center gap-2 text-sm font-bold text-yellow-400 mb-1">
-                                    <Clock size={15} /> Aguardando
-                                </h2>
-                                {/* Explicitar que AGUARDAR não é reprovação é metade do
-                                    valor da tela: são âncoras boas esperando preço. */}
-                                <p className="text-xs text-slate-500 mb-3">
-                                    Passaram no portão, mas ainda não reúnem tudo. Quem está aqui só pelo preço é uma
-                                    boa âncora esperando ponto de entrada — vale acompanhar, não descartar.
-                                </p>
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                                    {waits.map(item => <AssetCard key={item.ticker} item={item} />)}
-                                </div>
                             </section>
                         )}
 
-                        {exits.length > 0 && <ExitList exits={exits} />}
+                        {groups.map(({ status, items }) => (
+                            <section key={status.id} className="mb-10">
+                                <SectionHeading status={status} count={items.length} />
+                                {SECTOR_MIX_SECTIONS.has(status.id) && (
+                                    <AnchorSectorMix items={items} kind={sectorKind} section={status.section} />
+                                )}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                    {items.map(item => (
+                                        <AnchorAssetCard key={item.ticker} item={item} status={status} sectorKind={sectorKind} />
+                                    ))}
+                                </div>
+                            </section>
+                        ))}
+
+
+                        {/* Numa lista âncora, "ninguém saiu" é o resultado esperado
+                            e informa tanto quanto uma saída: some a seção e o
+                            assinante não sabe se a lista foi estável ou se a
+                            página deixou de contar. */}
+                        <ExitList
+                            exits={exits}
+                            subtitle="Quem estava na lista anterior e não está mais nesta — com o motivo escrito e o score de antes e de agora."
+                            emptyMessage="Nenhum ativo saiu da lista nesta apuração — a carteira anterior segue de pé."
+                        />
                     </>
                 )}
 

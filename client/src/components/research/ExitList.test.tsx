@@ -53,12 +53,13 @@ describe('ExitList', () => {
     render(<ExitList exits={exits} />);
     expect(screen.getByText('PINE4')).toBeInTheDocument();
     expect(screen.getByText(/score caiu para 60, abaixo do mínimo para manter a vaga \(62\)/)).toBeInTheDocument();
-    expect(screen.getByText('74 → 60')).toBeInTheDocument();
+    expect(screen.getByText('74')).toBeInTheDocument();
+    expect(screen.getByText('60')).toBeInTheDocument();
   });
 
   it('quem sumiu do universo não inventa score novo', () => {
     render(<ExitList exits={exits} />);
-    expect(screen.getByText('80 → fora do universo')).toBeInTheDocument();
+    expect(screen.getByText('fora do universo')).toBeInTheDocument();
   });
 
   it('só mostra o selo "não aparece mais no ranking" quando a estratégia o informa', () => {
@@ -66,10 +67,25 @@ describe('ExitList', () => {
     // e repetir o selo em toda linha seria ruído.
     const { rerender } = render(<ExitList exits={exits} />);
     expect(screen.queryByText('não aparece mais no ranking')).not.toBeInTheDocument();
+    expect(screen.queryByText('segue no ranking, fora do COMPRAR')).not.toBeInTheDocument();
 
     // Âncora manda: lá um ativo pode perder o COMPRAR e seguir no ranking.
     rerender(<ExitList exits={[{ ...exits[0], stillListed: false }]} />);
     expect(screen.getByText('não aparece mais no ranking')).toBeInTheDocument();
+
+    rerender(<ExitList exits={[{ ...exits[0], stillListed: true }]} />);
+    expect(screen.getByText('segue no ranking, fora do COMPRAR')).toBeInTheDocument();
+  });
+
+  it('sem saídas, a seção só aparece para quem pediu a mensagem de lista estável', () => {
+    // Semanal: nada saiu naquela apuração e a seção não existe.
+    const { rerender } = render(<ExitList exits={[]} />);
+    expect(screen.queryByText('Saíram da lista nesta apuração')).not.toBeInTheDocument();
+
+    // Âncora: "ninguém saiu" é resultado, não ausência de dado.
+    rerender(<ExitList exits={[]} emptyMessage="Nenhum ativo saiu da lista nesta apuração." />);
+    expect(screen.getByText('Saíram da lista nesta apuração')).toBeInTheDocument();
+    expect(screen.getByText('Nenhum ativo saiu da lista nesta apuração.')).toBeInTheDocument();
   });
 });
 
