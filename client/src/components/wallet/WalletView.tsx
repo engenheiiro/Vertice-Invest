@@ -20,7 +20,7 @@ import { RenameWalletModal } from './RenameWalletModal';
 import { WalletSwitcher } from './WalletSwitcher';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { SkeletonChart, SkeletonTableRows, EmptyState, Button } from '../ui'; // (I12) skeletons padronizados + (U3) empty state
-import { Plus, Lock, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, CircleDollarSign, FileText, Loader2, DollarSign, Landmark, Pencil, Eye, Upload } from 'lucide-react';
+import { Plus, Lock, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, CircleDollarSign, FileText, Loader2, DollarSign, Landmark, Pencil, Eye, Upload, ShieldCheck } from 'lucide-react';
 import { PieSlices } from '../ui/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
@@ -190,11 +190,10 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
                             <PlusCircle size={16} /> <span className="sm:hidden">Transação</span><span className="hidden sm:inline">Nova Transação</span>
                         </button>
 
-                        {/* Importar carteira — sem gate de plano: é a porta de
-                            entrada de quem vem de outra plataforma. */}
-                        <button aria-label="Importar carteira" title="Importar carteira do extrato da B3 ou de planilha" className="w-full sm:w-auto flex items-center justify-center gap-2 px-3 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-panel border border-slate-700 text-slate-200 hover:bg-elevated hover:text-white whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={() => setIsImportModalOpen(true)}>
-                            <Upload size={16} /> <span>Importar</span>
-                        </button>
+                        {/* Importar carteira NÃO fica aqui: a barra de ações é do dia
+                            a dia de quem já tem carteira, e importar é um gesto de
+                            uma vez só. A porta é o estado vazio da Visão Geral —
+                            some sozinha assim que existe o primeiro ativo. */}
 
                         {/* Botão Aporte Inteligente */}
                         <button aria-label="Aporte Inteligente" title="Aporte Inteligente" className="w-full sm:w-auto flex items-center justify-center gap-2 px-3 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={handleOpenSmartContribution}>
@@ -263,13 +262,19 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
                                             title="Sua carteira está vazia"
                                             description="Já investe pela B3? Importe o extrato e traga a carteira inteira de uma vez, com o histórico real de compras e vendas. Ou comece adicionando o primeiro ativo."
                                             action={
-                                                <div className="flex flex-col sm:flex-row gap-2.5">
-                                                    <Button onClick={() => setIsImportModalOpen(true)} className="!w-auto px-6 gap-2">
-                                                        <Upload size={16} /> Importar carteira
-                                                    </Button>
-                                                    <Button variant="outline" onClick={() => setIsAddModalOpen(true)} className="!w-auto px-6 gap-2">
-                                                        <Plus size={16} /> Adicionar ativo
-                                                    </Button>
+                                                <div className="flex flex-col items-center gap-3">
+                                                    <div className="flex flex-col sm:flex-row gap-2.5">
+                                                        <Button onClick={() => setIsImportModalOpen(true)} className="!w-auto px-6 gap-2">
+                                                            <Upload size={16} /> Importar carteira
+                                                        </Button>
+                                                        <Button variant="outline" onClick={() => setIsAddModalOpen(true)} className="!w-auto px-6 gap-2">
+                                                            <Plus size={16} /> Adicionar ativo
+                                                        </Button>
+                                                    </div>
+                                                    <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                                                        <ShieldCheck size={12} className="text-emerald-500/80 shrink-0" />
+                                                        O arquivo é lido no seu navegador — CPF e corretora não saem daqui.
+                                                    </p>
                                                 </div>
                                             }
                                         />
