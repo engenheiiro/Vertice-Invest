@@ -181,3 +181,31 @@ export function getAssetTags(asset: AssetLike): AssetTag[] {
 
   return tags;
 }
+
+/**
+ * Preço unitário exibível de uma posição — ou `null` quando não existe um.
+ *
+ * Renda fixa e caixa não têm preço unitário digitado que signifique algo: as
+ * colunas da tela são custo÷quantidade e saldo÷quantidade, e a quantidade da RF
+ * não segue convenção. O cadastro manual pede só o "Valor Total Investido" e
+ * grava quantidade 1 — o "preço médio" vira o total. O extrato da B3 traz a
+ * fração real (0,25) e o mesmo cálculo vira o PU do título. O mesmo Tesouro
+ * IPCA+ 2032 aparecia como R$ 735,92 numa carteira e R$ 2.943,68 na outra.
+ *
+ * A saída é: PU OFICIAL quando o título público está marcado a mercado (não
+ * depende de como foi digitado, e bate com o extrato do Tesouro Direto), e nada
+ * quando não há preço público — CDB, LCI, título com cupom semestral, caixa.
+ *
+ * Vive aqui, e não na tela, porque a Carteira e o Terminal listam os mesmos
+ * ativos: a regra divergir entre as duas recriaria a incoerência que ela existe
+ * para fechar.
+ */
+export function displayUnitPrices(
+  asset: { type?: string; treasuryUnitPrice?: number | null; treasuryAverageUnitPrice?: number | null },
+  fallback: { average: number; current: number },
+): { average: number; current: number } | null {
+  if (asset.type !== 'FIXED_INCOME' && asset.type !== 'CASH') return fallback;
+  const average = asset.treasuryAverageUnitPrice;
+  const current = asset.treasuryUnitPrice;
+  return (average && current) ? { average, current } : null;
+}

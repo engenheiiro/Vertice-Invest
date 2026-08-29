@@ -14,7 +14,7 @@ import { ConfirmModal } from '../ui/ConfirmModal';
 import AssetLogo from '../common/AssetLogo';
 import AssetTags from '../common/AssetTags';
 import type { AssetType } from '../../contexts/WalletContext';
-import { getAssetSubtitle, getAssetTags } from '../../utils/assetDisplay';
+import { getAssetSubtitle, getAssetTags, displayUnitPrices } from '../../utils/assetDisplay';
 import { allocationBucket } from '../../utils/allocation';
 
 interface AssetTableProps {
@@ -56,6 +56,10 @@ const pluralAtivos = (n: number) => `${n} ${n === 1 ? 'Ativo' : 'Ativos'}`;
 
 // Cripto e ativos internacionais cotam em US$; o resto (B3, FIIs, RF, caixa) em R$.
 const currencyOf = (type?: string): 'USD' | 'BRL' => (type === 'CRYPTO' || type === 'STOCK_US' ? 'USD' : 'BRL');
+
+/** Sem preço unitário exibível (renda fixa/caixa sem PU público). */
+const NO_UNIT_PRICE = <span className="text-slate-600">—</span>;
+const isFixedIncomeLike = (item: PortfolioItem) => item.type === 'FIXED_INCOME' || item.type === 'CASH';
 
 export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false, isResearchLoading = false }) => {
     const { hasPlan, limitFor } = useFeatureAccess();
@@ -224,6 +228,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                         const isUSD = currencyOf(item.type) === 'USD' || item.currency === 'USD';
                                         const brlValue = item.totalValue ?? item.currentPrice * item.shares;
                                         const nativeValue = item.currentPrice * item.shares;
+                                        const unitPrices = displayUnitPrices(item, { average: item.avgPrice, current: item.currentPrice });
 
                                         return (
                                             <tr key={item.ticker} className="hover:bg-slate-800/30 transition-colors group">
@@ -256,18 +261,30 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                         </div>
                                                     )}
                                                 </td>
+                                                {/* Mesma régua da Carteira: em RF/caixa o preço unitário
+                                                    digitado não significa nada, e o que entra é o PU
+                                                    oficial do título quando ele está marcado. */}
                                                 <td className="p-4 text-right tabular-nums font-bold text-slate-300">
-                                                    {formatCurrency(item.currentPrice, currencyOf(item.type))}
+                                                    {unitPrices ? formatCurrency(unitPrices.current, currencyOf(item.type)) : NO_UNIT_PRICE}
                                                 </td>
                                                 <td className="p-4 text-right tabular-nums text-slate-400">
-                                                    {formatCurrency(item.avgPrice, currencyOf(item.type))}
+                                                    {unitPrices ? formatCurrency(unitPrices.average, currencyOf(item.type)) : NO_UNIT_PRICE}
                                                 </td>
                                                 <td className="p-4 text-right">
                                                     <p className="font-bold text-slate-200">{formatCurrency(brlValue, 'BRL')}</p>
                                                     {isUSD && !isPrivacyMode ? (
                                                         <p className="text-[10px] text-blue-400/70 tabular-nums">({formatCurrency(nativeValue, 'USD')})</p>
                                                     ) : (
-                                                        <p className="text-[10px] text-slate-500">{item.shares} un</p>
+                                                        <p className="text-[10px] text-slate-500">
+                                                            {/* Em RF/caixa a contagem de unidades é vazia ("16.800 un" numa reserva):
+                                                                entra a fração implícita do título quando ele está marcado, senão o
+                                                                quanto entrou. Mesma linha da aba Carteira. */}
+                                                            {!isFixedIncomeLike(item)
+                                                                ? `${item.shares} un`
+                                                                : item.treasuryUnits
+                                                                    ? `${item.treasuryUnits} un`
+                                                                    : `investido ${formatCurrency(item.totalCost ?? 0, 'BRL')}`}
+                                                        </p>
                                                     )}
                                                 </td>
 
@@ -401,7 +418,16 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                 {isUSD && !isPrivacyMode ? (
                                                     <p className="text-[10px] text-blue-400/70 tabular-nums">({formatCurrency(nativeValue, 'USD')})</p>
                                                 ) : (
-                                                    <p className="text-[10px] text-slate-500">{item.shares} un</p>
+                                                    <p className="text-[10px] text-slate-500">
+                                                        {/* Em RF/caixa a contagem de unidades é vazia ("16.800 un" numa reserva):
+                                                            entra a fração implícita do título quando ele está marcado, senão o
+                                                            quanto entrou. Mesma linha da aba Carteira. */}
+                                                        {!isFixedIncomeLike(item)
+                                                            ? `${item.shares} un`
+                                                            : item.treasuryUnits
+                                                                ? `${item.treasuryUnits} un`
+                                                                : `investido ${formatCurrency(item.totalCost ?? 0, 'BRL')}`}
+                                                    </p>
                                                 )}
                                             </div>
                                         </div>

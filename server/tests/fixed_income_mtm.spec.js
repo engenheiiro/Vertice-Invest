@@ -206,6 +206,65 @@ describe('valueFixedIncomeAsset — porta única', () => {
     });
 });
 
+describe('PU oficial para a UI — preço que não depende da digitação', () => {
+    it('devolve o PU de hoje e a fração implícita, e valor = PU × fração', () => {
+        const marked = markToMarketFixedIncome(asset(), { history, calcDate });
+        expect(marked.unitPrice).toBe(1111);
+        expect(marked.units).toBeCloseTo(1000 / 1010, 8);
+        // A identidade que justifica exibir os dois: multiplicá-los tem de dar o
+        // valor marcado, senão a linha da tela não fecha na cabeça de ninguém.
+        expect(marked.unitPrice * marked.units).toBeCloseTo(marked.value, 6);
+    });
+
+    it('a fração implícita é a MESMA nas três convenções de cadastro', () => {
+        // É esta invariância que faz a carteira cadastrada à mão e a importada da
+        // B3 mostrarem o mesmo PU para o mesmo título.
+        const comoUmLote = asset({ quantity: 1, totalCost: 1000, taxLots: [{ date: dayDate(-4), quantity: 1, price: 1000 }] });
+        const comoFracao = asset({ quantity: 0.32, totalCost: 1000, taxLots: [{ date: dayDate(-4), quantity: 0.32, price: 3125 }] });
+        const comoAbsurdo = asset({ quantity: 2, totalCost: 1000, taxLots: [{ date: dayDate(-4), quantity: 2, price: 500 }] });
+
+        for (const posicao of [comoUmLote, comoFracao, comoAbsurdo]) {
+            const marked = markToMarketFixedIncome(posicao, { history, calcDate });
+            expect(marked.units).toBeCloseTo(1000 / 1010, 8);
+            expect(marked.unitPrice).toBe(1111);
+        }
+    });
+
+    it('soma a fração de lotes ancorados em PUs diferentes', () => {
+        const doisLotes = asset({
+            quantity: 2,
+            totalCost: 2000,
+            taxLots: [
+                { date: dayDate(-4), quantity: 1, price: 1000 },
+                { date: dayDate(-2), quantity: 1, price: 1000 },
+            ],
+        });
+        const marked = markToMarketFixedIncome(doisLotes, { history, calcDate });
+        expect(marked.units).toBeCloseTo(1000 / 1010 + 1000 / 1060, 8);
+        expect(marked.unitPrice * marked.units).toBeCloseTo(marked.value, 6);
+    });
+
+    it('sem série não há preço unitário — a UI omite em vez de inventar', () => {
+        const out = valueFixedIncomeAsset(asset(), { ...macroRates, calcDate, history: null });
+        expect(out.source).toBe(PRICING_SOURCE.ACCRUAL);
+        expect(out.unitPrice).toBeNull();
+        expect(out.units).toBeNull();
+    });
+
+    it('o card expõe PU de hoje, PU médio de compra e a fração', () => {
+        const pricing = { historyFor: () => history, resolve: () => ({ key: 'IPCA|2035-05-15' }), catalog: [], series: new Map() };
+        const { processed } = processWalletAsset(asset(), {
+            assetMap: new Map(), usdRate: 5, usdChange: 0, macroRates,
+            isTodayBusinessDay: true, treasuryPricing: pricing,
+        });
+
+        expect(processed.treasuryUnitPrice).toBe(1111);
+        expect(processed.treasuryUnits).toBeCloseTo(1000 / 1010, 6);
+        // PU médio = custo ÷ fração — reconstrói o PU de compra do lote (1010).
+        expect(processed.treasuryAverageUnitPrice).toBeCloseTo(1010, 2);
+    });
+});
+
 describe('normalizeLots', () => {
     it('CASH usa a quantidade como valor (mesma convenção do accrual)', () => {
         expect(normalizeLots({ type: 'CASH', quantity: 15000, totalCost: 15000, taxLots: [{ date: dayDate(-4), quantity: 15000, price: 1 }] }))

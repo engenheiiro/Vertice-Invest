@@ -245,6 +245,37 @@ export const normalizeLots = (asset) => {
  * INTEIRO. Marcar metade dos lotes e acumular a outra metade misturaria duas
  * réguas no mesmo número.
  */
+/**
+ * Quantidade IMPLÍCITA de títulos: Σ (custo do lote ÷ PU de compra do lote).
+ *
+ * É a mesma conta que a marcação já faz por dentro — `valor = Σ custo × PU_hoje
+ * ÷ PU_compra` é idêntico a `PU_hoje × Σ (custo ÷ PU_compra)` — só que isolada,
+ * para a UI poder exibir o PU do título em vez do preço unitário que o usuário
+ * digitou.
+ *
+ * Isso resolve uma incoerência de tela: `quantity`/`price` da posição não seguem
+ * convenção (o cadastro manual pede só o valor investido e grava quantidade 1; o
+ * extrato da B3 traz a fração real e o PU), então o mesmo título aparecia com
+ * "preço médio" R$ 735,92 numa carteira e R$ 2.943,68 na outra. A fração
+ * implícita não depende de como foi digitado — só do custo e do PU oficial.
+ *
+ * `null` com a mesma regra fail-closed da marcação: um lote sem PU utilizável
+ * invalida a quantidade do ativo inteiro.
+ */
+export const impliedTreasuryUnits = (lots, history) => {
+    let units = 0;
+    for (const lot of lots) {
+        const anchor = findTreasuryPu(history, lot.dateIso);
+        if (!anchor) return null;
+
+        const anchorPu = anchor.point.puBuy > 0 ? anchor.point.puBuy : anchor.point.pu;
+        if (!(anchorPu > 0)) return null;
+
+        units += lot.cost / anchorPu;
+    }
+    return units > 0 ? units : null;
+};
+
 export const markLotsToMarket = (lots, history, targetIso) => {
     const current = findTreasuryPu(history, targetIso);
     if (!current) return null;
@@ -299,7 +330,15 @@ export const markToMarketFixedIncome = (asset, { history, calcDate }) => {
         ? markLotsToMarket(olderLots, history, previous.date)
         : null;
 
-    return { value, previousValue, priceDate: current.point.date };
+    return {
+        value,
+        previousValue,
+        priceDate: current.point.date,
+        // PU oficial de hoje e a fração implícita que ele multiplica. Só a UI usa:
+        // o valor da posição continua vindo da razão de PU sobre o custo.
+        unitPrice: current.point.pu,
+        units: impliedTreasuryUnits(lots, history),
+    };
 };
 
 /** Como a posição foi precificada — acompanha o valor até a UI. */
@@ -315,11 +354,15 @@ export const PRICING_SOURCE = { MTM: 'MTM', ACCRUAL: 'ACCRUAL' };
  * @param {Object} opts  { cdiRate, selic, ipca, calcDate, history }
  *   `history` é a série de PU do título já resolvido pelo chamador (null = accrual)
  * @returns {{ value: number, accrued: number, market: number|null,
- *             previousMarket: number|null, source: string, priceDate: string|null }}
+ *             previousMarket: number|null, source: string, priceDate: string|null,
+ *             unitPrice: number|null, units: number|null }}
+ *   `unitPrice`/`units` só existem no caminho MTM: são o PU oficial do título e a
+ *   fração implícita que ele multiplica, para a UI exibir preço de título em vez
+ *   do preço unitário digitado. Nenhum cálculo de patrimônio depende deles.
  */
 export const valueFixedIncomeAsset = (asset, { cdiRate, selic, ipca, calcDate, history = null }) => {
     const accrued = accrueFixedIncomeValue(asset, { cdiRate, selic, ipca, calcDate });
-    const base = { accrued, market: null, previousMarket: null, priceDate: null };
+    const base = { accrued, market: null, previousMarket: null, priceDate: null, unitPrice: null, units: null };
 
     if (!history) return { ...base, value: accrued, source: PRICING_SOURCE.ACCRUAL };
 
@@ -332,6 +375,8 @@ export const valueFixedIncomeAsset = (asset, { cdiRate, selic, ipca, calcDate, h
         market: marked.value,
         previousMarket: marked.previousValue,
         priceDate: marked.priceDate,
+        unitPrice: marked.unitPrice,
+        units: marked.units,
         source: PRICING_SOURCE.MTM,
     };
 };

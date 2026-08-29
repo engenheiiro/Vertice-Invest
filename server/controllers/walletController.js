@@ -9,7 +9,7 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
-import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, safeValue, safePrice, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
+import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, safeValue, safePrice, safeQuantity, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
 import { computeQuotaSharpe, computeQuotaBeta, snapshotDayKey, SHARPE_WINDOW_SNAPSHOTS } from '../utils/walletRisk.js';
 import { countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { assetDailyFactor, valueFixedIncomeAsset, PRICING_SOURCE, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
@@ -378,6 +378,23 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
         pricingSource: pricing ? pricing.source : null,
         accruedValue: pricing ? safeCurrency(safeMult(pricing.accrued, currentMultiplier)) : null,
         priceDate: pricing ? pricing.priceDate : null,
+        // PU OFICIAL do título (hoje e o médio de compra) + a fração implícita.
+        //
+        // Existem porque `averagePrice`/`currentPrice` não servem para renda fixa:
+        // são custo÷quantidade e saldo÷quantidade, e a quantidade da RF não segue
+        // convenção — o cadastro manual pede só o valor investido e grava 1, o
+        // extrato da B3 traz a fração real. O mesmo Tesouro IPCA+ 2032 aparecia
+        // com "preço médio" R$ 735,92 numa carteira e R$ 2.943,68 na outra.
+        // Derivados do PU oficial, estes três não dependem da digitação e batem
+        // com o extrato do Tesouro Direto.
+        //
+        // Só existem no caminho MTM: sem PU público (CDB, LCI, cupom semestral)
+        // não há preço de título para exibir, e a UI omite a coluna.
+        treasuryUnitPrice: pricing?.unitPrice ? safeCurrency(pricing.unitPrice) : null,
+        treasuryUnits: pricing?.units ? safeQuantity(pricing.units) : null,
+        // `safePrice` e não `safeDiv`: a fração pode ter 8 casas, e safeDiv trunca
+        // o divisor a 4 — numa fração pequena isso deslocaria o PU médio.
+        treasuryAverageUnitPrice: pricing?.units ? safeCurrency(safePrice(asset.totalCost, pricing.units)) : null,
     };
 
     return { processed, totalValueBr, totalCostBr, dayChangeValueBr };

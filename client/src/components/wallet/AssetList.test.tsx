@@ -124,6 +124,114 @@ describe('AssetList — atalho de setores', () => {
     });
 });
 
+describe('AssetList — ordem dentro da classe', () => {
+    it('ordena por valor decrescente, com o ticker como desempate', () => {
+        // Sem ordenação, a lista saía na ordem de CRIAÇÃO da posição: a mesma
+        // carteira aparecia diferente conforme tivesse sido cadastrada à mão ou
+        // importada do extrato da B3.
+        vi.mocked(useWallet).mockReturnValue({
+            assets: [
+                asset({ id: 'a', ticker: 'PETR4', totalValue: 30, totalCost: 30 }),
+                asset({ id: 'b', ticker: 'VALE3', totalValue: 50, totalCost: 50 }),
+                asset({ id: 'c', ticker: 'BOVA11', type: 'ETF', allocationClass: 'STOCK', totalValue: 30, totalCost: 30 }),
+            ],
+            removeAsset: vi.fn(),
+            kpis: { totalEquity: 110 },
+            targetAllocation: {},
+            isPrivacyMode: false,
+        } as any);
+
+        render(<AssetList />);
+
+        const ordem = screen.getAllByText(/^(PETR4|VALE3|BOVA11)$/).map(el => el.textContent);
+        expect(ordem.slice(0, 3)).toEqual(['VALE3', 'BOVA11', 'PETR4']);
+    });
+});
+
+describe('AssetList — preço unitário', () => {
+    /** Células da linha do desktop que contém aquele ativo. */
+    const cellsOf = (titulo: string) => {
+        const linha = Array.from(document.querySelectorAll('tbody tr'))
+            .find(tr => tr.textContent?.includes(titulo));
+        return Array.from(linha?.querySelectorAll('td') ?? []).map(td => td.textContent?.trim());
+    };
+
+    it('omite preço médio e preço atual em renda fixa e caixa', () => {
+        // As colunas são custo÷quantidade e saldo÷quantidade, e em RF a quantidade
+        // não segue convenção: cadastro manual grava 1 (o "preço" vira o total),
+        // extrato da B3 traz a fração real (o "preço" vira o PU do título). O
+        // mesmo título mostrava números diferentes na mesma coluna.
+        vi.mocked(useWallet).mockReturnValue({
+            assets: [
+                asset({ id: 'rf', ticker: 'TESOURO IPCA+ 2032', type: 'FIXED_INCOME', quantity: 1, averagePrice: 735.92, currentPrice: 745.97, totalValue: 745.97, totalCost: 735.92 }),
+                asset({ id: 'cash', ticker: 'RESERVA', type: 'CASH', name: 'Reserva de Emergência', isReserve: true, quantity: 16800, averagePrice: 1, currentPrice: 1, totalValue: 16800, totalCost: 16800 }),
+                asset({ id: 'stock', ticker: 'PETR4', quantity: 10, averagePrice: 30, currentPrice: 33, totalValue: 330, totalCost: 300 }),
+            ],
+            removeAsset: vi.fn(),
+            kpis: { totalEquity: 17875.97 },
+            targetAllocation: {},
+            isPrivacyMode: false,
+        } as any);
+
+        render(<AssetList />);
+
+        expect(cellsOf('TESOURO IPCA+ 2032').slice(1, 3)).toEqual(['—', '—']);
+        expect(cellsOf('Reserva de Emergência').slice(1, 3)).toEqual(['—', '—']);
+
+        // Ativo com preço unitário de verdade continua mostrando os dois.
+        const acao = cellsOf('PETR4');
+        expect(acao[1]).toMatch(/30,00/);
+        expect(acao[2]).toMatch(/33,00/);
+    });
+
+    it('mostra o PU OFICIAL quando o título público está marcado a mercado', () => {
+        // O PU não depende da convenção de cadastro: a mesma posição lançada como
+        // "1 × R$ 735,92" (manual) ou "0,25 × R$ 2.943,69" (extrato da B3) exibe
+        // os mesmos R$ 2.943,68 → R$ 2.984,46, batendo com o Tesouro Direto.
+        vi.mocked(useWallet).mockReturnValue({
+            assets: [
+                asset({
+                    id: 'rf', ticker: 'TESOURO IPCA+ 2032', type: 'FIXED_INCOME',
+                    quantity: 1, averagePrice: 735.92, currentPrice: 746.12,
+                    totalValue: 746.12, totalCost: 735.92,
+                    pricingSource: 'MTM', accruedValue: 743.56,
+                    treasuryUnitPrice: 2984.46, treasuryAverageUnitPrice: 2943.68, treasuryUnits: 0.25,
+                }),
+            ],
+            removeAsset: vi.fn(),
+            kpis: { totalEquity: 746.12 },
+            targetAllocation: {},
+            isPrivacyMode: false,
+        } as any);
+
+        render(<AssetList />);
+
+        const celulas = cellsOf('TESOURO IPCA+ 2032');
+        expect(celulas[1]).toMatch(/2\.943,68/);
+        expect(celulas[2]).toMatch(/2\.984,46/);
+        // A fração acompanha o PU — sem ela, R$ 2.984 ao lado de R$ 746 não fecha.
+        expect(screen.getAllByText(/0,25 un/).length).toBeGreaterThan(0);
+    });
+
+    it('troca a contagem de unidades pelo valor investido em renda fixa', () => {
+        // "16.800 un" numa reserva é tão vazio quanto o preço unitário.
+        vi.mocked(useWallet).mockReturnValue({
+            assets: [
+                asset({ id: 'rf', ticker: 'CDB BANCO X', type: 'FIXED_INCOME', quantity: 1, averagePrice: 284.64, currentPrice: 286.26, totalValue: 286.26, totalCost: 284.64 }),
+            ],
+            removeAsset: vi.fn(),
+            kpis: { totalEquity: 286.26 },
+            targetAllocation: {},
+            isPrivacyMode: false,
+        } as any);
+
+        render(<AssetList />);
+
+        expect(screen.getAllByText(/investido/).length).toBeGreaterThan(0);
+        expect(screen.queryByText(/1 un/)).not.toBeInTheDocument();
+    });
+});
+
 describe('AssetList — subdivisão de Exterior', () => {
     it('inclui ETFs do Exterior e mantém todos os subtipos somando 100%', () => {
         vi.mocked(useWallet).mockReturnValue({

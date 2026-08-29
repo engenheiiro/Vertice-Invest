@@ -26,6 +26,14 @@ export interface PortfolioItem {
     usSubType?: 'STOCK' | 'REIT' | 'DOLLAR' | 'ETF' | 'GOLD' | null;
     aiScore: number;
     aiSentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    // Renda fixa: custo da posição e o PU OFICIAL do título quando marcado a
+    // mercado. O Terminal lista os mesmos ativos da Carteira e aplica a mesma
+    // régua de preço unitário (utils/assetDisplay: displayUnitPrices) — divergir
+    // recriaria a incoerência que ela existe para fechar.
+    totalCost?: number;
+    treasuryUnitPrice?: number | null;
+    treasuryAverageUnitPrice?: number | null;
+    treasuryUnits?: number | null;
 }
 
 export interface AiSignal {
@@ -259,6 +267,10 @@ export const useDashboardData = () => {
                 avgPrice: asset.averagePrice,
                 currentPrice: asset.currentPrice,
                 totalValue: asset.totalValue,
+                totalCost: asset.totalCost,
+                treasuryUnitPrice: asset.treasuryUnitPrice,
+                treasuryAverageUnitPrice: asset.treasuryAverageUnitPrice,
+                treasuryUnits: asset.treasuryUnits,
                 currency: asset.currency,
                 type: asset.type,
                 allocationClass: asset.allocationClass,

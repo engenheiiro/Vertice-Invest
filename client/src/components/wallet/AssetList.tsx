@@ -10,7 +10,7 @@ import { formatCurrency as fmtCurrency, formatQuantity as fmtQuantity, PRIVACY_M
 import { useConfirm } from '../../hooks/useConfirm';
 import AssetLogo from '../common/AssetLogo';
 import AssetTags from '../common/AssetTags';
-import { getAssetSubtitle, getAssetTags } from '../../utils/assetDisplay';
+import { getAssetSubtitle, getAssetTags, displayUnitPrices } from '../../utils/assetDisplay';
 import { allocationBucket, sumReserveValue, isReserveAsset, usSubKeyOf } from '../../utils/allocation';
 
 /** Título exibido na lista: cofrinhos (CASH) mostram o nome; demais, o ticker. */
@@ -62,6 +62,17 @@ const curveValueOf = (asset: { pricingSource?: 'MTM' | 'ACCRUAL' | null; accrued
     if (asset.pricingSource !== 'MTM' || typeof asset.accruedValue !== 'number') return null;
     return Math.abs(asset.accruedValue - asset.totalValue) >= 0.01 ? asset.accruedValue : null;
 };
+
+/**
+ * Renda fixa e caixa não têm preço unitário digitado que signifique algo — a
+ * régua está em `displayUnitPrices` (utils/assetDisplay), compartilhada com o
+ * Terminal para que as duas telas contem a mesma história. Quando não há preço,
+ * a célula fica com um traço em vez de um número enganoso.
+ */
+const hasUnitPrice = (asset: Asset): boolean => asset.type !== 'FIXED_INCOME' && asset.type !== 'CASH';
+const unitPricesOf = (asset: Asset) =>
+    displayUnitPrices(asset, { average: asset.averagePrice, current: asset.currentPrice });
+const NO_UNIT_PRICE = <span className="text-slate-600">—</span>;
 const TYPE_ORDER = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'OURO', 'CASH'];
 const MOBILE_ASSET_LIST_QUERY = '(max-width: 767px)';
 
@@ -176,6 +187,18 @@ export const AssetList = () => {
         acc[cls].push(asset);
         return acc;
     }, {} as Record<string, Asset[]>);
+
+    // Dentro da classe, do MAIOR peso para o menor — mesma regra do detalhamento
+    // por setor (`sectorAllocation.ts`). Sem isto a ordem era a de criação da
+    // posição, então a mesma carteira saía diferente conforme tivesse sido
+    // cadastrada à mão ou importada (no extrato da B3 o ticker que entra
+    // primeiro é só o primeiro alfabético da data mais recente).
+    // O desempate por ticker não é enfeite: sem ele, posições de valor igual
+    // (ou zeradas) trocam de lugar entre renders.
+    Object.values(groupedAssets).forEach(items => {
+        items.sort((a, b) => (b.totalValue || 0) - (a.totalValue || 0)
+            || assetTitle(a).localeCompare(assetTitle(b), 'pt-BR'));
+    });
 
     // Divisão Ações individuais vs ETFs de exposição Brasil. Os percentuais
     // são relativos ao próprio grupo de Ações Brasil e, portanto, somam 100%.
@@ -335,7 +358,9 @@ export const AssetList = () => {
                                                             ? 'Reserva / Caixa'
                                                             : curveValueOf(asset) !== null
                                                                 ? `na curva ${formatCurrency(curveValueOf(asset) as number, 'BRL')}`
-                                                                : `${formatQuantity(asset.quantity)} un · PM ${formatCurrency(asset.averagePrice, asset.currency)}`}
+                                                                : hasUnitPrice(asset)
+                                                                    ? `${formatQuantity(asset.quantity)} un · PM ${formatCurrency(asset.averagePrice, asset.currency)}`
+                                                                    : `investido ${formatCurrency(asset.totalCost, 'BRL')}`}
                                                     </p>
                                                 </div>
                                             </div>
@@ -542,6 +567,7 @@ export const AssetList = () => {
                                             // % da Classe
                                             const percentOfClass = totalValueGroup > 0 ? (asset.totalValue / totalValueGroup) * 100 : 0;
                                             const curveValue = curveValueOf(asset);
+                                            const unitPrices = unitPricesOf(asset);
 
                                             return (
                                                 <tr key={asset.id} className="hover:bg-slate-800/30 transition-colors border-b border-slate-800/30 last:border-0 group animate-fade-in">
@@ -554,16 +580,21 @@ export const AssetList = () => {
                                                                     <AssetTags tags={getAssetTags(asset)} />
                                                                 </div>
                                                                 <p className="text-[10px] text-slate-500 truncate">
-                                                                    {asset.matured ? 'Vencido — sugerimos resgatar' : getAssetSubtitle(asset)}
+                                                                    {/* A fração implícita acompanha o PU: sem ela, "R$ 2.984,46"
+                                                                        ao lado de um saldo de R$ 746,12 não fecha na cabeça de
+                                                                        ninguém. Com ela, 0,25 × 2.984,46 é o próprio saldo. */}
+                                                                    {asset.matured
+                                                                        ? 'Vencido — sugerimos resgatar'
+                                                                        : `${getAssetSubtitle(asset)}${asset.treasuryUnits ? ` · ${formatQuantity(asset.treasuryUnits)} un` : ''}`}
                                                                 </p>
                                                             </div>
                                                         </div>
                                                     </td>
                                                     <td className="p-4 text-right text-slate-400 tabular-nums">
-                                                        {formatCurrency(asset.averagePrice, asset.currency)}
+                                                        {unitPrices ? formatCurrency(unitPrices.average, asset.currency) : NO_UNIT_PRICE}
                                                     </td>
                                                     <td className="p-4 text-right text-slate-300 tabular-nums font-bold">
-                                                        {formatCurrency(asset.currentPrice, asset.currency)}
+                                                        {unitPrices ? formatCurrency(unitPrices.current, asset.currency) : NO_UNIT_PRICE}
                                                     </td>
                                                     <td className="p-4 text-right">
                                                         <p className="font-bold text-white">
@@ -585,7 +616,12 @@ export const AssetList = () => {
                                                             </p>
                                                         ) : !isUSD && (
                                                             <p className="text-[10px] text-slate-500">
-                                                                {formatQuantity(asset.quantity)} un
+                                                                {/* Em RF/caixa a contagem de unidades é tão vazia quanto o
+                                                                    preço unitário ("16.800 un" numa reserva). O que ancora
+                                                                    o saldo ali é o quanto entrou. */}
+                                                                {hasUnitPrice(asset)
+                                                                    ? `${formatQuantity(asset.quantity)} un`
+                                                                    : `investido ${formatCurrency(asset.totalCost, 'BRL')}`}
                                                             </p>
                                                         )}
                                                     </td>

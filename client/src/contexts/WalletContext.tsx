@@ -60,6 +60,19 @@ export interface Asset {
     accruedValue?: number | null;
     /** Data Base do PU usado na marcação (YYYY-MM-DD). */
     priceDate?: string | null;
+    /**
+     * PU OFICIAL do título (hoje e o médio de compra) e a fração implícita que
+     * ele multiplica. Só existem no caminho MTM.
+     *
+     * `averagePrice`/`currentPrice` não servem para renda fixa: são
+     * custo÷quantidade e saldo÷quantidade, e a quantidade da RF não segue
+     * convenção — o cadastro manual pede só o valor investido e grava 1, o
+     * extrato da B3 traz a fração real. Estes três vêm do PU oficial, então não
+     * dependem de como o ativo foi digitado e batem com o extrato do Tesouro.
+     */
+    treasuryUnitPrice?: number | null;
+    treasuryAverageUnitPrice?: number | null;
+    treasuryUnits?: number | null;
 }
 
 export interface WalletKPIs {
