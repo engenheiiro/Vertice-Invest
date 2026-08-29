@@ -90,13 +90,14 @@ interface AllocationChartProps {
 }
 
 export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOpenDividendGoal = false, onAutoOpenHandled }: AllocationChartProps) => {
-    const { assets, kpis, targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation, updateTargets, isPrivacyMode } = useWallet();
+    const { assets, kpis, targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation, updateTargets, isPrivacyMode, isReadOnly } = useWallet();
     const { addToast } = useToast();
     const { theme } = useTheme();
     // Trilho do donut: um degrau acima da superfície do card em cada tema (no escuro o
     // card agora é #131820, então #232B36 lê como sulco; no claro, cinza-gelo sobre branco).
     const trackColor = theme === 'light' ? '#EDF1F7' : '#232B36';
-    const [viewMode, setViewMode] = useState<'CURRENT' | 'IDEAL'>(initialViewMode);
+    // Em leitura pública não existe meta publicada: a view nasce e fica em 'Atual'.
+    const [viewMode, setViewMode] = useState<'CURRENT' | 'IDEAL'>(isReadOnly ? 'CURRENT' : initialViewMode);
     const [isEditing, setIsEditing] = useState(false);
     // Fatia sob o cursor: cresce um pouco (activeShape) para dar feedback tátil ao donut.
     const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
@@ -319,7 +320,9 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                     </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* A Carteira Ideal é o PLANO do dono e não é publicada no link:
+                    em modo leitura sobra a distribuição real, sem alternador nem editor. */}
+                {!isReadOnly && <div className="flex items-center gap-2">
                     <div className="flex gap-1 bg-deep p-1 rounded-lg border border-slate-800">
                         <button onClick={() => setViewMode('CURRENT')} className={`text-[10px] font-bold px-3 min-h-[32px] inline-flex items-center justify-center rounded transition-colors ${viewMode === 'CURRENT' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Atual</button>
                         <button onClick={() => setViewMode('IDEAL')} className={`text-[10px] font-bold px-3 min-h-[32px] inline-flex items-center justify-center rounded transition-colors ${viewMode === 'IDEAL' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>Ideal</button>
@@ -327,7 +330,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                     <button onClick={openEditor} aria-label="Configurar carteira ideal" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-white transition-colors rounded-lg hover:bg-slate-800 border border-transparent hover:border-slate-700">
                         <Settings size={14} />
                     </button>
-                </div>
+                </div>}
             </div>
 
             {/* Empty-state: sem investimentos para distribuir (só reserva, vazio, ou ideal não definida) */}
@@ -354,9 +357,11 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                                     Sua reserva ({formatCurrency(reserveValue)}) está garantida. Que tal diversificar o excedente para buscar mais rentabilidade?
                                 </p>
                             </div>
-                            <button onClick={() => setViewMode('IDEAL')} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors">
-                                Ver alocação ideal <ArrowRight size={15} />
-                            </button>
+                            {!isReadOnly && (
+                                <button onClick={() => setViewMode('IDEAL')} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors">
+                                    Ver alocação ideal <ArrowRight size={15} />
+                                </button>
+                            )}
                         </>
                     ) : (
                         <>

@@ -1,6 +1,5 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { walletService } from '../../services/wallet';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, YAxis, CartesianGrid } from 'recharts';
 import { Coins, CalendarCheck, TrendingUp, CheckCircle2, Clock, Calculator, Award } from 'lucide-react';
 import { useDemo } from '../../contexts/DemoContext';
@@ -34,7 +33,7 @@ export const DividendDashboard = () => {
     const [simulatorContribution, setSimulatorContribution] = useState<string>('0');
 
     const { isDemoMode } = useDemo();
-    const { kpis, activeWalletId, isWalletScopeReady } = useWallet();
+    const { kpis, activeWalletId, isWalletScopeReady, isPrivacyMode, dataSource } = useWallet();
 
     useEffect(() => {
         const load = async () => {
@@ -48,7 +47,7 @@ export const DividendDashboard = () => {
             }
 
             try {
-                const res = await walletService.getDividends(activeWalletId);
+                const res = await dataSource.getDividends();
                 const cleanHistory = Array.isArray(res?.history) ? res.history : [];
                 while(cleanHistory.length > 0 && cleanHistory[0].value === 0) {
                     cleanHistory.shift();
@@ -72,7 +71,9 @@ export const DividendDashboard = () => {
         // sem escopo e o efeito rodaria de novo com o id (duas chamadas caras).
         if (!isWalletScopeReady) return;
         load();
-    }, [isDemoMode, activeWalletId, isWalletScopeReady]);
+        // `dataSource` é memoizado pelo escopo da carteira (ou pelo token, no link
+        // público), então entra aqui sem provocar rebusca a cada render.
+    }, [isDemoMode, activeWalletId, isWalletScopeReady, dataSource]);
 
     const filteredHistory = useMemo(() => {
         if (timeRange === '12M') {
@@ -81,7 +82,7 @@ export const DividendDashboard = () => {
         return data.history;
     }, [data.history, timeRange]);
 
-    const formatCurrency = (val: number) => fmtCurrency(val);
+    const formatCurrency = (val: number) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
 
     const totalProvisioned = data.provisioned.reduce((acc, curr) => acc + (curr.amount || 0), 0);
 
@@ -405,7 +406,7 @@ export const DividendDashboard = () => {
                             <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false}
                                 tickFormatter={(m) => `${Math.round(m / 12)}a`} />
                             <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false}
-                                tickFormatter={(v) => formatCompact(v)} width={50} />
+                                tickFormatter={(v) => formatCompact(v, 'BRL', { privacy: isPrivacyMode })} width={50} />
                             <Tooltip
                                 formatter={(value: number) => formatCurrency(value)}
                                 labelFormatter={(m) => `Mês ${m}`}

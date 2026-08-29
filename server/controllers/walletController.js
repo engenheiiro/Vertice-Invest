@@ -591,10 +591,13 @@ export const getWalletData = async (req, res, next) => {
 };
 
 // --- CORREÇÃO DE RENTABILIDADE (LIVE POINT + FILTRO AVANÇADO) ---
-export const getWalletPerformance = async (req, res, next) => {
-    try {
-        const userId = req.user.id;
-        const walletId = req.walletId;
+/**
+ * Série de rentabilidade (carteira × CDI × IPCA+6% × Ibov) + métricas de risco.
+ * Extraído do handler pelo mesmo motivo de buildWalletPayload: o link público
+ * renderiza a MESMA aba Rentabilidade, então precisa da mesma matemática — não
+ * de uma segunda implementação que possa divergir.
+ */
+export const buildWalletPerformancePayload = async (userId, walletId) => {
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
 
         let history = await WalletSnapshot.find({
@@ -604,7 +607,7 @@ export const getWalletPerformance = async (req, res, next) => {
         }).sort({ date: 1 }).lean();
         
         if (history.length === 0) {
-            return res.json([]);
+            return [];
         }
 
         // "Hoje" no fuso de São Paulo (mesma referência do KPI) — evita que o
@@ -759,7 +762,7 @@ export const getWalletPerformance = async (req, res, next) => {
             computeQuotaSharpe(history, currentRate);
         const { beta, sample: betaSample } = computeQuotaBeta(history, resolveIbovClose);
 
-        res.json({
+        return {
             history: result,
             stats: {
                 sharpe: sharpe === null ? null : safeFloat(sharpe),
@@ -771,16 +774,24 @@ export const getWalletPerformance = async (req, res, next) => {
                 beta: beta === null ? null : safeFloat(beta),
                 betaSample
             }
-        });
+        };
+};
+
+// GET /wallet/performance — casca fina sobre buildWalletPerformancePayload.
+export const getWalletPerformance = async (req, res, next) => {
+    try {
+        res.json(await buildWalletPerformancePayload(req.user.id, req.walletId));
     } catch (error) {
         next(error);
     }
 };
 
+export const buildWalletHistoryPayload = (userId, walletId) =>
+    WalletSnapshot.find({ user: userId, wallet: walletId }).sort({ date: 1 }).lean();
+
 export const getWalletHistory = async (req, res, next) => {
     try {
-        const snapshots = await WalletSnapshot.find({ user: req.user.id, wallet: req.walletId }).sort({ date: 1 });
-        res.json(snapshots);
+        res.json(await buildWalletHistoryPayload(req.user.id, req.walletId));
     } catch (error) {
         next(error);
     }
@@ -1170,10 +1181,12 @@ const pruneDividendHeal = () => {
     for (const [uid, ts] of dividendHealAt) if (ts < cutoff) dividendHealAt.delete(uid);
 };
 
-export const getWalletDividends = async (req, res, next) => {
-    try {
-        const userId = req.user.id;
-        const walletId = req.walletId;
+/**
+ * Proventos da carteira (histórico mensal, provisionados, yield on cost, meta).
+ * Puro leitura — o self-heal fica no handler autenticado de propósito: um
+ * visitante do link público não deve disparar sincronização em background.
+ */
+export const buildWalletDividendsPayload = async (userId, walletId) => {
         // Meta de renda passiva é por carteira (Fase 2) — busca dedicada em Wallet,
         // em paralelo com o cálculo de proventos.
         const [data, walletDoc] = await Promise.all([
@@ -1195,14 +1208,22 @@ export const getWalletDividends = async (req, res, next) => {
             progressPercent: target > 0 ? Math.min(100, safeDiv(safeMult(current, 100), target)) : null,
         };
 
-        res.json({
+        return {
             history,
             provisioned: data.provisioned,
             totalAllTime: data.totalAllTime,
             projectedMonthly: data.projectedMonthly,
             yieldOnCost: data.yieldOnCost,
             goal,
-        });
+        };
+};
+
+export const getWalletDividends = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const walletId = req.walletId;
+        const data = await buildWalletDividendsPayload(userId, walletId);
+        res.json(data);
 
         // Self-heal: se o usuário tem ativos pagadores mas TUDO está zerado, é
         // sinal de que faltou sincronizar proventos e/ou popular dy. Dispara em
@@ -1231,12 +1252,8 @@ export const getWalletDividends = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
-export const getCashFlow = async (req, res, next) => {
-    try {
-        const { page = 1, limit = 20, filterType } = req.query;
-        const userId = req.user.id;
-        const walletId = req.walletId;
-
+/** Extrato paginado (aba Extrato) — compartilhado com a rota pública. */
+export const buildCashFlowPayload = async (userId, walletId, { page = 1, limit = 20, filterType } = {}) => {
         // Cofrinhos (Reserva/Caixa) desta carteira: cada um é um UserAsset type=CASH
         // com ticker próprio. Mapa ticker→nome para rotular o extrato e set para filtrar.
         const cashAssets = await UserAsset.find({ user: userId, wallet: walletId, type: 'CASH' }).select('ticker name type currency').lean();
@@ -1266,7 +1283,7 @@ export const getCashFlow = async (req, res, next) => {
             legacyAssets.forEach(a => assetByTicker.set(a.ticker, a));
         }
 
-        res.json({
+        return {
             transactions: transactions.map(t => {
                 const isCashOp = cashNameByTicker.has(t.ticker);
                 return {
@@ -1278,7 +1295,13 @@ export const getCashFlow = async (req, res, next) => {
                 };
             }),
             pagination: { total, hasMore: page * limit < total }
-        });
+        };
+};
+
+export const getCashFlow = async (req, res, next) => {
+    try {
+        const { page = 1, limit = 20, filterType } = req.query;
+        res.json(await buildCashFlowPayload(req.user.id, req.walletId, { page, limit, filterType }));
     } catch (error) { next(error); }
 };
 

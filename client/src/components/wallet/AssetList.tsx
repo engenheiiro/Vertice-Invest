@@ -6,7 +6,7 @@ import { AssetTransactionsModal } from './AssetTransactionsModal';
 import { RenameReserveModal } from './RenameReserveModal';
 import { SectorPopover } from './SectorPopover';
 import type { SectorKind } from '../../utils/sectorAllocation';
-import { formatCurrency as fmtCurrency, type Currency } from '../../utils/format';
+import { formatCurrency as fmtCurrency, formatQuantity as fmtQuantity, PRIVACY_MASK_SHORT, type Currency } from '../../utils/format';
 import { useConfirm } from '../../hooks/useConfirm';
 import AssetLogo from '../common/AssetLogo';
 import AssetTags from '../common/AssetTags';
@@ -105,7 +105,7 @@ const EXTERIOR_LABELS: Record<UsSubKey, string> = {
 };
 
 export const AssetList = () => {
-    const { assets, removeAsset, kpis, targetAllocation, isPrivacyMode } = useWallet();
+    const { assets, removeAsset, kpis, targetAllocation, isPrivacyMode, isReadOnly } = useWallet();
     const confirm = useConfirm();
 
     const [historyTicker, setHistoryTicker] = useState<string | null>(null);
@@ -116,6 +116,11 @@ export const AssetList = () => {
 
     const formatCurrency = (val: number | null | undefined, currency: Currency = 'BRL') =>
         fmtCurrency(val, currency, { privacy: isPrivacyMode });
+
+    // Quantidade também é tamanho de posição: com o preço público na tela, exibi-la
+    // no modo privacidade entregaria de volta o valor que a máscara escondeu.
+    const formatQuantity = (val: number | null | undefined) =>
+        isPrivacyMode ? PRIVACY_MASK_SHORT : fmtQuantity(val);
 
     const formatPercent = (val: number | null | undefined) => {
         const v = val || 0;
@@ -330,7 +335,7 @@ export const AssetList = () => {
                                                             ? 'Reserva / Caixa'
                                                             : curveValueOf(asset) !== null
                                                                 ? `na curva ${formatCurrency(curveValueOf(asset) as number, 'BRL')}`
-                                                                : `${asset.quantity} un · PM ${formatCurrency(asset.averagePrice, asset.currency)}`}
+                                                                : `${formatQuantity(asset.quantity)} un · PM ${formatCurrency(asset.averagePrice, asset.currency)}`}
                                                     </p>
                                                 </div>
                                             </div>
@@ -354,8 +359,10 @@ export const AssetList = () => {
                                                 </div>
                                                 {/* Ações em LINHA: empilhadas na vertical, os ícones esticavam a
                                                     linha p/ ~130px e o "remover" caía ao lado do ativo seguinte,
-                                                    dando a impressão de pertencer à linha de baixo. */}
-                                                <div className="flex items-center">
+                                                    dando a impressão de pertencer à linha de baixo.
+                                                    Em modo leitura (link público) nenhuma delas existe — inclusive
+                                                    o histórico, que é dado privado de transações. */}
+                                                {!isReadOnly && <div className="flex items-center">
                                                     {asset.type === 'CASH' && (
                                                         <button
                                                             onClick={() => setRenameTarget({ id: asset.id, name: asset.name || '' })}
@@ -387,7 +394,7 @@ export const AssetList = () => {
                                                     >
                                                         <Trash2 size={16} />
                                                     </button>
-                                                </div>
+                                                </div>}
                                             </div>
                                         </div>
                                     );
@@ -409,7 +416,9 @@ export const AssetList = () => {
                                 <th scope="col" className="p-4 font-bold text-right">% Classe</th>
                                 <th scope="col" className="p-4 font-bold text-right" title="Variação do preço: cotação atual vs. preço médio (não inclui proventos).">Variação</th>
                                 <th scope="col" className="p-4 font-bold text-right" title="Retorno total sobre o custo: valorização do preço + proventos recebidos.">Rentabilidade</th>
-                                <th scope="col" className="p-4 font-bold text-center">Ações</th>
+                                {/* Coluna de ações só existe onde há o que fazer: no link
+                                    público (leitura) ela sai junto com os botões. */}
+                                {!isReadOnly && <th scope="col" className="p-4 font-bold text-center">Ações</th>}
                             </tr>
                         </thead>
                         <tbody className="text-sm">
@@ -440,7 +449,7 @@ export const AssetList = () => {
                                             className="bg-panel border-y border-slate-800/50 cursor-pointer hover:bg-elevated transition-colors"
                                             onClick={() => toggleGroup(type)}
                                         >
-                                            <td colSpan={8} className="px-4 py-3">
+                                            <td colSpan={isReadOnly ? 7 : 8} className="px-4 py-3">
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-3">
                                                         <span className={`shrink-0 ${accent.label}`}>
@@ -501,7 +510,11 @@ export const AssetList = () => {
                                                             </div>
                                                         ) : (
                                                             <div className="flex flex-col items-end min-w-[100px]">
-                                                                <span className="text-slate-500 font-bold uppercase text-[9px]">Alocação (Ideal: {idealPercent}%)</span>
+                                                                {/* A meta é o plano do dono e não é publicada no link:
+                                                                    em leitura o rótulo mostra só a alocação real. */}
+                                                                <span className="text-slate-500 font-bold uppercase text-[9px]">
+                                                                    {isReadOnly ? 'Alocação' : `Alocação (Ideal: ${idealPercent}%)`}
+                                                                </span>
                                                                 <div className="flex items-center gap-2 w-full justify-end">
                                                                     <span className="text-white font-bold">{allocationPercent.toFixed(1)}%</span>
                                                                     <div className="w-12 h-1.5 bg-slate-700 rounded-full overflow-hidden">
@@ -572,7 +585,7 @@ export const AssetList = () => {
                                                             </p>
                                                         ) : !isUSD && (
                                                             <p className="text-[10px] text-slate-500">
-                                                                {asset.quantity} un
+                                                                {formatQuantity(asset.quantity)} un
                                                             </p>
                                                         )}
                                                     </td>
@@ -598,7 +611,7 @@ export const AssetList = () => {
                                                             </span>
                                                         </div>
                                                     </td>
-                                                    <td className="p-4 text-center">
+                                                    {!isReadOnly && <td className="p-4 text-center">
                                                         <div className="flex items-center justify-center gap-1.5">
                                                             {asset.type === 'CASH' && (
                                                                 <button
@@ -632,7 +645,7 @@ export const AssetList = () => {
                                                                 <Trash2 size={15} />
                                                             </button>
                                                         </div>
-                                                    </td>
+                                                    </td>}
                                                 </tr>
                                             );
                                         })}

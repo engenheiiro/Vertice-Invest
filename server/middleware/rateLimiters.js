@@ -98,12 +98,14 @@ export const mfaWriteLimiter = createUserLimiter({
 });
 
 // (C4/E6) Rota pública de carteira — NÃO autenticada, então a chave é o IP
-// (userKey cai no ramo defensivo de IP). 120/15min por IP: generoso para quem
-// abre/atualiza um link legítimo, apertado o bastante contra scraping/varredura
-// de tokens numa superfície sem login.
+// (userKey cai no ramo defensivo de IP). O link renderiza a página Carteira
+// inteira, então UMA visita gasta várias chamadas (carteira, histórico e a aba
+// aberta). 300/15min por IP: generoso para quem abre/atualiza um link legítimo
+// e navega pelas abas, apertado o bastante contra scraping/varredura de tokens
+// numa superfície sem login.
 export const publicShareLimiter = createUserLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 120,
+  max: 300,
   message: 'Muitas requisições. Aguarde alguns minutos.',
 });
 

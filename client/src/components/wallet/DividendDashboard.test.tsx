@@ -9,11 +9,9 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { DividendDashboard } from './DividendDashboard';
-import { walletService } from '../../services/wallet';
 import { useDemo } from '../../contexts/DemoContext';
 import { useWallet } from '../../contexts/WalletContext';
 
-vi.mock('../../services/wallet', () => ({ walletService: { getDividends: vi.fn() } }));
 vi.mock('../../contexts/DemoContext', () => ({ useDemo: vi.fn() }));
 vi.mock('../../contexts/WalletContext', () => ({ useWallet: vi.fn() }));
 vi.mock('../common/AssetLogo', () => ({ default: () => null }));
@@ -25,8 +23,11 @@ vi.mock('../common/AssetLogo', () => ({ default: () => null }));
   disconnect() {}
 };
 
+// A aba busca pelo `dataSource` do contexto (walletService na área logada,
+// rota pública no link compartilhado) — o teste injeta o dele.
+const getDividends = vi.fn();
 // `isWalletScopeReady` é o portão que segura a busca até a carteira ativa existir.
-const walletStub = { kpis: { totalEquity: 10000 }, isWalletScopeReady: true };
+const walletStub = { kpis: { totalEquity: 10000 }, isWalletScopeReady: true, dataSource: { getDividends } };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -41,14 +42,14 @@ describe('modo demo', () => {
     render(<DividendDashboard />);
 
     await waitFor(() => expect(screen.getByText('Yield on Cost')).toBeInTheDocument(), { timeout: 1000 });
-    expect(walletService.getDividends).not.toHaveBeenCalled();
+    expect(getDividends).not.toHaveBeenCalled();
     expect(screen.getAllByText(/% a\.a\./).length).toBeGreaterThan(0);
   });
 });
 
 describe('graceful degradation', () => {
   it('resposta sem yieldOnCost/goal (backend antigo) não quebra e oculta a seção de YoC', async () => {
-    vi.mocked(walletService.getDividends).mockResolvedValue({
+    getDividends.mockResolvedValue({
       history: [],
       provisioned: [],
       totalAllTime: 0,
@@ -65,7 +66,7 @@ describe('graceful degradation', () => {
 
 describe('simulador de reinvestimento', () => {
   it('alterar o período (10 → 20 anos) atualiza a projeção exibida', async () => {
-    vi.mocked(walletService.getDividends).mockResolvedValue({
+    getDividends.mockResolvedValue({
       history: [],
       provisioned: [],
       totalAllTime: 0,

@@ -11,7 +11,7 @@ interface EquitySummaryProps {
 }
 
 export const WalletSummary: React.FC<EquitySummaryProps> = () => {
-    const { kpis, isPrivacyMode, togglePrivacyMode, isLoading } = useWallet();
+    const { kpis, isPrivacyMode, togglePrivacyMode, isLoading, isValuesLocked } = useWallet();
     const animatedEquity = useCountUp(kpis?.totalEquity || 0);
 
     const formatCurrency = (val: number | null | undefined) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
@@ -73,12 +73,16 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                 <div className="relative flex min-h-[22px] items-start pr-10">
                     <div className="relative flex items-center gap-1.5">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-[rgba(255,255,255,0.72)]">Patrimônio Líquido</span>
-                        <PrivacyToggle
-                            isPrivacyMode={isPrivacyMode}
-                            onToggle={togglePrivacyMode}
-                            size={14}
-                            className="absolute left-full top-1/2 ml-1 min-h-[36px] min-w-[36px] -translate-y-1/2 inline-flex items-center justify-center hover:bg-white/[0.14] rounded-lg text-[rgba(255,255,255,0.6)] hover:text-[rgba(255,255,255,0.9)] transition-colors"
-                        />
+                        {/* No link público sem valores liberados não há número real
+                            para revelar — o botão sairia mentindo que revela. */}
+                        {!isValuesLocked && (
+                            <PrivacyToggle
+                                isPrivacyMode={isPrivacyMode}
+                                onToggle={togglePrivacyMode}
+                                size={14}
+                                className="absolute left-full top-1/2 ml-1 min-h-[36px] min-w-[36px] -translate-y-1/2 inline-flex items-center justify-center hover:bg-white/[0.14] rounded-lg text-[rgba(255,255,255,0.6)] hover:text-[rgba(255,255,255,0.9)] transition-colors"
+                            />
+                        )}
                     </div>
                     <span className="absolute right-0 top-0 w-[30px] h-[30px] rounded-[9px] bg-white/[0.14] flex items-center justify-center text-[#eafff6]">
                         <Wallet size={16} />

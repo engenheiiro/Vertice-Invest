@@ -117,7 +117,20 @@ export const DEFAULT_SUB_ALLOCATION: SubAllocationMap = {
 // Pseudo-carteira única usada só em modo demo — o seletor real fica oculto.
 const DEMO_WALLETS: WalletSummary[] = [{ id: 'demo', name: 'Demo', isDefault: true, createdAt: new Date().toISOString() }];
 
-interface WalletContextType {
+/**
+ * Fonte das abas que buscam sozinhas (Rentabilidade, Proventos, Extrato).
+ * Na área logada aponta para o walletService (com JWT e escopo de carteira); no
+ * link público, para o publicWalletService (token na URL, sem auth). Os
+ * componentes consomem daqui em vez de importar o serviço direto — é o que
+ * permite renderizar a MESMA página Carteira nos dois contextos.
+ */
+export interface WalletDataSource {
+    getPerformance: () => Promise<any>;
+    getDividends: () => Promise<any>;
+    getCashFlow: (page: number, limit: number, filterType: string) => Promise<any>;
+}
+
+export interface WalletContextType {
     assets: Asset[];
     kpis: WalletKPIs;
     history: HistoryPoint[];
@@ -130,6 +143,19 @@ interface WalletContextType {
     isRefreshing: boolean;
     isPrivacyMode: boolean;
     togglePrivacyMode: () => void;
+    /**
+     * Visão de leitura (link público compartilhado): a página é a mesma, mas
+     * toda ação de escrita — transação, aporte, rebalanceamento, reset, editar
+     * meta, renomear, trocar de carteira — some.
+     */
+    isReadOnly: boolean;
+    /**
+     * Nenhum valor real chegou do servidor (link com "exibir valores em R$"
+     * desligado): a privacidade fica travada e o botão de alternar some, porque
+     * desligá-la só revelaria números normalizados.
+     */
+    isValuesLocked: boolean;
+    dataSource: WalletDataSource;
     refreshWallet: () => void;
     addAsset: (asset: any) => Promise<void>;
     updateAsset: (id: string, data: UpdateAssetPayload) => Promise<void>;
@@ -155,7 +181,13 @@ interface WalletContextType {
     deleteWallet: (walletId: string) => Promise<void>;
 }
 
-const WalletContext = createContext<WalletContextType | undefined>(undefined);
+// Exportado porque o link público monta um provider irmão (PublicWalletProvider)
+// sobre o MESMO contexto — assim todo componente da Carteira segue usando
+// `useWallet()` sem saber se está na área logada ou numa visita anônima.
+// (o alerta de fast-refresh pede o contexto em arquivo separado; separá-lo daqui
+//  arrastaria os tipos que ~30 arquivos importam deste módulo)
+// eslint-disable-next-line react-refresh/only-export-components
+export const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const { user } = useAuth();
@@ -423,6 +455,15 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const wallets = isDemoMode ? DEMO_WALLETS : (walletsQuery.data?.wallets || []);
     const activeWalletName = isDemoMode ? 'Demo' : (wallets.find(w => w.id === activeWalletId)?.name || 'Minha Carteira');
 
+    // Fonte das abas que buscam sozinhas, com o escopo de carteira já embutido.
+    // Memoizado porque vai no value do contexto: um objeto novo a cada render
+    // reexecutaria as queries que o usam como dependência.
+    const dataSource = useMemo<WalletDataSource>(() => ({
+        getPerformance: () => walletService.getPerformance(activeWalletId),
+        getDividends: () => walletService.getDividends(activeWalletId),
+        getCashFlow: (page, limit, filterType) => walletService.getCashFlow(page, limit, filterType, activeWalletId),
+    }), [activeWalletId]);
+
     return (
         <WalletContext.Provider value={{
             assets,
@@ -437,6 +478,9 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             isRefreshing,
             isPrivacyMode: isDemoMode ? false : isPrivacyMode, // Demo sempre visível
             togglePrivacyMode,
+            isReadOnly: false,
+            isValuesLocked: false,
+            dataSource,
             refreshWallet: () => queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] }),
             addAsset,
             updateAsset,

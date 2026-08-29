@@ -1,13 +1,11 @@
 
 import React, { useEffect, useState } from 'react';
-import { walletService } from '../../services/wallet';
 import { ArrowUpCircle, ArrowDownCircle, Calendar, Loader2, FileText } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
 import { DEMO_TRANSACTIONS } from '../../data/DEMO_DATA';
-import { formatCalendarDate, formatCurrency as fmtCurrency } from '../../utils/format';
+import { formatCalendarDate, formatCurrency as fmtCurrency, formatQuantity, PRIVACY_MASK_SHORT } from '../../utils/format';
 
 interface Transaction {
     _id: string;
@@ -28,18 +26,18 @@ interface Transaction {
 type FilterType = 'ALL' | 'CASH' | 'TRADE';
 
 export const CashFlowHistory = () => {
-    const { user } = useAuth();
-    const { activeWalletId, isWalletScopeReady } = useWallet();
+    
+    const { activeWalletId, isWalletScopeReady, isPrivacyMode, dataSource } = useWallet();
     const { isDemoMode } = useDemo();
     const [page, setPage] = useState(1);
     const [activeFilter, setActiveFilter] = useState<FilterType>('ALL');
     const [transactions, setTransactions] = useState<Transaction[]>([]);
 
     const { data, isLoading, isFetching } = useQuery({
-        queryKey: ['cashFlow', user?.id, activeWalletId, page, activeFilter],
-        queryFn: () => walletService.getCashFlow(page, 15, activeFilter, activeWalletId),
+        queryKey: ['cashFlow', activeWalletId, page, activeFilter],
+        queryFn: () => dataSource.getCashFlow(page, 15, activeFilter),
         staleTime: 1000 * 60 * 2,
-        enabled: !!user?.id && !isDemoMode && isWalletScopeReady // Desativa query real no demo; espera o escopo da carteira
+        enabled: !isDemoMode && isWalletScopeReady // Desativa query real no demo; espera o escopo da carteira
     });
 
     useEffect(() => {
@@ -74,7 +72,7 @@ export const CashFlowHistory = () => {
         }
     };
 
-    const formatCurrency = (val: number, currency: 'BRL' | 'USD' = 'BRL') => fmtCurrency(val, currency);
+    const formatCurrency = (val: number, currency: 'BRL' | 'USD' = 'BRL') => fmtCurrency(val, currency, { privacy: isPrivacyMode });
 
     return (
         <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden min-h-[500px] flex flex-col">
@@ -129,7 +127,9 @@ export const CashFlowHistory = () => {
                                 subtitle = 'Movimentação de Caixa';
                             } else {
                                 title = `${isBuy ? 'Compra' : 'Venda'} de ${tx.ticker}`;
-                                subtitle = `${tx.quantity} unid. a ${formatCurrency(tx.price, cur)}`;
+                                // Quantidade sai junto no modo privacidade: com o preço
+                                // mascarado, ela sozinha ainda dimensionaria a operação.
+                                subtitle = `${isPrivacyMode ? PRIVACY_MASK_SHORT : formatQuantity(tx.quantity)} unid. a ${formatCurrency(tx.price, cur)}`;
                             }
 
                             return (

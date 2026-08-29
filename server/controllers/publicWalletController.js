@@ -2,111 +2,63 @@
 import * as Sentry from '@sentry/node';
 import Wallet from '../models/Wallet.js';
 import User from '../models/User.js';
-import WalletSnapshot from '../models/WalletSnapshot.js';
-import { buildWalletPayload } from './walletController.js';
-import { safeFloat, safeCurrency, safeDiv, safeMult } from '../utils/mathUtils.js';
+import {
+    buildWalletPayload,
+    buildWalletHistoryPayload,
+    buildWalletPerformancePayload,
+    buildWalletDividendsPayload,
+    buildCashFlowPayload,
+} from './walletController.js';
+import {
+    buildPublicScale, maskWalletPayload, maskHistory,
+    maskPerformance, maskDividends, maskCashFlow,
+} from '../utils/publicWalletMask.js';
 import AppError from '../utils/AppError.js';
 import logger from '../config/logger.js';
-import { allocationBucket as resolveAllocationBucket } from '../utils/assetAllocation.js';
 
 /**
  * (C4) Carteira pública — visão SOMENTE-LEITURA, sem autenticação, resolvida por
- * um token opt-in (Wallet.publicToken). Reusa buildWalletPayload (a mesma
- * matemática da carteira privada) e projeta um SUBCONJUNTO seguro:
- *   - composição por ativo (peso %) e alocação por classe (donut);
- *   - performance SÓ em % (cota TWRR normalizada — nunca expõe R$);
- *   - valores absolutos em R$ apenas se o dono optou (publicShowValues).
- * Nunca vaza userId, e-mail, custo, proventos ou métricas sensíveis.
+ * um token opt-in (Wallet.publicToken).
+ *
+ * O visitante vê a MESMA página Carteira do dono (mesmos componentes, mesmos
+ * números): cada rota daqui é uma casca fina sobre o builder que a rota privada
+ * correspondente usa — buildWalletPayload, buildWalletPerformancePayload,
+ * buildWalletDividendsPayload, buildCashFlowPayload. Não existe segunda
+ * implementação que possa divergir.
+ *
+ * O que muda em relação à rota privada:
+ *   - nada é gravado e nenhuma rotina de background é disparada;
+ *   - identificadores internos (user, wallet, assetId) são removidos;
+ *   - as metas da Carteira Ideal não são publicadas (o visitante vê a carteira
+ *     REAL, não o plano do dono);
+ *   - com `publicShowValues` desligado, todo R$ sai NORMALIZADO por
+ *     publicWalletMask (patrimônio = 100) e quantidade/preços saem zerados.
  */
 
-// Classe efetiva p/ o donut público: reserva (RF/CASH marcada) cai no balde CASH;
-// ETF nacional (type 'ETF') conta dentro de Ações BR (STOCK); senão usa o type real.
-// Espelha allocationBucket + fold de ETF do front (allocation.ts / AllocationChart).
-const publicBucket = (asset) => resolveAllocationBucket(asset);
+// Token gerado com randomBytes(24) → ~32 chars base64url. Guard barato contra
+// varredura por strings curtas antes de tocar o banco.
+const resolvePublicWallet = async (token) => {
+    if (!token || typeof token !== 'string' || token.length < 16) return null;
+    return Wallet.findOne({ publicToken: token, isPublic: true })
+        .select('_id user name publicShowValues').lean();
+};
 
-export const getPublicWallet = async (req, res, next) => {
+/**
+ * Casca comum das rotas públicas: resolve o token, monta a escala de máscara e
+ * entrega (wallet, scale) ao builder. Erro nunca vaza detalhe de existência —
+ * token inválido e carteira despublicada respondem o mesmo 404.
+ */
+const publicRoute = (build) => async (req, res, next) => {
     try {
-        const { token } = req.params;
-        // Token gerado com randomBytes(24) → ~32 chars base64url. Guard barato
-        // contra varredura por strings curtas antes de tocar o banco.
-        if (!token || typeof token !== 'string' || token.length < 16) {
-            return next(AppError.notFound('Carteira pública não encontrada.'));
-        }
-
-        const wallet = await Wallet.findOne({ publicToken: token, isPublic: true })
-            .select('_id user name publicShowValues').lean();
+        const wallet = await resolvePublicWallet(req.params.token);
         if (!wallet) return next(AppError.notFound('Carteira pública não encontrada.'));
 
-        const showValues = !!wallet.publicShowValues;
         const userId = String(wallet.user);
         const walletId = String(wallet._id);
-
-        const [payload, owner, snaps] = await Promise.all([
-            buildWalletPayload(userId, walletId),
-            User.findById(userId).select('name').lean(),
-            WalletSnapshot.find({ user: userId, wallet: walletId, totalEquity: { $gt: 1 } })
-                .sort({ date: 1 }).select('date quotaPrice').lean(),
-        ]);
-
-        const equity = safeFloat(payload?.kpis?.totalEquity);
-        const assets = Array.isArray(payload?.assets) ? payload.assets : [];
-
-        // Composição por ativo (peso %), ordenada por peso desc. R$ só se liberado.
-        const composition = assets
-            .map((a) => {
-                const value = safeFloat(a.totalValue);
-                return {
-                    ticker: a.ticker,
-                    name: a.name,
-                    type: a.type,
-                    allocationClass: a.allocationClass,
-                    weightPct: equity > 0 ? safeMult(safeDiv(value, equity), 100) : 0,
-                    ...(showValues ? { value: safeCurrency(value) } : {}),
-                };
-            })
-            .sort((x, y) => y.weightPct - x.weightPct);
-
-        // Alocação agregada por classe efetiva (donut).
-        const bucketMap = {};
-        for (const a of assets) {
-            const b = publicBucket(a);
-            bucketMap[b] = safeFloat(bucketMap[b]) + safeFloat(a.totalValue);
-        }
-        const allocation = Object.entries(bucketMap)
-            .map(([cls, val]) => ({ class: cls, weightPct: equity > 0 ? safeMult(safeDiv(val, equity), 100) : 0 }))
-            .sort((x, y) => y.weightPct - x.weightPct);
-
-        // Curva de performance SÓ em % (cota TWRR reancorada a 0% no início).
-        // Nunca carrega R$ — imune a aportes/resgates por construção da cota.
-        const base = safeFloat(snaps[0]?.quotaPrice) || 100;
-        const curve = base > 0
-            ? snaps.map((s) => ({
-                date: s.date,
-                returnPct: safeMult(safeDiv(safeFloat(s.quotaPrice), base) - 1, 100),
-            }))
-            : [];
-
-        // Só o primeiro nome do dono (link público por escolha explícita dele).
-        const ownerFirstName = (owner?.name || '').trim().split(/\s+/)[0] || null;
+        const payload = await build({ req, wallet, userId, walletId });
 
         res.set('Cache-Control', 'public, max-age=60'); // teaser: cache de 1min
-        res.json({
-            wallet: { name: wallet.name, ownerFirstName },
-            showValues,
-            composition,
-            allocation,
-            performance: {
-                totalReturnPct: safeFloat(payload?.kpis?.totalResultPercent),
-                dayVariationPercent: safeFloat(payload?.kpis?.dayVariationPercent),
-                curve,
-            },
-            kpis: showValues ? {
-                totalEquity: safeCurrency(equity),
-                totalInvested: safeCurrency(safeFloat(payload?.kpis?.totalInvested)),
-                totalResult: safeCurrency(safeFloat(payload?.kpis?.totalResult)),
-            } : null,
-            meta: { updatedAt: new Date(), assetCount: assets.length },
-        });
+        res.json(payload);
     } catch (error) {
         // (E5) Erros da rota pública ganham tag própria no Sentry — além do
         // handler global — para alerta/segmentação de uma superfície não-autenticada.
@@ -120,3 +72,102 @@ export const getPublicWallet = async (req, res, next) => {
         next(error);
     }
 };
+
+/**
+ * A escala depende do patrimônio, que só o payload da carteira conhece — e as
+ * abas precisam do MESMO fator, senão cada uma normalizaria por uma base
+ * diferente e os números não conversariam entre si.
+ *
+ * O patrimônio fica memoizado por carteira pelo mesmo minuto do Cache-Control:
+ * sem isso cada aba do link refaria o payload inteiro (cotações, snapshots,
+ * métricas de risco) só para descobrir o divisor.
+ */
+const EQUITY_TTL_MS = 60_000;
+const EQUITY_CACHE_MAX = 500;
+const equityCache = new Map();
+
+const cachedEquity = async (userId, walletId) => {
+    const hit = equityCache.get(walletId);
+    if (hit && Date.now() - hit.at < EQUITY_TTL_MS) return hit.equity;
+    const payload = await buildWalletPayload(userId, walletId);
+    return rememberEquity(walletId, payload?.kpis?.totalEquity);
+};
+
+const rememberEquity = (walletId, equity) => {
+    // Descarte simples por inserção mais antiga: o mapa é um cache, não um índice.
+    if (equityCache.size >= EQUITY_CACHE_MAX) equityCache.delete(equityCache.keys().next().value);
+    equityCache.set(walletId, { equity, at: Date.now() });
+    return equity;
+};
+
+const scaleFor = async (wallet, userId, walletId) => {
+    if (wallet.publicShowValues) return buildPublicScale({ showValues: true });
+    return buildPublicScale({ showValues: false, totalEquity: await cachedEquity(userId, walletId) });
+};
+
+/** GET /public/wallet/:token — carteira (ativos + KPIs) + identidade do link. */
+export const getPublicWallet = publicRoute(async ({ wallet, userId, walletId }) => {
+    const [payload, owner] = await Promise.all([
+        buildWalletPayload(userId, walletId),
+        User.findById(userId).select('name').lean(),
+    ]);
+
+    // Esta rota já pagou pelo payload: alimenta o cache que as abas consultam.
+    rememberEquity(walletId, payload?.kpis?.totalEquity);
+    const scale = buildPublicScale({
+        showValues: !!wallet.publicShowValues,
+        totalEquity: payload?.kpis?.totalEquity,
+    });
+
+    return {
+        // Só o primeiro nome do dono (link público por escolha explícita dele).
+        wallet: { name: wallet.name, ownerFirstName: (owner?.name || '').trim().split(/\s+/)[0] || null },
+        showValues: scale.showValues,
+        ...maskWalletPayload(scale, payload),
+    };
+});
+
+export const getPublicWalletHistory = publicRoute(async ({ wallet, userId, walletId }) => {
+    const [snapshots, scale] = await Promise.all([
+        buildWalletHistoryPayload(userId, walletId),
+        scaleFor(wallet, userId, walletId),
+    ]);
+    return maskHistory(scale, snapshots.map(({ user, wallet: _w, ...rest }) => rest));
+});
+
+export const getPublicWalletPerformance = publicRoute(async ({ wallet, userId, walletId }) => {
+    const [performance, scale] = await Promise.all([
+        buildWalletPerformancePayload(userId, walletId),
+        scaleFor(wallet, userId, walletId),
+    ]);
+    return maskPerformance(scale, performance);
+});
+
+export const getPublicWalletDividends = publicRoute(async ({ wallet, userId, walletId }) => {
+    const [dividends, scale] = await Promise.all([
+        buildWalletDividendsPayload(userId, walletId),
+        scaleFor(wallet, userId, walletId),
+    ]);
+    return maskDividends(scale, dividends);
+});
+
+export const getPublicWalletCashFlow = publicRoute(async ({ req, wallet, userId, walletId }) => {
+    // Paginação vem da querystring do visitante: normalizada e com teto, para
+    // que um link público não vire um dump paginado arbitrário.
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 15));
+    const filterType = ['CASH', 'TRADE'].includes(req.query.filterType) ? req.query.filterType : 'ALL';
+
+    const [cashFlow, scale] = await Promise.all([
+        buildCashFlowPayload(userId, walletId, { page, limit, filterType }),
+        scaleFor(wallet, userId, walletId),
+    ]);
+
+    // Remove identificadores internos ANTES da máscara: `user` é o id do dono e
+    // não pode existir numa resposta sem autenticação, com ou sem valores.
+    const sanitized = {
+        ...cashFlow,
+        transactions: (cashFlow.transactions || []).map(({ user, wallet: _w, assetId, ...rest }) => rest),
+    };
+    return maskCashFlow(scale, sanitized);
+});

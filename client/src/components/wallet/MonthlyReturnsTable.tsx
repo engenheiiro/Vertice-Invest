@@ -1,7 +1,6 @@
 
 import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { walletService } from '../../services/wallet';
 import { Loader2, Calendar, AlertCircle } from 'lucide-react';
 import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
@@ -19,19 +18,24 @@ interface YearRow {
 }
 
 export const MonthlyReturnsTable = () => {
-    const { isPrivacyMode, activeWalletId, isWalletScopeReady } = useWallet();
+    const { isPrivacyMode, activeWalletId, isWalletScopeReady, dataSource } = useWallet();
     const { isDemoMode } = useDemo();
 
     const { data: rawData, isLoading } = useQuery({
         queryKey: ['walletPerformance', activeWalletId],
-        queryFn: () => walletService.getPerformance(activeWalletId),
+        queryFn: () => dataSource.getPerformance(),
         staleTime: 1000 * 60 * 10,
         enabled: !isDemoMode && isWalletScopeReady // Desativa query real se for Demo; espera o escopo da carteira
     });
 
     const tableData = useMemo(() => {
-        // Seleciona a fonte de dados (Real ou Demo)
-        const sourceData = isDemoMode ? DEMO_PERFORMANCE : rawData;
+        // Seleciona a fonte de dados (Real ou Demo). A rota de performance responde
+        // `{history, stats}` — só devolve array puro quando não há snapshot. Ler
+        // `rawData` direto fazia `Array.isArray` falhar e a tabela ficava vazia em
+        // TODA carteira com histórico.
+        const sourceData = isDemoMode
+            ? DEMO_PERFORMANCE
+            : (Array.isArray(rawData) ? rawData : rawData?.history);
 
         if (!sourceData || !Array.isArray(sourceData) || sourceData.length === 0) return [];
 

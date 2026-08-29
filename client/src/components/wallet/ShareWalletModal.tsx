@@ -153,7 +153,9 @@ export const ShareWalletModal: React.FC<ShareWalletModalProps> = ({
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-semibold text-slate-200">Link público</p>
                                     <p className="text-[11px] text-slate-500 mt-0.5">
-                                        Qualquer pessoa com o link vê a composição e a rentabilidade (%). Off por padrão.
+                                        Quem tiver o link abre esta mesma tela em modo leitura: visão geral,
+                                        rentabilidade, proventos e extrato. O Imposto de Renda nunca é compartilhado.
+                                        Off por padrão.
                                     </p>
                                 </div>
                                 <button
@@ -204,7 +206,9 @@ export const ShareWalletModal: React.FC<ShareWalletModalProps> = ({
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-semibold text-slate-200">Exibir valores em R$</p>
                                             <p className="text-[11px] text-slate-500 mt-0.5">
-                                                Desligado, o visitante vê só percentuais. Ligado, expõe seu patrimônio em reais.
+                                                Desligado, todo valor aparece mascarado (••••) e nenhum número real
+                                                sequer sai do servidor — só percentuais e proporções. Ligado, expõe
+                                                seu patrimônio em reais.
                                             </p>
                                         </div>
                                         <button

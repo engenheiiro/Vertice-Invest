@@ -104,8 +104,15 @@ export default function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/chinelada" element={<Suspense fallback={<PageLoader />}><Chinelada /></Suspense>} />
 
-            {/* (C4) Carteira pública — leitura, sem auth. Fora dos layouts protegidos. */}
-            <Route path="/p/:token" element={<Suspense fallback={<PageLoader />}><PublicWallet /></Suspense>} />
+            {/* (C4) Carteira pública — leitura, sem auth. Fora dos layouts protegidos.
+                Renderiza a MESMA página Carteira (WalletView) em modo leitura, então
+                precisa do DemoProvider que os componentes dela consomem; sem usuário
+                logado ele fica inerte (isDemoMode nunca liga). */}
+            <Route path="/p/:token" element={
+              <Suspense fallback={<PageLoader />}>
+                <DemoProvider><PublicWallet /></DemoProvider>
+              </Suspense>
+            } />
 
 
             <Route element={<AuthLayout />}>

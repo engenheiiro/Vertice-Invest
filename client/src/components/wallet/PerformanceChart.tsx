@@ -1,13 +1,12 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { walletService } from '../../services/wallet';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { TrendingUp, RefreshCw } from 'lucide-react';
 import { useDemo } from '../../contexts/DemoContext';
 import { useWallet } from '../../contexts/WalletContext';
 import { DEMO_PERFORMANCE } from '../../data/DEMO_DATA';
-import { formatCurrency as fmtCurrency } from '../../utils/format';
+import { formatCurrency as fmtCurrency, PRIVACY_MASK_SHORT } from '../../utils/format';
 
 interface PerformancePoint {
     date: string;
@@ -76,7 +75,7 @@ export const PerformanceChart = React.memo(() => {
     const axisTick = theme === 'light' ? '#64748b' : '#6A7480';
 
     const { isDemoMode } = useDemo();
-    const { kpis, activeWalletId, isWalletScopeReady } = useWallet();
+    const { kpis, activeWalletId, isWalletScopeReady, isPrivacyMode, dataSource } = useWallet();
 
     const loadPerformance = async () => {
         setIsLoading(true);
@@ -90,7 +89,7 @@ export const PerformanceChart = React.memo(() => {
         }
 
         try {
-            const res = await walletService.getPerformance(activeWalletId);
+            const res = await dataSource.getPerformance();
             const sorted = Array.isArray(res?.history)
                 ? res.history.sort((a: any, b: any) => parsePerformanceDate(a.date).getTime() - parsePerformanceDate(b.date).getTime())
                 : [];
@@ -387,7 +386,7 @@ export const PerformanceChart = React.memo(() => {
                             domain={['auto', 'auto']}
                             tickFormatter={(val) =>
                                 viewMode === 'brl'
-                                    ? `R$${(val / 1000).toFixed(0)}k`
+                                    ? (isPrivacyMode ? PRIVACY_MASK_SHORT : `R$${(val / 1000).toFixed(0)}k`)
                                     : `${val.toFixed(0)}%`
                             }
                         />
@@ -399,7 +398,7 @@ export const PerformanceChart = React.memo(() => {
                             formatter={(value: number, name: string) => {
                                 const label = LABEL_MAP[name] ?? name;
                                 if (viewMode === 'brl') {
-                                    return [fmtCurrency(value), label];
+                                    return [fmtCurrency(value, 'BRL', { privacy: isPrivacyMode }), label];
                                 }
                                 return [`${value.toFixed(2)}%`, label];
                             }}
