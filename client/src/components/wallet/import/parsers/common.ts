@@ -151,3 +151,47 @@ export const parseSide = (value: string): 'BUY' | 'SELL' | null => {
 /** Um código de negociação plausível da B3 (`PETR4`, `MXRF11`, `BOVA11`). */
 export const looksLikeTicker = (value: string): boolean =>
     /^[A-Z]{4}\d{1,2}[A-Z]?$/.test(String(value ?? '').trim().toUpperCase());
+
+/** Teto do rótulo quando ele não é um código — o mesmo do `ticker` no schema. */
+const LABEL_MAX = 40;
+
+/**
+ * Separa o rótulo de produto do extrato em **código de negociação** e **nome**.
+ *
+ * A B3 escreve a coluna Produto como `"PETR4 - PETROLEO BRASILEIRO S.A."`, e
+ * mandar isso inteiro como ticker estoura a validação do servidor ("Ticker muito
+ * longo") — era o que quebrava o envio do extrato de Movimentação.
+ *
+ * O código só é extraído quando dá para ter certeza de que é um código:
+ *  - tem forma de papel da B3 (`PETR4`, `MXRF11`, `PETR4F`); ou
+ *  - o rótulo veio com o separador ` - ` da B3 (`AAPL - Apple Inc`); ou
+ *  - o rótulo é uma palavra só (`PETR4`, `BTC` — planilha do usuário).
+ *
+ * Fora disso o rótulo inteiro vira o "ticker". É de propósito: `Tesouro Selic
+ * 2029` e `Tesouro IPCA+ 2035` reduzidos ao primeiro token viravam ambos
+ * `TESOURO` e se fundiam numa posição só. Preservado, cada um cai como "não
+ * reconhecido" na conferência e o usuário escolhe a classe.
+ */
+export const splitProductLabel = (raw: string): { ticker: string; name?: string } => {
+    const cleaned = String(raw ?? '').replace(/\s+/g, ' ').trim();
+    if (!cleaned) return { ticker: '' };
+
+    const hasSeparator = / - /.test(cleaned);
+    const firstSpace = cleaned.indexOf(' ');
+    const head = firstSpace === -1 ? cleaned : cleaned.slice(0, firstSpace);
+    const tail = firstSpace === -1 ? '' : cleaned.slice(firstSpace + 1).replace(/^-\s*/, '').trim();
+
+    const token = head.toUpperCase().replace(/[^A-Z0-9.]/g, '');
+    // Ticker fracionário (`PETR4F`) é o MESMO ativo do lote padrão; sem isso a
+    // carteira nasce com duas posições da mesma empresa.
+    const fractional = /^([A-Z]{4}\d{1,2})F$/.exec(token);
+    const code = fractional ? fractional[1] : token;
+
+    const isCode = looksLikeTicker(code)
+        || (!!code && !tail)
+        || (!!code && hasSeparator && /^[A-Z0-9.]{1,10}$/.test(code));
+
+    if (isCode) return { ticker: code, name: tail ? tail.slice(0, 120) : undefined };
+
+    return { ticker: cleaned.toUpperCase().slice(0, LABEL_MAX), name: cleaned.slice(0, 120) };
+};

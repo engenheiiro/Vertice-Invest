@@ -1,5 +1,5 @@
 import { ParseError, type ImportRow, type ParseResult } from '../types';
-import { findColumn, locateHeaderRow, parseAssetType, parseNumber, parseSheetDate, parseSide } from './common';
+import { findColumn, locateHeaderRow, parseAssetType, parseNumber, parseSheetDate, parseSide, splitProductLabel } from './common';
 
 /**
  * Planilha modelo do Vértice.
@@ -72,7 +72,9 @@ export const parseGenericSheet = (grid: string[][]): ParseResult => {
 
         const at = (index: number) => (index === -1 ? '' : (line[index] ?? ''));
 
-        const ticker = at(idx.ticker).trim().toUpperCase();
+        // Aceita tanto o código puro (`PETR4`) quanto o rótulo colado de um
+        // extrato (`PETR4 - Petrobras`) — o usuário edita a planilha à mão.
+        const { ticker, name } = splitProductLabel(at(idx.ticker));
         if (!ticker) continue;
 
         const quantity = parseNumber(at(idx.quantidade));
@@ -86,6 +88,7 @@ export const parseGenericSheet = (grid: string[][]): ParseResult => {
 
         rows.push({
             ticker,
+            name,
             type: parseAssetType(at(idx.classe)),
             // Sem coluna de operação, a linha é uma compra — é o caso esmagador
             // numa planilha de carteira, e a venda é sempre explícita.

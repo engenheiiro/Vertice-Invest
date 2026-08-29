@@ -39,28 +39,49 @@ export const ROW_STATUS = {
     NAO_RECONHECIDO: 'nao_reconhecido',
 };
 
+/** Forma de um papel da B3 (`PETR4`, `MXRF11`, `PETR4F`). */
+const TICKER_SHAPE = /^[A-Z]{4}\d{1,2}[A-Z]?$/;
+
+/** Teto do rótulo preservado quando ele não é um código de negociação. */
+const LABEL_MAX = 40;
+
 /**
  * Extrai o código de negociação de um rótulo de extrato.
  *
  * A B3 escreve o produto como `"PETR4 - PETROLEO BRASILEIRO S.A. PETROBRAS"`, e
- * o Investidor10 às vezes cola o ticker junto do nome. Pegamos o primeiro token
- * antes do separador e validamos o formato — se não parecer um código de
- * negociação, devolvemos o texto limpo mesmo, para a linha cair como
+ * o Investidor10 às vezes cola o ticker junto do nome. O parser do cliente já
+ * separa código e nome, mas isto aqui é a fronteira: nada garante que a linha
+ * chegou por lá.
+ *
+ * O primeiro token só é aceito como código quando dá para ter certeza: tem forma
+ * de papel da B3, veio com o separador ` - `, ou é o rótulo inteiro (uma palavra
+ * só). Fora disso preservamos o rótulo — reduzir `Tesouro Selic 2029` e
+ * `Tesouro IPCA+ 2035` ao primeiro token fundia os dois num `TESOURO` só, com
+ * quantidade e custo somados de títulos diferentes. Preservado, cada um cai como
  * "não reconhecido" na revisão em vez de virar um ticker inventado.
  */
 export const extractTicker = (raw) => {
     if (!raw) return '';
-    const cleaned = String(raw).trim().toUpperCase();
-    // Separador da B3 é " - "; o hífen sem espaços pode fazer parte do nome.
-    const head = cleaned.split(/\s+-\s+/)[0].trim();
-    const token = head.split(/\s+/)[0].replace(/[^A-Z0-9.]/g, '');
+    const cleaned = String(raw).replace(/\s+/g, ' ').trim().toUpperCase();
+    if (!cleaned) return '';
+
+    const hasSeparator = / - /.test(cleaned);
+    const firstSpace = cleaned.indexOf(' ');
+    const head = firstSpace === -1 ? cleaned : cleaned.slice(0, firstSpace);
+    const tail = firstSpace === -1 ? '' : cleaned.slice(firstSpace + 1).replace(/^-\s*/, '').trim();
+
+    const token = head.replace(/[^A-Z0-9.]/g, '');
 
     // Ticker fracionário da B3 (`PETR4F`) é o MESMO ativo do lote padrão. Sem
     // essa normalização a carteira nasce com duas posições da mesma empresa.
     const fractional = /^([A-Z]{4}\d{1,2})F$/.exec(token);
-    if (fractional) return fractional[1];
+    const code = fractional ? fractional[1] : token;
 
-    return token || cleaned;
+    const isCode = TICKER_SHAPE.test(code)
+        || (!!code && !tail)
+        || (!!code && hasSeparator && /^[A-Z0-9.]{1,10}$/.test(code));
+
+    return isCode ? code : cleaned.slice(0, LABEL_MAX);
 };
 
 /** Ancora a data no meio-dia UTC, mesma convenção de `parseCalendarDate`. */
@@ -170,10 +191,16 @@ export const resolveRows = async ({ userId, walletId, rows }) => {
 
         seenInBatch.add(key);
 
+        // Só falta a CLASSE — que é escolhida nesta mesma tela. A linha vai
+        // entrar, então conta no saldo e no resumo.
+        const soFaltaClasse = status === ROW_STATUS.NAO_RECONHECIDO && !!row.ticker && !!row.date;
+
         // Simulação de saldo: só conta o que de fato entraria.
-        if (status === ROW_STATUS.OK || status === ROW_STATUS.ATENCAO) {
+        if (status === ROW_STATUS.OK || status === ROW_STATUS.ATENCAO || soFaltaClasse) {
             const current = runningQty.get(row.ticker) ?? 0;
-            if (row.side === 'SELL' && row.quantity > current + QUANTITY_EPSILON) {
+            // Sem o `soFaltaClasse` aqui, o aviso de venda sem lastro sobrescreveria
+            // o "escolha a classe" — e a classe é o que destrava a linha.
+            if (row.side === 'SELL' && row.quantity > current + QUANTITY_EPSILON && !soFaltaClasse) {
                 status = ROW_STATUS.ATENCAO;
                 reason = 'Venda maior que a posição acumulada até esta data — falta a compra correspondente.';
             }
@@ -187,10 +214,17 @@ export const resolveRows = async ({ userId, walletId, rows }) => {
     }
 
     // Posição resultante por ticker — o material da conferência contra a origem.
+    //
+    // Linha que só espera a classe entra na conta. Fora dela, um Tesouro ou
+    // qualquer ativo fora do catálogo aparecia com quantidade e valor ZERO na
+    // tela de conferência — justamente o número que o usuário abriu a tela para
+    // conferir, e que o commit ia gravar certo de qualquer jeito.
     const summary = tickers.map((ticker) => {
         const linhas = resolvedByIndex.filter((r) => r.ticker === ticker);
         const importaveis = linhas.filter(
-            (r) => r.status === ROW_STATUS.OK || r.status === ROW_STATUS.ATENCAO
+            (r) => r.status === ROW_STATUS.OK
+                || r.status === ROW_STATUS.ATENCAO
+                || (r.status === ROW_STATUS.NAO_RECONHECIDO && !!r.ticker && !!r.date)
         );
         let quantity = safeQuantity(positionByTicker.get(ticker)?.quantity || 0);
         let cost = 0;

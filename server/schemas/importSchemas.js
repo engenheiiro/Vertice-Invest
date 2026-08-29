@@ -25,9 +25,13 @@ export const MAX_IMPORT_TICKERS = 200;
 
 // Uma linha já normalizada pelo parser do cliente.
 const importRow = z.object({
+  // O teto é generoso de propósito: a coluna Produto do extrato da B3 vem como
+  // "PETR4 - PETROLEO BRASILEIRO S.A. PETROBRAS", e recusar isso aqui derrubava
+  // o import inteiro com "Ticker muito longo" antes de o `extractTicker` do
+  // serviço ter a chance de reduzir o rótulo ao código de negociação.
   ticker: z.string({ required_error: 'Ticker é obrigatório' })
     .min(1, 'Ticker é obrigatório')
-    .max(40, 'Ticker muito longo')
+    .max(120, 'Ticker muito longo')
     .trim(),
   type: z.enum(ASSET_TYPES, { errorMap: () => ({ message: 'Tipo de ativo inválido' }) }).optional(),
   // Diferente do POST /wallet/add, que infere BUY/SELL pelo SINAL da quantidade:

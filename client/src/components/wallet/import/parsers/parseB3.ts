@@ -1,5 +1,5 @@
 import { ParseError, type ImportRow, type ImportSource, type ParseResult } from '../types';
-import { findColumn, locateHeaderRow, parseNumber, parseSheetDate, parseSide } from './common';
+import { findColumn, locateHeaderRow, parseNumber, parseSheetDate, parseSide, splitProductLabel } from './common';
 
 /**
  * Extratos da Área do Investidor da B3 (`investidor.b3.com.br`).
@@ -117,7 +117,13 @@ export const parseB3Sheet = (grid: string[][]): ParseResult => {
         }
         if (!(price > 0)) semPreco += 1;
 
-        rows.push({ ticker: produto, side, quantity, price, date, currency: 'BRL' });
+        // A coluna Produto vem como "PETR4 - PETROLEO BRASILEIRO S.A.": o código
+        // é o ticker, o resto é o nome do ativo. Mandar o rótulo inteiro como
+        // ticker é o que o servidor recusa com "Ticker muito longo".
+        const { ticker, name } = splitProductLabel(produto);
+        if (!ticker) continue;
+
+        rows.push({ ticker, name, side, quantity, price, date, currency: 'BRL' });
     }
 
     if (rows.length === 0) {

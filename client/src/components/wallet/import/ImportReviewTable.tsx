@@ -42,8 +42,15 @@ const TYPE_LABELS: Array<{ value: AssetType; label: string }> = [
 ];
 
 const quantityFormat = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 8 });
+/**
+ * `2026-07-31` → `31/07/2026`.
+ *
+ * O `slice` não é decoração: a data volta do preview já resolvida pelo servidor,
+ * onde virou `Date` e foi serializada como `2026-07-31T12:00:00.000Z`. Sem
+ * cortar a hora, o split pelo hífen entregava "31T12:00:00.000Z/07/2026" na tela.
+ */
 const dateFormat = (iso: string) => {
-    const [y, m, d] = iso.split('-');
+    const [y, m, d] = String(iso ?? '').slice(0, 10).split('-');
     return d ? `${d}/${m}/${y}` : iso;
 };
 
@@ -179,8 +186,12 @@ export const ImportReviewTable: React.FC<Props> = ({ preview, decisions, onChang
                                     <div className="min-w-0">
                                         <div className="text-xs text-slate-200">
                                             <span className="font-bold">{row.ticker || '—'}</span>
+                                            {/* O preço unitário fica visível aqui de propósito: é a
+                                                linha que o usuário confere contra o extrato. */}
                                             <span className="text-slate-500"> · {row.side === 'BUY' ? 'Compra' : 'Venda'} de{' '}
-                                                {quantityFormat.format(row.quantity)} em {dateFormat(row.date)}</span>
+                                                {quantityFormat.format(row.quantity)}
+                                                {row.price > 0 && ` × ${currencyOf(row.currency ?? 'BRL').format(row.price)}`}
+                                                {' '}em {dateFormat(row.date)}</span>
                                         </div>
                                         <div className="text-[11px] text-slate-400 mt-0.5">{row.reason}</div>
                                     </div>

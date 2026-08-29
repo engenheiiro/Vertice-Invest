@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseDelimited } from './readSheet';
-import { normalizeHeader, findColumn, parseNumber, parseSheetDate, parseSide, parseAssetType, looksLikeTicker } from './common';
+import { normalizeHeader, findColumn, parseNumber, parseSheetDate, parseSide, parseAssetType, looksLikeTicker, splitProductLabel } from './common';
 import { parseB3Sheet } from './parseB3';
 import { parseInvestidor10Paste } from './parseInvestidor10';
 import { parseGenericSheet, buildTemplateCsv } from './parseGenericSheet';
@@ -74,6 +74,22 @@ describe('common — normalização de células', () => {
         expect(looksLikeTicker('Total')).toBe(false);
         expect(looksLikeTicker('R$ 100')).toBe(false);
     });
+
+    it('separa código e nome no rótulo de produto da B3', () => {
+        expect(splitProductLabel('PETR4 - PETROLEO BRASILEIRO S.A. PETROBRAS'))
+            .toEqual({ ticker: 'PETR4', name: 'PETROLEO BRASILEIRO S.A. PETROBRAS' });
+        // Fracionário é o MESMO ativo do lote padrão.
+        expect(splitProductLabel('MXRF11F - MAXI RENDA FDO INV IMOB').ticker).toBe('MXRF11');
+        // Hífen do nome não é o separador de coluna.
+        expect(splitProductLabel('SANB11 - BANCO SANTANDER-BRASIL').ticker).toBe('SANB11');
+        expect(splitProductLabel('PETR4')).toEqual({ ticker: 'PETR4', name: undefined });
+        expect(splitProductLabel('')).toEqual({ ticker: '' });
+    });
+
+    it('preserva o rótulo que não é código — dois títulos do Tesouro não podem virar um', () => {
+        expect(splitProductLabel('Tesouro Selic 2029').ticker).toBe('TESOURO SELIC 2029');
+        expect(splitProductLabel('Tesouro IPCA+ 2035').ticker).toBe('TESOURO IPCA+ 2035');
+    });
 });
 
 describe('parseDelimited — CSV', () => {
@@ -102,9 +118,11 @@ describe('parseB3Sheet — extrato de Movimentação', () => {
         ]));
 
         expect(source).toBe('B3_MOVIMENTACAO');
+        // A coluna Produto vira ticker + nome; mandar o rótulo inteiro como
+        // ticker era o que o servidor recusava com "Ticker muito longo".
         expect(rows).toEqual([
-            { ticker: 'PETR4 - PETROLEO BRASILEIRO S.A.', side: 'BUY', quantity: 100, price: 30.5, date: '2024-03-15', currency: 'BRL' },
-            { ticker: 'PETR4 - PETROLEO BRASILEIRO S.A.', side: 'SELL', quantity: 50, price: 38.1, date: '2024-08-20', currency: 'BRL' },
+            { ticker: 'PETR4', name: 'PETROLEO BRASILEIRO S.A.', side: 'BUY', quantity: 100, price: 30.5, date: '2024-03-15', currency: 'BRL' },
+            { ticker: 'PETR4', name: 'PETROLEO BRASILEIRO S.A.', side: 'SELL', quantity: 50, price: 38.1, date: '2024-08-20', currency: 'BRL' },
         ]);
     });
 

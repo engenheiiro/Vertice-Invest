@@ -90,6 +90,13 @@ describe('extractTicker — código de negociação a partir do rótulo do extra
     expect(extractTicker('SANB11 - BANCO SANTANDER-BRASIL')).toBe('SANB11');
   });
 
+  it('preserva o rótulo que não é código de negociação', () => {
+    // Reduzido ao primeiro token, todo título do Tesouro virava "TESOURO" e dois
+    // papéis diferentes se fundiam numa posição só, com custo somado.
+    expect(extractTicker('Tesouro Selic 2029')).toBe('TESOURO SELIC 2029');
+    expect(extractTicker('Tesouro IPCA+ 2035')).toBe('TESOURO IPCA+ 2035');
+  });
+
   it('devolve string vazia para entrada vazia em vez de explodir', () => {
     expect(extractTicker('')).toBe('');
     expect(extractTicker(null)).toBe('');
@@ -211,6 +218,30 @@ describe('resolveRows — classificação contra o catálogo', () => {
 
     expect(summary).toHaveLength(1);
     expect(summary[0]).toMatchObject({ ticker: 'PETR4', quantity: 200, averagePrice: 35, totalCost: 7000 });
+  });
+
+  it('conta na posição a linha que só espera a CLASSE do usuário', async () => {
+    // O Tesouro do extrato da B3 não está no catálogo de mercado. Deixá-lo fora
+    // do resumo mostrava quantidade e valor ZERO na conferência — o número que o
+    // usuário abriu a tela para conferir — enquanto o commit gravava certo.
+    givenDb({});
+
+    const { rows, summary } = await resolveRows({
+      userId: 'u1',
+      walletId: 'w1',
+      rows: [row({ ticker: 'Tesouro IPCA+ 2032', quantity: 0.25, price: 2943.69 })],
+    });
+
+    expect(rows[0].status).toBe(ROW_STATUS.NAO_RECONHECIDO);
+    // O custo é o do extrato (0,25 × 2.943,69 = R$ 735,92). O preço médio é
+    // derivado do custo em CENTAVOS, então fica um centavo abaixo do PU do
+    // título — é o que a posição vai mostrar depois, e não uma divergência.
+    expect(summary[0]).toMatchObject({
+      ticker: 'TESOURO IPCA+ 2032',
+      quantity: 0.25,
+      totalCost: 735.92,
+      averagePrice: 2943.68,
+    });
   });
 
   it('não conta duplicatas na posição resultante', async () => {

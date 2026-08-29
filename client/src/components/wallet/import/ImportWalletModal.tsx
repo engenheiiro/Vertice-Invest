@@ -59,7 +59,7 @@ const B3_STEPS: React.ReactNode[] = [
     <>
         Acesse{' '}
         <a
-            href="https://investidor.b3.com.br"
+            href="https://www.investidor.b3.com.br/login"
             target="_blank"
             rel="noopener noreferrer"
             className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
@@ -68,7 +68,7 @@ const B3_STEPS: React.ReactNode[] = [
         </a>{' '}
         e entre com CPF ou gov.br
     </>,
-    <>Vá em <strong className="text-slate-100">Extratos e Informativos → Movimentação</strong></>,
+    <>Vá em <strong className="text-slate-100">Extratos → Movimentação</strong></>,
     <>Escolha a data mais antiga disponível até hoje e clique em <strong className="text-slate-100">Filtrar</strong></>,
     <>Baixe em <strong className="text-slate-100">Excel</strong> e envie o arquivo aqui</>,
 ];

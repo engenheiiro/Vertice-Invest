@@ -213,6 +213,33 @@ describe('ImportWalletModal — o que chega ao commit', () => {
         expect(screen.getByRole('button', { name: /Importar 0 lançamento/i })).toBeDisabled();
     });
 
+    it('mostra data e preço legíveis na linha que pede atenção', async () => {
+        // A data volta do servidor como ISO COM HORA (`2026-07-31T12:00:00.000Z`),
+        // porque lá ela virou Date. Sem cortar a hora, a tela exibia
+        // "31T12:00:00.000Z/07/2026"; e sem o preço não dá para conferir a linha
+        // contra o extrato.
+        (walletService.importPreview as ReturnType<typeof vi.fn>).mockResolvedValue({
+            ...previewResponse,
+            rows: [{
+                ...previewResponse.rows[0],
+                ticker: 'TESOURO IPCA+ 2032',
+                type: undefined,
+                quantity: 0.25,
+                price: 2943.69,
+                date: '2026-07-31T12:00:00.000Z',
+                status: 'nao_reconhecido',
+                reason: 'Ativo fora do nosso catálogo. Escolha a classe para importar.',
+            }],
+            summary: [{ ...previewResponse.summary[0], ticker: 'TESOURO IPCA+ 2032', type: null, name: null }],
+        });
+
+        render(<ImportWalletModal isOpen onClose={vi.fn()} />);
+        await irParaConferencia();
+
+        expect(screen.getByText(/em 31\/07\/2026/)).toBeInTheDocument();
+        expect(screen.getByText(/2\.943,69/)).toBeInTheDocument();
+    });
+
     it('destrava assim que a classe do ativo desconhecido é escolhida', async () => {
         (walletService.importPreview as ReturnType<typeof vi.fn>).mockResolvedValue({
             ...previewResponse,
