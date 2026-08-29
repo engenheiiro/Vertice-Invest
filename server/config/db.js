@@ -9,7 +9,8 @@ import { attachMongoBreaker } from '../middleware/mongoCircuitBreaker.js';
  * carteiras) reescopou os índices de user- para wallet-, mas os legados user-scoped
  * ficaram no banco. O mais grave é `userassets.user_1_ticker_1` (ÚNICO), que bloqueia
  * o MESMO ticker em carteiras diferentes (E11000 ao cadastrar, ex.: BOVA11). Os demais
- * são compostos user-scoped já substituídos pelos equivalentes wallet-scoped.
+ * são compostos user-scoped já substituídos pelos equivalentes wallet-scoped. A lista
+ * também recolhe índices que nasceram com a definição errada (ver `wallets.publicToken_1`).
  *
  * Remoção idempotente e NÃO destrutiva: apaga só a definição de índice obsoleta (nunca
  * dados), e o índice correto já é garantido pelo autoIndex do schema. Para a limpeza
@@ -17,18 +18,27 @@ import { attachMongoBreaker } from '../middleware/mongoCircuitBreaker.js';
  */
 const healLegacyIndexes = async () => {
   const STALE = [
-    { collection: 'userassets', index: 'user_1_ticker_1' },        // ÚNICO — causa E11000
-    { collection: 'assettransactions', index: 'user_1_ticker_1_date_1' },
-    { collection: 'investmentgoals', index: 'user_1_status_1' },
-    { collection: 'goalcontributions', index: 'user_1_goal_1_date_-1' },
+    // ÚNICO — causa E11000 ao cadastrar o mesmo ticker em carteiras diferentes.
+    { collection: 'userassets', index: 'user_1_ticker_1', reason: 'Fase 2 — múltiplas carteiras' },
+    { collection: 'assettransactions', index: 'user_1_ticker_1_date_1', reason: 'Fase 2 — múltiplas carteiras' },
+    { collection: 'investmentgoals', index: 'user_1_status_1', reason: 'Fase 2 — múltiplas carteiras' },
+    { collection: 'goalcontributions', index: 'user_1_goal_1_date_-1', reason: 'Fase 2 — múltiplas carteiras' },
+    // ÚNICO — causa E11000 ao criar a 2ª carteira. Nasceu `{ unique, sparse }`
+    // acreditando que sparse tiraria do índice as carteiras sem link público. Não
+    // tira: sparse só ignora o documento em que o campo está AUSENTE, e
+    // `publicToken` tem `default: null`, então toda carteira grava o campo valendo
+    // null e a segunda colide com a primeira. O substituto é o índice PARCIAL
+    // `publicToken_partial_unique` do schema (nome distinto de propósito: assim o
+    // autoIndex o cria sem conflitar com este, que morre aqui).
+    { collection: 'wallets', index: 'publicToken_1', reason: 'sparse+unique colidia em publicToken:null' },
   ];
-  for (const { collection, index } of STALE) {
+  for (const { collection, index, reason } of STALE) {
     try {
       const coll = mongoose.connection.db.collection(collection);
       const exists = await coll.indexExists(index);
       if (exists) {
         await coll.dropIndex(index);
-        logger.warn(`🩹 [Database] Índice legado ${collection}.${index} removido (Fase 2 — múltiplas carteiras).`);
+        logger.warn(`🩹 [Database] Índice legado ${collection}.${index} removido (${reason}).`);
       }
     } catch (err) {
       // Não crítico: se falhar (permissão, índice já removido em corrida), seguimos.

@@ -26,6 +26,7 @@ import AssetTransaction from '../models/AssetTransaction.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
 import InvestmentGoal from '../models/InvestmentGoal.js';
 import GoalContribution from '../models/GoalContribution.js';
+import Wallet from '../models/Wallet.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,6 +41,10 @@ const MODELS = [
   { Model: WalletSnapshot, label: 'WalletSnapshot' },
   { Model: InvestmentGoal, label: 'InvestmentGoal' },
   { Model: GoalContribution, label: 'GoalContribution' },
+  // Wallet não foi reescopada, mas carrega o mesmo tipo de defeito: o índice
+  // `publicToken_1` nasceu `{ unique, sparse }` e colidia em `publicToken: null`
+  // (E11000 ao criar a 2ª carteira). O syncIndexes troca pelo parcial do schema.
+  { Model: Wallet, label: 'Wallet' },
 ];
 
 const run = async () => {

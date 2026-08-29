@@ -78,8 +78,8 @@ const WalletSchema = new mongoose.Schema({
 
   // --- Compartilhamento público (C4) — carteira somente-leitura por link ---
   // Off por padrão (opt-in). Ao ligar, gera um publicToken aleatório; ao revogar,
-  // token volta a null e a rota pública deixa de resolver. `sparse` no índice
-  // único garante que múltiplas carteiras com token=null não colidam.
+  // token volta a null e a rota pública deixa de resolver. O índice único é
+  // PARCIAL (indexa só token string) — ver a nota na declaração do índice.
   publicToken: { type: String, default: null },
   isPublic: { type: Boolean, default: false },
   // Por padrão a página pública mascara valores em R$ (mostra só % e composição).
@@ -90,8 +90,29 @@ const WalletSchema = new mongoose.Schema({
 });
 
 WalletSchema.index({ user: 1, createdAt: 1 });
-// Resolução O(1) da rota pública por token; sparse+unique evita colisão de nulls.
-WalletSchema.index({ publicToken: 1 }, { unique: true, sparse: true });
+// Resolução O(1) da rota pública por token.
+//
+// O índice é PARCIAL, não `sparse`. `sparse` só tira do índice o documento em que
+// o campo está AUSENTE — e aqui `publicToken` tem `default: null`, então toda
+// carteira nasce com o campo presente valendo null. Com sparse+unique, a segunda
+// carteira não compartilhada do usuário colidia com a primeira:
+//   E11000 duplicate key ... index: publicToken_1 dup key: { publicToken: null }
+// `partialFilterExpression` com `$type: 'string'` tira os nulls do índice de vez:
+// só token real entra, e a unicidade continua valendo entre eles.
+//
+// O NOME é próprio de propósito. Mongoose nomearia `publicToken_1` — o mesmo do
+// índice defeituoso que já está nos bancos existentes — e o `autoIndex` do boot
+// bateria de frente com ele (IndexOptionsConflict emitido como 'error' do model,
+// sem listener = derruba o processo). Com nome distinto, os dois coexistem por um
+// instante e o `publicToken_1` velho é removido pelo self-heal de config/db.js.
+WalletSchema.index(
+  { publicToken: 1 },
+  {
+    name: 'publicToken_partial_unique',
+    unique: true,
+    partialFilterExpression: { publicToken: { $type: 'string' } },
+  },
+);
 
 const Wallet = mongoose.models.Wallet || mongoose.model('Wallet', WalletSchema);
 export default Wallet;
