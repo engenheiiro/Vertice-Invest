@@ -515,8 +515,28 @@ export const externalMarketService = {
         }
     },
 
-    // Busca Histórico Completo
-    async getFullHistory(ticker, type) {
+    /**
+     * Histórico diário COM as lacunas da fonte explicitadas.
+     *
+     * O Yahoo devolve uma linha por pregão do período pedido; quando não tem o
+     * dado daquele dia, a linha vem com `close`/`open`/`adjclose`/`volume` TODOS
+     * nulos em vez de simplesmente não existir. Não é hipótese: em 27/08/2026 os
+     * 7 ETFs da B3 (BOVA11, IVVB11, BOVV11, DIVO11, ECOO11, GOLD11, LAFI11)
+     * receberam a linha nula enquanto 1.234 séries de ações e FIIs vieram
+     * normais — buraco do provedor, restrito a uma classe.
+     *
+     * `getFullHistory` descarta essas linhas, e está certo: candle sem preço não
+     * é candle, e gravá-lo criaria um buraco que a mescla seguinte trataria como
+     * preenchido. Mas o descarte apaga a diferença entre "a fonte publicou o dia
+     * VAZIO" (não vem mais candle, é definitivo) e "a fonte ainda NÃO publicou o
+     * dia" (chega mais tarde) — e é essa diferença que decide se o alarme de
+     * candle em carteira é defeito nosso ou lacuna de terceiro. Quem precisa
+     * DIAGNOSTICAR a ausência usa esta variante; o resto do sistema, que só quer
+     * a série, segue no `getFullHistory`.
+     *
+     * @returns {Promise<{candles: Array, emptyDates: string[]}|null>} null = falha ou payload inválido
+     */
+    async getFullHistoryDetailed(ticker, type) {
         let symbol = ticker.trim().toUpperCase();
 
         if (type === 'STOCK' || type === 'FII' || type === 'INDEX' || type === 'ETF') {
@@ -556,14 +576,23 @@ export const externalMarketService = {
 
             if (!result || !result.quotes || !Array.isArray(result.quotes)) return null;
 
-            return result.quotes
-                .filter(day => day.close > 0)
-                .map(day => ({
-                    date: day.date.toISOString().split('T')[0],
-                    close: day.close,
-                    adjClose: day.adjclose || day.close,
-                    volume: day.volume || 0
-                }));
+            const candles = [];
+            const emptyDates = [];
+            for (const day of result.quotes) {
+                if (!day?.date) continue;
+                const date = day.date.toISOString().split('T')[0];
+                if (day.close > 0) {
+                    candles.push({
+                        date,
+                        close: day.close,
+                        adjClose: day.adjclose || day.close,
+                        volume: day.volume || 0
+                    });
+                } else {
+                    emptyDates.push(date);
+                }
+            }
+            return { candles, emptyDates };
 
         } catch (error) {
             if (type === 'STOCK_US') {
@@ -571,6 +600,14 @@ export const externalMarketService = {
             }
             return null;
         }
+    },
+
+    // Busca Histórico Completo. Contrato inalterado (array de candles, ou null em
+    // falha) — as lacunas da fonte ficam em `getFullHistoryDetailed`, para quem
+    // precisa delas.
+    async getFullHistory(ticker, type) {
+        const detailed = await this.getFullHistoryDetailed(ticker, type);
+        return detailed ? detailed.candles : null;
     },
 
     // Busca o histórico de proventos (dividendos/JCP) via Yahoo Finance.

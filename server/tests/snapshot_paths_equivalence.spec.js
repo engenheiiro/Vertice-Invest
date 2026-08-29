@@ -56,7 +56,9 @@ vi.mock('../models/RefreshToken.js', () => ({ default: {} }));
 vi.mock('../services/marketDataService.js', () => ({
   marketDataService: { getMarketDataMap: mocks.getMarketDataMap },
 }));
-vi.mock('../services/externalMarketService.js', () => ({ externalMarketService: { getFullHistory: vi.fn() } }));
+vi.mock('../services/externalMarketService.js', () => ({
+  externalMarketService: { getFullHistory: vi.fn(), getFullHistoryDetailed: vi.fn() },
+}));
 vi.mock('../services/aiResearchService.js', () => ({ aiResearchService: {} }));
 vi.mock('../services/macroDataService.js', () => ({ macroDataService: {} }));
 vi.mock('../services/syncService.js', () => ({ syncService: {} }));

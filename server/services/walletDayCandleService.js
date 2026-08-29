@@ -32,6 +32,35 @@ export const DAY_CANDLE_BATCH_PAUSE_MS = 400;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Por que este ativo ficou sem o candle do dia — no vocabulário de quem vai ler
+ * o alarme amanhã de manhã.
+ *
+ * As três causas pedem ações diferentes, e o log antigo (só a contagem agregada)
+ * não separava nenhuma delas:
+ *  · `dia publicado VAZIO` — a fonte tem a linha do pregão com preço nulo. É
+ *    lacuna de terceiro, definitiva, e NÃO há o que consertar aqui: o candle não
+ *    vai chegar depois. Foi o caso dos 7 ETFs da B3 em 27/08/2026.
+ *  · `fonte ainda sem o dia` — a série mais nova para antes do dia pedido. Às
+ *    23:59 do próprio dia isso costuma ser publicação atrasada, e o candle entra
+ *    no run seguinte. Só vira defeito se persistir.
+ *  · `sem série na fonte` — o símbolo não devolveu nada. Aí sim é o ticker que
+ *    deixou de resolver: deslistamento, troca de código, ou o breaker aberto.
+ *
+ * Pressupõe que o candle de `dayStr` NÃO foi encontrado — é a única situação em
+ * que faz pergunta. Chamada com uma série que TEM o dia, devolve o motivo
+ * genérico do fim da lista, que aí seria mentira.
+ */
+export const describeMiss = (dayStr, payload) => {
+    if (!payload) return 'sem resposta da fonte';
+    const { candles = [], emptyDates = [] } = payload;
+    if (emptyDates.includes(dayStr)) return 'dia publicado VAZIO pela fonte (close nulo)';
+    if (candles.length === 0) return 'sem série na fonte';
+    const latest = candles[candles.length - 1]?.date;
+    if (latest && latest < dayStr) return `fonte ainda sem o dia (última: ${latest})`;
+    return 'dia ausente na série da fonte';
+};
+
+/**
  * Une a série armazenada com a recém-buscada. Implementação compartilhada em
  * `utils/assetHistory.js` — o timeSeriesWorker grava na MESMA coleção e precisa
  * das mesmas regras, senão os dois escritores desfazem o trabalho um do outro.
@@ -85,14 +114,24 @@ export const ensureWalletDayCandles = async (assetRefs = [], dayStr, closeMap = 
 
     const entries = [...pending.entries()];
     let fetched = 0;
+    const unresolved = [];
     for (let i = 0; i < entries.length; i += DAY_CANDLE_BATCH_SIZE) {
         const batch = entries.slice(i, i + DAY_CANDLE_BATCH_SIZE);
         await Promise.all(batch.map(async ([storageKey, { ticker, type }]) => {
             try {
-                const series = await externalMarketService.getFullHistory(ticker, type);
-                if (!Array.isArray(series) || series.length === 0) return;
+                // A variante `Detailed` existe para este diagnóstico: ela conserva as
+                // datas que a fonte publicou VAZIAS, que `getFullHistory` descarta.
+                const payload = await externalMarketService.getFullHistoryDetailed(ticker, type);
+                const series = payload?.candles;
+                if (!Array.isArray(series) || series.length === 0) {
+                    unresolved.push({ ticker, reason: describeMiss(dayStr, payload) });
+                    return;
+                }
                 const dayCandle = series.find((c) => c?.date === dayStr && c.close > 0);
-                if (!dayCandle) return; // ativo sem negócio no dia / fonte atrasada → fallback
+                if (!dayCandle) { // ativo sem negócio no dia / fonte atrasada → fallback
+                    unresolved.push({ ticker, reason: describeMiss(dayStr, payload) });
+                    return;
+                }
 
                 const merged = mergeDayCandles(storedByKey.get(storageKey) || [], series);
                 await AssetHistory.updateOne(
@@ -105,15 +144,27 @@ export const ensureWalletDayCandles = async (assetRefs = [], dayStr, closeMap = 
                 resolved.set(storageKey, dayCandle.close);
                 fetched += 1;
             } catch (e) {
+                unresolved.push({ ticker, reason: `erro na busca (${e.message})` });
                 logger.warn(`[DayCandle] Falha ao garantir candle de ${ticker} @ ${dayStr}: ${e.message}`);
             }
         }));
         if (i + DAY_CANDLE_BATCH_SIZE < entries.length) await sleep(DAY_CANDLE_BATCH_PAUSE_MS);
     }
 
-    const missing = pending.size - fetched;
     logger.info('[DayCandle] Candles do dia garantidos para ativos em carteira', {
-        day: dayStr, pending: pending.size, fetched, missing,
+        day: dayStr, pending: pending.size, fetched, missing: unresolved.length,
     });
+    // Cada ativo aqui teve o patrimônio marcado pelo preço das 23:59 em vez do
+    // fechamento, e é este o conjunto que a sentinela vai acusar amanhã. Sem os
+    // NOMES e o MOTIVO, o alarme obriga a refazer à mão a ida ao Mongo e à fonte
+    // que já foi feita uma vez — foi o custo de diagnosticar BOVA11/IVVB11 em
+    // 28/08/2026. Warn, e não info: o snapshot do dia saiu degradado.
+    if (unresolved.length > 0) {
+        logger.warn('[DayCandle] Ativos em carteira sem candle do dia — snapshot cai no preço corrente', {
+            day: dayStr,
+            missing: unresolved.length,
+            assets: unresolved.map((u) => `${u.ticker}: ${u.reason}`),
+        });
+    }
     return resolved;
 };

@@ -28,8 +28,9 @@ const mocks = vi.hoisted(() => ({
   historyFind: vi.fn(),
   historyUpdateOne: vi.fn(),
   getMarketDataMap: vi.fn(),
-  getFullHistory: vi.fn(),
+  getFullHistoryDetailed: vi.fn(),
   upsertSnapshot: vi.fn(),
+  loggerWarn: vi.fn(),
 }));
 
 vi.mock('../models/AssetTransaction.js', () => ({ default: { find: mocks.txFind } }));
@@ -65,7 +66,7 @@ vi.mock('../services/marketDataService.js', () => ({
   marketDataService: { getMarketDataMap: mocks.getMarketDataMap },
 }));
 vi.mock('../services/externalMarketService.js', () => ({
-  externalMarketService: { getFullHistory: mocks.getFullHistory },
+  externalMarketService: { getFullHistoryDetailed: mocks.getFullHistoryDetailed },
 }));
 vi.mock('../services/aiResearchService.js', () => ({ aiResearchService: {} }));
 vi.mock('../services/macroDataService.js', () => ({ macroDataService: {} }));
@@ -81,7 +82,7 @@ vi.mock('../services/usStocksFundamentalsService.js', () => ({ usStocksFundament
 vi.mock('node-cron', () => ({ default: { schedule: vi.fn() } }));
 vi.mock('@sentry/node', () => ({ captureException: vi.fn(), captureMessage: vi.fn() }));
 vi.mock('../config/logger.js', () => ({
-  default: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
+  default: { info: vi.fn(), error: vi.fn(), warn: mocks.loggerWarn, debug: vi.fn() },
 }));
 
 vi.mock('../utils/walletSnapshot.js', async (importOriginal) => {
@@ -108,6 +109,9 @@ const wireUserAssets = (positions) => {
     return Object.assign(Promise.resolve(result), chain);
   });
 };
+
+/** Payload de `getFullHistoryDetailed`: a série mais as datas que vieram VAZIAS. */
+const sourcePayload = (candles, emptyDates = []) => ({ candles, emptyDates });
 
 const seriesThrough = (lastDay, lastClose) => [
   { date: '2026-08-17', close: lastClose * 0.98, adjClose: lastClose * 0.98, volume: 100 },
@@ -139,10 +143,10 @@ describe('Snapshot diário — candle do dia garantido para ativos em carteira',
       lean: async () => [{ ticker: 'BOVA11', history: [{ date: '2026-08-17', close: 98, adjClose: 98, volume: 10 }] }],
     });
     mocks.getMarketDataMap.mockResolvedValue(new Map([['BOVA11', { price: 99.2 }]])); // preço corrente defasado
-    mocks.getFullHistory.mockResolvedValue(seriesThrough(DAY, 100));
+    mocks.getFullHistoryDetailed.mockResolvedValue(sourcePayload(seriesThrough(DAY, 100)));
 
     const ctx = await loadSnapshotContext(DAY, { ensureDayCandles: true });
-    expect(mocks.getFullHistory).toHaveBeenCalledWith('BOVA11', 'ETF');
+    expect(mocks.getFullHistoryDetailed).toHaveBeenCalledWith('BOVA11', 'ETF');
     expect(ctx.closeMap.get('BOVA11')).toBe(100);
 
     // Persistiu a série mesclada (o buraco de 18/08 fechou junto) sem "touch" em
@@ -161,7 +165,7 @@ describe('Snapshot diário — candle do dia garantido para ativos em carteira',
     wireUserAssets([HELD_ETF]);
     mocks.historyAggregate.mockResolvedValue([]);
     mocks.getMarketDataMap.mockResolvedValue(new Map([['BOVA11', { price: 99.2 }]]));
-    mocks.getFullHistory.mockRejectedValue(new Error('Yahoo timeout'));
+    mocks.getFullHistoryDetailed.mockRejectedValue(new Error('Yahoo timeout'));
 
     const ctx = await loadSnapshotContext(DAY, { ensureDayCandles: true });
     expect(ctx.closeMap.has('BOVA11')).toBe(false);
@@ -176,15 +180,72 @@ describe('Snapshot diário — candle do dia garantido para ativos em carteira',
     wireUserAssets([HELD_ETF, SOLD_OUT]);
     mocks.historyAggregate.mockResolvedValue([]);
     mocks.getMarketDataMap.mockResolvedValue(new Map([['BOVA11', { price: 99.2 }]]));
-    mocks.getFullHistory.mockResolvedValue(seriesThrough(DAY, 100));
+    mocks.getFullHistoryDetailed.mockResolvedValue(sourcePayload(seriesThrough(DAY, 100)));
 
     await loadSnapshotContext(DAY, { ensureDayCandles: true });
 
-    expect(mocks.getFullHistory).toHaveBeenCalledTimes(1);
-    expect(mocks.getFullHistory).toHaveBeenCalledWith('BOVA11', 'ETF');
+    expect(mocks.getFullHistoryDetailed).toHaveBeenCalledTimes(1);
+    expect(mocks.getFullHistoryDetailed).toHaveBeenCalledWith('BOVA11', 'ETF');
     // O universo de pesquisa (MarketAsset, ~1.264 ativos) não pode nem ser
     // consultado — é o que mantém o custo do run em algumas dezenas de buscas.
     expect(mocks.marketAssetFind).not.toHaveBeenCalled();
+  });
+
+  it('(d) dia publicado VAZIO pela fonte: o log nomeia o ticker e o motivo', async () => {
+    // Em 27/08/2026 o Yahoo devolveu a linha do pregão dos ETFs da B3 com
+    // close/open/volume nulos: `getFullHistory` a descarta (certo — candle sem
+    // preço não é candle), então a série chega SEM o dia e é indistinguível de
+    // fonte atrasada. `emptyDates` é o que separa "não vem mais" de "ainda não
+    // chegou" — e sem essa distinção o alarme do painel de Saúde do dia seguinte
+    // obriga a refazer à mão a ida ao Mongo e à fonte.
+    wireUserAssets([HELD_ETF]);
+    mocks.historyAggregate.mockResolvedValue([]);
+    mocks.getMarketDataMap.mockResolvedValue(new Map([['BOVA11', { price: 99.2 }]]));
+    mocks.getFullHistoryDetailed.mockResolvedValue(sourcePayload(
+      [{ date: '2026-08-18', close: 99, adjClose: 99, volume: 100 }],
+      [DAY],
+    ));
+
+    const ctx = await loadSnapshotContext(DAY, { ensureDayCandles: true });
+    expect(ctx.closeMap.has('BOVA11')).toBe(false);
+    // Candle vazio NÃO pode ser gravado: viraria um buraco que a mescla seguinte
+    // trataria como preenchido.
+    expect(mocks.historyUpdateOne).not.toHaveBeenCalled();
+
+    const warn = mocks.loggerWarn.mock.calls.find(([msg]) => msg.includes('sem candle do dia'));
+    expect(warn).toBeDefined();
+    expect(warn[1].assets).toEqual(['BOVA11: dia publicado VAZIO pela fonte (close nulo)']);
+
+    // E o snapshot segue de pé, no preço corrente.
+    await persistUserSnapshotForDay(WALLET, DAY, ctx);
+    expect(mocks.upsertSnapshot.mock.calls.at(-1)[3].totalEquity).toBeCloseTo(992, 2);
+  });
+
+  it('(e) fonte atrasada, fonte muda e erro de busca são motivos distintos', async () => {
+    // As três causas pedem ações diferentes: esperar o próximo run, investigar o
+    // ticker, ou olhar o breaker. A contagem agregada antiga não separava nenhuma.
+    const HELD_FII = { ticker: 'MXRF11', type: 'FII', currency: 'BRL', quantity: 10, totalCost: 100, totalCostBrl: 100 };
+    const HELD_STOCK = { ticker: 'PETR4', type: 'STOCK', currency: 'BRL', quantity: 10, totalCost: 400, totalCostBrl: 400 };
+    wireUserAssets([HELD_ETF, HELD_FII, HELD_STOCK]);
+    mocks.historyAggregate.mockResolvedValue([]);
+    mocks.getMarketDataMap.mockResolvedValue(new Map([
+      ['BOVA11', { price: 99.2 }], ['MXRF11', { price: 10 }], ['PETR4', { price: 40 }],
+    ]));
+    mocks.getFullHistoryDetailed.mockImplementation(async (ticker) => {
+      if (ticker === 'BOVA11') return sourcePayload([{ date: '2026-08-18', close: 99, adjClose: 99, volume: 1 }]);
+      if (ticker === 'MXRF11') return null;
+      throw new Error('Yahoo timeout');
+    });
+
+    await loadSnapshotContext(DAY, { ensureDayCandles: true });
+
+    const warn = mocks.loggerWarn.mock.calls.find(([msg]) => msg.includes('sem candle do dia'));
+    expect(warn[1].missing).toBe(3);
+    expect(warn[1].assets.sort()).toEqual([
+      'BOVA11: fonte ainda sem o dia (última: 2026-08-18)',
+      'MXRF11: sem resposta da fonte',
+      'PETR4: erro na busca (Yahoo timeout)',
+    ]);
   });
 
   it('cripto com candle do dia já na série não regride: nada é buscado', async () => {
@@ -193,7 +254,7 @@ describe('Snapshot diário — candle do dia garantido para ativos em carteira',
     mocks.getMarketDataMap.mockResolvedValue(new Map([['BTC', { price: 59000 }]]));
 
     const ctx = await loadSnapshotContext(DAY, { ensureDayCandles: true });
-    expect(mocks.getFullHistory).not.toHaveBeenCalled();
+    expect(mocks.getFullHistoryDetailed).not.toHaveBeenCalled();
     expect(ctx.closeMap.get('BTC-USD')).toBe(60000);
 
     await persistUserSnapshotForDay(WALLET, DAY, ctx);
@@ -208,6 +269,6 @@ describe('Snapshot diário — candle do dia garantido para ativos em carteira',
 
     await loadSnapshotContext(DAY);
 
-    expect(mocks.getFullHistory).not.toHaveBeenCalled();
+    expect(mocks.getFullHistoryDetailed).not.toHaveBeenCalled();
   });
 });
