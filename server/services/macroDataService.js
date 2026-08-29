@@ -8,6 +8,7 @@ import TreasuryBond from '../models/TreasuryBond.js';
 import EconomicIndex from '../models/EconomicIndex.js';
 import { DEFAULT_SELIC_FALLBACK, DEFAULT_NTNB_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import AssetHistory from '../models/AssetHistory.js';
+import { resolveMinInvestment } from '../utils/fixedIncomeView.js';
 import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
 import { fetchTesouroCsv } from './treasuryPriceService.js';
@@ -403,8 +404,14 @@ export const macroDataService = {
             if (foundPrices.length > 1) {
                 unitPrice = foundPrices[foundPrices.length - 1];
             } else {
-                unitPrice = minInvestment; 
+                unitPrice = minInvestment;
             }
+            // Quando a linha traz um preço só, o de cima copiava o PU para o
+            // mínimo — e a aba Indicadores anunciava "Investimento Mín.
+            // R$ 3.002,69" num título que se compra com R$ 30,03. O mínimo é 1%
+            // do título; `resolveMinInvestment` mantém o valor raspado quando ele
+            // é plausível como mínimo e deriva do PU quando não é.
+            minInvestment = resolveMinInvestment(minInvestment, unitPrice);
         }
 
         if (title && rate > 0) {

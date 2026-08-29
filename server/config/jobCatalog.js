@@ -107,7 +107,9 @@ export const JOB_CATALOG = {
         severity: 'WARN',
     },
     'treasury-prices': {
-        label: 'PU do Tesouro Direto (dias úteis 18:30)',
+        label: 'PU do Tesouro Direto (ter-sáb 12:30)',
+        // Maior vão da grade: sábado 12:30 → terça 12:30 = 72h (a segunda não tem
+        // rodada porque a sexta já entrou no sábado). 80h deixa 8h de folga.
         maxSilenceHours: 80,
         severity: 'CRITICAL', // marca a mercado a renda fixa do snapshot das 23:59
         heavy: true,

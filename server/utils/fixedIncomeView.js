@@ -31,6 +31,47 @@ const round2 = (n) => Number(n.toFixed(2));
 
 const isIpcaLinked = (type) => type === 'IPCA' || type === 'RENDAMAIS' || type === 'EDUCA';
 
+/**
+ * Fração mínima negociável no Tesouro Direto: 1% do título (0,01 título).
+ * "Investimento mínimo" e "preço unitário" são coisas diferentes por duas ordens
+ * de grandeza — R$ 30 contra R$ 3.000 num IPCA+ 2032.
+ */
+const MIN_FRACTION = 0.01;
+
+/**
+ * Piso do programa: 1% de um título barato dá menos que isso (o Prefixado 2032,
+ * com PU de R$ 485,54, daria R$ 4,86), mas a plataforma não aceita compra abaixo
+ * de R$ 30. Sem o piso, a coluna diria que dá para começar com R$ 4,86 numa
+ * ordem que seria recusada — e errar para baixo, nesta coluna, é pior que errar
+ * para cima.
+ */
+const MIN_FLOOR = 30;
+
+// Acima disto o "mínimo" não é mínimo: é o próprio PU (ou outra coluna) que veio
+// parar no campo errado. Folga generosa — o mínimo real é 1% do PU.
+const MIN_PLAUSIBLE_CEILING = 0.05;
+
+/**
+ * Investimento mínimo do título, saneado.
+ *
+ * O raspador coleta os valores monetários da linha e, quando encontra UM só,
+ * atribui o mesmo número ao mínimo e ao PU (`macroDataService`). O resultado é a
+ * aba Indicadores anunciando "Investimento Mín. R$ 3.002,69" num título cujo
+ * mínimo é R$ 30,03 — dois zeros de diferença, na coluna que existe justamente
+ * para dizer com quanto dá para começar.
+ *
+ * Quando o valor raspado não é plausível como mínimo, ele é derivado do PU. Sem
+ * PU não há o que derivar: devolve 0 e a tela mostra o vazio em vez de um número
+ * inventado.
+ */
+export const resolveMinInvestment = (minInvestment, unitPrice) => {
+    const min = num(minInvestment);
+    const pu = num(unitPrice);
+    if (pu <= 0) return min;
+    if (min > 0 && min <= pu * MIN_PLAUSIBLE_CEILING) return min;
+    return round2(Math.max(pu * MIN_FRACTION, MIN_FLOOR));
+};
+
 // Recupera o cupom REAL quando o valor persistido é, na verdade, o nominal (real+IPCA).
 const effectiveRealCoupon = (rate, type, ipca) => {
     if (isIpcaLinked(type) && ipca > 0 && rate > REAL_COUPON_CEILING) {
@@ -63,7 +104,7 @@ export const normalizeTreasuryBonds = (bonds = [], macro = {}) => {
             index: b.index || (isIpcaLinked(type) ? 'IPCA' : type === 'SELIC' ? 'SELIC' : 'PRE'),
             rate,
             maturityDate: b.maturityDate || null,
-            minInvestment: num(b.minInvestment),
+            minInvestment: resolveMinInvestment(b.minInvestment, b.unitPrice),
             unitPrice: num(b.unitPrice),
             nominalEstimate: round2(nominalEstimate),
             realEstimate: round2(realEstimate),

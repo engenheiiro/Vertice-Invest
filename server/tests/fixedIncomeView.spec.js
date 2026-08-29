@@ -3,7 +3,7 @@
  * Garante as fórmulas de rendimento nominal/real e comparação vs CDI por tipo de título.
  */
 import { describe, it, expect } from 'vitest';
-import { normalizeTreasuryBonds } from '../utils/fixedIncomeView.js';
+import { normalizeTreasuryBonds, resolveMinInvestment } from '../utils/fixedIncomeView.js';
 
 const MACRO = { ipca: 4, selic: 10.5, cdi: 10.4 };
 
@@ -110,5 +110,40 @@ describe('normalizeTreasuryBonds', () => {
   it('lista vazia → array vazio', () => {
     expect(normalizeTreasuryBonds([], MACRO)).toEqual([]);
     expect(normalizeTreasuryBonds(undefined, MACRO)).toEqual([]);
+  });
+});
+
+describe('resolveMinInvestment — mínimo é 1% do título, não o PU', () => {
+  it('deriva o mínimo quando o raspador copiou o PU para o campo errado', () => {
+    // Caso real (29/08/2026): a linha do Investidor10 trazia UM preço só, e o
+    // scraper atribuía o mesmo número ao mínimo e ao PU. A aba Indicadores
+    // anunciava "Investimento Mín. R$ 3.002,69" num título que se compra com
+    // R$ 30,03 — dois zeros de diferença.
+    expect(resolveMinInvestment(3002.69, 3002.69)).toBe(30.03);
+  });
+
+  it('preserva o mínimo raspado quando ele é plausível', () => {
+    expect(resolveMinInvestment(30.03, 3002.69)).toBe(30.03);
+    // Mínimo um pouco acima de 1% (arredondamento da corretora) ainda passa.
+    expect(resolveMinInvestment(35, 3002.69)).toBe(35);
+  });
+
+  it('respeita o piso de R$ 30 do programa em título barato', () => {
+    // 1% do Prefixado 2032 (PU 485,54) dá R$ 4,86 — abaixo do mínimo aceito.
+    expect(resolveMinInvestment(485.54, 485.54)).toBe(30);
+  });
+
+  it('sem PU não inventa mínimo', () => {
+    expect(resolveMinInvestment(0, 0)).toBe(0);
+    expect(resolveMinInvestment(120, 0)).toBe(120);
+  });
+
+  it('a vitrine já entrega o mínimo saneado', () => {
+    const [b] = normalizeTreasuryBonds(
+      [{ title: 'Tesouro IPCA+ 2032', type: 'IPCA', rate: 8, minInvestment: 3002.69, unitPrice: 3002.69 }],
+      MACRO,
+    );
+    expect(b.unitPrice).toBe(3002.69);
+    expect(b.minInvestment).toBe(30.03);
   });
 });

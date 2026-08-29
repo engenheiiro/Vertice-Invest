@@ -889,18 +889,28 @@ export const initScheduler = () => {
         }
     });
 
-    // 12.1 SÉRIE DE PU DO TESOURO DIRETO (dias úteis 18:30)
-    // Alimenta a marcação a mercado da renda fixa. Roda DEPOIS do fechamento e
-    // ANTES do snapshot das 23:59, que é quem consome a série.
+    // 12.1 SÉRIE DE PU DO TESOURO DIRETO (terça a SÁBADO, 12:30)
+    // Alimenta a marcação a mercado da renda fixa.
     //
     // A fonte anda um dia útil atrás: o arquivo oficial é republicado na manhã do
     // dia D trazendo a Data Base D-1 (verificado em 19/08/2026 — publicação de
     // 18/08 10:20 com 17/08 na última linha), e os preços são os da MANHÃ daquele
-    // pregão. Ou seja, o snapshot de D marca a RF pelo PU da manhã de D-1: é a
-    // granularidade que a fonte oferece, e cabe folgada nos 10 dias corridos de
-    // MAX_PU_STALE_DAYS antes de a marcação desligar. Rodar mais cedo não adianta
-    // — o dia D só existe no arquivo na manhã de D+1.
-    scheduleHeavy('30 18 * * 1-5', 'treasury-prices', async () => {
+    // pregão. Rodar de tarde não adianta: o dia D só existe no arquivo na manhã
+    // de D+1.
+    //
+    // Por que TERÇA A SÁBADO e não segunda a sexta. Com a grade antiga (18:30,
+    // seg-sex) a rodada de sexta encontrava só até quinta, e a Data Base de SEXTA
+    // — publicada no sábado de manhã — só entrava na segunda às 18:30. O fim de
+    // semana inteiro marcava a renda fixa pelo PU de QUINTA, ignorando o último
+    // pregão (medido em 29/08/2026: série parada em 27/08 com 28/08 já publicado
+    // na fonte). Rodando na manhã seguinte a cada pregão, o sábado fecha esse
+    // buraco e a segunda não precisa de rodada — o que ela leria (a sexta) já
+    // entrou no sábado, e a Data Base da própria segunda só sai na terça.
+    // Mesmo número de execuções por semana, sem o vão do fim de semana.
+    //
+    // 12:30 dá ~2h de folga sobre a publicação observada (10:20) e continua muito
+    // antes do snapshot das 23:59, que é quem consome a série.
+    scheduleHeavy('30 12 * * 2-6', 'treasury-prices', async () => {
         try {
             const { ingestTreasuryPrices } = await import('./treasuryPriceService.js');
             const result = await ingestTreasuryPrices();

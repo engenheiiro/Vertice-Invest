@@ -5,7 +5,7 @@ import { researchService } from '../services/research';
 import { SkeletonKpiGrid, SkeletonCard } from '../components/ui';
 import { Activity, TrendingUp, TrendingDown, ShieldCheck, Database, ArrowUpDown, Target, Percent, ChevronUp, ChevronDown, Landmark, Filter, Clock, AlertTriangle } from 'lucide-react';
 
-type SortKey = 'title' | 'type' | 'rate' | 'minInvestment' | 'maturityDate';
+type SortKey = 'title' | 'type' | 'rate' | 'unitPrice' | 'minInvestment' | 'maturityDate';
 type FilterType = 'ALL' | 'IPCA' | 'PREFIXADO' | 'SELIC' | 'OUTROS';
 
 // LISTA ATUALIZADA - DAY AFTER
@@ -213,6 +213,10 @@ export const Indicators = () => {
                                         <SortableHeader label="Título Público" sortKey="title" currentSort={sortConfig} onSort={handleSort} align="left" />
                                         <SortableHeader label="Tipo" sortKey="type" currentSort={sortConfig} onSort={handleSort} align="left" />
                                         <SortableHeader label="Rentabilidade Anual" sortKey="rate" currentSort={sortConfig} onSort={handleSort} align="right" />
+                                        {/* PU e mínimo são coisas distintas por duas ordens de grandeza
+                                            (R$ 3.002,69 contra R$ 30,03): mostrar só um dos dois com o
+                                            rótulo do outro foi o que confundiu a leitura da carteira. */}
+                                        <SortableHeader label="Preço Unitário" sortKey="unitPrice" currentSort={sortConfig} onSort={handleSort} align="right" />
                                         <SortableHeader label="Investimento Mín." sortKey="minInvestment" currentSort={sortConfig} onSort={handleSort} align="right" />
                                         <SortableHeader label="Vencimento" sortKey="maturityDate" currentSort={sortConfig} onSort={handleSort} align="right" />
                                     </tr>
@@ -232,8 +236,11 @@ export const Indicators = () => {
                                                 <td className="px-6 py-4 text-right font-mono font-bold text-emerald-400">
                                                     {bond.index === 'PRE' ? '' : bond.index + ' + '}{bond.rate.toFixed(2)}%
                                                 </td>
-                                                <td className="px-6 py-4 text-right text-slate-300">
-                                                    {fmtCurrency(bond.minInvestment)}
+                                                <td className="px-6 py-4 text-right text-slate-300 font-mono">
+                                                    {bond.unitPrice > 0 ? fmtCurrency(bond.unitPrice) : '—'}
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-slate-400">
+                                                    {bond.minInvestment > 0 ? fmtCurrency(bond.minInvestment) : '—'}
                                                 </td>
                                                 <td className="px-6 py-4 text-right text-slate-400 font-medium">
                                                     {bond.maturityDate}
@@ -242,7 +249,7 @@ export const Indicators = () => {
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={5} className="p-12 text-center text-slate-500 flex flex-col items-center justify-center">
+                                            <td colSpan={6} className="p-12 text-center text-slate-500 flex flex-col items-center justify-center">
                                                 <Database size={32} className="mb-2 opacity-50" />
                                                 <p className="font-bold">Base de dados sincronizando...</p>
                                             </td>
