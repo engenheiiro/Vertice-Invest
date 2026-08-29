@@ -162,6 +162,10 @@ export interface WalletContextType {
     removeAsset: (id: string) => Promise<void>;
     resetWallet: () => Promise<void>;
     updateTargets: (newTargets: AllocationMap, newReserveTarget: number, newSubAllocation?: SubAllocationMap, newDividendGoal?: number) => void;
+    /** Grava um lote importado (Investidor10 / extrato B3 / planilha). */
+    importCommit: (source: string, rows: unknown[]) => Promise<{ batchId: string; inserted: number } | undefined>;
+    /** Desfaz um lote importado inteiro. */
+    importUndo: (batchId: string) => Promise<void>;
     // --- Fase 2: múltiplas carteiras ---
     wallets: WalletSummary[];
     activeWalletId: string | undefined;
@@ -343,6 +347,30 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         onError: (err: any) => addToast(err?.message || 'Erro ao resetar carteira.', 'error')
     });
 
+    // Importação de carteira: mesma invalidação do reset, porque o efeito é o
+    // mesmo — a carteira inteira muda de uma vez, incluindo histórico e metas.
+    // Sem `onSuccess` de toast: o wizard de importação dá o feedback, com o
+    // resumo do que entrou (toast genérico aqui seria duplicado).
+    const invalidateAfterImport = () => {
+        queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
+        queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
+        queryClient.invalidateQueries({ queryKey: ['dividends'] });
+        queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboardResearch'] });
+        queryClient.invalidateQueries({ queryKey: ['goals'] });
+    };
+
+    const importCommitMutation = useMutation({
+        mutationFn: ({ source, rows }: { source: string; rows: unknown[] }) =>
+            walletService.importCommit(source, rows, activeWalletId),
+        onSuccess: invalidateAfterImport,
+    });
+
+    const importUndoMutation = useMutation({
+        mutationFn: (batchId: string) => walletService.importUndo(batchId, activeWalletId),
+        onSuccess: invalidateAfterImport,
+    });
+
     const setActiveWalletMutation = useMutation({
         mutationFn: (walletId: string) => walletsService.setActive(walletId),
         onSuccess: (_data, walletId) => {
@@ -371,6 +399,16 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const resetWallet = async () => {
         if (isDemoMode) return;
         await resetWalletMutation.mutateAsync();
+    };
+
+    const importCommit = async (source: string, rows: unknown[]) => {
+        if (isDemoMode) return undefined; // Demo não persiste
+        return await importCommitMutation.mutateAsync({ source, rows });
+    };
+
+    const importUndo = async (batchId: string) => {
+        if (isDemoMode) return;
+        await importUndoMutation.mutateAsync(batchId);
     };
 
     const updateTargets = async (newTargets: AllocationMap, newReserveTarget: number, newSubAllocation?: SubAllocationMap, newDividendGoal?: number) => {
@@ -487,6 +525,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             removeAsset,
             resetWallet,
             updateTargets,
+            importCommit,
+            importUndo,
             wallets,
             activeWalletId,
             isWalletScopeReady,

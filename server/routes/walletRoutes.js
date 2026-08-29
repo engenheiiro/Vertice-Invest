@@ -1,6 +1,6 @@
 
 import express from 'express';
-import { walletWriteLimiter } from '../middleware/rateLimiters.js';
+import { walletWriteLimiter, importLimiter } from '../middleware/rateLimiters.js';
 import {
     getWalletData,
     getWalletHistory, 
@@ -34,6 +34,12 @@ import {
 } from '../schemas/walletSchemas.js';
 import { rebalanceSchema } from '../schemas/rebalanceSchemas.js';
 import { generateRebalancePlan } from '../controllers/rebalanceController.js';
+import { previewImport, commitImport, revertImport, listImports } from '../controllers/importController.js';
+import {
+    importPreviewSchema,
+    importCommitSchema,
+    importBatchParamSchema,
+} from '../schemas/importSchemas.js';
 
 const router = express.Router();
 
@@ -54,6 +60,15 @@ router.get('/search', searchAssets);
 // Rotas de Escrita Protegidas — (I9) validação Zod após limiter, antes do handler.
 router.post('/add', writeLimiter, resolveWallet, validate(addTransactionSchema), addAssetTransaction);
 router.post('/reset', writeLimiter, resolveWallet, resetWallet);
+
+// Importação de carteira (Investidor10 / extrato B3 / planilha) — antes de '/:id'
+// pela mesma razão de '/targets'. Sem gate de plano de propósito: é feature de
+// aquisição, tirar o usuário da plataforma concorrente vale para GUEST também.
+// O parsing do arquivo roda no NAVEGADOR; aqui só chegam linhas normalizadas.
+router.get('/import', resolveWallet, listImports);
+router.post('/import/preview', importLimiter, resolveWallet, validate(importPreviewSchema), previewImport);
+router.post('/import/commit', importLimiter, resolveWallet, validate(importCommitSchema), commitImport);
+router.delete('/import/:batchId', writeLimiter, resolveWallet, validate(importBatchParamSchema), revertImport);
 // Carteira ideal (alocação-alvo) — antes de '/:id' para não cair no matcher de param.
 router.put('/targets', writeLimiter, resolveWallet, validate(updateTargetsSchema), updateWalletTargets);
 router.delete('/:id', writeLimiter, resolveWallet, validate(idParamSchema), removeAsset);

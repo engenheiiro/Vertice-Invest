@@ -82,6 +82,8 @@ export const PublicWalletProvider: React.FC<PublicWalletProviderProps> = ({ toke
         removeAsset: noop,
         resetWallet: noop,
         updateTargets: () => { /* leitura pública: sem escrita */ },
+        importCommit: async () => undefined,
+        importUndo: noop,
         wallets: [],
         // Prefixo `public:` isola as chaves de query desta visita das da área
         // logada (mesmo navegador, mesmo QueryClient).

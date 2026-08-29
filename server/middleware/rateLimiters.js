@@ -28,6 +28,19 @@ export const walletWriteLimiter = createUserLimiter({
   message: 'Muitas operações de escrita. Aguarde 15 minutos.',
 });
 
+// Importação de carteira: 10 / hora por usuário.
+//
+// Balde próprio, separado do walletWriteLimiter, por duas razões opostas: o
+// import NÃO pode consumir o orçamento de 50 escritas/15min (um único import de
+// 60 lançamentos zeraria o dia do usuário), e o commit é caro de um jeito que
+// uma escrita avulsa não é — dispara um `rebuildUserHistory` inteiro. Dez por
+// hora cobre o usuário que importa, confere, desfaz e refaz algumas vezes.
+export const importLimiter = createUserLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: 'Muitas importações seguidas. Aguarde alguns minutos.',
+});
+
 // Research pesado (full-pipeline, crunch, sync): 20 / 15min por usuário.
 export const researchHeavyLimiter = createUserLimiter({
   windowMs: 15 * 60 * 1000,

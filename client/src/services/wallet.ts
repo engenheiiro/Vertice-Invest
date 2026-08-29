@@ -166,5 +166,48 @@ export const walletService = {
             throw new Error(errorData.message || "Falha ao gerar o rebalanceamento");
         }
         return await response.json();
+    },
+
+    // --- Importação de carteira (Investidor10 / extrato B3 / planilha) ---
+    // O arquivo é lido no NAVEGADOR; daqui só saem linhas normalizadas
+    // (ticker, lado, quantidade, preço, data). CPF, corretora e conta ficam
+    // no cliente e nunca chegam ao servidor.
+
+    /** Resolve tickers, classes e duplicatas. Não escreve nada. */
+    async importPreview(source: string, rows: unknown[], walletId?: string) {
+        const response = await authService.api(withWallet('/api/wallet/import/preview', walletId), {
+            method: 'POST',
+            body: JSON.stringify({ source, rows })
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || "Falha ao analisar os dados importados");
+        }
+        return await response.json();
+    },
+
+    /** Grava o lote conferido pelo usuário. */
+    async importCommit(source: string, rows: unknown[], walletId?: string) {
+        const response = await authService.api(withWallet('/api/wallet/import/commit', walletId), {
+            method: 'POST',
+            body: JSON.stringify({ source, rows })
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || "Falha ao importar a carteira");
+        }
+        return await response.json();
+    },
+
+    /** Desfaz um lote inteiro. */
+    async importUndo(batchId: string, walletId?: string) {
+        const response = await authService.api(withWallet(`/api/wallet/import/${batchId}`, walletId), {
+            method: 'DELETE'
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || "Falha ao desfazer a importação");
+        }
+        return await response.json();
     }
 };

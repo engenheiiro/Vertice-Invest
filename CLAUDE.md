@@ -27,6 +27,8 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 | Modal deep-dive de ativo | `client/src/components/research/AssetDetailModal.tsx` |
 | Lista de ranking com numeração | `client/src/components/research/TopPicksCard.tsx` |
 | Carteira, KPIs, snapshots | `client/src/pages/Wallet.tsx` |
+| Importar carteira (parsers B3/Investidor10) | `client/src/components/wallet/import/parsers/` |
+| Importar carteira (gravação em lote) | `server/services/portfolioImportService.js` |
 | Dashboard, sinais, equity | `client/src/pages/Dashboard.tsx` |
 | Planos e feature gating | `server/config/subscription.js` |
 | Setores macro | `server/config/sectorTaxonomy.js` |
@@ -186,6 +188,7 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < ELITE (3) < BLACK (4). Definid
 - **Research:** `GET /research/latest?assetClass`, `/research/macro`, `/research/signals`, `/research/discard-logs`, `/research/accuracy`, `/research/config/tunables` (admin) · `POST /research/full-pipeline`, `/research/sync-market`, `/research/sync-macro`, `/research/publish`, `/research/crunch` · `PUT /research/config/tunables` (admin)
 - **Docs:** `GET /api/docs` (Swagger UI), `/api/docs.json` (OpenAPI) · `GET /api/health`
 - **Wallet:** `GET /wallet`, `/wallet/history`, `/wallet/dividends`, `/wallet/cashflow`, `/wallet/transactions/:ticker`, `/wallet/performance` · `POST /wallet/add` · `PUT /wallet/:id` · `DELETE /wallet/:id`
+- **Import de carteira:** `GET /wallet/import` · `POST /wallet/import/preview` (resolve, não escreve), `/wallet/import/commit` · `DELETE /wallet/import/:batchId` (desfaz o lote)
 - **Market:** `GET /market/quote?ticker`, `/market/price?ticker`, `/market/landing`
 - **Subscription:** `GET /subscription/status`, `/subscription/check-access` · `POST /subscription/checkout`, `/subscription/register-usage`
 - **Webhooks:** `POST /webhooks/mercadopago`

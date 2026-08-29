@@ -35,9 +35,27 @@ const AssetTransactionSchema = new mongoose.Schema({
   date: { type: Date, required: true, default: Date.now },
   
   notes: { type: String },
-  
+
+  // --- Importação de carteira (Investidor10 / extrato B3 / planilha) ---
+  // Lote que criou este lançamento. Sustenta o "desfazer importação": um único
+  // deleteMany por batchId reverte tudo.
+  //
+  // COM `default: null`, ao contrário de `currency`/`fxRate` acima: aqui ausente
+  // e null querem dizer exatamente a mesma coisa ("não veio de importação"), então
+  // o default aplicado na hidratação de um documento legado não apaga informação
+  // nenhuma — não há fallback a preservar.
+  importBatchId: { type: String, default: null },
+  importSource: {
+    type: String,
+    enum: ['B3_MOVIMENTACAO', 'B3_NEGOCIACAO', 'INVESTIDOR10', 'SHEET', null],
+    default: null,
+  },
+
   createdAt: { type: Date, default: Date.now }
 });
+
+// Reversão de um lote inteiro (deleteMany por batch) e listagem de importações.
+AssetTransactionSchema.index({ wallet: 1, importBatchId: 1 });
 
 // Índices para performance na busca de histórico
 AssetTransactionSchema.index({ wallet: 1, ticker: 1, date: 1 });

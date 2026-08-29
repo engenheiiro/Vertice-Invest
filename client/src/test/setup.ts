@@ -29,6 +29,30 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = vi.fn();
 }
 
+// jsdom não implementa Blob.text()/arrayBuffer() — usados pela importação de
+// carteira para ler a planilha no navegador. Ambos são suportados por todos os
+// navegadores alvo desde 2019; a lacuna é só do ambiente de teste. O FileReader,
+// esse sim, o jsdom implementa, então o polyfill é uma ponte de uma linha.
+const readVia = <T>(blob: Blob, read: (r: FileReader) => void): Promise<T> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as T);
+    reader.onerror = () => reject(reader.error);
+    read(reader);
+  });
+
+if (!Blob.prototype.text) {
+  Blob.prototype.text = function () {
+    return readVia<string>(this, (r) => r.readAsText(this));
+  };
+}
+
+if (!Blob.prototype.arrayBuffer) {
+  Blob.prototype.arrayBuffer = function () {
+    return readVia<ArrayBuffer>(this, (r) => r.readAsArrayBuffer(this));
+  };
+}
+
 afterEach(() => {
   cleanup();
 });

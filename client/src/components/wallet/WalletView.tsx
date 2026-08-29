@@ -13,11 +13,14 @@ const CashFlowHistory = lazy(() => import('./CashFlowHistory').then(m => ({ defa
 const TaxReport = lazy(() => import('./TaxReport').then(m => ({ default: m.TaxReport })));
 import { SmartContributionModal } from './SmartContributionModal';
 import { RebalanceModal } from './RebalanceModal';
+// Importação de carteira: lazy porque arrasta o leitor de planilha (fflate) e os
+// parsers junto — peso que quem nunca importa não precisa baixar.
+const ImportWalletModal = lazy(() => import('./import/ImportWalletModal').then(m => ({ default: m.ImportWalletModal })));
 import { RenameWalletModal } from './RenameWalletModal';
 import { WalletSwitcher } from './WalletSwitcher';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { SkeletonChart, SkeletonTableRows, EmptyState, Button } from '../ui'; // (I12) skeletons padronizados + (U3) empty state
-import { Plus, Lock, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, CircleDollarSign, FileText, Loader2, DollarSign, Landmark, Pencil, Eye } from 'lucide-react';
+import { Plus, Lock, RefreshCw, TrendingUp, PlusCircle, Trash2, BarChart2, CircleDollarSign, FileText, Loader2, DollarSign, Landmark, Pencil, Eye, Upload } from 'lucide-react';
 import { PieSlices } from '../ui/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
@@ -62,6 +65,7 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
     }, [autoOpenDividendGoal]);
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
     const [isRebalanceModalOpen, setIsRebalanceModalOpen] = useState(false);
     const [isRenameWalletOpen, setIsRenameWalletOpen] = useState(false);
@@ -186,6 +190,12 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
                             <PlusCircle size={16} /> <span className="sm:hidden">Transação</span><span className="hidden sm:inline">Nova Transação</span>
                         </button>
 
+                        {/* Importar carteira — sem gate de plano: é a porta de
+                            entrada de quem vem de outra plataforma. */}
+                        <button aria-label="Importar carteira" title="Importar carteira do extrato da B3 ou de planilha" className="w-full sm:w-auto flex items-center justify-center gap-2 px-3 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-panel border border-slate-700 text-slate-200 hover:bg-elevated hover:text-white whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={() => setIsImportModalOpen(true)}>
+                            <Upload size={16} /> <span>Importar</span>
+                        </button>
+
                         {/* Botão Aporte Inteligente */}
                         <button aria-label="Aporte Inteligente" title="Aporte Inteligente" className="w-full sm:w-auto flex items-center justify-center gap-2 px-3 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={handleOpenSmartContribution}>
                             {(user?.plan === 'GUEST' || user?.plan === 'ESSENTIAL') && <Lock size={12} />}
@@ -251,11 +261,16 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
                                             className="h-full w-full"
                                             icon={<PieSlices size={28} />}
                                             title="Sua carteira está vazia"
-                                            description="Defina sua alocação ideal na engrenagem ao lado e adicione seu primeiro ativo para acompanhar patrimônio, rentabilidade e proventos em tempo real."
+                                            description="Já investe pela B3? Importe o extrato e traga a carteira inteira de uma vez, com o histórico real de compras e vendas. Ou comece adicionando o primeiro ativo."
                                             action={
-                                                <Button onClick={() => setIsAddModalOpen(true)} className="!w-auto px-6 gap-2">
-                                                    <Plus size={16} /> Adicionar primeiro ativo
-                                                </Button>
+                                                <div className="flex flex-col sm:flex-row gap-2.5">
+                                                    <Button onClick={() => setIsImportModalOpen(true)} className="!w-auto px-6 gap-2">
+                                                        <Upload size={16} /> Importar carteira
+                                                    </Button>
+                                                    <Button variant="outline" onClick={() => setIsAddModalOpen(true)} className="!w-auto px-6 gap-2">
+                                                        <Plus size={16} /> Adicionar ativo
+                                                    </Button>
+                                                </div>
                                             }
                                         />
                                     </div>
@@ -332,6 +347,13 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
             {!isReadOnly && (
                 <>
                     <AddAssetModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
+                    {/* Só monta quando aberto: o chunk do leitor de planilha e dos
+                        parsers não é baixado por quem nunca clica em Importar. */}
+                    {isImportModalOpen && (
+                        <Suspense fallback={null}>
+                            <ImportWalletModal isOpen onClose={() => setIsImportModalOpen(false)} />
+                        </Suspense>
+                    )}
                     <SmartContributionModal isOpen={isSmartModalOpen} onClose={() => setIsSmartModalOpen(false)} />
                     <RebalanceModal isOpen={isRebalanceModalOpen} onClose={() => setIsRebalanceModalOpen(false)} />
                     <RenameWalletModal
