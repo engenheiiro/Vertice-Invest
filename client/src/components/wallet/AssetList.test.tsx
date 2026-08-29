@@ -195,7 +195,9 @@ describe('AssetList — preço unitário', () => {
                     quantity: 1, averagePrice: 735.92, currentPrice: 746.12,
                     totalValue: 746.12, totalCost: 735.92,
                     pricingSource: 'MTM', accruedValue: 743.56,
-                    treasuryUnitPrice: 2984.46, treasuryAverageUnitPrice: 2943.68, treasuryUnits: 0.25,
+                    // A fração chega do servidor como custo ÷ PU, com 8 casas — é
+                    // a tela que a corta na granularidade do Tesouro (0,01 título).
+                    treasuryUnitPrice: 2984.46, treasuryAverageUnitPrice: 2943.68, treasuryUnits: 0.25013766,
                 }),
             ],
             removeAsset: vi.fn(),

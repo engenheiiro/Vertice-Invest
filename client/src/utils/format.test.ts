@@ -5,6 +5,7 @@ import {
   formatCompact,
   formatCalendarDate,
   formatQuantity,
+  formatTreasuryUnits,
   formatSharpe,
   describeSharpe,
   PRIVACY_MASK,
@@ -70,6 +71,22 @@ describe('formatQuantity', () => {
   });
   it('mascara no modo privacidade', () => {
     expect(formatQuantity(0.0000028, { privacy: true })).toBe(PRIVACY_MASK_SHORT);
+  });
+});
+
+describe('formatTreasuryUnits', () => {
+  it('corta a fração derivada na granularidade real do Tesouro (0,01 título)', () => {
+    expect(formatTreasuryUnits(0.25013766)).toBe('0,25');
+    expect(formatTreasuryUnits(0.18349659)).toBe('0,18');
+  });
+  it('não força casas em quantidade redonda', () => {
+    expect(formatTreasuryUnits(2)).toBe('2');
+  });
+  it('afrouxa a régua abaixo do mínimo negociável em vez de exibir "0"', () => {
+    expect(formatTreasuryUnits(0.004)).toBe('0,004');
+  });
+  it('mascara no modo privacidade', () => {
+    expect(formatTreasuryUnits(0.25013766, { privacy: true })).toBe(PRIVACY_MASK_SHORT);
   });
 });
 

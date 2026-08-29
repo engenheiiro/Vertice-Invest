@@ -7,7 +7,7 @@ import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
-import { formatCurrency as fmtCurrency } from '../../utils/format';
+import { formatCurrency as fmtCurrency, formatTreasuryUnits } from '../../utils/format';
 import { SmartContributionModal } from '../wallet/SmartContributionModal';
 import { RebalanceModal } from '../wallet/RebalanceModal';
 import { ConfirmModal } from '../ui/ConfirmModal';
@@ -282,7 +282,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                             {!isFixedIncomeLike(item)
                                                                 ? `${item.shares} un`
                                                                 : item.treasuryUnits
-                                                                    ? `${item.treasuryUnits} un`
+                                                                    ? `${formatTreasuryUnits(item.treasuryUnits)} un`
                                                                     : `investido ${formatCurrency(item.totalCost ?? 0, 'BRL')}`}
                                                         </p>
                                                     )}
@@ -425,7 +425,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                         {!isFixedIncomeLike(item)
                                                             ? `${item.shares} un`
                                                             : item.treasuryUnits
-                                                                ? `${item.treasuryUnits} un`
+                                                                ? `${formatTreasuryUnits(item.treasuryUnits)} un`
                                                                 : `investido ${formatCurrency(item.totalCost ?? 0, 'BRL')}`}
                                                     </p>
                                                 )}

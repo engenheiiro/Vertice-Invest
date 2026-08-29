@@ -6,7 +6,7 @@ import { AssetTransactionsModal } from './AssetTransactionsModal';
 import { RenameReserveModal } from './RenameReserveModal';
 import { SectorPopover } from './SectorPopover';
 import type { SectorKind } from '../../utils/sectorAllocation';
-import { formatCurrency as fmtCurrency, formatQuantity as fmtQuantity, PRIVACY_MASK_SHORT, type Currency } from '../../utils/format';
+import { formatCurrency as fmtCurrency, formatQuantity as fmtQuantity, formatTreasuryUnits as fmtTreasuryUnits, PRIVACY_MASK_SHORT, type Currency } from '../../utils/format';
 import { useConfirm } from '../../hooks/useConfirm';
 import AssetLogo from '../common/AssetLogo';
 import AssetTags from '../common/AssetTags';
@@ -132,6 +132,9 @@ export const AssetList = () => {
     // no modo privacidade entregaria de volta o valor que a máscara escondeu.
     const formatQuantity = (val: number | null | undefined) =>
         isPrivacyMode ? PRIVACY_MASK_SHORT : fmtQuantity(val);
+
+    const formatTreasuryUnits = (val: number | null | undefined) =>
+        isPrivacyMode ? PRIVACY_MASK_SHORT : fmtTreasuryUnits(val);
 
     const formatPercent = (val: number | null | undefined) => {
         const v = val || 0;
@@ -585,7 +588,7 @@ export const AssetList = () => {
                                                                         ninguém. Com ela, 0,25 × 2.984,46 é o próprio saldo. */}
                                                                     {asset.matured
                                                                         ? 'Vencido — sugerimos resgatar'
-                                                                        : `${getAssetSubtitle(asset)}${asset.treasuryUnits ? ` · ${formatQuantity(asset.treasuryUnits)} un` : ''}`}
+                                                                        : `${getAssetSubtitle(asset)}${asset.treasuryUnits ? ` · ${formatTreasuryUnits(asset.treasuryUnits)} un` : ''}`}
                                                                 </p>
                                                             </div>
                                                         </div>

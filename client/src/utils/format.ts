@@ -88,6 +88,28 @@ export function formatQuantity(
   });
 }
 
+/**
+ * Fração implícita de um título do Tesouro. DUAS casas, porque essa é a
+ * granularidade real do Tesouro Direto: a compra mínima é 0,01 título e nada
+ * abaixo disso é negociável.
+ *
+ * Existe separada de `formatQuantity` porque o número é DERIVADO (custo ÷ PU de
+ * compra), não negociado: com 8 casas, um lote de R$ 87,86 aparecia como
+ * "0,18349659 un", exibindo como precisão o resto de uma divisão — e sugerindo
+ * uma quantidade que o extrato da corretora nunca vai confirmar.
+ *
+ * Abaixo de 0,01 a régua afrouxa em vez de arredondar: uma posição menor que a
+ * granularidade oficial só aparece em cadastro legado ou custo errado, e "0 un"
+ * esconderia justamente o caso que precisa ser visto.
+ */
+export function formatTreasuryUnits(
+  value: number | null | undefined,
+  options: FormatOptions = {},
+): string {
+  const units = toSafeNumber(value);
+  return formatQuantity(value, { ...options, maxDecimals: Math.abs(units) < 0.01 ? 8 : 2 });
+}
+
 /** Confiança do Sharpe, derivada do tamanho da amostra (definida no servidor). */
 export type SharpeConfidence = 'LOW' | 'MODERATE' | 'HIGH';
 
