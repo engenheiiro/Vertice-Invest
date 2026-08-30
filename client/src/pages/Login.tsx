@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft } from 'lucide-react';
 import { useFormValidation, validators } from '../hooks/useFormValidation';
 import { PageMeta } from '../components/seo/PageMeta';
+import { homeRouteFor } from '../config/homeRoute';
 
 export const Login = () => {
   const navigate = useNavigate();
@@ -58,7 +59,7 @@ export const Login = () => {
           login(response.user, response.accessToken);
           setStatus('success');
           setTimeout(() => {
-              navigate('/dashboard');
+              navigate(homeRouteFor(response.user));
           }, 600);
       } else {
           throw new Error("Resposta inválida do servidor");

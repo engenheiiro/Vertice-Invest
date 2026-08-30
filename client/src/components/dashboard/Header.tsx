@@ -13,6 +13,7 @@ import { PlanBadge } from '../ui/PlanBadge';
 import { PrivacyToggle } from '../ui/PrivacyToggle';
 import { NotificationBell } from './NotificationBell';
 import { WalletSwitcher } from '../wallet/WalletSwitcher';
+import { HOME_ROUTE, TERMINAL_ROUTE } from '../../config/homeRoute';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuth();
@@ -56,7 +57,8 @@ export const Header: React.FC = () => {
     <nav className="app-header border-b border-slate-800 backdrop-blur-[14px] sticky top-0 z-50 pt-[env(safe-area-inset-top)]">
       <div className="max-w-[1360px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-6">
-           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/dashboard')}>
+           {/* A logo leva para a CASA — e a casa é a Carteira (config/homeRoute). */}
+           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate(HOME_ROUTE)}>
               <div className="w-6 h-6 bg-blue-600 flex items-center justify-center rounded-md shadow-lg shadow-blue-600/20">
                  <ShieldCheck size={14} className="text-white" />
               </div>
@@ -67,20 +69,22 @@ export const Header: React.FC = () => {
            {/* Main Links com ID para o Tutorial. Agrupados em submenus (hover/foco)
                p/ enxugar o topo: Carteira (sua grana), Análise (descoberta), Ferramentas. */}
            <div id="tour-nav-links" className="hidden xl:flex items-center gap-1">
-              <Link to="/dashboard">
-                <NavLink icon={<LayoutGrid size={16} />} label="Terminal" active={activeTab === 'terminal'} />
-              </Link>
-
+              {/* Carteira primeiro: é a casa do app. O Terminal não sai do menu —
+                  só deixa de ser a primeira coisa que o usuário vê e clica. */}
               <NavGroup
                 label="Carteira"
                 icon={<Wallet size={16} />}
                 currentPath={location.pathname}
                 onNavigate={navigate}
                 items={[
-                  { to: '/wallet', label: 'Carteira', icon: <Wallet size={14} /> },
-                  { to: '/goals',  label: 'Metas',    icon: <Target size={14} /> },
+                  { to: HOME_ROUTE, label: 'Carteira', icon: <Wallet size={14} /> },
+                  { to: '/goals',   label: 'Metas',    icon: <Target size={14} /> },
                 ]}
               />
+
+              <Link to={TERMINAL_ROUTE}>
+                <NavLink icon={<LayoutGrid size={16} />} label="Terminal" active={activeTab === 'terminal'} />
+              </Link>
 
               <NavGroup
                 label="Análise"

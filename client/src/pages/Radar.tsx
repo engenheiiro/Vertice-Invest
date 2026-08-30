@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PieChart as RechartsPie, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { HOME_ROUTE } from '../config/homeRoute';
 
 interface QuantSignalHistory {
     _id: string;
@@ -254,8 +255,8 @@ export const RadarPage = () => {
                 {/* ── Cabeçalho ── */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
-                        <Link to="/dashboard" className="text-xs font-bold text-slate-500 hover:text-white flex items-center gap-2 mb-2 transition-colors">
-                            <ArrowLeft size={14} /> Voltar ao Terminal
+                        <Link to={HOME_ROUTE} className="text-xs font-bold text-slate-500 hover:text-white flex items-center gap-2 mb-2 transition-colors">
+                            <ArrowLeft size={14} /> Voltar à Carteira
                         </Link>
                         <h1 className="text-3xl font-black text-white flex items-center gap-3">
                             <Radar className="text-purple-500" size={32} />

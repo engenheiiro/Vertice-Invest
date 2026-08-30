@@ -23,7 +23,7 @@ const renderAdmin = (initialPath = '/admin') => render(
   <MemoryRouter initialEntries={[initialPath]}>
     <Routes>
       <Route path="/login" element={<p>Login page</p>} />
-      <Route path="/dashboard" element={<p>Dashboard page</p>} />
+      <Route path="/wallet" element={<p>Wallet page</p>} />
       <Route path="/admin" element={<AdminRoute><p>Admin panel</p></AdminRoute>} />
     </Routes>
   </MemoryRouter>
@@ -64,11 +64,11 @@ describe('AdminRoute', () => {
     expect(screen.getByText('Login page')).toBeInTheDocument();
   });
 
-  it('redireciona usuário sem papel ADMIN para o dashboard', () => {
+  it('redireciona usuário sem papel ADMIN para a casa (Carteira)', () => {
     mockAuth({ isLoading: false, isAuthenticated: true, user: { role: 'USER' } });
     renderAdmin();
 
-    expect(screen.getByText('Dashboard page')).toBeInTheDocument();
+    expect(screen.getByText('Wallet page')).toBeInTheDocument();
     expect(screen.queryByText('Admin panel')).not.toBeInTheDocument();
   });
 

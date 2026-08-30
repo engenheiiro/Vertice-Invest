@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDemo } from '../../contexts/DemoContext';
+import { HOME_ROUTE, TERMINAL_ROUTE } from '../../config/homeRoute';
 
 /**
  * (M1/M2) Barra de navegação inferior — visível abaixo de xl (`xl:hidden`).
@@ -17,9 +18,10 @@ import { useDemo } from '../../contexts/DemoContext';
  * polegar e o botão "Mais" abre um bottom sheet com os destinos secundários
  * (+ Sair). Substitui o drawer hambúrguer do Header no mobile.
  */
+// Carteira primeiro, no polegar: é a casa do app (ver config/homeRoute).
 const PRIMARY = [
-  { to: '/dashboard', label: 'Terminal', icon: LayoutGrid },
-  { to: '/wallet', label: 'Carteira', icon: Wallet },
+  { to: HOME_ROUTE, label: 'Carteira', icon: Wallet },
+  { to: TERMINAL_ROUTE, label: 'Terminal', icon: LayoutGrid },
   { to: '/research', label: 'Research', icon: BrainCircuit },
   { to: '/radar', label: 'Radar', icon: Radar },
 ];

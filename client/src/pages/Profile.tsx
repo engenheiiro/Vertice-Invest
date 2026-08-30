@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/auth';
 import { useToast } from '../contexts/ToastContext';
 import { getErrorMessage } from '../utils/errorMessages';
+import { HOME_ROUTE, TERMINAL_ROUTE } from '../config/homeRoute';
 
 export const Profile = () => {
     const { user, logout } = useAuth();
@@ -30,7 +31,7 @@ export const Profile = () => {
     const handleReplayTutorial = () => {
         startTransition(() => {
             startDemo();
-            navigate('/dashboard');
+            navigate(TERMINAL_ROUTE);
         });
     };
 
@@ -100,9 +101,9 @@ export const Profile = () => {
             <main id="main-content" tabIndex={-1} className="max-w-[1200px] mx-auto p-4 md:p-6 animate-fade-in">
                 {/* Breadcrumb / Back Navigation */}
                 <div className="mb-6">
-                    <Link to="/dashboard" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white transition-colors group">
+                    <Link to={HOME_ROUTE} className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white transition-colors group">
                         <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
-                        Voltar ao Terminal
+                        Voltar à Carteira
                     </Link>
                 </div>
 

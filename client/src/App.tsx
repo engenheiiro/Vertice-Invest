@@ -17,6 +17,7 @@ import { TutorialOverlay } from './components/tutorial/TutorialOverlay';
 import { BottomNav } from './components/layout/BottomNav';
 import { InstallPrompt } from './components/pwa/InstallPrompt';
 import { ReloadPrompt } from './components/pwa/ReloadPrompt';
+import { homeRouteFor } from './config/homeRoute';
 
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
@@ -63,9 +64,9 @@ const PageLoader = () => (
 );
 
 const PublicOnlyRoute: React.FC<PropsWithChildren> = ({ children }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   if (isLoading) return <PageLoader />;
-  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  if (isAuthenticated) return <Navigate to={homeRouteFor(user)} replace />;
   return <>{children}</>;
 };
 

@@ -4,6 +4,7 @@ import { X, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { DASHBOARD_STEPS, WALLET_STEPS, TutorialStep } from './tutorialSteps';
+import { HOME_ROUTE } from '../../config/homeRoute';
 
 type Placement = 'bottom' | 'top' | 'center' | 'left-side' | 'right-side';
 
@@ -170,9 +171,10 @@ export const TutorialOverlay: React.FC = () => {
         if (!rawStep) return;
         if (rawStep.isFinal) {
             if (isWalletFlow) {
-                // Fim do tour da carteira -> Encerra Demo
+                // Fim do tour da carteira -> Encerra Demo. O destino é a própria
+                // Carteira (a casa): o tour acaba onde o usuário vai morar.
                 skipTutorial();
-                navigate('/dashboard');
+                navigate(HOME_ROUTE);
             } else {
                 // Fim do tour do dashboard -> Vai para Carteira
                 resetStep(); // Reseta contador para 0

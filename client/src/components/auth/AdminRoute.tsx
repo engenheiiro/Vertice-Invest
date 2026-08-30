@@ -3,6 +3,7 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Loader2, Lock } from 'lucide-react';
+import { HOME_ROUTE } from '../../config/homeRoute';
 
 interface AdminRouteProps {
   children: React.ReactNode;
@@ -35,7 +36,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
             <p className="text-slate-400 max-w-md mb-6">
                 Esta área é exclusiva para o comando central da Vértice Invest. Sua credencial não possui nível de autorização suficiente.
             </p>
-            <Navigate to="/dashboard" />
+            <Navigate to={HOME_ROUTE} />
         </div>
     );
   }

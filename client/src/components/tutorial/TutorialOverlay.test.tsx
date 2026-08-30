@@ -87,13 +87,14 @@ describe('TutorialOverlay — navegação', () => {
         expect(nav.navigate).toHaveBeenCalledWith('/wallet');
     });
 
-    it('passo final da Carteira encerra o demo e volta ao Dashboard', async () => {
+    // A casa é a Carteira: o passo final encerra o demo SEM tirar o usuário dela.
+    it('passo final da Carteira encerra o demo e permanece na Carteira', async () => {
         demo.currentStep = WALLET_STEPS.length - 1;
         nav.pathname = '/wallet';
         render(<TutorialOverlay />);
         await userEvent.click(screen.getByText('Concluir Demo'));
         expect(demo.skipTutorial).toHaveBeenCalledTimes(1);
-        expect(nav.navigate).toHaveBeenCalledWith('/dashboard');
+        expect(nav.navigate).toHaveBeenCalledWith('/wallet');
     });
 });
 

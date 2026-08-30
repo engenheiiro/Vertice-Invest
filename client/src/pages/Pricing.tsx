@@ -9,6 +9,7 @@ import { subscriptionService, type BillingMode } from '../services/subscription'
 import { Header } from '../components/dashboard/Header';
 import { PaymentMethodModal } from '../components/subscription/PaymentMethodModal';
 import { PLAN_DETAILS } from '../constants/subscription';
+import { HOME_ROUTE } from '../config/homeRoute';
 
 // Features exclusivas de cada tier — só o que é NOVO naquele plano
 const PLAN_EXCLUSIVE: Record<UserPlan, { key: string; label: string; highlight?: string }[]> = {
@@ -189,7 +190,7 @@ export const Pricing = () => {
                 {/* Cabeçalho */}
                 <div className="mb-12 text-center relative">
                     <div className="absolute left-0 top-1/2 -translate-y-1/2 hidden lg:block">
-                        <Link to="/dashboard" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white transition-colors group">
+                        <Link to={HOME_ROUTE} className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white transition-colors group">
                             <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
                             Voltar
                         </Link>
@@ -207,8 +208,8 @@ export const Pricing = () => {
                         </span>
                     </p>
                     <div className="mt-6 lg:hidden text-left">
-                        <Link to="/dashboard" className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white">
-                            <ArrowLeft size={14} /> Voltar ao Terminal
+                        <Link to={HOME_ROUTE} className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white">
+                            <ArrowLeft size={14} /> Voltar à Carteira
                         </Link>
                     </div>
                 </div>

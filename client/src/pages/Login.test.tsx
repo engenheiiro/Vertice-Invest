@@ -3,11 +3,11 @@
  *
  * Cobre:
  *  - Validação de campos obrigatórios (email/senha vazia → não chama API)
- *  - Login bem-sucedido → chama login() e navega para /dashboard
+ *  - Login bem-sucedido → chama login() e navega para a casa (/wallet)
  *  - Erro de servidor → exibe mensagem de erro
  *  - Resposta mfaRequired → exibe passo de código 2FA
  *  - Código 2FA curto → exibe erro de validação
- *  - Login com 2FA completo → navega para /dashboard
+ *  - Login com 2FA completo → navega para a casa (/wallet)
  *
  * Estratégia de mock:
  *  - authService.login: vi.fn() controlável por teste
@@ -130,7 +130,7 @@ describe('validação de formulário', () => {
 // ─── Login bem-sucedido ───────────────────────────────────────────────────────
 
 describe('login bem-sucedido', () => {
-  it('chama login() e navega para /dashboard após 600ms', async () => {
+  it('chama login() e navega para a casa (Carteira) após 600ms', async () => {
     vi.mocked(authService.login).mockResolvedValue({
       user: { id: '1', name: 'João', email: 'user@email.com', plan: 'PRO' },
       accessToken: 'tok123',
@@ -147,6 +147,24 @@ describe('login bem-sucedido', () => {
     );
 
     // navigate é chamado 600ms depois — waitFor com timeout estendido
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/wallet'), {
+      timeout: 2000,
+    });
+  });
+
+  // Exceção ÚNICA da casa: no primeiro acesso o destino é o Terminal, porque é lá
+  // que o tour de boas-vindas nasce (DemoContext só dispara em /dashboard). Cair
+  // direto na Carteira mataria o onboarding em silêncio.
+  it('manda o usuário de primeiro acesso ao Terminal, onde o tour começa', async () => {
+    vi.mocked(authService.login).mockResolvedValue({
+      user: { id: '2', name: 'Novo', email: 'novo@email.com', plan: 'GUEST', hasSeenTutorial: false },
+      accessToken: 'tok456',
+    } as any);
+
+    renderLogin();
+    fillLoginForm();
+    submitForm();
+
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/dashboard'), {
       timeout: 2000,
     });
@@ -225,7 +243,7 @@ describe('fluxo 2FA (MFA)', () => {
     expect(vi.mocked(authService.login)).toHaveBeenCalledTimes(1);
   });
 
-  it('completa login com código 2FA válido e navega para /dashboard', async () => {
+  it('completa login com código 2FA válido e navega para a casa (Carteira)', async () => {
     vi.mocked(authService.login)
       .mockResolvedValueOnce({ mfaRequired: true } as any)
       .mockResolvedValueOnce({
@@ -249,7 +267,7 @@ describe('fluxo 2FA (MFA)', () => {
     expect(vi.mocked(authService.login)).toHaveBeenLastCalledWith(
       expect.objectContaining({ mfaToken: '123456' })
     );
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/dashboard'), {
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/wallet'), {
       timeout: 2000,
     });
   });
