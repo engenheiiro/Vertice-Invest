@@ -1,4 +1,5 @@
 import type { Asset } from '../contexts/WalletContext';
+import { FIXED_INCOME_SUB_LABELS, fixedIncomeSubKey } from './allocation';
 
 // ---------------------------------------------------------------------------
 // Alocação da carteira POR SETOR, dentro de uma classe.
@@ -41,7 +42,8 @@ export const ETF_SECTOR_LABEL = 'ETFs / Índices';
  * É um subconjunto de Asset para que a MESMA régua sirva a linhas que ainda
  * não são posições — um item de ranking, por exemplo, não tem saldo.
  */
-export type SectorLabelInput = Pick<Asset, 'sector'> & Partial<Pick<Asset, 'ticker' | 'type'>>;
+export type SectorLabelInput = Pick<Asset, 'sector'>
+    & Partial<Pick<Asset, 'ticker' | 'type' | 'fixedIncomeIndex' | 'fixedIncomeRate'>>;
 
 const normalize = (s: string): string =>
     s
@@ -240,10 +242,34 @@ export const stockSubsectorLabel = (asset: SectorLabelInput): string => {
     return (asset.sector || '').trim();
 };
 
+// --- Renda Fixa: indexador ---------------------------------------------------
+
+/**
+ * Rótulo do INDEXADOR de um título de Renda Fixa.
+ *
+ * RF não tem setor, mas tem o mesmo tipo de eixo: o que concentra risco aqui é
+ * estar tudo em pós (ou tudo em pré) — IPCA, pós e pré reagem a juro e inflação
+ * de formas opostas. É a leitura análoga à do macro-setor numa ação.
+ *
+ * O balde vem de `fixedIncomeSubKey` (utils/allocation), a MESMA régua das
+ * sub-metas da Distribuição — inclusive o fallback do legado sem índice, que
+ * espelha a convenção do accrual (taxa > 50 = % do CDI → pós). Reimplementar a
+ * régua aqui faria o donut chamar de prefixado um "100% do CDI" que a meta logo
+ * ao lado conta como pós-fixado.
+ *
+ * Não existe "Não classificado" nesta classe: a régua sempre resolve um balde.
+ */
+export const fixedIncomeSectorLabel = (asset: SectorLabelInput): string =>
+    FIXED_INCOME_SUB_LABELS[fixedIncomeSubKey(asset)];
+
 // --- Agregação ---------------------------------------------------------------
 
-/** Granularidade do balde na Carteira: macro-setor em ação, segmento em FII. */
-export type SectorKind = 'FII' | 'STOCK';
+/**
+ * Eixo de repartição de uma classe na Carteira: macro-setor em ação, segmento em
+ * FII, indexador em Renda Fixa. "Setor" aqui é sempre o eixo de RISCO da classe,
+ * e não o rótulo mais bonito — em RF o risco não se reparte por setor nenhum.
+ */
+export type SectorKind = 'FII' | 'STOCK' | 'FIXED_INCOME';
 
 /**
  * Granularidades aceitas pela agregação. Superconjunto de `SectorKind`: a lista
@@ -277,6 +303,8 @@ const KIND_CONFIG: Record<SectorGranularity, { labelOf: (a: SectorLabelInput) =>
     FII: { labelOf: (a) => fiiSectorLabel(a.sector), foldLabel: 'Outros segmentos' },
     STOCK: { labelOf: stockSectorLabel, foldLabel: 'Outros setores' },
     STOCK_SUBSECTOR: { labelOf: stockSubsectorLabel, foldLabel: 'Outros setores' },
+    // A cauda nunca dobra em RF (são no máximo 3 baldes), mas o campo é do contrato.
+    FIXED_INCOME: { labelOf: fixedIncomeSectorLabel, foldLabel: 'Outros indexadores' },
 };
 
 /** Rótulo de setor de uma linha, na granularidade pedida. Só precisa do setor. */

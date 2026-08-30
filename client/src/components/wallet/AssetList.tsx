@@ -42,12 +42,16 @@ const CLASS_ACCENT: Record<string, { label: string; icon: string; bar: string }>
 };
 const accentOf = (type: string) => CLASS_ACCENT[type] || CLASS_ACCENT.CASH;
 
-// Classes que ganham o donut de setores no cabeçalho, com a chave de agrupamento
-// de cada uma. Renda Fixa/Reserva não têm setor; Exterior e Cripto ficam de fora
-// por enquanto (o setor de ativo US chega em inglês e a cripto não tem setor).
+// Classes que ganham o donut no cabeçalho, com o EIXO DE RISCO de cada uma.
+// Renda Fixa não tem setor, mas tem o equivalente: o INDEXADOR — uma RF toda em
+// pós e uma toda em pré correm riscos opostos, e essa é a concentração que conta
+// ali. Reserva/Caixa fica de fora (é reserva, não alocação); Exterior e Cripto
+// também, por enquanto (o setor de ativo US chega em inglês, e cripto não tem
+// setor nenhum).
 const SECTOR_PIE_CLASSES: Record<string, SectorKind | undefined> = {
     STOCK: 'STOCK',
     FII: 'FII',
+    FIXED_INCOME: 'FIXED_INCOME',
 };
 const pluralAtivos = (n: number) => `${n} ${n === 1 ? 'Ativo' : 'Ativos'}`;
 
@@ -492,8 +496,9 @@ export const AssetList = () => {
                                                         <span className="text-[10px] font-bold text-slate-500 bg-elevated px-2 py-0.5 rounded border border-slate-800/50">
                                                             {pluralAtivos(groupItems.length)}
                                                         </span>
-                                                        {/* Donut de concentração setorial sem sair da lista: FII por
-                                                            segmento (papel, shopping, logística…), ação por macro-setor. */}
+                                                        {/* Donut de concentração sem sair da lista: FII por
+                                                            segmento (papel, shopping, logística…), ação por macro-setor,
+                                                            renda fixa por indexador (IPCA, pós, pré). */}
                                                         {sectorKind && (
                                                             <SectorPopover items={groupItems} kind={sectorKind} isPrivacyMode={isPrivacyMode} />
                                                         )}

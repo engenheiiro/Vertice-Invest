@@ -7,7 +7,7 @@ import { Button } from '../ui/Button';
 import { PieChart, Pie, Cell, ResponsiveContainer, Sector } from 'recharts';
 import { formatCompact as fmtCompact } from '../../utils/format';
 import { useToast } from '../../contexts/ToastContext';
-import { computeSubAllocationReal, hasSubTargets, allocationBucket } from '../../utils/allocation';
+import { FIXED_INCOME_SUB_LABELS, computeSubAllocationReal, hasSubTargets, allocationBucket } from '../../utils/allocation';
 
 // Cores
 const COLORS: Record<AssetType, string> = {
@@ -46,7 +46,9 @@ const SUB_KEYS: Record<string, string[]> = {
 };
 const SUB_LABELS: Record<string, Record<string, string>> = {
     STOCK: { STOCK: 'Ações', ETF: 'ETFs' },
-    FIXED_INCOME: { IPCA: 'IPCA', POS: 'Pós-fixado', PRE: 'Prefixado' },
+    // Vocabulário da classe vem de utils/allocation — o mesmo que o donut de
+    // indexador da lista lê. Redigitar aqui é como as duas telas divergem.
+    FIXED_INCOME: FIXED_INCOME_SUB_LABELS,
     STOCK_US: { STOCK: 'Stocks', REIT: 'REITs', ETF: 'ETFs', DOLLAR: 'Dólar' },
 };
 

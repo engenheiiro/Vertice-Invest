@@ -229,3 +229,49 @@ describe('computeSectorAllocation — Ações', () => {
         expect(slices[5].tickers).toEqual(['F3', 'G3']);
     });
 });
+
+describe('computeSectorAllocation — Renda Fixa', () => {
+    const rf = (ticker: string, totalValue: number, extra: Record<string, unknown>): Asset => ({
+        ...holding(ticker, totalValue, undefined, 'FIXED_INCOME'),
+        ...extra,
+    } as unknown as Asset);
+
+    it('reparte por indexador — o eixo de risco da classe', () => {
+        const slices = computeSectorAllocation([
+            rf('TESOURO IPCA+ 2035', 500, { fixedIncomeIndex: 'IPCA' }),
+            rf('TESOURO SELIC 2029', 300, { fixedIncomeIndex: 'SELIC' }),
+            rf('TESOURO PREFIXADO 2027', 200, { fixedIncomeIndex: 'PRE' }),
+        ], 'FIXED_INCOME');
+
+        expect(slices.map((s) => [s.label, s.pct])).toEqual([
+            ['IPCA', 50],
+            ['Pós-fixado', 30],
+            ['Prefixado', 20],
+        ]);
+    });
+
+    it('junta Selic e CDI num único balde pós-fixado', () => {
+        const slices = computeSectorAllocation([
+            rf('TESOURO SELIC 2029', 500, { fixedIncomeIndex: 'SELIC' }),
+            rf('CDB BANCO X', 500, { fixedIncomeIndex: 'CDI' }),
+        ], 'FIXED_INCOME');
+
+        expect(slices).toHaveLength(1);
+        expect(slices[0].label).toBe('Pós-fixado');
+        expect(slices[0].tickers).toEqual(['TESOURO SELIC 2029', 'CDB BANCO X']);
+    });
+
+    // A régua é a de `fixedIncomeSubKey`: um "110% do CDI" cadastrado sem índice é
+    // pós-fixado, não prefixado — do mesmo jeito que o accrual o remunera.
+    it('classifica o legado sem índice pela mesma convenção do accrual', () => {
+        const slices = computeSectorAllocation([
+            rf('CDB LEGADO', 600, { fixedIncomeRate: 110 }),
+            rf('LCI LEGADO', 400, { fixedIncomeRate: 12 }),
+        ], 'FIXED_INCOME');
+
+        expect(slices.map((s) => [s.label, s.pct])).toEqual([
+            ['Pós-fixado', 60],
+            ['Prefixado', 40],
+        ]);
+    });
+});

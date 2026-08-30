@@ -1,6 +1,6 @@
 import { render, screen, waitForElementToBeRemoved } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Asset } from '../../contexts/WalletContext';
 import { SectorPopover } from './SectorPopover';
 
@@ -136,5 +136,118 @@ describe('SectorPopover — Ações', () => {
         const popover = await screen.findByRole('dialog');
 
         expect(popover.querySelector('[title]')).toHaveAttribute('title', 'Financeiro — ITUB4, BBSE3');
+    });
+});
+
+describe('SectorPopover — Renda Fixa', () => {
+    const rf = (ticker: string, totalValue: number, extra: Record<string, unknown>): Asset => ({
+        ...fii(ticker, totalValue),
+        type: 'FIXED_INCOME',
+        ...extra,
+    } as unknown as Asset);
+
+    it('reparte por indexador e chama o gatilho de "Indexador", não de "Setores"', async () => {
+        const user = userEvent.setup();
+        render(
+            <SectorPopover
+                kind="FIXED_INCOME"
+                items={[
+                    rf('TESOURO IPCA+ 2035', 600, { fixedIncomeIndex: 'IPCA' }),
+                    rf('TESOURO SELIC 2029', 400, { fixedIncomeIndex: 'SELIC' }),
+                ]}
+            />,
+        );
+
+        // Renda Fixa não se reparte por setor: o vocabulário do chip acompanha.
+        expect(screen.queryByRole('button', { name: /setores/i })).not.toBeInTheDocument();
+
+        await user.hover(screen.getByRole('button', { name: /indexador/i }));
+        const popover = await screen.findByRole('dialog');
+
+        expect(popover).toHaveTextContent('Renda Fixa por indexador');
+        expect(popover).toHaveTextContent('IPCA');
+        expect(popover).toHaveTextContent('60.0%');
+        expect(popover).toHaveTextContent('Pós-fixado');
+        expect(popover).toHaveTextContent('40.0%');
+    });
+});
+
+describe('SectorPopover — filtro de ETFs em Ações BR', () => {
+    const stock = (ticker: string, totalValue: number, sector?: string, type = 'STOCK'): Asset => ({
+        ...fii(ticker, totalValue, sector),
+        type,
+    } as unknown as Asset);
+
+    const mixed = [
+        stock('ITUB4', 300, 'Bancos'),
+        stock('PETR4', 100, 'Petróleo, Gás e Biocombustíveis'),
+        stock('BOVA11', 600, 'Índice Amplo', 'ETF'),
+    ];
+
+    it('rebaseia os percentuais sobre as ações individuais ao ocultar os ETFs', async () => {
+        const user = userEvent.setup();
+        render(<SectorPopover kind="STOCK" items={mixed} />);
+
+        // Clique fixa o popover: o ponteiro precisa entrar nele para usar o filtro.
+        await user.click(screen.getByRole('button', { name: /setores/i }));
+        const popover = await screen.findByRole('dialog');
+
+        // Com o ETF na conta ele domina o donut e achata os setores reais.
+        expect(popover).toHaveTextContent('ETFs / Índices');
+        expect(popover).toHaveTextContent('60.0%');
+        expect(popover).toHaveTextContent('30.0%');
+        expect(popover).toHaveTextContent('% do total em Ações BR');
+
+        await user.click(screen.getByRole('button', { name: /ocultar etfs/i }));
+
+        // O denominador passa a ser só as ações: 300/400 e 100/400.
+        expect(popover).not.toHaveTextContent('ETFs / Índices');
+        expect(popover).toHaveTextContent('75.0%');
+        expect(popover).toHaveTextContent('25.0%');
+        // A base do percentual é dita na tela — o filtro nunca fica implícito.
+        expect(popover).toHaveTextContent('% das ações individuais');
+
+        // E o peso do que saiu continua legível no próprio botão.
+        const toggle = screen.getByRole('button', { name: /mostrar etfs/i });
+        expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        expect(toggle).toHaveTextContent('60%');
+    });
+
+    it('não oferece o filtro quando a classe não tem os dois lados', async () => {
+        const user = userEvent.setup();
+        render(<SectorPopover kind="STOCK" items={[stock('ITUB4', 300, 'Bancos')]} />);
+
+        await user.click(screen.getByRole('button', { name: /setores/i }));
+        await screen.findByRole('dialog');
+
+        expect(screen.queryByRole('button', { name: /ocultar etfs/i })).not.toBeInTheDocument();
+    });
+});
+
+describe('SectorPopover — isolamento do cabeçalho do grupo', () => {
+    const stock = (ticker: string, totalValue: number, sector?: string, type = 'STOCK'): Asset => ({
+        ...fii(ticker, totalValue, sector),
+        type,
+    } as unknown as Asset);
+
+    // O popover é um portal, mas o evento de React sobe pela árvore de COMPONENTES:
+    // sem stopPropagation, usar o filtro contrai a classe inteira na lista.
+    it('não deixa o clique escapar para o cabeçalho que contrai a classe', async () => {
+        const user = userEvent.setup();
+        const onHeaderClick = vi.fn();
+        render(
+            <div onClick={onHeaderClick}>
+                <SectorPopover
+                    kind="STOCK"
+                    items={[stock('ITUB4', 400, 'Bancos'), stock('BOVA11', 600, 'Índice Amplo', 'ETF')]}
+                />
+            </div>,
+        );
+
+        await user.click(screen.getByRole('button', { name: /setores/i }));
+        onHeaderClick.mockClear();
+
+        await user.click(screen.getByRole('button', { name: /ocultar etfs/i }));
+        expect(onHeaderClick).not.toHaveBeenCalled();
     });
 });

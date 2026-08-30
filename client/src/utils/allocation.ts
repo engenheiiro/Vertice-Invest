@@ -89,6 +89,17 @@ export const fixedIncomeSubKey = (asset: Pick<Asset, 'fixedIncomeIndex' | 'fixed
 };
 
 /**
+ * Rótulos de exibição dos sub-tipos de Renda Fixa. Vocabulário ÚNICO da classe:
+ * a Distribuição (sub-metas) e o donut de indexador da lista leem daqui — duplicar
+ * a tabela é como as duas telas passam a chamar a mesma coisa por nomes diferentes.
+ */
+export const FIXED_INCOME_SUB_LABELS: Record<FixedIncomeSubKey, string> = {
+    IPCA: 'IPCA',
+    POS: 'Pós-fixado',
+    PRE: 'Prefixado',
+};
+
+/**
  * Sub-tipo de um holding de Exterior; ouro lastreado (GOLD) conta como ETF do Exterior;
  * null/ausente cai no balde padrão STOCK.
  */

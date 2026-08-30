@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { PieChart as PieIcon } from 'lucide-react';
+import { Eye, EyeOff, PieChart as PieIcon } from 'lucide-react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { Asset } from '../../contexts/WalletContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -17,7 +17,7 @@ const CLOSE_DELAY_MS = 140;
 interface SectorPopoverProps {
     /** Ativos da classe (já filtrados pelo balde de alocação). */
     items: Asset[];
-    /** Define a chave de setor: segmento fino (FII) ou macro-setor (ação). */
+    /** Eixo da repartição: segmento (FII), macro-setor (ação) ou indexador (RF). */
     kind: SectorKind;
     isPrivacyMode?: boolean;
     /** `touch` amplia o alvo do chip no layout mobile (mínimo confortável de toque). */
@@ -29,18 +29,38 @@ const TRIGGER_SIZE: Record<'compact' | 'touch', string> = {
     touch: 'px-3 min-h-[36px]',
 };
 
-const KIND_COPY: Record<SectorKind, { title: string; subtitle: string; trigger: string; accent: string }> = {
+/**
+ * Cópia por eixo. `chip` é o rótulo do gatilho na linha do grupo e `count` o do
+ * miolo do donut: em Renda Fixa a repartição não é por setor, e chamar de
+ * "Setores" o que o usuário vê como IPCA/pós/pré ensinaria a palavra errada.
+ */
+const KIND_COPY: Record<SectorKind, {
+    title: string; subtitle: string; chip: string; count: string; trigger: string; accent: string;
+}> = {
     FII: {
         title: 'FIIs por setor',
         subtitle: '% do total em FIIs',
+        chip: 'Setores',
+        count: 'Setores',
         trigger: 'Ver alocação dos FIIs por setor',
         accent: 'text-emerald-400',
     },
     STOCK: {
         title: 'Ações por setor',
         subtitle: '% do total em Ações BR',
+        chip: 'Setores',
+        count: 'Setores',
         trigger: 'Ver alocação das ações por setor',
         accent: 'text-blue-400',
+    },
+    FIXED_INCOME: {
+        title: 'Renda Fixa por indexador',
+        subtitle: '% do total em Renda Fixa',
+        chip: 'Indexador',
+        count: 'Indexadores',
+        trigger: 'Ver a Renda Fixa por indexador (IPCA, pós-fixado, prefixado)',
+        // Espelha o acento da classe na lista (CLASS_ACCENT.FIXED_INCOME).
+        accent: 'text-amber-400',
     },
 };
 
@@ -51,8 +71,9 @@ const tickerSummary = (tickers: string[], max = 4): string =>
         : `${tickers.slice(0, max).join(', ')} +${tickers.length - max}`;
 
 /**
- * Chip "Setores" no cabeçalho de uma classe: hover (desktop) ou toque/clique abre
- * um donut com a repartição atual da classe por setor.
+ * Chip no cabeçalho de uma classe: hover (desktop) ou toque/clique abre um donut
+ * com a repartição atual da classe pelo eixo de risco dela — setor em ação e FII,
+ * indexador em Renda Fixa.
  *
  * O popover vai por PORTAL com posição fixa porque o container da tabela usa
  * `overflow-x-auto` — o que também recorta no eixo Y e engoliria um popover
@@ -68,8 +89,41 @@ export const SectorPopover = ({ items, kind, isPrivacyMode = false, variant = 'c
     // Clique/toque "prende" o popover: ele deixa de fechar quando o ponteiro sai.
     const [isPinned, setIsPinned] = useState(false);
     const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+    // Filtro do donut de Ações BR (ver `etfSplit`). Sobrevive a fechar e reabrir o
+    // popover de propósito: quem escondeu o ETF quer LER as ações, e reabrir já
+    // filtrado é o que ele pediu. O estado nunca fica invisível — o subtítulo diz
+    // sobre que base o percentual está, e o botão do rodapé diz quanto ficou fora.
+    const [hideEtf, setHideEtf] = useState(false);
 
-    const slices = useMemo(() => computeSectorAllocation(items, kind), [items, kind]);
+    // Ações BR mistura ações individuais e ETFs de índice, e o ETF ganha balde
+    // próprio porque não é setor de coisa nenhuma (BOVA11 não é "Financeiro" por
+    // ter bancos dentro). Numa carteira com ETF pesado essa fatia achata todos os
+    // setores reais e ainda gasta um dos 6 slots de cor — daí o filtro.
+    //
+    // Só é oferecido quando os DOIS lados existem: filtrar uma classe só-ETF
+    // deixaria o donut vazio, e numa classe sem ETF o botão não teria o que fazer.
+    const etfSplit = useMemo(() => {
+        if (kind !== 'STOCK') return null;
+        let etf = 0;
+        let stocks = 0;
+        (items || []).forEach((item) => {
+            const value = Number(item.totalValue) || 0;
+            if (value <= 0) return;
+            if (item.type === 'ETF') etf += value; else stocks += value;
+        });
+        return etf > 0 && stocks > 0 ? { pct: (etf / (etf + stocks)) * 100 } : null;
+    }, [items, kind]);
+
+    const isEtfHidden = etfSplit !== null && hideEtf;
+
+    // Filtrar ANTES de agregar (e não esconder a fatia depois) é o ponto: o total
+    // é recalculado dentro de computeSectorAllocation, então os percentuais passam
+    // a ser sobre as ações individuais. Esconder a fatia e manter o denominador
+    // daria um donut que não fecha 100%.
+    const slices = useMemo(
+        () => computeSectorAllocation(isEtfHidden ? items.filter((i) => i.type !== 'ETF') : items, kind),
+        [items, kind, isEtfHidden],
+    );
     const copy = KIND_COPY[kind];
 
     const cancelClose = useCallback(() => {
@@ -166,7 +220,7 @@ export const SectorPopover = ({ items, kind, isPrivacyMode = false, variant = 'c
                 className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-white bg-elevated hover:bg-slate-700/50 rounded-lg border border-slate-800 transition-colors ${TRIGGER_SIZE[variant]}`}
             >
                 <PieIcon size={11} className={copy.accent} />
-                Setores
+                {copy.chip}
             </button>
 
             {isOpen && position && createPortal(
@@ -174,6 +228,11 @@ export const SectorPopover = ({ items, kind, isPrivacyMode = false, variant = 'c
                     ref={popoverRef}
                     role="dialog"
                     aria-label={`${copy.title}: ${summary}`}
+                    // O popover vai por PORTAL, mas evento de React sobe pela árvore de
+                    // COMPONENTES, não pela do DOM: sem isto, qualquer clique aqui dentro
+                    // chega no cabeçalho do grupo e contrai a classe. Fica no container
+                    // (e não em cada controle) para valer também para o próximo que entrar.
+                    onClick={(e) => e.stopPropagation()}
                     onMouseEnter={cancelClose}
                     onMouseLeave={scheduleClose}
                     style={{ top: position.top, left: position.left, width: POPOVER_WIDTH }}
@@ -181,7 +240,7 @@ export const SectorPopover = ({ items, kind, isPrivacyMode = false, variant = 'c
                 >
                     <div className="flex items-baseline justify-between mb-2">
                         <h4 className="text-xs font-bold text-white">{copy.title}</h4>
-                        <span className="text-[10px] text-slate-500">{copy.subtitle}</span>
+                        <span className="text-[10px] text-slate-500">{isEtfHidden ? '% das ações individuais' : copy.subtitle}</span>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -215,7 +274,7 @@ export const SectorPopover = ({ items, kind, isPrivacyMode = false, variant = 'c
                                 </PieChart>
                             </ResponsiveContainer>
                             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                <span className="text-[9px] text-slate-500 uppercase font-bold">Setores</span>
+                                <span className="text-[9px] text-slate-500 uppercase font-bold">{copy.count}</span>
                                 <span className="text-xs text-white tabular-nums font-bold">{slices.length}</span>
                             </div>
                         </div>
@@ -238,6 +297,22 @@ export const SectorPopover = ({ items, kind, isPrivacyMode = false, variant = 'c
                             ))}
                         </ul>
                     </div>
+                    {etfSplit && (
+                        <button
+                            type="button"
+                            aria-pressed={isEtfHidden}
+                            onClick={() => setHideEtf((hidden) => !hidden)}
+                            title={isEtfHidden
+                                ? 'Voltar a contar os ETFs de índice na repartição da classe'
+                                : 'Tirar os ETFs de índice da conta e reler os setores só sobre as ações individuais'}
+                            className="mt-3 w-full flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-white bg-elevated hover:bg-slate-700/50 px-2 py-1.5 rounded-lg border border-slate-800 transition-colors"
+                        >
+                            {isEtfHidden ? <Eye size={11} /> : <EyeOff size={11} />}
+                            {isEtfHidden ? 'Mostrar ETFs' : 'Ocultar ETFs'}
+                            {/* O peso do ETF não some junto com a fatia: ele fica no botão. */}
+                            <span className="text-slate-500 tabular-nums normal-case">({etfSplit.pct.toFixed(0)}% da classe)</span>
+                        </button>
+                    )}
                 </div>,
                 document.body,
             )}
