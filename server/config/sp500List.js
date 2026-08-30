@@ -1,4 +1,13 @@
 // S&P 500 components with GICS sector classification
+//
+// MANUTENÇÃO: esta lista é ESTÁTICA e o sync a percorre inteira todo run. Ticker
+// que saiu da bolsa (fusão, aquisição, fechamento de capital) ou trocou de símbolo
+// vira "Quote not found" em três passadas de fundamentos, a cada run, para sempre —
+// não some sozinho, porque o serviço não consulta o banco para montar o universo.
+// Antes de remover ou renomear, confirme com o probe ao vivo:
+//   node server/scripts/diagnoseDeadTickers.js --tickers=XYZ
+// Baixas de 30/08/2026 (nenhuma fonte serve preço; busca por nome não acha sucessor
+// em bolsa US): HOLX, SEE, CFLT, EXAS, MRUS. Troca de ticker: MMC → MRSH.
 export const SP500_STOCKS = [
   // Technology
   { ticker: 'AAPL', name: 'Apple Inc.', sector: 'Technology', subsector: 'Technology Hardware' },
@@ -175,7 +184,6 @@ export const SP500_STOCKS = [
   { ticker: 'GEHC', name: 'GE HealthCare', sector: 'Healthcare', subsector: 'Health Care Equipment' },
   { ticker: 'ZTS', name: 'Zoetis Inc.', sector: 'Healthcare', subsector: 'Pharmaceuticals' },
   { ticker: 'IDXX', name: 'IDEXX Laboratories', sector: 'Healthcare', subsector: 'Health Care Equipment' },
-  { ticker: 'HOLX', name: 'Hologic Inc.', sector: 'Healthcare', subsector: 'Health Care Equipment' },
 
   // Financials
   { ticker: 'BRK.B', name: 'Berkshire Hathaway B', sector: 'Financials', subsector: 'Multi-line Insurance' },
@@ -198,7 +206,7 @@ export const SP500_STOCKS = [
   { ticker: 'ICE', name: 'Intercontinental Exchange', sector: 'Financials', subsector: 'Financial Exchanges' },
   { ticker: 'CME', name: 'CME Group', sector: 'Financials', subsector: 'Financial Exchanges' },
   { ticker: 'AON', name: 'Aon PLC', sector: 'Financials', subsector: 'Insurance Brokers' },
-  { ticker: 'MMC', name: 'Marsh McLennan', sector: 'Financials', subsector: 'Insurance Brokers' },
+  { ticker: 'MRSH', name: 'Marsh McLennan', sector: 'Financials', subsector: 'Insurance Brokers' }, // ex-MMC (troca de ticker; probe 30/08/2026)
   { ticker: 'AIG', name: 'American International Group', sector: 'Financials', subsector: 'Multi-line Insurance' },
   { ticker: 'MET', name: 'MetLife Inc.', sector: 'Financials', subsector: 'Life Insurance' },
   { ticker: 'PRU', name: 'Prudential Financial', sector: 'Financials', subsector: 'Life Insurance' },
@@ -306,7 +314,6 @@ export const SP500_STOCKS = [
   { ticker: 'PPG', name: 'PPG Industries', sector: 'Materials', subsector: 'Specialty Chemicals' },
   { ticker: 'IP', name: 'International Paper', sector: 'Materials', subsector: 'Paper Products' },
   { ticker: 'PKG', name: 'Packaging Corp. of America', sector: 'Materials', subsector: 'Paper Products' },
-  { ticker: 'SEE', name: 'Sealed Air Corp.', sector: 'Materials', subsector: 'Packaging' },
   { ticker: 'BALL', name: 'Ball Corp.', sector: 'Materials', subsector: 'Metal & Glass Containers' },
 
   // Real Estate
@@ -415,7 +422,6 @@ export const SP500_STOCKS = [
   { ticker: 'RNG', name: 'RingCentral Inc.', sector: 'Technology', subsector: 'Software' },
   { ticker: 'ESTC', name: 'Elastic N.V.', sector: 'Technology', subsector: 'Software' },
   { ticker: 'GTLB', name: 'GitLab Inc.', sector: 'Technology', subsector: 'Software' },
-  { ticker: 'CFLT', name: 'Confluent Inc.', sector: 'Technology', subsector: 'Software' },
   { ticker: 'BILL', name: 'Bill.com Holdings', sector: 'Technology', subsector: 'Software' },
   { ticker: 'APPN', name: 'Appian Corp.', sector: 'Technology', subsector: 'Software' },
   { ticker: 'DT', name: 'Dynatrace Inc.', sector: 'Technology', subsector: 'Software' },
@@ -484,7 +490,6 @@ export const SP500_STOCKS = [
   { ticker: 'ALNY', name: 'Alnylam Pharmaceuticals', sector: 'Healthcare', subsector: 'Biotechnology' },
   { ticker: 'INCY', name: 'Incyte Corp.', sector: 'Healthcare', subsector: 'Biotechnology' },
   { ticker: 'NVCR', name: 'NovoCure Ltd.', sector: 'Healthcare', subsector: 'Health Care Equipment' },
-  { ticker: 'EXAS', name: 'Exact Sciences', sector: 'Healthcare', subsector: 'Health Care Equipment' },
   { ticker: 'NVAX', name: 'Novavax Inc.', sector: 'Healthcare', subsector: 'Biotechnology' },
   { ticker: 'BEAM', name: 'Beam Therapeutics', sector: 'Healthcare', subsector: 'Biotechnology' },
   { ticker: 'NTLA', name: 'Intellia Therapeutics', sector: 'Healthcare', subsector: 'Biotechnology' },
@@ -504,7 +509,6 @@ export const SP500_STOCKS = [
   { ticker: 'DNLI', name: 'Denali Therapeutics', sector: 'Healthcare', subsector: 'Biotechnology' },
   { ticker: 'PRAX', name: 'Praxis Precision Medicine', sector: 'Healthcare', subsector: 'Biotechnology' },
   { ticker: 'RIGL', name: 'Rigel Pharmaceuticals', sector: 'Healthcare', subsector: 'Biotechnology' },
-  { ticker: 'MRUS', name: 'Merus N.V.', sector: 'Healthcare', subsector: 'Biotechnology' },
   { ticker: 'VKTX', name: 'Viking Therapeutics', sector: 'Healthcare', subsector: 'Biotechnology' },
   { ticker: 'PTCT', name: 'PTC Therapeutics', sector: 'Healthcare', subsector: 'Biotechnology' },
   { ticker: 'LRMR', name: 'Larimar Therapeutics', sector: 'Healthcare', subsector: 'Biotechnology' },

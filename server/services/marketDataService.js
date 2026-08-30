@@ -1,6 +1,7 @@
 
 import logger from '../config/logger.js';
 import MarketAsset from '../models/MarketAsset.js';
+import UserAsset from '../models/UserAsset.js';
 import AssetHistory from '../models/AssetHistory.js';
 import SystemConfig from '../models/SystemConfig.js';
 import FundamentalSnapshot from '../models/FundamentalSnapshot.js';
@@ -27,6 +28,22 @@ const LARGE_ASSET_LIQUIDITY = 1_000_000;     // R$ 1M/dia
 // lacuna de fonte, é ativo que sumiu. O sinal correto continua sendo o painel de
 // Saúde, que acusa o congelamento antes deste teto ser atingido.
 const LARGE_ASSET_FAILURE_CAP = 45;
+// Quarentena antes da APOSENTADORIA automática. Ficar inativo não tem custo de
+// dado (o upsert só grava sucesso), mas tem custo de ruído: o loop de reativação
+// re-cota todo inativo a cada run, e um papel que saiu da bolsa reaparece para
+// sempre no warn "Yahoo falhou para N ativos" — em ago/2026 eram 27 tickers, com
+// mortos de até 192 dias (BPAN4, CPLE5, MMC, HOLX…), sem caminho de saída porque
+// a única baixa possível era manual e a guarda de porte mandava todo papel grande
+// para uma "revisão manual" que nunca acontecia. 90 dias sem cotar em NENHUMA
+// fonte não é mais provedor engasgado: instabilidade real dura dias (caso B3SA3),
+// e o loop de reativação já teria recuperado o papel em qualquer run desse período.
+const RETIRE_AFTER_INACTIVE_DAYS = 90;
+// Idade máxima do último candle para considerar que o papel ainda negocia (e,
+// portanto, NÃO pode ser aposentado, por mais que o endpoint de cotação o ignore).
+const RETIRE_RECENT_CANDLE_DAYS = 10;
+
+/** Dias inteiros desde `date` (null quando a data não existe). */
+const daysSince = (date) => (date ? Math.floor((Date.now() - new Date(date).getTime()) / 86400000) : null);
 
 const FALLBACK_MACRO = {
     selic: { value: DEFAULT_SELIC_FALLBACK },
@@ -471,10 +488,10 @@ export const marketDataService = {
             // Sem este filtro, ativos deslistados (SGEN, IPG, EURP11, BDRX11…) seguiam
             // sendo re-cotados todo run — falhavam, disparavam 404 na brapi (abrindo o
             // breaker e starvando os vivos) e poluíam os warnings apesar da blacklist.
-            const inactiveAssets = await MarketAsset.find({ isActive: false, isBlacklisted: false }).select('ticker failCount type marketCap');
+            const inactiveAssets = await MarketAsset.find({ isActive: false, isBlacklisted: false }).select('ticker failCount type marketCap updatedAt');
             if (inactiveAssets.length === 0) {
                 logger.info(`✅ [Reativação] Nenhum ativo inativo para verificar.`);
-                return { reactivated: 0, stillInactive: 0 };
+                return { reactivated: 0, stillInactive: 0, retired: 0 };
             }
 
             logger.info(`🔄 [Reativação] Verificando ${inactiveAssets.length} ativos inativos...`);
@@ -503,19 +520,98 @@ export const marketDataService = {
                 logger.info(`✅ [Reativação] ${reactivatedCount} ativos reativados: ${reactivatedTickers.join(', ')}`);
             }
 
-            // Alerta para ativos grandes que continuam inativos
             const successSet = new Set(reactivatedTickers.map(t => this.normalizeSymbol(t)));
             const stillInactive = inactiveAssets.filter(a => !successSet.has(a.ticker));
-            const importantStillInactive = stillInactive.filter(a => (a.marketCap || 0) > 1000000000);
+
+            // Aposentadoria automática: quem passou a quarentena inteira sem cotar em
+            // nenhuma fonte sai do loop (isBlacklisted = estado terminal). É o que
+            // drena a lista sozinha — antes ela só crescia, e o mesmo warn se repetia
+            // indefinidamente. Ticker detido por usuário nunca é aposentado no
+            // automático: ali a baixa muda o que o dono vê na carteira, então é
+            // decisão a dedo (server/scripts/retireDeadTickers.js).
+            const retired = await this.retireStaleInactiveAssets(stillInactive);
+            const retiredSet = new Set(retired);
+
+            // Alerta para ativos grandes que continuam inativos (e ainda em quarentena)
+            const importantStillInactive = stillInactive.filter(a => (a.marketCap || 0) > 1000000000 && !retiredSet.has(a.ticker));
             if (importantStillInactive.length > 0) {
-                logger.warn(`⚠️ [Reativação] Ativos grandes ainda inativos: ${importantStillInactive.map(a => a.ticker).join(', ')}`);
+                const detail = importantStillInactive
+                    .map(a => `${a.ticker} (${daysSince(a.updatedAt) ?? '?'}d)`)
+                    .join(', ');
+                logger.warn(`⚠️ [Reativação] Ativos grandes ainda inativos (aposentam em ${RETIRE_AFTER_INACTIVE_DAYS}d sem cotação): ${detail}`);
             }
 
-            return { reactivated: reactivatedCount, stillInactive: stillInactive.length };
+            return { reactivated: reactivatedCount, stillInactive: stillInactive.length, retired: retired.length };
         } catch (error) {
             logger.error(`❌ [Reativação] Falha: ${error.message}`);
-            return { reactivated: 0, stillInactive: 0 };
+            return { reactivated: 0, stillInactive: 0, retired: 0 };
         }
+    },
+
+    // Aposenta (isBlacklisted, terminal) os inativos que atravessaram a quarentena
+    // inteira sem voltar a cotar. Chamada pelo tryReactivateAssets logo após a
+    // tentativa de reativação — ou seja, só chega aqui quem acabou de falhar mais
+    // uma vez, com todos os fallbacks (Google/Brapi) já esgotados no getQuotes.
+    // Devolve os tickers aposentados.
+    async retireStaleInactiveAssets(stillInactive) {
+        const eligible = (stillInactive || []).filter(a =>
+            (a.failCount || 0) >= MAX_FAILURES_BEFORE_BLACKLIST
+            && (daysSince(a.updatedAt) ?? 0) >= RETIRE_AFTER_INACTIVE_DAYS,
+        );
+        if (eligible.length === 0) return [];
+
+        // Detido em carteira → fora do automático (a baixa muda a tela do dono).
+        const heldTickers = await UserAsset.distinct('ticker', { ticker: { $in: eligible.map(a => a.ticker) } });
+        const held = new Set(heldTickers);
+        const candidates = eligible.filter(a => !held.has(a.ticker));
+        if (candidates.length === 0) return [];
+
+        // Última prova antes da baixa: o endpoint de cotação e o de histórico do
+        // Yahoo não cobrem o mesmo conjunto de papéis — HGPO11 (FII ilíquido) não
+        // devolve quote nenhum e mesmo assim tem candle de dois dias atrás. Candle
+        // recente = papel vivo: mantém inativo (o quote é que não o serve) e NÃO
+        // aposenta. Histórico sem resposta conta como ausência de prova de vida —
+        // o papel já falhou cotação nos 90 dias da quarentena, a baixa é reversível
+        // (`retireDeadTickers.js --undo`) e o log nomeia quem saiu.
+        const targets = [];
+        for (const a of candidates) {
+            let candles = null;
+            try {
+                candles = await externalMarketService.getFullHistory(a.ticker, a.type);
+            } catch { /* fonte fora → segue como "sem candle" e a baixa acontece */ }
+            const last = Array.isArray(candles) ? [...candles].reverse().find(c => c?.close > 0) : null;
+            const candleAge = last ? daysSince(last.date) : null;
+            if (candleAge !== null && candleAge <= RETIRE_RECENT_CANDLE_DAYS) {
+                logger.info(`↩️ [Reativação] ${a.ticker} segue negociando (candle de ${candleAge}d) — não aposenta, só não cota via quote.`);
+                continue;
+            }
+            targets.push(a);
+        }
+        if (targets.length === 0) return [];
+
+        const now = new Date();
+        await MarketAsset.bulkWrite(targets.map(a => ({
+            updateOne: {
+                filter: { ticker: a.ticker, isBlacklisted: false },
+                update: {
+                    $set: {
+                        isBlacklisted: true,
+                        retiredAt: now,
+                        retiredReason: `auto: ${daysSince(a.updatedAt)}d sem cotação em nenhuma fonte`,
+                    },
+                },
+            },
+        })));
+
+        const detail = targets.map(a => `${a.ticker} (${daysSince(a.updatedAt)}d)`).join(', ');
+        logger.info(
+            `🪦 [Reativação] ${targets.length} ativo(s) aposentado(s) após ${RETIRE_AFTER_INACTIVE_DAYS}d sem cotação: ${detail}`,
+            { retired: targets.map(a => a.ticker), quarantineDays: RETIRE_AFTER_INACTIVE_DAYS },
+        );
+        if (held.size > 0) {
+            logger.warn(`⚠️ [Reativação] Sem cotação há ${RETIRE_AFTER_INACTIVE_DAYS}d+ mas detido(s) em carteira — decidir a dedo: ${[...held].join(', ')}`);
+        }
+        return targets.map(a => a.ticker);
     },
 
     async getMarketData(assetClass) {

@@ -343,12 +343,23 @@ export const externalMarketService = {
             if (failedTickers.length > 0) {
                 const unexpectedFails = failedTickers.filter(t => !PREFER_GOOGLE_TICKERS.has(t));
                 if (unexpectedFails.length > 0) {
-                    logger.warn(`⚠️ [MarketService] Yahoo falhou para ${unexpectedFails.length} ativos: [${unexpectedFails.join(', ')}]. Tentando Google Finance Fallback...`);
+                    logger.debug(`[MarketService] Yahoo falhou para ${unexpectedFails.length} ativos: [${unexpectedFails.join(', ')}]. Tentando Google Finance Fallback...`);
                 }
-                
+
                 // (MEM) Concorrência limitada: cada scrape carrega uma árvore cheerio
                 // pesada. Promise.all sem teto mantinha todas em memória de uma vez.
                 const fallbackRaw = await mapWithConcurrency(failedTickers, GOOGLE_FALLBACK_CONCURRENCY, (ticker) => this.recoverQuote(ticker));
+
+                // O warn é do RESULTADO da cadeia, não da primeira tentativa. Avisar
+                // logo que o Yahoo falhou fazia o report repetir todo run três linhas
+                // de "Yahoo falhou..." que o Google/Brapi recuperavam segundos depois
+                // (NGRD3, HSRE11, EA/AVB/EQR em 30/08/2026) — ruído que empurrava o
+                // veredito para "SUCESSO COM AVISOS" sem nada a fazer a respeito.
+                // (mapWithConcurrency preserva a ordem, então o índice casa o ticker.)
+                const unrecovered = failedTickers.filter((t, i) => !fallbackRaw[i] && !PREFER_GOOGLE_TICKERS.has(t));
+                if (unrecovered.length > 0) {
+                    logger.warn(`⚠️ [MarketService] Sem cotação em nenhuma fonte (Yahoo/Google/Brapi) para ${unrecovered.length} ativos: [${unrecovered.join(', ')}]`);
+                }
 
                 const fallbackResults = fallbackRaw.filter(Boolean);
                 return [...mappedResults, ...fallbackResults];

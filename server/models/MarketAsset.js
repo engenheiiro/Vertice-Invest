@@ -41,9 +41,20 @@ const MarketAssetSchema = new mongoose.Schema({
   // Indústria fina do Yahoo (ex.: "REIT - Retail") — usada p/ sub-segmentar REITs na UI
   // sem alterar o `sector` (que a classificação usa p/ identificar REAL_ESTATE).
   industry: { type: String, default: null },
-  isIgnored: { type: Boolean, default: false }, 
-  isBlacklisted: { type: Boolean, default: false }, 
-  isTier1: { type: Boolean, default: false }, 
+  isIgnored: { type: Boolean, default: false },
+  isBlacklisted: { type: Boolean, default: false },
+  isTier1: { type: Boolean, default: false },
+
+  // --- Aposentadoria (por que este papel foi blacklistado) ---
+  // Sem isso, `isBlacklisted=true` é um flag mudo: meses depois ninguém sabe se
+  // aquele ticker saiu da bolsa, trocou de símbolo ou foi vítima de um provedor
+  // fora do ar. Preenchidos por retireDeadTickers.js e pela aposentadoria
+  // automática do tryReactivateAssets.
+  retiredAt: { type: Date, default: null },
+  retiredReason: { type: String, default: null },
+  // Papel que herdou a empresa quando houve troca de ticker/incorporação
+  // (MMC → MRSH, SQ → XYZ). Documental: o sync não segue o ponteiro sozinho.
+  successorTicker: { type: String, default: null },
   
   // --- Dados Financeiros Persistidos (Cache Avançado) ---
   lastPrice: { type: Number, default: 0 },

@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import MarketAsset from '../models/MarketAsset.js';
 import AssetHistory from '../models/AssetHistory.js';
+import UserAsset from '../models/UserAsset.js';
 import { externalMarketService } from '../services/externalMarketService.js';
 import { marketDataService } from '../services/marketDataService.js';
 
@@ -14,6 +15,7 @@ vi.mock('../models/MarketAsset.js', () => ({
   default: { find: vi.fn(), findOne: vi.fn(), bulkWrite: vi.fn() },
 }));
 vi.mock('../models/AssetHistory.js', () => ({ default: { find: vi.fn(), findOne: vi.fn(), create: vi.fn() } }));
+vi.mock('../models/UserAsset.js', () => ({ default: { distinct: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../models/SystemConfig.js', () => ({ default: { findOne: vi.fn() } }));
 vi.mock('../services/externalMarketService.js', () => ({
   externalMarketService: { getQuotes: vi.fn(), getFullHistory: vi.fn() },
@@ -142,6 +144,70 @@ describe('tryReactivateAssets — blacklist é estado terminal', () => {
     expect(res.reactivated).toBe(1);
     const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
     expect(set).toMatchObject({ isActive: true, failCount: 0, lastPrice: 12.75 });
+  });
+});
+
+// A lista de inativos só crescia: sem baixa automática, cada papel morto voltava
+// ao mesmo warn a cada sync (27 tickers, alguns há 192 dias, em 30/08/2026).
+describe('tryReactivateAssets — aposentadoria automática após a quarentena', () => {
+  const daysAgo = (d) => new Date(Date.now() - d * 86400000);
+
+  it('aposenta (blacklist) quem passou 90d inativo sem cotar em nenhuma fonte', async () => {
+    mockFind([{ ticker: 'MMC', failCount: 10, type: 'STOCK_US', marketCap: 0, updatedAt: daysAgo(127) }]);
+    externalMarketService.getQuotes.mockResolvedValue([]); // segue sem cotar
+    externalMarketService.getFullHistory.mockResolvedValue(null); // nem histórico
+    MarketAsset.bulkWrite.mockResolvedValue({ modifiedCount: 1 });
+
+    const res = await marketDataService.tryReactivateAssets();
+
+    expect(res.retired).toBe(1);
+    const op = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne;
+    expect(op.filter).toEqual({ ticker: 'MMC', isBlacklisted: false }); // idempotente
+    expect(op.update.$set.isBlacklisted).toBe(true);
+    expect(op.update.$set.retiredReason).toMatch(/127d sem cotação/);
+  });
+
+  it('não aposenta dentro da quarentena — papel ainda pode voltar sozinho', async () => {
+    mockFind([{ ticker: 'HGPO11', failCount: 10, type: 'FII', marketCap: 2.7e8, updatedAt: daysAgo(33) }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+
+    const res = await marketDataService.tryReactivateAssets();
+
+    expect(res.retired).toBe(0);
+    expect(MarketAsset.bulkWrite).not.toHaveBeenCalled();
+  });
+
+  it('nunca aposenta no automático ticker detido em carteira', async () => {
+    mockFind([{ ticker: 'TKNO4', failCount: 10, type: 'STOCK', marketCap: 6e8, updatedAt: daysAgo(200) }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+    UserAsset.distinct.mockResolvedValueOnce(['TKNO4']);
+
+    const res = await marketDataService.tryReactivateAssets();
+
+    expect(res.retired).toBe(0);
+    expect(MarketAsset.bulkWrite).not.toHaveBeenCalled();
+  });
+
+  it('candle recente segura a baixa: papel que negocia mas não cota via quote fica', async () => {
+    // HGPO11: FII ilíquido sem quote no Yahoo, com candle de 2 dias atrás.
+    mockFind([{ ticker: 'HGPO11', failCount: 10, type: 'FII', marketCap: 2.7e8, updatedAt: daysAgo(120) }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+    externalMarketService.getFullHistory.mockResolvedValue([{ date: daysAgo(2).toISOString().slice(0, 10), close: 153.42 }]);
+
+    const res = await marketDataService.tryReactivateAssets();
+
+    expect(res.retired).toBe(0);
+    expect(MarketAsset.bulkWrite).not.toHaveBeenCalled();
+  });
+
+  it('failCount baixo não aposenta, por mais parado que esteja (doc recém-criado)', async () => {
+    mockFind([{ ticker: 'NOVO3', failCount: 2, type: 'STOCK', marketCap: 0, updatedAt: daysAgo(300) }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+
+    const res = await marketDataService.tryReactivateAssets();
+
+    expect(res.retired).toBe(0);
+    expect(MarketAsset.bulkWrite).not.toHaveBeenCalled();
   });
 });
 

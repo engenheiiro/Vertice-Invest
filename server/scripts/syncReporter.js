@@ -21,14 +21,14 @@ import logger from '../config/logger.js';
 const RESERVED = new Set(['level', 'message', 'timestamp', 'stack', 'requestId']);
 const CLR = String.fromCharCode(27) + '[K'; // ANSI: limpa até o fim da linha
 
-// Tickers CONFIRMADOS vivos (negociam), mas ausentes das DUAS fontes gratuitas
-// (Yahoo E Google Finance) — lacuna de fonte, NÃO delisting. Verificado por probe
-// ao vivo em 2026-07-23: quote v7, quoteSummary, chart v8 e search do Yahoo falham,
-// e o Google devolve página sem preço em ambas as bolsas. Rotulá-los como "provável
-// saída de bolsa" era enganoso. Só recuperáveis com fonte US secundária (paga);
-// NÃO blacklistar. Reavaliar se voltarem a cotar (ou remover daqui).
-const KNOWN_SOURCE_GAP = new Set(['BK', 'MMC', 'MRUS', 'HOLX', 'SEE', 'EXAS', 'CFLT', 'CTRA', 'FOLD', 'DAWN']);
-const bareTicker = (t) => String(t).replace(/\.SA$/i, '').toUpperCase();
+// Havia aqui um KNOWN_SOURCE_GAP: lista escrita à mão em jul/2026 com os tickers
+// tidos por "vivos, mas ausentes das fontes" — para não rotulá-los de delisting.
+// Foi removida em 30/08/2026 porque envelheceu nas DUAS direções: BK, CTRA, FOLD e
+// DAWN voltaram a cotar sozinhos (era throttle), e MMC não estava com lacuna de
+// fonte nenhuma — tinha trocado de ticker para MRSH. Uma lista estática de corporate
+// actions sempre mente depois de algumas semanas; o veredito agora vem de probe ao
+// vivo (server/scripts/diagnoseDeadTickers.js) e a baixa, da aposentadoria
+// automática do tryReactivateAssets.
 
 // ── Formatação ────────────────────────────────────────────────────────────
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -311,23 +311,14 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
 
         const notFound = collectNotFound();
         if (notFound.length) {
-            // Separa lacuna-de-fonte CONHECIDA (ativo vivo, fonte sem o símbolo) de
-            // suspeita real de saída de bolsa/mudança de ticker (a verificar). Evita
-            // o rótulo enganoso de "delisting" para megacaps vivas (BK, MMC…).
-            const gap = notFound.filter((t) => KNOWN_SOURCE_GAP.has(bareTicker(t)));
-            const suspect = notFound.filter((t) => !KNOWN_SOURCE_GAP.has(bareTicker(t)));
-            if (suspect.length) {
-                points.push(
-                    `⚠️  ${suspect.length} ativo(s) sem cotação na fonte — verificar (mudança de ` +
-                    `ticker ou saída de bolsa): ${suspect.join(', ')}`
-                );
-            }
-            if (gap.length) {
-                points.push(
-                    `ℹ️  ${gap.length} ativo(s) com lacuna de fonte conhecida — vivos, mas Yahoo/Google ` +
-                    `não servem o símbolo (NÃO é delisting; não blacklistar): ${gap.join(', ')}`
-                );
-            }
+            // Sem veredito aqui: o relatório só lê log, não consulta fonte nenhuma.
+            // Dizer "delisting" ou "lacuna de fonte" a partir do log é chute — quem
+            // decide é o probe ao vivo, e o comando fica escrito ao lado do aviso
+            // para a apuração ser um passo, não um projeto.
+            points.push(
+                `⚠️  ${notFound.length} ativo(s) sem cotação na fonte — apurar com ` +
+                `\`node server/scripts/diagnoseDeadTickers.js --tickers=${notFound.join(',')}\``
+            );
         }
         return points;
     }

@@ -1,5 +1,13 @@
 
 /**
+ * ⚠️ SUPERADO por `retireDeadTickers.js` (30/08/2026) — prefira aquele.
+ * Aqui a decisão sai do ESTADO DO BANCO (inativo + stale + failCount), que não
+ * distingue "morreu" de "provedor engasgou"; por isso a guarda de blue-chip manda
+ * todo papel grande para uma revisão manual que nunca acontece — MMC, HOLX, SEE,
+ * CFLT, EXAS, BPAN4 e CPLE5 ficaram meses no limbo por causa dela. O script novo
+ * decide por probe AO VIVO (Yahoo quote/chart + Google + busca por nome) e cobre
+ * Exterior/ETF também. Este fica só como referência do caminho antigo.
+ *
  * Blacklist de tickers B3 genuinamente mortos (deslistados/cancelados).
  *
  * Contexto: no sync:prod, ativos que falham cotação por 10 dias distintos viram
