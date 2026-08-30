@@ -1,974 +1,766 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Plano de Divulgação — Vértice Invest (ago/2026)</title>
-<style>
-  @font-face{
-    font-family:'Manrope';
-    src:url('../client/src/assets/fonts/manrope-latin.woff2') format('woff2');
-    font-weight:200 800; font-style:normal; font-display:swap;
-  }
-
-  :root{
-    --ground:#E7EBF2; --surface:#FFFFFF; --raised:#F4F7FC;
-    --line:#D3DAE6; --line-soft:#E2E8F1;
-    --ink:#131922; --ink-2:#3E4A5C; --ink-3:#68758A;
-    --accent:#2563EB; --accent-soft:#E5EDFF;
-    --ok:#047857; --ok-soft:#D9F2E6;
-    --warn:#A25C00; --warn-soft:#FCEED6;
-    --risk:#C2312B; --risk-soft:#FBE3E1;
-    --plum:#6D3FBF; --plum-soft:#EDE5FC;
-    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    --measure:74ch;
-  }
-  @media (prefers-color-scheme:dark){
-    :root:not([data-theme="light"]){
-      --ground:#090C11; --surface:#141922; --raised:#1B222D;
-      --line:#2A3341; --line-soft:#212936;
-      --ink:#EAEFF7; --ink-2:#A8B4C6; --ink-3:#76839A;
-      --accent:#5B94FF; --accent-soft:#16233C;
-      --ok:#34D399; --ok-soft:#0F2A22;
-      --warn:#FBBF24; --warn-soft:#2C2210;
-      --risk:#F87171; --risk-soft:#2E1618;
-      --plum:#A78BFA; --plum-soft:#231C38;
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="document-status" content="plano consolidado">
+  <title>Plano comercial e de divulgação — Vértice Invest — 30 ago 2026</title>
+  <style>
+    @font-face {
+      font-family: "Manrope";
+      src: url("../client/src/assets/fonts/manrope-latin.woff2") format("woff2");
+      font-weight: 200 800;
+      font-display: swap;
     }
-  }
-  :root[data-theme="dark"]{
-    --ground:#090C11; --surface:#141922; --raised:#1B222D;
-    --line:#2A3341; --line-soft:#212936;
-    --ink:#EAEFF7; --ink-2:#A8B4C6; --ink-3:#76839A;
-    --accent:#5B94FF; --accent-soft:#16233C;
-    --ok:#34D399; --ok-soft:#0F2A22;
-    --warn:#FBBF24; --warn-soft:#2C2210;
-    --risk:#F87171; --risk-soft:#2E1618;
-    --plum:#A78BFA; --plum-soft:#231C38;
-  }
 
-  *{box-sizing:border-box;}
-  html{scroll-behavior:smooth;}
-  body{
-    margin:0;background:var(--ground);color:var(--ink);
-    font-family:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-    font-size:16px;line-height:1.62;-webkit-font-smoothing:antialiased;
-  }
-  .wrap{max-width:1120px;margin:0 auto;padding:0 24px 110px;}
+    :root {
+      --page: #090c11;
+      --surface: #0f141a;
+      --card: #141922;
+      --raised: #191f29;
+      --line: #293241;
+      --line-soft: #202936;
+      --text: #edf2f8;
+      --muted: #a7b2c2;
+      --quiet: #748196;
+      --blue: #60a5fa;
+      --blue-soft: #14243c;
+      --green: #34d399;
+      --green-soft: #0d2b23;
+      --yellow: #fbbf24;
+      --yellow-soft: #2d230e;
+      --red: #fb7185;
+      --red-soft: #31171d;
+      --purple: #c4b5fd;
+      --purple-soft: #241c3a;
+      --max: 1180px;
+      --copy: 76ch;
+    }
 
-  header.top{padding:64px 0 36px;border-bottom:1px solid var(--line);}
-  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;
-    text-transform:uppercase;color:var(--accent);margin:0 0 16px;}
-  h1{font-size:clamp(32px,5vw,48px);line-height:1.07;letter-spacing:-.028em;
-    font-weight:800;margin:0 0 16px;text-wrap:balance;}
-  .standfirst{font-size:17.5px;color:var(--ink-2);max-width:var(--measure);margin:0;}
-  .docmeta{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;}
-  .docmeta span{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
-    text-transform:uppercase;background:var(--raised);color:var(--ink-3);
-    padding:5px 10px;border-radius:5px;border:1px solid var(--line-soft);}
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--text);
+      font-family: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .87em;
+      color: #dbeafe;
+      background: #111a26;
+      border: 1px solid var(--line-soft);
+      border-radius: 5px;
+      padding: 2px 6px;
+    }
+    .shell { max-width: var(--max); margin: 0 auto; padding: 0 28px 96px; }
+    .hero {
+      padding: 72px 0 44px;
+      border-bottom: 1px solid var(--line);
+      background: radial-gradient(circle at 20% 0%, rgba(37, 99, 235, .12), transparent 34%);
+    }
+    .eyebrow, .kicker, th, .pill, .metric-label {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+    }
+    .eyebrow { color: var(--blue); font-size: 11px; font-weight: 800; margin: 0 0 14px; }
+    h1 {
+      max-width: 900px;
+      margin: 0;
+      font-size: clamp(34px, 6vw, 60px);
+      line-height: 1.02;
+      letter-spacing: -.04em;
+    }
+    .subtitle { max-width: 780px; margin: 20px 0 0; color: var(--muted); font-size: 18px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 9px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--quiet);
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 34px;
+    }
+    .metric { padding: 17px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+    .metric strong { display: block; font-size: 22px; letter-spacing: -.03em; }
+    .metric-label { color: var(--quiet); font-size: 9px; margin-top: 5px; }
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin: 26px 0 0;
+    }
+    .toc a {
+      color: var(--muted);
+      text-decoration: none;
+      padding: 7px 10px;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      font-size: 12px;
+      background: var(--surface);
+    }
+    .toc a:hover { color: var(--text); border-color: var(--blue); }
+    section { margin-top: 72px; scroll-margin-top: 24px; }
+    section > h2 {
+      margin: 0;
+      padding-bottom: 14px;
+      border-bottom: 2px solid var(--text);
+      font-size: clamp(25px, 4vw, 34px);
+      line-height: 1.18;
+      letter-spacing: -.03em;
+    }
+    .lede { max-width: var(--copy); margin: 15px 0 26px; color: var(--muted); }
+    h3 { margin: 34px 0 10px; font-size: 19px; letter-spacing: -.015em; }
+    p, ul, ol { max-width: var(--copy); }
+    p { color: var(--muted); }
+    ul, ol { color: var(--muted); padding-left: 21px; }
+    li { margin: 7px 0; }
+    b, strong { color: var(--text); }
+    .decision {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 14px;
+      margin-top: 24px;
+    }
+    .panel, .callout {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 22px;
+    }
+    .panel h3, .callout h3 { margin-top: 0; }
+    .panel p:last-child, .callout p:last-child { margin-bottom: 0; }
+    .callout.good { background: var(--green-soft); border-color: #17694f; }
+    .callout.warn { background: var(--yellow-soft); border-color: #785d15; }
+    .callout.risk { background: var(--red-soft); border-color: #7e2937; }
+    .kicker { font-size: 10px; font-weight: 800; margin-bottom: 7px; }
+    .good .kicker { color: var(--green); }
+    .warn .kicker { color: var(--yellow); }
+    .risk .kicker { color: var(--red); }
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: var(--surface);
+    }
+    table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 13px 15px; border-bottom: 1px solid var(--line-soft); vertical-align: top; text-align: left; }
+    th { color: var(--quiet); font-size: 9.5px; background: var(--raised); }
+    td { color: var(--muted); }
+    tbody tr:last-child td { border-bottom: 0; }
+    tr.focus td { background: rgba(37, 99, 235, .08); }
+    .num { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text); font-weight: 750; }
+    .tag {
+      display: inline-block;
+      padding: 3px 7px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .ready { background: var(--green-soft); color: var(--green); }
+    .review { background: var(--yellow-soft); color: var(--yellow); }
+    .stop { background: var(--red-soft); color: var(--red); }
+    .proposed { background: var(--blue-soft); color: var(--blue); }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 20px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+    .card h3 { margin: 0 0 7px; }
+    .card p { font-size: 14px; }
+    .card ul { padding-left: 18px; font-size: 13.5px; }
+    .plans { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+    .plan {
+      display: flex;
+      flex-direction: column;
+      min-height: 390px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      padding: 20px;
+    }
+    .plan.recommended { border-color: #3b82f6; box-shadow: inset 0 3px 0 #3b82f6; }
+    .plan h3 { margin: 8px 0 3px; }
+    .plan .who { min-height: 44px; color: var(--quiet); font-size: 12.5px; }
+    .price { font-size: 28px; font-weight: 800; letter-spacing: -.04em; margin: 13px 0 0; }
+    .price small { color: var(--quiet); font-size: 11px; font-weight: 600; letter-spacing: 0; }
+    .annual { color: var(--blue); font-size: 12px; margin: 2px 0 13px; }
+    .plan ul { font-size: 12.5px; padding-left: 17px; }
+    .plan .role { margin-top: auto; border-top: 1px solid var(--line-soft); padding-top: 12px; color: var(--quiet); font-size: 11px; }
+    .consulting {
+      display: grid;
+      grid-template-columns: minmax(210px, .72fr) 1.28fr;
+      gap: 24px;
+      margin-top: 16px;
+      padding: 25px;
+      border: 1px solid #8b6a1d;
+      border-radius: 15px;
+      background: linear-gradient(135deg, #221b0d 0%, var(--surface) 58%);
+      box-shadow: inset 4px 0 0 #d4af37;
+    }
+    .consulting h3 { margin: 8px 0 5px; font-size: 24px; }
+    .consulting .price { font-size: 17px; margin-top: 15px; color: #f2d06b; }
+    .consulting .tag { background: rgba(212, 175, 55, .14); color: #f2d06b; }
+    .consulting ul { columns: 2; column-gap: 30px; margin: 0; font-size: 13.5px; }
+    .consulting .legal { grid-column: 1 / -1; margin: 0; padding-top: 13px; border-top: 1px solid rgba(212, 175, 55, .2); color: var(--quiet); font-size: 11px; }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .flow > div { position: relative; padding: 17px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+    .flow strong { display: block; }
+    .flow span { display: block; color: var(--quiet); font-size: 12px; margin-top: 4px; }
+    .phase { display: grid; grid-template-columns: 120px 1fr; gap: 22px; padding: 23px 0; border-bottom: 1px solid var(--line-soft); }
+    .phase:last-child { border-bottom: 0; }
+    .phase-time { color: var(--blue); font-weight: 800; font-size: 13px; }
+    .phase h3 { margin: 0 0 7px; }
+    .phase p { margin-top: 0; }
+    .phase ul { margin-bottom: 0; }
+    .note { color: var(--quiet); font-size: 12px; }
+    .sources { font-size: 13px; }
+    .sources li { margin-bottom: 10px; }
+    footer { margin-top: 76px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--quiet); font-size: 12px; }
 
-  nav.toc{margin:36px 0 0;padding:20px 22px;background:var(--surface);
-    border:1px solid var(--line);border-radius:10px;}
-  nav.toc h2{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
-    text-transform:uppercase;color:var(--ink-3);margin:0 0 12px;font-weight:600;}
-  nav.toc ol{margin:0;padding-left:20px;columns:2;column-gap:32px;font-size:14.5px;}
-  nav.toc li{margin-bottom:5px;break-inside:avoid;}
-  nav.toc a{color:var(--ink-2);text-decoration:none;border-bottom:1px solid transparent;}
-  nav.toc a:hover,nav.toc a:focus{color:var(--accent);border-bottom-color:var(--accent);}
-  @media (max-width:640px){nav.toc ol{columns:1;}}
-
-  section.block{margin-top:72px;scroll-margin-top:24px;}
-  section.block > h2{font-size:27px;font-weight:800;letter-spacing:-.022em;
-    margin:0 0 10px;line-height:1.2;padding-bottom:14px;border-bottom:2px solid var(--ink);}
-  section.block > .lede{margin:16px 0 24px;color:var(--ink-2);
-    max-width:var(--measure);font-size:15.5px;}
-  h3.sub{font-size:18px;font-weight:800;letter-spacing:-.015em;margin:34px 0 10px;}
-  p{max-width:var(--measure);}
-  section.block p{color:var(--ink-2);font-size:15px;}
-  section.block p b,section.block li b{color:var(--ink);}
-  ul.plain{max-width:var(--measure);font-size:15px;color:var(--ink-2);padding-left:20px;}
-  ul.plain li{margin-bottom:7px;}
-
-  code{font-family:var(--mono);font-size:.87em;background:var(--raised);
-    padding:1.5px 5px;border-radius:4px;border:1px solid var(--line-soft);
-    color:var(--ink);word-break:break-word;}
-
-  .tablewrap{overflow-x:auto;border:1px solid var(--line);
-    border-radius:10px;background:var(--surface);margin-top:8px;}
-  table{border-collapse:collapse;width:100%;min-width:640px;font-size:14.5px;}
-  th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line-soft);
-    vertical-align:top;color:var(--ink-2);}
-  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--ink-3);font-weight:600;background:var(--raised);}
-  td b{color:var(--ink);}
-  tbody tr:last-child td{border-bottom:none;}
-  td.num{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap;color:var(--ink);}
-  td small{display:block;margin-top:3px;font-size:11px;font-weight:600;color:var(--ink-3);
-    font-family:var(--mono);letter-spacing:.04em;}
-
-  .st{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;
-    padding:3px 7px;border-radius:5px;font-weight:700;white-space:nowrap;display:inline-block;}
-  .st-ok{background:var(--ok-soft);color:var(--ok);}
-  .st-no{background:var(--risk-soft);color:var(--risk);}
-  .st-open{background:var(--warn-soft);color:var(--warn);}
-
-  .phase-head{display:flex;gap:18px;align-items:flex-start;
-    padding-bottom:18px;border-bottom:2px solid var(--ink);margin-top:56px;}
-  .phase-num{font-family:var(--mono);font-size:13px;font-weight:700;
-    color:var(--ground);background:var(--ink);width:34px;height:34px;flex:0 0 34px;
-    border-radius:8px;display:grid;place-items:center;margin-top:2px;}
-  .phase-title{flex:1;min-width:0;}
-  .phase-title h3{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:0 0 4px;line-height:1.2;}
-  .phase-title p{margin:0;color:var(--ink-2);font-size:14.5px;}
-  .phase-when{font-family:var(--mono);font-size:11px;letter-spacing:.06em;
-    color:var(--ink-3);white-space:nowrap;padding-top:8px;}
-
-  .tasks{display:flex;flex-direction:column;gap:1px;background:var(--line-soft);
-    border:1px solid var(--line);border-top:none;border-radius:0 0 10px 10px;overflow:hidden;}
-  .task{background:var(--surface);padding:20px 22px;
-    display:grid;grid-template-columns:30px 1fr;gap:0 16px;align-items:start;}
-  .task-n{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);
-    font-variant-numeric:tabular-nums;padding-top:3px;}
-  .task-body h4{font-size:16.5px;font-weight:700;margin:0 0 8px;
-    letter-spacing:-.01em;line-height:1.35;color:var(--ink);}
-  .task-body p{margin:0;color:var(--ink-2);font-size:14.5px;}
-  .task-body p + p{margin-top:8px;}
-  .task-body ul{margin:9px 0 0;padding-left:19px;font-size:14.5px;color:var(--ink-2);}
-  .task-body li{margin-bottom:5px;}
-  .meta{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 9px;}
-  .chip{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
-    padding:3px 8px;border-radius:5px;font-weight:700;white-space:nowrap;}
-  .c-site{background:var(--accent-soft);color:var(--accent);}
-  .c-yt{background:var(--risk-soft);color:var(--risk);}
-  .c-ig{background:var(--plum-soft);color:var(--plum);}
-  .c-law{background:var(--warn-soft);color:var(--warn);}
-  .c-data{background:var(--ok-soft);color:var(--ok);}
-  .c-cost{background:var(--raised);color:var(--ink-3);}
-
-  .callout{display:flex;gap:13px;align-items:flex-start;margin-top:22px;
-    padding:17px 19px;border-radius:10px;border:1px solid;}
-  .callout p{margin:0;font-size:14.5px;color:var(--ink);max-width:var(--measure);}
-  .callout p + p{margin-top:7px;}
-  .callout ul{margin:8px 0 0;padding-left:19px;font-size:14.5px;color:var(--ink);}
-  .callout strong.lbl{display:block;font-family:var(--mono);font-size:11px;
-    letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;}
-  .co-gate{border-style:dashed;border-color:var(--ok);background:var(--ok-soft);}
-  .co-gate strong.lbl{color:var(--ok);}
-  .co-warn{border-color:var(--warn);background:var(--warn-soft);}
-  .co-warn strong.lbl{color:var(--warn);}
-  .co-open{border-color:var(--accent);background:var(--accent-soft);}
-  .co-open strong.lbl{color:var(--accent);}
-
-  .avoid{display:grid;gap:1px;background:var(--line-soft);border:1px solid var(--line);
-    border-radius:10px;overflow:hidden;margin-top:8px;}
-  .avoid > div{background:var(--surface);padding:16px 20px;}
-  .avoid b{font-weight:800;color:var(--ink);display:block;margin-bottom:5px;}
-  .avoid p{margin:0;color:var(--ink-2);font-size:14px;}
-  .avoid p + p{margin-top:7px;}
-
-  footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--line);
-    color:var(--ink-3);font-size:13.5px;max-width:var(--measure);}
-  footer p{margin:0 0 10px;color:var(--ink-3);}
-  footer b{color:var(--ink-2);}
-
-  @media (max-width:640px){
-    .wrap{padding:0 18px 70px;}
-    header.top{padding:44px 0 28px;}
-    .phase-head{flex-wrap:wrap;gap:12px;}
-    .phase-when{width:100%;padding-top:0;}
-    .task{grid-template-columns:24px 1fr;gap:0 12px;padding:18px 15px;}
-  }
-</style>
+    @media (max-width: 960px) {
+      .summary, .plans { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .cards { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: repeat(2, 1fr); }
+      .consulting { grid-template-columns: 1fr; }
+      .consulting .legal { grid-column: auto; }
+    }
+    @media (max-width: 650px) {
+      .shell { padding: 0 17px 70px; }
+      .hero { padding-top: 48px; }
+      .summary, .decision, .plans, .flow { grid-template-columns: 1fr; }
+      .phase { grid-template-columns: 1fr; gap: 6px; }
+      .consulting ul { columns: 1; }
+      section { margin-top: 56px; }
+    }
+    @media print {
+      :root { --page: #fff; --surface: #fff; --card: #fff; --raised: #f3f5f8; --line: #cfd6df; --line-soft: #e3e7ed; --text: #111827; --muted: #374151; --quiet: #667085; }
+      body { font-size: 11pt; }
+      .shell { max-width: none; padding: 0; }
+      .hero { padding-top: 24px; }
+      .toc { display: none; }
+      section { break-inside: avoid; margin-top: 38px; }
+      .table-wrap { overflow: visible; }
+      a { color: #1d4ed8; }
+    }
+  </style>
 </head>
 <body>
-<div class="wrap">
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">Vértice Invest · plano revisado</p>
+      <h1>Produto, preços e divulgação em um plano só</h1>
+      <p class="subtitle">Uma proposta comercial enxuta para o Brasil: quatro opções públicas — Free + três pagas —, conteúdo como aquisição e assinatura como principal fonte de receita.</p>
+      <div class="meta">
+        <span class="pill">Revisado em 30 ago 2026</span>
+        <span class="pill">Horizonte inicial: 90 dias</span>
+        <span class="pill">Premissa: 1 pessoa · R$ 500/mês</span>
+        <span class="pill">Sem alterações no produto</span>
+      </div>
 
-<header class="top">
-  <p class="eyebrow">Vértice Invest · Documento de planejamento</p>
-  <h1>Plano de divulgação e aquisição</h1>
-  <p class="standfirst">
-    Como sair de zero tráfego e zero seguidores até o primeiro assinante pago, com
-    R$&nbsp;500 por mês e uma pessoa. O documento serve a dois leitores: o dono do
-    projeto, que executa, e agentes de IA em conversas futuras, que precisam do
-    contexto verificado sem repetir a investigação.
-  </p>
-  <div class="docmeta">
-    <span>Criado 18/ago/2026</span>
-    <span>Escopo: site · YouTube · Instagram</span>
-    <span>Horizonte 12 semanas</span>
-    <span>Status: aguardando decisão D-01</span>
-  </div>
-</header>
+      <div class="summary">
+        <div class="metric"><strong>3</strong><div class="metric-label">planos pagos</div></div>
+        <div class="metric"><strong>R$ 49,90</strong><div class="metric-label">Pro no anual</div></div>
+        <div class="metric"><strong>1 vídeo</strong><div class="metric-label">longo por semana</div></div>
+        <div class="metric"><strong>Assinatura</strong><div class="metric-label">receita prioritária</div></div>
+      </div>
 
-<nav class="toc">
-  <h2>Índice</h2>
-  <ol>
-    <li><a href="#uso">Como usar este documento</a></li>
-    <li><a href="#contexto">Contexto do produto</a></li>
-    <li><a href="#estado">Estado verificado do código</a></li>
-    <li><a href="#restricoes">Restrições e premissas</a></li>
-    <li><a href="#decisoes">Decisões tomadas</a></li>
-    <li><a href="#abertas">Decisões em aberto</a></li>
-    <li><a href="#fase0">Fase 0 — Destravar</a></li>
-    <li><a href="#fase1">Fase 1 — Construir o que compõe</a></li>
-    <li><a href="#fase2">Fase 2 — Só então, dinheiro</a></li>
-    <li><a href="#metricas">Métricas</a></li>
-    <li><a href="#naofazer">O que não fazer</a></li>
-    <li><a href="#riscos">Riscos e revisão</a></li>
-  </ol>
-</nav>
+      <nav class="toc" aria-label="Índice">
+        <a href="#decisao">Decisão</a>
+        <a href="#desatualizado">O que mudou</a>
+        <a href="#inventario">Inventário</a>
+        <a href="#mercado">Mercado</a>
+        <a href="#planos">Planos</a>
+        <a href="#monetizacao">Monetização</a>
+        <a href="#aquisicao">Aquisição</a>
+        <a href="#execucao">90 dias</a>
+        <a href="#metricas">Métricas</a>
+        <a href="#fontes">Fontes</a>
+      </nav>
+    </header>
 
-<!-- 1 -->
-<section class="block" id="uso">
-  <h2>1 · Como usar este documento</h2>
+    <section id="decisao">
+      <h2>1. A decisão em uma página</h2>
+      <p class="lede">O produto já tem profundidade para cobrar, mas ainda não tem prova pública e operação humana suficientes para sustentar quatro planos pagos. A prioridade é reduzir escolhas, vender apenas o que existe e usar cada canal para aquilo que faz melhor.</p>
 
-  <h3 class="sub">Se você é o dono do projeto</h3>
-  <p>Execute na ordem numerada. As tarefas 01 a 21 são sequenciais por dependência,
-  não por calendário: as semanas indicadas são estimativa, os <b>portões</b> entre
-  fases é que mandam. Pular um portão é o único erro que compromete o plano inteiro.</p>
+      <div class="decision">
+        <div class="callout good">
+          <div class="kicker">Recomendação</div>
+          <h3>Free + Essential + Pro + Elite</h3>
+          <p>Manter <strong>quatro assinaturas públicas no total</strong>, sendo três pagas. O Pro vira o plano recomendado; o Elite concentra global, rebalanceamento e IR. O Black deixa de ser assinatura e passa a ser uma consultoria avulsa, separada e condicionada à capacidade e ao enquadramento profissional.</p>
+        </div>
+        <div class="callout warn">
+          <div class="kicker">Modelo de receita</div>
+          <h3>Conteúdo vende; anúncios são bônus</h3>
+          <p>YouTube descobre e demonstra. O site captura, ativa e converte. Não colocar publicidade display no site no primeiro ano e não orientar a pauta pelo RPM do YouTube.</p>
+        </div>
+      </div>
 
-  <h3 class="sub">Se você é um agente de IA lendo isto num chat novo</h3>
-  <p>Este documento é a fonte de verdade sobre a estratégia de aquisição do Vértice.
-  Antes de sugerir qualquer coisa:</p>
-  <ul class="plain">
-    <li>Leia a <a href="#estado">seção 3</a> — são afirmações sobre o código <b>verificadas
-      em 18/ago/2026</b>, com arquivo e linha. Reconfira antes de agir: o código muda.</li>
-    <li>Leia a <a href="#decisoes">seção 5</a> — várias alternativas óbvias
-      (prospecção fria, trial de 7 dias, vídeo de review) já foram avaliadas e
-      <b>rejeitadas com motivo</b>. Não as re-proponha sem argumento novo.</li>
-    <li>Leia a <a href="#abertas">seção 6</a> — o que ainda depende do dono.
-      Não trate decisão aberta como decidida.</li>
-    <li>Este é um plano de marketing e produto. Não é parecer jurídico nem
-      recomendação de investimento, e o projeto tem exposição regulatória real
-      (ver <a href="#abertas">D-02</a>).</li>
-  </ul>
-</section>
+      <div class="flow" aria-label="Funil recomendado">
+        <div><strong>YouTube + busca</strong><span>descoberta e confiança</span></div>
+        <div><strong>Página específica</strong><span>responde a uma intenção</span></div>
+        <div><strong>Free ativado</strong><span>carteira importada ou criada</span></div>
+        <div><strong>Assinatura</strong><span>profundidade, tempo real e IA</span></div>
+      </div>
+    </section>
 
-<!-- 2 -->
-<section class="block" id="contexto">
-  <h2>2 · Contexto do produto</h2>
-  <p class="lede">O que um leitor novo precisa saber para as decisões abaixo fazerem sentido.</p>
+    <section id="desatualizado">
+      <h2>2. O que ficou desatualizado no plano antigo</h2>
+      <p class="lede">O documento de 18/08/2026 continua útil como histórico, mas já não deve ser a fonte de verdade comercial. A revisão abaixo foi feita contra o repositório em 30/08/2026.</p>
 
-  <p>O Vértice Invest é uma plataforma de análise quantitativa de Ações, FIIs e Cripto:
-  um motor próprio pontua ativos em três eixos estruturais, monta rankings por perfil de
-  risco e emite <code>COMPRAR</code> / <code>AGUARDAR</code> por ativo. O produto tem
-  carteira com KPIs, sinais técnicos e uma trilha de cursos. Detalhes de arquitetura
-  estão no <code>CLAUDE.md</code> da raiz.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Premissa antiga</th><th>Estado atual</th><th>Tratamento novo</th></tr></thead>
+          <tbody>
+            <tr><td>O Brasil 10 era o centro da proposta gratuita.</td><td>O produto agora inclui múltiplas carteiras, importação, metas, renda fixa, Buy &amp; Hold, comparador, cálculo de IR e mais.</td><td>Free passa a demonstrar a carteira; Brasil 10 é uma das alavancas de ativação, não o produto inteiro.</td></tr>
+            <tr><td>Quatro planos pagos eram aceitos como estrutura pronta.</td><td>O Black promete carteiras private, concierge 24h e calls com analistas sem operação verificável no código.</td><td><span class="tag stop">Retirar</span> Black da grade de assinaturas; redesenhar como consultoria avulsa.</td></tr>
+            <tr><td>Academy era apresentada como benefício concluído.</td><td>Quiz e certificado existem, mas o seed contém IDs de vídeo de demonstração e placeholders.</td><td><span class="tag review">Não vender ainda</span> até o conteúdo real estar publicado e revisado.</td></tr>
+            <tr><td>“Automação de IR” justificava o Black.</td><td>Existe relatório fiscal e PDF; isso não equivale a declaração transmitida, integração Receita ou DARF automático.</td><td>Nome correto: <strong>Relatório de apoio ao IR</strong>.</td></tr>
+            <tr><td>Monetização do YouTube estimada em ~R$ 20/mil views.</td><td>RPM varia por canal, formato, público e mês; não existe valor oficial garantido. Além disso, o YouTube anunciou limiares mais altos para anúncios a partir de fev/2027.</td><td>Usar faixa de cenário e medir leads/assinaturas.</td></tr>
+            <tr><td>CPC de marca e CAC eram tratados como fatos.</td><td>Sem dados reais de conta, conversão e retenção, são hipóteses.</td><td>Testar apenas depois de instrumentar o funil; cortar por payback, não por clique barato.</td></tr>
+            <tr><td>SEO era uma frente futura ampla.</td><td><code>/pricing</code> continua atrás de login, <code>robots.txt</code> bloqueia a rota e o sitemap continua com apenas duas URLs.</td><td>Primeiro tornar oferta e prova públicas; depois escalar páginas.</td></tr>
+            <tr><td>Comparador aparecia como produto disponível.</td><td>A página e a rota existem, mas o item continua marcado como desabilitado na navegação.</td><td><span class="tag review">Validar</span> antes de constar na página de venda.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Este documento consolida e substitui o plano anterior. A revisão não altera nenhum arquivo funcional do produto.</p>
+    </section>
 
-  <p>Para efeito de aquisição, o que importa é a estrutura de planos:</p>
+    <section id="inventario">
+      <h2>3. O produto que existe hoje</h2>
+      <p class="lede">O inventário separa capacidade técnica de promessa comercial. “Existe” significa que há fluxo no projeto; “vendável” exige também conteúdo, estabilidade, suporte e linguagem correta.</p>
 
-  <div class="tablewrap">
-    <table>
-      <thead>
-        <tr><th>Plano</th><th>Preço/mês</th><th>O que entrega de diferente</th></tr>
-      </thead>
-      <tbody>
-        <tr><td><b>GUEST</b></td><td class="num">R$ 0</td>
-          <td>Carteira e cursos gratuitos. <b>Hoje não vê o Brasil 10</b> — é o problema central da Fase 0.</td></tr>
-        <tr><td><b>ESSENTIAL</b></td><td class="num">R$ 39,90</td>
-          <td>Brasil 10, sinais com atraso de 60 min, cursos Essential, 1 relatório.</td></tr>
-        <tr><td><b>PRO</b></td><td class="num">R$ 89,90</td>
-          <td>Research completo de Ações/FIIs/Cripto/ETF, Radar Alpha, Aporte Inteligente.</td></tr>
-        <tr><td><b>ELITE</b></td><td class="num">R$ 120,00</td>
-          <td>Ativos Globais (US/REIT), rebalanceamento por IA.</td></tr>
-        <tr><td><b>BLACK</b></td><td class="num">R$ 299,00</td>
-          <td>Masterclass e teto de todos os limites.</td></tr>
-      </tbody>
-    </table>
-  </div>
+      <div class="cards">
+        <article class="card">
+          <span class="tag ready">Núcleo vendável</span>
+          <h3>Carteira e planejamento</h3>
+          <ul>
+            <li>Múltiplas carteiras, troca, renomeação e compartilhamento público opt-in.</li>
+            <li>Compra, venda, histórico por ativo, preço médio e lotes FIFO.</li>
+            <li>Importação de extrato/planilha, conferência e reversão por lote.</li>
+            <li>Patrimônio, investido, resultado, proventos, fluxo de caixa e composição.</li>
+            <li>Performance por cota/TWRR, Sharpe, beta, volatilidade e benchmarks.</li>
+            <li>Metas patrimoniais, jornadas, aportes e meta de renda passiva.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <span class="tag ready">Diferencial vendável</span>
+          <h3>Research quantitativo</h3>
+          <ul>
+            <li>Scores de qualidade, valuation e risco; perfis defensivo, moderado e arrojado.</li>
+            <li>Rankings de ações, FIIs, ETFs, cripto e ativos globais.</li>
+            <li>Brasil 10, preço justo, tese, riscos, confiança e trilha de auditoria.</li>
+            <li>Estratégia Buy &amp; Hold e histórico de posição/delta.</li>
+            <li>Radar Alpha com RSI, volume e suporte; atraso por plano.</li>
+            <li>Aporte Inteligente e rebalanceamento de carteira com IA.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <span class="tag ready">Utilidade diária</span>
+          <h3>Dados e educação</h3>
+          <ul>
+            <li>Cotações, status do mercado e indicadores macro.</li>
+            <li>SELIC, CDI, IPCA, Ibovespa, dólar, S&amp;P 500 e Bitcoin.</li>
+            <li>Tesouro Direto, CDBs e comparador/calculadora de rentabilidade líquida.</li>
+            <li>Academy com progresso, quiz e certificado em PDF.</li>
+            <li>Notificações de novos rankings.</li>
+            <li>Relatório fiscal anual em tela, JSON estruturado e PDF.</li>
+          </ul>
+        </article>
+      </div>
 
-  <p style="margin-top:18px;"><b>O ticket de entrada de R$ 39,90 é a âncora de todo o
-  raciocínio de mídia paga deste plano.</b> Um CAC de R$ 400 significa dez meses de
-  assinatura só para empatar, antes de churn — é por isso que quase tudo aqui é
-  canal orgânico.</p>
-</section>
+      <h3>Promessas que precisam de correção antes de qualquer campanha</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Promessa atual</th><th>Problema</th><th>Formulação segura</th></tr></thead>
+          <tbody>
+            <tr><td>“Concierge WhatsApp 24h” e “calls com analistas”</td><td>Não há operação, SLA ou equipe comprovada.</td><td>Não anunciar.</td></tr>
+            <tr><td>“Carteiras private e estruturadas”</td><td>Não existe entrega identificável e o termo aumenta risco regulatório.</td><td>Não anunciar.</td></tr>
+            <tr><td>“Automação de Imposto de Renda”</td><td>O fluxo gera relatório; não transmite declaração nem paga DARF.</td><td>“Relatório de apoio ao IR em PDF”.</td></tr>
+            <tr><td>“Academy completa”</td><td>Infraestrutura pronta, conteúdo real ainda não comprovado.</td><td>Listar apenas cursos efetivamente publicados.</td></tr>
+            <tr><td>“Promoção por tempo limitado” permanente</td><td>Preço riscado contínuo reduz confiança e pode criar risco consumerista.</td><td>Preço de tabela simples; campanha com data real quando houver.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-<!-- 3 -->
-<section class="block" id="estado">
-  <h2>3 · Estado verificado do código</h2>
-  <p class="lede">Auditoria feita em 18/ago/2026 contra o repositório, na branch
-  <code>main</code>. Cada linha foi confirmada abrindo o arquivo — nada aqui é suposição.
-  Reconfira antes de agir se estiver lendo isto muito depois dessa data.</p>
+    <section id="mercado">
+      <h2>4. Faixas de preço no Brasil</h2>
+      <p class="lede">A comparação usa páginas públicas consultadas em 30/08/2026. Promoções mudam; por isso os valores servem para posicionamento, não para copiar centavos.</p>
 
-  <div class="tablewrap">
-    <table>
-      <thead>
-        <tr><th>Afirmação</th><th>Status</th><th>Onde</th></tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><b>O backend já libera o Brasil 10 para GUEST</b><br>
-            <code>BRASIL_10</code> fica fora do gate de plano de propósito, com comentário explícito.</td>
-          <td><span class="st st-ok">Confirmado</span></td>
-          <td><code>server/controllers/researchController.js</code> (~l. 533, <code>RESEARCH_FEATURE_BY_CLASS</code>)</td>
-        </tr>
-        <tr>
-          <td><b>Quem bloqueia o Brasil 10 é o frontend</b><br>
-            A aba exige plano ESSENTIAL. É aqui que a tarefa 01 mexe.</td>
-          <td><span class="st st-ok">Confirmado</span></td>
-          <td><code>client/src/pages/Research.tsx:18</code> — <code>minPlan: 'ESSENTIAL'</code></td>
-        </tr>
-        <tr>
-          <td><b><code>research_br10</code> tem <code>GUEST: 0</code></b><br>
-            Não é o gate da rota; alimenta <code>check-access</code> e registro de uso. Precisa ser alinhado junto.</td>
-          <td><span class="st st-ok">Confirmado</span></td>
-          <td><code>server/config/subscription.js:108</code></td>
-        </tr>
-        <tr>
-          <td><b><code>/pricing</code> exige login</b><br>
-            Está dentro do <code>ProtectedAppLayout</code>, que envolve <code>ProtectedRoute</code> e redireciona para <code>/login</code>.</td>
-          <td><span class="st st-ok">Confirmado</span></td>
-          <td><code>client/src/App.tsx:119</code> · <code>components/auth/ProtectedRoute.tsx:23</code></td>
-        </tr>
-        <tr>
-          <td><b><code>robots.txt</code> bloqueia <code>/pricing</code></b> (e research, indicators, courses).</td>
-          <td><span class="st st-ok">Confirmado</span></td>
-          <td><code>client/public/robots.txt</code></td>
-        </tr>
-        <tr>
-          <td><b>O sitemap tem 2 URLs fixas</b> — <code>/</code> e <code>/terms</code>, hardcoded.</td>
-          <td><span class="st st-ok">Confirmado</span></td>
-          <td><code>server/routes/sitemapRouter.js</code></td>
-        </tr>
-        <tr>
-          <td><b>GA4 está instalado mas só mede pageview</b><br>
-            Zero chamadas <code>gtag(</code> em todo o <code>client/src</code>.</td>
-          <td><span class="st st-ok">Confirmado</span></td>
-          <td><code>client/index.html</code> (tag <code>G-V9QW6ZJEQW</code>)</td>
-        </tr>
-        <tr>
-          <td><b>O ranking publica 1× por semana</b> — segunda, 9h30 (<code>weekly-autopublish</code>). Decisivo contra o trial de 7 dias.</td>
-          <td><span class="st st-ok">Confirmado</span></td>
-          <td><code>server/services/schedulerService.js:636</code></td>
-        </tr>
-        <tr>
-          <td><b>Existe carteira pública compartilhável</b> com CTA de cadastro — loop de indicação pronto, faltando imagem de preview.</td>
-          <td><span class="st st-ok">Confirmado</span></td>
-          <td><code>client/src/pages/PublicWallet.tsx</code> · rota <code>/p/:token</code></td>
-        </tr>
-        <tr>
-          <td><b>Existe track record do algoritmo</b> — endpoint de acurácia (admin-only) e backtest contínuo.</td>
-          <td><span class="st st-ok">Confirmado</span></td>
-          <td><code>server/routes/researchRoutes.js:94</code> · <code>scripts/runBacktestEngine.js</code></td>
-        </tr>
-        <tr>
-          <td><b>O site está no ar e a home renderiza conteúdo</b> — sitemap responde, landing tem texto real (hero, planos, depoimentos).</td>
-          <td><span class="st st-ok">Confirmado</span></td>
-          <td><code>verticeinvest.com.br</code></td>
-        </tr>
-        <tr>
-          <td><b>O site aparece na busca por "Vértice Invest"</b></td>
-          <td><span class="st st-open">Não verificado</span></td>
-          <td>Só o Search Console responde — ver tarefa 03. Busca externa retornou apenas homônimos.</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Oferta pública</th><th>Preço observado</th><th>Âncora de valor</th><th>Leitura para a Vértice</th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://assine.kinvo.com.br/">Kinvo Premium</a></td><td class="num">R$ 179,90/ano à vista</td><td>Consolidação e análises de carteira.</td><td>Piso agressivo de ferramenta de carteira.</td></tr>
+            <tr><td><a href="https://investidor10.com.br/assine-agora-jun-26-b2/">Investidor10 PRO</a></td><td class="num">12× R$ 19,90/ano</td><td>Ferramentas, B3, carteiras, relatórios e cursos em oferta.</td><td>Concorrente de preço difícil; competir por método e produto, não por desconto.</td></tr>
+            <tr><td><a href="https://lp.statusinvest.com.br/ao/planos/">Status Invest Essencial</a></td><td class="num">R$ 21,90/mês no anual</td><td>Conexão B3, quatro carteiras e proventos.</td><td>Faixa correta para organização paga.</td></tr>
+            <tr><td><a href="https://lp.statusinvest.com.br/ao/planos/">Status Invest Profissional</a></td><td class="num">R$ 32,10/mês no anual</td><td>Consenso, preço-alvo e projeções.</td><td>Pressiona o plano intermediário.</td></tr>
+            <tr><td><a href="https://trademap.com.br/premium">TradeMap Plus / Pro</a></td><td class="num">R$ 29,90 / R$ 49,90 mês</td><td>Open Finance e conexão/ordens em corretora.</td><td>Referência mensal para utilidade e operação.</td></tr>
+            <tr><td><a href="https://lp.suno.com.br/suno-premium-conheca-2/">Suno Premium</a></td><td class="num">12× R$ 54,90/ano</td><td>Seis carteiras, relatórios, cursos e analistas CNPI.</td><td>Teto do research humano de entrada.</td></tr>
+            <tr><td><a href="https://lp.statusinvest.com.br/ao/planos/">Status Alpha</a></td><td class="num">R$ 99,75/mês no anual</td><td>Score, IA, 40 mil ativos e portfólios.</td><td>Referência direta para o Elite quantitativo.</td></tr>
+          </tbody>
+        </table>
+      </div>
 
-  <div class="callout co-warn">
-    <div>
-      <strong class="lbl">Concorrência de marca</strong>
-      <p>Existem pelo menos cinco empresas financeiras com nome parecido no Brasil:
-      Vértice Investimentos, Vértice Capital Management, Vertice Cred, Vertice
-      Corporation e Vértiq Invest. Elas são mais antigas e têm mais autoridade de
-      domínio. <b>Consequência prática:</b> mesmo a busca pelo seu próprio nome é
-      disputada — é o que justifica a tarefa 18.</p>
-    </div>
-  </div>
-</section>
+      <div class="callout good" style="margin-top:20px">
+        <div class="kicker">Posicionamento</div>
+        <p><strong>A Vértice deve ocupar o espaço entre ferramenta de carteira e research quantitativo.</strong> O argumento não é “temos mais telas”; é “da carteira real à próxima decisão, com método auditável e sem depender de planilha”.</p>
+      </div>
+    </section>
 
-<!-- 4 -->
-<section class="block" id="restricoes">
-  <h2>4 · Restrições e premissas</h2>
-  <div class="tablewrap">
-    <table>
-      <thead><tr><th>Variável</th><th>Valor</th><th>Consequência no plano</th></tr></thead>
-      <tbody>
-        <tr><td><b>Orçamento</b></td><td class="num">R$ 500/mês</td>
-          <td>R$ 1.500 por trimestre. Suficiente para defesa de marca e retargeting; insuficiente para prospecção fria como motor.</td></tr>
-        <tr><td><b>Ticket de entrada</b></td><td class="num">R$ 39,90</td>
-          <td>Teto de CAC saudável ≈ R$ 120 (3 meses). Acima disso, desligue a campanha.</td></tr>
-        <tr><td><b>Equipe</b></td><td class="num">1 pessoa</td>
-          <td>Dev e conteúdo competem pelas mesmas horas. Fase 1 precisa de corte consciente.</td></tr>
-        <tr><td><b>Dedicação</b></td><td class="num">meio período</td>
-          <td>12 semanas é estimativa otimista. Com dedicação integral vira ~8 — não menos, porque indexação depende de calendário.</td></tr>
-        <tr><td><b>Base inicial</b></td><td class="num">zero</td>
-          <td>0 seguidores no Instagram, canal do YouTube sem monetização, 2 URLs no sitemap.</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+    <section id="planos">
+      <h2>5. Nova arquitetura de planos</h2>
+      <p class="lede">Catálogo recomendado para implementação futura. Os valores anuais são cobrados pelo período de 12 meses e exibidos como equivalente mensal. Não alterar gates nem checkout antes da validação comercial e jurídica.</p>
 
-<!-- 5 -->
-<section class="block" id="decisoes">
-  <h2>5 · Decisões tomadas</h2>
-  <p class="lede">Alternativas já avaliadas e descartadas, com o motivo. Registradas para
-  não serem re-propostas a cada conversa nova.</p>
+      <div class="plans">
+        <article class="plan">
+          <span class="tag ready">Primeiros Passos</span>
+          <h3>Free</h3>
+          <div class="who">Para organizar a primeira carteira e comprovar valor.</div>
+          <div class="price">R$ 0</div>
+          <div class="annual">sem cartão</div>
+          <ul>
+            <li>1 carteira</li>
+            <li>Adicione ou importe seus investimentos</li>
+            <li>Gestão de Carteira, Rentabilidade e Extrato</li>
+            <li>3 Metas Financeiras</li>
+            <li>Indicadores, Calculadora e Cursos Nível 0</li>
+            <li>Brasil 10</li>
+          </ul>
+          <div class="role">Papel: ativar e gerar confiança.</div>
+        </article>
 
-  <div class="tablewrap">
-    <table>
-      <thead><tr><th>Decisão</th><th>Por quê</th></tr></thead>
-      <tbody>
-        <tr>
-          <td><b>Não usar Google Ads para prospecção fria</b><br>
-            <span class="st st-no">Rejeitado</span></td>
-          <td>R$ 500/mês a ~R$ 4/clique dão 125 cliques → ~4 cadastros → menos de 1 assinante. CAC acima de R$ 400 para ticket de R$ 39,90, e o volume não gera nem aprendizado estatístico.</td>
-        </tr>
-        <tr>
-          <td><b>Usar a verba em defesa de marca</b><br>
-            <span class="st st-ok">Adotado</span></td>
-          <td>CPC no próprio nome custa R$ 0,30–1,00 porque ninguém disputa. Dados os cinco homônimos, é o único gasto que se paga nesse orçamento: protege demanda já gerada em vez de comprar demanda nova.</td>
-        </tr>
-        <tr>
-          <td><b>YouTube por busca, não por monetização</b><br>
-            <span class="st st-ok">Adotado</span></td>
-          <td>Monetização rende ~R$ 20/mil views; um assinante rende R$ 39,90/mês recorrente. Perseguir tempo de exibição levaria a vídeos longos e genéricos. Vídeo é ativo buscável que compõe — mesma lógica do SEO programático.</td>
-        </tr>
-        <tr>
-          <td><b>Não fazer vídeo de "review" da própria plataforma</b><br>
-            <span class="st st-no">Rejeitado</span></td>
-          <td>"Testei a MELHOR plataforma do Brasil" posiciona o dono como terceiro avaliando o próprio produto. CDC art. 36 e CONAR exigem que anúncio seja identificável como tal, e superlativo exige comprovação. Converte pior: "eu construí" é mais forte quando é verdade.</td>
-        </tr>
-        <tr>
-          <td><b>Uma produção, três destinos</b><br>
-            <span class="st st-ok">Adotado</span></td>
-          <td>O mesmo vídeo vertical serve Reels, Shorts e TikTok. O canal não é a escolha; o formato e a narrativa são.</td>
-        </tr>
-        <tr>
-          <td><b>Perfil antes de alcance no Instagram</b><br>
-            <span class="st st-ok">Adotado</span></td>
-          <td>Reels alcançam por algoritmo, então zero seguidores não impede distribuição. O gargalo é o perfil vazio no momento do clique.</td>
-        </tr>
-        <tr>
-          <td><b>Trial de 7 dias do Brasil 10</b><br>
-            <span class="st st-no">Rejeitado</span></td>
-          <td>O ranking publica só às segundas: em 7 dias o usuário vê <b>um único</b> ranking, nunca a lista mudar nem as setas de delta — justamente o que justifica assinatura recorrente. O tráfego da Fase 1 é frio e converte em meses, não em dias, e trial expirado fecha a porta de um contato caro. Alternativa proposta: limite de <b>profundidade</b>, permanente (ver D-01).</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+        <article class="plan">
+          <span class="tag proposed">Investidor Sardinha</span>
+          <h3>Essential</h3>
+          <div class="who">Para acompanhar patrimônio, renda e objetivos sem planilha.</div>
+          <div class="price">R$ 29,90 <small>/mês</small></div>
+          <div class="annual">ou 12× R$ 19,90 · R$ 238,80/ano</div>
+          <ul>
+            <li>Tudo do Free</li>
+            <li>Até 3 carteiras</li>
+            <li>Gestão de Carteira Completa, Proventos e Dividendos</li>
+            <li>Metas Ilimitadas</li>
+            <li>Brasil 10 + Carteira de Renda Fixa</li>
+            <li>Radar Alpha — sinais técnicos com 60 min de defasagem</li>
+            <li>Cursos até o Nível 1</li>
+          </ul>
+          <div class="role">Papel: primeira conversão e retenção por utilidade.</div>
+        </article>
 
-<!-- 6 -->
-<section class="block" id="abertas">
-  <h2>6 · Decisões em aberto</h2>
-  <p class="lede">Dependem do dono. Nenhum agente deve tratá-las como resolvidas.</p>
+        <article class="plan recommended">
+          <span class="tag proposed">Investidor Estratégico</span>
+          <h3>Pro</h3>
+          <div class="who">Para decidir aportes com research, sinais e método quantitativo.</div>
+          <div class="price">R$ 69,90 <small>/mês</small></div>
+          <div class="annual">ou 12× R$ 49,90 · R$ 598,80/ano</div>
+          <ul>
+            <li>Tudo do Essential</li>
+            <li>Carteiras Ilimitadas</li>
+            <li>Carteiras de Ações, FIIs e Cripto</li>
+            <li>Buy &amp; Hold, comparador e diagnósticos</li>
+            <li>Radar Alpha — sinais técnicos em tempo real</li>
+            <li>Aporte Inteligente</li>
+            <li>Cursos até o Nível 3</li>
+          </ul>
+          <div class="role">Papel: plano principal e centro da comunicação.</div>
+        </article>
 
-  <div class="callout co-open">
-    <div>
-      <strong class="lbl">D-01 · Formato do acesso gratuito ao Brasil 10</strong>
-      <p><b>Status: aguardando decisão do dono.</b> O dono propôs liberar por 1 semana
-      ao usuário novo. A recomendação técnica foi rejeitar o trial (motivo na seção 5)
-      e adotar limite de profundidade permanente:</p>
+        <article class="plan">
+          <span class="tag proposed">Investidor Global</span>
+          <h3>Elite</h3>
+          <div class="who">Para portfólio global, rebalanceamento e rotina fiscal.</div>
+          <div class="price">R$ 129,90 <small>/mês</small></div>
+          <div class="annual">ou 12× R$ 99,90 · R$ 1.198,80/ano</div>
+          <ul>
+            <li>Tudo do Pro</li>
+            <li>Carteira de Ativos Globais (Exterior)</li>
+            <li>Rebalanceamento de Carteira com IA</li>
+            <li>Relatório de apoio ao IR em PDF</li>
+            <li>Cursos até o Nível 4</li>
+            <li>Masterclass</li>
+            <li>Suporte prioritário 24h</li>
+          </ul>
+          <div class="role">Papel: ARPU maior com automação avançada e suporte prioritário.</div>
+        </article>
+      </div>
+
+      <aside class="consulting" aria-label="Vértice Black — consultoria financeira avulsa">
+        <div>
+          <span class="tag">Serviço avulso</span>
+          <h3>Vértice Black</h3>
+          <p>Consultoria Financeira Profissional para quem precisa organizar a vida financeira e transformar objetivos em um plano de ação pessoal.</p>
+          <div class="price">Preço sob consulta · pagamento separado</div>
+        </div>
+        <div>
+          <ul>
+            <li>Diagnóstico individual de gastos, contas e compromissos mensais</li>
+            <li>Mapeamento das principais dores e prioridades financeiras</li>
+            <li>Plano de economia e reorganização do orçamento</li>
+            <li>Avaliação da carteira e da distribuição por classes de ativos</li>
+            <li>Plano financeiro compatível com objetivos, prazo e perfil de risco</li>
+            <li>Reunião individual e plano de ação documentado</li>
+          </ul>
+        </div>
+        <p class="legal"><strong>Oferta futura condicionada:</strong> não inclui administração da carteira, execução de ordens ou garantia de retorno. Orientação individualizada sobre valores mobiliários somente por profissional ou estrutura devidamente habilitada perante a CVM.</p>
+      </aside>
+
+      <h3>Por que três planos pagos — e não quatro</h3>
       <ul>
-        <li><b>GUEST vê:</b> a lista do Brasil 10, o score e a ação COMPRAR/AGUARDAR, mais o delta de posição — atualizado toda segunda, para sempre.</li>
-        <li><b>GUEST não vê:</b> a tese bull/bear, o <code>auditLog</code> e o modal de deep-dive do ativo.</li>
+        <li><strong>Essential</strong> resolve organização; <strong>Pro</strong> resolve decisão; <strong>Elite</strong> resolve complexidade. Cada degrau tem um trabalho claro.</li>
+        <li>O salto Essential → Pro é justificável por research e tempo real. O salto Pro → Elite é justificável por global, rebalanceamento e fiscal.</li>
+        <li>O Black depende de pessoas, diagnóstico e acompanhamento. Por isso deve ser cobrado à parte, com escopo, agenda e preço próprios.</li>
+        <li>A consultoria só deve ser lançada depois de definir profissional responsável, capacidade, contrato, compliance e limites claros — nunca como quinto card de autosserviço.</li>
       </ul>
-      <p>A lógica: a pessoa volta toda semana para ver o que mudou, quer saber
-      <i>por quê</i>, e o "por quê" é o paywall. O ESSENTIAL não fica oco — mantém
-      sinais, cursos e relatório. O <code>CLAUDE.md</code> já documenta o Brasil 10
-      como gratuito para todos os planos, então permanente é o desenho original.</p>
-      <p><b>Enquanto D-01 não for decidida, a tarefa 01 não pode ser implementada.</b></p>
-    </div>
-  </div>
 
-  <div class="callout co-open">
-    <div>
-      <strong class="lbl">D-02 · Enquadramento regulatório (CVM)</strong>
-      <p><b>Status: sem parecer.</b> A plataforma publica <code>COMPRAR</code> /
-      <code>AGUARDAR</code> por ativo. A Resolução CVM 20 trata publicação de
-      recomendação de valores mobiliários como atividade de analista, sujeita a
-      credenciamento. Enquanto o projeto era pessoal o risco era baixo; divulgação
-      em massa aumenta a exposição.</p>
-      <p>Isto não é parecer jurídico — é sinalização de que a consulta precisa
-      acontecer. A resposta define o que pode ir ao ar, principalmente a série de
-      track record (tarefa 17), que é o conteúdo mais forte disponível.</p>
-    </div>
-  </div>
-
-  <div class="callout co-open">
-    <div>
-      <strong class="lbl">D-03 · Certificação de serviços financeiros do Google Ads</strong>
-      <p><b>Status: não iniciada.</b> Anunciar serviços financeiros no Brasil exige
-      verificação via G2 Risk Solutions, comprovando autorização do regulador
-      (BACEN/CVM) ou qualificação para isenção. Sem isso a conta é reprovada.
-      O processo leva semanas e trava toda a Fase 2.</p>
-    </div>
-  </div>
-</section>
-
-<!-- FASE 0 -->
-<section class="block" id="fase0">
-  <h2>7 · Fase 0 — Destravar</h2>
-  <p class="lede">Hoje todo visitante que chega ao site vaza. Enquanto isso for verdade,
-  qualquer esforço de tráfego é desperdício. Nada nesta fase depende de audiência —
-  é tudo trabalho interno.</p>
-
-  <div class="phase-head">
-    <div class="phase-num">0</div>
-    <div class="phase-title">
-      <h3>Fechar os vazamentos do funil</h3>
-      <p>Sete tarefas, nenhuma delas dependente de tráfego.</p>
-    </div>
-    <div class="phase-when">Semanas 1–2</div>
-  </div>
-
-  <div class="tasks">
-    <div class="task">
-      <div class="task-n">01</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-site">Site</span><span class="chip c-cost">~30 min</span><span class="chip c-law">Bloqueada por D-01</span></div>
-        <h4>Liberar o Brasil 10 para o plano GUEST</h4>
-        <p>A tarefa mais importante do plano. Hoje quem se cadastra de graça encontra
-        um produto vazio e precisa pagar R$ 39,90 no escuro.</p>
-        <p><b>O backend já está pronto</b> — só o frontend bloqueia. Implementação:</p>
-        <ul>
-          <li><code>client/src/pages/Research.tsx:18</code> — trocar <code>minPlan: 'ESSENTIAL'</code> por <code>'GUEST'</code> na aba <code>BRASIL_10</code>.</li>
-          <li><code>server/config/subscription.js:108</code> — alinhar <code>research_br10</code> para <code>GUEST: 1</code>, senão a UI libera e o <code>check-access</code>/registro de uso discordam.</li>
-          <li>Se D-01 confirmar o limite de profundidade: manter tese, <code>auditLog</code> e modal de deep-dive atrás do paywall.</li>
-          <li>Ajustar os testes que hoje fixam o comportamento antigo (<code>client/src/pages/Research.test.tsx</code> tem caso explícito de GUEST bloqueado).</li>
-        </ul>
+      <div class="callout warn">
+        <div class="kicker">Nome a revisar</div>
+        <p>“Investidor Sardinha” foi mantido neste rascunho conforme a direção proposta, mas já é associado publicamente a uma marca/canal de educação financeira. Antes de publicar, validar disponibilidade de marca ou substituir por um nome próprio, como <strong>Investidor Essencial</strong>.</p>
       </div>
-    </div>
 
-    <div class="task">
-      <div class="task-n">02</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-site">Site</span><span class="chip c-cost">~1h</span></div>
-        <h4>Tirar <code>/pricing</code> de trás do login</h4>
-        <p>Quem clica em "ver planos" hoje bate num muro de login, e a página também
-        não existe para a busca. Mover a rota para fora do <code>ProtectedAppLayout</code>
-        e remover a linha correspondente do <code>robots.txt</code>.</p>
-        <p>A landing já mostra os planos numa seção, então o prejuízo hoje é parcial —
-        mas a URL <code>/pricing</code> é o destino natural de quem pesquisa
-        "vértice invest preço" e de qualquer anúncio futuro.</p>
+      <div class="callout warn">
+        <div class="kicker">Antes de mudar preços</div>
+        <p>Preservar o preço e o acesso de assinantes atuais durante o período contratado; definir migração, renovação, impostos, taxas do Mercado Pago e política de reembolso. O anual precisa de caixa e regra operacional próprios — não é apenas trocar o número no card.</p>
       </div>
-    </div>
+    </section>
 
-    <div class="task">
-      <div class="task-n">03</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-data">Medição</span><span class="chip c-cost">~3h</span></div>
-        <h4>Search Console e eventos de conversão no GA4</h4>
-        <p>Sem isto, nenhuma outra tarefa é avaliável — é a instrumentação de todo o plano.</p>
-        <ul>
-          <li>Registrar o domínio no Google Search Console e submeter o sitemap. É a única fonte confiável sobre o que está indexado.</li>
-          <li>Instrumentar três eventos no GA4: <b>cadastro concluído</b>, <b>checkout iniciado</b>, <b>assinatura paga</b>.</li>
-          <li>Marcá-los como conversão no painel do GA4, senão não aparecem nos relatórios de aquisição.</li>
-        </ul>
+    <section id="monetizacao">
+      <h2>6. Vídeo ou tráfego do site: o que monetiza melhor?</h2>
+      <p class="lede">Para a Vértice, a comparação correta não é YouTube Ads versus AdSense. É <strong>mídia alugada que gera confiança</strong> versus <strong>propriedade própria que converte</strong>. Os dois canais devem trabalhar para a assinatura.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cenário mensal</th><th>YouTube Ads<br>RPM R$ 8–20</th><th>Site display<br>RPM R$ 5–15</th><th>Leitura</th></tr></thead>
+          <tbody>
+            <tr><td class="num">10 mil views / páginas</td><td class="num">R$ 80–200</td><td class="num">R$ 50–150</td><td>Receita pequena; não paga uma rotina editorial profissional.</td></tr>
+            <tr><td class="num">50 mil views / páginas</td><td class="num">R$ 400–1.000</td><td class="num">R$ 250–750</td><td>YouTube tende a pagar melhor por mil, mas ambos os valores oscilam.</td></tr>
+            <tr><td class="num">100 mil views / páginas</td><td class="num">R$ 800–2.000</td><td class="num">R$ 500–1.500</td><td>Ainda inferior ao potencial de conversão de uma audiência financeira qualificada.</td></tr>
+          </tbody>
+        </table>
       </div>
-    </div>
+      <p class="note">Faixas de planejamento, não promessas. O Google define RPM como receita estimada por mil visualizações, mas não publica um RPM fixo por nicho ou país. Validar com dados reais após monetização.</p>
 
-    <div class="task">
-      <div class="task-n">04</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-law">Jurídico</span><span class="chip c-cost">custo externo</span></div>
-        <h4>Consultar advogado sobre a Resolução CVM 20</h4>
-        <p>Ver <a href="#abertas">D-02</a>. Define o que pode ser publicado, em especial
-        a série de track record (tarefa 17). Não bloqueia nada da Fase 1 exceto essa tarefa.</p>
+      <div class="decision">
+        <div class="panel">
+          <h3>Equivalência simples</h3>
+          <p>Um Pro anual gera <strong>R$ 598,80 brutos</strong>. Para obter o mesmo só com anúncios seriam necessárias, aproximadamente:</p>
+          <ul>
+            <li><strong>30–75 mil views</strong> de vídeos longos, usando RPM de R$ 8–20;</li>
+            <li><strong>40–120 mil pageviews</strong> com display, usando RPM de R$ 5–15.</li>
+          </ul>
+          <p>Por isso, uma assinatura bem adquirida vale mais que perseguir volume genérico.</p>
+        </div>
+        <div class="panel">
+          <h3>Regra de decisão</h3>
+          <ol>
+            <li>Assinatura mensal e anual.</li>
+            <li>Conteúdo patrocinado apenas com aderência e transparência.</li>
+            <li>Receita do YouTube quando o canal se qualificar.</li>
+            <li>Afiliados só após revisão de conflito e compliance.</li>
+            <li>Publicidade display no site: <strong>não ativar no primeiro ano</strong>.</li>
+          </ol>
+        </div>
       </div>
-    </div>
 
-    <div class="task">
-      <div class="task-n">05</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-law">Jurídico</span><span class="chip c-cost">~1h + espera</span></div>
-        <h4>Abrir a certificação de serviços financeiros do Google Ads</h4>
-        <p>Ver <a href="#abertas">D-03</a>. Leva semanas e trava a Fase 2 inteira —
-        abra agora mesmo que só vá anunciar daqui a dois meses. O pedido precisa partir
-        de um admin da conta do Google Ads ou do perfil de pagamentos.</p>
-      </div>
-    </div>
-
-    <div class="task">
-      <div class="task-n">06</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-yt">YouTube</span><span class="chip c-cost">~4h</span></div>
-        <h4>Montar o canal e ignorar a monetização</h4>
-        <p>Nome, banner, descrição com link para o site e um trailer de 60 segundos
-        explicando o que a plataforma faz.</p>
-        <p>Deixe explícito para si mesmo que os 1.000 inscritos e 4.000 horas <b>não são
-        meta</b>. O retorno é assinatura, não RPM — e otimizar para monetização levaria
-        aos vídeos errados.</p>
-      </div>
-    </div>
-
-    <div class="task">
-      <div class="task-n">07</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-ig">Instagram</span><span class="chip c-cost">~3h</span></div>
-        <h4>Transformar o perfil em landing page</h4>
-        <p>Bio com a proposta em uma linha, link para o site, foto e destaques.
-        Zero seguidores não impede alcance — Reels são distribuídos por algoritmo —
-        mas perfil vazio derruba a conversão de quem clica.</p>
-      </div>
-    </div>
-
-    <div class="task">
-      <div class="task-n">08</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-ig">Instagram</span><span class="chip c-cost">~6h</span></div>
-        <h4>Publicar 9 posts antes de buscar alcance</h4>
-        <p>Grade preenchida é pré-requisito de credibilidade. Use o que o produto já
-        gera: ranking da semana, um indicador explicado, um recorte do Brasil 10.
-        Ainda sem buscar tráfego — isto é cenário, não campanha.</p>
-      </div>
-    </div>
-  </div>
-
-  <div class="callout co-gate">
-    <div>
-      <strong class="lbl">Portão para a Fase 1</strong>
-      <p>Não avance sem estas duas respostas serem "sim":</p>
+      <h3>Por que não encher o site de anúncios</h3>
       <ul>
-        <li>Um cadastro gratuito enxerga valor real em menos de 60 segundos?</li>
-        <li><code>/pricing</code> abre sem login, para qualquer visitante?</li>
+        <li>Finanças exige confiança; banners de terceiros competem com o CTA pago e podem parecer endosso.</li>
+        <li>O site conhece a intenção, pode demonstrar o produto e capturar e-mail. Esse valor estratégico é maior que o page RPM.</li>
+        <li>O YouTube já tem distribuição, busca, recomendação e infraestrutura publicitária. Se houver publicidade, faz mais sentido monetizar lá.</li>
       </ul>
-    </div>
-  </div>
-</section>
 
-<!-- FASE 1 -->
-<section class="block" id="fase1">
-  <h2>8 · Fase 1 — Construir o que compõe</h2>
-  <p class="lede">Tudo aqui continua rendendo depois de pronto — o oposto de anúncio,
-  que deixa de existir no dia em que se para de pagar. É a fase mais longa e a que
-  decide o ano seguinte.</p>
-
-  <div class="phase-head">
-    <div class="phase-num">1</div>
-    <div class="phase-title">
-      <h3>Ativos permanentes: páginas e vídeos</h3>
-      <p>Quatro tarefas de site, três de conteúdo, uma condicionada ao jurídico.</p>
-    </div>
-    <div class="phase-when">Semanas 3–8</div>
-  </div>
-
-  <div class="tasks">
-    <div class="task">
-      <div class="task-n">09</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-site">Site</span><span class="chip c-cost">alto esforço</span></div>
-        <h4>SEO programático: uma página pública por ativo</h4>
-        <p><b>O maior ativo escondido do projeto.</b> O banco já tem
-        <code>MarketAsset</code> e <code>MarketAnalysis</code> com fundamentos de
-        centenas de tickers. Isso vira <code>/acoes/petr4</code>,
-        <code>/fiis/mxrf11</code>, com indicadores, score e tese.</p>
-        <p>"PETR4" sozinho tem dezenas de milhares de buscas por mês no Brasil. É
-        tráfego qualificado e recorrente, e nenhum concorrente copia sem ter
-        construído o mesmo motor.</p>
-        <p>Cuidados: cada página precisa de conteúdo suficiente para não ser tratada
-        como thin content; ativos sem dados devem sair do sitemap em vez de gerar
-        página vazia; e a página precisa de CTA para cadastro, senão vira tráfego sem funil.</p>
+      <div class="callout risk">
+        <div class="kicker">Mudança já anunciada</div>
+        <p>O YouTube informa que, a partir de <strong>1º/02/2027</strong>, novos canais precisarão de 1.000 inscritos e 8.000 horas qualificadas ou 20 milhões de views qualificadas em Shorts para entrar na divisão de receita de anúncios. Isso reforça a decisão de tratar o canal como aquisição desde o primeiro vídeo, não como negócio de AdSense.</p>
       </div>
-    </div>
+    </section>
 
-    <div class="task">
-      <div class="task-n">10</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-site">Site</span><span class="chip c-cost">~3h</span></div>
-        <h4>Sitemap dinâmico</h4>
-        <p>O <code>sitemapRouter.js</code> tem duas URLs hardcoded. Precisa gerar a
-        partir do banco, junto das páginas da tarefa 09, e revisar o
-        <code>robots.txt</code> — hoje ele bloqueia rotas que deveriam ranquear.</p>
+    <section id="aquisicao">
+      <h2>7. Estratégia de aquisição: conteúdo que demonstra o produto</h2>
+      <p class="lede">A Vértice não precisa vencer influenciadores em entretenimento. Precisa responder melhor às dúvidas que aparecem antes de alguém organizar uma carteira ou tomar uma decisão.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Pilar</th><th>Exemplos</th><th>Demonstração</th><th>CTA</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Carteira sem planilha</strong></td><td>Como importar; preço médio; por que TWRR difere do lucro.</td><td>Importação, extrato, cota, proventos.</td><td>Criar carteira Free.</td></tr>
+            <tr><td><strong>Decisão com método</strong></td><td>Como ler score; Graham x Bazin; qualidade versus preço.</td><td>Research, auditoria e comparador.</td><td>Ver uma análise demonstrativa.</td></tr>
+            <tr><td><strong>Risco visível</strong></td><td>Concentração setorial; beta; Sharpe; rebalanceamento.</td><td>Composição, risco e IA.</td><td>Diagnosticar a carteira.</td></tr>
+            <tr><td><strong>Renda e objetivos</strong></td><td>Meta de dividendos; renda fixa líquida; aporte por objetivo.</td><td>Metas, proventos, calculadora.</td><td>Definir primeira meta.</td></tr>
+            <tr><td><strong>Track record</strong></td><td>O que entrou, saiu e por quê; desempenho versus benchmark.</td><td>Delta, histórico e metodologia.</td><td>Acompanhar a próxima atualização.</td></tr>
+          </tbody>
+        </table>
       </div>
-    </div>
 
-    <div class="task">
-      <div class="task-n">11</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-site">Site</span><span class="chip c-cost">médio</span></div>
-        <h4>Pré-renderizar as páginas públicas</h4>
-        <p>SPA renderizada só no cliente ranqueia mal e devagar. As páginas públicas
-        precisam chegar ao Google como HTML pronto, não como shell mais JavaScript.
-        Vale para a landing, para <code>/pricing</code> e sobretudo para as páginas da tarefa 09.</p>
+      <h3>Cadência sustentável para uma pessoa</h3>
+      <div class="cards">
+        <article class="card"><h3>1 vídeo longo/semana</h3><p>8–12 minutos, uma intenção de busca, tela real do produto e uma única chamada para ação. O vídeo é o ativo principal.</p></article>
+        <article class="card"><h3>3 cortes/semana</h3><p>Shorts e Reels derivados do vídeo, cada um com uma ideia completa. Servem para alcance, não para substituir a explicação.</p></article>
+        <article class="card"><h3>1 página + 1 e-mail/semana</h3><p>A página aprofunda e captura; o e-mail reativa. Reaproveitar a mesma pesquisa para não criar quatro pautas diferentes.</p></article>
       </div>
-    </div>
 
-    <div class="task">
-      <div class="task-n">12</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-site">Site</span><span class="chip c-cost">~4h</span></div>
-        <h4>Imagem de preview dinâmica na carteira compartilhada</h4>
-        <p>A rota <code>/p/:token</code> já existe e já tem CTA para cadastro — é um
-        loop de indicação pronto e desligado. Falta a imagem de preview refletir a
-        rentabilidade daquela carteira.</p>
-        <p>Um link no WhatsApp exibindo "+18% no ano", publicado por um usuário real,
-        é mais persuasivo que qualquer anúncio comprado — e quem produz é o usuário.
-        Atenção à privacidade: o preview deve mostrar percentual, nunca valores absolutos.</p>
+      <h3>Distribuição do orçamento de R$ 500/mês</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Momento</th><th>Marca</th><th>Retargeting</th><th>Teste de busca</th><th>Condição</th></tr></thead>
+          <tbody>
+            <tr><td>Antes de medir conversão</td><td class="num">R$ 0</td><td class="num">R$ 0</td><td class="num">R$ 0</td><td>Guardar a verba. Tráfego sem eventos só compra incerteza.</td></tr>
+            <tr><td>Após 300 visitantes qualificados</td><td class="num">R$ 100</td><td class="num">R$ 250</td><td class="num">R$ 150</td><td>Somente com página pública, eventos, oferta coerente e verificação do Google.</td></tr>
+          </tbody>
+        </table>
       </div>
-    </div>
+      <p class="note">Não assumir CPC. Registrar consulta, página, cadastro, ativação, upgrade e receita por campanha. Parar se o payback estimado ultrapassar seis meses ou se o volume ainda não permitir leitura.</p>
+    </section>
 
-    <div class="task">
-      <div class="task-n">13</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-yt">YouTube</span><span class="chip c-cost">~10h</span></div>
-        <h4>O vídeo âncora: a história de construção</h4>
-        <p>"Passei 2 anos construindo um algoritmo para escolher ações — esse é o
-        resultado." Verdadeiro, identificável como conteúdo próprio, sem superlativo a
-        comprovar, e raro: quase ninguém no nicho tem essa história.</p>
-        <p>É o vídeo que fica fixado no canal e linkado em todo lugar. Mostre o motor
-        de verdade — os três eixos de score, o draft por perfil, a marcação a mercado
-        da renda fixa. A profundidade técnica <i>é</i> o diferencial.</p>
+    <section id="execucao">
+      <h2>8. Plano de 90 dias</h2>
+      <p class="lede">A ordem importa mais que a data. Cada fase termina com um portão verificável; se o portão não abrir, não se compra tráfego.</p>
+
+      <div class="phase">
+        <div class="phase-time">Dias 1–14</div>
+        <div>
+          <h3>Verdade comercial e compliance</h3>
+          <ul>
+            <li>Retirar da comunicação pública concierge, calls, private e “automação” de IR.</li>
+            <li>Validar juridicamente score, <code>COMPRAR</code>/<code>AGUARDAR</code>, relatórios e divulgação recorrente de ativos específicos.</li>
+            <li>Escolher os gates finais dos quatro níveis e política para clientes atuais.</li>
+            <li>Tornar preços, metodologia, termos e exemplo de entrega acessíveis antes do login.</li>
+            <li>Definir eventos: visita qualificada, cadastro, carteira ativada, paywall visto, checkout e assinatura.</li>
+          </ul>
+          <p><strong>Portão:</strong> cada promessa da página de venda aponta para uma entrega testável.</p>
+        </div>
       </div>
-    </div>
 
-    <div class="task">
-      <div class="task-n">14</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-yt">YouTube</span><span class="chip c-cost">1 vídeo/semana</span></div>
-        <h4>Série de busca, não de entretenimento</h4>
-        <p>Títulos que casam com o que se pesquisa de verdade: "Como analisar um FII em
-        5 minutos", "A fórmula de Graham na prática", "P/VP: o que é e quando ignorar".</p>
-        <p>Estrutura fixa: explica o conceito, mostra a plataforma fazendo aquilo em
-        dois cliques, encerra com CTA. Descrição com link e capítulos.</p>
+      <div class="phase">
+        <div class="phase-time">Dias 15–30</div>
+        <div>
+          <h3>Prova e ativação</h3>
+          <ul>
+            <li>Publicar uma demonstração real de carteira, research e rebalanceamento com dados fictícios claramente marcados.</li>
+            <li>Transformar o track record em prova pública com metodologia, benchmark, período e limitações.</li>
+            <li>Criar onboarding com uma vitória: importar carteira ou lançar três posições e uma meta.</li>
+            <li>Gravar quatro vídeos-base: importação, TWRR, score e concentração.</li>
+          </ul>
+          <p><strong>Portão:</strong> ao menos 35% dos novos cadastros chegam à ativação definida.</p>
+        </div>
       </div>
-    </div>
 
-    <div class="task">
-      <div class="task-n">15</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-ig">Instagram</span><span class="chip c-cost">custo marginal zero</span></div>
-        <h4>Recortar 3–4 Reels de cada vídeo</h4>
-        <p>O mesmo vertical vai para Reels, Shorts e TikTok. Reels dão alcance barato e
-        morrem em 48h; servem para cadência e para descobrir qual gancho funciona antes
-        de investir dez horas num vídeo longo.</p>
+      <div class="phase">
+        <div class="phase-time">Dias 31–60</div>
+        <div>
+          <h3>Motor editorial</h3>
+          <ul>
+            <li>Executar quatro semanas seguidas de 1 vídeo, 3 cortes, 1 página e 1 e-mail.</li>
+            <li>Usar CTAs específicos: “importe”, “compare”, “defina sua meta”, nunca apenas “conheça a Vértice”.</li>
+            <li>Coletar objeções de preço e entendimento no cancelamento, suporte e checkout abandonado.</li>
+            <li>Solicitar a verificação de serviços financeiros do Google Ads, se o enquadramento permitir.</li>
+          </ul>
+          <p><strong>Portão:</strong> conteúdo gera cadastros ativados de modo repetível, mesmo em volume pequeno.</p>
+        </div>
       </div>
-    </div>
 
-    <div class="task">
-      <div class="task-n">16</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-ig">Instagram</span><span class="chip c-cost">~1h/semana</span></div>
-        <h4>Carrossel semanal do ranking</h4>
-        <p>Aqui o produto vira fábrica de conteúdo: o ranking é publicado toda segunda
-        às 9h30 pelo <code>weekly-autopublish</code>. Transformá-lo em carrossel é
-        formatação, não criação — e carrossel de dados é o formato que mais gera
-        salvamento no nicho.</p>
+      <div class="phase">
+        <div class="phase-time">Dias 61–90</div>
+        <div>
+          <h3>Teste de preço e mídia</h3>
+          <ul>
+            <li>Ofertar mensal e anual sem preço riscado permanente.</li>
+            <li>Comparar conversão Essential versus Pro recomendado e medir mix anual.</li>
+            <li>Ativar marca e retargeting; usar busca fria apenas com intenção específica.</li>
+            <li>Revisar receita, estornos, taxas, suporte, ativação e churn por plano.</li>
+          </ul>
+          <p><strong>Portão:</strong> payback estimado de até seis meses e nenhuma promessa com entrega manual inviável.</p>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <div class="task">
-      <div class="task-n">17</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-yt">YouTube</span><span class="chip c-ig">Instagram</span><span class="chip c-law">Bloqueada por D-02</span></div>
-        <h4>Série de track record</h4>
-        <p>O endpoint de acurácia e o backtest contínuo alimentam uma série inteira:
-        "meu algoritmo escolheu estas 10 ações em janeiro; olha onde estão hoje."
-        Verificável e impossível de imitar.</p>
-        <p>É também exatamente onde a CVM 20 morde. <b>Só publique depois da tarefa 04.</b></p>
+    <section id="metricas">
+      <h2>9. Painel mínimo de decisão</h2>
+      <p class="lede">Seguidores e pageviews ajudam a diagnosticar distribuição; não dizem se o negócio funciona. O painel deve acompanhar o caminho completo até receita e retenção.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Etapa</th><th>Métrica principal</th><th>Faixa inicial saudável</th><th>Se estiver abaixo</th></tr></thead>
+          <tbody>
+            <tr><td>Descoberta</td><td>CTR de busca/recomendação e retenção do vídeo</td><td>Comparar por tema e formato, sem meta universal.</td><td>Reescrever título, abertura e promessa.</td></tr>
+            <tr><td>Visita → cadastro</td><td>Conversão da página específica</td><td class="num">3%–6%</td><td>Melhorar prova, clareza e correspondência com a intenção.</td></tr>
+            <tr><td>Cadastro → ativação</td><td>Importou ou criou carteira útil</td><td class="num">≥ 35%</td><td>Reduzir fricção e orientar a primeira vitória.</td></tr>
+            <tr><td>Ativação → pago em 30 dias</td><td>Upgrade por coorte</td><td class="num">3%–8%</td><td>Rever paywall, momento da oferta e diferença entre planos.</td></tr>
+            <tr><td>Receita</td><td>MRR, receita anual antecipada e ARPU</td><td>Pro como maior parte da receita nova.</td><td>Plano recomendado ou valor percebido estão fracos.</td></tr>
+            <tr><td>Retenção</td><td>Churn mensal e uso semanal</td><td class="num">churn &lt; 5%</td><td>Investigar atualização, confiança e utilidade recorrente.</td></tr>
+            <tr><td>Mídia</td><td>CAC por assinante e payback</td><td class="num">≤ 6 meses</td><td>Pausar; não compensar CAC ruim com esperança de LTV.</td></tr>
+          </tbody>
+        </table>
       </div>
-    </div>
-  </div>
 
-  <div class="callout co-warn">
-    <div>
-      <strong class="lbl">Atenção à capacidade</strong>
-      <p>Em meio período, uma pessoa não entrega nove tarefas em seis semanas.
-      Se precisar cortar, <b>corte cadência de conteúdo</b> — as tarefas 14 e 15 viram
-      quinzenais — e nunca as tarefas de site. Vídeo parado deixa de render; página
-      publicada continua rendendo sozinha.</p>
-    </div>
-  </div>
+      <div class="callout warn" style="margin-top:20px">
+        <div class="kicker">Disciplina</div>
+        <p>As faixas são metas de trabalho, não benchmarks universais. Depois das primeiras 100–200 ativações, substituir todas por dados próprios de coorte. Não calcular CAC com mensalidade bruta: descontar taxas, impostos, estornos, suporte e churn.</p>
+      </div>
+    </section>
 
-  <div class="callout co-gate">
-    <div>
-      <strong class="lbl">Portão para a Fase 2 (parcial)</strong>
-      <p>A distinção importa: a defesa de marca (tarefa 18) só depende de existir
-      conteúdo publicado — ligue assim que o primeiro vídeo sair, porque é aí que
-      começam as buscas pelo seu nome. As demais precisam de público acumulado:</p>
+    <section id="riscos">
+      <h2>10. Guardrails</h2>
       <ul>
-        <li>Retargeting (19): o site recebe ao menos 1.000 visitantes/mês?</li>
-        <li>Teste de prospecção (20): os eventos da tarefa 03 já mostram qual conteúdo vira cadastro?</li>
+        <li><strong>Regulatório:</strong> a CVM considera que habitualidade e remuneração — inclusive assinatura — podem caracterizar atividade profissional de análise. Um aviso “não é recomendação” sozinho não resolve. Obter parecer especializado antes de promover ativos específicos.</li>
+        <li><strong>Consultoria Black:</strong> orientação, recomendação ou aconselhamento profissional e individualizado sobre valores mobiliários só pode ser prestado por consultor registrado ou estrutura habilitada segundo a Resolução CVM 19.</li>
+        <li><strong>Google Ads:</strong> anunciantes de serviços financeiros direcionados ao Brasil precisam de verificação, inclusive quando alegam isenção de licença.</li>
+        <li><strong>Prova:</strong> todo número de backtest deve mostrar período, benchmark, custos, regras e diferença entre resultado histórico e futuro.</li>
+        <li><strong>Conflitos:</strong> patrocínio e afiliado precisam de identificação visível e nunca devem interferir no ranking.</li>
+        <li><strong>Privacidade:</strong> carteira compartilhada deve continuar opt-in e sem dados pessoais desnecessários.</li>
+        <li><strong>Capacidade:</strong> antes de anunciar “suporte prioritário 24h”, definir se 24h descreve a disponibilidade do canal ou o prazo máximo de resposta; publicar canal, horário e SLA reais.</li>
       </ul>
-    </div>
-  </div>
-</section>
+    </section>
 
-<!-- FASE 2 -->
-<section class="block" id="fase2">
-  <h2>9 · Fase 2 — Só então, dinheiro</h2>
-  <p class="lede">R$ 500 por mês viram R$ 1.500 por trimestre, o suficiente para
-  aprender algo. Mas a ordem de gasto é sempre: defender primeiro, remarcar depois,
-  prospectar por último.</p>
+    <section id="fontes">
+      <h2>11. Fontes e limites</h2>
+      <p class="lede">Fontes externas consultadas em 30/08/2026 e arquivos do repositório usados na auditoria. Preços promocionais podem mudar sem aviso.</p>
+      <ol class="sources">
+        <li><a href="https://lp.statusinvest.com.br/ao/planos/">Status Invest — planos e preços</a>: Essencial, Profissional, Alpha, IR e garantia.</li>
+        <li><a href="https://investidor10.com.br/assine-agora-jun-26-b2/">Investidor10 PRO — oferta anual</a>: preço promocional e escopo anunciado.</li>
+        <li><a href="https://assine.kinvo.com.br/">Kinvo Premium — checkout público</a>: plano anual e benefícios.</li>
+        <li><a href="https://trademap.com.br/premium">TradeMap Premium</a>: Free, Plus e Pro.</li>
+        <li><a href="https://lp.suno.com.br/suno-premium-conheca-2/">Suno Premium</a>: preço anual, carteiras, cursos e suporte de analistas.</li>
+        <li><a href="https://support.google.com/youtube/answer/72857">YouTube — formas e requisitos de monetização</a> e <a href="https://support.google.com/youtube/answer/12843009">mudanças anunciadas para 2027</a>.</li>
+        <li><a href="https://support.google.com/adsense/answer/190515">Google AdSense — definição de RPM</a>. O Google não garante RPM por nicho ou país.</li>
+        <li><a href="https://www.gov.br/cvm/pt-br/assuntos/noticias/2020/area-tecnica-da-cvm-esclarece-duvidas-sobre-atuacao-de-influenciadores-que-recomendam-investimentos-dddc1973876d4cc78c734b8ceeaaa740/">CVM — atuação profissional, habitualidade e remuneração</a> e <a href="https://conteudo.cvm.gov.br/legislacao/resolucoes/resol020.html">Resolução CVM 20</a>.</li>
+        <li><a href="https://www.gov.br/cvm/pt-br/assuntos/noticias/2026/area-tecnica-da-cvm-orienta-sobre-atividade-de-consultoria-de-valores-mobiliarios">CVM — orientação sobre consultoria de valores mobiliários</a> e <a href="https://conteudo.cvm.gov.br/legislacao/resolucoes/resol019.html">Resolução CVM 19</a>.</li>
+        <li><a href="https://support.google.com/adspolicy/answer/15332527?co=GENIE.CountryCode%3DBR&amp;hl=pt-BR">Google Ads — verificação de serviços financeiros no Brasil</a>.</li>
+        <li>Repositório: <code>server/config/subscription.js</code>, <code>client/src/constants/subscription.ts</code>, <code>client/src/pages/Landing.tsx</code>, <code>client/src/pages/Pricing.tsx</code>, rotas de wallet/goals/research/academy, <code>robots.txt</code> e <code>sitemapRouter.js</code>.</li>
+      </ol>
 
-  <div class="phase-head">
-    <div class="phase-num">2</div>
-    <div class="phase-title">
-      <h3>Mídia paga com disciplina</h3>
-      <p>Distribuição sugerida da verba mensal, sujeita ao portão acima e a D-03.</p>
-    </div>
-    <div class="phase-when">Semanas 9–12, depois recorrente</div>
-  </div>
-
-  <div class="tasks">
-    <div class="task">
-      <div class="task-n">18</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-site">Google Ads</span><span class="chip c-cost">~R$ 100/mês</span></div>
-        <h4>Campanha de defesa de marca</h4>
-        <p>Com cinco homônimos no mesmo setor, quem ouvir falar do Vértice e pesquisar
-        o nome pode cair em qualquer um deles. CPC na própria marca custa R$ 0,30–1,00
-        porque ninguém disputa, então R$ 100/mês já saturam a demanda pelo nome neste
-        estágio.</p>
-        <p>É a primeira campanha a ligar e a última a desligar.</p>
+      <div class="callout good">
+        <div class="kicker">Conclusão</div>
+        <p><strong>O caminho mais valioso é simples:</strong> vender menos opções, prometer somente o que está pronto, provar o método em público e usar cada vídeo para levar um investidor qualificado a uma experiência Free útil. A receita de anúncios pode aparecer depois; a assinatura precisa orientar o negócio desde agora.</p>
       </div>
-    </div>
+    </section>
 
-    <div class="task">
-      <div class="task-n">19</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-site">Google Ads</span><span class="chip c-cost">~R$ 250/mês</span></div>
-        <h4>Retargeting de quem já visitou</h4>
-        <p>Converte muito melhor que tráfego frio porque a pessoa já conhece o produto,
-        e é barato porque o público é pequeno. Exige o portão da Fase 1 — antes disso
-        não há audiência para remarcar.</p>
-        <p>Priorize quem chegou às páginas de ativo da tarefa 09 e não se cadastrou:
-        é a intenção mais alta disponível.</p>
-      </div>
-    </div>
-
-    <div class="task">
-      <div class="task-n">20</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-site">Google Ads</span><span class="chip c-cost">~R$ 150/mês</span></div>
-        <h4>Teste de prospecção — só a partir do 3º mês</h4>
-        <p>É aqui que a verba mensal faz diferença. R$ 150/mês dão uns 40 cliques:
-        inúteis isoladamente, mas ao longo de um trimestre são ~120 cliques na
-        <i>mesma</i> palavra-chave, e isso já diz alguma coisa.</p>
-        <p><b>Regra:</b> escolha 3 a 5 termos específicos de cauda longa e não mexa
-        neles por 90 dias. Trocar de palavra-chave todo mês transforma o orçamento
-        inteiro em ruído.</p>
-      </div>
-    </div>
-
-    <div class="task">
-      <div class="task-n">21</div>
-      <div class="task-body">
-        <div class="meta"><span class="chip c-data">Medição</span><span class="chip c-cost">~2h/mês</span></div>
-        <h4>Revisar o funil todo mês</h4>
-        <p>Com os eventos da tarefa 03 no lugar, dá para ver onde o funil vaza:
-        visitante que não cadastra, cadastro que não ativa, ativo que não paga.
-        Corrigir vazamento é sempre mais barato que comprar tráfego.</p>
-        <p><b>Regra de corte:</b> se o CAC de qualquer campanha passar de R$ 120
-        (três meses de Essential), desligue sem esperar o trimestre fechar.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- MÉTRICAS -->
-<section class="block" id="metricas">
-  <h2>10 · Métricas</h2>
-  <p class="lede">Cinco números, revisados semanalmente. Repare na separação entre o que
-  se controla e o que apenas se observa — confundir os dois é a forma mais comum de
-  achar que o plano falhou quando ele está no prazo.</p>
-
-  <div class="tablewrap">
-    <table>
-      <thead><tr><th>Métrica</th><th>Onde</th><th>Meta na semana 12</th><th>Por que importa</th></tr></thead>
-      <tbody>
-        <tr>
-          <td><b>Páginas publicadas</b><br><small>você controla</small></td>
-          <td>seu banco</td><td class="num">300+</td>
-          <td>Hoje o sitemap tem 2. É o teto de todo o tráfego orgânico possível.</td>
-        </tr>
-        <tr>
-          <td><b>Páginas indexadas</b><br><small>você não controla</small></td>
-          <td>Search Console</td><td class="num">30–50%</td>
-          <td>Domínio novo e sem autoridade é indexado devagar e parcialmente. Metade em 90 dias é resultado normal, não fracasso.</td>
-        </tr>
-        <tr>
-          <td><b>Visitantes únicos/mês</b></td>
-          <td>GA4</td><td class="num">400–600</td>
-          <td>A maior parte virá de YouTube e Instagram; o SEO só começa a pesar entre o 4º e o 6º mês.</td>
-        </tr>
-        <tr>
-          <td><b>Visitante → cadastro</b></td>
-          <td>GA4 (evento)</td><td class="num">3–5%</td>
-          <td>Mede se a landing e a isca gratuita fazem sentido.</td>
-        </tr>
-        <tr>
-          <td><b>Cadastro → pagante</b></td>
-          <td>GA4 + banco</td><td class="num">5–10%</td>
-          <td>O número que decide se o negócio fecha a conta.</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-
-<!-- NÃO FAZER -->
-<section class="block" id="naofazer">
-  <h2>11 · O que não fazer</h2>
-  <p class="lede">Cada item parece produtivo e custa mais do que entrega, neste orçamento.</p>
-  <div class="avoid">
-    <div>
-      <b>Prospecção fria como canal principal</b>
-      <p>R$ 500 a ~R$ 4/clique dão 125 cliques no mês, uns 4 cadastros, menos de 1
-      assinante — CAC acima de R$ 400 para um ticket de R$ 39,90. Um mês isolado
-      também não revela qual termo funcionou.</p>
-      <p>É por isso que a tarefa 20 existe em outro formato: verba pequena, poucos
-      termos, trimestre inteiro sem mexer.</p>
-    </div>
-    <div>
-      <b>Vídeo de "review" da própria plataforma</b>
-      <p>Posiciona o dono como terceiro avaliando o próprio produto. CDC e CONAR exigem
-      que anúncio seja identificável como tal, e superlativo exige comprovação. Além do
-      risco, converte pior que a narrativa de construção.</p>
-    </div>
-    <div>
-      <b>Perseguir a monetização do YouTube</b>
-      <p>Otimizar para tempo de exibição leva a vídeos longos e genéricos. O objetivo é
-      trazer 300 pessoas certas, não 50 mil erradas.</p>
-    </div>
-    <div>
-      <b>Publicar o vídeo âncora antes da Fase 0</b>
-      <p>Um vídeo que funciona joga tráfego num produto onde o cadastro gratuito não vê
-      nada. O pico passa, as pessoas não voltam, e o melhor conteúdo disponível foi
-      queimado — e ele só estreia uma vez.</p>
-    </div>
-    <div>
-      <b>Trial por tempo na porta de entrada</b>
-      <p>Ver seção 5. O lugar certo para trial é o <b>upgrade</b> — 7 dias de PRO
-      oferecidos a um GUEST já ativo há semanas —, não a primeira visita.</p>
-    </div>
-  </div>
-</section>
-
-<!-- RISCOS -->
-<section class="block" id="riscos">
-  <h2>12 · Riscos e revisão</h2>
-
-  <h3 class="sub">As datas são sequência, não calendário</h3>
-  <p>As fases avançam por portão. Se o portão da Fase 1 abrir no mês 5 em vez do 3,
-  o plano está funcionando — apenas mais devagar. O único erro real é pular um portão.</p>
-
-  <h3 class="sub">Riscos conhecidos</h3>
-  <ul class="plain">
-    <li><b>Jurídico atrasa.</b> D-02 e D-03 não dependem do dono e podem estourar. Nenhum deles bloqueia a Fase 1, exceto a tarefa 17.</li>
-    <li><b>Capacidade.</b> Fase 1 é a mais provável de estourar. O plano de corte está na própria fase.</li>
-    <li><b>Indexação lenta.</b> Domínio novo com cinco homônimos mais antigos disputa até o próprio nome. Por isso a tarefa 18 existe.</li>
-    <li><b>Conteúdo sem funil.</b> O maior risco do plano inteiro é publicar antes da Fase 0 estar fechada.</li>
-  </ul>
-
-  <h3 class="sub">Quando revisar este documento</h3>
-  <p>Ao fechar cada portão, e sempre que uma decisão em aberto for resolvida. Ao
-  concluir tarefas, siga a convenção do diretório: remova o item do
-  <code>BACKLOG.md</code> e registre no <code>CHANGELOG.md</code>, em vez de acumular
-  itens marcados como feitos.</p>
-</section>
-
-<footer>
-  <p><b>Premissas.</b> Orçamento de R$ 500 mensais, dedicação de meio período,
-  base inicial zero. Com dedicação integral as doze semanas viram cerca de oito —
-  não menos, porque indexação e alcance dependem de tempo de calendário, não de
-  horas trabalhadas.</p>
-  <p><b>Validade.</b> As afirmações sobre o código foram verificadas em 18/ago/2026
-  na branch <code>main</code>. Reconfira antes de agir se estiver lendo muito depois.</p>
-  <p>Este é um plano de marketing e produto. Não é aconselhamento jurídico nem
-  recomendação de investimento.</p>
-</footer>
-
-</div>
+    <footer>
+      Documento de planejamento — não é parecer jurídico, recomendação de investimento ou autorização para alterar o produto. Versão consolidada: 30/08/2026.
+    </footer>
+  </main>
 </body>
 </html>
