@@ -7,6 +7,8 @@ import {
   getFallbackTextColor,
   getFixedIncomeLabel,
 } from '../../utils/assetLogo';
+import { getFiiSegmentIcon } from '../../utils/fiiSegmentIcon';
+import { fiiSectorLabel } from '../../utils/sectorAllocation';
 
 interface AssetLogoProps {
   ticker: string;
@@ -15,6 +17,8 @@ interface AssetLogoProps {
   currency?: 'BRL' | 'USD';
   /** Nome do ativo (usado no alt da imagem e p/ rotular renda fixa). */
   name?: string;
+  /** Setor/segmento do ativo — em FII, define o pictograma do chip. */
+  sector?: string | null;
   /** Reserva separada: força o cofrinho (PiggyBank) mesmo em RF marcada como reserva. */
   isReserve?: boolean;
   /** URL explícita (gancho futuro: backend pode popular logoUrl). Tem prioridade. */
@@ -30,6 +34,7 @@ interface AssetLogoProps {
  * Logo do ativo num "chip" arredondado. Resolve em ordem:
  *  - CASH          → cofrinho (PiggyBank)
  *  - FIXED_INCOME  → rótulo curto do título (R+, SELIC, IPCA+, CDB...)
+ *  - FII c/ setor  → pictograma do segmento (loja, caminhão, documento...)
  *  - logo (CDN)    → imagem em chip claro (garante contraste no tema escuro)
  *  - fallback      → iniciais coloridas por tipo
  * Nenhum call site precisa lidar com <img>/onError — basta passar ticker + type.
@@ -39,6 +44,7 @@ export default function AssetLogo({
   type,
   currency,
   name,
+  sector,
   isReserve,
   logoUrl,
   size = 32,
@@ -85,6 +91,24 @@ export default function AssetLogo({
         <span style={{ fontSize }} className="leading-none tracking-tight">
           {label}
         </span>
+      </div>
+    );
+  }
+
+  // FII → pictograma do SEGMENTO (loja, caminhão, documento...). O chip é o único
+  // espaço da linha onde a exposição do fundo cabe sem custar uma coluna, e a
+  // inicial do ticker desperdiça esse espaço nomeando a gestora: KNCR11/KNSC11
+  // viram os dois "KN", HGCR11 (papel) e HGBS11 (shoppings) viram os dois "HG".
+  // Segmento ausente ou fora do canon devolve null e a linha cai nas iniciais.
+  const SegmentIcon = type === 'FII' ? getFiiSegmentIcon(sector) : null;
+  if (SegmentIcon) {
+    return (
+      <div
+        style={dimension}
+        title={fiiSectorLabel(sector)}
+        className={`shrink-0 flex items-center justify-center bg-slate-800 border border-slate-700 text-slate-300 ${radius} ${className}`}
+      >
+        <SegmentIcon size={Math.round(size * 0.55)} strokeWidth={2} />
       </div>
     );
   }

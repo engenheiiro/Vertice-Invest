@@ -239,7 +239,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                 </div>
                                 <div className="flex items-center justify-between mb-1">
                                     <div className="flex items-center gap-3 min-w-0">
-                                        <AssetLogo ticker={asset.ticker} type={type as AssetType} name={asset.name} size={48} />
+                                        <AssetLogo ticker={asset.ticker} type={type as AssetType} name={asset.name} sector={asset.sector} size={48} />
                                         <div className="flex flex-col min-w-0">
                                         <h2 id="asset-detail-title" className="text-4xl font-black text-white tracking-tighter">{asset.ticker}</h2>
                                         <div className="flex gap-2 mt-1">

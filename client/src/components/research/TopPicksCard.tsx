@@ -361,7 +361,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                                             <div className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg border shrink-0 ${getRankStyle(pick.visualPosition)}`}>
                                                 <span className="font-black text-sm leading-none">{pick.visualPosition}</span>
                                             </div>
-                                            <AssetLogo ticker={pick.ticker} type={pick.type as AssetType} name={pick.name} size={36} />
+                                            <AssetLogo ticker={pick.ticker} type={pick.type as AssetType} name={pick.name} sector={pick.sector} size={36} />
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-1 mb-1">
                                                     <h4 className="text-base font-black text-white tracking-tight">{pick.ticker}</h4>

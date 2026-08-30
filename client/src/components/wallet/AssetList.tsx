@@ -350,7 +350,7 @@ export const AssetList = () => {
                                     return (
                                         <div key={asset.id} className="flex items-center justify-between px-4 py-3 bg-base">
                                             <div className="min-w-0 flex-1 flex items-center gap-3">
-                                                <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} isReserve={isReserveAsset(asset)} size={32} />
+                                                <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} sector={asset.sector} isReserve={isReserveAsset(asset)} size={32} />
                                                 <div className="min-w-0">
                                                     <div className="flex items-center gap-1.5 min-w-0">
                                                         <span className="font-bold text-slate-200 text-sm truncate">{assetTitle(asset)}</span>
@@ -576,7 +576,7 @@ export const AssetList = () => {
                                                 <tr key={asset.id} className="hover:bg-slate-800/30 transition-colors border-b border-slate-800/30 last:border-0 group animate-fade-in">
                                                     <td className="p-4 pl-8">
                                                         <div className="flex items-center gap-3 min-w-0">
-                                                            <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} isReserve={isReserveAsset(asset)} size={32} />
+                                                            <AssetLogo ticker={asset.ticker} type={asset.type} currency={asset.currency} name={asset.name} sector={asset.sector} isReserve={isReserveAsset(asset)} size={32} />
                                                             <div className="min-w-0">
                                                                 <div className="flex items-center gap-1.5 min-w-0">
                                                                     <span className="font-bold text-slate-200 truncate">{assetTitle(asset)}</span>

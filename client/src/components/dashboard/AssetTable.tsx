@@ -245,7 +245,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-3 min-w-0">
-                                                            <AssetLogo ticker={item.ticker} type={item.type as AssetType} name={item.name} size={32} />
+                                                            <AssetLogo ticker={item.ticker} type={item.type as AssetType} name={item.name} sector={item.sector} size={32} />
                                                             <div className="min-w-0">
                                                                 <div className="flex items-center gap-1.5 min-w-0">
                                                                     <span className="font-bold text-slate-200 truncate">{itemTitle(item)}</span>
