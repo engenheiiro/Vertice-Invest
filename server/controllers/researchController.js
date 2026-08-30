@@ -91,8 +91,20 @@ export const getDiscardLogs = async (req, res, next) => {
 export const getMacroData = async (req, res, next) => {
     try {
         const indicators = await marketDataService.getMacroIndicators();
-        const bonds = await TreasuryBond.find({}).sort({ type: 1, rate: 1 });
-        res.json({ ...indicators, bonds: bonds });
+        const bonds = await TreasuryBond.find({}).sort({ type: 1, rate: 1 }).lean();
+
+        // Mesma régua da vitrine de renda fixa (getFixedIncomeData). Servir o
+        // documento cru aqui fazia a aba Indicadores e a Pesquisa mostrarem números
+        // diferentes para o mesmo título: só a vitrine passava pelo saneamento do
+        // cupom real e do investimento mínimo.
+        res.json({
+            ...indicators,
+            bonds: normalizeTreasuryBonds(bonds, {
+                ipca: Number(indicators?.ipca?.value) || 0,
+                selic: Number(indicators?.selic?.value) || 0,
+                cdi: Number(indicators?.cdi?.value) || Number(indicators?.selic?.value) || 0,
+            }),
+        });
     } catch (error) { next(error); }
 };
 

@@ -117,6 +117,24 @@ function calcInstrument(
   return { id, label, grossValue, costs, ir, netValue, grossReturn, netReturn, netGain, taxExempt: exempt, isAsset, color };
 }
 
+type MacroBond = { title?: string; type?: string; rate?: number; annualRate?: number };
+
+/**
+ * Prefixado de referência da simulação: o Tesouro Prefixado simples. O título com
+ * juros semestrais paga cupom no caminho e não capitaliza a taxa cheia, então não
+ * espelha um aporte que fica rendendo até o vencimento.
+ *
+ * "Juros Semestrais" está no NOME do título; `type` é o enum do catálogo
+ * (`PREFIXADO`), onde a palavra nunca aparece — filtrar `type` por "juros" não
+ * excluía nada.
+ */
+export const pickPrefixadoRate = (bonds: MacroBond[]): number | undefined => {
+  const bond = bonds.find(
+    b => (b.type ?? '').toUpperCase() === 'PREFIXADO' && !/juros/i.test(b.title ?? '')
+  );
+  return bond?.rate ?? bond?.annualRate;
+};
+
 function calcAll(
   initial: number,
   monthly: number,
@@ -134,12 +152,8 @@ function calcAll(
   const ipca = (macro?.ipca as { value?: number })?.value ?? 4.62;
   const ntnbLong = (macro?.ntnbLong as { value?: number })?.value ?? 6.50;
 
-  const bonds = (macro?.bonds as Array<{ type?: string; rate?: number; annualRate?: number }>) ?? [];
-  const prefBond = bonds.find(b => {
-    const t = (b.type ?? '').toLowerCase();
-    return t.includes('prefixado') && !t.includes('juros');
-  });
-  const prefixado = prefBond?.rate ?? prefBond?.annualRate ?? Math.max(selic - 0.5, 8);
+  const bonds = (macro?.bonds as MacroBond[]) ?? [];
+  const prefixado = pickPrefixadoRate(bonds) ?? Math.max(selic - 0.5, 8);
 
   const trMonthly = 0.1708;
   const poupancaMonthlyPct = selic > 8.5 ? 0.5 + trMonthly : (selic * 0.70) / 12;
@@ -401,12 +415,8 @@ export const Calculator: React.FC = () => {
   const cdi = (macro?.cdi as { value?: number })?.value;
   const ipca = (macro?.ipca as { value?: number })?.value;
   const ntnbLong = (macro?.ntnbLong as { value?: number })?.value;
-  const bonds = (macro?.bonds as Array<{ type?: string; rate?: number; annualRate?: number }>) ?? [];
-  const prefBond = bonds.find(b => {
-    const t = (b.type ?? '').toLowerCase();
-    return t.includes('prefixado') && !t.includes('juros');
-  });
-  const prefixado = prefBond?.rate ?? prefBond?.annualRate;
+  const bonds = (macro?.bonds as MacroBond[]) ?? [];
+  const prefixado = pickPrefixadoRate(bonds);
 
   // Dados do gráfico de pizza (melhor instrumento)
   const pieData = best && totalInvested > 0 ? [

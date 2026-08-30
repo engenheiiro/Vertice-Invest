@@ -27,6 +27,25 @@ export const NTNB_REAL_MAX = 9.5;
 export const isPlausibleNtnbRate = (rate) =>
     Number.isFinite(rate) && rate >= NTNB_REAL_MIN && rate <= NTNB_REAL_MAX;
 
+// --- Catálogo do Tesouro: espelho da fonte, não acumulador ---
+// A poda só roda sobre uma coleta que pareça um catálogo inteiro: um scrape parcial
+// (mudança de layout, resposta truncada) não pode esvaziar a vitrine.
+const PRUNE_MIN_BATCH = 20;
+const PRUNE_MIN_RATIO = 0.6;
+
+/**
+ * O selo "Juros Semestrais" vem em elemento próprio dentro da célula do título e,
+ * sem separador no HTML, o `.text()` do cheerio devolve tudo colado —
+ * "Tesouro IPCA+ 2037Juros Semestrais". Como o catálogo é chaveado pelo título, a
+ * mesma emissão vira duas linhas assim que a fonte muda a marcação. Reinsere o
+ * espaço entre o número e a palavra grudada: chave estável e nome legível na tela.
+ */
+export const normalizeBondTitle = (raw) =>
+    String(raw || '')
+        .replace(/\s+/g, ' ')
+        .replace(/(\d)(?=[A-ZÀ-Ú])/g, '$1 ')
+        .trim();
+
 // Verificação de certificado é obrigatória: falha de TLS deve seguir para os
 // fallbacks seguros, nunca degradar a conexão para HTTP ou aceitar um MITM.
 const bcbAgent = new https.Agent({
@@ -361,39 +380,74 @@ export const macroDataService = {
         return parseFloat(cleanStr) || 0;
     },
 
+    /**
+     * Lê a célula "Rentabilidade anual" (a taxa CONTRATADA) e devolve o índice e o
+     * spread que ela declara: "IPCA + 7,95%" → {IPCA, 7.95}; "SELIC + 0,07%" →
+     * {SELIC, 0.07}; "13,98%" → {PRE, 13.98}.
+     *
+     * O pós-fixado puro traz só o nome do índice, sem número — a célula do
+     * "Tesouro Reserva 2036" é literalmente "SELIC" (spread zero). Aí o índice está
+     * declarado e o spread é 0; ler "a primeira % da linha" pegaria a coluna
+     * seguinte, que é a rentabilidade ESTIMADA (nominal ~14%), e o título entrava no
+     * catálogo como "IPCA + 14,00%" — índice e taxa errados.
+     */
+    parseAnnualYieldCell(text) {
+        const clean = String(text || '').trim().replace(/\s+/g, ' ');
+        if (!clean) return null;
+
+        const index = /IPCA/i.test(clean) ? 'IPCA' : /SELIC/i.test(clean) ? 'SELIC' : null;
+        const hasPct = clean.includes('%');
+        // Sem índice nomeado, a célula só é rentabilidade se trouxer percentual
+        // (prefixado). Qualquer outro texto nesta posição não é a coluna esperada.
+        if (!index && !hasPct) return null;
+
+        const val = hasPct ? this.cleanNumber(clean) : 0;
+        return { index: index || 'PRE', rate: val > 0 && val < 25 ? val : 0 };
+    },
+
     parseGenericRow($, tr) {
         const cols = $(tr).find('td');
         if (cols.length < 3) return null;
-        
+
         let title = '';
-        let rate = 0;
+        let titleIdx = -1;
+        let firstPctRate = 0;
         let maturity = '-';
         let foundPrices = [];
 
         cols.each((i, td) => {
-            const text = $(td).text().trim().replace(/\s+/g, ' '); 
-            
+            const text = $(td).text().trim().replace(/\s+/g, ' ');
+
             if (!title && text.length > 5 && (text.includes('Tesouro') || text.includes('IPCA') || text.includes('Prefixado') || text.includes('Selic') || text.includes('Renda+'))) {
                 title = text;
-            } 
+                titleIdx = i;
+            }
             else if (text.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
                 maturity = text;
-            } 
+            }
             else if (text.includes('%')) {
                 // O Investidor10 tem DUAS colunas de %: "Rentabilidade anual" (a taxa
                 // REAL/contratada — ex.: IPCA+ mostra "IPCA + 7,95%" → 7.95; Selic
                 // mostra "SELIC + 0,07%" → 0.07) vem ANTES de "Rentabilidade estimada"
-                // (o retorno NOMINAL projetado — ex.: 12,18%). Só a PRIMEIRA (!rate)
-                // interessa: a estimada nominal contaminava a taxa NTN-B e o spread da
-                // renda fixa (IPCA+ virava ~12%, Selic virava ~14%).
+                // (o retorno NOMINAL projetado — ex.: 12,18%). Só a PRIMEIRA interessa:
+                // a estimada nominal contaminava a taxa NTN-B e o spread da renda fixa
+                // (IPCA+ virava ~12%, Selic virava ~14%). Fallback de quando a coluna
+                // anual não estiver onde deveria.
                 const val = this.cleanNumber(text);
-                if (!rate && val > 0 && val < 25) rate = val;
+                if (!firstPctRate && val > 0 && val < 25) firstPctRate = val;
             }
             else if (text.includes('R$') || (this.cleanNumber(text) > 30)) {
                 const val = this.cleanNumber(text);
                 if (val > 0) foundPrices.push(val);
             }
         });
+
+        // A rentabilidade anual é a coluna imediatamente após o nome — posição, não
+        // "a primeira % que aparecer". Só quando essa célula não é reconhecível é que
+        // vale a varredura acima.
+        const annual = titleIdx >= 0 ? this.parseAnnualYieldCell($(cols[titleIdx + 1]).text()) : null;
+        const rate = annual ? annual.rate : firstPctRate;
+        const index = annual ? annual.index : null;
 
         let minInvestment = 0;
         let unitPrice = 0;
@@ -414,8 +468,10 @@ export const macroDataService = {
             minInvestment = resolveMinInvestment(minInvestment, unitPrice);
         }
 
-        if (title && rate > 0) {
-            return { title, rate, minInvestment, unitPrice, maturity };
+        // Spread zero é taxa legítima no pós-fixado: a linha entra desde que o índice
+        // esteja declarado. Sem índice e sem taxa, não é linha de título.
+        if (title && (rate > 0 || index === 'SELIC' || index === 'IPCA')) {
+            return { title, rate, index, minInvestment, unitPrice, maturity };
         }
         return null;
     },
@@ -571,6 +627,41 @@ export const macroDataService = {
         return bonds;
     },
 
+    /**
+     * Remove do catálogo os títulos que a fonte não lista mais.
+     *
+     * O upsert é chaveado por `title`: quando a fonte muda a string (o Investidor10
+     * passou a colar o selo "Juros Semestrais" no nome), nasce um documento novo e o
+     * antigo fica órfão — a vitrine passa a mostrar a mesma emissão duas vezes, uma
+     * delas congelada na taxa/PU do dia da mudança, e a busca de renda fixa oferece
+     * as duas: cadastrar a órfã grava um spread velho na posição do usuário.
+     *
+     * Fail-closed: coleta pequena (< PRUNE_MIN_BATCH) ou encolhida em relação ao que
+     * já existe (< PRUNE_MIN_RATIO) não apaga nada — catálogo velho é melhor que
+     * catálogo vazio.
+     */
+    async pruneStaleBonds(titles) {
+        try {
+            if (titles.length < PRUNE_MIN_BATCH) return 0;
+            const existing = await TreasuryBond.countDocuments({});
+            if (existing > 0 && titles.length < existing * PRUNE_MIN_RATIO) {
+                logger.warn('🏛️ [Tesouro Direto] Poda ignorada: coleta encolhida', {
+                    coletados: titles.length,
+                    existentes: existing
+                });
+                return 0;
+            }
+            const { deletedCount = 0 } = await TreasuryBond.deleteMany({ title: { $nin: titles } });
+            if (deletedCount > 0) {
+                logger.info('🏛️ [Tesouro Direto] Títulos fora da fonte removidos', { removidos: deletedCount });
+            }
+            return deletedCount;
+        } catch (error) {
+            logger.warn('🏛️ [Tesouro Direto] Falha ao podar títulos fora da fonte', { error: error.message });
+            return 0;
+        }
+    },
+
     async updateTreasuryRates() {
         // Cadeia de prioridade para NTN-B (sempre validada pela faixa de
         // plausibilidade da taxa REAL — isPlausibleNtnbRate):
@@ -594,7 +685,7 @@ export const macroDataService = {
         const uniqueBondsMap = new Map();
 
         list.forEach(bond => {
-            const cleanTitle = bond.title.replace(/\s+/g, ' ').trim();
+            const cleanTitle = normalizeBondTitle(bond.title);
 
             let type = 'IPCA';
             let index = 'IPCA';
@@ -602,6 +693,11 @@ export const macroDataService = {
             else if (cleanTitle.includes('Selic') || cleanTitle.includes('LFT')) { type = 'SELIC'; index = 'SELIC'; }
             else if (/Renda\+/i.test(cleanTitle)) { type = 'RENDAMAIS'; }
             else if (/Educa\+/i.test(cleanTitle)) { type = 'EDUCA'; }
+            // O nome nem sempre revela o indexador ("Tesouro Reserva 2036" é Selic).
+            // Quando não revela, vale o índice DECLARADO na coluna de rentabilidade —
+            // o default IPCA só sobra quando nenhuma das duas fontes diz nada.
+            else if (bond.index === 'SELIC') { type = 'SELIC'; index = 'SELIC'; }
+            else if (bond.index === 'PRE') { type = 'PREFIXADO'; index = 'PRE'; }
 
             // Só usa a taxa do scraping se ainda não temos taxa ao vivo E se for
             // uma NTN-B de referência (IPCA+ longa, nunca Educa+/Renda+) E se a
@@ -646,6 +742,7 @@ export const macroDataService = {
 
             await TreasuryBond.bulkWrite(operations);
             logger.debug(`🏛️ [Tesouro Direto] Atualizado com sucesso: ${uniqueBonds.length} títulos.`);
+            await this.pruneStaleBonds(uniqueBonds.map(b => b.title));
         }
 
         // Nenhuma fonte ao vivo entregou taxa REAL plausível: ancora no último

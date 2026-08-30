@@ -13,6 +13,8 @@ import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculate
 import { computeQuotaSharpe, computeQuotaBeta, snapshotDayKey, SHARPE_WINDOW_SNAPSHOTS } from '../utils/walletRisk.js';
 import { countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { assetDailyFactor, valueFixedIncomeAsset, PRICING_SOURCE, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
+import { resolveFixedIncomeIndexing } from '../utils/fixedIncomeIndexing.js';
+import { escapeRegex } from '../utils/regexEscape.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from '../services/treasuryPriceService.js';
 import { isDollarized, resolveAssetCurrency, resolveTransactionCurrency, needsCurrencyFallback } from '../utils/assetCurrency.js';
 import { positionCostBRL, positionRealizedProfitBRL } from '../utils/fxRate.js';
@@ -871,21 +873,18 @@ export const addAssetTransaction = async (req, res, next) => {
                 // spread, não a taxa cheia. Persiste índice+spread p/ accrual correto
                 // (corrige o bug do Tesouro Selic render só o spread como prefixado).
                 if (type === 'FIXED_INCOME') {
-                    let idx = fixedIncomeIndex;
-                    let spread = fixedIncomeSpread;
+                    const idx = fixedIncomeIndex;
+                    const spread = fixedIncomeSpread;
                     // Catálogo é a fonte autoritativa de índice E vencimento — busca
                     // uma vez quando falta qualquer um dos dois (evita 2 queries).
                     let bond = null;
                     if (!idx || (!maturityDate && !updatedAsset.maturityDate)) {
-                        const safeTitle = String(ticker).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        bond = await TreasuryBond.findOne({ title: new RegExp(`^${safeTitle}$`, 'i') }).session(session);
+                        bond = await TreasuryBond.findOne({ title: new RegExp(`^${escapeRegex(ticker)}$`, 'i') }).session(session);
                     }
-                    if (!idx && bond?.index) { idx = bond.index; if (spread == null) spread = bond.rate; }
-                    if (idx === 'SELIC' || idx === 'CDI' || idx === 'IPCA') {
-                        updatedAsset.fixedIncomeIndex = idx;
-                        updatedAsset.fixedIncomeSpread = Number(spread) || 0;
-                    } else if (idx === 'PRE') {
-                        updatedAsset.fixedIncomeIndex = 'PRE';
+                    const indexing = resolveFixedIncomeIndexing({ index: idx, spread, bond });
+                    if (indexing) {
+                        updatedAsset.fixedIncomeIndex = indexing.index;
+                        if (indexing.spread !== null) updatedAsset.fixedIncomeSpread = indexing.spread;
                     }
                     // C2: vencimento — da UI (form) ou, quando ausente, do catálogo
                     // (string "dd/mm/aaaa"). Nunca reescreve um vencimento já salvo.
@@ -1126,14 +1125,18 @@ export const searchAssets = async (req, res, next) => {
         const { q, type } = req.query;
         if (!q || q.length < 2) return res.json([]);
 
+        // O termo é texto digitado, não padrão: "Tesouro IPCA+ 2037" sem escapar
+        // vira `IPCA+` = um ou mais "A", e a busca não devolvia nenhum título.
+        const term = escapeRegex(q);
+
         const marketResults = await MarketAsset.find({
-            $or: [{ ticker: { $regex: `^${q}`, $options: 'i' } }, { name: { $regex: q, $options: 'i' } }],
+            $or: [{ ticker: { $regex: `^${term}`, $options: 'i' } }, { name: { $regex: term, $options: 'i' } }],
             isIgnored: { $ne: true }
         }).sort({ liquidity: -1 }).limit(8).select('ticker name type lastPrice rate index');
 
         if (type === 'FIXED_INCOME') {
             const bonds = await TreasuryBond.find({
-                title: { $regex: q, $options: 'i' }
+                title: { $regex: term, $options: 'i' }
             }).sort({ type: 1, maturityDate: 1 }).limit(10);
 
             const formattedBonds = bonds.map(b => ({

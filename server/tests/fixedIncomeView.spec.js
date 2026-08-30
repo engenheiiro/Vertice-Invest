@@ -138,6 +138,12 @@ describe('resolveMinInvestment — mínimo é 1% do título, não o PU', () => {
     expect(resolveMinInvestment(120, 0)).toBe(120);
   });
 
+  it('o piso não passa do título inteiro', () => {
+    // "Tesouro Reserva 2036" tem PU de R$ 10,93: pedir o piso de R$ 30 seria exigir
+    // quase três títulos para comprar o mínimo de um.
+    expect(resolveMinInvestment(10.93, 10.93)).toBe(10.93);
+  });
+
   it('a vitrine já entrega o mínimo saneado', () => {
     const [b] = normalizeTreasuryBonds(
       [{ title: 'Tesouro IPCA+ 2032', type: 'IPCA', rate: 8, minInvestment: 3002.69, unitPrice: 3002.69 }],
