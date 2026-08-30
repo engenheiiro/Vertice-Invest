@@ -235,11 +235,19 @@ export const financialService = {
      * caiu, e se o provento daquele ativo só for creditado na data de pagamento, a
      * linha exibe um prejuízo que não existe. Por ativo e no total, a regra tem que
      * ser uma só — senão as partes deixam de somar o todo.
+     *
+     * `paid` / `pending` quebram o MESMO total pela data de pagamento (paid + pending
+     * === total, por construção). É a ponte que a tela de Proventos usa para explicar
+     * por que o gráfico de pagamentos mostra um número menor que o card: a diferença é
+     * exatamente o que já foi declarado e ainda não caiu na conta. Recalcular essa
+     * quebra por fora — somando `totalAllTime` com `provisioned` — daria quase sempre o
+     * mesmo número e ERRARIA justamente quando a posição mudou entre as ex-dates, que é
+     * o caso em que o acumulado importa.
      */
     async accrueDividendsByTicker(userId, walletId, throughDayKey, options = {}) {
         const txs = options.transactions
             || await AssetTransaction.find({ user: userId, wallet: walletId }).sort({ date: 1 });
-        if (!txs || txs.length === 0) return { total: 0, byTicker: {} };
+        if (!txs || txs.length === 0) return { total: 0, paid: 0, pending: 0, byTicker: {} };
 
         const dividendDateMap = options.dividendDateMap
             || await this._loadDividendDateMap([...new Set(txs.map(t => t.ticker))]);
@@ -249,6 +257,7 @@ export const financialService = {
         const byTicker = {};
         let txIndex = 0;
         let total = 0;
+        let paid = 0;
 
         for (const day of days) {
             // Mesma ordem do rebuild: transações do dia ANTES dos proventos do dia.
@@ -264,12 +273,19 @@ export const financialService = {
                     const value = qty[div.ticker] * div.amount;
                     total = safeAdd(total, value);
                     byTicker[div.ticker] = safeAdd(byTicker[div.ticker] || 0, value);
+                    // Sem paymentDate, a mesma convenção do resto do serviço: ex + 15d.
+                    const payKey = this.toDateKey(div.paymentDate || new Date(new Date(day).getTime() + 15 * 86400000));
+                    if (payKey <= throughDayKey) paid = safeAdd(paid, value);
                 }
             }
         }
 
         for (const ticker of Object.keys(byTicker)) byTicker[ticker] = safeCurrency(byTicker[ticker]);
-        return { total: safeCurrency(total), byTicker };
+        const safeTotal = safeCurrency(total);
+        const safePaid = safeCurrency(paid);
+        // `pending` é derivado da subtração, nunca somado em paralelo: garante que as
+        // duas parcelas fechem o total exibido mesmo com arredondamento de centavo.
+        return { total: safeTotal, paid: safePaid, pending: safeCurrency(safeTotal - safePaid), byTicker };
     },
 
     /** Indexa todos os proventos dos tickers por data (chave toDateKey). */

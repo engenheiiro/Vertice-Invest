@@ -271,4 +271,23 @@ describe('accruedDividendsThroughDay — proventos pela quantidade da época', (
     const soma = Object.values(byTicker).reduce((s, v) => s + v, 0);
     expect(soma).toBeCloseTo(total, 2);
   });
+
+  // A tela de Proventos exibe esta quebra para explicar por que o gráfico de
+  // pagamentos mostra menos que o card. Se ela não fechar o total, a explicação
+  // vira uma terceira versão do mesmo número — o defeito que ela existe p/ fechar.
+  it('paid + pending fecham exatamente o total', async () => {
+    vi.spyOn(financialService, '_loadDividendDateMap').mockResolvedValue(new Map([
+      // Ex-date passada, pagamento passado → já recebido.
+      ['2026-07-07', [{ ticker: TICKER, amount: 0.4, type: 'DIVIDEND', paymentDate: new Date('2026-07-20T00:00:00Z') }]],
+      // Ex-date passada, pagamento no futuro → declarado, a receber.
+      ['2026-08-07', [{ ticker: TICKER, amount: 0.4, type: 'DIVIDEND', paymentDate: new Date('2026-09-10T00:00:00Z') }]],
+    ]));
+    mocks.txFind.mockReturnValue({ sort: () => Promise.resolve([BUY]) });
+
+    const { total, paid, pending } = await financialService.accrueDividendsByTicker('u1', 'w1', '2026-08-31');
+
+    expect(paid).toBeCloseTo(4, 2);
+    expect(pending).toBeCloseTo(4, 2);
+    expect(paid + pending).toBeCloseTo(total, 2);
+  });
 });

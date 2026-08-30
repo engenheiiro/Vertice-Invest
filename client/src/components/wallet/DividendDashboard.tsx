@@ -20,13 +20,16 @@ interface DividendData {
     totalAllTime?: number;
     projectedMonthly?: number;
     yieldOnCost?: YieldOnCostItem[];
+    // Mesma soma do card "Prov. Acumulados" (por data-ex, quantidade da época),
+    // quebrada em pago e a pagar pelo servidor. paid + pending === total.
+    accrued?: { total: number; paid: number; pending: number };
     goal?: DividendGoal | null;
 }
 
 const SIMULATOR_PERIODS = [5, 10, 20, 30] as const;
 
 export const DividendDashboard = () => {
-    const [data, setData] = useState<DividendData>({ history: [], provisioned: [], totalAllTime: 0, projectedMonthly: 0, yieldOnCost: [], goal: null });
+    const [data, setData] = useState<DividendData>({ history: [], provisioned: [], totalAllTime: 0, projectedMonthly: 0, yieldOnCost: [], accrued: undefined, goal: null });
     const [isLoading, setIsLoading] = useState(true);
     const [timeRange, setTimeRange] = useState<'12M' | 'ALL'>('12M');
     const [simulatorYears, setSimulatorYears] = useState<number>(10);
@@ -59,6 +62,7 @@ export const DividendDashboard = () => {
                     totalAllTime: res?.totalAllTime || 0,
                     projectedMonthly: res?.projectedMonthly || 0,
                     yieldOnCost: Array.isArray(res?.yieldOnCost) ? res.yieldOnCost : [],
+                    accrued: res?.accrued,
                     goal: res?.goal ?? null,
                 });
             } catch (e) {
@@ -328,6 +332,28 @@ export const DividendDashboard = () => {
                         </div>
                     )}
                 </div>
+
+                {/* Ponte entre esta tela (CAIXA: quando o dinheiro cai) e o card
+                    "Prov. Acumulados" (COMPETÊNCIA: o que os ativos já declararam).
+                    Sem ela o usuário vê R$ 5,71 no gráfico e R$ 7,87 no card e conclui,
+                    com razão, que um dos dois está errado — os dois estão certos, e a
+                    diferença é exatamente o que ainda não foi pago. */}
+                {data.accrued && (
+                    <div className="mt-4 pt-4 border-t border-slate-800 space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-500">Já recebido</span>
+                            <span className="font-bold text-slate-300">{formatCurrency(data.accrued.paid)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-500">Declarado, a receber</span>
+                            <span className="font-bold text-slate-300">{formatCurrency(data.accrued.pending)}</span>
+                        </div>
+                        <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/70">
+                            <span className="text-[11px] font-bold text-slate-400">Prov. Acumulados</span>
+                            <span className="text-sm font-bold text-gold">{formatCurrency(data.accrued.total)}</span>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Yield on Cost por ativo */}

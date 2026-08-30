@@ -1221,9 +1221,14 @@ const pruneDividendHeal = () => {
 export const buildWalletDividendsPayload = async (userId, walletId) => {
         // Meta de renda passiva é por carteira (Fase 2) — busca dedicada em Wallet,
         // em paralelo com o cálculo de proventos.
-        const [data, walletDoc] = await Promise.all([
+        const [data, walletDoc, accrued] = await Promise.all([
             financialService.calculateUserDividends(userId, walletId),
             Wallet.findById(walletId).select('targetMonthlyDividendIncome').lean(),
+            // A MESMA soma do card "Prov. Acumulados", quebrada em pago e a pagar.
+            // Vai junto para que a tela de Proventos consiga explicar por que o
+            // gráfico de pagamentos mostra menos que o card, em vez de deixar o
+            // usuário concluir que um dos dois está errado.
+            financialService.accrueDividendsByTicker(userId, walletId, toDateKey(brazilToday())),
         ]);
         const history = Array.from(data.dividendMap.entries()).map(([month, val]) => ({ month, value: val.total, breakdown: val.breakdown })).sort((a, b) => a.month.localeCompare(b.month));
 
@@ -1246,6 +1251,9 @@ export const buildWalletDividendsPayload = async (userId, walletId) => {
             totalAllTime: data.totalAllTime,
             projectedMonthly: data.projectedMonthly,
             yieldOnCost: data.yieldOnCost,
+            // `total` é, por construção, o mesmo número do card; `paid`/`pending` o
+            // quebram sem recalcular nada por fora.
+            accrued: { total: accrued.total, paid: accrued.paid, pending: accrued.pending },
             goal,
         };
 };

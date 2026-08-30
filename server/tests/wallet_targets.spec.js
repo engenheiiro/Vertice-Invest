@@ -27,7 +27,7 @@ vi.mock('../models/WalletSnapshot.js', () => ({ default: {} }));
 vi.mock('../models/SystemConfig.js', () => ({ default: {} }));
 vi.mock('../services/marketDataService.js', () => ({ marketDataService: {} }));
 vi.mock('../services/financialService.js', () => ({
-  financialService: { calculateUserDividends: vi.fn() },
+  financialService: { calculateUserDividends: vi.fn(), accrueDividendsByTicker: vi.fn() },
 }));
 vi.mock('../services/schedulerService.js', () => ({ runDailySnapshot: vi.fn() }));
 vi.mock('../utils/dateUtils.js', () => ({
@@ -64,6 +64,9 @@ const emptyDividendData = (overrides = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // O payload de proventos carrega a quebra do acumulado (pago × a pagar) que a
+  // tela usa para reconciliar com o card. Default neutro; a meta não depende dela.
+  financialService.accrueDividendsByTicker.mockResolvedValue({ total: 0, paid: 0, pending: 0, byTicker: {} });
 });
 
 describe('updateWalletTargets — targetMonthlyDividendIncome', () => {
