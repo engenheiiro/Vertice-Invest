@@ -354,9 +354,15 @@ export const usStocksFundamentalsService = {
                 }
                 if (liquidity) updatePayload.liquidity = liquidity;
 
-                // DY: Yahoo .SA raramente devolve yield de fundo (vinha 0 até em DIVO11,
-                // um ETF de dividendos). Fallback: soma dos proventos dos últimos 12 meses
-                // ÷ preço. ETFs de acumulação (IVVB11/NASD11) não distribuem → dy 0 correto.
+                // DY: Yahoo .SA raramente devolve yield de fundo. Fallback: soma dos
+                // proventos dos últimos 12 meses ÷ preço. ETF de ACUMULAÇÃO não distribui
+                // — dy 0 é o valor correto, não um dado faltando, e é o caso de TODOS os
+                // ETFs de BR_ETF_LIST hoje. NÃO existe mais fallback semeado à mão: até
+                // 29/08/2026 um `seedYield` curado dava 4,5% a BOVA11, 6% a DIVO11 e 2% a
+                // SMAL11 — os três acumuladores —, e como a fonte viva nunca respondia p/
+                // `.SA`, o seed era a única fonte. Resultado: a carteira projetava renda
+                // mensal de ativo que jamais gera um evento de provento, e o ranking dava
+                // bônus de "ETF de Renda". Ver o histórico completo em config/brEtfList.js.
                 let dy = (f.dy != null && f.dy > 0) ? f.dy : 0;
                 if (!dy && price > 0) {
                     const hist = await externalMarketService.getDividendsHistory(etf.ticker, 'ETF');
@@ -367,10 +373,6 @@ export const usStocksFundamentalsService = {
                         if (ttm > 0) dy = safeFloat((ttm / price) * 100);
                     }
                 }
-                // Fallback final: seed curado p/ ETFs distribuidores (DIVO11/BOVA11/SMAL11).
-                // Yahoo não traz yield de fundo .SA e a Brapi cobra dividendos; a fonte viva
-                // acima tem precedência — o seed só entra se nada vivo respondeu. Ver brEtfList.
-                if (!dy && etf.seedYield > 0) dy = etf.seedYield;
                 updatePayload.dy = dy;
 
                 bulkOps.push({ updateOne: { filter: { ticker: etf.ticker }, update: { $set: updatePayload }, upsert: true } });

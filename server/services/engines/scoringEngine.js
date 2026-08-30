@@ -978,6 +978,13 @@ const scoreEtfProfiles = (asset, audit) => {
 
     if (m.dy >= 3) { defScore += 12; modScore += 8; audit.DEFENSIVE.push({ factor: `ETF de Renda (DY ${m.dy.toFixed(1)}%)`, points: 12, type: 'bonus' }); }
     else if (m.dy >= 1.5) { defScore += 6; modScore += 4; audit.DEFENSIVE.push({ factor: `Yield Moderado (${m.dy.toFixed(1)}%)`, points: 6, type: 'bonus' }); }
+    // dy=0 em ETF quase nunca significa "cesta sem renda": significa veículo de
+    // ACUMULAÇÃO, que reinveste os proventos e devolve o mesmo retorno pela cota — é
+    // a política do wrapper, não uma qualidade do ativo. Todo ETF da B3 hoje é assim
+    // (ver config/brEtfList.js). Sem penalidade, mas a auditoria precisa DIZER isso:
+    // sem esta linha o usuário vê o par de ETFs do mesmo índice separado por 12 pontos
+    // e nada no relatório explica de onde veio a diferença.
+    else if (!(m.dy > 0)) { audit.DEFENSIVE.push({ factor: 'ETF de acumulação: renda reinvestida na cota (yield não se aplica, sem penalidade)', points: 0, type: 'info' }); }
 
     if (aboveTrend) { defScore += 4; modScore += 10; boldScore += 12; audit.MODERATE.push({ factor: 'Tendência de Alta (Preço > SMA200)', points: 10, type: 'bonus' }); }
     else if (m.sma200 > 0) { modScore -= 6; boldScore -= 8; audit.MODERATE.push({ factor: 'Tendência de Baixa (Preço < SMA200)', points: -6, type: 'penalty' }); }

@@ -10,23 +10,34 @@
  * `sector` aqui é o TEMA/índice do ETF (usado no agrupamento por setor da UI).
  * Lista enxuta dos veículos mais comuns; ampliar conforme uso.
  *
- * `seedYield` (opcional): dividend yield aproximado (% a.a.) usado SÓ como fallback
- * final para os poucos ETFs que DISTRIBUEM proventos, quando nenhuma fonte viva
- * fornece o dado. Motivo: o Yahoo não devolve yield de fundo p/ tickers `.SA` e a
- * Brapi cobra os dados de dividendos (403 no plano atual). A maioria dos ETFs BR
- * é de ACUMULAÇÃO (IVVB11/NASD11/…) → sem `seedYield` → dy=0 (correto). Valor
- * estático e documentado (revisar ~semestralmente vs. relatório da gestora/B3);
- * a fonte viva (quando existir) SEMPRE tem precedência sobre este seed.
- *   Refs (jun/2026, aprox.): DIVO11 (IDIV) ~6% · BOVA11 (Ibov) ~4,5% · SMAL11 ~2%.
+ * SEM YIELD SEMEADO À MÃO (29/08/2026). Até esta data três entradas carregavam um
+ * `seedYield` curado (BOVA11 4,5% · DIVO11 6,0% · SMAL11 2,0%), usado como fallback
+ * final quando nenhuma fonte viva devolvia `dy` — e o Yahoo nunca devolve provento de
+ * fundo em ticker `.SA`, então o fallback era, na prática, a ÚNICA fonte. A premissa
+ * era falsa: os três são ETFs de ACUMULAÇÃO. Reinvestem no próprio patrimônio os
+ * proventos das empresas da carteira, e o retorno aparece na valorização da cota — o
+ * cotista não recebe nada. (DIVO11 segue o IDIV em versão total return; quem distribui
+ * é o DIVD11, que não está nesta lista.)
+ *
+ * O estrago era visível: a carteira projetava R$ 4,53/mês de renda em 7 cotas de
+ * BOVA11 — 39% da "Média Mensal Est." de uma carteira real — de um ativo que o razão
+ * de proventos é estruturalmente incapaz de creditar, porque não existe evento nenhum
+ * para creditar. O ranking ainda somava +12 DEFENSIVE por "ETF de Renda (DY 4,5%)".
+ *
+ * Todo ETF desta lista é de acumulação, então `dy` vem só de fonte viva e fica 0 — que
+ * é o valor CORRETO, não um dado faltando. Se um distribuidor real entrar na lista
+ * (DIVD11 e afins), o caminho honesto é alimentar `DividendEvent` com os pagamentos e
+ * deixar o TTM medir o yield (fallback vivo em `usStocksFundamentalsService`); um
+ * número mantido à mão que nenhum razão corrobora reintroduz exatamente este defeito.
  */
 export const BR_ETF_LIST = [
   // --- Índice amplo (Ibovespa / Brasil) ---
-  { ticker: 'BOVA11', name: 'iShares Ibovespa (BOVA11)', sector: 'Índice Amplo', seedYield: 4.5 },
+  { ticker: 'BOVA11', name: 'iShares Ibovespa (BOVA11)', sector: 'Índice Amplo' },
   { ticker: 'BOVV11', name: 'It Now Ibovespa (BOVV11)', sector: 'Índice Amplo' },
   { ticker: 'BOVB11', name: 'Bradesco Ibovespa (BOVB11)', sector: 'Índice Amplo' },
   { ticker: 'BRAX11', name: 'iShares Brasil (IBrX-100)', sector: 'Índice Amplo' },
-  { ticker: 'SMAL11', name: 'iShares Small Cap (SMAL11)', sector: 'Small Caps', seedYield: 2.0 },
-  { ticker: 'DIVO11', name: 'It Now IDIV Dividendos (DIVO11)', sector: 'Dividendos', seedYield: 6.0 },
+  { ticker: 'SMAL11', name: 'iShares Small Cap (SMAL11)', sector: 'Small Caps' },
+  { ticker: 'DIVO11', name: 'It Now IDIV Dividendos (DIVO11)', sector: 'Dividendos' },
   { ticker: 'GOVE11', name: 'It Now Governança (GOVE11)', sector: 'Governança' },
   { ticker: 'ECOO11', name: 'It Now Carbono Eficiente (ECOO11)', sector: 'ESG' },
   { ticker: 'ISUS11', name: 'It Now ISE Sustentabilidade (ISUS11)', sector: 'ESG' },

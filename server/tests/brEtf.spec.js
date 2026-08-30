@@ -30,16 +30,14 @@ describe('BR_ETF_LIST', () => {
         expect(byTicker.get('BOVA11')?.allocationClass).toBeUndefined();
     });
 
-    it('seedYield (quando presente) é só p/ distribuidores, positivo e plausível (<15%)', () => {
+    // Este teste já afirmou o CONTRÁRIO: que DIVO11 era distribuidor e merecia um
+    // `seedYield` curado. Era falso — DIVO11, BOVA11 e SMAL11 são de acumulação
+    // (reinvestem os proventos na cota). O seed era, na prática, a única fonte de `dy`
+    // p/ ETF `.SA`, e injetava renda inexistente na projeção da carteira e no ranking.
+    // Nenhum yield de ETF pode ser mantido à mão: ou vem de fonte viva/TTM, ou é 0.
+    it('nenhum ETF declara yield semeado à mão (seedYield foi removido)', () => {
         const seeded = BR_ETF_LIST.filter((e) => e.seedYield != null);
-        // Fallback curado existe apenas p/ os poucos ETFs que distribuem proventos.
-        expect(seeded.map((e) => e.ticker)).toEqual(expect.arrayContaining(['DIVO11']));
-        for (const e of seeded) {
-            expect(e.seedYield).toBeGreaterThan(0);
-            expect(e.seedYield).toBeLessThan(15); // sanidade: yield de ETF não é absurdo
-        }
-        // A maioria (acumuladores) NÃO tem seed → dy=0 permanece correto.
-        expect(seeded.length).toBeLessThan(BR_ETF_LIST.length / 2);
+        expect(seeded.map((e) => e.ticker)).toEqual([]);
     });
 });
 
