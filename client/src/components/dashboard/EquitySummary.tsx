@@ -157,6 +157,7 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
             {/* 4. PROVENTOS */}
             <StatCard
                 label="Prov. Acumulados"
+                tooltipText="ESTOQUE: tudo que seus ativos já declararam com data-ex passada, na quantidade que você tinha em cada data — parte pode ainda não ter caído na conta (o calendário de pagamento fica na aba Proventos). A Média Mensal Est. é um FLUXO: quanto a carteira tende a render por mês, medido pelo que estes ativos pagaram por cota nos últimos 12 meses. Carteira nova tem estoque menor: faltam meses, não renda."
                 icon={<PiggyBank size={16} />}
                 iconClass="bg-gold/10 text-gold"
                 value={formatCurrency(kpis.totalDividends)}

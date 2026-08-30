@@ -168,10 +168,18 @@ const buildEmptyWalletResponse = async (targets) => {
 // usados no TWRR/Sharpe. (5.3) Promise.allSettled: se uma falha (ex.: cálculo
 // de dividendos), a carteira ainda renderiza com degradação graciosa.
 const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAssets = []) => {
-    const [assetMapR, configR, dividendsR, snapshotsR, riskSnapshotsR, treasuryR] = await Promise.allSettled([
+    const [assetMapR, configR, dividendsR, accruedR, snapshotsR, riskSnapshotsR, treasuryR] = await Promise.allSettled([
         marketDataService.getMarketDataMap(liveTickers),
         SystemConfig.findOne({ key: 'MACRO_INDICATORS' }),
         financialService.calculateUserDividends(userId, walletId),
+        // Proventos acumulados do KPI: MESMA definição que o snapshot diário grava
+        // (soma por EX-DATE, com a quantidade da época). Antes o card lia
+        // `totalAllTime`, que credita na DATA DE PAGAMENTO — e entre o dia-ex e o
+        // pagamento o preço do ativo já caiu sem a renda ter entrado, exibindo um
+        // prejuízo inexistente em `totalResult`. Era a mesma fuga que o TWRR já
+        // havia fechado, e deixava o card divergindo do próprio gráfico patrimonial
+        // (carteira real, 29/08/2026: card R$ 5,71 × snapshot R$ 7,87).
+        financialService.accrueDividendsByTicker(userId, walletId, toDateKey(brazilToday())),
         WalletSnapshot.find({ user: userId, wallet: walletId }).sort({ date: -1 }).limit(30).lean(),
         // Série de risco (Sharpe): janela própria, MAIOR e com o mesmo filtro de
         // patrimônio do /performance — é o que garante que os dois caminhos vejam
@@ -190,8 +198,15 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAss
 
     const assetMap = assetMapR.status === 'fulfilled' ? assetMapR.value : new Map();
     const config = configR.status === 'fulfilled' ? configR.value : null;
-    const { totalAllTime: totalDividends = 0, projectedMonthly = 0, receivedByTicker = {} } =
+    const { totalAllTime = 0, projectedMonthly = 0, receivedByTicker: paidByTicker = {} } =
         dividendsR.status === 'fulfilled' ? dividendsR.value : {};
+    // Fail-open para a definição ANTIGA (caixa) se o accrual cair: um número um pouco
+    // defasado é melhor que zerar os proventos do card. Nunca o contrário — o accrual
+    // é a definição correta, e é dele que o snapshot vive.
+    const { total: accruedTotal, byTicker: accruedByTicker } =
+        accruedR.status === 'fulfilled' ? accruedR.value : { total: null, byTicker: null };
+    const totalDividends = accruedTotal ?? totalAllTime;
+    const receivedByTicker = accruedByTicker ?? paidByTicker;
     const snapshots = snapshotsR.status === 'fulfilled' ? snapshotsR.value : [];
     const riskSnapshots = riskSnapshotsR.status === 'fulfilled' ? riskSnapshotsR.value : [];
     // Falha ao carregar PU não derruba a carteira: a RF volta para o accrual.

@@ -244,4 +244,31 @@ describe('accruedDividendsThroughDay — proventos pela quantidade da época', (
     ]) });
     await expect(financialService.accruedDividendsThroughDay('u1', 'w1', '2026-08-31')).resolves.toBe(0);
   });
+
+  // O KPI da carteira e a coluna "Rentabilidade" por ativo passaram a ler daqui
+  // (walletController.fetchWalletMarketContext). Se as partes não somarem o todo, a
+  // soma das linhas da tabela deixa de bater com o card — a divergência que a
+  // migração para o accrual existe para fechar.
+  it('o detalhe por ticker soma exatamente o total', async () => {
+    const OTHER = 'OUTRO11';
+    vi.spyOn(financialService, '_loadDividendDateMap').mockResolvedValue(new Map([
+      ['2026-07-07', [
+        { ticker: TICKER, amount: 0.4, type: 'DIVIDEND' },
+        { ticker: OTHER, amount: 1.0, type: 'DIVIDEND' },
+      ]],
+      ['2026-08-07', [{ ticker: TICKER, amount: 0.4, type: 'DIVIDEND' }]],
+    ]));
+    mocks.txFind.mockReturnValue({ sort: () => Promise.resolve([
+      BUY,
+      { ...BUY, ticker: OTHER, quantity: 5, date: new Date('2026-06-01T12:00:00Z') },
+    ]) });
+
+    const { total, byTicker } = await financialService.accrueDividendsByTicker('u1', 'w1', '2026-08-31');
+
+    expect(byTicker[TICKER]).toBeCloseTo(8, 2);   // 10 cotas × 0,4 × 2 ex-dates
+    expect(byTicker[OTHER]).toBeCloseTo(5, 2);    // 5 cotas × 1,0
+    expect(total).toBeCloseTo(13, 2);
+    const soma = Object.values(byTicker).reduce((s, v) => s + v, 0);
+    expect(soma).toBeCloseTo(total, 2);
+  });
 });

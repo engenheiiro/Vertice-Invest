@@ -219,18 +219,34 @@ export const financialService = {
      * numa carteira que dobrou a posição, isso creditava o dobro dos proventos
      * realmente recebidos (produção: R$ 873,78 gravado × R$ 477,50 real), e o
      * número saltava sozinho no primeiro rebuild. `calculateUserDividends`
-     * continua servindo a tela de Proventos (recorte mensal por pagamento).
+     * continua servindo a tela de Proventos (recorte mensal por pagamento), que é uma
+     * visão de CAIXA — lá "recebido" e "provisionado" aparecem separados e rotulados.
      */
     async accruedDividendsThroughDay(userId, walletId, throughDayKey, options = {}) {
+        const { total } = await this.accrueDividendsByTicker(userId, walletId, throughDayKey, options);
+        return total;
+    },
+
+    /**
+     * Mesma soma de `accruedDividendsThroughDay`, com o detalhe por ticker.
+     *
+     * O detalhe existe porque a coluna "Rentabilidade" da carteira ((saldo − custo +
+     * proventos) / custo) sofre do MESMO vão que o KPI: no dia-ex o preço do ativo já
+     * caiu, e se o provento daquele ativo só for creditado na data de pagamento, a
+     * linha exibe um prejuízo que não existe. Por ativo e no total, a regra tem que
+     * ser uma só — senão as partes deixam de somar o todo.
+     */
+    async accrueDividendsByTicker(userId, walletId, throughDayKey, options = {}) {
         const txs = options.transactions
             || await AssetTransaction.find({ user: userId, wallet: walletId }).sort({ date: 1 });
-        if (!txs || txs.length === 0) return 0;
+        if (!txs || txs.length === 0) return { total: 0, byTicker: {} };
 
         const dividendDateMap = options.dividendDateMap
             || await this._loadDividendDateMap([...new Set(txs.map(t => t.ticker))]);
 
         const days = [...dividendDateMap.keys()].filter(d => d <= throughDayKey).sort();
         const qty = {};
+        const byTicker = {};
         let txIndex = 0;
         let total = 0;
 
@@ -244,10 +260,16 @@ export const financialService = {
                 txIndex++;
             }
             for (const div of dividendDateMap.get(day)) {
-                if (qty[div.ticker] > 0) total = safeAdd(total, qty[div.ticker] * div.amount);
+                if (qty[div.ticker] > 0) {
+                    const value = qty[div.ticker] * div.amount;
+                    total = safeAdd(total, value);
+                    byTicker[div.ticker] = safeAdd(byTicker[div.ticker] || 0, value);
+                }
             }
         }
-        return safeCurrency(total);
+
+        for (const ticker of Object.keys(byTicker)) byTicker[ticker] = safeCurrency(byTicker[ticker]);
+        return { total: safeCurrency(total), byTicker };
     },
 
     /** Indexa todos os proventos dos tickers por data (chave toDateKey). */
@@ -807,6 +829,63 @@ export const financialService = {
         return { tickers: tickerCount, events: eventCount };
     },
 
+    /**
+     * Run-rate mensal de proventos da carteira ("Média Mensal Est."), medido no
+     * PRÓPRIO razão: Σ(provento por cota nos últimos 12 meses) × quantidade ÷ 12.
+     *
+     * Antes de 29/08/2026 a projeção vinha de `MarketAsset.dy × preço ÷ 12` — uma
+     * fonte DIFERENTE da que alimenta o acumulado (`DividendEvent`). Duas fontes
+     * para dois números que a UI exibe lado a lado, ambos lidos como "a renda desta
+     * carteira", produzem contradição por construção: numa carteira real a projeção
+     * prometia R$ 4,53/mês de BOVA11, um ETF de acumulação com ZERO eventos de
+     * provento no razão — 39% da estimativa saía de renda que o acumulado jamais
+     * poderia registrar. Medindo os dois no mesmo razão, eles só divergem por motivo
+     * REAL (calendário de pagamento, mudança de posição), nunca por construção.
+     *
+     * Sem fallback para `dy`: ativo sem 12 meses de histórico projeta 0 e sobe
+     * sozinho no primeiro pagamento. Subestimar é a direção fail-closed — a mesma
+     * escolha da marcação de renda fixa (regra 9) —, enquanto o fallback reabriria
+     * a porta exata que este defeito usou.
+     *
+     * O cap herdado de 25% a.a. continua, agora expresso sobre o valor de mercado da
+     * posição (quantidade × último preço): segura provento extraordinário — dividendo de
+     * evento único, JCP dobrado — que, tomado como recorrente, inflaria o run-rate. Sem
+     * preço não há teto, e a renda medida no razão passa inteira: preço ausente é falha
+     * de cotação, e ela não pode apagar provento que comprovadamente caiu na conta.
+     *
+     * `MarketAsset.dy` não participa mais deste cálculo em nenhum ponto.
+     */
+    _projectMonthlyIncome(relevantAssets, eventsMap, marketMap) {
+        const cutoff = new Date();
+        cutoff.setFullYear(cutoff.getFullYear() - 1);
+
+        let projectedMonthly = 0;
+        for (const asset of relevantAssets) {
+            if (!(asset.quantity > 0)) continue;
+
+            // Mesma deduplicação por identidade canônica do acumulado: o mesmo provento
+            // vindo de duas fontes não pode contar duas vezes no run-rate.
+            const seen = new Set();
+            let ttmPerShare = 0;
+            for (const event of eventsMap.get(asset.ticker) || []) {
+                if (this.normalizeDate(event.date) < cutoff) continue;
+                const key = this.dividendIdentity(asset.ticker, event.date, event.type);
+                if (seen.has(key)) continue;
+                seen.add(key);
+                ttmPerShare = safeAdd(ttmPerShare, event.amount);
+            }
+            if (!(ttmPerShare > 0)) continue;
+
+            let annualIncome = safeMult(asset.quantity, ttmPerShare);
+            const marketValue = safeMult(asset.quantity, marketMap.get(asset.ticker)?.lastPrice || 0);
+            const ceiling = safeMult(marketValue, 0.25);
+            if (ceiling > 0 && annualIncome > ceiling) annualIncome = ceiling;
+
+            projectedMonthly = safeAdd(projectedMonthly, safeDiv(annualIncome, 12));
+        }
+        return projectedMonthly;
+    },
+
     // ... (Mantém o restante igual) ...
     async calculateUserDividends(userId, walletId) {
         // ... (Mantém inalterado)
@@ -820,25 +899,14 @@ export const financialService = {
         const marketMap = new Map();
         marketInfos.forEach(m => marketMap.set(m.ticker, m));
 
-        let projectedMonthly = 0;
-        relevantAssets.forEach(asset => {
-            const mInfo = marketMap.get(asset.ticker);
-            if (mInfo && mInfo.dy > 0) {
-                // CORREÇÃO: Cap de Yield para Projeção Mensal
-                // Evita que dividendos extraordinários (ex: > 25% a.a.) distorçam a média mensal projetada.
-                const safeDy = Math.min(mInfo.dy, 25);
-                
-                const annualIncome = (asset.quantity * mInfo.lastPrice) * (safeDy / 100);
-                projectedMonthly += (annualIncome / 12);
-            }
-        });
-
         const allEvents = await DividendEvent.find({ ticker: { $in: tickers } }).sort({ date: 1 });
         const eventsMap = new Map();
         allEvents.forEach(e => {
             if (!eventsMap.has(e.ticker)) eventsMap.set(e.ticker, []);
             eventsMap.get(e.ticker).push(e);
         });
+
+        const projectedMonthly = this._projectMonthlyIncome(relevantAssets, eventsMap, marketMap);
 
         // `new ObjectId(undefined)` geraria um id ALEATÓRIO (não omite o filtro!),
         // então o campo só entra no $match quando walletId de fato foi passado.
