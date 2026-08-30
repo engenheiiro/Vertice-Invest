@@ -54,6 +54,17 @@ const healthyFacts = (overrides = {}) => ({
         updatedAt: hoursAgo(0.5),
     },
     treasury: { titles: 14, businessDaysStale: 1 },
+    treasuryCatalog: {
+        total: 37,
+        duplicates: [],
+        glued: [],
+        implausibleRate: [],
+        wrongIndex: [],
+        minAbovePu: [],
+        missingPrice: [],
+        oldestDays: 1,
+        issues: 0,
+    },
     frozen: { count: 0, tickers: [] },
     timeSeries: {
         wallet: { total: 17, stale: 0, worst: [], dates: [] },
@@ -200,6 +211,65 @@ describe('FRESCOR', () => {
         facts.treasury = { titles: 81, businessDaysStale: 5 };
         expect(byId(buildHealthReport(facts), 'freshness.treasury').status)
             .toBe(HEALTH_STATUS.CRITICAL);
+    });
+
+    // O catálogo (TreasuryBond) é outra coisa que a série de PU: em 30/08/2026 a
+    // série estava em dia enquanto o catálogo tinha 4 duplicatas e um título com a
+    // taxa da coluna errada. Nenhum check existente enxergava isso.
+    it('catálogo com uma duplicata alerta; com três é CRITICAL', () => {
+        const facts = healthyFacts();
+        facts.treasuryCatalog = {
+            ...facts.treasuryCatalog,
+            duplicates: [{ title: 'Tesouro IPCA+ 2037 Juros Semestrais', variants: ['a', 'b'] }],
+            issues: 1,
+        };
+        expect(byId(buildHealthReport(facts), 'plausibility.treasuryCatalog').status)
+            .toBe(HEALTH_STATUS.WARN);
+
+        facts.treasuryCatalog.issues = 3;
+        expect(byId(buildHealthReport(facts), 'plausibility.treasuryCatalog').status)
+            .toBe(HEALTH_STATUS.CRITICAL);
+    });
+
+    it('o detalhe nomeia o defeito — alarme sem nome não vira conserto', () => {
+        const facts = healthyFacts();
+        facts.treasuryCatalog = {
+            ...facts.treasuryCatalog,
+            implausibleRate: [{ title: 'Tesouro Reserva 2036', type: 'IPCA', rate: 14 }],
+            minAbovePu: [{ title: 'Tesouro Reserva 2036', min: 30, pu: 10.93 }],
+            issues: 2,
+        };
+        const detail = byId(buildHealthReport(facts), 'plausibility.treasuryCatalog').detail;
+        expect(detail).toContain('Tesouro Reserva 2036');
+        expect(detail).toContain('IPCA 14%');
+        expect(detail).toContain('mínimo acima do PU');
+    });
+
+    it('catálogo vazio é CRITICAL nos dois eixos', () => {
+        const facts = healthyFacts();
+        facts.treasuryCatalog = { ...facts.treasuryCatalog, total: 0, oldestDays: null, issues: 0 };
+        const report = buildHealthReport(facts);
+        expect(byId(report, 'plausibility.treasuryCatalog').status).toBe(HEALTH_STATUS.CRITICAL);
+        expect(byId(report, 'freshness.treasuryCatalog').status).toBe(HEALTH_STATUS.CRITICAL);
+    });
+
+    it('título parado enquanto o resto foi reescrito acusa frescor do catálogo', () => {
+        // Os 4 duplicados estavam congelados havia 5 meses.
+        const facts = healthyFacts();
+        facts.treasuryCatalog = { ...facts.treasuryCatalog, oldestDays: 12 };
+        expect(byId(buildHealthReport(facts), 'freshness.treasuryCatalog').status)
+            .toBe(HEALTH_STATUS.WARN);
+
+        facts.treasuryCatalog = { ...facts.treasuryCatalog, oldestDays: 158 };
+        expect(byId(buildHealthReport(facts), 'freshness.treasuryCatalog').status)
+            .toBe(HEALTH_STATUS.CRITICAL);
+    });
+
+    it('sync manual de poucos dias não deixa o painel amarelo', () => {
+        const facts = healthyFacts();
+        facts.treasuryCatalog = { ...facts.treasuryCatalog, oldestDays: 6 };
+        expect(byId(buildHealthReport(facts), 'freshness.treasuryCatalog').status)
+            .toBe(HEALTH_STATUS.OK);
     });
 
     it('universo de pesquisa mede FRAÇÃO de séries com candle velho, não média', () => {

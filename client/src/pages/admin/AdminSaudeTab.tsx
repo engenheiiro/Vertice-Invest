@@ -40,9 +40,17 @@ const relativeTime = (iso: string | null | undefined) => {
     return `há ${Math.round(h / 24)} dias`;
 };
 
+/**
+ * Checks de `plausibility.*` publicam FRAÇÃO do universo, menos este: o catálogo do
+ * Tesouro tem ~37 documentos e o que interessa é quantos estão defeituosos. Sem a
+ * exceção, 4 duplicatas apareceriam no painel como "400,0%".
+ */
+const COUNT_VALUE_CHECKS = new Set(['plausibility.treasuryCatalog']);
+
 /** Só valores fracionários viram %. Idade em horas e contagem ficam como estão. */
 const formatValue = (check: HealthCheck) => {
     if (check.value === null) return '—';
+    if (COUNT_VALUE_CHECKS.has(check.id)) return null;
     if (check.id.startsWith('coverage.') || check.id.startsWith('freshness.price.')
         || check.id.startsWith('plausibility.') || check.id === 'ingestion.inactiveAssets'
         || check.id === 'freshness.timeSeriesUniverse') {

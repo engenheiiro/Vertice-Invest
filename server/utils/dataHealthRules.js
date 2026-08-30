@@ -85,6 +85,19 @@ export const DEFAULT_THRESHOLDS = {
     // e a posição volta para o accrual. 3 dias úteis (~5 corridos) avisa com folga;
     // 5 (~7 corridos) é crítico e ainda sobra margem antes do desligamento.
     treasuryBusinessDaysStale: { warn: 3, critical: 5 },
+    // CATÁLOGO de títulos (TreasuryBond) — outra coisa que a série de PU acima.
+    // Contagem de defeitos estruturais (duplicata, taxa fora da faixa da família,
+    // índice incoerente, mínimo acima do PU). Um só já merece olhar: o catálogo tem
+    // ~37 documentos e alimenta tanto a vitrine quanto o spread que a carteira
+    // copia para a curva de accrual. Três é sintoma de fonte remarcada, não de
+    // linha isolada — foi o que aconteceu em 30/08/2026, com 4 duplicatas.
+    treasuryCatalogIssues: { warn: 1, critical: 3 },
+    // Idade do título MAIS VELHO do catálogo, em dias corridos. Num catálogo
+    // saudável o sync reescreve todos juntos, então um documento muito atrás dos
+    // outros é órfão de uma marcação antiga (os 4 duplicados estavam parados havia
+    // 5 meses). Limiar folgado porque o sync é MANUAL e sem hora fixa: alarmar em
+    // 2 ou 3 dias deixaria o painel amarelo por rotina, não por defeito.
+    treasuryCatalogStaleDays: { warn: 10, critical: 30 },
     // Atraso das séries temporais medido pela data do último CANDLE — nunca por
     // `AssetHistory.lastUpdated`, que diz quando o worker BUSCOU e não o que ele
     // trouxe. Medida pelo fetch contra um corte de 168h, a regra antiga deu tudo
@@ -430,6 +443,69 @@ const treasuryCheck = (facts, th) => {
     });
 };
 
+/**
+ * Catálogo de títulos: consistência e frescor.
+ *
+ * Separado do check de PU acima porque são falhas independentes — a série pode
+ * estar em dia com o catálogo remarcado, e foi exatamente o caso em 30/08/2026.
+ * Os fatos vêm de `utils/treasuryCatalogAudit.js`.
+ */
+const treasuryCatalogChecks = (facts, th) => {
+    const cat = facts.treasuryCatalog;
+    const out = [];
+
+    if (!cat) return out;
+
+    const parts = [];
+    if (cat.duplicates?.length) {
+        parts.push(`${cat.duplicates.length} duplicata(s): ${cat.duplicates.slice(0, 3).map((d) => d.title).join(', ')}`);
+    }
+    if (cat.implausibleRate?.length) {
+        parts.push(`${cat.implausibleRate.length} taxa(s) fora da faixa: ${cat.implausibleRate.slice(0, 3).map((i) => `${i.title} (${i.type} ${i.rate}%)`).join(', ')}`);
+    }
+    if (cat.wrongIndex?.length) {
+        parts.push(`${cat.wrongIndex.length} índice(s) incoerente(s): ${cat.wrongIndex.slice(0, 3).map((i) => `${i.title} (${i.type}/${i.index})`).join(', ')}`);
+    }
+    if (cat.minAbovePu?.length) {
+        parts.push(`${cat.minAbovePu.length} com mínimo acima do PU: ${cat.minAbovePu.slice(0, 3).map((i) => `${i.title} (R$ ${i.min} > R$ ${i.pu})`).join(', ')}`);
+    }
+    if (cat.missingPrice?.length) {
+        parts.push(`${cat.missingPrice.length} sem PU: ${cat.missingPrice.slice(0, 3).join(', ')}`);
+    }
+
+    out.push(check({
+        id: 'plausibility.treasuryCatalog',
+        label: 'Catálogo do Tesouro Direto',
+        category: CATEGORY.PLAUSIBILITY,
+        status: cat.total > 0
+            ? gradeAscending(cat.issues, th.treasuryCatalogIssues)
+            : HEALTH_STATUS.CRITICAL,
+        value: cat.issues,
+        detail: cat.total === 0
+            ? 'Catálogo vazio'
+            : parts.length
+                ? parts.join(' · ')
+                : `${cat.total} títulos consistentes`,
+        hint: 'macroDataService.updateTreasuryRates. Duplicata = a fonte remarcou o nome e a poda não rodou; taxa fora da faixa = coluna de rentabilidade lida errada. O catálogo alimenta o spread que a carteira copia para a curva de accrual.',
+    }));
+
+    out.push(check({
+        id: 'freshness.treasuryCatalog',
+        label: 'Frescor do catálogo do Tesouro',
+        category: CATEGORY.FRESHNESS,
+        status: cat.total === 0
+            ? HEALTH_STATUS.CRITICAL
+            : gradeAscending(cat.oldestDays, th.treasuryCatalogStaleDays),
+        value: cat.oldestDays,
+        detail: cat.total === 0
+            ? 'Catálogo vazio'
+            : `Título mais antigo tem ${cat.oldestDays} dia(s) sem reescrita (${cat.total} títulos)`,
+        hint: 'O sync reescreve o catálogo inteiro de uma vez: um título muito atrás dos outros ficou órfão de uma marcação antiga da fonte e exibe taxa/PU congelados.',
+    }));
+
+    return out;
+};
+
 /** "TICKER (última data)" para os N mais parados — alarme sem nome não vira conserto. */
 const candleSample = (worst) => (worst || [])
     .map((s) => `${s.ticker} (${s.lastCandle || 'sem série'})`)
@@ -641,7 +717,7 @@ const errorChecks = (facts, th) => {
  * `facts` esperado:
  *   { now, totals{all,active,inactive}, assets{CLASSE:{active,stalePrice,missing{}}},
  *     implausible{campo:count,nonPositivePrice}, macro{...,updatedAt},
- *     treasury{titles,latestDate},
+ *     treasury{titles,latestDate}, treasuryCatalog{total,duplicates[],...},
  *     timeSeries{wallet{total,stale,worst[],dates[]}, universe{idem}},
  *     fundamentals{healthy,timestamp,errorCode}, jobs[], errors{last24h} }
  */
@@ -653,6 +729,7 @@ export const buildHealthReport = (facts = {}, thresholdOverrides = null) => {
     const checks = [
         ...freshnessChecks(ctx, th),
         treasuryCheck(ctx, th),
+        ...treasuryCatalogChecks(ctx, th),
         ...timeSeriesChecks(ctx, th),
         ...coverageChecks(ctx, th),
         ...plausibilityChecks(ctx, th),

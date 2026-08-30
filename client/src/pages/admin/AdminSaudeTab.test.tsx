@@ -112,6 +112,31 @@ describe('regra de leitura', () => {
         expect(screen.getByText(/treasuryPriceService/)).toBeInTheDocument();
     });
 
+    // O catálogo do Tesouro publica CONTAGEM de defeitos, não fração do universo
+    // como os outros checks de plausibilidade — 4 duplicatas não são "400,0%".
+    it('defeito do catálogo do Tesouro aparece nomeado e sem virar porcentagem', async () => {
+        getDataHealth.mockResolvedValue(mkResponse({
+            report: {
+                runAt: new Date().toISOString(),
+                status: 'CRITICAL',
+                summary: { ok: 0, warn: 0, critical: 1 },
+                checks: [
+                    {
+                        id: 'plausibility.treasuryCatalog', label: 'Catálogo do Tesouro Direto',
+                        category: 'PLAUSIBILIDADE', status: 'CRITICAL', value: 4,
+                        detail: '4 duplicata(s): Tesouro IPCA+ 2037 Juros Semestrais',
+                        hint: 'macroDataService.updateTreasuryRates. Duplicata = a fonte remarcou o nome.',
+                    },
+                ],
+            },
+        }));
+        render(<AdminSaudeTab />);
+        expect(await screen.findByText('Catálogo do Tesouro Direto')).toBeInTheDocument();
+        expect(screen.getByText(/4 duplicata\(s\)/)).toBeInTheDocument();
+        expect(screen.queryByText('400.0%')).not.toBeInTheDocument();
+        expect(screen.getByText(/updateTreasuryRates/)).toBeInTheDocument();
+    });
+
     it('checks saudáveis ficam recolhidos até o clique', async () => {
         getDataHealth.mockResolvedValue(mkResponse());
         render(<AdminSaudeTab />);

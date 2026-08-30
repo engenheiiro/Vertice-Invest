@@ -18,6 +18,7 @@ import MarketAsset from '../models/MarketAsset.js';
 import SystemConfig from '../models/SystemConfig.js';
 import AssetHistory from '../models/AssetHistory.js';
 import TreasuryPriceHistory from '../models/TreasuryPriceHistory.js';
+import TreasuryBond from '../models/TreasuryBond.js';
 import UserAsset from '../models/UserAsset.js';
 import DataHealthReport from '../models/DataHealthReport.js';
 import ErrorLog from '../models/ErrorLog.js';
@@ -27,6 +28,7 @@ import { isTransientMongoError } from '../utils/mongoResilience.js';
 import { JOB_CATALOG } from '../config/jobCatalog.js';
 import { brazilDayKey, isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { buildCandleClock, summarizeCandleStaleness } from '../utils/candleStaleness.js';
+import { auditTreasuryCatalog } from '../utils/treasuryCatalogAudit.js';
 import {
     COVERAGE_SPEC,
     DEFAULT_THRESHOLDS,
@@ -254,6 +256,7 @@ const collectFacts = async (now) => {
         totalInactive,
         macroConfig,
         treasuryRows,
+        treasuryCatalogRows,
         candleFacts,
         errors24h,
         jobs,
@@ -270,6 +273,9 @@ const collectFacts = async (now) => {
         TreasuryPriceHistory.aggregate([
             { $group: { _id: null, latest: { $max: { $max: '$history.date' } }, titles: { $sum: 1 } } },
         ]),
+        // Catálogo inteiro (~37 documentos): as invariantes são estruturais e
+        // baratas de checar sobre a coleção completa, sem agregação.
+        TreasuryBond.find({}).select('title type index rate unitPrice minInvestment maturityDate updatedAt').lean(),
         collectCandleFacts(now, candleTolerances),
         ErrorLog.aggregate([
             { $match: { lastSeenAt: { $gte: since24h } } },
@@ -292,6 +298,7 @@ const collectFacts = async (now) => {
     ]);
 
     const treasury = treasuryRows[0] || {};
+    const treasuryCatalog = auditTreasuryCatalog(treasuryCatalogRows, { now });
 
     return {
         facts: {
@@ -320,6 +327,7 @@ const collectFacts = async (now) => {
                 latestDate: treasury.latest ? new Date(`${treasury.latest}T12:00:00.000Z`) : null,
                 businessDaysStale: businessDaysStale(treasury.latest, now),
             },
+            treasuryCatalog,
             timeSeries: candleFacts,
             fundamentals: {
                 healthy: macroConfig?.lastSyncStats?.fundamentalsHealthy === true,
