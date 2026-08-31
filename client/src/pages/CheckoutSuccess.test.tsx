@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   syncPayment: vi.fn(),
   syncPreapproval: vi.fn(),
   api: vi.fn(),
+  trackEvent: vi.fn(),
 }));
 
 vi.mock('react-router-dom', () => ({
@@ -20,6 +21,7 @@ vi.mock('../services/subscription', () => ({
   subscriptionService: { syncPayment: mocks.syncPayment, syncPreapproval: mocks.syncPreapproval },
 }));
 vi.mock('../services/auth', () => ({ authService: { api: mocks.api } }));
+vi.mock('../utils/analytics', () => ({ trackEvent: mocks.trackEvent }));
 
 import { CheckoutSuccess } from './CheckoutSuccess';
 import { getCheckoutReturnDetails, isActivationRecorded, isSubscriptionActivated } from '../utils/checkoutStatus';
@@ -127,5 +129,57 @@ describe('CheckoutSuccess — fluxo de assinatura recorrente', () => {
     expect(mocks.syncPreapproval).toHaveBeenCalledWith('preapp-1');
     expect(mocks.syncPayment).not.toHaveBeenCalled();
     expect(screen.getByText('Mensal automática')).toBeInTheDocument();
+  });
+});
+
+describe('CheckoutSuccess — evento de conversão', () => {
+  const ativacaoAprovada = () => {
+    mocks.syncPayment.mockResolvedValue({ success: true, status: 'approved' });
+    mocks.api.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        current: { plan: 'PRO', subscriptionType: 'ONE_TIME', subscriptionStatus: 'ACTIVE' },
+        lastPayment: { gatewayId: 'pay-123', plan: 'PRO', status: 'PAID' },
+      }),
+    });
+  };
+
+  it('manda o valor da compra, não só a contagem', async () => {
+    // Sem `value`, o GA registra a conversão com receita zero e não dá para
+    // comparar canal por retorno — só por volume, que é o número enganoso.
+    mocks.query = 'plan=PRO&payment_id=pay-123&status=approved';
+    ativacaoAprovada();
+
+    render(<CheckoutSuccess />);
+
+    await waitFor(() => expect(mocks.trackEvent).toHaveBeenCalledWith('purchase', expect.objectContaining({
+      value: 69.9,
+      currency: 'BRL',
+      billing_cycle: 'MONTHLY',
+    })));
+  });
+
+  it('no anual, o valor é o do ano — não o da parcela', async () => {
+    mocks.query = 'plan=PRO_ANNUAL&payment_id=pay-123&status=approved';
+    ativacaoAprovada();
+
+    render(<CheckoutSuccess />);
+
+    await waitFor(() => expect(mocks.trackEvent).toHaveBeenCalledWith('purchase', expect.objectContaining({
+      value: 598.8,
+      billing_cycle: 'ANNUAL',
+    })));
+  });
+
+  it('não conta a compra de teste do admin como venda', async () => {
+    // A variante _TEST custa R$ 0,50 e existe para verificar o checkout.
+    // Reportá-la como conversão misturaria nosso teste com a receita medida.
+    mocks.query = 'plan=PRO_TEST&payment_id=pay-123&status=approved';
+    ativacaoAprovada();
+
+    render(<CheckoutSuccess />);
+
+    await waitFor(() => expect(screen.getByText('Pagamento confirmado!')).toBeInTheDocument());
+    expect(mocks.trackEvent).not.toHaveBeenCalled();
   });
 });

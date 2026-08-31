@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowRight, CheckCircle2, Clock3, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, type UserPlan } from '../contexts/AuthContext';
 import { subscriptionService } from '../services/subscription';
 import { authService } from '../services/auth';
 import { trackEvent } from '../utils/analytics';
+// Preço da compra para o evento de conversão: mesma tabela que gerou o checkout.
+import { SELLABLE_PLANS, priceOf } from '../constants/subscription';
 import {
     getCheckoutReturnDetails,
     isActivationRecorded,
@@ -62,6 +64,15 @@ export const CheckoutSuccess = () => {
     // O anual é avulso por construção (o PreApproval do MP não parcela), então
     // "Avulsa" sozinho não distingue 30 de 365 dias.
     const isAnnual = Boolean(rawPlan?.includes('_ANNUAL'));
+    // Variante de teste (R$ 0,50, só admin): compra de verificação não é venda.
+    // Contá-la no GA misturaria nosso próprio teste com a receita medida.
+    const isTestPurchase = Boolean(rawPlan?.includes('_TEST'));
+    // Valor da compra para o `purchase`. Sem ele o GA registra conversão com
+    // receita zero, e não dá para comparar canal por retorno — só por volume.
+    // Sai da tabela da vitrine, a mesma que gerou o checkout.
+    const purchaseValue = expectedPlan && (SELLABLE_PLANS as string[]).includes(expectedPlan)
+        ? priceOf(expectedPlan as UserPlan, isAnnual ? 'ANNUAL' : 'MONTHLY')
+        : undefined;
 
     useEffect(() => {
         let cancelled = false;
@@ -126,7 +137,7 @@ export const CheckoutSuccess = () => {
             }
 
             if (await waitForRecordedActivation()) {
-                if (!compraRegistrada.current) {
+                if (!compraRegistrada.current && !isTestPurchase) {
                     compraRegistrada.current = true;
                     trackEvent('purchase', {
                         transaction_id: paymentId ?? preapprovalId ?? undefined,
@@ -134,6 +145,7 @@ export const CheckoutSuccess = () => {
                         billing_cycle: isAnnual ? 'ANNUAL' : 'MONTHLY',
                         billing_mode: isRecurring ? 'RECURRING' : 'ONE_TIME',
                         currency: 'BRL',
+                        value: purchaseValue,
                     });
                 }
                 setResult('activated', isRecurring
@@ -154,7 +166,7 @@ export const CheckoutSuccess = () => {
         void verifyPayment();
 
         return () => { cancelled = true; };
-    }, [attempt, expectedPlan, isAnnual, isRecurring, paymentId, preapprovalId, refreshProfile, status]);
+    }, [attempt, expectedPlan, isAnnual, isRecurring, isTestPurchase, paymentId, preapprovalId, purchaseValue, refreshProfile, status]);
 
     const detail = phase === 'verifying' ? null : phaseDetails[phase];
     const Icon = phase === 'activated'
