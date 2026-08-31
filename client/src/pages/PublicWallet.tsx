@@ -5,6 +5,7 @@ import { ShieldCheck, Lock, ArrowUpRight } from 'lucide-react';
 import { PublicWalletProvider } from '../contexts/PublicWalletProvider';
 import { WalletView } from '../components/wallet/WalletView';
 import { publicWalletQueryOptions, type PublicWalletData } from '../services/publicWallet';
+import { PageMeta } from '../components/seo/PageMeta';
 
 /**
  * (C4) Carteira pública — o link compartilhado renderiza a MESMA página Carteira
@@ -16,6 +17,12 @@ import { publicWalletQueryOptions, type PublicWalletData } from '../services/pub
 
 const Shell: React.FC<React.PropsWithChildren> = ({ children }) => (
     <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30">
+        {/* O token é secreto por design: quem compartilha manda para alguém, não
+            para o mundo. O robots.txt pede que não rastreiem /p/, mas robots.txt
+            é pedido — o noindex é o que impede a página de virar resultado de
+            busca se alguém publicar o link em algum lugar. Fica no Shell para
+            valer nos três estados, inclusive no erro. */}
+        <PageMeta title="Carteira compartilhada" noindex />
         <header className="border-b border-slate-800/80">
             <div className="max-w-[1360px] mx-auto px-4 md:px-6 py-3 flex items-center justify-between">
                 <Link to="/" className="flex items-center gap-2 font-bold">

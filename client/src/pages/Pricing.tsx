@@ -10,6 +10,7 @@ import { Header } from '../components/dashboard/Header';
 import { PaymentMethodModal } from '../components/subscription/PaymentMethodModal';
 import { ANNUAL_INSTALLMENTS, PLAN_DETAILS, annualSavingsPercent, checkoutKeyFor, type BillingCycle } from '../constants/subscription';
 import { HOME_ROUTE } from '../config/homeRoute';
+import { PageMeta } from '../components/seo/PageMeta';
 
 // Features exclusivas de cada tier — só o que é NOVO naquele plano.
 // A grade segue o catálogo do plano comercial (planejamento/PLANO-DIVULGACAO-2026-08.html,
@@ -231,6 +232,15 @@ export const Pricing = () => {
     );
 
     return (
+        <>
+        {/* A página passou a ser indexável (Onda 5). Sem título e descrição
+            próprios, o resultado de busca herdaria os genéricos do index.html —
+            a página que vende apareceria com a cara da inicial. */}
+        <PageMeta
+            title="Planos e Preços"
+            description="Planos da Vértice Invest a partir de R$ 29,90/mês: carteira com importação da B3, proventos, carteiras recomendadas de Ações, FIIs e Cripto e ativos globais. No anual, até 12× sem renovação automática."
+            canonical="/pricing"
+        />
         <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-[calc(5rem+env(safe-area-inset-bottom))] xl:pb-20">
             {/* O Header do app depende do WalletProvider (carteira ativa, modo
                 privacidade), que só existe na área logada. Visitante recebe uma
@@ -380,6 +390,7 @@ export const Pricing = () => {
                 </div>
             </div>
         </div>
+        </>
     );
 };
 

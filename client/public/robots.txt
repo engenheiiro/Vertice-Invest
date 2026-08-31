@@ -9,6 +9,9 @@ Disallow: /courses
 Disallow: /profile
 Disallow: /admin
 Disallow: /checkout
-Disallow: /pricing
+
+# Carteiras compartilhadas por link. O token é secreto por design — indexar
+# transformaria "mandei para o meu irmão" em resultado de busca pública.
+Disallow: /p/
 
 Sitemap: https://verticeinvest.com.br/sitemap.xml
