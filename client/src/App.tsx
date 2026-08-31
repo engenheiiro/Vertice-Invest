@@ -86,6 +86,23 @@ const ProtectedAppLayout = () => {
   );
 };
 
+/**
+ * A vitrine de planos precisa ser visível SEM login — era a porta fechada que
+ * obrigava o visitante a criar conta só para descobrir o preço, e que deixava a
+ * página invisível para busca.
+ *
+ * Quem já está logado continua recebendo exatamente a casca de hoje (carteira,
+ * tutorial, navegação inferior); o visitante recebe a página nua. Publicar a
+ * rota fora do layout protegido para todo mundo tiraria a navegação de quem já
+ * é cliente — a página é a mesma, o entorno é que muda com a audiência.
+ */
+const PricingLayout = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <PageLoader />;
+  if (isAuthenticated) return <ProtectedAppLayout />;
+  return <Suspense fallback={<PageLoader />}><Outlet /></Suspense>;
+};
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -125,6 +142,11 @@ export default function App() {
               <Route path="/reset-password" element={<ResetPassword />} />
             </Route>
 
+            {/* Vitrine pública: mesma página, entorno conforme a audiência. */}
+            <Route element={<PricingLayout />}>
+              <Route path="/pricing" element={<Pricing />} />
+            </Route>
+
             <Route element={<ProtectedAppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/wallet" element={<Wallet />} />
@@ -140,7 +162,6 @@ export default function App() {
               <Route path="/courses" element={<Courses />} />
               <Route path="/courses/:courseId" element={<CoursePlayer />} />
               <Route path="/profile" element={<Profile />} />
-              <Route path="/pricing" element={<Pricing />} />
               
               <Route path="/admin" element={
                   <AdminRoute>

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
-import { Check, ArrowLeft, Zap, Shield, Rocket, Gem, ExternalLink } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Check, ArrowLeft, Zap, Shield, Rocket, Gem, ExternalLink, ShieldCheck } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { useAuth, UserPlan } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -124,8 +124,9 @@ const PLANS_CONFIG: PlanConfig[] = [
 ];
 
 export const Pricing = () => {
-    const { user } = useAuth();
+    const { user, isAuthenticated } = useAuth();
     const { addToast } = useToast();
+    const navigate = useNavigate();
     const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
     const [activeDot, setActiveDot] = useState(0);
     const [cycle, setCycle] = useState<BillingCycle>('MONTHLY');
@@ -168,6 +169,12 @@ export const Pricing = () => {
      */
     const handleSelectPlan = (planId: string) => {
         const plan = planId as UserPlan;
+        // Visitante não tem conta para receber o plano, e o checkout exige
+        // autenticação — mandá-lo ao Mercado Pago só produziria um 401.
+        if (!isAuthenticated) {
+            navigate('/register');
+            return;
+        }
         if (isAnnual) {
             void startCheckout(plan, 'ONE_TIME');
             return;
@@ -219,12 +226,16 @@ export const Pricing = () => {
             hoverColor={plan.hoverColor}
             onSelect={handleSelectPlan}
             isLoading={loadingPlan === plan.id}
+            isVisitor={!isAuthenticated}
         />
     );
 
     return (
         <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-[calc(5rem+env(safe-area-inset-bottom))] xl:pb-20">
-            <Header />
+            {/* O Header do app depende do WalletProvider (carteira ativa, modo
+                privacidade), que só existe na área logada. Visitante recebe uma
+                barra própria, com os dois caminhos que fazem sentido para ele. */}
+            {isAuthenticated ? <Header /> : <VitrineTopBar />}
 
             {pendingPlan && (
                 <PaymentMethodModal
@@ -242,7 +253,7 @@ export const Pricing = () => {
                 {/* Cabeçalho */}
                 <div className="mb-12 text-center relative">
                     <div className="absolute left-0 top-1/2 -translate-y-1/2 hidden lg:block">
-                        <Link to={HOME_ROUTE} className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white transition-colors group">
+                        <Link to={isAuthenticated ? HOME_ROUTE : '/'} className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white transition-colors group">
                             <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
                             Voltar
                         </Link>
@@ -252,16 +263,18 @@ export const Pricing = () => {
                     </h1>
                     <p className="text-slate-400 text-sm max-w-xl mx-auto">
                         Potencialize seus retornos com a tecnologia Vértice.
-                        <span className="block sm:inline mt-2 sm:mt-0 sm:ml-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/50">
-                            Plano Atual:{' '}
-                            <span className="text-white font-bold uppercase ml-1 px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
-                                {PLAN_DETAILS[user?.plan || 'GUEST'].label}
+                        {isAuthenticated && (
+                            <span className="block sm:inline mt-2 sm:mt-0 sm:ml-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/50">
+                                Plano Atual:{' '}
+                                <span className="text-white font-bold uppercase ml-1 px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
+                                    {PLAN_DETAILS[user?.plan || 'GUEST'].label}
+                                </span>
                             </span>
-                        </span>
+                        )}
                     </p>
                     <div className="mt-6 lg:hidden text-left">
-                        <Link to={HOME_ROUTE} className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white">
-                            <ArrowLeft size={14} /> Voltar à Carteira
+                        <Link to={isAuthenticated ? HOME_ROUTE : '/'} className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-white">
+                            <ArrowLeft size={14} /> {isAuthenticated ? 'Voltar à Carteira' : 'Voltar ao início'}
                         </Link>
                     </div>
                 </div>
@@ -371,6 +384,30 @@ export const Pricing = () => {
 };
 
 // ─────────────────────────────────────────────
+// VitrineTopBar — barra do visitante (sem WalletProvider)
+// ─────────────────────────────────────────────
+const VitrineTopBar = () => (
+    <nav aria-label="Navegação principal" className="w-full border-b border-slate-800 bg-base/80 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+            <Link to="/" className="flex items-center gap-2">
+                <div className="w-7 h-7 bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center rounded-lg shadow-lg shadow-blue-600/20">
+                    <ShieldCheck size={16} className="text-white" />
+                </div>
+                <span className="text-base font-bold tracking-tight text-white">VÉRTICE</span>
+            </Link>
+            <div className="flex items-center gap-4">
+                <Link to="/login" className="text-[12.5px] font-semibold text-slate-300 hover:text-white transition-colors">
+                    Acessar Conta
+                </Link>
+                <Link to="/register" className="rounded-full bg-white px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-950 transition-colors hover:bg-blue-50">
+                    Começar Agora
+                </Link>
+            </div>
+        </div>
+    </nav>
+);
+
+// ─────────────────────────────────────────────
 // PricingCard
 // ─────────────────────────────────────────────
 type ExclusiveFeature = { key: string; label: string; highlight?: string };
@@ -421,6 +458,7 @@ const PricingCard = ({
     hoverColor = 'hover:border-slate-700',
     onSelect,
     isLoading,
+    isVisitor,
 }: {
     id: string;
     title: string;
@@ -445,6 +483,7 @@ const PricingCard = ({
     hoverColor?: string;
     onSelect: (id: string) => void;
     isLoading?: boolean;
+    isVisitor?: boolean;
 }) => {
     // O Free não é vendido no anual: sem preço anual, o card fica como está.
     const isAnnualCard = cycle === 'ANNUAL' && Boolean(annualPrice);
@@ -557,7 +596,16 @@ const PricingCard = ({
 
         {/* CTA */}
         <div className="relative z-10 mt-auto">
-            {isFree && !current ? (
+            {isFree && isVisitor ? (
+                // Para o visitante o Free não é informação, é a porta de entrada.
+                <Button
+                    variant="outline"
+                    className="w-full text-xs uppercase tracking-wide py-4"
+                    onClick={() => onSelect(id)}
+                >
+                    Criar conta grátis
+                </Button>
+            ) : isFree && !current ? (
                 <div className="w-full py-4 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-500 text-xs font-bold text-center cursor-default">
                     Incluído em toda conta Vértice
                 </div>
@@ -574,6 +622,10 @@ const PricingCard = ({
                 >
                     {isLoading ? (
                         'Redirecionando...'
+                    ) : isVisitor ? (
+                        // Sem conta não há plano para creditar: o passo honesto é
+                        // o cadastro, não uma ida ao Mercado Pago que daria 401.
+                        'Criar conta para assinar'
                     ) : (
                         <span className="flex items-center gap-2">
                             Assinar com Mercado Pago <ExternalLink size={12} />
