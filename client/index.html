@@ -41,14 +41,11 @@
     <meta name="apple-mobile-web-app-title" content="Vértice" />
     <meta name="mobile-web-app-capable" content="yes" />
 
-    <!-- Google Analytics 4 -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-V9QW6ZJEQW"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-V9QW6ZJEQW');
-    </script>
+    <!-- Google Analytics 4: NÃO carrega aqui.
+         Cookie de medição não é estritamente necessário, então depende de
+         consentimento (LGPD Art. 7º, I) — e consentimento que chega depois da
+         coleta não é consentimento. A tag é injetada por
+         src/utils/analyticsConsent.ts, e só após o "Aceitar" do banner. -->
 
     <!-- Fontes — Manrope self-hosted (B2: remove dependência do Google Fonts CDN;
          @font-face fica em src/index.css, fingerprintado pelo Vite e precachado

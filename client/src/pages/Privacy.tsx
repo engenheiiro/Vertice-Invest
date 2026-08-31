@@ -1,8 +1,9 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ShieldCheck, Mail } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Mail, Cookie } from 'lucide-react';
 import { PageMeta } from '../components/seo/PageMeta';
+import { resetAnalyticsConsent } from '../utils/analyticsConsent';
 
 export const Privacy = () => {
   return (
@@ -19,7 +20,7 @@ export const Privacy = () => {
         </Link>
         <div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">Política de Privacidade</h2>
-            <p className="text-slate-500 text-[10px] font-medium uppercase tracking-wider">Versão 1.0 — Junho de 2025 • Lei nº 13.709/2018 (LGPD)</p>
+            <p className="text-slate-500 text-[10px] font-medium uppercase tracking-wider">Versão 1.1 — Agosto de 2026 • Lei nº 13.709/2018 (LGPD)</p>
         </div>
       </div>
 
@@ -53,13 +54,14 @@ export const Privacy = () => {
           <li><strong>Carteira e operações:</strong> ativos, lotes fiscais, transações e metas de investimento.</li>
           <li><strong>Logs de acesso e auditoria:</strong> IP, user-agent, data/hora e ação realizada (segurança e prevenção a fraudes).</li>
           <li><strong>Tokens de sessão:</strong> refresh tokens armazenados com hash SHA-256, expirando em 7 dias.</li>
+          <li><strong>Navegação (opcional):</strong> páginas visitadas e origem da visita, de forma agregada e com IP anonimizado — coletados <strong>apenas</strong> se você autorizar os cookies de medição (seção 6).</li>
         </ul>
 
         <h3 className="text-slate-900 font-bold text-base mb-2">3. Bases Legais (Art. 7º)</h3>
         <ul className="mb-4 text-sm list-disc pl-5 space-y-1">
           <li><strong>Execução de contrato (inciso V):</strong> dados de cadastro e carteira, necessários para a prestação do serviço contratado.</li>
           <li><strong>Legítimo interesse (inciso IX):</strong> logs de segurança, prevenção a fraudes e melhoria da plataforma.</li>
-          <li><strong>Consentimento (inciso I):</strong> comunicações de marketing opcionais (opt-in explícito).</li>
+          <li><strong>Consentimento (inciso I):</strong> comunicações de marketing opcionais e cookies de medição de uso (Google Analytics) — ambos com opt-in explícito e revogáveis a qualquer momento.</li>
           <li><strong>Cumprimento de obrigação legal (inciso II):</strong> guarda de dados financeiros conforme legislação aplicável.</li>
         </ul>
 
@@ -80,13 +82,39 @@ export const Privacy = () => {
           <li><strong>Mercado Pago:</strong> processamento de pagamentos (identificador de usuário e valor da transação).</li>
           <li><strong>Google (Gemini AI):</strong> geração de narrativas de mercado — apenas tickers e setores públicos; nenhum dado pessoal é enviado.</li>
           <li><strong>Sentry:</strong> monitoramento de erros e performance — configurado com masking de texto e sem captura de PII.</li>
+          <li><strong>Google Analytics:</strong> medição agregada de uso da plataforma (páginas visitadas, origem da visita, IP anonimizado) — <strong>somente se você autorizar</strong> no aviso de cookies. Sem autorização, nada é enviado.</li>
           <li><strong>Provedor SMTP:</strong> envio de e-mails transacionais (redefinição de senha, recibos de assinatura).</li>
         </ul>
 
         <h3 className="text-slate-900 font-bold text-base mb-2">6. Cookies e Armazenamento Local</h3>
         <p className="mb-4">
-          Utilizamos exclusivamente <strong>cookies próprios e essenciais</strong> para o funcionamento da plataforma: token de sessão (<code>jwt</code>) e proteção contra CSRF (<code>csrfToken</code>). Não utilizamos cookies de rastreamento ou analytics de terceiros. Por serem estritamente necessários, não requerem consentimento, mas informamos sua existência por transparência (Art. 6º, VI).
+          Utilizamos duas categorias de cookies, com bases legais distintas:
         </p>
+        <ul className="mb-4 text-sm list-disc pl-5 space-y-1">
+          <li>
+            <strong>Essenciais (sempre ativos):</strong> token de sessão (<code>jwt</code>) e proteção contra CSRF
+            (<code>csrfToken</code>). São cookies próprios, estritamente necessários para autenticar e manter a
+            sessão segura — sem eles a plataforma não funciona. Por esse motivo não dependem de consentimento
+            (Art. 6º, VI), mas informamos sua existência por transparência.
+          </li>
+          <li>
+            <strong>Medição de uso (opcionais, só com sua permissão):</strong> Google Analytics 4 (cookies
+            <code>_ga</code>), usado para medir páginas visitadas e origem das visitas de forma agregada, com
+            anonimização de IP. <strong>Nada é carregado antes do seu "Aceitar"</strong> no aviso de cookies: a
+            base legal é o consentimento (Art. 7º, I), e ele é colhido antes da coleta.
+          </li>
+        </ul>
+        <p className="mb-2">
+          Você pode revogar ou conceder essa permissão a qualquer momento (Art. 18, IX). Ao revogar, interrompemos
+          o envio de dados e apagamos os cookies de medição já gravados neste navegador.
+        </p>
+        <button
+          type="button"
+          onClick={resetAnalyticsConsent}
+          className="mb-4 inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-bold rounded-lg transition-colors"
+        >
+          <Cookie size={14} /> Alterar minha escolha sobre cookies
+        </button>
 
         <h3 className="text-slate-900 font-bold text-base mb-2">7. Prazo de Retenção</h3>
         <ul className="mb-4 text-sm list-disc pl-5 space-y-1">
@@ -95,6 +123,7 @@ export const Privacy = () => {
           <li><strong>Tokens de sessão:</strong> 7 dias ou até revogação manual.</li>
           <li><strong>Dados financeiros (carteira, transações):</strong> conforme exigência legal fiscal e contábil vigente.</li>
           <li><strong>Sinais e análises de mercado:</strong> prazo técnico definido internamente, excluídos após expiração.</li>
+          <li><strong>Cookies de medição (<code>_ga</code>):</strong> até 2 anos no seu navegador, ou até você revogar a permissão — o que ocorrer primeiro.</li>
         </ul>
 
         <h3 className="text-slate-900 font-bold text-base mb-2">8. Seus Direitos como Titular (Art. 18)</h3>

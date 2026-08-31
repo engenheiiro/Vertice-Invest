@@ -5,8 +5,12 @@ import App from './App';
 import './index.css';
 import * as Sentry from "@sentry/react";
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { initAnalyticsConsent } from './utils/analyticsConsent';
 
 const env = (import.meta as any).env;
+
+// Antes de qualquer render: carrega o GA só se já houver "Aceitar" registrado.
+initAnalyticsConsent();
 
 if (env?.VITE_SENTRY_DSN) {
   try {
