@@ -54,13 +54,14 @@ export const Privacy = () => {
           <li><strong>Carteira e operações:</strong> ativos, lotes fiscais, transações e metas de investimento.</li>
           <li><strong>Logs de acesso e auditoria:</strong> IP, user-agent, data/hora e ação realizada (segurança e prevenção a fraudes).</li>
           <li><strong>Tokens de sessão:</strong> refresh tokens armazenados com hash SHA-256, expirando em 7 dias.</li>
-          <li><strong>Navegação (opcional):</strong> páginas visitadas e origem da visita, de forma agregada e com IP anonimizado — coletados <strong>apenas</strong> se você autorizar os cookies de medição (seção 6).</li>
+          <li><strong>Origem do cadastro:</strong> por qual canal você chegou até nós (parâmetros de campanha do link, endereço do site que indicou e página de entrada). É registrado <strong>uma única vez, no momento do cadastro</strong>, fica guardado com a sua conta e não envolve cookie de terceiros nem acompanha sua navegação em outros sites. Base legal: legítimo interesse (Art. 7º, IX) — saber por qual canal chegam nossos clientes.</li>
+          <li><strong>Navegação (opcional):</strong> páginas visitadas dentro da plataforma, de forma agregada e com IP anonimizado — coletadas <strong>apenas</strong> se você autorizar os cookies de medição (seção 6).</li>
         </ul>
 
         <h3 className="text-slate-900 font-bold text-base mb-2">3. Bases Legais (Art. 7º)</h3>
         <ul className="mb-4 text-sm list-disc pl-5 space-y-1">
           <li><strong>Execução de contrato (inciso V):</strong> dados de cadastro e carteira, necessários para a prestação do serviço contratado.</li>
-          <li><strong>Legítimo interesse (inciso IX):</strong> logs de segurança, prevenção a fraudes e melhoria da plataforma.</li>
+          <li><strong>Legítimo interesse (inciso IX):</strong> logs de segurança, prevenção a fraudes, melhoria da plataforma e registro da origem do cadastro (por qual canal o cliente chegou).</li>
           <li><strong>Consentimento (inciso I):</strong> comunicações de marketing opcionais e cookies de medição de uso (Google Analytics) — ambos com opt-in explícito e revogáveis a qualquer momento.</li>
           <li><strong>Cumprimento de obrigação legal (inciso II):</strong> guarda de dados financeiros conforme legislação aplicável.</li>
         </ul>

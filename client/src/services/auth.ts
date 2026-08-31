@@ -15,6 +15,17 @@ interface RegisterData {
   acceptedTerms?: boolean;
   acceptedPrivacy?: boolean;
   marketingOptIn?: boolean;
+  // Origem do primeiro toque (utils/analytics). Vai UMA vez, no cadastro, e
+  // vira atributo da conta — é o que permite responder "de qual canal veio
+  // quem realmente assinou", que o Analytics não sabe: ele só vê quem aceitou
+  // o cookie de medição. O servidor saneia antes de gravar.
+  acquisition?: {
+    source?: string;
+    medium?: string;
+    campaign?: string;
+    referrer?: string;
+    landingPath?: string;
+  };
 }
 
 interface AuthResponse {

@@ -49,11 +49,25 @@ export const ANNUAL_INSTALLMENTS = 12;
 export const checkoutKeyFor = (plan: UserPlan, cycle: BillingCycle) =>
     cycle === 'ANNUAL' ? `${plan}_ANNUAL` : plan;
 
+/** '1.198,80' → 1198.8. Os preços moram como texto de exibição; só a conta
+ *  precisa do número. */
+const paraNumero = (valor: string) => Number(valor.replace(/\./g, '').replace(',', '.'));
+
+/**
+ * Valor REALMENTE cobrado no ciclo escolhido — o que vai no evento de funil.
+ * No anual é o total do ano, não a parcela: o débito é único, e reportar 49,90
+ * onde saíram 598,80 tornaria qualquer cálculo de retorno de campanha ficção.
+ */
+export const priceOf = (plan: UserPlan, cycle: BillingCycle): number => {
+    const detalhes = PLAN_DETAILS[plan];
+    if (cycle === 'ANNUAL') return detalhes.annualPrice ? paraNumero(detalhes.annualPrice) : 0;
+    return paraNumero(detalhes.price);
+};
+
 /** Quanto o anual economiza sobre 12 mensalidades, em % inteiros. */
 export const annualSavingsPercent = (plan: UserPlan): number | null => {
     const detalhes = PLAN_DETAILS[plan];
     if (!detalhes.annualPrice) return null;
-    const paraNumero = (valor: string) => Number(valor.replace(/\./g, '').replace(',', '.'));
     const anual = paraNumero(detalhes.annualPrice);
     const doze = paraNumero(detalhes.price) * 12;
     return Math.round((1 - anual / doze) * 100);

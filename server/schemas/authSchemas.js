@@ -25,6 +25,17 @@ export const registerSchema = z.object({
     acceptedTerms: z.boolean().optional(),
     acceptedPrivacy: z.boolean().optional(),
     marketingOptIn: z.boolean().optional(),
+
+    // Origem do cadastro (funil). Campos livres por natureza — o Zod só garante
+    // que são strings curtas; o saneamento de verdade (alfabeto, host, caminho
+    // sem query) é de utils/acquisition.js, que roda no controller.
+    acquisition: z.object({
+      source: z.string().max(200).optional(),
+      medium: z.string().max(200).optional(),
+      campaign: z.string().max(200).optional(),
+      referrer: z.string().max(500).optional(),
+      landingPath: z.string().max(500).optional(),
+    }).optional(),
   })
 });
 

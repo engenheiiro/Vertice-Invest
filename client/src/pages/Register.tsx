@@ -5,6 +5,7 @@ import { Button, ButtonStatus } from '../components/ui/Button';
 import { Link, useNavigate } from 'react-router-dom';
 import { PageMeta } from '../components/seo/PageMeta';
 import { authService } from '../services/auth';
+import { clearAcquisition, readAcquisition, trackEvent } from '../utils/analytics';
 import { useFormValidation, validators } from '../hooks/useFormValidation';
 
 const getPasswordStrength = (pwd: string): 0 | 1 | 2 | 3 => {
@@ -63,7 +64,15 @@ export const Register = () => {
         acceptedTerms,
         acceptedPrivacy,
         marketingOptIn,
+        // Só o que o servidor aceita: origem, meio, campanha, host de quem
+        // indicou e página de entrada — saneados lá antes de virar conta.
+        acquisition: readAcquisition() ?? undefined,
       });
+
+      // Topo do funil no GA (silencioso sem consentimento) e a cópia local da
+      // origem descartada: a partir daqui ela é atributo da conta no servidor.
+      trackEvent('sign_up', { method: 'email' });
+      clearAcquisition();
 
       setStatus('success');
       setTimeout(() => {

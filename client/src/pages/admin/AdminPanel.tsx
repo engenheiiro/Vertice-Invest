@@ -5,7 +5,7 @@ import { marketService } from '../../services/market';
 import { authService } from '../../services/auth';
 import { subscriptionService, type BillingMode } from '../../services/subscription';
 import type { BillingCycle } from '../../constants/subscription';
-import { Bot, CheckCircle2, AlertCircle, Activity, Settings, Play, HeartPulse } from 'lucide-react';
+import { Bot, CheckCircle2, AlertCircle, Activity, Settings, Play, HeartPulse, TrendingUp } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -13,6 +13,7 @@ import { AdminPainelTab, type MacroData } from './AdminPainelTab';
 import { AdminOperacoesTab } from './AdminOperacoesTab';
 import { AdminFerramentasTab } from './AdminFerramentasTab';
 import { AdminSaudeTab } from './AdminSaudeTab';
+import { AdminFunilTab } from './AdminFunilTab';
 import { healthService, type HealthStatus } from '../../services/health';
 import { getErrorMessage } from '../../utils/errorMessages';
 
@@ -23,11 +24,12 @@ interface CacheData {
     dataPoints?: number;
 }
 
-type TabId = 'painel' | 'saude' | 'operacoes' | 'ferramentas';
+type TabId = 'painel' | 'saude' | 'funil' | 'operacoes' | 'ferramentas';
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
     { id: 'painel', label: 'Painel', Icon: Activity },
     { id: 'saude', label: 'Saúde', Icon: HeartPulse },
+    { id: 'funil', label: 'Funil', Icon: TrendingUp },
     { id: 'operacoes', label: 'Operações', Icon: Play },
     { id: 'ferramentas', label: 'Ferramentas', Icon: Settings },
 ];
@@ -440,6 +442,8 @@ export const AdminPanel = () => {
                 )}
 
                 {activeTab === 'saude' && <AdminSaudeTab />}
+
+                {activeTab === 'funil' && <AdminFunilTab />}
 
                 {activeTab === 'operacoes' && (
                     <AdminOperacoesTab

@@ -28,6 +28,7 @@ import { ResetPassword } from './pages/ResetPassword';
 import { Landing } from './pages/Landing';
 import { CheckoutSuccess } from './pages/CheckoutSuccess';
 import { CookieNotice } from './components/ui/CookieNotice';
+import { FunnelTracker } from './components/analytics/FunnelTracker';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
 const Profile = lazy(() => import('./pages/Profile').then(module => ({ default: module.Profile })));
@@ -116,6 +117,9 @@ export default function App() {
             silencia os warnings de deprecação e evita surpresa no upgrade. */}
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <CookieNotice />
+          {/* Origem da visita + página vista por rota. Nada é enviado ao Google
+              sem consentimento; a origem fica só na sessão até o cadastro. */}
+          <FunnelTracker />
           {/* Dentro do Router: usa useLocation p/ não cobrir o CTA das telas de auth. */}
           <InstallPrompt />
           <Routes>

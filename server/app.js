@@ -29,6 +29,7 @@ import { buildAllowedOrigins, resolveCorsOrigin, sanitizeOriginForLog } from './
 import authRoutes from './routes/authRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import researchRoutes from './routes/researchRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
 import walletRoutes from './routes/walletRoutes.js';
 import walletsRoutes from './routes/walletsRoutes.js';
 import goalsRoutes from './routes/goalsRoutes.js';
@@ -305,6 +306,7 @@ app.use('/api', mongoCircuitBreaker);
 app.use('/api', authRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/research', researchRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/wallets', walletsRoutes);
 app.use('/api/goals', goalsRoutes);

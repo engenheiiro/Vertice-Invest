@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowRight, CheckCircle2, Clock3, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionService } from '../services/subscription';
 import { authService } from '../services/auth';
+import { trackEvent } from '../utils/analytics';
 import {
     getCheckoutReturnDetails,
     isActivationRecorded,
@@ -47,6 +48,9 @@ export const CheckoutSuccess = () => {
     const [searchParams] = useSearchParams();
     const { refreshProfile } = useAuth();
     const [attempt, setAttempt] = useState(0);
+    // Fim do funil dispara UMA vez por retorno. O efeito reroda no botão
+    // "atualizar", e uma compra contada duas vezes vira receita inventada no GA.
+    const compraRegistrada = useRef(false);
     const [phase, setPhase] = useState<CheckoutPhase>('verifying');
     const [message, setMessage] = useState('Verificando o pagamento com o Mercado Pago...');
 
@@ -122,6 +126,16 @@ export const CheckoutSuccess = () => {
             }
 
             if (await waitForRecordedActivation()) {
+                if (!compraRegistrada.current) {
+                    compraRegistrada.current = true;
+                    trackEvent('purchase', {
+                        transaction_id: paymentId ?? preapprovalId ?? undefined,
+                        plan: expectedPlan ?? undefined,
+                        billing_cycle: isAnnual ? 'ANNUAL' : 'MONTHLY',
+                        billing_mode: isRecurring ? 'RECURRING' : 'ONE_TIME',
+                        currency: 'BRL',
+                    });
+                }
                 setResult('activated', isRecurring
                     ? 'Sua assinatura está ativa e a renovação é automática.'
                     : undefined);
@@ -140,7 +154,7 @@ export const CheckoutSuccess = () => {
         void verifyPayment();
 
         return () => { cancelled = true; };
-    }, [attempt, expectedPlan, isRecurring, paymentId, preapprovalId, refreshProfile, status]);
+    }, [attempt, expectedPlan, isAnnual, isRecurring, paymentId, preapprovalId, refreshProfile, status]);
 
     const detail = phase === 'verifying' ? null : phaseDetails[phase];
     const Icon = phase === 'activated'

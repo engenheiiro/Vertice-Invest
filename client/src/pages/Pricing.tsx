@@ -8,7 +8,8 @@ import { useToast } from '../contexts/ToastContext';
 import { subscriptionService, type BillingMode } from '../services/subscription';
 import { Header } from '../components/dashboard/Header';
 import { PaymentMethodModal } from '../components/subscription/PaymentMethodModal';
-import { ANNUAL_INSTALLMENTS, PLAN_DETAILS, annualSavingsPercent, checkoutKeyFor, type BillingCycle } from '../constants/subscription';
+import { ANNUAL_INSTALLMENTS, PLAN_DETAILS, annualSavingsPercent, checkoutKeyFor, priceOf, type BillingCycle } from '../constants/subscription';
+import { trackEvent } from '../utils/analytics';
 import { HOME_ROUTE } from '../config/homeRoute';
 import { PageMeta } from '../components/seo/PageMeta';
 
@@ -144,6 +145,15 @@ export const Pricing = () => {
 
     const startCheckout = async (plan: UserPlan, mode: BillingMode) => {
         setLoadingPlan(plan);
+        // Meio do funil. Vai antes do redirect de propósito: depois dele a página
+        // já é do Mercado Pago, e a intenção de compra nunca seria registrada.
+        trackEvent('begin_checkout', {
+            plan,
+            billing_cycle: cycle,
+            billing_mode: mode,
+            currency: 'BRL',
+            value: priceOf(plan, cycle),
+        });
         try {
             const response = await subscriptionService.initCheckout(checkoutKeyFor(plan, cycle), mode);
             if (response.redirectUrl) {

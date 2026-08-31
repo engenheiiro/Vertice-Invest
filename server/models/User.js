@@ -109,6 +109,20 @@ const UserSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
   deactivatedAt: { type: Date },
 
+  // --- Origem da conta (funil comercial) ---
+  // Primeiro toque, congelado no cadastro: diz de onde veio quem virou conta.
+  // Não é rastreamento entre sites nem depende de cookie de terceiro — é um
+  // atributo do cadastro, saneado em utils/acquisition.js antes de entrar.
+  // Ausente nas contas anteriores a 30/08/2026 (agrupadas como 'direto').
+  acquisition: {
+    source: { type: String },        // utm_source (youtube, google, instagram...)
+    medium: { type: String },        // utm_medium (organico, cpc, bio...)
+    campaign: { type: String },      // utm_campaign
+    referrerHost: { type: String },  // só o host de quem indicou, sem caminho
+    landingPath: { type: String },   // página de entrada, sem query string
+    capturedAt: { type: Date },
+  },
+
   // --- Consentimento LGPD (Art. 7, 8) ---
   termsAcceptedAt: { type: Date },
   privacyAcceptedAt: { type: Date },

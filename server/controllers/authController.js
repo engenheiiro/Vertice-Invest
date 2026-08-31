@@ -26,6 +26,7 @@ import { verifyTotp, consumeBackupCode } from '../utils/mfa.js'; // (I14) MFA no
 import { encrypt, decrypt, blindIndex } from '../utils/encryption.js'; // (S) cripto em repouso: mfaSecret + CPF
 import { issueCsrfToken, clearCsrfToken } from '../middleware/csrf.js'; // (1.4) CSRF double-submit
 import { validateCpf } from '../utils/cpfUtils.js';
+import { sanitizeAcquisition } from '../utils/acquisition.js'; // origem da conta (funil)
 
 // Mascara e-mail para logs de auditoria — ex: j***@gmail.com
 const maskEmail = (email) => {
@@ -179,7 +180,7 @@ const sanitizeUser = (user) => {
 };
 
 export const register = async (req, res, next) => {
-  const { name, email, password, acceptedTerms, acceptedPrivacy, marketingOptIn } = req.body;
+  const { name, email, password, acceptedTerms, acceptedPrivacy, marketingOptIn, acquisition } = req.body;
   let newUserId;
   try {
     if (!name || name.length < 2) throw new Error("Nome muito curto.");
@@ -208,6 +209,8 @@ export const register = async (req, res, next) => {
         privacyAcceptedAt: acceptedPrivacy ? now : undefined,
         consentVersion: (acceptedTerms && acceptedPrivacy) ? CONSENT_VERSION : undefined,
         marketingOptIn: !!marketingOptIn,
+        // Origem do primeiro toque, saneada antes de encostar no banco.
+        acquisition: sanitizeAcquisition(acquisition),
       });
 
       // Toda conta nasce com uma carteira padrão (Fase 2 — múltiplas carteiras):

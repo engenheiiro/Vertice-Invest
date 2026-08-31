@@ -31,6 +31,9 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 | Importar carteira (gravação em lote) | `server/services/portfolioImportService.js` |
 | Dashboard, sinais, equity | `client/src/pages/Dashboard.tsx` |
 | Planos e feature gating | `server/config/subscription.js` |
+| Funil comercial (regras puras) | `server/utils/funnelMath.js` |
+| Funil comercial (consulta + painel) | `server/services/funnelService.js`, `client/src/pages/admin/AdminFunilTab.tsx` |
+| Consentimento de analytics / eventos | `client/src/utils/analyticsConsent.ts`, `client/src/utils/analytics.ts` |
 | Setores macro | `server/config/sectorTaxonomy.js` |
 | Constantes financeiras | `server/config/financialConstants.js` |
 | Matemática financeira segura | `server/utils/mathUtils.js` |
@@ -191,5 +194,6 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < ELITE (3) < BLACK (4). Definid
 - **Import de carteira:** `GET /wallet/import` · `POST /wallet/import/preview` (resolve, não escreve), `/wallet/import/commit` · `DELETE /wallet/import/:batchId` (desfaz o lote)
 - **Market:** `GET /market/quote?ticker`, `/market/price?ticker`, `/market/landing`
 - **Subscription:** `GET /subscription/status`, `/subscription/check-access` · `POST /subscription/checkout`, `/subscription/register-usage`
+- **Admin:** `GET /admin/funnel?months` (admin) — coortes, ativação, conversão 30d, receita, retenção e origem, lidos do banco
 - **Webhooks:** `POST /webhooks/mercadopago`
 - **Academy:** `GET /academy/courses`, `/academy/lessons/:id`, `/academy/progress/:courseId` · `POST /academy/progress`, `/academy/quiz/submit`
