@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   historyUpdateOne: vi.fn(),
   getMarketDataMap: vi.fn(),
   getFullHistoryDetailed: vi.fn(),
+  fetchB3DailyCloses: vi.fn(),
   upsertSnapshot: vi.fn(),
   loggerWarn: vi.fn(),
 }));
@@ -67,6 +68,9 @@ vi.mock('../services/marketDataService.js', () => ({
 }));
 vi.mock('../services/externalMarketService.js', () => ({
   externalMarketService: { getFullHistoryDetailed: mocks.getFullHistoryDetailed },
+}));
+vi.mock('../services/b3DailyFileService.js', () => ({
+  fetchB3DailyCloses: mocks.fetchB3DailyCloses,
 }));
 vi.mock('../services/aiResearchService.js', () => ({ aiResearchService: {} }));
 vi.mock('../services/macroDataService.js', () => ({ macroDataService: {} }));
@@ -131,6 +135,9 @@ describe('Snapshot diário — candle do dia garantido para ativos em carteira',
     mocks.dividendFind.mockReturnValue({ lean: async () => [] });
     mocks.historyUpdateOne.mockResolvedValue({ acknowledged: true });
     mocks.historyFind.mockReturnValue({ lean: async () => [] });
+    // Por padrão a B3 não tem o dia: os casos que testam a AUSÊNCIA de candle
+    // precisam das duas fontes silenciosas, senão medem o reforço sem querer.
+    mocks.fetchB3DailyCloses.mockResolvedValue(null);
     mocks.upsertSnapshot.mockImplementation(async (_m, _w, _d, payload) => ({ ...payload, _id: 'snap' }));
     vi.spyOn(financialService, '_loadUsdRateResolver').mockResolvedValue(() => 5);
     vi.spyOn(financialService, 'accruedDividendsThroughDay').mockResolvedValue(0);
@@ -246,6 +253,73 @@ describe('Snapshot diário — candle do dia garantido para ativos em carteira',
       'MXRF11: sem resposta da fonte',
       'PETR4: erro na busca (Yahoo timeout)',
     ]);
+  });
+
+  it('(f) Yahoo publica o dia VAZIO e o fechamento oficial da B3 cobre', async () => {
+    // O reforço existe porque o buraco do Yahoo é definitivo: em 28/08/2026 foram
+    // 661 séries de ação/FII/ETF de uma vez. A B3 publica o próprio arquivo do
+    // pregão, e o `LastPric` dela é o mesmo número que o `close` do Yahoo
+    // (conferido em 8 tickers no dia 27/08/2026).
+    wireUserAssets([HELD_ETF]);
+    mocks.historyAggregate.mockResolvedValue([]);
+    mocks.getMarketDataMap.mockResolvedValue(new Map([['BOVA11', { price: 99.2 }]]));
+    mocks.getFullHistoryDetailed.mockResolvedValue(sourcePayload(
+      [{ date: '2026-08-18', close: 99, adjClose: 99, volume: 100 }],
+      [DAY],
+    ));
+    mocks.fetchB3DailyCloses.mockResolvedValue(new Map([
+      ['BOVA11', { close: 99.5, volume: 1000, trades: 10 }],
+    ]));
+
+    const ctx = await loadSnapshotContext(DAY, { ensureDayCandles: true });
+    expect(ctx.closeMap.get('BOVA11')).toBe(99.5);
+
+    const gravado = mocks.historyUpdateOne.mock.calls.at(-1)[1].$set.history;
+    expect(gravado.find((c) => c.date === DAY)).toMatchObject({ close: 99.5, volume: 1000 });
+
+    // Não sobra alarme: o ativo deixou de estar "sem candle do dia".
+    expect(mocks.loggerWarn.mock.calls.find(([m]) => m.includes('sem candle do dia'))).toBeUndefined();
+
+    // E o patrimônio passa a sair do FECHAMENTO (99,5), não do preço corrente (99,2).
+    await persistUserSnapshotForDay(WALLET, DAY, ctx);
+    expect(mocks.upsertSnapshot.mock.calls.at(-1)[3].totalEquity).toBeCloseTo(995, 2);
+  });
+
+  it('(g) o reforço fecha a LACUNA INTEIRA, não só o dia pedido', async () => {
+    // Empurrar só o candle de hoje numa série parada dois pregões atrás deixaria o
+    // buraco no meio E faria isHistoryStale ver a série como fresca — o defeito
+    // que congelou 21 séries em 30/08/2026.
+    wireUserAssets([HELD_ETF]);
+    mocks.historyAggregate.mockResolvedValue([]);
+    mocks.getMarketDataMap.mockResolvedValue(new Map([['BOVA11', { price: 99.2 }]]));
+    mocks.historyFind.mockReturnValue({
+      lean: async () => [{ ticker: 'BOVA11', history: [{ date: '2026-08-17', close: 97, adjClose: 97, volume: 10 }] }],
+    });
+    mocks.getFullHistoryDetailed.mockResolvedValue(sourcePayload(
+      [{ date: '2026-08-17', close: 97, adjClose: 97, volume: 10 }],
+      [DAY],
+    ));
+    mocks.fetchB3DailyCloses.mockImplementation(async (dia) => new Map([
+      ['BOVA11', { close: dia === DAY ? 99.5 : 98.4, volume: 500, trades: 5 }],
+    ]));
+
+    await loadSnapshotContext(DAY, { ensureDayCandles: true });
+
+    expect(mocks.fetchB3DailyCloses.mock.calls.map(([d]) => d)).toEqual(['2026-08-18', DAY]);
+    const gravado = mocks.historyUpdateOne.mock.calls.at(-1)[1].$set.history;
+    expect(gravado.map((c) => c.date)).toEqual(['2026-08-17', '2026-08-18', DAY]);
+  });
+
+  it('(h) o reforço é só da B3: cripto não vai ao arquivo do pregão', async () => {
+    wireUserAssets([HELD_CRYPTO]);
+    mocks.historyAggregate.mockResolvedValue([]);
+    mocks.getMarketDataMap.mockResolvedValue(new Map([['BTC', { price: 59000 }]]));
+    mocks.getFullHistoryDetailed.mockResolvedValue(sourcePayload(
+      [{ date: '2026-08-18', close: 58000, adjClose: 58000, volume: 1 }],
+    ));
+
+    await loadSnapshotContext(DAY, { ensureDayCandles: true });
+    expect(mocks.fetchB3DailyCloses).not.toHaveBeenCalled();
   });
 
   it('cripto com candle do dia já na série não regride: nada é buscado', async () => {
