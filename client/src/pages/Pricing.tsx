@@ -8,7 +8,7 @@ import { useToast } from '../contexts/ToastContext';
 import { subscriptionService, type BillingMode } from '../services/subscription';
 import { Header } from '../components/dashboard/Header';
 import { PaymentMethodModal } from '../components/subscription/PaymentMethodModal';
-import { ANNUAL_INSTALLMENTS, PLAN_DETAILS, annualSavingsPercent, checkoutKeyFor, priceOf, type BillingCycle } from '../constants/subscription';
+import { ANNUAL_INSTALLMENTS, PLAN_DETAILS, SELLABLE_PLANS, annualSavingsPercent, checkoutKeyFor, priceOf, type BillingCycle } from '../constants/subscription';
 import { trackEvent } from '../utils/analytics';
 import { clearCheckoutIntent, readCheckoutIntent, saveCheckoutIntent } from '../utils/checkoutIntent';
 import { HOME_ROUTE } from '../config/homeRoute';
@@ -21,6 +21,13 @@ import { PageMeta } from '../components/seo/PageMeta';
 // anual à venda. Seguem SEM gate os níveis de curso (não existe catálogo para
 // dividir) e o canal 24h do Elite, que é decisão operacional. A tabela da seção 6
 // do plano registra o estado de cada promessa — atualize LÁ ao mexer AQUI.
+// O "a partir de" da descrição de busca sai da TABELA, não do texto. Escrito à
+// mão, ele era o único preço da vitrine fora do espelho testado: envelheceria
+// em silêncio no resultado do Google, que é onde o visitante vê o número antes
+// de qualquer página nossa.
+const menorMensalidade = Math.min(...SELLABLE_PLANS.map((plano) => priceOf(plano, 'MONTHLY')))
+    .toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 const PLAN_EXCLUSIVE: Record<UserPlan, { key: string; label: string; highlight?: string }[]> = {
     GUEST: [
         { key: 'wallets',    label: '1 carteira' },
@@ -260,7 +267,7 @@ export const Pricing = () => {
             a página que vende apareceria com a cara da inicial. */}
         <PageMeta
             title="Planos e Preços"
-            description="Planos da Vértice Invest a partir de R$ 29,90/mês: carteira com importação da B3, proventos, carteiras recomendadas de Ações, FIIs e Cripto e ativos globais. No anual, até 12× sem renovação automática."
+            description={`Planos da Vértice Invest a partir de R$ ${menorMensalidade}/mês: carteira com importação da B3, proventos, carteiras recomendadas de Ações, FIIs e Cripto e ativos globais. No anual, até ${ANNUAL_INSTALLMENTS}× sem renovação automática.`}
             canonical="/pricing"
         />
         <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-[calc(5rem+env(safe-area-inset-bottom))] xl:pb-20">
