@@ -34,6 +34,7 @@ vi.mock('react-router-dom', () => ({
 }));
 
 import { Pricing } from './Pricing';
+import { readCheckoutIntent, saveCheckoutIntent } from '../utils/checkoutIntent';
 
 /** O card do plano, isolado do carrossel mobile (que renderiza os mesmos textos). */
 const cardDo = (plano: string) => {
@@ -47,6 +48,7 @@ const trocarPara = async (ciclo: 'Mensal' | 'Anual') => {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     mocks.user = { plan: 'GUEST' };
     mocks.isAuthenticated = true;
     mocks.initCheckout.mockResolvedValue({ redirectUrl: 'https://mp/checkout' });
@@ -142,6 +144,84 @@ describe('Checkout do ciclo escolhido', () => {
     });
 });
 
+describe('Intenção de compra atravessando o cadastro', () => {
+    it('guarda o plano E o ciclo antes de mandar o visitante ao cadastro', async () => {
+        // Sem isto, quem escolheu "Pro anual" volta à vitrine do zero depois de
+        // criar a conta e precisa decidir de novo o que já tinha decidido.
+        mocks.isAuthenticated = false;
+        mocks.user = null;
+        render(<Pricing />);
+        await trocarPara('Anual');
+
+        await userEvent.click(within(cardDo('Pro')).getByRole('button', { name: /criar conta para assinar/i }));
+
+        expect(readCheckoutIntent()).toEqual({ plan: 'PRO', cycle: 'ANNUAL' });
+        expect(mocks.navigate).toHaveBeenCalledWith('/register');
+    });
+
+    it('reabre a vitrine já no ciclo escolhido antes do cadastro', () => {
+        saveCheckoutIntent({ plan: 'PRO', cycle: 'ANNUAL' });
+
+        render(<Pricing />);
+
+        expect(screen.getByRole('radio', { name: /anual/i })).toHaveAttribute('aria-checked', 'true');
+        expect(within(cardDo('Pro')).getByText(/598,80/)).toBeInTheDocument();
+    });
+
+    it('oferece retomar a compra, sem disparar o checkout sozinho', async () => {
+        // Mandar alguém ao Mercado Pago logo após o login seria levar ao
+        // pagamento sem um clique de confirmação.
+        saveCheckoutIntent({ plan: 'PRO', cycle: 'ANNUAL' });
+        render(<Pricing />);
+
+        expect(screen.getByText(/tinha escolhido o Pro/i)).toBeInTheDocument();
+        expect(mocks.initCheckout).not.toHaveBeenCalled();
+
+        await userEvent.click(screen.getByRole('button', { name: /assinar Pro · Anual/i }));
+
+        await waitFor(() => expect(mocks.initCheckout).toHaveBeenCalledWith('PRO_ANNUAL', 'ONE_TIME'));
+    });
+
+    it('esquece a intenção depois de usá-la', async () => {
+        saveCheckoutIntent({ plan: 'PRO', cycle: 'ANNUAL' });
+        render(<Pricing />);
+
+        await userEvent.click(screen.getByRole('button', { name: /assinar Pro · Anual/i }));
+
+        expect(readCheckoutIntent()).toBeNull();
+        expect(screen.queryByText(/tinha escolhido/i)).not.toBeInTheDocument();
+    });
+
+    it('deixa o usuário abandonar a escolha', async () => {
+        saveCheckoutIntent({ plan: 'ELITE', cycle: 'MONTHLY' });
+        render(<Pricing />);
+
+        await userEvent.click(screen.getByRole('button', { name: /ver todos/i }));
+
+        expect(readCheckoutIntent()).toBeNull();
+        expect(screen.queryByText(/tinha escolhido/i)).not.toBeInTheDocument();
+    });
+
+    it('não oferece retomada de um plano que o usuário já tem', () => {
+        mocks.user = { plan: 'PRO' };
+        saveCheckoutIntent({ plan: 'PRO', cycle: 'MONTHLY' });
+
+        render(<Pricing />);
+
+        expect(screen.queryByText(/tinha escolhido/i)).not.toBeInTheDocument();
+    });
+
+    it('não mostra a retomada para quem ainda não tem conta', () => {
+        // Ele ainda não pode comprar — o lugar dele é o cadastro.
+        mocks.isAuthenticated = false;
+        mocks.user = null;
+        saveCheckoutIntent({ plan: 'PRO', cycle: 'ANNUAL' });
+
+        render(<Pricing />);
+
+        expect(screen.queryByText(/tinha escolhido/i)).not.toBeInTheDocument();
+    });
+});
 describe('Vitrine pública — visitante sem conta', () => {
     // A página vivia atrás do login: para descobrir o preço era preciso criar
     // conta às cegas, e a página ficava invisível para busca.

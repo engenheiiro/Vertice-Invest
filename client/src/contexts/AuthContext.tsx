@@ -1,5 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { clearCheckoutIntent } from '../utils/checkoutIntent';
 import { useQueryClient } from '@tanstack/react-query';
 import { authService } from '../services/auth';
 
@@ -163,6 +164,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
         setUser(null);
         localStorage.removeItem('user');
+        // A compra que alguém ia fazer não pode ser oferecida à próxima pessoa
+        // que entrar nesta aba.
+        clearCheckoutIntent();
         queryClient.removeQueries();
         queryClient.clear();
     }

@@ -1,5 +1,7 @@
 
-import { UserPlan } from "../contexts/AuthContext";
+// `import type`: o ciclo constants -> AuthContext -> checkoutIntent -> constants
+// existe em tempo de TIPO, e o `type` garante que ele nao chegue ao runtime.
+import type { UserPlan } from "../contexts/AuthContext";
 
 // Hierarquia numérica para comparações de acesso (quem é maior que quem)
 export const PLAN_HIERARCHY: Record<UserPlan, number> = {
@@ -41,6 +43,15 @@ export const PLAN_DETAILS: Record<UserPlan, {
 // sozinha — a diferença precisa aparecer na tela, não só no banco.
 export type BillingCycle = 'MONTHLY' | 'ANNUAL';
 export const ANNUAL_INSTALLMENTS = 12;
+
+/**
+ * Planos que a vitrine realmente vende hoje. Espelha PUBLIC_PLAN_KEYS do
+ * servidor (que exclui aposentados e chaves de teste) e é comparado com ele em
+ * subscription.test.ts. Serve de lista branca em qualquer lugar que aceite um
+ * plano vindo de fora — URL, storage — para que um BLACK deixado para trás não
+ * reviva por um caminho lateral.
+ */
+export const SELLABLE_PLANS: UserPlan[] = ['ESSENTIAL', 'PRO', 'ELITE'];
 
 /**
  * Chave de checkout enviada ao servidor. `user.plan` continua sendo só o degrau

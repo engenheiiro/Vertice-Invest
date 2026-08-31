@@ -26,6 +26,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Login } from './Login';
 import { authService } from '../services/auth';
 import { useAuth } from '../contexts/AuthContext';
+import { saveCheckoutIntent } from '../utils/checkoutIntent';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ const mockLogin = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionStorage.clear();
   vi.mocked(useAuth).mockReturnValue({ login: mockLogin } as any);
 });
 
@@ -284,5 +286,38 @@ describe('fluxo 2FA (MFA)', () => {
     fireEvent.click(screen.getByText(/Voltar ao login/i));
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
     expect(screen.getByLabelText('Senha')).toBeInTheDocument();
+  });
+});
+
+// ─── Intenção de compra ───────────────────────────────────────────────────────
+
+describe('quem entrou para assinar', () => {
+  it('volta para a vitrine em vez da casa', async () => {
+    // A escolha feita antes do cadastro é o motivo de a conta existir; mandá-lo
+    // para a Carteira o obrigaria a refazer o caminho todo.
+    saveCheckoutIntent({ plan: 'PRO', cycle: 'ANNUAL' });
+    vi.mocked(authService.login).mockResolvedValue({
+      user: { id: '1', name: 'João', email: 'user@email.com', plan: 'GUEST' },
+      accessToken: 'tok123',
+    } as any);
+
+    renderLogin();
+    fillLoginForm();
+    submitForm();
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/pricing'), { timeout: 2000 });
+  });
+
+  it('sem intenção guardada, segue para a casa de sempre', async () => {
+    vi.mocked(authService.login).mockResolvedValue({
+      user: { id: '1', name: 'João', email: 'user@email.com', plan: 'PRO' },
+      accessToken: 'tok123',
+    } as any);
+
+    renderLogin();
+    fillLoginForm();
+    submitForm();
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/wallet'), { timeout: 2000 });
   });
 });

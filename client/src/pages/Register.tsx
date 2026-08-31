@@ -6,6 +6,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { PageMeta } from '../components/seo/PageMeta';
 import { authService } from '../services/auth';
 import { clearAcquisition, readAcquisition, trackEvent } from '../utils/analytics';
+import { readCheckoutIntent } from '../utils/checkoutIntent';
+import { PLAN_DETAILS } from '../constants/subscription';
 import { useFormValidation, validators } from '../hooks/useFormValidation';
 
 const getPasswordStrength = (pwd: string): 0 | 1 | 2 | 3 => {
@@ -35,6 +37,11 @@ export const Register = () => {
   const [termsError, setTermsError] = useState('');
   const [serverError, setServerError] = useState('');
   const [status, setStatus] = useState<ButtonStatus>('idle');
+  // Plano escolhido na vitrine antes de o visitante descobrir que precisa de
+  // conta. Aqui ele serve de lembrete: um formulário que não diz por que está
+  // sendo preenchido é um formulário mais fácil de abandonar. A intenção NÃO é
+  // consumida no cadastro — quem a usa é a vitrine, depois do login.
+  const [intent] = useState(readCheckoutIntent);
 
   const passwordStrength = getPasswordStrength(formData.password);
 
@@ -71,7 +78,13 @@ export const Register = () => {
 
       // Topo do funil no GA (silencioso sem consentimento) e a cópia local da
       // origem descartada: a partir daqui ela é atributo da conta no servidor.
-      trackEvent('sign_up', { method: 'email' });
+      trackEvent('sign_up', {
+        method: 'email',
+        // Sem isto não dá para medir quantos cadastros nascem de uma intenção
+        // de compra — que é justamente o que este caminho existe para preservar.
+        intent_plan: intent?.plan,
+        intent_cycle: intent?.cycle,
+      });
       clearAcquisition();
 
       setStatus('success');
@@ -103,6 +116,14 @@ export const Register = () => {
         <p className="text-slate-500 text-[11px] font-medium">Preencha os dados para acessar.</p>
       </div>
 
+      {/* Lembrete do que ele veio fazer. A cobrança só acontece depois, na
+          vitrine, com um clique dele — aqui é só contexto. */}
+      {intent && (
+        <div className="mb-2 p-2 bg-blue-50 border border-blue-100 rounded-lg text-[11px] text-blue-900 text-center">
+          Criando sua conta para assinar o <strong>{PLAN_DETAILS[intent.plan].label}</strong>
+          {intent.cycle === 'ANNUAL' ? ' anual' : ' mensal'}. Você confirma o pagamento no passo seguinte.
+        </div>
+      )}
       {serverError && (
         <div className="mb-2 p-1.5 bg-red-50 text-red-600 text-[10px] font-bold rounded-lg border border-red-100 flex items-center justify-center animate-fade-in text-center">
           {serverError}

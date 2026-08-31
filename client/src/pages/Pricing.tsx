@@ -10,6 +10,7 @@ import { Header } from '../components/dashboard/Header';
 import { PaymentMethodModal } from '../components/subscription/PaymentMethodModal';
 import { ANNUAL_INSTALLMENTS, PLAN_DETAILS, annualSavingsPercent, checkoutKeyFor, priceOf, type BillingCycle } from '../constants/subscription';
 import { trackEvent } from '../utils/analytics';
+import { clearCheckoutIntent, readCheckoutIntent, saveCheckoutIntent } from '../utils/checkoutIntent';
 import { HOME_ROUTE } from '../config/homeRoute';
 import { PageMeta } from '../components/seo/PageMeta';
 
@@ -131,7 +132,10 @@ export const Pricing = () => {
     const navigate = useNavigate();
     const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
     const [activeDot, setActiveDot] = useState(0);
-    const [cycle, setCycle] = useState<BillingCycle>('MONTHLY');
+    // Escolha feita ANTES do cadastro. Lida uma vez, na montagem: reler a cada
+    // render faria o alternador de ciclo voltar sozinho ao valor guardado.
+    const [intent, setIntent] = useState(() => readCheckoutIntent());
+    const [cycle, setCycle] = useState<BillingCycle>(intent?.cycle ?? 'MONTHLY');
     // Plano escolhido aguardando a escolha do método (cartão recorrente x Pix avulso).
     const [pendingPlan, setPendingPlan] = useState<UserPlan | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -183,9 +187,17 @@ export const Pricing = () => {
         // Visitante não tem conta para receber o plano, e o checkout exige
         // autenticação — mandá-lo ao Mercado Pago só produziria um 401.
         if (!isAuthenticated) {
+            // A decisão viaja com ele: sem isto, o recém-cadastrado volta à
+            // vitrine do zero e precisa escolher de novo o que já tinha escolhido.
+            saveCheckoutIntent({ plan, cycle });
+            trackEvent('select_plan', { plan, billing_cycle: cycle, authenticated: false });
             navigate('/register');
             return;
         }
+
+        // Daqui para frente a intenção virou ação: não deve reaparecer depois.
+        clearCheckoutIntent();
+        setIntent(null);
         if (isAnnual) {
             void startCheckout(plan, 'ONE_TIME');
             return;
@@ -299,6 +311,37 @@ export const Pricing = () => {
                     </div>
                 </div>
 
+                {/* A escolha que sobreviveu ao cadastro. Aparece só para quem já
+                    está logado: é aqui que ela finalmente pode virar checkout.
+                    Não dispara nada sozinho — mandar alguém ao Mercado Pago logo
+                    depois do login seria cobrar sem um clique de confirmação. */}
+                {isAuthenticated && intent && user?.plan !== intent.plan && (
+                    <div className="max-w-2xl mx-auto mb-10 bg-blue-950/30 border border-blue-800/50 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3 animate-fade-in">
+                        <div className="flex-1">
+                            <p className="text-sm font-bold text-white">
+                                Você tinha escolhido o {PLAN_DETAILS[intent.plan].label}
+                            </p>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                                Continue de onde parou — ou troque o plano e o ciclo abaixo.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <button
+                                onClick={() => { clearCheckoutIntent(); setIntent(null); }}
+                                className="px-3 py-2 text-xs font-bold text-slate-400 hover:text-white transition-colors"
+                            >
+                                Ver todos
+                            </button>
+                            <Button
+                                onClick={() => handleSelectPlan(intent.plan)}
+                                status={loadingPlan === intent.plan ? 'loading' : 'idle'}
+                                className="!py-2 !px-4 !text-xs"
+                            >
+                                Assinar {PLAN_DETAILS[intent.plan].label} · {isAnnual ? 'Anual' : 'Mensal'}
+                            </Button>
+                        </div>
+                    </div>
+                )}
                 {/* Ciclo de cobrança. O anual não é um desconto de campanha: é
                     outro produto (compra única de 12 meses), e o card muda de
                     número junto — mostrar só um selo de "%" esconderia o total. */}

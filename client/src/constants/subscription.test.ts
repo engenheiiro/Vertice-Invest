@@ -6,6 +6,7 @@ import {
     FEATURE_LIMITS,
     PLAN_DETAILS,
     PLAN_HIERARCHY,
+    SELLABLE_PLANS,
     annualSavingsPercent,
     checkoutKeyFor,
 } from './subscription';
@@ -51,6 +52,26 @@ const parseServerLimit = (feature: string) => {
     return limites;
 };
 
+describe('SELLABLE_PLANS — espelho de quem o servidor aceita no checkout', () => {
+    /** Bases de PUBLIC_PLAN_KEYS no backend: sem chave de teste, sem aposentado. */
+    const planosPublicosDoServidor = () => {
+        const bloco = serverConfig.slice(serverConfig.indexOf('export const PLAN_CATALOG'));
+        const catalogo = [...bloco.matchAll(/'([A-Z_]+)':\s*\{\s*title:/g)].map(([, plano]) => plano);
+        const aposentados = serverConfig.match(/RETIRED_PLAN_KEYS\s*=\s*\[([^\]]*)\]/)?.[1] ?? '';
+        return catalogo.filter((plano) => !aposentados.includes(`'${plano}'`));
+    };
+
+    it('vende exatamente os planos que o servidor aceita', () => {
+        // A lista é usada como lista branca do que vem de storage/URL. Se o
+        // servidor aposenta um plano e a vitrine não acompanha, o cliente é
+        // mandado a um checkout que o backend recusa.
+        expect(SELLABLE_PLANS).toEqual(planosPublicosDoServidor());
+    });
+
+    it('não inclui o Free — ele não passa pelo checkout', () => {
+        expect(SELLABLE_PLANS).not.toContain('GUEST');
+    });
+});
 describe('PLAN_DETAILS — espelho do preço cobrado pelo servidor', () => {
     it('encontra a tabela de preços do backend', () => {
         expect([...parseServerPrices().keys()]).toEqual(['ESSENTIAL', 'PRO', 'ELITE', 'BLACK']);

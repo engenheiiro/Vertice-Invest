@@ -8,6 +8,7 @@ import { ArrowLeft } from 'lucide-react';
 import { useFormValidation, validators } from '../hooks/useFormValidation';
 import { PageMeta } from '../components/seo/PageMeta';
 import { homeRouteFor } from '../config/homeRoute';
+import { readCheckoutIntent } from '../utils/checkoutIntent';
 
 export const Login = () => {
   const navigate = useNavigate();
@@ -59,7 +60,11 @@ export const Login = () => {
           login(response.user, response.accessToken);
           setStatus('success');
           setTimeout(() => {
-              navigate(homeRouteFor(response.user));
+              // Quem veio assinar volta para a vitrine, não para a casa: a
+              // escolha feita antes do cadastro é o motivo de ele ter criado a
+              // conta. O tour de boas-vindas (que mora no Terminal) não se perde
+              // — ele dispara na primeira vez que o usuário chegar lá.
+              navigate(readCheckoutIntent() ? '/pricing' : homeRouteFor(response.user));
           }, 600);
       } else {
           throw new Error("Resposta inválida do servidor");
