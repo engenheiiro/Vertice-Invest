@@ -20,7 +20,7 @@ import { classifyUsAsset } from '../utils/usClassification.js';
 import { isGoldTicker } from '../utils/goldClassification.js';
 import { isDollarized as isDollarizedAsset, resolveTransactionCurrency } from '../utils/assetCurrency.js';
 import logger from '../config/logger.js';
-import { historyStorageKey } from '../utils/assetHistory.js';
+import { dropUntradableCandles, historyStorageKey } from '../utils/assetHistory.js';
 import { brazilDayKey, isTwrrReturnAnomalous, isValidDayKey, snapshotInstantForDay } from '../utils/walletSnapshot.js';
 import { resolveAllocationClass } from '../utils/assetAllocation.js';
 import { loadUsdRateResolver, effectiveFxRate } from '../utils/fxRate.js';
@@ -141,7 +141,11 @@ export const financialService = {
                     const info = await MarketAsset.findOne({ ticker });
                     const type = assetMeta?.type || info?.type || 'STOCK';
                     try {
-                        const extHistory = await externalMarketService.getFullHistory(searchTicker, type);
+                        // Recusa candle em dia sem pregão antes de qualquer uso: este
+                        // caminho grava por SUBSTITUIÇÃO (não passa por mergeCandleSeries),
+                        // então é a única barreira aqui.
+                        const extHistory = dropUntradableCandles(
+                            await externalMarketService.getFullHistory(searchTicker, type), type);
                         if (extHistory && extHistory.length > 0) {
                             // Só persiste quando não havia série utilizável. Regravar a
                             // série cheia num ticker que o worker capa todo dia às 18:30

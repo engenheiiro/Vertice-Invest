@@ -284,7 +284,15 @@ export const timeSeriesWorker = {
                                 const historyToStore = mergeCandleSeries(
                                     historyEntry?.history || [],
                                     externalHistory,
-                                    { maxPoints: HISTORY_CAP_EXEMPT_TICKERS.has(asset.ticker) ? Infinity : ASSET_HISTORY_MAX_POINTS },
+                                    {
+                                        maxPoints: HISTORY_CAP_EXEMPT_TICKERS.has(asset.ticker) ? Infinity : ASSET_HISTORY_MAX_POINTS,
+                                        // Classe informada = candle em dia sem pregão é recusado. Sem
+                                        // isso, a barra "viva" de domingo que a fonte emite para ticker
+                                        // ilíquido entra na série e congela a re-busca (isHistoryStale
+                                        // só olha a data do último candle).
+                                        type: asset.type,
+                                        now,
+                                    },
                                 );
                                 await withMongoRetry(() => AssetHistory.updateOne(
                                     { ticker: storageKey },

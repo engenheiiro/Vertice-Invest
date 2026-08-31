@@ -72,9 +72,12 @@ export const describeMiss = (dayStr, payload) => {
  * 2) sobrescrever a série inteira pelo que veio da fonte encurtaria séries mais
  *    profundas que o cap, e é justamente a profundidade que o rebuild exige para
  *    não marcar o período anterior ao cap pelo preço de compra.
+ *
+ * `type` é a classe do ativo: com ela, candle em dia sem pregão é recusado (ver
+ * `isStorableCandleDate`). Omitida, nada é filtrado.
  */
-export const mergeDayCandles = (existing = [], fetched = []) => mergeCandleSeries(
-    existing, fetched, { maxPoints: ASSET_HISTORY_MAX_POINTS },
+export const mergeDayCandles = (existing = [], fetched = [], type) => mergeCandleSeries(
+    existing, fetched, { maxPoints: ASSET_HISTORY_MAX_POINTS, type },
 );
 
 /**
@@ -133,7 +136,7 @@ export const ensureWalletDayCandles = async (assetRefs = [], dayStr, closeMap = 
                     return;
                 }
 
-                const merged = mergeDayCandles(storedByKey.get(storageKey) || [], series);
+                const merged = mergeDayCandles(storedByKey.get(storageKey) || [], series, type);
                 await AssetHistory.updateOne(
                     { ticker: storageKey },
                     // lastCheckedAt fica intocado: ele mede a VISITA do timeSeriesWorker,

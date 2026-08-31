@@ -25,6 +25,62 @@ const normalizeCandle = (candle) => ({
     volume: candle.volume || 0,
 });
 
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Classes cujo pregão é de segunda a sexta — as únicas em que "candle de sábado
+ * ou domingo" é impossível por definição, em QUALQUER bolsa.
+ *
+ * Fora desta lista o filtro não se aplica (fail-open): cripto negocia 24/7 e o
+ * câmbio abre no domingo à noite, então recusar fim de semana ali apagaria dado
+ * legítimo. Tipo ausente também passa — os call sites antigos que não informam a
+ * classe continuam com o comportamento de antes.
+ *
+ * De propósito NÃO inclui feriado: o calendário é o brasileiro, e a B3 e a NYSE
+ * não fecham nos mesmos dias. Recusar 07/09 num `STOCK_US` apagaria um pregão
+ * real. Fim de semana é o único critério que vale para as duas praças.
+ */
+export const WEEKDAY_ONLY_TYPES = new Set(['STOCK', 'STOCK_US', 'FII', 'ETF', 'REIT', 'INDEX']);
+
+/**
+ * Este candle pode virar linha da série?
+ *
+ * Nasceu de um defeito de 30/08/2026 (um DOMINGO): a fonte devolveu, para 18
+ * FIIs ilíquidos, uma linha datada naquele domingo repetindo o preço de quinta —
+ * a barra "viva" que o Yahoo às vezes emite para ticker sem negócio. Gravamos, e
+ * o estrago não foi o preço errado em si: `isHistoryStale` decide a re-busca
+ * apenas pela DATA do último candle, então a série passou a parecer fresquíssima
+ * e o worker das 18:30 nunca mais buscou nada. Série congelada num preço falso,
+ * sem cura espontânea — a mesma armadilha que o comentário do
+ * `walletDayCandleService` já previa e que não tinha guarda nenhuma.
+ *
+ * @param {string} date data do candle (YYYY-MM-DD)
+ * @param {string} [type] classe do ativo; ausente ou fora de WEEKDAY_ONLY_TYPES = sem filtro de dia
+ * @param {Date} [now] instante de referência para o horizonte futuro
+ */
+export const isStorableCandleDate = (date, type, now = new Date()) => {
+    if (!DAY_KEY_RE.test(String(date || ''))) return false;
+
+    // Horizonte de D+1, e não "hoje", porque a data do candle vem no fuso da
+    // FONTE: os candles de cripto são datados em UTC, e entre 21h e meia-noite
+    // de Brasília o dia UTC já virou. Cortar em "hoje" recusaria, no snapshot das
+    // 23:59, o candle legítimo do dia corrente. O que este teto barra é data
+    // absurda (mês ou ano à frente), não fuso.
+    const horizon = new Date(now.getTime() + 86400000).toISOString().slice(0, 10);
+    if (date > horizon) return false;
+
+    if (!WEEKDAY_ONLY_TYPES.has(String(type || '').trim().toUpperCase())) return true;
+    const dow = new Date(`${date}T12:00:00.000Z`).getUTCDay(); // 0=Dom .. 6=Sáb
+    return dow !== 0 && dow !== 6;
+};
+
+/**
+ * Remove da série os candles que não podiam existir (ver isStorableCandleDate).
+ * Usada onde a gravação NÃO passa por `mergeCandleSeries`.
+ */
+export const dropUntradableCandles = (series = [], type, now = new Date()) =>
+    (series || []).filter((candle) => isStorableCandleDate(candle?.date, type, now));
+
 /**
  * Une a série ARMAZENADA com a recém-buscada (a nova vence em datas repetidas) e
  * devolve oldest→newest, respeitando o teto de armazenamento.
@@ -45,21 +101,32 @@ const normalizeCandle = (candle) => ({
  * preço zero, e gravá-lo criaria um buraco que a mescla seguinte trataria como
  * preenchido.
  *
+ * Informado o `type`, candle em dia sem pregão é recusado dos DOIS lados (ver
+ * isStorableCandleDate): do lado da fonte para não entrar, e do lado guardado
+ * para que a série se limpe na próxima gravação. Sem `type` nada é filtrado.
+ *
  * @param {Array} existing série já gravada
  * @param {Array} fetched série vinda da fonte
- * @param {{maxPoints?: number}} [options] teto de pontos (Infinity para isentos)
+ * @param {{maxPoints?: number, type?: string, now?: Date}} [options] teto de pontos (Infinity para isentos), classe do ativo e instante de referência
  */
-export const mergeCandleSeries = (existing = [], fetched = [], { maxPoints } = {}) => {
+export const mergeCandleSeries = (existing = [], fetched = [], { maxPoints, type, now } = {}) => {
     const byDate = new Map();
+    let kept = 0;
     for (const candle of existing) {
-        if (candle?.date) byDate.set(candle.date, normalizeCandle(candle));
+        if (!candle?.date || !isStorableCandleDate(candle.date, type, now)) continue;
+        byDate.set(candle.date, normalizeCandle(candle));
+        kept += 1;
     }
     for (const candle of fetched) {
-        if (candle?.date && candle.close > 0) byDate.set(candle.date, normalizeCandle(candle));
+        if (!candle?.date || !(candle.close > 0)) continue;
+        if (!isStorableCandleDate(candle.date, type, now)) continue;
+        byDate.set(candle.date, normalizeCandle(candle));
     }
     const merged = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     const cap = Number.isFinite(maxPoints) ? maxPoints : Infinity;
-    const limit = Math.max(cap, existing.length);
+    // A catraca segura a profundidade JÁ GUARDADA — contada depois do filtro, para
+    // um candle recusado não reservar espaço que a série não tem mais.
+    const limit = Math.max(cap, kept);
     return Number.isFinite(limit) ? merged.slice(-limit) : merged;
 };
 

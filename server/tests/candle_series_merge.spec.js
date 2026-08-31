@@ -10,7 +10,7 @@
  * parece uma série em dia.
  */
 import { describe, expect, it } from 'vitest';
-import { mergeCandleSeries } from '../utils/assetHistory.js';
+import { dropUntradableCandles, isStorableCandleDate, mergeCandleSeries } from '../utils/assetHistory.js';
 import { ASSET_HISTORY_MAX_POINTS } from '../config/financialConstants.js';
 
 const candle = (date, close = 10) => ({ date, close, adjClose: close, volume: 100 });
@@ -92,5 +92,123 @@ describe('mergeCandleSeries', () => {
   it('entradas vazias não quebram', () => {
     expect(mergeCandleSeries([], [], { maxPoints: CAP })).toEqual([]);
     expect(mergeCandleSeries(undefined, undefined, { maxPoints: CAP })).toEqual([]);
+  });
+});
+
+/**
+ * Candle em dia SEM PREGÃO — o defeito de domingo 30/08/2026.
+ *
+ * A fonte devolveu, para 18 FIIs ilíquidos, uma linha datada num DOMINGO
+ * repetindo o preço de quinta. O dano não é o preço errado: `isHistoryStale` só
+ * olha a DATA do último candle, então a série passou a parecer fresquíssima e o
+ * worker nunca mais buscou nada — congelada num preço falso, sem cura espontânea.
+ */
+describe('isStorableCandleDate', () => {
+  // 2026-08-30 = domingo · 2026-08-29 = sábado · 2026-08-28 = sexta
+  const AGORA = new Date('2026-08-31T12:00:00.000Z');
+
+  it('recusa fim de semana nas classes de pregão seg–sex', () => {
+    for (const type of ['STOCK', 'STOCK_US', 'FII', 'ETF', 'REIT', 'INDEX']) {
+      expect(isStorableCandleDate('2026-08-30', type, AGORA)).toBe(false); // domingo
+      expect(isStorableCandleDate('2026-08-29', type, AGORA)).toBe(false); // sábado
+      expect(isStorableCandleDate('2026-08-28', type, AGORA)).toBe(true);  // sexta
+    }
+  });
+
+  it('cripto negocia 24/7 — fim de semana é candle legítimo', () => {
+    expect(isStorableCandleDate('2026-08-30', 'CRYPTO', AGORA)).toBe(true);
+    expect(isStorableCandleDate('2026-08-29', 'CRYPTO', AGORA)).toBe(true);
+  });
+
+  it('sem classe informada não filtra dia — o câmbio abre domingo à noite', () => {
+    expect(isStorableCandleDate('2026-08-30', undefined, AGORA)).toBe(true);
+    expect(isStorableCandleDate('2026-08-30', 'CURRENCY', AGORA)).toBe(true);
+  });
+
+  it('feriado NÃO é critério: a B3 e a NYSE não fecham nos mesmos dias', () => {
+    // 07/09/2026 (segunda) é feriado no Brasil e pregão normal nos EUA. Recusar
+    // pelo calendário brasileiro apagaria um pregão real do STOCK_US.
+    const setembro = new Date('2026-09-30T12:00:00.000Z');
+    expect(isStorableCandleDate('2026-09-07', 'STOCK_US', setembro)).toBe(true);
+    expect(isStorableCandleDate('2026-09-07', 'STOCK', setembro)).toBe(true);
+  });
+
+  it('recusa data absurda no futuro, mas tolera o fuso da fonte (D+1)', () => {
+    // Os candles de cripto vêm datados em UTC: entre 21h e meia-noite de Brasília
+    // o dia UTC já virou, e cortar em "hoje" recusaria o candle do dia corrente.
+    expect(isStorableCandleDate('2026-09-01', 'CRYPTO', AGORA)).toBe(true);
+    expect(isStorableCandleDate('2026-09-02', 'CRYPTO', AGORA)).toBe(false);
+    expect(isStorableCandleDate('2027-01-04', 'STOCK', AGORA)).toBe(false);
+  });
+
+  it('data malformada não é candle', () => {
+    expect(isStorableCandleDate('', 'STOCK', AGORA)).toBe(false);
+    expect(isStorableCandleDate(undefined, 'STOCK', AGORA)).toBe(false);
+    expect(isStorableCandleDate('30/08/2026', 'STOCK', AGORA)).toBe(false);
+  });
+});
+
+describe('mergeCandleSeries — dia sem pregão', () => {
+  const AGORA = new Date('2026-08-31T12:00:00.000Z');
+  const opts = (type) => ({ maxPoints: CAP, type, now: AGORA });
+
+  it('candle de domingo vindo da fonte NÃO entra — o caso AERO11', () => {
+    const guardada = [candle('2026-08-26', 100), candle('2026-08-27', 100)];
+    const fonte = [candle('2026-08-30', 100)]; // domingo
+    const merged = mergeCandleSeries(guardada, fonte, opts('FII'));
+    expect(merged.map(c => c.date)).toEqual(['2026-08-26', '2026-08-27']);
+  });
+
+  it('candle de domingo JÁ GUARDADO sai na próxima gravação', () => {
+    const envenenada = [candle('2026-08-27', 100), candle('2026-08-30', 100)];
+    const merged = mergeCandleSeries(envenenada, [candle('2026-08-31', 101)], opts('FII'));
+    expect(merged.map(c => c.date)).toEqual(['2026-08-27', '2026-08-31']);
+  });
+
+  it('sem type o comportamento antigo é preservado', () => {
+    const merged = mergeCandleSeries(
+      [candle('2026-08-27', 100)], [candle('2026-08-30', 100)], { maxPoints: CAP });
+    expect(merged.map(c => c.date)).toEqual(['2026-08-27', '2026-08-30']);
+  });
+
+  it('cripto mantém o fim de semana', () => {
+    const merged = mergeCandleSeries(
+      [candle('2026-08-28', 10)], [candle('2026-08-29', 11), candle('2026-08-30', 12)], opts('CRYPTO'));
+    expect(merged.map(c => c.date)).toEqual(['2026-08-28', '2026-08-29', '2026-08-30']);
+  });
+
+  // `serie()` anda em dias CORRIDOS e por isso cai em fim de semana — o que a
+  // guarda passa a recusar. Aqui a série guardada precisa ser de pregões.
+  const serieUteis = (n) => {
+    const out = [];
+    const d = new Date(Date.UTC(2020, 0, 1));
+    while (out.length < n) {
+      const dow = d.getUTCDay();
+      if (dow !== 0 && dow !== 6) out.push(candle(d.toISOString().slice(0, 10), 10));
+      d.setUTCDate(d.getUTCDate() + 1);
+    }
+    return out;
+  };
+
+  it('a catraca conta a série guardada JÁ FILTRADA', () => {
+    // Série profunda com um candle inválido: a profundidade preservada é a dos
+    // candles válidos, não a contagem inflada pelo que acabou de ser recusado.
+    const profunda = [...serieUteis(500), candle('2026-08-30', 9)];
+    const merged = mergeCandleSeries(profunda, [], opts('STOCK'));
+    expect(merged.length).toBe(500);
+    expect(merged.some(c => c.date === '2026-08-30')).toBe(false);
+  });
+});
+
+describe('dropUntradableCandles', () => {
+  it('filtra a série sem depender da mescla (caminho do financialService)', () => {
+    const bruta = [candle('2026-08-28', 10), candle('2026-08-30', 10)];
+    expect(dropUntradableCandles(bruta, 'STOCK', new Date('2026-08-31T12:00:00.000Z'))
+      .map(c => c.date)).toEqual(['2026-08-28']);
+  });
+
+  it('entrada nula devolve lista vazia', () => {
+    expect(dropUntradableCandles(null, 'STOCK')).toEqual([]);
+    expect(dropUntradableCandles(undefined, 'STOCK')).toEqual([]);
   });
 });
