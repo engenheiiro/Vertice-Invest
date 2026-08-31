@@ -65,7 +65,13 @@ export const loadAnalytics = (): boolean => {
     // eslint-disable-next-line prefer-rest-params
     w.gtag = function gtag() { w.dataLayer.push(arguments); };
     w.gtag('js', new Date());
-    w.gtag('config', GA_MEASUREMENT_ID, { anonymize_ip: true });
+    // `send_page_view: false` porque quem conta página aqui é o FunnelTracker,
+    // uma vez por rota. O padrão do GA4 é o `config` disparar um `page_view`
+    // sozinho — e como numa SPA ele só dispararia no carregamento, o tracker
+    // existe de qualquer jeito. Com os dois ligados, quem já tinha consentido
+    // entrava com DUAS visualizações da página de entrada: páginas por sessão
+    // inflada justo na população que estamos medindo.
+    w.gtag('config', GA_MEASUREMENT_ID, { anonymize_ip: true, send_page_view: false });
     return true;
 };
 

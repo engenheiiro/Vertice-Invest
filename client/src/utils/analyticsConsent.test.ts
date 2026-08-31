@@ -93,6 +93,19 @@ describe('Permissão concedida', () => {
 
         expect(tagsDoGa()).toHaveLength(1);
     });
+
+    it('deixa a contagem de página para o tracker, sem disparar a sua', () => {
+        // O `config` do GA4 manda um page_view por padrão. Numa SPA ele só
+        // dispararia no carregamento, então o FunnelTracker conta todas as rotas
+        // — e com os dois ligados a página de entrada era contada duas vezes.
+        grantAnalyticsConsent();
+
+        const comandos = [...(window as any).dataLayer].map((args) => Array.from(args));
+        const config = comandos.find(([comando]) => comando === 'config');
+
+        expect(config, 'o gtag precisa ser configurado no carregamento').toBeDefined();
+        expect(config?.[2]).toMatchObject({ send_page_view: false });
+    });
 });
 
 describe('Permissão recusada', () => {
