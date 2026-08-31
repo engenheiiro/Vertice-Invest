@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { subscriptionService } from '../../services/subscription';
 import { useToast } from '../../contexts/ToastContext';
+import { PLAN_DETAILS } from '../../constants/subscription';
 
 export const SubscriptionCard = () => {
     const { user, refreshProfile } = useAuth();
@@ -17,12 +18,15 @@ export const SubscriptionCard = () => {
     // Configurações de exibição por plano. Features REAIS, derivadas de
     // PLAN_ACCESS/PLAN_EXCLUSIVE (constants/subscription + Pricing) — cada tier
     // herda o anterior ("Tudo do ...") e lista só o que agrega de novo.
+    // Nome e preço vêm de PLAN_DETAILS: o assinante não pode ver aqui um valor
+    // diferente do que a vitrine anuncia e o checkout cobra.
     const planDetails: Record<UserPlan, { name: string; price: string; features: string[] }> = {
-        GUEST: { name: 'Visitante', price: '0,00', features: ['Gestão de Carteira', 'Research Brasil 10', 'Vértice Academy (grátis)', 'Cotações com delay'] },
-        ESSENTIAL: { name: 'Essential', price: '39,90', features: ['Carteira & Brasil 10', 'Sinais técnicos (com delay)', 'Cursos Essenciais', 'Relatório mensal'] },
-        PRO: { name: 'Vértice Pro', price: '89,90', features: ['Tudo do Essential', 'Aporte Inteligente (IA)', 'Radar Alpha tempo real', 'Research Ações, FIIs & Cripto', 'Relatórios de diagnóstico (IA)'] },
-        ELITE: { name: 'Vértice Elite', price: '120,00', features: ['Tudo do Pro', 'Rebalanceamento IA', 'Research Global (Stocks & REITs)', 'Masterclass & Estudos de Caso'] },
-        BLACK: { name: 'Vértice Black', price: '299,00', features: ['Tudo do Elite', 'Carteiras Private', 'Automação de Imposto de Renda', 'Concierge WhatsApp 24h', 'Calls com Analistas'] }
+        GUEST: { name: PLAN_DETAILS.GUEST.label, price: PLAN_DETAILS.GUEST.price, features: ['1 carteira, com importação da B3', 'Carteira, rentabilidade e extrato', 'Metas financeiras limitadas', 'Carteira Brasil TOP 10, indicadores e cursos limitados'] },
+        ESSENTIAL: { name: PLAN_DETAILS.ESSENTIAL.label, price: PLAN_DETAILS.ESSENTIAL.price, features: ['Tudo do Free', 'Até 3 carteiras e metas financeiras ilimitadas', 'Proventos e dividendos', 'Carteira Brasil TOP 10 + Renda Fixa', 'Radar Alpha (Day Trade) — sinais com 60 min'] },
+        PRO: { name: PLAN_DETAILS.PRO.label, price: PLAN_DETAILS.PRO.price, features: ['Tudo do Essential', 'Carteiras ilimitadas', 'Carteiras de Ações, FIIs e Cripto', 'Carteira Aposentadoria (Buy & Hold)', 'Radar Alpha (Day Trade) e Aporte Inteligente'] },
+        ELITE: { name: PLAN_DETAILS.ELITE.label, price: PLAN_DETAILS.ELITE.price, features: ['Tudo do Pro', 'Carteira de Ativos Globais (Stocks e REITs)', 'Rebalanceamento de Carteira com IA', 'Relatório de apoio ao IR em PDF', 'Suporte prioritário 24h'] },
+        // Plano aposentado: só quem já assina chega a ver este card.
+        BLACK: { name: PLAN_DETAILS.BLACK.label, price: PLAN_DETAILS.BLACK.price, features: ['Tudo do Elite', 'Relatório de apoio ao IR em PDF'] }
     };
 
     // Método de pagamento real (3.22) → ícone + rótulo. Deriva de Transaction.method
@@ -58,6 +62,7 @@ export const SubscriptionCard = () => {
     // Assinatura recorrente ativa não "expira" — ela renova. Mostrar contagem
     // regressiva ali assustaria o assinante adimplente sem motivo.
     const isRecurring = user?.subscriptionType === 'RECURRING';
+    const isAnnual = user?.billingCycle === 'ANNUAL';
     const isRenewing = isRecurring && user?.subscriptionStatus === 'ACTIVE';
     const expiryBadge = !isRenewing && daysLeft !== null && daysLeft <= 7
         ? { label: daysLeft <= 0 ? 'Expirado' : `Expira em ${daysLeft} dia${daysLeft === 1 ? '' : 's'}`, urgent: daysLeft <= 3 }
@@ -141,6 +146,13 @@ export const SubscriptionCard = () => {
                             {isRenewing && (
                                 <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-950/60 text-blue-300 border border-blue-800/60">
                                     <RefreshCw size={9} /> Renovação automática
+                                </span>
+                            )}
+                            {/* Sem isto, um assinante anual vê "Renovação: Manual"
+                                sem saber que comprou 12 meses de uma vez. */}
+                            {isAnnual && !isRenewing && (
+                                <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-800/60">
+                                    <CalendarClock size={9} /> Plano anual (12 meses)
                                 </span>
                             )}
                             {expiryBadge && (

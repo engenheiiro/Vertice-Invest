@@ -27,7 +27,7 @@ import { useWallet } from '../../contexts/WalletContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useDemo } from '../../contexts/DemoContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FEATURE_LIMITS } from '../../constants/subscription';
+import { FEATURE_LIMITS, PLAN_HIERARCHY } from '../../constants/subscription';
 import { WALLET_STEPS } from '../tutorial/tutorialSteps';
 
 interface WalletViewProps {
@@ -75,9 +75,16 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
 
     const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PERFORMANCE' | 'DIVIDENDS' | 'STATEMENT' | 'TAX'>('OVERVIEW');
 
-    // (7.11) Relatório de IR é exclusivo do plano BLACK (ADMIN passa para QA).
-    // O link público nunca expõe a aba: é declaração fiscal do dono.
-    const canAccessTax = !isReadOnly && (user?.plan === 'BLACK' || user?.role === 'ADMIN');
+    // (7.11) Relatório de apoio ao IR: ELITE+ (ADMIN passa para QA). O link
+    // público nunca expõe a aba: é declaração fiscal do dono.
+    // Proventos: ESSENTIAL+. No link público o gate é do DONO e vive no servidor
+    // (getPublicWalletDividends) — o visitante pode nem ter conta, então o plano
+    // de quem está olhando não pode decidir nada aqui.
+    const isElite = PLAN_HIERARCHY[user?.plan || 'GUEST'] >= PLAN_HIERARCHY.ELITE;
+    const canAccessTax = !isReadOnly && (isElite || user?.role === 'ADMIN');
+    const canAccessDividends = isReadOnly
+        || PLAN_HIERARCHY[user?.plan || 'GUEST'] >= PLAN_HIERARCHY.ESSENTIAL
+        || user?.role === 'ADMIN';
 
     // --- AUTOMAÇÃO DO TUTORIAL ---
     // A aba ativa é derivada do metadado `tab` do passo atual (sem número mágico),
@@ -120,11 +127,20 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
     // CHECK DE PERMISSÃO: RELATÓRIO DE IR (BLACK+)
     const handleTaxTab = () => {
         if (!canAccessTax) {
-            setLimitMessage("O Relatório de Imposto de Renda é um recurso exclusivo do plano Black.");
+            setLimitMessage("O Relatório de apoio ao Imposto de Renda é um recurso do plano Elite.");
             setLimitModalOpen(true);
             return;
         }
         setActiveTab('TAX');
+    };
+
+    const handleDividendsTab = () => {
+        if (!canAccessDividends) {
+            setLimitMessage("O painel de Proventos e Dividendos começa no plano Essential.");
+            setLimitModalOpen(true);
+            return;
+        }
+        setActiveTab('DIVIDENDS');
     };
 
     return (
@@ -224,7 +240,7 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
             <div id="tour-wallet-tabs" aria-label="Seções da carteira" className={`flex gap-1 sm:gap-2 mb-5 md:mb-6 border-b border-slate-800/60 overflow-x-auto overscroll-x-contain snap-x snap-proximity no-scrollbar transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
                 <TabButton active={activeTab === 'OVERVIEW'} onClick={() => setActiveTab('OVERVIEW')} icon={<PieSlices size={16} />} label="Visão Geral" />
                 <TabButton active={activeTab === 'PERFORMANCE'} onClick={() => setActiveTab('PERFORMANCE')} icon={<BarChart2 size={16} />} label="Rentabilidade" />
-                <TabButton active={activeTab === 'DIVIDENDS'} onClick={() => setActiveTab('DIVIDENDS')} icon={<CircleDollarSign size={16} />} label="Proventos" />
+                <TabButton active={activeTab === 'DIVIDENDS'} onClick={handleDividendsTab} icon={canAccessDividends ? <CircleDollarSign size={16} /> : <Lock size={16} />} label="Proventos" />
                 <TabButton active={activeTab === 'STATEMENT'} onClick={() => setActiveTab('STATEMENT')} icon={<FileText size={16} />} label="Extrato" />
                 {!isReadOnly && (
                     <TabButton active={activeTab === 'TAX'} onClick={handleTaxTab} icon={canAccessTax ? <Landmark size={16} /> : <Lock size={16} />} label="Imposto de Renda" />
@@ -322,7 +338,7 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
                         </Suspense>
                     )}
 
-                    {activeTab === 'DIVIDENDS' && (
+                    {activeTab === 'DIVIDENDS' && canAccessDividends && (
                         <Suspense fallback={<TabFallback />}>
                             <div className="animate-fade-in">
                                 <DividendDashboard />

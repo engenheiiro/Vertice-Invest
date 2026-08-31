@@ -12,8 +12,13 @@ export type SubscriptionStatusResponse = {
     lastPayment?: { gatewayId?: string; status?: string; plan?: string };
 };
 
-/** Sufixo dos planos de teste do Mercado Pago — some do plano exibido ao usuário. */
-export const TEST_PLAN_SUFFIX = '_TEST';
+/**
+ * Reduz a chave de CHECKOUT (PRO_ANNUAL, PRO_TEST, PRO_ANNUAL_TEST) ao plano que
+ * o usuário realmente recebe — espelho de basePlanOf() no servidor. Sem isso,
+ * quem compra o anual fica preso na tela de "processando": a confirmação
+ * compararia PRO_ANNUAL com o PRO que foi creditado e nunca daria bate.
+ */
+export const basePlanOf = (planKey: string) => planKey.replace(/_ANNUAL(_TEST)?$|_TEST$/, '');
 
 export const getCheckoutReturnDetails = (params: URLSearchParams) => {
     const paymentId = params.get('payment_id') || params.get('collection_id');
@@ -22,9 +27,7 @@ export const getCheckoutReturnDetails = (params: URLSearchParams) => {
     const preapprovalId = params.get('preapproval_id');
     const status = (params.get('status') || params.get('collection_status') || params.get('return_status') || 'processing').toLowerCase();
     const rawPlan = params.get('plan');
-    const expectedPlan = rawPlan?.endsWith(TEST_PLAN_SUFFIX)
-        ? rawPlan.slice(0, -TEST_PLAN_SUFFIX.length)
-        : rawPlan;
+    const expectedPlan = rawPlan ? basePlanOf(rawPlan) : rawPlan;
 
     return { paymentId, preapprovalId, status, rawPlan, expectedPlan };
 };

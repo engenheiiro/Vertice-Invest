@@ -38,6 +38,19 @@ describe('CheckoutSuccess — parâmetros do retorno Mercado Pago', () => {
     expect(details).toEqual({ paymentId: 'pay-123', preapprovalId: null, status: 'approved', rawPlan: 'PRO', expectedPlan: 'PRO' });
   });
 
+  it('reduz a chave anual ao plano creditado — senão a tela trava em "processando"', () => {
+    // O servidor credita PRO por uma compra de PRO_ANNUAL. Comparar a chave de
+    // checkout com o plano creditado nunca daria bate, e a confirmação ficaria
+    // girando até o timeout mesmo com o pagamento aprovado.
+    for (const chave of ['PRO_ANNUAL', 'PRO_ANNUAL_TEST', 'PRO_TEST']) {
+      const details = getCheckoutReturnDetails(new URLSearchParams({
+        plan: chave, payment_id: 'pay-123', status: 'approved',
+      }));
+      expect(details.expectedPlan, `${chave} deveria virar PRO`).toBe('PRO');
+      expect(details.rawPlan).toBe(chave);
+    }
+  });
+
   it('usa collection_id como fallback e converte plano de teste ao plano real esperado', () => {
     const details = getCheckoutReturnDetails(new URLSearchParams({
       plan: 'ELITE_TEST', collection_id: 'pay-456', collection_status: 'pending',

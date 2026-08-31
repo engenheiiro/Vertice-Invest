@@ -1,11 +1,15 @@
 import { z } from 'zod';
-import { BILLING_MODES, LIMITS_CONFIG, PUBLIC_PLAN_KEYS } from '../config/subscription.js';
+import { BILLING_CYCLES, BILLING_MODES, LIMITS_CONFIG, PUBLIC_PLAN_KEYS } from '../config/subscription.js';
 
 const feature = z.enum(Object.keys(LIMITS_CONFIG));
 
 // ONE_TIME por padrão: mantém compatível qualquer cliente que ainda não envie o
 // modo (o comportamento antigo era sempre avulso).
 const mode = z.enum(BILLING_MODES).optional().default('ONE_TIME');
+
+// MONTHLY por padrão: o ciclo é opt-in, então nenhum cliente antigo passa a
+// comprar um ano sem pedir.
+const cycle = z.enum(BILLING_CYCLES).optional().default('MONTHLY');
 
 // Só planos vendáveis: as variantes _TEST (R$0,50) entram exclusivamente pelo
 // /test-checkout, que é requireAdmin.
@@ -17,6 +21,7 @@ export const testCheckoutSchema = z.object({
   body: z.object({
     planKey: z.enum(['ESSENTIAL', 'PRO', 'ELITE', 'BLACK']),
     mode,
+    cycle,
   }).strict(),
 });
 
@@ -26,6 +31,8 @@ export const syncPreapprovalSchema = z.object({
   }).strict(),
 });
 
+// Aceita as chaves anuais para o controller poder explicar POR QUE não dá — um
+// "enum inválido" do Zod não diria a quem clicou que o caminho é o checkout.
 export const changePlanSchema = z.object({
   body: z.object({ planId: z.enum(PUBLIC_PLAN_KEYS) }).strict(),
 });

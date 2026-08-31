@@ -1,7 +1,8 @@
 
 import Transaction from '../models/Transaction.js';
 import logger from '../config/logger.js';
-import { PLANS, TEST_PLAN_MAP, RECURRING_GRACE_DAYS } from '../config/subscription.js';
+import { PLANS, basePlanOf, RECURRING_GRACE_DAYS } from '../config/subscription.js';
+import { paymentService } from './paymentService.js';
 import { invalidateUser } from '../utils/userCache.js';
 
 /**
@@ -21,8 +22,10 @@ import { invalidateUser } from '../utils/userCache.js';
  *   construção e o nosso calendário nunca diverge do calendário de cobrança dele.
  */
 
-// Resolve variante de teste (ESSENTIAL_TEST) para o plano real creditado.
-export const resolvePlanKey = (planKey) => TEST_PLAN_MAP[planKey] || planKey || 'ESSENTIAL';
+// Resolve qualquer variante de checkout (ESSENTIAL_TEST, PRO_ANNUAL,
+// PRO_ANNUAL_TEST) para o plano real creditado. Chave desconhecida volta como
+// veio — external_reference antigo continua sendo lido.
+export const resolvePlanKey = (planKey) => basePlanOf(planKey) || planKey || 'ESSENTIAL';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -52,9 +55,41 @@ export const isSubscriptionExpired = (user, now = new Date()) => {
 };
 
 /**
- * Credita um período avulso (Pix/boleto). Cria a Transaction ANTES de estender o
- * plano: o índice único em gatewayId faz a 2ª entrega concorrente do MP falhar
- * com E11000 aqui, nunca creditando os dias duas vezes.
+ * Encerra no Mercado Pago a assinatura mensal de quem acabou de comprar um
+ * período avulso (Pix, boleto ou o anual parcelado). Sem isso, quem migra do
+ * mensal para o anual fica com o preapproval autorizado e é cobrado DUAS vezes:
+ * o anual à vista e a mensalidade de novo no aniversário.
+ *
+ * Nunca lança: o período já foi pago e creditado, e negar acesso por causa de
+ * uma falha no cancelamento seria punir o cliente pelo nosso problema. Falhar
+ * aqui vira log de erro — é cobrança indevida esperando alguém agir.
+ */
+const stopRecurringAfterOneTime = async (user) => {
+    const preapprovalId = user.mpPreapprovalId;
+    if (!preapprovalId || user.subscriptionStatus === 'CANCELED') return;
+
+    try {
+        const canceled = await paymentService.cancelPreapproval(preapprovalId);
+        if (canceled) {
+            logger.info('🔕 Assinatura mensal encerrada por compra avulsa', {
+                userId: user._id.toString(), preapprovalId,
+            });
+            return;
+        }
+        logger.error('🔥 Preapproval NÃO cancelado após compra avulsa — risco de cobrança dupla', {
+            userId: user._id.toString(), preapprovalId,
+        });
+    } catch (error) {
+        logger.error('🔥 Erro ao cancelar preapproval após compra avulsa — risco de cobrança dupla', {
+            userId: user._id.toString(), preapprovalId, error: error.message,
+        });
+    }
+};
+
+/**
+ * Credita um período avulso (Pix/boleto/anual parcelado). Cria a Transaction
+ * ANTES de estender o plano: o índice único em gatewayId faz a 2ª entrega
+ * concorrente do MP falhar com E11000 aqui, nunca creditando os dias duas vezes.
  *
  * @returns {{ credited: boolean, duplicated?: boolean, plan?: string, validUntil?: Date }}
  */
@@ -79,6 +114,10 @@ export const grantOneTimePeriod = async (user, planKey, { gatewayId, amount, met
         throw e;
     }
 
+    // Só depois da barreira de idempotência: uma reentrega do mesmo pagamento
+    // volta acima e não tenta cancelar duas vezes.
+    await stopRecurringAfterOneTime(user);
+
     const now = new Date();
     const base = user.validUntil && new Date(user.validUntil) > now
         ? new Date(user.validUntil)
@@ -88,6 +127,7 @@ export const grantOneTimePeriod = async (user, planKey, { gatewayId, amount, met
     user.plan = plan;
     user.subscriptionStatus = 'ACTIVE';
     user.subscriptionType = 'ONE_TIME';
+    user.billingCycle = PLANS[planKey]?.cycle ?? 'MONTHLY';
     user.validUntil = base;
     user.mpSubscriptionId = gatewayId?.toString();
     // Compra avulsa não renova: zera o calendário recorrente para a UI não
@@ -99,7 +139,8 @@ export const grantOneTimePeriod = async (user, planKey, { gatewayId, amount, met
     invalidateUser(user._id);
 
     logger.info('✅ Período avulso creditado', {
-        userId: user._id.toString(), plan, days, validUntil: base.toISOString(),
+        userId: user._id.toString(), plan, days, cycle: user.billingCycle,
+        validUntil: base.toISOString(),
     });
 
     return { credited: true, plan, validUntil: base };
@@ -121,6 +162,9 @@ export const syncRecurringPeriod = async (user, preapproval) => {
 
     user.plan = plan;
     user.subscriptionType = 'RECURRING';
+    // A recorrência do MP (PreApproval) só existe no ciclo mensal — o anual é
+    // sempre compra avulsa parcelada.
+    user.billingCycle = 'MONTHLY';
     user.subscriptionStatus = 'ACTIVE';
     user.mpPreapprovalId = preapproval.id?.toString();
     if (preapproval.payment_method_id) user.cardBrand = preapproval.payment_method_id;

@@ -277,7 +277,7 @@
         <span class="pill">Revisado em 30 ago 2026</span>
         <span class="pill">Horizonte inicial: 90 dias</span>
         <span class="pill">Premissa: 1 pessoa · R$ 500/mês</span>
-        <span class="pill">Sem alterações no produto</span>
+        <span class="pill">Implantação em 5 ondas</span>
       </div>
 
       <div class="summary">
@@ -293,6 +293,7 @@
         <a href="#inventario">Inventário</a>
         <a href="#mercado">Mercado</a>
         <a href="#planos">Planos</a>
+        <a href="#implantacao">Implantação</a>
         <a href="#monetizacao">Monetização</a>
         <a href="#aquisicao">Aquisição</a>
         <a href="#execucao">90 dias</a>
@@ -345,7 +346,7 @@
           </tbody>
         </table>
       </div>
-      <p class="note">Este documento consolida e substitui o plano anterior. A revisão não altera nenhum arquivo funcional do produto.</p>
+      <p class="note">Este documento consolida e substitui o plano anterior. A implantação começou em 30/08/2026 e é rastreada na seção 6.</p>
     </section>
 
     <section id="inventario">
@@ -433,39 +434,40 @@
 
     <section id="planos">
       <h2>5. Nova arquitetura de planos</h2>
-      <p class="lede">Catálogo recomendado para implementação futura. Os valores anuais são cobrados pelo período de 12 meses e exibidos como equivalente mensal. Não alterar gates nem checkout antes da validação comercial e jurídica.</p>
+      <p class="lede">Catálogo no ar desde 30/08/2026. Os valores anuais são cobrados de uma vez pelo período de 12 meses (parceláveis em 12× no cartão) e exibidos como equivalente mensal. Preço e gate saem de <code>server/config/subscription.js</code>; mudar aqui sem mudar lá deixa a vitrine mentindo.</p>
 
       <div class="plans">
         <article class="plan">
           <span class="tag ready">Primeiros Passos</span>
           <h3>Free</h3>
-          <div class="who">Para organizar a primeira carteira e comprovar valor.</div>
+          <div class="who">Para organizar a primeira carteira.</div>
           <div class="price">R$ 0</div>
           <div class="annual">sem cartão</div>
           <ul>
             <li>1 carteira</li>
-            <li>Adicione ou importe seus investimentos</li>
+            <li>Importe seus investimentos da B3 ou de uma planilha</li>
             <li>Gestão de Carteira, Rentabilidade e Extrato</li>
-            <li>3 Metas Financeiras</li>
-            <li>Indicadores, Calculadora e Cursos Nível 0</li>
-            <li>Brasil 10</li>
+            <li>Metas Financeiras Limitadas</li>
+            <li>Indicadores e Calculadora</li>
+            <li>Cursos Limitados</li>
+            <li>Carteira Brasil TOP 10</li>
           </ul>
           <div class="role">Papel: ativar e gerar confiança.</div>
         </article>
 
         <article class="plan">
-          <span class="tag proposed">Investidor Sardinha</span>
+          <span class="tag proposed">Investidor Iniciante</span>
           <h3>Essential</h3>
-          <div class="who">Para acompanhar patrimônio, renda e objetivos sem planilha.</div>
+          <div class="who">Para acompanhar os primeiros ativos.</div>
           <div class="price">R$ 29,90 <small>/mês</small></div>
           <div class="annual">ou 12× R$ 19,90 · R$ 238,80/ano</div>
           <ul>
             <li>Tudo do Free</li>
             <li>Até 3 carteiras</li>
             <li>Gestão de Carteira Completa, Proventos e Dividendos</li>
-            <li>Metas Ilimitadas</li>
-            <li>Brasil 10 + Carteira de Renda Fixa</li>
-            <li>Radar Alpha — sinais técnicos com 60 min de defasagem</li>
+            <li>Metas Financeiras Ilimitadas</li>
+            <li>Carteira Brasil TOP 10 + Carteira de Renda Fixa</li>
+            <li>Radar Alpha (Day Trade) — sinais com 60 min</li>
             <li>Cursos até o Nível 1</li>
           </ul>
           <div class="role">Papel: primeira conversão e retenção por utilidade.</div>
@@ -474,15 +476,15 @@
         <article class="plan recommended">
           <span class="tag proposed">Investidor Estratégico</span>
           <h3>Pro</h3>
-          <div class="who">Para decidir aportes com research, sinais e método quantitativo.</div>
+          <div class="who">Para decidir aportes com a Carteira Recomendada e gestão com IA.</div>
           <div class="price">R$ 69,90 <small>/mês</small></div>
           <div class="annual">ou 12× R$ 49,90 · R$ 598,80/ano</div>
           <ul>
             <li>Tudo do Essential</li>
             <li>Carteiras Ilimitadas</li>
             <li>Carteiras de Ações, FIIs e Cripto</li>
-            <li>Buy &amp; Hold, comparador e diagnósticos</li>
-            <li>Radar Alpha — sinais técnicos em tempo real</li>
+            <li>Carteira Aposentadoria (Buy &amp; Hold)</li>
+            <li>Radar Alpha (Day Trade) — sinais em tempo real</li>
             <li>Aporte Inteligente</li>
             <li>Cursos até o Nível 3</li>
           </ul>
@@ -497,7 +499,7 @@
           <div class="annual">ou 12× R$ 99,90 · R$ 1.198,80/ano</div>
           <ul>
             <li>Tudo do Pro</li>
-            <li>Carteira de Ativos Globais (Exterior)</li>
+            <li>Carteira de Ativos Globais (Stocks e REITs)</li>
             <li>Rebalanceamento de Carteira com IA</li>
             <li>Relatório de apoio ao IR em PDF</li>
             <li>Cursos até o Nível 4</li>
@@ -536,19 +538,70 @@
         <li>A consultoria só deve ser lançada depois de definir profissional responsável, capacidade, contrato, compliance e limites claros — nunca como quinto card de autosserviço.</li>
       </ul>
 
-      <div class="callout warn">
-        <div class="kicker">Nome a revisar</div>
-        <p>“Investidor Sardinha” foi mantido neste rascunho conforme a direção proposta, mas já é associado publicamente a uma marca/canal de educação financeira. Antes de publicar, validar disponibilidade de marca ou substituir por um nome próprio, como <strong>Investidor Essencial</strong>.</p>
+      <div class="callout good">
+        <div class="kicker">Nome definido</div>
+        <p>O apelido do nível de entrada pago é <strong>Investidor Iniciante</strong>, decidido em 30/08/2026. Substitui “Investidor Sardinha”, associado publicamente a outra marca de educação financeira. Por ser um termo descritivo, o risco de colisão é baixo — em compensação, também não é registrável como marca exclusiva: serve como rótulo de plano, não como ativo de marca.</p>
       </div>
 
       <div class="callout warn">
         <div class="kicker">Antes de mudar preços</div>
-        <p>Preservar o preço e o acesso de assinantes atuais durante o período contratado; definir migração, renovação, impostos, taxas do Mercado Pago e política de reembolso. O anual precisa de caixa e regra operacional próprios — não é apenas trocar o número no card.</p>
+        <p>Preservar o preço e o acesso de assinantes atuais durante o período contratado; definir migração, renovação, impostos e taxas do Mercado Pago. O anual precisa de caixa e regra operacional próprios — não é apenas trocar o número no card.</p>
+        <p><b>Reembolso (decidido em 30/08/2026):</b> não haverá política de reembolso proporcional. Cancelar interrompe a cobrança futura e preserva o acesso até o fim do período pago — não devolve dinheiro. Isso não alcança o <b>direito de arrependimento</b> do art. 49 do Código de Defesa do Consumidor: compra feita fora de loja física pode ser desfeita em até 7 dias com devolução integral, e essa janela vale por lei, independentemente do que a página disser. Vale para o mensal e, com muito mais peso em reais, para o anual.</p>
+      </div>
+    </section>
+
+    <section id="implantacao">
+      <h2>6. Implantação: da vitrine ao gate</h2>
+      <p class="lede">O catálogo da seção anterior já está no ar — cards, preços, apelidos e Black fora da venda. A Onda 3 fez os gates aplicarem o que os cards prometem, e a Onda 4 pôs o anual à venda. O que sobra de dívida está marcado abaixo: cada promessa tem uma onda em que vira entrega verificável, e enquanto a linha estiver pendente ela é compromisso público assumido, não recurso entregue.</p>
+
+      <h3>As cinco ondas</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Onda</th><th>O que resolve</th><th>Estado</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td><b>Verdade comercial.</b> Tirar da vitrine concierge, calls, carteiras private e “automação de IR”; encerrar a promoção permanente.</td><td><span class="tag ready">No ar</span> 30/08/2026</td></tr>
+            <tr><td class="num">2</td><td><b>Catálogo e preços.</b> R$ 29,90 / 69,90 / 129,90, Free como plano de vitrine, Black aposentado da venda, apelidos e descrições do plano.</td><td><span class="tag ready">No ar</span> 30/08/2026</td></tr>
+            <tr><td class="num">3</td><td><b>Gates.</b> Limites de carteira e de meta por plano, Carteira Brasil TOP 10 no Free, Proventos no Essential e relatório de IR no Elite.</td><td><span class="tag ready">No ar</span> 30/08/2026 — restam o canal 24h (operação) e os níveis de curso (sem catálogo)</td></tr>
+            <tr class="focus"><td class="num">4</td><td><b>Cobrança anual.</b> 12× no cartão, período de 365 dias, migração mensal↔anual e caixa. Sem reembolso proporcional, por decisão de 30/08/2026 — ressalvados os 7 dias de arrependimento do CDC.</td><td><span class="tag ready">No ar</span> 30/08/2026</td></tr>
+            <tr><td class="num">5</td><td><b>Descoberta e medição.</b> Liberar <code>/pricing</code> para busca, ampliar o sitemap e instrumentar o funil.</td><td><span class="tag proposed">Pendente</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Promessa no card × entrega no sistema</h3>
+      <p>Cada linha abaixo já aparece para o visitante. A coluna do meio é o que o código faz hoje — é ela que precisa mudar para a promessa deixar de ser promessa.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Linha no card</th><th>O que o sistema faz hoje</th><th>Vira entrega na</th></tr></thead>
+          <tbody>
+            <tr><td>1 carteira (Free) · até 3 (Essential) · ilimitadas (Pro)</td><td>Aplicado em <code>LIMITS_CONFIG.wallets</code>: criar além do teto responde 403 com convite a assinar. O teto absoluto de 15 por conta continua valendo por cima, como rede anti-abuso.</td><td><span class="tag ready">Entregue</span></td></tr>
+            <tr><td>Metas limitadas (Free) · metas financeiras ilimitadas (Essential)</td><td>Aplicado em <code>LIMITS_CONFIG.goals</code>: 3 marcos por carteira no Free, ilimitado do Essential para cima.</td><td><span class="tag ready">Entregue</span></td></tr>
+            <tr><td>Carteira Brasil TOP 10 no Free</td><td>Front e backend agora concordam: é a única classe aberta ao GUEST. Todo o resto do ranking começa no Pro.</td><td><span class="tag ready">Entregue</span></td></tr>
+            <tr><td>Proventos e dividendos como benefício do Essential</td><td>Gate fechado: a aba, a rota privada e o <b>link público</b> exigem Essential — no link, pelo plano de quem publicou, senão bastava compartilhar a carteira para ver o painel de graça.</td><td><span class="tag ready">Entregue</span></td></tr>
+            <tr><td>Comparador (Pro)</td><td>Rota existe, mas segue desabilitada na navegação.</td><td><span class="tag stop">Fora do card</span> — só volta a ser anunciado depois de validado</td></tr>
+            <tr><td>Relatório de apoio ao IR (Elite)</td><td>O gate desceu de Black para Elite. Quem ainda assina Black continua entrando pela hierarquia — e o Black deixou de ter qualquer entrega exclusiva.</td><td><span class="tag ready">Entregue</span></td></tr>
+            <tr class="focus"><td>Suporte prioritário 24h (Elite)</td><td>Não há canal publicado nem prazo de resposta divulgado.</td><td><span class="tag stop">Em aberto</span> — decisão operacional; é a única linha do Elite ainda sem entrega</td></tr>
+            <tr class="focus"><td>Cursos Limitados (Free) · Cursos até o Nível 1, 3 e 4</td><td>O modelo de curso usa <code>requiredPlan</code>; não existe o conceito de nível nos dados — e ainda não há catálogo de cursos para dividir em níveis.</td><td><span class="tag proposed">Adiada</span> — sem catálogo, o gate não teria o que separar</td></tr>
+            <tr><td>Selo <b>IA</b> nas carteiras e no Radar Alpha</td><td>O ranking sai do motor quantitativo (<code>scoringEngine</code>); a IA entra nas narrativas, no Aporte Inteligente e no rebalanceamento.</td><td><span class="tag proposed">Decisão de vocabulário</span> — se quiser precisão, separar em selo QUANT (carteiras) e IA (aporte/rebalanceamento)</td></tr>
+            <tr><td>Preço anual (12× por plano)</td><td>Vendável: a página de planos tem alternador mensal/anual e o checkout emite a chave anual (<code>PRO_ANNUAL</code>), que credita o plano base por 365 dias. No cartão vai parcelado em 12×; no Pix, à vista.</td><td><span class="tag ready">Entregue</span></td></tr>
+            <tr><td>“Não renova automaticamente” no anual</td><td>É verdade por construção, não por omissão: o PreApproval do Mercado Pago não parcela, então o anual é cobrança única. Quem migra do mensal tem o preapproval cancelado no ato — senão pagaria o ano e continuaria sendo cobrado todo mês.</td><td><span class="tag ready">Entregue</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <div class="kicker">O risco assumido</div>
+        <p>Anunciar antes de entregar foi uma escolha consciente para o catálogo avançar por incremento. Duas linhas eram diferentes das outras, porque nelas o cliente paga R$ 129,90 e esbarra em porta fechada: <b>relatório de IR</b> e <b>canal 24h</b> no Elite. O relatório foi entregue na Onda 3. <b>O canal 24h continua em aberto</b> — e é a única promessa do catálogo em que o assinante ainda recebe menos do que o card diz. Enquanto não houver canal e prazo publicados, essa linha é dívida, não recurso.</p>
+      </div>
+
+      <div class="callout good">
+        <div class="kicker">Como manter isto honesto</div>
+        <p>A lista de features vive em <code>client/src/pages/Pricing.tsx</code>, com espelhos na Landing e no card de assinatura do perfil. Ao mexer em qualquer uma, atualizar a tabela acima na mesma sessão — é ela que diz o que já é verdade. Preço não se digita na tela: sai de <code>PLAN_DETAILS</code>, que é comparado com <code>server/config/subscription.js</code> por teste automatizado.</p>
       </div>
     </section>
 
     <section id="monetizacao">
-      <h2>6. Vídeo ou tráfego do site: o que monetiza melhor?</h2>
+      <h2>7. Vídeo ou tráfego do site: o que monetiza melhor?</h2>
       <p class="lede">Para a Vértice, a comparação correta não é YouTube Ads versus AdSense. É <strong>mídia alugada que gera confiança</strong> versus <strong>propriedade própria que converte</strong>. Os dois canais devem trabalhar para a assinatura.</p>
 
       <div class="table-wrap">
@@ -599,7 +652,7 @@
     </section>
 
     <section id="aquisicao">
-      <h2>7. Estratégia de aquisição: conteúdo que demonstra o produto</h2>
+      <h2>8. Estratégia de aquisição: conteúdo que demonstra o produto</h2>
       <p class="lede">A Vértice não precisa vencer influenciadores em entretenimento. Precisa responder melhor às dúvidas que aparecem antes de alguém organizar uma carteira ou tomar uma decisão.</p>
 
       <div class="table-wrap">
@@ -636,7 +689,7 @@
     </section>
 
     <section id="execucao">
-      <h2>8. Plano de 90 dias</h2>
+      <h2>9. Plano de 90 dias</h2>
       <p class="lede">A ordem importa mais que a data. Cada fase termina com um portão verificável; se o portão não abrir, não se compra tráfego.</p>
 
       <div class="phase">
@@ -698,7 +751,7 @@
     </section>
 
     <section id="metricas">
-      <h2>9. Painel mínimo de decisão</h2>
+      <h2>10. Painel mínimo de decisão</h2>
       <p class="lede">Seguidores e pageviews ajudam a diagnosticar distribuição; não dizem se o negócio funciona. O painel deve acompanhar o caminho completo até receita e retenção.</p>
 
       <div class="table-wrap">
@@ -723,7 +776,7 @@
     </section>
 
     <section id="riscos">
-      <h2>10. Guardrails</h2>
+      <h2>11. Guardrails</h2>
       <ul>
         <li><strong>Regulatório:</strong> a CVM considera que habitualidade e remuneração — inclusive assinatura — podem caracterizar atividade profissional de análise. Um aviso “não é recomendação” sozinho não resolve. Obter parecer especializado antes de promover ativos específicos.</li>
         <li><strong>Consultoria Black:</strong> orientação, recomendação ou aconselhamento profissional e individualizado sobre valores mobiliários só pode ser prestado por consultor registrado ou estrutura habilitada segundo a Resolução CVM 19.</li>
@@ -731,12 +784,12 @@
         <li><strong>Prova:</strong> todo número de backtest deve mostrar período, benchmark, custos, regras e diferença entre resultado histórico e futuro.</li>
         <li><strong>Conflitos:</strong> patrocínio e afiliado precisam de identificação visível e nunca devem interferir no ranking.</li>
         <li><strong>Privacidade:</strong> carteira compartilhada deve continuar opt-in e sem dados pessoais desnecessários.</li>
-        <li><strong>Capacidade:</strong> antes de anunciar “suporte prioritário 24h”, definir se 24h descreve a disponibilidade do canal ou o prazo máximo de resposta; publicar canal, horário e SLA reais.</li>
+        <li><strong>Capacidade:</strong> no Elite, <strong>24h descreve a disponibilidade do canal</strong> — decisão de 30/08/2026 —, não o prazo de resposta. O card carrega a forma curta (“Suporte prioritário 24h”), então o significado precisa estar escrito onde o suporte é descrito: canal, o que 24h cobre e o prazo de resposta como número separado. Um canal que aceita mensagem de madrugada e responde no expediente é legítimo desde que esteja publicado assim.</li>
       </ul>
     </section>
 
     <section id="fontes">
-      <h2>11. Fontes e limites</h2>
+      <h2>12. Fontes e limites</h2>
       <p class="lede">Fontes externas consultadas em 30/08/2026 e arquivos do repositório usados na auditoria. Preços promocionais podem mudar sem aviso.</p>
       <ol class="sources">
         <li><a href="https://lp.statusinvest.com.br/ao/planos/">Status Invest — planos e preços</a>: Essencial, Profissional, Alpha, IR e garantia.</li>

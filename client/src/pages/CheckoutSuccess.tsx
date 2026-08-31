@@ -9,7 +9,6 @@ import {
     getCheckoutReturnDetails,
     isActivationRecorded,
     isSubscriptionActivated,
-    TEST_PLAN_SUFFIX,
     type SubscriptionStatusResponse,
 } from '../utils/checkoutStatus';
 
@@ -56,6 +55,9 @@ export const CheckoutSuccess = () => {
         [searchParams],
     );
     const isRecurring = Boolean(preapprovalId);
+    // O anual é avulso por construção (o PreApproval do MP não parcela), então
+    // "Avulsa" sozinho não distingue 30 de 365 dias.
+    const isAnnual = Boolean(rawPlan?.includes('_ANNUAL'));
 
     useEffect(() => {
         let cancelled = false;
@@ -181,7 +183,9 @@ export const CheckoutSuccess = () => {
                         <div className="bg-slate-900/50 rounded-xl p-4 mb-6 border border-slate-800 text-left space-y-2">
                             <div className="flex justify-between text-xs gap-3">
                                 <span className="text-slate-500">Plano selecionado</span>
-                                <span className="text-white font-bold text-right">{rawPlan?.replace(TEST_PLAN_SUFFIX, '') || '—'}</span>
+                                <span className="text-white font-bold text-right">
+                                    {expectedPlan ? `${expectedPlan}${isAnnual ? ' · Anual' : ''}` : '—'}
+                                </span>
                             </div>
                             <div className="flex justify-between text-xs gap-3">
                                 <span className="text-slate-500">Status do retorno</span>
@@ -192,7 +196,9 @@ export const CheckoutSuccess = () => {
                             <div className="flex justify-between text-xs gap-3">
                                 <span className="text-slate-500">Cobrança</span>
                                 <span className="text-white font-bold text-right">
-                                    {isRecurring ? 'Mensal automática' : 'Avulsa (30 dias)'}
+                                    {isRecurring
+                                        ? 'Mensal automática'
+                                        : isAnnual ? 'Única (12 meses)' : 'Avulsa (30 dias)'}
                                 </span>
                             </div>
                             {(paymentId || preapprovalId) && (

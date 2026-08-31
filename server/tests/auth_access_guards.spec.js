@@ -15,7 +15,9 @@ const {
     authenticateToken,
     requireAdmin,
     requireElitePlan,
-    requireBlackPlan,
+    requireTaxReportPlan,
+    requireDividendsPlan,
+    requireMinPlan,
 } = await import('../middleware/authMiddleware.js');
 
 const response = () => {
@@ -108,12 +110,45 @@ describe('guards de autorização por papel e plano', () => {
         expect(blocked.res.body.requiredPlan).toBe('ELITE');
     });
 
-    it('requireBlackPlan libera BLACK e ADMIN; bloqueia ELITE', () => {
-        expect(callGuard(requireBlackPlan, { role: 'USER', plan: 'BLACK' }).next).toHaveBeenCalledOnce();
-        expect(callGuard(requireBlackPlan, { role: 'ADMIN', plan: 'GUEST' }).next).toHaveBeenCalledOnce();
+    // Onda 3 do plano comercial: o relatório de IR desceu de BLACK para ELITE
+    // quando o BLACK saiu da venda e o card do Elite passou a prometê-lo. Quem
+    // ainda é BLACK continua entrando pela hierarquia, sem regra própria.
+    it('requireTaxReportPlan libera ELITE, BLACK e ADMIN; bloqueia PRO', () => {
+        for (const user of [
+            { role: 'USER', plan: 'ELITE' },
+            { role: 'USER', plan: 'BLACK' },
+            { role: 'ADMIN', plan: 'GUEST' },
+        ]) {
+            expect(callGuard(requireTaxReportPlan, user).next).toHaveBeenCalledOnce();
+        }
 
-        const blocked = callGuard(requireBlackPlan, { role: 'USER', plan: 'ELITE' });
+        const blocked = callGuard(requireTaxReportPlan, { role: 'USER', plan: 'PRO' });
         expect(blocked.res.statusCode).toBe(403);
-        expect(blocked.res.body.requiredPlan).toBe('BLACK');
+        expect(blocked.res.body.requiredPlan).toBe('ELITE');
+    });
+
+    it('requireDividendsPlan libera do ESSENTIAL para cima; bloqueia GUEST', () => {
+        for (const user of [
+            { role: 'USER', plan: 'ESSENTIAL' },
+            { role: 'USER', plan: 'PRO' },
+            { role: 'USER', plan: 'ELITE' },
+            { role: 'USER', plan: 'BLACK' },
+            { role: 'ADMIN', plan: 'GUEST' },
+        ]) {
+            expect(callGuard(requireDividendsPlan, user).next).toHaveBeenCalledOnce();
+        }
+
+        const blocked = callGuard(requireDividendsPlan, { role: 'USER', plan: 'GUEST' });
+        expect(blocked.res.statusCode).toBe(403);
+        expect(blocked.res.body.requiredPlan).toBe('ESSENTIAL');
+    });
+
+    // Fail-closed: sem usuário, com plano desconhecido ou com degrau inexistente,
+    // o gate nega. É o que impede um plano novo (ou um typo) de virar acesso livre.
+    it('requireMinPlan nega usuário ausente, plano desconhecido e degrau inexistente', () => {
+        const guard = requireMinPlan('PRO', 'nope');
+        expect(callGuard(guard, undefined).res.statusCode).toBe(403);
+        expect(callGuard(guard, { role: 'USER', plan: 'PLANO_QUE_NAO_EXISTE' }).res.statusCode).toBe(403);
+        expect(callGuard(requireMinPlan('DEGRAU_INEXISTENTE', 'nope'), { role: 'USER', plan: 'BLACK' }).res.statusCode).toBe(403);
     });
 });

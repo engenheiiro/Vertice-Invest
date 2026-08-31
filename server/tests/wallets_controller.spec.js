@@ -66,28 +66,59 @@ beforeEach(() => {
 });
 
 describe('walletsController — createWallet (teto de carteiras)', () => {
-  it('bloqueia a criação ao atingir o teto de 15 carteiras', async () => {
-    Wallet.countDocuments.mockResolvedValue(15);
-    const req = { user: { id: 'u1' }, body: { name: 'Carteira Extra' } };
+  const create = async (plan, count, role = 'USER') => {
+    Wallet.countDocuments.mockResolvedValue(count);
+    Wallet.create.mockResolvedValue({ _id: 'w9', name: 'Carteira Extra', createdAt: new Date('2026-07-10') });
+    const req = { user: { id: 'u1', plan, role }, body: { name: '  Carteira Extra  ' } };
     const res = mockRes();
     const next = vi.fn();
-
     await createWallet(req, res, next);
+    return { res, next };
+  };
+
+  it('bloqueia a criação ao atingir o teto ABSOLUTO de 15 carteiras (400, sem upsell)', async () => {
+    const { next } = await create('PRO', 15);
 
     expect(Wallet.create).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
   });
 
-  it('cria normalmente abaixo do teto', async () => {
-    Wallet.countDocuments.mockResolvedValue(3);
-    Wallet.create.mockResolvedValue({ _id: 'w9', name: 'Carteira Extra', createdAt: new Date('2026-07-10') });
-    const req = { user: { id: 'u1' }, body: { name: '  Carteira Extra  ' } };
-    const res = mockRes();
-    const next = vi.fn();
+  // Onda 3 do plano comercial: 1 carteira no Free, 3 no Essential, ilimitadas
+  // do Pro para cima. Bloqueio de PLANO responde 403 (é convite a assinar),
+  // não 400 — o front distingue os dois casos pela mensagem.
+  it.each([
+    ['GUEST', 1],
+    ['ESSENTIAL', 3],
+  ])('bloqueia %s ao atingir o teto do plano (403 com upsell)', async (plan, limite) => {
+    const { next } = await create(plan, limite);
 
-    await createWallet(req, res, next);
+    expect(Wallet.create).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+  });
+
+  it.each([
+    ['GUEST', 0],
+    ['ESSENTIAL', 2],
+    ['PRO', 3],
+  ])('cria normalmente para %s abaixo do teto do plano', async (plan, count) => {
+    const { res, next } = await create(plan, count);
 
     expect(Wallet.create).toHaveBeenCalledWith({ user: 'u1', name: 'Carteira Extra' });
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('plano ausente ou desconhecido cai no degrau do Free (fail-closed)', async () => {
+    const semPlano = await create(undefined, 1);
+    expect(semPlano.next).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+
+    const desconhecido = await create('PLANO_QUE_NAO_EXISTE', 1);
+    expect(desconhecido.next).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+  });
+
+  it('ADMIN vai até o teto absoluto, independente do plano', async () => {
+    const { res, next } = await create('GUEST', 14, 'ADMIN');
+
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);
   });

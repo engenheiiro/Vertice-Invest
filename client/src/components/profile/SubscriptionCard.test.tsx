@@ -48,7 +48,7 @@ describe('SubscriptionCard', () => {
     });
     renderCard();
 
-    expect(screen.getByText('Vértice Pro')).toBeInTheDocument();
+    expect(screen.getByText('Pro')).toBeInTheDocument();
     expect(screen.getByText(/expira em 2 dias/i)).toBeInTheDocument();
     expect(screen.getByText(/pix · mercado pago/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /gerenciar/i })).toBeInTheDocument();
@@ -117,7 +117,7 @@ describe('SubscriptionCard — assinatura recorrente', () => {
 
     expect(screen.getByText(/não conseguimos renovar sua assinatura/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /atualizar pagamento/i })).toBeInTheDocument();
-    expect(screen.getByText('Vértice Pro')).toBeInTheDocument();
+    expect(screen.getByText('Pro')).toBeInTheDocument();
   });
 
   it('assinatura já cancelada não oferece cancelar de novo', () => {

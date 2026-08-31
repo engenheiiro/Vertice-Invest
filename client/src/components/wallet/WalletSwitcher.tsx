@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Wallet as WalletIcon, ChevronDown, Plus, Pencil, Trash2, Check, Loader2, Share2, Globe } from 'lucide-react';
+import { Wallet as WalletIcon, ChevronDown, Plus, Pencil, Trash2, Check, Loader2, Share2, Globe, Lock } from 'lucide-react';
 import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -7,6 +7,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { RenameWalletModal } from './RenameWalletModal';
 import { ShareWalletModal } from './ShareWalletModal';
 import type { WalletSummary } from '../../services/wallets';
+import { useFeatureAccess } from '../../hooks/useFeatureAccess';
+import { useNavigate } from 'react-router-dom';
 
 interface WalletSwitcherProps {
     /** Versão somente com ícone para espaços estreitos, como o título mobile da carteira. */
@@ -22,6 +24,12 @@ export const WalletSwitcher: React.FC<WalletSwitcherProps> = ({ compact = false 
     const { wallets, activeWalletId, activeWalletName, isWalletsLoading, isSwitchingWallet, setActiveWallet, deleteWallet } = useWallet();
     const { addToast } = useToast();
     const confirm = useConfirm();
+    const navigate = useNavigate();
+    // Teto comercial de carteiras (1 Free / 3 Essential / ilimitado Pro+). O gate
+    // que vale é o do servidor (walletsController); aqui só evitamos oferecer um
+    // botão que vai falhar — o upsell aparece no lugar dele.
+    const { limitFor } = useFeatureAccess();
+    const canCreateWallet = wallets.length < limitFor('wallets');
     const [isOpen, setIsOpen] = useState(false);
     const [modalMode, setModalMode] = useState<'create' | 'rename' | null>(null);
     const [editingWallet, setEditingWallet] = useState<{ id: string; name: string } | null>(null);
@@ -141,13 +149,23 @@ export const WalletSwitcher: React.FC<WalletSwitcherProps> = ({ compact = false 
                             })}
                         </div>
                         <div className="border-t border-slate-800 mt-1 pt-1">
-                            <button
-                                type="button"
-                                onClick={() => { setIsOpen(false); setEditingWallet(null); setModalMode('create'); }}
-                                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-bold text-blue-400 hover:bg-blue-500/10 transition-colors"
-                            >
-                                <Plus size={14} /> Nova Carteira
-                            </button>
+                            {canCreateWallet ? (
+                                <button
+                                    type="button"
+                                    onClick={() => { setIsOpen(false); setEditingWallet(null); setModalMode('create'); }}
+                                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-bold text-blue-400 hover:bg-blue-500/10 transition-colors"
+                                >
+                                    <Plus size={14} /> Nova Carteira
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => { setIsOpen(false); navigate('/pricing'); }}
+                                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-bold text-slate-400 hover:bg-slate-800/60 hover:text-white transition-colors"
+                                >
+                                    <Lock size={14} /> Mais carteiras: fazer upgrade
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

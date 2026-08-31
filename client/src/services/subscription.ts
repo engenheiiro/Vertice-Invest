@@ -1,8 +1,10 @@
 
 import { authService } from './auth';
+import type { BillingCycle } from '../constants/subscription';
 
-// ONE_TIME: Pix/boleto, 30 dias sem renovação.
+// ONE_TIME: Pix/boleto, período fechado sem renovação.
 // RECURRING: cartão via PreApproval, o Mercado Pago cobra todo mês.
+// O anual ignora o modo e é sempre ONE_TIME — o PreApproval não parcela.
 export type BillingMode = 'ONE_TIME' | 'RECURRING';
 
 export const subscriptionService = {
@@ -59,10 +61,12 @@ export const subscriptionService = {
         return await response.json();
     },
 
-    async testCheckout(planKey: string, mode: BillingMode = 'ONE_TIME') {
+    // `cycle` exercita o caminho anual do MP (Preference com cartão parcelado),
+    // que é outro fluxo — aprovar o mensal não dá garantia nenhuma sobre ele.
+    async testCheckout(planKey: string, mode: BillingMode = 'ONE_TIME', cycle: BillingCycle = 'MONTHLY') {
         const response = await authService.api('/api/subscription/test-checkout', {
             method: 'POST',
-            body: JSON.stringify({ planKey, mode })
+            body: JSON.stringify({ planKey, mode, cycle })
         });
 
         if (!response.ok) throw new Error("Erro ao iniciar checkout de teste");

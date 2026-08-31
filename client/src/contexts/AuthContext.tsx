@@ -16,6 +16,9 @@ export interface User {
   plan: UserPlan;
   subscriptionStatus: SubscriptionStatus;
   subscriptionType?: SubscriptionType;
+  // Ciclo comprado. Ortogonal ao plano: PRO mensal e PRO anual dão o mesmo
+  // acesso e só diferem em preço e duração.
+  billingCycle?: 'MONTHLY' | 'ANNUAL';
   role: UserRole;
   validUntil?: string;
   nextBillingDate?: string;

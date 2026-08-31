@@ -7,6 +7,8 @@ import { walletService } from '../services/wallet';
 import { authService } from '../services/auth';
 import { STALE_TIME } from '../config/queryConfig';
 import { DividendGoal } from '../types/dividends';
+import { useFeatureAccess } from './useFeatureAccess';
+import { useAuth } from '../contexts/AuthContext';
 
 export interface PortfolioItem {
     ticker: string;
@@ -101,6 +103,11 @@ interface QuantSignal {
 
 export const useDashboardData = () => {
     const { assets, kpis, isLoading: isWalletLoading, activeWalletId, isWalletScopeReady } = useWallet();
+    // Proventos são ESSENTIAL+ (gate autoritativo em GET /wallet/dividends). Sem
+    // este check o Free levaria um 403 a cada carregamento do painel.
+    const { hasPlan } = useFeatureAccess();
+    const { user } = useAuth();
+    const canSeeDividends = hasPlan('ESSENTIAL') || user?.role === 'ADMIN';
 
     // 1. Dados Macro
     const macroQuery = useQuery({
@@ -113,7 +120,7 @@ export const useDashboardData = () => {
     const dividendsQuery = useQuery({
         queryKey: ['dividends', activeWalletId],
         queryFn: () => walletService.getDividends(activeWalletId),
-        enabled: isWalletScopeReady, // evita uma busca sem escopo + outra com o id
+        enabled: isWalletScopeReady && canSeeDividends, // escopo resolvido + plano com acesso
         staleTime: STALE_TIME.SHORT,
     });
 

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { TunablesCard } from '../../components/admin/TunablesCard';
 import { useDemo } from '../../contexts/DemoContext';
 import type { BillingMode } from '../../services/subscription';
+import type { BillingCycle } from '../../constants/subscription';
 
 interface CacheData {
     ticker: string;
@@ -30,7 +31,7 @@ interface Props {
     onClearRadarHistory: () => void;
     onCacheSearch: (e: React.FormEvent) => void;
     onFixSplit: (e: React.FormEvent) => void;
-    onTestPayment: (planKey: string, mode?: BillingMode) => void;
+    onTestPayment: (planKey: string, mode?: BillingMode, cycle?: BillingCycle) => void;
     onLoadDiscardLogs: () => void;
 }
 
@@ -140,10 +141,11 @@ export const AdminFerramentasTab: React.FC<Props> = ({
             {/* Dois fluxos distintos do MP (Preference x PreApproval), com webhooks
                 distintos: aprovar um não valida o outro. */}
             {([
-                { mode: 'ONE_TIME' as const, title: 'Avulso (Pix) — 30 dias', hint: 'Preference · tópico payment' },
-                { mode: 'RECURRING' as const, title: 'Assinatura (Cartão) — recorrente', hint: 'PreApproval · tópicos subscription_*' },
-            ]).map(({ mode, title, hint }) => (
-                <div key={mode} className="mb-4 last:mb-0">
+                { mode: 'ONE_TIME' as const, cycle: 'MONTHLY' as const, title: 'Avulso (Pix) — 30 dias', hint: 'Preference · tópico payment' },
+                { mode: 'RECURRING' as const, cycle: 'MONTHLY' as const, title: 'Assinatura (Cartão) — recorrente', hint: 'PreApproval · tópicos subscription_*' },
+                { mode: 'ONE_TIME' as const, cycle: 'ANNUAL' as const, title: 'Anual (Cartão 12× ou Pix) — 365 dias', hint: 'Preference parcelada · tópico payment' },
+            ]).map(({ mode, cycle, title, hint }) => (
+                <div key={`${mode}:${cycle}`} className="mb-4 last:mb-0">
                     <div className="flex items-baseline justify-between gap-2 mb-2">
                         <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">{title}</span>
                         <span className="text-[9px] text-slate-600 font-mono">{hint}</span>
@@ -154,9 +156,11 @@ export const AdminFerramentasTab: React.FC<Props> = ({
                             { key: 'PRO', label: 'Pro', color: 'emerald' },
                             { key: 'ELITE', label: 'Elite', color: 'purple' },
                             { key: 'BLACK', label: 'Black', color: 'gold' },
-                        ].map(({ key, label, color }) => (
-                            <button key={key} onClick={() => onTestPayment(key, mode)} disabled={testPaymentLoading !== null} className={`py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${color === 'blue' ? 'bg-blue-900/20 border-blue-700/40 text-blue-400 hover:bg-blue-900/40' : ''} ${color === 'emerald' ? 'bg-emerald-900/20 border-emerald-700/40 text-emerald-400 hover:bg-emerald-900/40' : ''} ${color === 'purple' ? 'bg-purple-900/20 border-purple-700/40 text-purple-400 hover:bg-purple-900/40' : ''} ${color === 'gold' ? 'bg-gold/10 border-gold/40 text-gold hover:bg-gold/20' : ''} disabled:opacity-50 disabled:cursor-not-allowed`}>
-                                {testPaymentLoading === `${key}:${mode}` ? <RefreshCw size={13} className="animate-spin" /> : null}
+                        // O Black saiu da venda e nunca teve ciclo anual: oferecer o
+                        // botão daria um 400 do servidor, não um teste.
+                        ].filter(({ key }) => !(cycle === 'ANNUAL' && key === 'BLACK')).map(({ key, label, color }) => (
+                            <button key={key} onClick={() => onTestPayment(key, mode, cycle)} disabled={testPaymentLoading !== null} className={`py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${color === 'blue' ? 'bg-blue-900/20 border-blue-700/40 text-blue-400 hover:bg-blue-900/40' : ''} ${color === 'emerald' ? 'bg-emerald-900/20 border-emerald-700/40 text-emerald-400 hover:bg-emerald-900/40' : ''} ${color === 'purple' ? 'bg-purple-900/20 border-purple-700/40 text-purple-400 hover:bg-purple-900/40' : ''} ${color === 'gold' ? 'bg-gold/10 border-gold/40 text-gold hover:bg-gold/20' : ''} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                                {testPaymentLoading === `${key}:${mode}:${cycle}` ? <RefreshCw size={13} className="animate-spin" /> : null}
                                 {label}
                             </button>
                         ))}

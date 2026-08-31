@@ -20,7 +20,7 @@ import {
     getSnapshotHealth,
     forceSnapshot // Importado
 } from '../controllers/walletController.js';
-import { authenticateToken, requireAdmin, requireElitePlan, requireBlackPlan } from '../middleware/authMiddleware.js';
+import { authenticateToken, requireAdmin, requireElitePlan, requireTaxReportPlan, requireDividendsPlan } from '../middleware/authMiddleware.js';
 import { resolveWallet } from '../middleware/resolveWallet.js';
 import { researchHeavyLimiter } from '../middleware/rateLimiters.js';
 import { getTaxReport, getTaxReportPdf } from '../controllers/taxController.js';
@@ -80,7 +80,11 @@ router.delete('/transactions/:id', writeLimiter, resolveWallet, validate(idParam
 
 // Rotas de Inteligência
 router.get('/performance', resolveWallet, getWalletPerformance);
-router.get('/dividends', resolveWallet, getWalletDividends);
+// Proventos e Dividendos (ESSENTIAL+): diferencial anunciado do primeiro degrau
+// pago. O link público não passa por aqui — ele tem gate próprio, pelo plano do
+// DONO da carteira (publicWalletController), senão bastava publicar a carteira
+// para ver o painel de graça.
+router.get('/dividends', requireDividendsPlan, resolveWallet, getWalletDividends);
 
 // Rebalanceamento IA (ELITE+): read-only, gera plano de ordens sobre a carteira
 // ativa. Cadeia: authenticateToken (router.use) → requireElitePlan → limiter
@@ -90,11 +94,11 @@ router.post('/rebalance', requireElitePlan, researchHeavyLimiter, resolveWallet,
 // Extrato de Conta Corrente (Cash Flow)
 router.get('/cashflow', resolveWallet, getCashFlow);
 
-// (7.11) Relatório de Imposto de Renda (BLACK): apuração de renda variável,
-// posição 31/12, proventos e DARF. Cadeia: authenticateToken (router.use) →
-// requireBlackPlan → limiter pesado (recálculo caro) → handler.
-router.get('/tax-report/:year', requireBlackPlan, researchHeavyLimiter, getTaxReport);
-router.get('/tax-report/:year/pdf', requireBlackPlan, researchHeavyLimiter, getTaxReportPdf);
+// (7.11) Relatório de apoio ao Imposto de Renda (ELITE+): apuração de renda
+// variável, posição 31/12, proventos e DARF. Cadeia: authenticateToken
+// (router.use) → requireTaxReportPlan → limiter pesado (recálculo caro) → handler.
+router.get('/tax-report/:year', requireTaxReportPlan, researchHeavyLimiter, getTaxReport);
+router.get('/tax-report/:year/pdf', requireTaxReportPlan, researchHeavyLimiter, getTaxReportPdf);
 
 // Nova Rota: Correção de Splits (Admin / Manutenção)
 router.post('/fix-splits', writeLimiter, validate(corporateActionSchema), runCorporateAction);

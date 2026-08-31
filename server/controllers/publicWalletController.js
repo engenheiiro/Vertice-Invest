@@ -13,6 +13,7 @@ import {
     buildPublicScale, maskWalletPayload, maskHistory,
     maskPerformance, maskDividends, maskCashFlow,
 } from '../utils/publicWalletMask.js';
+import { hasPlanAtLeast } from '../config/subscription.js';
 import AppError from '../utils/AppError.js';
 import logger from '../config/logger.js';
 
@@ -62,7 +63,10 @@ const publicRoute = (build) => async (req, res, next) => {
     } catch (error) {
         // (E5) Erros da rota pública ganham tag própria no Sentry — além do
         // handler global — para alerta/segmentação de uma superfície não-autenticada.
-        if (process.env.SENTRY_DSN) {
+        // Recusa deliberada (4xx, ex.: proventos não publicados) não é incidente:
+        // vira ruído no alerta e esconde a falha real que o painel existe para pegar.
+        const isExpected = error?.status >= 400 && error.status < 500;
+        if (process.env.SENTRY_DSN && !isExpected) {
             Sentry.withScope((scope) => {
                 scope.setTag('route', 'public_wallet');
                 Sentry.captureException(error);
@@ -143,7 +147,21 @@ export const getPublicWalletPerformance = publicRoute(async ({ wallet, userId, w
     return maskPerformance(scale, performance);
 });
 
+/**
+ * Proventos é um módulo pago (ESSENTIAL+) — e o gate tem de valer aqui também.
+ * Sem isto, publicar a própria carteira e abrir o próprio link seria um desvio
+ * de uma linha em torno de requireDividendsPlan. Quem paga é o DONO do link, não
+ * o visitante: o plano consultado é o dele.
+ *
+ * O 403 é neutro de propósito. O visitante não tem nada a ver com o plano de
+ * quem publicou, e a página trata a falha como aba sem dados.
+ */
 export const getPublicWalletDividends = publicRoute(async ({ wallet, userId, walletId }) => {
+    const owner = await User.findById(userId).select('plan role').lean();
+    if (!hasPlanAtLeast(owner, 'ESSENTIAL')) {
+        throw AppError.forbidden('Proventos não estão publicados nesta carteira.');
+    }
+
     const [dividends, scale] = await Promise.all([
         buildWalletDividendsPayload(userId, walletId),
         scaleFor(wallet, userId, walletId),

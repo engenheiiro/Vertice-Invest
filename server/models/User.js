@@ -74,12 +74,20 @@ const UserSchema = new mongoose.Schema({
   // --- Assinatura recorrente (PreApproval) ---
   // ID real do preapproval no MP. É o que permite cancelar/alterar a assinatura.
   mpPreapprovalId: { type: String, index: true, sparse: true },
-  // ONE_TIME: comprou 30 dias (Pix/boleto), sem renovação.
+  // ONE_TIME: comprou um período fechado (Pix/boleto/anual parcelado), sem renovação.
   // RECURRING: cartão cadastrado, o MP cobra automaticamente todo mês.
   subscriptionType: {
     type: String,
     enum: ['ONE_TIME', 'RECURRING'],
     default: 'ONE_TIME'
+  },
+  // Ciclo comprado. É ortogonal a `plan`: PRO mensal e PRO anual dão o MESMO
+  // acesso e só diferem em preço e duração. Serve para a tela mostrar o valor e
+  // o período certos — sem ele, um assinante anual vê "R$ 69,90/mês".
+  billingCycle: {
+    type: String,
+    enum: ['MONTHLY', 'ANNUAL'],
+    default: 'MONTHLY'
   },
   nextBillingDate: { type: Date },      // preapproval.next_payment_date
   cardBrand: { type: String },          // payment_method_id do preapproval (visa/master/...)

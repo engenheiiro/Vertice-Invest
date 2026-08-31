@@ -176,6 +176,8 @@ describe('navegação por abas', () => {
   });
 
   it('clicar em "Proventos" torna a aba ativa', () => {
+    // Proventos é ESSENTIAL+ (Onda 3): o stub padrão é GUEST e cairia no upsell.
+    vi.mocked(useAuth).mockReturnValue(makeAuthStub('ESSENTIAL') as any);
     renderWallet();
     fireEvent.click(screen.getByText('Proventos'));
     expect(screen.getByText('Proventos').closest('button')).toHaveAttribute('aria-current', 'page');
@@ -185,6 +187,45 @@ describe('navegação por abas', () => {
     renderWallet();
     fireEvent.click(screen.getByText('Extrato'));
     expect(screen.getByText('Extrato').closest('button')).toHaveAttribute('aria-current', 'page');
+  });
+});
+
+// ─── Permissão: Proventos e Imposto de Renda ─────────────────────────────────
+
+// Onda 3 do plano comercial (30/08/2026): Proventos começa no Essential e o
+// relatório de apoio ao IR desceu de Black para Elite. O gate que vale é o do
+// backend (requireDividendsPlan / requireTaxReportPlan); aqui só a aba.
+describe('Proventos — controle de acesso', () => {
+  it('plano GUEST abre modal de limite em vez da aba', () => {
+    vi.mocked(useAuth).mockReturnValue(makeAuthStub('GUEST') as any);
+    renderWallet();
+    fireEvent.click(screen.getByText('Proventos'));
+    expect(screen.getByRole('dialog', { name: 'Acesso Restrito' })).toBeInTheDocument();
+    expect(screen.getByText('Proventos').closest('button')).not.toHaveAttribute('aria-current', 'page');
+  });
+
+  it.each(['ESSENTIAL', 'PRO', 'ELITE', 'BLACK'])('plano %s abre a aba', (plan) => {
+    vi.mocked(useAuth).mockReturnValue(makeAuthStub(plan) as any);
+    renderWallet();
+    fireEvent.click(screen.getByText('Proventos'));
+    expect(screen.queryByRole('dialog', { name: 'Acesso Restrito' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Imposto de Renda — controle de acesso', () => {
+  it.each(['GUEST', 'ESSENTIAL', 'PRO'])('plano %s abre modal de limite', (plan) => {
+    vi.mocked(useAuth).mockReturnValue(makeAuthStub(plan) as any);
+    renderWallet();
+    fireEvent.click(screen.getByText('Imposto de Renda'));
+    expect(screen.getByRole('dialog', { name: 'Acesso Restrito' })).toBeInTheDocument();
+  });
+
+  it.each(['ELITE', 'BLACK'])('plano %s abre a aba', (plan) => {
+    vi.mocked(useAuth).mockReturnValue(makeAuthStub(plan) as any);
+    renderWallet();
+    fireEvent.click(screen.getByText('Imposto de Renda'));
+    expect(screen.queryByRole('dialog', { name: 'Acesso Restrito' })).not.toBeInTheDocument();
+    expect(screen.getByText('Imposto de Renda').closest('button')).toHaveAttribute('aria-current', 'page');
   });
 });
 

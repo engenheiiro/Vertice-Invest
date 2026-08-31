@@ -6,9 +6,10 @@ import {
   ShieldCheck, Bot,
   ChevronRight, Activity, Cpu, CheckCircle2, Check,
   GraduationCap, LayoutDashboard, Quote, BarChart3,
-  TrendingUp, RefreshCw, Target, CalendarClock, Zap, Gem, Crown
+  TrendingUp, RefreshCw, Target, CalendarClock, Zap, Gem, Rocket
 } from 'lucide-react';
 import { API_URL } from '../config';
+import { PLAN_DETAILS } from '../constants/subscription';
 
 interface LandingTicker {
   ticker: string;
@@ -124,59 +125,68 @@ const COMPARISON_ROWS = [
   { label: 'Carteira consolidada e rentabilidade', vertice: 'Incluído', investidor10: 'Incluído', spreadsheet: 'Manual', traditional: '—' },
   { label: 'Aporte inteligente e rebalanceamento', vertice: 'Pro / Elite', investidor10: 'Limitado', spreadsheet: 'Manual', traditional: '—' },
   { label: 'Educação financeira estruturada', vertice: 'Incluído', investidor10: 'Cursos incluídos', spreadsheet: '—', traditional: 'Extra pago' },
-  { label: 'Custo mensal de entrada', vertice: 'R$ 39,90 mensal', investidor10: '12× R$ 19,90 anual', spreadsheet: 'Seu tempo', traditional: 'R$ 100+' },
+  { label: 'Custo mensal de entrada', vertice: `R$ ${PLAN_DETAILS.ESSENTIAL.price} mensal`, investidor10: '12× R$ 19,90 anual', spreadsheet: 'Seu tempo', traditional: 'R$ 100+' },
 ] as const;
 
+// Preço vem de PLAN_DETAILS (espelho de server/config/subscription.js) para a
+// vitrine não divergir do que o checkout cobra.
 const LANDING_PLANS = [
   {
-    name: 'Essential',
-    price: '39,90',
-    description: 'Comece a investir com inteligência.',
+    name: PLAN_DETAILS.GUEST.label,
+    nickname: PLAN_DETAILS.GUEST.nickname,
+    price: PLAN_DETAILS.GUEST.price,
+    description: 'Para organizar a primeira carteira.',
     inheritance: null,
-    features: ['Terminal e cotações', 'Carteira e rentabilidade', 'Carteira Brasil 10', 'Academy e sinais com delay'],
+    features: ['1 carteira, com importação da B3', 'Carteira, rentabilidade e extrato', 'Metas financeiras limitadas', 'Carteira Brasil TOP 10', 'Indicadores, calculadora e cursos limitados'],
+    icon: Rocket,
+    cta: { to: '/register', label: 'Criar conta grátis' },
+    borderClass: 'border-slate-700/50',
+    iconClass: 'border-slate-600/30 bg-slate-500/[0.08] text-slate-300',
+    checkClass: 'text-slate-400',
+    buttonClass: 'border-slate-600/50 text-slate-300 hover:bg-slate-500/10',
+  },
+  {
+    name: PLAN_DETAILS.ESSENTIAL.label,
+    nickname: PLAN_DETAILS.ESSENTIAL.nickname,
+    price: PLAN_DETAILS.ESSENTIAL.price,
+    description: 'Para acompanhar os primeiros ativos.',
+    inheritance: 'Tudo do Free +',
+    features: ['Até 3 carteiras', 'Proventos, dividendos e metas financeiras ilimitadas', 'Carteira Brasil TOP 10 + Renda Fixa', 'Radar Alpha (Day Trade) — sinais com 60 min', 'Cursos até o Nível 1'],
     icon: ShieldCheck,
+    cta: { to: '/pricing', label: 'Conhecer plano' },
     borderClass: 'border-emerald-500/30',
     iconClass: 'border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300',
     checkClass: 'text-emerald-400',
     buttonClass: 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10',
   },
   {
-    name: 'Vértice Pro',
-    price: '89,90',
-    originalPrice: '119,90',
-    description: 'Carteiras completas e IA no seu aporte.',
+    name: PLAN_DETAILS.PRO.label,
+    nickname: PLAN_DETAILS.PRO.nickname,
+    price: PLAN_DETAILS.PRO.price,
+    description: 'Para decidir aportes com a Carteira Recomendada e gestão com IA.',
     inheritance: 'Tudo do Essential +',
-    features: ['Aporte Inteligente', 'Radar Alpha em tempo real', 'Carteiras de Ações, FIIs e Cripto', 'Diagnósticos com IA'],
+    features: ['Carteiras ilimitadas', 'Carteiras de Ações, FIIs e Cripto', 'Carteira Aposentadoria (Buy & Hold)', 'Radar Alpha (Day Trade) — sinais em tempo real', 'Aporte Inteligente e Cursos até o Nível 3'],
     icon: Zap,
     recommended: true,
+    cta: { to: '/pricing', label: 'Conhecer plano' },
     borderClass: 'border-blue-500/55',
     iconClass: 'border-blue-400/30 bg-blue-600 text-white',
     checkClass: 'text-blue-400',
     buttonClass: 'border-blue-500 bg-blue-600 text-white hover:bg-blue-500',
   },
   {
-    name: 'Vértice Elite',
-    price: '120,00',
-    description: 'Globais e automações para ir além.',
+    name: PLAN_DETAILS.ELITE.label,
+    nickname: PLAN_DETAILS.ELITE.nickname,
+    price: PLAN_DETAILS.ELITE.price,
+    description: 'Para portfólio global, rebalanceamento e rotina fiscal.',
     inheritance: 'Tudo do Pro +',
-    features: ['Rebalanceamento com IA', 'Carteira Global', 'Masterclasses e estudos de caso'],
+    features: ['Carteira de Ativos Globais (Stocks e REITs)', 'Rebalanceamento de Carteira com IA', 'Relatório de apoio ao IR em PDF', 'Masterclass e Cursos até o Nível 4', 'Suporte prioritário 24h'],
     icon: Gem,
+    cta: { to: '/pricing', label: 'Conhecer plano' },
     borderClass: 'border-violet-500/35',
     iconClass: 'border-violet-400/25 bg-violet-400/[0.09] text-violet-300',
     checkClass: 'text-violet-400',
     buttonClass: 'border-violet-500/45 text-violet-300 hover:bg-violet-500/10',
-  },
-  {
-    name: 'Vértice Black',
-    price: '299,00',
-    description: 'Estrutura private e atendimento dedicado.',
-    inheritance: 'Tudo do Elite +',
-    features: ['Carteiras estruturadas', 'Automação de IR', 'Concierge e calls com analistas'],
-    icon: Crown,
-    borderClass: 'border-yellow-500/35',
-    iconClass: 'border-yellow-400/25 bg-yellow-400/[0.08] text-yellow-300',
-    checkClass: 'text-yellow-400',
-    buttonClass: 'border-yellow-500/45 text-yellow-300 hover:bg-yellow-500/10',
   },
 ] as const;
 
@@ -187,7 +197,7 @@ const LANDING_TESTIMONIALS = [
 ] as const;
 
 const FINAL_CTA_FEATURES = [
-  { icon: Cpu, title: 'Research quantitativo', description: 'Dados antes da decisão' },
+  { icon: Cpu, title: 'Carteiras quantitativas', description: 'Dados antes da decisão' },
   { icon: LayoutDashboard, title: 'Carteira inteligente', description: 'Tudo em uma única visão' },
   { icon: Target, title: 'Metas conectadas', description: 'Progresso que você acompanha' },
 ] as const;
@@ -402,7 +412,7 @@ export const Landing = () => {
             <div className="space-y-6 animate-fade-in text-center xl:text-left">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/50 border border-slate-800 backdrop-blur-md text-blue-400 text-[10px] font-bold uppercase tracking-widest mx-auto xl:mx-0 shadow-lg shadow-blue-900/10">
                 <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
-                Vértice AI Research 2.4
+                Vértice AI 2.4
               </div>
               
               <h1 className="mx-auto max-w-[720px] text-[40px] sm:text-5xl md:text-6xl xl:mx-0 xl:text-7xl font-bold leading-[1.1] tracking-tight text-white">
@@ -479,7 +489,7 @@ export const Landing = () => {
                   <Bot size={17} className="text-emerald-400" />
                 </div>
                 <div>
-                  <p className="text-[11px] font-extrabold text-slate-100 leading-none">Research com IA</p>
+                  <p className="text-[11px] font-extrabold text-slate-100 leading-none">Carteira com IA</p>
                   <p className="mt-1 text-[9.5px] text-slate-500">Análises geradas por IA</p>
                 </div>
               </div>
@@ -743,7 +753,7 @@ export const Landing = () => {
                     <span className="mt-1 block text-[8px] font-extrabold uppercase tracking-[0.14em] text-slate-600">Plano PRO</span>
                   </th>
                   <th className="w-[17%] px-4 py-4 text-center">Planilhas</th>
-                  <th className="w-[17%] px-4 py-4 text-center">Research tradicional</th>
+                  <th className="w-[17%] px-4 py-4 text-center">Casa de análise</th>
                 </tr>
               </thead>
               <tbody>
@@ -787,24 +797,23 @@ export const Landing = () => {
             {LANDING_PLANS.map((plan) => {
               const Icon = plan.icon;
               const recommended = 'recommended' in plan && plan.recommended;
-              const originalPrice = 'originalPrice' in plan ? plan.originalPrice : undefined;
 
               return (
                 <article key={plan.name} className={`relative flex min-h-[480px] snap-center flex-col overflow-hidden rounded-2xl border bg-[#0a0e16] p-5 transition-transform duration-300 hover:-translate-y-1 sm:p-6 ${plan.borderClass}`}>
                   {recommended && <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 to-violet-500"></div>}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${plan.iconClass}`}><Icon size={18} /></div>
-                    {recommended && <span className="rounded-md border border-blue-400/25 bg-blue-400/10 px-2 py-1 text-[8px] font-extrabold uppercase tracking-wider text-blue-300">Recomendado</span>}
+                  <div className="flex items-center gap-2.5">
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${plan.iconClass}`}><Icon size={18} /></div>
+                    <h3 className="truncate text-lg font-extrabold text-slate-100">{plan.name}</h3>
+                    {recommended && <span className="ml-auto shrink-0 rounded-md border border-blue-400/25 bg-blue-400/10 px-2 py-1 text-[8px] font-extrabold uppercase tracking-wider text-blue-300">Recomendado</span>}
                   </div>
 
-                  <h3 className="mt-5 text-lg font-extrabold text-slate-100">{plan.name}</h3>
-                  <p className="mt-1.5 min-h-10 text-xs leading-5 text-slate-500">{plan.description}</p>
+                  {plan.nickname && <p className="mt-3.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">{plan.nickname}</p>}
+                  <p className={`${plan.nickname ? 'mt-1.5' : 'mt-3.5'} min-h-10 text-xs leading-5 text-slate-500`}>{plan.description}</p>
                   <div className="mt-4 flex items-end gap-1">
                     <span className="mb-1 text-xs font-semibold text-slate-500">R$</span>
                     <span className="text-3xl font-extrabold tracking-tight text-white">{plan.price}</span>
                     <span className="mb-1 text-[10px] text-slate-600">/mês</span>
                   </div>
-                  {originalPrice ? <p className="mt-1 text-[9px] text-slate-600">De <span className="line-through">R$ {originalPrice}</span> por tempo limitado</p> : <div className="h-[13px]"></div>}
 
                   <div className="my-5 h-px bg-slate-800/80"></div>
                   {plan.inheritance && <p className={`mb-3 self-start rounded-full border px-2.5 py-1 text-[8px] font-bold ${plan.iconClass}`}>✦ {plan.inheritance}</p>}
@@ -816,8 +825,8 @@ export const Landing = () => {
                     ))}
                   </ul>
 
-                  <Link to="/pricing" className={`mt-auto inline-flex items-center justify-center gap-1.5 rounded-xl border px-4 py-3 text-[10px] font-extrabold uppercase tracking-wider transition-colors ${plan.buttonClass}`}>
-                    Conhecer plano <ChevronRight size={13} />
+                  <Link to={plan.cta.to} className={`mt-auto inline-flex items-center justify-center gap-1.5 rounded-xl border px-4 py-3 text-[10px] font-extrabold uppercase tracking-wider transition-colors ${plan.buttonClass}`}>
+                    {plan.cta.label} <ChevronRight size={13} />
                   </Link>
                 </article>
               );
@@ -941,7 +950,7 @@ export const Landing = () => {
           <div>
             <h4 className="mb-3 text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-400">Produto</h4>
             <ul className="space-y-2 text-[10px]">
-              <li><a href="#recursos" className="inline-block py-1.5 hover:text-blue-400">Research e recursos</a></li>
+              <li><a href="#recursos" className="inline-block py-1.5 hover:text-blue-400">Carteiras e recursos</a></li>
               <li><a href="#metas" className="inline-block py-1.5 hover:text-blue-400">Sistema de Metas</a></li>
               <li><a href="#planos" className="inline-block py-1.5 hover:text-blue-400">Planos</a></li>
               <li><Link to="/pricing" className="inline-block py-1.5 hover:text-blue-400">Comparar assinaturas</Link></li>

@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import logger from '../config/logger.js'; // (M10) logger estruturado
 import { getCachedUser, setCachedUser } from '../utils/userCache.js'; // (I6) cache de plano
 import { isSubscriptionExpired } from '../services/subscriptionService.js';
+import { hasPlanAtLeast } from '../config/subscription.js';
 
 // Middleware 1: Verifica Token E Validade da Assinatura
 export const authenticateToken = async (req, res, next) => {
@@ -107,29 +108,33 @@ export const requireAdmin = (req, res, next) => {
     }
 };
 
-// Middleware 3: Restringe a rota aos planos com "poder de IA" (ELITE e BLACK) —
-// recursos como o Rebalanceamento IA. ADMIN passa para facilitar QA/suporte —
-// mesmo critério de isenção usado na lógica de expiração acima.
-const REBALANCE_PLANS = ['ELITE', 'BLACK'];
-export const requireElitePlan = (req, res, next) => {
-    if (req.user && (REBALANCE_PLANS.includes(req.user.plan) || req.user.role === 'ADMIN')) {
-        return next();
-    }
-    return res.status(403).json({
-        message: "Rebalanceamento com IA é um recurso exclusivo dos planos Elite e Black.",
-        requiredPlan: 'ELITE',
-    });
+// Middleware 3: Fábrica de gate por degrau de plano. Uma implementação só para
+// todos os "a partir do plano X" — a hierarquia mora em config/subscription.js
+// (PLAN_HIERARCHY), não em listas de planos repetidas por rota. ADMIN passa,
+// mesmo critério da isenção de expiração acima.
+export const requireMinPlan = (minPlan, message) => (req, res, next) => {
+    if (hasPlanAtLeast(req.user, minPlan)) return next();
+    return res.status(403).json({ message, requiredPlan: minPlan });
 };
 
-// Middleware 4: Restringe a rota ao plano BLACK (topo de linha) — ex.: Relatório
-// de Imposto de Renda (7.11). ADMIN passa para QA/suporte, mesmo critério dos
-// demais gates.
-export const requireBlackPlan = (req, res, next) => {
-    if (req.user && (req.user.plan === 'BLACK' || req.user.role === 'ADMIN')) {
-        return next();
-    }
-    return res.status(403).json({
-        message: "O Relatório de Imposto de Renda é um recurso exclusivo do plano Black.",
-        requiredPlan: 'BLACK',
-    });
-};
+// Rebalanceamento IA: ELITE+ (poder de IA). PRO não tem.
+export const requireElitePlan = requireMinPlan(
+    'ELITE',
+    'Rebalanceamento com IA é um recurso exclusivo dos planos Elite e Black.',
+);
+
+// Relatório de apoio ao IR: ELITE+ (Onda 3 do plano comercial de 30/08/2026).
+// Era exclusivo do BLACK, que saiu da venda — o card do Elite passou a prometer
+// o relatório, então o gate desceu junto. Quem é BLACK continua entrando pela
+// hierarquia, sem precisar de regra própria.
+export const requireTaxReportPlan = requireMinPlan(
+    'ELITE',
+    'O Relatório de apoio ao Imposto de Renda é um recurso do plano Elite.',
+);
+
+// Proventos e Dividendos: ESSENTIAL+. É o diferencial anunciado do primeiro
+// degrau pago — sem este gate a linha do card não separava plano nenhum.
+export const requireDividendsPlan = requireMinPlan(
+    'ESSENTIAL',
+    'O painel de Proventos e Dividendos começa no plano Essential.',
+);

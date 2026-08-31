@@ -8,13 +8,27 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import InvestmentGoal from '../models/InvestmentGoal.js';
 import GoalContribution from '../models/GoalContribution.js';
 import { runTransaction, txError } from '../utils/dbTransaction.js';
+import { LIMITS_CONFIG } from '../config/subscription.js';
 import AppError from '../utils/AppError.js';
 import logger from '../config/logger.js';
 
-// Teto de carteiras por usuário — não é um limite de produto anunciado, só uma
-// rede de segurança contra abuso/loop client-side (cada carteira nova é uma
-// escrita real: Wallet + índices; sem teto, um bug no front poderia spammar).
+// Teto ABSOLUTO por conta — rede de segurança contra abuso/loop client-side
+// (cada carteira nova é uma escrita real: Wallet + índices; sem teto, um bug no
+// front poderia spammar). Vale por cima do limite comercial: "carteiras
+// ilimitadas" do Pro é ilimitado de produto, não de infraestrutura.
 const MAX_WALLETS_PER_USER = 15;
+
+/**
+ * Quantas carteiras o plano do usuário permite (Onda 3 do plano comercial de
+ * 30/08/2026): 1 no Free, 3 no Essential, ilimitadas do Pro para cima.
+ * Fail-closed: plano desconhecido cai no degrau do Free. ADMIN vai ao teto
+ * absoluto — mesmo critério de isenção dos demais gates.
+ */
+const walletLimitFor = (user) => {
+    if (user?.role === 'ADMIN') return MAX_WALLETS_PER_USER;
+    const planLimit = LIMITS_CONFIG.wallets[user?.plan] ?? LIMITS_CONFIG.wallets.GUEST;
+    return Math.min(planLimit, MAX_WALLETS_PER_USER);
+};
 
 // GET /wallets — lista as carteiras do usuário + qual é a ativa.
 export const listWallets = async (req, res, next) => {
@@ -54,9 +68,16 @@ export const listWallets = async (req, res, next) => {
 export const createWallet = async (req, res, next) => {
     try {
         const userId = req.user.id;
+        const limit = walletLimitFor(req.user);
         const count = await Wallet.countDocuments({ user: userId });
-        if (count >= MAX_WALLETS_PER_USER) {
-            return next(AppError.badRequest(`Limite de ${MAX_WALLETS_PER_USER} carteiras por conta atingido.`));
+        if (count >= limit) {
+            // Mensagem diferente por natureza do bloqueio: teto de plano é um
+            // convite a assinar; teto absoluto é um limite de conta, sem upsell.
+            return next(limit < MAX_WALLETS_PER_USER
+                ? AppError.forbidden(
+                    `Seu plano permite ${limit} ${limit === 1 ? 'carteira' : 'carteiras'}. Faça upgrade para criar mais.`,
+                )
+                : AppError.badRequest(`Limite de ${MAX_WALLETS_PER_USER} carteiras por conta atingido.`));
         }
 
         const wallet = await Wallet.create({ user: userId, name: req.body.name.trim() });

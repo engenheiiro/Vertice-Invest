@@ -111,14 +111,27 @@ describe('render básico', () => {
 // ─── Controle de acesso ───────────────────────────────────────────────────────
 
 describe('controle de acesso por plano', () => {
-  it('plano GUEST não consegue acessar BRASIL_10 (ESSENTIAL required)', async () => {
+  // Onda 3 do plano comercial: a Carteira Brasil TOP 10 é a vitrine do Free.
+  // O GUEST vê o ranking inteiro — é a única classe aberta (as outras seguem
+  // barradas nos testes abaixo, e o gate que vale é o do backend).
+  it('plano GUEST acessa BRASIL_10 (vitrine do Free)', async () => {
     vi.mocked(useAuth).mockReturnValue({ user: makeUser('GUEST') } as any);
     renderResearch();
-    // GUEST (0) < ESSENTIAL (1): após fetchReport, deve mostrar tela de bloqueio
+    await waitFor(() =>
+      expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledWith('BRASIL_10', 'BUY_HOLD')
+    );
+    expect(screen.queryByText(/Conteúdo Exclusivo/i)).not.toBeInTheDocument();
+  });
+
+  it('plano GUEST continua bloqueado nas demais classes', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: makeUser('GUEST') } as any);
+    renderResearch();
+    fireEvent.click(screen.getByText('Ações BR'));
+
     await waitFor(() =>
       expect(screen.getByText(/Conteúdo Exclusivo/i)).toBeInTheDocument()
     );
-    expect(vi.mocked(researchService.getLatest)).not.toHaveBeenCalled();
+    expect(vi.mocked(researchService.getLatest)).not.toHaveBeenCalledWith('STOCK', 'BUY_HOLD');
   });
 
   it('plano ESSENTIAL acessa BRASIL_10 sem bloqueio', async () => {

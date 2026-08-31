@@ -4,6 +4,7 @@ import { researchService, SECTION_LABEL, ResearchReport, PublishStatus } from '.
 import { marketService } from '../../services/market';
 import { authService } from '../../services/auth';
 import { subscriptionService, type BillingMode } from '../../services/subscription';
+import type { BillingCycle } from '../../constants/subscription';
 import { Bot, CheckCircle2, AlertCircle, Activity, Settings, Play, HeartPulse } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 import { useToast } from '../../contexts/ToastContext';
@@ -315,11 +316,12 @@ export const AdminPanel = () => {
 
     // `mode` decide qual API do MP é exercitada: ONE_TIME (Preference/Pix) ou
     // RECURRING (PreApproval/cartão). São fluxos e webhooks diferentes — testar
-    // um não dá garantia nenhuma sobre o outro.
-    const handleTestPayment = async (planKey: string, mode: BillingMode = 'ONE_TIME') => {
-        setTestPaymentLoading(`${planKey}:${mode}`);
+    // um não dá garantia nenhuma sobre o outro. O ciclo anual é um terceiro
+    // caminho: Preference com cartão PARCELADO, que o mensal nunca exercita.
+    const handleTestPayment = async (planKey: string, mode: BillingMode = 'ONE_TIME', cycle: BillingCycle = 'MONTHLY') => {
+        setTestPaymentLoading(`${planKey}:${mode}:${cycle}`);
         try {
-            const data = await subscriptionService.testCheckout(planKey, mode);
+            const data = await subscriptionService.testCheckout(planKey, mode, cycle);
             if (data.redirectUrl) window.open(data.redirectUrl, '_blank');
         } catch (e: unknown) { showStatus('error', getErrorMessage(e, "Erro ao gerar link de teste.")); }
         finally { setTestPaymentLoading(null); }

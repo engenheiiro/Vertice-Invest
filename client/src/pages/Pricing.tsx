@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useCallback } from 'react';
-import { Check, ArrowLeft, Zap, Shield, Crown, Gem, ExternalLink } from 'lucide-react';
+import { Check, ArrowLeft, Zap, Shield, Rocket, Gem, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { useAuth, UserPlan } from '../contexts/AuthContext';
@@ -8,42 +8,62 @@ import { useToast } from '../contexts/ToastContext';
 import { subscriptionService, type BillingMode } from '../services/subscription';
 import { Header } from '../components/dashboard/Header';
 import { PaymentMethodModal } from '../components/subscription/PaymentMethodModal';
-import { PLAN_DETAILS } from '../constants/subscription';
+import { ANNUAL_INSTALLMENTS, PLAN_DETAILS, annualSavingsPercent, checkoutKeyFor, type BillingCycle } from '../constants/subscription';
 import { HOME_ROUTE } from '../config/homeRoute';
 
-// Features exclusivas de cada tier — só o que é NOVO naquele plano
+// Features exclusivas de cada tier — só o que é NOVO naquele plano.
+// A grade segue o catálogo do plano comercial (planejamento/PLANO-DIVULGACAO-2026-08.html,
+// seção 5). A Onda 3 fechou os gates: limites de carteira e de meta, Brasil TOP 10
+// no Free, Proventos no Essential e relatório de IR no Elite. A Onda 4 pôs o ciclo
+// anual à venda. Seguem SEM gate os níveis de curso (não existe catálogo para
+// dividir) e o canal 24h do Elite, que é decisão operacional. A tabela da seção 6
+// do plano registra o estado de cada promessa — atualize LÁ ao mexer AQUI.
 const PLAN_EXCLUSIVE: Record<UserPlan, { key: string; label: string; highlight?: string }[]> = {
-    GUEST: [],
+    GUEST: [
+        { key: 'wallets',    label: '1 carteira' },
+        { key: 'import',     label: 'Importe seus investimentos da B3 ou de uma planilha' },
+        { key: 'wallet',     label: 'Gestão de Carteira, Rentabilidade e Extrato' },
+        { key: 'goals',      label: 'Metas Financeiras Limitadas' },
+        { key: 'indicators', label: 'Indicadores e Calculadora' },
+        { key: 'academy',    label: 'Cursos Limitados' },
+        { key: 'br10',       label: 'Carteira Brasil TOP 10',                    highlight: 'IA' },
+    ],
     ESSENTIAL: [
-        { key: 'terminal',        label: 'Terminal & Cotações em Tempo Real' },
-        { key: 'wallet',          label: 'Gestão de Carteira & Rentabilidade' },
-        { key: 'br10',            label: 'Research: Carteira Brasil 10' },
-        { key: 'academy',         label: 'Vértice Academy (Cursos básicos)' },
-        { key: 'delayed_signals', label: 'Sinais com Delay' },
+        { key: 'wallets',         label: 'Até 3 carteiras' },
+        { key: 'wallet',          label: 'Gestão de Carteira Completa, Proventos e Dividendos' },
+        { key: 'goals',           label: 'Metas Financeiras Ilimitadas' },
+        { key: 'fixed_income',    label: 'Carteira Brasil TOP 10 + Carteira de Renda Fixa', highlight: 'IA' },
+        { key: 'delayed_signals', label: 'Radar Alpha (Day Trade) — sinais com 60 min', highlight: 'IA' },
+        { key: 'academy',         label: 'Cursos até o Nível 1' },
     ],
     PRO: [
-        { key: 'smart_contribution', label: 'Aporte Inteligente',             highlight: 'IA' },
-        { key: 'radar',              label: 'Radar Alpha (Sinais Tempo Real)' },
-        { key: 'stocks',             label: 'Research: Ações Brasileiras' },
-        { key: 'fiis',               label: 'Research: Fundos Imobiliários' },
-        { key: 'crypto',             label: 'Research: Criptoativos' },
-        { key: 'reports',            label: 'Relatórios de Diagnóstico',      highlight: 'IA' },
+        { key: 'wallets',            label: 'Carteiras Ilimitadas' },
+        { key: 'research',           label: 'Carteiras de Ações, FIIs e Cripto',       highlight: 'IA' },
+        { key: 'buy_and_hold',       label: 'Carteira Aposentadoria (Buy & Hold)',     highlight: 'IA' },
+        { key: 'radar',              label: 'Radar Alpha (Day Trade) — sinais em tempo real', highlight: 'IA' },
+        { key: 'smart_contribution', label: 'Aporte Inteligente',                     highlight: 'IA' },
+        { key: 'academy',            label: 'Cursos até o Nível 3' },
     ],
     ELITE: [
-        { key: 'rebalance',   label: 'Rebalanceamento Automático de Carteira', highlight: 'IA' },
-        { key: 'global',      label: 'Research Global (Stocks & REITs)' },
-        { key: 'masterclass', label: 'Masterclass & Estudos de Caso' },
+        { key: 'global',      label: 'Carteira de Ativos Globais (Stocks e REITs)', highlight: 'IA' },
+        { key: 'rebalance',   label: 'Rebalanceamento de Carteira',          highlight: 'IA' },
+        { key: 'ir',          label: 'Relatório de apoio ao IR em PDF' },
+        { key: 'academy',     label: 'Cursos até o Nível 4' },
+        { key: 'masterclass', label: 'Masterclass' },
+        { key: 'support',     label: 'Suporte prioritário 24h' },
     ],
+    // Aposentado: virou consultoria avulsa e não aparece mais na vitrine. A lista
+    // fica porque o tipo é Record<UserPlan> e porque descreve o que o assinante
+    // atual ainda recebe. Nada aqui é exclusivo: o relatório de IR desceu para o
+    // Elite na Onda 3, e o Black entra por hierarquia.
     BLACK: [
-        { key: 'private',  label: 'Carteiras Private & Estruturadas' },
-        { key: 'ir',       label: 'Automação de Imposto de Renda' },
-        { key: 'whatsapp', label: 'Concierge WhatsApp 24h' },
-        { key: 'calls',    label: 'Calls Trimestrais com Analistas' },
+        { key: 'ir', label: 'Relatório de apoio ao IR em PDF' },
     ],
 };
 
 // Linha de herança exibida no topo da lista de features de cada card
 const PLAN_INHERITS: Partial<Record<UserPlan, string>> = {
+    ESSENTIAL: 'Tudo do Free +',
     PRO:   'Tudo do Essential +',
     ELITE: 'Tudo do Pro +',
     BLACK: 'Tudo do Elite +',
@@ -54,6 +74,8 @@ type PlanConfig = {
     description: string;
     icon: React.ReactNode;
     isPopular?: boolean;
+    // Free não passa pelo checkout: o card informa, não vende.
+    isFree?: boolean;
     buttonVariant: 'outline' | 'primary';
     buttonColorClass: string;
     borderColor: string;
@@ -62,8 +84,18 @@ type PlanConfig = {
 
 const PLANS_CONFIG: PlanConfig[] = [
     {
+        id: 'GUEST',
+        description: 'Para organizar a primeira carteira.',
+        icon: <Rocket className="text-slate-300" size={20} />,
+        isFree: true,
+        buttonVariant: 'outline',
+        buttonColorClass: '',
+        borderColor: 'border-slate-700/50',
+        hoverColor: 'hover:border-slate-600',
+    },
+    {
         id: 'ESSENTIAL',
-        description: 'Comece a investir com inteligência.',
+        description: 'Para acompanhar os primeiros ativos.',
         icon: <Shield className="text-emerald-400" size={20} />,
         buttonVariant: 'outline',
         buttonColorClass: '!bg-transparent !text-emerald-400 !border-emerald-500/50 hover:!bg-emerald-500/10 hover:!border-emerald-400',
@@ -72,7 +104,7 @@ const PLANS_CONFIG: PlanConfig[] = [
     },
     {
         id: 'PRO',
-        description: 'Alpha real. Research completo + IA no seu aporte.',
+        description: 'Para decidir aportes com a Carteira Recomendada e gestão com IA.',
         icon: <Zap className="text-blue-400" size={20} fill="currentColor" />,
         isPopular: true,
         buttonVariant: 'primary',
@@ -82,21 +114,12 @@ const PLANS_CONFIG: PlanConfig[] = [
     },
     {
         id: 'ELITE',
-        description: 'O poder total da IA Vértice: globais e rebalanceamento automático.',
+        description: 'Para portfólio global, rebalanceamento e rotina fiscal.',
         icon: <Gem className="text-purple-400" size={20} fill="currentColor" />,
         buttonVariant: 'outline',
         buttonColorClass: '!bg-transparent !text-purple-400 !border-purple-500/50 hover:!bg-purple-500/10 hover:!border-purple-400',
         borderColor: 'border-purple-500/30',
         hoverColor: 'hover:border-purple-500/60',
-    },
-    {
-        id: 'BLACK',
-        description: 'Gestão institucional com concierge humano dedicado.',
-        icon: <Crown className="text-gold" size={20} fill="currentColor" />,
-        buttonVariant: 'outline',
-        buttonColorClass: '!bg-transparent !text-gold !border-gold/50 hover:!bg-gold/10 hover:!border-gold',
-        borderColor: 'border-gold/30',
-        hoverColor: 'hover:border-gold/60',
     },
 ];
 
@@ -105,22 +128,22 @@ export const Pricing = () => {
     const { addToast } = useToast();
     const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
     const [activeDot, setActiveDot] = useState(0);
+    const [cycle, setCycle] = useState<BillingCycle>('MONTHLY');
     // Plano escolhido aguardando a escolha do método (cartão recorrente x Pix avulso).
     const [pendingPlan, setPendingPlan] = useState<UserPlan | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    // Cartão e Pix não são só formas de pagar: levam a APIs diferentes do Mercado
-    // Pago (PreApproval x Preference), com consequências diferentes de renovação.
-    // Por isso a escolha vem antes do redirect, não depois.
-    const handleSelectPlan = (planId: string) => {
-        setPendingPlan(planId as UserPlan);
-    };
+    const isAnnual = cycle === 'ANNUAL';
+    // O desconto varia por plano; o selo do toggle anuncia o teto e cada card
+    // mostra o seu — prometer um número único seria falso para dois dos três.
+    const maiorEconomia = Math.max(
+        ...PLANS_CONFIG.map((plano) => annualSavingsPercent(plano.id) ?? 0),
+    );
 
-    const handleConfirmMethod = async (mode: BillingMode) => {
-        if (!pendingPlan) return;
-        setLoadingPlan(pendingPlan);
+    const startCheckout = async (plan: UserPlan, mode: BillingMode) => {
+        setLoadingPlan(plan);
         try {
-            const response = await subscriptionService.initCheckout(pendingPlan, mode);
+            const response = await subscriptionService.initCheckout(checkoutKeyFor(plan, cycle), mode);
             if (response.redirectUrl) {
                 window.location.href = response.redirectUrl;
             } else {
@@ -132,6 +155,29 @@ export const Pricing = () => {
             setLoadingPlan(null);
             setPendingPlan(null);
         }
+    };
+
+    /**
+     * No MENSAL, cartão e Pix levam a APIs diferentes do Mercado Pago
+     * (PreApproval x Preference) e a consequências diferentes de renovação — por
+     * isso a escolha vem antes do redirect.
+     *
+     * No ANUAL não há escolha a fazer: é uma cobrança única, e o próprio checkout
+     * do MP oferece cartão parcelado ou Pix na mesma tela. Abrir o modal ali seria
+     * pedir uma decisão que não muda nada.
+     */
+    const handleSelectPlan = (planId: string) => {
+        const plan = planId as UserPlan;
+        if (isAnnual) {
+            void startCheckout(plan, 'ONE_TIME');
+            return;
+        }
+        setPendingPlan(plan);
+    };
+
+    const handleConfirmMethod = (mode: BillingMode) => {
+        if (!pendingPlan) return;
+        void startCheckout(pendingPlan, mode);
     };
 
     const handleScroll = useCallback(() => {
@@ -152,7 +198,12 @@ export const Pricing = () => {
             key={plan.id}
             id={plan.id}
             title={PLAN_DETAILS[plan.id].label}
+            nickname={PLAN_DETAILS[plan.id].nickname}
             price={PLAN_DETAILS[plan.id].price}
+            annualPrice={PLAN_DETAILS[plan.id].annualPrice}
+            annualMonthly={PLAN_DETAILS[plan.id].annualMonthly}
+            savingsPercent={annualSavingsPercent(plan.id)}
+            cycle={cycle}
             originalPrice={PLAN_DETAILS[plan.id].originalPrice}
             promo={PLAN_DETAILS[plan.id].promo}
             description={plan.description}
@@ -160,6 +211,7 @@ export const Pricing = () => {
             exclusiveFeatures={PLAN_EXCLUSIVE[plan.id]}
             inheritsFrom={PLAN_INHERITS[plan.id]}
             isPopular={plan.isPopular}
+            isFree={plan.isFree}
             current={user?.plan === plan.id}
             buttonVariant={plan.buttonVariant}
             buttonColorClass={plan.buttonColorClass}
@@ -214,6 +266,43 @@ export const Pricing = () => {
                     </div>
                 </div>
 
+                {/* Ciclo de cobrança. O anual não é um desconto de campanha: é
+                    outro produto (compra única de 12 meses), e o card muda de
+                    número junto — mostrar só um selo de "%" esconderia o total. */}
+                <div className="mb-10 flex flex-col items-center gap-2">
+                    <div role="radiogroup" aria-label="Ciclo de cobrança" className="inline-flex items-center gap-1 p-1 rounded-xl bg-base border border-slate-800">
+                        {([
+                            { value: 'MONTHLY' as const, label: 'Mensal' },
+                            { value: 'ANNUAL' as const, label: 'Anual' },
+                        ]).map((opcao) => (
+                            <button
+                                key={opcao.value}
+                                type="button"
+                                role="radio"
+                                aria-checked={cycle === opcao.value}
+                                onClick={() => setCycle(opcao.value)}
+                                className={`px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${
+                                    cycle === opcao.value
+                                        ? 'bg-blue-600 text-white shadow'
+                                        : 'text-slate-400 hover:text-white'
+                                }`}
+                            >
+                                {opcao.label}
+                                {opcao.value === 'ANNUAL' && (
+                                    <span className="ml-2 text-[9px] font-bold text-emerald-400">
+                                        até {maiorEconomia}% off
+                                    </span>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                        {isAnnual
+                            ? `Cobrança única de 12 meses, em até ${ANNUAL_INSTALLMENTS}× no cartão. Não renova automaticamente.`
+                            : 'No cartão, renova automaticamente todo mês. Cancele quando quiser.'}
+                    </p>
+                </div>
+
                 {/* ── MOBILE: carrossel horizontal com snap ── */}
                 <div className="sm:hidden">
                     <div
@@ -265,8 +354,10 @@ export const Pricing = () => {
 
                 <div className="mt-12 text-center border-t border-slate-800 pt-8 flex flex-col items-center gap-2">
                     <p className="text-[10px] text-slate-600 max-w-2xl mx-auto">
-                        * A assinatura é renovada automaticamente. O pagamento é processado de forma segura pelo{' '}
-                        <strong>Mercado Pago</strong>.
+                        {isAnnual
+                            ? '* O plano anual é uma cobrança única que libera 12 meses de acesso e não é renovado automaticamente.'
+                            : '* No cartão, a assinatura mensal é renovada automaticamente. No Pix, o acesso vale 30 dias e não renova.'}
+                        {' '}O pagamento é processado de forma segura pelo <strong>Mercado Pago</strong>.
                     </p>
                     <div className="flex gap-2 opacity-60">
                         <img src="/assets/payment/visa.svg" alt="Visa" className="h-6" />
@@ -285,6 +376,7 @@ export const Pricing = () => {
 type ExclusiveFeature = { key: string; label: string; highlight?: string };
 
 const CHECK_COLOR: Record<string, string> = {
+    GUEST:     'text-slate-400',
     ESSENTIAL: 'text-emerald-500',
     PRO:       'text-blue-500',
     ELITE:     'text-purple-500',
@@ -308,7 +400,12 @@ const HIGHLIGHT_STYLE: Record<string, string> = {
 const PricingCard = ({
     id,
     title,
+    nickname,
     price,
+    annualPrice,
+    annualMonthly,
+    savingsPercent,
+    cycle,
     originalPrice,
     promo,
     description,
@@ -316,6 +413,7 @@ const PricingCard = ({
     exclusiveFeatures,
     inheritsFrom,
     isPopular,
+    isFree,
     current,
     buttonVariant,
     buttonColorClass = '',
@@ -326,7 +424,12 @@ const PricingCard = ({
 }: {
     id: string;
     title: string;
+    nickname?: string;
     price: string;
+    annualPrice?: string;
+    annualMonthly?: string;
+    savingsPercent?: number | null;
+    cycle: BillingCycle;
     originalPrice?: string;
     promo?: string;
     description: string;
@@ -334,6 +437,7 @@ const PricingCard = ({
     exclusiveFeatures: ExclusiveFeature[];
     inheritsFrom?: string;
     isPopular?: boolean;
+    isFree?: boolean;
     current?: boolean;
     buttonVariant: 'outline' | 'primary';
     buttonColorClass?: string;
@@ -341,7 +445,11 @@ const PricingCard = ({
     hoverColor?: string;
     onSelect: (id: string) => void;
     isLoading?: boolean;
-}) => (
+}) => {
+    // O Free não é vendido no anual: sem preço anual, o card fica como está.
+    const isAnnualCard = cycle === 'ANNUAL' && Boolean(annualPrice);
+
+    return (
     <div
         className={`bg-base border ${borderColor} rounded-2xl p-7 relative overflow-hidden flex flex-col h-full transition-all duration-300 ${
             isPopular
@@ -356,37 +464,53 @@ const PricingCard = ({
 
         {/* Ícone + badge */}
         <div className="mb-5 relative z-10">
-            <div className="flex items-center justify-between mb-4">
-                <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">{icon}</div>
+            <div className="flex items-center gap-2.5 mb-2">
+                <div className="p-2 bg-slate-900 rounded-lg border border-slate-800 shrink-0">{icon}</div>
+                <h3 className="text-xl font-bold text-white truncate">{title}</h3>
                 {isPopular && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400 bg-blue-900/20 px-2.5 py-1 rounded border border-blue-900/30">
+                    <span className="ml-auto shrink-0 text-[9px] font-bold uppercase tracking-wider text-blue-400 bg-blue-900/20 px-2 py-1 rounded border border-blue-900/30">
                         Recomendado
                     </span>
                 )}
             </div>
-            <h3 className="text-xl font-bold text-white mb-1.5">{title}</h3>
+            {nickname && (
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{nickname}</p>
+            )}
             <p className="text-sm text-slate-400 leading-snug">{description}</p>
         </div>
 
-        {/* Preço */}
+        {/* Preço. No anual o número grande é a PARCELA (total ÷ 12), e o total
+            cobrado vem logo abaixo — anunciar só a parcela esconderia o valor
+            que de fato sai da conta hoje. */}
         <div className="mb-6 relative z-10 border-b border-slate-800/50 pb-5">
             {promo && (
                 <span className="inline-flex items-center gap-1 mb-2 text-[9px] font-bold uppercase tracking-wider text-blue-300 bg-blue-900/30 px-2 py-0.5 rounded border border-blue-700/40 animate-pulse">
                     🔥 {promo}
                 </span>
             )}
+            {isAnnualCard && savingsPercent ? (
+                <span className="inline-flex items-center gap-1 mb-2 text-[9px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-900/25 px-2 py-0.5 rounded border border-emerald-700/40">
+                    Economize {savingsPercent}%
+                </span>
+            ) : null}
             <div className="flex items-baseline gap-1">
                 <span className="text-sm text-slate-500 font-bold">R$</span>
-                <span className="text-4xl font-bold text-white tracking-tight">{price}</span>
+                <span className="text-4xl font-bold text-white tracking-tight">
+                    {isAnnualCard ? annualMonthly : price}
+                </span>
                 <span className="text-xs text-slate-500">/mês</span>
             </div>
-            {originalPrice && (
+            {isAnnualCard ? (
+                <p className="mt-1 text-xs text-slate-400">
+                    {ANNUAL_INSTALLMENTS}× de R$ {annualMonthly} · <span className="text-slate-300 font-bold">R$ {annualPrice}</span> por ano
+                </p>
+            ) : originalPrice ? (
                 <p className="mt-1 text-xs text-slate-500">
                     De{' '}
                     <span className="line-through decoration-red-500/60">R$ {originalPrice}</span>{' '}
                     por tempo limitado
                 </p>
-            )}
+            ) : null}
         </div>
 
         {/* Lista de features */}
@@ -412,17 +536,19 @@ const PricingCard = ({
                         <div className={`mt-0.5 shrink-0 ${CHECK_COLOR[id] ?? 'text-emerald-500'}`}>
                             <Check size={13} strokeWidth={3} />
                         </div>
-                        <div className="flex-1 flex items-center justify-between gap-2">
-                            <span>{feature.label}</span>
-                            {feature.highlight && (
-                                <span
-                                    className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 ${
-                                        HIGHLIGHT_STYLE[id] ?? 'text-blue-400 bg-blue-900/20 border-blue-900/30'
-                                    }`}
-                                >
-                                    {feature.highlight}
-                                </span>
-                            )}
+                        <div className="flex-1">
+                            <span>
+                                {feature.label}
+                                {feature.highlight && (
+                                    <span
+                                        className={`ml-1.5 align-middle whitespace-nowrap text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${
+                                            HIGHLIGHT_STYLE[id] ?? 'text-blue-400 bg-blue-900/20 border-blue-900/30'
+                                        }`}
+                                    >
+                                        {feature.highlight}
+                                    </span>
+                                )}
+                            </span>
                         </div>
                     </div>
                 ))}
@@ -431,7 +557,11 @@ const PricingCard = ({
 
         {/* CTA */}
         <div className="relative z-10 mt-auto">
-            {current ? (
+            {isFree && !current ? (
+                <div className="w-full py-4 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-500 text-xs font-bold text-center cursor-default">
+                    Incluído em toda conta Vértice
+                </div>
+            ) : current ? (
                 <div className="w-full py-4 rounded-xl bg-slate-800/50 border border-slate-700 text-slate-400 text-sm font-bold text-center cursor-default flex items-center justify-center gap-2">
                     <Check size={16} /> Seu Plano Atual
                 </div>
@@ -453,4 +583,5 @@ const PricingCard = ({
             )}
         </div>
     </div>
-);
+    );
+};

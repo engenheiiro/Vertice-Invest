@@ -1,7 +1,7 @@
 
 import { MercadoPagoConfig, Preference, PreApproval } from 'mercadopago';
 import logger from '../config/logger.js';
-import { PLANS } from '../config/subscription.js';
+import { ANNUAL_INSTALLMENTS, PLANS } from '../config/subscription.js';
 
 // Inicializa o cliente MP
 const accessToken = process.env.MP_ACCESS_TOKEN;
@@ -14,9 +14,15 @@ const getApiBaseUrl = () => {
 
 export const paymentService = {
     /**
-     * Checkout AVULSO (Preference): 30 dias, sem renovação. Usado para Pix/boleto.
-     * O cartão de crédito é excluído de propósito — ele tem caminho próprio em
-     * createRecurringSubscription e é sempre recorrente.
+     * Checkout AVULSO (Preference): período fechado, sem renovação.
+     *
+     * Dois produtos passam por aqui, com regras opostas para o cartão:
+     * - MENSAL (Pix/boleto): o cartão é EXCLUÍDO de propósito. Quem paga no
+     *   cartão entra pelo PreApproval; deixar as duas portas abertas criaria uma
+     *   cobrança avulsa silenciosa, sem renovação e sem preapproval para cancelar.
+     * - ANUAL: o cartão é a porta principal, parcelado em até 12×. O PreApproval
+     *   do MP não parcela, e é o parcelamento que torna o anual vendável — por
+     *   isso o anual é avulso por construção, não por limitação temporária.
      */
     async createOneTimeCheckout(user, planKey) {
         if (!client) {
@@ -57,13 +63,16 @@ export const paymentService = {
             }
 
             // --- CRIAÇÃO DA PREFERÊNCIA (CHECKOUT API) ---
+            const isAnnual = planConfig.cycle === 'ANNUAL';
+            const periodLabel = isAnnual ? 'Anual (12 meses)' : 'Mensal (30 dias)';
+
             const body = {
                 items: [
                     {
                         id: planKey,
                         // TÍTULO EXPLÍCITO: Substitui qualquer padrão do painel
-                        title: `Vértice Invest - ${planConfig.title || planKey}`,
-                        description: `Acesso Premium à plataforma Vértice Invest (${planKey})`,
+                        title: `Vértice Invest - ${planConfig.title || planKey} — ${periodLabel}`,
+                        description: `Acesso Premium à plataforma Vértice Invest (${planKey}) · ${planConfig.days} dias`,
                         quantity: 1,
                         unit_price: Number(planConfig.price),
                         currency_id: 'BRL',
@@ -88,19 +97,17 @@ export const paymentService = {
                     email: payerEmail
                 },
 
-                payment_methods: {
-                    // Cartão sai daqui: quem paga com cartão entra pelo PreApproval
-                    // (recorrente). Deixar as duas portas abertas criaria um cartão
-                    // avulso silencioso, sem renovação e sem preapproval para cancelar.
-                    excluded_payment_types: [{ id: 'credit_card' }],
-                    installments: 1
-                },
+                payment_methods: isAnnual
+                    // `installments` é o TETO de parcelas, não a escolha: o
+                    // comprador pode pagar à vista se quiser.
+                    ? { installments: ANNUAL_INSTALLMENTS }
+                    : { excluded_payment_types: [{ id: 'credit_card' }], installments: 1 },
 
                 // NOME NA FATURA DO CARTÃO (Máx 22 chars)
                 statement_descriptor: "VERTICE INVEST"
             };
 
-            logger.info(`💳 Criando Checkout para User ${userId} | Plano: ${planKey} | Valor: ${planConfig.price}`);
+            logger.info(`💳 Criando Checkout para User ${userId} | Plano: ${planKey} | Valor: ${planConfig.price} | ${periodLabel}`);
 
             const response = await preference.create({ body });
 
@@ -141,6 +148,12 @@ export const paymentService = {
 
         const planConfig = PLANS[planKey];
         if (!planConfig) throw new Error("Plano inválido.");
+        // Barreira de contrato: o anual não tem caminho recorrente (o PreApproval
+        // não parcela). Chegar aqui com uma chave anual significa que alguém
+        // roteou errado — cobrar R$598,80 TODO MÊS seria o estrago.
+        if (planConfig.cycle === 'ANNUAL') {
+            throw new Error("O plano anual é cobrança única e não pode virar assinatura recorrente.");
+        }
 
         const userId = user.id || user._id;
         const apiUrl = getApiBaseUrl();

@@ -3,7 +3,7 @@ import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 import UsageLog from '../models/UsageLog.js';
 import logger from '../config/logger.js';
-import { PLANS, LIMITS_CONFIG, isTestPlan } from '../config/subscription.js';
+import { PLANS, LIMITS_CONFIG, isAnnualPlan, isTestPlan, checkoutKeyFor } from '../config/subscription.js';
 import { paymentService } from '../services/paymentService.js';
 import {
     grantOneTimePeriod,
@@ -16,7 +16,9 @@ import { sendSubscriptionCanceledEmail } from '../services/emailService.js';
 // Além deste teto, o saldo restante não é um período comprado e sim um acesso
 // concedido à mão (contas internas costumam ter validade em datas distantes).
 // Adiar a primeira cobrança para lá deixaria a assinatura sem cobrar por anos.
-const MAX_HONORED_REMAINDER_DAYS = 366;
+// O teto acomoda o maior período vendável (365 dias do anual) mais a folga de um
+// mês que sobra quando alguém compra o anual ainda dentro da mensalidade paga.
+const MAX_HONORED_REMAINDER_DAYS = 400;
 
 /**
  * Data em que a assinatura deve começar a cobrar. Quem ainda tem dias pagos no
@@ -33,9 +35,17 @@ const resolveRecurringStartDate = (user) => {
     return remainingDays <= MAX_HONORED_REMAINDER_DAYS ? validUntil : null;
 };
 
-// Roteia o checkout conforme o modo: cartão nunca é avulso, Pix nunca é recorrente.
+/**
+ * Roteia o checkout conforme o modo: no mensal, cartão nunca é avulso e Pix
+ * nunca é recorrente.
+ *
+ * O anual ignora o modo pedido e vai sempre para o avulso. Não é uma
+ * simplificação: o PreApproval do Mercado Pago não parcela, e o anual só existe
+ * como 12× no cartão. Recusar o pedido devolveria um erro para algo que
+ * sabemos servir — o comprador escolhe cartão ou Pix dentro do próprio checkout.
+ */
 const startCheckout = (user, planKey, mode) => (
-    mode === 'RECURRING'
+    mode === 'RECURRING' && !isAnnualPlan(planKey)
         ? paymentService.createRecurringSubscription(user, planKey, { startDate: resolveRecurringStartDate(user) })
         : paymentService.createOneTimeCheckout(user, planKey)
 );
@@ -137,15 +147,21 @@ export const registerUsage = async (req, res, next) => {
 
 export const createTestCheckoutSession = async (req, res, next) => {
     try {
-        const { planKey, mode = 'ONE_TIME' } = req.body;
+        const { planKey, mode = 'ONE_TIME', cycle = 'MONTHLY' } = req.body;
         const TESTABLE_PLANS = ['ESSENTIAL', 'PRO', 'ELITE', 'BLACK'];
 
         if (!TESTABLE_PLANS.includes(planKey)) {
             return res.status(400).json({ message: "Plano inválido para teste. Use ESSENTIAL, PRO, ELITE ou BLACK." });
         }
 
-        // Usa a mesma função do fluxo real — apenas com a variante _TEST (R$0,50, mesmos dias)
-        const testPlanKey = `${planKey}_TEST`;
+        // Usa a mesma função do fluxo real — só com a variante _TEST (R$0,50,
+        // mesmos dias e mesmo ciclo). Testar o anual importa porque ele exercita
+        // outro caminho do MP: Preference com cartão parcelado, não PreApproval.
+        const testPlanKey = checkoutKeyFor(planKey, { cycle, test: true });
+        if (!PLANS[testPlanKey]) {
+            return res.status(400).json({ message: `O plano ${planKey} não tem ciclo ${cycle}.` });
+        }
+
         const subscription = await startCheckout(req.user, testPlanKey, mode);
 
         res.status(200).json({
@@ -200,6 +216,14 @@ export const changePlan = async (req, res, next) => {
         if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
         if (!PLANS[planId] || isTestPlan(planId)) {
             return res.status(400).json({ message: "Plano inválido." });
+        }
+        // A troca de plano é uma operação sobre o PREAPPROVAL: cancela um e cria
+        // outro. O anual não tem preapproval — é compra única parcelada — então
+        // migrar para ele passa pelo checkout normal, não por aqui.
+        if (isAnnualPlan(planId)) {
+            return res.status(400).json({
+                message: "A mudança para o plano anual é feita na página de planos: o anual é uma compra única parcelada, não uma assinatura mensal.",
+            });
         }
         if (user.subscriptionType !== 'RECURRING' || !user.mpPreapprovalId) {
             return res.status(400).json({ message: "Nenhuma assinatura recorrente ativa para trocar." });
@@ -424,7 +448,7 @@ export const syncPreapproval = async (req, res, next) => {
 export const getSubscriptionStatus = async (req, res, next) => {
     try {
         const user = await User.findById(req.user.id)
-            .select('plan subscriptionStatus subscriptionType validUntil nextBillingDate cardBrand lastPaymentFailedAt mpSubscriptionId mpPreapprovalId bannerColor');
+            .select('plan subscriptionStatus subscriptionType billingCycle validUntil nextBillingDate cardBrand lastPaymentFailedAt mpSubscriptionId mpPreapprovalId bannerColor');
         const lastTransaction = await Transaction.findOne({ user: req.user.id }).sort({ createdAt: -1 });
 
         res.json({

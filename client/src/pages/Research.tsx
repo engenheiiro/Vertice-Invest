@@ -13,8 +13,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { ResearchAporteRequest } from '../utils/researchAporte';
 
+// minPlan espelha o gate autoritativo do backend (RESEARCH_FEATURE_BY_CLASS em
+// researchController + LIMITS_CONFIG). A Carteira Brasil TOP 10 é a vitrine do
+// Free: o GUEST vê o ranking inteiro — é a única classe aberta.
 const ASSETS = [
-    { id: 'BRASIL_10', label: 'Brasil 10 (Mix)', color: 'bg-emerald-600', minPlan: 'ESSENTIAL' },
+    { id: 'BRASIL_10', label: 'Brasil 10 (Mix)', color: 'bg-emerald-600', minPlan: 'GUEST' },
     { id: 'STOCK', label: 'Ações BR', color: 'bg-blue-600', minPlan: 'PRO' },
     { id: 'FII', label: 'FIIs', color: 'bg-indigo-600', minPlan: 'PRO' },
     { id: 'CRYPTO', label: 'Cripto', color: 'bg-purple-600', minPlan: 'PRO' },

@@ -72,8 +72,26 @@ describe('getLatestReport — gate de plano por classe (F1)', () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it('BRASIL_10 permanece fora do gate (acessível a plano básico)', async () => {
-    const res = await run('BRASIL_10', 'ESSENTIAL');
-    expect(res.statusCode).toBe(200);
+  // Onda 3 do plano comercial: a Carteira Brasil TOP 10 é a vitrine do Free —
+  // o GUEST vê o ranking inteiro. É a ÚNICA classe aberta; se um dia outra
+  // passar a responder 200 para GUEST, este teste é o lugar de decidir isso.
+  it('BRASIL_10 é a vitrine do Free (GUEST e ESSENTIAL entram)', async () => {
+    for (const plan of ['GUEST', 'ESSENTIAL']) {
+      const res = await run('BRASIL_10', plan);
+      expect(res.statusCode, `plano ${plan}`).toBe(200);
+    }
+  });
+
+  it('nenhuma outra classe abre para GUEST', async () => {
+    for (const cls of ['STOCK', 'FII', 'CRYPTO', 'ETF', 'STOCK_US', 'REIT']) {
+      const res = await run(cls, 'GUEST');
+      expect(res.statusCode, `classe ${cls}`).toBe(403);
+    }
+  });
+
+  it('LIMITS_CONFIG.research_br10 libera o GUEST (fonte do check-access)', async () => {
+    const { LIMITS_CONFIG } = await import('../config/subscription.js');
+    expect(LIMITS_CONFIG.research_br10.GUEST).toBe(1);
+    expect(LIMITS_CONFIG.research_general.GUEST).toBe(0);
   });
 });

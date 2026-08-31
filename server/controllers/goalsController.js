@@ -15,9 +15,22 @@ import { orderChainFrom } from '../utils/goalChain.js';
 import { safeCurrency, safeFloat, safeSub, safeMult, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { isDollarized } from '../utils/assetCurrency.js';
+import { LIMITS_CONFIG } from '../config/subscription.js';
 import logger from '../config/logger.js';
 
 const MS_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Teto de metas por plano (Onda 3 do plano comercial de 30/08/2026): o Free tem
+ * "Metas Financeiras Limitadas", o Essential em diante tem ilimitadas.
+ * Fail-closed: plano desconhecido cai no degrau do Free. ADMIN não tem teto.
+ * O teto é por CARTEIRA — metas são 100% escopadas por carteira (Fase 2), e o
+ * limite de carteiras do plano já contém o total da conta.
+ */
+const goalLimitFor = (user) => {
+    if (user?.role === 'ADMIN') return Infinity;
+    return LIMITS_CONFIG.goals[user?.plan] ?? LIMITS_CONFIG.goals.GUEST;
+};
 
 /** Carrega as metas da carteira e devolve a cadeia inteira da meta informada. */
 const collectChain = async (goal, userId, walletId) => {
@@ -515,6 +528,15 @@ export const createGoal = async (req, res, next) => {
         const userId = req.user.id;
         const walletId = req.walletId;
         const { name, icon, color, targetAmount, monthlyTarget, expectedAnnualRate, startDate, targetDate, mirrorWallet, manualBalance, previousGoalId } = req.body;
+
+        const limit = goalLimitFor(req.user);
+        const total = await InvestmentGoal.countDocuments({ user: userId, wallet: walletId });
+        if (total >= limit) {
+            return res.status(403).json({
+                message: `Seu plano permite ${limit} metas por carteira. Faça upgrade para criar metas ilimitadas.`,
+                requiredPlan: 'ESSENTIAL',
+            });
+        }
 
         const useMirror = mirrorWallet !== undefined ? mirrorWallet : true;
         const { equity: liveEquity } = await getLiveWalletEquity(userId, walletId);
