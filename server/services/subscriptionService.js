@@ -143,7 +143,9 @@ export const grantOneTimePeriod = async (user, planKey, { gatewayId, amount, met
         validUntil: base.toISOString(),
     });
 
-    return { credited: true, plan, validUntil: base };
+    // O ciclo volta junto porque o recibo precisa dele: anual é cobrança única
+    // de 12 meses e não pode ser anunciado como mensalidade.
+    return { credited: true, plan, validUntil: base, cycle: user.billingCycle };
 };
 
 /**

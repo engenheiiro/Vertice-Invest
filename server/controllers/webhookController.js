@@ -310,7 +310,7 @@ const handlePaymentEvent = async (resourceId) => {
     });
 
     if (result.credited) {
-        await sendCheckoutConfirmationEmail(user.email, result.plan, result.validUntil);
+        await sendCheckoutConfirmationEmail(user.email, result.plan, result.validUntil, { cycle: result.cycle });
         logger.info(`✅ Acesso liberado para user ${user._id} até ${result.validUntil.toISOString()}`);
     }
 };

@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
 import logger from '../config/logger.js'; // (M10) logger estruturado
+// Preço e título do plano vêm da MESMA tabela que o checkout cobra.
+import { PLAN_CATALOG, basePlanOf } from '../config/subscription.js';
 
 const CLIENT_URL = process.env.CLIENT_URL || 'https://verticeinvest.com.br';
 
@@ -57,23 +59,54 @@ export const sendResetPasswordEmail = async (to, token, origin) => {
   }
 };
 
-const PLAN_LABELS = {
-  ESSENTIAL: 'Essential — R$ 39,90/mês',
-  PRO: 'Pro — R$ 89,90/mês',
-  ELITE: 'Elite — R$ 120,00/mês',
-  BLACK: 'Black — R$ 299,00/mês',
+// --- CATÁLOGO NO E-MAIL ---
+// Preço NÃO se escreve aqui. Este arquivo passou meses anunciando "Pro — R$
+// 89,90/mês" depois que o preço virou R$ 69,90, e "Elite — R$ 120,00" para quem
+// tinha acabado de pagar R$ 129,90 — o pior sentido possível, já que o recibo
+// dizia menos do que foi cobrado. O rótulo agora sai de PLAN_CATALOG, a mesma
+// fonte que o checkout usa para cobrar.
+const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+/**
+ * Rótulo do plano no e-mail. Recebe o CICLO porque o anual é cobrança única de
+ * 12 meses: chamá-lo de "/mês" transformaria o recibo de uma compra de R$ 598,80
+ * num anúncio de mensalidade.
+ */
+export const planLabelFor = (planKey, cycle = 'MONTHLY') => {
+  const catalogo = PLAN_CATALOG[basePlanOf(planKey)];
+  if (!catalogo) return String(planKey ?? '');
+  if (cycle === 'ANNUAL' && catalogo.annual !== null) {
+    return `${catalogo.title} anual — ${BRL.format(catalogo.annual)} por 12 meses`;
+  }
+  return `${catalogo.title} — ${BRL.format(catalogo.monthly)}/mês`;
 };
 
+/**
+ * O que o assinante passa a poder USAR — não o que o card promete.
+ *
+ * Duas ausências são deliberadas. O BLACK saiu da venda porque prometia
+ * concierge, carteira private e gestão tributária sem operação por trás; essas
+ * três linhas ficaram aqui por engano até 31/08/2026, num e-mail que chega
+ * depois do pagamento, que é onde uma promessa vazia custa mais caro. E o
+ * "suporte prioritário 24h" do Elite continua sem canal publicado: enquanto for
+ * dívida, não entra num recibo.
+ */
 const PLAN_FEATURES = {
-  ESSENTIAL: ['Carteira & Brasil 10', 'Sinais Radar Alpha', 'Histórico de dividendos'],
-  PRO: ['Tudo do Essential', 'Research STOCK/FII/Cripto', 'Radar Alpha & Aporte Inteligente'],
-  ELITE: ['Tudo do Pro', 'Ativos Globais', 'Rebalanceamento com IA', 'Masterclass completa'],
-  BLACK: ['Tudo do Elite', 'Concierge WhatsApp 24h', 'Carteira Private', 'Gestão Tributária (IR)'],
+  ESSENTIAL: ['Tudo do Free', 'Até 3 carteiras e metas financeiras ilimitadas', 'Proventos e dividendos', 'Carteira Brasil TOP 10 + Renda Fixa', 'Radar Alpha (Day Trade) — sinais com 60 min'],
+  PRO: ['Tudo do Essential', 'Carteiras ilimitadas', 'Carteiras de Ações, FIIs e Cripto', 'Carteira Aposentadoria (Buy & Hold)', 'Radar Alpha (Day Trade) e Aporte Inteligente'],
+  ELITE: ['Tudo do Pro', 'Carteira de Ativos Globais (Stocks e REITs)', 'Rebalanceamento de Carteira com IA', 'Relatório de apoio ao IR em PDF'],
+  BLACK: ['Tudo do Elite', 'Relatório de apoio ao IR em PDF'],
 };
 
-export const sendCheckoutConfirmationEmail = async (to, plan, validUntil) => {
-  const planLabel = PLAN_LABELS[plan] || plan;
-  const features = PLAN_FEATURES[plan] || [];
+export const featuresFor = (planKey) => PLAN_FEATURES[basePlanOf(planKey)] || [];
+
+/**
+ * Recibo da compra avulsa (Pix, boleto e o anual parcelado). O `cycle` vem de
+ * quem creditou o período: sem ele, o recibo de 12 meses sairia com preço "/mês".
+ */
+export const sendCheckoutConfirmationEmail = async (to, plan, validUntil, { cycle = 'MONTHLY' } = {}) => {
+  const planLabel = planLabelFor(plan, cycle);
+  const features = featuresFor(plan);
   const expiryDate = validUntil
     ? new Date(validUntil).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
     : null;
@@ -185,7 +218,7 @@ const sendSafely = async ({ to, subject, html, logLabel }) => {
 
 export const sendSubscriptionCreatedEmail = async (to, plan, nextBillingDate) => {
   const nextDate = formatDate(nextBillingDate);
-  const features = (PLAN_FEATURES[plan] || [])
+  const features = featuresFor(plan)
     .map(f => `<li style="margin: 6px 0; color: #334155;">✅ ${f}</li>`)
     .join('');
 
@@ -198,7 +231,7 @@ export const sendSubscriptionCreatedEmail = async (to, plan, nextBillingDate) =>
       ctaLabel: 'Acessar o Dashboard →',
       ctaPath: '/dashboard',
       bodyHtml: `
-        <p style="color: #475569;">Seu cartão foi cadastrado e o plano <strong>${PLAN_LABELS[plan] || plan}</strong> está liberado.</p>
+        <p style="color: #475569;">Seu cartão foi cadastrado e o plano <strong>${planLabelFor(plan)}</strong> está liberado.</p>
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 24px 0;">
           <p style="margin: 0 0 12px; font-weight: bold; color: #0f172a;">O que você tem acesso agora:</p>
           <ul style="margin: 0; padding-left: 0; list-style: none;">${features}</ul>
@@ -222,7 +255,7 @@ export const sendRenewalReceiptEmail = async (to, plan, nextBillingDate, amount)
       title: '✅ Assinatura renovada',
       ctaLabel: 'Ver minha assinatura →',
       bodyHtml: `
-        <p style="color: #475569;">Sua assinatura <strong>${PLAN_LABELS[plan] || plan}</strong> foi renovada automaticamente.</p>
+        <p style="color: #475569;">Sua assinatura <strong>${planLabelFor(plan)}</strong> foi renovada automaticamente.</p>
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 24px 0;">
           ${value ? `<p style="margin: 0 0 8px; color: #334155;">Valor cobrado: <strong>${value}</strong></p>` : ''}
           ${nextDate ? `<p style="margin: 0; color: #334155;">Próxima cobrança: <strong>${nextDate}</strong></p>` : ''}
@@ -245,7 +278,7 @@ export const sendPaymentFailedEmail = async (to, plan, accessUntil) => {
       ctaLabel: 'Atualizar forma de pagamento →',
       ctaPath: '/pricing',
       bodyHtml: `
-        <p style="color: #475569;">A cobrança da sua assinatura <strong>${PLAN_LABELS[plan] || plan}</strong> não foi aprovada pelo seu banco.</p>
+        <p style="color: #475569;">A cobrança da sua assinatura <strong>${planLabelFor(plan)}</strong> não foi aprovada pelo seu banco.</p>
         <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 20px; margin: 24px 0;">
           <p style="margin: 0; color: #991b1b;">O Mercado Pago vai tentar novamente nos próximos dias. Se preferir não esperar, atualize o cartão agora.</p>
           ${untilDate ? `<p style="margin: 12px 0 0; font-size: 13px; color: #7f1d1d;">Seu acesso segue ativo até <strong>${untilDate}</strong>.</p>` : ''}
@@ -267,7 +300,7 @@ export const sendSubscriptionCanceledEmail = async (to, plan, accessUntil) => {
       ctaLabel: 'Reativar assinatura →',
       ctaPath: '/pricing',
       bodyHtml: `
-        <p style="color: #475569;">Sua assinatura <strong>${PLAN_LABELS[plan] || plan}</strong> foi cancelada e não haverá novas cobranças.</p>
+        <p style="color: #475569;">Sua assinatura <strong>${planLabelFor(plan)}</strong> foi cancelada e não haverá novas cobranças.</p>
         ${untilDate ? `<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 24px 0;">
           <p style="margin: 0; color: #334155;">Você continua com acesso completo até <strong>${untilDate}</strong> — o período já pago é seu.</p>
         </div>` : ''}
