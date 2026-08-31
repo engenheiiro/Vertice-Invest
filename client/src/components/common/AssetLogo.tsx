@@ -7,7 +7,7 @@ import {
   getFallbackTextColor,
   getFixedIncomeLabel,
 } from '../../utils/assetLogo';
-import { getFiiSegmentIcon } from '../../utils/fiiSegmentIcon';
+import { getFiiSegmentStyle } from '../../utils/fiiSegmentIcon';
 import { fiiSectorLabel } from '../../utils/sectorAllocation';
 
 interface AssetLogoProps {
@@ -95,18 +95,22 @@ export default function AssetLogo({
     );
   }
 
-  // FII → pictograma do SEGMENTO (loja, caminhão, documento...). O chip é o único
-  // espaço da linha onde a exposição do fundo cabe sem custar uma coluna, e a
-  // inicial do ticker desperdiça esse espaço nomeando a gestora: KNCR11/KNSC11
-  // viram os dois "KN", HGCR11 (papel) e HGBS11 (shoppings) viram os dois "HG".
+  // FII → pictograma do SEGMENTO (loja, caminhão, documento...), tingido pela
+  // família de risco do fundo. O chip é o único espaço da linha onde a exposição
+  // cabe sem custar uma coluna, e a inicial do ticker desperdiça esse espaço
+  // nomeando a gestora: KNCR11/KNSC11 viram os dois "KN", HGCR11 (papel) e
+  // HGBS11 (shoppings) viram os dois "HG". A cor entra como segunda camada de
+  // leitura — agrupa papel, tijolo, consumo — sem tocar no verde/vermelho do
+  // resultado (ver a régua de ΔE em fiiSegmentIcon.ts).
   // Segmento ausente ou fora do canon devolve null e a linha cai nas iniciais.
-  const SegmentIcon = type === 'FII' ? getFiiSegmentIcon(sector) : null;
-  if (SegmentIcon) {
+  const segment = type === 'FII' ? getFiiSegmentStyle(sector) : null;
+  if (segment) {
+    const SegmentIcon = segment.icon;
     return (
       <div
         style={dimension}
         title={fiiSectorLabel(sector)}
-        className={`shrink-0 flex items-center justify-center bg-slate-800 border border-slate-700 text-slate-300 ${radius} ${className}`}
+        className={`shrink-0 flex items-center justify-center border ${segment.chip} ${radius} ${className}`}
       >
         <SegmentIcon size={Math.round(size * 0.55)} strokeWidth={2} />
       </div>
