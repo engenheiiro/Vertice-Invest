@@ -69,7 +69,9 @@ export const getFunnelReport = async ({ months = DEFAULT_MONTHS } = {}) => {
         // `plan` nasce como GUEST e o middleware rebaixa quem venceu — então
         // "plano acima de GUEST + prazo no futuro" é a definição de pagante.
         User.find({ plan: { $ne: 'GUEST' }, validUntil: { $gt: now } })
-            .select('plan billingCycle')
+            // `_id` é explícito porque a retenção compara este conjunto com quem
+            // pagou na janela — não é só matéria-prima de receita.
+            .select('_id plan billingCycle')
             .lean(),
 
         primeiroPorUsuario(UserAsset),
@@ -86,21 +88,26 @@ export const getFunnelReport = async ({ months = DEFAULT_MONTHS } = {}) => {
     const cohorts = buildCohorts({ users, firstAssetByUser: ativacoes, firstPaidByUser: pagamentos, now });
 
     // Retenção (ver a nota em buildRetention): quem venceu na janela e não voltou,
-    // contra quem já era cliente e pagou de novo. Renovar empurra `validUntil`
-    // para frente, então os dois conjuntos não se sobrepõem.
-    const renovacoes = await Transaction.aggregate([
+    // contra quem já pagava e pagou de novo. Renovar empurra `validUntil` para
+    // frente, então os dois conjuntos não se sobrepõem.
+    const pagantesNaJanela = await Transaction.aggregate([
         { $match: { status: 'PAID', createdAt: { $gte: trintaDiasAtras } } },
-        { $group: { _id: '$user', pagamentos: { $sum: 1 } } },
-        { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'conta' } },
-        { $unwind: '$conta' },
-        // "Já era cliente": conta anterior à janela. Assinante estreante não
-        // renovou nada — contá-lo inflaria a retenção com venda nova.
-        { $match: { 'conta.createdAt': { $lt: trintaDiasAtras }, 'conta.validUntil': { $gt: now } } },
-        { $count: 'total' },
+        { $group: { _id: '$user' } },
     ]);
 
+    // "Já era cliente" é ter PAGAMENTO anterior à janela — não conta antiga.
+    // A primeira versão usava a idade do cadastro como prova, e assim toda
+    // estreia vinda da base gratuita (a maioria das vendas de um produto novo)
+    // entrava como renovação: o churn saía menor do que é, justamente no número
+    // que existe para dizer se o produto segura quem entra.
+    const vigentes = new Set(assinantes.map((a) => String(a._id)));
+    const renovados = pagantesNaJanela.filter(({ _id }) => {
+        const id = String(_id);
+        const primeiroPagamento = pagamentos.get(id);
+        return Boolean(primeiroPagamento) && primeiroPagamento < trintaDiasAtras && vigentes.has(id);
+    }).length;
+
     const perdidos = await User.countDocuments({ validUntil: { $gte: trintaDiasAtras, $lt: now } });
-    const renovados = renovacoes[0]?.total ?? 0;
 
     return {
         generatedAt: now.toISOString(),

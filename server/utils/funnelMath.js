@@ -144,7 +144,10 @@ export const buildRevenue = (assinantes) => {
  *
  *   perdidos  = período venceu na janela e não foi renovado (venceu → some do
  *               conjunto de vigentes; renovar empurra `validUntil` para frente)
- *   renovados = já era cliente, pagou de novo na janela e segue vigente
+ *   renovados = tinha PAGAMENTO anterior à janela, pagou de novo dentro dela e
+ *               segue vigente. É pagamento anterior, não conta antiga: quem
+ *               criou conta há meses e assina hoje pela primeira vez é venda
+ *               nova, e contá-la aqui esconderia o churn atrás do crescimento.
  *
  * A base é a soma dos dois: são as assinaturas que CHEGARAM ao vencimento no
  * período. Quem só entrou agora não teve a chance de sair e não entra na conta.
