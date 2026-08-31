@@ -18,7 +18,7 @@ export const Terms = () => {
         </Link>
         <div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">Termos de Uso</h2>
-            <p className="text-slate-500 text-[10px] font-medium uppercase tracking-wider">Versão 1.0 — Janeiro de 2025</p>
+            <p className="text-slate-500 text-[10px] font-medium uppercase tracking-wider">Versão 1.1 — Agosto de 2026</p>
         </div>
       </div>
 
@@ -45,7 +45,24 @@ export const Terms = () => {
         <h3 className="text-slate-900 font-bold text-base mb-2">5. Privacidade e Dados</h3>
         <p className="mb-4">Respeitamos sua privacidade e protegemos seus dados conforme a LGPD. Coletamos apenas informações necessárias para a prestação do serviço e segurança da conta (como logs de acesso e auditoria). Seus dados pessoais nunca serão vendidos a terceiros sem seu consentimento explícito.</p>
         
-        <h3 className="text-slate-900 font-bold text-base mb-2">6. Encerramento de Conta</h3>
+        {/* Cláusula de cobrança (31/08/2026). A plataforma vendia assinatura mensal
+            recorrente e um anual parcelado em 12× sem nenhum texto que dissesse o que
+            renova, o que não renova e o que acontece ao cancelar — e a Landing anuncia
+            "Cancele quando quiser", que sozinho sugere devolução. Preço NÃO se escreve
+            aqui: fica na vitrine, que é espelhada por teste com o servidor. */}
+        <h3 className="text-slate-900 font-bold text-base mb-2">6. Assinaturas, Cobrança e Cancelamento</h3>
+        <p className="mb-3">Os valores vigentes de cada plano estão na <Link to="/pricing" className="text-blue-600 hover:underline font-medium">página de planos</Link>. O pagamento é processado pelo Mercado Pago; não recebemos nem armazenamos os dados do seu cartão.</p>
+        <ul className="mb-4 space-y-1.5 pl-5 list-disc marker:text-slate-400">
+          <li><strong>Mensal no cartão:</strong> assinatura recorrente, renovada automaticamente a cada período até que você cancele.</li>
+          <li><strong>Mensal no Pix:</strong> pagamento avulso que libera 30 dias de acesso e não renova sozinho.</li>
+          <li><strong>Anual:</strong> cobrança única que libera 365 dias, parcelável em até 12× no cartão. <strong>Não renova automaticamente.</strong> Se houver uma assinatura mensal ativa, ela é cancelada na contratação do anual, para que não haja cobrança dupla.</li>
+        </ul>
+        <p className="mb-4"><strong>Direito de arrependimento.</strong> Nos 7 dias corridos seguintes à contratação, você pode desistir e receber de volta o valor pago, conforme o art. 49 do Código de Defesa do Consumidor. Basta solicitar por <a href="mailto:contato.verticeinvest@gmail.com" className="text-blue-600 hover:underline font-medium">contato.verticeinvest@gmail.com</a>.</p>
+        <p className="mb-4"><strong>Cancelamento.</strong> Pode ser feito a qualquer momento no seu perfil, sem multa nem fidelidade. O cancelamento interrompe as cobranças futuras e o acesso continua até o fim do período já pago. Passado o prazo de arrependimento, não há devolução proporcional do período em curso.</p>
+        <p className="mb-4"><strong>Mudança de plano e de preço.</strong> Ao contratar um novo período avulso, os dias que ainda restam do seu plano atual são somados ao novo — você não perde o que já pagou. Mudanças de preço não alteram assinaturas já autorizadas: o novo valor vale para contratações futuras.</p>
+        <p className="mb-4"><strong>Falta de pagamento.</strong> Se uma cobrança não for aprovada, o acesso continua até o fim do período já pago. Sem novo pagamento, a conta retorna ao plano gratuito e seus dados de carteira permanecem preservados.</p>
+
+        <h3 className="text-slate-900 font-bold text-base mb-2">7. Encerramento de Conta</h3>
         <p className="mb-4">Reservamo-nos o direito de suspender ou encerrar sua conta a qualquer momento, sem aviso prévio, em caso de violação destes termos ou suspeita de atividade fraudulenta.</p>
       </div>
 
