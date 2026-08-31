@@ -48,9 +48,16 @@ describe('CSP do shell', () => {
         const csp = res.headers.get('content-security-policy') || '';
         const scriptSrc = csp.split(';').find((d) => d.trim().startsWith('script-src ')) || '';
 
-        // Anti-FOUC de tema, GA4 e auto-recuperação: 3 inline no shell buildado.
+        // Anti-FOUC de tema e auto-recuperação: 2 inline no shell buildado.
+        //
+        // Eram 3 até o GA4 sair do index.html (30/08/2026): a tag passou a ser
+        // injetada por código, só depois do consentimento, e script com `src` é
+        // autorizado pela ORIGEM — por isso o teste seguinte cobra
+        // googletagmanager.com na política, e este não cobra mais um hash.
+        // O número velho sobreviveu ao commit porque a CSP é derivada de
+        // client/dist, e um dist antigo na máquina ainda continha o bloco.
         const hashes = scriptSrc.match(/'sha256-[^']+'/g) || [];
-        expect(hashes.length).toBeGreaterThanOrEqual(3);
+        expect(hashes.length).toBeGreaterThanOrEqual(2);
     });
 
     it('libera o gtag.js — sem isso o GA4 nunca mede nada', async () => {
