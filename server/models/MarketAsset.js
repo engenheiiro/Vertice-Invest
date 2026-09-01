@@ -59,6 +59,13 @@ const MarketAssetSchema = new mongoose.Schema({
   // --- Dados Financeiros Persistidos (Cache Avançado) ---
   lastPrice: { type: Number, default: 0 },
   change: { type: Number, default: 0 },
+  // Dia CIVIL brasileiro do PREGÃO que produziu lastPrice/change — não confundir
+  // com `updatedAt`, que diz quando NÓS perguntamos. À 00:20 de um dia útil o sync
+  // regrava esta linha com o fechamento da véspera e o updatedAt de hoje; sem a
+  // data da sessão, a carteira exibia a variação de ontem como "variação hoje"
+  // até a B3 abrir. null = fonte que não publica o horário do negócio (Google
+  // Finance, fallback de histórico) ou documento anterior à migração.
+  priceDate: { type: String, default: null },
   marketCap: { type: Number, default: 0 },
   liquidity: { type: Number, default: 0 }, // Liq. Diária
   

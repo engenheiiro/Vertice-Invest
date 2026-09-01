@@ -12,6 +12,22 @@ import { summarizeTrackRecord } from '../utils/trackRecord.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { getTunablesSync } from './configService.js'; // (I13) tunables editáveis pelo admin
 import { historyStorageKey } from '../utils/assetHistory.js';
+import { brazilDateKey } from '../utils/dateUtils.js';
+
+/**
+ * Dia da SESSÃO a que a cotação pertence, no calendário brasileiro. É o carimbo
+ * que separa "fechou +1,19% hoje" de "fechou +1,19% ontem": `updatedAt` responde
+ * quando perguntamos ao provedor, nunca quando o negócio aconteceu.
+ *
+ * null quando a fonte não publica o horário (scraping do Google Finance, fallback
+ * de histórico) — o consumidor decide o que fazer com a ausência, e o de hoje
+ * (walletController) mantém o comportamento antigo em vez de zerar a variação.
+ */
+const sessionDateKey = (marketTime) => {
+    if (!marketTime) return null;
+    const d = new Date(marketTime);
+    return Number.isNaN(d.getTime()) ? null : brazilDateKey(d);
+};
 
 const MAX_FAILURES_BEFORE_BLACKLIST = 10;
 // (Robustez) Ativos grandes/líquidos ganham prazo extra antes da desativação
@@ -89,6 +105,7 @@ export const marketDataService = {
                 return {
                     price: asset.lastPrice,
                     change: asset.change || 0,
+                    priceDate: asset.priceDate || null,
                     name: asset.name,
                     sector: asset.sector,
                     dy: asset.dy || 0
@@ -140,7 +157,7 @@ export const marketDataService = {
 
         try {
             const assets = await MarketAsset.find({ ticker: { $in: cleanList } })
-                .select('ticker name sector type currency allocationClass lastPrice change dy');
+                .select('ticker name sector type currency allocationClass lastPrice change priceDate dy');
             const byTicker = new Map(assets.map(a => [a.ticker, a]));
 
             const missingKeys = new Set();
@@ -150,6 +167,7 @@ export const marketDataService = {
                     map.set(original, {
                         price: asset.lastPrice,
                         change: asset.change || 0,
+                        priceDate: asset.priceDate || null,
                         name: asset.name,
                         sector: asset.sector,
                         ...(asset.allocationClass ? { allocationClass: asset.allocationClass } : {}),
@@ -311,6 +329,9 @@ export const marketDataService = {
                     const updatePayload = {
                         lastPrice: newPrice,
                         change: newChange, 
+                        // Data da sessão anda SEMPRE junto do change: gravar um sem o
+                        // outro é como o cache volta a mentir sobre a idade do dado.
+                        priceDate: sessionDateKey(quote.marketTime),
                         updatedAt: now,
                         isActive: true,
                         failCount: 0, // Reset do contador de falhas em caso de sucesso
@@ -507,7 +528,7 @@ export const marketDataService = {
                     operations.push({
                         updateOne: {
                             filter: { ticker: this.normalizeSymbol(quote.ticker) },
-                            update: { $set: { isActive: true, failCount: 0, lastFailDate: null, lastPrice: quote.price, change: quote.change || 0, updatedAt: new Date() } }
+                            update: { $set: { isActive: true, failCount: 0, lastFailDate: null, lastPrice: quote.price, change: quote.change || 0, priceDate: sessionDateKey(quote.marketTime), updatedAt: new Date() } }
                         }
                     });
                     reactivatedCount++;

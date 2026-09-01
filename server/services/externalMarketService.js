@@ -226,6 +226,8 @@ export const externalMarketService = {
                     ticker: ticker.replace('.SA', ''),
                     price: data.regularMarketPrice,
                     change: data.regularMarketChangePercent,
+                    // Mesma datação da sessão do caminho principal (ver Yahoo).
+                    marketTime: data.regularMarketTime || null,
                     // Volume p/ liquidez de ETFs B3 (.SA): o Yahoo costuma devolver 0 aqui.
                     volume: data.regularMarketVolume || 0,
                     name: data.longName || cleanTicker,
@@ -324,6 +326,11 @@ export const externalMarketService = {
                     ticker: symbol,
                     price: item.regularMarketPrice || item.price || 0,
                     change: changePct,
+                    // Instante do último negócio da SESSÃO regular. É o que permite
+                    // datar a variação: sem ele, quem lê a cotação não distingue
+                    // "fechou +1,19% hoje" de "fechou +1,19% ontem e ninguém abriu
+                    // o mercado ainda". O provedor já mandava; nós descartávamos.
+                    marketTime: item.regularMarketTime || null,
                     marketCap: item.marketCap || 0,
                     volume: item.regularMarketVolume || item.volume || 0,
                     name: item.longName || item.shortName || symbol,

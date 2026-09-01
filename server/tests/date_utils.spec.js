@@ -3,7 +3,7 @@
  * startOfDay (meia-noite local) e dateKeyToUtcDate (chave → Date UTC estável).
  */
 import { describe, it, expect } from 'vitest';
-import { toDateKey, startOfDay, dateKeyToUtcDate, parseCalendarDate, isBusinessDay, countBusinessDays } from '../utils/dateUtils.js';
+import { brazilDateKey, toDateKey, startOfDay, dateKeyToUtcDate, parseCalendarDate, isBusinessDay, countBusinessDays } from '../utils/dateUtils.js';
 
 describe('toDateKey', () => {
   it('gera chave YYYY-MM-DD a partir de Date/string/number', () => {
@@ -22,6 +22,26 @@ describe('toDateKey', () => {
     expect(toDateKey(undefined)).toBeNull();
     expect(toDateKey('')).toBeNull();
     expect(toDateKey('não-é-data')).toBeNull();
+  });
+});
+
+describe('brazilDateKey — dia CIVIL brasileiro', () => {
+  it('não segue o UTC depois das 21h de Brasília', () => {
+    // 01/09 às 00:30 UTC ainda é 31/08 às 21:30 em Brasília. Confundir as duas
+    // réguas é o que faz o sistema achar que o pregão da noite é de amanhã.
+    expect(brazilDateKey('2026-09-01T00:30:00.000Z')).toBe('2026-08-31');
+    expect(toDateKey('2026-09-01T00:30:00.000Z')).toBe('2026-09-01');
+  });
+
+  it('vira o dia na meia-noite de Brasília, não na de Londres', () => {
+    expect(brazilDateKey('2026-09-01T02:59:00.000Z')).toBe('2026-08-31'); // 23:59 BRT
+    expect(brazilDateKey('2026-09-01T03:01:00.000Z')).toBe('2026-09-01'); // 00:01 BRT
+  });
+
+  it('aceita Date e string, e usa "agora" por padrão', () => {
+    expect(brazilDateKey(new Date('2026-08-31T20:55:00.000Z'))).toBe('2026-08-31');
+    expect(brazilDateKey()).toHaveLength(10);
+    expect(brazilDateKey().split('-').map(Number).every(Number.isFinite)).toBe(true);
   });
 });
 

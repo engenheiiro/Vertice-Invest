@@ -11,7 +11,7 @@ import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, safeValue, safePrice, safeQuantity, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
 import { computeQuotaSharpe, computeQuotaBeta, snapshotDayKey, SHARPE_WINDOW_SNAPSHOTS } from '../utils/walletRisk.js';
-import { countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
+import { brazilDateKey, countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { assetDailyFactor, valueFixedIncomeAsset, PRICING_SOURCE, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
 import { resolveFixedIncomeIndexing } from '../utils/fixedIncomeIndexing.js';
 import { escapeRegex } from '../utils/regexEscape.js';
@@ -220,7 +220,7 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAss
 
 // Processa um único ativo: resolve preço/variação e devolve o card pronto +
 // as contribuições para os totais da carteira. Aritmética idêntica à original.
-export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay, treasuryPricing = EMPTY_TREASURY_PRICING }) => {
+export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay, treasuryPricing = EMPTY_TREASURY_PRICING, todayKey = brazilDateKey() }) => {
     let currentPrice = 0;
     let dayChangePct = 0;
     // Renda fixa/caixa: valor TOTAL da posição (fonte da verdade). Guardado à parte
@@ -283,9 +283,27 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
         if (cached && cached.price > 0) {
             currentPrice = safeFloat(Number(cached.price));
             if (asset.type === 'CRYPTO') {
+                // Cripto não tem pregão: negocia 24h e a variação do provedor é
+                // sempre a das últimas 24h. Não há sessão para datar, então não há
+                // guarda a aplicar — só o rótulo é aproximado.
                 dayChangePct = safeFloat(Number(cached.change));
             } else {
-                dayChangePct = isTodayBusinessDay ? safeFloat(Number(cached.change)) : 0;
+                // A variação só é de HOJE se a SESSÃO que a produziu for a de hoje.
+                // O updatedAt não responde isso: ele diz quando NÓS perguntamos ao
+                // provedor. À 00:23 de um dia útil o refresh regrava a linha com o
+                // fechamento da véspera, e o card exibia o pregão de ontem como
+                // "variação hoje" até a B3 abrir — todo dia, por ~10 horas, com o
+                // mesmo movimento contado duas vezes (ontem às 23h59 e hoje de
+                // madrugada). É a MESMA guarda que o PU do Tesouro já faz acima.
+                //
+                // Sem priceDate (fonte que não publica horário, ou documento
+                // anterior à migração) cai no teste antigo de dia útil: um número
+                // defasado é melhor que zerar a variação da carteira inteira, e o
+                // campo se preenche sozinho no primeiro refresh.
+                const isTodaySession = cached.priceDate
+                    ? cached.priceDate === todayKey
+                    : isTodayBusinessDay;
+                dayChangePct = isTodaySession ? safeFloat(Number(cached.change)) : 0;
             }
 
             // Ajuste para ativos comprados HOJE (evita variação irreal no dia da compra)
@@ -537,11 +555,11 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
             return safeAdd(acc, profitInBrl);
         }, 0);
 
-        const brazilTodayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+        const brazilTodayStr = brazilDateKey();
         const isTodayBusinessDay = isBusinessDay(new Date(brazilTodayStr + 'T00:00:00.000Z'));
 
         // Processa cada ativo e acumula os totais (mesma ordem/aritmética da versão monolítica).
-        const assetCtx = { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay, treasuryPricing };
+        const assetCtx = { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay, treasuryPricing, todayKey: brazilTodayStr };
         const processedAssets = [];
         let totalEquity = 0;
         let totalInvested = 0;

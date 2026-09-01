@@ -27,6 +27,14 @@ export const toDateKey = (date) => {
 };
 
 // Normaliza para a meia-noite LOCAL (00:00:00.000), devolvendo um NOVO Date.
+/**
+ * Chave 'YYYY-MM-DD' do dia CIVIL brasileiro de um instante. Diferente de
+ * `toDateKey` (UTC): às 21h30 de Brasília o UTC já virou o dia seguinte, e é por
+ * isso que tudo que responde "que dia é hoje para o usuário" precisa desta régua.
+ */
+export const brazilDateKey = (date = new Date()) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(date));
+
 export const startOfDay = (date) => {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
