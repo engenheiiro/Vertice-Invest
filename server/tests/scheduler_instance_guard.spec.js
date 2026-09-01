@@ -127,10 +127,10 @@ describe('sem a flag — comportamento idêntico ao de hoje', () => {
         }
     });
 
-    it('mantém as duas rotinas de boot agendadas', () => {
+    it('mantém as rotinas de boot agendadas', () => {
         initScheduler();
 
-        // Backfill de snapshot (15s) + primeira avaliação da sentinela (45s).
+        // Backfill + reconciliação sequencial (15s) e sentinela (45s).
         expect(vi.getTimerCount()).toBe(2);
     });
 

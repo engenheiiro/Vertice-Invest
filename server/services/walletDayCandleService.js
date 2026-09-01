@@ -250,7 +250,10 @@ export const ensureWalletDayCandles = async (assetRefs = [], dayStr, closeMap = 
             try {
                 // A variante `Detailed` existe para este diagnóstico: ela conserva as
                 // datas que a fonte publicou VAZIAS, que `getFullHistory` descarta.
-                const payload = await externalMarketService.getFullHistoryDetailed(ticker, type);
+                // `dayStr` é inclusivo; o serviço converte para o `period2`
+                // exclusivo do Yahoo. Passá-lo explicitamente evita depender do
+                // acaso do fuso UTC às 23:59 BRT.
+                const payload = await externalMarketService.getFullHistoryDetailed(ticker, type, dayStr);
                 const series = payload?.candles;
                 if (!Array.isArray(series) || series.length === 0) {
                     unresolved.push({ ticker, storageKey, type, reason: describeMiss(dayStr, payload) });

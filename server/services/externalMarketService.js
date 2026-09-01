@@ -565,7 +565,7 @@ export const externalMarketService = {
      *
      * @returns {Promise<{candles: Array, emptyDates: string[]}|null>} null = falha ou payload inválido
      */
-    async getFullHistoryDetailed(ticker, type) {
+    async getFullHistoryDetailed(ticker, type, throughDayStr = null) {
         let symbol = ticker.trim().toUpperCase();
 
         if (type === 'STOCK' || type === 'FII' || type === 'INDEX' || type === 'ETF') {
@@ -589,12 +589,21 @@ export const externalMarketService = {
         }
 
         try {
-            const today = new Date();
-            const todayStr = today.toISOString().split('T')[0];
+            // O Yahoo trata `period2` como limite EXCLUSIVO. Passar o próprio
+            // dia desejado cortava justamente o candle que o chamador queria:
+            // no worker das 18:30, `period2=hoje` terminava sempre em D-1. No
+            // snapshot das 23:59 isso parecia funcionar por acidente porque o
+            // servidor já estava no dia seguinte em UTC. A janela agora declara
+            // explicitamente o último dia INCLUSIVO e avança uma data civil.
+            const through = /^\d{4}-\d{2}-\d{2}$/.test(String(throughDayStr || ''))
+                ? throughDayStr
+                : new Date().toISOString().split('T')[0];
+            const exclusiveEnd = new Date(`${through}T12:00:00.000Z`);
+            exclusiveEnd.setUTCDate(exclusiveEnd.getUTCDate() + 1);
 
             const queryOptions = {
                 period1: '2020-01-01',
-                period2: todayStr,
+                period2: exclusiveEnd.toISOString().split('T')[0],
                 interval: '1d'
             };
 

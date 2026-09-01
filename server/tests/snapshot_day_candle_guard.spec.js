@@ -153,7 +153,7 @@ describe('Snapshot diário — candle do dia garantido para ativos em carteira',
     mocks.getFullHistoryDetailed.mockResolvedValue(sourcePayload(seriesThrough(DAY, 100)));
 
     const ctx = await loadSnapshotContext(DAY, { ensureDayCandles: true });
-    expect(mocks.getFullHistoryDetailed).toHaveBeenCalledWith('BOVA11', 'ETF');
+    expect(mocks.getFullHistoryDetailed).toHaveBeenCalledWith('BOVA11', 'ETF', DAY);
     expect(ctx.closeMap.get('BOVA11')).toBe(100);
 
     // Persistiu a série mesclada (o buraco de 18/08 fechou junto) sem "touch" em
@@ -192,7 +192,7 @@ describe('Snapshot diário — candle do dia garantido para ativos em carteira',
     await loadSnapshotContext(DAY, { ensureDayCandles: true });
 
     expect(mocks.getFullHistoryDetailed).toHaveBeenCalledTimes(1);
-    expect(mocks.getFullHistoryDetailed).toHaveBeenCalledWith('BOVA11', 'ETF');
+    expect(mocks.getFullHistoryDetailed).toHaveBeenCalledWith('BOVA11', 'ETF', DAY);
     // O universo de pesquisa (MarketAsset, ~1.264 ativos) não pode nem ser
     // consultado — é o que mantém o custo do run em algumas dezenas de buscas.
     expect(mocks.marketAssetFind).not.toHaveBeenCalled();

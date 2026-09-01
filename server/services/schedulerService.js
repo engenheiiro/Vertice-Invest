@@ -48,6 +48,7 @@ import {
 } from '../utils/walletSnapshot.js';
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
 import { ensureWalletDayCandles } from './walletDayCandleService.js';
+import { reconcilePreviousWalletSnapshot } from './walletCandleRecoveryService.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { trackJobSafe } from '../utils/jobRun.js';
 import { runDataHealthCheck } from './dataHealthService.js';
@@ -557,8 +558,20 @@ export const initScheduler = () => {
     // (RESILIÊNCIA) Recuperação de snapshots perdidos no BOOT. Um deploy/reinício
     // que caia sobre 23:59 BRT não reexecuta o tick do cron — este catch-up fecha
     // o buraco no próximo start. Fire-and-forget após 15s (deixa o boot assentar).
-    setTimeout(() => {
-        backfillMissedSnapshots().catch((e) => logger.error(`Backfill boot: ${e.message}`));
+    setTimeout(async () => {
+        try {
+            await backfillMissedSnapshots();
+        } catch (e) {
+            logger.error(`Backfill boot: ${e.message}`);
+        }
+        // O fechamento oficial da B3 pode virar Final só depois do snapshot das
+        // 23:59. A segunda passagem fica SEQUENCIAL ao backfill: ambos podem
+        // reconstruir WalletSnapshot e nunca devem disputar a mesma carteira.
+        try {
+            await reconcilePreviousWalletSnapshot();
+        } catch (e) {
+            logger.error(`Reconciliação candle boot: ${e.message}`);
+        }
     }, 15000);
 
     // 1. Sync Leve: Macroeconomia (A cada 15 minutos)
@@ -617,6 +630,13 @@ export const initScheduler = () => {
     schedule('0 9 * * *', 'daily-morning', async () => {
         logger.info("⏰ Rotina Diária V3 — Manhã (09:00)");
         try {
+            // Segunda chance do fechamento anterior, já com o arquivo B3 Final.
+            // Best-effort: falha aqui não deve impedir sync/research da manhã.
+            try {
+                await reconcilePreviousWalletSnapshot();
+            } catch (e) {
+                logger.error(`Reconciliação candle manhã: ${e.message}`);
+            }
             const syncResult = await syncService.performFullSync();
             // Resiliência: 403/IP no Fundamentus não deve abortar o research.
             // Fundamentos são trimestrais (já no banco) e preços seguem frescos
