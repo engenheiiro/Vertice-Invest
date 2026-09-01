@@ -106,6 +106,7 @@ export const marketDataService = {
                     price: asset.lastPrice,
                     change: asset.change || 0,
                     priceDate: asset.priceDate || null,
+                    previousClose: asset.previousClose || 0,
                     name: asset.name,
                     sector: asset.sector,
                     dy: asset.dy || 0
@@ -157,7 +158,7 @@ export const marketDataService = {
 
         try {
             const assets = await MarketAsset.find({ ticker: { $in: cleanList } })
-                .select('ticker name sector type currency allocationClass lastPrice change priceDate dy');
+                .select('ticker name sector type currency allocationClass lastPrice change priceDate previousClose dy');
             const byTicker = new Map(assets.map(a => [a.ticker, a]));
 
             const missingKeys = new Set();
@@ -168,6 +169,7 @@ export const marketDataService = {
                         price: asset.lastPrice,
                         change: asset.change || 0,
                         priceDate: asset.priceDate || null,
+                        previousClose: asset.previousClose || 0,
                         name: asset.name,
                         sector: asset.sector,
                         ...(asset.allocationClass ? { allocationClass: asset.allocationClass } : {}),
@@ -332,6 +334,7 @@ export const marketDataService = {
                         // Data da sessão anda SEMPRE junto do change: gravar um sem o
                         // outro é como o cache volta a mentir sobre a idade do dado.
                         priceDate: sessionDateKey(quote.marketTime),
+                        previousClose: Number(quote.previousClose) > 0 ? Number(quote.previousClose) : 0,
                         updatedAt: now,
                         isActive: true,
                         failCount: 0, // Reset do contador de falhas em caso de sucesso

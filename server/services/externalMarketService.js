@@ -228,6 +228,7 @@ export const externalMarketService = {
                     change: data.regularMarketChangePercent,
                     // Mesma datação da sessão do caminho principal (ver Yahoo).
                     marketTime: data.regularMarketTime || null,
+                    previousClose: data.regularMarketPreviousClose || null,
                     // Volume p/ liquidez de ETFs B3 (.SA): o Yahoo costuma devolver 0 aqui.
                     volume: data.regularMarketVolume || 0,
                     name: data.longName || cleanTicker,
@@ -331,6 +332,11 @@ export const externalMarketService = {
                     // "fechou +1,19% hoje" de "fechou +1,19% ontem e ninguém abriu
                     // o mercado ainda". O provedor já mandava; nós descartávamos.
                     marketTime: item.regularMarketTime || null,
+                    // Fechamento do dia anterior. Para AÇÃO é redundante com o
+                    // change; para CRIPTO não é: ali o change do Yahoo são 24h
+                    // CORRIDAS (janela deslizante), e só o previousClose define o
+                    // "desde o fechamento de ontem" que o resto da carteira usa.
+                    previousClose: item.regularMarketPreviousClose || null,
                     marketCap: item.marketCap || 0,
                     volume: item.regularMarketVolume || item.volume || 0,
                     name: item.longName || item.shortName || symbol,

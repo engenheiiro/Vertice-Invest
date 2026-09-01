@@ -66,6 +66,12 @@ const MarketAssetSchema = new mongoose.Schema({
   // até a B3 abrir. null = fonte que não publica o horário do negócio (Google
   // Finance, fallback de histórico) ou documento anterior à migração.
   priceDate: { type: String, default: null },
+  // Fechamento da sessão anterior, como o provedor publica. Existe por causa da
+  // CRIPTO: lá o `change` são 24h corridas, então às 00h48 ele ainda carrega o
+  // movimento de ontem inteiro — que já está no patrimônio de ontem. Ancorar no
+  // fechamento anterior é o que faz a variação do dia da cripto medir a mesma
+  // coisa que a das outras classes. 0 = fonte não publicou.
+  previousClose: { type: Number, default: 0 },
   marketCap: { type: Number, default: 0 },
   liquidity: { type: Number, default: 0 }, // Liq. Diária
   

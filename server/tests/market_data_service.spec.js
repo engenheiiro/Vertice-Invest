@@ -80,7 +80,7 @@ describe('refreshQuotesBatch — data da sessão', () => {
     mockFind([{ ticker: 'PETR4', updatedAt: minutesAgo(60), lastPrice: 40, isActive: true, failCount: 0 }]);
     // 31/08 às 17:55 BRT (fechamento da B3) = 20:55Z.
     externalMarketService.getQuotes.mockResolvedValue([
-      { ticker: 'PETR4', price: 42, change: 1.5, marketTime: new Date('2026-08-31T20:55:00.000Z') },
+      { ticker: 'PETR4', price: 42, change: 1.5, previousClose: 41.38, marketTime: new Date('2026-08-31T20:55:00.000Z') },
     ]);
 
     await marketDataService.refreshQuotesBatch(['PETR4'], false);
@@ -88,6 +88,7 @@ describe('refreshQuotesBatch — data da sessão', () => {
     const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
     expect(set.priceDate).toBe('2026-08-31');
     expect(set.change).toBe(1.5);
+    expect(set.previousClose).toBe(41.38);
   });
 
   it('fonte sem horário grava null — nunca a data de hoje por conveniência', async () => {
@@ -96,7 +97,9 @@ describe('refreshQuotesBatch — data da sessão', () => {
 
     await marketDataService.refreshQuotesBatch(['PETR4'], false);
 
-    expect(MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set.priceDate).toBeNull();
+    const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(set.priceDate).toBeNull();
+    expect(set.previousClose).toBe(0); // 0 = não publicado; a cripto cai na janela de 24h
   });
 });
 
@@ -248,7 +251,7 @@ describe('getMarketDataMap — lote sem N+1 (5.8) / cada uma por si (5.3)', () =
 
   it('resolve preço do MarketAsset em UMA query e usa a chave ORIGINAL do chamador', async () => {
     mockFind([
-      { ticker: 'PETR4', name: 'Petrobras', sector: 'Energia', lastPrice: 40, change: 1.2, priceDate: '2026-08-31', dy: 8 },
+      { ticker: 'PETR4', name: 'Petrobras', sector: 'Energia', lastPrice: 40, change: 1.2, priceDate: '2026-08-31', previousClose: 39.53, dy: 8 },
       { ticker: 'MXRF11', name: 'Maxi Renda', sector: 'FII', lastPrice: 10, change: -0.5, dy: 12 },
     ]);
 
@@ -259,7 +262,7 @@ describe('getMarketDataMap — lote sem N+1 (5.8) / cada uma por si (5.3)', () =
     expect(AssetHistory.find).not.toHaveBeenCalled(); // todos tinham lastPrice
     // priceDate viaja junto do change: quem consome a variação precisa saber de
     // que pregão ela é (ver walletController).
-    expect(map.get('petr4.SA')).toEqual({ price: 40, change: 1.2, priceDate: '2026-08-31', name: 'Petrobras', sector: 'Energia', dy: 8 });
+    expect(map.get('petr4.SA')).toEqual({ price: 40, change: 1.2, priceDate: '2026-08-31', previousClose: 39.53, name: 'Petrobras', sector: 'Energia', dy: 8 });
     expect(map.get('MXRF11').priceDate).toBeNull(); // doc sem o campo → null explícito
     expect(map.get('MXRF11').price).toBe(10);
   });

@@ -40,6 +40,24 @@ const ctx = (cached, overrides = {}) => ({
 
 const quote = (priceDate) => ({ price: 174.78, change: 1.1927, priceDate });
 
+// Posição de cripto da mesma carteira (BTC em 01/09/2026).
+const btc = () => ({
+    ticker: 'BTC',
+    type: 'CRYPTO',
+    quantity: 0.0005014,
+    totalCost: 180,
+    taxLots: [{ date: new Date('2026-06-01T00:00:00.000Z'), quantity: 0.0005014, price: 70000 }],
+});
+
+const ctxCripto = (cached) => ({
+    assetMap: new Map([['BTC', cached]]),
+    usdRate: 5.185,
+    usdChange: 0,
+    macroRates,
+    isTodayBusinessDay: true,
+    todayKey: HOJE,
+});
+
 describe('variação do dia só vale se a sessão for a de hoje', () => {
     it('sessão de ontem não vira "variação hoje", mesmo em dia útil', () => {
         const { processed, dayChangeValueBr } = processWalletAsset(bova(), ctx(quote(ONTEM)));
@@ -85,24 +103,41 @@ describe('variação do dia só vale se a sessão for a de hoje', () => {
         expect(processed.dayChangePct).toBeCloseTo(1.1927, 4);
     });
 
-    it('cripto ignora a guarda: negocia 24h e não tem sessão para datar', () => {
-        const btc = {
-            ticker: 'BTC',
-            type: 'CRYPTO',
-            quantity: 0.0005014,
-            totalCost: 180,
-            taxLots: [{ date: new Date('2026-06-01T00:00:00.000Z'), quantity: 0.0005014, price: 70000 }],
-        };
-        const { processed } = processWalletAsset(btc, {
-            assetMap: new Map([['BTC', { price: 78415.52, change: 0.8627, priceDate: ONTEM }]]),
-            usdRate: 5.18,
-            usdChange: 0,
-            macroRates,
-            isTodayBusinessDay: true,
-            todayKey: HOJE,
-        });
-        // A cripto desta carteira vale ~R$200: o arredondamento monetário de 4 casas
-        // mexe na 3ª casa do percentual. O que o teste trava é que NÃO foi zerada.
-        expect(processed.dayChangePct).toBeGreaterThan(0.8);
+    it('cripto não é zerada pela guarda de sessão: negocia 24h, sem pregão a datar', () => {
+        const { processed } = processWalletAsset(btc(), ctxCripto({ price: 78662.2, change: 1.18, previousClose: 78559.11, priceDate: ONTEM }));
+        expect(processed.dayChangePct).toBeGreaterThan(0);
+    });
+});
+
+describe('cripto mede o dia do FECHAMENTO ANTERIOR, não da janela de 24h', () => {
+    // O change do provedor é uma janela DESLIZANTE: à 00h48 ele ainda carrega o dia
+    // inteiro de ontem, que já está no patrimônio de ontem. Era a diferença entre o
+    // card (R$ 14,48) e o gráfico (R$ 10,74) na carteira real.
+    it('usa price / previousClose, e não o change de 24h', () => {
+        const { processed } = processWalletAsset(
+            btc(),
+            ctxCripto({ price: 78662.2, change: 1.18, previousClose: 78559.11, priceDate: HOJE }),
+        );
+        // 78662,20 / 78559,11 − 1 = +0,1312% — o change de 24h diria +1,18%,
+        // quase dez vezes mais. (Posição de ~R$200: o arredondamento monetário de 4
+        // casas mexe na 3ª casa do percentual.)
+        expect(processed.dayChangePct).toBeCloseTo(0.13, 2);
+    });
+
+    it('sem previousClose cai na janela do provedor (fail-open)', () => {
+        const { processed } = processWalletAsset(
+            btc(),
+            ctxCripto({ price: 78662.2, change: 1.18, previousClose: 0, priceDate: HOJE }),
+        );
+        expect(processed.dayChangePct).toBeCloseTo(1.18, 2);
+    });
+
+    it('queda desde o fechamento aparece como queda, mesmo com 24h positivas', () => {
+        // O caso que mais engana: subiu forte ontem à noite e caiu de madrugada.
+        const { processed } = processWalletAsset(
+            btc(),
+            ctxCripto({ price: 78000, change: 1.18, previousClose: 78559.11, priceDate: HOJE }),
+        );
+        expect(processed.dayChangePct).toBeLessThan(0);
     });
 });

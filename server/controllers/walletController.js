@@ -283,10 +283,22 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
         if (cached && cached.price > 0) {
             currentPrice = safeFloat(Number(cached.price));
             if (asset.type === 'CRYPTO') {
-                // Cripto não tem pregão: negocia 24h e a variação do provedor é
-                // sempre a das últimas 24h. Não há sessão para datar, então não há
-                // guarda a aplicar — só o rótulo é aproximado.
-                dayChangePct = safeFloat(Number(cached.change));
+                // Cripto não tem pregão para datar: negocia 24h. Mas o `change` do
+                // provedor é uma janela DESLIZANTE de 24 horas, e isso não é "hoje":
+                // à 00h48 ele ainda carregava o dia inteiro de ontem — movimento que
+                // já está dentro do patrimônio de ontem e passava a ser contado duas
+                // vezes. Numa carteira real: R$ 5,09 no card contra R$ 1,34 de ganho
+                // efetivo, e o card divergia do gráfico exatamente nessa diferença.
+                //
+                // O fechamento anterior do provedor é a âncora fixa que falta — o
+                // mesmo "desde ontem" que as outras classes usam (BTC em 01/09:
+                // +1,18% na janela de 24h contra +0,13% desde o fechamento).
+                // Sem previousClose, mantém a janela do provedor: defasada, mas é
+                // a única leitura disponível.
+                const previousClose = safeFloat(Number(cached.previousClose) || 0);
+                dayChangePct = previousClose > 0 && currentPrice > 0
+                    ? ((currentPrice / previousClose) - 1) * 100
+                    : safeFloat(Number(cached.change));
             } else {
                 // A variação só é de HOJE se a SESSÃO que a produziu for a de hoje.
                 // O updatedAt não responde isso: ele diz quando NÓS perguntamos ao
