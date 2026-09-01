@@ -70,6 +70,55 @@ const tickerSummary = (tickers: string[], max = 4): string =>
         ? tickers.join(', ')
         : `${tickers.slice(0, max).join(', ')} +${tickers.length - max}`;
 
+interface SectorTooltipProps {
+    active?: boolean;
+    payload?: Array<{
+        value?: number | string;
+        payload?: SectorSlice;
+    }>;
+    formatValue: (value: number) => string;
+    isLight: boolean;
+}
+
+/**
+ * Tooltip próprio porque o Recharts não propaga de forma confiável o `fill` de
+ * cada Cell para o tooltip padrão. A camada explícita também impede que o texto
+ * fique atrás do rótulo central do donut.
+ */
+const SectorTooltip = ({ active, payload, formatValue, isLight }: SectorTooltipProps) => {
+    const entry = payload?.[0];
+    const slice = entry?.payload;
+    if (!active || !slice) return null;
+
+    const value = Number(entry.value ?? slice.value);
+
+    return (
+        <div
+            className={`min-w-max rounded-lg border px-2.5 py-2 text-[10px] shadow-2xl ${
+                isLight
+                    ? 'border-slate-200 bg-white text-slate-900'
+                    : 'border-slate-600 bg-elevated text-white'
+            }`}
+        >
+            <div className="flex items-center gap-1.5 font-bold">
+                <span
+                    aria-hidden="true"
+                    className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/10"
+                    style={{ backgroundColor: slice.color }}
+                />
+                <span>{slice.label}</span>
+            </div>
+            <div className="mt-1 tabular-nums">
+                <span className="font-bold" style={{ color: slice.color }}>{slice.pct.toFixed(1)}%</span>
+                <span className={isLight ? 'text-slate-600' : 'text-slate-300'}> · {formatValue(value)}</span>
+            </div>
+            <div className={`mt-0.5 max-w-[180px] truncate ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                {tickerSummary(slice.tickers)}
+            </div>
+        </div>
+    );
+};
+
 /**
  * Chip no cabeçalho de uma classe: hover (desktop) ou toque/clique abre um donut
  * com a repartição atual da classe pelo eixo de risco dela — setor em ação e FII,
@@ -191,10 +240,6 @@ export const SectorPopover = ({ items, kind, isPrivacyMode = false, variant = 'c
 
     if (slices.length === 0) return null;
 
-    const tooltipStyle = theme === 'light'
-        ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '11px', color: '#0f172a' }
-        : { backgroundColor: '#202631', borderColor: '#334155', borderRadius: '8px', fontSize: '11px' };
-
     const summary = slices.map((s) => `${s.label} ${s.pct.toFixed(1)}%`).join(', ');
     const formatValue = (v: number) => formatCompact(v, 'BRL', { privacy: isPrivacyMode });
 
@@ -264,12 +309,14 @@ export const SectorPopover = ({ items, kind, isPrivacyMode = false, variant = 'c
                                         ))}
                                     </Pie>
                                     <Tooltip
-                                        contentStyle={tooltipStyle}
-                                        formatter={(value: number, _name, entry: { payload?: SectorSlice }) => {
-                                            const slice = entry?.payload;
-                                            const tickers = slice ? ` · ${tickerSummary(slice.tickers)}` : '';
-                                            return [`${(slice?.pct ?? 0).toFixed(1)}% · ${formatValue(value)}${tickers}`, ''];
-                                        }}
+                                        content={(
+                                            <SectorTooltip
+                                                formatValue={formatValue}
+                                                isLight={theme === 'light'}
+                                            />
+                                        )}
+                                        allowEscapeViewBox={{ x: true, y: true }}
+                                        wrapperStyle={{ zIndex: 20, pointerEvents: 'none' }}
                                     />
                                 </PieChart>
                             </ResponsiveContainer>
