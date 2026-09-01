@@ -37,6 +37,12 @@ const LABELS: Record<AssetType, string> = {
 // internacionais contam no Exterior (sub-tipo ETF).
 const ORDERED_TYPES: AssetType[] = ['STOCK', 'FII', 'STOCK_US', 'FIXED_INCOME', 'CRYPTO', 'CASH'];
 
+/** Diferenças menores que meio ponto percentual são tratadas como oscilação visual. */
+const MIN_DIVERGENCE_PP = 0.5;
+
+const formatDivergencePp = (diff: number): string =>
+    `${diff > 0 ? '+' : '-'}${Math.abs(diff).toFixed(1)} p.p.`;
+
 // Classes que admitem ramificação (sub-metas), com suas sub-chaves e rótulos.
 const RAMIFIABLE: AssetType[] = ['STOCK', 'FIXED_INCOME', 'STOCK_US'];
 const SUB_KEYS: Record<string, string[]> = {
@@ -282,7 +288,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
 
             const valToShow = viewMode === 'CURRENT' ? rPct : tPct;
             const diff = rPct - tPct;
-            const showDiff = viewMode === 'CURRENT' && hasMeta && Math.abs(diff) > 1;
+            const showDiff = viewMode === 'CURRENT' && hasMeta && Math.abs(diff) >= MIN_DIVERGENCE_PP;
 
             return (
                 <div key={`${type}-${k}`} className="flex justify-between items-center text-[11px] py-[3px] pl-2.5 pr-1">
@@ -294,7 +300,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                         <span className="font-semibold text-slate-300 block leading-none">{valToShow.toFixed(0)}%</span>
                         {showDiff && (
                             <span className={`text-[9px] block leading-none ${diff > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                {diff > 0 ? '+' : '-'}{Math.abs(diff).toFixed(0)}% vs meta
+                                {formatDivergencePp(diff)}
                             </span>
                         )}
                     </div>
@@ -509,8 +515,8 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
 
                             if (viewMode === 'CURRENT') {
                                 const diff = currentPct - targetPct;
-                                if (Math.abs(diff) > 1) {
-                                    divergenceNode = <span className={`text-[9px] block leading-none ${diff > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{diff > 0 ? '+' : '-'}{Math.abs(diff).toFixed(0)}%</span>;
+                                if (Math.abs(diff) >= MIN_DIVERGENCE_PP) {
+                                    divergenceNode = <span className={`text-[9px] block leading-none ${diff > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatDivergencePp(diff)}</span>;
                                 }
                             }
                         }
