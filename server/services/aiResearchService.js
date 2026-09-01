@@ -27,6 +27,7 @@ import {
     buildCompetitiveCohesiveShadowTop10s,
 } from './engines/stockCalibrationShadowEngine.js';
 import { assessStockMetricCoverage } from '../config/stockCalibration.js';
+import { measurePerformance } from '../utils/performanceMetrics.js';
 
 const stockWeakAxisReason = axes => {
     const labels = {
@@ -729,32 +730,32 @@ export const aiResearchService = {
 
             currentClass = 'STOCK';
             logger.info("ℹ️ [AI Research] Processando Ações...");
-            const stockData = await this.calculateRanking('STOCK', strat);
+            const stockData = await measurePerformance('pipeline', 'ranking STOCK', () => this.calculateRanking('STOCK', strat));
             await saveAnalysis('STOCK', stockData.ranking, stockData.fullList, stockData.retentionAudit);
 
             currentClass = 'FII';
             logger.info("ℹ️ [AI Research] Processando FIIs...");
-            const fiiData = await this.calculateRanking('FII', strat);
+            const fiiData = await measurePerformance('pipeline', 'ranking FII', () => this.calculateRanking('FII', strat));
             await saveAnalysis('FII', fiiData.ranking, fiiData.fullList, fiiData.retentionAudit);
 
             currentClass = 'CRYPTO';
             logger.info("ℹ️ [AI Research] Processando Criptomoedas...");
-            const cryptoData = await this.calculateRanking('CRYPTO', strat);
+            const cryptoData = await measurePerformance('pipeline', 'ranking CRYPTO', () => this.calculateRanking('CRYPTO', strat));
             await saveAnalysis('CRYPTO', cryptoData.ranking, cryptoData.fullList);
 
             currentClass = 'STOCK_US';
             logger.info("ℹ️ [AI Research] Processando Ativos Globais (S&P 500)...");
-            const stockUsData = await this.calculateRanking('STOCK_US', strat);
+            const stockUsData = await measurePerformance('pipeline', 'ranking STOCK_US', () => this.calculateRanking('STOCK_US', strat));
             await saveAnalysis('STOCK_US', stockUsData.ranking, stockUsData.fullList);
 
             currentClass = 'REIT';
             logger.info("ℹ️ [AI Research] Processando REITs (imobiliário US)...");
-            const reitData = await this.calculateRanking('REIT', strat);
+            const reitData = await measurePerformance('pipeline', 'ranking REIT', () => this.calculateRanking('REIT', strat));
             await saveAnalysis('REIT', reitData.ranking, reitData.fullList);
 
             currentClass = 'ETF';
             logger.info("ℹ️ [AI Research] Processando ETFs (nacionais + internacionais)...");
-            const etfData = await this.calculateRanking('ETF', strat);
+            const etfData = await measurePerformance('pipeline', 'ranking ETF', () => this.calculateRanking('ETF', strat));
             await saveAnalysis('ETF', etfData.ranking, etfData.fullList);
 
             currentClass = 'BRASIL_10';

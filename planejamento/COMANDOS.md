@@ -104,3 +104,31 @@ npm run build:all         # valida server + build do client
 npm run changelog         # gera/atualiza o CHANGELOG.md a partir dos commits
 npm run changelog:first   # primeira geração (histórico completo)
 ```
+
+## 8. Performance e baseline
+
+As métricas leves ficam ativas por padrão. Use `PERF_METRICS_ENABLED=false`
+somente se precisar desligá-las. Apenas durante uma janela de diagnóstico do
+banco, habilite `PERF_MONGO_COMMANDS_ENABLED=true`. O snapshot agregado fica em
+`GET /api/admin/performance-metrics` e exige usuário ADMIN.
+
+```bash
+# Benchmark HTTP somente leitura. Requer o backend rodando e um access token.
+BENCHMARK_AUTH_TOKEN=... BENCHMARK_WALLET_ID=... npm run benchmark:http
+
+# Explain somente leitura das queries críticas. Wallet/ticker são opcionais;
+# sem wallet usa uma carteira existente, sem imprimir documentos ou ids.
+BENCHMARK_WALLET_ID=... BENCHMARK_TICKER=PETR4 npm run benchmark:mongo
+
+# Bundle detalhado (gera client/dist/stats.html).
+npm run analyze --prefix client
+
+# Baseline local de FCP/LCP/INP do build já gerado (Playwright/Chromium).
+npm run benchmark:web
+
+# A mesma coleta contra uma URL publicada (somente navegação GET).
+BENCHMARK_WEB_URL=https://verticeinvest.com.br npm run benchmark:web
+```
+
+Controles opcionais: `BENCHMARK_ITERATIONS`, `BENCHMARK_WARMUP`,
+`BENCHMARK_CONCURRENCY`, `BENCHMARK_SCENARIOS` e `BENCHMARK_QUERY_LIMIT`.

@@ -1,5 +1,10 @@
 
 import * as Sentry from "@sentry/node";
+import axios from 'axios';
+import { attachAxiosMetrics, startRuntimeMetrics } from './utils/performanceMetrics.js';
+
+startRuntimeMetrics();
+attachAxiosMetrics(axios);
 
 if (process.env.SENTRY_DSN) {
   const PII_FIELDS = ['email', 'password', 'cpf', 'token', 'accessToken', 'refreshToken'];

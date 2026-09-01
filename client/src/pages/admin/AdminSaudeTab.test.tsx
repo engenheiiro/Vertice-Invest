@@ -25,6 +25,9 @@ vi.mock('../../services/health', () => ({
     },
 }));
 vi.mock('../../contexts/ToastContext', () => ({ useToast: () => ({ addToast: vi.fn() }) }));
+vi.mock('../../components/admin/PerformanceOverview', () => ({
+    PerformanceOverview: () => <div data-testid="performance-overview" />,
+}));
 
 const mkResponse = (over: Partial<DataHealthResponse> = {}): DataHealthResponse => ({
     report: {

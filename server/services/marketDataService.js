@@ -13,6 +13,7 @@ import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { getTunablesSync } from './configService.js'; // (I13) tunables editáveis pelo admin
 import { historyStorageKey } from '../utils/assetHistory.js';
 import { brazilDateKey } from '../utils/dateUtils.js';
+import { recordCacheAccess } from '../utils/performanceMetrics.js';
 
 /**
  * Dia da SESSÃO a que a cotação pertence, no calendário brasileiro. É o carimbo
@@ -102,6 +103,7 @@ export const marketDataService = {
             }
 
             if (asset && asset.lastPrice > 0) {
+                recordCacheAccess('market-price', 'hit');
                 return {
                     price: asset.lastPrice,
                     change: asset.change || 0,
@@ -120,6 +122,7 @@ export const marketDataService = {
                 const lastClose = sorted[0].close || sorted[0].adjClose;
                 
                 if (lastClose > 0) {
+                    recordCacheAccess('market-price', 'fallback');
                     return {
                         price: lastClose,
                         change: 0, 
@@ -130,8 +133,10 @@ export const marketDataService = {
                 }
             }
 
+            recordCacheAccess('market-price', 'miss');
             return { price: 0, change: 0, name: ticker, sector: 'Outros' };
         } catch {
+            recordCacheAccess('market-price', 'error');
             return { price: 0, change: 0, name: ticker, sector: 'Outros' };
         }
     },
@@ -157,6 +162,9 @@ export const marketDataService = {
         if (cleanList.length === 0) return map;
 
         try {
+            let primaryHits = 0;
+            let fallbackHits = 0;
+            let misses = 0;
             const assets = await MarketAsset.find({ ticker: { $in: cleanList } })
                 .select('ticker name sector type currency allocationClass lastPrice change priceDate previousClose dy');
             const byTicker = new Map(assets.map(a => [a.ticker, a]));
@@ -165,6 +173,7 @@ export const marketDataService = {
             for (const { original, clean } of pairs) {
                 const asset = byTicker.get(clean);
                 if (asset && asset.lastPrice > 0) {
+                    primaryHits += 1;
                     map.set(original, {
                         price: asset.lastPrice,
                         change: asset.change || 0,
@@ -200,6 +209,7 @@ export const marketDataService = {
                     const sorted = [...hist.history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                     const lastClose = sorted[0].close || sorted[0].adjClose;
                     if (lastClose > 0) {
+                        fallbackHits += 1;
                         resolved = {
                             price: lastClose, change: 0, name: original, sector: 'Outros',
                             ...(asset?.allocationClass ? { allocationClass: asset.allocationClass } : {}),
@@ -207,9 +217,14 @@ export const marketDataService = {
                         };
                     }
                 }
+                if (!resolved.isFallback) misses += 1;
                 map.set(original, resolved);
             }
+            recordCacheAccess('market-price', 'hit', primaryHits);
+            recordCacheAccess('market-price', 'fallback', fallbackHits);
+            recordCacheAccess('market-price', 'miss', misses);
         } catch (error) {
+            recordCacheAccess('market-price', 'error', cleanList.length);
             logger.warn(`[MarketData] getMarketDataMap falhou: ${error.message}`);
             // Garante chave para todo ticker pedido mesmo em falha total de DB.
             for (const { original } of pairs) {

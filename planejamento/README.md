@@ -17,7 +17,10 @@ pendência** — o histórico do que já foi entregue vive no git e no
 - [`../AUDITORIA-PROMPT.md`](../AUDITORIA-PROMPT.md) — prompt reutilizável para
   auditoria técnica completa.
 - [`../RESULTADO-AUDITORIA.md`](../RESULTADO-AUDITORIA.md) — resultado da última
-  auditoria + baseline para as próximas.
+  auditoria geral de julho + baseline histórico.
+- [`../AUDITORIA-ESTRUTURAL-PERFORMANCE-2026-09-01.md`](../AUDITORIA-ESTRUTURAL-PERFORMANCE-2026-09-01.md) —
+  auditoria estrutural e de performance mais recente, com achados priorizados,
+  plano em fases, benchmarks e prompt para iniciar a execução.
 
 ## Manutenção deste diretório
 

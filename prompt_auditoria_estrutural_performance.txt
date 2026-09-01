@@ -1,0 +1,374 @@
+PROMPT — AUDITORIA ESTRUTURAL E DE PERFORMANCE DO VÉRTICE
+
+Atue como arquiteto de software sênior, especialista em performance de aplicações React/Node.js e sistemas financeiros.
+
+Analise integralmente este repositório, considerando frontend, backend, banco de dados, integrações, jobs, testes, build e infraestrutura. O objetivo é identificar melhorias estruturais, reduzir complexidade e aumentar a velocidade, estabilidade, escalabilidade e manutenibilidade do sistema.
+
+IMPORTANTE: nesta etapa, não altere nenhum arquivo. Faça apenas uma auditoria técnica baseada em evidências encontradas no código. Não apresente recomendações genéricas: toda conclusão deve citar arquivos, funções, rotas, componentes ou trechos concretos do projeto.
+
+CONTEXTO DO SISTEMA
+
+Este é o Vértice, uma plataforma institucional de análise quantitativa financeira:
+
+- Frontend: React 18, TypeScript, Vite, Tailwind, React Query, React Router e Recharts.
+- Backend: Node.js com ES Modules, Express, MongoDB/Mongoose, Winston e node-cron.
+- Integrações: Yahoo Finance, Google Finance, Brapi, Fundamentus, Gemini, Mercado Pago, Sentry e SMTP.
+- Monorepo com /client e /server.
+- O sistema realiza processamento financeiro, rankings, sinais técnicos, carteiras, snapshots históricos e pesquisas de ativos.
+
+Respeite integralmente as instruções do arquivo AGENTS.md, especialmente:
+
+- Threshold global: score >= 70 = BUY; score < 70 = WAIT.
+- Ordenação por score decrescente, com composite estrutural como desempate.
+- Backend exclusivamente com ES Modules.
+- Cálculos monetários usando mathUtils.js.
+- Rate limiting por usuário e validação Zod em novas escritas.
+- Não expor nem modificar secrets.
+- Preservar as regras dos perfis DEFENSIVE, MODERATE e BOLD.
+
+OBJETIVOS DA AUDITORIA
+
+1. ARQUITETURA E ESTRUTURA
+
+Avalie:
+
+- Separação de responsabilidades.
+- Acoplamento e coesão dos módulos.
+- Serviços, controllers, middlewares, models, contexts e hooks.
+- Funções ou componentes excessivamente grandes.
+- Código duplicado.
+- Dependências circulares.
+- Abstrações desnecessárias ou ausentes.
+- Fluxos difíceis de testar.
+- Mistura entre regra de negócio, acesso a dados e apresentação.
+- Consistência entre frontend e backend.
+- Possíveis módulos que deveriam ser divididos, unidos ou removidos.
+- Dívida técnica e pontos que dificultam futuras funcionalidades.
+
+2. PERFORMANCE DO BACKEND
+
+Investigue:
+
+- Rotas lentas e operações bloqueantes.
+- Consultas MongoDB sem índices adequados.
+- Problemas de N+1 queries.
+- Uso incorreto de lean(), projections, paginação e aggregation pipelines.
+- Queries ou documentos que carregam dados além do necessário.
+- Processamentos sequenciais que poderiam ser paralelos com segurança.
+- Promises sem tratamento ou paralelização inadequada.
+- Loops com complexidade elevada.
+- Rankings, scoring, portfolio draft e sinais recalculados desnecessariamente.
+- Cache duplicado, inexistente, obsoleto ou mal invalidado.
+- Scraping e APIs externas no caminho crítico das requisições.
+- Retry, timeout, circuit breaker e fallback.
+- Jobs do scheduler que possam disputar recursos com requisições HTTP.
+- Consumo de memória, event loop, CPU, serialização e payloads grandes.
+- Possíveis race conditions, concorrência e operações não idempotentes.
+- Gargalos nas integrações externas.
+
+Dê atenção especial a:
+
+- server/services/engines/scoringEngine.js
+- server/services/engines/portfolioEngine.js
+- server/services/engines/signalEngine.js
+- server/services/aiResearchService.js
+- server/services/marketDataService.js
+- server/services/fundamentusService.js
+- server/services/macroDataService.js
+- server/services/workers/timeSeriesWorker.js
+- Models e índices MongoDB.
+- Middlewares globais e rotas mais acessadas.
+
+3. PERFORMANCE DO FRONTEND
+
+Investigue:
+
+- Renderizações desnecessárias.
+- Estados derivados armazenados incorretamente.
+- Contexts que causam rerender global.
+- Uso inadequado de useMemo, useCallback e memo.
+- Hooks condicionais ou guards antes dos hooks.
+- React Query: staleTime, gcTime, chaves, invalidação, deduplicação e refetch.
+- Requisições duplicadas.
+- Waterfalls de carregamento.
+- Bundle size e dependências pesadas.
+- Falta de lazy loading e code splitting por rota.
+- Gráficos ou listas que processam dados em todo render.
+- Falta de virtualização em listas extensas.
+- Payloads acima do necessário.
+- Imagens, fontes e recursos bloqueantes.
+- Componentes muito grandes ou com responsabilidades misturadas.
+- Tempo para primeira renderização e responsividade da interface.
+- Possíveis problemas de memória ou listeners não removidos.
+
+Dê atenção especial a:
+
+- client/src/pages/Research.tsx
+- client/src/components/research/AssetDetailModal.tsx
+- client/src/components/research/TopPicksCard.tsx
+- client/src/pages/Wallet.tsx
+- client/src/pages/Dashboard.tsx
+- AuthContext
+- WalletContext
+- DemoContext
+- useDashboardData
+- Configuração do Vite e divisão do bundle.
+
+4. SEGURANÇA, ESTABILIDADE E OBSERVABILIDADE
+
+Verifique:
+
+- Validação e sanitização de entradas.
+- Autorização e feature gating.
+- Rate limiting.
+- Exposição de dados sensíveis.
+- Logs com informações pessoais ou tokens.
+- Tratamento consistente de erros.
+- Uso de correlation IDs.
+- Cobertura do Sentry.
+- Timeouts ausentes.
+- Falhas silenciosas.
+- Ausência de métricas para medir os principais gargalos.
+- Transações MongoDB onde a consistência financeira exigir atomicidade.
+- Operações financeiras sem safeFloat, safeCurrency ou operações seguras.
+- Falhas que possam gerar rankings, saldos ou performance incorretos.
+
+5. COMPLEXIDADE E QUALIDADE
+
+Para os pontos relevantes, estime:
+
+- Complexidade ciclomática.
+- Complexidade temporal, usando notação Big O quando aplicável.
+- Complexidade espacial.
+- Profundidade de condicionais.
+- Quantidade de responsabilidades por módulo.
+- Facilidade de teste.
+- Risco de regressão.
+- Cobertura de testes existente e lacunas críticas.
+
+Use ferramentas locais e os scripts existentes para verificar:
+
+- Estrutura do repositório.
+- Dependências.
+- TypeScript.
+- ESLint.
+- Vitest.
+- Build.
+- Testes.
+- Tamanho dos bundles.
+- Arquivos e funções de maior dimensão.
+- Índices declarados nos schemas.
+- Rotas e middlewares.
+
+Não instale dependências e não modifique arquivos. Se uma verificação não puder ser executada, registre a limitação.
+
+REGRAS DA ANÁLISE
+
+1. Primeiro, leia AGENTS.md, os manifests e a estrutura do repositório.
+2. Examine o caminho completo das operações críticas, da interface até o MongoDB ou serviço externo.
+3. Diferencie fatos confirmados, hipóteses e medições.
+4. Não invente tempos ou ganhos de performance.
+5. Quando não houver benchmark, apresente o ganho como estimativa:
+   - Baixo: 0–10%.
+   - Moderado: 10–30%.
+   - Alto: 30–60%.
+   - Muito alto: acima de 60%.
+6. Explique o método necessário para validar cada estimativa.
+7. Não recomende micro-otimizações sem impacto mensurável.
+8. Preserve as regras financeiras e de negócio.
+9. Considere o custo de implementação e o risco de regressão.
+10. Não proponha uma reescrita total sem demonstrar tecnicamente a necessidade.
+11. Separe quick wins de mudanças arquiteturais.
+12. Identifique recomendações incompatíveis entre si.
+13. Para cada problema, indique evidência reproduzível.
+14. Quando possível, cite arquivo e linha.
+15. Priorize primeiro correção e consistência financeira, depois estabilidade, velocidade e organização.
+
+ESCALAS OBRIGATÓRIAS
+
+Criticidade:
+
+- P0 — Crítica: corrupção financeira, falha de segurança, indisponibilidade ou regra de negócio incorreta.
+- P1 — Alta: gargalo severo, risco frequente de falha ou grande impacto no usuário.
+- P2 — Média: degradação relevante de performance ou manutenibilidade.
+- P3 — Baixa: melhoria incremental.
+- P4 — Informativa: oportunidade futura ou padronização.
+
+Complexidade de implementação:
+
+- XS — Até algumas horas.
+- S — Aproximadamente 1 dia.
+- M — De 2 a 5 dias.
+- L — De 1 a 2 semanas.
+- XL — Mudança arquitetural superior a 2 semanas.
+
+Confiança da conclusão:
+
+- Alta: confirmada diretamente pelo código, teste ou medição.
+- Média: forte indício, mas requer benchmark.
+- Baixa: hipótese que precisa de instrumentação.
+
+FORMATO OBRIGATÓRIO DA ENTREGA
+
+1. RESUMO EXECUTIVO
+
+Apresente:
+
+- Estado geral da arquitetura.
+- Estado geral da performance.
+- Três maiores riscos.
+- Três maiores oportunidades.
+- Avaliação de 0 a 10 para arquitetura, backend, frontend, banco de dados, segurança, observabilidade, testes e escalabilidade.
+
+Explique brevemente cada nota.
+
+2. MAPA DO SISTEMA
+
+Descreva o fluxo dos principais casos de uso:
+
+- Pesquisa e geração de ranking.
+- Consulta do Dashboard.
+- Atualização de cotações.
+- Carteira e transações.
+- Snapshots de performance.
+- Autenticação e renovação de tokens.
+
+Destaque onde CPU, banco, rede, cache e APIs externas participam.
+
+3. TABELA PRINCIPAL DA AUDITORIA
+
+Use uma tabela com estas colunas:
+
+| ID | Problema | Evidência | Impacto | Criticidade | Complexidade | Confiança | Antes | Depois | Ganho esperado | Risco de regressão | Recomendação |
+
+O campo “Antes” deve descrever o comportamento atual.
+
+O campo “Depois” deve descrever o resultado esperado após a melhoria, incluindo, quando aplicável:
+
+- Complexidade atual x proposta.
+- Número de queries atual x proposto.
+- Processamento sequencial x paralelo.
+- Payload atual x projetado.
+- Bundle atual x projetado.
+- Tempo medido atual x meta.
+- Uso atual de memória x meta.
+- Estrutura atual x nova divisão de responsabilidades.
+
+Se não existirem medições, escreva claramente “não medido” e indique como medir.
+
+4. TOP 10 MELHORIAS PRIORIZADAS
+
+Ordene usando:
+
+prioridade = impacto x criticidade x confiança / esforço
+
+Para cada melhoria, informe:
+
+- Arquivos envolvidos.
+- Problema.
+- Causa raiz.
+- Solução proposta.
+- Antes x depois.
+- Benefício esperado.
+- Complexidade.
+- Dependências.
+- Riscos.
+- Testes necessários.
+- Métrica que comprovará o sucesso.
+
+5. ANÁLISE DE COMPLEXIDADE
+
+Liste as funções e componentes mais complexos:
+
+| Arquivo/função | Responsabilidades | Complexidade atual | Big O | Problema | Complexidade proposta | Refatoração sugerida |
+
+6. ANÁLISE DE VELOCIDADE
+
+Separe em:
+
+- Backend.
+- MongoDB.
+- Frontend.
+- Build e bundle.
+- APIs externas.
+- Jobs e processamento assíncrono.
+
+Para cada área, apresente:
+
+| Fluxo | Gargalo | Medição atual | Meta | Melhoria estimada | Como medir |
+
+Não confunda latência percebida com tempo de processamento do servidor.
+
+7. ANTES X DEPOIS DOS PRINCIPAIS FLUXOS
+
+Para cada fluxo crítico, mostre:
+
+ANTES
+Entrada → etapas atuais → gargalo → resultado
+
+DEPOIS
+Entrada → etapas propostas → otimização → resultado esperado
+
+Inclua pelo menos:
+
+- Carregamento do Dashboard.
+- Geração do ranking.
+- Consulta de carteira.
+- Atualização de dados de mercado.
+- Renderização da página Research.
+
+8. QUICK WINS
+
+Liste alterações pequenas, de baixo risco e alto retorno que possam ser implementadas primeiro. Para cada item, informe arquivos, ganho, esforço e validação.
+
+9. PLANO DE EXECUÇÃO
+
+Organize em fases:
+
+- Fase 0: instrumentação e baseline.
+- Fase 1: correções críticas.
+- Fase 2: quick wins.
+- Fase 3: banco e backend.
+- Fase 4: frontend.
+- Fase 5: arquitetura e escalabilidade.
+
+Para cada fase, informe:
+
+- Objetivo.
+- Tarefas.
+- Ordem.
+- Dependências.
+- Critério de aceite.
+- Possível rollback.
+
+10. PLANO DE BENCHMARKS
+
+Proponha benchmarks reproduzíveis para:
+
+- p50, p95 e p99 das principais rotas.
+- Tempo total do pipeline de pesquisa.
+- Tempo das queries MongoDB.
+- Cache hit rate.
+- Event loop lag.
+- Consumo de CPU e memória.
+- Tamanho inicial do bundle.
+- First Contentful Paint.
+- Largest Contentful Paint.
+- Interaction to Next Paint.
+- Número de renders dos componentes críticos.
+- Volume e duração das chamadas externas.
+
+Informe comandos, cenários, massa de dados e condições necessárias, sem modificar o projeto nesta etapa.
+
+11. DECISÃO FINAL
+
+Conclua respondendo:
+
+1. O sistema precisa de refatoração estrutural ou apenas otimizações localizadas?
+2. Qual é o maior gargalo provável?
+3. Qual é o maior risco técnico?
+4. Quais cinco mudanças devem ser feitas primeiro?
+5. Que melhorias não valem o custo neste momento?
+6. Qual resultado realista pode ser esperado após cada fase?
+
+Entregue a auditoria em português brasileiro, com linguagem objetiva e técnica. Termine com uma lista dos arquivos que provavelmente seriam alterados durante a futura implementação, mas não altere nenhum deles agora.

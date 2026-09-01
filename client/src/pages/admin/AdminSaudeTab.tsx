@@ -13,6 +13,7 @@ import {
 } from '../../services/health';
 import { useToast } from '../../contexts/ToastContext';
 import { getErrorMessage } from '../../utils/errorMessages';
+import { PerformanceOverview } from '../../components/admin/PerformanceOverview';
 
 /**
  * Aba "Saúde" do Admin.
@@ -252,21 +253,24 @@ export const AdminSaudeTab = () => {
 
     if (!report) {
         return (
-            <div className="bg-base border border-slate-800 rounded-2xl p-8 text-center">
-                <ShieldAlert size={32} className="text-slate-600 mx-auto mb-3" />
-                <p className="text-sm font-bold text-white">Nenhuma avaliação registrada ainda.</p>
-                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                    A sentinela roda de hora em hora e ao fim de cada sync. Se o servidor
-                    acabou de subir, aguarde o próximo ciclo ou avalie agora.
-                </p>
-                <button
-                    onClick={handleRunNow}
-                    disabled={isRunning}
-                    className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-xs font-bold text-white transition-colors"
-                >
-                    <RefreshCw size={13} className={isRunning ? 'animate-spin' : ''} />
-                    Avaliar agora
-                </button>
+            <div className="space-y-6">
+                <div className="bg-base border border-slate-800 rounded-2xl p-8 text-center">
+                    <ShieldAlert size={32} className="text-slate-600 mx-auto mb-3" />
+                    <p className="text-sm font-bold text-white">Nenhuma avaliação registrada ainda.</p>
+                    <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                        A sentinela roda de hora em hora e ao fim de cada sync. Se o servidor
+                        acabou de subir, aguarde o próximo ciclo ou avalie agora.
+                    </p>
+                    <button
+                        onClick={handleRunNow}
+                        disabled={isRunning}
+                        className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-xs font-bold text-white transition-colors"
+                    >
+                        <RefreshCw size={13} className={isRunning ? 'animate-spin' : ''} />
+                        Avaliar agora
+                    </button>
+                </div>
+                <PerformanceOverview />
             </div>
         );
     }
@@ -317,6 +321,8 @@ export const AdminSaudeTab = () => {
                     </div>
                 </div>
             </div>
+
+            <PerformanceOverview />
 
             {/* O que está quebrado */}
             {failing.length > 0 && (

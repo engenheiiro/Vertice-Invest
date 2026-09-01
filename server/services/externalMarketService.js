@@ -5,6 +5,7 @@ import * as cheerio from 'cheerio'; // Necessário para o scraping
 import logger from '../config/logger.js';
 import { createCircuitBreaker, withRetry } from '../utils/resilience.js'; // (I4)
 import { recordIngestionError } from './errorLogService.js';
+import { measurePerformance } from '../utils/performanceMetrics.js';
 
 // Instancia a classe com supressão de avisos
 const yahooFinance = new YahooFinance({
@@ -310,10 +311,11 @@ export const externalMarketService = {
             // Circuito aberto → lança e cai no catch (Protocolo de Emergência Google).
             // Sem retry em 429/crumb: é rate-limit de IP, repetir em 300ms não ajuda
             // e só soma mais uma tacada no endpoint já bloqueado.
-            const results = await yahooBreaker.exec(() => withRetry(
-                () => yahooFinance.quote(yahooTickers, {}, { validateResult: false }),
-                { retries: 1, baseDelayMs: 300, shouldRetry: (err) => !/429|crumb/i.test(err?.message || '') },
-            ));
+            const results = await measurePerformance('external', 'YAHOO quote-batch', () =>
+                yahooBreaker.exec(() => withRetry(
+                    () => yahooFinance.quote(yahooTickers, {}, { validateResult: false }),
+                    { retries: 1, baseDelayMs: 300, shouldRetry: (err) => !/429|crumb/i.test(err?.message || '') },
+                )));
             const validResults = Array.isArray(results) ? results : [results];
             
             const mappedResults = validResults.map(item => {
@@ -402,7 +404,8 @@ export const externalMarketService = {
     // Busca índices globais para Dashboard (Snapshot Instantâneo)
     async getGlobalIndices() {
         try {
-            const quotes = await yahooFinance.quote(['^BVSP', '^GSPC', '^IXIC']); 
+            const quotes = await measurePerformance('external', 'YAHOO global-indices', () =>
+                yahooFinance.quote(['^BVSP', '^GSPC', '^IXIC']));
             const result = {};
             const find = (s) => (Array.isArray(quotes) ? quotes : [quotes]).find(q => q.symbol === s);
             
@@ -430,11 +433,12 @@ export const externalMarketService = {
             const period1 = startDate.toISOString().split('T')[0];
             const period2 = endDate.toISOString().split('T')[0];
 
-            const result = await yahooFinance.chart('^GSPC', {
-                period1: period1,
-                period2: period2,
-                interval: '1d'
-            }, { validateResult: false });
+            const result = await measurePerformance('external', 'YAHOO chart-spx', () =>
+                yahooFinance.chart('^GSPC', {
+                    period1: period1,
+                    period2: period2,
+                    interval: '1d'
+                }, { validateResult: false }));
 
             if (!result || !result.quotes || result.quotes.length < 10) {
                 logger.warn("⚠️ SPX Chart: Dados insuficientes (Length < 10). Usando Fallback 32.50%.");
@@ -494,11 +498,12 @@ export const externalMarketService = {
             const period1 = startDate.toISOString().split('T')[0];
             const period2 = endDate.toISOString().split('T')[0];
 
-            const result = await yahooFinance.chart('^BVSP', {
-                period1: period1,
-                period2: period2,
-                interval: '1d'
-            }, { validateResult: false });
+            const result = await measurePerformance('external', 'YAHOO chart-ibov', () =>
+                yahooFinance.chart('^BVSP', {
+                    period1: period1,
+                    period2: period2,
+                    interval: '1d'
+                }, { validateResult: false }));
 
             if (!result || !result.quotes || result.quotes.length < 10) {
                 logger.warn("⚠️ IBOV Chart: Dados insuficientes. Usando Fallback 15.50%.");
@@ -596,7 +601,8 @@ export const externalMarketService = {
             // validateResult:false silencia os avisos verbosos da lib quando o Yahoo
             // devolve meta incompleto (currency null / sem regularMarketPrice) — payload
             // de quotes ainda vem íntegro e já filtramos close>0 abaixo.
-            const result = await yahooFinance.chart(symbol, queryOptions, { validateResult: false });
+            const result = await measurePerformance('external', 'YAHOO chart-history', () =>
+                yahooFinance.chart(symbol, queryOptions, { validateResult: false }));
 
             if (!result || !result.quotes || !Array.isArray(result.quotes)) return null;
 
@@ -653,22 +659,23 @@ export const externalMarketService = {
 
         try {
             const today = new Date().toISOString().split('T')[0];
-            const result = await yahooDividendsBreaker.exec(() => withRetry(
-                () => yahooFinance.chart(symbol, {
-                    period1: '2018-01-01',
-                    period2: today,
-                    interval: '1d',
-                    events: 'dividends',
-                }, { validateResult: false }),
-                {
-                    retries: 2,
-                    baseDelayMs: 300,
-                    // "No data found"/"delisted": o ticker não existe no Yahoo —
-                    // repetir não ajuda. Demais erros (timeout/rede) são tratados
-                    // como transitórios e re-tentados.
-                    shouldRetry: (err) => !/no data found|delisted/i.test(err?.message || ''),
-                },
-            ));
+            const result = await measurePerformance('external', 'YAHOO chart-dividends', () =>
+                yahooDividendsBreaker.exec(() => withRetry(
+                    () => yahooFinance.chart(symbol, {
+                        period1: '2018-01-01',
+                        period2: today,
+                        interval: '1d',
+                        events: 'dividends',
+                    }, { validateResult: false }),
+                    {
+                        retries: 2,
+                        baseDelayMs: 300,
+                        // "No data found"/"delisted": o ticker não existe no Yahoo —
+                        // repetir não ajuda. Demais erros (timeout/rede) são tratados
+                        // como transitórios e re-tentados.
+                        shouldRetry: (err) => !/no data found|delisted/i.test(err?.message || ''),
+                    },
+                )));
 
             const divs = result?.events?.dividends || [];
             return divs

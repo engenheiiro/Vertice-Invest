@@ -13,7 +13,8 @@
     "test:e2e:install": "playwright install --with-deps chromium",
     "lint": "tsc --noEmit",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "benchmark:web": "node scripts/benchmarkWebVitals.mjs"
   },
   "dependencies": {
     "@sentry/react": "^8.0.0",

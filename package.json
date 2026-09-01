@@ -63,7 +63,10 @@
     "changelog:first": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0",
     "prepare": "husky || true",
     "migrate:tx-currency": "node server/scripts/migrateTransactionCurrency.js",
-    "repair:wallet-metrics-v5": "node server/scripts/repairWalletMetricsV5.js"
+    "repair:wallet-metrics-v5": "node server/scripts/repairWalletMetricsV5.js",
+    "benchmark:http": "npm run benchmark:http --prefix server",
+    "benchmark:mongo": "npm run benchmark:mongo --prefix server",
+    "benchmark:web": "npm run benchmark:web --prefix client"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": "eslint --fix"

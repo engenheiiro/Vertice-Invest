@@ -2,6 +2,7 @@
 import mongoose from 'mongoose';
 import logger from './logger.js';
 import { attachMongoBreaker } from '../middleware/mongoCircuitBreaker.js';
+import { attachMongoCommandMetrics, performanceMetrics } from '../utils/performanceMetrics.js';
 
 /**
  * Self-heal de índices legados que `autoIndex` NÃO remove sozinho (autoIndex só
@@ -86,6 +87,10 @@ export const MONGO_CONNECT_OPTIONS = {
   // re-tentada uma vez pelo próprio driver antes de chegar ao nosso retry.
   retryReads: true,
   retryWrites: true,
+  // Command monitoring é opt-in porque adiciona eventos por operação. Quando
+  // ativo, o coletor guarda somente comando + coleção + duração — nunca filtros,
+  // documentos ou valores.
+  monitorCommands: performanceMetrics.enabled && process.env.PERF_MONGO_COMMANDS_ENABLED === 'true',
   family: 4 // Força IPv4 para evitar problemas de resolução DNS IPv6 em alguns ambientes
 };
 
@@ -105,6 +110,7 @@ const connectDB = async () => {
 
   try {
     const conn = await mongoose.connect(MONGO_URI, connectOptions);
+    attachMongoCommandMetrics(conn.connection.getClient());
     logger.info(`🗄️ [Database] MongoDB Conectado: ${conn.connection.host}`);
 
     await healLegacyIndexes();

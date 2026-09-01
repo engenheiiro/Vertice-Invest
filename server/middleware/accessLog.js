@@ -1,5 +1,7 @@
 
+import { performance } from 'perf_hooks';
 import logger from '../config/logger.js';
+import { recordHttpMetric } from '../utils/performanceMetrics.js';
 
 // Probes e documentação: alto volume, zero informação de negócio.
 const isNoise = (path) => path === '/api/health' || path.startsWith('/api/docs');
@@ -22,10 +24,12 @@ const isNoise = (path) => path === '/api/health' || path.startsWith('/api/docs')
  * no transport JSON em vez de pedaços de string.
  */
 export const accessLog = (req, res, next) => {
-  const start = Date.now();
+  const start = performance.now();
   res.on('finish', () => {
     if (isNoise(req.path)) return;
-    const meta = { ms: Date.now() - start };
+    const durationMs = performance.now() - start;
+    recordHttpMetric(req, res.statusCode, durationMs);
+    const meta = { ms: Math.round(durationMs) };
     if (req.walletId) meta.walletId = req.walletId;
     logger.http(`${req.method} ${req.path} ${res.statusCode}`, meta);
   });

@@ -22,7 +22,9 @@
     "lint": "node --check index.js",
     "build": "node scripts/build.js",
     "backtest:portfolio": "node scripts/seedPortfolioBacktest.js",
-    "seed:wallet": "node scripts/seedFullWallet.js"
+    "seed:wallet": "node scripts/seedFullWallet.js",
+    "benchmark:http": "node scripts/benchmarkHttp.js",
+    "benchmark:mongo": "node scripts/benchmarkMongo.js"
   },
   "dependencies": {
     "@google/genai": "^1.38.0",

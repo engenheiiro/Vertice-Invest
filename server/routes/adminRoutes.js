@@ -9,11 +9,13 @@ import express from 'express';
 import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 import { adminLimiter } from '../middleware/rateLimiters.js';
 import { getFunnel } from '../controllers/funnelController.js';
+import { getPerformanceMetrics } from '../controllers/performanceController.js';
 
 const router = express.Router();
 
 router.use(authenticateToken);
 
 router.get('/funnel', adminLimiter, requireAdmin, getFunnel);
+router.get('/performance-metrics', adminLimiter, requireAdmin, getPerformanceMetrics);
 
 export default router;

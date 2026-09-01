@@ -11,6 +11,8 @@
  * Redis (ver I3) — a interface aqui foi mantida pequena de propósito.
  */
 
+import { recordCacheAccess } from './performanceMetrics.js';
+
 const TTL_MS = parseInt(process.env.PLAN_CACHE_TTL_MS, 10) || 5 * 60 * 1000; // 5min
 const MAX_ENTRIES = 50_000; // guarda anti-memory-leak
 
@@ -19,11 +21,16 @@ const cache = new Map(); // userId(string) -> { data, expires }
 export const getCachedUser = (userId) => {
   const key = String(userId);
   const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expires) {
-    cache.delete(key);
+  if (!entry) {
+    recordCacheAccess('user-plan', 'miss');
     return null;
   }
+  if (Date.now() > entry.expires) {
+    cache.delete(key);
+    recordCacheAccess('user-plan', 'expired');
+    return null;
+  }
+  recordCacheAccess('user-plan', 'hit');
   return entry.data;
 };
 
