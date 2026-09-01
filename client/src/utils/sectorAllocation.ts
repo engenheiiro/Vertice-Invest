@@ -1,5 +1,6 @@
 import type { Asset } from '../contexts/WalletContext';
-import { FIXED_INCOME_SUB_LABELS, fixedIncomeSubKey } from './allocation';
+import { getB3SectorFallback } from '../data/b3Sectors';
+import { FIXED_INCOME_SUB_LABELS, allocationBucket, fixedIncomeSubKey } from './allocation';
 
 // ---------------------------------------------------------------------------
 // Alocação da carteira POR SETOR, dentro de uma classe.
@@ -52,6 +53,29 @@ const normalize = (s: string): string =>
         .toLowerCase()
         .replace(/\s+/g, ' ')
         .trim();
+
+/**
+ * Setores que o backend grava quando NÃO sabe o setor. Deixá-los passar como
+ * rótulo criaria uma fatia "Outros" que se confunde com a dobra da cauda.
+ */
+const GENERIC_SECTORS = new Set(['outros', 'outro', 'n/a', 'geral']);
+
+/**
+ * Setor efetivo de uma linha — o texto sobre o qual TODA régua desta casa decide.
+ *
+ * O fallback por ticker (ações da B3 que o backend ainda não sincronizou) é
+ * aplicado AQUI, e não na sublinha da tela, porque rótulo e agregação leem deste
+ * mesmo ponto. Enquanto o fallback vivia só na sublinha, a mesma posição aparecia
+ * como "Bancos" na linha e caía em "Não classificado" no donut ao lado — um ativo,
+ * duas verdades na mesma tela.
+ */
+const resolveSector = (item: SectorLabelInput): string => {
+    const raw = (item.sector || '').trim();
+    if (raw && !GENERIC_SECTORS.has(normalize(raw))) return raw;
+    // Só ação da B3 tem tabela de fallback; FII e Exterior não entram aqui.
+    if (item.type === 'STOCK' || !item.type) return getB3SectorFallback(item.ticker || '') || '';
+    return '';
+};
 
 // --- FIIs: segmento fino (espelha FII_SEGMENT_CANON, mapeado para rótulo) -----
 
@@ -117,7 +141,7 @@ const MACRO_SECTORS: Record<string, string[]> = {
     FINANCEIRO: ['bancos', 'seguros', 'holdings financeiras', 'holdings diversificadas', 'financeiro', 'servicos financeiros diversos', 'previdencia e seguros'],
     COMMODITIES: ['mineracao', 'petroleo', 'gas e biocombustiveis', 'siderurgia', 'papel e celulose', 'agro', 'agropecuaria', 'quimica', 'quimicos', 'materiais basicos'],
     UTILITIES: ['eletricas', 'energia eletrica', 'saneamento', 'agua e saneamento', 'gas', 'utilidade publica'],
-    REAL_ESTATE: ['construcao civil', 'exploracao de imoveis', 'imobiliario', 'cemiterios'],
+    REAL_ESTATE: ['construcao civil', 'exploracao de imoveis', 'imobiliario', 'shoppings', 'cemiterios'],
     CONSUMO: ['varejo', 'alimentos', 'bebidas', 'consumo ciclico', 'tecidos, vestuario e calcados', 'comercio', 'educacao', 'utilidades domesticas', 'produtos de limpeza', 'hotelaria'],
     SAUDE: ['saude', 'medicamentos e outros produtos', 'servicos medico - hospitalares', 'analises e diagnosticos'],
     TECNOLOGIA: ['tecnologia', 'computadores e equipamentos', 'programas e servicos', 'telecom', 'telecomunicacoes', 'midia'],
@@ -157,7 +181,7 @@ export const stockSectorLabel = (asset: SectorLabelInput): string => {
     // a leitura de concentração (BOVA11 não é "Financeiro" por ter bancos dentro).
     if (asset.type === 'ETF') return ETF_SECTOR_LABEL;
 
-    const n = normalize(asset.sector || '');
+    const n = normalize(resolveSector(asset));
     if (!n) return UNKNOWN_SECTOR_LABEL;
 
     if (US_SECTOR_MAP[n]) return MACRO_LABELS[US_SECTOR_MAP[n]];
@@ -227,7 +251,8 @@ const STOCK_SUBSECTOR_LABELS: Record<string, string> = {
 export const stockSubsectorLabel = (asset: SectorLabelInput): string => {
     if (asset.type === 'ETF') return ETF_SECTOR_LABEL;
 
-    const n = normalize(asset.sector || '');
+    const sector = resolveSector(asset);
+    const n = normalize(sector);
     if (!n) return UNKNOWN_SECTOR_LABEL;
     if (STOCK_SUBSECTOR_LABELS[n]) return STOCK_SUBSECTOR_LABELS[n];
 
@@ -235,11 +260,7 @@ export const stockSubsectorLabel = (asset: SectorLabelInput): string => {
     // traduzido, que é a informação mais fina que existe para esse ativo.
     if (US_SECTOR_MAP[n]) return MACRO_LABELS[US_SECTOR_MAP[n]];
 
-    // "Outros" é o default do resolver quando NÃO se sabe o setor; deixá-lo
-    // passar criaria uma fatia "Outros" que se confunde com a dobra da cauda.
-    if (n === 'outros') return UNKNOWN_SECTOR_LABEL;
-
-    return (asset.sector || '').trim();
+    return sector;
 };
 
 // --- Renda Fixa: indexador ---------------------------------------------------
@@ -277,6 +298,48 @@ export type SectorKind = 'FII' | 'STOCK' | 'FIXED_INCOME';
  * Carteira segue no macro-setor. FII já é fino nas duas — não há um segundo nível.
  */
 export type SectorGranularity = SectorKind | 'STOCK_SUBSECTOR';
+
+/**
+ * Classes que ganham donut, com o EIXO DE RISCO de cada uma. Renda Fixa não tem
+ * setor, mas tem o equivalente: o INDEXADOR — uma RF toda em pós e uma toda em pré
+ * correm riscos opostos, e essa é a concentração que conta ali.
+ *
+ * Indexado pelo BALDE DE ALOCAÇÃO da linha (`allocationBucket`), não pelo `type`:
+ * um Tesouro marcado como Reserva vive no balde Caixa, que é reserva e não
+ * alocação. Exterior e Cripto ficam de fora por enquanto — o setor do ativo US
+ * chega em inglês, e cripto não tem setor nenhum.
+ */
+export const SECTOR_PIE_KIND: Partial<Record<string, SectorKind>> = {
+    STOCK: 'STOCK',
+    FII: 'FII',
+    FIXED_INCOME: 'FIXED_INCOME',
+};
+
+export type SectorKindInput = Partial<Pick<Asset, 'type' | 'isReserve' | 'allocationClass'>>;
+
+/**
+ * Eixo do donut em que a linha entra, ou null se a classe dela não tem donut.
+ *
+ * Fonte ÚNICA da pergunta "esta linha aparece em qual gráfico?": a lista usa para
+ * decidir se desenha o donut da classe, e a sublinha do ativo usa para escolher em
+ * que vocabulário se rotular. Duas cópias desse mapa é como uma classe passa a ter
+ * donut de um eixo e rótulo de outro.
+ */
+export const sectorKindOf = (asset: SectorKindInput): SectorKind | null =>
+    SECTOR_PIE_KIND[allocationBucket(asset as Pick<Asset, 'isReserve' | 'type' | 'allocationClass'>)] ?? null;
+
+/**
+ * Granularidade da LINHA em cada eixo. Na ação é uma casa abaixo do donut — a
+ * linha serve para reconhecer o ativo ("Energia Elétrica"), o donut para medir
+ * risco ("Utilidade Pública"), e colapsar a linha no macro empobreceria a lista.
+ * Em FII e Renda Fixa é a MESMA: lá o donut já é fino, e dar dois nomes à mesma
+ * coisa ("Títulos e Val. Mob." na linha, "Papel (CRI)" na fatia) é só ruído.
+ */
+export const ROW_GRANULARITY: Record<SectorKind, SectorGranularity> = {
+    STOCK: 'STOCK_SUBSECTOR',
+    FII: 'FII',
+    FIXED_INCOME: 'FIXED_INCOME',
+};
 
 export interface SectorSlice {
     /** Chave estável da fatia (rótulo, ou sentinela da dobra). */

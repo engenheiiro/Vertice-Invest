@@ -5,12 +5,12 @@ import { TrendingUp, TrendingDown, Trash2, Folder, PieChart, History, ChevronDow
 import { AssetTransactionsModal } from './AssetTransactionsModal';
 import { RenameReserveModal } from './RenameReserveModal';
 import { SectorPopover } from './SectorPopover';
-import type { SectorKind } from '../../utils/sectorAllocation';
+import { SECTOR_PIE_KIND } from '../../utils/sectorAllocation';
 import { formatCurrency as fmtCurrency, formatQuantity as fmtQuantity, formatTreasuryUnits as fmtTreasuryUnits, PRIVACY_MASK_SHORT, type Currency } from '../../utils/format';
 import { useConfirm } from '../../hooks/useConfirm';
 import AssetLogo from '../common/AssetLogo';
 import AssetTags from '../common/AssetTags';
-import { getAssetSubtitle, getAssetTags, displayUnitPrices } from '../../utils/assetDisplay';
+import { getAssetSubtitle, getAssetSectorParent, getAssetTags, displayUnitPrices } from '../../utils/assetDisplay';
 import { allocationBucket, sumReserveValue, isReserveAsset, usSubKeyOf } from '../../utils/allocation';
 
 /** Título exibido na lista: cofrinhos (CASH) mostram o nome; demais, o ticker. */
@@ -42,17 +42,6 @@ const CLASS_ACCENT: Record<string, { label: string; icon: string; bar: string }>
 };
 const accentOf = (type: string) => CLASS_ACCENT[type] || CLASS_ACCENT.CASH;
 
-// Classes que ganham o donut no cabeçalho, com o EIXO DE RISCO de cada uma.
-// Renda Fixa não tem setor, mas tem o equivalente: o INDEXADOR — uma RF toda em
-// pós e uma toda em pré correm riscos opostos, e essa é a concentração que conta
-// ali. Reserva/Caixa fica de fora (é reserva, não alocação); Exterior e Cripto
-// também, por enquanto (o setor de ativo US chega em inglês, e cripto não tem
-// setor nenhum).
-const SECTOR_PIE_CLASSES: Record<string, SectorKind | undefined> = {
-    STOCK: 'STOCK',
-    FII: 'FII',
-    FIXED_INCOME: 'FIXED_INCOME',
-};
 const pluralAtivos = (n: number) => `${n} ${n === 1 ? 'Ativo' : 'Ativos'}`;
 
 /**
@@ -289,7 +278,7 @@ export const AssetList = () => {
                         const totalValueGroup = groupItems.reduce((acc, item) => acc + (item.totalValue || 0), 0);
                         const gm = groupMetrics(groupItems);
                         const accent = accentOf(type);
-                        const sectorKind = SECTOR_PIE_CLASSES[type];
+                        const sectorKind = SECTOR_PIE_KIND[type];
                         const sp = stockSplit(groupItems);
                         const exterior = exteriorSplit(groupItems);
                         const showStockSplit = type === 'STOCK' && sp.etf > 0 && totalValueGroup > 0;
@@ -468,7 +457,7 @@ export const AssetList = () => {
                                 const idealPercent = targetAllocation[type as AssetType] || 0;
                                 const gm = groupMetrics(groupItems);
                                 const accent = accentOf(type);
-                                const sectorKind = SECTOR_PIE_CLASSES[type];
+                                const sectorKind = SECTOR_PIE_KIND[type];
                                 // Ações BR: decompõe o % do grupo em Ações individuais vs ETFs nacionais.
                                 const sp = stockSplit(groupItems);
                                 const exterior = exteriorSplit(groupItems);
@@ -576,6 +565,9 @@ export const AssetList = () => {
                                             const percentOfClass = totalValueGroup > 0 ? (asset.totalValue / totalValueGroup) * 100 : 0;
                                             const curveValue = curveValueOf(asset);
                                             const unitPrices = unitPricesOf(asset);
+                                            // null quando a sublinha JÁ é o nome da fatia (FII, Renda Fixa):
+                                            // repetir o texto logo acima não explicaria nada.
+                                            const sectorParent = asset.matured ? null : getAssetSectorParent(asset);
 
                                             return (
                                                 <tr key={asset.id} className="hover:bg-slate-800/30 transition-colors border-b border-slate-800/30 last:border-0 group animate-fade-in">
@@ -587,7 +579,14 @@ export const AssetList = () => {
                                                                     <span className="font-bold text-slate-200 truncate">{assetTitle(asset)}</span>
                                                                     <AssetTags tags={getAssetTags(asset)} />
                                                                 </div>
-                                                                <p className="text-[10px] text-slate-500 truncate">
+                                                                <p
+                                                                    className="text-[10px] text-slate-500 truncate"
+                                                                    // O setor da linha é mais fino que o do donut da classe (a linha
+                                                                    // reconhece o ativo, o donut mede risco). O balde vem no title
+                                                                    // para que "Petróleo e Gás" aqui e "Commodities" no gráfico
+                                                                    // deixem de parecer duas classificações que se contradizem.
+                                                                    title={sectorParent ? `No gráfico de setores da classe, entra em "${sectorParent}"` : undefined}
+                                                                >
                                                                     {/* A fração implícita acompanha o PU: sem ela, "R$ 2.984,46"
                                                                         ao lado de um saldo de R$ 746,12 não fecha na cabeça de
                                                                         ninguém. Com ela, 0,25 × 2.984,46 é o próprio saldo. */}

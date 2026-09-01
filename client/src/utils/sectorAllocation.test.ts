@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Asset } from '../contexts/WalletContext';
+import { B3_SECTOR_BY_BASE } from '../data/b3Sectors';
 import {
     ETF_SECTOR_LABEL,
     SECTOR_COLORS,
@@ -127,6 +128,35 @@ describe('stockSubsectorLabel — granularidade das listas de seleção', () => 
 
     it('ETF de índice segue fora de qualquer setor', () => {
         expect(stockSubsectorLabel(holding('BOVA11', 1, 'Índice Amplo', 'ETF'))).toBe(ETF_SECTOR_LABEL);
+    });
+});
+
+describe('todo setor exibível tem casa no donut', () => {
+    // A invariante que impede a divergência de voltar: se a linha consegue exibir
+    // um setor, a agregação PRECISA saber em que fatia colocá-lo. Um rótulo novo
+    // que não case com nenhum macro-setor cai aqui, e não na tela do usuário.
+    it('nenhum setor do fallback por ticker cai em "Não classificado"', () => {
+        const orfaos = Object.entries(B3_SECTOR_BY_BASE)
+            .filter(([, setor]) => stockSectorLabel({ sector: setor, type: 'STOCK' }) === UNKNOWN_SECTOR_LABEL)
+            .map(([base, setor]) => `${base} (${setor})`);
+        expect(orfaos).toEqual([]);
+    });
+
+    it('o fallback por ticker alimenta a AGREGAÇÃO, não só a sublinha', () => {
+        // KLBN4 sem setor no banco: a linha sempre soube dizer "Papel e Celulose"
+        // pelo ticker. Enquanto o donut não sabia, o mesmo ativo aparecia com setor
+        // na lista e como "Não classificado" na fatia ao lado.
+        expect(stockSubsectorLabel({ ticker: 'KLBN4', sector: '', type: 'STOCK' })).toBe('Papel e Celulose');
+        const [slice] = computeSectorAllocation(
+            [{ ticker: 'KLBN4', sector: '', type: 'STOCK', totalValue: 1000 }],
+            'STOCK',
+        );
+        expect(slice.label).toBe('Commodities');
+    });
+
+    it('setor genérico do backend não vira rótulo — nem na linha, nem na fatia', () => {
+        expect(stockSubsectorLabel({ ticker: 'XPTO3', sector: 'Outros', type: 'STOCK' })).toBe(UNKNOWN_SECTOR_LABEL);
+        expect(stockSectorLabel({ ticker: 'XPTO3', sector: 'Outros', type: 'STOCK' })).toBe(UNKNOWN_SECTOR_LABEL);
     });
 });
 

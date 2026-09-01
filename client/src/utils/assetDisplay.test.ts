@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getAssetSubtitle, getAssetTags } from './assetDisplay';
+import { getAssetSectorParent, getAssetSubtitle, getAssetTags } from './assetDisplay';
 
 describe('getAssetSubtitle', () => {
   it('mostra sempre o setor, ignorando o nome real', () => {
@@ -8,7 +8,7 @@ describe('getAssetSubtitle', () => {
     ).toBe('Criptoativo'); // Criptomoeda → traduzido p/ Criptoativo
     expect(
       getAssetSubtitle({ ticker: 'PETR3', name: 'Petrobras', sector: 'Petróleo', type: 'STOCK' })
-    ).toBe('Petróleo');
+    ).toBe('Petróleo e Gás'); // canonizado pela MESMA régua do donut (subsetor)
   });
 
   it('traduz setores em inglês de ações US', () => {
@@ -41,20 +41,35 @@ describe('getAssetSubtitle', () => {
     expect(getAssetSubtitle({ ticker: 'TAEE11', type: 'STOCK' })).toBe('Energia Elétrica');
   });
 
-  it('ação não mapeada e sem setor cai no rótulo do tipo', () => {
+  it('ação sem setor reconhecível diz o mesmo que o donut: "Não classificado"', () => {
+    // "Ação" seria mais bonito e MENTIROSO em relação à fatia cinza ao lado, que
+    // conta essa mesma posição como não classificada.
     expect(
       getAssetSubtitle({ ticker: 'XPTO3', name: 'XPTO3', sector: 'Outros', type: 'STOCK' })
-    ).toBe('Ação');
+    ).toBe('Não classificado');
   });
 
-  it('renda fixa com nome longo = ticker → "Renda Fixa"', () => {
+  it('renda fixa mostra o INDEXADOR — mesma régua do donut e das sub-metas', () => {
+    // Sem índice explícito, a convenção do accrual manda (rate ausente = %CDI → pós).
     expect(
       getAssetSubtitle({
         ticker: 'TESOURO RENDA+ 2045',
         name: 'TESOURO RENDA+ 2045',
         type: 'FIXED_INCOME',
       })
+    ).toBe('Pós-fixado');
+    expect(
+      getAssetSubtitle({ ticker: 'TESOURO IPCA+ 2035', type: 'FIXED_INCOME', fixedIncomeIndex: 'IPCA' })
+    ).toBe('IPCA');
+    // Reserva vive no balde Caixa, que não tem donut: segue no rótulo do tipo.
+    expect(
+      getAssetSubtitle({ ticker: 'TESOURO SELIC 2029', type: 'FIXED_INCOME', isReserve: true })
     ).toBe('Renda Fixa');
+  });
+
+  it('FII: a sublinha é LITERALMENTE o rótulo da fatia (o donut já é fino)', () => {
+    expect(getAssetSubtitle({ ticker: 'KNCR11', sector: 'Títulos e Val. Mob.', type: 'FII' })).toBe('Papel (CRI)');
+    expect(getAssetSubtitle({ ticker: 'HGLG11', sector: 'Imóveis Industriais e Logísticos', type: 'FII' })).toBe('Logística');
   });
 
   it('caixa/reserva → "Caixa / Reserva"', () => {
@@ -80,10 +95,35 @@ describe('getAssetSubtitle', () => {
     expect(getAssetSubtitle({ ticker: 'BOVA11', sector: 'ETF', type: 'ETF' })).toBe('Fundo de Índice');
   });
 
+  it('setor da linha que o donut não conhece não existe: o fallback é o MESMO', () => {
+    // Antes, a linha adivinhava o setor pelo ticker e a agregação não recebia esse
+    // palpite — "Bancos" na linha, "Não classificado" na fatia, mesmo ativo.
+    expect(getAssetSubtitle({ ticker: 'MULT3', sector: 'Outros', type: 'STOCK' })).toBe('Shoppings');
+    expect(getAssetSectorParent({ ticker: 'MULT3', sector: 'Outros', type: 'STOCK' })).toBe('Imobiliário');
+  });
+
   it('Exterior sem setor útil usa o sub-tipo na sublinha', () => {
     expect(getAssetSubtitle({ ticker: 'O', type: 'STOCK_US', usSubType: 'REIT' })).toBe('Imobiliário (REIT)');
     expect(getAssetSubtitle({ ticker: 'GLD', type: 'STOCK_US', usSubType: 'GOLD' })).toBe('Ouro');
     expect(getAssetSubtitle({ ticker: 'AAPL', type: 'STOCK_US' })).toBe('Ação (EUA)');
+  });
+});
+
+describe('getAssetSectorParent', () => {
+  it('ação: devolve o balde do donut, que é mais largo que a sublinha', () => {
+    expect(getAssetSectorParent({ ticker: 'PETR4', sector: 'Petróleo', type: 'STOCK' })).toBe('Commodities');
+    expect(getAssetSectorParent({ ticker: 'CMIG4', sector: 'Elétricas', type: 'STOCK' })).toBe('Utilidade Pública');
+  });
+
+  it('ETF: a sublinha descreve o índice, o balde do donut vem no title', () => {
+    expect(getAssetSectorParent({ ticker: 'BOVA11', sector: 'Índice Amplo', type: 'ETF' })).toBe('ETFs / Índices');
+  });
+
+  it('null quando o title só repetiria a sublinha ou a classe não tem donut', () => {
+    expect(getAssetSectorParent({ ticker: 'KNCR11', sector: 'Títulos e Val. Mob.', type: 'FII' })).toBeNull();
+    expect(getAssetSectorParent({ ticker: 'TESOURO IPCA+ 2035', type: 'FIXED_INCOME', fixedIncomeIndex: 'IPCA' })).toBeNull();
+    expect(getAssetSectorParent({ ticker: 'AAPL', sector: 'Technology', type: 'STOCK_US' })).toBeNull();
+    expect(getAssetSectorParent({ ticker: 'BTC', sector: 'Criptomoeda', type: 'CRYPTO' })).toBeNull();
   });
 });
 

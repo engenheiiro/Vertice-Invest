@@ -1,5 +1,13 @@
 import type { AssetType } from '../contexts/WalletContext';
 import { getB3SectorFallback } from '../data/b3Sectors';
+import {
+  ETF_SECTOR_LABEL,
+  ROW_GRANULARITY,
+  sectorKindOf,
+  sectorLabelFor,
+  type SectorKindInput,
+  type SectorLabelInput,
+} from './sectorAllocation';
 
 /**
  * Setores genéricos que não agregam informação na 2ª linha. 'ETF' entra aqui
@@ -68,7 +76,20 @@ interface AssetLike {
   matured?: boolean;
   /** Renda Fixa: 'MTM' = marcada pelo PU oficial; 'ACCRUAL' = valor na curva. */
   pricingSource?: 'MTM' | 'ACCRUAL' | null;
+  /** Reserva de emergência: sai da base de alocação e não entra em donut nenhum. */
+  isReserve?: boolean | null;
+  /** Renda Fixa: definem o indexador exibido (mesma régua das sub-metas). */
+  fixedIncomeIndex?: 'SELIC' | 'CDI' | 'IPCA' | 'PRE' | null;
+  fixedIncomeRate?: number | null;
 }
+
+/**
+ * ETF é a única linha que NÃO se rotula pelo canon do donut. O balde dele lá é
+ * "ETFs / Índices" — que a sublinha só repetiria, já que o selo ao lado do ticker
+ * também diz ETF. "Índice Amplo" informa mais, e o balde continua a um passe de
+ * mouse de distância (ver getAssetSectorParent).
+ */
+const isEtfVehicle = (asset: AssetLike): boolean => asset.type === 'ETF' || asset.usSubType === 'ETF';
 
 /**
  * Texto da 2ª linha (sublinha) de um ativo. Decisão de produto: mostra SEMPRE o
@@ -77,6 +98,13 @@ interface AssetLike {
  * Ordem: setor do backend → fallback de setor por ticker (ações) → rótulo do tipo.
  */
 export function getAssetSubtitle(asset: AssetLike): string {
+  // 0. Classe que tem donut de setor: a sublinha lê a MESMA régua do gráfico
+  //    (sectorAllocation), na granularidade de linha daquele eixo. Sem isto a tela
+  //    dizia "Títulos e Val. Mob." embaixo do ticker e "Papel (CRI)" na fatia — o
+  //    mesmo setor com dois nomes, um centímetro de distância.
+  const kind = isEtfVehicle(asset) ? null : sectorKindOf(asset as SectorKindInput);
+  if (kind) return sectorLabelFor(asset as SectorLabelInput, ROW_GRANULARITY[kind]);
+
   // 1. Setor/segmento vindo do backend, quando não for genérico
   const sector = (asset.sector || '').trim();
   if (sector && !GENERIC_SECTORS.has(sector.toUpperCase())) return translateSector(sector);
@@ -95,6 +123,23 @@ export function getAssetSubtitle(asset: AssetLike): string {
 
   // 4. Rótulo por tipo
   return TYPE_FALLBACK[String(asset.type)] || 'Ativo';
+}
+
+/**
+ * Balde do donut em que a linha entra, quando ele DIFERE do texto da sublinha —
+ * senão o title só repetiria o que já está escrito logo acima.
+ *
+ * É o que fecha a conta nos dois sentidos: sem ele o leitor via "Petróleo e Gás"
+ * na linha, "Commodities 3,3%" no gráfico, e não tinha como saber que era a mesma
+ * posição. Só a ação (e o ETF) chegam aqui — em FII e Renda Fixa os dois textos
+ * são iguais por construção.
+ */
+export function getAssetSectorParent(asset: AssetLike): string | null {
+  if (isEtfVehicle(asset)) return asset.type === 'ETF' ? ETF_SECTOR_LABEL : null;
+  const kind = sectorKindOf(asset as SectorKindInput);
+  if (!kind) return null;
+  const parent = sectorLabelFor(asset as SectorLabelInput, kind);
+  return parent === getAssetSubtitle(asset) ? null : parent;
 }
 
 // ---------------------------------------------------------------------------
