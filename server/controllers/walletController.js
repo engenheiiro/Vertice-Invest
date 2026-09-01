@@ -19,7 +19,8 @@ import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from '../services/treasur
 import { isDollarized, resolveAssetCurrency, resolveTransactionCurrency, needsCurrencyFallback } from '../utils/assetCurrency.js';
 import { positionCostBRL, positionRealizedProfitBRL } from '../utils/fxRate.js';
 import { sumTransactionFlowBRL, transactionsAfterSnapshotFilter } from '../utils/walletSnapshot.js';
-import { resolveAllocationClass } from '../utils/assetAllocation.js';
+import { allocationBucket, resolveAllocationClass } from '../utils/assetAllocation.js';
+import { cashFlowTickerCondition } from '../utils/cashFlowFilter.js';
 import logger from '../config/logger.js';
 import AppError from '../utils/AppError.js';
 import { cdiAnnualRateForYear, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
@@ -1297,15 +1298,19 @@ export const getWalletDividends = async (req, res, next) => {
 
 /** Extrato paginado (aba Extrato) — compartilhado com a rota pública. */
 export const buildCashFlowPayload = async (userId, walletId, { page = 1, limit = 20, filterType } = {}) => {
-        // Cofrinhos (Reserva/Caixa) desta carteira: cada um é um UserAsset type=CASH
-        // com ticker próprio. Mapa ticker→nome para rotular o extrato e set para filtrar.
-        const cashAssets = await UserAsset.find({ user: userId, wallet: walletId, type: 'CASH' }).select('ticker name type currency').lean();
-        const cashTickers = cashAssets.map(a => a.ticker);
-        const cashNameByTicker = new Map(cashAssets.map(a => [a.ticker, a.name || 'Reserva']));
+        // UserAsset é a fonte autoritativa da classe econômica. Isso também cobre
+        // ETFs por exposição e Renda Fixa marcada como Reserva separada.
+        const portfolioAssets = await UserAsset.find({ user: userId, wallet: walletId })
+            .select('ticker name type currency allocationClass isReserve usSubType')
+            .lean();
+        const assetByTicker = new Map(portfolioAssets.map(a => [a.ticker, a]));
+        const assetClassByTicker = new Map(portfolioAssets.map(a => [a.ticker, allocationBucket(a)]));
+        const reserveAssets = portfolioAssets.filter(a => allocationBucket(a) === 'CASH');
+        const cashNameByTicker = new Map(reserveAssets.map(a => [a.ticker, a.name || 'Reserva']));
 
         const query = { user: userId, wallet: walletId };
-        if (filterType === 'CASH') query.ticker = { $in: cashTickers };
-        else if (filterType === 'TRADE') query.ticker = { $nin: cashTickers };
+        const tickerCondition = cashFlowTickerCondition(portfolioAssets, filterType);
+        if (tickerCondition) query.ticker = tickerCondition;
         const transactions = await AssetTransaction.find(query).sort({ date: -1, createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
         const total = await AssetTransaction.countDocuments(query);
 
@@ -1317,8 +1322,8 @@ export const buildCashFlowPayload = async (userId, walletId, { page = 1, limit =
         // então nem uma carteira gigante amplia a consulta. Continua auto-curável:
         // se dado legado reaparecer (restore de backup antigo), o fallback volta
         // sozinho sem precisar rodar o backfill de novo.
-        const legacyTickers = [...new Set(transactions.filter(needsCurrencyFallback).map(t => t.ticker))];
-        const assetByTicker = new Map(cashAssets.map(a => [a.ticker, a]));
+        const legacyTickers = [...new Set(transactions.filter(needsCurrencyFallback).map(t => t.ticker))]
+            .filter(ticker => !assetByTicker.has(ticker));
         if (legacyTickers.length > 0) {
             const legacyAssets = await UserAsset.find({
                 user: userId, wallet: walletId, ticker: { $in: legacyTickers },
@@ -1333,6 +1338,8 @@ export const buildCashFlowPayload = async (userId, walletId, { page = 1, limit =
                     ...t.toObject(),
                     isCashOp,
                     cashName: isCashOp ? cashNameByTicker.get(t.ticker) : undefined,
+                    assetClass: assetClassByTicker.get(t.ticker),
+                    assetType: assetByTicker.get(t.ticker)?.type,
                     // Gravada > posição atual > BRL.
                     currency: resolveTransactionCurrency(t, assetByTicker.get(t.ticker)),
                 };

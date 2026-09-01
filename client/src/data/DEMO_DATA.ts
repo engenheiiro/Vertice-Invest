@@ -186,7 +186,10 @@ export const DEMO_TRANSACTIONS = {
         totalValue: asset.totalCost,
         // Início da janela demo — coerente com o primeiro ponto do DEMO_HISTORY.
         date: demoStartDate().toISOString().slice(0, 10),
-        isCashOp: false
+        isCashOp: asset.type === 'CASH' || asset.isReserve === true,
+        assetClass: asset.isReserve === true ? 'CASH' : (asset.allocationClass || asset.type),
+        assetType: asset.type,
+        currency: asset.currency
     })),
     pagination: { hasMore: false, currentPage: 1, totalPages: 1, totalItems: DEMO_ASSETS.length }
 };

@@ -122,7 +122,7 @@ export const walletService = {
 
     // Atualizado: Suporte a filtros
     async getCashFlow(page: number = 1, limit: number = 20, filterType: string = 'ALL', walletId?: string) {
-        const response = await authService.api(withWallet(`/api/wallet/cashflow?page=${page}&limit=${limit}&filterType=${filterType}`, walletId));
+        const response = await authService.api(withWallet(`/api/wallet/cashflow?page=${page}&limit=${limit}&filterType=${encodeURIComponent(filterType)}`, walletId));
         if (!response.ok) throw new Error("Falha ao buscar extrato");
         return await response.json();
     },
