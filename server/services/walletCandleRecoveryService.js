@@ -1,9 +1,11 @@
 import logger from '../config/logger.js';
-import AssetHistory from '../models/AssetHistory.js';
 import UserAsset from '../models/UserAsset.js';
 import { historyStorageKey } from '../utils/assetHistory.js';
+import { loadClosesForDay } from '../utils/dayCloses.js';
+import { findTreasuryPu } from '../utils/fixedIncome.js';
 import { brazilDayKey, isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { financialService } from './financialService.js';
+import { loadTreasuryPricing } from './treasuryPriceService.js';
 import { ensureWalletDayCandles } from './walletDayCandleService.js';
 
 const NON_MARKET_TYPES = ['CASH', 'FIXED_INCOME'];
@@ -15,31 +17,27 @@ export const previousDayKey = (dayStr) => {
     return date.toISOString().slice(0, 10);
 };
 
-const loadDayCloses = async (assetRefs, dayStr) => {
-    const keys = [...new Set(assetRefs
-        .map((asset) => historyStorageKey(asset.ticker, asset.type))
-        .filter(Boolean))];
-    if (keys.length === 0) return new Map();
-
-    const rows = await AssetHistory.aggregate([
-        { $match: { ticker: { $in: keys } } },
-        {
-            $project: {
-                ticker: 1,
-                candle: {
-                    $first: {
-                        $filter: {
-                            input: { $ifNull: ['$history', []] },
-                            as: 'h',
-                            cond: { $eq: ['$$h.date', dayStr] },
-                        },
-                    },
-                },
-            },
-        },
-        { $match: { 'candle.close': { $gt: 0 } } },
-    ]);
-    return new Map(rows.map((row) => [row.ticker, row.candle.close]));
+/**
+ * Reconstrói o histórico das carteiras afetadas até `dayStr`. Compartilhado
+ * pelas duas reconciliações (candle tardio e PU tardio do Tesouro): as duas
+ * corrigem o MESMO snapshot e nunca devem divergir na forma de reescrevê-lo.
+ */
+const rebuildAffectedWallets = async (affected, dayStr, tag) => {
+    let rebuilt = 0;
+    let failed = 0;
+    for (const { wallet, user } of affected.values()) {
+        try {
+            await financialService.rebuildUserHistory(user, wallet, {
+                throughDayKey: dayStr,
+                source: 'REBUILD',
+            });
+            rebuilt += 1;
+        } catch (error) {
+            failed += 1;
+            logger.error(`[${tag}] Reconciliação do snapshot ${wallet} @ ${dayStr}: ${error.message}`);
+        }
+    }
+    return { rebuilt, failed };
 };
 
 /**
@@ -76,7 +74,7 @@ export const reconcilePreviousWalletSnapshot = async ({
         return { status: 'SKIPPED', day: dayStr, recovered: 0, rebuilt: 0, failed: 0 };
     }
 
-    const closeMap = await loadDayCloses(eligible, dayStr);
+    const closeMap = await loadClosesForDay(eligible, dayStr);
     const resolved = await ensureWalletDayCandles(eligible, dayStr, closeMap);
     if (resolved.size === 0) {
         return { status: 'SUCCESS', day: dayStr, recovered: 0, rebuilt: 0, failed: 0 };
@@ -92,20 +90,7 @@ export const reconcilePreviousWalletSnapshot = async ({
         affected.set(String(asset.wallet), { wallet: asset.wallet, user: asset.user });
     }
 
-    let rebuilt = 0;
-    let failed = 0;
-    for (const { wallet, user } of affected.values()) {
-        try {
-            await financialService.rebuildUserHistory(user, wallet, {
-                throughDayKey: dayStr,
-                source: 'REBUILD',
-            });
-            rebuilt += 1;
-        } catch (error) {
-            failed += 1;
-            logger.error(`[DayCandle] Reconciliação do snapshot ${wallet} @ ${dayStr}: ${error.message}`);
-        }
-    }
+    const { rebuilt, failed } = await rebuildAffectedWallets(affected, dayStr, 'DayCandle');
 
     const tickers = [...new Set(eligible
         .filter((asset) => resolved.has(historyStorageKey(asset.ticker, asset.type)))
@@ -128,4 +113,76 @@ export const reconcilePreviousWalletSnapshot = async ({
     };
 };
 
-export const walletCandleRecoveryService = { reconcilePreviousWalletSnapshot };
+/**
+ * Segunda passagem do fechamento do Tesouro Direto.
+ *
+ * O Tesouro publica o PU da Data Base do dia D só no dia D+1 (~10:20), e a
+ * ingestão roda 12:30. O snapshot das 23:59 do dia D, portanto, NUNCA enxerga o
+ * PU do próprio dia: ele marca o título pelo último ponto disponível, que é o de
+ * D-1. Qualquer recomputação posterior — o rebuild, e a âncora do "início do
+ * dia" no KPI ao vivo — resolve o PU de D e chega a outro número.
+ *
+ * É o mesmo defeito que a âncora de candle resolveu, sobrevivendo aqui porque a
+ * série de PU, ao contrário do candle, NÃO é imutável: um ponto novo aparece
+ * depois que o snapshot já foi gravado. Medido em 31/08/2026 numa carteira com
+ * R$ 836 em Tesouro: R$ 838,01 pelo PU de 28/08 contra R$ 836,24 pelo de 31/08 —
+ * R$ 1,77 de divergência num único dia, contra os R$ 0,02 de resíduo do resto
+ * da carteira.
+ *
+ * A correção é a mesma da recuperação de candle: quando o dado tardio chega,
+ * reconstrói o snapshot daquele dia. Só as carteiras que detêm um título cujo PU
+ * do dia REALMENTE chegou entram no rebuild — sem ponto exato para o dia, não há
+ * o que reconciliar e a passagem sai sem escrever nada.
+ */
+export const reconcileTreasurySnapshot = async ({ now = new Date(), targetDay = null } = {}) => {
+    const todayKey = brazilDayKey(now);
+    const dayStr = targetDay || previousDayKey(todayKey);
+    if (!isBrBusinessDay(dayStr)) {
+        return { status: 'SKIPPED', day: dayStr, resolved: 0, rebuilt: 0, failed: 0 };
+    }
+
+    const holdings = await UserAsset.find({ type: 'FIXED_INCOME', quantity: { $gt: 0 } })
+        .select('ticker type quantity maturityDate fixedIncomeIndex user wallet').lean();
+    if (holdings.length === 0) {
+        return { status: 'SKIPPED', day: dayStr, resolved: 0, rebuilt: 0, failed: 0 };
+    }
+
+    const pricing = await loadTreasuryPricing(holdings);
+    const affected = new Map();
+    const tickers = new Set();
+    for (const asset of holdings) {
+        if (!asset.wallet || !asset.user) continue;
+        const history = pricing.historyFor(asset);
+        const hit = history ? findTreasuryPu(history, dayStr) : null;
+        // Ponto EXATO do dia. Um PU anterior é o que o snapshot já usou — nada
+        // mudou e reconstruir seria trabalho à toa.
+        if (!hit || hit.point.date !== dayStr) continue;
+        tickers.add(asset.ticker);
+        affected.set(String(asset.wallet), { wallet: asset.wallet, user: asset.user });
+    }
+
+    if (affected.size === 0) {
+        return { status: 'SUCCESS', day: dayStr, resolved: 0, rebuilt: 0, failed: 0 };
+    }
+
+    const { rebuilt, failed } = await rebuildAffectedWallets(affected, dayStr, 'TreasuryPU');
+
+    logger.info('[TreasuryPU] Snapshot anterior reconciliado após publicação do PU oficial', {
+        day: dayStr,
+        tickers: [...tickers],
+        resolved: tickers.size,
+        rebuilt,
+        failed,
+    });
+
+    return {
+        status: failed > 0 ? 'PARTIAL' : 'SUCCESS',
+        day: dayStr,
+        resolved: tickers.size,
+        rebuilt,
+        failed,
+        tickers: [...tickers],
+    };
+};
+
+export const walletCandleRecoveryService = { reconcilePreviousWalletSnapshot, reconcileTreasurySnapshot };

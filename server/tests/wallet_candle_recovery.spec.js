@@ -12,12 +12,16 @@ const mocks = vi.hoisted(() => ({
   historyAggregate: vi.fn(),
   ensureDayCandles: vi.fn(),
   rebuildUserHistory: vi.fn(),
+  loadTreasuryPricing: vi.fn(),
   loggerInfo: vi.fn(),
   loggerError: vi.fn(),
 }));
 
 vi.mock('../models/UserAsset.js', () => ({ default: { find: mocks.userAssetFind } }));
 vi.mock('../models/AssetHistory.js', () => ({ default: { aggregate: mocks.historyAggregate } }));
+vi.mock('../services/treasuryPriceService.js', () => ({
+  loadTreasuryPricing: mocks.loadTreasuryPricing,
+}));
 vi.mock('../services/walletDayCandleService.js', () => ({
   ensureWalletDayCandles: mocks.ensureDayCandles,
 }));
@@ -28,7 +32,7 @@ vi.mock('../config/logger.js', () => ({
   default: { info: mocks.loggerInfo, error: mocks.loggerError, warn: vi.fn(), debug: vi.fn() },
 }));
 
-const { previousDayKey, reconcilePreviousWalletSnapshot } = await import(
+const { previousDayKey, reconcilePreviousWalletSnapshot, reconcileTreasurySnapshot } = await import(
   '../services/walletCandleRecoveryService.js'
 );
 
@@ -43,6 +47,7 @@ beforeEach(() => {
   mocks.historyAggregate.mockResolvedValue([]);
   mocks.ensureDayCandles.mockResolvedValue(new Map());
   mocks.rebuildUserHistory.mockResolvedValue([]);
+  mocks.loadTreasuryPricing.mockResolvedValue({ historyFor: () => null });
 });
 
 describe('walletCandleRecoveryService', () => {
@@ -125,5 +130,96 @@ describe('walletCandleRecoveryService', () => {
     expect(mocks.userAssetFind).not.toHaveBeenCalled();
     expect(mocks.ensureDayCandles).not.toHaveBeenCalled();
     expect(mocks.rebuildUserHistory).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Reconciliação do PU do Tesouro.
+ *
+ * O Tesouro publica o PU da Data Base do dia D só no dia D+1, e a ingestão roda
+ * 12:30. O snapshot das 23:59 do dia D nunca enxerga o PU do próprio dia — marca
+ * o título pelo de D-1 — enquanto o rebuild e a âncora do KPI ao vivo, rodando
+ * depois, resolvem o PU de D. Medido em 31/08/2026: R$ 838,01 pelo PU de 28/08
+ * contra R$ 836,24 pelo de 31/08, num único dia.
+ */
+describe('reconcileTreasurySnapshot', () => {
+  const serie = [
+    { date: '2026-08-27', pu: 2982.24 },
+    { date: '2026-08-28', pu: 2994.37 },
+    { date: '2026-08-31', pu: 2987.92 },
+  ];
+  const tesouro = { ticker: 'TESOURO IPCA+ 2032', type: 'FIXED_INCOME', quantity: 1, user: 'u1', wallet: 'w1' };
+
+  it('reconstrói a carteira quando o PU do dia finalmente chega', async () => {
+    wireHoldings([tesouro]);
+    mocks.loadTreasuryPricing.mockResolvedValue({ historyFor: () => serie });
+
+    const result = await reconcileTreasurySnapshot({ targetDay: '2026-08-31' });
+
+    expect(mocks.rebuildUserHistory).toHaveBeenCalledWith('u1', 'w1', {
+      throughDayKey: '2026-08-31',
+      source: 'REBUILD',
+    });
+    expect(result).toMatchObject({ status: 'SUCCESS', resolved: 1, rebuilt: 1, failed: 0 });
+  });
+
+  it('não reconstrói enquanto o PU do dia não existe — só há o ponto anterior', async () => {
+    wireHoldings([tesouro]);
+    // Série parada em 28/08: é exatamente o PU que o snapshot de 31/08 já usou.
+    mocks.loadTreasuryPricing.mockResolvedValue({ historyFor: () => serie.slice(0, 2) });
+
+    const result = await reconcileTreasurySnapshot({ targetDay: '2026-08-31' });
+
+    expect(mocks.rebuildUserHistory).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'SUCCESS', resolved: 0, rebuilt: 0 });
+  });
+
+  it('ignora renda fixa sem série de PU (fica na curva, não é marcável)', async () => {
+    wireHoldings([{ ticker: 'PÓS-FIXADO', type: 'FIXED_INCOME', quantity: 1, user: 'u1', wallet: 'w1' }]);
+    mocks.loadTreasuryPricing.mockResolvedValue({ historyFor: () => null });
+
+    const result = await reconcileTreasurySnapshot({ targetDay: '2026-08-31' });
+
+    expect(mocks.rebuildUserHistory).not.toHaveBeenCalled();
+    expect(result.resolved).toBe(0);
+  });
+
+  it('reconstrói cada carteira uma vez, mesmo com dois títulos marcáveis', async () => {
+    wireHoldings([
+      tesouro,
+      { ticker: 'TESOURO PREFIXADO 2032', type: 'FIXED_INCOME', quantity: 1, user: 'u1', wallet: 'w1' },
+      { ticker: 'TESOURO IPCA+ 2032', type: 'FIXED_INCOME', quantity: 1, user: 'u2', wallet: 'w2' },
+    ]);
+    mocks.loadTreasuryPricing.mockResolvedValue({ historyFor: () => serie });
+
+    const result = await reconcileTreasurySnapshot({ targetDay: '2026-08-31' });
+
+    expect(mocks.rebuildUserHistory).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ rebuilt: 2, resolved: 2 });
+  });
+
+  it('em dia sem pregão não consulta posição nem reconstrói', async () => {
+    wireHoldings([tesouro]);
+
+    const result = await reconcileTreasurySnapshot({ targetDay: '2026-08-30' }); // domingo
+
+    expect(result.status).toBe('SKIPPED');
+    expect(mocks.userAssetFind).not.toHaveBeenCalled();
+    expect(mocks.rebuildUserHistory).not.toHaveBeenCalled();
+  });
+
+  it('uma carteira quebrada não impede a reconstrução das outras', async () => {
+    wireHoldings([
+      tesouro,
+      { ticker: 'TESOURO IPCA+ 2032', type: 'FIXED_INCOME', quantity: 1, user: 'u2', wallet: 'w2' },
+    ]);
+    mocks.loadTreasuryPricing.mockResolvedValue({ historyFor: () => serie });
+    mocks.rebuildUserHistory
+      .mockRejectedValueOnce(new Error('histórico insuficiente'))
+      .mockResolvedValueOnce([]);
+
+    const result = await reconcileTreasurySnapshot({ targetDay: '2026-08-31' });
+
+    expect(result).toMatchObject({ status: 'PARTIAL', rebuilt: 1, failed: 1 });
   });
 });

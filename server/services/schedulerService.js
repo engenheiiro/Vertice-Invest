@@ -49,7 +49,7 @@ import {
 } from '../utils/walletSnapshot.js';
 import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
 import { ensureWalletDayCandles } from './walletDayCandleService.js';
-import { reconcilePreviousWalletSnapshot } from './walletCandleRecoveryService.js';
+import { reconcilePreviousWalletSnapshot, reconcileTreasurySnapshot } from './walletCandleRecoveryService.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { trackJobSafe } from '../utils/jobRun.js';
 import { withJobLease } from '../utils/jobLease.js';
@@ -962,7 +962,20 @@ export const initScheduler = () => {
         try {
             const { ingestTreasuryPrices } = await import('./treasuryPriceService.js');
             const result = await ingestTreasuryPrices();
-            if (!result.ok) logger.warn(`⚠️ [Scheduler] Série de PU do Tesouro não atualizada: ${result.reason}`);
+            if (!result.ok) {
+                logger.warn(`⚠️ [Scheduler] Série de PU do Tesouro não atualizada: ${result.reason}`);
+                return;
+            }
+            // O snapshot das 23:59 de ontem foi gravado ANTES deste PU existir —
+            // marcou o título pelo dia anterior. Reconcilia agora, enquanto o
+            // rebuild ainda é barato e muito antes do snapshot desta noite.
+            // Sequencial ao ingest de propósito: sem o PU no banco não há o que
+            // reconciliar, e nenhuma outra rotina reescreve WalletSnapshot às 12:30.
+            try {
+                await reconcileTreasurySnapshot();
+            } catch (e) {
+                logger.error(`❌ [Scheduler] Reconciliação do PU do Tesouro: ${e.message}`);
+            }
         } catch (error) {
             logger.error(`❌ [Scheduler] Sync PU do Tesouro: ${error.message}`);
         }
