@@ -2,7 +2,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useWallet } from '../../contexts/WalletContext';
-import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, ArrowRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
+import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, ChevronRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
 import { SkeletonKpiGrid, FitText, PrivacyToggle } from '../ui'; // (I12) skeleton padronizado + auto-fit de valor
 import { formatCurrency as fmtCurrency, formatSharpe, describeSharpe } from '../../utils/format';
 import { useCountUp } from '../../hooks/useCountUp';
@@ -117,9 +117,7 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                     </span>
                 </div>
 
-                {/* items-end: com o "Ver o dia" abaixo do valor, a coluna da esquerda
-                    cresce e a pílula precisa acompanhar a base, não o centro. */}
-                <div className="relative flex items-end justify-between gap-3 mt-3 pt-3 border-t border-white/[0.14]">
+                <div className="relative flex items-center justify-between mt-3 pt-3 border-t border-white/[0.14]">
                     <div>
                         <div className="mb-0.5 flex items-center gap-1">
                             <p className="text-[9px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.6)]">Variação Hoje</p>
@@ -128,21 +126,25 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                                 iconClass="text-[rgba(255,255,255,0.55)] hover:text-[#eafff6]"
                             />
                         </div>
-                        <div className="text-sm font-bold text-[#fff]">
-                            {isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}
-                        </div>
-                        {/* Rótulo escrito, não ícone mudo: a fraqueza de guardar o
-                            detalhamento atrás de um clique é descoberta, e ela se
-                            resolve dizendo o que há do outro lado. Fora do link
-                            público — lá o detalhamento não é oferecido ao visitante. */}
-                        {!isReadOnly && (
+                        {/* O próprio valor abre o detalhamento — a setinha é a única
+                            marca de que há algo atrás. O `-m-1 p-1` dá área de clique
+                            sem deslocar o texto nem crescer a altura do card. No link
+                            público não há botão: o detalhamento não é oferecido ao
+                            visitante. */}
+                        {isReadOnly ? (
+                            <div className="text-sm font-bold text-[#fff]">
+                                {isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}
+                            </div>
+                        ) : (
                             <button
                                 type="button"
                                 onClick={() => setIsDayModalOpen(true)}
-                                className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-white/[0.26] bg-white/[0.09] px-2.5 py-1 text-[11px] font-semibold text-[#eafff6] transition-colors hover:border-white/40 hover:bg-white/[0.17] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8ff0c8]"
+                                title="Ver de quais ativos veio a variação de hoje"
+                                aria-label="Ver de quais ativos veio a variação de hoje"
+                                className="group -m-1 flex items-center gap-1 rounded-md p-1 text-sm font-bold text-[#fff] transition-colors hover:bg-white/[0.12] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8ff0c8]"
                             >
-                                Ver o dia
-                                <ArrowRight size={11} />
+                                {isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}
+                                <ChevronRight size={13} className="text-[rgba(255,255,255,0.55)] transition-colors group-hover:text-[#eafff6]" />
                             </button>
                         )}
                     </div>

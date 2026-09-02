@@ -63,7 +63,7 @@ describe('WalletSummary', () => {
         render(<WalletSummary />);
 
         // Ícone mudo não é descoberto: o botão diz o que há do outro lado.
-        const botao = screen.getByRole('button', { name: /Ver o dia/ });
+        const botao = screen.getByRole('button', { name: /variação de hoje/i });
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
         fireEvent.click(botao);
@@ -77,7 +77,7 @@ describe('WalletSummary', () => {
         walletState.isReadOnly = true;
         render(<WalletSummary />);
 
-        expect(screen.queryByRole('button', { name: /Ver o dia/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /variação de hoje/i })).not.toBeInTheDocument();
     });
 
     it('usa a mesma identidade canônica do gráfico para o saldo total', () => {

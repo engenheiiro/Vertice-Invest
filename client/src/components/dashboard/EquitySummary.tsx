@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useWallet } from '../../contexts/WalletContext';
-import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, ArrowRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
+import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, ChevronRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
 import { SkeletonKpiGrid, FitText } from '../ui';
 import { formatCurrency as fmtCurrency, formatSharpe, describeSharpe } from '../../utils/format';
 import { useCountUp } from '../../hooks/useCountUp';
@@ -101,24 +101,25 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
                     </span>
                 </div>
 
-                {/* items-end: com o "Ver o dia" abaixo do valor, a pílula acompanha
-                    a base da coluna, não o centro. */}
-                <div className="relative flex items-end justify-between mt-3 pt-3 border-t border-white/[0.14]">
+                <div className="relative flex items-center justify-between mt-3 pt-3 border-t border-white/[0.14]">
                     <div className="min-w-0">
                         <p className="text-[9px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.6)] mb-0.5">Variação Hoje</p>
-                        <div className="text-sm font-bold text-[#fff] truncate">
-                            {isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}
-                        </div>
-                        {/* Mesmo detalhamento da Carteira: os dois cards leem o mesmo
-                            contexto, então um componente só atende os dois. */}
-                        {!isReadOnly && (
+                        {/* Mesmo detalhamento da Carteira, mesma entrada: o valor abre,
+                            a setinha sinaliza. Ver WalletSummary. */}
+                        {isReadOnly ? (
+                            <div className="text-sm font-bold text-[#fff] truncate">
+                                {isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}
+                            </div>
+                        ) : (
                             <button
                                 type="button"
                                 onClick={() => setIsDayModalOpen(true)}
-                                className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-white/[0.26] bg-white/[0.09] px-2.5 py-1 text-[11px] font-semibold text-[#eafff6] transition-colors hover:border-white/40 hover:bg-white/[0.17] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8ff0c8]"
+                                title="Ver de quais ativos veio a variação de hoje"
+                                aria-label="Ver de quais ativos veio a variação de hoje"
+                                className="group -m-1 flex min-w-0 items-center gap-1 rounded-md p-1 text-sm font-bold text-[#fff] transition-colors hover:bg-white/[0.12] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8ff0c8]"
                             >
-                                Ver o dia
-                                <ArrowRight size={11} />
+                                <span className="truncate">{isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}</span>
+                                <ChevronRight size={13} className="shrink-0 text-[rgba(255,255,255,0.55)] transition-colors group-hover:text-[#eafff6]" />
                             </button>
                         )}
                     </div>

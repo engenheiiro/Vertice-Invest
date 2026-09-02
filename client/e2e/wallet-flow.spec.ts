@@ -201,7 +201,7 @@ test.describe(() => {
   await page.goto('/wallet');
 
   // O card mostra o total do dia; o botão promete explicá-lo.
-  const verODia = page.getByRole('button', { name: /Ver o dia/i }).first();
+  const verODia = page.getByRole('button', { name: /variação de hoje/i }).first();
   await expect(verODia).toBeVisible();
   await verODia.click();
 

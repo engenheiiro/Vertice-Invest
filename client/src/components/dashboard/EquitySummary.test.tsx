@@ -57,7 +57,7 @@ describe('EquitySummary', () => {
         expect(screen.getByText('Variação Hoje')).toBeInTheDocument();
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: /Ver o dia/ }));
+        fireEvent.click(screen.getByRole('button', { name: /variação de hoje/i }));
 
         expect(screen.getByText('O dia da sua carteira')).toBeInTheDocument();
         expect(screen.getByText(/desde o fechamento de segunda-feira, 31\/08/)).toBeInTheDocument();
@@ -68,6 +68,6 @@ describe('EquitySummary', () => {
         walletState.isReadOnly = true;
         render(<EquitySummary />);
 
-        expect(screen.queryByRole('button', { name: /Ver o dia/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /variação de hoje/i })).not.toBeInTheDocument();
     });
 });
