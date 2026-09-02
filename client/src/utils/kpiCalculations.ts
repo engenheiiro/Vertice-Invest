@@ -34,6 +34,8 @@ export function computeWalletKpis(
       totalResultPercent: 0,
       dayVariation: 0,
       dayVariationPercent: 0,
+      dayAnchorDate: serverKpis?.dayAnchorDate ?? null,
+      dayDividends: 0,
       totalDividends: serverKpis?.totalDividends ?? 0,
       projectedDividends: serverKpis?.projectedDividends ?? 0,
       weightedRentability: 0,
@@ -68,6 +70,10 @@ export function computeWalletKpis(
     totalResultPercent: resultPercent,
     dayVariation: serverKpis?.dayVariation ?? 0,
     dayVariationPercent: serverKpis?.dayVariationPercent ?? 0,
+    // Acompanham a variação: a janela que ela cobre e os proventos do dia-ex.
+    // Sem repassá-los aqui, o detalhamento do dia perderia os dois no caminho.
+    dayAnchorDate: serverKpis?.dayAnchorDate ?? null,
+    dayDividends: serverKpis?.dayDividends ?? 0,
     totalDividends: serverKpis?.totalDividends ?? 0,
     projectedDividends: serverKpis?.projectedDividends ?? 0,
     weightedRentability: serverKpis?.weightedRentability ?? resultPercent,

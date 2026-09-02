@@ -1,10 +1,11 @@
 
 import React from 'react';
 import { useWallet } from '../../contexts/WalletContext';
-import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
+import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, ArrowRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
 import { SkeletonKpiGrid, FitText } from '../ui';
 import { formatCurrency as fmtCurrency, formatSharpe, describeSharpe } from '../../utils/format';
 import { useCountUp } from '../../hooks/useCountUp';
+import { DayMoversModal } from '../wallet/DayMoversModal';
 
 interface EquitySummaryProps {
     onGenerateReport?: () => void;
@@ -18,8 +19,10 @@ interface EquitySummaryProps {
  * nunca cortar dígitos em patrimônios grandes.
  */
 export const EquitySummary: React.FC<EquitySummaryProps> = () => {
-    const { kpis, isPrivacyMode, isLoading } = useWallet();
+    const { kpis, isPrivacyMode, isLoading, isReadOnly } = useWallet();
     const animatedEquity = useCountUp(kpis?.totalEquity || 0);
+    // Hooks primeiro: o guard de `isLoading` abaixo retorna cedo.
+    const [isDayModalOpen, setIsDayModalOpen] = React.useState(false);
 
     const formatCurrency = (val: number | null | undefined) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
 
@@ -98,12 +101,26 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
                     </span>
                 </div>
 
-                <div className="relative flex items-center justify-between mt-3 pt-3 border-t border-white/[0.14]">
+                {/* items-end: com o "Ver o dia" abaixo do valor, a pílula acompanha
+                    a base da coluna, não o centro. */}
+                <div className="relative flex items-end justify-between mt-3 pt-3 border-t border-white/[0.14]">
                     <div className="min-w-0">
                         <p className="text-[9px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.6)] mb-0.5">Variação Hoje</p>
                         <div className="text-sm font-bold text-[#fff] truncate">
                             {isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}
                         </div>
+                        {/* Mesmo detalhamento da Carteira: os dois cards leem o mesmo
+                            contexto, então um componente só atende os dois. */}
+                        {!isReadOnly && (
+                            <button
+                                type="button"
+                                onClick={() => setIsDayModalOpen(true)}
+                                className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-white/[0.26] bg-white/[0.09] px-2.5 py-1 text-[11px] font-semibold text-[#eafff6] transition-colors hover:border-white/40 hover:bg-white/[0.17] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8ff0c8]"
+                            >
+                                Ver o dia
+                                <ArrowRight size={11} />
+                            </button>
+                        )}
                     </div>
                     <span className="shrink-0 ml-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-[#eafff6] bg-white/[0.14] px-2.5 py-1 rounded-full">
                         {isDayFlat ? <Minus size={12} /> : isDayPositive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
@@ -167,6 +184,7 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
                 tagClass="bg-gold/10 text-gold border-gold/20"
             />
 
+            <DayMoversModal isOpen={isDayModalOpen} onClose={() => setIsDayModalOpen(false)} />
         </section>
     );
 };

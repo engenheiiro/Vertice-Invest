@@ -10,39 +10,56 @@ export const DEMO_ASSETS: Asset[] = [
         id: 'demo-sbsp3', ticker: 'SBSP3', name: 'Sabesp', type: 'STOCK',
         quantity: 2, averagePrice: 55.00, currentPrice: 105.50, 
         totalValue: 211.00, totalCost: 110.00, profit: 101.00, profitPercent: 91.81, 
-        currency: 'BRL', sector: 'Saneamento', dayChangePct: 1.5
+        currency: 'BRL', sector: 'Saneamento', dayChangePct: 1.49, dayChangeValue: 3.10, dayChangeReason: 'ANCHOR_CLOSE'
     },
     // 2. WEG (Consistência)
     {
         id: 'demo-wege3', ticker: 'WEGE3', name: 'WEG S.A.', type: 'STOCK',
         quantity: 2, averagePrice: 32.00, currentPrice: 56.50, 
         totalValue: 113.00, totalCost: 64.00, profit: 49.00, profitPercent: 76.56, 
-        currency: 'BRL', sector: 'Indústria', dayChangePct: 0.8
+        currency: 'BRL', sector: 'Indústria', dayChangePct: -0.92, dayChangeValue: -1.05, dayChangeReason: 'ANCHOR_CLOSE'
     },
     // 3. NVDA (Fracionado BDR ou Stock para caber no valor)
     {
         id: 'demo-nvda', ticker: 'NVDA', name: 'NVIDIA Corp', type: 'STOCK_US',
         quantity: 0.2, averagePrice: 380.00, currentPrice: 820.00, 
         totalValue: 164.00, totalCost: 76.00, profit: 88.00, profitPercent: 115.78, 
-        currency: 'USD', sector: 'Tecnologia', dayChangePct: 2.1
+        currency: 'USD', sector: 'Tecnologia', dayChangePct: 1.27, dayChangeValue: 2.05, dayChangeReason: 'ANCHOR_CLOSE'
     },
     // 4. Tesouro (Caixa/Segurança)
     {
         id: 'demo-selic', ticker: 'TESOURO SELIC', name: 'Tesouro Selic 2029', type: 'FIXED_INCOME',
         quantity: 0.0025, averagePrice: 13500, currentPrice: 15228, 
         totalValue: 38.07, totalCost: 33.75, profit: 4.32, profitPercent: 12.80, 
-        currency: 'BRL', sector: 'Governo', dayChangePct: 0.04
+        currency: 'BRL', sector: 'Governo', dayChangePct: 0.05, dayChangeValue: 0.02, dayChangeReason: 'FIXED_INCOME_MTM'
     }
 ];
 
+/**
+ * Dia útil anterior, para o detalhamento do dia nomear a âncora no tour em vez
+ * de exibir uma data fixa que envelhece. Datas locais montadas peça por peça:
+ * `toISOString` converte para UTC e devolveria o dia anterior à noite no Brasil.
+ */
+const previousBusinessDayKey = (): string => {
+    const d = new Date();
+    do { d.setDate(d.getDate() - 1); } while (d.getDay() === 0 || d.getDay() === 6);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 // Valores KPIs Exatos conforme solicitado
 export const DEMO_KPIS = {
-    totalEquity: 526.07, 
+    totalEquity: 526.07,
     totalInvested: 322.34, // (526.07 - 203.73)
-    totalResult: 203.73, 
+    totalResult: 203.73,
     totalResultPercent: 42.54, // ROI
-    dayVariation: 4.12, 
+    // As contribuições por ativo em DEMO_ASSETS somam exatamente este valor
+    // (3,10 + 2,05 + 0,02 − 1,05). Mexer num dos lados sem o outro faz o
+    // detalhamento do dia abrir no tour com uma conta que não fecha.
+    dayVariation: 4.12,
     dayVariationPercent: 0.79,
+    dayAnchorDate: previousBusinessDayKey(),
+    // Zero de propósito: inventar provento na demo é inventar renda.
+    dayDividends: 0,
     totalDividends: 46.72, 
     projectedDividends: 3.89,
     weightedRentability: 96.44 

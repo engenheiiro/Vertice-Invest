@@ -18,6 +18,24 @@ import { foldEtfIntoStock } from '../utils/allocation';
 // ouro entra como ETF lastreado, ex. GLD/GOLD11).
 export type AssetType = 'STOCK' | 'FII' | 'CRYPTO' | 'STOCK_US' | 'ETF' | 'FIXED_INCOME' | 'CASH' | 'OURO';
 
+/**
+ * Régua que produziu a variação do dia de uma posição. Espelha o enum do
+ * servidor (`server/utils/dayChangeReason.js`) — se um valor novo aparecer lá,
+ * ele precisa aparecer aqui e ganhar rótulo em `utils/dayMovers.ts`.
+ */
+export type DayChangeReason =
+    | 'ANCHOR_CLOSE'
+    | 'PREVIOUS_CLOSE'
+    | 'BOUGHT_TODAY'
+    | 'FIXED_INCOME_MTM'
+    | 'FIXED_INCOME_MTM_PENDING'
+    | 'FIXED_INCOME_CURVE'
+    | 'MATURED'
+    | 'STALE_QUOTE'
+    | 'NO_QUOTE'
+    | 'PROVIDER_WINDOW'
+    | 'PROVIDER_SESSION';
+
 export interface Asset {
     id: string;
     ticker: string;
@@ -37,6 +55,21 @@ export interface Asset {
     sector?: string;
     fixedIncomeRate?: number;
     dayChangePct?: number;
+    /**
+     * Contribuição da posição para a Variação Hoje, em BRL. Vem do servidor, que
+     * é quem mede o início do dia contra o snapshot-âncora — a soma destes valores
+     * FECHA com `kpis.dayVariation` por construção, e é o que sustenta o
+     * detalhamento do dia. Nunca recalcular no cliente.
+     */
+    dayChangeValue?: number;
+    /**
+     * Qual régua produziu `dayChangeValue` (ver server/utils/dayChangeReason.js).
+     * Distingue o zero de "o ativo fechou estável" do zero de "não temos cotação
+     * de hoje" — o primeiro é fato do mercado, o segundo é limite do nosso dado.
+     */
+    dayChangeReason?: DayChangeReason | null;
+    /** Provento com data-ex dentro da janela do dia. Fora de `dayChangeValue`. */
+    dayDividends?: number;
     // Proventos recebidos (all-time, BRL) deste ativo — compõe a Rentabilidade
     // total (preço + proventos), distinta da Variação (só preço).
     dividendsReceived?: number;
@@ -82,6 +115,14 @@ export interface WalletKPIs {
     totalResultPercent: number;
     dayVariation: number;
     dayVariationPercent: number;
+    /**
+     * Dia do snapshot contra o qual a variação foi medida (YYYY-MM-DD). `null`
+     * em carteira nova. Numa segunda após feriado a âncora é quinta — o rótulo
+     * "Hoje" sozinho mentiria sobre a janela que o número cobre.
+     */
+    dayAnchorDate?: string | null;
+    /** Proventos com data-ex na mesma janela. NÃO entram em `dayVariation`. */
+    dayDividends?: number;
     totalDividends: number;
     projectedDividends: number;
     weightedRentability: number;

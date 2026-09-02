@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { walletState } = vi.hoisted(() => ({
     walletState: {
@@ -21,10 +21,12 @@ const { walletState } = vi.hoisted(() => ({
             sharpeSample: 22,
             beta: null,
         },
+        assets: [],
         isPrivacyMode: false,
         togglePrivacyMode: vi.fn(),
         isLoading: false,
         isValuesLocked: false,
+        isReadOnly: false,
     },
 }));
 
@@ -32,6 +34,8 @@ vi.mock('../../contexts/WalletContext', () => ({ useWallet: () => walletState })
 vi.mock('../../hooks/useCountUp', () => ({ useCountUp: (value: number) => value }));
 
 import { WalletSummary } from './WalletSummary';
+
+afterEach(() => { walletState.isReadOnly = false; });
 
 describe('WalletSummary', () => {
     it('explica a Variação Hoje com texto curto e simples', () => {
@@ -53,6 +57,27 @@ describe('WalletSummary', () => {
             fireEvent.mouseLeave(trigger);
             expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
         });
+    });
+
+    it('o detalhamento do dia abre pelo próprio card, com rótulo escrito', () => {
+        render(<WalletSummary />);
+
+        // Ícone mudo não é descoberto: o botão diz o que há do outro lado.
+        const botao = screen.getByRole('button', { name: /Ver o dia/ });
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        fireEvent.click(botao);
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByText('O dia da sua carteira')).toBeInTheDocument();
+        // O total do modal é o MESMO do card que o abriu.
+        expect(screen.getAllByText(/7,51/).length).toBeGreaterThan(0);
+    });
+
+    it('o link público não oferece o detalhamento ao visitante', () => {
+        walletState.isReadOnly = true;
+        render(<WalletSummary />);
+
+        expect(screen.queryByRole('button', { name: /Ver o dia/ })).not.toBeInTheDocument();
     });
 
     it('usa a mesma identidade canônica do gráfico para o saldo total', () => {

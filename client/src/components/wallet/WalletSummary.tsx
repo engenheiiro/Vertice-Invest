@@ -2,19 +2,23 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useWallet } from '../../contexts/WalletContext';
-import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
+import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, ArrowRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
 import { SkeletonKpiGrid, FitText, PrivacyToggle } from '../ui'; // (I12) skeleton padronizado + auto-fit de valor
 import { formatCurrency as fmtCurrency, formatSharpe, describeSharpe } from '../../utils/format';
 import { useCountUp } from '../../hooks/useCountUp';
 import { totalResultBalance } from '../../utils/kpiCalculations';
+import { DayMoversModal } from './DayMoversModal';
 
 interface EquitySummaryProps {
     onGenerateReport?: () => void;
 }
 
 export const WalletSummary: React.FC<EquitySummaryProps> = () => {
-    const { kpis, isPrivacyMode, togglePrivacyMode, isLoading, isValuesLocked } = useWallet();
+    const { kpis, isPrivacyMode, togglePrivacyMode, isLoading, isValuesLocked, isReadOnly } = useWallet();
     const animatedEquity = useCountUp(kpis?.totalEquity || 0);
+    // Hooks primeiro: o guard de `isLoading` abaixo retorna cedo, e declarar
+    // estado depois dele quebraria a ordem entre renderizações.
+    const [isDayModalOpen, setIsDayModalOpen] = React.useState(false);
 
     const formatCurrency = (val: number | null | undefined) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
 
@@ -113,7 +117,9 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                     </span>
                 </div>
 
-                <div className="relative flex items-center justify-between mt-3 pt-3 border-t border-white/[0.14]">
+                {/* items-end: com o "Ver o dia" abaixo do valor, a coluna da esquerda
+                    cresce e a pílula precisa acompanhar a base, não o centro. */}
+                <div className="relative flex items-end justify-between gap-3 mt-3 pt-3 border-t border-white/[0.14]">
                     <div>
                         <div className="mb-0.5 flex items-center gap-1">
                             <p className="text-[9px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.6)]">Variação Hoje</p>
@@ -125,6 +131,20 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                         <div className="text-sm font-bold text-[#fff]">
                             {isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}
                         </div>
+                        {/* Rótulo escrito, não ícone mudo: a fraqueza de guardar o
+                            detalhamento atrás de um clique é descoberta, e ela se
+                            resolve dizendo o que há do outro lado. Fora do link
+                            público — lá o detalhamento não é oferecido ao visitante. */}
+                        {!isReadOnly && (
+                            <button
+                                type="button"
+                                onClick={() => setIsDayModalOpen(true)}
+                                className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-white/[0.26] bg-white/[0.09] px-2.5 py-1 text-[11px] font-semibold text-[#eafff6] transition-colors hover:border-white/40 hover:bg-white/[0.17] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8ff0c8]"
+                            >
+                                Ver o dia
+                                <ArrowRight size={11} />
+                            </button>
+                        )}
                     </div>
                     <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#eafff6] bg-white/[0.14] px-2.5 py-1 rounded-full">
                         {isDayFlat ? <Minus size={12} /> : isDayPositive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
@@ -188,6 +208,7 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                 tagClass="bg-gold/10 text-gold border-gold/20"
             />
 
+            <DayMoversModal isOpen={isDayModalOpen} onClose={() => setIsDayModalOpen(false)} />
         </section>
     );
 };
