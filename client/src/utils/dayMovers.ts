@@ -1,4 +1,4 @@
-import type { Asset, DayChangeReason, WalletKPIs } from '../contexts/WalletContext';
+import type { Asset, AssetType, DayChangeReason, WalletKPIs } from '../contexts/WalletContext';
 
 /**
  * Detalhamento da Variação Hoje: de quais posições veio o número do card.
@@ -25,6 +25,11 @@ export interface DayMoverRow {
     id: string;
     ticker: string;
     name: string;
+    /** Metadados visuais repassados ao mesmo AssetLogo do Detalhamento. */
+    type: AssetType;
+    currency: 'BRL' | 'USD';
+    sector: string | null;
+    isReserve: boolean;
     /** Contribuição em BRL para a Variação Hoje. */
     value: number;
     /** Variação percentual da posição no dia (preço + câmbio). */
@@ -34,6 +39,12 @@ export interface DayMoverRow {
     dividends: number;
 }
 
+export interface PendingTreasurySummary {
+    count: number;
+    /** Data-base do PU que já está incorporado ao fechamento anterior. */
+    latestPriceDate: string | null;
+}
+
 export interface DayMovers {
     /** Ordenadas da maior alta para a maior queda. */
     rows: DayMoverRow[];
@@ -41,14 +52,14 @@ export interface DayMovers {
     downCount: number;
     /** Ativos que negociaram e fecharam estáveis — agrupados, fora de `rows`. */
     flatCount: number;
-    /** Maior |contribuição|; escala das barras. 0 quando não há movimento. */
-    maxAbs: number;
     /** Autoridade: vem de `kpis.dayVariation`. */
     total: number;
     totalPercent: number;
     dividends: number;
     dividendTickers: string[];
     anchorDate: string | null;
+    /** Tesouros sem PU do dia ficam numa nota única, fora da lista de movimentos. */
+    pendingTreasury: PendingTreasurySummary;
     /**
      * Preenchido quando TODAS as linhas de mercado compartilham o mesmo motivo
      * degradado — fim de semana, feriado, ou antes da B3 abrir. Um motivo que
@@ -160,10 +171,11 @@ export const formatAnchorLabel = (anchorDate: string | null | undefined): string
 export function buildDayMovers(assets: Asset[], kpis?: Partial<WalletKPIs> | null): DayMovers {
     const total = kpis?.dayVariation ?? 0;
     const empty: DayMovers = {
-        rows: [], upCount: 0, downCount: 0, flatCount: 0, maxAbs: 0,
+        rows: [], upCount: 0, downCount: 0, flatCount: 0,
         total, totalPercent: kpis?.dayVariationPercent ?? 0,
         dividends: kpis?.dayDividends ?? 0, dividendTickers: [],
         anchorDate: kpis?.dayAnchorDate ?? null, sharedReason: null,
+        pendingTreasury: { count: 0, latestPriceDate: null },
     };
     if (!Array.isArray(assets) || assets.length === 0) return empty;
 
@@ -171,14 +183,28 @@ export function buildDayMovers(assets: Asset[], kpis?: Partial<WalletKPIs> | nul
     let flatCount = 0;
     let upCount = 0;
     let downCount = 0;
-    let maxAbs = 0;
     const dividendTickers: string[] = [];
+    let pendingTreasuryCount = 0;
+    let pendingTreasuryPriceDate: string | null = null;
 
     for (const asset of assets) {
         const value = asset.dayChangeValue ?? 0;
         const reason = asset.dayChangeReason ?? null;
         const dividends = asset.dayDividends ?? 0;
         if (dividends > 0) dividendTickers.push(asset.ticker);
+
+        // Um Tesouro sem PU do dia não é um movimento de hoje: o PU anterior já
+        // foi incorporado ao fechamento da própria data-base. Em vez de ocupar
+        // uma linha zerada por título, ele vira uma nota única no rodapé. Se por
+        // alguma inconsistência a contribuição vier diferente de zero, a linha
+        // permanece visível — nunca escondemos dinheiro que entrou no total.
+        if (reason === 'FIXED_INCOME_MTM_PENDING' && Math.abs(value) < FLAT_THRESHOLD) {
+            pendingTreasuryCount += 1;
+            if (asset.priceDate && (!pendingTreasuryPriceDate || asset.priceDate > pendingTreasuryPriceDate)) {
+                pendingTreasuryPriceDate = asset.priceDate;
+            }
+            continue;
+        }
 
         // Zero de mercado: o ativo negociou e não se moveu. Agrupa.
         // Zero nosso (ou provento a explicar): permanece na lista.
@@ -189,12 +215,14 @@ export function buildDayMovers(assets: Asset[], kpis?: Partial<WalletKPIs> | nul
 
         if (value > 0) upCount += 1;
         else if (value < 0) downCount += 1;
-        maxAbs = Math.max(maxAbs, Math.abs(value));
-
         rows.push({
             id: asset.id,
             ticker: asset.ticker,
             name: displayName(asset),
+            type: asset.type,
+            currency: asset.currency,
+            sector: asset.sector ?? null,
+            isReserve: asset.isReserve ?? asset.type === 'CASH',
             value,
             percent: asset.dayChangePct ?? 0,
             reason,
@@ -211,12 +239,15 @@ export function buildDayMovers(assets: Asset[], kpis?: Partial<WalletKPIs> | nul
         upCount,
         downCount,
         flatCount,
-        maxAbs,
         total,
         totalPercent: kpis?.dayVariationPercent ?? 0,
         dividends: kpis?.dayDividends ?? 0,
         dividendTickers,
         anchorDate: kpis?.dayAnchorDate ?? null,
+        pendingTreasury: {
+            count: pendingTreasuryCount,
+            latestPriceDate: pendingTreasuryPriceDate,
+        },
         sharedReason: resolveSharedReason(rows),
     };
 }

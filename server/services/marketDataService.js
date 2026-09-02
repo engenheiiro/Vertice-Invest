@@ -16,6 +16,7 @@ import { historyStorageKey } from '../utils/assetHistory.js';
 import { brazilDateKey } from '../utils/dateUtils.js';
 import { loadLatestCloseBefore } from '../utils/dayCloses.js';
 import { deriveDividendFromGap } from '../utils/dividendGap.js';
+import { isAccumulatingBrEtf } from '../config/brEtfList.js';
 import { recordCacheAccess } from '../utils/performanceMetrics.js';
 
 /**
@@ -349,6 +350,9 @@ export const marketDataService = {
                 const asset = assetMap.get(ticker);
                 const adjusted = Number(quote.previousClose);
                 if (!asset || !(adjusted > 0)) continue;
+                // ETFs brasileiros curados são de acumulação: os rendimentos
+                // ficam na cota e nunca podem virar crédito em DividendEvent.
+                if (asset.type === 'ETF' && isAccumulatingBrEtf(ticker)) continue;
                 if (sessionDateKey(quote.marketTime) !== todayBr) continue;
                 candidates.push({ ticker, type: asset.type, adjusted });
             }

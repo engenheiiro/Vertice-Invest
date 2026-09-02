@@ -63,21 +63,12 @@ describe('buildDayMovers — a conta é do servidor', () => {
         expect(out.rows.map((r) => r.ticker)).toEqual(['BBAS3', 'WEGE3']);
     });
 
-    it('maxAbs é a escala da barra: o maior módulo, alta ou queda', () => {
-        const out = buildDayMovers([
-            asset({ ticker: 'PETR4', dayChangeValue: 100 }),
-            asset({ ticker: 'KNCR11', dayChangeValue: -158.2 }),
-        ], kpis());
-
-        expect(out.maxAbs).toBe(158.2);
-    });
-
     it('carteira vazia devolve o KPI e nenhuma linha', () => {
         const out = buildDayMovers([], kpis({ dayVariation: 0, dayVariationPercent: 0 }));
 
         expect(out.rows).toEqual([]);
         expect(out.total).toBe(0);
-        expect(out.maxAbs).toBe(0);
+        expect(out.pendingTreasury).toEqual({ count: 0, latestPriceDate: null });
         expect(out.sharedReason).toBeNull();
     });
 
@@ -123,6 +114,37 @@ describe('buildDayMovers — os dois tipos de zero', () => {
         expect(out.flatCount).toBe(0);
         expect(out.dividendTickers).toEqual(['KNCR11']);
         expect(out.dividends).toBe(142.5);
+    });
+
+    it('Tesouro sem PU do dia vira nota única, fora da lista de movimentos', () => {
+        const out = buildDayMovers([
+            asset({
+                ticker: 'TESOURO IPCA+ 2035', type: 'FIXED_INCOME',
+                dayChangeValue: 0, dayChangeReason: 'FIXED_INCOME_MTM_PENDING',
+                priceDate: '2026-09-01',
+            }),
+            asset({
+                ticker: 'TESOURO PREFIXADO 2029', type: 'FIXED_INCOME',
+                dayChangeValue: 0, dayChangeReason: 'FIXED_INCOME_MTM_PENDING',
+                priceDate: '2026-09-01',
+            }),
+        ], kpis());
+
+        expect(out.rows).toEqual([]);
+        expect(out.pendingTreasury).toEqual({ count: 2, latestPriceDate: '2026-09-01' });
+    });
+
+    it('Tesouro pendente com contribuição inesperada continua visível', () => {
+        const out = buildDayMovers([
+            asset({
+                ticker: 'TESOURO IPCA+ 2035', type: 'FIXED_INCOME',
+                dayChangeValue: -5.54, dayChangeReason: 'FIXED_INCOME_MTM_PENDING',
+                priceDate: '2026-09-01',
+            }),
+        ], kpis());
+
+        expect(out.rows.map((r) => r.ticker)).toEqual(['TESOURO IPCA+ 2035']);
+        expect(out.pendingTreasury.count).toBe(0);
     });
 
     it('o provento do dia NÃO entra no total — a identidade com o patrimônio é só preço', () => {

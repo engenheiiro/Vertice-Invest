@@ -28,6 +28,7 @@ import { loadUsdRateResolver, effectiveFxRate } from '../utils/fxRate.js';
 import { markLotsToMarket, findTreasuryPu, accrueLotsValue } from '../utils/fixedIncome.js';
 import { loadCdiCurve, annualRateFromDailyFactor } from '../utils/cdiCurve.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
+import { isAccumulatingBrEtf } from '../config/brEtfList.js';
 
 export const financialService = {
     
@@ -867,6 +868,21 @@ export const financialService = {
             const key = ticker.toUpperCase();
             if (seen.has(key) || ['CRYPTO', 'FIXED_INCOME', 'CASH'].includes(type)) continue;
             seen.add(key);
+
+            // ETF BR de acumulação não paga provento em dinheiro. Além de não
+            // consultar a fonte, remove qualquer provisório antigo criado pelo
+            // detector de gap antes desta proteção (caso real: IVVB11 em 02/09).
+            if (type === 'ETF' && isAccumulatingBrEtf(key)) {
+                const cleanup = await DividendEvent.deleteMany({ ticker: key, source: 'DERIVED' });
+                if (cleanup.deletedCount > 0) {
+                    logger.info('[Dividends] Provento provisório inválido removido de ETF de acumulação', {
+                        ticker: key,
+                        removidos: cleanup.deletedCount,
+                    });
+                }
+                continue;
+            }
+
             tickerCount++;
 
             const events = await externalMarketService.getDividendsHistory(ticker, type);

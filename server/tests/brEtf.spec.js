@@ -3,7 +3,7 @@
  * concentração por tema (getConcentrationKey) para o draft do ranking de ETFs.
  */
 import { describe, it, expect } from 'vitest';
-import { BR_ETF_LIST } from '../config/brEtfList.js';
+import { BR_ETF_LIST, isAccumulatingBrEtf } from '../config/brEtfList.js';
 import { getConcentrationKey } from '../config/sectorTaxonomy.js';
 
 describe('BR_ETF_LIST', () => {
@@ -38,6 +38,12 @@ describe('BR_ETF_LIST', () => {
     it('nenhum ETF declara yield semeado à mão (seedYield foi removido)', () => {
         const seeded = BR_ETF_LIST.filter((e) => e.seedYield != null);
         expect(seeded.map((e) => e.ticker)).toEqual([]);
+    });
+
+    it('reconhece IVVB11 como ETF de acumulação mesmo com caixa ou sufixo Yahoo', () => {
+        expect(isAccumulatingBrEtf('IVVB11')).toBe(true);
+        expect(isAccumulatingBrEtf(' ivvb11.sa ')).toBe(true);
+        expect(isAccumulatingBrEtf('DIVD11')).toBe(false);
     });
 });
 

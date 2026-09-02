@@ -12,9 +12,11 @@ import { DividendDashboard } from './DividendDashboard';
 import { useDemo } from '../../contexts/DemoContext';
 import { useWallet } from '../../contexts/WalletContext';
 
+const { assetLogoSpy } = vi.hoisted(() => ({ assetLogoSpy: vi.fn(() => null) }));
+
 vi.mock('../../contexts/DemoContext', () => ({ useDemo: vi.fn() }));
 vi.mock('../../contexts/WalletContext', () => ({ useWallet: vi.fn() }));
-vi.mock('../common/AssetLogo', () => ({ default: () => null }));
+vi.mock('../common/AssetLogo', () => ({ default: assetLogoSpy }));
 
 // jsdom não implementa ResizeObserver — usado pelo ResponsiveContainer do recharts.
 (global as any).ResizeObserver = class {
@@ -27,7 +29,7 @@ vi.mock('../common/AssetLogo', () => ({ default: () => null }));
 // rota pública no link compartilhado) — o teste injeta o dele.
 const getDividends = vi.fn();
 // `isWalletScopeReady` é o portão que segura a busca até a carteira ativa existir.
-const walletStub = { kpis: { totalEquity: 10000 }, isWalletScopeReady: true, dataSource: { getDividends } };
+const walletStub = { assets: [], kpis: { totalEquity: 10000 }, isWalletScopeReady: true, dataSource: { getDividends } };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -61,6 +63,43 @@ describe('graceful degradation', () => {
 
     await waitFor(() => expect(screen.getByText('Yield on Cost')).toBeInTheDocument());
     expect(screen.getByText('Ainda sem proventos recebidos nos últimos 12 meses.')).toBeInTheDocument();
+  });
+});
+
+describe('logos dos FIIs', () => {
+  it('repassa tipo e segmento ao logo nas Provisões Futuras e no Yield on Cost', async () => {
+    vi.mocked(useWallet).mockReturnValue({
+      ...walletStub,
+      assets: [{
+        ticker: 'KNCR11', name: 'Kinea Rendimentos', type: 'FII', sector: 'Papel',
+        currency: 'BRL', isReserve: false,
+      }],
+    } as any);
+    getDividends.mockResolvedValue({
+      history: [],
+      provisioned: [{ ticker: 'KNCR11', date: '2026-09-15', amount: 12.50 }],
+      yieldOnCost: [{ ticker: 'KNCR11', dividends12m: 150, totalCost: 3000, yocPercent: 5 }],
+    });
+
+    render(<DividendDashboard />);
+    await waitFor(() => expect(screen.getAllByText('KNCR11')).toHaveLength(2));
+
+    const provisionLogoProps = assetLogoSpy.mock.calls
+      .map(([props]) => props)
+      .find((props) => props.ticker === 'KNCR11' && props.size === 32);
+    const yieldLogoProps = assetLogoSpy.mock.calls
+      .map(([props]) => props)
+      .find((props) => props.ticker === 'KNCR11' && props.size === 24);
+    const expectedMetadata = {
+      ticker: 'KNCR11',
+      type: 'FII',
+      currency: 'BRL',
+      name: 'Kinea Rendimentos',
+      sector: 'Papel',
+      isReserve: false,
+    };
+    expect(provisionLogoProps).toMatchObject(expectedMetadata);
+    expect(yieldLogoProps).toMatchObject(expectedMetadata);
   });
 });
 

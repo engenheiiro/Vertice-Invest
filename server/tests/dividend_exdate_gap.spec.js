@@ -71,6 +71,16 @@ describe('deriveDividendFromGap — derivação', () => {
     expect(deriveDividendFromGap({ ...base, rawPrevCloseDate: '2026-09-02', rawPrevClose: 79.30, adjustedPrevClose: 78.37 })).toBeNull();
   });
 
+  it('rejeita candle de duas sessões atrás — caso real do falso IVVB11', () => {
+    expect(deriveDividendFromGap({
+      type: 'ETF',
+      priceDate: '2026-09-02',
+      rawPrevCloseDate: '2026-08-31',
+      rawPrevClose: 449.35,
+      adjustedPrevClose: 444.35,
+    })).toBeNull();
+  });
+
   it('descarta ruído abaixo de um centavo e gap negativo', () => {
     expect(deriveDividendFromGap({ ...base, rawPrevClose: 79.30, adjustedPrevClose: 79.295 })).toBeNull();
     expect(deriveDividendFromGap({ ...base, rawPrevClose: 78.37, adjustedPrevClose: 79.30 })).toBeNull();
@@ -152,6 +162,15 @@ describe('marketDataService.detectExDateDividends', () => {
       { ticker: 'TRXF11', date: new Date(Date.UTC(y, m - 1, d)), amount: 0.93, source: 'PROVIDER' },
     ]));
     expect(await marketDataService.detectExDateDividends(quotes, assetMap)).toBe(0);
+    expect(DividendEvent.updateOne).not.toHaveBeenCalled();
+  });
+
+  it('não deriva provento de IVVB11, que reinveste rendimentos na cota', async () => {
+    const ivvbQuotes = [{ ticker: 'IVVB11', previousClose: 444.35, marketTime: nowInSession }];
+    const ivvbAssets = new Map([['IVVB11', { ticker: 'IVVB11', type: 'ETF' }]]);
+
+    expect(await marketDataService.detectExDateDividends(ivvbQuotes, ivvbAssets)).toBe(0);
+    expect(AssetHistory.aggregate).not.toHaveBeenCalled();
     expect(DividendEvent.updateOne).not.toHaveBeenCalled();
   });
 

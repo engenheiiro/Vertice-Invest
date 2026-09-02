@@ -87,4 +87,15 @@ describe('financialService.syncDividends', () => {
     expect(externalMarketService.getDividendsHistory).not.toHaveBeenCalled();
     expect(res).toEqual({ tickers: 0, events: 0 });
   });
+
+  it('IVVB11 não busca proventos e remove o provisório falso já gravado', async () => {
+    DividendEvent.deleteMany.mockResolvedValue({ deletedCount: 1 });
+
+    const res = await financialService.syncDividends([{ ticker: 'ivvb11', type: 'ETF' }]);
+
+    expect(externalMarketService.getDividendsHistory).not.toHaveBeenCalled();
+    expect(DividendEvent.updateOne).not.toHaveBeenCalled();
+    expect(DividendEvent.deleteMany).toHaveBeenCalledWith({ ticker: 'IVVB11', source: 'DERIVED' });
+    expect(res).toEqual({ tickers: 0, events: 0 });
+  });
 });

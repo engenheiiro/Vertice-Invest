@@ -14,17 +14,16 @@
  * até lá o `dy` fantasma segue gravado em `MarketAsset` e continua entrando em qualquer
  * ranking publicado. Este script limpa o que já está no banco.
  *
- * Estratégia (fail-closed, sem lista hardcoded): zera o `dy` de todo ETF em BRL que
- * tenha `dy > 0` e NENHUM evento em `DividendEvent`. O critério é a própria regra que
- * passou a valer — yield de ETF ou é corroborado pelo razão de proventos, ou é 0. Um
- * ETF que realmente distribui tem eventos e não é tocado; se um distribuidor estiver
- * sem eventos por falha de ingestão, o reparo o zera e o `dy` volta sozinho no primeiro
- * sync que popular o razão (fail-closed: subestimar, nunca inventar renda).
+ * Estratégia (fail-closed): para os ETFs que a lista curada declara de acumulação,
+ * zera o `dy` e remove todo `DividendEvent` PROVISÓRIO — esses fundos reinvestem os
+ * rendimentos e não podem gerar crédito ao cotista. Para ETFs BRL fora dessa lista,
+ * mantém a regra anterior: `dy > 0` sem evento corroborando é zerado.
  *
  * Idempotente: reexecutar depois do conserto não altera nada.
  *
  * Uso:
  *   node server/scripts/repairEtfPhantomYield.js --dry
+ *   node server/scripts/repairEtfPhantomYield.js --ticker=IVVB11
  *   node server/scripts/repairEtfPhantomYield.js
  *
  * Requer MONGO_URI no .env.
@@ -36,11 +35,16 @@ import { fileURLToPath } from 'url';
 import { connectScriptDb } from './lib/scriptDb.js';
 import MarketAsset from '../models/MarketAsset.js';
 import DividendEvent from '../models/DividendEvent.js';
+import { isAccumulatingBrEtf } from '../config/brEtfList.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const dryRun = process.argv.slice(2).includes('--dry');
+const tickerArg = process.argv.slice(2).find((arg) => arg.startsWith('--ticker='));
+const onlyTicker = tickerArg
+    ? tickerArg.slice('--ticker='.length).trim().toUpperCase().replace(/\.SA$/, '')
+    : null;
 
 const run = async () => {
     try {
@@ -49,16 +53,34 @@ const run = async () => {
 
         // ETF nacional (BRL). ETF/REIT americano tem yield de fonte viva confiável e
         // fica fora — o defeito era específico do `.SA`, sem cobertura de proventos.
-        const etfs = await MarketAsset.find({ type: 'ETF', currency: 'BRL' })
+        const etfs = await MarketAsset.find({
+            type: 'ETF',
+            currency: 'BRL',
+            ...(onlyTicker ? { ticker: onlyTicker } : {}),
+        })
             .select('ticker dy lastPrice')
             .lean();
 
+        if (onlyTicker && etfs.length === 0) {
+            throw new Error(`ETF BRL não encontrado: ${onlyTicker}`);
+        }
+
         const phantom = [];
+        const invalidDerived = [];
         let corroborated = 0;
         let alreadyZero = 0;
 
         for (const etf of etfs) {
             const dy = Number(etf.dy) || 0;
+
+            if (isAccumulatingBrEtf(etf.ticker)) {
+                const derivedEvents = await DividendEvent.countDocuments({ ticker: etf.ticker, source: 'DERIVED' });
+                if (derivedEvents > 0) invalidDerived.push({ ticker: etf.ticker, count: derivedEvents });
+                if (dy > 0) phantom.push({ ticker: etf.ticker, dy });
+                else alreadyZero++;
+                continue;
+            }
+
             if (dy <= 0) { alreadyZero++; continue; }
 
             const events = await DividendEvent.countDocuments({ ticker: etf.ticker });
@@ -73,9 +95,17 @@ const run = async () => {
             }
         }
 
+        for (const p of invalidDerived) {
+            console.log(`   ✓ ${p.ticker.padEnd(8)} ${p.count} provento(s) provisório(s) inválido(s) → removido(s)`);
+            if (!dryRun) {
+                await DividendEvent.deleteMany({ ticker: p.ticker, source: 'DERIVED' });
+            }
+        }
+
         console.log(
             `\n📊 Resumo: ${etfs.length} ETFs BRL | ${alreadyZero} já com dy=0 | ` +
-            `${corroborated} com yield corroborado pelo razão | ${phantom.length} fantasma(s) zerado(s)${dryRun ? ' (dry)' : ''}`
+            `${corroborated} com yield corroborado pelo razão | ${phantom.length} yield(s) fantasma(s) zerado(s) | ` +
+            `${invalidDerived.reduce((sum, item) => sum + item.count, 0)} provento(s) provisório(s) inválido(s) removido(s)${dryRun ? ' (dry)' : ''}`
         );
 
         if (phantom.length) {

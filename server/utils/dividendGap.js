@@ -59,6 +59,21 @@ const PLAUSIBILITY_MIN_DIVISOR = 10;
  */
 const roundGap = (n) => Math.round(Number(n) * 1e4) / 1e4;
 
+/**
+ * Última sessão esperada sem depender do fuso do processo. Feriados não são
+ * antecipados aqui: nesse caso a derivação falha fechada e espera a fonte
+ * publicar o evento, em vez de correr o risco de inventar renda.
+ */
+const previousWeekdayKey = (dayKey) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || ''))) return null;
+    const date = new Date(`${dayKey}T12:00:00.000Z`);
+    if (Number.isNaN(date.getTime())) return null;
+    do {
+        date.setUTCDate(date.getUTCDate() - 1);
+    } while (date.getUTCDay() === 0 || date.getUTCDay() === 6);
+    return date.toISOString().slice(0, 10);
+};
+
 const median = (values) => {
     const sorted = values.filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
     if (sorted.length === 0) return null;
@@ -93,9 +108,11 @@ export const deriveDividendFromGap = ({
     const adjusted = Number(adjustedPrevClose);
     if (!Number.isFinite(raw) || !Number.isFinite(adjusted) || raw <= 0 || adjusted <= 0) return null;
 
-    // O candle precisa ser de uma sessão ANTERIOR à da cotação. Comparar o
-    // fechamento bruto de hoje com o previousClose de hoje mede coisa nenhuma.
-    if (!priceDate || !rawPrevCloseDate || !(rawPrevCloseDate < priceDate)) return null;
+    // O candle precisa ser da sessão IMEDIATAMENTE anterior à cotação. Aceitar
+    // apenas "alguma data anterior" gerou o falso IVVB11 de 02/09/2026: o
+    // histórico ainda parava em 31/08, mas o previousClose já era de 01/09; a
+    // oscilação entre as duas sessões virou um "dividendo" inexistente de R$ 5.
+    if (!priceDate || !rawPrevCloseDate || rawPrevCloseDate !== previousWeekdayKey(priceDate)) return null;
 
     const gap = roundGap(raw - adjusted);
     if (!(gap >= MIN_GAP)) return null;

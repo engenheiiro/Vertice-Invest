@@ -75,4 +75,15 @@ export const BR_ETF_LIST = [
   { ticker: 'FIXA11', name: 'Renda Fixa Prefixado (FIXA11)', sector: 'Renda Fixa' },
 ];
 
+/**
+ * Estes ETFs reinvestem os rendimentos dos ativos da carteira na própria cota;
+ * não há pagamento em dinheiro ao cotista. Centralizar a política aqui impede
+ * que um ajuste de preço do provedor seja confundido com provento no dia-ex.
+ * Um ETF distribuidor real deve ficar fora desta lista de acumulação.
+ */
+export const BR_ACCUMULATING_ETF_TICKERS = new Set(BR_ETF_LIST.map(({ ticker }) => ticker));
+
+export const isAccumulatingBrEtf = (ticker) =>
+  BR_ACCUMULATING_ETF_TICKERS.has(String(ticker || '').trim().toUpperCase().replace(/\.SA$/, ''));
+
 export default BR_ETF_LIST;

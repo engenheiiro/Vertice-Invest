@@ -37,10 +37,10 @@ const setWallet = (assets: Asset[], kpis: Partial<WalletKPIs>, isPrivacyMode = f
 };
 
 const carteira = () => [
-    asset({ ticker: 'PETR4', name: 'Petrobras', dayChangeValue: 214.8, dayChangePct: 1.62 }),
-    asset({ ticker: 'ITSA4', name: 'Itaúsa', dayChangeValue: 148.3, dayChangePct: 1.04 }),
-    asset({ ticker: 'VALE3', name: 'Vale', dayChangeValue: -96.7, dayChangePct: -1.18 }),
-    asset({ ticker: 'KNCR11', name: 'Kinea Rendimentos', type: 'FII', dayChangeValue: -158.2, dayChangePct: -1.45 }),
+    asset({ ticker: 'PETR4', name: 'Petrobras', sector: 'Petróleo e Gás', dayChangeValue: 214.8, dayChangePct: 1.62 }),
+    asset({ ticker: 'ITSA4', name: 'Itaúsa', sector: 'Holding', dayChangeValue: 148.3, dayChangePct: 1.04 }),
+    asset({ ticker: 'VALE3', name: 'Vale', sector: 'Mineração', dayChangeValue: -96.7, dayChangePct: -1.18 }),
+    asset({ ticker: 'KNCR11', name: 'Kinea Rendimentos', sector: 'Papel', type: 'FII', dayChangeValue: -158.2, dayChangePct: -1.45 }),
 ];
 
 const kpis = (over: Partial<WalletKPIs> = {}): Partial<WalletKPIs> => ({
@@ -86,7 +86,10 @@ describe('DayMoversModal', () => {
 
         const dialog = screen.getByRole('dialog');
         const ordem = within(dialog).getAllByText(/^(PETR4|ITSA4|VALE3|KNCR11)$/).map((el) => el.textContent);
-        expect(ordem).toEqual(['PETR4', 'ITSA4', 'VALE3', 'KNCR11']);
+        expect(ordem).toEqual([
+            'PETR4 · Ação', 'ITSA4 · Ação', 'VALE3 · Ação', 'KNCR11 · FII',
+        ]);
+        expect(within(dialog).queryByText(/Petrobras|Itaúsa|Kinea Rendimentos/)).not.toBeInTheDocument();
 
         expect(within(dialog).getByText(/em alta/)).toHaveTextContent('2 em alta');
         expect(within(dialog).getByText(/em queda/)).toHaveTextContent('2 em queda');
@@ -121,7 +124,7 @@ describe('DayMoversModal — motivos', () => {
 
         expect(screen.getByText('sem negócio hoje')).toBeInTheDocument();
         // Zero NOSSO permanece listado — não vira contador anônimo.
-        expect(screen.getByText('RECR11')).toBeInTheDocument();
+        expect(screen.getByText('RECR11')).toHaveTextContent('RECR11 · FII');
     });
 
     it('mercado inteiro parado vira faixa única, sem repetir a etiqueta', () => {
@@ -148,6 +151,86 @@ describe('DayMoversModal — motivos', () => {
         expect(screen.queryByText('WEGE3')).not.toBeInTheDocument();
         expect(screen.getAllByText('XPTO11').length).toBeGreaterThan(0);
         expect(screen.getByText('sem cotação')).toBeInTheDocument();
+    });
+
+    it('resume Tesouros sem PU numa nota ao final, sem linhas zeradas', () => {
+        setWallet([
+            asset({
+                ticker: 'TESOURO IPCA+ 2035', name: 'Tesouro IPCA+ 2035', type: 'FIXED_INCOME',
+                dayChangeValue: 0, dayChangeReason: 'FIXED_INCOME_MTM_PENDING', priceDate: '2026-09-01',
+            }),
+            asset({
+                ticker: 'TESOURO PREFIXADO 2029', name: 'Tesouro Prefixado 2029', type: 'FIXED_INCOME',
+                dayChangeValue: 0, dayChangeReason: 'FIXED_INCOME_MTM_PENDING', priceDate: '2026-09-01',
+            }),
+        ], kpis({ dayVariation: 0, dayVariationPercent: 0 }));
+        render(<DayMoversModal isOpen onClose={vi.fn()} />);
+
+        expect(screen.queryByText('TESOURO IPCA+ 2035')).not.toBeInTheDocument();
+        expect(screen.getByText(/2 títulos usam o último PU oficial, de 01\/09/)).toBeInTheDocument();
+        expect(screen.getByText(/não aparecem na lista de movimentos/)).toBeInTheDocument();
+    });
+
+    it('usa os mesmos logos contextuais do Detalhamento da Carteira', () => {
+        setWallet([
+            asset({ ticker: 'BTC', name: 'Bitcoin', type: 'CRYPTO', currency: 'USD', dayChangeValue: 10 }),
+            asset({ ticker: 'KNCR11', name: 'Kinea Rendimentos', type: 'FII', sector: 'Papel', dayChangeValue: -5 }),
+            asset({ ticker: 'RESERVA', name: 'Reserva de emergência', type: 'CASH', isReserve: true, dayChangeValue: 1 }),
+        ], kpis());
+        render(<DayMoversModal isOpen onClose={vi.fn()} />);
+
+        expect(screen.getByRole('img', { name: 'Bitcoin' })).toBeInTheDocument();
+        expect(document.querySelector('.lucide-file-text')).toBeInTheDocument();
+        expect(document.querySelector('.lucide-piggy-bank')).toBeInTheDocument();
+    });
+
+    it('mostra ticker e classe; somente a Reserva mantém o nome amigável', () => {
+        setWallet([
+            asset({
+                ticker: 'RESERVA-RESERVA-DE-EMERGENCIA',
+                name: 'Reserva de Emergência',
+                type: 'CASH',
+                isReserve: true,
+                dayChangeValue: 1,
+            }),
+            asset({
+                ticker: 'RESERVA-RESCISAO-HUAWEI',
+                name: 'Rescisão Huawei',
+                type: 'CASH',
+                isReserve: true,
+                dayChangeValue: 2,
+            }),
+            asset({
+                ticker: 'PETR4',
+                name: 'Petrobras',
+                sector: 'Petróleo e Gás',
+                dayChangeValue: 3,
+            }),
+            asset({
+                ticker: 'KNCR11',
+                name: 'Kinea Rendimentos',
+                sector: 'Papel',
+                type: 'FII',
+                dayChangeValue: 4,
+            }),
+            asset({
+                ticker: 'BTC',
+                name: 'Bitcoin',
+                type: 'CRYPTO',
+                currency: 'USD',
+                dayChangeValue: 5,
+            }),
+        ], kpis());
+        render(<DayMoversModal isOpen onClose={vi.fn()} />);
+
+        expect(screen.getByText('Reserva de Emergência')).toBeInTheDocument();
+        expect(screen.getByText('Rescisão Huawei')).toBeInTheDocument();
+        expect(screen.getByText('PETR4')).toHaveTextContent('PETR4 · Ação');
+        expect(screen.getByText('KNCR11')).toHaveTextContent('KNCR11 · FII');
+        expect(screen.getByText('BTC')).toHaveTextContent('BTC · Cripto');
+        expect(screen.queryByText(/RESERVA-RESERVA-DE-EMERGENCIA/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/RESERVA-RESCISAO-HUAWEI/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Petrobras|Kinea Rendimentos|Bitcoin/)).not.toBeInTheDocument();
     });
 });
 

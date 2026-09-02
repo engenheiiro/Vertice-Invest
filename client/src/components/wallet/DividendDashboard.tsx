@@ -36,7 +36,14 @@ export const DividendDashboard = () => {
     const [simulatorContribution, setSimulatorContribution] = useState<string>('0');
 
     const { isDemoMode } = useDemo();
-    const { kpis, activeWalletId, isWalletScopeReady, isPrivacyMode, dataSource } = useWallet();
+    const { assets, kpis, activeWalletId, isWalletScopeReady, isPrivacyMode, dataSource } = useWallet();
+
+    // A API de proventos traz só ticker/data/valor. Os metadados visuais já
+    // existem na carteira; cruzá-los aqui permite que AssetLogo reconheça FII e
+    // desenhe o pictograma do segmento, em vez de cair nas duas iniciais.
+    const assetsByTicker = useMemo(() => new Map(
+        assets.map((asset) => [asset.ticker.trim().toUpperCase().replace(/\.SA$/, ''), asset]),
+    ), [assets]);
 
     useEffect(() => {
         const load = async () => {
@@ -284,10 +291,20 @@ export const DividendDashboard = () => {
                     {data.provisioned.length > 0 ? (
                         data.provisioned.map((item, idx) => {
                             const received = isDatePassed(item.date);
+                            const ticker = (item.ticker || 'DIV').trim().toUpperCase().replace(/\.SA$/, '');
+                            const asset = assetsByTicker.get(ticker);
                             return (
                                 <div key={idx} className="flex items-center justify-between p-3 bg-panel rounded-xl border border-slate-800/50">
                                     <div className="flex items-center gap-3">
-                                        <AssetLogo ticker={item.ticker || 'DIV'} name={item.ticker} size={32} />
+                                        <AssetLogo
+                                            ticker={ticker}
+                                            type={asset?.type}
+                                            currency={asset?.currency}
+                                            name={asset?.name || item.ticker}
+                                            sector={asset?.sector}
+                                            isReserve={asset?.isReserve}
+                                            size={32}
+                                        />
                                         <div>
                                             <p className="text-xs font-bold text-white">{item.ticker}</p>
                                             <p className="text-[10px] text-slate-500">
@@ -366,15 +383,27 @@ export const DividendDashboard = () => {
 
                 {sortedYieldOnCost.length > 0 ? (
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 max-h-[260px]">
-                        {sortedYieldOnCost.map((item) => (
-                            <div key={item.ticker} className="flex items-center justify-between p-2.5 bg-panel rounded-xl border border-slate-800/50">
-                                <div className="flex items-center gap-2">
-                                    <AssetLogo ticker={item.ticker} name={item.ticker} size={24} />
-                                    <span className="text-xs font-bold text-white">{item.ticker}</span>
+                        {sortedYieldOnCost.map((item) => {
+                            const ticker = item.ticker.trim().toUpperCase().replace(/\.SA$/, '');
+                            const asset = assetsByTicker.get(ticker);
+                            return (
+                                <div key={item.ticker} className="flex items-center justify-between p-2.5 bg-panel rounded-xl border border-slate-800/50">
+                                    <div className="flex items-center gap-2">
+                                        <AssetLogo
+                                            ticker={ticker}
+                                            type={asset?.type}
+                                            currency={asset?.currency}
+                                            name={asset?.name || item.ticker}
+                                            sector={asset?.sector}
+                                            isReserve={asset?.isReserve}
+                                            size={24}
+                                        />
+                                        <span className="text-xs font-bold text-white">{item.ticker}</span>
+                                    </div>
+                                    <span className="text-xs font-bold text-gold">{item.yocPercent.toFixed(2)}% a.a.</span>
                                 </div>
-                                <span className="text-xs font-bold text-gold">{item.yocPercent.toFixed(2)}% a.a.</span>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 ) : (
                     <div className="flex-1 flex items-center justify-center text-center text-xs text-slate-600 py-6">
