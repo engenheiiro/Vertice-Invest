@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeWalletKpis } from './kpiCalculations';
+import { computeWalletKpis, totalResultBalance } from './kpiCalculations';
 import type { Asset, WalletKPIs } from '../contexts/WalletContext';
 
 // Só totalValue/totalCost são lidos pelo cálculo — o resto é preenchível.
@@ -20,6 +20,10 @@ describe('computeWalletKpis — carteira vazia', () => {
 });
 
 describe('computeWalletKpis — com posições', () => {
+  it('fecha o saldo canônico por aplicado + resultado sem recompor KPIs arredondados', () => {
+    expect(totalResultBalance({ totalInvested: 21856.44, totalResult: 300.84 })).toBeCloseTo(22157.28, 2);
+  });
+
   it('soma equity e invested a partir das posições', () => {
     const k = computeWalletKpis([pos(1200, 1000), pos(800, 1000)]);
     expect(k.totalEquity).toBe(2000);

@@ -58,6 +58,9 @@ const RETIRE_AFTER_INACTIVE_DAYS = 90;
 // Idade máxima do último candle para considerar que o papel ainda negocia (e,
 // portanto, NÃO pode ser aposentado, por mais que o endpoint de cotação o ignore).
 const RETIRE_RECENT_CANDLE_DAYS = 10;
+// Single-flight por processo: uma tela com vários consumidores do mesmo ticker
+// não dispara várias renovações enquanto o primeiro refresh ainda está em voo.
+const interactiveRefreshes = new Map();
 
 /** Dias inteiros desde `date` (null quando a data não existe). */
 const daysSince = (date) => (date ? Math.floor((Date.now() - new Date(date).getTime()) / 86400000) : null);
@@ -84,7 +87,22 @@ export const marketDataService = {
         return ticker.toUpperCase().trim().replace('.SA', '');
     },
 
-    async getMarketDataByTicker(ticker) {
+    refreshQuoteInBackground(ticker) {
+        const cleanTicker = this.normalizeSymbol(ticker);
+        if (!cleanTicker) return Promise.resolve();
+        const running = interactiveRefreshes.get(cleanTicker);
+        if (running) return running;
+
+        const refresh = this.refreshQuotesBatch([cleanTicker], true)
+            .catch((error) => {
+                logger.warn(`[MarketData] Refresh SWR falhou para ${cleanTicker}: ${error.message}`);
+            })
+            .finally(() => interactiveRefreshes.delete(cleanTicker));
+        interactiveRefreshes.set(cleanTicker, refresh);
+        return refresh;
+    },
+
+    async getMarketDataByTicker(ticker, { interactive = false } = {}) {
         try {
             const cleanTicker = this.normalizeSymbol(ticker);
             let asset = await MarketAsset.findOne({ ticker: cleanTicker });
@@ -92,7 +110,7 @@ export const marketDataService = {
             // Self-heal do nome: se o nome ainda for o próprio ticker (ações BR não
             // enriquecidas), busca o nome real no Yahoo via refresh e relê. Assim o
             // autofill de "Nome do Ativo" recebe o nome correto na hora.
-            if (asset && ['STOCK', 'FII', 'STOCK_US', 'ETF'].includes(asset.type)) {
+            if (!interactive && asset && ['STOCK', 'FII', 'STOCK_US', 'ETF'].includes(asset.type)) {
                 const nm = (asset.name || '').trim();
                 if (!nm || nm.toUpperCase() === cleanTicker.toUpperCase()) {
                     try {
@@ -103,7 +121,11 @@ export const marketDataService = {
             }
 
             if (asset && asset.lastPrice > 0) {
-                recordCacheAccess('market-price', 'hit');
+                const cacheMinutes = getTunablesSync().marketCacheMinutes;
+                const staleBefore = Date.now() - cacheMinutes * 60 * 1000;
+                const isStale = !asset.updatedAt || new Date(asset.updatedAt).getTime() < staleBefore;
+                if (interactive && isStale) this.refreshQuoteInBackground(cleanTicker);
+                recordCacheAccess('market-price', isStale ? 'stale' : 'hit');
                 return {
                     price: asset.lastPrice,
                     change: asset.change || 0,
@@ -111,7 +133,9 @@ export const marketDataService = {
                     previousClose: asset.previousClose || 0,
                     name: asset.name,
                     sector: asset.sector,
-                    dy: asset.dy || 0
+                    dy: asset.dy || 0,
+                    cacheStatus: isStale ? 'STALE' : 'HIT',
+                    isStale,
                 };
             }
 
@@ -122,19 +146,23 @@ export const marketDataService = {
                 const lastClose = sorted[0].close || sorted[0].adjClose;
                 
                 if (lastClose > 0) {
+                    if (interactive) this.refreshQuoteInBackground(cleanTicker);
                     recordCacheAccess('market-price', 'fallback');
                     return {
                         price: lastClose,
                         change: 0, 
                         name: ticker,
                         sector: 'Outros',
-                        isFallback: true
+                        isFallback: true,
+                        cacheStatus: 'STALE',
+                        isStale: true,
                     };
                 }
             }
 
+            if (interactive) this.refreshQuoteInBackground(cleanTicker);
             recordCacheAccess('market-price', 'miss');
-            return { price: 0, change: 0, name: ticker, sector: 'Outros' };
+            return { price: 0, change: 0, name: ticker, sector: 'Outros', cacheStatus: 'MISS', isStale: true };
         } catch {
             recordCacheAccess('market-price', 'error');
             return { price: 0, change: 0, name: ticker, sector: 'Outros' };

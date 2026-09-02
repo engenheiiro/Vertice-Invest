@@ -24,6 +24,11 @@ vi.mock('../services/treasuryPriceService.js', () => {
   return { loadTreasuryPricing: vi.fn(async () => empty), EMPTY_TREASURY_PRICING: empty };
 });
 vi.mock('../models/WalletSnapshot.js', () => ({ default: {} }));
+// Âncora do dia (utils/dayCloses) lê a série de candles: mockado para não
+// arrastar o model real, como os demais aqui.
+vi.mock('../models/AssetHistory.js', () => ({ default: {} }));
+// Curva histórica do CDI (utils/cdiCurve): idem — a série é lida do banco.
+vi.mock('../models/EconomicIndex.js', () => ({ default: { find: vi.fn(() => ({ lean: () => [] })) } }));
 vi.mock('../models/SystemConfig.js', () => ({ default: {} }));
 vi.mock('../services/marketDataService.js', () => ({ marketDataService: {} }));
 vi.mock('../services/financialService.js', () => ({

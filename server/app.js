@@ -11,7 +11,6 @@ import cookieParser from 'cookie-parser';
 import * as Sentry from "@sentry/node";
 import { fileURLToPath } from 'url';
 import swaggerUi from 'swagger-ui-express';
-import { initScheduler } from './services/schedulerService.js';
 import { sanitizeInput } from './middleware/sanitize.js'; // (S8) anti-injeção NoSQL
 import { correlationId } from './middleware/correlationId.js'; // (D12) correlation id
 import { accessLog } from './middleware/accessLog.js'; // (D12) log de request concluída
@@ -56,8 +55,6 @@ app.use(productionErrorSanitizer);
 // (D12) Log de conclusão da requisição (método, rota, status, duração) no nível
 // `http` — sai em dev, silencioso em produção. Pula probes/docs para não poluir.
 app.use(accessLog);
-
-initScheduler();
 
 if (process.env.SENTRY_DSN) {
     Sentry.addIntegration(Sentry.expressIntegration({ app }));

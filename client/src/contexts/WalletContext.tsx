@@ -102,7 +102,10 @@ export interface HistoryPoint {
     date: string;
     totalEquity: number;
     totalInvested: number;
-    profit: number;
+    /** Proventos acumulados até o snapshot (ausente em payloads legados). */
+    totalDividends?: number;
+    /** Resultado total persistido: patrimônio − aplicado + proventos. */
+    profit?: number;
 }
 
 export type AllocationMap = Partial<Record<AssetType, number>>;

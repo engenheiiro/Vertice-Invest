@@ -6,7 +6,18 @@ import ImportBatch from '../models/ImportBatch.js';
 import { financialService } from './financialService.js';
 import { runTransaction } from '../utils/dbTransaction.js';
 import { toDateKey } from '../utils/dateUtils.js';
-import { safeCurrency, safeQuantity, QUANTITY_EPSILON } from '../utils/mathUtils.js';
+import {
+    addQty,
+    QUANTITY_EPSILON,
+    safeAdd,
+    safeCurrency,
+    safeFloat,
+    safePrice,
+    safeQuantity,
+    safeSub,
+    safeValue,
+    subQty,
+} from '../utils/mathUtils.js';
 import AppError from '../utils/AppError.js';
 import logger from '../config/logger.js';
 
@@ -206,7 +217,7 @@ export const resolveRows = async ({ userId, walletId, rows }) => {
             }
             runningQty.set(
                 row.ticker,
-                row.side === 'BUY' ? current + row.quantity : current - row.quantity
+                row.side === 'BUY' ? addQty(current, row.quantity) : subQty(current, row.quantity)
             );
         }
 
@@ -230,12 +241,12 @@ export const resolveRows = async ({ userId, walletId, rows }) => {
         let cost = 0;
         for (const linha of importaveis) {
             if (linha.side === 'BUY') {
-                quantity += linha.quantity;
-                cost = safeCurrency(cost + linha.quantity * linha.price);
+                quantity = addQty(quantity, linha.quantity);
+                cost = safeAdd(cost, safeValue(linha.quantity, linha.price));
             } else {
-                const avg = quantity > 0 ? cost / quantity : 0;
-                cost = safeCurrency(cost - linha.quantity * avg);
-                quantity -= linha.quantity;
+                const avg = safePrice(cost, quantity);
+                cost = safeSub(cost, safeValue(linha.quantity, avg));
+                quantity = subQty(quantity, linha.quantity);
             }
         }
         return {
@@ -245,7 +256,7 @@ export const resolveRows = async ({ userId, walletId, rows }) => {
             currency: importaveis[0]?.currency || 'BRL',
             rows: linhas.length,
             quantity: safeQuantity(quantity),
-            averagePrice: quantity > 0 ? safeCurrency(cost / quantity) : 0,
+            averagePrice: quantity > 0 ? safeCurrency(safePrice(cost, quantity)) : 0,
             totalCost: safeCurrency(cost),
             hadPosition: positionByTicker.has(ticker),
         };
@@ -290,7 +301,7 @@ export const applyImport = async ({ userId, walletId, rows, source }) => {
     const saldo = new Map(existing.map((a) => [a.ticker, safeQuantity(a.quantity)]));
     for (const row of normalized) {
         const atual = saldo.get(row.ticker) ?? 0;
-        saldo.set(row.ticker, row.side === 'BUY' ? atual + row.quantity : atual - row.quantity);
+        saldo.set(row.ticker, row.side === 'BUY' ? addQty(atual, row.quantity) : subQty(atual, row.quantity));
     }
     const negativo = [...saldo.entries()].find(([, qty]) => qty < -QUANTITY_EPSILON);
     if (negativo) {
@@ -310,8 +321,8 @@ export const applyImport = async ({ userId, walletId, rows, source }) => {
 
         const docs = normalized.map((row) => {
             const ticker = row.ticker;
-            const quantity = Math.abs(Number(row.quantity));
-            const price = Math.abs(Number(row.price));
+            const quantity = safeQuantity(Math.abs(Number(row.quantity)));
+            const price = safeFloat(Math.abs(Number(row.price)));
             return {
                 user: userId,
                 wallet: walletId,
@@ -319,7 +330,7 @@ export const applyImport = async ({ userId, walletId, rows, source }) => {
                 type: row.side,
                 quantity,
                 price,
-                totalValue: quantity * price,
+                totalValue: safeValue(quantity, price),
                 // Moeda nativa carimbada já na criação: o import conhece a moeda
                 // (resolvida no preview), então não precisa do segundo save que o
                 // fluxo de lançamento avulso faz. O `fxRate` fica de fora — quem

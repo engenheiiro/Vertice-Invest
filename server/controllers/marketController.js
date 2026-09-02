@@ -34,7 +34,9 @@ export const getCurrentQuote = async (req, res, next) => {
         const { ticker } = req.query;
         if (!ticker) return res.status(400).json({ message: "Ticker obrigatório" });
 
-        const data = await marketDataService.getMarketDataByTicker(ticker);
+        // Leitura interativa: responde imediatamente com o último valor válido e,
+        // se estiver antigo, renova em background (stale-while-revalidate).
+        const data = await marketDataService.getMarketDataByTicker(ticker, { interactive: true });
         res.json(data);
     } catch (error) {
         next(error);

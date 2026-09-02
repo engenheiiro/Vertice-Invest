@@ -68,12 +68,15 @@ export const trackJob = async (jobId, fn) => {
         const result = await fn();
         const finishedAt = new Date();
         const reportedFailure = result && typeof result === 'object' && result.success === false;
+        const reportedSkip = result && typeof result === 'object' && result.skipped === true;
         await safeClose(run?._id, {
             finishedAt,
             durationMs: finishedAt.getTime() - startedAt.getTime(),
-            status: reportedFailure ? 'FAILED' : 'SUCCESS',
+            status: reportedSkip ? 'SKIPPED' : reportedFailure ? 'FAILED' : 'SUCCESS',
             error: reportedFailure ? String(result.error || 'falha sem detalhe').slice(0, 500) : null,
-            meta: result && typeof result === 'object' ? result.jobMeta ?? null : null,
+            meta: result && typeof result === 'object'
+                ? result.jobMeta ?? (reportedSkip ? { reason: result.reason || 'SKIPPED' } : null)
+                : null,
         });
         // O resultado segue intacto para o chamador — só o registro muda.
         if (reportedFailure) {

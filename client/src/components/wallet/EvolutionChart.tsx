@@ -172,8 +172,9 @@ export const EvolutionChart = React.memo(() => {
         [chartData, isBar]
     );
 
-    // Escala do eixo Y calculada a partir dos próprios dados (Patrimônio + Aplicado),
-    // em vez de deixar o Recharts decidir. Dois motivos:
+    // Escala do eixo Y calculada a partir dos próprios dados, em vez de deixar o
+    // Recharts decidir. A linha representa Patrimônio Líquido; a barra representa
+    // Aplicado + Resultado Total. Dois motivos:
     //  1) Zoom: sem domain explícito o auto-scale às vezes inclui o zero (comum na
     //     janela Diária) e uma variação real de poucos R$ vira uma linha reta.
     //  2) Rótulos: geramos os ticks em passos "redondos" e derivamos as casas decimais
@@ -183,8 +184,9 @@ export const EvolutionChart = React.memo(() => {
         if (chartData.length === 0) return null;
         let min = Infinity, max = -Infinity;
         chartData.forEach((p) => {
-            min = Math.min(min, p.realEquity, p.realInvested);
-            max = Math.max(max, p.realEquity, p.realInvested);
+            const displayedBalance = isBar ? p.realTotalBalance : p.realEquity;
+            min = Math.min(min, displayedBalance, p.realInvested);
+            max = Math.max(max, displayedBalance, p.realInvested);
         });
         if (!isFinite(min) || !isFinite(max)) return null;
 
@@ -256,7 +258,8 @@ export const EvolutionChart = React.memo(() => {
     const renderEndDot = (props: any): React.ReactElement => {
         const { cx, cy, index, payload } = props;
         if (cx == null || cy == null || payload?.isVisualAnchor || index !== renderData.length - 1) return <g key={`d${index}`} />;
-        const label = formatTooltipCurrency(payload.realEquity);
+        const displayedBalance = isBar ? payload.realTotalBalance : payload.realEquity;
+        const label = formatTooltipCurrency(displayedBalance);
         const bw = Math.max(78, label.length * 7.2 + 18);
         // Linha: bolha à esquerda do ponto (o ponto vive na borda direita).
         // Barra: centralizada sobre a última barra, presa dentro do plot.
@@ -266,7 +269,7 @@ export const EvolutionChart = React.memo(() => {
             : cx - bw - 6;
         const by = isBar ? cy - 26 : cy - 30;
         return (
-            <g>
+            <g key={`d${index}`}>
                 <rect x={bx} y={by} width={bw} height={22} rx={7} fill={bubbleBg} />
                 <text x={bx + bw / 2} y={by + 15} textAnchor="middle" fontSize={11.5} fontWeight={800} fill={bubbleText}>
                     {label}
@@ -280,7 +283,7 @@ export const EvolutionChart = React.memo(() => {
     const renderActiveDot = (props: any): React.ReactElement => {
         const { cx, cy, payload, index } = props;
         if (cx == null || cy == null || payload?.isVisualAnchor) return <g key={`a${index}`} />;
-        return <circle cx={cx} cy={cy} r={4} fill="#0e9268" stroke={dotFill} strokeWidth={2} />;
+        return <circle key={`a${index}`} cx={cx} cy={cy} r={4} fill="#0e9268" stroke={dotFill} strokeWidth={2} />;
     };
 
     if (kpis.totalEquity === 0 && chartData.length === 0) {
@@ -431,13 +434,13 @@ export const EvolutionChart = React.memo(() => {
                                     // mesma tela convivem três réguas: a do dia (card), a do ponto
                                     // anterior e a da janela inteira (cabeçalho). Chamar as três de
                                     // "no período" fazia parecer que os números se contradiziam.
-                                    //   • ponto de HOJE no diário → "Variação hoje", com o MESMO
+                                    //   • ponto LIVE no diário → "Variação Hoje", com o MESMO
                                     //     número do card (buildEvolutionChartData força isso);
                                     //   • demais pontos → nomeia o comparativo ("vs 30/06");
                                     //   • sem ponto anterior → o número é o acumulado, e aí o
                                     //     texto genérico é o honesto.
                                     const variationLabel = data.isDayVariation
-                                        ? 'Variação hoje'
+                                        ? 'Variação Hoje'
                                         : data.previousLabel
                                             ? `Variação vs ${data.previousLabel}`
                                             : 'Variação no período';
@@ -461,7 +464,7 @@ export const EvolutionChart = React.memo(() => {
                                                     <span className="text-slate-200 tabular-nums whitespace-nowrap">{formatTooltipCurrency(data.realInvested)}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center gap-2 sm:gap-6 text-xs">
-                                                    <span className="text-emerald-400 font-bold">Resultado</span>
+                                                    <span className="text-emerald-400 font-bold">Resultado Total</span>
                                                     <span className={`tabular-nums font-bold whitespace-nowrap ${data.realProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
                                                         {data.realProfit >= 0 ? '+' : ''}{formatTooltipCurrency(data.realProfit)}
                                                     </span>
@@ -477,9 +480,15 @@ export const EvolutionChart = React.memo(() => {
                                                     </span>
                                                 </div>
 
-                                                <div className="border-t border-slate-800 pt-1.5 mt-1 flex justify-between items-center gap-2 sm:gap-6">
-                                                    <span className="text-white font-bold text-xs uppercase whitespace-nowrap">Saldo Final</span>
-                                                    <span className="text-white font-bold tabular-nums text-sm whitespace-nowrap">{formatTooltipCurrency(data.realEquity)}</span>
+                                                <div className="border-t border-slate-800 pt-1.5 mt-1 space-y-1.5">
+                                                    <div className="flex justify-between items-center gap-2 sm:gap-6 text-xs">
+                                                        <span className="text-slate-400 font-bold whitespace-nowrap">Patrimônio Líquido</span>
+                                                        <span className="text-slate-200 font-bold tabular-nums whitespace-nowrap">{formatTooltipCurrency(data.realEquity)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center gap-2 sm:gap-6">
+                                                        <span className="text-white font-bold text-xs uppercase whitespace-nowrap">Aplicado + Resultado</span>
+                                                        <span className="text-white font-bold tabular-nums text-sm whitespace-nowrap">{formatTooltipCurrency(data.realTotalBalance)}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -523,7 +532,7 @@ export const EvolutionChart = React.memo(() => {
 
                                 {/* Série invisível no topo da pilha: só carrega a bolha do LIVE. */}
                                 <Line
-                                    dataKey={(d: any) => Math.max(d.realEquity, d.realInvested)}
+                                    dataKey={(d: any) => Math.max(d.realTotalBalance, d.realInvested)}
                                     stroke="none"
                                     dot={renderEndDot}
                                     activeDot={false}

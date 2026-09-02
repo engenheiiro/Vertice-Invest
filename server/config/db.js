@@ -3,6 +3,10 @@ import mongoose from 'mongoose';
 import logger from './logger.js';
 import { attachMongoBreaker } from '../middleware/mongoCircuitBreaker.js';
 import { attachMongoCommandMetrics, performanceMetrics } from '../utils/performanceMetrics.js';
+import AssetTransaction from '../models/AssetTransaction.js';
+import WalletSnapshot from '../models/WalletSnapshot.js';
+import JobLease from '../models/JobLease.js';
+import JobCheckpoint from '../models/JobCheckpoint.js';
 
 /**
  * Self-heal de índices legados que `autoIndex` NÃO remove sozinho (autoIndex só
@@ -22,6 +26,7 @@ const healLegacyIndexes = async () => {
     // ÚNICO — causa E11000 ao cadastrar o mesmo ticker em carteiras diferentes.
     { collection: 'userassets', index: 'user_1_ticker_1', reason: 'Fase 2 — múltiplas carteiras' },
     { collection: 'assettransactions', index: 'user_1_ticker_1_date_1', reason: 'Fase 2 — múltiplas carteiras' },
+    { collection: 'assettransactions', index: 'wallet_1_ticker_1_date_1', reason: 'Fase 3 — sort agora inclui createdAt' },
     { collection: 'investmentgoals', index: 'user_1_status_1', reason: 'Fase 2 — múltiplas carteiras' },
     { collection: 'goalcontributions', index: 'user_1_goal_1_date_-1', reason: 'Fase 2 — múltiplas carteiras' },
     // ÚNICO — causa E11000 ao criar a 2ª carteira. Nasceu `{ unique, sparse }`
@@ -46,6 +51,23 @@ const healLegacyIndexes = async () => {
       logger.warn(`[Database] Não foi possível remover o índice legado ${collection}.${index}: ${err.message}`);
     }
   }
+};
+
+/**
+ * Índices operacionais cuja ausência muda corretude (lease único) ou recoloca
+ * SORT em memória nas rotas quentes. `createIndex` é idempotente e o connectDB
+ * espera sua confirmação antes de liberar o scheduler.
+ */
+const ensureOperationalIndexes = async () => {
+  // Model.init() reutiliza a promessa interna do Mongoose e, portanto, não
+  // disputa a mesma criação com o autoIndex iniciado na conexão.
+  await Promise.all([
+    AssetTransaction.init(),
+    WalletSnapshot.init(),
+    JobLease.init(),
+    JobCheckpoint.init(),
+  ]);
+  logger.info('🧭 [Database] Índices operacionais da Fase 3 confirmados.');
 };
 
 /**
@@ -113,6 +135,7 @@ const connectDB = async () => {
     attachMongoCommandMetrics(conn.connection.getClient());
     logger.info(`🗄️ [Database] MongoDB Conectado: ${conn.connection.host}`);
 
+    await ensureOperationalIndexes();
     await healLegacyIndexes();
 
     mongoose.connection.on('error', err => {

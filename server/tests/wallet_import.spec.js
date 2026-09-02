@@ -276,6 +276,24 @@ describe('applyImport — gravação do lote', () => {
     expect(result).toMatchObject({ batchId: 'batch1', inserted: 1 });
   });
 
+  it('preserva fração de cripto e arredonda o valor monetário sem float cru', async () => {
+    givenWritableDb();
+
+    await applyImport({
+      userId: 'u1', walletId: 'w1', source: 'SHEET',
+      rows: [row({
+        ticker: 'BTC', type: 'CRYPTO', currency: 'USD', quantity: 0.0000028, price: 600000.005,
+      })],
+    });
+
+    const [docs] = AssetTransaction.insertMany.mock.calls[0];
+    expect(docs[0]).toMatchObject({
+      quantity: 0.0000028,
+      price: 600000.005,
+      totalValue: 1.68,
+    });
+  });
+
   it('ancora a data no meio-dia UTC (dia-calendário, não meia-noite)', async () => {
     givenWritableDb();
 

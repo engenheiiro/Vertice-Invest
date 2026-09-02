@@ -7,7 +7,8 @@ process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test-refresh
 // O SDK do Gemini exige chave já na construção (import de aiEnhancementService).
 process.env.API_KEY = process.env.API_KEY || 'test-gemini-key';
 
-// O scheduler registra cron de verdade no import do app — nunca num teste.
+// O app puro não inicia o scheduler; o mock mantém os controllers que importam
+// funções de snapshot isolados de qualquer rotina real.
 vi.mock('../services/schedulerService.js', () => ({
     initScheduler: () => {},
     runDailySnapshot: async () => ({ status: 'SKIPPED' }),

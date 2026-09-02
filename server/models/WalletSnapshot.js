@@ -60,7 +60,8 @@ const WalletSnapshotSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-// Índice composto para buscar histórico de UMA CARTEIRA ordenado por data.
+// Índice composto para buscar histórico de UMA CARTEIRA em qualquer direção.
+// O Mongo percorre o mesmo B-tree ao contrário para `{ date: -1 }`.
 WalletSnapshotSchema.index({ wallet: 1, date: 1 });
 WalletSnapshotSchema.index(
   { wallet: 1, dayKey: 1 },

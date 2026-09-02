@@ -66,6 +66,7 @@
     "repair:wallet-metrics-v5": "node server/scripts/repairWalletMetricsV5.js",
     "benchmark:http": "npm run benchmark:http --prefix server",
     "benchmark:mongo": "npm run benchmark:mongo --prefix server",
+    "benchmark:phase3": "npm run benchmark:phase3 --prefix server",
     "benchmark:web": "npm run benchmark:web --prefix client"
   },
   "lint-staged": {

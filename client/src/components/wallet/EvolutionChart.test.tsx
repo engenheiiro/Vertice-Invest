@@ -10,6 +10,8 @@ vi.mock('../../contexts/WalletContext', () => ({
             totalEquity: 8353.77,
             totalInvested: 8353.77,
             totalResult: 0,
+            dayVariation: 7.51,
+            dayVariationPercent: 0.03,
         },
     }),
 }));
@@ -20,13 +22,26 @@ vi.mock('../../contexts/ThemeContext', () => ({
 
 vi.mock('recharts', async () => {
     const ReactModule = await import('react');
+    let latestChartData: any[] = [];
     const Container = ({ children }: { children?: React.ReactNode }) => ReactModule.createElement('div', null, children);
-    const Chart = ({ children, data }: { children?: React.ReactNode; data?: Array<{ isLive?: boolean; isVisualAnchor?: boolean }> }) => ReactModule.createElement('svg', {
-        'data-testid': 'composed-chart',
-        'data-point-count': String(data?.length ?? 0),
-        'data-first-anchor': String(data?.[0]?.isVisualAnchor === true),
-        'data-last-live': String(data?.[(data?.length ?? 1) - 1]?.isLive === true),
-    }, children);
+    const Chart = ({ children, data }: { children?: React.ReactNode; data?: Array<{ isLive?: boolean; isVisualAnchor?: boolean }> }) => {
+        latestChartData = data || [];
+        return ReactModule.createElement('svg', {
+            'data-testid': 'composed-chart',
+            'data-point-count': String(data?.length ?? 0),
+            'data-first-anchor': String(data?.[0]?.isVisualAnchor === true),
+            'data-last-live': String(data?.[(data?.length ?? 1) - 1]?.isLive === true),
+        }, children);
+    };
+    const Tooltip = ({ content }: { content?: (props: any) => React.ReactNode }) => ReactModule.createElement(
+        'div',
+        { 'data-testid': 'evolution-tooltip' },
+        content?.({
+            active: true,
+            payload: [{ payload: latestChartData[latestChartData.length - 1] }],
+            label: 'hoje',
+        })
+    );
     const Empty = () => null;
 
     return {
@@ -37,7 +52,7 @@ vi.mock('recharts', async () => {
         Line: Empty,
         XAxis: Empty,
         YAxis: Empty,
-        Tooltip: Empty,
+        Tooltip,
         CartesianGrid: Empty,
     };
 });
@@ -68,5 +83,21 @@ describe('EvolutionChart — carteira sem snapshots', () => {
         expect(chart).toHaveAttribute('data-first-anchor', 'false');
         expect(chart).toHaveAttribute('data-last-live', 'true');
         expect(localStorage.getItem('evolutionChartType')).toBe('BAR');
+    });
+
+    it('explicita no tooltip resultado total, patrimônio líquido e a soma que fecha', () => {
+        render(<EvolutionChart />);
+
+        const tooltip = screen.getByTestId('evolution-tooltip');
+        expect(tooltip).toHaveTextContent('Resultado Total');
+        expect(tooltip).toHaveTextContent('Patrimônio Líquido');
+        expect(tooltip).toHaveTextContent('Aplicado + Resultado');
+    });
+
+    it('nomeia o comparativo ao vivo como Variação Hoje', () => {
+        render(<EvolutionChart />);
+        fireEvent.click(screen.getByRole('button', { name: 'Diário' }));
+
+        expect(screen.getByTestId('evolution-tooltip')).toHaveTextContent('Variação Hoje');
     });
 });

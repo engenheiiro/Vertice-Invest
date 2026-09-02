@@ -57,8 +57,11 @@ const AssetTransactionSchema = new mongoose.Schema({
 // Reversão de um lote inteiro (deleteMany por batch) e listagem de importações.
 AssetTransactionSchema.index({ wallet: 1, importBatchId: 1 });
 
-// Índices para performance na busca de histórico
-AssetTransactionSchema.index({ wallet: 1, ticker: 1, date: 1 });
+// Índices que cobrem filtro + ordenação das duas listagens quentes. `createdAt`
+// desempata lançamentos do mesmo dia; sem ele o Mongo fazia um estágio SORT em
+// memória mesmo já tendo `{ wallet, ticker, date }`.
+AssetTransactionSchema.index({ wallet: 1, ticker: 1, date: -1, createdAt: -1 });
+AssetTransactionSchema.index({ wallet: 1, date: -1, createdAt: -1 });
 AssetTransactionSchema.index({ user: 1 }); // consultas "todas as carteiras do usuário"
 
 const AssetTransaction = mongoose.models.AssetTransaction || mongoose.model('AssetTransaction', AssetTransactionSchema);

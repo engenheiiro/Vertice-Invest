@@ -9,7 +9,7 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
-import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, safeValue, safePrice, safeQuantity, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
+import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, safeValue, safePrice, safeQuantity, percentOf, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
 import { computeQuotaSharpe, computeQuotaBeta, snapshotDayKey, SHARPE_WINDOW_SNAPSHOTS } from '../utils/walletRisk.js';
 import { brazilDateKey, countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { assetDailyFactor, valueFixedIncomeAsset, PRICING_SOURCE, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
@@ -19,12 +19,22 @@ import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from '../services/treasur
 import { isDollarized, resolveAssetCurrency, resolveTransactionCurrency, needsCurrencyFallback } from '../utils/assetCurrency.js';
 import { positionCostBRL, positionRealizedProfitBRL } from '../utils/fxRate.js';
 import { sumTransactionFlowBRL, transactionsAfterSnapshotFilter } from '../utils/walletSnapshot.js';
+import { historyStorageKey } from '../utils/assetHistory.js';
+import { loadClosesForDay } from '../utils/dayCloses.js';
+import { loadCdiCurve, earliestFixedIncomeLotDate } from '../utils/cdiCurve.js';
 import { allocationBucket, resolveAllocationClass } from '../utils/assetAllocation.js';
 import { cashFlowTickerCondition } from '../utils/cashFlowFilter.js';
 import logger from '../config/logger.js';
 import AppError from '../utils/AppError.js';
 import { cdiAnnualRateForYear, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { runDailySnapshot } from '../services/schedulerService.js'; // Importado
+import {
+    boundedPointLimit,
+    boundedPageLimit,
+    DEFAULT_HISTORY_POINTS,
+    DEFAULT_PERFORMANCE_POINTS,
+    downsampleTimeSeries,
+} from '../utils/timeSeriesDownsample.js';
 
 const getDailyFactorForDate = (date, currentConfigRate) => {
     // Resolução da taxa por ano centralizada em financialConstants. Fallback 10.0
@@ -64,6 +74,10 @@ const calculateLiveKPIS = async (userId, currentCdi, walletId) => {
     const selic = usdConfig?.selic;
     const ipca = usdConfig?.ipca;
     const calcDate = brazilToday();
+    const cdiCurve = await loadCdiCurve({
+        since: earliestFixedIncomeLotDate(activeAssets),
+        currentRate: currentCdi,
+    });
 
     for (const asset of activeAssets) {
         const multiplier = isDollarized(asset) ? usdRate : 1;
@@ -73,7 +87,7 @@ const calculateLiveKPIS = async (userId, currentCdi, walletId) => {
             // Fonte única de valorização (idêntica ao getWalletData) — antes este
             // caminho ignorava o rendimento (val = qty), divergindo do KPI.
             val = valueFixedIncomeAsset(asset, {
-                cdiRate: currentCdi, selic, ipca, calcDate,
+                cdiRate: currentCdi, selic, ipca, calcDate, cdiCurve,
                 history: treasuryPricing.historyFor(asset),
             }).value;
         } else {
@@ -218,11 +232,65 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAss
     return { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots, riskSnapshots, treasuryPricing };
 };
 
+/**
+ * O dia BR de um lote. Data "pura" (meia-noite UTC, como vem de um input
+ * YYYY-MM-DD) é lida como está; instante com hora é convertido para o fuso de
+ * São Paulo.
+ */
+const lotDayStr = (d) => {
+    const o = new Date(d);
+    if (o.getUTCHours() === 0 && o.getUTCMinutes() === 0 && o.getUTCSeconds() === 0) {
+        return o.toISOString().split('T')[0];
+    }
+    return brazilDateKey(o);
+};
+
+/**
+ * TODOS os lotes da posição são do dia `dayKey`? É a guarda que impede uma compra
+ * de hoje de exibir a variação do pregão inteiro (a posição não existia na
+ * abertura) — e agora a que garante que ela ancore no CUSTO, não no candle.
+ *
+ * O dia vem do fuso BR (`todayKey`), nunca de `toDateKey(new Date())`: aquele é
+ * UTC, e das 21h à meia-noite de Brasília já aponta para o dia seguinte. A guarda
+ * ficava morta justamente nas três horas em que o usuário confere a carteira
+ * depois do pregão.
+ */
+const isBoughtOnDay = (asset, dayKey) =>
+    Array.isArray(asset.taxLots) && asset.taxLots.length > 0
+    && asset.taxLots.every((lot) => lotDayStr(lot.date) === dayKey);
+
 // Processa um único ativo: resolve preço/variação e devolve o card pronto +
 // as contribuições para os totais da carteira. Aritmética idêntica à original.
-export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay, treasuryPricing = EMPTY_TREASURY_PRICING, todayKey = brazilDateKey() }) => {
+//
+// ÂNCORA DO DIA (`anchorDayKey`/`anchorCloses`/`anchorUsdRate`): o "início do dia"
+// de cada posição é o MESMO dado que o snapshot-âncora usou para gravar o
+// patrimônio daquele dia — fechamento do candle e câmbio do dia-âncora. É isso
+// que faz valer a identidade
+//
+//     patrimônio do último snapshot + Variação Hoje === patrimônio de hoje
+//
+// Antes cada ponta lia uma fonte: o snapshot marcava pelo candle gravado e o card
+// reconstruía o início do dia por `preço ÷ (1 + change do provedor)`. As duas só
+// coincidem quando o provedor não mexe na referência — e ele mexe. Em 01/09/2026,
+// seis FIIs ficaram ex-provento e o Yahoo baixou `regularMarketPreviousClose` pelo
+// valor do provento (TRXF11: candle 79,30 × prevClose 78,37 = exatamente os R$ 0,93
+// que o fundo distribui todo mês), enquanto o candle guardava o fechamento cheio.
+// Resultado: a queda do dia-ex entrava no patrimônio e sumia da variação, e a tela
+// exibia "+R$ 7,97 hoje" com o patrimônio R$ 8,14 MENOR que o de ontem.
+//
+// Cripto sofria do mesmo mal por outro caminho: negocia 24h, e o `previousClose` do
+// provedor corta o dia numa hora e o candle gravado noutra.
+//
+// Sem âncora (carteira nova, ativo sem candle no dia) cai no caminho antigo: um
+// número reconstruído é melhor que zerar a variação da carteira inteira.
+export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay, treasuryPricing = EMPTY_TREASURY_PRICING, todayKey = brazilDateKey(), anchorDayKey = null, anchorCloses = null, anchorUsdRate = 0 }) => {
     let currentPrice = 0;
     let dayChangePct = 0;
+    // Valor da posição na MOEDA NATIVA no dia-âncora. `null` = sem âncora
+    // utilizável; o cálculo cai na reconstrução por percentual (comportamento
+    // anterior). Quando presente, é ele — e não `dayChangePct` — quem define o
+    // início do dia, porque é o número que o snapshot realmente gravou.
+    let anchorValueNative = null;
     // Renda fixa/caixa: valor TOTAL da posição (fonte da verdade). Guardado à parte
     // porque re-derivar via quantidade × preço unitário perde precisão — safeFloat
     // arredonda o preço a 4 casas e, numa reserva com muitas "unidades" (ex.: 15.000),
@@ -241,6 +309,20 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
 
         const totalCurrentValue = pricing.value;
         accruedTotalValue = totalCurrentValue;
+
+        // Renda fixa no dia-âncora pela MESMA porta (`valueFixedIncomeAsset`), com a
+        // data de cálculo daquele dia: curva ou PU oficial, exatamente como o
+        // snapshot marcou. Substitui a heurística de "um fator diário se hoje é dia
+        // útil", que errava sempre que o âncora não era o dia útil imediatamente
+        // anterior (segunda-feira, feriado, buraco no histórico).
+        if (anchorDayKey) {
+            const anchorValue = valueFixedIncomeAsset(asset, {
+                ...macroRates,
+                calcDate: new Date(`${anchorDayKey}T00:00:00.000Z`),
+                history,
+            }).value;
+            if (anchorValue > 0) anchorValueNative = anchorValue;
+        }
         const totalQuantity = asset.quantity;
 
         if (totalQuantity > 0) {
@@ -249,7 +331,10 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
             currentPrice = asset.type === 'CASH' ? 1 : safeDiv(asset.totalCost, asset.quantity);
         }
 
-        const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+        // Mesmo dia BR que o resto da função usa (`todayKey`), em vez de recalcular
+        // o fuso aqui — duas leituras do "hoje" na mesma função é como elas passam
+        // a discordar na virada.
+        const todayStr = todayKey;
 
         if (pricing.source === PRICING_SOURCE.MTM) {
             // Marcado: a variação do dia é a do PU — e só existe quando o PU
@@ -264,12 +349,7 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
             dayChangePct = isTodayBusinessDay ? (effectiveDailyFactor - 1) * 100 : 0;
 
             // Ativo comprado HOJE: zera a variação do dia (evita variação irreal).
-            const lotDayStr = (d) => {
-                const o = new Date(d);
-                if (o.getUTCHours() === 0 && o.getUTCMinutes() === 0 && o.getUTCSeconds() === 0) return o.toISOString().split('T')[0];
-                return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(o);
-            };
-            const boughtToday = asset.taxLots && asset.taxLots.length > 0 && asset.taxLots.every(lot => lotDayStr(lot.date) === todayStr);
+            const boughtToday = isBoughtOnDay(asset, todayKey);
             if (boughtToday) dayChangePct = 0;
         }
 
@@ -278,11 +358,25 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
         matured = isMatured(asset, calcDate);
         if (matured) dayChangePct = 0;
 
+        // Com âncora, a variação exibida é a MEDIDA contra o dia-âncora — não a
+        // estimada por um fator. Cobre curva e marcação a mercado com uma régua só.
+        if (anchorValueNative !== null && !matured) {
+            dayChangePct = ((totalCurrentValue / anchorValueNative) - 1) * 100;
+        }
+
     } else {
         const cached = assetMap.get(asset.ticker);
         if (cached && cached.price > 0) {
             currentPrice = safeFloat(Number(cached.price));
-            if (asset.type === 'CRYPTO') {
+            const anchorClose = safeFloat(Number(anchorCloses?.get(historyStorageKey(asset.ticker, asset.type)) || 0));
+            // Fechamento GRAVADO do dia-âncora: o mesmo número que virou patrimônio
+            // no snapshot. Vale para todas as classes — ação, FII, ETF e cripto — e
+            // é o que impede que um ajuste de referência do provedor (dia-ex) ou um
+            // corte de dia diferente (cripto 24h) abra vão entre o card e o gráfico.
+            if (anchorClose > 0) {
+                dayChangePct = ((currentPrice / anchorClose) - 1) * 100;
+                anchorValueNative = safeValue(asset.quantity, anchorClose);
+            } else if (asset.type === 'CRYPTO') {
                 // Cripto não tem pregão para datar: negocia 24h. Mas o `change` do
                 // provedor é uma janela DESLIZANTE de 24 horas, e isso não é "hoje":
                 // à 00h48 ele ainda carregava o dia inteiro de ontem — movimento que
@@ -319,13 +413,17 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
             }
 
             // Ajuste para ativos comprados HOJE (evita variação irreal no dia da compra)
-            const todayStr = toDateKey(new Date());
-            const boughtToday = asset.taxLots && asset.taxLots.length > 0 && asset.taxLots.every(lot => toDateKey(lot.date) === todayStr);
+            const boughtToday = isBoughtOnDay(asset, todayKey);
 
             if (boughtToday && asset.quantity > 0) {
                 const averagePrice = safePrice(asset.totalCost, asset.quantity);
                 if (averagePrice > 0) {
                     dayChangePct = ((currentPrice / averagePrice) - 1) * 100;
+                    // Posição que não existia no dia-âncora: o início do dia é o
+                    // custo, não o fechamento de um candle em que ela não estava.
+                    // Precede a âncora — senão o movimento do dia inteiro entraria
+                    // como variação de uma posição comprada à tarde.
+                    anchorValueNative = safeValue(asset.quantity, averagePrice);
                 }
             }
         } else {
@@ -336,7 +434,14 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
 
     const dollarized = isDollarized(asset);
     const currentMultiplier = dollarized ? usdRate : 1;
-    const prevMultiplier = dollarized ? (usdRate / (1 + usdChange/100)) : 1;
+    // Câmbio do DIA-ÂNCORA, da mesma série histórica que o snapshot consultou.
+    // `usdRate / (1 + usdChange/100)` é uma reconstrução a partir da variação
+    // intraday do provedor e responde outra pergunta ("quanto o dólar subiu nas
+    // últimas 24h"), então descolava do câmbio com que o patrimônio de ontem foi
+    // efetivamente gravado — sobrava um resíduo cambial no lugar de zero.
+    const prevMultiplier = dollarized
+        ? (anchorUsdRate > 0 ? anchorUsdRate : (usdRate / (1 + usdChange / 100)))
+        : 1;
 
     const valueBase = asset.type === 'CASH' ? asset.quantity : safeValue(asset.quantity, currentPrice);
     // Renda fixa/caixa: multiplica o TOTAL acumulado (preciso) pelo câmbio, em vez de
@@ -358,12 +463,22 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
     // Cálculo robusto da variação diária em BRL
     // Considera tanto a variação do ativo quanto a variação cambial
     const priceStart = currentPrice / (1 + dayChangePct/100);
-    // Valor de início do dia: renda fixa/caixa deriva do TOTAL acumulado ÷ fator do dia.
-    // Divisão CRUA (sem safeDiv) de propósito: o fator ~1,0005 arredondado a 4 casas
-    // reintroduziria a perda de centavos; arredonda-se só o resultado monetário final.
-    const valueStartBr = accruedTotalValue !== null
-        ? safeMult(accruedTotalValue / (1 + dayChangePct / 100), prevMultiplier)
-        : safeMult(safeValue(asset.quantity, priceStart), prevMultiplier);
+    // Valor de início do dia. Com âncora é o valor MEDIDO no dia-âncora (candle
+    // gravado / RF avaliada naquela data), o mesmo que compôs o snapshot — e é daí
+    // que vem a identidade "patrimônio de ontem + variação de hoje = hoje".
+    //
+    // Sem âncora, o caminho antigo: renda fixa/caixa deriva do TOTAL acumulado ÷
+    // fator do dia. Divisão CRUA (sem safeDiv) de propósito: o fator ~1,0005
+    // arredondado a 4 casas reintroduziria a perda de centavos; arredonda-se só o
+    // resultado monetário final.
+    let valueStartBr;
+    if (anchorValueNative !== null) {
+        valueStartBr = safeMult(anchorValueNative, prevMultiplier);
+    } else if (accruedTotalValue !== null) {
+        valueStartBr = safeMult(accruedTotalValue / (1 + dayChangePct / 100), prevMultiplier);
+    } else {
+        valueStartBr = safeMult(safeValue(asset.quantity, priceStart), prevMultiplier);
+    }
 
     const dayChangeValueBr = safeSub(totalValueBr, valueStartBr);
     const combinedChangePct = valueStartBr > 0 ? ((totalValueBr / valueStartBr) - 1) * 100 : 0;
@@ -559,7 +674,14 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         const usdRate = safeFloat(config?.dollar || 5.75);
         const usdChange = safeFloat(config?.dollarChange || 0);
         const currentCdi = (config?.cdi && config.cdi > 0) ? safeFloat(config.cdi) : ((config?.selic && config.selic > 0) ? safeFloat(config.selic) : DEFAULT_SELIC_FALLBACK);
-        const macroRates = { cdiRate: currentCdi, selic: config?.selic, ipca: config?.ipca };
+        // Curva histórica do CDI junto do macro: `processWalletAsset` já repassa
+        // `macroRates` inteiro a `valueFixedIncomeAsset`, então a renda fixa do card
+        // rende pela taxa vigente em cada dia — a mesma régua do rebuild.
+        const cdiCurve = await loadCdiCurve({
+            since: earliestFixedIncomeLotDate(activeAssets),
+            currentRate: currentCdi,
+        });
+        const macroRates = { cdiRate: currentCdi, selic: config?.selic, ipca: config?.ipca, cdiCurve };
 
         const totalRealizedProfit = closedAssets.reduce((acc, curr) => {
             const mult = isDollarized(curr) ? usdRate : 1;
@@ -570,8 +692,31 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         const brazilTodayStr = brazilDateKey();
         const isTodayBusinessDay = isBusinessDay(new Date(brazilTodayStr + 'T00:00:00.000Z'));
 
+        // ÂNCORA DO DIA: o snapshot contra o qual a Variação Hoje é medida é o MESMO
+        // que ancora o TWRR (`selectAnchorSnapshot`) e o ponto anterior do gráfico.
+        // Fixar os três no mesmo dia é o que impede a tela de mostrar um card, um
+        // gráfico e uma cota discordando sobre o que aconteceu hoje.
+        //
+        // Um snapshot do PRÓPRIO dia não serve de âncora: ele já é "hoje", e medir a
+        // variação contra ele daria zero.
+        const anchorSnapshot = selectAnchorSnapshot(
+            (snapshots || []).filter((s) => (s.dayKey || snapshotDayKey(s)) < brazilTodayStr)
+        );
+        const anchorDayKey = anchorSnapshot ? (anchorSnapshot.dayKey || snapshotDayKey(anchorSnapshot)) : null;
+        const [anchorCloses, anchorUsdRate] = anchorDayKey
+            ? await Promise.all([
+                loadClosesForDay(activeAssets, anchorDayKey),
+                financialService._loadUsdRateResolver(usdRate)
+                    .then((resolve) => safeFloat(resolve(anchorDayKey)))
+                    .catch(() => 0),
+            ])
+            : [new Map(), 0];
+
         // Processa cada ativo e acumula os totais (mesma ordem/aritmética da versão monolítica).
-        const assetCtx = { assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay, treasuryPricing, todayKey: brazilTodayStr };
+        const assetCtx = {
+            assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay, treasuryPricing,
+            todayKey: brazilTodayStr, anchorDayKey, anchorCloses, anchorUsdRate,
+        };
         const processedAssets = [];
         let totalEquity = 0;
         let totalInvested = 0;
@@ -599,14 +744,14 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
 
         let totalResultPercent = 0;
         if (safeTotalInvested > 0) {
-            totalResultPercent = safeMult(safeDiv(safeTotalResult, safeTotalInvested), 100);
+            totalResultPercent = percentOf(safeTotalResult, safeTotalInvested);
         }
 
         let dayVariationPercent = 0;
         if (safeTotalEquity > 0) {
             const denom = safeSub(safeTotalEquity, safeTotalDayVariation);
             if (denom !== 0) {
-                dayVariationPercent = safeMult(safeDiv(safeTotalDayVariation, denom), 100);
+                dayVariationPercent = percentOf(safeTotalDayVariation, denom);
             }
         }
 
@@ -669,7 +814,10 @@ export const buildWalletPerformancePayload = async (userId, walletId) => {
             user: userId,
             wallet: walletId,
             totalEquity: { $gt: 1 }
-        }).sort({ date: 1 }).lean();
+        })
+            .sort({ date: 1 })
+            .select('date dayKey totalEquity totalInvested totalDividends quotaPrice calculatedAt')
+            .lean();
         
         if (history.length === 0) {
             return [];
@@ -828,7 +976,7 @@ export const buildWalletPerformancePayload = async (userId, walletId) => {
         const { beta, sample: betaSample } = computeQuotaBeta(history, resolveIbovClose);
 
         return {
-            history: result,
+            history: downsampleTimeSeries(result, { maxPoints: DEFAULT_PERFORMANCE_POINTS }),
             stats: {
                 sharpe: sharpe === null ? null : safeFloat(sharpe),
                 sharpeSample,
@@ -851,12 +999,39 @@ export const getWalletPerformance = async (req, res, next) => {
     }
 };
 
-export const buildWalletHistoryPayload = (userId, walletId) =>
-    WalletSnapshot.find({ user: userId, wallet: walletId }).sort({ date: 1 }).lean();
+export const buildWalletHistoryPayload = async (
+    userId,
+    walletId,
+    { maxPoints = DEFAULT_HISTORY_POINTS, before = null, pageLimit = null } = {},
+) => {
+    const filter = { user: userId, wallet: walletId };
+    if (before) filter.date = { $lt: before };
+
+    const projection = 'date dayKey totalEquity totalInvested totalDividends profit profitPercent quotaPrice allocation calculatedAt source calculationVersion';
+    if (pageLimit) {
+        const page = await WalletSnapshot.find(filter)
+            .sort({ date: -1 })
+            .limit(pageLimit)
+            .select(projection)
+            .lean();
+        return page.reverse();
+    }
+
+    const history = await WalletSnapshot.find(filter).sort({ date: 1 }).select(projection).lean();
+    return downsampleTimeSeries(history, { maxPoints });
+};
 
 export const getWalletHistory = async (req, res, next) => {
     try {
-        res.json(await buildWalletHistoryPayload(req.user.id, req.walletId));
+        const maxPoints = boundedPointLimit(req.query.maxPoints, DEFAULT_HISTORY_POINTS);
+        const requestedLimit = req.query.limit ? boundedPageLimit(req.query.limit) : null;
+        const beforeDate = req.query.before ? new Date(req.query.before) : null;
+        const before = beforeDate && !Number.isNaN(beforeDate.getTime()) ? beforeDate : null;
+        res.json(await buildWalletHistoryPayload(req.user.id, req.walletId, {
+            maxPoints,
+            before,
+            pageLimit: requestedLimit,
+        }));
     } catch (error) {
         next(error);
     }
@@ -879,10 +1054,13 @@ export const addAssetTransaction = async (req, res, next) => {
         const transactionDayKey = toDateKey(txDate);
         if (date && transactionDayKey > brazilTodayKey) throw AppError.badRequest("Data futura não permitida.");
         await runTransaction(async (session) => {
+            const transactionQuantity = safeQuantity(Math.abs(Number(quantity)));
+            const transactionPrice = safeFloat(Math.abs(Number(price)));
             const newTx = new AssetTransaction({
                 user: userId, wallet: walletId, ticker: ticker.toUpperCase(), type: transactionType,
-                quantity: Math.abs(parseFloat(quantity)), price: Math.abs(parseFloat(price)),
-                totalValue: Math.abs(parseFloat(quantity)) * Math.abs(parseFloat(price)),
+                quantity: transactionQuantity,
+                price: transactionPrice,
+                totalValue: safeValue(transactionQuantity, transactionPrice),
                 date: txDate, notes: name ? `Nome: ${name}` : ''
             });
             await newTx.save({ session });

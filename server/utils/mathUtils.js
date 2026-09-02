@@ -67,7 +67,24 @@ export const safePrice = (totalCost, quantity) => {
 export const calculatePercent = (current, initial) => {
     if (initial === 0) return 0;
     const diff = safeSub(current, initial);
-    return safeMult(safeDiv(diff, initial), 100);
+    return percentOf(diff, initial);
+};
+
+/**
+ * `parte ÷ todo` em PERCENTUAL, arredondado só no fim.
+ *
+ * Não use `safeDiv` para isto: ele arredonda a RAZÃO a 4 casas, e a razão de um
+ * percentual pequeno mora bem abaixo disso. Uma variação de R$ 1,58 sobre R$ 22.148
+ * dá 0,00007134 → arredondado vira 0,0001 → exibido como "0,01%" no lugar de
+ * "0,007%": 40% de erro, e todo percentual do sistema quantizado em degraus de
+ * 0,01. Dinheiro tem 2 casas; razão não tem casa nenhuma até virar percentual.
+ */
+export const percentOf = (part, whole) => {
+    const w = Number(whole);
+    if (!Number.isFinite(w) || w === 0) return 0;
+    const p = Number(part);
+    if (!Number.isFinite(p)) return 0;
+    return safeFloat((p / w) * 100);
 };
 
 // --- NOVAS FUNÇÕES FINANCEIRAS (V4) ---

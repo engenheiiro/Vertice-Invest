@@ -24,7 +24,8 @@ import { dropUntradableCandles, historyStorageKey } from '../utils/assetHistory.
 import { brazilDayKey, isTwrrReturnAnomalous, isValidDayKey, snapshotInstantForDay } from '../utils/walletSnapshot.js';
 import { resolveAllocationClass } from '../utils/assetAllocation.js';
 import { loadUsdRateResolver, effectiveFxRate } from '../utils/fxRate.js';
-import { markLotsToMarket, findTreasuryPu } from '../utils/fixedIncome.js';
+import { markLotsToMarket, findTreasuryPu, accrueLotsValue } from '../utils/fixedIncome.js';
+import { loadCdiCurve, annualRateFromDailyFactor } from '../utils/cdiCurve.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
 
 export const financialService = {
@@ -427,6 +428,12 @@ export const financialService = {
                     const state = fixedIncomeState[tx.ticker];
                     state.currentValue += tx.totalValue;
                     state.lots.push({ dateIso: txDateIso, cost: tx.totalValue });
+                    // `currentValue` acima é só o valor de partida do dia da compra:
+                    // a partir daqui quem manda são os LOTES, recompostos do zero a
+                    // cada dia por `accrueLotsValue`. É de lá que vem a regra de que a
+                    // aplicação não rende no próprio dia — `countBusinessDays` conta
+                    // os dias ESTRITAMENTE depois da compra.
+                    //
                     // Compra anterior ao início da série: o título é abandonado pela
                     // marcação de vez, em vez de marcar só parte dos lotes. Metade
                     // marcada e metade na curva seria um número sem régua.
@@ -490,7 +497,7 @@ export const financialService = {
      * KPI/benchmark (que usam countBusinessDays, pulando feriados).
      */
     _accrueDailyFixedIncome(ctx) {
-        const { cursor, cursorIso, portfolio, fixedIncomeState, dailyFactorsMap, cdiDailyFactor, currentIpcaRate } = ctx;
+        const { cursor, cursorIso, portfolio, fixedIncomeState, dailyFactorsMap, cdiDailyFactor, currentIpcaRate, currentSelicRate, currentCdiRate, cdiCurve = null } = ctx;
         const isMapFactor = dailyFactorsMap.has(cursorIso);
         const shouldApplyRates = isMapFactor || isBusinessDay(cursor);
 
@@ -507,26 +514,37 @@ export const financialService = {
 
         if (!shouldApplyRates) return;
 
+        // Recalculado DO ZERO a partir dos lotes, como o ramo marcado a mercado logo
+        // acima já fazia — e pela MESMA função que o KPI ao vivo e o snapshot diário
+        // usam (`utils/fixedIncome.accrueLotsValue`).
+        //
+        // A composição incremental que morava aqui era uma segunda implementação da
+        // mesma conta, e divergia em dois pontos: aplicava o fator no próprio dia da
+        // compra (um dia útil de juros a mais em toda a série) e não congelava o
+        // accrual no vencimento. Recompor a partir do valor do dia anterior também
+        // propagava para sempre qualquer erro de um único dia.
         for (const ticker in fixedIncomeState) {
             if (portfolio[ticker].qty > 0 && !fixedIncomeState[ticker].history) {
                 const state = fixedIncomeState[ticker];
-                let dailyFactor = 1;
-                // Indexados (Selic/CDI/IPCA): índice + spread. Selic usa o CDI
-                // histórico do dia + gap SELIC-CDI (~0,10) + spread; IPCA usa o
-                // IPCA corrente + spread (sem série diária no rebuild).
-                if (state.index === 'SELIC' || state.index === 'CDI') {
-                    const extraAnnual = (state.index === 'SELIC' ? 0.10 : 0) + (state.spread || 0);
-                    dailyFactor = cdiDailyFactor * Math.pow(1 + (extraAnnual / 100), 1/252);
-                } else if (state.index === 'IPCA') {
-                    dailyFactor = Math.pow(1 + ((currentIpcaRate + (state.spread || 0)) / 100), 1/252);
-                } else if (state.rate > 50) {
-                    // Legado: > 50 = % do CDI (ex: 110 = 110% CDI); <= 50 = prefixada a.a.
-                    dailyFactor = 1 + ((cdiDailyFactor - 1) * (state.rate / 100));
-                } else {
-                    dailyFactor = Math.pow(1 + (state.rate / 100), 1/252);
-                }
-
-                state.currentValue *= dailyFactor;
+                const endIso = (state.maturityIso && cursorIso > state.maturityIso)
+                    ? state.maturityIso
+                    : cursorIso;
+                state.currentValue = accrueLotsValue(
+                    state.lots.map((lot) => ({ date: `${lot.dateIso}T00:00:00.000Z`, principal: lot.cost })),
+                    { fixedIncomeIndex: state.index, fixedIncomeSpread: state.spread, fixedIncomeRate: state.rate },
+                    {
+                        // CDI/Selic CORRENTES, iguais aos que o KPI ao vivo passa: a
+                        // taxa de cada dia vem da curva, e este par serve só de
+                        // recurso e de base do spread SELIC−CDI. Passar aqui o CDI
+                        // do próprio dia faria o spread histórico sair diferente do
+                        // que o card calcula, reabrindo o vão que a curva fecha.
+                        cdiRate: currentCdiRate ?? annualRateFromDailyFactor(cdiDailyFactor) ?? DEFAULT_SELIC_FALLBACK,
+                        selic: currentSelicRate,
+                        ipca: currentIpcaRate,
+                        endDate: new Date(`${endIso}T00:00:00.000Z`),
+                        cdiCurve,
+                    },
+                );
             }
         }
     },
@@ -633,6 +651,7 @@ export const financialService = {
             const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
             const currentCdiRate = sysConfig?.cdi || DEFAULT_SELIC_FALLBACK;
             const currentIpcaRate = (sysConfig?.ipca && sysConfig.ipca > 0) ? sysConfig.ipca : 4.5;
+            const currentSelicRate = (sysConfig?.selic && sysConfig.selic > 0) ? sysConfig.selic : undefined;
             const currentUsdRate = sysConfig?.dollar || 5.75;
 
             const uniqueTickers = [...new Set(txs.map(t => t.ticker))];
@@ -690,6 +709,9 @@ export const financialService = {
             const today = new Date(`${endDayKey}T12:00:00.000Z`);
 
             const { dailyFactorsMap, cdiFactorsCacheFallback } = await this._loadCdiFactors(startDate, today, currentCdiRate);
+            // Curva histórica do CDI: a MESMA que o KPI ao vivo e o snapshot diário
+            // consultam, para que os três caminhos rendam pela taxa vigente em cada dia.
+            const cdiCurve = await loadCdiCurve({ since: startDate, currentRate: currentCdiRate });
 
             // Estado mutável acumulado ao longo do loop diário.
             const snapshots = [];
@@ -735,7 +757,7 @@ export const financialService = {
                 // 3) Juros da renda fixa do dia.
                 this._accrueDailyFixedIncome({
                     cursor, cursorIso, portfolio, fixedIncomeState,
-                    dailyFactorsMap, cdiDailyFactor, currentIpcaRate,
+                    dailyFactorsMap, cdiDailyFactor, currentIpcaRate, currentSelicRate, currentCdiRate, cdiCurve,
                 });
 
                 // 4) Marcação a mercado.

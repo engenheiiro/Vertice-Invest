@@ -18,7 +18,7 @@
  *    PU oficial do Tesouro Direto. Só para título público identificado sem
  *    ambiguidade e sem cupom semestral.
  */
-import { countBusinessDays, toDateKey } from './dateUtils.js';
+import { countBusinessDays, isBusinessDay, toDateKey } from './dateUtils.js';
 
 /** "Hoje" no fuso de São Paulo, como Date à meia-noite UTC (dia puro). */
 export const brazilToday = () => {
@@ -125,8 +125,7 @@ export const isMatured = (asset, calcDate) => {
  * @param {Object} opts  { cdiRate, calcDate }
  * @returns {number} valor acumulado (na moeda do ativo; multiplicador cambial é aplicado pelo chamador)
  */
-export const accrueFixedIncomeValue = (asset, { cdiRate, selic, ipca, calcDate }) => {
-    const dailyFactor = assetDailyFactor(asset, { cdiRate, selic, ipca });
+export const accrueFixedIncomeValue = (asset, { cdiRate, selic, ipca, calcDate, cdiCurve = null }) => {
     const isCash = asset.type === 'CASH';
 
     // Congela o accrual no vencimento: data-fim = min(calcDate, vencimento).
@@ -143,13 +142,78 @@ export const accrueFixedIncomeValue = (asset, { cdiRate, selic, ipca, calcDate }
             price: asset.quantity > 0 ? asset.totalCost / asset.quantity : 0,
         }];
 
+    return accrueLotsValue(
+        lots.map((lot) => ({
+            date: lot.date,
+            principal: isCash ? lot.quantity : lot.quantity * lot.price,
+        })),
+        asset,
+        { cdiRate, selic, ipca, endDate, cdiCurve },
+    );
+};
+
+/**
+ * Núcleo do accrual: compõe cada lote da compra (EXCLUSIVE) até a data-fim
+ * (inclusive), dia útil a dia útil.
+ *
+ * Fonte ÚNICA usada pelos três caminhos que precisam do valor na curva — KPI ao
+ * vivo, snapshot diário e rebuild do histórico. Antes o rebuild tinha a própria
+ * cópia, e duas cópias da mesma conta divergiram de dois jeitos: aplicavam o
+ * fator no PRÓPRIO dia da compra (um dia útil de juros a mais em toda a série) e
+ * liam o CDI de fontes diferentes (curva histórica × taxa de hoje).
+ *
+ * Com `cdiCurve`, cada dia rende pela taxa que estava vigente NAQUELE dia. Sem
+ * ela, a taxa corrente vale para todo o período — o comportamento anterior.
+ *
+ * @param {Array<{date: Date|string, principal: number}>} lots
+ * @param {Object} spec { fixedIncomeIndex, fixedIncomeSpread, fixedIncomeRate }
+ */
+export const accrueLotsValue = (lots, spec, { cdiRate, selic, ipca, endDate, cdiCurve = null }) => {
+    const end = brazilDateOnly(endDate);
+    // Spread SELIC−CDI observado hoje, aplicado aos dias históricos. Usar a Selic
+    // corrente num dia de 2024 seria pior que derivá-la do CDI daquele dia; o
+    // fallback 0,10 é a mesma folga que `effectiveAnnualRate` já assume.
+    const selicGap = (Number(selic) > 0 && Number(cdiRate) > 0)
+        ? Number(selic) - Number(cdiRate)
+        : 0.10;
+
+    // A curva tem poucas taxas distintas (uma por regime da Selic): memoizar o
+    // fator por taxa evita repetir a potenciação a cada dia útil percorrido.
+    const factorByRate = new Map();
+    const factorFor = (rate) => {
+        let f = factorByRate.get(rate);
+        if (f === undefined) {
+            f = assetDailyFactor(spec, { cdiRate: rate, selic: rate + selicGap, ipca });
+            factorByRate.set(rate, f);
+        }
+        return f;
+    };
+
     let value = 0;
     for (const lot of lots) {
-        const startDate = brazilDateOnly(lot.date);
-        const businessDays = countBusinessDays(startDate, endDate);
-        let compoundFactor = Math.pow(dailyFactor, businessDays);
+        const start = brazilDateOnly(lot.date);
+        const principal = Number(lot.principal) || 0;
+        if (principal === 0) continue;
+
+        let compoundFactor;
+        if (cdiCurve) {
+            compoundFactor = 1;
+            const cursor = new Date(start);
+            while (cursor < end) {
+                cursor.setUTCDate(cursor.getUTCDate() + 1);
+                if (!isBusinessDay(cursor)) continue;
+                const dayKey = toDateKey(cursor);
+                const rateOfDay = cdiCurve.annualRateFor(dayKey);
+                compoundFactor *= factorFor(Number.isFinite(rateOfDay) ? rateOfDay : cdiRate);
+            }
+        } else {
+            compoundFactor = Math.pow(factorFor(cdiRate), countBusinessDays(start, end));
+        }
+
+        // Fator < 1 é dado corrompido (taxa negativa, data invertida): a posição
+        // fica no principal em vez de encolher sozinha.
         if (!isFinite(compoundFactor) || compoundFactor < 1) compoundFactor = 1;
-        value += (isCash ? lot.quantity : lot.quantity * lot.price) * compoundFactor;
+        value += principal * compoundFactor;
     }
     return value;
 };
@@ -360,8 +424,8 @@ export const PRICING_SOURCE = { MTM: 'MTM', ACCRUAL: 'ACCRUAL' };
  *   fração implícita que ele multiplica, para a UI exibir preço de título em vez
  *   do preço unitário digitado. Nenhum cálculo de patrimônio depende deles.
  */
-export const valueFixedIncomeAsset = (asset, { cdiRate, selic, ipca, calcDate, history = null }) => {
-    const accrued = accrueFixedIncomeValue(asset, { cdiRate, selic, ipca, calcDate });
+export const valueFixedIncomeAsset = (asset, { cdiRate, selic, ipca, calcDate, history = null, cdiCurve = null }) => {
+    const accrued = accrueFixedIncomeValue(asset, { cdiRate, selic, ipca, calcDate, cdiCurve });
     const base = { accrued, market: null, previousMarket: null, priceDate: null, unitPrice: null, units: null };
 
     if (!history) return { ...base, value: accrued, source: PRICING_SOURCE.ACCRUAL };

@@ -1,4 +1,5 @@
 import type { HistoryPoint, WalletKPIs } from '../contexts/WalletContext';
+import { totalResultBalance } from './kpiCalculations';
 
 // Transformação PURA e testável dos snapshots patrimoniais em pontos de gráfico.
 // Antes essa lógica vivia enterrada num useMemo em EvolutionChart.tsx (sem testes).
@@ -12,12 +13,13 @@ export interface EvolutionChartPoint {
     label: string;        // 'dd/mm' (diário) | 'mm/aa' (mensal)
     fullDate: string;     // 'dd/mm/aaaa' — usado no tooltip
     sortDate: Date;
-    baseBar: number;      // min(equity, invested)  → segmento "Valor Aplicado"
-    profitBar: number;    // max(0, equity - invested) → segmento "Resultado"
-    lossBar: number;      // max(0, invested - equity) → capa vermelha (queda até o custo)
+    baseBar: number;      // min(aplicado + resultado, aplicado) → corpo da barra
+    profitBar: number;    // max(0, resultado total) → segmento "Resultado"
+    lossBar: number;      // max(0, -resultado total) → capa vermelha
     realInvested: number;
-    realEquity: number;
-    realProfit: number;
+    realEquity: number;       // patrimônio líquido, sem somar proventos à parte
+    realProfit: number;       // resultado total (inclui proventos no snapshot V5)
+    realTotalBalance: number; // aplicado + resultado; fecha a pilha visual
     periodVariation: number;         // variação de mercado do período em R$ (desconta aportes)
     periodVariationPercent: number | null; // % sobre o patrimônio do ponto anterior
     // Rótulo do ponto CONTRA o qual a variação foi medida ('30/06', 'jun/2026').
@@ -62,14 +64,25 @@ const MONTH_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set
 const monthLabel = (d: Date) => `${MONTH_ABBR[d.getMonth()]}/${d.getFullYear()}`;
 const fullLabel = (d: Date) => d.toLocaleDateString('pt-BR');
 
-// Segmentos empilhados: base = patrimônio "seguro"; profit = ganho (verde, sobe);
-// loss = queda até o custo (vermelho, capa por cima). profit e loss são mutuamente
-// exclusivos — um é sempre 0. Barra total = max(equity, invested).
-const makeBars = (equity: number, invested: number) => ({
-    baseBar: Math.min(equity, invested),
-    profitBar: Math.max(0, equity - invested),
-    lossBar: Math.max(0, invested - equity),
+// Segmentos empilhados: a barra representa APLICADO + RESULTADO TOTAL. Usar o
+// patrimônio líquido aqui descartava os proventos do snapshot, embora a legenda
+// chamasse a capa de "Resultado". profit e loss são mutuamente exclusivos.
+const makeBars = (totalBalance: number, invested: number) => ({
+    baseBar: Math.min(totalBalance, invested),
+    profitBar: Math.max(0, totalBalance - invested),
+    lossBar: Math.max(0, invested - totalBalance),
 });
+
+// O snapshot V5 persiste `profit = equity - invested + dividends`. Payloads
+// anteriores podem não ter `profit`; nesse caso recompomos com os campos
+// disponíveis, sem transformar ausência em zero silenciosamente.
+const snapshotProfit = (point: HistoryPoint): number => {
+    if (typeof point.profit === 'number' && Number.isFinite(point.profit)) return point.profit;
+    const dividends = typeof point.totalDividends === 'number' && Number.isFinite(point.totalDividends)
+        ? point.totalDividends
+        : 0;
+    return (point.totalEquity || 0) - (point.totalInvested || 0) + dividends;
+};
 
 type RawPoint = Omit<EvolutionChartPoint, 'periodVariation' | 'periodVariationPercent' | 'previousLabel' | 'isDayVariation'>;
 
@@ -145,21 +158,24 @@ function buildDaily(
     windowStart.setDate(windowStart.getDate() - (windowDays - 1));
 
     // Indexa último snapshot conhecido por dia.
-    const dayMap = new Map<string, { equity: number; invested: number }>();
+    const dayMap = new Map<string, { equity: number; invested: number; profit: number }>();
     sortedHistory.forEach((point) => {
         dayMap.set(localDayKey(new Date(point.date)), {
             equity: point.totalEquity || 0,
             invested: point.totalInvested || 0,
+            profit: snapshotProfit(point),
         });
     });
 
     // Semente: último snapshot em ou antes do início da janela (forward-fill inicial).
     let lastEquity = 0;
     let lastInvested = 0;
+    let lastProfit = 0;
     const seed = sortedHistory.filter((h) => startOfDay(new Date(h.date)) <= windowStart).pop();
     if (seed) {
         lastEquity = seed.totalEquity || 0;
         lastInvested = seed.totalInvested || 0;
+        lastProfit = snapshotProfit(seed);
     }
 
     const points: RawPoint[] = [];
@@ -169,18 +185,20 @@ function buildDaily(
         if (existing) {
             lastEquity = existing.equity;
             lastInvested = existing.invested;
+            lastProfit = existing.profit;
         }
         // Dias antes do 1º snapshot (sem dados) são omitidos.
         if (lastEquity > 0 || lastInvested > 0) {
-            const profit = lastEquity - lastInvested;
+            const totalBalance = lastInvested + lastProfit;
             points.push({
                 label: dayLabel(cursor),
                 fullDate: fullLabel(cursor),
                 sortDate: new Date(cursor),
-                ...makeBars(lastEquity, lastInvested),
+                ...makeBars(totalBalance, lastInvested),
                 realInvested: lastInvested,
                 realEquity: lastEquity,
-                realProfit: profit,
+                realProfit: lastProfit,
+                realTotalBalance: totalBalance,
             });
         }
         cursor.setDate(cursor.getDate() + 1);
@@ -202,11 +220,12 @@ function buildMonthly(
     minDate.setHours(0, 0, 0, 0);
 
     // Valor de FIM de mês por chave ano-mês (último snapshot do mês vence).
-    const historyMap = new Map<string, { invested: number; equity: number }>();
+    const historyMap = new Map<string, { invested: number; equity: number; profit: number }>();
     sortedHistory.forEach((point) => {
         historyMap.set(localMonthKey(new Date(point.date)), {
             invested: point.totalInvested || 0,
             equity: point.totalEquity || 0,
+            profit: snapshotProfit(point),
         });
     });
 
@@ -214,6 +233,7 @@ function buildMonthly(
     const cursor = new Date(minDate);
     let lastInvested = 0;
     let lastEquity = 0;
+    let lastProfit = 0;
 
     while (cursor <= now) {
         // Mês atual é adicionado como LIVE no final.
@@ -226,18 +246,20 @@ function buildMonthly(
         if (existing) {
             lastInvested = existing.invested;
             lastEquity = existing.equity;
+            lastProfit = existing.profit;
         }
 
         if (lastEquity > 0 || lastInvested > 0) {
-            const profit = lastEquity - lastInvested;
+            const totalBalance = lastInvested + lastProfit;
             points.push({
                 label: monthLabel(cursor),
                 fullDate: fullLabel(cursor),
                 sortDate: new Date(cursor),
-                ...makeBars(lastEquity, lastInvested),
+                ...makeBars(totalBalance, lastInvested),
                 realInvested: lastInvested,
                 realEquity: lastEquity,
-                realProfit: profit,
+                realProfit: lastProfit,
+                realTotalBalance: totalBalance,
             });
         }
 
@@ -258,14 +280,16 @@ function appendLive(
     labelFn: (d: Date) => string
 ) {
     if (kpis.totalEquity > 0) {
+        const totalBalance = totalResultBalance(kpis);
         points.push({
             label: labelFn(now),
             fullDate: fullLabel(now),
             sortDate: new Date(now),
-            ...makeBars(kpis.totalEquity, kpis.totalInvested),
+            ...makeBars(totalBalance, kpis.totalInvested),
             realInvested: kpis.totalInvested,
             realEquity: kpis.totalEquity,
             realProfit: kpis.totalResult,
+            realTotalBalance: totalBalance,
             isLive: true,
         });
     }

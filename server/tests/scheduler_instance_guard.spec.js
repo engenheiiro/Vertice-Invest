@@ -28,10 +28,14 @@ vi.mock('node-cron', () => ({ default: { schedule: vi.fn() } }));
 vi.mock('../config/logger.js', () => ({
     default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), http: vi.fn() },
 }));
+vi.mock('../utils/jobLease.js', () => ({
+    withJobLease: vi.fn(async (jobId) => ({ skipped: true, reason: 'TEST_LEASE', jobId })),
+}));
 
 const { default: cron } = await import('node-cron');
 const { default: logger } = await import('../config/logger.js');
-const { initScheduler } = await import('../services/schedulerService.js');
+const { withJobLease } = await import('../utils/jobLease.js');
+const { initScheduler, runDailySnapshot } = await import('../services/schedulerService.js');
 
 // Os jobs que initScheduler registra hoje, na ordem em que aparecem no arquivo.
 const JOBS_ESPERADOS = [
@@ -162,5 +166,14 @@ describe('EXTERNAL_SCHEDULER segue ortogonal', () => {
         // Justamente os dois vistos morrendo ficam de fora do EXTERNAL_SCHEDULER.
         expect(pesados).not.toContain('quotes-sync');
         expect(pesados).not.toContain('daily-morning');
+    });
+});
+
+describe('lease também cobre entradas externas', () => {
+    it('runDailySnapshot público disputa daily-snapshot antes de tocar o core', async () => {
+        await expect(runDailySnapshot(false)).resolves.toMatchObject({
+            skipped: true, reason: 'TEST_LEASE', jobId: 'daily-snapshot',
+        });
+        expect(withJobLease).toHaveBeenCalledWith('daily-snapshot', expect.any(Function));
     });
 });

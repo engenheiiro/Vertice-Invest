@@ -20,12 +20,13 @@ import UserAsset from '../models/UserAsset.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
 import AssetTransaction from '../models/AssetTransaction.js';
 import DividendEvent from '../models/DividendEvent.js';
-import AssetHistory from '../models/AssetHistory.js';
+import { loadClosesForDay } from '../utils/dayCloses.js';
 import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
 import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
-import { calculateDailyDietz } from '../utils/mathUtils.js';
+import { calculateDailyDietz, safeAdd, safeCurrency, safeMult, safeValue } from '../utils/mathUtils.js';
 import { valueFixedIncomeAsset } from '../utils/fixedIncome.js';
+import { loadCdiCurve, earliestFixedIncomeLotDate } from '../utils/cdiCurve.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
 import { validateFundamentalsPublicationHealth } from '../utils/ingestionHealth.js';
 import { runAnchorPublication } from './anchorPublicationService.js';
@@ -51,6 +52,9 @@ import { ensureWalletDayCandles } from './walletDayCandleService.js';
 import { reconcilePreviousWalletSnapshot } from './walletCandleRecoveryService.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { trackJobSafe } from '../utils/jobRun.js';
+import { withJobLease } from '../utils/jobLease.js';
+import { mapWithConcurrency } from '../utils/concurrency.js';
+import { loadCompletedCheckpoints, saveCheckpoint } from '../utils/jobCheckpoint.js';
 import { runDataHealthCheck } from './dataHealthService.js';
 
 // (TZ) Todos os crons rodam em horário de Brasília. Sem o timezone explícito,
@@ -66,7 +70,9 @@ const SCHEDULER_TZ = 'America/Sao_Paulo';
 const schedule = (expression, jobId, fn) => cron.schedule.call(
     cron,
     expression,
-    () => trackJobSafe(jobId, fn),
+    // trackJob fica por fora para registrar também o nó que perdeu a disputa
+    // como SKIPPED/LEASE_HELD. O corpo do job só roda em uma instância.
+    () => trackJobSafe(jobId, () => withJobLease(jobId, fn)),
     { timezone: SCHEDULER_TZ },
 );
 
@@ -111,6 +117,11 @@ const scheduleHeavy = (expression, jobId, fn) => {
 // e DOMINGO como SEGUNDA (gravava snapshot indevido). Estas helpers derivam o dia
 // BR e só então checam feriado/fim de semana e compõem o accrual.
 const CATCHUP_MAX_DAYS = 14; // teto de recuperação por usuário (segurança)
+const SNAPSHOT_JOB_ID = 'daily-snapshot';
+const snapshotConcurrency = () => {
+    const configured = Number.parseInt(process.env.SNAPSHOT_CONCURRENCY || '4', 10);
+    return Math.max(1, Math.min(10, Number.isFinite(configured) ? configured : 4));
+};
 
 // Dia-calendário BR (YYYY-MM-DD) de um instante.
 const brDayStr = (d) => brazilDayKey(d);
@@ -146,32 +157,6 @@ const businessDaysBetween = (fromDayStr, untilDayStr) => {
     return days;
 };
 
-// Fechamentos do dia (AssetHistory) dos tickers de renda variável em carteira.
-// É a MESMA fonte que o rebuild usa para marcar a mercado; sem isso, o snapshot
-// diário gravava a cotação em cache do momento do cron (que pode estar horas
-// atrasada — em produção, TRXF11 a 79,75 contra fechamento de 81,35, ~2%) e o
-// primeiro rebuild reescrevia o dia inteiro. Só o candle do dia é projetado —
-// hidratar os arrays de ~400 candles de toda a base seria caro à toa.
-const loadDayCloses = async (assetRefs, dayStr) => {
-    const keys = [...new Set(assetRefs.map((a) => historyStorageKey(a.ticker, a.type)).filter(Boolean))];
-    if (keys.length === 0) return new Map();
-    const rows = await AssetHistory.aggregate([
-        { $match: { ticker: { $in: keys } } },
-        {
-            $project: {
-                ticker: 1,
-                candle: {
-                    $first: {
-                        $filter: { input: { $ifNull: ['$history', []] }, as: 'h', cond: { $eq: ['$$h.date', dayStr] } },
-                    },
-                },
-            },
-        },
-        { $match: { 'candle.close': { $gt: 0 } } },
-    ]);
-    return new Map(rows.map((r) => [r.ticker, r.candle.close]));
-};
-
 // Contexto compartilhado (macro + cotações em lote) de um run de snapshot.
 // `ensureDayCandles` só é ligado por quem vai GRAVAR o snapshot de hoje: o
 // backfill/boot reconstrói a série pelo rebuild (que tem o próprio cache de
@@ -180,11 +165,20 @@ export const loadSnapshotContext = async (dayStr = brDayStr(new Date()), { ensur
     const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
     const usdRate = sysConfig?.dollar || 5.75;
     const currentCdi = (sysConfig?.cdi > 0 ? sysConfig.cdi : null) || (sysConfig?.selic > 0 ? sysConfig.selic : null) || DEFAULT_SELIC_FALLBACK;
-    const macroRates = { cdiRate: currentCdi, selic: sysConfig?.selic, ipca: sysConfig?.ipca };
+    // A curva viaja DENTRO de macroRates porque `computeEquityAt` já repassa o
+    // objeto inteiro a `valueFixedIncomeAsset` — assim snapshot, KPI ao vivo e
+    // rebuild leem a mesma taxa por dia sem cada um carregar a série por conta.
+    const fixedIncomeAssets = await UserAsset.find({ type: { $in: ['CASH', 'FIXED_INCOME'] } })
+        .select('type taxLots startDate').lean();
+    const cdiCurve = await loadCdiCurve({
+        since: earliestFixedIncomeLotDate(fixedIncomeAssets),
+        currentRate: currentCdi,
+    });
+    const macroRates = { cdiRate: currentCdi, selic: sysConfig?.selic, ipca: sysConfig?.ipca, cdiCurve };
     // (F4) Cotações em LOTE, uma vez por run — evita N+1 de getMarketDataByTicker.
     const liveAssets = await UserAsset.find({ type: { $nin: ['CASH', 'FIXED_INCOME'] } }).select('ticker type quantity').lean();
     const priceMap = await marketDataService.getMarketDataMap([...new Set(liveAssets.map((a) => a.ticker))]);
-    const closeMap = await loadDayCloses(liveAssets, dayStr);
+    const closeMap = await loadClosesForDay(liveAssets, dayStr);
     // Antes de marcar o dia, garante o candle de fechamento dos ativos que estão
     // em carteira. Sem isso o fallback abaixo (preço corrente às 23:59) valia para
     // metade do patrimônio, porque a série de AssetHistory atrasa por design.
@@ -215,6 +209,8 @@ export const computeEquityAt = (assets, { priceMap, closeMap, macroRates, usdRat
     for (const asset of assets) {
         const multiplier = isDollarized(asset) ? usdRate : 1;
         if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
+            // O accrual mantém precisão integral até a persistência do snapshot;
+            // arredondar aqui antecipa centavos em títulos com PU fracionário.
             totalEquity += valueFixedIncomeAsset(asset, {
                 ...macroRates, calcDate, history: treasuryPricing.historyFor(asset),
             }).value;
@@ -223,10 +219,11 @@ export const computeEquityAt = (assets, { priceMap, closeMap, macroRates, usdRat
             const close = closeMap?.get(historyStorageKey(asset.ticker, asset.type)) || 0;
             const price = close > 0 ? close : (priceMap.get(asset.ticker)?.price || 0);
             if (price > 0) {
-                totalEquity += asset.quantity * price * multiplier;
+                const nativeValue = safeValue(asset.quantity, price);
+                totalEquity = safeAdd(totalEquity, safeCurrency(safeMult(nativeValue, multiplier)));
                 // Custo com o câmbio das compras (mesma base do fluxo de aportes,
                 // que já usava o câmbio por data em sumTransactionFlowBRL).
-                totalInvested += positionCostBRL(asset, usdRate);
+                totalInvested = safeAdd(totalInvested, positionCostBRL(asset, usdRate));
             }
         }
     }
@@ -382,15 +379,16 @@ export const backfillMissedSnapshots = async () => {
         const todayStr = brDayStr(new Date());
         const ctx = await loadSnapshotContext(todayStr);
         const wallets = await Wallet.find({}).populate('user', 'email').select('_id user name');
-        let created = 0;
-        for (const wallet of wallets) {
+        const results = await mapWithConcurrency(wallets, Math.min(2, snapshotConcurrency()), async (wallet) => {
             try {
-                created += await backfillUserGap(wallet, todayStr, ctx, null);
+                return await backfillUserGap(wallet, todayStr, ctx, null);
             } catch (e) {
                 logger.error(`Backfill erro wallet ${wallet._id}: ${e.message}`);
                 if (process.env.SENTRY_DSN) Sentry.captureException(e);
+                return 0;
             }
-        }
+        });
+        const created = results.reduce((sum, value) => sum + value, 0);
         if (created > 0) logger.info(`🩹 Recuperação de snapshots concluída: ${created} dia(s) preenchido(s).`);
         return { status: 'SUCCESS', created };
     } catch (error) {
@@ -400,7 +398,7 @@ export const backfillMissedSnapshots = async () => {
     }
 };
 
-export const runDailySnapshot = async (force = false) => {
+export const runDailySnapshotCore = async (force = false) => {
     const now = new Date();
     const todayStr = brDayStr(now);
 
@@ -421,34 +419,57 @@ export const runDailySnapshot = async (force = false) => {
         // Fase 2: itera CARTEIRAS (não usuários) — 1 snapshot/dia por carteira,
         // já que cada uma tem seu próprio histórico/TWRR desde a criação.
         const wallets = await Wallet.find({}).populate('user', 'email').select('_id user name');
+        const completed = force ? new Set() : await loadCompletedCheckpoints(SNAPSHOT_JOB_ID, todayStr);
+        const pendingWallets = wallets.filter((wallet) => !completed.has(String(wallet._id)));
 
         let snapshotsCreated = 0;
         let snapshotsSkipped = 0;
         let backfilled = 0;
+        let errors = 0;
 
-        for (const wallet of wallets) {
+        const outcomes = await mapWithConcurrency(pendingWallets, snapshotConcurrency(), async (wallet) => {
             try {
                 const userId = wallet.user?._id || wallet.user;
                 // Posições buscadas uma vez por carteira (reuso no catch-up + hoje).
                 const assets = await UserAsset.find({ user: userId, wallet: wallet._id });
 
                 // 1) Recupera dias úteis anteriores faltantes (self-healing).
-                backfilled += await backfillUserGap(wallet, todayStr, ctx, assets);
+                const walletBackfilled = await backfillUserGap(wallet, todayStr, ctx, assets);
 
                 // 2) Snapshot de HOJE (idempotente; respeita force).
                 const r = await persistUserSnapshotForDay(wallet, todayStr, ctx, { assets, force });
-                if (r === 'created') snapshotsCreated++;
-                else snapshotsSkipped++;
+                const retryable = r === 'anomaly' || r === 'reset-guard';
+                await saveCheckpoint(SNAPSHOT_JOB_ID, todayStr, wallet._id, {
+                    status: retryable ? 'FAILED' : 'SUCCESS',
+                    result: r,
+                    error: retryable ? r : null,
+                });
+                return { result: r, backfilled: walletBackfilled, error: retryable };
             } catch (walletErr) {
                 logger.error(`Erro snapshot wallet ${wallet._id}: ${walletErr.message}`);
                 if (process.env.SENTRY_DSN) Sentry.captureException(walletErr);
+                await saveCheckpoint(SNAPSHOT_JOB_ID, todayStr, wallet._id, {
+                    status: 'FAILED',
+                    error: walletErr.message,
+                });
+                return { result: 'error', backfilled: 0, error: true };
             }
+        });
+
+        for (const outcome of outcomes) {
+            backfilled += outcome.backfilled;
+            if (outcome.result === 'created') snapshotsCreated++;
+            else snapshotsSkipped++;
+            if (outcome.error) errors++;
         }
 
         const stats = {
             created: snapshotsCreated,
             skipped: snapshotsSkipped,
             backfilled,
+            errors,
+            resumed: completed.size,
+            concurrency: snapshotConcurrency(),
             timestamp: new Date(),
         };
 
@@ -459,7 +480,7 @@ export const runDailySnapshot = async (force = false) => {
             { upsert: true }
         );
 
-        logger.info(`✅ Snapshot Finalizado. Criados: ${snapshotsCreated}, Recuperados: ${backfilled}, Ignorados: ${snapshotsSkipped}`);
+        logger.info(`✅ Snapshot Finalizado. Criados: ${snapshotsCreated}, Recuperados: ${backfilled}, Ignorados: ${snapshotsSkipped}, Retomados: ${completed.size}, Concorrência: ${snapshotConcurrency()}`);
         return { status: 'SUCCESS', stats };
 
     } catch (error) {
@@ -468,6 +489,11 @@ export const runDailySnapshot = async (force = false) => {
         return { status: 'ERROR', error: error.message };
     }
 };
+
+// Ponto público usado por admin e Render Cron Job: também disputa o mesmo lease
+// do cron in-app. O core separado evita aquisição aninhada no scheduler.
+export const runDailySnapshot = (force = false) =>
+    withJobLease(SNAPSHOT_JOB_ID, () => runDailySnapshotCore(force));
 
 // --- AUTO-PUBLISH SEMANAL (Reutilizável) ---
 // Publica automaticamente o ranking + Explainable IA mais recente de cada classe,
@@ -559,19 +585,21 @@ export const initScheduler = () => {
     // que caia sobre 23:59 BRT não reexecuta o tick do cron — este catch-up fecha
     // o buraco no próximo start. Fire-and-forget após 15s (deixa o boot assentar).
     setTimeout(async () => {
-        try {
-            await backfillMissedSnapshots();
-        } catch (e) {
-            logger.error(`Backfill boot: ${e.message}`);
-        }
-        // O fechamento oficial da B3 pode virar Final só depois do snapshot das
-        // 23:59. A segunda passagem fica SEQUENCIAL ao backfill: ambos podem
-        // reconstruir WalletSnapshot e nunca devem disputar a mesma carteira.
-        try {
-            await reconcilePreviousWalletSnapshot();
-        } catch (e) {
-            logger.error(`Reconciliação candle boot: ${e.message}`);
-        }
+        await withJobLease('snapshot-boot-recovery', async () => {
+            try {
+                await backfillMissedSnapshots();
+            } catch (e) {
+                logger.error(`Backfill boot: ${e.message}`);
+            }
+            // O fechamento oficial da B3 pode virar Final só depois do snapshot das
+            // 23:59. A segunda passagem fica SEQUENCIAL ao backfill: ambos podem
+            // reconstruir WalletSnapshot e nunca devem disputar a mesma carteira.
+            try {
+                await reconcilePreviousWalletSnapshot();
+            } catch (e) {
+                logger.error(`Reconciliação candle boot: ${e.message}`);
+            }
+        });
     }, 15000);
 
     // 1. Sync Leve: Macroeconomia (A cada 15 minutos)
@@ -753,7 +781,7 @@ export const initScheduler = () => {
 
     // 6. Snapshot Patrimonial Inteligente (23:59)
     schedule('59 23 * * *', 'daily-snapshot', async () => {
-        await runDailySnapshot(false); // false = não força, respeita feriados
+        await runDailySnapshotCore(false); // o wrapper schedule já detém o lease
     });
 
     // 7. Verificação de Assinaturas (Diário 03:00 AM)

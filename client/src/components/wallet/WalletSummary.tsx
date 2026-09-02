@@ -1,10 +1,12 @@
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useWallet } from '../../contexts/WalletContext';
 import { Wallet, TrendingUp, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Activity, Layers, Info, ShieldCheck, AlertTriangle, Scale, Minus } from 'lucide-react';
 import { SkeletonKpiGrid, FitText, PrivacyToggle } from '../ui'; // (I12) skeleton padronizado + auto-fit de valor
 import { formatCurrency as fmtCurrency, formatSharpe, describeSharpe } from '../../utils/format';
 import { useCountUp } from '../../hooks/useCountUp';
+import { totalResultBalance } from '../../utils/kpiCalculations';
 
 interface EquitySummaryProps {
     onGenerateReport?: () => void;
@@ -41,8 +43,10 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
         sample: kpis?.sharpeSample,
     });
 
-    // Retorno Total Bruto (patrimônio + proventos) e múltiplo sobre o aplicado.
-    const totalGross = (kpis?.totalEquity || 0) + (kpis?.totalDividends || 0);
+    // Uma só identidade para card e gráfico: Aplicado + Resultado Total.
+    // Não recompomos por patrimônio + proventos, pois a soma das posições pode
+    // conservar subcentavos enquanto os KPIs do servidor já vêm arredondados.
+    const totalGross = totalResultBalance(kpis);
     const grossMultiple = (kpis?.totalInvested || 0) > 0 ? totalGross / kpis.totalInvested : 0;
 
     if (isLoading) {
@@ -60,16 +64,18 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
                 arbitrários (text-[#fff], rgba…) porque o tema claro sobrescreve .text-white
                 e .text-white/xx para tons escuros — o que apagaria o texto sobre o verde. */}
             <div
-                className="relative h-full overflow-hidden rounded-2xl p-[18px] text-[#fff]"
+                className="relative h-full rounded-2xl p-[18px] text-[#fff]"
                 style={{
                     background: 'linear-gradient(180deg, #0f5f47, #0c4f3b)',
                     boxShadow: '0 14px 30px -18px rgba(12,79,59,.9)',
                 }}
             >
-                <div
-                    className="absolute right-[-30px] top-[-30px] w-[130px] h-[130px] rounded-full pointer-events-none"
-                    style={{ background: 'radial-gradient(circle, rgba(255,255,255,.14), transparent 70%)' }}
-                />
+                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+                    <div
+                        className="absolute right-[-30px] top-[-30px] h-[130px] w-[130px] rounded-full"
+                        style={{ background: 'radial-gradient(circle, rgba(255,255,255,.14), transparent 70%)' }}
+                    />
+                </div>
                 <div className="relative flex min-h-[22px] items-start pr-10">
                     <div className="relative flex items-center gap-1.5">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-[rgba(255,255,255,0.72)]">Patrimônio Líquido</span>
@@ -109,7 +115,13 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
 
                 <div className="relative flex items-center justify-between mt-3 pt-3 border-t border-white/[0.14]">
                     <div>
-                        <p className="text-[9px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.6)] mb-0.5">Variação Hoje</p>
+                        <div className="mb-0.5 flex items-center gap-1">
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.6)]">Variação Hoje</p>
+                            <InfoTooltip
+                                text="Ganho ou perda desde o fechamento anterior."
+                                iconClass="text-[rgba(255,255,255,0.55)] hover:text-[#eafff6]"
+                            />
+                        </div>
                         <div className="text-sm font-bold text-[#fff]">
                             {isDayPositive ? '+' : ''}{formatCurrency(kpis.dayVariation)}
                         </div>
@@ -124,11 +136,11 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
             {/* 2. VALOR APLICADO */}
             <StatCard
                 label="Valor Aplicado"
-                tooltipText="Custo Contábil: Soma exata do dinheiro que saiu do seu bolso. Não inclui dividendos reinvestidos (estes aumentam apenas a quantidade de cotas)."
+                tooltipText="Total que saiu do seu bolso."
                 icon={<DollarSign size={16} />}
                 iconClass="bg-slate-800 text-slate-300"
                 value={formatCurrency(kpis.totalInvested)}
-                subLabel="Patrimônio + Proventos"
+                subLabel="Aplicado + Resultado"
                 subValue={formatCurrency(totalGross)}
                 tag={<><Activity size={11} /> {grossMultiple.toFixed(2)}x</>}
                 tagClass="bg-purple-500/10 text-purple-400 border-purple-500/20"
@@ -137,7 +149,7 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
             {/* 3. LUCRO TOTAL */}
             <StatCard
                 label="Lucro Total"
-                tooltipText="Resultado total = ganho de capital (valorização dos ativos) + proventos recebidos. O card 'Prov. Acumulados' detalha apenas a parcela de proventos."
+                tooltipText="Valorização + proventos recebidos."
                 icon={<TrendingUp size={16} />}
                 iconClass={isTotalPositive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}
                 value={`${isTotalPositive ? '+' : ''}${formatCurrency(kpis.totalResult)}`}
@@ -166,7 +178,7 @@ export const WalletSummary: React.FC<EquitySummaryProps> = () => {
             {/* 4. PROVENTOS */}
             <StatCard
                 label="Prov. Acumulados"
-                tooltipText="Tudo que seus ativos já anunciaram, incluindo o que ainda vai cair na conta (detalhe na aba Proventos). A Média Mensal Est. é quanto isso rende por mês."
+                tooltipText="Proventos recebidos e a receber."
                 icon={<PiggyBank size={16} />}
                 iconClass="bg-gold/10 text-gold"
                 value={formatCurrency(kpis.totalDividends)}
@@ -189,13 +201,7 @@ const StatCard = ({ label, tooltipText, icon, iconClass, value, valueClass, subL
             <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
                 {tooltipText && (
-                    <div className="group/info relative flex items-center">
-                        <Info size={11} className="text-slate-600 cursor-help hover:text-blue-400 transition-colors" />
-                        <div className="absolute left-0 top-6 w-48 p-3 bg-elevated border border-slate-700 rounded-xl shadow-xl z-50 opacity-0 group-hover/info:opacity-100 transition-opacity pointer-events-none">
-                            <p className="text-[10px] text-slate-300 leading-relaxed font-medium">{tooltipText}</p>
-                            <div className="absolute -top-1.5 left-2 w-3 h-3 bg-elevated border-t border-l border-slate-700 transform rotate-45"></div>
-                        </div>
-                    </div>
+                    <InfoTooltip text={tooltipText} />
                 )}
             </div>
             <span className={`absolute right-0 top-0 w-[30px] h-[30px] rounded-[9px] flex items-center justify-center ${iconClass}`}>
@@ -219,3 +225,77 @@ const StatCard = ({ label, tooltipText, icon, iconClass, value, valueClass, subL
         </div>
     </div>
 );
+
+type TooltipPosition = {
+    left: number;
+    top: number;
+    arrowLeft: number;
+    placement: 'above' | 'below';
+};
+
+const InfoTooltip = ({ text, iconClass = 'text-slate-600 hover:text-blue-400' }: { text: string; iconClass?: string }) => {
+    const triggerRef = React.useRef<HTMLButtonElement>(null);
+    const [position, setPosition] = React.useState<TooltipPosition | null>(null);
+
+    const showTooltip = () => {
+        const trigger = triggerRef.current;
+        if (!trigger) return;
+
+        const triggerRect = trigger.getBoundingClientRect();
+        const tooltipWidth = 192;
+        const halfWidth = tooltipWidth / 2;
+        const viewportPadding = 8;
+        const triggerCenter = triggerRect.left + triggerRect.width / 2;
+        const left = Math.min(
+            window.innerWidth - halfWidth - viewportPadding,
+            Math.max(halfWidth + viewportPadding, triggerCenter)
+        );
+        // O padrão visual é abaixo do ícone. Se faltar espaço no fim da janela,
+        // inverte para cima; o portal impede recorte pelos limites do card.
+        const placement = window.innerHeight - triggerRect.bottom >= 80 ? 'below' : 'above';
+        const top = placement === 'below' ? triggerRect.bottom + 8 : triggerRect.top - 8;
+        const arrowLeft = Math.min(tooltipWidth - 12, Math.max(12, triggerCenter - (left - halfWidth)));
+
+        setPosition({ left, top, arrowLeft, placement });
+    };
+
+    return (
+        <>
+            <button
+                ref={triggerRef}
+                type="button"
+                data-tooltip-trigger
+                aria-label={text}
+                onMouseEnter={showTooltip}
+                onMouseLeave={() => setPosition(null)}
+                onFocus={showTooltip}
+                onBlur={() => setPosition(null)}
+                className="relative flex items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+            >
+                <Info size={11} className={`${iconClass} cursor-help transition-colors`} />
+            </button>
+            {position && createPortal(
+                <span
+                    role="tooltip"
+                    style={{
+                        left: position.left,
+                        top: position.top,
+                        transform: position.placement === 'above' ? 'translate(-50%, -100%)' : 'translateX(-50%)',
+                    }}
+                    className="pointer-events-none fixed z-[200] w-48 rounded-xl border border-slate-700 bg-elevated p-3 text-left text-[10px] font-medium leading-relaxed text-slate-300 shadow-xl"
+                >
+                    {text}
+                    <span
+                        aria-hidden="true"
+                        style={{ left: position.arrowLeft }}
+                        className={`absolute h-3 w-3 -translate-x-1/2 rotate-45 bg-elevated ${position.placement === 'above'
+                            ? '-bottom-1.5 border-b border-r border-slate-700'
+                            : '-top-1.5 border-l border-t border-slate-700'
+                            }`}
+                    />
+                </span>,
+                document.body
+            )}
+        </>
+    );
+};

@@ -58,15 +58,40 @@ describe('runTransaction — resiliência de commit, rollback e timeout', () => 
     expect(session.endSession).toHaveBeenCalledOnce();
   });
 
-  it('timeout aborta, encerra e retorna código operacional estável', async () => {
+  it('timeout aborta, mas só encerra a sessão depois da operação pendente terminar', async () => {
     const session = makeSession();
     mocks.startSession.mockResolvedValue(session);
+    let finishCallback;
+    const callbackPending = new Promise((resolve) => { finishCallback = resolve; });
 
-    await expect(runTransaction(() => new Promise(() => {}), 5)).rejects.toMatchObject({
+    const transactionPending = runTransaction(() => callbackPending, 5);
+
+    await vi.waitFor(() => expect(session.abortTransaction).toHaveBeenCalledOnce());
+    expect(session.endSession).not.toHaveBeenCalled();
+
+    finishCallback();
+    await expect(transactionPending).rejects.toMatchObject({
       code: 'TX_TIMEOUT',
       message: 'MongoDB transaction timed out after 5ms',
     });
-    expect(session.abortTransaction).toHaveBeenCalledOnce();
+    expect(session.endSession).toHaveBeenCalledOnce();
+  });
+
+  it('preserva o timeout e anexa a falha tardia do callback para diagnóstico', async () => {
+    const session = makeSession();
+    mocks.startSession.mockResolvedValue(session);
+    let failCallback;
+    const callbackPending = new Promise((_, reject) => { failCallback = reject; });
+    const lateFailure = new Error('operation interrupted by abort');
+
+    const transactionPending = runTransaction(() => callbackPending, 5);
+    await vi.waitFor(() => expect(session.abortTransaction).toHaveBeenCalledOnce());
+    failCallback(lateFailure);
+
+    await expect(transactionPending).rejects.toMatchObject({
+      code: 'TX_TIMEOUT',
+      callbackError: lateFailure,
+    });
     expect(session.endSession).toHaveBeenCalledOnce();
   });
 

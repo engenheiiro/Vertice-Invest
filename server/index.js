@@ -62,6 +62,8 @@ const panicLog = (message) => {
     const { default: app } = await import('./app.js');
     const { default: connectDB } = await import('./config/db.js');
     const { default: logger } = await import('./config/logger.js');
+    const { initScheduler } = await import('./services/schedulerService.js');
+    const { logAiConfiguration, startApplication } = await import('./utils/serverStartup.js');
 
     // --- TRATAMENTO DE ERROS GLOBAIS ---
     process.on('uncaughtException', (error) => {
@@ -80,8 +82,6 @@ const panicLog = (message) => {
 
     logger.info("⚡ [Boot] Inicializando servidor...");
 
-    await connectDB();
-
     const PORT = process.env.PORT || 5000;
     const JWT_SECRET = process.env.JWT_SECRET;
     const API_KEY = process.env.API_KEY;
@@ -92,27 +92,43 @@ const panicLog = (message) => {
       panicLog(msg);
     }
 
-    if (!API_KEY) {
-        logger.warn("⚠️ AVISO: API_KEY do Google Gemini não encontrada.");
-    } else {
-        logger.info(`🧠 [AI] Google Gemini: Conectado (Key: ${API_KEY.substring(0, 4)}...)`);
-    }
+    logAiConfiguration(logger, API_KEY);
 
-    const server = app.listen(PORT, () => {
-      logger.info(`🚀 Servidor Vértice Invest rodando na porta ${PORT}`);
-      logger.info(`📡 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+    // Preserva o fallback local de porta, mas transforma `listening` numa
+    // promessa para que o scheduler só suba quando o socket estiver pronto.
+    const listenOnPort = (port, allowFallback = true) => new Promise((resolve, reject) => {
+      const handleStartupError = (error) => {
+        if (error.code === 'EADDRINUSE' && allowFallback) {
+          const fallbackPort = Number(port) + 1;
+          logger.error(`❌ Porta ${port} já está em uso. Tentando ${fallbackPort}.`);
+          setTimeout(() => {
+            listenOnPort(fallbackPort, false).then(resolve, reject);
+          }, 1000);
+          return;
+        }
+        reject(error);
+      };
+
+      const candidate = app.listen(port, () => {
+        // A partir daqui o listener permanente abaixo assume erros futuros; este
+        // tratador cobre somente falhas durante a abertura inicial da porta.
+        candidate.off('error', handleStartupError);
+        logger.info(`🚀 Servidor Vértice Invest rodando na porta ${port}`);
+        logger.info(`📡 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+        resolve(candidate);
+      });
+
+      candidate.once('error', handleStartupError);
+    });
+
+    const server = await startApplication({
+      connectDB,
+      listen: () => listenOnPort(PORT),
+      initScheduler,
     });
 
     server.on('error', (e) => {
-        if (e.code === 'EADDRINUSE') {
-            logger.error(`❌ Porta ${PORT} já está em uso!`);
-            setTimeout(() => {
-                server.close();
-                app.listen(Number(PORT) + 1);
-            }, 1000);
-        } else {
-            logger.error(`❌ Erro no servidor: ${e.message}`);
-        }
+        logger.error(`❌ Erro no servidor: ${e.message}`);
     });
 
   } catch (error) {

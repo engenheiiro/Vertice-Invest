@@ -63,6 +63,10 @@ const SystemConfigSchema = new mongoose.Schema({
   lastSnapshotStats: {
     created: { type: Number, default: 0 },
     skipped: { type: Number, default: 0 }, // Anomalias ou erros
+    backfilled: { type: Number, default: 0 },
+    errors: { type: Number, default: 0 },
+    resumed: { type: Number, default: 0 },
+    concurrency: { type: Number, default: 1 },
     timestamp: { type: Date }
   },
 

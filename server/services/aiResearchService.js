@@ -115,6 +115,15 @@ const reportRetention = (assetClass, result) => {
     }
 };
 
+export class RankingCalculationError extends Error {
+    constructor(assetClass, cause) {
+        super(`Falha ao calcular ranking de ${assetClass}: ${cause?.message || 'erro desconhecido'}`, { cause });
+        this.name = 'RankingCalculationError';
+        this.code = 'RANKING_CALCULATION_FAILED';
+        this.assetClass = assetClass;
+    }
+}
+
 // Exportado para teste (T6). Função pura: calcula o delta entre dois rankings.
 export const generateComparisonReport = (assetClass, newRanking, previousRanking) => {
     if (!previousRanking || previousRanking.length === 0) return null;
@@ -417,7 +426,12 @@ export const aiResearchService = {
             
             if (!rawData || rawData.length === 0) {
                 logger.warn("⚠️ Nenhum dado encontrado no Banco. Execute 'Sync Preços' primeiro.");
-                return { ranking: [], fullList: [], processedAssets: [] };
+                return {
+                    ranking: [],
+                    fullList: [],
+                    processedAssets: [],
+                    emptyReason: 'NO_MARKET_DATA',
+                };
             }
             
             const macroConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
@@ -642,8 +656,11 @@ export const aiResearchService = {
             return { ranking, fullList, processedAssets, tierStats, discardLogs: discardOperations, retentionAudit, baseline };
 
         } catch (error) {
-            logger.error(`Erro ranking: ${error.message}`);
-            return { ranking: [], fullList: [], processedAssets: [], discardLogs: [], retentionAudit: null, baseline: null };
+            const rankingError = error instanceof RankingCalculationError
+                ? error
+                : new RankingCalculationError(assetClass, error);
+            logger.error(`Erro ranking ${assetClass}: ${rankingError.message}`);
+            throw rankingError;
         }
     },
 

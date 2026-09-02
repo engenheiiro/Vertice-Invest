@@ -18,6 +18,7 @@ import {
     validateFundamentusIngestion,
 } from '../utils/ingestionHealth.js';
 import { trackJob } from '../utils/jobRun.js';
+import { withJobLease } from '../utils/jobLease.js';
 import { withMongoRetry } from '../utils/mongoResilience.js';
 
 const yahooFinanceLTM = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
@@ -117,7 +118,7 @@ export const syncService = {
      * uma quebra de fonte é mais detectável.
      */
     async performFullSync() {
-        const result = await trackJob('full-sync', () => this._runFullSync());
+        const result = await trackJob('full-sync', () => withJobLease('full-sync', () => this._runFullSync()));
         // Fora do trackJob: uma falha ao avaliar a saúde não deve marcar o sync
         // (que pode ter ido bem) como falho.
         try {

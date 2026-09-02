@@ -83,7 +83,7 @@ vi.mock('../utils/walletSnapshot.js', async (importOriginal) => {
 });
 
 const { financialService } = await import('../services/financialService.js');
-const { persistUserSnapshotForDay } = await import('../services/schedulerService.js');
+const { computeEquityAt, persistUserSnapshotForDay } = await import('../services/schedulerService.js');
 
 // ---------------------------------------------------------------- carteira
 const TICKER = 'TEST3';
@@ -207,6 +207,22 @@ describe('WalletSnapshot — job diário e rebuild produzem a MESMA série', () 
     await persistUserSnapshotForDay(WALLET, '2026-07-02', ctx);
 
     expect(mocks.upsertSnapshot.mock.calls.at(-1)[3].totalEquity).toBeCloseTo(98, 2); // 10 × 9,80
+  });
+
+  it('preserva quantidade fracionária de cripto ao marcar o snapshot', () => {
+    const crypto = {
+      ticker: 'BTC', type: 'CRYPTO', currency: 'USD',
+      quantity: 0.0000028, totalCost: 1.68, totalCostBrl: 1.68,
+    };
+    const result = computeEquityAt([crypto], {
+      priceMap: new Map([['BTC', { price: 600000.005 }]]),
+      closeMap: new Map(),
+      macroRates: {},
+      usdRate: 1,
+    });
+
+    expect(result.totalEquity).toBe(1.68);
+    expect(result.totalInvested).toBe(1.68);
   });
 });
 

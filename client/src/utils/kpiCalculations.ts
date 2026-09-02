@@ -1,6 +1,17 @@
 import type { Asset, WalletKPIs } from '../contexts/WalletContext';
 
 /**
+ * Saldo econômico que fecha com o Lucro Total.
+ *
+ * Esta é a identidade canônica exibida no card e no gráfico. Evita misturar a
+ * soma dos ativos (que conserva casas subcentavo) com KPIs monetários já
+ * arredondados pelo servidor — diferença que podia aparecer como R$ 0,01.
+ */
+export const totalResultBalance = (
+  kpis: Pick<WalletKPIs, 'totalInvested' | 'totalResult'>
+): number => kpis.totalInvested + kpis.totalResult;
+
+/**
  * Cálculo puro dos KPIs da carteira a partir das posições e dos KPIs vindos do
  * servidor. Extraído do `WalletContext` (M5) para ser testável isoladamente.
  *

@@ -27,6 +27,7 @@ export async function runTransaction(fn, timeoutMs = TX_TIMEOUT_MS) {
     session.startTransaction({ maxCommitTimeMS: timeoutMs });
 
     let timer;
+    let workPromise;
     try {
         const timeout = new Promise((_, reject) => {
             timer = setTimeout(
@@ -38,7 +39,11 @@ export async function runTransaction(fn, timeoutMs = TX_TIMEOUT_MS) {
             );
         });
 
-        await Promise.race([fn(session), timeout]);
+        // Encapsula também throws síncronos e mantém uma referência à operação.
+        // Promise.race não cancela a promessa perdedora: sem esta referência, o
+        // finally encerrava a sessão enquanto fn(session) ainda podia escrever.
+        workPromise = Promise.resolve().then(() => fn(session));
+        await Promise.race([workPromise, timeout]);
         clearTimeout(timer);
         await session.commitTransaction();
     } catch (err) {
@@ -49,6 +54,18 @@ export async function runTransaction(fn, timeoutMs = TX_TIMEOUT_MS) {
             // A falha de rollback é contexto operacional importante, mas nunca
             // deve esconder a causa original que levou a transação a abortar.
             err.abortError = abortError;
+        }
+
+        // O timeout inicia o rollback, mas não torna `fn` magicamente cancelada.
+        // Aguarda a operação observar o abort/terminar antes de liberar a sessão.
+        // Se ela falhar depois do timeout, preserva TX_TIMEOUT como causa pública
+        // e anexa a falha tardia apenas como contexto de diagnóstico.
+        if (err.code === 'TX_TIMEOUT' && workPromise) {
+            try {
+                await workPromise;
+            } catch (callbackError) {
+                if (callbackError !== err) err.callbackError = callbackError;
+            }
         }
         throw err;
     } finally {

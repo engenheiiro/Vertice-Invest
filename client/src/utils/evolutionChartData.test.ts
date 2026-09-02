@@ -4,11 +4,19 @@ import type { HistoryPoint } from '../contexts/WalletContext';
 
 // Data com hora ao MEIO-DIA local: 12h de folga de cada lado da meia-noite torna
 // o localDayKey estável independentemente do fuso do runner de testes.
-const snap = (y: number, m: number, d: number, equity: number, invested: number): HistoryPoint => ({
+const snap = (
+    y: number,
+    m: number,
+    d: number,
+    equity: number,
+    invested: number,
+    overrides: Partial<HistoryPoint> = {}
+): HistoryPoint => ({
     date: new Date(y, m, d, 12, 0, 0).toISOString(),
     totalEquity: equity,
     totalInvested: invested,
     profit: equity - invested,
+    ...overrides,
 });
 
 const kpis = (totalEquity: number, totalInvested: number, totalResult?: number) => ({
@@ -79,6 +87,59 @@ describe('buildEvolutionChartData — MENSAL', () => {
 });
 
 describe('buildEvolutionChartData — DIÁRIO (forward-fill)', () => {
+    it('usa o profit persistido com proventos no histórico e mantém a mesma definição no LIVE', () => {
+        // Caso real de 31/08 → 01/09: antes, o histórico mostrava R$ 301,58
+        // (equity - invested) e o LIVE R$ 300,90 (resultado total). Agora ambos
+        // leem a mesma grandeza: `profit` persistido / `totalResult` live.
+        const history = [
+            snap(2026, 7, 31, 22158.02, 21856.44, {
+                totalDividends: 7.87,
+                profit: 309.45,
+            }),
+        ];
+        const pts = buildEvolutionChartData({
+            history,
+            kpis: {
+                totalEquity: 22149.47,
+                totalInvested: 21856.44,
+                totalResult: 300.90,
+                dayVariation: 7.56,
+                dayVariationPercent: 0.03,
+            },
+            granularity: 'DAILY',
+            window: '7D',
+            now: new Date(2026, 8, 1, 12, 0, 0),
+        });
+
+        const historical = pts.find((p) => p.label === '31/08')!;
+        const live = pts[pts.length - 1];
+
+        expect(historical.realProfit).toBe(309.45);
+        expect(historical.realProfit).not.toBeCloseTo(301.58);
+        expect(historical.realTotalBalance).toBeCloseTo(22165.89, 2);
+        expect(historical.profitBar).toBeCloseTo(309.45, 2);
+        expect(live.realProfit).toBe(300.90);
+        expect(live.realTotalBalance).toBeCloseTo(22157.34, 2);
+        expect(historical.realProfit - live.realProfit).toBeCloseTo(8.55, 2);
+        // Patrimônio líquido e variação do dia preservam suas réguas próprias.
+        expect(historical.realEquity).toBe(22158.02);
+        expect(live.realEquity).toBe(22149.47);
+        expect(live.periodVariation).toBe(7.56);
+    });
+
+    it('recompõe o resultado de payload legado sem profit usando proventos quando disponíveis', () => {
+        const legacy = snap(2026, 5, 30, 1100, 1000, {
+            profit: undefined,
+            totalDividends: 25,
+        });
+        const pts = build([legacy], kpis(1100, 1000, 125), 'DAILY', '30D');
+        const historical = byLabel(pts, '30/06')!;
+
+        expect(historical.realProfit).toBe(125);
+        expect(historical.realTotalBalance).toBe(1125);
+        expect(historical.profitBar).toBe(125);
+    });
+
     it('preenche fim de semana repetindo o último valor (eixo contínuo)', () => {
         // Sexta 26/06 = 1000. Sáb 27 e Dom 28 não têm snapshot.
         const history = [snap(2026, 5, 26, 1000, 1000)];
@@ -254,7 +315,7 @@ describe('ponto LIVE do diário usa a régua do card (variação do DIA)', () =>
         expect(live.periodVariation).not.toBeCloseTo(31.45); // snapshot
         expect(live.periodVariationPercent).toBeCloseTo(0.08);
         expect(live.isDayVariation).toBe(true);
-        expect(live.previousLabel).toBeNull(); // o rótulo vira "Variação hoje"
+        expect(live.previousLabel).toBeNull(); // o rótulo vira "Variação Hoje"
     });
 
     it('os pontos HISTÓRICOS continuam medindo snapshot a snapshot', () => {

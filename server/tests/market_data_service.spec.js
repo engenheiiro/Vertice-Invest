@@ -4,7 +4,7 @@
  * Foca em refreshQuotesBatch (freshness de cache, skip de inativos, failCount
  * com teto/coerção do B2) e em normalizeSymbol.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import MarketAsset from '../models/MarketAsset.js';
 import AssetHistory from '../models/AssetHistory.js';
 import UserAsset from '../models/UserAsset.js';
@@ -39,6 +39,7 @@ const minutesAgo = (m) => new Date(Date.now() - m * 60 * 1000);
 beforeEach(() => {
   vi.clearAllMocks();
 });
+afterEach(() => vi.restoreAllMocks());
 
 describe('normalizeSymbol', () => {
   it('uppercase, trim e remove sufixo .SA', () => {
@@ -69,6 +70,58 @@ describe('refreshQuotesBatch — cache', () => {
     expect(set.change).toBe(1.5);
     expect(set.failCount).toBe(0); // sucesso reseta o contador
     expect(set.isActive).toBe(true);
+  });
+});
+
+describe('getMarketDataByTicker — stale-while-revalidate interativo', () => {
+  it('responde o cache stale sem esperar a rede e renova em background', async () => {
+    MarketAsset.findOne.mockResolvedValue({
+      ticker: 'PETR4', type: 'STOCK', name: 'Petrobras', sector: 'Energia',
+      lastPrice: 40, change: 1.2, updatedAt: minutesAgo(60),
+    });
+    let finishRefresh;
+    const refresh = vi.spyOn(marketDataService, 'refreshQuotesBatch')
+      .mockImplementation(() => new Promise((resolve) => { finishRefresh = resolve; }));
+
+    const result = await marketDataService.getMarketDataByTicker('PETR4', { interactive: true });
+
+    expect(result).toMatchObject({ price: 40, cacheStatus: 'STALE', isStale: true });
+    expect(refresh).toHaveBeenCalledWith(['PETR4'], true);
+    finishRefresh();
+    await refresh.mock.results[0].value;
+  });
+
+  it('deduplica refresh concorrente do mesmo ticker (single-flight)', async () => {
+    MarketAsset.findOne.mockResolvedValue({
+      ticker: 'VALE3', type: 'STOCK', name: 'Vale', sector: 'Mineração',
+      lastPrice: 60, change: 0.5, updatedAt: minutesAgo(60),
+    });
+    let finishRefresh;
+    const refresh = vi.spyOn(marketDataService, 'refreshQuotesBatch')
+      .mockImplementation(() => new Promise((resolve) => { finishRefresh = resolve; }));
+
+    const [a, b] = await Promise.all([
+      marketDataService.getMarketDataByTicker('VALE3', { interactive: true }),
+      marketDataService.getMarketDataByTicker('VALE3', { interactive: true }),
+    ]);
+
+    expect(a.price).toBe(60);
+    expect(b.price).toBe(60);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    finishRefresh();
+    await refresh.mock.results[0].value;
+  });
+
+  it('cache fresco não agenda refresh', async () => {
+    MarketAsset.findOne.mockResolvedValue({
+      ticker: 'ITUB4', type: 'STOCK', name: 'Itaú', sector: 'Financeiro',
+      lastPrice: 35, updatedAt: minutesAgo(1),
+    });
+    const refresh = vi.spyOn(marketDataService, 'refreshQuotesBatch');
+
+    await expect(marketDataService.getMarketDataByTicker('ITUB4', { interactive: true }))
+      .resolves.toMatchObject({ price: 35, cacheStatus: 'HIT', isStale: false });
+    expect(refresh).not.toHaveBeenCalled();
   });
 });
 

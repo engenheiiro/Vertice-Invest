@@ -4,7 +4,7 @@
 
 **Escopo:** frontend, backend, MongoDB, integrações, jobs, testes, build e observabilidade
 
-**Status:** diagnóstico concluído; Fase 0 de instrumentação e baseline implementada em 01/09/2026
+**Status:** diagnóstico concluído; Fases 0, 1 e 3 implementadas e validadas em 01/09/2026; Fase 2 permanece pendente
 
 **Prompt de origem:** [`prompt_auditoria_estrutural_performance.txt`](prompt_auditoria_estrutural_performance.txt)
 **Auditoria anterior:** [`RESULTADO-AUDITORIA.md`](RESULTADO-AUDITORIA.md)
@@ -71,9 +71,9 @@ Nenhum achado P0 foi confirmado.
 | TypeScript frontend | Aprovado |
 | ESLint frontend/backend | Aprovado; 2 avisos não bloqueantes |
 | Testes frontend | 65 arquivos, 855 testes aprovados |
-| Testes backend | 179 arquivos, 1.977 testes aprovados após a Fase 0 |
-| Total de testes | 2.832 aprovados |
-| Build Vite de produção | Aprovado; validação mais recente em 10,15 s |
+| Testes backend | 188 arquivos, 2.016 testes aprovados após a Fase 3 |
+| Total de testes | 2.871 aprovados |
+| Build Vite de produção | Aprovado; validação mais recente em 9,38 s |
 | Precache PWA | 103 entradas, 2,37 MiB |
 | Chunk comum `index` | 417,65 KB raw / 130,65 KB gzip |
 | Chunk Recharts | 350,14 KB raw / 98,28 KB gzip |
@@ -159,6 +159,99 @@ justifica comparar os novos índices na Fase 3 com massa extensa.
   uma janela representativa com a feature flag ligada;
 - número de renders ainda deve ser coletado com React Profiler em sessão real;
 - o launcher global do `npm` segue quebrado no host; foram usados os binários locais.
+
+### Execução da Fase 1 — 01/09/2026
+
+As cinco correções críticas foram implementadas sem executar sync, publicação,
+migração ou escrita em produção. Threshold 70, scores, pesos, ordenação, perfis,
+retenção, planos e feature gating não foram alterados.
+
+| Achado | Antes | Depois | Evidência | Criticidade residual |
+|---|---|---|---|---|
+| A01 — matemática | Quantidade/preço e `quantity * price` diretos em lançamento, importação e snapshot | Quantidade com 8 casas, preço normalizado, valor e acumuladores pelos helpers de `mathUtils` | Regressão com `0,0000028 × 600.000,005 = 1,68`; 71 testes financeiros direcionados | Baixa |
+| A02 — timeout | `Promise.race` encerrava a sessão enquanto o callback perdedor podia continuar | Timeout inicia rollback e aguarda o callback terminar antes de `endSession`; falhas secundárias ficam anexadas | Teste observa rollback executado e sessão ainda aberta até liberar a operação pendente | Baixa/média |
+| A08 — ranking | Exceção era convertida em `ranking: []`, podendo parecer universo vazio | Universo vazio recebe `NO_MARKET_DATA`; falha lança `RANKING_CALCULATION_FAILED` e o batch vira `FAILED`/`PARTIAL` | Falha simulada em FII persiste somente STOCK e deixa batch `PARTIAL` | Baixa |
+| A15 — segredo | Log mostrava os quatro primeiros caracteres da API key | Log informa somente configurada/não configurada | Teste procura chave completa e prefixo serializados e confirma ausência | Baixa |
+| A10 — boot | `initScheduler()` rodava durante o import de `app.js`, antes do Mongo/listen | Orquestração explícita: Mongo → HTTP pronto → scheduler | Teste com Mongo e HTTP controlados confirma ordem e ausência do scheduler quando qualquer etapa falha | Baixa |
+
+**Complexidade e velocidade:** a complexidade de implementação foi média/alta,
+concentrada no lifecycle transacional e no boot. Esta fase reduz risco e
+comportamento ambíguo; não foi projetada para reduzir latência. O bundle principal
+permaneceu em 417,65 KB raw / 130,66 KB gzip e não há alegação de ganho de p95.
+O scheduler agora começa alguns instantes mais tarde, somente quando as duas
+dependências estão prontas, o que é uma correção de prontidão e não uma regressão
+de serviço.
+
+**Double check executado:**
+
+- ESLint em backend e frontend: zero erros; dois avisos preexistentes em arquivos
+  não alterados (`Calculator.tsx` e `AdminFunilTab.tsx`);
+- TypeScript: aprovado;
+- backend: 183 arquivos e 1.996 testes aprovados;
+- frontend: 65 arquivos e 855 testes aprovados;
+- build backend: 487 arquivos JavaScript validados;
+- build Vite/PWA: aprovado, 103 entradas e 2.381,54 KiB de precache;
+- `git diff --check` e buscas pelos padrões vulneráveis antigos: aprovados.
+
+**Riscos residuais e rollback:** callbacks transacionais precisam encerrar após
+o abort do Mongo; se um callback futuro ignorar a sessão e nunca resolver, a
+função deliberadamente não encerrará uma sessão ainda em uso. O rollback é
+local por bloco: matemática (`walletController`, `portfolioImportService`,
+`schedulerService`), transação (`dbTransaction`), ranking (`aiResearchService`)
+e boot/log (`app`, `index`, `serverStartup`). Os testes novos travam cada contrato.
+
+### Execução da Fase 3 — 01/09/2026
+
+A Fase 3 foi executada fora da ordem a pedido do responsável pelo projeto. A
+Fase 2 continua pendente e nenhuma otimização dela foi incorporada aqui. Não
+houve sync, publicação, migração de dados ou escrita no banco de produção.
+
+| Frente | Antes | Depois | Evidência local | Criticidade residual |
+|---|---|---|---|---|
+| A03 — índices | Extrato por carteira/ticker tinha `IXSCAN → FETCH → SORT`, pois o índice terminava em `date` e a ordenação desempata por `createdAt` | Índices `{wallet,date,createdAt}` e `{wallet,ticker,date,createdAt}` na mesma direção do sort; o boot aguarda `Model.init()` e remove o índice antigo | Baseline real registrou `SORT`; 4 testes inspecionam os índices declarados e o build valida o boot | Média até o `explain` pós-deploy; baixa depois de confirmar ausência de `SORT` |
+| A04 — snapshots | `/wallet/history` e `/wallet/performance` enviavam todos os dias existentes | Histórico limitado a 480 pontos, performance a 600; primeiro/último, fechamentos mensais antigos e 120 dias recentes preservados; cursor `before + limit` disponível | Massa de 3.650 pontos: 453.095 → 29.648 bytes, redução de **93,46%**; 3.650 → 237 pontos semanticamente necessários | Baixa |
+| Cotações SWR | Cache antigo era devolvido sem renovação interativa; o self-heal de nome podia esperar a rede | Cache stale responde imediatamente, agenda refresh em background e deduplica por ticker (single-flight) | Testes provam resposta antes da Promise externa, apenas um refresh concorrente e zero refresh com cache fresco | Baixa; durante indisponibilidade externa o valor stale continua explicitamente marcado |
+| A09 — lease | Cada instância executava o mesmo cron; script externo e botão admin não compartilhavam trava | Lease Mongo atômico e único por `jobId`, heartbeat, token de liberação e falha fechada; perdedor vira `SKIPPED/LEASE_HELD` | Duas execuções concorrentes: somente um corpo é chamado; erro do Mongo não autoriza execução sem trava | Baixa/média; indisponibilidade do Mongo prefere pular o tick a duplicar escrita |
+| Snapshot escalável | Carteiras processadas estritamente em série e sem progresso recuperável | Concorrência limitada (default 4, teto 10), backfill com teto 2 e checkpoint por carteira/dia com TTL de 14 dias | Última execução: 24 carteiras com I/O sintético, p95 de 203,56 → 51,77 ms (**3,93×**); teste confirma o teto exato no cenário controlado | Média; o ganho real depende da latência/pool do Mongo e deve ser observado após deploy |
+
+O downsample só ocorre depois que os cálculos de TWRR, Sharpe, beta e benchmarks
+foram feitos sobre a série integral. Assim, a redução de payload não altera os
+números financeiros; ela reduz apenas os pontos enviados ao navegador. O formato
+das respostas continua sendo o mesmo array/objeto aceito pelos componentes atuais.
+
+**Complexidade e velocidade:** implementação de complexidade alta, por envolver
+coordenação distribuída e retomada segura. O benchmark `npm run benchmark:phase3`
+é local, controlado e sem banco/rede. As execuções ficaram entre 3,93× e
+3,99× no cenário sintético; a versão final reduziu 93,46% do payload. Isso comprova
+o ganho algorítmico, não substitui o p95 autenticado no ambiente real.
+
+**Double check executado:**
+
+- testes específicos executados em passagens repetidas; a checagem final do
+  downsample, incluindo virada de mês no fuso do Brasil, aprovou 6/6;
+- backend completo: 188 arquivos e 2.016 testes aprovados;
+- frontend completo: 65 arquivos e 855 testes aprovados;
+- TypeScript: aprovado;
+- ESLint global: zero erros; somente os dois avisos preexistentes em
+  `Calculator.tsx` e `AdminFunilTab.tsx`;
+- build backend: 499 arquivos JavaScript validados;
+- build Vite/PWA: aprovado em 9,38 s, 103 entradas e 2.381,54 KiB;
+- `git diff --check`: aprovado, sem erro de whitespace.
+
+**Validação pós-deploy obrigatória:** rodar `npm run benchmark:mongo` depois que o
+servidor confirmar os índices da Fase 3. O aceite operacional exige que cashflow
+e transações por ticker deixem de exibir estágio `SORT`. Também comparar, no
+painel Admin, p95 de `/wallet/history`, `/wallet/performance` e do job
+`daily-snapshot` após uma janela representativa. Esta etapa não foi simulada como
+“produção”: aplicar índices ou disparar jobs no banco real a partir da máquina de
+desenvolvimento seria uma escrita externa indevida.
+
+**Rollback:** os blocos são independentes: índices (`AssetTransaction`/`db`),
+payload (`timeSeriesDownsample`/`walletController`), SWR (`marketDataService`),
+lease (`JobLease`/`jobLease`/wrappers) e lote/checkpoint
+(`concurrency`/`JobCheckpoint`/`schedulerService`). Os snapshots continuam
+idempotentes por carteira/dia mesmo se o checkpoint for temporariamente
+indisponível.
 
 ---
 
@@ -268,7 +361,7 @@ permanecer idênticos antes e depois.
 
 **Aceite:** baseline reproduzível registrado e nenhuma regra funcional alterada.
 
-### Fase 1 — Correções críticas
+### Fase 1 — Correções críticas — concluída em 01/09/2026
 
 1. A01: matemática financeira segura.
 2. A02: lifecycle/timeout das transações.
@@ -290,7 +383,7 @@ ranking válido ou saldo esperado alterado sem justificativa e teste.
 
 **Aceite:** redução de requests/renders comprovada e testes completos aprovados.
 
-### Fase 3 — Banco e backend
+### Fase 3 — Banco e backend — concluída em 01/09/2026
 
 1. A03: índices e `explain` antes/depois.
 2. A04: paginação/downsample dos snapshots.
@@ -398,7 +491,7 @@ Resultado realista:
 
 ---
 
-## 10. Prompt recomendado para iniciar a Fase 1
+## 10. Prompt executado na Fase 1 (histórico)
 
 A Fase 0 está implementada. O ciclo seguinte trata somente correção e estabilidade.
 
@@ -437,4 +530,27 @@ de uma classe e boot com Mongo lento.
 Ao final, execute ESLint, TypeScript, todos os testes do backend e frontend e o
 build de produção. Entregue antes/depois, resultados, riscos residuais, arquivos
 alterados e o próximo prompt para iniciar a Fase 2.
+```
+
+---
+
+## 11. Prompt recomendado para iniciar a Fase 2
+
+```text
+Leia integralmente AGENTS.md e o documento
+AUDITORIA-ESTRUTURAL-PERFORMANCE-2026-09-01.md.
+
+Execute somente a Fase 2 — Quick wins, com baseline antes/depois e mudanças
+pequenas: invalidação seletiva do perfil (A05), React Query em Research (A07),
+Set.has no scanner (A14), projections + lean nas leituras identificadas (A12),
+paralelização apenas de consultas independentes e sampling do Sentry por ambiente.
+
+Não altere threshold 70, scores, pesos, ordenação, perfis, retenção, publicação,
+planos, feature gating nem a instrumentação das Fases 0/1. Não inicie a Fase 3
+e não execute sync, publicação, migração ou escrita em produção.
+
+Antes de cada mudança, registre requests/renders, query/payload ou custo atual;
+depois, prove o ganho com o mesmo cenário e acrescente testes de regressão. Ao
+final, rode ESLint, TypeScript, todas as suítes e os builds, entregando evidências,
+riscos residuais e o prompt da Fase 3.
 ```
