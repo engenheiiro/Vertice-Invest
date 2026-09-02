@@ -140,6 +140,35 @@ describe('regra de leitura', () => {
         expect(screen.getByText(/updateTreasuryRates/)).toBeInTheDocument();
     });
 
+    it('carteira degradada aparece nomeada, com quais buscas caíram', async () => {
+        // O formato é o que `dataHealthRules.walletPayloadCheck` emite no servidor.
+        // O painel renderiza checks genericamente, então o valor deste teste é
+        // garantir que o aviso CHEGA na tela — o dono não lê log, e foi por isso
+        // que a carteira rodou degradada em 02/09/2026 sem ninguém notar.
+        getDataHealth.mockResolvedValue(mkResponse({
+            report: {
+                runAt: new Date().toISOString(),
+                status: 'CRITICAL',
+                summary: { ok: 0, warn: 0, critical: 1 },
+                checks: [
+                    {
+                        id: 'wallet.payloadDegraded24h', label: 'Carteiras com dados incompletos (24h)',
+                        category: 'ERROS', status: 'CRITICAL', value: 42,
+                        detail: '42 carteira(s) montada(s) sem dados completos: snapshots (30), treasuryPricing (12)',
+                        hint: 'A busca nomeada falhou e o payload caiu no padrão — TWRR e marcação da RF ficam degradados.',
+                    },
+                ],
+            },
+        }));
+        render(<AdminSaudeTab />);
+
+        expect(await screen.findByText('Carteiras com dados incompletos (24h)')).toBeInTheDocument();
+        // O endereço do conserto tem de estar visível sem expandir nada.
+        expect(screen.getByText(/snapshots \(30\)/)).toBeInTheDocument();
+        expect(screen.getByText(/treasuryPricing \(12\)/)).toBeInTheDocument();
+        expect(screen.getByText(/TWRR e marcação da RF/)).toBeInTheDocument();
+    });
+
     it('checks saudáveis ficam recolhidos até o clique', async () => {
         getDataHealth.mockResolvedValue(mkResponse());
         render(<AdminSaudeTab />);

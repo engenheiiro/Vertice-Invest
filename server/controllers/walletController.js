@@ -22,6 +22,8 @@ import { sumTransactionFlowBRL, transactionsAfterSnapshotFilter } from '../utils
 import { historyStorageKey } from '../utils/assetHistory.js';
 import { loadClosesForDay } from '../utils/dayCloses.js';
 import { DAY_CHANGE_REASON } from '../utils/dayChangeReason.js';
+import { createSettledReader } from '../utils/settledReader.js';
+import { recordError } from '../services/errorLogService.js';
 import { loadCdiCurve, earliestFixedIncomeLotDate } from '../utils/cdiCurve.js';
 import { allocationBucket, resolveAllocationClass } from '../utils/assetAllocation.js';
 import { cashFlowTickerCondition } from '../utils/cashFlowFilter.js';
@@ -211,8 +213,16 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAss
     // janela de proventos. Em vez de serializar as duas coisas (uma ida a mais ao
     // banco antes de tudo), o accrual ENCADEIA nesta promessa e as outras cinco
     // seguem em paralelo: só o accrual espera, e ele não é o caminho crítico.
+    //
+    // `.exec()` NÃO é decoração: sem ele, `find().lean()` devolve uma QUERY do
+    // Mongoose, não uma Promise. Query executa no primeiro `.then()` e rejeita no
+    // segundo ("Query was already executed") — e consumimos esta duas vezes (o
+    // encadeamento do accrual e o `allSettled` abaixo). O `allSettled` engole a
+    // rejeição, `snapshots` chega vazio, e a carteira inteira degrada em silêncio:
+    // sem snapshot não há âncora de TWRR (a Rentabilidade Real vira ROI simples e
+    // o selo cai para "Estimado") nem dia-âncora para a Variação Hoje.
     const snapshotsPromise = WalletSnapshot.find({ user: userId, wallet: walletId })
-        .sort({ date: -1 }).limit(30).lean();
+        .sort({ date: -1 }).limit(30).lean().exec();
 
     const [assetMapR, configR, dividendsR, accruedR, snapshotsR, riskSnapshotsR, treasuryR] = await Promise.allSettled([
         marketDataService.getMarketDataMap(liveTickers),
@@ -247,25 +257,69 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAss
         loadTreasuryPricing(activeAssets),
     ]);
 
-    const assetMap = assetMapR.status === 'fulfilled' ? assetMapR.value : new Map();
-    const config = configR.status === 'fulfilled' ? configR.value : null;
+    // Degradação graciosa REGISTRADA. Cada uma das sete buscas acima tem um padrão
+    // de fallback — está certo, a carteira precisa renderizar mesmo se os proventos
+    // caírem. O que estava errado era o silêncio: qualquer uma podia falhar e o
+    // usuário só via números piores, para sempre, sem sinal nenhum em lugar nenhum.
+    //
+    // Aconteceu: uma promessa consumida duas vezes derrubou `snapshots`, e com ela o
+    // TWRR (Rentabilidade Real virou ROI simples) e o dia-âncora da Variação Hoje. O
+    // único sintoma visível foi o selo do card trocando "Auditado" por "Estimado" —
+    // achado no olho, não pelo log nem pelos testes.
+    const settled = createSettledReader();
+
+    const assetMap = settled.or(assetMapR, new Map(), 'quotes');
+    const config = settled.or(configR, null, 'macro');
     const { totalAllTime = 0, projectedMonthly = 0, receivedByTicker: paidByTicker = {} } =
-        dividendsR.status === 'fulfilled' ? dividendsR.value : {};
+        settled.or(dividendsR, {}, 'dividends');
     // Fail-open para a definição ANTIGA (caixa) se o accrual cair: um número um pouco
     // defasado é melhor que zerar os proventos do card. Nunca o contrário — o accrual
     // é a definição correta, e é dele que o snapshot vive.
     const { total: accruedTotal, byTicker: accruedByTicker, sinceTotal, sinceByTicker } =
-        accruedR.status === 'fulfilled' ? accruedR.value : { total: null, byTicker: null };
+        settled.or(accruedR, { total: null, byTicker: null }, 'dividendAccrual');
     const totalDividends = accruedTotal ?? totalAllTime;
     const receivedByTicker = accruedByTicker ?? paidByTicker;
     // Proventos da janela do dia. Sem fail-open: não há definição antiga para cair,
     // e inventar um número aqui poria uma nota falsa no detalhamento.
     const dayDividendsTotal = sinceTotal ?? 0;
     const dayDividendsByTicker = sinceByTicker ?? {};
-    const snapshots = snapshotsR.status === 'fulfilled' ? snapshotsR.value : [];
-    const riskSnapshots = riskSnapshotsR.status === 'fulfilled' ? riskSnapshotsR.value : [];
+    const snapshots = settled.or(snapshotsR, [], 'snapshots');
+    const riskSnapshots = settled.or(riskSnapshotsR, [], 'riskSnapshots');
     // Falha ao carregar PU não derruba a carteira: a RF volta para o accrual.
-    const treasuryPricing = treasuryR.status === 'fulfilled' ? treasuryR.value : EMPTY_TREASURY_PRICING;
+    const treasuryPricing = settled.or(treasuryR, EMPTY_TREASURY_PRICING, 'treasuryPricing');
+
+    if (settled.failures.length > 0) {
+        // UMA linha por requisição, nomeando o que caiu. Sete linhas separadas
+        // inundariam o log justamente quando o banco inteiro está fora — que é
+        // quando ele mais precisa ser legível.
+        //
+        // Ids vão como METADADO estruturado, nunca interpolados na mensagem
+        // (mesma regra do access log: entrada em linha de log permite forjar linha).
+        logger.warn('[Wallet] Payload montado com dados incompletos', {
+            userId: String(userId),
+            walletId: walletId ? String(walletId) : null,
+            failed: settled.failed(),
+            errors: settled.failures,
+        });
+
+        // Log não basta: o dono não usa Sentry e não lê `combined.log` todo dia —
+        // aviso tem que ser VISUAL. Registrado aqui, a sentinela horária conta as
+        // ocorrências e a aba Saúde do Admin mostra "Carteiras com dados
+        // incompletos", com quais buscas caíram.
+        //
+        // `code` leva as buscas que falharam: o fingerprint do ErrorLog é
+        // origin+source+code+mensagem normalizada, então cada combinação vira UM
+        // documento com contador — "snapshots" e "treasuryPricing" são problemas
+        // diferentes e merecem linhas diferentes. Sem await: registrar não pode
+        // atrasar a carteira, e `recordError` já engole o próprio erro (nunca
+        // lança) e desiste em silêncio se o banco estiver fora.
+        recordError({
+            origin: 'HTTP',
+            source: 'wallet.payload',
+            code: settled.failed(),
+            message: settled.failures.map((f) => `${f.source}: ${f.error}`).join(' | '),
+        }).catch(() => {});
+    }
 
     return {
         assetMap, config, totalDividends, projectedMonthly, receivedByTicker,

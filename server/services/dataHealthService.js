@@ -141,6 +141,22 @@ const collectCandleFacts = async (now, th) => {
     };
 };
 
+/**
+ * Linhas do ErrorLog (agrupadas por `code`) no formato que
+ * `dataHealthRules.walletPayloadCheck` consome.
+ *
+ * Exportada só para o teste poder ligar o PRODUTOR ao CONSUMIDOR: se a chave
+ * mudar de nome de um lado só, o check passa a ler `undefined`, grada como zero e
+ * exibe "nenhuma carteira degradada" para sempre. Alarme que mente calado é pior
+ * que alarme nenhum.
+ */
+export const summarizeWalletPayloadFailures = (rows = []) => ({
+    degraded24h: rows.reduce((acc, r) => acc + (r.total || 0), 0),
+    // Só as 3 combinações mais frequentes: a lista inteira não cabe num card e a
+    // cauda longa não muda a ação.
+    sources: rows.slice(0, 3).map((r) => ({ failed: r._id || '?', count: r.total || 0 })),
+});
+
 /** Todos os campos cobrados, sem repetição entre classes. */
 const allCoverageFields = () => [
     ...new Set(Object.values(COVERAGE_SPEC).flatMap((spec) => spec.map((s) => s.field))),
@@ -259,6 +275,7 @@ const collectFacts = async (now) => {
         treasuryCatalogRows,
         candleFacts,
         errors24h,
+        walletPayloadRows,
         jobs,
         oldestRun,
         frozenAssets,
@@ -280,6 +297,19 @@ const collectFacts = async (now) => {
         ErrorLog.aggregate([
             { $match: { lastSeenAt: { $gte: since24h } } },
             { $group: { _id: null, total: { $sum: '$count' } } },
+        ]),
+        // Carteiras montadas com dados incompletos. Sai do balde genérico de erros
+        // porque a consequência é específica e cara: sem `snapshots` a carteira
+        // perde a âncora de TWRR e exibe ROI simples com o selo "Estimado"; sem
+        // `treasuryPricing`, a renda fixa volta para a curva. O usuário vê números
+        // piores e nada diz que faltou dado — foi assim em 02/09/2026, e o defeito
+        // só apareceu porque alguém reparou no selo do card.
+        //
+        // Agrupado por `code` (as buscas que caíram), que é o que decide o conserto.
+        ErrorLog.aggregate([
+            { $match: { source: 'wallet.payload', lastSeenAt: { $gte: since24h } } },
+            { $group: { _id: '$code', total: { $sum: '$count' }, lastSeenAt: { $max: '$lastSeenAt' } } },
+            { $sort: { total: -1 } },
         ]),
         collectJobFacts(),
         // Marco zero da instrumentação: sem ele, todo cron diário apareceria como
@@ -336,6 +366,9 @@ const collectFacts = async (now) => {
             },
             jobs,
             errors: { last24h: errors24h[0]?.total || 0 },
+            // Carteiras degradadas: total nas 24h e QUAIS buscas caíram — é o que
+            // decide o conserto.
+            walletPayload: summarizeWalletPayloadFailures(walletPayloadRows),
             instrumentationSince: oldestRun?.startedAt || now,
             frozen: {
                 count: frozenAssets.length,

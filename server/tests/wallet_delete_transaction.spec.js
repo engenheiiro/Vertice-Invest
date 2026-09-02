@@ -17,6 +17,10 @@ const session = {
 vi.mock('mongoose', () => ({
   default: { startSession: vi.fn(() => Promise.resolve(session)) },
 }));
+// O controller registra a degradação do payload no ErrorLog; mockamos o SERVIÇO
+// (não o modelo, que é detalhe interno dele) para não arrastar um schema real
+// contra o mongoose stubado acima.
+vi.mock('../services/errorLogService.js', () => ({ recordError: vi.fn(() => Promise.resolve(true)) }));
 vi.mock('../models/User.js', () => ({ default: {} }));
 vi.mock('../models/Wallet.js', () => ({ default: {} }));
 vi.mock('../models/UserAsset.js', () => ({ default: {} }));

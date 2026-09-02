@@ -6,6 +6,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('mongoose', () => ({ default: { startSession: vi.fn() } }));
+// O controller registra a degradação do payload no ErrorLog; mockamos o SERVIÇO
+// (não o modelo, que é detalhe interno dele) para não arrastar um schema real
+// contra o mongoose stubado acima.
+vi.mock('../services/errorLogService.js', () => ({ recordError: vi.fn(() => Promise.resolve(true)) }));
 vi.mock('../utils/dbTransaction.js', () => ({ runTransaction: vi.fn(), txError: vi.fn() }));
 vi.mock('../models/User.js', () => ({
   default: { findByIdAndUpdate: vi.fn(), findById: vi.fn() },

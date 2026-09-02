@@ -18,6 +18,9 @@ import {
     ratio,
     worstStatus,
 } from '../utils/dataHealthRules.js';
+// A sentinela entra aqui só pelo formatador PURO do fato — é o que fecha o elo
+// entre quem produz e quem julga (nenhum IO acontece na importação).
+import { summarizeWalletPayloadFailures } from '../services/dataHealthService.js';
 
 const NOW = new Date('2026-08-16T12:00:00Z');
 const hoursAgo = (h) => new Date(NOW.getTime() - h * 3600000);
@@ -589,6 +592,43 @@ describe('ROTINAS (crons)', () => {
 });
 
 describe('ERROS', () => {
+    it('carteira degradada aparece no painel já na PRIMEIRA ocorrência', () => {
+        // warn: 1 é decisão, não folga. Uma carteira exibindo ROI simples com selo
+        // "Estimado" já é um número errado na tela de alguém.
+        const facts = healthyFacts();
+        facts.walletPayload = { degraded24h: 1, sources: [{ failed: 'snapshots', count: 1 }] };
+        expect(byId(buildHealthReport(facts), 'wallet.payloadDegraded24h').status)
+            .toBe(HEALTH_STATUS.WARN);
+    });
+
+    it('carteira sem degradação fica OK e diz isso por extenso', () => {
+        const facts = healthyFacts();
+        facts.walletPayload = { degraded24h: 0, sources: [] };
+        const c = byId(buildHealthReport(facts), 'wallet.payloadDegraded24h');
+        expect(c.status).toBe(HEALTH_STATUS.OK);
+        expect(c.detail).toMatch(/Nenhuma carteira degradada/);
+    });
+
+    it('o detalhe nomeia QUAIS buscas caíram — alarme sem endereço é ruído', () => {
+        const facts = healthyFacts();
+        facts.walletPayload = {
+            degraded24h: 42,
+            sources: [{ failed: 'snapshots', count: 30 }, { failed: 'treasuryPricing', count: 12 }],
+        };
+        const c = byId(buildHealthReport(facts), 'wallet.payloadDegraded24h');
+        expect(c.status).toBe(HEALTH_STATUS.CRITICAL);
+        expect(c.detail).toContain('snapshots (30)');
+        expect(c.detail).toContain('treasuryPricing (12)');
+    });
+
+    it('fato ausente não quebra o relatório (sentinela antiga, deploy novo)', () => {
+        const facts = healthyFacts();
+        delete facts.walletPayload;
+        const c = byId(buildHealthReport(facts), 'wallet.payloadDegraded24h');
+        expect(c.status).toBe(HEALTH_STATUS.OK);
+        expect(c.value).toBe(0);
+    });
+
     it('pico de erros 5xx alarma', () => {
         const facts = healthyFacts();
         facts.errors = { last24h: 300 };
@@ -646,5 +686,55 @@ describe('agregação do veredito', () => {
     it('todo check carrega uma dica de onde olhar', () => {
         const report = buildHealthReport(healthyFacts());
         expect(report.checks.every((c) => typeof c.hint === 'string' && c.hint.length > 0)).toBe(true);
+    });
+});
+
+/**
+ * Elo PRODUTOR → CONSUMIDOR do check de carteira degradada.
+ *
+ * A sentinela monta o fato (`summarizeWalletPayloadFailures`) e a régua o lê
+ * (`walletPayloadCheck`). São arquivos diferentes ligados por um nome de chave —
+ * e se um lado renomear sozinho, o check não quebra: passa a ler `undefined`,
+ * grada como zero e mostra "nenhuma carteira degradada" para sempre. O alarme
+ * mente calado, que é o pior defeito possível num alarme.
+ *
+ * Estes testes fecham o elo sem banco: as linhas cruas do ErrorLog entram, o
+ * relatório sai.
+ */
+describe('carteira degradada: sentinela e régua falam a mesma língua', () => {
+    const rows = (...entries) => entries.map(([code, total]) => ({ _id: code, total }));
+
+    const reportFrom = (errorLogRows) => {
+        const facts = healthyFacts();
+        facts.walletPayload = summarizeWalletPayloadFailures(errorLogRows);
+        return byId(buildHealthReport(facts), 'wallet.payloadDegraded24h');
+    };
+
+    it('linhas do ErrorLog viram um check com contagem e endereço', () => {
+        const c = reportFrom(rows(['snapshots', 30], ['treasuryPricing', 12]));
+
+        expect(c.value).toBe(42);
+        expect(c.status).toBe(HEALTH_STATUS.CRITICAL);
+        expect(c.detail).toContain('snapshots (30)');
+        expect(c.detail).toContain('treasuryPricing (12)');
+    });
+
+    it('sem nenhuma ocorrência o check fica OK', () => {
+        const c = reportFrom([]);
+        expect(c.value).toBe(0);
+        expect(c.status).toBe(HEALTH_STATUS.OK);
+    });
+
+    it('a cauda longa é cortada no detalhe, mas contada no total', () => {
+        const c = reportFrom(rows(['a', 5], ['b', 4], ['c', 3], ['d', 2], ['e', 1]));
+
+        expect(c.value).toBe(15);
+        expect(c.detail).toContain('a (5)');
+        expect(c.detail).not.toContain('d (2)');
+    });
+
+    it('code vazio ainda rende uma linha legível, não "undefined"', () => {
+        const c = reportFrom([{ _id: null, total: 2 }]);
+        expect(c.detail).toContain('? (2)');
     });
 });

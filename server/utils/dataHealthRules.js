@@ -134,6 +134,12 @@ export const DEFAULT_THRESHOLDS = {
     inactiveRatio: { warn: 0.05, critical: 0.15 },
     // Erros 5xx do backend nas últimas 24h.
     errors24h: { warn: 25, critical: 150 },
+    // Carteiras montadas com dados incompletos nas últimas 24h.
+    //
+    // `warn: 1` de propósito: uma única carteira exibindo a Rentabilidade Real como
+    // ROI simples (selo "Estimado") já é um número errado na tela de alguém, e o
+    // dono precisa saber. Não é um limiar de tolerância — é o piso da visibilidade.
+    walletDegraded24h: { warn: 1, critical: 25 },
     // Idade da confirmação de saúde dos fundamentos BR (espelha o gate de publicação).
     fundamentalsAgeHours: { warn: 40, critical: 96 },
 };
@@ -698,15 +704,51 @@ const jobChecks = (facts) => {
 
 const errorChecks = (facts, th) => {
     const count = num(facts.errors?.last24h) ?? 0;
-    return [check({
-        id: 'errors.backend24h',
-        label: 'Erros do backend (24h)',
+    return [
+        check({
+            id: 'errors.backend24h',
+            label: 'Erros do backend (24h)',
+            category: CATEGORY.ERRORS,
+            status: gradeAscending(count, th.errors24h),
+            value: count,
+            detail: `${count} erro(s) registrado(s) nas últimas 24h`,
+            hint: 'Detalhe por rota/job na aba de Erros.',
+        }),
+        walletPayloadCheck(facts, th),
+    ];
+};
+
+/**
+ * Carteiras montadas com dados incompletos.
+ *
+ * Separado do balde geral de erros porque a consequência é específica e cara: o
+ * payload da carteira faz sete buscas independentes e degrada graciosamente
+ * quando uma cai — mas sem `snapshots` não há âncora de TWRR (a Rentabilidade
+ * Real vira ROI simples e o selo do card troca "Auditado" por "Estimado", e a
+ * Variação Hoje perde o dia-âncora), e sem `treasuryPricing` a renda fixa volta
+ * para a curva. O usuário vê números piores e a tela não diz que faltou dado.
+ *
+ * Aconteceu em 02/09/2026 e só apareceu porque alguém reparou no selo. O detalhe
+ * nomeia QUAIS buscas caíram, que é o que decide o conserto — um alarme que não
+ * diz onde olhar só vira ruído.
+ */
+const walletPayloadCheck = (facts, th) => {
+    const count = num(facts.walletPayload?.degraded24h) ?? 0;
+    const sources = Array.isArray(facts.walletPayload?.sources) ? facts.walletPayload.sources : [];
+    const detail = count === 0
+        ? 'Nenhuma carteira degradada nas últimas 24h'
+        : `${count} carteira(s) montada(s) sem dados completos: `
+            + sources.map((s) => `${s.failed} (${s.count})`).join(', ');
+
+    return check({
+        id: 'wallet.payloadDegraded24h',
+        label: 'Carteiras com dados incompletos (24h)',
         category: CATEGORY.ERRORS,
-        status: gradeAscending(count, th.errors24h),
+        status: gradeAscending(count, th.walletDegraded24h),
         value: count,
-        detail: `${count} erro(s) registrado(s) nas últimas 24h`,
-        hint: 'Detalhe por rota/job na aba de Erros.',
-    })];
+        detail,
+        hint: 'A busca nomeada falhou e o payload caiu no padrão — TWRR e marcação da RF ficam degradados.',
+    });
 };
 
 // --- montagem do relatório --------------------------------------------------

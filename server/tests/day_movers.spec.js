@@ -22,6 +22,8 @@ import { DAY_CHANGE_REASON, isDefaultDayChangeReason, ZEROED_BY_DATA_REASONS } f
 import { historyStorageKey } from '../utils/assetHistory.js';
 import { brazilToday, PRICING_SOURCE } from '../utils/fixedIncome.js';
 import { reconcileRoundedParts, safeCurrency, safeAdd } from '../utils/mathUtils.js';
+import { readFileSync } from 'node:fs';
+import WalletSnapshot from '../models/WalletSnapshot.js';
 
 const macroRates = { cdiRate: 13.9, selic: 14.0, ipca: 4.72 };
 const HOJE = '2026-09-01';   // terça-feira
@@ -360,5 +362,43 @@ describe('proventos da janela do dia', () => {
         const r = await call(ANCORA);
         // 100×1,10 + 200×0,10 + 100×1,25 = 110 + 20 + 125
         expect(r.total).toBe(255);
+    });
+});
+
+/**
+ * REGRESSÃO: a promessa de snapshots é consumida DUAS vezes.
+ *
+ * `fetchWalletMarketContext` encadeia o accrual de proventos na busca de
+ * snapshots (para recortar a janela pelo dia-âncora) e passa a MESMA promessa
+ * para o `Promise.allSettled`. Sem `.exec()`, `find().lean()` devolve uma Query
+ * do Mongoose: ela executa no primeiro `.then()` e REJEITA no segundo, com
+ * "Query was already executed".
+ *
+ * O estrago é silencioso e desproporcional: o `allSettled` engole a rejeição,
+ * `snapshots` chega vazio, e sem snapshot não há âncora de TWRR (a Rentabilidade
+ * Real vira ROI simples e o selo cai de "Auditado" para "Estimado") nem
+ * dia-âncora para a Variação Hoje — que passa a ser reconstruída pelo percentual
+ * do provedor, exatamente o caminho que a âncora existe para evitar.
+ */
+describe('busca de snapshots do payload da carteira', () => {
+    it('query crua NÃO é Promise; só .exec() devolve uma reaproveitável', () => {
+        const query = WalletSnapshot.find({}).lean();
+        expect(query instanceof Promise).toBe(false);
+
+        const promise = WalletSnapshot.find({}).lean().exec();
+        expect(promise instanceof Promise).toBe(true);
+        // Sem conexão de banco a promessa rejeita por timeout de buffer; o catch
+        // evita uma unhandled rejection derrubando a suíte.
+        promise.catch(() => {});
+    });
+
+    it('o controller consome a busca com .exec()', () => {
+        const src = readFileSync(new URL('../controllers/walletController.js', import.meta.url), 'utf8');
+        const linha = src
+            .split('\n')
+            .find((l) => l.includes('.sort({ date: -1 }).limit(30).lean()'));
+
+        expect(linha, 'a busca de snapshots do payload sumiu ou mudou de forma').toBeTruthy();
+        expect(linha.trim(), 'sem .exec() a promessa é uma Query e rejeita no segundo consumo').toMatch(/\.lean\(\)\.exec\(\);$/);
     });
 });
