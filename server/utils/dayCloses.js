@@ -39,3 +39,51 @@ export const loadClosesForDay = async (assetRefs, dayStr) => {
     ]);
     return new Map(rows.map((r) => [r.ticker, r.candle.close]));
 };
+
+/**
+ * Último fechamento BRUTO gravado ANTES de `dayStr`, por ativo.
+ *
+ * Usado pela detecção de provento no dia-ex (`utils/dividendGap.js`), que
+ * precisa do candle da sessão anterior para comparar com o `previousClose`
+ * ajustado da cotação. Não assume a série ordenada: reduz pelo maior `date`,
+ * em vez de confiar num `$last` que dependeria da ordem de gravação.
+ *
+ * @param {Array<{ticker: string, type: string}>} assetRefs
+ * @param {string} dayStr YYYY-MM-DD (exclusivo)
+ * @returns {Promise<Map<string, {date: string, close: number}>>}
+ */
+export const loadLatestCloseBefore = async (assetRefs, dayStr) => {
+    if (!dayStr) return new Map();
+    const keys = [...new Set((assetRefs || []).map((a) => historyStorageKey(a.ticker, a.type)).filter(Boolean))];
+    if (keys.length === 0) return new Map();
+
+    const rows = await AssetHistory.aggregate([
+        { $match: { ticker: { $in: keys } } },
+        {
+            $project: {
+                ticker: 1,
+                candle: {
+                    $reduce: {
+                        input: {
+                            $filter: {
+                                input: { $ifNull: ['$history', []] },
+                                as: 'h',
+                                cond: { $and: [{ $lt: ['$$h.date', dayStr] }, { $gt: ['$$h.close', 0] }] },
+                            },
+                        },
+                        initialValue: null,
+                        in: {
+                            $cond: [
+                                { $or: [{ $eq: ['$$value', null] }, { $gt: ['$$this.date', '$$value.date'] }] },
+                                '$$this',
+                                '$$value',
+                            ],
+                        },
+                    },
+                },
+            },
+        },
+        { $match: { candle: { $ne: null } } },
+    ]);
+    return new Map(rows.map((r) => [r.ticker, { date: r.candle.date, close: r.candle.close }]));
+};

@@ -13,6 +13,7 @@ import AuditLog from '../models/AuditLog.js'; // Novo
 import { marketDataService } from './marketDataService.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { externalMarketService } from './externalMarketService.js';
+import { DERIVED_RECONCILE_WINDOW_MS } from '../utils/dividendGap.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz, safeQuantity, addQty, subQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
@@ -823,6 +824,11 @@ export const financialService = {
      * DividendEvent (índice único ticker+date+type — o valor NÃO entra na chave;
      * ver DividendEvent.js). Cripto, renda fixa e caixa são ignorados.
      * `assets`: [{ ticker, type }].
+     *
+     * Esta é a fonte AUTORITATIVA, e ela atrasa 1-3 dias em relação à data-ex.
+     * O crédito do dia é coberto por um provento provisório derivado do gap do
+     * dia-ex (`utils/dividendGap.js`); aqui ele é promovido a oficial quando as
+     * datas coincidem, ou removido quando a fonte publica a data deslocada.
      */
     async syncDividends(assets) {
         if (!Array.isArray(assets) || assets.length === 0) return { tickers: 0, events: 0 };
@@ -839,6 +845,7 @@ export const financialService = {
             tickerCount++;
 
             const events = await externalMarketService.getDividendsHistory(ticker, type);
+            const officialTimes = [];
             for (const ev of events) {
                 // Upsert pela identidade canônica (ticker + ex-date dia + type),
                 // SEM o valor: o mesmo provento de outra fonte (valor levemente
@@ -848,12 +855,17 @@ export const financialService = {
                 const normDate = this.normalizeDividendDate(ev.date);
                 const normAmount = this.roundDividendAmount(ev.amount);
                 if (!(normAmount > 0)) continue;
+                officialTimes.push(normDate.getTime());
                 try {
                     const res = await DividendEvent.updateOne(
                         { ticker: key, date: normDate, type: evType },
                         {
                             $set: {
                                 amount: normAmount,
+                                // Carimba a procedência: se aqui havia um provisório
+                                // derivado do gap (mesma data-ex), ele é PROMOVIDO a
+                                // oficial e passa a valer o valor da fonte.
+                                source: 'PROVIDER',
                                 ...(ev.paymentDate ? { paymentDate: this.normalizeDividendDate(ev.paymentDate) } : {}),
                             },
                             $setOnInsert: { ticker: key, date: normDate, type: evType, currency: 'BRL' },
@@ -863,6 +875,28 @@ export const financialService = {
                     if (res.upsertedCount > 0) eventCount++;
                 } catch {
                     // Corrida no índice único (evento já inserido) — ignora.
+                }
+            }
+
+            // Reconciliação do provisório: o provento derivado do gap (ver
+            // utils/dividendGap.js) usa como data-ex o dia em que o gap apareceu.
+            // Quando a fonte publica o oficial com a data DESLOCADA em 1-2 dias, o
+            // índice único não colapsa os dois e o mesmo pagamento passaria a ser
+            // contado DUAS vezes. Todo provisório vizinho de um oficial é o mesmo
+            // pagamento e vai embora; o que não tem oficial por perto fica, porque
+            // é provento que a fonte simplesmente não publicou.
+            if (officialTimes.length > 0) {
+                const provisional = await DividendEvent.find({ ticker: key, source: 'DERIVED' }).select('date').lean();
+                const orphanIds = provisional
+                    .filter((p) => {
+                        const t = new Date(p.date).getTime();
+                        if (officialTimes.includes(t)) return false;
+                        return officialTimes.some((o) => Math.abs(o - t) <= DERIVED_RECONCILE_WINDOW_MS);
+                    })
+                    .map((p) => p._id);
+                if (orphanIds.length > 0) {
+                    await DividendEvent.deleteMany({ _id: { $in: orphanIds } });
+                    logger.info('[Dividends] Provisórios substituídos pelo oficial', { ticker: key, removidos: orphanIds.length });
                 }
             }
         }

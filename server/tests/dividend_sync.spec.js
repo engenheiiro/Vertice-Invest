@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../config/logger.js', () => ({
   default: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
 }));
-vi.mock('../models/DividendEvent.js', () => ({ default: { updateOne: vi.fn(), find: vi.fn() } }));
+vi.mock('../models/DividendEvent.js', () => ({ default: { updateOne: vi.fn(), find: vi.fn(), deleteMany: vi.fn() } }));
 vi.mock('../services/externalMarketService.js', () => ({
   externalMarketService: { getDividendsHistory: vi.fn() },
 }));
@@ -27,9 +27,18 @@ const DividendEvent = (await import('../models/DividendEvent.js')).default;
 const { externalMarketService } = await import('../services/externalMarketService.js');
 const { financialService } = await import('../services/financialService.js');
 
+/** Encadeável para os dois formatos usados no serviço: .select().lean() e .sort().lean(). */
+const chain = (rows = []) => {
+  const self = { select: () => self, sort: () => self, lean: async () => rows };
+  return self;
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   DividendEvent.updateOne.mockResolvedValue({ upsertedCount: 1 });
+  // Reconciliação do provisório: sem provisórios, nada a remover.
+  DividendEvent.find.mockReturnValue(chain([]));
+  DividendEvent.deleteMany.mockResolvedValue({ deletedCount: 0 });
 });
 
 describe('financialService.syncDividends', () => {

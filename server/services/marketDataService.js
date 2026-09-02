@@ -11,8 +11,11 @@ import { summarizeTrackRecord } from '../utils/trackRecord.js';
 // (M9) Janela de cache e fallback de Selic centralizados em financialConstants.
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { getTunablesSync } from './configService.js'; // (I13) tunables editáveis pelo admin
+import DividendEvent from '../models/DividendEvent.js';
 import { historyStorageKey } from '../utils/assetHistory.js';
 import { brazilDateKey } from '../utils/dateUtils.js';
+import { loadLatestCloseBefore } from '../utils/dayCloses.js';
+import { deriveDividendFromGap } from '../utils/dividendGap.js';
 import { recordCacheAccess } from '../utils/performanceMetrics.js';
 
 /**
@@ -320,6 +323,121 @@ export const marketDataService = {
         return ops;
     },
 
+    /**
+     * Registra proventos PROVISÓRIOS detectados pelo gap do dia-ex.
+     *
+     * Roda no sync de cotações porque o sinal só existe DURANTE a sessão do
+     * dia-ex: o `previousClose` da cotação vem ajustado pelo provento enquanto
+     * o nosso candle da véspera continua bruto. Na sessão seguinte os dois já
+     * concordam e o gap some para sempre — perder a janela é perder o dado.
+     * Por isso o gancho fica no caminho quente (toda atualização de cotação é
+     * uma nova chance de capturar) e não num cron, que erraria o dia se falhasse.
+     *
+     * Nunca derruba o sync de cotações: qualquer falha aqui é logada e engolida.
+     *
+     * @returns {Promise<number>} eventos provisórios gravados
+     */
+    async detectExDateDividends(quotes, assetMap) {
+        try {
+            const todayBr = brazilDateKey(new Date());
+
+            // 1. Só cotações da sessão de HOJE. Um quote de ontem compararia o
+            //    previousClose de anteontem com o candle da véspera — sem sentido.
+            const candidates = [];
+            for (const quote of quotes || []) {
+                const ticker = this.normalizeSymbol(quote.ticker);
+                const asset = assetMap.get(ticker);
+                const adjusted = Number(quote.previousClose);
+                if (!asset || !(adjusted > 0)) continue;
+                if (sessionDateKey(quote.marketTime) !== todayBr) continue;
+                candidates.push({ ticker, type: asset.type, adjusted });
+            }
+            if (candidates.length === 0) return 0;
+
+            // 2. Passada barata: sem histórico de proventos. Na esmagadora maioria
+            //    dos dias TODO gap é zero e a função sai aqui, sem tocar em
+            //    DividendEvent — é o que mantém o custo no caminho quente irrisório.
+            const closes = await loadLatestCloseBefore(candidates, todayBr);
+            const hits = [];
+            for (const c of candidates) {
+                const prev = closes.get(historyStorageKey(c.ticker, c.type));
+                if (!prev) continue;
+                const derived = deriveDividendFromGap({
+                    type: c.type,
+                    rawPrevClose: prev.close,
+                    adjustedPrevClose: c.adjusted,
+                    priceDate: todayBr,
+                    rawPrevCloseDate: prev.date,
+                });
+                if (derived) hits.push({ ...c, prev });
+            }
+            if (hits.length === 0) return 0;
+
+            // 3. Só agora vale consultar o histórico, para (a) não pisar num evento
+            //    oficial já publicado e (b) aplicar a trava de plausibilidade.
+            const tickers = hits.map((h) => h.ticker);
+            const known = await DividendEvent.find({ ticker: { $in: tickers } })
+                .select('ticker date amount source').sort({ date: -1 }).lean();
+
+            const byTicker = new Map();
+            for (const ev of known) {
+                if (!byTicker.has(ev.ticker)) byTicker.set(ev.ticker, []);
+                byTicker.get(ev.ticker).push(ev);
+            }
+
+            const [ty, tm, td] = todayBr.split('-').map(Number);
+            const exDateUtc = new Date(Date.UTC(ty, tm - 1, td));
+            const NEAR_DAYS_MS = 4 * 86400000;
+
+            let written = 0;
+            for (const hit of hits) {
+                const events = byTicker.get(hit.ticker) || [];
+
+                // Evento OFICIAL perto da data-ex derivada: a fonte já publicou (ou
+                // publicou com a data deslocada em 1-2 dias). Não inventar um segundo.
+                const officialNearby = events.some((ev) => (ev.source || 'PROVIDER') === 'PROVIDER'
+                    && Math.abs(new Date(ev.date).getTime() - exDateUtc.getTime()) <= NEAR_DAYS_MS);
+                if (officialNearby) continue;
+
+                const knownAmounts = events
+                    .filter((ev) => (ev.source || 'PROVIDER') === 'PROVIDER')
+                    .slice(0, 12)
+                    .map((ev) => Number(ev.amount));
+
+                const derived = deriveDividendFromGap({
+                    type: hit.type,
+                    rawPrevClose: hit.prev.close,
+                    adjustedPrevClose: hit.adjusted,
+                    priceDate: todayBr,
+                    rawPrevCloseDate: hit.prev.date,
+                    knownAmounts,
+                });
+                if (!derived) continue;
+
+                await DividendEvent.updateOne(
+                    { ticker: hit.ticker, date: exDateUtc, type: 'DIVIDEND' },
+                    {
+                        $set: { amount: derived.amount, source: 'DERIVED' },
+                        $setOnInsert: { ticker: hit.ticker, date: exDateUtc, type: 'DIVIDEND', currency: 'BRL' },
+                    },
+                    { upsert: true },
+                );
+                written++;
+                logger.info('[Dividends] Provento provisório detectado pelo gap do dia-ex', {
+                    ticker: hit.ticker,
+                    exDate: todayBr,
+                    amount: derived.amount,
+                    rawPrevClose: hit.prev.close,
+                    adjustedPrevClose: hit.adjusted,
+                });
+            }
+            return written;
+        } catch (error) {
+            logger.warn(`[Dividends] Detecção de provento por gap falhou: ${error.message}`);
+            return 0;
+        }
+    },
+
     async refreshQuotesBatch(tickers, force = false) {
         if (!tickers || tickers.length === 0) return;
 
@@ -430,6 +548,10 @@ export const marketDataService = {
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
             }
+
+            // Provento do dia-ex: só detectável DURANTE a sessão em que o gap
+            // existe. Depois do bulkWrite para não atrasar a gravação da cotação.
+            await this.detectExDateDividends(quotes, assetMap);
 
         } catch (error) {
             logger.error(`❌ [MarketData] Falha: ${error.message}`);

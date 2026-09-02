@@ -14,8 +14,16 @@ const DividendEventSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   
   // Dividendo, JCP, etc.
-  type: { type: String, default: 'DIVIDEND' }, 
-  
+  type: { type: String, default: 'DIVIDEND' },
+
+  // Procedência do registro.
+  //  PROVIDER — publicado pela fonte oficial (Yahoo). Autoritativo.
+  //  DERIVED  — PROVISÓRIO, deduzido do gap do dia-ex enquanto a fonte não
+  //             publica (ver utils/dividendGap.js). Colapsa no MESMO documento
+  //             quando o oficial chega, pelo índice único {ticker,date,type}.
+  // Documentos anteriores a set/2026 não têm o campo; ausência = PROVIDER.
+  source: { type: String, enum: ['PROVIDER', 'DERIVED'], default: 'PROVIDER' },
+
   currency: { type: String, default: 'BRL' },
   
   createdAt: { type: Date, default: Date.now }
