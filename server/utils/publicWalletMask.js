@@ -51,6 +51,17 @@ export const maskAsset = (scale, asset) => {
         profit: money(scale, asset.profit),
         dividendsReceived: money(scale, asset.dividendsReceived),
         accruedValue: money(scale, asset.accruedValue),
+        // Contribuição do ativo para a Variação Hoje e provento do dia-ex. Entram
+        // aqui mesmo com o detalhamento do dia oculto no link público: o campo
+        // trafega na resposta de qualquer jeito, e um valor real em R$ reconstrói
+        // o fator de normalização — e com ele o patrimônio verdadeiro do dono.
+        dayChangeValue: money(scale, asset.dayChangeValue),
+        dayDividends: money(scale, asset.dayDividends),
+        // `dayChangeReason` passa intacto: é rótulo, não valor. Decisão consciente —
+        // "comprado hoje" revela que o dono operou no dia, o que já é visível pela
+        // quantidade quando ele libera os valores, e o detalhamento não é oferecido
+        // ao visitante. A catraca de campos em tests/public_wallet_mask.spec.js
+        // obriga quem adicionar o próximo campo a decidir isso de novo.
     };
 };
 
@@ -62,6 +73,7 @@ export const maskKpis = (scale, kpis = {}) => {
         totalInvested: money(scale, kpis.totalInvested),
         totalResult: money(scale, kpis.totalResult),
         dayVariation: money(scale, kpis.dayVariation),
+        dayDividends: money(scale, kpis.dayDividends),
         totalDividends: money(scale, kpis.totalDividends),
         projectedDividends: money(scale, kpis.projectedDividends),
     };

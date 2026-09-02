@@ -9,7 +9,7 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
-import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, safeValue, safePrice, safeQuantity, percentOf, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
+import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, safeValue, safePrice, safeQuantity, percentOf, reconcileRoundedParts, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
 import { computeQuotaSharpe, computeQuotaBeta, snapshotDayKey, SHARPE_WINDOW_SNAPSHOTS } from '../utils/walletRisk.js';
 import { brazilDateKey, countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { assetDailyFactor, valueFixedIncomeAsset, PRICING_SOURCE, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
@@ -21,6 +21,7 @@ import { positionCostBRL, positionRealizedProfitBRL } from '../utils/fxRate.js';
 import { sumTransactionFlowBRL, transactionsAfterSnapshotFilter } from '../utils/walletSnapshot.js';
 import { historyStorageKey } from '../utils/assetHistory.js';
 import { loadClosesForDay } from '../utils/dayCloses.js';
+import { DAY_CHANGE_REASON } from '../utils/dayChangeReason.js';
 import { loadCdiCurve, earliestFixedIncomeLotDate } from '../utils/cdiCurve.js';
 import { allocationBucket, resolveAllocationClass } from '../utils/assetAllocation.js';
 import { cashFlowTickerCondition } from '../utils/cashFlowFilter.js';
@@ -165,7 +166,8 @@ const buildEmptyWalletResponse = async (targets) => {
         assets: [],
         kpis: {
             totalEquity: 0, totalInvested: 0, totalResult: 0, totalResultPercent: 0,
-            dayVariation: 0, dayVariationPercent: 0, totalDividends: 0, projectedDividends: 0,
+            dayVariation: 0, dayVariationPercent: 0, dayAnchorDate: null, dayDividends: 0,
+            totalDividends: 0, projectedDividends: 0,
             weightedRentability: 0,
             dataQuality: 'AUDITED',
             // Carteira vazia não tem risco medível — null, não zero.
@@ -184,7 +186,34 @@ const buildEmptyWalletResponse = async (targets) => {
 // cotações (1 query em lote, sem N+1 — 5.8), macro, dividendos e os snapshots
 // usados no TWRR/Sharpe. (5.3) Promise.allSettled: se uma falha (ex.: cálculo
 // de dividendos), a carteira ainda renderiza com degradação graciosa.
+
+/**
+ * Dia-âncora da Variação Hoje: o último snapshot ANTERIOR a hoje.
+ *
+ * Regra ÚNICA, compartilhada por quem mede a variação (o card), quem recorta os
+ * proventos da mesma janela e o TWRR — os três têm de concordar sobre o que
+ * "hoje" está sendo comparado, senão a tela exibe um card, um gráfico e uma cota
+ * discordando sobre o mesmo dia.
+ *
+ * Um snapshot do PRÓPRIO dia não serve: ele já é "hoje", e medir contra ele daria
+ * zero. Devolve `null` quando não há snapshot anterior (carteira nova).
+ */
+const resolveAnchorDayKey = (snapshots, todayKey) => {
+    const anchor = selectAnchorSnapshot(
+        (snapshots || []).filter((s) => (s.dayKey || snapshotDayKey(s)) < todayKey)
+    );
+    return anchor ? (anchor.dayKey || snapshotDayKey(anchor)) : null;
+};
+
 const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAssets = []) => {
+    const todayKey = toDateKey(brazilToday());
+    // Os snapshots definem o dia-âncora, e o accrual precisa dele para recortar a
+    // janela de proventos. Em vez de serializar as duas coisas (uma ida a mais ao
+    // banco antes de tudo), o accrual ENCADEIA nesta promessa e as outras cinco
+    // seguem em paralelo: só o accrual espera, e ele não é o caminho crítico.
+    const snapshotsPromise = WalletSnapshot.find({ user: userId, wallet: walletId })
+        .sort({ date: -1 }).limit(30).lean();
+
     const [assetMapR, configR, dividendsR, accruedR, snapshotsR, riskSnapshotsR, treasuryR] = await Promise.allSettled([
         marketDataService.getMarketDataMap(liveTickers),
         SystemConfig.findOne({ key: 'MACRO_INDICATORS' }),
@@ -196,8 +225,13 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAss
         // prejuízo inexistente em `totalResult`. Era a mesma fuga que o TWRR já
         // havia fechado, e deixava o card divergindo do próprio gráfico patrimonial
         // (carteira real, 29/08/2026: card R$ 5,71 × snapshot R$ 7,87).
-        financialService.accrueDividendsByTicker(userId, walletId, toDateKey(brazilToday())),
-        WalletSnapshot.find({ user: userId, wallet: walletId }).sort({ date: -1 }).limit(30).lean(),
+        //
+        // `sinceDayKey` abre o recorte da MESMA janela que a Variação Hoje mede —
+        // é ele que explica a queda do dia-ex no detalhamento do dia.
+        snapshotsPromise.then((snaps) => financialService.accrueDividendsByTicker(
+            userId, walletId, todayKey, { sinceDayKey: resolveAnchorDayKey(snaps, todayKey) },
+        )),
+        snapshotsPromise,
         // Série de risco (Sharpe): janela própria, MAIOR e com o mesmo filtro de
         // patrimônio do /performance — é o que garante que os dois caminhos vejam
         // o mesmo conjunto. Query separada de propósito: a busca acima define o
@@ -220,16 +254,23 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAss
     // Fail-open para a definição ANTIGA (caixa) se o accrual cair: um número um pouco
     // defasado é melhor que zerar os proventos do card. Nunca o contrário — o accrual
     // é a definição correta, e é dele que o snapshot vive.
-    const { total: accruedTotal, byTicker: accruedByTicker } =
+    const { total: accruedTotal, byTicker: accruedByTicker, sinceTotal, sinceByTicker } =
         accruedR.status === 'fulfilled' ? accruedR.value : { total: null, byTicker: null };
     const totalDividends = accruedTotal ?? totalAllTime;
     const receivedByTicker = accruedByTicker ?? paidByTicker;
+    // Proventos da janela do dia. Sem fail-open: não há definição antiga para cair,
+    // e inventar um número aqui poria uma nota falsa no detalhamento.
+    const dayDividendsTotal = sinceTotal ?? 0;
+    const dayDividendsByTicker = sinceByTicker ?? {};
     const snapshots = snapshotsR.status === 'fulfilled' ? snapshotsR.value : [];
     const riskSnapshots = riskSnapshotsR.status === 'fulfilled' ? riskSnapshotsR.value : [];
     // Falha ao carregar PU não derruba a carteira: a RF volta para o accrual.
     const treasuryPricing = treasuryR.status === 'fulfilled' ? treasuryR.value : EMPTY_TREASURY_PRICING;
 
-    return { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots, riskSnapshots, treasuryPricing };
+    return {
+        assetMap, config, totalDividends, projectedMonthly, receivedByTicker,
+        dayDividendsTotal, dayDividendsByTicker, snapshots, riskSnapshots, treasuryPricing,
+    };
 };
 
 /**
@@ -298,6 +339,10 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
     let accruedTotalValue = null;
     let matured = false; // C2: título de RF vencido (accrual congelado, sugere resgate)
     let pricing = null;  // diagnóstico da renda fixa (mercado × curva) para a UI
+    // Qual régua produziu `dayChangePct` (ver utils/dayChangeReason.js). Atribuído
+    // em CADA ramo abaixo, na mesma ordem em que o valor é sobrescrito: um motivo
+    // fora de ordem faz a linha exibir um número e explicar outro.
+    let dayChangeReason = null;
 
     if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
         // Fonte única (utils/fixedIncome): marca a mercado quando o título público
@@ -341,22 +386,46 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
             // publicado é o de HOJE. A série oficial sai de manhã e é ingerida no
             // fim do dia; repetir a variação de ontem enquanto isso mostraria um
             // movimento que não aconteceu hoje.
-            dayChangePct = (pricing.priceDate === todayStr && pricing.previousMarket > 0)
+            const puIsFromToday = pricing.priceDate === todayStr;
+            const hasPreviousMark = pricing.previousMarket > 0;
+            dayChangePct = (puIsFromToday && hasPreviousMark)
                 ? ((pricing.value / pricing.previousMarket) - 1) * 100
                 : 0;
+
+            if (puIsFromToday && hasPreviousMark) {
+                dayChangeReason = DAY_CHANGE_REASON.FIXED_INCOME_MTM;
+            } else if (!hasPreviousMark && isBoughtOnDay(asset, todayKey)) {
+                // Não há marcação anterior porque a POSIÇÃO não existia no PU
+                // anterior — é compra do dia, não série atrasada. É a mesma guarda
+                // que o ramo da curva faz explicitamente; aqui ela cai por
+                // consequência, e sem esta distinção a linha diria "PU de hoje não
+                // publicado" com o PU de hoje publicado na tela ao lado.
+                dayChangeReason = DAY_CHANGE_REASON.BOUGHT_TODAY;
+            } else {
+                dayChangeReason = DAY_CHANGE_REASON.FIXED_INCOME_MTM_PENDING;
+            }
         } else {
             const effectiveDailyFactor = assetDailyFactor(asset, macroRates);
             dayChangePct = isTodayBusinessDay ? (effectiveDailyFactor - 1) * 100 : 0;
+            dayChangeReason = DAY_CHANGE_REASON.FIXED_INCOME_CURVE;
 
             // Ativo comprado HOJE: zera a variação do dia (evita variação irreal).
+            // Só no ramo da CURVA — no marcado a mercado o código não zera por
+            // compra do dia, e a etiqueta acompanha essa assimetria.
             const boughtToday = isBoughtOnDay(asset, todayKey);
-            if (boughtToday) dayChangePct = 0;
+            if (boughtToday) {
+                dayChangePct = 0;
+                dayChangeReason = DAY_CHANGE_REASON.BOUGHT_TODAY;
+            }
         }
 
         // C2: título vencido não rende mais — zera a variação do dia (o valor já
         // vem congelado no vencimento). isMatured usa a mesma calcDate.
         matured = isMatured(asset, calcDate);
-        if (matured) dayChangePct = 0;
+        if (matured) {
+            dayChangePct = 0;
+            dayChangeReason = DAY_CHANGE_REASON.MATURED;
+        }
 
         // Com âncora, a variação exibida é a MEDIDA contra o dia-âncora — não a
         // estimada por um fator. Cobre curva e marcação a mercado com uma régua só.
@@ -376,6 +445,7 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
             if (anchorClose > 0) {
                 dayChangePct = ((currentPrice / anchorClose) - 1) * 100;
                 anchorValueNative = safeValue(asset.quantity, anchorClose);
+                dayChangeReason = DAY_CHANGE_REASON.ANCHOR_CLOSE;
             } else if (asset.type === 'CRYPTO') {
                 // Cripto não tem pregão para datar: negocia 24h. Mas o `change` do
                 // provedor é uma janela DESLIZANTE de 24 horas, e isso não é "hoje":
@@ -390,9 +460,13 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
                 // Sem previousClose, mantém a janela do provedor: defasada, mas é
                 // a única leitura disponível.
                 const previousClose = safeFloat(Number(cached.previousClose) || 0);
-                dayChangePct = previousClose > 0 && currentPrice > 0
+                const hasPreviousClose = previousClose > 0 && currentPrice > 0;
+                dayChangePct = hasPreviousClose
                     ? ((currentPrice / previousClose) - 1) * 100
                     : safeFloat(Number(cached.change));
+                dayChangeReason = hasPreviousClose
+                    ? DAY_CHANGE_REASON.PREVIOUS_CLOSE
+                    : DAY_CHANGE_REASON.PROVIDER_WINDOW;
             } else {
                 // A variação só é de HOJE se a SESSÃO que a produziu for a de hoje.
                 // O updatedAt não responde isso: ele diz quando NÓS perguntamos ao
@@ -410,6 +484,9 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
                     ? cached.priceDate === todayKey
                     : isTodayBusinessDay;
                 dayChangePct = isTodaySession ? safeFloat(Number(cached.change)) : 0;
+                dayChangeReason = isTodaySession
+                    ? DAY_CHANGE_REASON.PROVIDER_SESSION
+                    : DAY_CHANGE_REASON.STALE_QUOTE;
             }
 
             // Ajuste para ativos comprados HOJE (evita variação irreal no dia da compra)
@@ -419,6 +496,9 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
                 const averagePrice = safePrice(asset.totalCost, asset.quantity);
                 if (averagePrice > 0) {
                     dayChangePct = ((currentPrice / averagePrice) - 1) * 100;
+                    // Sobrescreve QUALQUER um dos quatro motivos acima: o início do
+                    // dia deixou de ser um fechamento e passou a ser o custo.
+                    dayChangeReason = DAY_CHANGE_REASON.BOUGHT_TODAY;
                     // Posição que não existia no dia-âncora: o início do dia é o
                     // custo, não o fechamento de um candle em que ela não estava.
                     // Precede a âncora — senão o movimento do dia inteiro entraria
@@ -429,6 +509,7 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
         } else {
             currentPrice = 0;
             dayChangePct = 0;
+            dayChangeReason = DAY_CHANGE_REASON.NO_QUOTE;
         }
     }
 
@@ -520,6 +601,18 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
         profitPercent: safeFloat(profitPercent),
         sector: assetMap.get(asset.ticker)?.sector || (asset.type === 'FIXED_INCOME' ? 'Renda Fixa' : asset.type === 'CASH' ? 'Caixa' : 'Outros'),
         dayChangePct: safeFloat(combinedChangePct),
+        // Contribuição da posição para a Variação Hoje, em BRL. É o MESMO número
+        // que `buildWalletPayload` acumula no total do card — exposto para o
+        // detalhamento do dia poder explicar o total sem recalculá-lo por outra
+        // régua, que é como as duas pontas voltariam a discordar.
+        //
+        // O arredondamento aqui é só de exibição: o total soma os valores CRUS e
+        // arredonda uma vez. `reconcileRoundedParts` fecha o resíduo depois do laço.
+        dayChangeValue: safeCurrency(dayChangeValueBr),
+        // Qual régua produziu o número acima (utils/dayChangeReason.js). Sem ele,
+        // o zero de "não temos cotação de hoje" é indistinguível do zero de "o
+        // ativo fechou estável", e a tela some com a diferença.
+        dayChangeReason,
         tags: asset.tags, // Return tags
         // Sub-tipos usados pela ramificação da Carteira Ideal (real vs meta):
         // RF → índice (IPCA/SELIC/CDI/PRE); Exterior → usSubType (STOCK/ETF/REIT/DOLLAR).
@@ -668,7 +761,8 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
                 .catch(err => logger.warn(`[Wallet] Refresh de cotações em background falhou: ${err.message}`));
         }
 
-        const { assetMap, config, totalDividends, projectedMonthly, receivedByTicker, snapshots, riskSnapshots, treasuryPricing } =
+        const { assetMap, config, totalDividends, projectedMonthly, receivedByTicker,
+            dayDividendsTotal, dayDividendsByTicker, snapshots, riskSnapshots, treasuryPricing } =
             await fetchWalletMarketContext(userId, liveTickers, walletId, activeAssets);
 
         const usdRate = safeFloat(config?.dollar || 5.75);
@@ -693,16 +787,10 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         const isTodayBusinessDay = isBusinessDay(new Date(brazilTodayStr + 'T00:00:00.000Z'));
 
         // ÂNCORA DO DIA: o snapshot contra o qual a Variação Hoje é medida é o MESMO
-        // que ancora o TWRR (`selectAnchorSnapshot`) e o ponto anterior do gráfico.
-        // Fixar os três no mesmo dia é o que impede a tela de mostrar um card, um
-        // gráfico e uma cota discordando sobre o que aconteceu hoje.
-        //
-        // Um snapshot do PRÓPRIO dia não serve de âncora: ele já é "hoje", e medir a
-        // variação contra ele daria zero.
-        const anchorSnapshot = selectAnchorSnapshot(
-            (snapshots || []).filter((s) => (s.dayKey || snapshotDayKey(s)) < brazilTodayStr)
-        );
-        const anchorDayKey = anchorSnapshot ? (anchorSnapshot.dayKey || snapshotDayKey(anchorSnapshot)) : null;
+        // que ancora o TWRR (`selectAnchorSnapshot`), o ponto anterior do gráfico e o
+        // recorte de proventos do dia. Fixar os quatro no mesmo dia é o que impede a
+        // tela de mostrar um card, um gráfico e uma cota discordando sobre hoje.
+        const anchorDayKey = resolveAnchorDayKey(snapshots, brazilTodayStr);
         const [anchorCloses, anchorUsdRate] = anchorDayKey
             ? await Promise.all([
                 loadClosesForDay(activeAssets, anchorDayKey),
@@ -727,6 +815,12 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
             // Rentabilidade total (preço + proventos) na Detalhamento por Classe,
             // distinta da Variação (só preço).
             processed.dividendsReceived = safeCurrency(receivedByTicker[asset.ticker] || 0);
+            // Provento com data-ex DENTRO da janela do dia (posterior ao dia-âncora).
+            // Não entra em `dayChangeValue`: somá-lo quebraria a identidade
+            // "patrimônio de ontem + variação de hoje = hoje", que é medida só em
+            // preço. Existe para a tela poder explicar a queda do dia-ex, que sem
+            // ele aparece como prejuízo puro.
+            processed.dayDividends = safeCurrency(dayDividendsByTicker[asset.ticker] || 0);
             processedAssets.push(processed);
             totalEquity = safeAdd(totalEquity, totalValueBr);
             totalInvested = safeAdd(totalInvested, totalCostBr);
@@ -741,6 +835,15 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         const safeTotalInvested = safeCurrency(totalInvested);
         const safeTotalResult = safeCurrency(totalResult);
         const safeTotalDayVariation = safeCurrency(totalDayVariation);
+
+        // O total soma os valores CRUS e arredonda uma vez; as contribuições por
+        // ativo já saíram arredondadas. Sem este ajuste, a soma das linhas do
+        // detalhamento erra o card em até meio centavo por posição — e o painel
+        // existe justamente para provar que as linhas fecham o total.
+        const reconciledDayValues = reconcileRoundedParts(
+            processedAssets.map((a) => a.dayChangeValue), safeTotalDayVariation,
+        );
+        processedAssets.forEach((a, i) => { a.dayChangeValue = reconciledDayValues[i]; });
 
         let totalResultPercent = 0;
         if (safeTotalInvested > 0) {
@@ -769,6 +872,13 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
                 totalResultPercent: totalResultPercent,
                 dayVariation: safeTotalDayVariation,
                 dayVariationPercent: dayVariationPercent,
+                // Dia do snapshot contra o qual a variação foi medida. Não é
+                // cosmético: numa segunda após feriado a âncora é quinta, e o rótulo
+                // "Hoje" sozinho mente sobre a janela que o número cobre.
+                dayAnchorDate: anchorDayKey,
+                // Proventos com data-ex na MESMA janela. Fora de `dayVariation` de
+                // propósito — ver `processed.dayDividends`.
+                dayDividends: safeCurrency(dayDividendsTotal),
                 totalDividends: safeCurrency(totalDividends),
                 projectedDividends: safeCurrency(projectedMonthly),
                 weightedRentability: safeFloat(weightedRentability),

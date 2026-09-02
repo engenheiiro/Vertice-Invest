@@ -87,6 +87,41 @@ export const percentOf = (part, whole) => {
     return safeFloat((p / w) * 100);
 };
 
+/**
+ * Ajusta partes JÁ arredondadas para que somem EXATAMENTE o total arredondado.
+ *
+ * Os totais da carteira somam os valores CRUS e arredondam uma única vez no fim —
+ * é isso que preserva a identidade com o patrimônio. Arredondar cada parte para
+ * exibi-la reintroduz até meio centavo de resíduo POR parte: numa carteira de 30
+ * posições, até R$ 0,15 de diferença entre a soma das linhas e o total do card.
+ *
+ * O ajuste vai INTEIRO para a parte de maior módulo — a que menos sente o
+ * deslocamento em termos relativos — em vez de ser distribuído, o que criaria N
+ * pequenas discrepâncias no lugar de nenhuma.
+ *
+ * @param {number[]} parts partes já arredondadas (safeCurrency)
+ * @param {number} total total arredondado, a autoridade
+ * @returns {number[]} novo array; a soma bate com `total` ao centavo
+ */
+export const reconcileRoundedParts = (parts, total) => {
+    const values = (parts || []).map((p) => safeCurrency(p));
+    if (values.length === 0) return values;
+
+    const target = safeCurrency(total);
+    const sum = values.reduce((acc, v) => safeAdd(acc, v), 0);
+    const residue = safeCurrency(safeSub(target, sum));
+    if (residue === 0) return values;
+
+    // Maior módulo. Empate resolve pelo primeiro — determinístico, e a ordem de
+    // `parts` vem da carteira, que já é estável.
+    let pivot = 0;
+    for (let i = 1; i < values.length; i++) {
+        if (Math.abs(values[i]) > Math.abs(values[pivot])) pivot = i;
+    }
+    values[pivot] = safeCurrency(safeAdd(values[pivot], residue));
+    return values;
+};
+
 // --- NOVAS FUNÇÕES FINANCEIRAS (V4) ---
 
 /**

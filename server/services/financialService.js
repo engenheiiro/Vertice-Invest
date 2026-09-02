@@ -249,11 +249,22 @@ export const financialService = {
      * quebra por fora — somando `totalAllTime` com `provisioned` — daria quase sempre o
      * mesmo número e ERRARIA justamente quando a posição mudou entre as ex-dates, que é
      * o caso em que o acumulado importa.
+     *
+     * `options.sinceDayKey` (EXCLUSIVO) abre um segundo balde no mesmo laço:
+     * `sinceTotal`/`sinceByTicker` contam só as ex-dates POSTERIORES àquele dia. É o
+     * que o detalhamento da Variação Hoje usa para explicar a queda do dia-ex — no
+     * dia em que o ativo fica ex, o preço cai e o crédito ainda não aparece em lugar
+     * nenhum da tela. A janela é a MESMA que a variação mede (o dia-âncora), não
+     * "hoje": numa segunda após feriado a âncora é quinta, e usar hoje deixaria de
+     * fora os proventos de sexta.
      */
     async accrueDividendsByTicker(userId, walletId, throughDayKey, options = {}) {
+        const sinceDayKey = options.sinceDayKey || null;
         const txs = options.transactions
             || await AssetTransaction.find({ user: userId, wallet: walletId }).sort({ date: 1 });
-        if (!txs || txs.length === 0) return { total: 0, paid: 0, pending: 0, byTicker: {} };
+        if (!txs || txs.length === 0) {
+            return { total: 0, paid: 0, pending: 0, byTicker: {}, sinceTotal: 0, sinceByTicker: {} };
+        }
 
         const dividendDateMap = options.dividendDateMap
             || await this._loadDividendDateMap([...new Set(txs.map(t => t.ticker))]);
@@ -261,9 +272,11 @@ export const financialService = {
         const days = [...dividendDateMap.keys()].filter(d => d <= throughDayKey).sort();
         const qty = {};
         const byTicker = {};
+        const sinceByTicker = {};
         let txIndex = 0;
         let total = 0;
         let paid = 0;
+        let sinceTotal = 0;
 
         for (const day of days) {
             // Mesma ordem do rebuild: transações do dia ANTES dos proventos do dia.
@@ -279,6 +292,10 @@ export const financialService = {
                     const value = qty[div.ticker] * div.amount;
                     total = safeAdd(total, value);
                     byTicker[div.ticker] = safeAdd(byTicker[div.ticker] || 0, value);
+                    if (sinceDayKey && day > sinceDayKey) {
+                        sinceTotal = safeAdd(sinceTotal, value);
+                        sinceByTicker[div.ticker] = safeAdd(sinceByTicker[div.ticker] || 0, value);
+                    }
                     // Sem paymentDate, a mesma convenção do resto do serviço: ex + 15d.
                     const payKey = this.toDateKey(div.paymentDate || new Date(new Date(day).getTime() + 15 * 86400000));
                     if (payKey <= throughDayKey) paid = safeAdd(paid, value);
@@ -287,11 +304,19 @@ export const financialService = {
         }
 
         for (const ticker of Object.keys(byTicker)) byTicker[ticker] = safeCurrency(byTicker[ticker]);
+        for (const ticker of Object.keys(sinceByTicker)) sinceByTicker[ticker] = safeCurrency(sinceByTicker[ticker]);
         const safeTotal = safeCurrency(total);
         const safePaid = safeCurrency(paid);
         // `pending` é derivado da subtração, nunca somado em paralelo: garante que as
         // duas parcelas fechem o total exibido mesmo com arredondamento de centavo.
-        return { total: safeTotal, paid: safePaid, pending: safeCurrency(safeTotal - safePaid), byTicker };
+        return {
+            total: safeTotal,
+            paid: safePaid,
+            pending: safeCurrency(safeTotal - safePaid),
+            byTicker,
+            sinceTotal: safeCurrency(sinceTotal),
+            sinceByTicker,
+        };
     },
 
     /** Indexa todos os proventos dos tickers por data (chave toDateKey). */
