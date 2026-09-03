@@ -547,9 +547,11 @@ const timeSeriesChecks = (facts, th) => {
                   + candleSample(wallet.worst),
         hint: 'O snapshot das 23:59 marca a renda variável pelo FECHAMENTO do dia e só cai no '
             + 'preço do instante quando o candle falta — e WalletSnapshot é a base do TWRR e do '
-            + 'Sharpe. Se estes tickers aparecem aqui, a garantia de candle do snapshot '
-            + '(walletDayCandleService) falhou para eles: confira o job daily-snapshot e se o '
-            + 'ticker ainda resolve na fonte.',
+            + 'Sharpe. Ticker da B3 aqui costuma ser o Yahoo publicando o dia VAZIO: quem repara '
+            + 'é o job wallet-candle-recovery (de hora em hora), pelo arquivo oficial da B3, que '
+            + 'não tem hora garantida de publicação. Confira esse job e o log [B3] antes de '
+            + 'suspeitar do daily-snapshot; ticker fora da B3 (cripto, ação americana) não tem '
+            + 'esse reforço e aí a pergunta é se ele ainda resolve na fonte.',
     }));
 
     // Universo: FRAÇÃO. A pergunta é de cobertura do worker, não de nomes.

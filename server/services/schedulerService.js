@@ -658,13 +658,10 @@ export const initScheduler = () => {
     schedule('0 9 * * *', 'daily-morning', async () => {
         logger.info("⏰ Rotina Diária V3 — Manhã (09:00)");
         try {
-            // Segunda chance do fechamento anterior, já com o arquivo B3 Final.
-            // Best-effort: falha aqui não deve impedir sync/research da manhã.
-            try {
-                await reconcilePreviousWalletSnapshot();
-            } catch (e) {
-                logger.error(`Reconciliação candle manhã: ${e.message}`);
-            }
+            // A segunda chance do fechamento anterior saiu daqui: ela agora tem
+            // cron próprio ('wallet-candle-recovery', de hora em hora), porque a
+            // publicação do arquivo oficial da B3 não tem hora garantida e uma
+            // única tentativa às 09:00 chegava cedo demais (02/09/2026).
             const syncResult = await syncService.performFullSync();
             // Resiliência: 403/IP no Fundamentus não deve abortar o research.
             // Fundamentos são trimestrais (já no banco) e preços seguem frescos
@@ -688,6 +685,20 @@ export const initScheduler = () => {
         } catch (e) {
             logger.error(`❌ Rotina Manhã V3: ${e.message}`);
             Sentry.captureException(e);
+        }
+    });
+
+    // 5a-bis. Recuperação do fechamento oficial (de hora em hora, 07:25–21:25)
+    //
+    // O snapshot das 23:59 é fail-open quando nenhuma fonte publicou o fechamento,
+    // e a hora em que o arquivo oficial da B3 entra no ar não é garantida — em
+    // 02/09/2026 o pregão do dia não estava lá às 23:59 nem às 09:00 do dia
+    // seguinte. Em vez de apostar num horário, tenta enquanto a lacuna existir:
+    // sem candle faltando, o job sai em duas consultas ao Mongo e não toca a rede.
+    schedule('25 7-21 * * *', 'wallet-candle-recovery', async () => {
+        const resultado = await reconcilePreviousWalletSnapshot();
+        if (resultado.recovered > 0 || resultado.healed > 0) {
+            logger.info('⏰ Recuperação de candle: fechamento oficial entrou e o snapshot foi refeito', resultado);
         }
     });
 

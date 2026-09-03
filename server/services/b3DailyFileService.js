@@ -144,10 +144,21 @@ export const fetchB3DailyCloses = async (dayStr) => {
             });
             // Dia sem arquivo: a B3 recusa o pedido do token. Não é erro nosso e
             // não deve ser re-tentado — devolvemos null e o chamador segue.
-            if (req.status !== 200) return null;
+            //
+            // Em INFO, e não em debug, porque as duas causas de "sem arquivo" são
+            // indistinguíveis sem esta linha: dia sem pregão (esperado) e pregão
+            // que a B3 ainda não publicou (o que travou a recuperação de BOVA11 e
+            // IVVB11 em 02/09/2026 e custou uma investigação inteira para achar).
+            if (req.status !== 200) {
+                logger.info(`[B3] Arquivo de ${dayStr} ainda não publicado (HTTP ${req.status}).`);
+                return null;
+            }
 
             const token = String(req.data?.redirectUrl || '').split('token=')[1];
-            if (!token) return null;
+            if (!token) {
+                logger.warn(`[B3] Resposta de ${dayStr} sem token de download — formato do endpoint mudou?`);
+                return null;
+            }
 
             const dl = await axios.get(`${DOWNLOAD_URL}?token=${token}`, {
                 headers: { 'User-Agent': UA, Accept: 'text/csv, text/plain, */*', 'Accept-Encoding': 'gzip' },

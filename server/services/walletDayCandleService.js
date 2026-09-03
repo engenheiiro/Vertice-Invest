@@ -132,6 +132,53 @@ export const missingBusinessDays = (lastCandleDate, dayStr, maxDays = MAX_B3_BAC
 };
 
 /**
+ * Dias úteis da janela que termina em `throughDay`, do mais antigo ao mais novo.
+ */
+export const businessWindowDays = (throughDay, maxDays = MAX_B3_BACKFILL_DAYS) => {
+    if (!throughDay || !isBrBusinessDay(throughDay)) return [];
+    const dias = [];
+    const cursor = new Date(`${throughDay}T12:00:00.000Z`);
+    while (dias.length < maxDays) {
+        const key = cursor.toISOString().slice(0, 10);
+        if (isBrBusinessDay(key)) dias.push(key);
+        cursor.setUTCDate(cursor.getUTCDate() - 1);
+    }
+    return dias.reverse();
+};
+
+/**
+ * Dias úteis SEM candle DENTRO da janela — buraco no MEIO da série inclusive.
+ *
+ * `missingBusinessDays` olha só a ponta (o último candle guardado), e isso basta
+ * enquanto o dia que falta É a ponta. Deixa de bastar assim que o dia seguinte
+ * chega: em 02/09/2026 o Yahoo publicou o dia VAZIO para BOVA11 e IVVB11, a B3 só
+ * publicou o arquivo oficial depois das duas tentativas do dia, e no dia 03 o
+ * candle novo entrou por cima — o buraco de 02 virou permanente. É a cicatriz de
+ * 27 e 28/08 se repetindo, que da outra vez só saiu com varredura à mão.
+ *
+ * Medindo por PERTENCIMENTO à janela, a lacuna continua visível depois que a
+ * ponta se fecha, e a recuperação segue tentando até o arquivo oficial aparecer.
+ *
+ * Série sem NENHUM candle na janela não produz lacuna: aí não é buraco, é série
+ * morta ou recém-criada, e reconstruir histórico é trabalho do `timeSeriesWorker`.
+ * Pelo mesmo motivo nada anterior ao candle mais antigo da janela é cobrado —
+ * ativo comprado ontem não tem pregão anterior a preencher.
+ *
+ * @param {Iterable<string>|Set<string>} existingDates datas já guardadas (idealmente só as da janela)
+ * @param {string} throughDay último dia da janela (YYYY-MM-DD, dia útil)
+ * @param {number} [maxDays] tamanho da janela, em dias úteis
+ */
+export const missingDaysInWindow = (existingDates, throughDay, maxDays = MAX_B3_BACKFILL_DAYS) => {
+    const presentes = existingDates instanceof Set ? existingDates : new Set(existingDates || []);
+    if (presentes.size === 0) return [];
+    const janela = businessWindowDays(throughDay, maxDays);
+    if (janela.length === 0) return [];
+    let piso = null;
+    for (const data of presentes) if (!piso || data < piso) piso = data;
+    return janela.filter((dia) => dia >= piso && !presentes.has(dia));
+};
+
+/**
  * REFORÇO: busca na B3 o fechamento oficial dos que o Yahoo não entregou.
  *
  * Só entra depois que o Yahoo falhou, e só para o que o arquivo da B3 cobre —
@@ -312,4 +359,124 @@ export const ensureWalletDayCandles = async (assetRefs = [], dayStr, closeMap = 
         });
     }
     return resolved;
+};
+
+/**
+ * VARREDURA DE LACUNA: fecha, pelo arquivo oficial da B3, os buracos que ficaram
+ * na janela recente das séries em carteira.
+ *
+ * Complementa `ensureWalletDayCandles`, que só enxerga a PONTA da série (o dia
+ * que está sendo marcado). Quando as duas fontes falham no dia D e o candle de
+ * D+1 chega normalmente, a ponta se fecha com o buraco de D lá dentro — e some do
+ * radar do caminho do snapshot para sempre. Foi o que aconteceu em 27 e 28/08 e
+ * de novo em 02/09/2026, com BOVA11 e IVVB11: o Yahoo publicou o dia vazio e a
+ * B3 só publicou o arquivo oficial DEPOIS das tentativas das 23:59 e das 09:00.
+ *
+ * Barata quando não há o que fazer, que é o caso quase sempre: uma agregação lê
+ * apenas as DATAS da janela (não os ~1.600 candles de cada série) e, sem lacuna,
+ * a função sai sem tocar na rede. A série completa só é carregada para os tickers
+ * que realmente têm buraco.
+ *
+ * Ausente do arquivo da B3 = papel que não negociou no dia. Não é falha e não
+ * vira candle: inventar fechamento é pior que a lacuna.
+ *
+ * @param {Array<{ticker:string,type:string,quantity?:number}>} assetRefs posições em carteira
+ * @param {string} throughDay último dia útil da janela (YYYY-MM-DD)
+ * @param {{maxDays?:number}} [options]
+ * @returns {Promise<Map<string, string[]>>} storageKey → dias recuperados
+ */
+export const healWalletCandleGaps = async (assetRefs = [], throughDay, { maxDays = MAX_B3_BACKFILL_DAYS } = {}) => {
+    const recuperados = new Map();
+    const janela = businessWindowDays(throughDay, maxDays);
+    if (janela.length === 0) return recuperados;
+
+    const alvos = new Map();
+    for (const asset of assetRefs) {
+        if (!asset?.ticker) continue;
+        if (asset.quantity !== undefined && !(asset.quantity > 0)) continue;
+        const ticker = String(asset.ticker).trim().toUpperCase();
+        if (!B3_FALLBACK_TYPES.has(String(asset.type || '').trim().toUpperCase())) continue;
+        if (!B3_TICKER_RE.test(ticker)) continue;
+        const storageKey = historyStorageKey(asset.ticker, asset.type);
+        if (storageKey && !alvos.has(storageKey)) alvos.set(storageKey, { ticker, type: asset.type });
+    }
+    if (alvos.size === 0) return recuperados;
+
+    let faltantesPorChave = new Map();
+    try {
+        const rows = await AssetHistory.aggregate([
+            { $match: { ticker: { $in: [...alvos.keys()] } } },
+            {
+                $project: {
+                    ticker: 1,
+                    dates: {
+                        $map: {
+                            input: {
+                                $filter: {
+                                    input: { $ifNull: ['$history', []] },
+                                    as: 'h',
+                                    cond: { $and: [{ $gte: ['$$h.date', janela[0]] }, { $lte: ['$$h.date', throughDay] }] },
+                                },
+                            },
+                            as: 'h',
+                            in: '$$h.date',
+                        },
+                    },
+                },
+            },
+        ]);
+        for (const row of rows) {
+            const dias = missingDaysInWindow(row.dates, throughDay, maxDays);
+            if (dias.length > 0) faltantesPorChave.set(row.ticker, dias);
+        }
+    } catch (e) {
+        // Fail-open: sem a leitura não há varredura, e o caminho de quem chamou
+        // segue com o que já tinha.
+        logger.warn(`[DayCandle] Varredura de lacuna não pôde ler as séries: ${e.message}`);
+        return recuperados;
+    }
+    if (faltantesPorChave.size === 0) return recuperados;
+
+    const todosOsDias = new Set();
+    for (const dias of faltantesPorChave.values()) for (const dia of dias) todosOsDias.add(dia);
+    const porDia = new Map();
+    for (const dia of [...todosOsDias].sort()) porDia.set(dia, await fetchB3DailyCloses(dia));
+
+    const docs = await AssetHistory.find({ ticker: { $in: [...faltantesPorChave.keys()] } }).lean();
+    const guardadaPorChave = new Map(docs.map((doc) => [doc.ticker, doc.history || []]));
+
+    for (const [storageKey, dias] of faltantesPorChave) {
+        const alvo = alvos.get(storageKey);
+        const novos = [];
+        for (const dia of dias) {
+            const linha = porDia.get(dia)?.get(alvo.ticker);
+            if (linha) novos.push({ date: dia, close: linha.close, volume: linha.volume });
+        }
+        if (novos.length === 0) continue;
+        try {
+            const merged = mergeDayCandles(guardadaPorChave.get(storageKey) || [], novos, alvo.type);
+            await AssetHistory.updateOne(
+                { ticker: storageKey },
+                { $set: { history: merged, lastUpdated: new Date() } },
+            );
+            recuperados.set(storageKey, novos.map((c) => c.date));
+        } catch (e) {
+            logger.warn(`[DayCandle] Varredura de lacuna falhou ao gravar ${alvo.ticker}: ${e.message}`);
+        }
+    }
+
+    if (recuperados.size > 0) {
+        logger.info('[DayCandle] Lacuna da janela fechada pelo fechamento oficial da B3', {
+            throughDay,
+            assets: [...recuperados].map(([chave, dias]) => `${chave}: ${dias.join(', ')}`),
+        });
+    } else {
+        // Sem isto, "a lacuna existe e nada foi feito" fica indistinguível de
+        // "não havia lacuna" — que foi o buraco de diagnóstico de 03/09/2026.
+        logger.info('[DayCandle] Lacuna na janela sem cobertura no arquivo da B3', {
+            throughDay,
+            assets: [...faltantesPorChave].map(([chave, dias]) => `${chave}: ${dias.join(', ')}`),
+        });
+    }
+    return recuperados;
 };

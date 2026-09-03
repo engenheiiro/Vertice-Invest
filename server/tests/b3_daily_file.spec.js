@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { parseB3Number, parseB3TradeFile } from '../services/b3DailyFileService.js';
-import { missingBusinessDays } from '../services/walletDayCandleService.js';
+import { businessWindowDays, missingBusinessDays, missingDaysInWindow } from '../services/walletDayCandleService.js';
 
 const CAB = 'RptDt;TckrSymb;ISIN;SgmtNm;MinPric;MaxPric;TradAvrgPric;LastPric;OscnPctg;AdjstdQt;AdjstdQtTax;RefPric;TradQty;FinInstrmQty;NtlFinVol';
 const arquivo = (linhas, status = 'Status do Arquivo: Final') => [status, CAB, ...linhas].join('\n');
@@ -119,5 +119,48 @@ describe('missingBusinessDays', () => {
   it('respeita o teto e devolve os dias mais recentes, em ordem', () => {
     const dias = missingBusinessDays('2026-01-02', '2026-08-31', 5);
     expect(dias).toEqual(['2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28', '2026-08-31']);
+  });
+});
+
+/**
+ * A janela existe porque a ponta engana: quando o candle do dia seguinte chega,
+ * a série volta a parecer em dia com o buraco lá dentro (BOVA11 e IVVB11 em
+ * 02/09/2026, e antes disso 27 e 28/08).
+ */
+describe('missingDaysInWindow', () => {
+  it('enxerga o buraco no MEIO da série, que a régua da ponta não vê', () => {
+    const guardadas = ['2026-08-27', '2026-08-28', '2026-08-31', '2026-09-02'];
+    // Série termina em 02/09 — para missingBusinessDays não falta nada.
+    expect(missingBusinessDays('2026-09-02', '2026-09-02')).toEqual([]);
+    // 01/09 (terça) está faltando no meio.
+    expect(missingDaysInWindow(guardadas, '2026-09-02')).toEqual(['2026-09-01']);
+  });
+
+  it('cobra o dia da ponta como qualquer outro', () => {
+    expect(missingDaysInWindow(['2026-08-31', '2026-09-01'], '2026-09-02')).toEqual(['2026-09-02']);
+  });
+
+  it('série completa na janela não pede nada', () => {
+    const cheia = ['2026-08-27', '2026-08-28', '2026-08-31', '2026-09-01', '2026-09-02'];
+    expect(missingDaysInWindow(cheia, '2026-09-02')).toEqual([]);
+  });
+
+  it('não cobra pregão anterior ao candle mais antigo — ativo comprado ontem', () => {
+    expect(missingDaysInWindow(['2026-09-01'], '2026-09-02')).toEqual(['2026-09-02']);
+  });
+
+  it('série sem candle na janela não é buraco, é assunto do worker', () => {
+    expect(missingDaysInWindow([], '2026-09-02')).toEqual([]);
+  });
+
+  it('dia final sem pregão não abre janela', () => {
+    expect(missingDaysInWindow(['2026-08-28'], '2026-08-30')).toEqual([]); // domingo
+    expect(businessWindowDays('2026-08-30')).toEqual([]);
+  });
+
+  it('a janela é de dias ÚTEIS e termina no dia pedido', () => {
+    expect(businessWindowDays('2026-09-02')).toEqual([
+      '2026-08-27', '2026-08-28', '2026-08-31', '2026-09-01', '2026-09-02',
+    ]);
   });
 });

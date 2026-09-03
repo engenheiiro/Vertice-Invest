@@ -62,6 +62,15 @@ export const JOB_CATALOG = {
         maxSilenceHours: 816,
         severity: 'WARN',
     },
+    'wallet-candle-recovery': {
+        label: 'Recuperação do fechamento oficial (horária, 07:25–21:25)',
+        // Vão noturno: 21:25 → 07:25 do dia seguinte = 10h. 14h deixa folga para
+        // uma execução perdida sem alarmar de madrugada.
+        maxSilenceHours: 14,
+        // WARN: o dano de uma parada aqui é o snapshot ficar marcado pelo preço
+        // das 23:59 em vez do fechamento — degradação, não número errado na tela.
+        severity: 'WARN',
+    },
     'daily-snapshot': {
         label: 'Snapshot patrimonial (23:59)',
         maxSilenceHours: 30,

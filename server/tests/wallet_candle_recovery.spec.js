@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   userAssetFind: vi.fn(),
   historyAggregate: vi.fn(),
   ensureDayCandles: vi.fn(),
+  healGaps: vi.fn(),
   rebuildUserHistory: vi.fn(),
   loadTreasuryPricing: vi.fn(),
   loggerInfo: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock('../services/treasuryPriceService.js', () => ({
 }));
 vi.mock('../services/walletDayCandleService.js', () => ({
   ensureWalletDayCandles: mocks.ensureDayCandles,
+  healWalletCandleGaps: mocks.healGaps,
 }));
 vi.mock('../services/financialService.js', () => ({
   financialService: { rebuildUserHistory: mocks.rebuildUserHistory },
@@ -32,9 +34,12 @@ vi.mock('../config/logger.js', () => ({
   default: { info: mocks.loggerInfo, error: mocks.loggerError, warn: vi.fn(), debug: vi.fn() },
 }));
 
-const { previousDayKey, reconcilePreviousWalletSnapshot, reconcileTreasurySnapshot } = await import(
-  '../services/walletCandleRecoveryService.js'
-);
+const {
+  previousBusinessDayKey,
+  previousDayKey,
+  reconcilePreviousWalletSnapshot,
+  reconcileTreasurySnapshot,
+} = await import('../services/walletCandleRecoveryService.js');
 
 const wireHoldings = (rows) => {
   mocks.userAssetFind.mockReturnValue({
@@ -46,6 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.historyAggregate.mockResolvedValue([]);
   mocks.ensureDayCandles.mockResolvedValue(new Map());
+  mocks.healGaps.mockResolvedValue(new Map());
   mocks.rebuildUserHistory.mockResolvedValue([]);
   mocks.loadTreasuryPricing.mockResolvedValue({ historyFor: () => null });
 });
@@ -53,6 +59,43 @@ beforeEach(() => {
 describe('walletCandleRecoveryService', () => {
   it('calcula o dia civil anterior em virada de mês', () => {
     expect(previousDayKey('2026-09-01')).toBe('2026-08-31');
+  });
+
+  it('o alvo é o último dia ÚTIL, não o dia civil anterior', () => {
+    // Segunda-feira: o dia civil anterior é domingo, que não tem pregão nem
+    // snapshot. Antes disso a rotina saía SKIPPED e um fechamento de sexta
+    // publicado tarde (28/08/2026) nunca ganhava segunda chance.
+    expect(previousDayKey('2026-08-31')).toBe('2026-08-30');
+    expect(previousBusinessDayKey('2026-08-31')).toBe('2026-08-28');
+  });
+
+  it('na segunda-feira reconcilia a SEXTA', async () => {
+    wireHoldings([{ ticker: 'BOVA11', type: 'ETF', quantity: 10, user: 'u1', wallet: 'w1' }]);
+
+    await reconcilePreviousWalletSnapshot({ now: new Date('2026-08-31T12:00:00.000Z') });
+
+    expect(mocks.ensureDayCandles).toHaveBeenCalledWith(
+      expect.any(Array), '2026-08-28', expect.any(Map),
+    );
+  });
+
+  it('fecha buraco ANTIGO da janela e reconstrói, mesmo sem candle novo na ponta', async () => {
+    // O caso de 02/09/2026: as duas fontes falharam no dia, o candle do dia
+    // seguinte entrou por cima e a lacuna sumiu do radar da ponta. Sem a
+    // varredura, o buraco vira permanente e o TWRR fica marcado no preço errado.
+    wireHoldings([{ ticker: 'IVVB11', type: 'ETF', quantity: 2, user: 'u1', wallet: 'w1' }]);
+    mocks.ensureDayCandles.mockResolvedValue(new Map());
+    mocks.healGaps.mockResolvedValue(new Map([['IVVB11', ['2026-09-02']]]));
+
+    const result = await reconcilePreviousWalletSnapshot({ targetDay: '2026-09-03' });
+
+    expect(mocks.healGaps).toHaveBeenCalledWith(expect.any(Array), '2026-09-03');
+    expect(mocks.rebuildUserHistory).toHaveBeenCalledWith('u1', 'w1', {
+      throughDayKey: '2026-09-03',
+      source: 'REBUILD',
+    });
+    expect(result).toMatchObject({ status: 'SUCCESS', recovered: 0, healed: 1, rebuilt: 1 });
+    expect(result.tickers).toEqual(['IVVB11']);
   });
 
   it('recupera o candle tardio e reconstrói só a carteira afetada', async () => {
