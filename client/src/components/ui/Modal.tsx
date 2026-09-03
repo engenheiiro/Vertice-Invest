@@ -104,10 +104,15 @@ export const Modal = ({
       <div className="fixed inset-0 z-10 overflow-y-auto">
         {/* (M3) No mobile o painel cola embaixo (bottom sheet); no desktop centraliza. */}
         <div className="flex min-h-full items-end justify-center p-0 sm:items-center sm:p-4">
+          {/* Superfície `base`, não `panel`: os modais escritos à mão (AddAsset,
+              RenameWallet, ShareWallet, Rebalance, Confirm…) já assentam em
+              `base`, e `panel` deixava este shell mais CLARO que o conteúdo —
+              o `bg-card` interno virava um degrau para BAIXO, invertendo a
+              escada de superfícies. Em light os dois tokens valem #FFFFFF. */}
           <div
             ref={panelRef}
             tabIndex={-1}
-            className={`relative w-full ${maxWidth} transform overflow-hidden rounded-t-2xl sm:rounded-2xl bg-panel border border-slate-800 text-left shadow-2xl transition-all animate-fade-in outline-none ${
+            className={`relative w-full ${maxWidth} transform overflow-hidden rounded-t-2xl sm:rounded-2xl bg-base border border-slate-800 text-left shadow-2xl transition-all animate-fade-in outline-none ${
               accent ? `border-t-4 ${accent}` : ''
             }`}
           >
