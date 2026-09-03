@@ -577,6 +577,41 @@ describe('ROTINAS (crons)', () => {
             .toBe(HEALTH_STATUS.CRITICAL);
     });
 
+    it('job ACRESCENTADO depois ganha carência própria, contada da entrada no catálogo', () => {
+        // 03/09/2026: 'wallet-candle-recovery' entrou no ar e o painel o acusou de
+        // "nunca executado" dois minutos depois do deploy — a carência valia só
+        // para a instrumentação, madura havia semanas, e não para o job novo.
+        const facts = healthyFacts();
+        facts.jobs.push({
+            jobId: 'wallet-candle-recovery',
+            label: 'Recuperação do fechamento oficial',
+            severity: 'WARN',
+            maxSilenceHours: 14,
+            since: new Date(facts.now.getTime() - 0.5 * 3600000).toISOString().slice(0, 10),
+            lastRunAt: null,
+            lastStatus: null,
+        });
+        const check = byId(buildHealthReport(facts), 'jobs.wallet-candle-recovery');
+        expect(check.status).toBe(HEALTH_STATUS.OK);
+        expect(check.detail).toContain('Aguardando primeira execução');
+    });
+
+    it('passada a carência do próprio job, "nunca executado" volta a ser falha', () => {
+        const facts = healthyFacts();
+        facts.jobs.push({
+            jobId: 'wallet-candle-recovery',
+            label: 'Recuperação do fechamento oficial',
+            severity: 'WARN',
+            maxSilenceHours: 14,
+            since: '2026-01-05', // entrou há meses e nunca rodou
+            lastRunAt: null,
+            lastStatus: null,
+        });
+        const check = byId(buildHealthReport(facts), 'jobs.wallet-candle-recovery');
+        expect(check.status).toBe(HEALTH_STATUS.WARN);
+        expect(check.detail).toContain('Nunca executado');
+    });
+
     it('carência não silencia cron que JÁ rodou e depois parou', () => {
         const facts = healthyFacts();
         facts.instrumentationSince = hoursAgo(2);

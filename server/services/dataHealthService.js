@@ -237,6 +237,9 @@ const collectJobFacts = async () => {
                 label: meta.label,
                 severity: meta.severity,
                 maxSilenceHours: meta.maxSilenceHours,
+                // Entrada do job no catálogo: a carência de "nunca executado" é
+                // contada dela quando é mais recente que a instrumentação.
+                since: meta.since || null,
                 lastRunAt: last?.lastRunAt || null,
                 lastStatus: last?.lastStatus || null,
                 lastError: last?.lastError || null,

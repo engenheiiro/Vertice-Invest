@@ -642,19 +642,33 @@ const ingestionChecks = (facts, th) => {
 
 const jobChecks = (facts) => {
     const out = [];
-    // Há quanto tempo existe registro de execução. Um cron diário legitimamente
-    // não tem histórico se a instrumentação subiu há duas horas — sem esta carência
-    // o painel nasceria vermelho acusando 12 rotinas de "nunca executadas", e um
-    // monitor cuja primeira impressão é um alarme falso é um monitor que se aprende
-    // a ignorar. A carência de cada job é o próprio teto de silêncio dele.
-    const instrumentedForHours = facts.instrumentationSince
-        ? hoursBetween(facts.instrumentationSince, facts.now)
-        : 0;
+    // Há quanto tempo ESTE job é monitorado. Um cron diário legitimamente não tem
+    // histórico se a instrumentação subiu há duas horas — sem esta carência o
+    // painel nasceria vermelho acusando 12 rotinas de "nunca executadas", e um
+    // monitor cuja primeira impressão é um alarme falso é um monitor que se
+    // aprende a ignorar. A carência de cada job é o próprio teto de silêncio dele.
+    //
+    // Contada do MAIS RECENTE entre o início da instrumentação e a entrada do job
+    // no catálogo (`since`). Medida só pela instrumentação, a carência protegia
+    // apenas a primeira leva: qualquer job acrescentado depois nascia em falha até
+    // o primeiro tique dele — foi o que aconteceu com 'wallet-candle-recovery' em
+    // 03/09/2026, dois minutos após o deploy. Job sem `since` mantém o
+    // comportamento antigo.
+    const monitoredHours = (job) => {
+        const instrumentado = facts.instrumentationSince || facts.now;
+        const entrada = job.since ? new Date(`${job.since}T00:00:00.000Z`) : null;
+        // Data inválida ou no futuro (erro de digitação) não pode virar carência
+        // eterna: nesse caso vale só a instrumentação.
+        const valida = entrada && Number.isFinite(entrada.getTime()) && entrada <= new Date(facts.now);
+        const inicio = valida && entrada > new Date(instrumentado) ? entrada : instrumentado;
+        return hoursBetween(inicio, facts.now) ?? 0;
+    };
 
     for (const job of facts.jobs || []) {
         const { jobId, label, severity = 'WARN', maxSilenceHours, lastRunAt, lastStatus, lastError } = job;
 
         if (!lastRunAt) {
+            const instrumentedForHours = monitoredHours(job);
             const withinGrace = Number.isFinite(maxSilenceHours)
                 && instrumentedForHours < maxSilenceHours;
             out.push(check({

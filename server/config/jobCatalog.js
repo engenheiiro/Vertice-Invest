@@ -64,6 +64,10 @@ export const JOB_CATALOG = {
     },
     'wallet-candle-recovery': {
         label: 'Recuperação do fechamento oficial (horária, 07:25–21:25)',
+        // Data de entrada no catálogo. A sentinela conta a carência de "nunca
+        // executado" a partir daqui — sem isso, todo job novo nasce em falha entre
+        // o deploy e o primeiro tique dele.
+        since: '2026-09-03',
         // Vão noturno: 21:25 → 07:25 do dia seguinte = 10h. 14h deixa folga para
         // uma execução perdida sem alarmar de madrugada.
         maxSilenceHours: 14,
