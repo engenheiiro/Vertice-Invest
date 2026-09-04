@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
+    buildChainMap,
     buildSourceStatuses,
     summarizeSources,
     SOURCE_STATUS,
@@ -235,10 +236,29 @@ describe('cadeia de cobertura', () => {
     // o Fundamentus não substitui o Tesouro só por estarem no mesmo agrupamento.
     it('fonte sem cadeia é ponto único de falha, e isso fica explícito', () => {
         const rows = buildSourceStatuses(factsBase(), getSourceStats());
-        for (const id of ['tesouro', 'fundamentus', 'yahoo.history']) {
+        for (const id of ['tesouro', 'fundamentus', 'yahoo.indices']) {
             expect(byId(rows, id).backups).toEqual([]);
             expect(byId(rows, id).covers).toBeNull();
         }
+    });
+
+    // A série diária DEIXOU de ser ponto único em 04/09/2026: o arquivo da B3
+    // passou a cobrir o universo de pesquisa, não só a carteira. O painel só pode
+    // afirmar isso porque o código realmente faz — ver `reinforceWithB3`.
+    it('o histórico diário tem a B3 como reserva', () => {
+        const rows = buildSourceStatuses(factsBase(), getSourceStats());
+        expect(byId(rows, 'yahoo.history').backups).toEqual(['B3 — arquivo diário']);
+        expect(byId(rows, 'b3').covers).toBe('Yahoo Finance — histórico');
+    });
+
+    // O catálogo afirmava que a Brapi vinha antes do Google. `recoverQuote` faz o
+    // contrário, e um painel que inverte a ordem de tentativa manda investigar a
+    // fonte errada no dia da falha.
+    it('a cadeia de cotações segue a ordem do código: Google antes da Brapi', () => {
+        const rows = buildSourceStatuses(factsBase(), getSourceStats());
+        expect(byId(rows, 'yahoo.quotes').backups).toEqual(['Google Finance', 'Brapi']);
+        expect(byId(rows, 'google.finance').chainPosition).toBe(2);
+        expect(byId(rows, 'brapi').chainPosition).toBe(3);
     });
 
     it('cadeias diferentes não se misturam', () => {
@@ -266,5 +286,54 @@ describe('summarizeSources — a frase do topo', () => {
         const resumo = summarizeSources(buildSourceStatuses(factsBase(), getSourceStats()));
         expect(resumo.worst).toBe(SOURCE_STATUS.OK);
         expect(resumo.unknown).toBeGreaterThan(0);
+    });
+});
+
+/**
+ * A ordem da cadeia precisa vir do DADO, e não da vizinhança na tela. Um bloco do
+ * painel junta responsabilidades independentes — a B3 fica ao lado da Google
+ * Finance sem ser o 4º elo das cotações —, então numerar por posição visual
+ * afirmaria uma cobertura que não existe.
+ */
+describe('buildChainMap — posição declarada, não inferida da tela', () => {
+    const fonte = (id, chain, kind = 'onFailure') => ({
+        id, label: id.toUpperCase(), chain, schedule: chain ? { kind } : null,
+    });
+
+    it('numera cada elo pela ordem do catálogo, 1-based', () => {
+        const mapa = buildChainMap([
+            fonte('a', 'fx', 'minutes'),
+            fonte('b', 'fx'),
+            fonte('c', 'fx'),
+        ]);
+        expect(mapa.get('a').chainPosition).toBe(1);
+        expect(mapa.get('b').chainPosition).toBe(2);
+        expect(mapa.get('c').chainPosition).toBe(3);
+        expect(mapa.get('c').chainSize).toBe(3);
+    });
+
+    it('publica o id da cadeia, para a tela agrupar sem adivinhar', () => {
+        const mapa = buildChainMap([fonte('a', 'fx', 'minutes'), fonte('b', 'quotes', 'minutes')]);
+        expect(mapa.get('a').chain).toBe('fx');
+        expect(mapa.get('b').chain).toBe('quotes');
+    });
+
+    // O caso que motivou tudo: fonte sem cadeia não entra no mapa, e por isso não
+    // ganha número nem seta. Silêncio aqui vira "ponto único de falha" na tela.
+    it('fonte independente fica de fora do mapa, sem posição', () => {
+        const mapa = buildChainMap([fonte('a', 'quotes', 'minutes'), fonte('b3', null)]);
+        expect(mapa.has('b3')).toBe(false);
+    });
+
+    it('buildSourceStatuses carrega chain/posição para cada fonte', () => {
+        const linhas = buildSourceStatuses(
+            { now: new Date('2026-09-04T12:00:00Z'), macro: {} },
+            [
+                { ...fonte('a', 'fx', 'minutes'), attempts: 0, ok: 0, failures: 0, failureRate: null, critical: false },
+                { ...fonte('b3', null), attempts: 0, ok: 0, failures: 0, failureRate: null, critical: false },
+            ],
+        );
+        expect(linhas[0]).toMatchObject({ chain: 'fx', chainPosition: 1, chainSize: 1 });
+        expect(linhas[1]).toMatchObject({ chain: null, chainPosition: null, chainSize: null });
     });
 });

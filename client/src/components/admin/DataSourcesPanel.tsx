@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    AlertTriangle, CheckCircle2, HelpCircle, Radio, ShieldCheck, X, XCircle,
+    AlertTriangle, CheckCircle2, ChevronRight, HelpCircle, Radio, ShieldCheck, X, XCircle,
 } from 'lucide-react';
 import type { DataSource, SourceGroup, SourceStatus, SourceSummary } from '../../services/health';
 
@@ -58,6 +58,32 @@ const STATUS_UI: Record<SourceStatus, {
 };
 
 /**
+ * A RESERVA EM ESPERA TEM COR PRÓPRIA.
+ *
+ * Ela caía no mesmo cinza de `UNKNOWN` da fonte agendada que ainda não teve a vez,
+ * e os dois estados não são a mesma coisa: a agendada é uma pendência (tem hora
+ * marcada e ainda não cumpriu), enquanto a reserva parada é o SISTEMA FUNCIONANDO —
+ * ninguém precisou dela. Cinza lê como apagado, quase defeito; azul lê como
+ * "em posição, sem nada a fazer", que é o que de fato está acontecendo.
+ *
+ * Azul e não verde de propósito: verde é o "recebendo" de quem está entregando
+ * AGORA, e usar o mesmo tom apagaria a diferença entre a fonte que sustenta o dado
+ * e a que só está de prontidão.
+ */
+const STANDBY_UI = {
+    dot: 'bg-blue-500',
+    text: 'text-blue-400',
+    label: 'Em espera',
+    card: 'border-blue-900/50 bg-blue-900/10 hover:border-blue-800',
+    Icon: ShieldCheck,
+};
+
+/** Reserva que ninguém precisou acionar ≠ fonte sem notícia. Ver STANDBY_UI. */
+const isStandby = (source: DataSource) => source.status === 'UNKNOWN' && source.trigger === 'onFailure';
+
+const visualFor = (source: DataSource) => (isStandby(source) ? STANDBY_UI : STATUS_UI[source.status]);
+
+/**
  * O rodapé do card responde "e agora?" — e a resposta depende da natureza da
  * fonte, não só do estado dela.
  *
@@ -67,12 +93,11 @@ const STATUS_UI: Record<SourceStatus, {
  * isso roda?" não tinha resposta — e metade dos cards nem tem horário para dar.
  */
 const footerInfo = (source: DataSource): { label: string; time: string } => {
-    const ui = STATUS_UI[source.status];
     if (source.status !== 'UNKNOWN') {
-        return { label: ui.label, time: sinceLabel(source.lastDeliveryHours) };
+        return { label: STATUS_UI[source.status].label, time: sinceLabel(source.lastDeliveryHours) };
     }
-    if (source.trigger === 'onFailure') {
-        return { label: 'Em espera', time: 'reserva' };
+    if (isStandby(source)) {
+        return { label: STANDBY_UI.label, time: 'reserva' };
     }
     return { label: 'Aguardando', time: source.nextRun ?? '—' };
 };
@@ -85,15 +110,20 @@ const sinceLabel = (hours: number | null) => {
     return `${Math.round(hours / 24)}d`;
 };
 
+/** "1ª", "2ª"… O ordinal só existe dentro de uma cadeia; fora dela não há ordem. */
+const ORDINAL = ['1ª', '2ª', '3ª', '4ª', '5ª', '6ª'];
+
 const SourceCard = ({
-    source, selected, onSelect,
+    source, selected, onSelect, className = '',
 }: {
     source: DataSource;
     selected: boolean;
     onSelect: () => void;
+    className?: string;
 }) => {
-    const ui = STATUS_UI[source.status];
+    const ui = visualFor(source);
     const footer = footerInfo(source);
+    const ordinal = source.chainPosition ? ORDINAL[source.chainPosition - 1] : null;
     return (
         <button
             type="button"
@@ -101,10 +131,15 @@ const SourceCard = ({
             aria-pressed={selected}
             className={`text-left p-2.5 rounded-xl border transition-colors min-w-0 ${ui.card} ${
                 selected ? 'outline outline-1 outline-blue-500/60' : ''
-            }`}
+            } ${className}`}
         >
             <div className="flex items-center gap-1.5 min-w-0">
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ui.dot} ${source.status === 'OK' ? 'animate-pulse' : ''}`} />
+                {ordinal && (
+                    <span className="text-[9px] font-black text-slate-400 bg-elevated px-1 rounded shrink-0">
+                        {ordinal}
+                    </span>
+                )}
                 <span className="text-[11px] font-bold text-white truncate">{source.short ?? source.label}</span>
             </div>
             <p className="text-[9px] text-slate-500 mt-0.5 truncate" title={source.role}>{source.role}</p>
@@ -119,6 +154,42 @@ const SourceCard = ({
         </button>
     );
 };
+
+/**
+ * Uma cadeia de cobertura, desenhada como sequência: `1ª → 2ª → 3ª`.
+ *
+ * A grade uniforme anterior mentia por omissão. Cards lado a lado leem-se como
+ * lista de alternativas equivalentes, e nem a ordem de tentativa nem a fronteira
+ * entre cadeias estavam na tela: no bloco de cotações, a B3 aparecia colada na
+ * Google Finance como se fosse o 4º elo, quando é uma fonte independente que
+ * cobre outra coisa (o fechamento oficial do pregão). Setas só entre quem
+ * realmente se cobre; quem não tem cadeia sai fora da sequência.
+ */
+const ChainRow = ({
+    itens, selectedId, onSelect,
+}: {
+    itens: DataSource[];
+    selectedId: string | null;
+    onSelect: (id: string) => void;
+}) => (
+    <div className="flex flex-wrap items-stretch gap-1.5">
+        {itens.map((s, i) => (
+            <React.Fragment key={s.id}>
+                {i > 0 && (
+                    <div className="flex items-center shrink-0" aria-hidden="true">
+                        <ChevronRight size={14} className="text-slate-600" />
+                    </div>
+                )}
+                <SourceCard
+                    source={s}
+                    selected={selectedId === s.id}
+                    onSelect={() => onSelect(s.id)}
+                    className="basis-[132px] grow max-w-[200px]"
+                />
+            </React.Fragment>
+        ))}
+    </div>
+);
 
 /** Data e hora absolutas, no fuso de quem lê. Relativo sozinho ("há 3h") perde o dia. */
 const absoluteTime = (iso: string | null | undefined) => {
@@ -150,7 +221,7 @@ const Linha = ({ rotulo, children }: { rotulo: string; children: React.ReactNode
  * mais valioso ainda: é o mapa dos pontos únicos de falha do sistema.
  */
 const SourceDetailModal = ({ source, onClose }: { source: DataSource; onClose: () => void }) => {
-    const ui = STATUS_UI[source.status];
+    const ui = visualFor(source);
     const footer = footerInfo(source);
     const entrega = absoluteTime(source.lastDeliveryAt);
     const falha = absoluteTime(source.lastFailAt);
@@ -186,7 +257,14 @@ const SourceDetailModal = ({ source, onClose }: { source: DataSource; onClose: (
                                 </span>
                             )}
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{source.role}</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                            {source.chainPosition && source.chainSize && (
+                                <span className="text-slate-400 font-bold">
+                                    {ORDINAL[source.chainPosition - 1]} de {source.chainSize} ·{' '}
+                                </span>
+                            )}
+                            {source.role}
+                        </p>
                     </div>
                     <button
                         type="button"
@@ -201,7 +279,8 @@ const SourceDetailModal = ({ source, onClose }: { source: DataSource; onClose: (
                 <div className={`mt-4 rounded-xl border p-3 ${
                     source.status === 'CRITICAL' ? 'border-red-900/50 bg-red-900/10'
                         : source.status === 'WARN' ? 'border-yellow-900/50 bg-yellow-900/10'
-                            : 'border-slate-800 bg-base'
+                            : isStandby(source) ? 'border-blue-900/50 bg-blue-900/10'
+                                : 'border-slate-800 bg-base'
                 }`}
                 >
                     <p className={`text-[10px] font-bold uppercase tracking-wide ${ui.text}`}>{footer.label}</p>
@@ -287,17 +366,28 @@ export const DataSourcesPanel = ({
 }) => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
 
-    // Agrupa preservando a ordem que o servidor mandou — dentro de cada bloco, a
-    // ordem do catálogo É a ordem da cadeia de fallback.
+    // Agrupa preservando a ordem que o servidor mandou e, dentro do bloco, separa
+    // as CADEIAS (que viram sequência com seta) das fontes independentes. A
+    // distinção vem do campo `chain`, nunca da vizinhança na tela.
     const blocos = useMemo(() => {
         const lista = groups?.length
             ? groups
             : [{ id: '__all', label: 'Fontes', hint: '' }];
         return lista
-            .map((g) => ({
-                ...g,
-                itens: sources.filter((s) => (g.id === '__all' ? true : s.group === g.id)),
-            }))
+            .map((g) => {
+                const itens = sources.filter((s) => (g.id === '__all' ? true : s.group === g.id));
+                const cadeias = new Map<string, DataSource[]>();
+                const avulsas: DataSource[] = [];
+                for (const s of itens) {
+                    if (!s.chain) { avulsas.push(s); continue; }
+                    if (!cadeias.has(s.chain)) cadeias.set(s.chain, []);
+                    cadeias.get(s.chain)!.push(s);
+                }
+                // Servidor antigo não manda `chain`: sem cadeia nenhuma, tudo cai em
+                // `avulsas` e o bloco volta a ser a grade de antes — sem seta, que é
+                // o correto quando a ordem não é conhecida.
+                return { ...g, itens, cadeias: [...cadeias.values()], avulsas };
+            })
             .filter((g) => g.itens.length > 0);
     }, [sources, groups]);
 
@@ -344,15 +434,38 @@ export const DataSourcesPanel = ({
                             </h5>
                             {bloco.hint && <span className="text-[10px] text-slate-500">· {bloco.hint}</span>}
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-                            {bloco.itens.map((s) => (
-                                <SourceCard
-                                    key={s.id}
-                                    source={s}
-                                    selected={selectedId === s.id}
-                                    onSelect={() => setSelectedId((cur) => (cur === s.id ? null : s.id))}
+                        <div className="space-y-2">
+                            {bloco.cadeias.map((cadeia) => (
+                                <ChainRow
+                                    key={cadeia[0].id}
+                                    itens={cadeia}
+                                    selectedId={selectedId}
+                                    onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
                                 />
                             ))}
+                            {bloco.avulsas.length > 0 && (
+                                <div>
+                                    {/* Só quando há cadeia no mesmo bloco: aí a proximidade
+                                        engana, e a legenda desfaz. Bloco sem cadeia nenhuma
+                                        não precisa avisar que não tem sequência. */}
+                                    {bloco.cadeias.length > 0 && (
+                                        <p className="text-[9px] text-slate-600 uppercase font-bold tracking-wide mb-1.5">
+                                            Independente — não substitui as de cima
+                                        </p>
+                                    )}
+                                    <div className="flex flex-wrap items-stretch gap-1.5">
+                                        {bloco.avulsas.map((s) => (
+                                            <SourceCard
+                                                key={s.id}
+                                                source={s}
+                                                selected={selectedId === s.id}
+                                                onSelect={() => setSelectedId((cur) => (cur === s.id ? null : s.id))}
+                                                className="basis-[132px] grow max-w-[200px]"
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))}

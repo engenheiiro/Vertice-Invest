@@ -217,3 +217,95 @@ describe('DataSourcesPanel', () => {
         expect(container).toBeEmptyDOMElement();
     });
 });
+
+// O pedido veio de uma leitura errada da tela anterior: cards lado a lado leem-se
+// como alternativas equivalentes, e no bloco de cotações a B3 aparecia colada na
+// Google Finance como se fosse o 4º elo — quando é fonte independente, que cobre
+// o fechamento oficial do pregão e não substitui ninguém.
+describe('DataSourcesPanel — ordem da cadeia', () => {
+    it('numera cada elo da cadeia na ordem de tentativa', () => {
+        render(<DataSourcesPanel
+            sources={[
+                src({ id: 'a', short: 'Yahoo', group: 'fx', chain: 'fx', chainPosition: 1, chainSize: 3 }),
+                src({ id: 'b', short: 'AwesomeAPI', group: 'fx', chain: 'fx', chainPosition: 2, chainSize: 3 }),
+                src({ id: 'c', short: 'Coinbase', group: 'fx', chain: 'fx', chainPosition: 3, chainSize: 3 }),
+            ]}
+            groups={groups}
+        />);
+        expect(screen.getByText('1ª')).toBeInTheDocument();
+        expect(screen.getByText('2ª')).toBeInTheDocument();
+        expect(screen.getByText('3ª')).toBeInTheDocument();
+    });
+
+    // O ponto todo: fonte sem cadeia não ganha número, porque não tem posição.
+    it('fonte independente não recebe ordinal e é separada da cadeia', () => {
+        render(<DataSourcesPanel
+            sources={[
+                src({ id: 'a', short: 'Yahoo', group: 'quotes', chain: 'quotes', chainPosition: 1, chainSize: 1 }),
+                src({ id: 'b3', short: 'B3', group: 'quotes', chain: null, chainPosition: null }),
+            ]}
+            groups={groups}
+        />);
+        expect(screen.getByText('1ª')).toBeInTheDocument();
+        expect(screen.queryByText('2ª')).not.toBeInTheDocument();
+        expect(screen.getByText(/Independente/)).toBeInTheDocument();
+    });
+
+    it('bloco sem cadeia nenhuma não anuncia independência (não há o que confundir)', () => {
+        render(<DataSourcesPanel
+            sources={[src({ id: 'tesouro', short: 'Tesouro', group: 'quotes', chain: null, chainPosition: null })]}
+            groups={groups}
+        />);
+        expect(screen.queryByText(/Independente/)).not.toBeInTheDocument();
+    });
+
+    it('o detalhe diz a posição na cadeia', () => {
+        render(<DataSourcesPanel
+            sources={[src({
+                id: 'c', short: 'Coinbase', label: 'Coinbase', chain: 'fx', chainPosition: 3, chainSize: 4,
+            })]}
+            groups={groups}
+        />);
+        fireEvent.click(screen.getByRole('button', { name: /Coinbase/ }));
+        expect(screen.getByText(/3ª de 4/)).toBeInTheDocument();
+    });
+});
+
+// Cinza juntava dois estados opostos: a fonte agendada que ainda não cumpriu a
+// hora (pendência) e a reserva que ninguém precisou acionar (sistema funcionando).
+// A cor tem de separar os dois — é a leitura de relance que o painel existe para dar.
+describe('DataSourcesPanel — reserva em espera', () => {
+    const reserva = () => src({
+        id: 'a', short: 'Coinbase', status: 'UNKNOWN', attempts: 0,
+        lastDeliveryHours: null, trigger: 'onFailure', nextRun: null,
+    });
+    const agendada = () => src({
+        id: 'b', short: 'Fundamentus', status: 'UNKNOWN', attempts: 0,
+        lastDeliveryHours: null, trigger: 'scheduled', nextRun: 'hoje às 18:30',
+    });
+
+    const cardDe = (nome: RegExp) => screen.getByRole('button', { name: nome }).className;
+
+    it('a reserva parada é azul, não cinza', () => {
+        render(<DataSourcesPanel sources={[reserva()]} groups={groups} />);
+        expect(cardDe(/Coinbase/)).toMatch(/blue/);
+    });
+
+    it('a agendada em atraso de vez continua cinza', () => {
+        render(<DataSourcesPanel sources={[agendada()]} groups={groups} />);
+        expect(cardDe(/Fundamentus/)).not.toMatch(/blue/);
+    });
+
+    // Azul é "de prontidão", nunca "entregando": quem sustenta o dado agora é verde,
+    // e empatar os dois apagaria a diferença que importa no dia da falha.
+    it('fonte entregando não vira azul', () => {
+        render(<DataSourcesPanel sources={[src({ id: 'c', short: 'Yahoo', status: 'OK' })]} groups={groups} />);
+        expect(cardDe(/Yahoo/)).not.toMatch(/blue/);
+    });
+
+    it('o detalhe da reserva abre com a mesma cor do card', () => {
+        render(<DataSourcesPanel sources={[reserva()]} groups={groups} />);
+        fireEvent.click(screen.getByRole('button', { name: /Coinbase/ }));
+        expect(screen.getByRole('dialog').innerHTML).toMatch(/text-blue-400/);
+    });
+});

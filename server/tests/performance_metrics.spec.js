@@ -5,6 +5,8 @@ import {
   normalizeMetricPath,
   resolveMetricsEnabled,
   routeMetricKey,
+  recordHttpMetric,
+  getPerformanceSnapshot,
 } from '../utils/performanceMetrics.js';
 import { getPerformanceMetrics } from '../controllers/performanceController.js';
 import adminRoutes from '../routes/adminRoutes.js';
@@ -77,5 +79,34 @@ describe('performanceMetrics', () => {
     await expect(measurePerformance('pipeline', 'ranking STOCK', async () => 42)).resolves.toBe(42);
     await expect(measurePerformance('pipeline', 'ranking STOCK', async () => { throw new Error('falha original'); }))
       .rejects.toThrow('falha original');
+  });
+});
+
+/**
+ * O bundle do site pesa ~400 KB e é entregue pela mesma cadeia do Express, então
+ * ele cai no mesmo coletor das rotas de API. Medido `res.on('finish')`, o tempo
+ * dele é em boa parte a banda de quem baixa — e, na mesma série, ele vence o p95
+ * sempre. O painel passava a apontar "a página mais lenta do sistema" para algo
+ * que nenhum código nosso acelera, escondendo a rota de API realmente lenta.
+ */
+describe('recordHttpMetric — API e entrega de arquivo em séries separadas', () => {
+  const keys = (domain) => (getPerformanceSnapshot().durations[domain] || []).map((m) => m.key);
+
+  it('rota de API fica em "http"', () => {
+    recordHttpMetric({ method: 'GET', path: '/api/wallet/history' }, 200, 120);
+    expect(keys('http')).toContain('GET /api/wallet/history 2xx');
+    expect(keys('web')).not.toContain('GET /api/wallet/history 2xx');
+  });
+
+  it('arquivo do build vai para "web", fora do medidor de latência', () => {
+    recordHttpMetric({ method: 'GET', path: '/assets/index-CFpXr4Go.js' }, 200, 1480);
+    expect(keys('web')).toContain('GET /assets/index-CFpXr4Go.js 2xx');
+    expect(keys('http')).not.toContain('GET /assets/index-CFpXr4Go.js 2xx');
+  });
+
+  // Deep link da SPA devolve o index.html: é entrega de arquivo, não chamada.
+  it('deep link da SPA conta como arquivo, não como API', () => {
+    recordHttpMetric({ method: 'GET', path: '/carteira' }, 200, 90);
+    expect(keys('web')).toContain('GET /carteira 2xx');
   });
 });

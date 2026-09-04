@@ -51,7 +51,33 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 // para a carteira e a varredura do universo dividirem UM download por dia.
 const MEMO_TTL_MS = 6 * 60 * 60 * 1000;
 const MEMO_MAX_DAYS = 8;
-const memo = new Map(); // dayStr -> { at, closes }
+
+/**
+ * TTL do "ainda não tem arquivo".
+ *
+ * A ausência também precisa ser lembrada, e por um motivo concreto: no run das
+ * 18:30 o pregão do dia costuma não estar publicado, e sem memo negativo cada lote
+ * do `timeSeriesWorker` refaria o pedido — ~260 chamadas à B3 por run para receber
+ * 260 vezes o mesmo "400". Curto de propósito: a publicação acontece ao longo da
+ * tarde/noite (em 02/09/2026 só apareceu no dia seguinte), então a resposta precisa
+ * envelhecer rápido para a reconciliação horária ter chance de pegar o arquivo
+ * assim que ele sobe.
+ */
+const MEMO_MISS_TTL_MS = 10 * 60 * 1000;
+const memo = new Map(); // dayStr -> { at, ttl, closes }
+
+/**
+ * Downloads EM VOO, por dia. O memo só existe depois que o arquivo chega, então
+ * chamadas concorrentes para o mesmo dia passavam todas pelo cache vazio e
+ * baixavam 8,5 MB cada uma.
+ *
+ * Não era problema enquanto o único consumidor era o caminho da carteira, que é
+ * sequencial. Passa a ser quando o `timeSeriesWorker` entra: ele processa o lote
+ * com `Promise.all`, então cinco ativos pediriam o mesmo pregão ao mesmo tempo —
+ * 42 MB de texto vivo num processo com heap de 400 MB, para gravar o mesmo mapa
+ * cinco vezes. Uma promessa por dia resolve os cinco.
+ */
+const inflight = new Map(); // dayStr -> Promise
 
 /** Número no formato brasileiro do arquivo (`1.234,56`). NaN vira null. */
 export const parseB3Number = (raw) => {
@@ -132,8 +158,18 @@ export const fetchB3DailyCloses = async (dayStr) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dayStr || ''))) return null;
 
     const cached = memo.get(dayStr);
-    if (cached && (Date.now() - cached.at) < MEMO_TTL_MS) return cached.closes;
+    if (cached && (Date.now() - cached.at) < cached.ttl) return cached.closes;
 
+    const emVoo = inflight.get(dayStr);
+    if (emVoo) return emVoo;
+
+    const promessa = downloadDay(dayStr).finally(() => inflight.delete(dayStr));
+    inflight.set(dayStr, promessa);
+    return promessa;
+};
+
+/** O download em si. Sempre atrás de `fetchB3DailyCloses`, que faz memo e dedup. */
+const downloadDay = async (dayStr) => {
     try {
         const closes = await withRetry(async () => {
             // Só o pedido do token é rastreado como "a fonte respondeu": o 400/404
@@ -176,11 +212,15 @@ export const fetchB3DailyCloses = async (dayStr) => {
             return parseB3TradeFile(dl.data, dayStr);
         }, { retries: 2, baseDelayMs: 500 });
 
+        // Guarda os DOIS desfechos. O positivo é definitivo (o arquivo do dia é
+        // `Final`); o negativo vale poucos minutos, só para não repetir o pedido
+        // dentro do mesmo run.
+        memo.set(dayStr, { at: Date.now(), ttl: closes ? MEMO_TTL_MS : MEMO_MISS_TTL_MS, closes: closes || null });
+        // Poda simples: a varredura pede poucos dias por run, e segurar mais que
+        // isso só ocuparia heap. Fora do ramo positivo — a entrada negativa também
+        // conta para o tamanho.
+        if (memo.size > MEMO_MAX_DAYS) memo.delete(memo.keys().next().value);
         if (closes) {
-            memo.set(dayStr, { at: Date.now(), closes });
-            // Poda simples: a varredura pede poucos dias por run, e segurar mais
-            // que isso só ocuparia heap.
-            if (memo.size > MEMO_MAX_DAYS) memo.delete(memo.keys().next().value);
             logger.debug(`[B3] Fechamento oficial de ${dayStr}: ${closes.size} papéis no à vista.`);
         } else {
             logger.debug(`[B3] Sem arquivo publicado para ${dayStr} (dia sem pregão ou ainda em apuração).`);
@@ -192,7 +232,7 @@ export const fetchB3DailyCloses = async (dayStr) => {
     }
 };
 
-/** Descarta o memo (testes e runs forçados). */
-export const clearB3Memo = () => memo.clear();
+/** Descarta o memo e os downloads em voo (testes e runs forçados). */
+export const clearB3Memo = () => { memo.clear(); inflight.clear(); };
 
 export const b3DailyFileService = { fetchB3DailyCloses, parseB3TradeFile, clearB3Memo };

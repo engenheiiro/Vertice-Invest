@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { AdminSaudeTab } from './AdminSaudeTab';
 import type { DataHealthResponse } from '../../services/health';
 
@@ -180,43 +180,29 @@ describe('regra de leitura', () => {
     });
 });
 
+// O comportamento fino da seção (baldes, atraso, rótulo) é coberto em
+// JobsPanel.test.tsx. Aqui se cobra só a integração: a aba entrega os jobs e a
+// seção decide sozinha se merece espaço.
 describe('rotinas', () => {
-    it('lista cron com última execução e contagem de 24h', async () => {
+    it('fica recolhida e resumida quando todas estão em dia', async () => {
         getDataHealth.mockResolvedValue(mkResponse());
         render(<AdminSaudeTab />);
-        expect(await screen.findByText('Cotações em tempo real')).toBeInTheDocument();
-        expect(screen.getByText(/96× \/ 24h/)).toBeInTheDocument();
+        expect(await screen.findByText('Todas em dia')).toBeInTheDocument();
+        expect(screen.queryByText('Cotações em tempo real')).not.toBeInTheDocument();
     });
 
-    it('cron que nunca rodou é marcado como problema, não como neutro', async () => {
+    it('abre sozinha e nomeia a rotina que nunca rodou', async () => {
         getDataHealth.mockResolvedValue(mkResponse({
             jobs: [{
-                jobId: 'daily-snapshot', label: 'Snapshot patrimonial', severity: 'CRITICAL',
+                jobId: 'daily-snapshot', label: 'Snapshot patrimonial (23:59)', severity: 'CRITICAL',
                 maxSilenceHours: 30, monitored: true, lastRunAt: null, lastStatus: null,
                 lastError: null, lastDurationMs: null, runs24h: 0, failures24h: 0,
             }],
         }));
         render(<AdminSaudeTab />);
-        const row = (await screen.findByText('Snapshot patrimonial')).closest('tr')!;
-        expect(within(row).getByText('nunca')).toBeInTheDocument();
-        expect(within(row).getByText('CRITICAL')).toBeInTheDocument();
-    });
-
-    it('job sob demanda não é cobrado por silêncio', async () => {
-        getDataHealth.mockResolvedValue(mkResponse({
-            jobs: [{
-                jobId: 'full-sync', label: 'Sync completo', severity: 'WARN',
-                maxSilenceHours: null, monitored: false,
-                lastRunAt: new Date(Date.now() - 10 * 86400000).toISOString(),
-                lastStatus: 'SUCCESS', lastError: null, lastDurationMs: 5000,
-                runs24h: 0, failures24h: 0,
-            }],
-        }));
-        render(<AdminSaudeTab />);
-        // Escopado na linha da rotina: "OK" também aparece no contador do resumo.
-        const row = (await screen.findByText('Sync completo')).closest('tr')!;
-        expect(within(row).getByText('sob demanda')).toBeInTheDocument();
-        expect(within(row).getByText('OK')).toBeInTheDocument();
+        expect(await screen.findByText('1 atrasada(s)')).toBeInTheDocument();
+        expect(screen.getAllByText(/Snapshot patrimonial/).length).toBeGreaterThan(1);
+        expect(screen.getByText('nunca')).toBeInTheDocument();
     });
 });
 

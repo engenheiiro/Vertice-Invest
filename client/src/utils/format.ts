@@ -185,3 +185,25 @@ export function formatCalendarDate(value: string | Date | null | undefined): str
   if (Number.isNaN(date.getTime())) return '-';
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(date);
 }
+
+/**
+ * "há 12 min", "há 3h", "nunca". Tempo decorrido em linguagem de leitura, para
+ * painéis onde o instante exato não importa e a distância importa muito.
+ *
+ * Vive aqui, e não em cada painel, porque três telas do Admin já respondiam a
+ * mesma pergunta ("quando foi a última vez?") com arredondamentos diferentes —
+ * e duas leituras do mesmo carimbo divergindo em um minuto é exatamente o tipo
+ * de detalhe que faz o operador desconfiar do painel inteiro.
+ */
+export function formatRelativeTime(value: string | Date | null | undefined): string {
+  if (!value) return 'nunca';
+  const date = value instanceof Date ? value : new Date(value);
+  const diffMs = Date.now() - date.getTime();
+  if (!Number.isFinite(diffMs)) return '—';
+  const min = Math.round(diffMs / 60000);
+  if (min < 1) return 'agora';
+  if (min < 60) return `há ${min} min`;
+  const hours = Math.round(min / 60);
+  if (hours < 48) return `há ${hours}h`;
+  return `há ${Math.round(hours / 24)} dias`;
+}

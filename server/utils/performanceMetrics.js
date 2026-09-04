@@ -193,9 +193,26 @@ export const routeMetricKey = (req) => {
   return `${String(req?.method || 'UNKNOWN').toUpperCase()} ${normalizeMetricPath(routePath)}`;
 };
 
+/**
+ * Entrega de arquivo do build (bundle, CSS, imagem) e do shell da SPA vive num
+ * domínio SEPARADO de `http`.
+ *
+ * A medição é `res.on('finish')` — tempo até o último byte sair. Para uma chamada
+ * de API isso é latência nossa; para um arquivo de 400 KB é, em boa parte, a banda
+ * de quem está baixando. Misturados na mesma série, o `index-*.js` sempre ganha o
+ * p95 e o painel passa a apontar "a página mais lenta do sistema" para algo que
+ * nenhum código nosso deixaria mais rápido — enquanto a rota de API realmente
+ * lenta fica escondida atrás dele.
+ *
+ * A fronteira é `/api`: o que não é API é arquivo servido (inclusive o deep link
+ * da SPA, que devolve o `index.html`).
+ */
+const isApiRequest = (req) => String(req?.path || req?.originalUrl || '').startsWith('/api');
+
 export const recordHttpMetric = (req, statusCode, durationMs) => {
   const statusClass = `${Math.floor(Number(statusCode || 0) / 100)}xx`;
-  performanceMetrics.observe('http', `${routeMetricKey(req)} ${statusClass}`, durationMs, {
+  const domain = isApiRequest(req) ? 'http' : 'web';
+  performanceMetrics.observe(domain, `${routeMetricKey(req)} ${statusClass}`, durationMs, {
     error: Number(statusCode) >= 500,
   });
 };

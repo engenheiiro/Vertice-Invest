@@ -81,6 +81,14 @@ export interface DataSource {
     cadence?: string | null;
     /** Próximo disparo: "em 9 min", "hoje às 18:30". `null` para fonte de reserva. */
     nextRun?: string | null;
+    /**
+     * Cadeia de cobertura a que pertence e posição nela (1-based). `null` quando a
+     * fonte não tem reserva. Não se deduz do bloco: um bloco pode juntar uma cadeia
+     * e uma fonte independente, e desenhar seta entre elas seria mentira.
+     */
+    chain?: string | null;
+    chainPosition?: number | null;
+    chainSize?: number | null;
     /** Quem assume se esta falhar, na ordem de tentativa. Vazio = ponto único de falha. */
     backups?: string[];
     /** A fonte principal que esta cobre; `null` se ela própria for a principal. */

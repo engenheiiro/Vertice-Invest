@@ -5,6 +5,8 @@ import SystemConfig from '../../models/SystemConfig.js';
 import { marketDataService } from '../marketDataService.js';
 import { historyStorageKey, mergeCandleSeries } from '../../utils/assetHistory.js';
 import { externalMarketService } from '../externalMarketService.js';
+import { collectB3Candles, isB3Coverable, lastBusinessDayUpTo } from '../b3HistoryFallback.js';
+import { brazilDayKey } from '../../utils/walletSnapshot.js';
 import { ASSET_HISTORY_MAX_POINTS, HISTORY_CAP_EXEMPT_TICKERS } from '../../config/financialConstants.js';
 import { isTransientMongoError, withMongoRetry } from '../../utils/mongoResilience.js';
 
@@ -158,6 +160,63 @@ const calculateBeta = (assetReturns, benchmarkReturns) => {
     return covariance / varianceB;
 };
 
+/** Data do candle mais novo da série guardada. Não assume ordenação. */
+export const latestCandleDate = (history = []) => {
+    let latest = '';
+    for (const h of history) if (h?.date && h.date > latest) latest = h.date;
+    return latest || null;
+};
+
+/**
+ * REFORÇO DA B3 PARA A SÉRIE DO UNIVERSO.
+ *
+ * O Yahoo era fonte ÚNICA aqui. Quando ele não entrega — e ele publica a linha do
+ * dia com `close` nulo sem aviso: 661 séries da B3 numa sexta de agosto/2026 — a
+ * série simplesmente parava, e com ela SMA, RSI, beta, volatilidade e o backtest.
+ * O caminho da carteira já tinha essa segunda fonte desde 31/08/2026; o universo de
+ * pesquisa, não.
+ *
+ * Cobre os dois modos de falha com o mesmo teste, que é o único que importa: a
+ * ponta da série alcança o último pregão? Não alcança tanto quando o Yahoo devolveu
+ * nada quanto quando devolveu a série inteira menos o dia — e o segundo caso é o
+ * pior dos dois, porque a série parece saudável enquanto o buraco não se fecha
+ * sozinho.
+ *
+ * NÃO reconstrói série vazia. O arquivo é por pregão (~8,5 MB), então um ano
+ * custaria ~250 downloads; a B3 estende a ponta de quem já tem histórico, e quem
+ * não tem continua dependendo do Yahoo. Prometer mais que isso na tela seria
+ * inventar uma cobertura que não existe.
+ */
+const reinforceWithB3 = async ({ asset, storageKey, historyEntry, throughDay, now }) => {
+    if (!throughDay || !isB3Coverable(asset.ticker, asset.type)) return null;
+
+    const guardada = historyEntry?.history || [];
+    if (guardada.length === 0) return null;
+
+    const ultimo = latestCandleDate(guardada);
+    if (!ultimo || ultimo >= throughDay) return null;
+
+    const novos = (await collectB3Candles(
+        [{ key: storageKey, ticker: asset.ticker, type: asset.type, lastCandleDate: ultimo }],
+        throughDay,
+    )).get(storageKey);
+    if (!novos?.length) return null;
+
+    // Mesma mescla do caminho do Yahoo: o cap de pontos e a recusa de candle em dia
+    // sem pregão valem igual, venha o fechamento de onde vier.
+    const historyToStore = mergeCandleSeries(guardada, novos, {
+        maxPoints: HISTORY_CAP_EXEMPT_TICKERS.has(asset.ticker) ? Infinity : ASSET_HISTORY_MAX_POINTS,
+        type: asset.type,
+        now,
+    });
+    await withMongoRetry(() => AssetHistory.updateOne(
+        { ticker: storageKey },
+        { $set: { history: historyToStore, lastUpdated: now, lastCheckedAt: now } },
+        { upsert: true },
+    ), { label: `candles da B3 de ${asset.ticker}` });
+    return { ticker: storageKey, history: historyToStore, lastUpdated: now };
+};
+
 export const timeSeriesWorker = {
     async run() {
         logger.info("📈 [TimeSeriesWorker] Iniciando cálculo de Volatilidade, Beta, SMA e EMA...");
@@ -165,6 +224,8 @@ export const timeSeriesWorker = {
         // em 19/08/2026 o run parou em 234/1300 sem uma linha de log dizendo isso.
         const stats = {
             total: 0, visited: 0, fetched: 0, fresh: 0, failed: 0, metrics: 0,
+            // Séries que só avançaram porque a B3 cobriu o que o Yahoo não deu.
+            b3: 0,
             // Lotes perdidos por queda de conexão (ver MAX_CONSECUTIVE_BATCH_FAILURES).
             batchesFailed: 0, skipped: 0,
         };
@@ -220,6 +281,10 @@ export const timeSeriesWorker = {
             const queue = orderByStaleness(assets, lastCheckedByKey);
 
             stats.total = queue.length;
+            // Último pregão que já deveria ter fechamento. Sábado e domingo olham a
+            // sexta. Ancorado no dia-calendário BR, não no instante UTC, que na
+            // virada da meia-noite aponta para o dia errado.
+            const throughDay = lastBusinessDayUpTo(brazilDayKey(new Date()));
             const BATCH_SIZE = 5;
             let consecutiveFailures = 0;
 
@@ -319,6 +384,26 @@ export const timeSeriesWorker = {
                             // mascarava a staleness e congelava as séries.
                             stats.fresh += 1;
                             visitedTickers.push(storageKey);
+                        }
+
+                        // SEGUNDA FONTE — fora do ramo de staleness, e é aí que está
+                        // a graça. O modo de falha mais comum do Yahoo não é cair: é
+                        // publicar a série inteira MENOS o dia. Uma série a que só
+                        // falta hoje tem ~1,8 dia de idade, ou seja, passa por FRESCA
+                        // na régua de 2 dias — o ramo acima nem a visita, e o buraco
+                        // ficaria aberto até a série envelhecer. Testar a ponta contra
+                        // o último pregão custa uma comparação de string por ativo, e
+                        // o arquivo do dia desce uma vez só para o run inteiro.
+                        try {
+                            const reforcado = await reinforceWithB3({ asset, storageKey, historyEntry, throughDay, now });
+                            if (reforcado) {
+                                historyEntry = reforcado;
+                                stats.b3 += 1;
+                            }
+                        } catch (e) {
+                            // Fail-open: reforço que derruba o run deixa de ser reforço.
+                            // A série fica como o Yahoo a entregou.
+                            logger.warn(`[TimeSeriesWorker] Reforço da B3 falhou para ${asset.ticker}: ${e.message}`);
                         }
 
                         if (!historyEntry || !historyEntry.history || historyEntry.history.length < 20) return;
@@ -461,8 +546,12 @@ export const timeSeriesWorker = {
         const perdidos = stats.batchesFailed
             ? ` · ${stats.skipped} pulados em ${stats.batchesFailed} lote(s) com queda de conexão`
             : '';
+        // O reforço da B3 só é citado quando entrou em ação: numa semana em que o
+        // Yahoo se comporta, ele é zero, e imprimir "0 pela B3" todo run treinaria
+        // o olho a ignorar justamente o número que interessa no dia da falha.
+        const viaB3 = stats.b3 ? ` · ${stats.b3} completados pelo fechamento oficial da B3` : '';
         const linha = `${stats.visited}/${stats.total} visitados · ${stats.fetched} re-buscados · `
-            + `${stats.fresh} já frescos · ${stats.failed} sem dado na fonte · `
+            + `${stats.fresh} já frescos · ${stats.failed} sem dado no Yahoo${viaB3} · `
             + `${stats.metrics} métricas gravadas${perdidos}.`;
         if (complete) logger.info(`✅ [TimeSeriesWorker] ${linha}`);
         else logger.warn(`⚠️ [TimeSeriesWorker] Cobertura INCOMPLETA — ${linha}`);
@@ -477,6 +566,7 @@ export const timeSeriesWorker = {
                             visited: stats.visited,
                             total: stats.total,
                             fetched: stats.fetched,
+                            recoveredByB3: stats.b3 || 0,
                             failed: stats.failed,
                             batchesFailed: stats.batchesFailed || 0,
                             skipped: stats.skipped || 0,

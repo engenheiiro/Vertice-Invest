@@ -129,3 +129,61 @@ describe('medidores de desempenho no Admin', () => {
         expect(await screen.findByText('Medidores indisponíveis')).toBeInTheDocument();
     });
 });
+
+/**
+ * Em 04/09/2026 o painel mostrou "Página mais lenta: 1,48 s" e ninguém conseguia
+ * dizer de que página se tratava. Medido até o último byte, o bundle de ~400 KB
+ * concorre no mesmo p95 das rotas de API e vence sempre — só que o tempo dele é a
+ * banda de quem baixa, não latência nossa. Séries separadas, e a linha de arquivos
+ * fica fora do veredito.
+ */
+describe('latência de API × entrega de arquivo', () => {
+    const comWeb = () => snapshot({
+        durations: {
+            http: [{
+                key: 'GET /api/wallet 2xx', count: 100, sampled: 25, errors: 0,
+                errorRate: 0, avgMs: 100, minMs: 50, p50Ms: 90, p95Ms: 240,
+                p99Ms: 300, maxMs: 320, retainedSamples: 25,
+            }],
+            web: [{
+                key: 'GET /assets/index-CFpXr4Go.js 2xx', count: 400, sampled: 100, errors: 0,
+                errorRate: 0, avgMs: 900, minMs: 300, p50Ms: 800, p95Ms: 1480,
+                p99Ms: 2100, maxMs: 2400, retainedSamples: 100,
+            }],
+        },
+    });
+
+    it('o medidor principal ignora arquivo e aponta a rota de API', async () => {
+        getSnapshot.mockResolvedValue(comWeb());
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText('Chamada mais lenta')).toBeInTheDocument();
+        expect(screen.getByText('GET /api/wallet 2xx')).toBeInTheDocument();
+        expect(screen.getByText('240 ms')).toBeInTheDocument();
+    });
+
+    it('a entrega de arquivo aparece à parte, sem veredito de cor', async () => {
+        getSnapshot.mockResolvedValue(comWeb());
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText(/Entrega de arquivos do site/)).toBeInTheDocument();
+        expect(screen.getByText(/depende sobretudo/)).toBeInTheDocument();
+        // Nada de amarelo: 1,48 s ali não é defeito nosso e não entra no veredito.
+        expect(screen.getByText(/Tudo dentro do normal/)).toBeInTheDocument();
+    });
+
+    // Só o p95 não separa "lenta para todo mundo" de "rápida com pico ocasional".
+    it('mostra o p50 ao lado, para distinguir pico de lentidão crônica', async () => {
+        getSnapshot.mockResolvedValue(comWeb());
+        render(<PerformanceOverview />);
+        expect(await screen.findByText(/Metade responde em 90 ms/)).toBeInTheDocument();
+    });
+
+    it('a tabela de detalhe nomeia o domínio em português', async () => {
+        getSnapshot.mockResolvedValue(comWeb());
+        render(<PerformanceOverview />);
+        fireEvent.click(await screen.findByText('Ver detalhes técnicos'));
+        expect(screen.getByText('Arquivo do site')).toBeInTheDocument();
+        expect(screen.getByText('API')).toBeInTheDocument();
+    });
+});

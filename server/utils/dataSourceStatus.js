@@ -103,11 +103,16 @@ export const buildChainMap = (sourceStats = []) => {
     }
 
     const mapa = new Map();
-    for (const membros of porCadeia.values()) {
+    for (const [chain, membros] of porCadeia) {
         // A ordem do catálogo É a ordem de tentativa — ver SOURCE_CATALOG.
         const principal = membros.find((m) => m.schedule?.kind !== 'onFailure') || membros[0];
         membros.forEach((m, i) => {
             mapa.set(m.id, {
+                chain,
+                // 1-based: a tela numera "1ª, 2ª, 3ª" a partir daqui em vez de
+                // recontar a lista, que é o que fazia a ordem virar suposição.
+                chainPosition: i + 1,
+                chainSize: membros.length,
                 backups: membros.slice(i + 1).map((b) => b.label),
                 covers: m.id === principal?.id ? null : (principal?.label ?? null),
             });
@@ -190,6 +195,17 @@ export const buildSourceStatuses = (facts, sourceStats = []) => {
             cadence: cadenceLabel(source.schedule),
             /** Frase do próximo disparo; `null` para fonte de reserva (não tem hora). */
             nextRun: nextRunLabel(source.schedule, now),
+            /**
+             * Cadeia de fallback a que pertence, e a posição nela. `null` quando a
+             * fonte não tem reserva — e isso NÃO se deduz do agrupamento visual: o
+             * bloco junta responsabilidades independentes (o Fundamentus não
+             * substitui o Tesouro), então a tela precisa do dado explícito para não
+             * desenhar uma cadeia que não existe só porque dois cards ficaram lado
+             * a lado.
+             */
+            chain: cadeia.get(source.id)?.chain ?? null,
+            chainPosition: cadeia.get(source.id)?.chainPosition ?? null,
+            chainSize: cadeia.get(source.id)?.chainSize ?? null,
             /** Fontes que assumem se esta falhar, na ordem de tentativa. Vazio = ponto único de falha. */
             backups: cadeia.get(source.id)?.backups ?? [],
             /** A fonte principal que esta cobre; `null` se ela própria for a principal. */

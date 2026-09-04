@@ -2,6 +2,13 @@ import logger from '../config/logger.js';
 import AssetHistory from '../models/AssetHistory.js';
 import { externalMarketService } from './externalMarketService.js';
 import { fetchB3DailyCloses } from './b3DailyFileService.js';
+import {
+    B3_FALLBACK_TYPES,
+    B3_TICKER_RE,
+    MAX_B3_FALLBACK_DAYS,
+    collectB3Candles,
+    missingBusinessDays,
+} from './b3HistoryFallback.js';
 import { historyStorageKey, mergeCandleSeries } from '../utils/assetHistory.js';
 import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { ASSET_HISTORY_MAX_POINTS } from '../config/financialConstants.js';
@@ -89,47 +96,15 @@ export const mergeDayCandles = (existing = [], fetched = [], type) => mergeCandl
     existing, fetched, { maxPoints: ASSET_HISTORY_MAX_POINTS, type },
 );
 
-/** Classes e formato de ticker que o arquivo da B3 cobre. */
-const B3_FALLBACK_TYPES = new Set(['STOCK', 'FII', 'ETF']);
-const B3_TICKER_RE = /^[A-Z]{4}\d{1,2}$/; // ITSA4, BOVA11, KNSC11 — exclui VOO, QQQ e afins
+// Cobertura da B3 e matemática de dia útil vivem em `b3HistoryFallback.js`: o
+// timeSeriesWorker usa as MESMAS regras, e duas cópias divergem — foi assim que
+// a janela de drawdown do motor âncora ficou corrigida só de um lado.
 
-/**
- * Teto de dias úteis que o reforço da B3 preenche de uma vez.
- *
- * Não é economia de rede (o arquivo é memoizado por dia), é limite de escopo: a
- * garantia do candle serve ao snapshot de HOJE. Rombo maior que uma semana é
- * assunto da varredura do universo (`scripts/backfillB3Closes.js`), que enxerga
- * a base inteira e roda sob supervisão.
- */
-export const MAX_B3_BACKFILL_DAYS = 5;
-
-/**
- * Dias ÚTEIS sem candle entre o último guardado e `dayStr` (inclusive).
- *
- * Preencher só o dia pedido seria pior que não preencher: empurrar o candle de
- * hoje numa série parada há três dias deixa o buraco no meio E faz
- * `isHistoryStale` ver a série como fresca, então o worker nunca mais volta lá —
- * exatamente o defeito que congelou 21 séries em 30/08/2026. Como o arquivo da
- * B3 existe para qualquer dia passado, o reforço fecha a lacuna inteira.
- *
- * Sem série guardada, devolve só o dia pedido: reconstruir o histórico completo
- * é trabalho do worker, não do caminho do snapshot.
- */
-export const missingBusinessDays = (lastCandleDate, dayStr, maxDays = MAX_B3_BACKFILL_DAYS) => {
-    if (!dayStr || !isBrBusinessDay(dayStr)) return [];
-    if (!lastCandleDate || lastCandleDate >= dayStr) {
-        return lastCandleDate === dayStr ? [] : [dayStr];
-    }
-    const dias = [];
-    const cursor = new Date(`${dayStr}T12:00:00.000Z`);
-    while (dias.length < maxDays) {
-        const key = cursor.toISOString().slice(0, 10);
-        if (key <= lastCandleDate) break;
-        if (isBrBusinessDay(key)) dias.push(key);
-        cursor.setUTCDate(cursor.getUTCDate() - 1);
-    }
-    return dias.reverse();
-};
+// Nomes históricos, mantidos porque o resto do arquivo e os testes já os usam.
+// A implementação é a compartilhada — o worker do universo depende da mesma
+// matemática de dia útil para não gravar candle em dia sem pregão.
+export const MAX_B3_BACKFILL_DAYS = MAX_B3_FALLBACK_DAYS;
+export { missingBusinessDays };
 
 /**
  * Dias úteis da janela que termina em `throughDay`, do mais antigo ao mais novo.
@@ -200,40 +175,30 @@ const recoverWithB3 = async (unresolved, storedByKey, dayStr, resolved) => {
         && B3_TICKER_RE.test(String(u.ticker || '').trim().toUpperCase()));
     if (alvos.length === 0) return new Set();
 
-    const diasPorAlvo = new Map();
-    const todosOsDias = new Set();
-    for (const alvo of alvos) {
-        const guardada = storedByKey.get(alvo.storageKey) || [];
-        const ultimo = guardada.length ? guardada[guardada.length - 1]?.date : null; // a mescla devolve ordenado
-        const dias = missingBusinessDays(ultimo, dayStr);
-        if (dias.length === 0) continue;
-        diasPorAlvo.set(alvo.storageKey, dias);
-        for (const dia of dias) todosOsDias.add(dia);
-    }
-    if (todosOsDias.size === 0) return new Set();
-
-    const porDia = new Map();
-    for (const dia of [...todosOsDias].sort()) porDia.set(dia, await fetchB3DailyCloses(dia));
+    // A busca é a compartilhada com o worker do universo; só a gravação fica aqui,
+    // porque as regras de mescla legitimamente divergem entre os dois caminhos.
+    // Sem `adjClose`: o arquivo da B3 não ajusta por provento, e `normalizeCandle`
+    // já espelha o close quando ele falta — igual ao que o Yahoo devolve enquanto
+    // não há provento no meio.
+    const candlesPorChave = await collectB3Candles(
+        alvos.map((alvo) => {
+            const guardada = storedByKey.get(alvo.storageKey) || [];
+            return {
+                key: alvo.storageKey,
+                ticker: alvo.ticker,
+                type: alvo.type,
+                // A mescla devolve ordenado, então a ponta é o último elemento.
+                lastCandleDate: guardada.length ? guardada[guardada.length - 1]?.date : null,
+            };
+        }),
+        dayStr,
+    );
+    if (candlesPorChave.size === 0) return new Set();
 
     const recuperados = new Set();
     for (const alvo of alvos) {
-        const dias = diasPorAlvo.get(alvo.storageKey);
-        if (!dias) continue;
-        const ticker = String(alvo.ticker).trim().toUpperCase();
-        const novos = [];
-        for (const dia of dias) {
-            const linha = porDia.get(dia)?.get(ticker);
-            // Ausente no arquivo = o papel não negociou naquele dia. Não é falha:
-            // dia sem negócio não tem fechamento, e inventar um seria pior.
-            if (linha) {
-                // Sem `adjClose`: o arquivo da B3 não ajusta por provento, e
-                // `normalizeCandle` já espelha o close quando ele falta — que é o
-                // que o próprio Yahoo devolve enquanto não há provento no meio.
-                novos.push({ date: dia, close: linha.close, volume: linha.volume });
-            }
-        }
-        if (novos.length === 0) continue;
-
+        const novos = candlesPorChave.get(alvo.storageKey);
+        if (!novos?.length) continue;
         try {
             const merged = mergeDayCandles(storedByKey.get(alvo.storageKey) || [], novos, alvo.type);
             await AssetHistory.updateOne(

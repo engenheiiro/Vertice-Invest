@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Activity, AlertTriangle, Bug, CheckCircle2, ChevronDown, ChevronRight,
+    AlertTriangle, Bug, CheckCircle2, ChevronDown, ChevronRight,
     Clock, RefreshCw, ShieldAlert, XCircle,
 } from 'lucide-react';
 import {
@@ -9,12 +9,13 @@ import {
     type DataHealthResponse,
     type HealthCheck,
     type HealthStatus,
-    type JobStatus,
 } from '../../services/health';
 import { useToast } from '../../contexts/ToastContext';
 import { getErrorMessage } from '../../utils/errorMessages';
 import { PerformanceOverview } from '../../components/admin/PerformanceOverview';
 import { DataSourcesPanel } from '../../components/admin/DataSourcesPanel';
+import { JobsPanel } from '../../components/admin/JobsPanel';
+import { formatRelativeTime } from '../../utils/format';
 
 /**
  * Aba "Saúde" do Admin.
@@ -52,18 +53,6 @@ const CATEGORY_LABEL: Record<string, string> = {
     INGESTION: 'Coleta',
 };
 
-const relativeTime = (iso: string | null | undefined) => {
-    if (!iso) return 'nunca';
-    const diffMs = Date.now() - new Date(iso).getTime();
-    if (!Number.isFinite(diffMs)) return '—';
-    const min = Math.round(diffMs / 60000);
-    if (min < 1) return 'agora';
-    if (min < 60) return `há ${min} min`;
-    const h = Math.round(min / 60);
-    if (h < 48) return `há ${h}h`;
-    return `há ${Math.round(h / 24)} dias`;
-};
-
 /**
  * Checks de `plausibility.*` publicam FRAÇÃO do universo, menos este: o catálogo do
  * Tesouro tem ~37 documentos e o que interessa é quantos estão defeituosos. Sem a
@@ -81,16 +70,6 @@ const formatValue = (check: HealthCheck) => {
         return `${(check.value * 100).toFixed(1)}%`;
     }
     return null;
-};
-
-const StatusPill = ({ status }: { status: HealthStatus }) => {
-    const ui = STATUS_UI[status];
-    return (
-        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold ${ui.bg} ${ui.text} border ${ui.border}`}>
-            <ui.Icon size={11} />
-            {status}
-        </span>
-    );
 };
 
 const CheckRow = ({ check }: { check: HealthCheck }) => {
@@ -118,38 +97,6 @@ const CheckRow = ({ check }: { check: HealthCheck }) => {
     );
 };
 
-const JobRow = ({ job }: { job: JobStatus }) => {
-    const failed = job.lastStatus === 'FAILED';
-    const overdue = job.monitored && job.maxSilenceHours !== null && job.lastRunAt
-        ? (Date.now() - new Date(job.lastRunAt).getTime()) / 3600000 > job.maxSilenceHours
-        : job.monitored && !job.lastRunAt;
-    const bad = failed || overdue;
-
-    return (
-        <tr className="border-t border-slate-800">
-            <td className="py-2 pr-3">
-                <span className="text-xs font-bold text-white">{job.label}</span>
-                {!job.monitored && (
-                    <span className="ml-2 text-[9px] text-slate-600 font-bold uppercase">sob demanda</span>
-                )}
-                {failed && job.lastError && (
-                    <p className="text-[10px] text-red-400 mt-0.5 truncate max-w-md">{job.lastError}</p>
-                )}
-            </td>
-            <td className="py-2 pr-3 text-[11px] text-slate-400 whitespace-nowrap">{relativeTime(job.lastRunAt)}</td>
-            <td className="py-2 pr-3 text-[11px] text-slate-500 whitespace-nowrap">
-                {job.runs24h}× / 24h
-                {job.failures24h > 0 && <span className="text-red-400 font-bold"> ({job.failures24h} falha)</span>}
-            </td>
-            <td className="py-2 text-right">
-                {bad
-                    ? <StatusPill status={job.severity === 'CRITICAL' ? 'CRITICAL' : 'WARN'} />
-                    : <StatusPill status="OK" />}
-            </td>
-        </tr>
-    );
-};
-
 const ErrorRow = ({ error, onResolve }: { error: BackendError; onResolve: (id: string) => void }) => {
     const [open, setOpen] = useState(false);
     return (
@@ -174,7 +121,7 @@ const ErrorRow = ({ error, onResolve }: { error: BackendError; onResolve: (id: s
                     </div>
                     <p className="text-xs text-white mt-1 break-words">{error.message}</p>
                     <p className="text-[10px] text-slate-500 mt-0.5">
-                        {error.code} · último {relativeTime(error.lastSeenAt)} · primeiro {relativeTime(error.firstSeenAt)}
+                        {error.code} · último {formatRelativeTime(error.lastSeenAt)} · primeiro {formatRelativeTime(error.firstSeenAt)}
                     </p>
                 </div>
             </button>
@@ -331,7 +278,7 @@ export const AdminSaudeTab = () => {
                             <p className="text-xs text-slate-300 mt-1 max-w-lg">{verdictSentence}</p>
                             <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1.5">
                                 <Clock size={11} />
-                                Avaliado {relativeTime(report.runAt)}
+                                Avaliado {formatRelativeTime(report.runAt)}
                                 {report.trigger && <span className="text-slate-600">· {report.trigger.toLowerCase()}</span>}
                             </p>
                         </div>
@@ -403,33 +350,7 @@ export const AdminSaudeTab = () => {
             </div>
 
             {/* Rotinas */}
-            <div className="bg-base border border-slate-800 rounded-2xl p-4">
-                <h4 className="text-xs font-black text-white uppercase flex items-center gap-2">
-                    <Activity size={14} className="text-blue-500" />
-                    Rotinas automáticas
-                </h4>
-                <p className="text-[11px] text-slate-400 mt-1 mb-3 max-w-2xl">
-                    Os robôs que buscam e calculam dado sozinhos. Aqui se vê se cada um
-                    <strong className="text-slate-300"> rodou</strong> — não se ele trouxe dado bom:
-                    uma rotina pode terminar com sucesso e mesmo assim gravar um valor velho, e quem
-                    pega isso são as verificações acima.
-                </p>
-                <div className="overflow-x-auto">
-                    <table className="w-full min-w-[560px]">
-                        <thead>
-                            <tr className="text-[9px] text-slate-500 font-bold uppercase text-left">
-                                <th className="pb-2 pr-3">Rotina</th>
-                                <th className="pb-2 pr-3">Última execução</th>
-                                <th className="pb-2 pr-3">Frequência</th>
-                                <th className="pb-2 text-right">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {(data?.jobs ?? []).map((job) => <JobRow key={job.jobId} job={job} />)}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            <JobsPanel jobs={data?.jobs ?? []} />
 
             {/* Erros do backend */}
             <div>

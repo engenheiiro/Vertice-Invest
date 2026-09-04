@@ -95,14 +95,32 @@ const MetricCard = ({
                 {value}
             </p>
             {meaning && <p className="mt-0.5 text-[10px] text-slate-400 leading-snug">{meaning}</p>}
-            <p className="mt-0.5 text-[10px] text-slate-500 truncate" title={detail}>{detail}</p>
+            {/* Sem truncar: no card da chamada mais lenta o `detail` É o nome da
+                rota, e cortá-lo no meio ("GET /api/wallet/histo…") apaga a única
+                informação acionável do medidor. */}
+            <p className="mt-0.5 text-[10px] text-slate-500 leading-snug break-words" title={detail}>{detail}</p>
         </div>
     );
 };
 
+/**
+ * Nome de cada domínio de medição em português. A tabela de detalhe imprimia a
+ * chave crua ("http", "web", "mongo"), que só faz sentido para quem escreveu o
+ * coletor — e é justamente a tabela que o leitor abre quando quer entender de
+ * onde vem um número ruim.
+ */
+const DOMAIN_LABEL: Record<string, string> = {
+    http: 'API',
+    web: 'Arquivo do site',
+    external: 'Fonte externa',
+    mongo: 'Banco',
+};
+
 const SlowMetricRow = ({ domain, metric }: { domain: string; metric: PerformanceDurationMetric }) => (
     <tr className="border-t border-slate-800">
-        <td className="py-2 pr-3 text-[9px] font-bold uppercase text-slate-500">{domain}</td>
+        <td className="py-2 pr-3 text-[9px] font-bold uppercase text-slate-500">
+            {DOMAIN_LABEL[domain] ?? domain}
+        </td>
         <td className="py-2 pr-3 text-[11px] font-mono text-slate-300 break-all">{metric.key}</td>
         <td className="py-2 pr-3 text-[11px] font-mono text-white text-right whitespace-nowrap">{formatMs(metric.p95Ms)}</td>
         <td className="py-2 text-[11px] text-slate-500 text-right whitespace-nowrap">
@@ -147,6 +165,14 @@ export const PerformanceOverview = ({
         const requests = sum(http.map((metric) => metric.count));
         const errors = sum(http.map((metric) => metric.errors));
 
+        // Entrega de arquivo do build. Fica FORA do medidor principal de propósito:
+        // o tempo aqui é dominado pela banda de quem baixa, não por código nosso, e
+        // um bundle grande sempre venceria o p95 e esconderia a rota realmente lenta.
+        const web = snapshot?.durations.web ?? [];
+        const slowestWeb = [...web]
+            .filter((metric) => metric.sampled > 0 && metric.p95Ms !== null)
+            .sort((a, b) => (b.p95Ms ?? 0) - (a.p95Ms ?? 0))[0];
+
         const cache = snapshot?.counters.cache ?? {};
         const cacheEntries = Object.entries(cache);
         const cacheHits = sum(cacheEntries.filter(([key]) => key.endsWith('.hit')).map(([, value]) => value));
@@ -184,6 +210,7 @@ export const PerformanceOverview = ({
 
         return {
             slowestHttp,
+            slowestWeb,
             errorRate,
             requests,
             errors,
@@ -250,9 +277,14 @@ export const PerformanceOverview = ({
                 <>
                     <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mt-4">
                         <MetricCard
-                            label="Página mais lenta"
+                            label="Chamada mais lenta"
                             value={formatMs(summary.slowestHttp?.p95Ms)}
-                            meaning="Espera do usuário na tela mais pesada"
+                            /* p50 ao lado do p95 separa duas histórias muito
+                               diferentes: uma rota lenta para todo mundo e uma rota
+                               rápida com um pico ocasional. Só o p95 não distingue. */
+                            meaning={summary.slowestHttp
+                                ? `Metade responde em ${formatMs(summary.slowestHttp.p50Ms)}`
+                                : 'A chamada de API que mais faz esperar'}
                             detail={summary.slowestHttp?.key ?? 'Aguardando tráfego'}
                             Icon={Activity}
                             verdict={gradeAscending(summary.slowestHttp?.p95Ms, 1000, 3000)}
@@ -294,6 +326,20 @@ export const PerformanceOverview = ({
                             verdict={gradeDescending(summary.cacheRate, 0.5, 0.2)}
                         />
                     </div>
+
+                    {/* Fora da grade e sem veredito, de propósito: é medição de banda
+                        do visitante, não de saúde do servidor. Fica visível porque a
+                        pergunta "e a entrega dos arquivos?" é legítima — mas colorir
+                        isso de amarelo seria alarmar por algo que nenhum ajuste nosso
+                        resolve no ato. */}
+                    {summary.slowestWeb && (
+                        <p className="mt-3 text-[10px] text-slate-500">
+                            <span className="font-bold text-slate-400">Entrega de arquivos do site:</span>{' '}
+                            {formatMs(summary.slowestWeb.p95Ms)} no maior deles
+                            (<span className="font-mono">{summary.slowestWeb.key}</span>) — depende sobretudo
+                            da conexão de quem acessa, não do servidor.
+                        </p>
+                    )}
 
                     <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
                         <p className="text-[10px] text-slate-600">

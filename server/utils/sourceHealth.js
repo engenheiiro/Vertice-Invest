@@ -47,6 +47,13 @@ export const SOURCE_GROUPS = [
  * ordem carrega informação: ver a 3ª fonte acesa enquanto a 1ª está vermelha diz,
  * de relance, que a reserva está segurando o sistema.
  *
+ * `role` descreve a COBERTURA, não a posição — a posição é `chainPosition`, que a
+ * tela desenha como "1ª → 2ª → 3ª". Escrever "3ª fonte" aqui duplicaria o número
+ * e desperdiçaria a única linha do card que pode contar o que de fato varia entre
+ * os elos: a Coinbase só traz Bitcoin, o IBGE só traz IPCA, a Brapi só cobre
+ * ativos brasileiros. Cair para a reserva quase nunca é cair para um substituto
+ * completo, e é isso que precisa estar visível.
+ *
  * `critical: true` = sem ela, alguma parte do produto para ou serve número velho.
  *
  * `schedule` diz QUANDO ela roda, e é o que separa dois cinzas muito diferentes:
@@ -55,49 +62,46 @@ export const SOURCE_GROUPS = [
  * Os horários espelham `schedulerService.js`; mudar o cron lá pede mudar aqui.
  *
  * `chain` marca as fontes que REALMENTE se cobrem, e não coincide com `group`:
- * 'series' e 'reference' agrupam responsabilidades independentes (o Fundamentus
- * não substitui o Tesouro), então ali não há cadeia. Fonte sem `chain` é ponto
- * único de falha — e dizer isso na tela é metade do valor do painel.
+ * 'reference' agrupa responsabilidades independentes (o Fundamentus não substitui
+ * o Tesouro), e em 'series' só o candle diário tem reserva — os índices, não.
+ * Fonte sem `chain` é ponto único de falha, e dizer isso na tela é metade do valor
+ * do painel.
+ *
+ * A ordem de cada cadeia é a do CÓDIGO, não a que soaria razoável. Em cotações o
+ * Google vem antes da Brapi (`recoverQuote` em externalMarketService), e o catálogo
+ * afirmava o contrário — o painel dizia, com todas as letras, que a Brapi era
+ * tentada primeiro. Mudar a ordem de tentativa lá obriga a mudar aqui.
  */
 export const SOURCE_CATALOG = {
     // --- Cotações de ativos: a cadeia que precifica a carteira ---
     'yahoo.quotes': {
         label: 'Yahoo Finance — cotações',
         short: 'Yahoo',
-        role: 'Fonte principal',
+        role: 'Todos os mercados',
         group: 'quotes',
         feeds: 'Preço de ações, FIIs, ETFs e cripto na carteira e no ranking',
         schedule: { kind: 'minutes', at: [0, 15, 30, 45] },
         chain: 'quotes',
         critical: true,
     },
-    brapi: {
-        label: 'Brapi',
-        short: 'Brapi',
-        role: 'Reserva (ativos BR)',
-        group: 'quotes',
-        feeds: 'Cotação de ativos brasileiros quando o Yahoo falha',
-        schedule: { kind: 'onFailure' },
-        chain: 'quotes',
-        critical: false,
-    },
     'google.finance': {
         label: 'Google Finance',
         short: 'Google',
-        role: 'Último recurso',
+        role: 'Um ativo por vez',
         group: 'quotes',
-        feeds: 'Cotação buscada ativo por ativo, quando as duas acima falham',
+        feeds: 'Cotação buscada ativo por ativo, quando o Yahoo não traz o preço',
         schedule: { kind: 'onFailure' },
         chain: 'quotes',
         critical: false,
     },
-    b3: {
-        label: 'B3 — arquivo diário',
-        short: 'B3',
-        role: 'Fechamento oficial',
+    brapi: {
+        label: 'Brapi',
+        short: 'Brapi',
+        role: 'Só ativos brasileiros',
         group: 'quotes',
-        feeds: 'Preço de fechamento do pregão, quando o Yahoo publica com buraco',
+        feeds: 'Cotação de ativo brasileiro quando nem o Yahoo nem o Google trazem',
         schedule: { kind: 'onFailure' },
+        chain: 'quotes',
         critical: false,
     },
 
@@ -105,7 +109,7 @@ export const SOURCE_CATALOG = {
     'yahoo.currencies': {
         label: 'Yahoo Finance — câmbio',
         short: 'Yahoo',
-        role: '1ª fonte',
+        role: 'Dólar e Bitcoin',
         group: 'fx',
         feeds: 'Dólar e Bitcoin',
         schedule: { kind: 'minutes', at: [5, 20, 35, 50] },
@@ -115,7 +119,7 @@ export const SOURCE_CATALOG = {
     awesomeapi: {
         label: 'AwesomeAPI',
         short: 'AwesomeAPI',
-        role: '2ª fonte',
+        role: 'Dólar e Bitcoin',
         group: 'fx',
         feeds: 'Dólar e Bitcoin, quando o Yahoo não responde',
         schedule: { kind: 'onFailure' },
@@ -125,7 +129,7 @@ export const SOURCE_CATALOG = {
     coinbase: {
         label: 'Coinbase',
         short: 'Coinbase',
-        role: '3ª fonte (só Bitcoin)',
+        role: 'Só Bitcoin',
         group: 'fx',
         feeds: 'Bitcoin, quando as duas primeiras falham',
         schedule: { kind: 'onFailure' },
@@ -135,7 +139,7 @@ export const SOURCE_CATALOG = {
     ptax: {
         label: 'PTAX — Banco Central',
         short: 'PTAX',
-        role: '4ª fonte (só dólar)',
+        role: 'Só dólar (oficial)',
         group: 'fx',
         feeds: 'Dólar oficial, quando as duas primeiras falham',
         schedule: { kind: 'onFailure' },
@@ -147,7 +151,7 @@ export const SOURCE_CATALOG = {
     'bcb.series': {
         label: 'Banco Central — séries',
         short: 'Banco Central',
-        role: 'Fonte principal',
+        role: 'Selic e IPCA',
         group: 'rates',
         feeds: 'Selic e IPCA, que definem a taxa livre de risco de todo o ranking',
         schedule: { kind: 'minutes', at: [5, 20, 35, 50] },
@@ -157,7 +161,7 @@ export const SOURCE_CATALOG = {
     brasilapi: {
         label: 'BrasilAPI',
         short: 'BrasilAPI',
-        role: 'Reserva',
+        role: 'Selic e IPCA',
         group: 'rates',
         feeds: 'Selic e IPCA quando o Banco Central não responde',
         schedule: { kind: 'onFailure' },
@@ -167,7 +171,7 @@ export const SOURCE_CATALOG = {
     ibge: {
         label: 'IBGE',
         short: 'IBGE',
-        role: 'Último recurso (só IPCA)',
+        role: 'Só IPCA',
         group: 'rates',
         feeds: 'IPCA quando as duas fontes acima falham',
         schedule: { kind: 'onFailure' },
@@ -183,7 +187,20 @@ export const SOURCE_CATALOG = {
         group: 'series',
         feeds: 'Gráficos e cálculo de rentabilidade da carteira',
         schedule: { kind: 'dailyTimes', at: ['18:30'] },
+        chain: 'candle',
         critical: true,
+    },
+    b3: {
+        label: 'B3 — arquivo diário',
+        short: 'B3',
+        role: 'Só ações, FIIs e ETFs da B3',
+        group: 'series',
+        // O que ela faz é ESTENDER a ponta de uma série que já existe — o arquivo é
+        // por pregão, então reconstruir histórico custaria centenas de downloads.
+        feeds: 'Fechamento oficial do pregão quando o Yahoo publica o dia sem preço',
+        schedule: { kind: 'onFailure' },
+        chain: 'candle',
+        critical: false,
     },
     'yahoo.indices': {
         label: 'Yahoo Finance — índices',
