@@ -20,6 +20,11 @@ const yahooFinance = new YahooFinance({
 // endpoint de crumb (datacenter IP), insistir a cada 30s só prolonga o bloqueio.
 // 2min dá tempo de Yahoo "esfriar" e ainda recupera bem dentro da cadência dos crons.
 const yahooBreaker = createCircuitBreaker({ name: 'yahoo', failureThreshold: 4, cooldownMs: 120_000 });
+
+// Teto da chamada de câmbio. Curto de propósito: quem espera por ela é o
+// macro-sync inteiro, e há duas fontes atrás na cadeia — desistir rápido e cair
+// para a próxima vale mais que insistir numa resposta que já atrasou.
+const CURRENCY_TIMEOUT_MS = 8000;
 const googleBreaker = createCircuitBreaker({ name: 'google-finance', failureThreshold: 8, cooldownMs: 60_000 });
 const brapiBreaker = createCircuitBreaker({ name: 'brapi', failureThreshold: 5, cooldownMs: 60_000 });
 // Sinaliza UMA vez por processo o 429 de cota mensal esgotada da brapi. Sem isto o
@@ -432,8 +437,23 @@ export const externalMarketService = {
      */
     async getCurrencyQuotes() {
         try {
-            const quotes = await measurePerformance('external', 'YAHOO currencies', () =>
-                yahooFinance.quote(['BRL=X', 'BTC-USD'], {}, { validateResult: false }));
+            const quotes = await measurePerformance('external', 'YAHOO currencies', () => withRetry(
+                () => yahooFinance.quote(['BRL=X', 'BTC-USD'], {}, {
+                    validateResult: false,
+                    // Sem teto explícito, a chamada pendurava até o timeout do
+                    // socket: as execuções do macro-sync em 04/09/2026 iam de 3s
+                    // para 21s quando esta falhava, e o resto da rotina esperava
+                    // junto. 8s é folgado para uma resposta que normalmente leva ~1s.
+                    fetchOptions: { signal: AbortSignal.timeout(CURRENCY_TIMEOUT_MS) },
+                }),
+                // Mesma política do lote de cotações: uma retentativa curta para
+                // falha transitória, NENHUMA em 429/crumb — rate-limit de IP não
+                // melhora em 300ms, e insistir só prolonga o bloqueio. Sem breaker
+                // dedicado porque isto roda uma vez a cada 15 min: não há martelo
+                // a interromper, e reaproveitar o `yahooBreaker` do lote deixaria
+                // uma falha de câmbio abrir o circuito da sincronização inteira.
+                { retries: 1, baseDelayMs: 300, shouldRetry: (err) => !/429|crumb/i.test(err?.message || '') },
+            ));
             const list = Array.isArray(quotes) ? quotes : [quotes];
             const find = (s) => list.find(q => q.symbol === s);
             const result = {};

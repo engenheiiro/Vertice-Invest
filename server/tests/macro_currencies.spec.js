@@ -9,8 +9,9 @@ import { externalMarketService } from '../services/externalMarketService.js';
 // véspera — na barra de indicadores E no multiplicador de posição dolarizada —
 // sem log, sem flag e sem alarme. O contrato abaixo é o que impede a repetição.
 //
-// A ordem da cadeia (Yahoo → AwesomeAPI desde 05/09/2026) é deliberada e está
-// coberta: a AwesomeAPI só era consultada para gastar uma chamada condenada.
+// A ordem da cadeia (Yahoo → AwesomeAPI → Coinbase → PTAX) é deliberada e está
+// coberta: as duas últimas são especialistas de uma moeda só, e existem porque
+// as duas primeiras já falharam JUNTAS a partir do host de produção.
 
 const awesomeBody = (over = {}) => ({
     data: {
@@ -66,7 +67,7 @@ describe('updateCurrencies — cadeia de fontes', () => {
     // O ponto do incidente: sem valor de hoje, o retorno é `null` — nunca o
     // valor da véspera disfarçado de cotação. Quem grava é que decide preservar
     // o último conhecido, e marca isso como defasado.
-    it('as duas fontes fora → null nas duas moedas, sem número inventado', async () => {
+    it('cadeia inteira fora → null nas duas moedas, sem número inventado', async () => {
         vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
         vi.spyOn(axios, 'get').mockRejectedValue(new Error('ETIMEDOUT'));
 
@@ -90,6 +91,47 @@ describe('updateCurrencies — cadeia de fontes', () => {
         expect(out.usd).toBeCloseTo(5.1263, 4);
         expect(out.usdSource).toBe('AwesomeAPI');
         expect(out.btcSource).toBe('Yahoo'); // o BTC da primária estava bom
+    });
+});
+
+describe('_fetchBtcCoinbase — rede final do bitcoin', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it('deriva a variação de 24h da abertura da própria janela', async () => {
+        vi.spyOn(axios, 'get').mockResolvedValue({ data: { last: '79762.41', open: '81771.62' } });
+
+        const out = await macroDataService._fetchBtcCoinbase();
+
+        expect(out.btc).toBeCloseTo(79762.41, 2);
+        expect(out.btcChange).toBeCloseTo(-2.457, 2);
+    });
+
+    it('sem abertura utilizável, entrega o preço e variação zero em vez de NaN', async () => {
+        vi.spyOn(axios, 'get').mockResolvedValue({ data: { last: '79762.41', open: '0' } });
+        const out = await macroDataService._fetchBtcCoinbase();
+        expect(out.btc).toBeCloseTo(79762.41, 2);
+        expect(out.btcChange).toBe(0);
+    });
+
+    it('corpo inesperado vira null, não exceção', async () => {
+        vi.spyOn(axios, 'get').mockResolvedValue({ data: { message: 'NotFound' } });
+        await expect(macroDataService._fetchBtcCoinbase()).resolves.toBeNull();
+    });
+
+    // O buraco que ela fecha: em 04/09/2026 as duas primeiras fontes falharam
+    // juntas a partir do host e o BTC ficou sem ninguém — a PTAX cobre só dólar.
+    it('na cadeia, cobre o BTC quando as duas primeiras caem juntas', async () => {
+        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
+        vi.spyOn(macroDataService, '_fetchCurrenciesAwesome').mockResolvedValue(null);
+        vi.spyOn(macroDataService, '_fetchBtcCoinbase').mockResolvedValue({ btc: 79762.41, btcChange: -2.45 });
+        vi.spyOn(macroDataService, '_fetchPtaxUsd').mockResolvedValue({ usd: 5.1253, usdChange: 0.57 });
+
+        const out = await macroDataService.updateCurrencies();
+
+        expect(out.btcSource).toBe('Coinbase');
+        expect(out.usdSource).toBe('PTAX/BCB');
+        expect(out.btc).toBeCloseTo(79762.41, 2);
+        expect(out.usd).toBe(5.1253);
     });
 });
 

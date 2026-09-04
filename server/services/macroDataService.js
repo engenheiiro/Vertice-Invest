@@ -50,10 +50,10 @@ export const isPlausibleBtc = (value) => Number.isFinite(value) && value >= 1000
  * infraestrutura independente do Yahoo, é justamente o que salva o bloco quando
  * o Yahoo cai.
  *
- * A variação NÃO significa exatamente o mesmo em todas: em cripto, o Yahoo
- * reporta as últimas 24h corridas e a AwesomeAPI, o fechamento anterior. Em
- * USD/BRL as três medem contra o fechamento — que é o que `walletController`
- * usa para reconstruir o câmbio-âncora do dia.
+ * A variação NÃO significa exatamente o mesmo em todas: em cripto, Yahoo e
+ * Coinbase reportam as últimas 24h corridas e a AwesomeAPI, o fechamento
+ * anterior. Em USD/BRL todas medem contra o fechamento — que é o que
+ * `walletController` usa para reconstruir o câmbio-âncora do dia.
  *
  * Fora da cadeia, e por quê: o **arquivo diário da B3** (`b3DailyFileService`)
  * não tem dólar nem bitcoin à vista. O que ele traz é DERIVATIVO — no dia
@@ -84,10 +84,16 @@ const CURRENCY_SOURCES = [
         name: 'AwesomeAPI',
         fetch: (service) => service._fetchCurrenciesAwesome(),
     },
-    // Rede final, só para o DÓLAR (o BCB não cota cripto) e só com a fixação de
-    // HOJE — ver `_fetchPtaxUsd`. Infraestrutura independente das duas de cima e
-    // já usada para SELIC/IPCA: quando Yahoo e AwesomeAPI caem juntos, é o que
-    // separa "câmbio oficial do dia" de "câmbio da véspera marcado como defasado".
+    // As duas últimas são ESPECIALISTAS — cada uma cobre só uma moeda, e existem
+    // porque as duas primeiras já falharam juntas em produção (04/09/2026), a
+    // partir do host, enquanto respondiam normalmente de fora. A ordem entre elas
+    // não disputa nada: uma preenche o BTC, a outra o dólar.
+    //
+    // A Coinbase vem antes da PTAX por ser cotação viva; a PTAX é fixação diária.
+    {
+        name: 'Coinbase',
+        fetch: (service) => service._fetchBtcCoinbase(),
+    },
     {
         name: 'PTAX/BCB',
         fetch: (service) => service._fetchPtaxUsd(),
@@ -477,6 +483,39 @@ export const macroDataService = {
         }
 
         return reading;
+    },
+
+    /**
+     * Coinbase — rede final do BITCOIN (a PTAX cobre o dólar, mas o BCB não cota
+     * cripto, então sem esta o BTC ficava sem terceira fonte).
+     *
+     * Endpoint público de estatísticas do par BTC-USD, sem chave. `last` é a
+     * negociação mais recente e `open` é a abertura das últimas 24h — a variação
+     * daqui é 24h CORRIDAS, a mesma régua do Yahoo (a AwesomeAPI mede contra o
+     * fechamento anterior). Preferida à Binance porque esta bloqueia IPs de
+     * algumas regiões, e a máquina que faz a chamada é a de produção, não a nossa.
+     *
+     * É BTC/USD de verdade, não BTC/USDT: não carrega o desvio da stablecoin.
+     */
+    async _fetchBtcCoinbase() {
+        try {
+            const res = await axios.get('https://api.exchange.coinbase.com/products/BTC-USD/stats', {
+                headers: BASE_HEADERS,
+                timeout: 8000,
+            });
+            const last = Number(res.data?.last);
+            const open = Number(res.data?.open);
+
+            if (!(last > 0)) {
+                logger.warn(`⚠️ [Câmbio] Coinbase devolveu corpo inesperado: ${JSON.stringify(res.data).slice(0, 160)}`);
+                return null;
+            }
+
+            return { btc: last, btcChange: open > 0 ? ((last / open) - 1) * 100 : 0 };
+        } catch (error) {
+            logger.warn(`⚠️ [Câmbio] Coinbase falhou: ${error.message}`);
+            return null;
+        }
     },
 
     /**
