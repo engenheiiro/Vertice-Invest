@@ -62,10 +62,10 @@ beforeEach(() => {
 });
 
 describe('veredito global', () => {
-    it('mostra "Tudo certo" quando nada está quebrado', async () => {
+    it('mostra o veredito de tudo certo quando nada está quebrado', async () => {
         getDataHealth.mockResolvedValue(mkResponse());
         render(<AdminSaudeTab />);
-        expect(await screen.findByText('Tudo certo')).toBeInTheDocument();
+        expect(await screen.findByText('Está tudo funcionando')).toBeInTheDocument();
     });
 
     it('mostra estado crítico e o contador de falhas', async () => {
@@ -82,8 +82,8 @@ describe('veredito global', () => {
             },
         }));
         render(<AdminSaudeTab />);
-        // O veredito é o título; "Crítico" também rotula o contador do resumo.
-        expect(await screen.findByRole('heading', { name: 'Crítico' })).toBeInTheDocument();
+        // O veredito é o título, escrito como frase — o contador ao lado guarda o número.
+        expect(await screen.findByRole('heading', { name: 'Tem coisa quebrada' })).toBeInTheDocument();
         expect(screen.getByText(/Precisa de atenção \(1\)/)).toBeInTheDocument();
     });
 });
@@ -172,7 +172,7 @@ describe('regra de leitura', () => {
     it('checks saudáveis ficam recolhidos até o clique', async () => {
         getDataHealth.mockResolvedValue(mkResponse());
         render(<AdminSaudeTab />);
-        await screen.findByText('Tudo certo');
+        await screen.findByText('Está tudo funcionando');
         expect(screen.queryByText('SELIC')).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByText(/Verificações saudáveis \(2\)/));

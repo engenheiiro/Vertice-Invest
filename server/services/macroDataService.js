@@ -13,6 +13,7 @@ import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
 import { fetchTesouroCsv } from './treasuryPriceService.js';
 import { isBusinessDay, brazilDateKey } from '../utils/dateUtils.js';
+import { trackSource } from '../utils/sourceHealth.js';
 
 const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391, SELIC_DAILY: 11 };
 
@@ -237,11 +238,11 @@ export const macroDataService = {
     // Primária: lê o último valor de uma série SGS do BCB. Retorna número ou null.
     async _fetchBcbSeries(serie, label) {
         try {
-            const res = await axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${serie}/dados/ultimos/1?formato=json`, {
+            const res = await trackSource('bcb.series', () => axios.get(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${serie}/dados/ultimos/1?formato=json`, {
                 headers: BASE_HEADERS,
                 httpsAgent: bcbAgent,
                 timeout: 5000
-            });
+            }), { isEmpty: (r) => !(Array.isArray(r?.data) && r.data[0]?.valor) });
             const raw = Array.isArray(res.data) && res.data[0]?.valor;
             const val = raw ? parseFloat(String(raw).replace(',', '.')) : NaN;
             if (val > 0 && val < 50) return val;
@@ -257,7 +258,7 @@ export const macroDataService = {
     // Retorna { selic, ipca } com cada campo número ou null.
     async fetchRatesFromBrasilApi() {
         try {
-            const res = await axios.get('https://brasilapi.com.br/api/taxas/v1', { headers: BASE_HEADERS, timeout: 6000 });
+            const res = await trackSource('brasilapi', () => axios.get('https://brasilapi.com.br/api/taxas/v1', { headers: BASE_HEADERS, timeout: 6000 }), { isEmpty: (r) => !Array.isArray(r?.data) || r.data.length === 0 });
             const list = Array.isArray(res.data) ? res.data : [];
             const pick = (nome) => {
                 const item = list.find(r => String(r.nome).toUpperCase() === nome);
@@ -280,7 +281,7 @@ export const macroDataService = {
     async fetchIpcaFromIbge() {
         try {
             const url = 'https://servicodados.ibge.gov.br/api/v3/agregados/1737/periodos/-1/variaveis/2265?localidades=N1[all]';
-            const res = await axios.get(url, { headers: BASE_HEADERS, timeout: 8000 });
+            const res = await trackSource('ibge', () => axios.get(url, { headers: BASE_HEADERS, timeout: 8000 }), { isEmpty: (r) => !r?.data?.[0]?.resultados?.[0]?.series?.[0]?.serie });
             const serie = res.data?.[0]?.resultados?.[0]?.series?.[0]?.serie;
             if (serie && typeof serie === 'object') {
                 const values = Object.values(serie).filter(v => v != null && v !== '...');
@@ -499,10 +500,10 @@ export const macroDataService = {
      */
     async _fetchBtcCoinbase() {
         try {
-            const res = await axios.get('https://api.exchange.coinbase.com/products/BTC-USD/stats', {
+            const res = await trackSource('coinbase', () => axios.get('https://api.exchange.coinbase.com/products/BTC-USD/stats', {
                 headers: BASE_HEADERS,
                 timeout: 8000,
-            });
+            }), { isEmpty: (r) => !(Number(r?.data?.last) > 0) });
             const last = Number(res.data?.last);
             const open = Number(res.data?.open);
 
@@ -554,7 +555,7 @@ export const macroDataService = {
                 + 'CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)'
                 + `?@dataInicial='${fmt(inicio)}'&@dataFinalCotacao='${fmt(hoje)}'&$top=200&$format=json`;
 
-            const res = await axios.get(url, { headers: BASE_HEADERS, httpsAgent: bcbAgent, timeout: 8000 });
+            const res = await trackSource('ptax', () => axios.get(url, { headers: BASE_HEADERS, httpsAgent: bcbAgent, timeout: 8000 }), { isEmpty: (r) => !(r?.data?.value?.length > 0) });
             const linhas = (Array.isArray(res.data?.value) ? res.data.value : [])
                 .filter((c) => Number(c?.cotacaoVenda) > 0 && typeof c?.dataHoraCotacao === 'string')
                 .sort((a, b) => a.dataHoraCotacao.localeCompare(b.dataHoraCotacao));
@@ -589,7 +590,7 @@ export const macroDataService = {
     /** Fonte secundária. Devolve `null` (com log) em erro de rede, rate-limit ou payload inesperado. */
     async _fetchCurrenciesAwesome() {
         try {
-            const res = await axios.get('https://economia.awesomeapi.com.br/last/USD-BRL,BTC-USD', { timeout: 8000 });
+            const res = await trackSource('awesomeapi', () => axios.get('https://economia.awesomeapi.com.br/last/USD-BRL,BTC-USD', { timeout: 8000 }), { isEmpty: (r) => !r?.data?.USDBRL?.bid || !r?.data?.BTCUSD?.bid });
             const usdRaw = res.data?.USDBRL;
             const btcRaw = res.data?.BTCUSD;
 

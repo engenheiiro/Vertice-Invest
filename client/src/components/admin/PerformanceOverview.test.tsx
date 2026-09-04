@@ -83,6 +83,45 @@ describe('medidores de desempenho no Admin', () => {
         expect(screen.getAllByText('GET /api/research/latest 5xx')).toHaveLength(2);
     });
 
+    // Antes, os cinco medidores eram cinco números sem régua: "800 ms" e "1.96%"
+    // só significam alguma coisa para quem já sabe os limiares de cor.
+    it('cada medidor carrega o veredito, não só o número', async () => {
+        getSnapshot.mockResolvedValue(snapshot());
+        render(<PerformanceOverview />);
+
+        await screen.findByText('Medição ativa');
+        // 800 ms de p95 na rota mais lenta = normal; 1,96% de erro = atenção.
+        expect(screen.getAllByText('normal').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('atenção').length).toBeGreaterThan(0);
+    });
+
+    it('o topo diz em uma frase se é preciso agir', async () => {
+        getSnapshot.mockResolvedValue(snapshot());
+        render(<PerformanceOverview />);
+        expect(await screen.findByText(/merecendo o olho, mas nada quebrado/)).toBeInTheDocument();
+    });
+
+    it('medidor fora do aceitável vira frase de alerta no topo', async () => {
+        getSnapshot.mockResolvedValue(snapshot({
+            runtime: {
+                uptimeSeconds: 7200,
+                memoryMb: { rss: 500, heapUsed: 380, heapTotal: 400, external: 10 }, // ~98% de 512 MB
+                eventLoopDelayMs: { mean: 12, p50: 11, p95: 24, p99: 31, max: 40 },
+            },
+        }));
+        render(<PerformanceOverview />);
+        expect(await screen.findByText(/fora do aceitável/)).toBeInTheDocument();
+    });
+
+    it('sem amostra, o medidor não é julgado (ausência não é nota ruim)', async () => {
+        getSnapshot.mockResolvedValue(snapshot({ durations: { http: [] }, counters: { cache: {} } }));
+        render(<PerformanceOverview />);
+
+        await screen.findByText('Medição ativa');
+        expect(screen.getByText('Aguardando tráfego')).toBeInTheDocument();
+        expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    });
+
     it('não derruba a aba Saúde quando o endpoint está indisponível', async () => {
         getSnapshot.mockRejectedValue(new Error('offline'));
         render(<PerformanceOverview />);

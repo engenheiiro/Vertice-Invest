@@ -9,6 +9,7 @@ import {
     validateFundamentusLayout,
 } from '../config/scraperSchemas.js';
 import { recordIngestionError } from './errorLogService.js';
+import { trackSource } from '../utils/sourceHealth.js';
 
 // Separa as duas falhas que chegam pelo mesmo catch, porque exigem conserto
 // diferente: LAYOUT_MISMATCH é mudança na estrutura do site (precisa atualizar
@@ -49,12 +50,12 @@ export const fundamentusService = {
         try {
             logger.info("🔎 Iniciando Scraping Detalhado Fundamentus (Ações)...");
             
-            const response = await axios.get('https://www.fundamentus.com.br/resultado.php', {
+            const response = await trackSource('fundamentus', () => axios.get('https://www.fundamentus.com.br/resultado.php', {
                 headers: HEADERS,
                 responseType: 'arraybuffer',
                 timeout: 25000, // Timeout aumentado para evitar falhas em redes lentas
                 decompress: true // Garante descompressão do gzip
-            });
+            }), { isEmpty: (r) => !(r?.data?.length > 0) });
 
             const decodedData = iconv.decode(response.data, 'iso-8859-1');
             const $ = cheerio.load(decodedData);
@@ -203,12 +204,12 @@ export const fundamentusService = {
         try {
             logger.info("🔎 Iniciando Scraping Detalhado Fundamentus (FIIs)...");
 
-            const response = await axios.get('https://www.fundamentus.com.br/fii_resultado.php', {
+            const response = await trackSource('fundamentus', () => axios.get('https://www.fundamentus.com.br/fii_resultado.php', {
                 headers: HEADERS,
                 responseType: 'arraybuffer',
                 timeout: 25000,
                 decompress: true
-            });
+            }), { isEmpty: (r) => !(r?.data?.length > 0) });
 
             const decodedData = iconv.decode(response.data, 'iso-8859-1');
             const $ = cheerio.load(decodedData);

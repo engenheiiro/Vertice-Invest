@@ -14,19 +14,42 @@ import {
 import { useToast } from '../../contexts/ToastContext';
 import { getErrorMessage } from '../../utils/errorMessages';
 import { PerformanceOverview } from '../../components/admin/PerformanceOverview';
+import { DataSourcesPanel } from '../../components/admin/DataSourcesPanel';
 
 /**
  * Aba "Saúde" do Admin.
  *
- * Regra de leitura da tela: o que está QUEBRADO aparece primeiro e já explica
- * onde olhar (`hint`). O resto fica recolhido — um painel que mostra 60 checks
- * verdes com igual destaque é um painel que ninguém lê.
+ * Duas regras de leitura, nessa ordem:
+ *
+ * 1. **O que está QUEBRADO aparece primeiro** e já explica onde olhar (`hint`).
+ *    O resto fica recolhido — um painel que mostra 60 checks verdes com igual
+ *    destaque é um painel que ninguém lê.
+ * 2. **Toda seção começa por uma frase, não por um número.** O leitor desta tela
+ *    é o dono do produto, não quem escreveu o coletor: "3 de 346 ações sem preço
+ *    fresco" é informação; "0,87%" é telemetria. Sempre que a escolha for entre
+ *    precisão técnica e a frase que responde "preciso agir?", ganha a frase — o
+ *    número continua ali do lado.
  */
 
 const STATUS_UI: Record<HealthStatus, { text: string; bg: string; border: string; label: string; Icon: React.ElementType }> = {
-    OK: { text: 'text-emerald-400', bg: 'bg-emerald-900/10', border: 'border-emerald-900/40', label: 'Tudo certo', Icon: CheckCircle2 },
-    WARN: { text: 'text-yellow-400', bg: 'bg-yellow-900/10', border: 'border-yellow-900/40', label: 'Atenção', Icon: AlertTriangle },
-    CRITICAL: { text: 'text-red-400', bg: 'bg-red-900/10', border: 'border-red-900/40', label: 'Crítico', Icon: XCircle },
+    OK: { text: 'text-emerald-400', bg: 'bg-emerald-900/10', border: 'border-emerald-900/40', label: 'Está tudo funcionando', Icon: CheckCircle2 },
+    WARN: { text: 'text-yellow-400', bg: 'bg-yellow-900/10', border: 'border-yellow-900/40', label: 'Alguma coisa merece atenção', Icon: AlertTriangle },
+    CRITICAL: { text: 'text-red-400', bg: 'bg-red-900/10', border: 'border-red-900/40', label: 'Tem coisa quebrada', Icon: XCircle },
+};
+
+/**
+ * Tradução das categorias técnicas para o que elas significam na prática. A chave
+ * é o `category` que o backend manda; sem isso a tela mostra "PLAUSIBILITY" e
+ * "FRESHNESS" para quem só quer saber se o preço da carteira está certo.
+ */
+const CATEGORY_LABEL: Record<string, string> = {
+    FRESHNESS: 'Dado atualizado',
+    COVERAGE: 'Dado completo',
+    PLAUSIBILITY: 'Dado plausível',
+    MACRO: 'Indicadores',
+    JOBS: 'Rotinas',
+    ERRORS: 'Erros',
+    INGESTION: 'Coleta',
 };
 
 const relativeTime = (iso: string | null | undefined) => {
@@ -81,7 +104,7 @@ const CheckRow = ({ check }: { check: HealthCheck }) => {
                         <ui.Icon size={13} className={`${ui.text} shrink-0`} />
                         <span className="text-xs font-bold text-white">{check.label}</span>
                         <span className="text-[9px] font-bold uppercase text-slate-500 bg-elevated px-1.5 py-0.5 rounded">
-                            {check.category}
+                            {CATEGORY_LABEL[check.category] ?? check.category}
                         </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">{check.detail}</p>
@@ -242,6 +265,23 @@ export const AdminSaudeTab = () => {
         };
     }, [report]);
 
+    // A frase que substitui a contagem. "2 crítico · 1 alerta · 57 ok" obriga o
+    // leitor a somar e concluir sozinho; a frase já entrega a conclusão, e os
+    // números seguem ao lado para quem quiser conferir.
+    const verdictSentence = useMemo(() => {
+        const criticos = failing.filter((c) => c.status === 'CRITICAL');
+        const alertas = failing.filter((c) => c.status === 'WARN');
+        if (criticos.length) {
+            return `${criticos.length} verificação(ões) em estado crítico: ${criticos.slice(0, 2).map((c) => c.label).join(', ')}`
+                + `${criticos.length > 2 ? ' e outras' : ''}. Isso afeta o que o usuário vê.`;
+        }
+        if (alertas.length) {
+            return `${alertas.length} ponto(s) de atenção: ${alertas.slice(0, 2).map((c) => c.label).join(', ')}`
+                + `${alertas.length > 2 ? ' e outros' : ''}. Nada quebrado, mas vale acompanhar.`;
+        }
+        return 'Todas as verificações passaram: dados atualizados, completos e dentro das faixas esperadas.';
+    }, [failing]);
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-20 text-slate-500 gap-2">
@@ -288,7 +328,8 @@ export const AdminSaudeTab = () => {
                         </div>
                         <div>
                             <h3 className={`text-xl font-black ${ui.text}`}>{ui.label}</h3>
-                            <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1.5">
+                            <p className="text-xs text-slate-300 mt-1 max-w-lg">{verdictSentence}</p>
+                            <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1.5">
                                 <Clock size={11} />
                                 Avaliado {relativeTime(report.runAt)}
                                 {report.trigger && <span className="text-slate-600">· {report.trigger.toLowerCase()}</span>}
@@ -299,15 +340,15 @@ export const AdminSaudeTab = () => {
                         <div className="flex items-center gap-3 text-center">
                             <div>
                                 <p className="text-lg font-black text-red-400">{report.summary.critical}</p>
-                                <p className="text-[9px] text-slate-500 font-bold uppercase">Crítico</p>
+                                <p className="text-[9px] text-slate-500 font-bold uppercase">Quebrado</p>
                             </div>
                             <div>
                                 <p className="text-lg font-black text-yellow-400">{report.summary.warn}</p>
-                                <p className="text-[9px] text-slate-500 font-bold uppercase">Alerta</p>
+                                <p className="text-[9px] text-slate-500 font-bold uppercase">Atenção</p>
                             </div>
                             <div>
                                 <p className="text-lg font-black text-emerald-400">{report.summary.ok}</p>
-                                <p className="text-[9px] text-slate-500 font-bold uppercase">OK</p>
+                                <p className="text-[9px] text-slate-500 font-bold uppercase">Certo</p>
                             </div>
                         </div>
                         <button
@@ -321,6 +362,10 @@ export const AdminSaudeTab = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Fontes ANTES dos sintomas: quando algo está errado, a primeira
+                pergunta é de onde o dado deveria ter vindo. */}
+            <DataSourcesPanel sources={data?.sources ?? []} summary={data?.sourceSummary} />
 
             <PerformanceOverview />
 
@@ -355,10 +400,16 @@ export const AdminSaudeTab = () => {
 
             {/* Rotinas */}
             <div className="bg-base border border-slate-800 rounded-2xl p-4">
-                <h4 className="text-xs font-black text-white uppercase mb-3 flex items-center gap-2">
+                <h4 className="text-xs font-black text-white uppercase flex items-center gap-2">
                     <Activity size={14} className="text-blue-500" />
                     Rotinas automáticas
                 </h4>
+                <p className="text-[11px] text-slate-400 mt-1 mb-3 max-w-2xl">
+                    Os robôs que buscam e calculam dado sozinhos. Aqui se vê se cada um
+                    <strong className="text-slate-300"> rodou</strong> — não se ele trouxe dado bom:
+                    uma rotina pode terminar com sucesso e mesmo assim gravar um valor velho, e quem
+                    pega isso são as verificações acima.
+                </p>
                 <div className="overflow-x-auto">
                     <table className="w-full min-w-[560px]">
                         <thead>

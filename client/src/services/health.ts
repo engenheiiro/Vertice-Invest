@@ -49,10 +49,45 @@ export interface JobStatus {
     failures24h: number;
 }
 
+/**
+ * Estado de uma fonte externa. `UNKNOWN` não é falha: o contador de chamadas vive
+ * na memória do servidor e zera a cada reinício, então uma fonte que só roda no
+ * sync diário fica legitimamente sem histórico por horas depois de um deploy.
+ */
+export type SourceStatus = 'OK' | 'WARN' | 'CRITICAL' | 'UNKNOWN';
+
+export interface DataSource {
+    id: string;
+    label: string;
+    /** O que ela alimenta, em português de gente. Vai direto para a tela. */
+    feeds: string;
+    critical: boolean;
+    status: SourceStatus;
+    detail: string;
+    lastDeliveryAt: string | null;
+    lastDeliveryHours: number | null;
+    attempts: number;
+    failures: number;
+    failureRate: number | null;
+    lastError: string | null;
+    lastFailAt: string | null;
+}
+
+export interface SourceSummary {
+    total: number;
+    ok: number;
+    degraded: number;
+    unknown: number;
+    degradedLabels: string[];
+    worst: SourceStatus;
+}
+
 export interface DataHealthResponse {
     report: HealthReport | null;
     history: HealthHistoryPoint[];
     jobs: JobStatus[];
+    sources?: DataSource[];
+    sourceSummary?: SourceSummary;
 }
 
 export interface BackendError {

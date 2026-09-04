@@ -12,13 +12,14 @@ import { JOB_CATALOG } from '../config/jobCatalog.js';
 import {
     getHealthHistory,
     getLatestHealthReport,
+    getLiveSourceStatuses,
     runDataHealthCheck,
 } from '../services/dataHealthService.js';
 
 /** GET /api/research/data-health — último relatório + tendência + rotinas. */
 export const getDataHealth = async (req, res, next) => {
     try {
-        const [latest, history, jobRuns] = await Promise.all([
+        const [latest, history, jobRuns, sources] = await Promise.all([
             getLatestHealthReport(),
             getHealthHistory(req.query.limit),
             JobRun.aggregate([
@@ -56,6 +57,7 @@ export const getDataHealth = async (req, res, next) => {
                     },
                 },
             ]),
+            getLiveSourceStatuses(),
         ]);
 
         const runsById = new Map(jobRuns.map((r) => [r._id, r]));
@@ -82,6 +84,11 @@ export const getDataHealth = async (req, res, next) => {
             report: latest || null,
             history: history.reverse(), // cronológico p/ o gráfico
             jobs,
+            // Calculado AGORA, não lido do relatório persistido: o contador de
+            // chamadas vive na memória do processo e a pergunta que ele responde
+            // ("está entregando neste momento?") não sobrevive a uma hora de atraso.
+            sources: sources.sources,
+            sourceSummary: sources.summary,
         });
     } catch (error) { next(error); }
 };

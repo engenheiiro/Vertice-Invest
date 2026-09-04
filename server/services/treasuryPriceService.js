@@ -20,6 +20,7 @@ import * as Sentry from '@sentry/node';
 import logger from '../config/logger.js';
 import TreasuryPriceHistory from '../models/TreasuryPriceHistory.js';
 import { classifyTreasuryLabel, treasuryTitleKey, familyHasCoupon, resolveTreasuryTitleKey } from '../utils/treasuryTitle.js';
+import { trackSource } from '../utils/sourceHealth.js';
 
 export const TESOURO_CSV_URL = 'https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/precotaxatesourodireto.csv';
 
@@ -57,7 +58,7 @@ let csvMemo = { at: 0, csv: null };
 export const fetchTesouroCsv = async ({ force = false } = {}) => {
     if (!force && csvMemo.csv && (Date.now() - csvMemo.at) < CSV_MEMO_TTL_MS) return csvMemo.csv;
     try {
-        const res = await axios.get(TESOURO_CSV_URL, {
+        const res = await trackSource('tesouro', () => axios.get(TESOURO_CSV_URL, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                 'Accept': 'text/csv, text/plain, */*',
@@ -69,7 +70,7 @@ export const fetchTesouroCsv = async ({ force = false } = {}) => {
             transformResponse: [(d) => d], // não deixa o axios tentar parsear como JSON
             maxContentLength: 64 * 1024 * 1024,
             maxBodyLength: 64 * 1024 * 1024,
-        });
+        }), { isEmpty: (r) => !(String(r?.data || '').length > 1000) });
         const csv = typeof res.data === 'string' ? res.data : String(res.data ?? '');
         if (!csv || csv.length < 1000) return null;
         csvMemo = { at: Date.now(), csv };

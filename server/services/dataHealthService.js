@@ -36,6 +36,8 @@ import {
     PLAUSIBILITY_RANGES,
     buildHealthReport,
 } from '../utils/dataHealthRules.js';
+import { getSourceStats } from '../utils/sourceHealth.js';
+import { buildSourceStatuses, summarizeSources } from '../utils/dataSourceStatus.js';
 
 const THRESHOLD_KEY = 'DATA_HEALTH_THRESHOLDS';
 
@@ -352,6 +354,12 @@ const collectFacts = async (now) => {
                     dollar: macroConfig.dollar,
                     btc: macroConfig.btc,
                     updatedAt: macroConfig.lastUpdated || null,
+                    // Origem efetiva das taxas oficiais. Alimenta o painel de
+                    // FONTES: sem isto dá para ver que a Selic está fresca, mas
+                    // não que ela veio da secundária porque o BCB caiu.
+                    ratesSources: macroConfig.ratesSources || null,
+                    ratesUpdatedAt: macroConfig.ratesUpdatedAt || null,
+                    ratesStale: !!macroConfig.ratesStale,
                     // Frescor do bloco de MOEDAS, medido à parte. `lastUpdated`
                     // avança a cada run do cron mesmo com a fonte de câmbio fora
                     // do ar, então sozinho ele dava saúde verde para um dólar de
@@ -445,6 +453,48 @@ export const runDataHealthCheck = async ({ trigger = 'CRON', persist = true } = 
 };
 
 /** Último relatório salvo (o que o painel abre). */
+/**
+ * Estado das FONTES externas, calculado na hora.
+ *
+ * Não vem do relatório persistido de propósito: os contadores de chamada vivem na
+ * memória do processo e a pergunta que eles respondem é "está entregando AGORA?".
+ * Servir isso de um documento gravado há até uma hora daria a resposta de uma
+ * hora atrás — inútil justamente no momento em que alguém abre o painel porque
+ * desconfia de algo.
+ *
+ * Custo: uma leitura de documento. Os carimbos de entrega que sobrevivem a
+ * reinício (câmbio, taxas) moram todos no `MACRO_INDICATORS`; para o resto, o
+ * próprio registro do processo é a evidência.
+ */
+export const getLiveSourceStatuses = async () => {
+    let macroConfig = null;
+    try {
+        macroConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' })
+            .select('currenciesSources currenciesUpdatedAt ratesSources ratesUpdatedAt lastUpdated lastSyncStats')
+            .lean();
+    } catch (error) {
+        // Sem o documento o veredito cai só na conectividade — degradado, não quebrado.
+        logger.debug(`[DataHealth] Fontes sem carimbo persistido: ${error.message}`);
+    }
+
+    const facts = {
+        now: new Date(),
+        macro: macroConfig
+            ? {
+                currenciesSources: macroConfig.currenciesSources || null,
+                currenciesUpdatedAt: macroConfig.currenciesUpdatedAt || null,
+                ratesSources: macroConfig.ratesSources || null,
+                ratesUpdatedAt: macroConfig.ratesUpdatedAt || null,
+                updatedAt: macroConfig.lastUpdated || null,
+            }
+            : {},
+        fundamentals: { timestamp: macroConfig?.lastSyncStats?.timestamp || null },
+    };
+
+    const sources = buildSourceStatuses(facts, getSourceStats());
+    return { sources, summary: summarizeSources(sources) };
+};
+
 export const getLatestHealthReport = async () =>
     DataHealthReport.findOne().sort({ runAt: -1 }).lean();
 

@@ -2,6 +2,7 @@ import axios from 'axios';
 import https from 'https';
 import logger from '../config/logger.js';
 import { withRetry } from '../utils/resilience.js';
+import { trackSource } from '../utils/sourceHealth.js';
 
 /**
  * FECHAMENTO OFICIAL DO PREGÃO, DIRETO DA B3.
@@ -135,13 +136,16 @@ export const fetchB3DailyCloses = async (dayStr) => {
 
     try {
         const closes = await withRetry(async () => {
-            const req = await axios.get(REQUEST_URL, {
+            // Só o pedido do token é rastreado como "a fonte respondeu": o 400/404
+            // de dia sem pregão NÃO é falha da B3 (é o comportamento correto num
+            // sábado), então `isEmpty` olha o token, não o status.
+            const req = await trackSource('b3', () => axios.get(REQUEST_URL, {
                 params: { fileName: FILE_NAME, date: dayStr },
                 headers: { 'User-Agent': UA, Accept: 'application/json, */*' },
                 httpsAgent: B3_AGENT,
                 timeout: 30000,
                 validateStatus: (s) => s === 200 || s === 400 || s === 404,
-            });
+            }));
             // Dia sem arquivo: a B3 recusa o pedido do token. Não é erro nosso e
             // não deve ser re-tentado — devolvemos null e o chamador segue.
             //

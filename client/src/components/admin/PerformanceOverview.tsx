@@ -9,6 +9,14 @@ import {
     type PerformanceSnapshot,
 } from '../../services/performance';
 
+/**
+ * Teto de memória da instância. Sem um denominador, "180 MB" não diz nada — o
+ * mesmo número é folgado num plano e é véspera de reinício em outro. O processo
+ * sobe com `--max-old-space-size=400` dentro de uma instância de 512 MB, e é
+ * contra esse teto que o alerta faz sentido.
+ */
+const MEMORY_LIMIT_MB = 512;
+
 const formatMs = (value: number | null | undefined) => {
     if (value === null || value === undefined || !Number.isFinite(value)) return '—';
     if (value < 1) return `${value.toFixed(2)} ms`;
@@ -24,23 +32,73 @@ const formatUptime = (seconds: number | null | undefined) => {
     return `${Math.floor(hours / 24)} dias`;
 };
 
+/**
+ * Veredito de um medidor.
+ *
+ * Existe porque a versão anterior exibia cinco números sem régua nenhuma: "412 ms",
+ * "0,80%", "180 MB" — informação para quem já sabe o que é bom, ruído para todos os
+ * outros. Um painel de saúde que obriga o leitor a saber os limiares de cor não
+ * está medindo saúde, está imprimindo telemetria.
+ *
+ * `null` = sem amostra suficiente para julgar (nunca "ruim").
+ */
+type Verdict = 'GOOD' | 'WATCH' | 'BAD' | null;
+
+const VERDICT_UI: Record<Exclude<Verdict, null>, { value: string; chip: string; label: string }> = {
+    GOOD: { value: 'text-emerald-400', chip: 'bg-emerald-900/20 text-emerald-400', label: 'normal' },
+    WATCH: { value: 'text-yellow-400', chip: 'bg-yellow-900/20 text-yellow-400', label: 'atenção' },
+    BAD: { value: 'text-red-400', chip: 'bg-red-900/20 text-red-400', label: 'ruim' },
+};
+
+/** Compara contra limiares crescentes (quanto MENOR, melhor). */
+const gradeAscending = (value: number | null | undefined, watch: number, bad: number): Verdict => {
+    if (value === null || value === undefined || !Number.isFinite(value)) return null;
+    if (value >= bad) return 'BAD';
+    if (value >= watch) return 'WATCH';
+    return 'GOOD';
+};
+
+/** Compara contra limiares decrescentes (quanto MAIOR, melhor). */
+const gradeDescending = (value: number | null | undefined, watch: number, bad: number): Verdict => {
+    if (value === null || value === undefined || !Number.isFinite(value)) return null;
+    if (value <= bad) return 'BAD';
+    if (value <= watch) return 'WATCH';
+    return 'GOOD';
+};
+
 const MetricCard = ({
-    label, value, detail, Icon,
+    label, value, detail, Icon, verdict, meaning,
 }: {
     label: string;
     value: string;
     detail: string;
     Icon: React.ElementType;
-}) => (
-    <div className="rounded-xl border border-slate-800 bg-panel p-3 min-w-0">
-        <div className="flex items-center gap-1.5 text-slate-500">
-            <Icon size={12} />
-            <span className="text-[9px] font-bold uppercase tracking-wide">{label}</span>
+    verdict?: Verdict;
+    /** Uma frase dizendo o que o número significa. É o que torna o card legível. */
+    meaning?: string;
+}) => {
+    const ui = verdict ? VERDICT_UI[verdict] : null;
+    return (
+        <div className="rounded-xl border border-slate-800 bg-panel p-3 min-w-0">
+            <div className="flex items-center justify-between gap-1.5">
+                <div className="flex items-center gap-1.5 text-slate-500 min-w-0">
+                    <Icon size={12} className="shrink-0" />
+                    <span className="text-[9px] font-bold uppercase tracking-wide truncate">{label}</span>
+                </div>
+                {ui && (
+                    <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-full shrink-0 ${ui.chip}`}>
+                        {ui.label}
+                    </span>
+                )}
+            </div>
+            <p className={`mt-1.5 text-lg font-black font-mono truncate ${ui ? ui.value : 'text-white'}`} title={value}>
+                {value}
+            </p>
+            {meaning && <p className="mt-0.5 text-[10px] text-slate-400 leading-snug">{meaning}</p>}
+            <p className="mt-0.5 text-[10px] text-slate-500 truncate" title={detail}>{detail}</p>
         </div>
-        <p className="mt-1.5 text-lg font-black text-white font-mono truncate" title={value}>{value}</p>
-        <p className="mt-0.5 text-[10px] text-slate-500 truncate" title={detail}>{detail}</p>
-    </div>
-);
+    );
+};
 
 const SlowMetricRow = ({ domain, metric }: { domain: string; metric: PerformanceDurationMetric }) => (
     <tr className="border-t border-slate-800">
@@ -103,14 +161,36 @@ export const PerformanceOverview = ({
             .sort((a, b) => (b.metric.p95Ms ?? 0) - (a.metric.p95Ms ?? 0))
             .slice(0, 12);
 
+        const errorRate = requests > 0 ? errors / requests : null;
+        const cacheRate = cacheAttempts > 0 ? cacheHits / cacheAttempts : null;
+        const memoryMb = snapshot?.runtime ? snapshot.runtime.memoryMb.rss : null;
+
+        // Uma frase no lugar de cinco números soltos: quem abre a aba quer saber
+        // se precisa agir, não interpretar percentis.
+        const verdicts = [
+            gradeAscending(slowestHttp?.p95Ms, 1000, 3000),
+            gradeAscending(errorRate, 0.01, 0.05),
+            gradeAscending(memoryMb, MEMORY_LIMIT_MB * 0.75, MEMORY_LIMIT_MB * 0.9),
+            gradeAscending(snapshot?.runtime?.eventLoopDelayMs?.p95, 100, 500),
+            gradeDescending(cacheRate, 0.5, 0.2),
+        ];
+        const ruins = verdicts.filter((v) => v === 'BAD').length;
+        const atencao = verdicts.filter((v) => v === 'WATCH').length;
+        const verdictLabel = ruins > 0
+            ? `${ruins} medidor(es) fora do aceitável — o site pode estar lento ou falhando para o usuário.`
+            : atencao > 0
+                ? `${atencao} medidor(es) merecendo o olho, mas nada quebrado.`
+                : 'Tudo dentro do normal — o site está respondendo bem e o servidor tem folga.';
+
         return {
             slowestHttp,
-            errorRate: requests > 0 ? errors / requests : null,
+            errorRate,
             requests,
             errors,
-            cacheRate: cacheAttempts > 0 ? cacheHits / cacheAttempts : null,
+            cacheRate,
             cacheAttempts,
             detailRows,
+            verdictLabel,
         };
     }, [snapshot]);
 
@@ -122,8 +202,12 @@ export const PerformanceOverview = ({
                         <Gauge size={14} className="text-blue-500" />
                         Desempenho do sistema
                     </h4>
-                    <p className="text-[10px] text-slate-500 mt-1">
-                        Leitura desde o último reinício do servidor; atualiza a cada 2 minutos.
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-xl">
+                        {summary.verdictLabel}
+                    </p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                        Quanto o site demora a responder e quanto fôlego o servidor tem. Leitura desde
+                        o último reinício; atualiza a cada 2 minutos.
                     </p>
                 </div>
                 {snapshot?.enabled && (
@@ -166,34 +250,48 @@ export const PerformanceOverview = ({
                 <>
                     <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mt-4">
                         <MetricCard
-                            label="Rota mais lenta (p95)"
+                            label="Página mais lenta"
                             value={formatMs(summary.slowestHttp?.p95Ms)}
+                            meaning="Espera do usuário na tela mais pesada"
                             detail={summary.slowestHttp?.key ?? 'Aguardando tráfego'}
                             Icon={Activity}
+                            verdict={gradeAscending(summary.slowestHttp?.p95Ms, 1000, 3000)}
                         />
                         <MetricCard
-                            label="Erros HTTP"
+                            label="Requisições com erro"
                             value={summary.errorRate === null ? '—' : `${(summary.errorRate * 100).toFixed(2)}%`}
+                            meaning="Telas que falharam ao carregar"
                             detail={`${summary.errors} erro(s) em ${summary.requests} requisições`}
                             Icon={AlertTriangle}
+                            verdict={gradeAscending(summary.errorRate, 0.01, 0.05)}
                         />
                         <MetricCard
                             label="Memória do servidor"
                             value={snapshot.runtime ? `${snapshot.runtime.memoryMb.rss.toFixed(0)} MB` : '—'}
+                            meaning={`De ${MEMORY_LIMIT_MB} MB disponíveis no plano`}
                             detail={snapshot.runtime ? `Heap ${snapshot.runtime.memoryMb.heapUsed.toFixed(0)} MB` : 'Sem leitura'}
                             Icon={MemoryStick}
+                            verdict={gradeAscending(
+                                snapshot.runtime ? snapshot.runtime.memoryMb.rss : null,
+                                MEMORY_LIMIT_MB * 0.75,
+                                MEMORY_LIMIT_MB * 0.9,
+                            )}
                         />
                         <MetricCard
-                            label="Atraso interno (p95)"
+                            label="Congestionamento"
                             value={formatMs(snapshot.runtime?.eventLoopDelayMs?.p95)}
-                            detail="Fila interna do Node.js"
+                            meaning="Fila de espera dentro do servidor"
+                            detail="Alto = o servidor está engasgando"
                             Icon={Clock3}
+                            verdict={gradeAscending(snapshot.runtime?.eventLoopDelayMs?.p95, 100, 500)}
                         />
                         <MetricCard
-                            label="Acerto de cache"
+                            label="Aproveitamento de cache"
                             value={summary.cacheRate === null ? '—' : `${(summary.cacheRate * 100).toFixed(1)}%`}
+                            meaning="Respostas servidas sem ir ao banco"
                             detail={summary.cacheAttempts ? `${summary.cacheAttempts} consultas observadas` : 'Aguardando consultas'}
                             Icon={Database}
+                            verdict={gradeDescending(summary.cacheRate, 0.5, 0.2)}
                         />
                     </div>
 

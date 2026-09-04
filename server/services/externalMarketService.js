@@ -6,6 +6,7 @@ import logger from '../config/logger.js';
 import { createCircuitBreaker, withRetry } from '../utils/resilience.js'; // (I4)
 import { recordIngestionError } from './errorLogService.js';
 import { measurePerformance } from '../utils/performanceMetrics.js';
+import { trackSource } from '../utils/sourceHealth.js';
 
 // Instancia a classe com supressão de avisos
 const yahooFinance = new YahooFinance({
@@ -128,7 +129,7 @@ export const externalMarketService = {
             // derrubava blue-chips como B3SA3 e abria o circuit breaker. Accept-Language
             // pt-BR ancora o formato de preço BR. maxRedirects segue o novo 302 para
             // /finance/beta/quote/. Timeout 6s tolera o hop extra + latência do datacenter.
-            const response = await googleBreaker.exec(
+            const response = await trackSource('google.finance', () => googleBreaker.exec(
                 () => axios.get(url, {
                     headers: {
                         'User-Agent': GOOGLE_FINANCE_UA,
@@ -138,7 +139,7 @@ export const externalMarketService = {
                     timeout: 6000,
                     maxRedirects: 5,
                 }),
-            );
+            ), { isEmpty: (r) => !r?.data });
 
             const $ = cheerio.load(response.data);
             
@@ -217,10 +218,10 @@ export const externalMarketService = {
             // mortos no lote ABREM o breaker, starvando os vivos que vêm depois
             // (BPAN4/CPLE5/JPSA3 ficavam presos inativos por meses). 429/5xx/timeout
             // ainda lançam → o breaker segue protegendo contra queda real da brapi.
-            const response = await brapiBreaker.exec(() => axios.get(url, {
+            const response = await trackSource('brapi', () => brapiBreaker.exec(() => axios.get(url, {
                 timeout: 4000,
                 validateStatus: (s) => s === 200 || s === 404,
-            }));
+            })), { isEmpty: (r) => !(r?.data?.results?.length > 0) });
             
             if (response.data && response.data.results && response.data.results.length > 0) {
                 const data = response.data.results[0];
@@ -316,11 +317,11 @@ export const externalMarketService = {
             // Circuito aberto → lança e cai no catch (Protocolo de Emergência Google).
             // Sem retry em 429/crumb: é rate-limit de IP, repetir em 300ms não ajuda
             // e só soma mais uma tacada no endpoint já bloqueado.
-            const results = await measurePerformance('external', 'YAHOO quote-batch', () =>
+            const results = await measurePerformance('external', 'YAHOO quote-batch', () => trackSource('yahoo.quotes', () =>
                 yahooBreaker.exec(() => withRetry(
                     () => yahooFinance.quote(yahooTickers, {}, { validateResult: false }),
                     { retries: 1, baseDelayMs: 300, shouldRetry: (err) => !/429|crumb/i.test(err?.message || '') },
-                )));
+                ))));
             const validResults = Array.isArray(results) ? results : [results];
             
             const mappedResults = validResults.map(item => {
@@ -409,8 +410,8 @@ export const externalMarketService = {
     // Busca índices globais para Dashboard (Snapshot Instantâneo)
     async getGlobalIndices() {
         try {
-            const quotes = await measurePerformance('external', 'YAHOO global-indices', () =>
-                yahooFinance.quote(['^BVSP', '^GSPC', '^IXIC']));
+            const quotes = await measurePerformance('external', 'YAHOO global-indices', () => trackSource('yahoo.indices', () =>
+                yahooFinance.quote(['^BVSP', '^GSPC', '^IXIC'])));
             const result = {};
             const find = (s) => (Array.isArray(quotes) ? quotes : [quotes]).find(q => q.symbol === s);
             
@@ -437,7 +438,7 @@ export const externalMarketService = {
      */
     async getCurrencyQuotes() {
         try {
-            const quotes = await measurePerformance('external', 'YAHOO currencies', () => withRetry(
+            const quotes = await measurePerformance('external', 'YAHOO currencies', () => trackSource('yahoo.currencies', () => withRetry(
                 () => yahooFinance.quote(['BRL=X', 'BTC-USD'], {}, {
                     validateResult: false,
                     // Sem teto explícito, a chamada pendurava até o timeout do
@@ -453,7 +454,7 @@ export const externalMarketService = {
                 // a interromper, e reaproveitar o `yahooBreaker` do lote deixaria
                 // uma falha de câmbio abrir o circuito da sincronização inteira.
                 { retries: 1, baseDelayMs: 300, shouldRetry: (err) => !/429|crumb/i.test(err?.message || '') },
-            ));
+            )));
             const list = Array.isArray(quotes) ? quotes : [quotes];
             const find = (s) => list.find(q => q.symbol === s);
             const result = {};
@@ -664,8 +665,8 @@ export const externalMarketService = {
             // validateResult:false silencia os avisos verbosos da lib quando o Yahoo
             // devolve meta incompleto (currency null / sem regularMarketPrice) — payload
             // de quotes ainda vem íntegro e já filtramos close>0 abaixo.
-            const result = await measurePerformance('external', 'YAHOO chart-history', () =>
-                yahooFinance.chart(symbol, queryOptions, { validateResult: false }));
+            const result = await measurePerformance('external', 'YAHOO chart-history', () => trackSource('yahoo.history', () =>
+                yahooFinance.chart(symbol, queryOptions, { validateResult: false })));
 
             if (!result || !result.quotes || !Array.isArray(result.quotes)) return null;
 
