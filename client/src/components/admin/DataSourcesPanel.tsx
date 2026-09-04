@@ -24,28 +24,48 @@ import type { DataSource, SourceGroup, SourceStatus, SourceSummary } from '../..
  * conta, de relance, que a reserva está segurando o sistema.
  */
 
+/**
+ * A paleta dos cards, e por que ela é o que é.
+ *
+ * Todo estado com NOTÍCIA tem tom próprio — borda tingida, fundo lavado na mesma
+ * cor, hover que acende a borda. "Recebendo" ficava fora dessa receita: só o ponto
+ * e o rótulo eram verdes, o card em si era cinza neutro. Ao lado da reserva em
+ * azul, a fonte que está de fato sustentando o dado parecia a mais apagada da
+ * tela — exatamente o contrário do que ela é.
+ *
+ * O PESO é que separa: verde e azul são lavados (fundo /10, sem anel); amarelo e
+ * vermelho vêm com fundo mais forte e anel. Se tudo pesasse igual, a cor deixaria
+ * de fazer triagem numa grade de quinze cards — que é a razão de a grade existir.
+ *
+ * O único estado sem cor é o `UNKNOWN` agendado: a fonte que ainda não teve a vez.
+ * Ausência de notícia não é notícia, e cinza é o que diz isso. A reserva parada não
+ * cai aqui — ela tem cor própria (ver STANDBY_UI).
+ */
 const STATUS_UI: Record<SourceStatus, {
-    dot: string; text: string; label: string; card: string; Icon: React.ElementType;
+    dot: string; text: string; label: string; card: string; band: string; Icon: React.ElementType;
 }> = {
     OK: {
         dot: 'bg-emerald-500',
         text: 'text-emerald-400',
         label: 'Recebendo',
-        card: 'border-slate-800 bg-panel hover:border-slate-700',
+        card: 'border-emerald-900/50 bg-emerald-900/10 hover:border-emerald-800',
+        band: 'border-emerald-900/50 bg-emerald-900/10',
         Icon: CheckCircle2,
     },
     WARN: {
         dot: 'bg-yellow-500',
         text: 'text-yellow-400',
         label: 'Instável',
-        card: 'border-yellow-800/60 bg-yellow-900/10 ring-1 ring-yellow-900/30',
+        card: 'border-yellow-800/60 bg-yellow-900/20 ring-1 ring-yellow-900/30 hover:border-yellow-700',
+        band: 'border-yellow-900/50 bg-yellow-900/10',
         Icon: AlertTriangle,
     },
     CRITICAL: {
         dot: 'bg-red-500',
         text: 'text-red-400',
         label: 'Sem receber',
-        card: 'border-red-800/60 bg-red-900/10 ring-1 ring-red-900/40',
+        card: 'border-red-800/60 bg-red-900/20 ring-1 ring-red-900/40 hover:border-red-700',
+        band: 'border-red-900/50 bg-red-900/10',
         Icon: XCircle,
     },
     UNKNOWN: {
@@ -53,6 +73,7 @@ const STATUS_UI: Record<SourceStatus, {
         text: 'text-slate-500',
         label: 'Aguardando',
         card: 'border-slate-800/70 bg-panel/50 hover:border-slate-700',
+        band: 'border-slate-800 bg-base',
         Icon: HelpCircle,
     },
 };
@@ -75,6 +96,7 @@ const STANDBY_UI = {
     text: 'text-blue-400',
     label: 'Em espera',
     card: 'border-blue-900/50 bg-blue-900/10 hover:border-blue-800',
+    band: 'border-blue-900/50 bg-blue-900/10',
     Icon: ShieldCheck,
 };
 
@@ -276,13 +298,10 @@ const SourceDetailModal = ({ source, onClose }: { source: DataSource; onClose: (
                     </button>
                 </div>
 
-                <div className={`mt-4 rounded-xl border p-3 ${
-                    source.status === 'CRITICAL' ? 'border-red-900/50 bg-red-900/10'
-                        : source.status === 'WARN' ? 'border-yellow-900/50 bg-yellow-900/10'
-                            : isStandby(source) ? 'border-blue-900/50 bg-blue-900/10'
-                                : 'border-slate-800 bg-base'
-                }`}
-                >
+                {/* A faixa vem da MESMA paleta do card. Era um ternário paralelo, e
+                    dois lugares decidindo a cor do mesmo estado divergem — o card
+                    ficaria verde e a faixa continuaria cinza. */}
+                <div className={`mt-4 rounded-xl border p-3 ${ui.band}`}>
                     <p className={`text-[10px] font-bold uppercase tracking-wide ${ui.text}`}>{footer.label}</p>
                     <p className="text-xs text-slate-200 mt-1">{source.detail}</p>
                 </div>
