@@ -89,6 +89,7 @@ export const getDataHealth = async (req, res, next) => {
             // ("está entregando neste momento?") não sobrevive a uma hora de atraso.
             sources: sources.sources,
             sourceSummary: sources.summary,
+            sourceGroups: sources.groups,
         });
     } catch (error) { next(error); }
 };

@@ -20,91 +20,168 @@
  */
 
 /**
+ * Blocos do painel, na ordem em que aparecem.
+ *
+ * Agrupar por FUNÇÃO, e não por estado, é decisão de leitura: numa grade de 15
+ * cards a cor já faz a triagem, então reordenar por gravidade só custaria a
+ * memória de posição — o card que muda de lugar a cada carregamento não se acha
+ * de olho. Fixo, aprende-se onde cada coisa fica e o olho vai direto na cor.
+ *
+ * A ordem dos blocos segue o quanto o dado toca o que o usuário vê: preço da
+ * carteira primeiro, dado de apoio por último.
+ */
+export const SOURCE_GROUPS = [
+    { id: 'quotes', label: 'Cotações de ativos', hint: 'Preço da carteira e do ranking' },
+    { id: 'fx', label: 'Câmbio e cripto', hint: 'Converte patrimônio em dólar para reais' },
+    { id: 'rates', label: 'Indicadores econômicos', hint: 'Selic e IPCA, base de todo o ranking' },
+    { id: 'series', label: 'Histórico e índices', hint: 'Gráficos, rentabilidade e barra do topo' },
+    { id: 'reference', label: 'Renda fixa e fundamentos', hint: 'Tesouro Direto e dados das empresas' },
+];
+
+/**
  * Catálogo das fontes. `feeds` é escrito para quem NÃO conhece o sistema — é o
  * texto que vai para a tela, e a régua é: se o dono do produto não entender a
  * frase, ela está errada.
+ *
+ * Dentro de cada bloco a ordem é a da CADEIA (principal → reservas), porque essa
+ * ordem carrega informação: ver a 3ª fonte acesa enquanto a 1ª está vermelha diz,
+ * de relance, que a reserva está segurando o sistema.
  *
  * `critical: true` = sem ela, alguma parte do produto para ou serve número velho.
  * `optional: true` = a ausência de chamadas é normal (roda uma vez por dia, ou só
  * sob demanda), então silêncio não vira alarme.
  */
 export const SOURCE_CATALOG = {
+    // --- Cotações de ativos: a cadeia que precifica a carteira ---
     'yahoo.quotes': {
         label: 'Yahoo Finance — cotações',
+        short: 'Yahoo',
+        role: 'Fonte principal',
+        group: 'quotes',
         feeds: 'Preço de ações, FIIs, ETFs e cripto na carteira e no ranking',
         critical: true,
     },
-    'yahoo.indices': {
-        label: 'Yahoo Finance — índices',
-        feeds: 'Ibovespa e S&P 500 na barra do topo',
-        critical: true,
-    },
-    'yahoo.history': {
-        label: 'Yahoo Finance — histórico',
-        feeds: 'Série de fechamentos que alimenta gráficos e rentabilidade',
-        critical: true,
-    },
-    'yahoo.currencies': {
-        label: 'Yahoo Finance — câmbio',
-        feeds: 'Dólar e Bitcoin (1ª fonte)',
-        critical: false,
-    },
-    awesomeapi: {
-        label: 'AwesomeAPI',
-        feeds: 'Dólar e Bitcoin (2ª fonte)',
-        critical: false,
-    },
-    coinbase: {
-        label: 'Coinbase',
-        feeds: 'Bitcoin (3ª fonte)',
-        critical: false,
-    },
-    ptax: {
-        label: 'PTAX — Banco Central',
-        feeds: 'Dólar oficial (4ª fonte)',
-        critical: false,
-    },
-    'bcb.series': {
-        label: 'Banco Central — séries',
-        feeds: 'Selic e IPCA, que definem a taxa livre de risco de todo o ranking',
-        critical: true,
-    },
-    brasilapi: {
-        label: 'BrasilAPI',
-        feeds: 'Selic e IPCA quando o Banco Central não responde',
-        critical: false,
-    },
-    ibge: {
-        label: 'IBGE',
-        feeds: 'IPCA quando as duas fontes acima falham',
-        critical: false,
-    },
-    tesouro: {
-        label: 'Tesouro Transparente',
-        feeds: 'Preço diário dos títulos públicos (marcação a mercado da renda fixa)',
-        critical: true,
-    },
-    b3: {
-        label: 'B3 — arquivo diário',
-        feeds: 'Fechamento oficial do pregão, quando o Yahoo publica com buraco',
-        critical: false,
-        optional: true,
-    },
-    fundamentus: {
-        label: 'Fundamentus',
-        feeds: 'Indicadores fundamentalistas das empresas brasileiras',
-        critical: true,
-        optional: true,
-    },
     brapi: {
         label: 'Brapi',
+        short: 'Brapi',
+        role: 'Reserva (ativos BR)',
+        group: 'quotes',
         feeds: 'Cotação de ativos brasileiros quando o Yahoo falha',
         critical: false,
     },
     'google.finance': {
         label: 'Google Finance',
-        feeds: 'Último recurso de cotação, ativo por ativo',
+        short: 'Google',
+        role: 'Último recurso',
+        group: 'quotes',
+        feeds: 'Cotação buscada ativo por ativo, quando as duas acima falham',
         critical: false,
+    },
+    b3: {
+        label: 'B3 — arquivo diário',
+        short: 'B3',
+        role: 'Fechamento oficial',
+        group: 'quotes',
+        feeds: 'Preço de fechamento do pregão, quando o Yahoo publica com buraco',
+        critical: false,
+        optional: true,
+    },
+
+    // --- Câmbio e cripto: cadeia de 4 elos, cada um cobrindo o que faltou ---
+    'yahoo.currencies': {
+        label: 'Yahoo Finance — câmbio',
+        short: 'Yahoo',
+        role: '1ª fonte',
+        group: 'fx',
+        feeds: 'Dólar e Bitcoin',
+        critical: false,
+    },
+    awesomeapi: {
+        label: 'AwesomeAPI',
+        short: 'AwesomeAPI',
+        role: '2ª fonte',
+        group: 'fx',
+        feeds: 'Dólar e Bitcoin, quando o Yahoo não responde',
+        critical: false,
+    },
+    coinbase: {
+        label: 'Coinbase',
+        short: 'Coinbase',
+        role: '3ª fonte (só Bitcoin)',
+        group: 'fx',
+        feeds: 'Bitcoin, quando as duas primeiras falham',
+        critical: false,
+    },
+    ptax: {
+        label: 'PTAX — Banco Central',
+        short: 'PTAX',
+        role: '4ª fonte (só dólar)',
+        group: 'fx',
+        feeds: 'Dólar oficial, quando as duas primeiras falham',
+        critical: false,
+    },
+
+    // --- Indicadores econômicos ---
+    'bcb.series': {
+        label: 'Banco Central — séries',
+        short: 'Banco Central',
+        role: 'Fonte principal',
+        group: 'rates',
+        feeds: 'Selic e IPCA, que definem a taxa livre de risco de todo o ranking',
+        critical: true,
+    },
+    brasilapi: {
+        label: 'BrasilAPI',
+        short: 'BrasilAPI',
+        role: 'Reserva',
+        group: 'rates',
+        feeds: 'Selic e IPCA quando o Banco Central não responde',
+        critical: false,
+    },
+    ibge: {
+        label: 'IBGE',
+        short: 'IBGE',
+        role: 'Último recurso (só IPCA)',
+        group: 'rates',
+        feeds: 'IPCA quando as duas fontes acima falham',
+        critical: false,
+    },
+
+    // --- Histórico e índices ---
+    'yahoo.history': {
+        label: 'Yahoo Finance — histórico',
+        short: 'Yahoo histórico',
+        role: 'Série de fechamentos',
+        group: 'series',
+        feeds: 'Gráficos e cálculo de rentabilidade da carteira',
+        critical: true,
+    },
+    'yahoo.indices': {
+        label: 'Yahoo Finance — índices',
+        short: 'Yahoo índices',
+        role: 'Ibovespa e S&P 500',
+        group: 'series',
+        feeds: 'A barra de indicadores do topo do site',
+        critical: true,
+    },
+
+    // --- Renda fixa e fundamentos ---
+    tesouro: {
+        label: 'Tesouro Transparente',
+        short: 'Tesouro',
+        role: 'Preço diário oficial',
+        group: 'reference',
+        feeds: 'Marcação a mercado dos títulos públicos na carteira',
+        critical: true,
+    },
+    fundamentus: {
+        label: 'Fundamentus',
+        short: 'Fundamentus',
+        role: 'Raspagem diária',
+        group: 'reference',
+        feeds: 'Indicadores fundamentalistas das empresas brasileiras',
+        critical: true,
+        optional: true,
     },
 };
 
@@ -160,6 +237,9 @@ export const getSourceStats = () => Object.entries(SOURCE_CATALOG).map(([id, met
     return {
         id,
         label: meta.label,
+        short: meta.short,
+        role: meta.role,
+        group: meta.group,
         feeds: meta.feeds,
         critical: !!meta.critical,
         optional: !!meta.optional,

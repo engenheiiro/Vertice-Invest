@@ -36,7 +36,7 @@ import {
     PLAUSIBILITY_RANGES,
     buildHealthReport,
 } from '../utils/dataHealthRules.js';
-import { getSourceStats } from '../utils/sourceHealth.js';
+import { getSourceStats, SOURCE_GROUPS } from '../utils/sourceHealth.js';
 import { buildSourceStatuses, summarizeSources } from '../utils/dataSourceStatus.js';
 
 const THRESHOLD_KEY = 'DATA_HEALTH_THRESHOLDS';
@@ -492,7 +492,9 @@ export const getLiveSourceStatuses = async () => {
     };
 
     const sources = buildSourceStatuses(facts, getSourceStats());
-    return { sources, summary: summarizeSources(sources) };
+    // Os blocos vão junto: a ordem de leitura do painel é decisão de produto e
+    // mora aqui, no catálogo, não espalhada na tela.
+    return { sources, summary: summarizeSources(sources), groups: SOURCE_GROUPS };
 };
 
 export const getLatestHealthReport = async () =>

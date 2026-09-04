@@ -365,7 +365,11 @@ export const AdminSaudeTab = () => {
 
             {/* Fontes ANTES dos sintomas: quando algo está errado, a primeira
                 pergunta é de onde o dado deveria ter vindo. */}
-            <DataSourcesPanel sources={data?.sources ?? []} summary={data?.sourceSummary} />
+            <DataSourcesPanel
+                sources={data?.sources ?? []}
+                summary={data?.sourceSummary}
+                groups={data?.sourceGroups}
+            />
 
             <PerformanceOverview />
 

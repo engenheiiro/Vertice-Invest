@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import {
-    AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, HelpCircle, Radio, XCircle,
+    AlertTriangle, CheckCircle2, HelpCircle, Radio, X, XCircle,
 } from 'lucide-react';
-import type { DataSource, SourceStatus, SourceSummary } from '../../services/health';
+import type { DataSource, SourceGroup, SourceStatus, SourceSummary } from '../../services/health';
 
 /**
  * "De onde vêm os dados" — a pergunta que o painel não respondia.
@@ -14,102 +14,161 @@ import type { DataSource, SourceStatus, SourceSummary } from '../../services/hea
  * cotações e índices normalmente no mesmo minuto —, não havia como ver isso sem
  * abrir o banco.
  *
- * A régua de escrita aqui é uma só: quem não conhece o sistema tem que entender a
- * linha. Nome da fonte, o que ela alimenta, e uma frase de estado. Número de
- * chamada e mensagem de erro ficam atrás do clique.
+ * Layout em GRADE, agrupado por função. Quinze linhas empilhadas viravam uma
+ * lista que ninguém varre até o fim; em cards, o bloco inteiro cabe num olhar e
+ * a cor faz a triagem. Por isso a ordem é FIXA (função, e dentro dela a ordem da
+ * cadeia) em vez de ordenada por gravidade: card que muda de lugar a cada
+ * carregamento não se acha de memória, e a cor já resolve o "onde olhar". A
+ * ordem da cadeia ainda carrega informação — a 3ª fonte acesa com a 1ª vermelha
+ * conta, de relance, que a reserva está segurando o sistema.
  */
 
 const STATUS_UI: Record<SourceStatus, {
-    dot: string; text: string; label: string; Icon: React.ElementType;
+    dot: string; text: string; label: string; card: string; Icon: React.ElementType;
 }> = {
-    OK: { dot: 'bg-emerald-500', text: 'text-emerald-400', label: 'Recebendo', Icon: CheckCircle2 },
-    WARN: { dot: 'bg-yellow-500', text: 'text-yellow-400', label: 'Instável', Icon: AlertTriangle },
-    CRITICAL: { dot: 'bg-red-500', text: 'text-red-400', label: 'Sem receber', Icon: XCircle },
-    UNKNOWN: { dot: 'bg-slate-600', text: 'text-slate-500', label: 'Sem uso ainda', Icon: HelpCircle },
+    OK: {
+        dot: 'bg-emerald-500',
+        text: 'text-emerald-400',
+        label: 'Recebendo',
+        card: 'border-slate-800 bg-panel hover:border-slate-700',
+        Icon: CheckCircle2,
+    },
+    WARN: {
+        dot: 'bg-yellow-500',
+        text: 'text-yellow-400',
+        label: 'Instável',
+        card: 'border-yellow-800/60 bg-yellow-900/10 ring-1 ring-yellow-900/30',
+        Icon: AlertTriangle,
+    },
+    CRITICAL: {
+        dot: 'bg-red-500',
+        text: 'text-red-400',
+        label: 'Sem receber',
+        card: 'border-red-800/60 bg-red-900/10 ring-1 ring-red-900/40',
+        Icon: XCircle,
+    },
+    UNKNOWN: {
+        dot: 'bg-slate-600',
+        text: 'text-slate-500',
+        label: 'Sem uso',
+        card: 'border-slate-800/70 bg-panel/50 hover:border-slate-700',
+        Icon: HelpCircle,
+    },
 };
-
-const ORDER: Record<SourceStatus, number> = { CRITICAL: 0, WARN: 1, OK: 2, UNKNOWN: 3 };
 
 const sinceLabel = (hours: number | null) => {
-    if (hours === null) return 'sem registro';
+    if (hours === null) return '—';
     if (hours < 0.02) return 'agora';
-    if (hours < 1) return `há ${Math.max(1, Math.round(hours * 60))} min`;
-    if (hours < 48) return `há ${Math.round(hours)}h`;
-    return `há ${Math.round(hours / 24)} dias`;
+    if (hours < 1) return `${Math.max(1, Math.round(hours * 60))} min`;
+    if (hours < 48) return `${Math.round(hours)}h`;
+    return `${Math.round(hours / 24)}d`;
 };
 
-const SourceRow = ({ source }: { source: DataSource }) => {
-    const [open, setOpen] = useState(false);
+const SourceCard = ({
+    source, selected, onSelect,
+}: {
+    source: DataSource;
+    selected: boolean;
+    onSelect: () => void;
+}) => {
     const ui = STATUS_UI[source.status];
-    const temDetalhe = source.attempts > 0 || !!source.lastError;
-
     return (
-        <div className={`rounded-xl border ${source.status === 'OK' || source.status === 'UNKNOWN'
-            ? 'border-slate-800 bg-panel'
-            : source.status === 'CRITICAL' ? 'border-red-900/40 bg-red-900/10' : 'border-yellow-900/40 bg-yellow-900/10'}`}
+        <button
+            type="button"
+            onClick={onSelect}
+            aria-pressed={selected}
+            className={`text-left p-2.5 rounded-xl border transition-colors min-w-0 ${ui.card} ${
+                selected ? 'outline outline-1 outline-blue-500/60' : ''
+            }`}
         >
-            <button
-                type="button"
-                onClick={() => temDetalhe && setOpen((v) => !v)}
-                className={`w-full flex items-center gap-3 p-3 text-left ${temDetalhe ? 'hover:bg-elevated/40' : 'cursor-default'} transition-colors rounded-xl`}
-                aria-expanded={open}
-            >
-                <span className={`w-2 h-2 rounded-full shrink-0 ${ui.dot} ${source.status === 'OK' ? 'animate-pulse' : ''}`} />
-                <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ui.dot} ${source.status === 'OK' ? 'animate-pulse' : ''}`} />
+                <span className="text-[11px] font-bold text-white truncate">{source.short ?? source.label}</span>
+            </div>
+            <p className="text-[9px] text-slate-500 mt-0.5 truncate" title={source.role}>{source.role}</p>
+            <div className="flex items-baseline justify-between gap-1 mt-1.5">
+                <span className={`text-[9px] font-bold uppercase tracking-wide ${ui.text} truncate`}>
+                    {ui.label}
+                </span>
+                <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                    {sinceLabel(source.lastDeliveryHours)}
+                </span>
+            </div>
+        </button>
+    );
+};
+
+/** Detalhe da fonte escolhida. Fora da grade: dentro do card ele quebraria o alinhamento. */
+const SourceDetail = ({ source, onClose }: { source: DataSource; onClose: () => void }) => {
+    const ui = STATUS_UI[source.status];
+    return (
+        <div className="mt-3 rounded-xl border border-slate-700 bg-elevated/60 p-3">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
+                        <ui.Icon size={13} className={ui.text} />
                         <span className="text-xs font-bold text-white">{source.label}</span>
                         {source.critical && (
-                            <span className="text-[9px] font-bold uppercase text-slate-500 bg-elevated px-1.5 py-0.5 rounded">
+                            <span className="text-[9px] font-bold uppercase text-slate-500 bg-base px-1.5 py-0.5 rounded">
                                 essencial
                             </span>
                         )}
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{source.feeds}</p>
-                </div>
-                <div className="text-right shrink-0">
-                    <p className={`text-[11px] font-bold ${ui.text}`}>{ui.label}</p>
-                    <p className="text-[10px] text-slate-500">{sinceLabel(source.lastDeliveryHours)}</p>
-                </div>
-                {temDetalhe && (open
-                    ? <ChevronDown size={13} className="text-slate-600 shrink-0" />
-                    : <ChevronRight size={13} className="text-slate-600 shrink-0" />)}
-            </button>
-
-            {open && (
-                <div className="px-3 pb-3 pl-8 space-y-1">
-                    <p className="text-[11px] text-slate-400">{source.detail}</p>
+                    <p className="text-[11px] text-slate-400 mt-1">{source.feeds}</p>
+                    <p className="text-[11px] text-slate-300 mt-1.5">{source.detail}</p>
                     {source.lastError && (
-                        <p className="text-[10px] text-slate-500">
+                        <p className="text-[10px] text-slate-500 mt-1">
                             Último erro: <span className="font-mono text-slate-400">{source.lastError}</span>
                         </p>
                     )}
-                    <p className="text-[10px] text-slate-600">
-                        Contagem desde o último reinício do servidor.
+                    <p className="text-[10px] text-slate-600 mt-1">
+                        Contagem de chamadas desde o último reinício do servidor.
                     </p>
                 </div>
-            )}
+                <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Fechar detalhe"
+                    className="text-slate-500 hover:text-white transition-colors shrink-0"
+                >
+                    <X size={14} />
+                </button>
+            </div>
         </div>
     );
 };
 
 export const DataSourcesPanel = ({
-    sources, summary,
+    sources, summary, groups,
 }: {
     sources: DataSource[];
     summary?: SourceSummary;
+    groups?: SourceGroup[];
 }) => {
-    const [showAll, setShowAll] = useState(false);
+    const [selectedId, setSelectedId] = useState<string | null>(null);
 
-    const { problemas, resto } = useMemo(() => {
-        const ordenadas = [...sources].sort((a, b) => ORDER[a.status] - ORDER[b.status]);
-        return {
-            problemas: ordenadas.filter((s) => s.status === 'CRITICAL' || s.status === 'WARN'),
-            resto: ordenadas.filter((s) => s.status === 'OK' || s.status === 'UNKNOWN'),
-        };
-    }, [sources]);
+    // Agrupa preservando a ordem que o servidor mandou — dentro de cada bloco, a
+    // ordem do catálogo É a ordem da cadeia de fallback.
+    const blocos = useMemo(() => {
+        const lista = groups?.length
+            ? groups
+            : [{ id: '__all', label: 'Fontes', hint: '' }];
+        return lista
+            .map((g) => ({
+                ...g,
+                itens: sources.filter((s) => (g.id === '__all' ? true : s.group === g.id)),
+            }))
+            .filter((g) => g.itens.length > 0);
+    }, [sources, groups]);
+
+    const selected = useMemo(
+        () => sources.find((s) => s.id === selectedId) ?? null,
+        [sources, selectedId],
+    );
 
     if (!sources.length) return null;
 
+    const problemas = summary?.degradedLabels ?? [];
     const tudoBem = problemas.length === 0;
 
     return (
@@ -120,10 +179,10 @@ export const DataSourcesPanel = ({
                         <Radio size={14} className="text-blue-500" />
                         De onde vêm os dados
                     </h4>
-                    <p className="text-[11px] text-slate-400 mt-1 max-w-xl">
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-2xl">
                         {tudoBem
-                            ? `As ${summary?.ok ?? sources.length} fontes em uso estão entregando normalmente.`
-                            : `${problemas.length} fonte(s) com problema: ${problemas.map((p) => p.label).join(', ')}.`}
+                            ? 'Todas as fontes em uso estão entregando normalmente. Clique num card para ver os detalhes.'
+                            : `${problemas.length} fonte(s) com problema: ${problemas.join(', ')}.`}
                     </p>
                 </div>
                 <span className={`text-[9px] font-bold uppercase px-2 py-1 rounded-full whitespace-nowrap border ${
@@ -136,29 +195,30 @@ export const DataSourcesPanel = ({
                 </span>
             </div>
 
-            {/* Quem está com problema aparece SEMPRE aberto; o resto fica recolhido.
-                Um painel que mostra quinze linhas verdes com o mesmo destaque é um
-                painel em que a linha vermelha se perde. */}
-            {problemas.length > 0 && (
-                <div className="space-y-2 mt-4">
-                    {problemas.map((s) => <SourceRow key={s.id} source={s} />)}
-                </div>
-            )}
+            <div className="mt-4 space-y-4">
+                {blocos.map((bloco) => (
+                    <div key={bloco.id}>
+                        <div className="flex items-baseline gap-2 mb-2 flex-wrap">
+                            <h5 className="text-[10px] font-black text-slate-300 uppercase tracking-wide">
+                                {bloco.label}
+                            </h5>
+                            {bloco.hint && <span className="text-[10px] text-slate-500">· {bloco.hint}</span>}
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+                            {bloco.itens.map((s) => (
+                                <SourceCard
+                                    key={s.id}
+                                    source={s}
+                                    selected={selectedId === s.id}
+                                    onSelect={() => setSelectedId((cur) => (cur === s.id ? null : s.id))}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
 
-            <button
-                type="button"
-                onClick={() => setShowAll((v) => !v)}
-                className="mt-3 text-[10px] font-bold text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
-            >
-                {showAll ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                {showAll ? 'Ocultar as demais' : `Ver as outras ${resto.length} fontes`}
-            </button>
-
-            {showAll && (
-                <div className="space-y-2 mt-3">
-                    {resto.map((s) => <SourceRow key={s.id} source={s} />)}
-                </div>
-            )}
+            {selected && <SourceDetail source={selected} onClose={() => setSelectedId(null)} />}
         </section>
     );
 };

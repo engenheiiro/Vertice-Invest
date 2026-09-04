@@ -127,6 +127,9 @@ export const buildSourceStatuses = (facts, sourceStats = []) => {
         return {
             id: source.id,
             label: source.label,
+            short: source.short,
+            role: source.role,
+            group: source.group,
             feeds: source.feeds,
             critical: source.critical,
             status,

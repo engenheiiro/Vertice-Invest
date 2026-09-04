@@ -56,9 +56,22 @@ export interface JobStatus {
  */
 export type SourceStatus = 'OK' | 'WARN' | 'CRITICAL' | 'UNKNOWN';
 
+/** Bloco do painel de fontes. A ordem vem do servidor — é decisão de produto. */
+export interface SourceGroup {
+    id: string;
+    label: string;
+    hint: string;
+}
+
 export interface DataSource {
     id: string;
     label: string;
+    /** Nome curto para o card; o `label` completo aparece no detalhe. */
+    short?: string;
+    /** Posição na cadeia: 'Fonte principal', '3ª fonte (só Bitcoin)', 'Reserva'… */
+    role?: string;
+    /** Bloco a que pertence — casa com `SourceGroup.id`. */
+    group?: string;
     /** O que ela alimenta, em português de gente. Vai direto para a tela. */
     feeds: string;
     critical: boolean;
@@ -88,6 +101,7 @@ export interface DataHealthResponse {
     jobs: JobStatus[];
     sources?: DataSource[];
     sourceSummary?: SourceSummary;
+    sourceGroups?: SourceGroup[];
 }
 
 export interface BackendError {
