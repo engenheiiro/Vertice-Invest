@@ -117,3 +117,6 @@ backup_*/
 
 # Patches de rollback gerados localmente (nao versionados)
 .revert/
+
+# Scripts temporários de diagnóstico (nunca versionados)
+server/_tmp_*.mjs
