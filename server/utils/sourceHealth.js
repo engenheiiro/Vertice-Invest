@@ -53,6 +53,11 @@ export const SOURCE_GROUPS = [
  * o da fonte agendada que ainda não teve a vez ("volta em 7 min") e o da fonte de
  * reserva, que só é chamada quando a anterior falha — nesta, cinza é boa notícia.
  * Os horários espelham `schedulerService.js`; mudar o cron lá pede mudar aqui.
+ *
+ * `chain` marca as fontes que REALMENTE se cobrem, e não coincide com `group`:
+ * 'series' e 'reference' agrupam responsabilidades independentes (o Fundamentus
+ * não substitui o Tesouro), então ali não há cadeia. Fonte sem `chain` é ponto
+ * único de falha — e dizer isso na tela é metade do valor do painel.
  */
 export const SOURCE_CATALOG = {
     // --- Cotações de ativos: a cadeia que precifica a carteira ---
@@ -63,6 +68,7 @@ export const SOURCE_CATALOG = {
         group: 'quotes',
         feeds: 'Preço de ações, FIIs, ETFs e cripto na carteira e no ranking',
         schedule: { kind: 'minutes', at: [0, 15, 30, 45] },
+        chain: 'quotes',
         critical: true,
     },
     brapi: {
@@ -72,6 +78,7 @@ export const SOURCE_CATALOG = {
         group: 'quotes',
         feeds: 'Cotação de ativos brasileiros quando o Yahoo falha',
         schedule: { kind: 'onFailure' },
+        chain: 'quotes',
         critical: false,
     },
     'google.finance': {
@@ -81,6 +88,7 @@ export const SOURCE_CATALOG = {
         group: 'quotes',
         feeds: 'Cotação buscada ativo por ativo, quando as duas acima falham',
         schedule: { kind: 'onFailure' },
+        chain: 'quotes',
         critical: false,
     },
     b3: {
@@ -101,6 +109,7 @@ export const SOURCE_CATALOG = {
         group: 'fx',
         feeds: 'Dólar e Bitcoin',
         schedule: { kind: 'minutes', at: [5, 20, 35, 50] },
+        chain: 'fx',
         critical: false,
     },
     awesomeapi: {
@@ -110,6 +119,7 @@ export const SOURCE_CATALOG = {
         group: 'fx',
         feeds: 'Dólar e Bitcoin, quando o Yahoo não responde',
         schedule: { kind: 'onFailure' },
+        chain: 'fx',
         critical: false,
     },
     coinbase: {
@@ -119,6 +129,7 @@ export const SOURCE_CATALOG = {
         group: 'fx',
         feeds: 'Bitcoin, quando as duas primeiras falham',
         schedule: { kind: 'onFailure' },
+        chain: 'fx',
         critical: false,
     },
     ptax: {
@@ -128,6 +139,7 @@ export const SOURCE_CATALOG = {
         group: 'fx',
         feeds: 'Dólar oficial, quando as duas primeiras falham',
         schedule: { kind: 'onFailure' },
+        chain: 'fx',
         critical: false,
     },
 
@@ -139,6 +151,7 @@ export const SOURCE_CATALOG = {
         group: 'rates',
         feeds: 'Selic e IPCA, que definem a taxa livre de risco de todo o ranking',
         schedule: { kind: 'minutes', at: [5, 20, 35, 50] },
+        chain: 'rates',
         critical: true,
     },
     brasilapi: {
@@ -148,6 +161,7 @@ export const SOURCE_CATALOG = {
         group: 'rates',
         feeds: 'Selic e IPCA quando o Banco Central não responde',
         schedule: { kind: 'onFailure' },
+        chain: 'rates',
         critical: false,
     },
     ibge: {
@@ -157,6 +171,7 @@ export const SOURCE_CATALOG = {
         group: 'rates',
         feeds: 'IPCA quando as duas fontes acima falham',
         schedule: { kind: 'onFailure' },
+        chain: 'rates',
         critical: false,
     },
 
@@ -258,6 +273,7 @@ export const getSourceStats = () => Object.entries(SOURCE_CATALOG).map(([id, met
         group: meta.group,
         feeds: meta.feeds,
         schedule: meta.schedule || null,
+        chain: meta.chain || null,
         critical: !!meta.critical,
         attempts,
         ok: stat.ok,

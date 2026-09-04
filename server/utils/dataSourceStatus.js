@@ -82,9 +82,44 @@ const deliveryFacts = (facts) => {
  * @param {Array} sourceStats saída de `getSourceStats()`
  * @returns {Array} uma linha por fonte, pronta para a tela
  */
+/**
+ * Quem cobre quem, dentro de cada cadeia.
+ *
+ * É a informação que faltava para responder a pergunta seguinte à do painel:
+ * "essa fonte caiu — e agora?". Devolve, para cada id: as fontes que entram
+ * DEPOIS dela (na ordem em que serão tentadas) e a principal que ela cobre.
+ *
+ * Fonte sem `chain` fica com as duas listas vazias, e isso é informação de
+ * primeira ordem: significa PONTO ÚNICO DE FALHA. Tesouro, Fundamentus e o
+ * histórico do Yahoo estão nessa condição hoje — se caírem, não há reserva, e o
+ * painel precisa dizer isso em vez de deixar o silêncio parecer cobertura.
+ */
+export const buildChainMap = (sourceStats = []) => {
+    const porCadeia = new Map();
+    for (const s of sourceStats) {
+        if (!s.chain) continue;
+        if (!porCadeia.has(s.chain)) porCadeia.set(s.chain, []);
+        porCadeia.get(s.chain).push(s);
+    }
+
+    const mapa = new Map();
+    for (const membros of porCadeia.values()) {
+        // A ordem do catálogo É a ordem de tentativa — ver SOURCE_CATALOG.
+        const principal = membros.find((m) => m.schedule?.kind !== 'onFailure') || membros[0];
+        membros.forEach((m, i) => {
+            mapa.set(m.id, {
+                backups: membros.slice(i + 1).map((b) => b.label),
+                covers: m.id === principal?.id ? null : (principal?.label ?? null),
+            });
+        });
+    }
+    return mapa;
+};
+
 export const buildSourceStatuses = (facts, sourceStats = []) => {
     const now = facts?.now || new Date();
     const delivery = deliveryFacts(facts || {});
+    const cadeia = buildChainMap(sourceStats);
 
     return sourceStats.map((source) => {
         const lastDeliveryAt = delivery[source.id] || source.lastOkAt || null;
@@ -155,14 +190,22 @@ export const buildSourceStatuses = (facts, sourceStats = []) => {
             cadence: cadenceLabel(source.schedule),
             /** Frase do próximo disparo; `null` para fonte de reserva (não tem hora). */
             nextRun: nextRunLabel(source.schedule, now),
+            /** Fontes que assumem se esta falhar, na ordem de tentativa. Vazio = ponto único de falha. */
+            backups: cadeia.get(source.id)?.backups ?? [],
+            /** A fonte principal que esta cobre; `null` se ela própria for a principal. */
+            covers: cadeia.get(source.id)?.covers ?? null,
             status,
             detail,
             lastDeliveryAt,
             lastDeliveryHours: idade === null ? null : Math.round(idade * 10) / 10,
+            // Contagem aberta: a frase de `detail` resume, mas o detalhe da fonte
+            // mostra os três números, que é o que permite julgar sozinho.
             attempts: source.attempts,
+            ok: source.ok,
             failures: source.failures,
             failureRate: rate,
             lastError: source.lastError,
+            lastOkAt: source.lastOkAt,
             lastFailAt: source.lastFailAt,
         };
     });

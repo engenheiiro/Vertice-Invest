@@ -208,6 +208,45 @@ describe('buildSourceStatuses — veredito por fonte', () => {
     });
 });
 
+// "Essa fonte caiu — e agora?" é a pergunta seguinte à do painel, e a resposta
+// não estava em lugar nenhum.
+describe('cadeia de cobertura', () => {
+    beforeEach(() => resetSourceStats());
+
+    it('a principal lista quem assume, na ordem de tentativa', () => {
+        const yahoo = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'yahoo.currencies');
+        expect(yahoo.covers).toBeNull();
+        expect(yahoo.backups).toEqual(['AwesomeAPI', 'Coinbase', 'PTAX — Banco Central']);
+    });
+
+    it('a reserva diz quem ela cobre e quem vem depois dela', () => {
+        const coinbase = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'coinbase');
+        expect(coinbase.covers).toBe('Yahoo Finance — câmbio');
+        expect(coinbase.backups).toEqual(['PTAX — Banco Central']);
+    });
+
+    it('a última da cadeia não tem mais ninguém atrás', () => {
+        const ptax = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'ptax');
+        expect(ptax.backups).toEqual([]);
+        expect(ptax.covers).toBe('Yahoo Finance — câmbio');
+    });
+
+    // O que mais importa saber: onde NÃO há rede de proteção. Bloco não é cadeia —
+    // o Fundamentus não substitui o Tesouro só por estarem no mesmo agrupamento.
+    it('fonte sem cadeia é ponto único de falha, e isso fica explícito', () => {
+        const rows = buildSourceStatuses(factsBase(), getSourceStats());
+        for (const id of ['tesouro', 'fundamentus', 'yahoo.history']) {
+            expect(byId(rows, id).backups).toEqual([]);
+            expect(byId(rows, id).covers).toBeNull();
+        }
+    });
+
+    it('cadeias diferentes não se misturam', () => {
+        const bcb = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'bcb.series');
+        expect(bcb.backups).toEqual(['BrasilAPI', 'IBGE']);
+    });
+});
+
 describe('summarizeSources — a frase do topo', () => {
     beforeEach(() => resetSourceStats());
 

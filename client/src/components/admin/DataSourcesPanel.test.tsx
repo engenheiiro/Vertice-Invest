@@ -84,6 +84,53 @@ describe('DataSourcesPanel', () => {
         expect(screen.getByText('Atenção')).toBeInTheDocument();
     });
 
+    // A pergunta seguinte à do painel: "caiu — e agora?". Antes não tinha resposta.
+    it('o detalhe diz quem assume se a fonte falhar', () => {
+        render(<DataSourcesPanel
+            sources={[src({
+                id: 'a', short: 'Yahoo', label: 'Yahoo Finance — câmbio',
+                backups: ['AwesomeAPI', 'Coinbase', 'PTAX — Banco Central'], covers: null,
+            })]}
+            groups={groups}
+        />);
+        fireEvent.click(screen.getByRole('button', { name: /Yahoo/ }));
+        expect(screen.getByText(/AwesomeAPI → Coinbase → PTAX/)).toBeInTheDocument();
+    });
+
+    it('a reserva diz de quem ela é reserva', () => {
+        render(<DataSourcesPanel
+            sources={[src({
+                id: 'a', short: 'Coinbase', label: 'Coinbase',
+                backups: ['PTAX — Banco Central'], covers: 'Yahoo Finance — câmbio',
+            })]}
+            groups={groups}
+        />);
+        fireEvent.click(screen.getByRole('button', { name: /Coinbase/ }));
+        expect(screen.getByText(/Yahoo Finance — câmbio/)).toBeInTheDocument();
+    });
+
+    // O aviso mais valioso do modal: onde NÃO há rede de proteção.
+    it('fonte sem reserva avisa que é ponto único de falha', () => {
+        render(<DataSourcesPanel
+            sources={[src({ id: 'a', short: 'Tesouro', label: 'Tesouro Transparente', backups: [], covers: null })]}
+            groups={groups}
+        />);
+        fireEvent.click(screen.getByRole('button', { name: /Tesouro/ }));
+        expect(screen.getByText(/Não há fonte alternativa/)).toBeInTheDocument();
+    });
+
+    it('o modal fecha no Esc e no clique fora', () => {
+        render(<DataSourcesPanel
+            sources={[src({ id: 'a', short: 'Yahoo', label: 'Yahoo Finance — cotações' })]}
+            groups={groups}
+        />);
+        fireEvent.click(screen.getByRole('button', { name: /Yahoo/ }));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
     it('o detalhe abre ao clicar no card e fecha ao clicar de novo', () => {
         render(<DataSourcesPanel
             sources={[src({

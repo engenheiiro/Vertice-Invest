@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
-    AlertTriangle, CheckCircle2, HelpCircle, Radio, X, XCircle,
+    AlertTriangle, CheckCircle2, HelpCircle, Radio, ShieldCheck, X, XCircle,
 } from 'lucide-react';
 import type { DataSource, SourceGroup, SourceStatus, SourceSummary } from '../../services/health';
 
@@ -119,49 +120,161 @@ const SourceCard = ({
     );
 };
 
-/** Detalhe da fonte escolhida. Fora da grade: dentro do card ele quebraria o alinhamento. */
-const SourceDetail = ({ source, onClose }: { source: DataSource; onClose: () => void }) => {
+/** Data e hora absolutas, no fuso de quem lê. Relativo sozinho ("há 3h") perde o dia. */
+const absoluteTime = (iso: string | null | undefined) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return null;
+    return d.toLocaleString('pt-BR', {
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    });
+};
+
+const Linha = ({ rotulo, children }: { rotulo: string; children: React.ReactNode }) => (
+    <div className="flex items-baseline gap-2 flex-wrap">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500 shrink-0">{rotulo}</span>
+        <span className="text-[11px] text-slate-300 min-w-0">{children}</span>
+    </div>
+);
+
+/**
+ * Detalhe da fonte, em modal.
+ *
+ * Em janela, e não numa faixa embaixo da grade, porque o conteúdo cresceu além do
+ * que cabe sem empurrar os cards para fora da tela — e porque a leitura aqui é um
+ * desvio do fluxo: você abre para investigar uma fonte, não para comparar quinze.
+ *
+ * A informação que faltava e que mais importa é a última seção: **quem cobre se
+ * esta cair**. Sem ela, o painel dizia que a fonte quebrou e deixava a pergunta
+ * seguinte sem resposta. E quando não há ninguém atrás, dizer isso em voz alta é
+ * mais valioso ainda: é o mapa dos pontos únicos de falha do sistema.
+ */
+const SourceDetailModal = ({ source, onClose }: { source: DataSource; onClose: () => void }) => {
     const ui = STATUS_UI[source.status];
-    return (
-        <div className="mt-3 rounded-xl border border-slate-700 bg-elevated/60 p-3">
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <ui.Icon size={13} className={ui.text} />
-                        <span className="text-xs font-bold text-white">{source.label}</span>
-                        {source.critical && (
-                            <span className="text-[9px] font-bold uppercase text-slate-500 bg-base px-1.5 py-0.5 rounded">
-                                essencial
-                            </span>
-                        )}
+    const footer = footerInfo(source);
+    const entrega = absoluteTime(source.lastDeliveryAt);
+    const falha = absoluteTime(source.lastFailAt);
+    const semReserva = (source.backups?.length ?? 0) === 0 && !source.covers;
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    return createPortal(
+        <div
+            className="fixed inset-0 z-[100] backdrop-blur-md bg-black/95 flex items-center justify-center p-4"
+            onClick={onClose}
+            role="presentation"
+        >
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-label={`Detalhes da fonte ${source.label}`}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-lg bg-panel border border-slate-700 rounded-2xl p-5 max-h-[85vh] overflow-y-auto"
+            >
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <ui.Icon size={16} className={ui.text} />
+                            <h3 className="text-sm font-black text-white">{source.label}</h3>
+                            {source.critical && (
+                                <span className="text-[9px] font-bold uppercase text-slate-400 bg-elevated px-1.5 py-0.5 rounded">
+                                    essencial
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">{source.role}</p>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">{source.feeds}</p>
-                    {source.cadence && (
-                        <p className="text-[11px] text-slate-400 mt-1">
-                            <span className="text-slate-500">Quando roda:</span> {source.cadence}
-                            {source.nextRun && <span className="text-slate-500"> · próxima {source.nextRun}</span>}
-                        </p>
-                    )}
-                    <p className="text-[11px] text-slate-300 mt-1.5">{source.detail}</p>
-                    {source.lastError && (
-                        <p className="text-[10px] text-slate-500 mt-1">
-                            Último erro: <span className="font-mono text-slate-400">{source.lastError}</span>
-                        </p>
-                    )}
-                    <p className="text-[10px] text-slate-600 mt-1">
-                        Contagem de chamadas desde o último reinício do servidor.
-                    </p>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Fechar"
+                        className="text-slate-500 hover:text-white transition-colors shrink-0"
+                    >
+                        <X size={16} />
+                    </button>
                 </div>
-                <button
-                    type="button"
-                    onClick={onClose}
-                    aria-label="Fechar detalhe"
-                    className="text-slate-500 hover:text-white transition-colors shrink-0"
+
+                <div className={`mt-4 rounded-xl border p-3 ${
+                    source.status === 'CRITICAL' ? 'border-red-900/50 bg-red-900/10'
+                        : source.status === 'WARN' ? 'border-yellow-900/50 bg-yellow-900/10'
+                            : 'border-slate-800 bg-base'
+                }`}
                 >
-                    <X size={14} />
-                </button>
+                    <p className={`text-[10px] font-bold uppercase tracking-wide ${ui.text}`}>{footer.label}</p>
+                    <p className="text-xs text-slate-200 mt-1">{source.detail}</p>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                    <Linha rotulo="Alimenta">{source.feeds}</Linha>
+                    {source.cadence && (
+                        <Linha rotulo="Quando roda">
+                            {source.cadence}
+                            {source.nextRun && <span className="text-slate-500"> · próxima {source.nextRun}</span>}
+                        </Linha>
+                    )}
+                    <Linha rotulo="Última entrega">
+                        {entrega ? <>{entrega} <span className="text-slate-500">({sinceLabel(source.lastDeliveryHours)})</span></> : 'sem registro'}
+                    </Linha>
+                    {(source.attempts ?? 0) > 0 && (
+                        <Linha rotulo="Chamadas">
+                            {source.attempts} desde o reinício · {source.ok ?? 0} com dado · {source.failures} sem
+                        </Linha>
+                    )}
+                    {/* Ancorado no ERRO, não na data: o registro sempre grava os dois
+                        juntos, mas se um dia faltar o carimbo, a mensagem ainda é o
+                        que resolve o problema — esconder por falta do relógio seria
+                        perder a única pista. */}
+                    {(source.lastError || falha) && (
+                        <Linha rotulo="Última falha">
+                            {falha ?? 'sem data'}
+                            {source.lastError && <span className="text-slate-500"> — <span className="font-mono">{source.lastError}</span></span>}
+                        </Linha>
+                    )}
+                </div>
+
+                {/* A pergunta seguinte à do painel: caiu, e agora? */}
+                <div className="mt-4 pt-3 border-t border-slate-800">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                        <ShieldCheck size={11} />
+                        Se esta fonte falhar
+                    </p>
+                    {semReserva ? (
+                        <p className="text-[11px] text-yellow-400/90 mt-1.5">
+                            Não há fonte alternativa. Se ela parar, o dado que ela alimenta deixa de ser
+                            atualizado até a fonte voltar.
+                        </p>
+                    ) : (
+                        <div className="mt-1.5 space-y-1">
+                            {source.covers && (
+                                <p className="text-[11px] text-slate-400">
+                                    Esta é reserva de <span className="text-slate-200">{source.covers}</span>.
+                                </p>
+                            )}
+                            {(source.backups?.length ?? 0) > 0 ? (
+                                <p className="text-[11px] text-slate-300">
+                                    Assumem, nesta ordem:{' '}
+                                    <span className="text-slate-200">{source.backups?.join(' → ')}</span>
+                                </p>
+                            ) : (
+                                <p className="text-[11px] text-yellow-400/90">
+                                    É a última da cadeia — depois dela não há mais ninguém.
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <p className="text-[10px] text-slate-600 mt-4">
+                    A contagem de chamadas zera a cada reinício do servidor; a data de entrega vem do banco
+                    e sobrevive a ele.
+                </p>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 };
 
@@ -245,7 +358,7 @@ export const DataSourcesPanel = ({
                 ))}
             </div>
 
-            {selected && <SourceDetail source={selected} onClose={() => setSelectedId(null)} />}
+            {selected && <SourceDetailModal source={selected} onClose={() => setSelectedId(null)} />}
         </section>
     );
 };

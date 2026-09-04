@@ -81,6 +81,13 @@ export interface DataSource {
     cadence?: string | null;
     /** Próximo disparo: "em 9 min", "hoje às 18:30". `null` para fonte de reserva. */
     nextRun?: string | null;
+    /** Quem assume se esta falhar, na ordem de tentativa. Vazio = ponto único de falha. */
+    backups?: string[];
+    /** A fonte principal que esta cobre; `null` se ela própria for a principal. */
+    covers?: string | null;
+    /** Chamadas que trouxeram dado (o complemento de `failures`). */
+    ok?: number;
+    lastOkAt?: string | null;
     /** O que ela alimenta, em português de gente. Vai direto para a tela. */
     feeds: string;
     critical: boolean;
