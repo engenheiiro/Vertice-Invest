@@ -93,6 +93,55 @@ describe('updateCurrencies — cadeia de fontes', () => {
     });
 });
 
+describe('_fetchPtaxUsd — rede final, só dólar e só do dia', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    const ptax = (dia, venda) => ({ dataHoraCotacao: `${dia} 13:03:59.556874`, cotacaoVenda: venda });
+    const hojeBr = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+
+    it('fixação de hoje é aceita, com a variação medida sobre a anterior', async () => {
+        vi.spyOn(axios, 'get').mockResolvedValue({
+            data: { value: [ptax('2026-09-03', 5.0962), ptax(hojeBr(), 5.1253)] },
+        });
+
+        const out = await macroDataService._fetchPtaxUsd();
+
+        expect(out.usd).toBe(5.1253);
+        expect(out.usdChange).toBeCloseTo(0.571, 2); // 5,1253 / 5,0962 − 1
+    });
+
+    // A PTAX é FIXAÇÃO, não cotação viva: o boletim sai ~13h BRT e antes disso o
+    // dia corrente não existe na série. Servir a última linha disponível seria
+    // exatamente o defeito de 04/09/2026 — câmbio de ontem com cara de hoje.
+    it('fixação de ontem é RECUSADA em vez de virar cotação de hoje', async () => {
+        vi.spyOn(axios, 'get').mockResolvedValue({
+            data: { value: [ptax('2026-09-02', 5.1273), ptax('2026-09-03', 5.0962)] },
+        });
+
+        await expect(macroDataService._fetchPtaxUsd()).resolves.toBeNull();
+    });
+
+    it('série vazia vira null, não exceção', async () => {
+        vi.spyOn(axios, 'get').mockResolvedValue({ data: { value: [] } });
+        await expect(macroDataService._fetchPtaxUsd()).resolves.toBeNull();
+    });
+
+    it('na cadeia, cobre o dólar e deixa o BTC declaradamente ausente', async () => {
+        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
+        vi.spyOn(macroDataService, '_fetchCurrenciesAwesome').mockResolvedValue(null);
+        vi.spyOn(axios, 'get').mockResolvedValue({
+            data: { value: [ptax('2026-09-03', 5.0962), ptax(hojeBr(), 5.1253)] },
+        });
+
+        const out = await macroDataService.updateCurrencies();
+
+        expect(out.usd).toBe(5.1253);
+        expect(out.usdSource).toBe('PTAX/BCB');
+        expect(out.btc).toBeNull();      // o BCB não cota cripto
+        expect(out.btcSource).toBeNull();
+    });
+});
+
 describe('_fetchCurrenciesAwesome — corpo inesperado', () => {
     afterEach(() => vi.restoreAllMocks());
 

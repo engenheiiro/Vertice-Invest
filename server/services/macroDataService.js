@@ -12,7 +12,7 @@ import { resolveMinInvestment } from '../utils/fixedIncomeView.js';
 import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
 import { fetchTesouroCsv } from './treasuryPriceService.js';
-import { isBusinessDay } from '../utils/dateUtils.js';
+import { isBusinessDay, brazilDateKey } from '../utils/dateUtils.js';
 
 const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391, SELIC_DAILY: 11 };
 
@@ -50,10 +50,22 @@ export const isPlausibleBtc = (value) => Number.isFinite(value) && value >= 1000
  * infraestrutura independente do Yahoo, é justamente o que salva o bloco quando
  * o Yahoo cai.
  *
- * A variação NÃO significa exatamente o mesmo nas duas: em cripto, o Yahoo
+ * A variação NÃO significa exatamente o mesmo em todas: em cripto, o Yahoo
  * reporta as últimas 24h corridas e a AwesomeAPI, o fechamento anterior. Em
- * USD/BRL as duas medem contra o fechamento — que é o que `walletController`
+ * USD/BRL as três medem contra o fechamento — que é o que `walletController`
  * usa para reconstruir o câmbio-âncora do dia.
+ *
+ * Fora da cadeia, e por quê: o **arquivo diário da B3** (`b3DailyFileService`)
+ * não tem dólar nem bitcoin à vista. O que ele traz é DERIVATIVO — no dia
+ * 03/09/2026, com o spot fechando em 5,0998, o arquivo trazia DOLV26 a 5,1315
+ * (+0,62%), DOLX26 a 5,1725 (+1,43%) e WDOG27 a 5,2565 (+3,07%): o prêmio do
+ * cupom cambial, que cresce com o vencimento e nada tem a ver com a taxa que
+ * converte patrimônio. Em cripto é pior — só ETF (BITH11, BTCI11) e futuro em
+ * reais, nunca BTC/USD. Há ainda a armadilha de nome: DOLA11, DOLB11 e DOLX11
+ * estão no à vista e começam com "DOL" sem serem dólar (um casamento ingênuo de
+ * ticker gravaria R$ 10,13 como câmbio). E o arquivo é do fechamento do dia
+ * anterior, publicado em hora não garantida — não é cotação corrente por
+ * construção.
  */
 const CURRENCY_SOURCES = [
     {
@@ -71,6 +83,14 @@ const CURRENCY_SOURCES = [
     {
         name: 'AwesomeAPI',
         fetch: (service) => service._fetchCurrenciesAwesome(),
+    },
+    // Rede final, só para o DÓLAR (o BCB não cota cripto) e só com a fixação de
+    // HOJE — ver `_fetchPtaxUsd`. Infraestrutura independente das duas de cima e
+    // já usada para SELIC/IPCA: quando Yahoo e AwesomeAPI caem juntos, é o que
+    // separa "câmbio oficial do dia" de "câmbio da véspera marcado como defasado".
+    {
+        name: 'PTAX/BCB',
+        fetch: (service) => service._fetchPtaxUsd(),
     },
 ];
 
@@ -457,6 +477,74 @@ export const macroDataService = {
         }
 
         return reading;
+    },
+
+    /**
+     * PTAX do BCB — a taxa OFICIAL do dólar, sem chave (Olinda/OData).
+     *
+     * Duas coisas a respeitar, e as duas viram código aqui:
+     *
+     * 1. **Não é cotação ao vivo, é FIXAÇÃO.** O boletim de fechamento sai por
+     *    volta das 13h de Brasília; antes disso o dia corrente simplesmente não
+     *    existe na série. Aceitar a última linha disponível serviria a PTAX de
+     *    ONTEM como se fosse a de hoje — exatamente o defeito de 04/09/2026 que
+     *    esta cadeia existe para impedir. Por isso a leitura só é aceita se a
+     *    fixação for do dia corrente; fora disso devolve `null` e o bloco fica
+     *    marcado como defasado, que é a resposta honesta.
+     * 2. **Só dólar.** O BCB não cota cripto; `btc` sai indefinido de propósito e
+     *    o chamador trata a cobertura parcial.
+     *
+     * Usa `cotacaoVenda` (a ponta que o comprador de dólar paga). O spread para a
+     * compra é de ~0,01%, irrelevante para marcação de patrimônio, mas fixar a
+     * ponta evita que o número oscile por escolha de coluna.
+     *
+     * A variação sai da PTAX do dia útil anterior da própria série — mesma
+     * pergunta que as outras fontes respondem ("quanto mudou desde o fechamento
+     * anterior"), que é o que `walletController` usa para o câmbio-âncora.
+     */
+    async _fetchPtaxUsd() {
+        try {
+            // Janela de 10 dias corridos: cobre feriado prolongado e ainda garante
+            // um dia útil anterior para a variação.
+            const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${d.getFullYear()}`;
+            const hoje = new Date();
+            const inicio = new Date(hoje);
+            inicio.setDate(inicio.getDate() - 10);
+
+            const url = 'https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/'
+                + 'CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)'
+                + `?@dataInicial='${fmt(inicio)}'&@dataFinalCotacao='${fmt(hoje)}'&$top=200&$format=json`;
+
+            const res = await axios.get(url, { headers: BASE_HEADERS, httpsAgent: bcbAgent, timeout: 8000 });
+            const linhas = (Array.isArray(res.data?.value) ? res.data.value : [])
+                .filter((c) => Number(c?.cotacaoVenda) > 0 && typeof c?.dataHoraCotacao === 'string')
+                .sort((a, b) => a.dataHoraCotacao.localeCompare(b.dataHoraCotacao));
+
+            const ultima = linhas.at(-1);
+            if (!ultima) {
+                logger.warn('⚠️ [Câmbio] PTAX: série vazia na janela consultada.');
+                return null;
+            }
+
+            // `dataHoraCotacao` já vem no horário de Brasília ("2026-09-04 13:03:59"),
+            // então o dia da fixação é o prefixo — sem conversão de fuso pelo meio.
+            const diaFixacao = ultima.dataHoraCotacao.slice(0, 10);
+            const hojeBr = brazilDateKey();
+            if (diaFixacao !== hojeBr) {
+                logger.warn(`⚠️ [Câmbio] PTAX mais recente é de ${diaFixacao}, não de ${hojeBr} (boletim sai ~13h BRT). Recusada para não servir câmbio velho como atual.`);
+                return null;
+            }
+
+            const anterior = linhas.at(-2);
+            const venda = Number(ultima.cotacaoVenda);
+            const vendaAnterior = Number(anterior?.cotacaoVenda);
+            const usdChange = vendaAnterior > 0 ? ((venda / vendaAnterior) - 1) * 100 : 0;
+
+            return { usd: venda, usdChange };
+        } catch (error) {
+            logger.warn(`⚠️ [Câmbio] PTAX/BCB falhou: ${error.message}`);
+            return null;
+        }
     },
 
     /** Fonte secundária. Devolve `null` (com log) em erro de rede, rate-limit ou payload inesperado. */
