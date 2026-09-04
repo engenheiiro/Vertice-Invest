@@ -115,6 +115,19 @@ describe('DayMoversModal — motivos', () => {
         expect(screen.queryByText('na curva')).not.toBeInTheDocument();
     });
 
+    it('não mostra "na curva" nas posições de renda fixa', () => {
+        setWallet([
+            asset({
+                ticker: 'CDB-BANCO-2028', name: 'CDB Banco 2028', type: 'FIXED_INCOME',
+                dayChangeValue: 2.5, dayChangePct: 0.04, dayChangeReason: 'FIXED_INCOME_CURVE',
+            }),
+        ], kpis({ dayVariation: 2.5, dayVariationPercent: 0.04 }));
+        render(<DayMoversModal isOpen onClose={vi.fn()} />);
+
+        expect(screen.getByText('CDB-BANCO-2028')).toBeInTheDocument();
+        expect(screen.queryByText('na curva')).not.toBeInTheDocument();
+    });
+
     it('uma posição fora do caso normal ganha a etiqueta na linha', () => {
         setWallet([
             ...carteira(),

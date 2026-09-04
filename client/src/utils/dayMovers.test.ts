@@ -204,6 +204,7 @@ describe('rótulos de motivo', () => {
     it('o caso normal não recebe etiqueta — senão a exceção deixa de saltar', () => {
         expect(reasonLabel('ANCHOR_CLOSE')).toBeNull();
         expect(reasonLabel('PREVIOUS_CLOSE')).toBeNull();
+        expect(reasonLabel('FIXED_INCOME_CURVE')).toBeNull();
         expect(reasonLabel(null)).toBeNull();
         expect(isDefaultReason('ANCHOR_CLOSE')).toBe(true);
         expect(isDefaultReason('STALE_QUOTE')).toBe(false);
@@ -212,8 +213,8 @@ describe('rótulos de motivo', () => {
     it('todo motivo fora do caso normal tem rótulo e explicação', () => {
         const rotulados: DayChangeReason[] = [
             'BOUGHT_TODAY', 'FIXED_INCOME_MTM', 'FIXED_INCOME_MTM_PENDING',
-            'FIXED_INCOME_CURVE', 'MATURED', 'STALE_QUOTE', 'NO_QUOTE',
-            'PROVIDER_WINDOW', 'PROVIDER_SESSION',
+            'MATURED', 'STALE_QUOTE', 'NO_QUOTE', 'PROVIDER_WINDOW',
+            'PROVIDER_SESSION',
         ];
 
         for (const reason of rotulados) {

@@ -95,7 +95,7 @@ export const reasonLabel = (reason: DayChangeReason | null | undefined): string 
     switch (reason) {
         case 'BOUGHT_TODAY': return 'comprado hoje';
         case 'FIXED_INCOME_MTM': return 'marcado a mercado';
-        case 'FIXED_INCOME_CURVE': return 'na curva';
+        case 'FIXED_INCOME_CURVE': return null;
         case 'FIXED_INCOME_MTM_PENDING': return 'PU de hoje não publicado';
         case 'MATURED': return 'vencido';
         case 'STALE_QUOTE': return 'sem negócio hoje';
