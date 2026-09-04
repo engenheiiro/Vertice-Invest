@@ -27,7 +27,21 @@ const SystemConfigSchema = new mongoose.Schema({
   
   dollar: { type: Number, default: 5.75 },
   dollarChange: { type: Number, default: 0 },
-  
+
+  // Observabilidade do bloco de MOEDAS, separada da das taxas oficiais e do
+  // `lastUpdated` do documento. `lastUpdated` avança a cada run do cron mesmo
+  // quando só as moedas falham, então era impossível distinguir "dólar de agora"
+  // de "dólar de ontem preservado" — foi assim por um dia inteiro em 04/09/2026.
+  currenciesStale: { type: Boolean, default: false },
+  // Fonte efetiva de cada moeda: 'AwesomeAPI' | 'Yahoo' | null (nenhuma respondeu).
+  currenciesSources: {
+    usd: { type: String, default: null },
+    btc: { type: String, default: null },
+  },
+  // Último instante em que AS DUAS moedas vieram de fonte real.
+  currenciesUpdatedAt: { type: Date, default: null },
+
+
   // Cache de Índices
   ibov: { type: Number, default: 128000 },
   ibovChange: { type: Number, default: 0 },

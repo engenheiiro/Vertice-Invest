@@ -421,6 +421,40 @@ export const externalMarketService = {
         }
     },
 
+    /**
+     * Segunda fonte de USD/BRL e BTC/USD, para quando a AwesomeAPI não responde.
+     *
+     * A variação NÃO é a mesma pergunta nas duas fontes: a AwesomeAPI reporta
+     * contra o fechamento anterior e o Yahoo, em cripto, contra as últimas 24h
+     * corridas. Quem consome trata a diferença como aceitável para um fallback —
+     * o alternativo é exibir o câmbio de ontem como se fosse o de hoje, que foi
+     * exatamente o defeito de 04/09/2026.
+     */
+    async getCurrencyQuotes() {
+        try {
+            const quotes = await measurePerformance('external', 'YAHOO currencies', () =>
+                yahooFinance.quote(['BRL=X', 'BTC-USD'], {}, { validateResult: false }));
+            const list = Array.isArray(quotes) ? quotes : [quotes];
+            const find = (s) => list.find(q => q.symbol === s);
+            const result = {};
+
+            const usd = find('BRL=X');
+            if (usd?.regularMarketPrice > 0) {
+                result.usd = { value: usd.regularMarketPrice, change: usd.regularMarketChangePercent || 0 };
+            }
+
+            const btc = find('BTC-USD');
+            if (btc?.regularMarketPrice > 0) {
+                result.btc = { value: btc.regularMarketPrice, change: btc.regularMarketChangePercent || 0 };
+            }
+
+            return result;
+        } catch (error) {
+            logger.warn(`⚠️ [Câmbio] Yahoo não devolveu moedas: ${error.message}`);
+            return {};
+        }
+    },
+
     // CÁLCULO S&P 500 (12 MESES)
     async getSpx12mReturn() {
         try {

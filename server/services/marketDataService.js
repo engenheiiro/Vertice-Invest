@@ -69,19 +69,28 @@ const interactiveRefreshes = new Map();
 /** Dias inteiros desde `date` (null quando a data não existe). */
 const daysSince = (date) => (date ? Math.floor((Date.now() - new Date(date).getTime()) / 86400000) : null);
 
+/** Valor ausente/zerado vira `null` — a UI mostra vazio em vez de número inventado. */
+const nullIfAbsent = (value) => (Number.isFinite(value) && value !== 0 ? value : null);
+
 const FALLBACK_MACRO = {
     selic: { value: DEFAULT_SELIC_FALLBACK },
     cdi: { value: Math.max(0, DEFAULT_SELIC_FALLBACK - 0.10) },
     ipca: { value: 4.50 },
     riskFree: { value: DEFAULT_SELIC_FALLBACK },
     ntnbLong: { value: 6.30 },
-    ibov: { value: 128000, change: 0 },
-    usd: { value: 5.75, change: 0 },
-    spx: { value: 5200, change: 0 },
-    btc: { value: 65000, change: 0 },
+    // Taxas têm fallback declarado (o scoring precisa de uma taxa livre de risco
+    // para existir); PREÇO não tem — índice e moeda ficam nulos e a tela mostra
+    // vazio, porque não há valor honesto a inventar para uma cotação.
+    ibov: { value: null, change: 0 },
+    usd: { value: null, change: 0 },
+    spx: { value: null, change: 0 },
+    btc: { value: null, change: 0 },
     ratesStale: true,
     ratesSources: { selic: 'fallback', ipca: 'fallback' },
     ratesUpdatedAt: null,
+    currenciesStale: true,
+    currenciesSources: null,
+    currenciesUpdatedAt: null,
     lastUpdated: new Date()
 };
 
@@ -653,10 +662,18 @@ export const marketDataService = {
                     ipca: { value: config.ipca },
                     riskFree: { value: config.riskFree },
                     ntnbLong: { value: config.ntnbLong },
-                    usd: { value: config.dollar || 5.75, change: config.dollarChange || 0 }, 
-                    ibov: { value: config.ibov || 128000, change: config.ibovChange || 0 },
-                    spx: { value: config.spx || 5800, change: config.spxChange || 0 },
-                    btc: { value: config.btc || 90000, change: config.btcChange || 0 },
+                    // Sem número inventado: `null` = "não temos o valor", e quem
+                    // exibe mostra vazio. Os antigos `|| 5.75` / `|| 90000` faziam
+                    // um dólar fictício passar por cotação na tela do usuário.
+                    usd: { value: nullIfAbsent(config.dollar), change: config.dollarChange || 0 },
+                    ibov: { value: nullIfAbsent(config.ibov), change: config.ibovChange || 0 },
+                    spx: { value: nullIfAbsent(config.spx), change: config.spxChange || 0 },
+                    btc: { value: nullIfAbsent(config.btc), change: config.btcChange || 0 },
+                    // Frescor do bloco de MOEDAS. Separado de `lastUpdated`, que
+                    // avança a cada run do cron mesmo com a fonte de câmbio fora.
+                    currenciesStale: !!config.currenciesStale,
+                    currenciesSources: config.currenciesSources || null,
+                    currenciesUpdatedAt: config.currenciesUpdatedAt || null,
                     // Observabilidade: ratesSources informa a fonte efetiva de cada taxa
                     // ('BCB' | 'BrasilAPI' | 'IBGE' | 'fallback'); ratesStale=true se alguma caiu
                     // no fallback hardcoded. ratesUpdatedAt = último fetch 100% real.

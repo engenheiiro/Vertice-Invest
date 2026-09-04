@@ -69,6 +69,15 @@ export const DEFAULT_THRESHOLDS = {
     implausibleRatio: { warn: 0.02, critical: 0.10 },
     // Idade do bloco macro (SELIC/IPCA/CDI/Ibov/dólar).
     macroAgeHours: { warn: 6, critical: 48 },
+    // Idade do bloco de MOEDAS (dólar/BTC), medido à parte do macro.
+    //
+    // Limiar bem mais curto porque a natureza da falha é outra: as taxas oficiais
+    // mudam de mês em mês e só o BCB as publica, enquanto o câmbio é cotação viva,
+    // sincronizada de 15 em 15 minutos, e alimenta a conversão de toda posição
+    // dolarizada. Uma hora parada já são ~4 execuções falhando em sequência —
+    // não é flutuação de rede, é fonte fora. Seis horas é o dia de negociação
+    // inteiro perdido, com o patrimônio em dólar marcado pelo câmbio da véspera.
+    currencyAgeHours: { warn: 1, critical: 6 },
     // Atraso do último PU do Tesouro em DIAS ÚTEIS — não em horas. O Tesouro só
     // publica em dia útil, então em horas todo domingo acusaria ~52h de atraso
     // sobre a sexta e o painel amanheceria amarelo todo fim de semana.
@@ -170,6 +179,7 @@ export const MACRO_RANGES = {
     cdi: { min: 0.5, max: 40, label: 'CDI', unit: '%' },
     ibov: { min: 30000, max: 500000, label: 'Ibovespa', unit: 'pts' },
     dollar: { min: 1, max: 30, label: 'Dólar', unit: 'R$' },
+    btc: { min: 1000, max: 5000000, label: 'Bitcoin', unit: 'US$' },
 };
 
 /**
@@ -410,6 +420,28 @@ const macroChecks = (facts, th) => {
             ? 'Nenhum registro de macro encontrado'
             : `Atualizado há ${age.toFixed(1)}h`,
         hint: 'macroDataService — cadeia BCB → BrasilAPI → IBGE. Cheque o cron de 15 min e o circuito de rede.',
+    }));
+
+    // Frescor do CÂMBIO, separado do bloco macro acima de propósito.
+    //
+    // O check de cima lê `lastUpdated`, que o cron carimba a cada 15 minutos
+    // aconteça o que acontecer. Em 04/09/2026 ele marcou "6 min" o dia inteiro
+    // enquanto dólar e BTC estavam congelados no fechamento da véspera: a fonte
+    // de moedas caiu, o `catch` era vazio e o gravador preservava o valor antigo.
+    // Nenhuma faixa de sanidade pegaria — R$ 5,0998 é um dólar perfeitamente
+    // plausível; só estava um dia atrasado. O que denuncia é o carimbo próprio.
+    const currencyAge = macro.currenciesUpdatedAt ? hoursBetween(macro.currenciesUpdatedAt, facts.now) : null;
+    const sources = macro.currenciesSources || {};
+    out.push(check({
+        id: 'macro.currencies',
+        label: 'Idade do câmbio (USD/BTC)',
+        category: CATEGORY.MACRO,
+        status: currencyAge === null ? HEALTH_STATUS.CRITICAL : gradeAscending(currencyAge, th.currencyAgeHours),
+        value: currencyAge,
+        detail: currencyAge === null
+            ? 'Nenhuma sincronização de câmbio bem-sucedida registrada'
+            : `Atualizado há ${currencyAge.toFixed(1)}h (USD: ${sources.usd || '—'}, BTC: ${sources.btc || '—'})`,
+        hint: 'macroDataService.updateCurrencies — AwesomeAPI com fallback Yahoo, a cada 15 min. Câmbio parado congela a conversão de toda posição dolarizada, não só a barra de indicadores.',
     }));
 
     for (const [field, range] of Object.entries(MACRO_RANGES)) {

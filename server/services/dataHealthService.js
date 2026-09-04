@@ -350,7 +350,15 @@ const collectFacts = async (now) => {
                     cdi: macroConfig.cdi,
                     ibov: macroConfig.ibov,
                     dollar: macroConfig.dollar,
+                    btc: macroConfig.btc,
                     updatedAt: macroConfig.lastUpdated || null,
+                    // Frescor do bloco de MOEDAS, medido à parte. `lastUpdated`
+                    // avança a cada run do cron mesmo com a fonte de câmbio fora
+                    // do ar, então sozinho ele dava saúde verde para um dólar de
+                    // ontem — 04/09/2026, um dia inteiro sem ninguém ver.
+                    currenciesUpdatedAt: macroConfig.currenciesUpdatedAt || null,
+                    currenciesStale: !!macroConfig.currenciesStale,
+                    currenciesSources: macroConfig.currenciesSources || null,
                 }
                 : {},
             treasury: {

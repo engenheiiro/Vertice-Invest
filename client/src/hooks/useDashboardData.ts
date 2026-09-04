@@ -76,9 +76,14 @@ export interface SignalAccess {
 
 export interface MarketIndex {
     ticker: string;
-    value: number;
+    /** `null` = o servidor não tem o valor. Nunca preencher com número inventado. */
+    value: number | null;
     changePercent: number;
     type?: 'INDEX' | 'RATE' | 'CURRENCY';
+    /** Valor preservado de uma sincronização anterior — não é a cotação de agora. */
+    stale?: boolean;
+    /** Símbolo da moeda em que o valor é cotado ('$' para cripto, '' para índice). */
+    prefix?: string;
 }
 
 export interface SystemHealth {
@@ -161,12 +166,19 @@ export const useDashboardData = () => {
     const marketIndices: MarketIndex[] = useMemo(() => {
         const data = macroQuery.data;
         if (!data) return [];
+        // `?? null` e não `|| 0`: zero é um valor exibível e viraria "0,00" na
+        // barra como se fosse cotação. Ausente tem que chegar ausente na tela.
+        // `currenciesStale` marca dólar e BTC preservados de um sync anterior —
+        // a fonte de câmbio pode cair sozinha, sem derrubar Ibov e S&P junto.
+        const currenciesStale = !!data.currenciesStale;
         return [
-            { ticker: "IBOV", value: data.ibov?.value || 0, changePercent: data.ibov?.change || 0, type: 'INDEX' },
-            { ticker: "CDI", value: data.cdi?.value || 0, changePercent: 0, type: 'RATE' },
-            { ticker: "USD", value: data.usd?.value || 0, changePercent: data.usd?.change || 0, type: 'CURRENCY' },
-            { ticker: "BTC", value: data.btc?.value || 0, changePercent: data.btc?.change || 0, type: 'CURRENCY' },
-            { ticker: "S&P", value: data.spx?.value || 0, changePercent: data.spx?.change || 0, type: 'INDEX' }
+            { ticker: "IBOV", value: data.ibov?.value ?? null, changePercent: data.ibov?.change || 0, type: 'INDEX' },
+            { ticker: "CDI", value: data.cdi?.value ?? null, changePercent: 0, type: 'RATE' },
+            // O ticker "USD" já diz o que está sendo cotado; o BTC não — sem o "$"
+            // o número em formato pt-BR passa por reais (BTC em real seria ~6× isso).
+            { ticker: "USD", value: data.usd?.value ?? null, changePercent: data.usd?.change || 0, type: 'CURRENCY', stale: currenciesStale },
+            { ticker: "BTC", value: data.btc?.value ?? null, changePercent: data.btc?.change || 0, type: 'CURRENCY', stale: currenciesStale, prefix: '$' },
+            { ticker: "S&P", value: data.spx?.value ?? null, changePercent: data.spx?.change || 0, type: 'INDEX' }
         ];
     }, [macroQuery.data]);
 
@@ -186,6 +198,14 @@ export const useDashboardData = () => {
                 status = 'STALE';
                 msg = 'Dados Desatualizados (>1h)';
             }
+        }
+
+        // `lastUpdated` é carimbado a cada run do cron mesmo quando só o bloco de
+        // câmbio falha — sozinho ele dava "Sistemas Operacionais" com o dólar da
+        // véspera na tela. O sinal do próprio bloco é o que fecha esse buraco.
+        if (status === 'ONLINE' && data?.currenciesStale) {
+            status = 'STALE';
+            msg = 'Câmbio desatualizado (USD/BTC)';
         }
         return { status, lastSync: date, latencyMs: 45, message: msg };
     }, [macroQuery.data, macroQuery.isError, macroQuery.isLoading]);

@@ -27,6 +27,14 @@ export const NTNB_REAL_MAX = 9.5;
 export const isPlausibleNtnbRate = (rate) =>
     Number.isFinite(rate) && rate >= NTNB_REAL_MIN && rate <= NTNB_REAL_MAX;
 
+// --- Plausibilidade das moedas ---
+// Faixas largas de propósito: o objetivo não é adivinhar o preço justo, é barrar
+// `0`, `NaN` e string mal parseada antes que virem multiplicador de patrimônio
+// (posição dolarizada é convertida por `config.dollar` em walletController).
+// A faixa do dólar espelha MACRO_RANGES.dollar do painel de Saúde.
+export const isPlausibleUsd = (value) => Number.isFinite(value) && value >= 1 && value <= 30;
+export const isPlausibleBtc = (value) => Number.isFinite(value) && value >= 1000 && value <= 5000000;
+
 // --- Catálogo do Tesouro: espelho da fonte, não acumulador ---
 // A poda só roda sobre uma coleta que pareça um catálogo inteiro: um scrape parcial
 // (mudança de layout, resposta truncada) não pode esvaziar a vitrine.
@@ -361,15 +369,84 @@ export const macroDataService = {
         }
     },
 
+    /**
+     * Cotação corrente de USD/BRL e BTC/USD.
+     *
+     * Este bloco já falhou em silêncio por um dia inteiro (04/09/2026): a
+     * AwesomeAPI parou de responder, o `catch` vazio devolvia `null`, o gravador
+     * preservava o valor anterior e `lastUpdated` era carimbado assim mesmo — a
+     * barra de indicadores e a conversão de posição dolarizada exibiam o
+     * fechamento da véspera como se fosse o preço de agora, e nenhum alarme podia
+     * ver isso, porque todos olhavam o carimbo do documento inteiro.
+     *
+     * Três consequências viram contrato aqui:
+     *  - toda falha é LOGADA com a razão (a rede não tem por que ser silenciosa);
+     *  - há SEGUNDA FONTE (Yahoo), consultada só para o que faltou;
+     *  - o retorno diz a origem de cada moeda, e `null` significa "não temos
+     *    valor de hoje" — nunca um número inventado.
+     */
     async updateCurrencies() {
+        const reading = { usd: null, usdChange: 0, usdSource: null, btc: null, btcChange: 0, btcSource: null };
+
+        const apply = (partial, source) => {
+            if (!partial) return;
+            if (reading.usd === null && isPlausibleUsd(partial.usd)) {
+                reading.usd = partial.usd;
+                reading.usdChange = Number.isFinite(partial.usdChange) ? partial.usdChange : 0;
+                reading.usdSource = source;
+            }
+            if (reading.btc === null && isPlausibleBtc(partial.btc)) {
+                reading.btc = partial.btc;
+                reading.btcChange = Number.isFinite(partial.btcChange) ? partial.btcChange : 0;
+                reading.btcSource = source;
+            }
+        };
+
+        apply(await this._fetchCurrenciesAwesome(), 'AwesomeAPI');
+
+        if (reading.usd === null || reading.btc === null) {
+            const missing = [reading.usd === null && 'USD', reading.btc === null && 'BTC'].filter(Boolean).join('/');
+            logger.warn(`⚠️ [Câmbio] AwesomeAPI não cobriu ${missing}; tentando Yahoo.`);
+            const yahoo = await externalMarketService.getCurrencyQuotes();
+            apply({
+                usd: yahoo?.usd?.value,
+                usdChange: yahoo?.usd?.change,
+                btc: yahoo?.btc?.value,
+                btcChange: yahoo?.btc?.change,
+            }, 'Yahoo');
+        }
+
+        if (reading.usd === null || reading.btc === null) {
+            const missing = [reading.usd === null && 'USD', reading.btc === null && 'BTC'].filter(Boolean).join('/');
+            logger.error(`❌ [Câmbio] Nenhuma fonte devolveu ${missing}. O valor anterior é PRESERVADO e marcado como defasado.`);
+        }
+
+        return reading;
+    },
+
+    /** Fonte primária. Devolve `null` (com log) em erro de rede, rate-limit ou payload inesperado. */
+    async _fetchCurrenciesAwesome() {
         try {
-            const res = await axios.get('https://economia.awesomeapi.com.br/last/USD-BRL,BTC-USD', { timeout: 5000 });
-            const usd = parseFloat(res.data.USDBRL.bid);
-            const usdChange = parseFloat(res.data.USDBRL.pctChange);
-            const btcUsd = parseFloat(res.data.BTCUSD.bid);
-            const btcChange = parseFloat(res.data.BTCUSD.pctChange);
-            return { usd, usdChange, btcUsd, btcChange };
-        } catch {
+            const res = await axios.get('https://economia.awesomeapi.com.br/last/USD-BRL,BTC-USD', { timeout: 8000 });
+            const usdRaw = res.data?.USDBRL;
+            const btcRaw = res.data?.BTCUSD;
+
+            // Rate-limit da AwesomeAPI responde 200 com outro corpo ({status, code}).
+            // Sem esta checagem o acesso a `.bid` lançava TypeError e caía no catch
+            // como se fosse queda de rede — mesmo silêncio, diagnóstico errado.
+            if (!usdRaw?.bid || !btcRaw?.bid) {
+                logger.warn(`⚠️ [Câmbio] AwesomeAPI devolveu corpo inesperado: ${JSON.stringify(res.data).slice(0, 160)}`);
+                return null;
+            }
+
+            return {
+                usd: parseFloat(usdRaw.bid),
+                usdChange: parseFloat(usdRaw.pctChange),
+                btc: parseFloat(btcRaw.bid),
+                btcChange: parseFloat(btcRaw.pctChange),
+            };
+        } catch (error) {
+            logger.warn(`⚠️ [Câmbio] AwesomeAPI falhou: ${error.message}`);
             return null;
         }
     },
@@ -918,11 +995,23 @@ export const macroDataService = {
             }
         }
         
-        if (currencies) {
+        // Escrita por moeda, não em bloco: uma fonte que cobre só o dólar não pode
+        // arrastar o BTC junto, nem o inverso. `currenciesUpdatedAt` só é carimbado
+        // quando AS DUAS vieram frescas — é o carimbo que o painel de Saúde e a
+        // barra de indicadores leem, e ele não pode herdar a honestidade do
+        // `lastUpdated` do documento, que avança mesmo com o bloco inteiro falhando.
+        if (currencies.usd !== null) {
             config.dollar = currencies.usd;
             config.dollarChange = currencies.usdChange;
-            config.btc = currencies.btcUsd;
+        }
+        if (currencies.btc !== null) {
+            config.btc = currencies.btc;
             config.btcChange = currencies.btcChange;
+        }
+        config.currenciesSources = { usd: currencies.usdSource, btc: currencies.btcSource };
+        config.currenciesStale = currencies.usd === null || currencies.btc === null;
+        if (!config.currenciesStale) {
+            config.currenciesUpdatedAt = new Date();
         }
         
         if (globalIndices) {

@@ -53,8 +53,11 @@ const healthyFacts = (overrides = {}) => ({
     },
     implausible: { dy: 1, pl: 2, p_vp: 0, beta: 1, change: 0, nonPositivePrice: 0 },
     macro: {
-        selic: 12.43, ipca: 4.2, cdi: 12.33, ibov: 138000, dollar: 5.4,
+        selic: 12.43, ipca: 4.2, cdi: 12.33, ibov: 138000, dollar: 5.4, btc: 90000,
         updatedAt: hoursAgo(0.5),
+        currenciesUpdatedAt: hoursAgo(0.2),
+        currenciesStale: false,
+        currenciesSources: { usd: 'AwesomeAPI', btc: 'AwesomeAPI' },
     },
     treasury: { titles: 14, businessDaysStale: 1 },
     treasuryCatalog: {
@@ -467,6 +470,48 @@ describe('MACRO', () => {
         facts.macro.updatedAt = hoursAgo(8);
         expect(byId(buildHealthReport(facts), 'macro.freshness').status)
             .toBe(HEALTH_STATUS.WARN);
+    });
+
+    // O defeito de 04/09/2026: o cron carimbava `lastUpdated` a cada 15 min
+    // enquanto dólar e BTC estavam congelados no fechamento da véspera. Nenhuma
+    // faixa de sanidade pegava — R$ 5,0998 é um dólar plausível, só estava velho.
+    it('câmbio parado não é visto pelo frescor do bloco macro', () => {
+        const facts = healthyFacts();
+        facts.macro.updatedAt = hoursAgo(0.1);      // cron rodando normalmente
+        facts.macro.currenciesUpdatedAt = hoursAgo(20); // moedas congeladas desde ontem
+
+        const report = buildHealthReport(facts);
+        expect(byId(report, 'macro.freshness').status).toBe(HEALTH_STATUS.OK);
+        expect(byId(report, 'macro.value.dollar').status).toBe(HEALTH_STATUS.OK);
+        expect(byId(report, 'macro.currencies').status).toBe(HEALTH_STATUS.CRITICAL);
+    });
+
+    it('câmbio parado por 2h vira WARN antes de virar crítico', () => {
+        const facts = healthyFacts();
+        facts.macro.currenciesUpdatedAt = hoursAgo(2);
+        expect(byId(buildHealthReport(facts), 'macro.currencies').status)
+            .toBe(HEALTH_STATUS.WARN);
+    });
+
+    it('câmbio nunca sincronizado é CRITICAL', () => {
+        const facts = healthyFacts();
+        facts.macro.currenciesUpdatedAt = null;
+        expect(byId(buildHealthReport(facts), 'macro.currencies').status)
+            .toBe(HEALTH_STATUS.CRITICAL);
+    });
+
+    it('o check de câmbio nomeia a fonte efetiva de cada moeda', () => {
+        const facts = healthyFacts();
+        facts.macro.currenciesSources = { usd: 'Yahoo', btc: null };
+        const detail = byId(buildHealthReport(facts), 'macro.currencies').detail;
+        expect(detail).toContain('Yahoo');
+    });
+
+    it('BTC fora da faixa de sanidade é CRITICAL', () => {
+        const facts = healthyFacts();
+        facts.macro.btc = 12; // veio em milhares, ou a fonte devolveu outra unidade
+        expect(byId(buildHealthReport(facts), 'macro.value.btc').status)
+            .toBe(HEALTH_STATUS.CRITICAL);
     });
 });
 
