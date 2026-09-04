@@ -620,6 +620,20 @@ export const externalMarketService = {
             for (const day of result.quotes) {
                 if (!day?.date) continue;
                 const date = day.date.toISOString().split('T')[0];
+                // FORA DA JANELA PEDIDA NÃO ENTRA. O Yahoo respeita `period2` no
+                // passado, mas devolve de carona o candle EM ANDAMENTO da sessão
+                // viva — um preço de meio de pregão com data de fechamento. Quem
+                // pedia a série "até D" recebia D+1 parcial e o gravava: em
+                // 04/09/2026, às 10:25 e 11:25, as 17 séries da carteira ficaram
+                // com o preço da manhã no lugar do fechamento do dia.
+                //
+                // O estrago não é cosmético e não se conserta sozinho:
+                // `loadClosesForDay` lê candle existente COMO fechamento do dia,
+                // então o snapshot das 23:59 marcaria o patrimônio pelo preço da
+                // manhã, e a varredura de lacuna nunca voltaria lá — o dia não
+                // está FALTANDO, está errado. A janela é contrato, e vale aqui
+                // para todos os chamadores.
+                if (date > through) continue;
                 if (day.close > 0) {
                     candles.push({
                         date,
