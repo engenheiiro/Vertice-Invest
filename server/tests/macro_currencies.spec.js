@@ -8,6 +8,9 @@ import { externalMarketService } from '../services/externalMarketService.js';
 // carimbado assim mesmo. Dólar e BTC ficaram um dia inteiro no fechamento da
 // véspera — na barra de indicadores E no multiplicador de posição dolarizada —
 // sem log, sem flag e sem alarme. O contrato abaixo é o que impede a repetição.
+//
+// A ordem da cadeia (Yahoo → AwesomeAPI desde 05/09/2026) é deliberada e está
+// coberta: a AwesomeAPI só era consultada para gastar uma chamada condenada.
 
 const awesomeBody = (over = {}) => ({
     data: {
@@ -17,28 +20,17 @@ const awesomeBody = (over = {}) => ({
     },
 });
 
-describe('updateCurrencies — fontes e frescor', () => {
+const yahooBody = {
+    usd: { value: 5.13, change: 0.5 },
+    btc: { value: 79000, change: -2.1 },
+};
+
+describe('updateCurrencies — cadeia de fontes', () => {
     afterEach(() => vi.restoreAllMocks());
 
-    it('AwesomeAPI no ar → usa a primária e nem consulta o Yahoo', async () => {
-        vi.spyOn(axios, 'get').mockResolvedValue(awesomeBody());
-        const yahoo = vi.spyOn(externalMarketService, 'getCurrencyQuotes');
-
-        const out = await macroDataService.updateCurrencies();
-
-        expect(out.usd).toBeCloseTo(5.1263, 4);
-        expect(out.btc).toBeCloseTo(79533.56, 2);
-        expect(out.usdSource).toBe('AwesomeAPI');
-        expect(out.btcSource).toBe('AwesomeAPI');
-        expect(yahoo).not.toHaveBeenCalled();
-    });
-
-    it('AwesomeAPI fora → o Yahoo cobre as duas moedas e a fonte fica declarada', async () => {
-        vi.spyOn(axios, 'get').mockRejectedValue(new Error('ETIMEDOUT'));
-        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({
-            usd: { value: 5.13, change: 0.5 },
-            btc: { value: 79000, change: -2.1 },
-        });
+    it('Yahoo no ar → resolve tudo e nem chega na AwesomeAPI', async () => {
+        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue(yahooBody);
+        const awesome = vi.spyOn(macroDataService, '_fetchCurrenciesAwesome');
 
         const out = await macroDataService.updateCurrencies();
 
@@ -46,27 +38,37 @@ describe('updateCurrencies — fontes e frescor', () => {
         expect(out.btc).toBe(79000);
         expect(out.usdSource).toBe('Yahoo');
         expect(out.btcSource).toBe('Yahoo');
+        expect(awesome).not.toHaveBeenCalled();
     });
 
-    it('cobertura parcial: cada moeda guarda a sua própria fonte', async () => {
-        vi.spyOn(axios, 'get').mockRejectedValue(new Error('ECONNRESET'));
-        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({
-            usd: { value: 5.13, change: 0.5 },
-        });
+    it('Yahoo fora → a AwesomeAPI cobre as duas moedas e a fonte fica declarada', async () => {
+        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
+        vi.spyOn(axios, 'get').mockResolvedValue(awesomeBody());
 
         const out = await macroDataService.updateCurrencies();
 
-        expect(out.usdSource).toBe('Yahoo');
-        expect(out.btc).toBeNull();     // não temos BTC de hoje
-        expect(out.btcSource).toBeNull();
+        expect(out.usd).toBeCloseTo(5.1263, 4);
+        expect(out.btc).toBeCloseTo(79533.56, 2);
+        expect(out.usdSource).toBe('AwesomeAPI');
+        expect(out.btcSource).toBe('AwesomeAPI');
+    });
+
+    it('cobertura parcial: cada moeda guarda a sua própria fonte', async () => {
+        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({ usd: yahooBody.usd });
+        vi.spyOn(axios, 'get').mockResolvedValue(awesomeBody());
+
+        const out = await macroDataService.updateCurrencies();
+
+        expect(out.usdSource).toBe('Yahoo');       // primária resolveu o dólar
+        expect(out.btcSource).toBe('AwesomeAPI');  // e a segunda completou o BTC
     });
 
     // O ponto do incidente: sem valor de hoje, o retorno é `null` — nunca o
     // valor da véspera disfarçado de cotação. Quem grava é que decide preservar
     // o último conhecido, e marca isso como defasado.
     it('as duas fontes fora → null nas duas moedas, sem número inventado', async () => {
-        vi.spyOn(axios, 'get').mockRejectedValue(new Error('ETIMEDOUT'));
         vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
+        vi.spyOn(axios, 'get').mockRejectedValue(new Error('ETIMEDOUT'));
 
         const out = await macroDataService.updateCurrencies();
 
@@ -76,19 +78,18 @@ describe('updateCurrencies — fontes e frescor', () => {
         expect(out.btcSource).toBeNull();
     });
 
-    it('valor implausível da primária é rejeitado e o Yahoo assume', async () => {
-        vi.spyOn(axios, 'get').mockResolvedValue(awesomeBody({
-            USDBRL: { bid: '0', pctChange: '0' },
-        }));
+    it('valor implausível da primária é rejeitado e a segunda assume', async () => {
         vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({
-            usd: { value: 5.13, change: 0.5 },
+            usd: { value: 0, change: 0 },   // fonte devolveu lixo
+            btc: yahooBody.btc,
         });
+        vi.spyOn(axios, 'get').mockResolvedValue(awesomeBody());
 
         const out = await macroDataService.updateCurrencies();
 
-        expect(out.usd).toBe(5.13);
-        expect(out.usdSource).toBe('Yahoo');
-        expect(out.btcSource).toBe('AwesomeAPI'); // o BTC da primária estava bom
+        expect(out.usd).toBeCloseTo(5.1263, 4);
+        expect(out.usdSource).toBe('AwesomeAPI');
+        expect(out.btcSource).toBe('Yahoo'); // o BTC da primária estava bom
     });
 });
 

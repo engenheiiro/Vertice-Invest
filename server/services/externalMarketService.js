@@ -422,13 +422,13 @@ export const externalMarketService = {
     },
 
     /**
-     * Segunda fonte de USD/BRL e BTC/USD, para quando a AwesomeAPI não responde.
+     * USD/BRL e BTC/USD — fonte primária do bloco de moedas do macro desde
+     * 05/09/2026 (a ordem da cadeia mora em `CURRENCY_SOURCES`, no macroDataService).
      *
-     * A variação NÃO é a mesma pergunta nas duas fontes: a AwesomeAPI reporta
-     * contra o fechamento anterior e o Yahoo, em cripto, contra as últimas 24h
-     * corridas. Quem consome trata a diferença como aceitável para um fallback —
-     * o alternativo é exibir o câmbio de ontem como se fosse o de hoje, que foi
-     * exatamente o defeito de 04/09/2026.
+     * Em cripto, `regularMarketChangePercent` são as últimas 24h CORRIDAS, não o
+     * fechamento anterior; a segunda fonte da cadeia mede contra o fechamento.
+     * Quem consome trata a diferença como aceitável — o alternativo é exibir o
+     * câmbio de ontem como se fosse o de hoje, que foi o defeito de 04/09/2026.
      */
     async getCurrencyQuotes() {
         try {

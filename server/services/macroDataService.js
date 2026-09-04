@@ -35,6 +35,45 @@ export const isPlausibleNtnbRate = (rate) =>
 export const isPlausibleUsd = (value) => Number.isFinite(value) && value >= 1 && value <= 30;
 export const isPlausibleBtc = (value) => Number.isFinite(value) && value >= 1000 && value <= 5000000;
 
+/**
+ * Cadeia de fontes de câmbio, NA ORDEM em que são tentadas. Cada uma só é
+ * consultada se a anterior deixou alguma moeda de fora, e a origem efetiva fica
+ * gravada em `currenciesSources` — trocar a ordem aqui é a única mudança
+ * necessária para promover ou rebaixar uma fonte.
+ *
+ * O Yahoo é a primária desde 05/09/2026. A AwesomeAPI vinha primeiro e parou de
+ * atender ESPECIFICAMENTE a partir do host de produção (o mesmo endereço
+ * respondia normalmente de fora), provavelmente por limite de requisições no IP
+ * compartilhado do Render. Enquanto ela liderava, todo run gastava uma chamada
+ * condenada antes de chegar na fonte que funciona. Ela segue na cadeia porque
+ * o defeito é do lado dela e pode passar — e porque uma fonte só de câmbio, com
+ * infraestrutura independente do Yahoo, é justamente o que salva o bloco quando
+ * o Yahoo cai.
+ *
+ * A variação NÃO significa exatamente o mesmo nas duas: em cripto, o Yahoo
+ * reporta as últimas 24h corridas e a AwesomeAPI, o fechamento anterior. Em
+ * USD/BRL as duas medem contra o fechamento — que é o que `walletController`
+ * usa para reconstruir o câmbio-âncora do dia.
+ */
+const CURRENCY_SOURCES = [
+    {
+        name: 'Yahoo',
+        fetch: async () => {
+            const quotes = await externalMarketService.getCurrencyQuotes();
+            return {
+                usd: quotes?.usd?.value,
+                usdChange: quotes?.usd?.change,
+                btc: quotes?.btc?.value,
+                btcChange: quotes?.btc?.change,
+            };
+        },
+    },
+    {
+        name: 'AwesomeAPI',
+        fetch: (service) => service._fetchCurrenciesAwesome(),
+    },
+];
+
 // --- Catálogo do Tesouro: espelho da fonte, não acumulador ---
 // A poda só roda sobre uma coleta que pareça um catálogo inteiro: um scrape parcial
 // (mudança de layout, resposta truncada) não pode esvaziar a vitrine.
@@ -381,7 +420,7 @@ export const macroDataService = {
      *
      * Três consequências viram contrato aqui:
      *  - toda falha é LOGADA com a razão (a rede não tem por que ser silenciosa);
-     *  - há SEGUNDA FONTE (Yahoo), consultada só para o que faltou;
+     *  - a cadeia tem SEGUNDA FONTE, consultada só para a moeda que faltou;
      *  - o retorno diz a origem de cada moeda, e `null` significa "não temos
      *    valor de hoje" — nunca um número inventado.
      */
@@ -402,29 +441,25 @@ export const macroDataService = {
             }
         };
 
-        apply(await this._fetchCurrenciesAwesome(), 'AwesomeAPI');
+        const missingLabel = () =>
+            [reading.usd === null && 'USD', reading.btc === null && 'BTC'].filter(Boolean).join('/');
 
-        if (reading.usd === null || reading.btc === null) {
-            const missing = [reading.usd === null && 'USD', reading.btc === null && 'BTC'].filter(Boolean).join('/');
-            logger.warn(`⚠️ [Câmbio] AwesomeAPI não cobriu ${missing}; tentando Yahoo.`);
-            const yahoo = await externalMarketService.getCurrencyQuotes();
-            apply({
-                usd: yahoo?.usd?.value,
-                usdChange: yahoo?.usd?.change,
-                btc: yahoo?.btc?.value,
-                btcChange: yahoo?.btc?.change,
-            }, 'Yahoo');
+        for (const [i, { name, fetch }] of CURRENCY_SOURCES.entries()) {
+            if (reading.usd !== null && reading.btc !== null) break;
+            if (i > 0) {
+                logger.warn(`⚠️ [Câmbio] ${CURRENCY_SOURCES[i - 1].name} não cobriu ${missingLabel()}; tentando ${name}.`);
+            }
+            apply(await fetch(this), name);
         }
 
         if (reading.usd === null || reading.btc === null) {
-            const missing = [reading.usd === null && 'USD', reading.btc === null && 'BTC'].filter(Boolean).join('/');
-            logger.error(`❌ [Câmbio] Nenhuma fonte devolveu ${missing}. O valor anterior é PRESERVADO e marcado como defasado.`);
+            logger.error(`❌ [Câmbio] Nenhuma fonte devolveu ${missingLabel()}. O valor anterior é PRESERVADO e marcado como defasado.`);
         }
 
         return reading;
     },
 
-    /** Fonte primária. Devolve `null` (com log) em erro de rede, rate-limit ou payload inesperado. */
+    /** Fonte secundária. Devolve `null` (com log) em erro de rede, rate-limit ou payload inesperado. */
     async _fetchCurrenciesAwesome() {
         try {
             const res = await axios.get('https://economia.awesomeapi.com.br/last/USD-BRL,BTC-USD', { timeout: 8000 });

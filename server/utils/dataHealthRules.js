@@ -441,7 +441,7 @@ const macroChecks = (facts, th) => {
         detail: currencyAge === null
             ? 'Nenhuma sincronização de câmbio bem-sucedida registrada'
             : `Atualizado há ${currencyAge.toFixed(1)}h (USD: ${sources.usd || '—'}, BTC: ${sources.btc || '—'})`,
-        hint: 'macroDataService.updateCurrencies — AwesomeAPI com fallback Yahoo, a cada 15 min. Câmbio parado congela a conversão de toda posição dolarizada, não só a barra de indicadores.',
+        hint: 'macroDataService.updateCurrencies — cadeia Yahoo → AwesomeAPI, a cada 15 min. Câmbio parado congela a conversão de toda posição dolarizada, não só a barra de indicadores.',
     }));
 
     for (const [field, range] of Object.entries(MACRO_RANGES)) {
