@@ -72,6 +72,15 @@ export interface DataSource {
     role?: string;
     /** Bloco a que pertence — casa com `SourceGroup.id`. */
     group?: string;
+    /**
+     * 'scheduled' tem hora marcada; 'onFailure' só é chamada quando a fonte
+     * anterior da cadeia falha — nesta, ausência de chamadas é boa notícia.
+     */
+    trigger?: 'scheduled' | 'onFailure';
+    /** Periodicidade em português: "A cada 15 minutos", "Todo dia às 09:00 e 18:30". */
+    cadence?: string | null;
+    /** Próximo disparo: "em 9 min", "hoje às 18:30". `null` para fonte de reserva. */
+    nextRun?: string | null;
     /** O que ela alimenta, em português de gente. Vai direto para a tela. */
     feeds: string;
     critical: boolean;

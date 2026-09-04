@@ -50,10 +50,30 @@ const STATUS_UI: Record<SourceStatus, {
     UNKNOWN: {
         dot: 'bg-slate-600',
         text: 'text-slate-500',
-        label: 'Sem uso',
+        label: 'Aguardando',
         card: 'border-slate-800/70 bg-panel/50 hover:border-slate-700',
         Icon: HelpCircle,
     },
+};
+
+/**
+ * O rodapé do card responde "e agora?" — e a resposta depende da natureza da
+ * fonte, não só do estado dela.
+ *
+ * Cinza escondia duas coisas opostas: a fonte agendada que ainda não teve a vez
+ * (pendência, com hora marcada) e a de reserva, que só é chamada quando a
+ * anterior falha (silêncio ali é o sistema funcionando). Sem separar, "que horas
+ * isso roda?" não tinha resposta — e metade dos cards nem tem horário para dar.
+ */
+const footerInfo = (source: DataSource): { label: string; time: string } => {
+    const ui = STATUS_UI[source.status];
+    if (source.status !== 'UNKNOWN') {
+        return { label: ui.label, time: sinceLabel(source.lastDeliveryHours) };
+    }
+    if (source.trigger === 'onFailure') {
+        return { label: 'Em espera', time: 'reserva' };
+    }
+    return { label: 'Aguardando', time: source.nextRun ?? '—' };
 };
 
 const sinceLabel = (hours: number | null) => {
@@ -72,6 +92,7 @@ const SourceCard = ({
     onSelect: () => void;
 }) => {
     const ui = STATUS_UI[source.status];
+    const footer = footerInfo(source);
     return (
         <button
             type="button"
@@ -88,10 +109,10 @@ const SourceCard = ({
             <p className="text-[9px] text-slate-500 mt-0.5 truncate" title={source.role}>{source.role}</p>
             <div className="flex items-baseline justify-between gap-1 mt-1.5">
                 <span className={`text-[9px] font-bold uppercase tracking-wide ${ui.text} truncate`}>
-                    {ui.label}
+                    {footer.label}
                 </span>
-                <span className="text-[10px] font-mono text-slate-400 shrink-0">
-                    {sinceLabel(source.lastDeliveryHours)}
+                <span className="text-[10px] font-mono text-slate-400 shrink-0 truncate" title={footer.time}>
+                    {footer.time}
                 </span>
             </div>
         </button>
@@ -115,6 +136,12 @@ const SourceDetail = ({ source, onClose }: { source: DataSource; onClose: () => 
                         )}
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">{source.feeds}</p>
+                    {source.cadence && (
+                        <p className="text-[11px] text-slate-400 mt-1">
+                            <span className="text-slate-500">Quando roda:</span> {source.cadence}
+                            {source.nextRun && <span className="text-slate-500"> · próxima {source.nextRun}</span>}
+                        </p>
+                    )}
                     <p className="text-[11px] text-slate-300 mt-1.5">{source.detail}</p>
                     {source.lastError && (
                         <p className="text-[10px] text-slate-500 mt-1">

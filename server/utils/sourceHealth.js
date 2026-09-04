@@ -48,8 +48,11 @@ export const SOURCE_GROUPS = [
  * de relance, que a reserva está segurando o sistema.
  *
  * `critical: true` = sem ela, alguma parte do produto para ou serve número velho.
- * `optional: true` = a ausência de chamadas é normal (roda uma vez por dia, ou só
- * sob demanda), então silêncio não vira alarme.
+ *
+ * `schedule` diz QUANDO ela roda, e é o que separa dois cinzas muito diferentes:
+ * o da fonte agendada que ainda não teve a vez ("volta em 7 min") e o da fonte de
+ * reserva, que só é chamada quando a anterior falha — nesta, cinza é boa notícia.
+ * Os horários espelham `schedulerService.js`; mudar o cron lá pede mudar aqui.
  */
 export const SOURCE_CATALOG = {
     // --- Cotações de ativos: a cadeia que precifica a carteira ---
@@ -59,6 +62,7 @@ export const SOURCE_CATALOG = {
         role: 'Fonte principal',
         group: 'quotes',
         feeds: 'Preço de ações, FIIs, ETFs e cripto na carteira e no ranking',
+        schedule: { kind: 'minutes', at: [0, 15, 30, 45] },
         critical: true,
     },
     brapi: {
@@ -67,6 +71,7 @@ export const SOURCE_CATALOG = {
         role: 'Reserva (ativos BR)',
         group: 'quotes',
         feeds: 'Cotação de ativos brasileiros quando o Yahoo falha',
+        schedule: { kind: 'onFailure' },
         critical: false,
     },
     'google.finance': {
@@ -75,6 +80,7 @@ export const SOURCE_CATALOG = {
         role: 'Último recurso',
         group: 'quotes',
         feeds: 'Cotação buscada ativo por ativo, quando as duas acima falham',
+        schedule: { kind: 'onFailure' },
         critical: false,
     },
     b3: {
@@ -83,8 +89,8 @@ export const SOURCE_CATALOG = {
         role: 'Fechamento oficial',
         group: 'quotes',
         feeds: 'Preço de fechamento do pregão, quando o Yahoo publica com buraco',
+        schedule: { kind: 'onFailure' },
         critical: false,
-        optional: true,
     },
 
     // --- Câmbio e cripto: cadeia de 4 elos, cada um cobrindo o que faltou ---
@@ -94,6 +100,7 @@ export const SOURCE_CATALOG = {
         role: '1ª fonte',
         group: 'fx',
         feeds: 'Dólar e Bitcoin',
+        schedule: { kind: 'minutes', at: [5, 20, 35, 50] },
         critical: false,
     },
     awesomeapi: {
@@ -102,6 +109,7 @@ export const SOURCE_CATALOG = {
         role: '2ª fonte',
         group: 'fx',
         feeds: 'Dólar e Bitcoin, quando o Yahoo não responde',
+        schedule: { kind: 'onFailure' },
         critical: false,
     },
     coinbase: {
@@ -110,6 +118,7 @@ export const SOURCE_CATALOG = {
         role: '3ª fonte (só Bitcoin)',
         group: 'fx',
         feeds: 'Bitcoin, quando as duas primeiras falham',
+        schedule: { kind: 'onFailure' },
         critical: false,
     },
     ptax: {
@@ -118,6 +127,7 @@ export const SOURCE_CATALOG = {
         role: '4ª fonte (só dólar)',
         group: 'fx',
         feeds: 'Dólar oficial, quando as duas primeiras falham',
+        schedule: { kind: 'onFailure' },
         critical: false,
     },
 
@@ -128,6 +138,7 @@ export const SOURCE_CATALOG = {
         role: 'Fonte principal',
         group: 'rates',
         feeds: 'Selic e IPCA, que definem a taxa livre de risco de todo o ranking',
+        schedule: { kind: 'minutes', at: [5, 20, 35, 50] },
         critical: true,
     },
     brasilapi: {
@@ -136,6 +147,7 @@ export const SOURCE_CATALOG = {
         role: 'Reserva',
         group: 'rates',
         feeds: 'Selic e IPCA quando o Banco Central não responde',
+        schedule: { kind: 'onFailure' },
         critical: false,
     },
     ibge: {
@@ -144,6 +156,7 @@ export const SOURCE_CATALOG = {
         role: 'Último recurso (só IPCA)',
         group: 'rates',
         feeds: 'IPCA quando as duas fontes acima falham',
+        schedule: { kind: 'onFailure' },
         critical: false,
     },
 
@@ -154,6 +167,7 @@ export const SOURCE_CATALOG = {
         role: 'Série de fechamentos',
         group: 'series',
         feeds: 'Gráficos e cálculo de rentabilidade da carteira',
+        schedule: { kind: 'dailyTimes', at: ['18:30'] },
         critical: true,
     },
     'yahoo.indices': {
@@ -162,6 +176,7 @@ export const SOURCE_CATALOG = {
         role: 'Ibovespa e S&P 500',
         group: 'series',
         feeds: 'A barra de indicadores do topo do site',
+        schedule: { kind: 'minutes', at: [5, 20, 35, 50] },
         critical: true,
     },
 
@@ -172,6 +187,7 @@ export const SOURCE_CATALOG = {
         role: 'Preço diário oficial',
         group: 'reference',
         feeds: 'Marcação a mercado dos títulos públicos na carteira',
+        schedule: { kind: 'minutes', at: [5, 20, 35, 50] },
         critical: true,
     },
     fundamentus: {
@@ -180,8 +196,8 @@ export const SOURCE_CATALOG = {
         role: 'Raspagem diária',
         group: 'reference',
         feeds: 'Indicadores fundamentalistas das empresas brasileiras',
+        schedule: { kind: 'dailyTimes', at: ['09:00', '18:30'] },
         critical: true,
-        optional: true,
     },
 };
 
@@ -241,8 +257,8 @@ export const getSourceStats = () => Object.entries(SOURCE_CATALOG).map(([id, met
         role: meta.role,
         group: meta.group,
         feeds: meta.feeds,
+        schedule: meta.schedule || null,
         critical: !!meta.critical,
-        optional: !!meta.optional,
         attempts,
         ok: stat.ok,
         failures: stat.fail + stat.empty,

@@ -79,25 +79,35 @@ describe('buildSourceStatuses — veredito por fonte', () => {
     // Um deploy zera o contador. Se silêncio virasse vermelho, o painel nasceria
     // em pânico a cada publicação — o jeito mais rápido de ensinar alguém a
     // ignorar um monitor.
-    it('fonte que roda uma vez por dia explica o silêncio em vez de alarmar', () => {
+    // Fonte AGENDADA sem chamadas: cinza com previsão, não alarme.
+    it('fonte agendada que ainda não rodou diz quando volta', () => {
         const facts = factsBase();
         facts.fundamentals = { timestamp: null }; // sem entrega gravada
-        const rows = buildSourceStatuses(facts, getSourceStats());
-        expect(byId(rows, 'fundamentus').detail).toContain('uma vez por dia');
+        const fundamentus = byId(buildSourceStatuses(facts, getSourceStats()), 'fundamentus');
+
+        expect(fundamentus.status).toBe(SOURCE_STATUS.UNKNOWN);
+        expect(fundamentus.trigger).toBe('scheduled');
+        expect(fundamentus.detail).toContain('Ainda não teve a vez');
+        expect(fundamentus.cadence).toBe('Todo dia às 09:00 e 18:30');
+        expect(fundamentus.nextRun).toMatch(/(hoje|amanhã) às (09:00|18:30)/);
     });
 
-    // Depois de um deploy, a fonte tem entrega gravada no banco e zero chamadas no
-    // processo novo. Dizer só "sem chamadas" ao lado de "há 12 min" fazia a linha
-    // se contradizer na tela.
-    it('entrega anterior ao reinício não vira "sem chamadas" seco', () => {
-        const facts = factsBase();
-        facts.macro.currenciesSources = { usd: 'PTAX/BCB', btc: 'Coinbase' };
-        const rows = buildSourceStatuses(facts, getSourceStats());
+    // Fonte de RESERVA sem chamadas: é boa notícia, não pendência. Ela só entra
+    // quando a anterior falha — silêncio ali significa que a cadeia deu conta.
+    it('fonte de reserva sem chamadas explica que isso é o esperado', () => {
+        const coinbase = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'coinbase');
 
-        const coinbase = byId(rows, 'coinbase');
-        expect(coinbase.attempts).toBe(0);
-        expect(coinbase.lastDeliveryAt).toEqual(facts.macro.currenciesUpdatedAt);
-        expect(coinbase.detail).toContain('antes do último reinício');
+        expect(coinbase.status).toBe(SOURCE_STATUS.UNKNOWN);
+        expect(coinbase.trigger).toBe('onFailure');
+        expect(coinbase.nextRun).toBeNull();   // não tem hora marcada
+        expect(coinbase.detail).toContain('é o esperado');
+        expect(coinbase.cadence).toContain('quando a fonte anterior');
+    });
+
+    it('a fonte agendada carrega a periodicidade em português', () => {
+        const rows = buildSourceStatuses(factsBase(), getSourceStats());
+        expect(byId(rows, 'bcb.series').cadence).toBe('A cada 15 minutos');
+        expect(byId(rows, 'bcb.series').nextRun).toMatch(/^(em \d+ min|em instantes)$/);
     });
 
     it('metade das chamadas falhando derruba uma fonte crítica', () => {
@@ -128,6 +138,48 @@ describe('buildSourceStatuses — veredito por fonte', () => {
         }));
         expect(byId(rows, 'yahoo.currencies').status).toBe(SOURCE_STATUS.WARN);
         expect(byId(rows, 'yahoo.currencies').detail).toContain('Nenhuma');
+    });
+
+    // Rodou UMA vez e não trouxe nada: sai do cinza na hora. Era o pedido
+    // explícito — "se rodar e não receber, deve ficar laranja ou vermelho".
+    it('uma única chamada sem dado já tira a fonte do cinza', () => {
+        const rows = buildSourceStatuses(factsBase(), stats({
+            id: 'tesouro', attempts: 1, ok: 0, failures: 1, failureRate: 1,
+        }));
+        // `tesouro` é essencial → vermelho, não amarelo.
+        expect(byId(rows, 'tesouro').status).toBe(SOURCE_STATUS.CRITICAL);
+        expect(byId(rows, 'tesouro').detail).toContain('uma vez e não trouxe dado');
+    });
+
+    // Histórico bom não pode esconder uma queda acontecendo agora. Uma fonte
+    // diária levaria semanas para a MÉDIA acusar o que a última chamada já diz.
+    it('última chamada falhando derruba do verde, mesmo com média boa', () => {
+        const agora = new Date(NOW);
+        const rows = buildSourceStatuses(factsBase(), stats({
+            id: 'yahoo.quotes',
+            attempts: 30,
+            ok: 29,
+            failures: 1,
+            failureRate: 1 / 30,
+            lastOkAt: new Date(agora.getTime() - 3600000),
+            lastFailAt: agora,
+        }));
+        expect(byId(rows, 'yahoo.quotes').status).toBe(SOURCE_STATUS.WARN);
+        expect(byId(rows, 'yahoo.quotes').detail).toContain('última chamada falhou');
+    });
+
+    it('falha antiga seguida de sucesso volta ao verde', () => {
+        const agora = new Date(NOW);
+        const rows = buildSourceStatuses(factsBase(), stats({
+            id: 'yahoo.quotes',
+            attempts: 30,
+            ok: 29,
+            failures: 1,
+            failureRate: 1 / 30,
+            lastFailAt: new Date(agora.getTime() - 3600000),
+            lastOkAt: agora,
+        }));
+        expect(byId(rows, 'yahoo.quotes').status).toBe(SOURCE_STATUS.OK);
     });
 
     // O caso exato de 04/09/2026: o Yahoo servia cotações e índices normalmente e

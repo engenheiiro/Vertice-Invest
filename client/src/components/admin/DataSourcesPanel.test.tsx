@@ -110,11 +110,54 @@ describe('DataSourcesPanel', () => {
     // de falha, o painel nasceria em pânico a cada publicação.
     it('fonte sem uso ainda não é tratada como falha', () => {
         render(<DataSourcesPanel
-            sources={[src({ id: 'a', short: 'IBGE', status: 'UNKNOWN', attempts: 0, lastDeliveryHours: null })]}
+            sources={[src({
+                id: 'a', short: 'Fundamentus', status: 'UNKNOWN', attempts: 0,
+                lastDeliveryHours: null, trigger: 'scheduled', nextRun: 'hoje às 18:30',
+            })]}
             groups={groups}
         />);
         expect(screen.getByText('Tudo chegando')).toBeInTheDocument();
-        expect(screen.getByText('Sem uso')).toBeInTheDocument();
+    });
+
+    // O pedido: "preciso saber que horas eles vão rodar". Card cinza sem previsão
+    // é indistinguível de card cinza abandonado.
+    it('fonte agendada em espera mostra QUANDO volta a rodar', () => {
+        render(<DataSourcesPanel
+            sources={[src({
+                id: 'a', short: 'Fundamentus', status: 'UNKNOWN', attempts: 0,
+                lastDeliveryHours: null, trigger: 'scheduled', nextRun: 'hoje às 18:30',
+            })]}
+            groups={groups}
+        />);
+        expect(screen.getByText('Aguardando')).toBeInTheDocument();
+        expect(screen.getByText('hoje às 18:30')).toBeInTheDocument();
+    });
+
+    // Reserva não tem horário — ela entra quando a anterior falha. Mostrar "—" ali
+    // faria parecer defeito o que é o sistema funcionando.
+    it('fonte de reserva parada aparece como em espera, não como pendência', () => {
+        render(<DataSourcesPanel
+            sources={[src({
+                id: 'a', short: 'Coinbase', status: 'UNKNOWN', attempts: 0,
+                lastDeliveryHours: null, trigger: 'onFailure', nextRun: null,
+            })]}
+            groups={groups}
+        />);
+        expect(screen.getByText('Em espera')).toBeInTheDocument();
+        expect(screen.getByText('reserva')).toBeInTheDocument();
+    });
+
+    it('o detalhe diz a periodicidade e a próxima execução', () => {
+        render(<DataSourcesPanel
+            sources={[src({
+                id: 'a', short: 'Banco Central', label: 'Banco Central — séries',
+                cadence: 'A cada 15 minutos', nextRun: 'em 9 min',
+            })]}
+            groups={groups}
+        />);
+        fireEvent.click(screen.getByRole('button', { name: /Banco Central/ }));
+        expect(screen.getByText(/A cada 15 minutos/)).toBeInTheDocument();
+        expect(screen.getByText(/próxima em 9 min/)).toBeInTheDocument();
     });
 
     it('servidor antigo (sem os blocos) ainda renderiza os cards', () => {

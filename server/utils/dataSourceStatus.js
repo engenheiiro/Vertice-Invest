@@ -19,6 +19,8 @@
  * respondeu errado agora é pior notícia que uma que ninguém chamou ainda.
  */
 
+import { cadenceLabel, nextRunLabel } from './sourceSchedule.js';
+
 export const SOURCE_STATUS = { OK: 'OK', WARN: 'WARN', CRITICAL: 'CRITICAL', UNKNOWN: 'UNKNOWN' };
 
 /**
@@ -92,20 +94,29 @@ export const buildSourceStatuses = (facts, sourceStats = []) => {
         let status = SOURCE_STATUS.OK;
         let detail;
 
+        const deReserva = source.schedule?.kind === 'onFailure';
+        // A última tentativa terminou em falha? É o estado CORRENTE da fonte, e
+        // vale mais que a média: uma fonte que roda duas vezes por dia levaria
+        // dias para a taxa acusar algo, enquanto "a última chamada falhou" é
+        // exatamente o que se quer ver no painel no momento em que acontece.
+        const ultimaFalhou = !!source.lastFailAt
+            && (!source.lastOkAt || new Date(source.lastFailAt) > new Date(source.lastOkAt));
+
         if (source.attempts === 0) {
             // Silêncio não é falha. Uma fonte que só roda no sync diário fica sem
             // chamada nenhuma por horas depois de um deploy, e marcá-la de vermelho
             // aí é o alarme falso que ensina o operador a ignorar o painel.
             status = SOURCE_STATUS.UNKNOWN;
-            if (lastDeliveryAt) {
+            if (deReserva) {
+                // Aqui o cinza é BOA notícia: a cadeia não precisou da reserva.
+                detail = 'Nenhuma chamada porque a fonte anterior da cadeia deu conta — é o esperado';
+            } else if (lastDeliveryAt) {
                 // Entrega gravada ANTES do reinício. Dizer só "sem chamadas" ao lado
                 // de "há 12 min" faz a linha se contradizer na tela; o que aconteceu
                 // é que o dado dela está no banco e o processo atual ainda não a usou.
                 detail = 'Entregou antes do último reinício; ainda sem novas chamadas neste processo';
-            } else if (source.optional) {
-                detail = 'Sem chamadas desde o reinício — normal para uma fonte que roda uma vez por dia';
             } else {
-                detail = 'Sem chamadas desde o reinício do servidor';
+                detail = 'Ainda não teve a vez dela desde o reinício do servidor';
             }
         } else if (julgavel && rate >= FAILURE_RATE.critical) {
             status = source.critical ? SOURCE_STATUS.CRITICAL : SOURCE_STATUS.WARN;
@@ -114,10 +125,17 @@ export const buildSourceStatuses = (facts, sourceStats = []) => {
             status = SOURCE_STATUS.WARN;
             detail = `${pct(rate)} das ${source.attempts} chamadas falharam`;
         } else if (source.ok === 0) {
-            // Poucas tentativas, todas ruins: ainda não é tendência estatística,
-            // mas não há uma única entrega para chamar de saudável.
+            // Rodou e não trouxe nada, nem uma vez. Ainda não é tendência
+            // estatística, mas não há uma única entrega para chamar de saudável.
             status = source.critical ? SOURCE_STATUS.CRITICAL : SOURCE_STATUS.WARN;
-            detail = `Nenhuma das ${source.attempts} chamadas trouxe dado`;
+            detail = source.attempts === 1
+                ? 'Foi chamada uma vez e não trouxe dado'
+                : `Nenhuma das ${source.attempts} chamadas trouxe dado`;
+        } else if (ultimaFalhou) {
+            // Já entregou antes, mas a chamada mais recente falhou. Verde aqui
+            // esconderia uma fonte caindo AGORA atrás de um histórico bom.
+            status = SOURCE_STATUS.WARN;
+            detail = `A última chamada falhou (${source.ok} de ${source.attempts} trouxeram dado)`;
         } else {
             detail = `${source.ok} de ${source.attempts} chamadas com dado`;
         }
@@ -132,6 +150,11 @@ export const buildSourceStatuses = (facts, sourceStats = []) => {
             group: source.group,
             feeds: source.feeds,
             critical: source.critical,
+            /** 'scheduled' tem hora marcada; 'onFailure' só entra se a anterior falhar. */
+            trigger: deReserva ? 'onFailure' : 'scheduled',
+            cadence: cadenceLabel(source.schedule),
+            /** Frase do próximo disparo; `null` para fonte de reserva (não tem hora). */
+            nextRun: nextRunLabel(source.schedule, now),
             status,
             detail,
             lastDeliveryAt,
