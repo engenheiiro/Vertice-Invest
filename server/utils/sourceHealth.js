@@ -214,6 +214,18 @@ export const SOURCE_CATALOG = {
         chain: 'candle',
         critical: false,
     },
+    'yahoo.hourly': {
+        label: 'Yahoo Finance — barras horárias',
+        short: 'Yahoo horário',
+        role: 'Só cripto',
+        group: 'series',
+        // A cripto não tem arquivo de pregão: quando o Yahoo publica a barra
+        // diária vazia, a barra horária do mesmo dia é o único socorro que existe.
+        feeds: 'Fechamento do dia da cripto quando a barra diária vem sem preço',
+        schedule: { kind: 'onFailure' },
+        chain: 'candle',
+        critical: false,
+    },
     'yahoo.indices': {
         label: 'Yahoo Finance — índices',
         short: 'Yahoo índices',

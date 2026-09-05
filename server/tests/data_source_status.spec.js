@@ -245,10 +245,20 @@ describe('cadeia de cobertura', () => {
     // A série diária DEIXOU de ser ponto único em 04/09/2026: o arquivo da B3
     // passou a cobrir o universo de pesquisa, não só a carteira. O painel só pode
     // afirmar isso porque o código realmente faz — ver `reinforceWithB3`.
-    it('o histórico diário tem a B3 como reserva', () => {
+    //
+    // As barras horárias entraram em 05/09/2026 como TERCEIRO elo, e a ordem
+    // importa: o arquivo da B3 é fechamento oficial, a barra horária é
+    // aproximação. Inverter os dois no catálogo faria o painel prometer
+    // precisão que a segunda reserva não tem.
+    it('o histórico diário tem a B3 e as barras horárias como reserva', () => {
         const rows = buildSourceStatuses(factsBase(), getSourceStats());
-        expect(byId(rows, 'yahoo.history').backups).toEqual(['B3 — arquivo diário']);
+        expect(byId(rows, 'yahoo.history').backups).toEqual([
+            'B3 — arquivo diário',
+            'Yahoo Finance — barras horárias',
+        ]);
         expect(byId(rows, 'b3').covers).toBe('Yahoo Finance — histórico');
+        expect(byId(rows, 'b3').chainPosition).toBe(2);
+        expect(byId(rows, 'yahoo.hourly').chainPosition).toBe(3);
     });
 
     // O catálogo afirmava que a Brapi vinha antes do Google. `recoverQuote` faz o

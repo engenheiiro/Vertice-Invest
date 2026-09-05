@@ -53,6 +53,12 @@ const US_CLASS_DASH_RE = /^[A-Z]{1,4}-[A-Z]$/;   // BRK-B (não casa BTC-USD)
 // nenhuma"). Ver o módulo para o histórico de B3SA3 e EQMA3B.
 // Ticker canônico (DB) → símbolo aceito pelo Yahoo.
 export const toYahooSymbol = (sym) => (US_CLASS_DOT_RE.test(sym) ? sym.replace('.', '-') : sym);
+
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Barras horárias válidas mínimas, de 24, para aceitar o fechamento derivado. */
+export const HOURLY_MIN_BARS = 18;
+/** Hora UTC mínima da última barra válida para ela valer como fechamento. */
+export const HOURLY_MIN_LAST_HOUR = 20;
 // Símbolo do Yahoo → ticker canônico (DB), revertendo só a classe US (preserva BTC-USD).
 export const fromYahooSymbol = (sym) => (US_CLASS_DASH_RE.test(sym) ? sym.replace('-', '.') : sym);
 
@@ -213,6 +219,64 @@ export const externalMarketService = {
             };
         } catch {
             // Silencioso no nível de função, quem chama decide o log.
+            return null;
+        }
+    },
+
+    /**
+     * FECHAMENTO DO DIA DERIVADO DAS BARRAS HORÁRIAS — o socorro de quem não tem
+     * arquivo oficial.
+     *
+     * Em 04/09/2026 o Yahoo publicou a barra DIÁRIA de toda a cripto com
+     * `close: null` (BTC, ETH e USDC pararam em 03/09) enquanto as barras
+     * HORÁRIAS do mesmo dia estavam lá: 23 das 24 válidas, a última às 22:00Z. É
+     * o buraco já conhecido nos ETFs da B3, agora numa classe que não tem arquivo
+     * de pregão para socorrê-la.
+     *
+     * O valor é uma APROXIMAÇÃO declarada: com a última hora nula, o fechamento
+     * derivado é o preço das 23:00Z, uma hora antes do fechamento de fato. Isso é
+     * melhor que as duas alternativas reais — o buraco permanente, e o preço das
+     * 23:59 BRT (três horas DEPOIS) que o snapshot usa quando o candle falta.
+     *
+     * Fail-closed nos dois limites: meia dúzia de barras soltas no meio do dia não
+     * vira fechamento. Exige cobertura (`HOURLY_MIN_BARS`) E que a última barra
+     * válida esteja no fim do dia (`HOURLY_MIN_LAST_HOUR`) — sem os dois, uma
+     * interrupção da fonte às 10h viraria "fechamento" das 10h.
+     *
+     * @param {string} symbol símbolo do provedor (para cripto, a própria chave: BTC-USD)
+     * @param {string} dayStr dia-UTC alvo (YYYY-MM-DD)
+     */
+    async fetchDailyCloseFromHourly(symbol, dayStr) {
+        if (!symbol || !DAY_KEY_RE.test(String(dayStr || ''))) return null;
+        try {
+            const inicio = new Date(`${dayStr}T00:00:00.000Z`);
+            const fim = new Date(inicio.getTime() + 86400000);
+            const result = await trackSource('yahoo.hourly', () => yahooBreaker.exec(() => yahooFinance.chart(
+                symbol,
+                { period1: inicio, period2: fim, interval: '1h' },
+            )), { isEmpty: (r) => !(r?.quotes?.length > 0) });
+
+            // Filtro explícito pelo dia: o Yahoo entrega a barra viva ALÉM do
+            // period2, e ela pertence ao dia seguinte.
+            const doDia = (result?.quotes || []).filter((c) => {
+                const d = c?.date instanceof Date ? c.date : new Date(c?.date);
+                return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === dayStr;
+            });
+            const validas = doDia.filter((c) => c.close > 0);
+            const ultima = validas[validas.length - 1];
+            if (!ultima) return null;
+            if (validas.length < HOURLY_MIN_BARS) return null;
+            const dataUltima = ultima.date instanceof Date ? ultima.date : new Date(ultima.date);
+            if (dataUltima.getUTCHours() < HOURLY_MIN_LAST_HOUR) return null;
+
+            return {
+                date: dayStr,
+                close: ultima.close,
+                // Volume do dia é a SOMA das horas: a barra horária traz só a sua
+                // fatia, e gravar a fatia como volume do dia subestimaria em ~24x.
+                volume: doDia.reduce((soma, c) => soma + (c.volume || 0), 0),
+            };
+        } catch {
             return null;
         }
     },

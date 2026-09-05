@@ -9,6 +9,7 @@ import { collectB3Candles, isB3Coverable, lastBusinessDayUpTo } from '../b3Histo
 import { brazilDayKey } from '../../utils/walletSnapshot.js';
 import { ASSET_HISTORY_MAX_POINTS, HISTORY_CAP_EXEMPT_TICKERS } from '../../config/financialConstants.js';
 import { isTransientMongoError, withMongoRetry } from '../../utils/mongoResilience.js';
+import { repairCryptoCandleGaps } from '../cryptoCandleRepairService.js';
 
 // Funções matemáticas auxiliares
 const calculateSMA = (prices, period) => {
@@ -522,6 +523,17 @@ export const timeSeriesWorker = {
 
             await flushMetrics();
             await this.reportRun(stats);
+
+            // A barra DIÁRIA da cripto às vezes vem com close nulo enquanto as
+            // horárias do mesmo dia existem (04/09/2026: BTC, ETH e USDC). Roda
+            // DEPOIS do run porque só faz sentido sobre a série já atualizada — e
+            // fora do try de cada lote, porque é reparo, não parte da coleta:
+            // falhar aqui não pode derrubar o relatório do run.
+            try {
+                await repairCryptoCandleGaps();
+            } catch (e) {
+                logger.warn(`⚠️ [TimeSeriesWorker] Reparo de candle da cripto falhou: ${e.message}`);
+            }
 
         } catch (error) {
             // O que já foi calculado não pode morrer com o erro.
