@@ -24,6 +24,42 @@ import { CreateGoalModal } from '../components/goals/CreateGoalModal';
 import { GoalDetailModal } from '../components/goals/GoalDetailModal';
 import { ConfirmModal, EmptyState, SkeletonCard, SkeletonKpiGrid } from '../components/ui';
 
+/**
+ * Preferência de "mostrar/esconder as metas concluídas", por navegador.
+ *
+ * Tri-estado de propósito: `null` é "o usuário ainda não decidiu", e só nesse
+ * caso o padrão pode depender do que há em andamento (sem nada vivo, recolher as
+ * concluídas deixaria a página vazia). Guardar só um booleano apagaria essa
+ * distinção — o primeiro acesso passaria a herdar um "false" que ninguém pediu.
+ *
+ * localStorage e não servidor: é escolha de exibição, não dado de carteira. Vale
+ * por navegador, some se o usuário limpar o site, e nenhuma dessas coisas custa
+ * nada a quem lê a tela. Leitura e escrita em try/catch porque o acesso ao
+ * storage LANÇA em janela anônima com cookies de terceiros bloqueados — sem a
+ * guarda, a página de Metas quebrava inteira em vez de perder a preferência.
+ */
+const COMPLETED_OPEN_KEY = 'goalsCompletedOpen';
+/** Uma chave por jornada: recolher uma não pode recolher as outras. */
+const chainExpandedKey = (chainId: string) => `goalsChainExpanded:${chainId}`;
+
+const readFlag = (key: string): boolean | null => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === '1') return true;
+    if (raw === '0') return false;
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const writeFlag = (key: string, value: boolean) => {
+  try { localStorage.setItem(key, value ? '1' : '0'); } catch { /* storage indisponível */ }
+};
+
+const readCompletedOverride = (): boolean | null => readFlag(COMPLETED_OPEN_KEY);
+const storeCompletedOverride = (open: boolean) => writeFlag(COMPLETED_OPEN_KEY, open);
+
 const ChainArrow: React.FC = () => (
   <>
     <div className="hidden sm:flex items-center justify-center shrink-0 px-1 text-slate-600">
@@ -77,8 +113,14 @@ interface GoalChainProps {
 /** Uma jornada encadeada, com os marcos conquistados do início recolhíveis. */
 const GoalChain: React.FC<GoalChainProps> = ({ goals, privacy, onSelect, onRename, renaming }) => {
   // Padrão é a jornada inteira à vista: esconder conquista por default tira do
-  // usuário justamente o que ele veio ver. Recolher é uma escolha dele.
-  const [expanded, setExpanded] = useState(true);
+  // usuário justamente o que ele veio ver. Recolher é uma escolha dele — e, por
+  // ser dele, sobrevive a sair e voltar (chave por jornada, ver chainExpandedKey).
+  const chainId = goals[goals.length - 1]?._id || '';
+  const [expanded, setExpanded] = useState<boolean>(() => readFlag(chainExpandedKey(chainId)) ?? true);
+  const setExpandedPersisted = (value: boolean) => {
+    setExpanded(value);
+    writeFlag(chainExpandedKey(chainId), value);
+  };
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const settled = useRef(false);
@@ -165,7 +207,7 @@ const GoalChain: React.FC<GoalChainProps> = ({ goals, privacy, onSelect, onRenam
         </div>
         {expanded && trailCount > 0 && (
           <button
-            onClick={() => setExpanded(false)}
+            onClick={() => setExpandedPersisted(false)}
             className="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-300 transition-colors"
           >
             <ChevronUp size={12} /> Recolher {trailCount} conquistadas
@@ -187,7 +229,7 @@ const GoalChain: React.FC<GoalChainProps> = ({ goals, privacy, onSelect, onRenam
                 {i > 0 && <ChainArrow />}
                 <div className="min-w-0">
                   {node.kind === 'trail' ? (
-                    <AchievedTrail goals={node.goals} privacy={privacy} onExpand={() => setExpanded(true)} />
+                    <AchievedTrail goals={node.goals} privacy={privacy} onExpand={() => setExpandedPersisted(true)} />
                   ) : (
                     <GoalCard goal={node.goal} privacy={privacy} onClick={() => onSelect(node.goal._id)} />
                   )}
@@ -210,7 +252,10 @@ export const Goals: React.FC = () => {
   const [clearOpen, setClearOpen] = useState(false);
   // Jornada já vencida não disputa espaço com as vivas — fica a um clique.
   // `null` = usuário ainda não decidiu; aí o padrão depende do que há em andamento.
-  const [completedOverride, setCompletedOverride] = useState<boolean | null>(null);
+  // A escolha sobrevive a sair e voltar (ver COMPLETED_OPEN_KEY): recolher as
+  // concluídas é arrumar a própria tela, e ter que refazer isso a cada visita
+  // desfazia o único efeito que o botão tem.
+  const [completedOverride, setCompletedOverride] = useState<boolean | null>(readCompletedOverride);
 
   const { data, isLoading } = useQuery({
     queryKey: ['goals', activeWalletId],
@@ -379,7 +424,11 @@ export const Goals: React.FC = () => {
             {completedItems.length > 0 && (
               <section>
                 <button
-                  onClick={() => setCompletedOverride(!completedOpen)}
+                  onClick={() => {
+                    const proximo = !completedOpen;
+                    setCompletedOverride(proximo);
+                    storeCompletedOverride(proximo);
+                  }}
                   aria-expanded={completedOpen}
                   className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 hover:text-slate-300 transition-colors mb-3"
                 >
