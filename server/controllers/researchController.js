@@ -341,7 +341,16 @@ export const getDataQualityStats = async (req, res, next) => {
 
 export const resetAssetHealth = async (req, res, next) => {
     try {
-        const result = await MarketAsset.updateMany({ isActive: false, failCount: { $gte: 10 } }, { $set: { isActive: true, failCount: 0 } });
+        // O reset de saúde perdoa QUARENTENA, não APOSENTADORIA. Sem o
+        // `isBlacklisted`, um clique no botão do Admin ressuscitava em massa todo
+        // papel já dado como morto (delistado, incorporado, trocou de símbolo):
+        // eles voltavam para a fila de cotação com failCount zerado e ficavam
+        // descendo Yahoo → Google → Brapi de novo, indefinidamente. Aposentado só
+        // volta a dedo, por `retireDeadTickers.js --undo`.
+        const result = await MarketAsset.updateMany(
+            { isActive: false, isBlacklisted: { $ne: true }, failCount: { $gte: 10 } },
+            { $set: { isActive: true, failCount: 0 } },
+        );
         res.json({ message: "Saúde dos ativos resetada.", reactivated: result.modifiedCount });
     } catch (error) { next(error); }
 };

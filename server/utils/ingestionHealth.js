@@ -12,12 +12,14 @@ export const createFundamentusStats = ({ stockParsed = 0, fiiParsed = 0 } = {}) 
         accepted: 0,
         rejectedLowLiquidity: 0,
         duplicates: 0,
+        retired: 0,
     },
     FII: {
         parsed: fiiParsed,
         accepted: 0,
         rejectedLowLiquidity: 0,
         duplicates: 0,
+        retired: 0,
     },
 });
 
@@ -32,6 +34,11 @@ export const finalizeFundamentusStats = (stats) => {
             accepted,
             rejectedLowLiquidity: Number(row.rejectedLowLiquidity) || 0,
             duplicates: Number(row.duplicates) || 0,
+            // Linhas que a fonte ainda publica mas que já foram APOSENTADAS aqui.
+            // Ficam fora de `accepted` de propósito: não são perda de ingestão, são
+            // recusa deliberada — a fonte continuar listando um papel morto não
+            // ressuscita o flag terminal.
+            retired: Number(row.retired) || 0,
             acceptanceRate: parsed > 0 ? accepted / parsed : 0,
         };
     }

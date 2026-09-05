@@ -60,7 +60,9 @@ const runMigration = async () => {
         });
         await Promise.all(promises);
 
-        await MarketAsset.updateMany({ ticker: { $in: BLACKLIST } }, { $set: { isBlacklisted: true } });
+        // isBlacklisted é terminal e anda com isActive: marcar só o flag deixava o
+        // papel na fila de cotação para sempre (ver normalizeRetiredAssets.js).
+        await MarketAsset.updateMany({ ticker: { $in: BLACKLIST } }, { $set: { isBlacklisted: true, isActive: false } });
         await MarketAsset.updateMany({ ticker: { $in: IGNORED_TICKERS } }, { $set: { isIgnored: true } });
         await MarketAsset.updateMany({ ticker: { $in: FII_TIER_1 } }, { $set: { isTier1: true } });
 

@@ -168,6 +168,19 @@ export const syncService = {
                 return { success: false, error: "Scraping blocked.", errorCode: 'FUNDAMENTUS_BLOCKED', fundamentals: stats };
             }
 
+            // Aposentados, lidos UMA vez por sync. A blacklist é estado TERMINAL, mas a
+            // fonte não sabe disso: o Fundamentus segue listando o papel (com a liquidez
+            // velha, que passa no filtro de 5k) e o $set abaixo grava
+            // `isActive: true, failCount: 0` — ou seja, o sync desfazia a aposentadoria a
+            // cada run. Era assim que `isBlacklisted=true` + `isActive=true` nascia: em
+            // 05/09/2026 eram 23 ativos nesse estado, e o painel de Saúde ("Aposentado
+            // que ainda é cotado") mostrava o resultado, não a origem. Fonte listar papel
+            // morto não desfaz a baixa: quem saiu, saiu.
+            const retiredTickers = new Set(
+                (await MarketAsset.find({ isBlacklisted: true }).select('ticker').lean())
+                    .map((a) => a.ticker),
+            );
+
             const processedTickers = new Set();
             let typosFixedCount = 0; // Contador para Monitor de Qualidade
 
@@ -186,6 +199,12 @@ export const syncService = {
                     return;
                 }
                 processedTickers.add(ticker);
+
+                // 3. FILTRO DE APOSENTADORIA (terminal — vale mesmo com dado bom na fonte)
+                if (retiredTickers.has(ticker)) {
+                    classStats.retired++;
+                    return;
+                }
 
                 const liquidity = Number(data.liq2m) || Number(data.liquidity) || 0;
                 
@@ -320,9 +339,14 @@ export const syncService = {
             // isActive filter: ativos delistados já desativados pela blacklist dinâmica
             // não devem ser re-cotados aqui (a reativação tem varredura própria). Sem
             // isto, tickers mortos (SGEN, ABC, MRO...) eram tentados todo sync.
+            // isBlacklisted também: os dois campos não andam juntos sozinhos, e ler só
+            // `isActive` deixava o aposentado-mas-ativo entrar no lote, ser cotado e
+            // sair daqui com `isActive: true` regravado — a mesma ressurreição do
+            // caminho de fundamentos, agora no exterior/cripto.
             let assetsForExternal = await MarketAsset.find({
                 type: { $in: ['CRYPTO', 'STOCK_US'] },
-                isActive: { $ne: false }
+                isActive: { $ne: false },
+                isBlacklisted: { $ne: true }
             }).select('ticker type failCount lastFailDate marketCap liquidity');
 
             logger.info("ℹ️ [Sync] Verificando/Seeding default cryptocurrencies...");

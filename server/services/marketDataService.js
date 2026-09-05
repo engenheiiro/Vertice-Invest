@@ -941,6 +941,12 @@ export const marketDataService = {
                 update: {
                     $set: {
                         isBlacklisted: true,
+                        // isActive junto, sempre. Aqui o candidato JÁ vem inativo, então
+                        // a linha é redundante no caminho feliz — e é exatamente por ser
+                        // redundante que ela precisa existir: o estado terminal fica
+                        // completo em uma escrita só, e não depende de quem chamou ter
+                        // deixado o documento no estado certo.
+                        isActive: false,
                         retiredAt: now,
                         retiredReason: `auto: ${daysSince(a.updatedAt)}d sem cotação em nenhuma fonte`,
                     },

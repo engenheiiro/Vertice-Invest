@@ -123,7 +123,10 @@ const run = async () => {
         if (apply) {
             const res = await MarketAsset.updateMany(
                 { ticker: { $in: explicit } },
-                { $set: { isBlacklisted: false, failCount: 0, lastFailDate: null }, $unset: { retiredAt: '', retiredReason: '', successorTicker: '' } },
+                // isActive volta junto: a baixa desativa (o --apply grava os dois), então
+                // reverter só o isBlacklisted deixava o papel fora da fila de cotação
+                // esperando a varredura de reativação notar. Desfazer é desfazer tudo.
+                { $set: { isBlacklisted: false, isActive: true, failCount: 0, lastFailDate: null }, $unset: { retiredAt: '', retiredReason: '', successorTicker: '' } },
             );
             console.log(`✅ ${res.modifiedCount} revertido(s) — o próximo sync tenta cotar de novo.`);
         } else {

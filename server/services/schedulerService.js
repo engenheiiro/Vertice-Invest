@@ -635,8 +635,13 @@ export const initScheduler = () => {
     // 2. Sync Preços (Yahoo/Brapi 15min)
     schedule('*/15 * * * *', 'quotes-sync', async () => {
         try {
-            const assets = await MarketAsset.find({ 
+            // Aposentado fora do lote na ORIGEM. O refreshQuotesBatch já descarta
+            // blacklistado, mas descartar depois de montar o lote significa carregar
+            // o ticker morto a cada 15 minutos só para jogá-lo fora — e o filtro aqui
+            // é o mesmo índice composto { isActive, isBlacklisted, isIgnored, type }.
+            const assets = await MarketAsset.find({
                 isActive: true,
+                isBlacklisted: { $ne: true },
                 $or: [
                     { liquidity: { $gt: 10000 } },
                     { type: { $in: ['CRYPTO', 'STOCK_US', 'ETF'] } }

@@ -252,6 +252,9 @@ describe('tryReactivateAssets — aposentadoria automática após a quarentena',
     const op = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne;
     expect(op.filter).toEqual({ ticker: 'MMC', isBlacklisted: false }); // idempotente
     expect(op.update.$set.isBlacklisted).toBe(true);
+    // Estado terminal COMPLETO na mesma escrita: baixa sem desativar deixava o
+    // aposentado na fila de cotação (isBlacklisted=true + isActive=true).
+    expect(op.update.$set.isActive).toBe(false);
     expect(op.update.$set.retiredReason).toMatch(/127d sem cotação/);
   });
 

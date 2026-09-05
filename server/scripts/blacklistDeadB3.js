@@ -146,7 +146,12 @@ const run = async () => {
 
         if (apply && toBlacklist.length) {
             const ops = toBlacklist.map(({ a }) => ({
-                updateOne: { filter: { ticker: a.ticker, isBlacklisted: false }, update: { $set: { isBlacklisted: true } } },
+                // isActive junto: baixa sem desativar é o que gerava o aposentado que
+                // continuava sendo cotado (ver normalizeRetiredAssets.js).
+                updateOne: {
+                    filter: { ticker: a.ticker, isBlacklisted: false },
+                    update: { $set: { isBlacklisted: true, isActive: false } },
+                },
             }));
             const res = await MarketAsset.bulkWrite(ops);
             console.log(`\n✅ ${res.modifiedCount} ativos marcados isBlacklisted=true.`);
