@@ -24,6 +24,13 @@
  * e HSRE11 estavam vivos; os três tinham ZERO negócios nos 10 pregões anteriores.
  * Preço em cache não é papel negociando.
  *
+ * O probe passou a DATAR o eco em 05/09/2026, e com isso o falso positivo deixa
+ * de depender da precedência da B3 para ser contido — o que valia só para papel
+ * brasileiro passou a valer para o exterior, que não tem arquivo de pregão. Foi
+ * o que faltava para AVB, EQR (fusão → VMRK) e EA (fechou capital): os três
+ * saíam daqui como "✅ RECUPERA — falha transitória" enquanto o último negócio
+ * era de agosto. Ver `probeProvesTrading` em lib/quoteProbe.js.
+ *
  * Guardas que permanecem:
  *   - DRY-RUN por padrão; só grava com --apply.
  *   - Ticker detido por usuário nunca é aposentado automaticamente (--force-held
@@ -50,7 +57,7 @@ import { fileURLToPath } from 'url';
 import MarketAsset from '../models/MarketAsset.js';
 import UserAsset from '../models/UserAsset.js';
 import { connectScriptDb } from './lib/scriptDb.js';
-import { probeTicker, classifyProbe, probeHasPrice } from './lib/quoteProbe.js';
+import { probeTicker, classifyProbe } from './lib/quoteProbe.js';
 import { loadB3Window, b3Activity, b3Label, isB3Type } from './lib/b3Activity.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -197,7 +204,12 @@ const run = async () => {
             continue;
         }
 
-        if (probeHasPrice(p)) {
+        // Preserva SÓ quando o probe prova negociação recente. Antes a guarda era
+        // `probeHasPrice`, e preço não é prova: o `meta` do Yahoo e a página do
+        // Google servem a última cotação de um símbolo extinto indefinidamente.
+        // A troca não afrouxa nada — o que não prova vida ainda precisa passar
+        // pelas mesmas guardas (detido em carteira, quarentena, --apply).
+        if (verdict.code === 'RECOVERS') {
             skipped.push({ a, reason: verdict.label });
             continue;
         }

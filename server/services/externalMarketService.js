@@ -8,6 +8,7 @@ import { recordIngestionError } from './errorLogService.js';
 import { measurePerformance } from '../utils/performanceMetrics.js';
 import { trackSource, recordEscalation } from '../utils/sourceHealth.js';
 import { B3_TICKER_RE } from '../utils/tickerShape.js';
+import { cryptoYahooSymbol, isKnownCryptoTicker } from '../config/cryptoList.js';
 
 // Instancia a classe com supressão de avisos
 const yahooFinance = new YahooFinance({
@@ -126,7 +127,8 @@ export const externalMarketService = {
      * em ':NASDAQ'. O fallback US falhava por endereço errado, não por ausência
      * de dado, e isso ficou meses parecendo "lacuna de fonte".
      */
-    _googleExchanges(ticker) {
+    _googleExchanges(ticker, type = null) {
+        if (type === 'CRYPTO') return [''];
         if (ticker.endsWith('.SA') || B3_TICKER_RE.test(ticker)) return [':BVMF'];
         // Cripto é global no Google — a URL não leva bolsa.
         if (ticker.endsWith('-USD')) return [''];
@@ -186,11 +188,13 @@ export const externalMarketService = {
      * zero aqui não se lê como "não sei", se lê como "não mexeu" — some da lista
      * de altas e baixas do dia um papel que andou.
      */
-    async fetchFromYahooChart(ticker) {
+    async fetchFromYahooChart(ticker, type = null) {
         try {
-            const symbol = B3_TICKER_RE.test(ticker) && !ticker.endsWith('.SA')
-                ? `${ticker}.SA`
-                : toYahooSymbol(ticker);
+            // Mesmo tradutor da cotação em lote: a reserva perguntando por um
+            // símbolo diferente do da principal é uma forma silenciosa de a cadeia
+            // inteira não cobrir o que promete (cripto ia como `TAO`, que não
+            // existe, em vez de `TAO22974-USD`).
+            const symbol = this._providerSymbol(ticker, type);
             // 10 dias cobre feriado prolongado sem trazer série longa à toa.
             const result = await trackSource('yahoo.chart', () => yahooBreaker.exec(() => yahooFinance.chart(
                 symbol,
@@ -282,7 +286,7 @@ export const externalMarketService = {
     },
 
     // Helper: Scraper do Google Finance (Fallback Terciário)
-    async fetchFromGoogleFinance(ticker) {
+    async fetchFromGoogleFinance(ticker, type = null) {
         // Lógica B3 — aceita TANTO o formato Yahoo (PETR4.SA) quanto o ticker cru
         // do banco (PETR4). Sem o segundo ramo, o ticker cru caía no ramo US e
         // recebia ':NASDAQ', fazendo o Google devolver página vazia: era a causa
@@ -290,7 +294,7 @@ export const externalMarketService = {
         // fallback de B3 nunca chegava à bolsa certa (:BVMF).
         const googleTicker = ticker.endsWith('.SA') ? ticker.replace('.SA', '') : ticker;
 
-        for (const exchange of this._googleExchanges(ticker)) {
+        for (const exchange of this._googleExchanges(ticker, type)) {
             try {
                 const url = `https://www.google.com/finance/quote/${googleTicker}${exchange}`;
 
@@ -407,7 +411,7 @@ export const externalMarketService = {
     // na Brapi?" — pergunta que a contagem de chamadas nunca responde, porque
     // ela não sabe de ticker: 24 falhas podem ser 24 ativos ou o mesmo ativo
     // morto tentado 24 vezes, e as duas coisas pedem ações opostas.
-    async recoverQuote(ticker, { reason = 'O Yahoo não trouxe o preço deste ativo' } = {}) {
+    async recoverQuote(ticker, { reason = 'O Yahoo não trouxe o preço deste ativo', type = null } = {}) {
         // A principal entra na lista mesmo tendo falhado: sem o primeiro elo, o
         // caminho não diz de onde o ativo veio parar aqui.
         const tried = ['yahoo.quotes', 'yahoo.chart'];
@@ -420,7 +424,7 @@ export const externalMarketService = {
 
         // Mesmo provedor, outro endpoint: mais barato e mais confiável que sair
         // para scraping, e os dois não falham juntos.
-        const chartData = await this.fetchFromYahooChart(ticker);
+        const chartData = await this.fetchFromYahooChart(ticker, type);
         if (chartData) {
             logger.info(`✅ [Fallback] Candle do Yahoo recuperou cotação para ${ticker}: ${chartData.price}`);
             registrar('yahoo.chart');
@@ -428,7 +432,7 @@ export const externalMarketService = {
         }
 
         tried.push('google.finance');
-        const googleData = await this.fetchFromGoogleFinance(ticker);
+        const googleData = await this.fetchFromGoogleFinance(ticker, type);
         if (googleData) {
             logger.info(`✅ [Fallback] Google Finance recuperou cotação para ${ticker}: ${googleData.price}`);
             registrar('google.finance');
@@ -449,8 +453,37 @@ export const externalMarketService = {
         return null;
     },
 
+    /**
+     * Ticker do nosso banco → símbolo do provedor.
+     *
+     * `type` é OPCIONAL, mas quem o tem deve passá-lo, e a razão tem nome: `STX`
+     * é Stacks na cripto e Seagate na NASDAQ. Sem o tipo, a decisão "isso é
+     * cripto?" só pode ser feita ao texto do ticker — e foi assim que a Seagate,
+     * uma ação do S&P 500, passou meses sendo cotada como `STX-USD` e entrando
+     * no ranking a US$ 0,0028 em vez de US$ 849,28. Nenhum erro, nenhuma falha:
+     * o provedor respondeu certinho sobre outro ativo.
+     *
+     * Sem `type`, o palpite pelo catálogo continua (é melhor que nada, e cobre o
+     * caso de quem só tem uma lista de strings na mão).
+     */
+    _providerSymbol(ticker, type = null) {
+        const cleanT = String(ticker).trim().toUpperCase();
+
+        if (type === 'CRYPTO') return cryptoYahooSymbol(cleanT) || `${cleanT}-USD`;
+        // Tipo conhecido e NÃO cripto encerra o assunto: nunca vira `-USD`.
+        if (!type && isKnownCryptoTicker(cleanT)) return cryptoYahooSymbol(cleanT);
+        if (cleanT.endsWith('-USD')) return cleanT;
+
+        const isB3Format = B3_TICKER_RE.test(cleanT);
+        if (isB3Format && !cleanT.endsWith('.SA')) return `${cleanT}.SA`;
+        // Ação com classe (BRK.B) → formato do Yahoo (BRK-B).
+        return toYahooSymbol(cleanT);
+    },
+
     // Busca Preço de Criptos e Stocks Internacionais em lote (Cotação Atual)
-    async getQuotes(tickers) {
+    // `typeByTicker` (Map ou objeto) é o que impede sigla disputada de virar o
+    // ativo errado — ver `_providerSymbol`.
+    async getQuotes(tickers, { typeByTicker = null } = {}) {
         if (!tickers || tickers.length === 0) return [];
 
         // Guarda defensiva: descarta tickers vazios/whitespace/não-string antes do
@@ -459,26 +492,23 @@ export const externalMarketService = {
         tickers = tickers.filter(t => typeof t === 'string' && t.trim().length > 0);
         if (tickers.length === 0) return [];
 
-        const yahooTickers = tickers.map(t => {
-            const cleanT = t.trim().toUpperCase();
-            
-            // If it's a known crypto list or looks like a crypto (not B3 format, no dot, length 3-4)
-            // Actually, we don't know the type here. But we can check if it's in our default crypto list
-            const knownCryptos = [
-                'BTC', 'ETH', 'USDT', 'BNB', 'SOL', 'USDC', 'XRP', 'DOGE', 'TON', 'ADA',
-                'SHIB', 'AVAX', 'TRX', 'DOT', 'BCH', 'LINK', 'MATIC', 'NEAR', 'LTC', 'ICP',
-                'LEO', 'DAI', 'UNI', 'APT', 'STX', 'ETC', 'MNT', 'FIL', 'RNDR', 'ARB',
-                'XMR', 'OKB', 'IMX', 'KAS', 'XLM', 'INJ', 'VET', 'FDUSD', 'OP', 'GRT',
-                'TAO', 'THETA', 'MKR', 'CRO', 'FET', 'LDO', 'ALGO', 'RUNE', 'AAVE', 'BSV'
-            ];
-            if (knownCryptos.includes(cleanT)) return `${cleanT}-USD`;
-            if (cleanT.endsWith('-USD')) return cleanT;
-
-            const isB3Format = B3_TICKER_RE.test(cleanT);
-            if (isB3Format && !cleanT.endsWith('.SA')) return `${cleanT}.SA`;
-            // Ação com classe (BRK.B) → formato do Yahoo (BRK-B).
-            return toYahooSymbol(cleanT);
-        });
+        const tipoDe = (t) => {
+            if (!typeByTicker) return null;
+            const chave = String(t).trim().toUpperCase();
+            return (typeByTicker instanceof Map ? typeByTicker.get(chave) : typeByTicker[chave]) || null;
+        };
+        const yahooTickers = tickers.map(t => this._providerSymbol(t, tipoDe(t)));
+        // Volta EXATA do símbolo para o nosso ticker. Antes o caminho de volta era
+        // adivinhado por sufixo (`-USD` fora, `.SA` fora), o que só funciona
+        // enquanto o símbolo do provedor é o nosso ticker mais um sufixo. Com o
+        // desempate da CoinMarketCap não é: `TAO22974-USD` viraria `TAO22974` e o
+        // ativo apareceria como falha mesmo tendo vindo preço.
+        // Guarda a forma CANÔNICA (fromYahooSymbol: BF-B → BF.B), a mesma que o
+        // filtro de falhas usa logo abaixo. Guardar o ticker cru faria um papel de
+        // classe cotar certo e ainda assim contar como falha.
+        const tickerDoSimbolo = new Map(
+            yahooTickers.map((s, i) => [s.toUpperCase(), fromYahooSymbol(tickers[i].trim().toUpperCase())]),
+        );
 
         try {
             // TENTATIVA 1: YAHOO FINANCE (Principal)
@@ -495,10 +525,15 @@ export const externalMarketService = {
             const validResults = Array.isArray(results) ? results : [results];
             
             const mappedResults = validResults.map(item => {
-                let symbol = item.symbol;
-                if (symbol.endsWith('.SA')) symbol = symbol.replace('.SA', '');
-                if (symbol.endsWith('-USD')) symbol = symbol.replace('-USD', '');
-                else symbol = fromYahooSymbol(symbol); // BRK-B → BRK.B (canônico no DB)
+                // O mapa da ida é a fonte da volta; o desmonte por sufixo fica só
+                // para o símbolo que não saiu daqui (nenhum, hoje) — ver acima.
+                let symbol = tickerDoSimbolo.get(String(item.symbol).toUpperCase());
+                if (!symbol) {
+                    symbol = item.symbol;
+                    if (symbol.endsWith('.SA')) symbol = symbol.replace('.SA', '');
+                    if (symbol.endsWith('-USD')) symbol = symbol.replace('-USD', '');
+                    else symbol = fromYahooSymbol(symbol); // BRK-B → BRK.B (canônico no DB)
+                }
                 const changePct = item.regularMarketChangePercent || item.changePercent || 0;
 
                 return {
@@ -802,7 +837,11 @@ export const externalMarketService = {
                 }
             }
         } else if (type === 'CRYPTO' && !symbol.includes('-')) {
-            symbol = `${symbol}-USD`;
+            // Mesmo catálogo da cotação. Traduzir diferente aqui seria pior que não
+            // traduzir: o preço viria do token certo e a SÉRIE do impostor, e o
+            // worker de séries MESCLA em vez de substituir — as duas histórias
+            // ficariam entrelaçadas no mesmo documento, sem como separar depois.
+            symbol = cryptoYahooSymbol(symbol) || `${symbol}-USD`;
         } else if (type === 'STOCK_US') {
             // US stocks vão quase sem ajuste (AAPL, MSFT). Exceção: ações com classe
             // (BRK.B) precisam do hífen do Yahoo (BRK-B), senão "No data found".

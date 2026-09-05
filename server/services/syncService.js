@@ -18,6 +18,7 @@ import {
     validateFundamentusIngestion,
 } from '../utils/ingestionHealth.js';
 import { trackJob } from '../utils/jobRun.js';
+import { CRYPTO_ASSETS } from '../config/cryptoList.js';
 import { withJobLease } from '../utils/jobLease.js';
 import { withMongoRetry } from '../utils/mongoResilience.js';
 
@@ -325,23 +326,21 @@ export const syncService = {
             }).select('ticker type failCount lastFailDate marketCap liquidity');
 
             logger.info("ℹ️ [Sync] Verificando/Seeding default cryptocurrencies...");
-            const defaultCryptos = [
-                'BTC', 'ETH', 'USDT', 'BNB', 'SOL', 'USDC', 'XRP', 'DOGE', 'TON', 'ADA',
-                'SHIB', 'AVAX', 'TRX', 'DOT', 'BCH', 'LINK', 'MATIC', 'NEAR', 'LTC', 'ICP',
-                'LEO', 'DAI', 'UNI', 'APT', 'STX', 'ETC', 'MNT', 'FIL', 'RNDR', 'ARB',
-                'XMR', 'OKB', 'IMX', 'KAS', 'XLM', 'INJ', 'VET', 'FDUSD', 'OP', 'GRT',
-                'TAO', 'THETA', 'MKR', 'CRO', 'FET', 'LDO', 'ALGO', 'RUNE', 'AAVE', 'BSV'
-            ];
-            
+            // O universo e o SÍMBOLO de cada moeda moram no mesmo lugar
+            // (config/cryptoList.js). Eram duas listas inline — esta e uma cópia no
+            // externalMarketService — que precisavam concordar e não tinham dono;
+            // a cópia de lá montava o símbolo por concatenação e servia o token
+            // errado nas siglas disputadas.
             const existingCryptos = new Set(assetsForExternal.filter(a => a.type === 'CRYPTO').map(a => a.ticker));
-            
-            for (const ticker of defaultCryptos) {
+
+            for (const cripto of CRYPTO_ASSETS) {
+                const ticker = cripto.ticker;
                 operations.push({
                     updateOne: {
                         filter: { ticker },
                         update: {
                             $setOnInsert: {
-                                name: ticker,
+                                name: cripto.name,
                                 type: 'CRYPTO',
                                 currency: 'USD',
                                 sector: 'Criptomoeda',
@@ -352,7 +351,7 @@ export const syncService = {
                         upsert: true
                     }
                 });
-                
+
                 if (!existingCryptos.has(ticker)) {
                     assetsForExternal.push({ ticker, type: 'CRYPTO' });
                 }
@@ -362,7 +361,9 @@ export const syncService = {
                 const tickersToFetch = assetsForExternal
                     .map(a => a.ticker)
                     .filter(t => typeof t === 'string' && t.trim().length > 0);
-                const quotes = await externalMarketService.getQuotes(tickersToFetch);
+                const quotes = await externalMarketService.getQuotes(tickersToFetch, {
+                    typeByTicker: new Map(assetsForExternal.map((a) => [a.ticker, a.type || null])),
+                });
 
                 const successfulTickers = new Set(
                     quotes.filter(q => q.price > 0).map(q => q.ticker)

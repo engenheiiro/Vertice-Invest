@@ -8,6 +8,11 @@
 //   node server/scripts/diagnoseDeadTickers.js --tickers=XYZ
 // Baixas de 30/08/2026 (nenhuma fonte serve preço; busca por nome não acha sucessor
 // em bolsa US): HOLX, SEE, CFLT, EXAS, MRUS. Troca de ticker: MMC → MRSH.
+// Baixas de 05/09/2026: EA (fechou capital — só restam as R-shares alemãs).
+// Fusão AVB + EQR → VMRK (Vivmark Residential, NYSE): duas linhas viraram uma, e
+// é por isso que a contagem da lista não bate com 500. Os três serviam preço de
+// agosto como se fosse de hoje; o `meta.regularMarketTime` do Yahoo é que datou a
+// morte (14/08, 17/08 e 04/08) enquanto `quotes` já vinha vazio.
 export const SP500_STOCKS = [
   // Technology
   { ticker: 'AAPL', name: 'Apple Inc.', sector: 'Technology', subsector: 'Technology Hardware' },
@@ -66,7 +71,6 @@ export const SP500_STOCKS = [
   { ticker: 'WBD', name: 'Warner Bros. Discovery', sector: 'Communication Services', subsector: 'Entertainment' },
   { ticker: 'OMC', name: 'Omnicom Group', sector: 'Communication Services', subsector: 'Media' },
   { ticker: 'IPG', name: 'Interpublic Group', sector: 'Communication Services', subsector: 'Media' },
-  { ticker: 'EA', name: 'Electronic Arts', sector: 'Communication Services', subsector: 'Entertainment' },
   { ticker: 'TTWO', name: 'Take-Two Interactive', sector: 'Communication Services', subsector: 'Entertainment' },
   { ticker: 'MTCH', name: 'Match Group', sector: 'Communication Services', subsector: 'Interactive Media' },
   { ticker: 'PINS', name: 'Pinterest Inc.', sector: 'Communication Services', subsector: 'Interactive Media' },
@@ -328,8 +332,7 @@ export const SP500_STOCKS = [
   { ticker: 'VICI', name: 'VICI Properties', sector: 'Real Estate', subsector: 'Specialized REITs' },
   { ticker: 'EXR', name: 'Extra Space Storage', sector: 'Real Estate', subsector: 'Specialized REITs' },
   { ticker: 'WY', name: 'Weyerhaeuser Co.', sector: 'Real Estate', subsector: 'Specialized REITs' },
-  { ticker: 'AVB', name: 'AvalonBay Communities', sector: 'Real Estate', subsector: 'Residential REITs' },
-  { ticker: 'EQR', name: 'Equity Residential', sector: 'Real Estate', subsector: 'Residential REITs' },
+  { ticker: 'VMRK', name: 'Vivmark Residential', sector: 'Real Estate', subsector: 'Residential REITs' },
   { ticker: 'ESS', name: 'Essex Property Trust', sector: 'Real Estate', subsector: 'Residential REITs' },
   { ticker: 'MAA', name: 'Mid-America Apartment', sector: 'Real Estate', subsector: 'Residential REITs' },
   { ticker: 'UDR', name: 'UDR Inc.', sector: 'Real Estate', subsector: 'Residential REITs' },

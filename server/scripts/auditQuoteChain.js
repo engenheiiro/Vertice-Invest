@@ -87,7 +87,7 @@ const run = async () => {
         const lote = tickers.slice(i, i + CHUNK);
         process.stdout.write(`   lote ${Math.floor(i / CHUNK) + 1}/${Math.ceil(tickers.length / CHUNK)} (${lote.length})…\r`);
          
-        const quotes = await externalMarketService.getQuotes(lote);
+        const quotes = await externalMarketService.getQuotes(lote, { typeByTicker: tipoDe });
         for (const q of quotes || []) {
             if (q?.ticker && q.price > 0) recebidos.set(q.ticker.toUpperCase(), q);
         }

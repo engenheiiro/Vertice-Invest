@@ -63,7 +63,11 @@ describe('refreshQuotesBatch — cache', () => {
 
     await marketDataService.refreshQuotesBatch(['PETR4'], false);
 
-    expect(externalMarketService.getQuotes).toHaveBeenCalledWith(['PETR4']);
+    // O tipo do ativo viaja junto: é o que impede sigla disputada (STX é
+    // Stacks e Seagate) de trazer o preço do ativo errado.
+    expect(externalMarketService.getQuotes).toHaveBeenCalledWith(['PETR4'], {
+      typeByTicker: expect.any(Map),
+    });
     const ops = MarketAsset.bulkWrite.mock.calls[0][0];
     const set = ops[0].updateOne.update.$set;
     expect(set.lastPrice).toBe(42);
@@ -451,6 +455,10 @@ describe('refreshQuotesBatch — blacklist é a flag que decide', () => {
 
     await marketDataService.refreshQuotesBatch(['PETR4'], false);
 
-    expect(externalMarketService.getQuotes).toHaveBeenCalledWith(['PETR4']);
+    // O tipo do ativo viaja junto: é o que impede sigla disputada (STX é
+    // Stacks e Seagate) de trazer o preço do ativo errado.
+    expect(externalMarketService.getQuotes).toHaveBeenCalledWith(['PETR4'], {
+      typeByTicker: expect.any(Map),
+    });
   });
 });

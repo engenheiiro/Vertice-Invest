@@ -307,6 +307,67 @@ export const marketDataService = {
         }
     },
 
+    /**
+     * A COTAÇÃO PROVA QUE O PAPEL NEGOCIOU, OU SÓ REPETE O QUE JÁ SABÍAMOS?
+     *
+     * O scraping do Google Finance serve o último preço conhecido por tempo
+     * indeterminado e não diz de que sessão ele é. Enquanto o papel negocia isso
+     * é irrelevante — o número muda todo dia e o eco não existe. Quando o papel
+     * morre, o mesmo scraping vira máquina de ressurreição: a gravação de sucesso
+     * zera `failCount`, remarca `isActive` e empurra `updatedAt` para agora, e as
+     * três juntas reiniciam TODOS os relógios que existem para dar baixa em
+     * símbolo extinto (10 falhas → desativa, 45 → vence a proteção de porte,
+     * 90 dias parado → aposenta).
+     *
+     * Medido em 05/09/2026: AVB e EQR viraram VMRK numa fusão e EA fechou capital.
+     * EA e EQR, que o Google não pega, acumulavam falha e sairiam sozinhos em
+     * outubro. AVB estava com `failCount: 0` e `updatedAt` de hoje servindo
+     * US$ 184,06 de 14/08 ao ranking — imortal exatamente porque o socorro
+     * funcionava.
+     *
+     * Sem carimbo de sessão, o único sinal honesto que sobra é o MOVIMENTO: preço
+     * diferente do guardado é negócio novo; preço idêntico não prova nada. A régua
+     * é frouxa de propósito para o lado seguro — papel vivo que feche duas sessões
+     * no mesmo centavo perde um dia de contagem e o recupera no primeiro tique
+     * seguinte, enquanto o morto repete o mesmo número para sempre. É o que mantém
+     * B3SA3 (que só cota pelo Google e negocia ~28 mil vezes por dia) fora da baixa.
+     *
+     * Vale só para fonte SEM `marketTime`: Yahoo e Brapi datam a sessão, e ali quem
+     * responde pela idade do dado é `priceDate`.
+     */
+    isEchoQuote(quote, currentAsset) {
+        if (!quote || quote.marketTime) return false;
+        const stored = Number(currentAsset?.lastPrice);
+        if (!(stored > 0)) return false; // sem base de comparação: é dado novo
+        return Number(quote.price) === stored;
+    },
+
+    /**
+     * A COTAÇÃO É DE UMA SESSÃO VELHA DEMAIS PARA VALER COMO PREÇO DE HOJE?
+     *
+     * Irmã do `isEchoQuote`, para o caso em que a fonte DATA a resposta. Aí não há
+     * eco a detectar: o provedor diz, com todas as letras, de que sessão é aquele
+     * número — e nós gravávamos assim mesmo, com `updatedAt` de agora e
+     * `failCount` zerado, como se fosse do pregão de hoje.
+     *
+     * O levantamento de 05/09/2026 achou 18 ativos ATIVOS nessa condição, com
+     * sessões de 10 a 1.635 dias atrás. `priceDate` já expunha todos desde
+     * 01/09; ninguém lia o campo para este fim.
+     *
+     * 10 dias é a mesma régua de `RETIRE_RECENT_CANDLE_DAYS` (aposentadoria
+     * automática) e de `PROBE_FRESH_DAYS` (probe de baixa) — três lugares
+     * respondendo "esse papel ainda negocia?" com números diferentes seria a
+     * receita para eles discordarem sobre o mesmo ticker. A folga cobre feriado
+     * prolongado da B3 e papel de baixa liquidez que passa alguns pregões sem
+     * negócio; não cobre símbolo trocado, que é o que se quer pegar.
+     */
+    isStaleSessionQuote(quote) {
+        if (!quote?.marketTime) return false; // sem data, quem responde é isEchoQuote
+        const t = new Date(quote.marketTime).getTime();
+        if (Number.isNaN(t)) return false;
+        return (Date.now() - t) / 86400000 > RETIRE_RECENT_CANDLE_DAYS;
+    },
+
     // Regra ÚNICA da blacklist dinâmica por falha de cotação. Recebe os docs de
     // ativos (com failCount/lastFailDate/marketCap/liquidity) e o conjunto de
     // tickers que cotaram com sucesso; devolve os bulkOps de failCount/desativação.
@@ -494,22 +555,47 @@ export const marketDataService = {
 
             if (toUpdate.length === 0) return;
 
-            const quotes = await externalMarketService.getQuotes(toUpdate);
+            // O tipo vai junto: sem ele, sigla disputada (STX é Stacks na cripto e
+            // Seagate na NASDAQ) faz o provedor responder sobre outro ativo.
+            const quotes = await externalMarketService.getQuotes(toUpdate, {
+                typeByTicker: new Map([...assetMap].map(([t, a]) => [t, a?.type || null])),
+            });
             const operations = [];
             
             // Set para controle de sucesso/falha
             const successfulTickers = new Set();
+            // Preço que voltou sem sessão e sem movimento (ver isEchoQuote). Não é
+            // sucesso nem erro de fonte: é ausência de prova de pregão.
+            const echoedTickers = [];
+            // Cotação datada de uma sessão velha demais (ver isStaleSessionQuote).
+            const staleTickers = [];
 
             for (const quote of quotes) {
                 const ticker = this.normalizeSymbol(quote.ticker);
                 const currentAsset = assetMap.get(ticker);
-                
+
                 let newPrice = quote.price;
                 let newChange = quote.change || 0;
 
                 if (newPrice && newPrice > 0) {
+                    // Eco não entra em `successfulTickers`: cai no caminho de falha
+                    // logo abaixo e o ativo segue envelhecendo, que é o correto.
+                    // Nada é gravado — o valor é idêntico ao que já está no banco,
+                    // e é justamente o `updatedAt` que não pode ser renovado.
+                    if (this.isEchoQuote(quote, currentAsset)) {
+                        echoedTickers.push(ticker);
+                        continue;
+                    }
+                    // Sessão velha demais: a fonte respondeu e datou honestamente,
+                    // e a data diz que isso não é preço de hoje. Mesmo destino do
+                    // eco — não vira sucesso, e o ativo passa a envelhecer rumo à
+                    // baixa em vez de parecer atualizado para sempre.
+                    if (this.isStaleSessionQuote(quote)) {
+                        staleTickers.push(`${ticker}@${sessionDateKey(quote.marketTime)}`);
+                        continue;
+                    }
                     successfulTickers.add(ticker);
-                    
+
                     const updatePayload = {
                         lastPrice: newPrice,
                         change: newChange, 
@@ -565,6 +651,25 @@ export const marketDataService = {
                 .filter(t => !successfulTickers.has(t))
                 .map(t => assetMap.get(t));
             operations.push(...this.buildQuoteFailureOps(failedAssets, successfulTickers));
+
+            // O eco precisa aparecer com nome próprio no log: no report ele some
+            // dentro de "falhou em todas as fontes", que é uma frase diferente —
+            // aqui uma fonte RESPONDEU, com um número que não vale como pregão.
+            if (echoedTickers.length > 0) {
+                logger.warn(
+                    `🔁 [MarketData] ${echoedTickers.length} ativo(s) só ecoaram o preço já gravado (fonte sem data de sessão): ${echoedTickers.join(', ')}`,
+                    { echoed: echoedTickers },
+                );
+            }
+            // Símbolo trocado se parece com isto: o preço chega, datado, e a data é
+            // de meses atrás. O ticker vai com a sessão colada para o log responder
+            // "desde quando" sem ninguém precisar abrir o banco.
+            if (staleTickers.length > 0) {
+                logger.warn(
+                    `🕰️ [MarketData] ${staleTickers.length} ativo(s) com cotação de sessão antiga (> ${RETIRE_RECENT_CANDLE_DAYS}d) — não gravada como preço de hoje: ${staleTickers.join(', ')}`,
+                    { stale: staleTickers },
+                );
+            }
 
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
@@ -706,7 +811,9 @@ export const marketDataService = {
             // Sem este filtro, ativos deslistados (SGEN, IPG, EURP11, BDRX11…) seguiam
             // sendo re-cotados todo run — falhavam, disparavam 404 na brapi (abrindo o
             // breaker e starvando os vivos) e poluíam os warnings apesar da blacklist.
-            const inactiveAssets = await MarketAsset.find({ isActive: false, isBlacklisted: false }).select('ticker failCount type marketCap updatedAt');
+            // `lastPrice` entra no select porque é a base de comparação do eco:
+            // sem ele, isEchoQuote não tem contra o que comparar e deixa passar.
+            const inactiveAssets = await MarketAsset.find({ isActive: false, isBlacklisted: false }).select('ticker failCount type marketCap updatedAt lastPrice');
             if (inactiveAssets.length === 0) {
                 logger.info(`✅ [Reativação] Nenhum ativo inativo para verificar.`);
                 return { reactivated: 0, stillInactive: 0, retired: 0 };
@@ -714,14 +821,28 @@ export const marketDataService = {
 
             logger.info(`🔄 [Reativação] Verificando ${inactiveAssets.length} ativos inativos...`);
             const tickers = inactiveAssets.map(a => a.ticker);
-            const quotes = await externalMarketService.getQuotes(tickers);
+            const quotes = await externalMarketService.getQuotes(tickers, {
+                typeByTicker: new Map(inactiveAssets.map((a) => [a.ticker, a.type || null])),
+            });
 
             const operations = [];
             let reactivatedCount = 0;
             const reactivatedTickers = [];
+            const echoedTickers = [];
+            const inactiveMap = new Map(inactiveAssets.map(a => [a.ticker, a]));
 
             for (const quote of quotes) {
                 if (quote.price && quote.price > 0) {
+                    // O eco tem que ser barrado AQUI também, e este é o ponto que
+                    // mais importa: sem isto, o ativo que a contagem de falhas
+                    // acabou de desativar volta a ativo no ciclo seguinte com o
+                    // mesmo preço congelado, e a quarentena de 90 dias nunca chega
+                    // ao fim — o relógio reinicia a cada volta.
+                    if (this.isEchoQuote(quote, inactiveMap.get(this.normalizeSymbol(quote.ticker)))
+                        || this.isStaleSessionQuote(quote)) {
+                        echoedTickers.push(this.normalizeSymbol(quote.ticker));
+                        continue;
+                    }
                     operations.push({
                         updateOne: {
                             filter: { ticker: this.normalizeSymbol(quote.ticker) },
@@ -736,6 +857,12 @@ export const marketDataService = {
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
                 logger.info(`✅ [Reativação] ${reactivatedCount} ativos reativados: ${reactivatedTickers.join(', ')}`);
+            }
+            if (echoedTickers.length > 0) {
+                logger.warn(
+                    `🔁 [Reativação] ${echoedTickers.length} ativo(s) NÃO reativados: a fonte só devolveu o preço já gravado, sem data de sessão: ${echoedTickers.join(', ')}`,
+                    { echoed: echoedTickers },
+                );
             }
 
             const successSet = new Set(reactivatedTickers.map(t => this.normalizeSymbol(t)));
