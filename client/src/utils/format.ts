@@ -68,6 +68,7 @@ export function formatCompact(
   if (options.privacy) return PRIVACY_MASK;
   return new Intl.NumberFormat('pt-BR', {
     notation: 'compact',
+    minimumFractionDigits: 0,
     maximumFractionDigits: 1,
     ...(currency ? { style: 'currency', currency } : {}),
   }).format(toSafeNumber(value));
