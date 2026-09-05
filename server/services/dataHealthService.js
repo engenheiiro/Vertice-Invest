@@ -351,9 +351,10 @@ const collectFacts = async (now) => {
         // Invariante do modelo: aposentado é estado TERMINAL, logo isBlacklisted
         // implica isActive=false. Quebrar isso não dá erro — dá gasto silencioso:
         // o ativo continua na fila de cotação, desce a cadeia inteira de fontes e
-        // falha nas três, a cada 15 minutos, para sempre.
+        // falha em todas, a cada 15 minutos, para sempre.
         retiredButActive: MarketAsset.countDocuments({ isBlacklisted: true, isActive: true }),
     });
+
     const treasury = treasuryRows[0] || {};
     const treasuryCatalog = auditTreasuryCatalog(treasuryCatalogRows, { now });
 

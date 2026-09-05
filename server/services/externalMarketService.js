@@ -175,10 +175,10 @@ export const externalMarketService = {
      * e mais confiável do que sair do Yahoo.
      *
      * O que ele devolve é o ÚLTIMO FECHAMENTO, não a cotação viva — por isso vem
-     * depois do `quote`, nunca antes. Sem `change`: a variação do dia exigiria o
-     * fechamento anterior, e informar zero seria pior que omitir (zero se lê como
-     * "não mexeu"). `previousClose` sai do penúltimo candle, que é o mesmo dado
-     * que o resto da carteira usa para datar variação.
+     * depois do `quote`, nunca antes. A variação sai dos DOIS últimos candles, e
+     * não de um zero de conveniência: `change` é gravado direto no ativo, então
+     * zero aqui não se lê como "não sei", se lê como "não mexeu" — some da lista
+     * de altas e baixas do dia um papel que andou.
      */
     async fetchFromYahooChart(ticker) {
         try {
@@ -195,12 +195,18 @@ export const externalMarketService = {
             const ultimo = candles[candles.length - 1];
             if (!ultimo) return null;
 
+            // Um único candle na janela (papel recém-listado, ou feriado longo com
+            // a fonte rala) não dá base de comparação: aí a variação vai como 0,
+            // que é o mesmo que o consumidor faria com o campo ausente.
+            const anterior = candles[candles.length - 2]?.close ?? null;
+            const change = anterior > 0 ? ((ultimo.close - anterior) / anterior) * 100 : 0;
+
             return {
                 ticker: ticker.replace('.SA', ''),
                 price: ultimo.close,
-                change: 0,
+                change,
                 marketTime: ultimo.date || null,
-                previousClose: candles[candles.length - 2]?.close ?? null,
+                previousClose: anterior,
                 volume: ultimo.volume || 0,
                 name: ticker,
                 source: 'YAHOO_CHART_FALLBACK',
