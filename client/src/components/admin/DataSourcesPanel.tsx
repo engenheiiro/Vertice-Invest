@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    AlertTriangle, CheckCircle2, ChevronRight, HelpCircle, Radio, ShieldCheck, X, XCircle,
+    AlertTriangle, CheckCircle2, ChevronRight, GitBranch, HelpCircle, Radio, ShieldCheck, X, XCircle,
 } from 'lucide-react';
-import type { DataSource, SourceGroup, SourceStatus, SourceSummary } from '../../services/health';
+import type {
+    ChainEscalation, ChainFlow, DataSource, SourceGroup, SourceStatus, SourceSummary,
+} from '../../services/health';
 
 /**
  * "De onde vêm os dados" — a pergunta que o painel não respondia.
@@ -231,6 +233,242 @@ const Linha = ({ rotulo, children }: { rotulo: string; children: React.ReactNode
 );
 
 /**
+ * Uma lista de tickers, com teto.
+ *
+ * Some quando não tem ninguém, em vez de mostrar "nenhum": três rótulos vazios
+ * empilhados no detalhe de toda fonte saudável seriam ruído puro, e o que
+ * importa aqui é justamente o grupo que TEM nome dentro.
+ *
+ * `total` vem da contagem exata do servidor e pode ser maior que a lista, que é
+ * transportada com teto. O "+ N" existe para a tela não afirmar, por omissão,
+ * que os quinze mostrados são todos.
+ */
+const TickerGroup = ({
+    rotulo, tickers, total, tone,
+}: {
+    rotulo: string;
+    tickers: string[];
+    total: number;
+    tone: string;
+}) => {
+    if (total === 0) return null;
+    const MOSTRA = 14;
+    const visiveis = tickers.slice(0, MOSTRA);
+    const restante = total - visiveis.length;
+    return (
+        <div>
+            <p className="text-[9px] uppercase font-bold tracking-wide text-slate-600">{rotulo}</p>
+            <div className="flex flex-wrap gap-1 mt-1">
+                {visiveis.map((t) => (
+                    <span key={t} className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${tone}`}>
+                        {t}
+                    </span>
+                ))}
+                {restante > 0 && (
+                    <span className="text-[10px] text-slate-500 self-center">+ {restante}</span>
+                )}
+            </div>
+        </div>
+    );
+};
+
+/**
+ * O CAMINHO DE UM ATIVO, desenhado como ele aconteceu.
+ *
+ * O painel dizia "a Brapi está instável, 80 chamadas, 24 sem dado" e parava aí.
+ * A pergunta seguinte — *quais ativos* chegaram até ela? — não tinha resposta em
+ * lugar nenhum, e sem ela os dois diagnósticos possíveis são indistinguíveis: 24
+ * falhas podem ser 24 ativos diferentes (fonte degradada) ou o mesmo papel morto
+ * tentado 24 vezes (ticker para aposentar). São ações opostas.
+ *
+ * Cada elo é pintado pelo que ele FEZ com este ativo, não pelo estado geral da
+ * fonte: quem trouxe o preço fica verde, quem foi tentado e não trouxe fica
+ * riscado. É a mesma fonte podendo aparecer verde numa linha e riscada na de
+ * baixo — que é exatamente a verdade que faltava.
+ */
+const EscalationPath = ({ item, labelOf }: { item: ChainEscalation; labelOf: (id: string) => string }) => (
+    <div className="flex items-center gap-1 flex-wrap">
+        {item.tried.map((id, i) => {
+            const entregou = item.resolvedBy === id;
+            return (
+                <React.Fragment key={id}>
+                    {i > 0 && <ChevronRight size={10} className="text-slate-700 shrink-0" aria-hidden="true" />}
+                    <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                            entregou
+                                ? 'bg-emerald-900/30 text-emerald-300 border border-emerald-900/60'
+                                : 'bg-elevated text-slate-500 line-through decoration-slate-600'
+                        }`}
+                    >
+                        {labelOf(id)}
+                    </span>
+                </React.Fragment>
+            );
+        })}
+        {!item.resolvedBy && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-red-900/25 text-red-400 border border-red-900/50">
+                sem preço
+            </span>
+        )}
+    </div>
+);
+
+/**
+ * Linha de resumo embaixo da cadeia.
+ *
+ * Fica aqui, e não só dentro do card, porque a informação é da CADEIA: nenhum
+ * card sozinho sabe dizer quantos ativos desceram até o último elo. E precisa
+ * aparecer sem clique — o painel é lido de relance, e "3 ativos sem preço em
+ * fonte nenhuma" é a frase que não pode depender de alguém abrir um modal.
+ *
+ * Zero também é notícia, e por isso tem texto próprio: significa que a fonte
+ * principal cobriu o universo inteiro e as reservas nem foram chamadas.
+ */
+const ChainFlowLine = ({ flow, onOpen }: { flow: ChainFlow; onOpen: () => void }) => {
+    if (flow.total === 0) {
+        return (
+            <p className="text-[10px] text-slate-600">
+                Nenhum ativo precisou de reserva desde o último reinício do servidor.
+            </p>
+        );
+    }
+    return (
+        <button
+            type="button"
+            onClick={onOpen}
+            className="w-full text-left flex items-center gap-2 flex-wrap px-2 py-1.5 rounded-lg border border-slate-800 bg-panel/40 hover:border-slate-700 transition-colors"
+        >
+            <GitBranch size={11} className="text-slate-500 shrink-0" />
+            <span className="text-[10px] text-slate-300">
+                <span className="font-bold text-white">{flow.total}</span> ativo(s) precisaram de reserva
+            </span>
+            {flow.byResolver.map((r) => (
+                <span
+                    key={r.id ?? 'nenhuma'}
+                    className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        r.id
+                            ? 'bg-elevated text-slate-300'
+                            : 'bg-red-900/25 text-red-400 font-bold border border-red-900/50'
+                    }`}
+                >
+                    {r.count} {r.id ? `por ${r.label}` : 'sem preço em nenhuma'}
+                </span>
+            ))}
+            <span className="text-[10px] text-blue-400 ml-auto shrink-0">ver ativos →</span>
+        </button>
+    );
+};
+
+/** Data curta com hora — o ledger vive no processo, então o dia raramente varia. */
+const shortTime = (iso: string) => {
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return '—';
+    return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+};
+
+/**
+ * A lista completa de quem escalou, por cadeia.
+ *
+ * Ordem vinda do servidor, e ela é opinativa: **quem ficou sem preço vem
+ * primeiro**. É a única categoria com consequência real — ativo sem cotação
+ * carrega preço velho para a carteira do usuário —, enquanto "recuperado pela
+ * reserva" é o sistema fazendo o que foi desenhado para fazer.
+ */
+const ChainFlowModal = ({
+    flow, labelOf, onClose,
+}: {
+    flow: ChainFlow;
+    labelOf: (id: string) => string;
+    onClose: () => void;
+}) => {
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    return createPortal(
+        <div
+            className="fixed inset-0 z-[100] backdrop-blur-md bg-black/95 flex items-center justify-center p-4"
+            onClick={onClose}
+            role="presentation"
+        >
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Ativos que precisaram de fonte de reserva"
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-xl bg-panel border border-slate-700 rounded-2xl p-5 max-h-[85vh] overflow-y-auto"
+            >
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <h3 className="text-sm font-black text-white flex items-center gap-2">
+                            <GitBranch size={14} className="text-blue-500" />
+                            Quem precisou de reserva
+                        </h3>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                            {flow.total} ativo(s) desceram a cadeia · {flow.unresolved} ficaram sem preço em
+                            fonte nenhuma
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Fechar"
+                        className="text-slate-500 hover:text-white transition-colors shrink-0"
+                    >
+                        <X size={16} />
+                    </button>
+                </div>
+
+                <div className="mt-4 divide-y divide-slate-800/70">
+                    {flow.items.map((item) => (
+                        <div key={item.subject} className="py-2 flex items-start justify-between gap-3 flex-wrap">
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-bold text-white font-mono">{item.subject}</span>
+                                    {item.count > 1 && (
+                                        <span className="text-[9px] text-slate-500 font-mono">{item.count}×</span>
+                                    )}
+                                    {/* Escalada conhecida sai do caminho da atenção: é ruído
+                                        permanente, e misturá-la com a novidade é o que ensina
+                                        o operador a ignorar a lista inteira. */}
+                                    {item.expected && (
+                                        <span className="text-[9px] uppercase font-bold text-slate-500 bg-elevated px-1 rounded">
+                                            esperado
+                                        </span>
+                                    )}
+                                </div>
+                                {item.reason && (
+                                    <p className="text-[10px] text-slate-500 mt-0.5">{item.reason}</p>
+                                )}
+                            </div>
+                            <div className="flex flex-col items-end gap-1 shrink-0">
+                                <EscalationPath item={item} labelOf={labelOf} />
+                                <span className="text-[9px] font-mono text-slate-600">{shortTime(item.at)}</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {flow.truncated > 0 && (
+                    <p className="text-[10px] text-slate-500 mt-3">
+                        + {flow.truncated} ativo(s) não listados — a tela mostra os {flow.items.length} mais
+                        relevantes (sem preço primeiro, depois os mais recentes).
+                    </p>
+                )}
+
+                <p className="text-[10px] text-slate-600 mt-4">
+                    A lista zera a cada reinício do servidor e guarda uma linha por ativo: repetir a mesma
+                    escalada atualiza a linha em vez de criar outra.
+                </p>
+            </div>
+        </div>,
+        document.body,
+    );
+};
+
+/**
  * Detalhe da fonte, em modal.
  *
  * Em janela, e não numa faixa embaixo da grade, porque o conteúdo cresceu além do
@@ -242,12 +480,26 @@ const Linha = ({ rotulo, children }: { rotulo: string; children: React.ReactNode
  * seguinte sem resposta. E quando não há ninguém atrás, dizer isso em voz alta é
  * mais valioso ainda: é o mapa dos pontos únicos de falha do sistema.
  */
-const SourceDetailModal = ({ source, onClose }: { source: DataSource; onClose: () => void }) => {
+const SourceDetailModal = ({
+    source, flow, onClose,
+}: {
+    source: DataSource;
+    /** Trajeto dos ativos na cadeia desta fonte; ausente = cadeia sem medição. */
+    flow?: ChainFlow;
+    onClose: () => void;
+}) => {
     const ui = visualFor(source);
     const footer = footerInfo(source);
     const entrega = absoluteTime(source.lastDeliveryAt);
     const falha = absoluteTime(source.lastFailAt);
     const semReserva = (source.backups?.length ?? 0) === 0 && !source.covers;
+    // Três destinos possíveis para quem passou por esta fonte, e eles se leem
+    // por LINHA do ledger, não pelo estado geral da fonte: a mesma Brapi salva
+    // um ticker e falha no seguinte no mesmo minuto.
+    const passaram = (flow?.items ?? []).filter((i) => i.tried.includes(source.id));
+    const salvos = passaram.filter((i) => i.resolvedBy === source.id).map((i) => i.subject);
+    const seguiram = passaram.filter((i) => i.resolvedBy && i.resolvedBy !== source.id).map((i) => i.subject);
+    const semPreco = passaram.filter((i) => !i.resolvedBy).map((i) => i.subject);
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -366,6 +618,55 @@ const SourceDetailModal = ({ source, onClose }: { source: DataSource; onClose: (
                     )}
                 </div>
 
+                {/* Quais ATIVOS passaram por aqui. A seção acima diz quem cobre
+                    esta fonte no papel; esta diz o que aconteceu de verdade —
+                    e as duas discordam com frequência, porque cobertura
+                    declarada não é cobertura exercida. */}
+                {source.escalated && (
+                    <div className="mt-4 pt-3 border-t border-slate-800">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                            <GitBranch size={11} />
+                            Ativos que passaram por aqui
+                        </p>
+                        {source.escalated.reached === 0 ? (
+                            <p className="text-[11px] text-slate-400 mt-1.5">
+                                {source.chainPosition === 1
+                                    ? 'Nenhum ativo precisou de reserva: esta fonte trouxe o preço de todos.'
+                                    : 'Nenhum ativo chegou até aqui — a fonte anterior deu conta de todos.'}
+                            </p>
+                        ) : (
+                            <>
+                                <p className="text-[11px] text-slate-300 mt-1.5">
+                                    <span className="font-bold text-white">{source.escalated.reached}</span>
+                                    {source.chainPosition === 1
+                                        ? ' ativo(s) não tiveram preço aqui e desceram para a reserva'
+                                        : ` ativo(s) chegaram até aqui · ${source.escalated.rescued} tiveram o preço trazido por esta fonte · ${source.escalated.missed} não`}
+                                </p>
+                                <div className="mt-2 space-y-1.5">
+                                    <TickerGroup
+                                        rotulo="Trouxe o preço"
+                                        tickers={salvos}
+                                        total={source.escalated.rescued}
+                                        tone="text-emerald-300 bg-emerald-900/20 border-emerald-900/50"
+                                    />
+                                    <TickerGroup
+                                        rotulo="Seguiu para a próxima fonte"
+                                        tickers={seguiram}
+                                        total={seguiram.length}
+                                        tone="text-slate-400 bg-elevated border-slate-700"
+                                    />
+                                    <TickerGroup
+                                        rotulo="Ficou sem preço em fonte nenhuma"
+                                        tickers={semPreco}
+                                        total={semPreco.length}
+                                        tone="text-red-400 bg-red-900/20 border-red-900/50"
+                                    />
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+
                 <p className="text-[10px] text-slate-600 mt-4">
                     A contagem de chamadas zera a cada reinício do servidor; a data de entrega vem do banco
                     e sobrevive a ele.
@@ -377,13 +678,20 @@ const SourceDetailModal = ({ source, onClose }: { source: DataSource; onClose: (
 };
 
 export const DataSourcesPanel = ({
-    sources, summary, groups,
+    sources, summary, groups, chains,
 }: {
     sources: DataSource[];
     summary?: SourceSummary;
     groups?: SourceGroup[];
+    /**
+     * Trajeto por ativo, por cadeia. Chave AUSENTE significa "não medimos" — não
+     * "nada escalou". Por isso a tela não inventa um zero quando o servidor cala:
+     * ela simplesmente não fala pela cadeia que não tem registro.
+     */
+    chains?: Record<string, ChainFlow>;
 }) => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [openChain, setOpenChain] = useState<string | null>(null);
 
     // Agrupa preservando a ordem que o servidor mandou e, dentro do bloco, separa
     // as CADEIAS (que viram sequência com seta) das fontes independentes. A
@@ -414,6 +722,13 @@ export const DataSourcesPanel = ({
         () => sources.find((s) => s.id === selectedId) ?? null,
         [sources, selectedId],
     );
+
+    // O ledger transporta IDS; o nome curto de cada fonte já vem no catálogo, e
+    // duplicá-lo em cada linha do trajeto só engordaria o payload.
+    const labelOf = useMemo(() => {
+        const mapa = new Map(sources.map((s) => [s.id, s.short ?? s.label]));
+        return (id: string) => mapa.get(id) ?? id;
+    }, [sources]);
 
     if (!sources.length) return null;
 
@@ -454,14 +769,21 @@ export const DataSourcesPanel = ({
                             {bloco.hint && <span className="text-[10px] text-slate-500">· {bloco.hint}</span>}
                         </div>
                         <div className="space-y-2">
-                            {bloco.cadeias.map((cadeia) => (
-                                <ChainRow
-                                    key={cadeia[0].id}
-                                    itens={cadeia}
-                                    selectedId={selectedId}
-                                    onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
-                                />
-                            ))}
+                            {bloco.cadeias.map((cadeia) => {
+                                const fluxo = cadeia[0].chain ? chains?.[cadeia[0].chain] : undefined;
+                                return (
+                                    <div key={cadeia[0].id} className="space-y-1.5">
+                                        <ChainRow
+                                            itens={cadeia}
+                                            selectedId={selectedId}
+                                            onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
+                                        />
+                                        {fluxo && (
+                                            <ChainFlowLine flow={fluxo} onOpen={() => setOpenChain(fluxo.chain)} />
+                                        )}
+                                    </div>
+                                );
+                            })}
                             {bloco.avulsas.length > 0 && (
                                 <div>
                                     {/* Só quando há cadeia no mesmo bloco: aí a proximidade
@@ -490,7 +812,20 @@ export const DataSourcesPanel = ({
                 ))}
             </div>
 
-            {selected && <SourceDetailModal source={selected} onClose={() => setSelectedId(null)} />}
+            {selected && (
+                <SourceDetailModal
+                    source={selected}
+                    flow={selected.chain ? chains?.[selected.chain] : undefined}
+                    onClose={() => setSelectedId(null)}
+                />
+            )}
+            {openChain && chains?.[openChain] && (
+                <ChainFlowModal
+                    flow={chains[openChain]}
+                    labelOf={labelOf}
+                    onClose={() => setOpenChain(null)}
+                />
+            )}
         </section>
     );
 };

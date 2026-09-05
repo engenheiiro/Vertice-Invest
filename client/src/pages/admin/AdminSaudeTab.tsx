@@ -316,6 +316,7 @@ export const AdminSaudeTab = () => {
                 sources={data?.sources ?? []}
                 summary={data?.sourceSummary}
                 groups={data?.sourceGroups}
+                chains={data?.sourceChains}
             />
 
             <PerformanceOverview />

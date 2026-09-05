@@ -6,7 +6,7 @@ import logger from '../config/logger.js';
 import { createCircuitBreaker, withRetry } from '../utils/resilience.js'; // (I4)
 import { recordIngestionError } from './errorLogService.js';
 import { measurePerformance } from '../utils/performanceMetrics.js';
-import { trackSource } from '../utils/sourceHealth.js';
+import { trackSource, recordEscalation } from '../utils/sourceHealth.js';
 
 // Instancia a classe com supressão de avisos
 const yahooFinance = new YahooFinance({
@@ -263,19 +263,42 @@ export const externalMarketService = {
 
     // Helper: Google Finance e, se for B3, Brapi como última tentativa. Usado tanto
     // na falha parcial (alguns tickers do lote) quanto na falha total do Yahoo.
-    async recoverQuote(ticker) {
+    //
+    // Cada passagem por aqui é uma ESCALADA: o Yahoo não trouxe o preço deste
+    // ativo e a cadeia desceu um degrau. Registrar o caminho (quem foi tentado,
+    // quem entregou) é o que permite ao painel responder "quais ativos chegaram
+    // na Brapi?" — pergunta que a contagem de chamadas nunca responde, porque
+    // ela não sabe de ticker: 24 falhas podem ser 24 ativos ou o mesmo ativo
+    // morto tentado 24 vezes, e as duas coisas pedem ações opostas.
+    async recoverQuote(ticker, { reason = 'O Yahoo não trouxe o preço deste ativo' } = {}) {
+        // A principal entra na lista mesmo tendo falhado: sem o primeiro elo, o
+        // caminho não diz de onde o ativo veio parar aqui.
+        const tried = ['yahoo.quotes', 'google.finance'];
+        // Ticker que SEMPRE falha no Yahoo não é notícia — marcá-lo separa o ruído
+        // permanente da escalada nova, que é a que merece o olho.
+        const expected = PREFER_GOOGLE_TICKERS.has(ticker);
+        const registrar = (resolvedBy) => recordEscalation({
+            chain: 'quotes', subject: ticker, tried, resolvedBy, reason, expected,
+        });
+
         const googleData = await this.fetchFromGoogleFinance(ticker);
         if (googleData) {
             logger.info(`✅ [Fallback] Google Finance recuperou cotação para ${ticker}: ${googleData.price}`);
+            registrar('google.finance');
             return googleData;
         }
         if (B3_TICKER_RE.test(ticker)) {
+            tried.push('brapi');
             const brapiData = await this.fetchFromBrapi(ticker + '.SA');
             if (brapiData) {
                 logger.info(`✅ [Fallback] Brapi recuperou cotação para ${ticker}: ${brapiData.price}`);
+                registrar('brapi');
                 return brapiData;
             }
         }
+        // `null` em resolvedBy é o registro mais valioso do ledger: ativo que a
+        // cadeia inteira não conseguiu precificar.
+        registrar(null);
         return null;
     },
 
@@ -400,7 +423,7 @@ export const externalMarketService = {
             // (MEM) Mesmo no modo de emergência usamos pool limitado em vez de varrer
             // o lote inteiro: protege o heap (árvores cheerio) quando o Yahoo cai e
             // TODOS os tickers caem no scraping de uma vez.
-            const emergencyRaw = await mapWithConcurrency(tickers, GOOGLE_FALLBACK_CONCURRENCY, (t) => this.recoverQuote(t));
+            const emergencyRaw = await mapWithConcurrency(tickers, GOOGLE_FALLBACK_CONCURRENCY, (t) => this.recoverQuote(t, { reason: 'O Yahoo caiu e o lote inteiro foi para a reserva' }));
             const emergencyResults = emergencyRaw.filter(Boolean);
             logger.info(`✅ [Emergência] Recuperados ${emergencyResults.length}/${tickers.length} ativos via Google/Brapi.`);
             return emergencyResults;

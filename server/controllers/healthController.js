@@ -90,6 +90,10 @@ export const getDataHealth = async (req, res, next) => {
             sources: sources.sources,
             sourceSummary: sources.summary,
             sourceGroups: sources.groups,
+            // O trajeto por ATIVO dentro de cada cadeia de fallback. Mesma
+            // natureza dos contadores (memória do processo), e pela mesma razão
+            // não passa pelo relatório persistido.
+            sourceChains: sources.chains,
         });
     } catch (error) { next(error); }
 };

@@ -20,6 +20,7 @@
  */
 
 import { cadenceLabel, nextRunLabel } from './sourceSchedule.js';
+import { LEDGERED_CHAINS } from './sourceHealth.js';
 
 export const SOURCE_STATUS = { OK: 'OK', WARN: 'WARN', CRITICAL: 'CRITICAL', UNKNOWN: 'UNKNOWN' };
 
@@ -121,10 +122,115 @@ export const buildChainMap = (sourceStats = []) => {
     return mapa;
 };
 
-export const buildSourceStatuses = (facts, sourceStats = []) => {
+
+/**
+ * Quantos assuntos a tela lista por cadeia. O RESUMO é sempre exato (contado
+ * sobre o ledger inteiro); o que o teto corta é só a lista nominal — ninguém
+ * varre 600 tickers na tela, e um payload que cresce sem limite é o começo de um
+ * painel lento justamente no dia em que tudo está falhando.
+ */
+const ESCALATION_SAMPLE = 60;
+
+/**
+ * DE ONDE CADA ATIVO VEIO — o cruzamento do ledger com as fontes.
+ *
+ * Duas saídas, com propósitos diferentes:
+ *
+ *  - `bySource`: contagem EXATA por fonte. Responde, no detalhe de cada card,
+ *    "quantos ativos chegaram até aqui, quantos eu salvei, quantos passaram
+ *    direto". `reached` inclui a própria principal que falhou — sem isso o card
+ *    do Yahoo não teria como dizer em quantos ativos ele não entregou, que é a
+ *    metade mais acionável do painel.
+ *  - `chains`: o resumo da cadeia, que é o que cabe numa linha embaixo da
+ *    sequência de cards: "6 ativos precisaram de reserva — 4 pelo Google, 2 pela
+ *    Brapi, 1 sem preço em fonte nenhuma".
+ *
+ * `unresolved` é contado à parte porque é a única categoria com consequência
+ * real: ativo que nenhuma fonte precificou fica com preço velho na carteira. Os
+ * outros dois estados (recuperado por reserva, escalada conhecida) são o sistema
+ * funcionando como projetado.
+ */
+export const buildEscalationView = (escalations = [], sourceStats = []) => {
+    const rotulo = new Map(sourceStats.map((s) => [s.id, s.short || s.label]));
+    const bySource = new Map();
+    const chains = {};
+
+    // Cadeia instrumentada começa vazia, não ausente: "nada escalou" é notícia
+    // boa e precisa aparecer como tal. Cadeia sem ledger não entra de jeito
+    // nenhum — ver LEDGERED_CHAINS.
+    for (const chain of LEDGERED_CHAINS) {
+        chains[chain] = { chain, total: 0, unresolved: 0, expected: 0, byResolver: [], items: [], truncated: 0 };
+    }
+
+    const porResolver = new Map();
+
+    for (const ev of escalations) {
+        const alvo = chains[ev.chain];
+        if (!alvo) continue;
+        alvo.total += 1;
+        if (!ev.resolvedBy) alvo.unresolved += 1;
+        if (ev.expected) alvo.expected += 1;
+
+        const chaveResolver = `${ev.chain}|${ev.resolvedBy || ''}`;
+        porResolver.set(chaveResolver, (porResolver.get(chaveResolver) || 0) + 1);
+
+        for (const id of ev.tried || []) {
+            if (!bySource.has(id)) bySource.set(id, { reached: 0, rescued: 0, missed: 0 });
+            const conta = bySource.get(id);
+            conta.reached += 1;
+            if (ev.resolvedBy === id) conta.rescued += 1;
+            else conta.missed += 1;
+        }
+    }
+
+    for (const [chave, count] of porResolver) {
+        const [chain, id] = chave.split('|');
+        if (!chains[chain]) continue;
+        chains[chain].byResolver.push({ id: id || null, label: id ? (rotulo.get(id) || id) : null, count });
+    }
+    for (const chain of Object.values(chains)) {
+        // Ordem da CADEIA (quem tenta primeiro aparece primeiro), com o "ninguém"
+        // no fim — é a leitura natural da frase, e ordenar por contagem faria a
+        // linha trocar de ordem a cada carregamento.
+        const ordem = sourceStats.filter((s) => s.chain === chain.chain).map((s) => s.id);
+        chain.byResolver.sort((a, b) => {
+            if (!a.id) return 1;
+            if (!b.id) return -1;
+            return ordem.indexOf(a.id) - ordem.indexOf(b.id);
+        });
+    }
+
+    // Não resolvido primeiro, depois o mais recente: o teto da lista corta o que
+    // sobra, e o que sobra tem que ser o menos importante.
+    const ordenados = [...escalations].sort((a, b) => {
+        const pesoA = a.resolvedBy ? 1 : 0;
+        const pesoB = b.resolvedBy ? 1 : 0;
+        if (pesoA !== pesoB) return pesoA - pesoB;
+        return new Date(b.at) - new Date(a.at);
+    });
+    for (const ev of ordenados) {
+        const alvo = chains[ev.chain];
+        if (!alvo) continue;
+        if (alvo.items.length >= ESCALATION_SAMPLE) { alvo.truncated += 1; continue; }
+        alvo.items.push({
+            subject: ev.subject,
+            tried: ev.tried,
+            resolvedBy: ev.resolvedBy,
+            reason: ev.reason,
+            expected: ev.expected,
+            count: ev.count,
+            at: ev.at,
+        });
+    }
+
+    return { bySource, chains };
+};
+
+export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) => {
     const now = facts?.now || new Date();
     const delivery = deliveryFacts(facts || {});
     const cadeia = buildChainMap(sourceStats);
+    const escalada = buildEscalationView(escalations, sourceStats);
 
     return sourceStats.map((source) => {
         const lastDeliveryAt = delivery[source.id] || source.lastOkAt || null;
@@ -223,6 +329,15 @@ export const buildSourceStatuses = (facts, sourceStats = []) => {
             lastError: source.lastError,
             lastOkAt: source.lastOkAt,
             lastFailAt: source.lastFailAt,
+            /**
+             * Quantos ATIVOS passaram por esta fonte na cadeia (ver
+             * buildEscalationView). `null` quando a cadeia não tem ledger por
+             * assunto — e null é diferente de zero: zero afirma que nada escalou,
+             * null admite que não medimos.
+             */
+            escalated: LEDGERED_CHAINS.has(source.chain)
+                ? (escalada.bySource.get(source.id) || { reached: 0, rescued: 0, missed: 0 })
+                : null,
         };
     });
 };

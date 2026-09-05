@@ -108,6 +108,44 @@ export interface DataSource {
     failureRate: number | null;
     lastError: string | null;
     lastFailAt: string | null;
+    /**
+     * Quantos ATIVOS passaram por esta fonte dentro da cadeia. `null` quando a
+     * cadeia não tem registro por ativo — e null não é zero: zero afirma que
+     * nada escalou, null admite que não medimos.
+     */
+    escalated?: { reached: number; rescued: number; missed: number } | null;
+}
+
+/** Um ativo que precisou descer a cadeia, e o caminho que ele fez. */
+export interface ChainEscalation {
+    /** O ticker (ou o que se buscava). */
+    subject: string;
+    /** Ids das fontes tentadas, na ordem — a primeira é a que falhou. */
+    tried: string[];
+    /** Id de quem trouxe o dado; `null` = nenhuma fonte trouxe. */
+    resolvedBy: string | null;
+    reason: string | null;
+    /** Escalada conhecida (ticker que sempre falha na fonte principal). */
+    expected: boolean;
+    /** Quantas vezes aconteceu desde o reinício. */
+    count: number;
+    at: string;
+}
+
+/**
+ * Resumo do trajeto por cadeia. Só existe para cadeias com registro por ativo;
+ * a ausência da chave significa "não medimos", nunca "nada escalou".
+ */
+export interface ChainFlow {
+    chain: string;
+    total: number;
+    /** Ativos que nenhuma fonte precificou — a única categoria com consequência. */
+    unresolved: number;
+    expected: number;
+    byResolver: { id: string | null; label: string | null; count: number }[];
+    items: ChainEscalation[];
+    /** Quantos ficaram de fora de `items` pelo teto de transporte. */
+    truncated: number;
 }
 
 export interface SourceSummary {
@@ -126,6 +164,8 @@ export interface DataHealthResponse {
     sources?: DataSource[];
     sourceSummary?: SourceSummary;
     sourceGroups?: SourceGroup[];
+    /** Trajeto por ativo, por cadeia. Chave ausente = cadeia sem medição. */
+    sourceChains?: Record<string, ChainFlow>;
 }
 
 export interface BackendError {

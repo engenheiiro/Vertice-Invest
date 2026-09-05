@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { DataSourcesPanel } from './DataSourcesPanel';
-import type { DataSource, SourceGroup } from '../../services/health';
+import type { ChainFlow, DataSource, SourceGroup } from '../../services/health';
 
 // A tela existe para responder, sem intermediário técnico: "de onde vem o dado e
 // está chegando?". O que se cobra aqui é a hierarquia de leitura — grade agrupada,
@@ -307,5 +307,98 @@ describe('DataSourcesPanel — reserva em espera', () => {
         render(<DataSourcesPanel sources={[reserva()]} groups={groups} />);
         fireEvent.click(screen.getByRole('button', { name: /Coinbase/ }));
         expect(screen.getByRole('dialog').innerHTML).toMatch(/text-blue-400/);
+    });
+});
+
+// --- O trajeto por ativo -----------------------------------------------------
+//
+// O painel dizia "a Brapi está instável, 24 chamadas sem dado" e parava aí. Quais
+// ativos chegaram até ela era pergunta sem resposta na tela — e os dois
+// diagnósticos por trás daquele número pedem ações opostas (fonte degradada ×
+// ticker morto para aposentar).
+
+const cadeia: DataSource[] = [
+    src({ id: 'yahoo.quotes', short: 'Yahoo', chain: 'quotes', chainPosition: 1, chainSize: 3, escalated: { reached: 3, rescued: 0, missed: 3 } }),
+    src({ id: 'google.finance', short: 'Google', chain: 'quotes', chainPosition: 2, chainSize: 3, trigger: 'onFailure', escalated: { reached: 3, rescued: 1, missed: 2 } }),
+    src({ id: 'brapi', short: 'Brapi', chain: 'quotes', chainPosition: 3, chainSize: 3, trigger: 'onFailure', status: 'WARN', escalated: { reached: 2, rescued: 1, missed: 1 } }),
+];
+
+const flow: Record<string, ChainFlow> = {
+    quotes: {
+        chain: 'quotes',
+        total: 3,
+        unresolved: 1,
+        expected: 0,
+        byResolver: [
+            { id: 'google.finance', label: 'Google', count: 1 },
+            { id: 'brapi', label: 'Brapi', count: 1 },
+            { id: null, label: null, count: 1 },
+        ],
+        items: [
+            { subject: 'EURP11', tried: ['yahoo.quotes', 'google.finance', 'brapi'], resolvedBy: null, reason: 'O Yahoo não trouxe o preço deste ativo', expected: false, count: 4, at: new Date().toISOString() },
+            { subject: 'PETR4', tried: ['yahoo.quotes', 'google.finance', 'brapi'], resolvedBy: 'brapi', reason: null, expected: false, count: 1, at: new Date().toISOString() },
+            { subject: 'NGRD3', tried: ['yahoo.quotes', 'google.finance'], resolvedBy: 'google.finance', reason: null, expected: false, count: 1, at: new Date().toISOString() },
+        ],
+        truncated: 0,
+    },
+};
+
+describe('DataSourcesPanel — quem precisou de reserva', () => {
+    it('resume a cadeia sem exigir clique, com o "sem preço" destacado', () => {
+        render(<DataSourcesPanel sources={cadeia} groups={groups} chains={flow} />);
+        expect(screen.getByText(/precisaram de reserva/)).toBeInTheDocument();
+        expect(screen.getByText('1 sem preço em nenhuma')).toBeInTheDocument();
+    });
+
+    // Zero é notícia boa e precisa de frase própria: significa que a principal
+    // cobriu o universo inteiro.
+    it('diz em voz alta quando ninguém precisou de reserva', () => {
+        render(<DataSourcesPanel
+            sources={cadeia}
+            groups={groups}
+            chains={{ quotes: { ...flow.quotes, total: 0, unresolved: 0, byResolver: [], items: [] } }}
+        />);
+        expect(screen.getByText(/Nenhum ativo precisou de reserva/)).toBeInTheDocument();
+    });
+
+    // Ausência de medição não pode virar "nada escalou": a cadeia sem ledger
+    // simplesmente não fala.
+    it('cala sobre a cadeia que o servidor não mede', () => {
+        render(<DataSourcesPanel sources={cadeia} groups={groups} />);
+        expect(screen.queryByText(/precisaram de reserva/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Nenhum ativo precisou de reserva/)).not.toBeInTheDocument();
+    });
+
+    it('abre a lista com o ticker, o caminho e quem entregou', () => {
+        render(<DataSourcesPanel sources={cadeia} groups={groups} chains={flow} />);
+        fireEvent.click(screen.getByText(/ver ativos/));
+
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByText('PETR4')).toBeInTheDocument();
+        // Sem preço primeiro: é a única categoria com consequência real.
+        const tickers = screen.getAllByText(/^(EURP11|PETR4|NGRD3)$/).map((n) => n.textContent);
+        expect(tickers[0]).toBe('EURP11');
+        expect(screen.getByText('sem preço')).toBeInTheDocument();
+        expect(screen.getByText('4×')).toBeInTheDocument();
+    });
+
+    it('o detalhe da fonte nomeia os ativos que ela salvou e os que perdeu', () => {
+        render(<DataSourcesPanel sources={cadeia} groups={groups} chains={flow} />);
+        fireEvent.click(screen.getByText('Brapi'));
+
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toHaveTextContent('Ativos que passaram por aqui');
+        expect(dialog).toHaveTextContent('Trouxe o preço');
+        expect(dialog).toHaveTextContent('PETR4');
+        expect(dialog).toHaveTextContent('Ficou sem preço em fonte nenhuma');
+        expect(dialog).toHaveTextContent('EURP11');
+        // NGRD3 nunca chegou na Brapi (o Google resolveu antes).
+        expect(dialog).not.toHaveTextContent('NGRD3');
+    });
+
+    it('fonte sem medição não ganha a seção de ativos', () => {
+        render(<DataSourcesPanel sources={[src({ id: 'coinbase', short: 'Coinbase', group: 'fx', escalated: null })]} groups={groups} />);
+        fireEvent.click(screen.getByText('Coinbase'));
+        expect(screen.getByRole('dialog')).not.toHaveTextContent('Ativos que passaram por aqui');
     });
 });

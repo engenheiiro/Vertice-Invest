@@ -36,8 +36,8 @@ import {
     PLAUSIBILITY_RANGES,
     buildHealthReport,
 } from '../utils/dataHealthRules.js';
-import { getSourceStats, SOURCE_GROUPS } from '../utils/sourceHealth.js';
-import { buildSourceStatuses, summarizeSources } from '../utils/dataSourceStatus.js';
+import { getSourceStats, getEscalations, SOURCE_GROUPS } from '../utils/sourceHealth.js';
+import { buildSourceStatuses, summarizeSources, buildEscalationView } from '../utils/dataSourceStatus.js';
 
 const THRESHOLD_KEY = 'DATA_HEALTH_THRESHOLDS';
 
@@ -491,10 +491,22 @@ export const getLiveSourceStatuses = async () => {
         fundamentals: { timestamp: macroConfig?.lastSyncStats?.timestamp || null },
     };
 
-    const sources = buildSourceStatuses(facts, getSourceStats());
+    const stats = getSourceStats();
+    const escalations = getEscalations();
+    const sources = buildSourceStatuses(facts, stats, escalations);
     // Os blocos vão junto: a ordem de leitura do painel é decisão de produto e
     // mora aqui, no catálogo, não espalhada na tela.
-    return { sources, summary: summarizeSources(sources), groups: SOURCE_GROUPS };
+    //
+    // `chains` é o caminho que cada ATIVO percorreu — quem falhou, quem salvou,
+    // quem ficou sem preço. Vai separado das fontes porque a pergunta é da
+    // cadeia, não de um card: "quais ativos chegaram até a Brapi?" não tem
+    // resposta olhando a Brapi sozinha, só olhando o trajeto inteiro.
+    return {
+        sources,
+        summary: summarizeSources(sources),
+        groups: SOURCE_GROUPS,
+        chains: buildEscalationView(escalations, stats).chains,
+    };
 };
 
 export const getLatestHealthReport = async () =>

@@ -302,5 +302,91 @@ export const getSourceStats = () => Object.entries(SOURCE_CATALOG).map(([id, met
     };
 });
 
-/** Só para teste — o registro é global ao processo. */
-export const resetSourceStats = () => stats.clear();
+/** Só para teste — o registro é global ao processo (contadores e ledger). */
+export const resetSourceStats = () => { stats.clear(); escalations.clear(); };
+
+/**
+ * QUEM PRECISOU DE RESERVA — o registro por ASSUNTO, não por chamada.
+ *
+ * Os contadores acima respondem "a fonte está entregando?" e param aí. Em
+ * 04/09/2026 o painel mostrava a Brapi instável com 80 chamadas, e a pergunta
+ * óbvia não tinha resposta em lugar nenhum: *quais ativos* chegaram até ela?
+ * Contagem de chamadas não sabe de ticker — 24 falhas da Brapi podiam ser 24
+ * ativos diferentes ou o mesmo ativo morto tentado 24 vezes, e as duas coisas
+ * pedem ações opostas (investigar a fonte × aposentar o papel).
+ *
+ * O que se grava aqui é o CAMINHO de cada assunto dentro de uma cadeia: quem foi
+ * tentado, em que ordem, e quem finalmente trouxe o dado. É o que transforma
+ * "a Brapi está instável" em "PETR4 e HGLG11 vieram pela Brapi porque Yahoo e
+ * Google não trouxeram, e EURP11 não veio de ninguém".
+ *
+ * Um registro por ASSUNTO, não por evento: a chave é `cadeia|assunto` e a
+ * repetição só atualiza a última ocorrência (com um contador). Sem isso, um
+ * ticker morto tentado a cada 15 minutos empurraria todo o resto para fora do
+ * teto em duas horas e a lista viraria a mesma linha repetida.
+ *
+ * Mesma natureza dos contadores: memória do PROCESSO, some no reinício. Ledger
+ * persistido significaria escrever no banco a cada cotação recuperada.
+ */
+
+/**
+ * Teto de assuntos guardados. Dimensionado acima do universo de tickers que
+ * escala num run (dezenas), com folga para um dia ruim em que o Yahoo cai
+ * inteiro e o lote todo passa pela reserva.
+ */
+const ESCALATION_CAP = 600;
+
+/**
+ * Cadeias que têm ledger por assunto.
+ *
+ * Existe para a tela não mentir por omissão. Sem esta lista, uma cadeia que
+ * ninguém instrumentou apareceria com "0 ativos precisaram de reserva" — que se
+ * lê como *nada escalou*, quando o verdadeiro é *não medimos*. São afirmações
+ * opostas, e a segunda é a única que temos direito de fazer. Instrumentou o
+ * fallback de uma cadeia nova? Acrescente o id aqui, e só então o painel passa a
+ * falar por ela.
+ */
+export const LEDGERED_CHAINS = new Set(['quotes']);
+
+const escalations = new Map();
+
+/**
+ * Registra que um assunto precisou percorrer a cadeia.
+ *
+ * @param {object} evento
+ * @param {string} evento.chain cadeia do SOURCE_CATALOG (ex.: 'quotes')
+ * @param {string} evento.subject o que se buscava (ticker, 'USD'…)
+ * @param {string[]} evento.tried ids tentados, NA ORDEM — incluindo a principal
+ *   que falhou. É ela que dá sentido ao resto: sem o primeiro elo na lista, não
+ *   dá para dizer de onde o ativo veio.
+ * @param {string|null} evento.resolvedBy id que trouxe o dado; `null` = ninguém
+ * @param {string} [evento.reason] por que escalou, em português
+ * @param {boolean} [evento.expected] escalada conhecida e sem novidade (ticker
+ *   que sempre falha na principal). Separar isso do resto é o que impede a lista
+ *   de virar ruído permanente que se aprende a ignorar.
+ */
+export const recordEscalation = ({ chain, subject, tried = [], resolvedBy = null, reason = null, expected = false }) => {
+    if (!chain || !subject) return;
+    const key = `${chain}|${subject}`;
+    const anterior = escalations.get(key);
+    // Reinserir joga a chave para o fim: a ordem do Map passa a ser "mais antigo
+    // primeiro" e o descarte por idade sai de graça, sem varrer nada.
+    escalations.delete(key);
+    escalations.set(key, {
+        chain,
+        subject,
+        tried: [...tried],
+        resolvedBy: resolvedBy || null,
+        reason: reason || null,
+        expected: !!expected,
+        at: new Date(),
+        count: (anterior?.count || 0) + 1,
+    });
+    while (escalations.size > ESCALATION_CAP) {
+        escalations.delete(escalations.keys().next().value);
+    }
+};
+
+/** Fotografia do ledger, do mais recente para o mais antigo. */
+export const getEscalations = () => [...escalations.values()]
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
