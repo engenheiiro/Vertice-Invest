@@ -254,11 +254,15 @@ describe('cadeia de cobertura', () => {
     // O catálogo afirmava que a Brapi vinha antes do Google. `recoverQuote` faz o
     // contrário, e um painel que inverte a ordem de tentativa manda investigar a
     // fonte errada no dia da falha.
-    it('a cadeia de cotações segue a ordem do código: Google antes da Brapi', () => {
+    // O candle do Yahoo entrou como 2º elo em 04/09/2026: mesmo provedor, outro
+    // endpoint, e os dois não falham juntos — sair para scraping antes de tentar
+    // isso era pagar mais caro por uma resposta pior.
+    it('a cadeia de cotações segue a ordem do código: candle, Google, Brapi', () => {
         const rows = buildSourceStatuses(factsBase(), getSourceStats());
-        expect(byId(rows, 'yahoo.quotes').backups).toEqual(['Google Finance', 'Brapi']);
-        expect(byId(rows, 'google.finance').chainPosition).toBe(2);
-        expect(byId(rows, 'brapi').chainPosition).toBe(3);
+        expect(byId(rows, 'yahoo.quotes').backups).toEqual(['Yahoo Finance — candle', 'Google Finance', 'Brapi']);
+        expect(byId(rows, 'yahoo.chart').chainPosition).toBe(2);
+        expect(byId(rows, 'google.finance').chainPosition).toBe(3);
+        expect(byId(rows, 'brapi').chainPosition).toBe(4);
     });
 
     it('cadeias diferentes não se misturam', () => {

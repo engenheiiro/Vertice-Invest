@@ -84,12 +84,24 @@ export const SOURCE_CATALOG = {
         chain: 'quotes',
         critical: true,
     },
+    'yahoo.chart': {
+        label: 'Yahoo Finance — candle',
+        short: 'Yahoo candle',
+        role: 'Último fechamento',
+        group: 'quotes',
+        // Escrito para quem lê o painel: o valor é de FECHAMENTO, não do minuto —
+        // e essa diferença é a razão de ele vir depois da cotação, nunca antes.
+        feeds: 'Último fechamento do ativo, quando a cotação ao vivo do Yahoo vem vazia',
+        schedule: { kind: 'onFailure' },
+        chain: 'quotes',
+        critical: false,
+    },
     'google.finance': {
         label: 'Google Finance',
         short: 'Google',
         role: 'Um ativo por vez',
         group: 'quotes',
-        feeds: 'Cotação buscada ativo por ativo, quando o Yahoo não traz o preço',
+        feeds: 'Cotação buscada ativo por ativo, quando o Yahoo não traz nem cotação nem candle',
         schedule: { kind: 'onFailure' },
         chain: 'quotes',
         critical: false,

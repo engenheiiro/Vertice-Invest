@@ -76,7 +76,7 @@ describe('recoverQuote — registro do trajeto de cada ativo', () => {
 
     const [ev] = getEscalations();
     expect(ev.subject).toBe('PETR4');
-    expect(ev.tried).toEqual(['yahoo.quotes', 'google.finance', 'brapi']);
+    expect(ev.tried).toEqual(['yahoo.quotes', 'yahoo.chart', 'google.finance', 'brapi']);
     expect(ev.resolvedBy).toBe('brapi');
   });
 
@@ -98,7 +98,7 @@ describe('recoverQuote — registro do trajeto de cada ativo', () => {
 
     await externalMarketService.recoverQuote('AVB');
 
-    expect(getEscalations()[0].tried).toEqual(['yahoo.quotes', 'google.finance']);
+    expect(getEscalations()[0].tried).toEqual(['yahoo.quotes', 'yahoo.chart', 'google.finance']);
   });
 
   // Escalada conhecida é ruído permanente: misturá-la com a novidade é o que
@@ -109,6 +109,21 @@ describe('recoverQuote — registro do trajeto de cada ativo', () => {
     await externalMarketService.recoverQuote('B3SA3');
 
     expect(getEscalations()[0].expected).toBe(true);
+  });
+
+  // O candle é o primeiro degrau porque é o mesmo provedor por outro endpoint:
+  // mais barato e mais confiável do que sair para o scraping do Google.
+  it('o candle do Yahoo resolve antes de sair para o Google', async () => {
+    const google = vi.spyOn(externalMarketService, 'fetchFromGoogleFinance').mockResolvedValue(null);
+    vi.spyOn(externalMarketService, 'fetchFromYahooChart').mockResolvedValue({ ticker: 'EQR', price: 63.66 });
+
+    const r = await externalMarketService.recoverQuote('EQR');
+
+    expect(r?.price).toBe(63.66);
+    expect(google).not.toHaveBeenCalled();
+    const [ev] = getEscalations();
+    expect(ev.resolvedBy).toBe('yahoo.chart');
+    expect(ev.tried).toEqual(['yahoo.quotes', 'yahoo.chart']);
   });
 
   it('a queda TOTAL do Yahoo aparece com motivo próprio no registro', async () => {

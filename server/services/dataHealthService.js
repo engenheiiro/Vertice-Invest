@@ -249,6 +249,15 @@ const collectJobFacts = async () => {
         });
 };
 
+/**
+ * `Promise.all` por NOME: recebe um objeto de promessas e devolve um objeto de
+ * resultados. A forma posicional é a que deixa inserir um item no meio e mover
+ * calado o valor de todos os seguintes — barato de escrever, caro de descobrir.
+ */
+const resolveAll = async (mapa) => Object.fromEntries(
+    await Promise.all(Object.entries(mapa).map(async ([chave, promessa]) => [chave, await promessa])),
+);
+
 const collectFacts = async (now) => {
     const thresholdDoc = await SystemConfig.findOne({ key: THRESHOLD_KEY }).lean();
     const overrides = thresholdDoc?.value || null;
@@ -271,7 +280,15 @@ const collectFacts = async (now) => {
         || DEFAULT_THRESHOLDS.frozenPriceAfterDays;
     const frozenCutoff = new Date(now.getTime() - frozenDays * 86400000);
 
-    const [
+    // Coleta em paralelo, por NOME.
+    //
+    // Era uma lista posicional de treze itens, e em 04/09/2026 ela cobrou o preço
+    // dessa forma: uma consulta nova foi inserida no meio, os nomes continuaram na
+    // ordem antiga, e a partir dali cada resultado foi parar na variável do
+    // vizinho — `macroConfig` recebeu um número. Nada quebrou na coleta; a aba
+    // inteira respondeu 500 na hora de montar o relatório, e a causa não estava
+    // perto do sintoma. Com chaves, inserir no meio é inofensivo por construção.
+    const {
         assetFacts,
         totalAll,
         totalInactive,
@@ -285,27 +302,22 @@ const collectFacts = async (now) => {
         oldestRun,
         frozenAssets,
         retiredButActive,
-    ] = await Promise.all([
-        collectAssetFacts(staleCutoff, fundamentalsCutoff),
-        MarketAsset.countDocuments({}),
-        MarketAsset.countDocuments({ isActive: false, failCount: { $gte: 10 } }),
-        // Invariante do modelo: aposentado é estado TERMINAL, logo isBlacklisted
-        // implica isActive=false. Quebrar isso não dá erro — dá gasto silencioso:
-        // o ativo continua na fila de cotação, desce a cadeia inteira de fontes e
-        // falha nas três, a cada 15 minutos, para sempre.
-        MarketAsset.countDocuments({ isBlacklisted: true, isActive: true }),
-        SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean(),
+    } = await resolveAll({
+        assetFacts: collectAssetFacts(staleCutoff, fundamentalsCutoff),
+        totalAll: MarketAsset.countDocuments({}),
+        totalInactive: MarketAsset.countDocuments({ isActive: false, failCount: { $gte: 10 } }),
+        macroConfig: SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean(),
         // Data do PU mais recente entre todos os títulos. Usa a data do DADO
         // (history.date), não o instante da ingestão: um CSV velho reingerido
         // renovaria `lastUpdated` e esconderia exatamente a falha que queremos ver.
-        TreasuryPriceHistory.aggregate([
+        treasuryRows: TreasuryPriceHistory.aggregate([
             { $group: { _id: null, latest: { $max: { $max: '$history.date' } }, titles: { $sum: 1 } } },
         ]),
         // Catálogo inteiro (~37 documentos): as invariantes são estruturais e
         // baratas de checar sobre a coleção completa, sem agregação.
-        TreasuryBond.find({}).select('title type index rate unitPrice minInvestment maturityDate updatedAt').lean(),
-        collectCandleFacts(now, candleTolerances),
-        ErrorLog.aggregate([
+        treasuryCatalogRows: TreasuryBond.find({}).select('title type index rate unitPrice minInvestment maturityDate updatedAt').lean(),
+        candleFacts: collectCandleFacts(now, candleTolerances),
+        errors24h: ErrorLog.aggregate([
             { $match: { lastSeenAt: { $gte: since24h } } },
             { $group: { _id: null, total: { $sum: '$count' } } },
         ]),
@@ -317,27 +329,31 @@ const collectFacts = async (now) => {
         // só apareceu porque alguém reparou no selo do card.
         //
         // Agrupado por `code` (as buscas que caíram), que é o que decide o conserto.
-        ErrorLog.aggregate([
+        walletPayloadRows: ErrorLog.aggregate([
             { $match: { source: 'wallet.payload', lastSeenAt: { $gte: since24h } } },
             { $group: { _id: '$code', total: { $sum: '$count' }, lastSeenAt: { $max: '$lastSeenAt' } } },
             { $sort: { total: -1 } },
         ]),
-        collectJobFacts(),
+        jobs: collectJobFacts(),
         // Marco zero da instrumentação: sem ele, todo cron diário apareceria como
         // "nunca executado" nas primeiras horas depois do deploy.
-        JobRun.findOne().sort({ startedAt: 1 }).select('startedAt').lean(),
+        oldestRun: JobRun.findOne().sort({ startedAt: 1 }).select('startedAt').lean(),
         // Congelados há semanas, restrito a quem o sync REALMENTE cotiza: abaixo de
         // MIN_LIQUIDITY_FOR_LIVE_QUOTE o ativo está fora do lote por decisão de
         // projeto e congelar é o comportamento esperado, não defeito.
         // Traz os tickers (limitado) porque o alarme só vira conserto se disser
         // QUAIS — ordenado do mais parado para o menos.
-        MarketAsset.find({
+        frozenAssets: MarketAsset.find({
             ...ACTIVE_UNIVERSE,
             updatedAt: { $lt: frozenCutoff },
             liquidity: { $gt: MIN_LIQUIDITY_FOR_LIVE_QUOTE },
         }).select('ticker updatedAt').sort({ updatedAt: 1 }).limit(200).lean(),
-    ]);
-
+        // Invariante do modelo: aposentado é estado TERMINAL, logo isBlacklisted
+        // implica isActive=false. Quebrar isso não dá erro — dá gasto silencioso:
+        // o ativo continua na fila de cotação, desce a cadeia inteira de fontes e
+        // falha nas três, a cada 15 minutos, para sempre.
+        retiredButActive: MarketAsset.countDocuments({ isBlacklisted: true, isActive: true }),
+    });
     const treasury = treasuryRows[0] || {};
     const treasuryCatalog = auditTreasuryCatalog(treasuryCatalogRows, { now });
 

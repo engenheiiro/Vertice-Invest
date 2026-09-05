@@ -164,7 +164,54 @@ export const externalMarketService = {
         return { price: finalPrice, change };
     },
 
-    // Helper: Scraper do Google Finance (Fallback Secundário)
+    /**
+     * O CANDLE DO YAHOO COMO SEGUNDA TENTATIVA — mesmo provedor, outro endpoint.
+     *
+     * O `quote` (v7) e o `chart` (v8) não falham juntos. Medido em 04/09/2026 com
+     * EA, EQR e AVB: o `quote` devolveu vazio para os três enquanto o `chart`
+     * respondia — e, horas depois, o inverso. Enquanto isso o fallback seguinte é
+     * scraping de página, que é mais lento, mais frágil e depende de acertar a
+     * bolsa na URL. Perguntar de novo ao Yahoo, por outro caminho, é mais barato
+     * e mais confiável do que sair do Yahoo.
+     *
+     * O que ele devolve é o ÚLTIMO FECHAMENTO, não a cotação viva — por isso vem
+     * depois do `quote`, nunca antes. Sem `change`: a variação do dia exigiria o
+     * fechamento anterior, e informar zero seria pior que omitir (zero se lê como
+     * "não mexeu"). `previousClose` sai do penúltimo candle, que é o mesmo dado
+     * que o resto da carteira usa para datar variação.
+     */
+    async fetchFromYahooChart(ticker) {
+        try {
+            const symbol = B3_TICKER_RE.test(ticker) && !ticker.endsWith('.SA')
+                ? `${ticker}.SA`
+                : toYahooSymbol(ticker);
+            // 10 dias cobre feriado prolongado sem trazer série longa à toa.
+            const result = await trackSource('yahoo.chart', () => yahooBreaker.exec(() => yahooFinance.chart(
+                symbol,
+                { period1: new Date(Date.now() - 10 * 86400000), interval: '1d' },
+            )), { isEmpty: (r) => !(r?.quotes?.length > 0) });
+
+            const candles = (result?.quotes || []).filter((c) => c?.close > 0);
+            const ultimo = candles[candles.length - 1];
+            if (!ultimo) return null;
+
+            return {
+                ticker: ticker.replace('.SA', ''),
+                price: ultimo.close,
+                change: 0,
+                marketTime: ultimo.date || null,
+                previousClose: candles[candles.length - 2]?.close ?? null,
+                volume: ultimo.volume || 0,
+                name: ticker,
+                source: 'YAHOO_CHART_FALLBACK',
+            };
+        } catch {
+            // Silencioso no nível de função, quem chama decide o log.
+            return null;
+        }
+    },
+
+    // Helper: Scraper do Google Finance (Fallback Terciário)
     async fetchFromGoogleFinance(ticker) {
         // Lógica B3 — aceita TANTO o formato Yahoo (PETR4.SA) quanto o ticker cru
         // do banco (PETR4). Sem o segundo ramo, o ticker cru caía no ramo US e
@@ -293,7 +340,7 @@ export const externalMarketService = {
     async recoverQuote(ticker, { reason = 'O Yahoo não trouxe o preço deste ativo' } = {}) {
         // A principal entra na lista mesmo tendo falhado: sem o primeiro elo, o
         // caminho não diz de onde o ativo veio parar aqui.
-        const tried = ['yahoo.quotes', 'google.finance'];
+        const tried = ['yahoo.quotes', 'yahoo.chart'];
         // Ticker que SEMPRE falha no Yahoo não é notícia — marcá-lo separa o ruído
         // permanente da escalada nova, que é a que merece o olho.
         const expected = PREFER_GOOGLE_TICKERS.has(ticker);
@@ -301,6 +348,16 @@ export const externalMarketService = {
             chain: 'quotes', subject: ticker, tried, resolvedBy, reason, expected,
         });
 
+        // Mesmo provedor, outro endpoint: mais barato e mais confiável que sair
+        // para scraping, e os dois não falham juntos.
+        const chartData = await this.fetchFromYahooChart(ticker);
+        if (chartData) {
+            logger.info(`✅ [Fallback] Candle do Yahoo recuperou cotação para ${ticker}: ${chartData.price}`);
+            registrar('yahoo.chart');
+            return chartData;
+        }
+
+        tried.push('google.finance');
         const googleData = await this.fetchFromGoogleFinance(ticker);
         if (googleData) {
             logger.info(`✅ [Fallback] Google Finance recuperou cotação para ${ticker}: ${googleData.price}`);
@@ -422,7 +479,7 @@ export const externalMarketService = {
                 // (mapWithConcurrency preserva a ordem, então o índice casa o ticker.)
                 const unrecovered = failedTickers.filter((t, i) => !fallbackRaw[i] && !PREFER_GOOGLE_TICKERS.has(t));
                 if (unrecovered.length > 0) {
-                    logger.warn(`⚠️ [MarketService] Sem cotação em nenhuma fonte (Yahoo/Google/Brapi) para ${unrecovered.length} ativos: [${unrecovered.join(', ')}]`);
+                    logger.warn(`⚠️ [MarketService] Sem cotação em nenhuma fonte (Yahoo cotação/candle, Google, Brapi) para ${unrecovered.length} ativos: [${unrecovered.join(', ')}]`);
                 }
 
                 const fallbackResults = fallbackRaw.filter(Boolean);
