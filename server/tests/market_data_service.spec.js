@@ -14,7 +14,7 @@ import { marketDataService } from '../services/marketDataService.js';
 vi.mock('../models/MarketAsset.js', () => ({
   default: { find: vi.fn(), findOne: vi.fn(), bulkWrite: vi.fn() },
 }));
-vi.mock('../models/AssetHistory.js', () => ({ default: { find: vi.fn(), findOne: vi.fn(), create: vi.fn() } }));
+vi.mock('../models/AssetHistory.js', () => ({ default: { find: vi.fn(), findOne: vi.fn(), create: vi.fn(), aggregate: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../models/UserAsset.js', () => ({ default: { distinct: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../models/SystemConfig.js', () => ({ default: { findOne: vi.fn() } }));
 vi.mock('../services/externalMarketService.js', () => ({
@@ -463,5 +463,79 @@ describe('refreshQuotesBatch — blacklist é a flag que decide', () => {
     expect(externalMarketService.getQuotes).toHaveBeenCalledWith(['PETR4'], {
       typeByTicker: expect.any(Map),
     });
+  });
+});
+
+/**
+ * O PREÇO FICA, A VARIAÇÃO CONTESTADA NÃO.
+ *
+ * XPIN11 em 05/09/2026 chegou com preço 62,04 (que bate com o fechamento oficial
+ * da B3) e, na mesma resposta, `change` de +108% com `previousClose` de 29,82 —
+ * enquanto a nossa série mostrava 62,04 parado havia semanas. Guardar o par da
+ * fonte é servir "+108% hoje" na carteira; recusar o preço é jogar fora o número
+ * certo. A saída é reancorar no candle que o snapshot diário já usa.
+ */
+describe('refreshQuotesBatch — variação contestada', () => {
+  const anchor = (close) => AssetHistory.aggregate.mockResolvedValue([
+    { ticker: 'XPIN11', candle: { date: '2026-09-02', close } },
+  ]);
+
+  it('reancora no nosso fechamento e descarta o par da fonte', async () => {
+    mockFind([{ ticker: 'XPIN11', type: 'FII', updatedAt: minutesAgo(60), lastPrice: 62.04, priceDate: '2026-09-02', isActive: true, failCount: 0 }]);
+    externalMarketService.getQuotes.mockResolvedValue([
+      { ticker: 'XPIN11', price: 62.04, change: 108.0769, previousClose: 29.8159, marketTime: new Date('2026-09-03T20:55:00.000Z') },
+    ]);
+    anchor(62.04);
+
+    await marketDataService.refreshQuotesBatch(['XPIN11'], false);
+
+    const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(set.lastPrice).toBe(62.04);   // o preço da fonte fica
+    expect(set.change).toBe(0);          // a variação dela, não
+    expect(set.previousClose).toBe(62.04);
+  });
+
+  it('preserva o movimento que o nosso candle confirma', async () => {
+    mockFind([{ ticker: 'XPIN11', type: 'FII', updatedAt: minutesAgo(60), lastPrice: 100, priceDate: '2026-09-02', isActive: true, failCount: 0 }]);
+    externalMarketService.getQuotes.mockResolvedValue([
+      { ticker: 'XPIN11', price: 135, change: 200, previousClose: 45, marketTime: new Date('2026-09-03T20:55:00.000Z') },
+    ]);
+    anchor(100);
+
+    await marketDataService.refreshQuotesBatch(['XPIN11'], false);
+
+    const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(set.change).toBeCloseTo(35, 6);
+  });
+
+  // A âncora é acessória; a cotação não. Perder o lote inteiro por uma consulta
+  // de apoio seria trocar um número torto por nenhum número.
+  it('falha na busca da âncora não derruba o lote de preços', async () => {
+    mockFind([{ ticker: 'XPIN11', type: 'FII', updatedAt: minutesAgo(60), lastPrice: 62.04, priceDate: '2026-09-02', isActive: true, failCount: 0 }]);
+    externalMarketService.getQuotes.mockResolvedValue([
+      { ticker: 'XPIN11', price: 62.04, change: 108.0769, previousClose: 29.8159, marketTime: new Date('2026-09-03T20:55:00.000Z') },
+    ]);
+    AssetHistory.aggregate.mockRejectedValue(new Error('sem banco'));
+
+    await marketDataService.refreshQuotesBatch(['XPIN11'], false);
+
+    const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(set.lastPrice).toBe(62.04);
+    expect(set.change).toBe(0);
+  });
+
+  // Dia normal continua vindo da fonte: a reancoragem é exceção, não regra.
+  it('não mexe na variação quando a fonte é coerente', async () => {
+    mockFind([{ ticker: 'PETR4', type: 'STOCK', updatedAt: minutesAgo(60), lastPrice: 41.38, priceDate: '2026-09-02', isActive: true, failCount: 0 }]);
+    externalMarketService.getQuotes.mockResolvedValue([
+      { ticker: 'PETR4', price: 42, change: 1.4983, previousClose: 41.38, marketTime: new Date('2026-09-03T20:55:00.000Z') },
+    ]);
+
+    await marketDataService.refreshQuotesBatch(['PETR4'], false);
+
+    const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(set.change).toBe(1.4983);
+    expect(set.previousClose).toBe(41.38);
+    expect(AssetHistory.aggregate).not.toHaveBeenCalled();
   });
 });

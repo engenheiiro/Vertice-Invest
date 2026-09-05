@@ -132,6 +132,52 @@ export const buildChainMap = (sourceStats = []) => {
 const ESCALATION_SAMPLE = 60;
 
 /**
+ * Teto da lista de cotações suspeitas. Menor que o das escaladas de propósito:
+ * cada linha aqui carrega uma frase inteira ("+108% contra o fechamento anterior
+ * da própria fonte…"), e sessenta delas é um paredão que ninguém lê. Se um dia
+ * passar de quarenta, o problema não é de ativo — é da fonte, e a contagem total
+ * já diz isso sem precisar da lista.
+ */
+const SUSPECT_SAMPLE = 40;
+
+/**
+ * COTAÇÕES SUSPEITAS, prontas para a tela.
+ *
+ * Irmã de `buildEscalationView`, para a outra pergunta: aquela responde "de onde
+ * veio o preço"; esta, "o preço faz sentido?". Ficam em funções separadas porque
+ * as duas listas não se cruzam — um ativo pode ter vindo pela fonte principal,
+ * sem escalada nenhuma, e ainda assim trazer um número torto. É justamente esse
+ * o caso perigoso: nada no caminho denuncia.
+ *
+ * O total é exato; a lista nominal tem teto, pela mesma razão do outro ledger.
+ *
+ * @param {Array} suspects saída de `getSuspectQuotes()`
+ * @returns {{total: number, items: Array, truncated: number}}
+ */
+export const buildSuspectView = (suspects = []) => {
+    const items = suspects.slice(0, SUSPECT_SAMPLE).map((s) => ({
+        subject: s.subject,
+        type: s.type ?? null,
+        source: s.source ?? null,
+        price: s.price ?? null,
+        // Só os códigos e as frases: a tela não recalcula nada, e o veredito
+        // continua sendo de quem julgou (utils/quoteSanity.js).
+        findings: (s.findings || []).map((f) => ({
+            code: f.code,
+            detail: f.detail,
+            movePct: f.movePct ?? null,
+        })),
+        count: s.count ?? 1,
+        at: s.at,
+    }));
+    return {
+        total: suspects.length,
+        items,
+        truncated: Math.max(0, suspects.length - items.length),
+    };
+};
+
+/**
  * DE ONDE CADA ATIVO VEIO — o cruzamento do ledger com as fontes.
  *
  * Duas saídas, com propósitos diferentes:

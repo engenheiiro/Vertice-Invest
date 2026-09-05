@@ -18,6 +18,8 @@ import { loadLatestCloseBefore } from '../utils/dayCloses.js';
 import { deriveDividendFromGap } from '../utils/dividendGap.js';
 import { isAccumulatingBrEtf } from '../config/brEtfList.js';
 import { recordCacheAccess } from '../utils/performanceMetrics.js';
+import { judgeQuote, contestsChange, resolveContestedChange } from '../utils/quoteSanity.js';
+import { recordSuspectQuote } from '../utils/sourceHealth.js';
 
 /**
  * Dia da SESSÃO a que a cotação pertence, no calendário brasileiro. É o carimbo
@@ -522,7 +524,10 @@ export const marketDataService = {
         const threshold = new Date(now.getTime() - cacheMinutes * 60 * 1000);
 
         try {
-            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker name type updatedAt lastPrice change isActive isBlacklisted failCount lastFailDate marketCap liquidity');
+            // `priceDate` entra no select por causa do juiz de magnitude: comparar
+            // o preço novo com o guardado só faz sentido sabendo de que sessão o
+            // guardado é (ver STORED_PRICE_MAX_AGE_DAYS em utils/quoteSanity).
+            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker name type updatedAt lastPrice priceDate change isActive isBlacklisted failCount lastFailDate marketCap liquidity');
             
             const toUpdate = [];
             const assetMap = new Map();
@@ -569,6 +574,16 @@ export const marketDataService = {
             const echoedTickers = [];
             // Cotação datada de uma sessão velha demais (ver isStaleSessionQuote).
             const staleTickers = [];
+            // Preço que chegou fora da magnitude esperada (ver utils/quoteSanity).
+            // NÃO é caminho de falha: o preço é gravado do mesmo jeito, porque
+            // grupamento e desdobramento têm a mesma assinatura de um erro de
+            // fonte e barrar por magnitude congelaria o ativo para sempre. O que
+            // muda é que ele passa a aparecer NOMEADO no painel de Saúde.
+            const suspectTickers = [];
+            // Ativos cuja VARIAÇÃO a fonte não sustenta. O preço segue sendo dela;
+            // o par (change, previousClose) é reancorado no nosso próprio candle
+            // logo depois do laço — ver `resolveContestedChange`.
+            const contestados = [];
 
             for (const quote of quotes) {
                 const ticker = this.normalizeSymbol(quote.ticker);
@@ -595,6 +610,29 @@ export const marketDataService = {
                         continue;
                     }
                     successfulTickers.add(ticker);
+
+                    // Julgamento de MAGNITUDE, depois dos de presença e idade.
+                    // Roda contra o preço que AINDA está no banco (a gravação vem
+                    // depois, no bulkWrite), que é justamente a régua que faltava.
+                    const achados = judgeQuote({
+                        type: currentAsset?.type || null,
+                        price: newPrice,
+                        previousClose: quote.previousClose,
+                        change: quote.change,
+                        storedPrice: currentAsset?.lastPrice,
+                        storedPriceDate: currentAsset?.priceDate || null,
+                        now,
+                    });
+                    if (achados.length > 0) {
+                        recordSuspectQuote({
+                            subject: ticker,
+                            type: currentAsset?.type || null,
+                            source: quote.source || null,
+                            price: newPrice,
+                            findings: achados,
+                        });
+                        suspectTickers.push(`${ticker} (${achados[0].detail})`);
+                    }
 
                     const updatePayload = {
                         lastPrice: newPrice,
@@ -632,6 +670,21 @@ export const marketDataService = {
                         }
                     }
 
+                    // A variação contestada é reancorada DEPOIS do laço, porque a
+                    // âncora está no banco (`AssetHistory`) e ir lá por ativo, no
+                    // meio do lote, custaria uma consulta por cotação suspeita. A
+                    // referência ao payload é guardada aqui e o par é corrigido
+                    // numa passada só, com uma agregação por sessão.
+                    if (contestsChange(achados)) {
+                        contestados.push({
+                            ticker,
+                            type: currentAsset?.type || null,
+                            sessionDate: updatePayload.priceDate,
+                            price: newPrice,
+                            payload: updatePayload,
+                        });
+                    }
+
                     operations.push({
                         updateOne: {
                             filter: { ticker: ticker },
@@ -641,6 +694,54 @@ export const marketDataService = {
                         }
                     });
                 }
+            }
+
+            // --- VARIAÇÃO CONTESTADA: REANCORA NO NOSSO PRÓPRIO FECHAMENTO ---
+            // O preço da fonte fica (ele é auditável contra o fechamento oficial
+            // da B3 e passa); o par variação/fechamento-anterior, não. XPIN11
+            // estava gravado com +108% e previousClose de 29,82 enquanto a nossa
+            // série mostrava 62,04 parado havia semanas — número que a carteira
+            // exibiria como "variação de hoje".
+            //
+            // Uma agregação por SESSÃO (na prática, uma só): o candle anterior
+            // vem da mesma fonte que o snapshot diário usa para marcar patrimônio,
+            // e usar outra aqui reintroduziria a divergência que `dayCloses.js`
+            // existe para fechar.
+            if (contestados.length > 0) {
+                const porSessao = new Map();
+                for (const c of contestados) {
+                    if (!c.sessionDate) continue; // sem sessão não há "antes de"
+                    if (!porSessao.has(c.sessionDate)) porSessao.set(c.sessionDate, []);
+                    porSessao.get(c.sessionDate).push(c);
+                }
+                for (const [sessao, itens] of porSessao) {
+                    try {
+                        const closes = await loadLatestCloseBefore(itens, sessao);
+                        for (const item of itens) {
+                            item.ownClose = closes.get(historyStorageKey(item.ticker, item.type))?.close ?? null;
+                        }
+                    } catch (err) {
+                        // A âncora é um LUXO comparada à cotação: sem o candle, a
+                        // variação contestada cai em zero (que é o veredito seguro)
+                        // e o lote inteiro de preços segue para o banco. Deixar a
+                        // exceção subir custaria todas as cotações do lote por uma
+                        // consulta acessória.
+                        logger.warn(`[MarketData] Sem âncora para reancorar variação (${sessao}): ${err.message}`);
+                    }
+                }
+                for (const c of contestados) {
+                    const { change, previousClose } = resolveContestedChange({
+                        price: c.price,
+                        ownClose: c.ownClose,
+                    });
+                    c.payload.change = change;
+                    c.payload.previousClose = previousClose;
+                }
+                logger.warn(
+                    `🧭 [MarketData] ${contestados.length} variação(ões) reancorada(s) no nosso fechamento `
+                    + `(a fonte se contradisse): ${contestados.map((c) => `${c.ticker}→${c.payload.change.toFixed(2)}%`).join(', ')}`,
+                    { reanchored: contestados.map((c) => c.ticker) },
+                );
             }
 
             // --- BLACKLIST DINÂMICA (DETECTAR FALHAS) ---
@@ -671,13 +772,36 @@ export const marketDataService = {
                 );
             }
 
+            // Suspeita não é falha, e o log precisa dizer isso: o preço FOI
+            // gravado. Sem a frase, quem lê a linha assume que o ativo ficou sem
+            // cotação e vai procurar um defeito que não existe.
+            if (suspectTickers.length > 0) {
+                logger.warn(
+                    `📈 [MarketData] ${suspectTickers.length} cotação(ões) fora da magnitude esperada `
+                    + `(gravadas; podem ser grupamento/desdobramento): ${suspectTickers.join(' | ')}`,
+                    { suspects: suspectTickers },
+                );
+            }
+
             if (operations.length > 0) {
                 await MarketAsset.bulkWrite(operations);
             }
 
             // Provento do dia-ex: só detectável DURANTE a sessão em que o gap
             // existe. Depois do bulkWrite para não atrasar a gravação da cotação.
-            await this.detectExDateDividends(quotes, assetMap);
+            //
+            // Cotação com variação contestada fica de FORA: o sinal de provento é
+            // justamente a distância entre o `previousClose` da fonte e o nosso
+            // candle bruto — e é esse `previousClose` que acabou de ser
+            // desqualificado. Com XPIN11 (fonte dizendo 29,82 contra o nosso
+            // candle de 62,04) o gap viraria um "provento" de R$ 32,22 por cota.
+            const contestadoSet = new Set(contestados.map((c) => c.ticker));
+            await this.detectExDateDividends(
+                contestadoSet.size > 0
+                    ? quotes.filter((q) => !contestadoSet.has(this.normalizeSymbol(q.ticker)))
+                    : quotes,
+                assetMap,
+            );
 
         } catch (error) {
             logger.error(`❌ [MarketData] Falha: ${error.message}`);

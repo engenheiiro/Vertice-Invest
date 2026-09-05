@@ -159,6 +159,41 @@ export interface ChainFlow {
     truncated: number;
 }
 
+/** Um motivo pelo qual a cotação chegou fora do esperado. */
+export interface QuoteSuspectFinding {
+    /** SALTO_NA_FONTE | SALTO_VS_BANCO | VARIACAO_INCOERENTE */
+    code: string;
+    /** A frase pronta, escrita no servidor. A tela não recalcula nada. */
+    detail: string;
+    movePct: number | null;
+}
+
+/** Uma cotação que foi GRAVADA, mas com número fora da magnitude esperada. */
+export interface QuoteSuspect {
+    subject: string;
+    type: string | null;
+    /** Fonte que trouxe o número, como ela se identifica (YAHOO, BRAPI_FALLBACK…). */
+    source: string | null;
+    price: number | null;
+    findings: QuoteSuspectFinding[];
+    /** Quantas vezes desde o reinício — repetir atualiza a mesma linha. */
+    count: number;
+    at: string;
+}
+
+/**
+ * Cotações suspeitas do processo corrente.
+ *
+ * Não é uma variação do `ChainFlow`: aquele diz por ONDE o preço veio, este diz
+ * se o preço FAZ SENTIDO. Um ativo pode ter vindo pela fonte principal, sem
+ * escalada nenhuma, e ainda assim trazer número torto.
+ */
+export interface QuoteSuspectView {
+    total: number;
+    items: QuoteSuspect[];
+    truncated: number;
+}
+
 export interface SourceSummary {
     total: number;
     ok: number;
@@ -177,6 +212,8 @@ export interface DataHealthResponse {
     sourceGroups?: SourceGroup[];
     /** Trajeto por ativo, por cadeia. Chave ausente = cadeia sem medição. */
     sourceChains?: Record<string, ChainFlow>;
+    /** Cotações gravadas com número fora do esperado, desde o último reinício. */
+    quoteSuspects?: QuoteSuspectView;
 }
 
 export interface BackendError {

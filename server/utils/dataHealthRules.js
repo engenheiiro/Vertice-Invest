@@ -169,7 +169,15 @@ export const PLAUSIBILITY_RANGES = {
     pl: { min: -5000, max: 5000, label: 'P/L', unit: '' },
     p_vp: { min: -5000, max: 5000, label: 'P/VP', unit: '' },
     beta: { min: -2, max: 4, label: 'Beta', unit: '' },
-    change: { min: -50, max: 50, label: 'Variação diária', unit: '%' },
+    // `categorical`: UMA ocorrência já tira o check de OK, em vez de esperar a
+    // fração do universo. Só a variação diária tem isso, e a razão é a natureza
+    // do campo: P/L, P/VP, DY e beta são razões cujos extremos são
+    // economicamente LEGÍTIMOS (patrimônio líquido negativo, dividendo
+    // extraordinário) — por isso a régua de fração, senão o painel amanhece
+    // amarelo por 20 nomes que ninguém vai consertar. Um pregão de ±50% no nosso
+    // universo é outra coisa: ou é notícia que merece o olho, ou é defeito. Nos
+    // dois casos, saber QUAL ativo vale mais que a fração dele sobre 1250.
+    change: { min: -50, max: 50, label: 'Variação diária', unit: '%', categorical: true },
 };
 
 /** Faixas de sanidade dos indicadores macro. */
@@ -366,21 +374,47 @@ const coverageChecks = (facts, th) => {
     return out;
 };
 
+/**
+ * Nomes por trás de uma contagem, com teto.
+ *
+ * Mesma decisão do check de preço congelado, pela mesma razão: alarme que diz
+ * "20 ativos com DY fora da faixa" sem dizer QUAIS obriga alguém a abrir o banco
+ * toda vez — e é sempre a mesma consulta. A amostra é opcional de propósito:
+ * servidor que ainda não coleta os nomes continua exibindo só a contagem, em vez
+ * de quebrar ou de mostrar uma lista vazia que se leria como "nenhum".
+ */
+const SAMPLE_CAP = 8;
+const sampleSuffix = (lista) => {
+    if (!Array.isArray(lista) || lista.length === 0) return '';
+    const visiveis = lista.slice(0, SAMPLE_CAP);
+    const resto = lista.length - visiveis.length;
+    return `: ${visiveis.join(', ')}${resto > 0 ? ` e mais ${resto}` : ''}`;
+};
+
 const plausibilityChecks = (facts, th) => {
     const out = [];
     const totals = facts.implausible || {};
+    const samples = totals.samples || {};
     const universe = num(facts.totals?.active) ?? 0;
     if (universe === 0) return out;
     for (const [field, range] of Object.entries(PLAUSIBILITY_RANGES)) {
         const count = num(totals[field]) ?? 0;
         const r = ratio(count, universe);
+        const porFracao = gradeAscending(r, th.implausibleRatio);
         out.push(check({
             id: `plausibility.${field}`,
             label: `${range.label} fora da faixa`,
             category: CATEGORY.PLAUSIBILITY,
-            status: gradeAscending(r, th.implausibleRatio),
+            // Piso categórico onde o campo pede (ver `categorical` no catálogo):
+            // a fração continua mandando para cima, mas uma ocorrência já basta
+            // para o check sair de OK e o nome aparecer sem expandir a seção dos
+            // saudáveis — que é onde ele se escondia.
+            status: range.categorical && count > 0
+                ? worstStatus(HEALTH_STATUS.WARN, porFracao)
+                : porFracao,
             value: r,
-            detail: `${count} ativo(s) com ${range.label} fora de [${range.min}, ${range.max}]${range.unit ? ` ${range.unit}` : ''} (${pct(r)})`,
+            detail: `${count} ativo(s) com ${range.label} fora de [${range.min}, ${range.max}]${range.unit ? ` ${range.unit}` : ''} (${pct(r)})`
+                + sampleSuffix(samples[field]),
             hint: 'Valor impossível quase sempre é coluna trocada na origem ou unidade errada (fração vs. percentual).',
         }));
     }
@@ -414,7 +448,7 @@ const plausibilityChecks = (facts, th) => {
                 gradeAscending(ratio(zeroPrice, universe), th.implausibleRatio),
             ),
         value: zeroPrice,
-        detail: `${zeroPrice} ativo(s) ativo(s) com preço ≤ 0`,
+        detail: `${zeroPrice} ativo(s) ativo(s) com preço ≤ 0` + sampleSuffix(samples.nonPositivePrice),
         hint: 'Ativo ativo sem preço válido entra em ranking e carteira com valor errado. Verifique o fallback de cotação.',
     }));
     return out;

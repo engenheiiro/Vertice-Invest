@@ -421,6 +421,64 @@ describe('PLAUSIBILIDADE', () => {
         expect(700000).toBeGreaterThan(PLAUSIBILITY_RANGES.p_vp.max);
     });
 
+    /**
+     * A fração é a régua certa para razão cujo extremo é ECONÔMICO (P/VP
+     * negativo, dividendo extraordinário): baixar o limiar ali só criaria um
+     * amarelo permanente por nomes que ninguém vai consertar. A variação diária
+     * é de outra natureza — um pregão de ±50% no nosso universo ou é notícia que
+     * merece o olho, ou é defeito. Nos dois casos, saber QUAL vale mais que a
+     * fração dele sobre 1250, e um ativo em 1250 nunca alcança o limiar de 2%.
+     */
+    it('uma única variação diária absurda já tira o check de OK', () => {
+        const facts = healthyFacts();
+        facts.implausible.change = 1; // 0,1% do universo — longe do limiar de fração
+        expect(byId(buildHealthReport(facts), 'plausibility.change').status)
+            .not.toBe(HEALTH_STATUS.OK);
+    });
+
+    it('o piso categórico não contamina as razões econômicas', () => {
+        const facts = healthyFacts();
+        facts.implausible.dy = 1;
+        facts.implausible.pl = 1;
+        facts.implausible.p_vp = 1;
+        facts.implausible.beta = 1;
+        const report = buildHealthReport(facts);
+        for (const campo of ['dy', 'pl', 'p_vp', 'beta']) {
+            expect(byId(report, `plausibility.${campo}`).status).toBe(HEALTH_STATUS.OK);
+        }
+    });
+
+    /**
+     * Contagem sem nome obriga a mesma investigação toda vez: "20 ativos com DY
+     * fora da faixa" manda alguém abrir o banco para descobrir QUAIS — e é sempre
+     * a mesma consulta, feita pela mesma pessoa. O valor vai junto do ticker
+     * porque "WEST3" não diz se é dado torto ou dividendo gordo; "WEST3=186" diz.
+     */
+    it('nomeia os ativos por trás da contagem, com o valor', () => {
+        const facts = healthyFacts();
+        facts.implausible.dy = 2;
+        facts.implausible.samples = { dy: ['WEST3=186.05', 'SYNE3=68.28'] };
+        const check = byId(buildHealthReport(facts), 'plausibility.dy');
+        expect(check.detail).toContain('WEST3=186.05');
+        expect(check.detail).toContain('SYNE3=68.28');
+    });
+
+    it('lista longa é cortada, e o corte é dito em voz alta', () => {
+        const facts = healthyFacts();
+        facts.implausible.dy = 12;
+        facts.implausible.samples = { dy: Array.from({ length: 12 }, (_, i) => `T${i}=99`) };
+        expect(byId(buildHealthReport(facts), 'plausibility.dy').detail).toMatch(/e mais 4/);
+    });
+
+    // Servidor que ainda não coleta os nomes continua exibindo só a contagem —
+    // lista vazia não pode virar dois-pontos pendurado no fim da frase.
+    it('sem amostra, o detalhe segue sendo só a contagem', () => {
+        const facts = healthyFacts();
+        facts.implausible.dy = 3;
+        delete facts.implausible.samples;
+        expect(byId(buildHealthReport(facts), 'plausibility.dy').detail).not.toMatch(/:\s*$/);
+    });
+
     it('um único preço ≤ 0 já sai de OK', () => {
         const facts = healthyFacts();
         facts.implausible.nonPositivePrice = 1;

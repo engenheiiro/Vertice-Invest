@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { DataSourcesPanel } from './DataSourcesPanel';
-import type { ChainFlow, DataSource, SourceGroup } from '../../services/health';
+import type { ChainFlow, DataSource, QuoteSuspectView, SourceGroup } from '../../services/health';
 
 // A tela existe para responder, sem intermediário técnico: "de onde vem o dado e
 // está chegando?". O que se cobra aqui é a hierarquia de leitura — grade agrupada,
@@ -417,5 +417,90 @@ describe('DataSourcesPanel — quem precisou de reserva', () => {
         render(<DataSourcesPanel sources={[src({ id: 'coinbase', short: 'Coinbase', group: 'fx', escalated: null })]} groups={groups} />);
         fireEvent.click(screen.getByText('Coinbase'));
         expect(screen.getByRole('dialog')).not.toHaveTextContent('Ativos que passaram por aqui');
+    });
+});
+
+/**
+ * "Chegou preço" e "o preço está certo" são perguntas diferentes, e a segunda é
+ * a que não deixa rastro: cotação errada volta com carimbo de sucesso. A linha
+ * de suspeitos precisa dizer, sem clique, que o preço FOI gravado — senão ela se
+ * lê como falha e manda alguém procurar um ativo sem cotação que não existe.
+ */
+const suspeitos: QuoteSuspectView = {
+    total: 2,
+    truncated: 0,
+    items: [
+        {
+            subject: 'XPIN11',
+            type: 'FII',
+            source: 'YAHOO',
+            price: 62.04,
+            count: 1,
+            at: new Date().toISOString(),
+            findings: [{
+                code: 'SALTO_NA_FONTE',
+                detail: '108% contra o fechamento anterior da própria fonte (29.82 → 62.04)',
+                movePct: 108,
+            }],
+        },
+        {
+            subject: 'NAUI11',
+            type: 'FII',
+            source: 'YAHOO',
+            price: 1000,
+            count: 3,
+            at: new Date().toISOString(),
+            findings: [{
+                code: 'VARIACAO_INCOERENTE',
+                detail: 'a fonte declara 4.02% mas os preços dela implicam 0.00%',
+                movePct: 0,
+            }],
+        },
+    ],
+};
+
+describe('DataSourcesPanel — preços fora do esperado', () => {
+    it('avisa sem clique, e diz que o preço foi gravado', () => {
+        render(<DataSourcesPanel sources={cadeia} groups={groups} chains={flow} suspects={suspeitos} />);
+        expect(screen.getByText(/chegaram com preço fora/)).toBeInTheDocument();
+        expect(screen.getByText(/gravados, para conferir/)).toBeInTheDocument();
+    });
+
+    it('zero também é notícia e tem frase própria', () => {
+        render(<DataSourcesPanel
+            sources={cadeia}
+            groups={groups}
+            chains={flow}
+            suspects={{ total: 0, items: [], truncated: 0 }}
+        />);
+        expect(screen.getByText(/Nenhum preço fora do esperado/)).toBeInTheDocument();
+    });
+
+    // Servidor sem a medição não pode virar "nenhum preço fora do esperado":
+    // são afirmações opostas, e só a segunda temos direito de fazer.
+    it('cala quando o servidor não manda a medição', () => {
+        render(<DataSourcesPanel sources={cadeia} groups={groups} chains={flow} />);
+        expect(screen.queryByText(/Nenhum preço fora do esperado/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/chegaram com preço fora/)).not.toBeInTheDocument();
+    });
+
+    it('a lista traz o ticker e a frase inteira do motivo, não o código', () => {
+        render(<DataSourcesPanel sources={cadeia} groups={groups} chains={flow} suspects={suspeitos} />);
+        fireEvent.click(screen.getByText(/chegaram com preço fora/));
+
+        const dialog = screen.getByRole('dialog', { name: /valor fora do esperado/i });
+        expect(dialog).toHaveTextContent('XPIN11');
+        expect(dialog).toHaveTextContent('108% contra o fechamento anterior');
+        expect(dialog).toHaveTextContent('NAUI11');
+        expect(dialog).not.toHaveTextContent('SALTO_NA_FONTE');
+    });
+
+    // Grupamento e desdobramento têm a mesma assinatura de um erro de fonte: o
+    // painel precisa dizer por que não recusou o preço.
+    it('explica por que o preço não foi recusado', () => {
+        render(<DataSourcesPanel sources={cadeia} groups={groups} chains={flow} suspects={suspeitos} />);
+        fireEvent.click(screen.getByText(/chegaram com preço fora/));
+        expect(screen.getByRole('dialog', { name: /valor fora do esperado/i }))
+            .toHaveTextContent(/grupamento e desdobramento/i);
     });
 });

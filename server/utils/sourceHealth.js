@@ -326,8 +326,8 @@ export const getSourceStats = () => Object.entries(SOURCE_CATALOG).map(([id, met
     };
 });
 
-/** Só para teste — o registro é global ao processo (contadores e ledger). */
-export const resetSourceStats = () => { stats.clear(); escalations.clear(); };
+/** Só para teste — o registro é global ao processo (contadores e ledgers). */
+export const resetSourceStats = () => { stats.clear(); escalations.clear(); suspects.clear(); };
 
 /**
  * QUEM PRECISOU DE RESERVA — o registro por ASSUNTO, não por chamada.
@@ -413,4 +413,57 @@ export const recordEscalation = ({ chain, subject, tried = [], resolvedBy = null
 
 /** Fotografia do ledger, do mais recente para o mais antigo. */
 export const getEscalations = () => [...escalations.values()]
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
+
+/**
+ * O PREÇO CHEGOU, MAS ELE FAZ SENTIDO? — o terceiro registro desta casa.
+ *
+ * Os contadores dizem se a fonte respondeu; o ledger de escaladas diz por onde
+ * cada ativo passou. Nenhum dos dois olha para o NÚMERO. E é aí que mora a falha
+ * mais cara, porque ela não deixa rastro: cotação errada volta 200, datada, com
+ * failCount zerado, e entra no ranking e na carteira como se fosse boa.
+ *
+ * O veredito é do `utils/quoteSanity.js` (puro); aqui é só a memória — mesma
+ * natureza dos outros dois: um registro por ATIVO, teto de tamanho, some no
+ * reinício. Persistir significaria escrever no banco a cada cotação suspeita, e
+ * a pergunta que isto responde ("o que chegou torto agora?") não precisa de
+ * histórico longo: o estado ACUMULADO tem dono próprio, que é a sentinela.
+ */
+const SUSPECT_CAP = 300;
+
+const suspects = new Map();
+
+/**
+ * Registra uma cotação que chegou fora do esperado.
+ *
+ * @param {object} evento
+ * @param {string} evento.subject ticker
+ * @param {string} [evento.type] classe do ativo
+ * @param {string} [evento.source] fonte que trouxe o número (YAHOO, BRAPI…)
+ * @param {number} evento.price preço gravado
+ * @param {Array<{code: string, detail: string, movePct: number|null}>} evento.findings
+ *   achados de `judgeQuote`. Sem achado, nada é registrado.
+ */
+export const recordSuspectQuote = ({ subject, type = null, source = null, price = null, findings = [] }) => {
+    if (!subject || !Array.isArray(findings) || findings.length === 0) return;
+    const anterior = suspects.get(subject);
+    // Mesma mecânica do ledger de escaladas: reinserir joga a chave para o fim,
+    // então o descarte por idade sai de graça.
+    suspects.delete(subject);
+    suspects.set(subject, {
+        subject,
+        type,
+        source,
+        price,
+        findings,
+        at: new Date(),
+        count: (anterior?.count || 0) + 1,
+    });
+    while (suspects.size > SUSPECT_CAP) {
+        suspects.delete(suspects.keys().next().value);
+    }
+};
+
+/** Fotografia das cotações suspeitas, da mais recente para a mais antiga. */
+export const getSuspectQuotes = () => [...suspects.values()]
     .sort((a, b) => new Date(b.at) - new Date(a.at));

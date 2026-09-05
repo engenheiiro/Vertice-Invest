@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    AlertTriangle, CheckCircle2, ChevronRight, GitBranch, HelpCircle, Radio, ShieldCheck, X, XCircle,
+    AlertTriangle, CheckCircle2, ChevronRight, GitBranch, HelpCircle, Radio, ShieldCheck,
+    SearchCheck, X, XCircle,
 } from 'lucide-react';
 import type {
-    ChainEscalation, ChainFlow, DataSource, SourceGroup, SourceStatus, SourceSummary,
+    ChainEscalation, ChainFlow, DataSource, QuoteSuspectView, SourceGroup, SourceStatus, SourceSummary,
 } from '../../services/health';
 
 /**
@@ -374,6 +375,143 @@ const ChainFlowLine = ({ flow, onOpen }: { flow: ChainFlow; onOpen: () => void }
     );
 };
 
+/**
+ * "O PREÇO CHEGOU" NÃO É "O PREÇO ESTÁ CERTO".
+ *
+ * A linha de cima da cadeia responde a primeira pergunta e para ali. Fonte que
+ * não responde deixa rastro em todo lugar — failCount, ativo envelhecendo, card
+ * vermelho. Fonte que responde o número ERRADO não deixa rastro nenhum: entra no
+ * ranking e na carteira com carimbo de sucesso.
+ *
+ * Por isso esta linha fica ao lado da outra, sem clique: são as duas metades da
+ * mesma pergunta. E o texto diz, com todas as letras, que o preço FOI gravado —
+ * senão a linha se lê como falha, e alguém vai procurar um ativo sem cotação
+ * que não existe.
+ *
+ * Zero tem texto próprio: é a afirmação de que ninguém chegou torto, e ela vale
+ * tanto quanto o alarme.
+ */
+const SuspectLine = ({ suspects, onOpen }: { suspects: QuoteSuspectView; onOpen: () => void }) => {
+    if (suspects.total === 0) {
+        return (
+            <p className="text-[10px] text-slate-600">
+                Nenhum preço fora do esperado desde o último reinício do servidor.
+            </p>
+        );
+    }
+    return (
+        <button
+            type="button"
+            onClick={onOpen}
+            className="w-full text-left flex items-center gap-2 flex-wrap px-2 py-1.5 rounded-lg border border-yellow-900/50 bg-yellow-900/10 hover:border-yellow-800 transition-colors"
+        >
+            <SearchCheck size={11} className="text-yellow-500 shrink-0" />
+            <span className="text-[10px] text-slate-300">
+                <span className="font-bold text-white">{suspects.total}</span> ativo(s) chegaram com preço fora
+                do esperado
+            </span>
+            <span className="text-[10px] text-slate-500">— gravados, para conferir</span>
+            <span className="text-[10px] text-blue-400 ml-auto shrink-0">ver ativos →</span>
+        </button>
+    );
+};
+
+/**
+ * A lista dos preços suspeitos.
+ *
+ * Cada linha carrega a FRASE inteira do motivo, escrita no servidor ("+108%
+ * contra o fechamento anterior da própria fonte"), e não um código: quem abre
+ * este modal quer decidir se aquilo foi grupamento ou erro de fonte, e para isso
+ * precisa dos dois números, não da etiqueta.
+ */
+const SuspectModal = ({ suspects, onClose }: { suspects: QuoteSuspectView; onClose: () => void }) => {
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    return createPortal(
+        <div
+            className="fixed inset-0 z-[100] backdrop-blur-md bg-black/95 flex items-center justify-center p-4"
+            onClick={onClose}
+            role="presentation"
+        >
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Cotações com valor fora do esperado"
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-2xl bg-panel border border-slate-700 rounded-2xl p-5 max-h-[85vh] overflow-y-auto"
+            >
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <h3 className="text-sm font-black text-white flex items-center gap-2">
+                            <SearchCheck size={14} className="text-yellow-500" />
+                            Preços fora do esperado
+                        </h3>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                            {suspects.total} ativo(s) desde o último reinício · o preço foi gravado
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Fechar"
+                        className="text-slate-500 hover:text-white transition-colors shrink-0"
+                    >
+                        <X size={16} />
+                    </button>
+                </div>
+
+                <div className="mt-4 divide-y divide-slate-800/70">
+                    {suspects.items.map((item) => (
+                        <div key={item.subject} className="py-2.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-bold text-white font-mono">{item.subject}</span>
+                                {item.type && (
+                                    <span className="text-[9px] uppercase font-bold text-slate-500 bg-elevated px-1 rounded">
+                                        {item.type}
+                                    </span>
+                                )}
+                                {item.source && (
+                                    <span className="text-[9px] font-mono text-slate-600">via {item.source}</span>
+                                )}
+                                {item.count > 1 && (
+                                    <span className="text-[9px] text-slate-500 font-mono">{item.count}×</span>
+                                )}
+                                <span className="text-[9px] font-mono text-slate-600 ml-auto">{shortTime(item.at)}</span>
+                            </div>
+                            <ul className="mt-1 space-y-0.5">
+                                {item.findings.map((f) => (
+                                    <li key={f.code} className="text-[11px] text-slate-300">
+                                        <span className="text-yellow-500/80">↳</span> {f.detail}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
+                </div>
+
+                {suspects.truncated > 0 && (
+                    <p className="text-[10px] text-slate-500 mt-3">
+                        + {suspects.truncated} ativo(s) não listados — a tela mostra os {suspects.items.length}{' '}
+                        mais recentes.
+                    </p>
+                )}
+
+                <p className="text-[10px] text-slate-600 mt-4">
+                    O preço é gravado mesmo assim, de propósito: grupamento e desdobramento produzem a mesma
+                    assinatura de um erro de fonte, e recusar por magnitude congelaria o ativo no valor
+                    anterior ao evento. Esta lista existe para você olhar e decidir — ela zera a cada reinício
+                    do servidor.
+                </p>
+            </div>
+        </div>,
+        document.body,
+    );
+};
+
 /** Data curta com hora — o ledger vive no processo, então o dia raramente varia. */
 const shortTime = (iso: string) => {
     const d = new Date(iso);
@@ -693,7 +831,7 @@ const SourceDetailModal = ({
 };
 
 export const DataSourcesPanel = ({
-    sources, summary, groups, chains,
+    sources, summary, groups, chains, suspects,
 }: {
     sources: DataSource[];
     summary?: SourceSummary;
@@ -704,9 +842,16 @@ export const DataSourcesPanel = ({
      * ela simplesmente não fala pela cadeia que não tem registro.
      */
     chains?: Record<string, ChainFlow>;
+    /**
+     * Preços que chegaram fora da magnitude esperada. Ausente = servidor sem a
+     * medição (versão anterior), e aí a linha some em vez de afirmar zero — a
+     * mesma regra do trajeto por ativo, pela mesma razão.
+     */
+    suspects?: QuoteSuspectView;
 }) => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [openChain, setOpenChain] = useState<string | null>(null);
+    const [openSuspects, setOpenSuspects] = useState(false);
 
     // Agrupa preservando a ordem que o servidor mandou e, dentro do bloco, separa
     // as CADEIAS (que viram sequência com seta) das fontes independentes. A
@@ -796,6 +941,14 @@ export const DataSourcesPanel = ({
                                         {fluxo && (
                                             <ChainFlowLine flow={fluxo} onOpen={() => setOpenChain(fluxo.chain)} />
                                         )}
+                                        {/* Só na cadeia de cotações: é a única com
+                                            julgamento de valor hoje, e afirmar
+                                            "nenhum preço fora do esperado" embaixo
+                                            de uma cadeia que ninguém julga seria
+                                            mentir por omissão. */}
+                                        {suspects && cadeia[0].chain === 'quotes' && (
+                                            <SuspectLine suspects={suspects} onOpen={() => setOpenSuspects(true)} />
+                                        )}
                                     </div>
                                 );
                             })}
@@ -840,6 +993,9 @@ export const DataSourcesPanel = ({
                     labelOf={labelOf}
                     onClose={() => setOpenChain(null)}
                 />
+            )}
+            {openSuspects && suspects && (
+                <SuspectModal suspects={suspects} onClose={() => setOpenSuspects(false)} />
             )}
         </section>
     );

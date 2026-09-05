@@ -94,6 +94,11 @@ export const getDataHealth = async (req, res, next) => {
             // natureza dos contadores (memória do processo), e pela mesma razão
             // não passa pelo relatório persistido.
             sourceChains: sources.chains,
+            // Cotações que chegaram com número fora do esperado. Também memória
+            // do processo: é o flagrante do momento em que o preço entrou. O
+            // estado ACUMULADO (o que está gravado agora) tem dono separado —
+            // os checks de plausibilidade do relatório.
+            quoteSuspects: sources.suspects,
         });
     } catch (error) { next(error); }
 };

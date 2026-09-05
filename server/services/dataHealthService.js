@@ -36,8 +36,12 @@ import {
     PLAUSIBILITY_RANGES,
     buildHealthReport,
 } from '../utils/dataHealthRules.js';
-import { getSourceStats, getEscalations, SOURCE_GROUPS } from '../utils/sourceHealth.js';
-import { buildSourceStatuses, summarizeSources, buildEscalationView } from '../utils/dataSourceStatus.js';
+import {
+    getSourceStats, getEscalations, getSuspectQuotes, SOURCE_GROUPS,
+} from '../utils/sourceHealth.js';
+import {
+    buildSourceStatuses, summarizeSources, buildEscalationView, buildSuspectView,
+} from '../utils/dataSourceStatus.js';
 
 const THRESHOLD_KEY = 'DATA_HEALTH_THRESHOLDS';
 
@@ -164,6 +168,55 @@ const allCoverageFields = () => [
     ...new Set(Object.values(COVERAGE_SPEC).flatMap((spec) => spec.map((s) => s.field))),
 ];
 
+/**
+ * OS TICKERS POR TRÁS DE CADA CONTAGEM DE IMPLAUSIBILIDADE.
+ *
+ * Contagem sem nome obriga a mesma investigação toda vez: "20 ativos com DY fora
+ * da faixa" manda alguém abrir o banco para descobrir QUAIS — e é sempre o mesmo
+ * alguém, sempre a mesma consulta. Quem corta a lista para caber na tela é a
+ * regra (`dataHealthRules`), não a coleta: aqui se traz o material, lá se decide
+ * o que cabe no card.
+ *
+ * Uma consulta só, com `$or` sobre todas as faixas: o universo implausível é
+ * pequeno por construção (se não fosse, o painel já estaria vermelho e a lista
+ * seria o menor dos problemas), então cabe trazer os documentos e separar em
+ * JS em vez de multiplicar agregações por campo.
+ *
+ * Ordena pelos MAIORES desvios? Não: ordena por nada, e o teto corta os
+ * primeiros que vierem. Ranquear pediria uma chave por campo — e o valor da
+ * lista aqui é dar um ponto de partida nominal, não eleger o pior.
+ */
+const collectImplausibleSamples = async () => {
+    const clausulas = Object.entries(PLAUSIBILITY_RANGES).map(([field, { min, max }]) => ({
+        $or: [{ [field]: { $lt: min } }, { [field]: { $gt: max } }],
+    }));
+    clausulas.push({ lastPrice: { $lte: 0 } });
+
+    const campos = Object.keys(PLAUSIBILITY_RANGES).join(' ');
+    const rows = await MarketAsset.find({ ...ACTIVE_UNIVERSE, $or: clausulas })
+        .select(`ticker lastPrice ${campos}`)
+        .limit(400)
+        .lean();
+
+    const samples = { nonPositivePrice: [] };
+    for (const field of Object.keys(PLAUSIBILITY_RANGES)) samples[field] = [];
+
+    for (const row of rows) {
+        if (!(Number(row.lastPrice) > 0)) samples.nonPositivePrice.push(row.ticker);
+        for (const [field, { min, max }] of Object.entries(PLAUSIBILITY_RANGES)) {
+            const v = row[field];
+            if (v === null || v === undefined) continue;
+            if (v < min || v > max) {
+                // O VALOR vai junto do ticker: sem ele a lista diz onde olhar mas
+                // não o que se está vendo, e "WEST3" é bem menos acionável que
+                // "WEST3=186" para decidir se é dado torto ou dividendo gordo.
+                samples[field].push(`${row.ticker}=${Math.round(v * 100) / 100}`);
+            }
+        }
+    }
+    return samples;
+};
+
 const collectAssetFacts = async (staleCutoff, fundamentalsCutoff) => {
     const group = {
         _id: '$type',
@@ -184,7 +237,10 @@ const collectAssetFacts = async (staleCutoff, fundamentalsCutoff) => {
         group[`imp__${field}`] = sumIf(outOfRangeExpr(field, range));
     }
 
-    const rows = await MarketAsset.aggregate([{ $match: ACTIVE_UNIVERSE }, { $group: group }]);
+    const [rows, samples] = await Promise.all([
+        MarketAsset.aggregate([{ $match: ACTIVE_UNIVERSE }, { $group: group }]),
+        collectImplausibleSamples(),
+    ]);
 
     const assets = {};
     const implausible = { nonPositivePrice: 0 };
@@ -211,6 +267,11 @@ const collectAssetFacts = async (staleCutoff, fundamentalsCutoff) => {
             missing,
         };
     }
+
+    // As amostras andam DENTRO de `implausible`, junto das contagens que elas
+    // explicam: separá-las abriria a porta para a lista de um campo ser servida
+    // ao lado da contagem de outro.
+    implausible.samples = samples;
 
     return { assets, implausible, activeTotal };
 };
@@ -530,6 +591,11 @@ export const getLiveSourceStatuses = async () => {
         summary: summarizeSources(sources),
         groups: SOURCE_GROUPS,
         chains: buildEscalationView(escalations, stats).chains,
+        // `suspects` não é uma variação de `chains`: aquele diz por ONDE o preço
+        // veio, este diz se o preço FAZ SENTIDO. Um ativo pode ter vindo pela
+        // fonte principal, sem escalada nenhuma, e ainda trazer número torto —
+        // e é justamente esse o caso que nada mais no painel denuncia.
+        suspects: buildSuspectView(getSuspectQuotes()),
     };
 };
 
