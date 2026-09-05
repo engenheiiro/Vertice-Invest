@@ -37,10 +37,32 @@ const FILE_NAME = 'TradeInformationConsolidated';
 /**
  * Segmento do mercado à vista. O filtro NÃO é detalhe: das ~135 mil linhas do
  * arquivo, ~129 mil são opções (EQUITY CALL/PUT) e o resto se divide em termo,
- * fracionário e block trade. O à vista são ~1.400 linhas — e é a única fatia em
- * que `TckrSymb` significa o que a nossa série significa.
+ * fracionário e block trade. O à vista são ~1.400 linhas — e é onde `TckrSymb`
+ * significa o que a nossa série significa (o complemento está logo abaixo).
  */
 const SPOT_SEGMENT = 'CASH';
+
+/**
+ * O SEGUNDO SEGMENTO — onde a B3 arquiva o ETF de RENDA FIXA.
+ *
+ * Descoberto medindo, em 05/09/2026: FIXA11 constava como ZERO negócios em 120
+ * pregões pelo filtro de `CASH`, e no mesmo arquivo de 04/09 tinha 434 negócios
+ * sob `SgmtNm = FORWARD`. Vendo as 66 linhas do segmento naquele dia, as 66 são
+ * ETF de renda fixa — IMAB11 (2.173 negócios), LFTB11 (10.550), B5P211 (1.708),
+ * IRFM11, CDIB11, DEBB11 — e não há uma única operação a termo de verdade ali.
+ *
+ * Custava caro nos dois sentidos: esses papéis nunca recebiam o reforço do
+ * fechamento oficial (ficavam só com o Yahoo), e o critério de aposentadoria por
+ * pregão (`lib/b3Activity.js`) os dava como símbolos extintos — bastava rodar o
+ * `retireDeadTickers` neles para aposentar um ETF que negocia centenas de vezes
+ * por dia.
+ *
+ * O `CASH` continua tendo precedência e este segmento só PREENCHE o que faltar:
+ * não houve uma colisão de símbolo sequer entre os dois no dia medido, e se um
+ * dia um termo de verdade aparecer aqui usando símbolo do à vista, a precedência
+ * é o que impede o preço dele de virar o nosso fechamento.
+ */
+const FIXED_INCOME_ETF_SEGMENT = 'FORWARD';
 
 const B3_AGENT = new https.Agent({ rejectUnauthorized: true, keepAlive: true, minVersion: 'TLSv1.2' });
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
@@ -123,21 +145,31 @@ export const parseB3TradeFile = (text, dayStr) => {
     }
 
     const closes = new Map();
+    // O segundo segmento é juntado à parte e só entra no fim: a ordem das linhas
+    // é da B3, e decidir a precedência dentro do laço faria o vencedor depender
+    // de quem apareceu primeiro no arquivo.
+    const suplemento = new Map();
     for (let i = 2; i < linhas.length; i += 1) {
         const col = linhas[i].split(';');
         if (col.length <= iLast) continue;
-        if (col[iSeg] !== SPOT_SEGMENT) continue;
+        const segmento = col[iSeg];
+        if (segmento !== SPOT_SEGMENT && segmento !== FIXED_INCOME_ETF_SEGMENT) continue;
         // O arquivo é do dia, mas conferir a data é barato e impede que uma
         // resposta trocada pela B3 vire candle na data errada.
         if (col[iDate] !== dayStr) continue;
         const ticker = String(col[iSym] || '').trim().toUpperCase();
         const close = parseB3Number(col[iLast]);
         if (!ticker || !(close > 0)) continue;
-        closes.set(ticker, {
+        const linha = {
             close,
             volume: iQty >= 0 ? (parseB3Number(col[iQty]) || 0) : 0,
             trades: iTrades >= 0 ? (parseB3Number(col[iTrades]) || 0) : 0,
-        });
+        };
+        if (segmento === SPOT_SEGMENT) closes.set(ticker, linha);
+        else suplemento.set(ticker, linha);
+    }
+    for (const [ticker, linha] of suplemento) {
+        if (!closes.has(ticker)) closes.set(ticker, linha);
     }
     return closes.size > 0 ? closes : null;
 };

@@ -18,7 +18,11 @@ const arquivo = (linhas, status = 'Status do Arquivo: Final') => [status, CAB, .
 const ITSA4 = '2026-08-28;ITSA4;BRITSAACNPR7;CASH;12,81;12,98;12,9;12,95;0,85;;;;25153;14850800;191244935';
 const BOVA11 = '2026-08-28;BOVA11;BRBOVACTF003;CASH;171,11;173,69;172,24;172,72;0,18;;;;66570;3751418;639099966,69';
 const OPCAO = '2026-08-28;ITSAH125;BRITSAACNPR7;EQUITY CALL;0,5;0,6;0,55;0,58;1,2;;;;10;1000;580';
-const TERMO = '2026-08-28;03BK11;BR03BKCTF019;FORWARD;50,69;50,78;50,73;50,69;-0,11;;;;2;2;101,47';
+// `FORWARD` não é termo: é onde a B3 arquiva o ETF de RENDA FIXA. Medido em
+// 04/09/2026 — as 66 linhas do segmento eram todas ETF (FIXA11 com 434 negócios,
+// IMAB11 com 2.173, LFTB11 com 10.550), nenhuma operação a termo. Esta linha
+// esteve aqui como "TERMO" até 05/09/2026, e o engano deixava FIXA11 invisível.
+const ETF_RF = '2026-08-28;03BK11;BR03BKCTF019;FORWARD;50,69;50,78;50,73;50,69;-0,11;;;;2;2;101,47';
 
 describe('parseB3Number', () => {
   it('lê a vírgula decimal e o ponto de milhar', () => {
@@ -49,9 +53,19 @@ describe('parseB3TradeFile', () => {
     expect(closes.get('ITSA4').trades).toBe(25153);
   });
 
-  it('descarta opção e termo — só o segmento à vista', () => {
-    const closes = parseB3TradeFile(arquivo([ITSA4, OPCAO, TERMO]), '2026-08-28');
-    expect([...closes.keys()]).toEqual(['ITSA4']);
+  it('descarta opção, e traz o ETF de renda fixa do segundo segmento', () => {
+    const closes = parseB3TradeFile(arquivo([ITSA4, OPCAO, ETF_RF]), '2026-08-28');
+    expect([...closes.keys()].sort()).toEqual(['03BK11', 'ITSA4']);
+    expect(closes.get('03BK11').close).toBe(50.69);
+  });
+
+  it('o à vista tem precedência sobre o segundo segmento, na ordem que vier', () => {
+    // Se um termo de verdade um dia usar símbolo do à vista, quem manda é o à
+    // vista — e não pode depender de qual linha o arquivo trouxe primeiro.
+    const sombra = ETF_RF.replace('03BK11', 'ITSA4').replace('50,69;-0,11', '99,99;-0,11');
+    for (const ordem of [[ITSA4, sombra], [sombra, ITSA4]]) {
+      expect(parseB3TradeFile(arquivo(ordem), '2026-08-28').get('ITSA4').close).toBe(12.95);
+    }
   });
 
   it('descarta linha de outra data', () => {
