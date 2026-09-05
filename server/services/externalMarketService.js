@@ -57,9 +57,24 @@ export const toYahooSymbol = (sym) => (US_CLASS_DOT_RE.test(sym) ? sym.replace('
 // Símbolo do Yahoo → ticker canônico (DB), revertendo só a classe US (preserva BTC-USD).
 export const fromYahooSymbol = (sym) => (US_CLASS_DASH_RE.test(sym) ? sym.replace('-', '.') : sym);
 
-// Tickers que falham consistentemente no Yahoo Finance mas são recuperados pelo Google.
-// Listados aqui para eliminar ruído de warn no log — o fallback já os trata corretamente.
-const PREFER_GOOGLE_TICKERS = new Set(['B3SA3', 'CVBI11', 'MALL11', 'QAGR11', 'RRCI11', 'RVBI11']);
+// Tickers que falham consistentemente no Yahoo Finance mas são recuperados pelo
+// Google. Existe para eliminar ruído de warn no log — o fallback já os trata.
+//
+// ENCOLHEU DE 6 PARA 1 EM 04/09/2026, e a razão é o argumento contra ela crescer
+// de novo. CVBI11, MALL11, QAGR11, RRCI11 e RVBI11 estavam aqui como "falha
+// conhecida do Yahoo"; o arquivo oficial da B3 mostrou ZERO negócios nos 10
+// pregões anteriores para os cinco. Não eram lacuna de fonte: eram fundos
+// renomeados (CVBI11→PCIP11, RVBI11→PSEC11, QAGR11→PLAG11, RRCI11→XLPR11) cujo
+// símbolo morreu — e o preço que o Google "recuperava" era o último negócio de
+// meses atrás, entrando no ranking como cotação do dia.
+//
+// A lista silenciou por meses exatamente o sinal que denunciaria a troca de
+// símbolo. Antes de acrescentar um ticker aqui, prove que ele NEGOCIA:
+//   node server/scripts/retireDeadTickers.js --tickers=XPTO11
+// Se a janela da B3 disser "zero negócios", o lugar dele é a aposentadoria, não
+// esta lista. B3SA3 fica porque negocia ~28 mil vezes por dia e o Yahoo
+// simplesmente não serve o símbolo.
+const PREFER_GOOGLE_TICKERS = new Set(['B3SA3']);
 
 // (MEM) Limite de scrapes simultâneos do Google Finance. Cada cheerio.load() de
 // uma página do Google constrói uma árvore DOM de vários MB; sem este teto, um

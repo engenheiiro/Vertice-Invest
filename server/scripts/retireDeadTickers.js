@@ -8,10 +8,21 @@
  * EXAS, BPAN4, CPLE5 ficaram 4 a 6 meses no limbo, repetindo o mesmo warn a cada
  * sync, sem caminho de saída.
  *
- * Aqui a guarda é o PROBE AO VIVO (lib/quoteProbe.js), não o porte do papel: nada é
- * aposentado sem que Yahoo (quote + chart), Google (todas as bolsas plausíveis) e a
- * busca por nome falhem na hora da execução. Papel grande deixa de ser exceção
- * permanente e passa a ser apenas um papel a mais que precisa provar que morreu.
+ * Aqui a guarda é a MEDIDA AO VIVO, não o porte do papel: papel grande deixa de ser
+ * exceção permanente e passa a ser apenas um papel a mais que precisa provar que
+ * morreu. Duas evidências, com precedência clara:
+ *
+ *   1. **Pregão da B3** (lib/b3Activity.js) — para papel da B3, decide sozinha. O
+ *      arquivo oficial lista o que foi NEGOCIADO; zero negócios em 10 pregões é
+ *      símbolo extinto, e um único negócio já impede a aposentadoria.
+ *   2. **Probe nas fontes** (lib/quoteProbe.js) — decide para o que não é da B3, e
+ *      em qualquer caso é o que sugere o SUCESSOR na troca de símbolo.
+ *
+ * A ordem importa porque o probe tem um falso positivo caro: o `chart` do Yahoo
+ * devolve o último candle dentro da janela pedida e o Google serve o último preço
+ * conhecido por tempo indeterminado. Em 04/09/2026 esse eco jurava que NGRD3, TRAD3
+ * e HSRE11 estavam vivos; os três tinham ZERO negócios nos 10 pregões anteriores.
+ * Preço em cache não é papel negociando.
  *
  * Guardas que permanecem:
  *   - DRY-RUN por padrão; só grava com --apply.
@@ -24,8 +35,10 @@
  * Uso:
  *   node server/scripts/retireDeadTickers.js                       # dry-run de todos os inativos
  *   node server/scripts/retireDeadTickers.js --days=90             # exige N dias parado (default 60)
+ *   node server/scripts/retireDeadTickers.js --sessions=20         # janela de pregões da B3 (default 10)
  *   node server/scripts/retireDeadTickers.js --tickers=A,B --apply # alvo explícito
  *   node server/scripts/retireDeadTickers.js --tickers=MMC --successor=MRSH --apply
+ *   node server/scripts/retireDeadTickers.js --successors=GUAR3:RIAA3,PETZ3:AUAU3 --apply
  *   node server/scripts/retireDeadTickers.js --tickers=X --undo --apply   # reverte
  *
  * Requer MONGO_URI no .env.
@@ -38,6 +51,7 @@ import MarketAsset from '../models/MarketAsset.js';
 import UserAsset from '../models/UserAsset.js';
 import { connectScriptDb } from './lib/scriptDb.js';
 import { probeTicker, classifyProbe, probeHasPrice } from './lib/quoteProbe.js';
+import { loadB3Window, b3Activity, b3Label, isB3Type } from './lib/b3Activity.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,11 +65,36 @@ const valueOf = (flag) => {
     const a = args.find((x) => x.startsWith(`${flag}=`));
     return a ? a.replace(`${flag}=`, '') : null;
 };
-const explicit = valueOf('--tickers')?.split(',').map((t) => t.trim().toUpperCase()).filter(Boolean) || null;
+const explicitFlag = valueOf('--tickers')?.split(',').map((t) => t.trim().toUpperCase()).filter(Boolean) || null;
 const successor = valueOf('--successor')?.trim().toUpperCase() || null;
+/**
+ * Mapa OLD:NEW para a onda de renomeação — em 04/09/2026 foram nove pares no
+ * mesmo levantamento (AXIA6→AXIA3, GUAR3→RIAA3, PETZ3→AUAU3, CVBI11→PCIP11…).
+ * Continua sendo um par explícito por ticker, que é a guarda que importa: o que
+ * `--successor` proíbe é herdar sucessor por lote, não nomear vários de uma vez.
+ */
+const successorMap = Object.fromEntries(
+    (valueOf('--successors') || '')
+        .split(',').map((par) => par.trim().toUpperCase()).filter(Boolean)
+        .map((par) => par.split(':').map((x) => x.trim()))
+        .filter(([de, para]) => de && para),
+);
+const temMapa = Object.keys(successorMap).length > 0;
 const STALE_DAYS = Number(valueOf('--days') ?? 60);
+// Janela de pregões da B3. 10 é folgado para o papel ilíquido de verdade — no
+// levantamento de 04/09/2026, EQMA3B (3 negócios/dia) apareceu em 6 dos 10.
+const B3_SESSIONS = Number(valueOf('--sessions') ?? 10);
 const FAIL_MIN = 10; // MAX_FAILURES_BEFORE_BLACKLIST
 
+// Nomear o sucessor já diz qual ticker aposentar — repetir em --tickers seria
+// só uma chance a mais de os dois discordarem.
+const explicit = explicitFlag
+    || (temMapa ? Object.keys(successorMap) : null);
+
+if (successor && temMapa) {
+    console.error('❌ Use --successor (um par) OU --successors (vários), não os dois.');
+    process.exit(1);
+}
 if (successor && (!explicit || explicit.length !== 1)) {
     console.error('❌ --successor só vale para UM ticker por vez (--tickers=MMC --successor=MRSH).');
     process.exit(1);
@@ -110,6 +149,14 @@ const run = async () => {
 
     console.log(`\n🧹 Aposentadoria de tickers mortos ${apply ? '(APLICANDO)' : '(DRY-RUN — nada será gravado)'} | ${candidates.length} candidato(s) | probe ao vivo\n`);
 
+    // Uma leitura do arquivo por pregão, reaproveitada por todos os candidatos.
+    const janela = await loadB3Window({ sessions: B3_SESSIONS });
+    if (janela.length) {
+        console.log(`📄 Pregões da B3 na janela: ${janela.map((d) => d.dia.slice(5)).join(', ')}\n`);
+    } else {
+        console.log('⚠️  Sem arquivo da B3 na janela — papel da B3 volta a ser decidido só pelo probe.\n');
+    }
+
     const toRetire = [];
     const skipped = [];
 
@@ -130,6 +177,26 @@ const run = async () => {
         const verdict = classifyProbe(a, p);
         await sleep(350);
 
+        // Papel da B3: o pregão decide, nos dois sentidos. O probe fica só com o
+        // que ele faz bem — apontar o sucessor quando o símbolo trocou.
+        const b3 = isB3Type(a.type) ? b3Activity(a.ticker, janela) : { conclusive: false };
+        if (b3.conclusive) {
+            if (b3.traded > 0) {
+                skipped.push({ a, reason: b3Label(b3) });
+                continue;
+            }
+            toRetire.push({
+                a,
+                stale,
+                held,
+                verdict: {
+                    code: verdict.code === 'SUCCESSOR' ? 'SUCCESSOR' : 'DEAD_B3',
+                    label: `${b3Label(b3)}${verdict.code === 'SUCCESSOR' ? ` · ${verdict.label}` : ''}`,
+                },
+            });
+            continue;
+        }
+
         if (probeHasPrice(p)) {
             skipped.push({ a, reason: verdict.label });
             continue;
@@ -138,10 +205,11 @@ const run = async () => {
     }
 
     if (toRetire.length) {
-        console.log(`⛔ Aposentar (${toRetire.length}) — sem preço em nenhuma fonte agora:`);
+        console.log(`⛔ Aposentar (${toRetire.length}) — sem negócio na B3 (ou sem preço em fonte alguma, fora da B3):`);
         for (const { a, stale, verdict, held } of toRetire) {
             console.log(`   • ${a.ticker.padEnd(9)} [${String(a.type).padEnd(8)}] parado=${stale}d fail=${a.failCount}${held ? ` 🧷 held=${held}` : ''} — ${a.name || 's/nome'}`);
             console.log(`       ${verdict.label}`);
+            if (successorMap[a.ticker]) console.log(`       ↪ sucessor a registrar: ${successorMap[a.ticker]}`);
         }
     }
     if (skipped.length) {
@@ -159,7 +227,9 @@ const run = async () => {
                         isActive: false,
                         retiredAt: new Date(),
                         retiredReason: `probe ${new Date().toISOString().slice(0, 10)}: ${verdict.code}`,
-                        ...(successor ? { successorTicker: successor } : {}),
+                        ...(successorMap[a.ticker] || successor
+                            ? { successorTicker: successorMap[a.ticker] || successor }
+                            : {}),
                     },
                 },
             },
@@ -167,6 +237,9 @@ const run = async () => {
         const res = await MarketAsset.bulkWrite(ops);
         console.log(`\n✅ ${res.modifiedCount} ticker(s) aposentado(s) (isBlacklisted=true).`);
         if (successor) console.log(`   ↪ sucessor registrado: ${explicit[0]} → ${successor}`);
+        for (const [de, para] of Object.entries(successorMap)) {
+            if (toRetire.some((r) => r.a.ticker === de)) console.log(`   ↪ sucessor registrado: ${de} → ${para}`);
+        }
     } else if (toRetire.length) {
         console.log(`\nℹ️  DRY-RUN: rode com --apply para aposentar os ${toRetire.length} acima.`);
     }
