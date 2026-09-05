@@ -197,6 +197,40 @@ describe('buildSourceStatuses — veredito por fonte', () => {
         expect(byId(rows, 'yahoo.currencies').status).not.toBe(SOURCE_STATUS.OK);
     });
 
+    // A taxa de falha de uma RESERVA mede a população que chega até ela, não a
+    // fonte: só lhe perguntam o que a anterior já não conseguiu. Em 05/09/2026 o
+    // candle do Yahoo apareceu como "INSTÁVEL · 100% das 3 chamadas falharam"
+    // respondendo normalmente para o resto do mercado — as três chamadas tinham
+    // sido para AVB, EQR e EA, que haviam saído da bolsa. Só o ledger por assunto
+    // desempata, e é isso que estes dois testes travam.
+    const escalada = (subject, resolvedBy) => ({
+        chain: 'quotes', subject, tried: ['yahoo.quotes', 'yahoo.chart'], resolvedBy, count: 1, at: NOW,
+    });
+
+    it('reserva chamada só para ativo que ninguém precificou não é acusada', () => {
+        const rows = buildSourceStatuses(
+            factsBase(),
+            stats({ id: 'yahoo.chart', attempts: 3, ok: 0, failures: 3, failureRate: 1 }),
+            [escalada('AVB', null), escalada('EQR', null), escalada('EA', null)],
+        );
+        const chart = byId(rows, 'yahoo.chart');
+        expect(chart.status).toBe(SOURCE_STATUS.UNKNOWN);
+        expect(chart.detail).toContain('nenhuma fonte precificou');
+        // Os números crus continuam à mão: o veredito muda, o fato não some.
+        expect(chart.attempts).toBe(3);
+        expect(chart.failureRate).toBe(1);
+    });
+
+    it('basta um ativo salvo pela fonte SEGUINTE para a suspeita voltar a ser dela', () => {
+        const rows = buildSourceStatuses(
+            factsBase(),
+            stats({ id: 'yahoo.chart', attempts: 3, ok: 0, failures: 3, failureRate: 1 }),
+            [escalada('AVB', null), escalada('EQR', null), escalada('PETR4', 'google.finance')],
+        );
+        expect(byId(rows, 'yahoo.chart').status).toBe(SOURCE_STATUS.WARN);
+        expect(byId(rows, 'yahoo.chart').detail).toContain('100%');
+    });
+
     it('a entrega registrada no banco vira a data de referência da fonte', () => {
         const facts = factsBase();
         facts.macro.currenciesSources = { usd: 'PTAX/BCB', btc: 'Coinbase' };

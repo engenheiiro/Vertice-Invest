@@ -113,7 +113,18 @@ export interface DataSource {
      * cadeia não tem registro por ativo — e null não é zero: zero afirma que
      * nada escalou, null admite que não medimos.
      */
-    escalated?: { reached: number; rescued: number; missed: number } | null;
+    escalated?: {
+        reached: number;
+        rescued: number;
+        missed: number;
+        /**
+         * Dos que esta fonte não trouxe, quantos NENHUMA fonte trouxe. É o que
+         * separa "a reserva falhou e a seguinte salvou" de "o ativo não negocia
+         * mais" — sem isso, uma fonte chamada só para ticker morto fica vermelha
+         * para sempre por um defeito que não é dela.
+         */
+        orphaned?: number;
+    } | null;
 }
 
 /** Um ativo que precisou descer a cadeia, e o caminho que ele fez. */

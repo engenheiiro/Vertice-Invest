@@ -194,6 +194,23 @@ describe('DataSourcesPanel', () => {
         expect(screen.getByText('reserva')).toBeInTheDocument();
     });
 
+    // "Em espera" quer dizer que ninguém precisou dela. Dizer isso a uma reserva
+    // que acabou de ser chamada três vezes é uma mentira pequena — e o painel só
+    // vale enquanto cada frase dele resiste a ser conferida.
+    it('reserva chamada só para ativo morto não diz "em espera"', () => {
+        render(<DataSourcesPanel
+            sources={[src({
+                id: 'a', short: 'Yahoo candle', status: 'UNKNOWN', attempts: 3, failures: 3, failureRate: 1,
+                lastDeliveryHours: null, trigger: 'onFailure', nextRun: null,
+                detail: 'As 3 chamadas foram para 3 ativos que nenhuma fonte precificou',
+                escalated: { reached: 3, rescued: 0, missed: 3, orphaned: 3 },
+            })]}
+            groups={groups}
+        />);
+        expect(screen.getByText('Sem alvo vivo')).toBeInTheDocument();
+        expect(screen.queryByText('Em espera')).not.toBeInTheDocument();
+    });
+
     it('o detalhe diz a periodicidade e a próxima execução', () => {
         render(<DataSourcesPanel
             sources={[src({

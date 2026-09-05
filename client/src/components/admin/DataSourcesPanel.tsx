@@ -105,6 +105,18 @@ const STANDBY_UI = {
 /** Reserva que ninguém precisou acionar ≠ fonte sem notícia. Ver STANDBY_UI. */
 const isStandby = (source: DataSource) => source.status === 'UNKNOWN' && source.trigger === 'onFailure';
 
+/**
+ * Reserva que FOI chamada, e só para ativo que ninguém precificou.
+ *
+ * Mesma cor da reserva em espera (nada aqui é problema da fonte), rótulo
+ * diferente: dizer "Em espera" a quem acabou de ser chamada três vezes é uma
+ * mentira pequena que corrói a confiança no painel inteiro. O servidor já decidiu
+ * o ESTADO e escreveu a frase em `detail`; aqui só se escolhe o rótulo curto do
+ * rodapé, que é onde o card não tem espaço para a frase.
+ */
+const isSemAlvoVivo = (source: DataSource) =>
+    isStandby(source) && (source.escalated?.reached ?? 0) > 0;
+
 const visualFor = (source: DataSource) => (isStandby(source) ? STANDBY_UI : STATUS_UI[source.status]);
 
 /**
@@ -119,6 +131,9 @@ const visualFor = (source: DataSource) => (isStandby(source) ? STANDBY_UI : STAT
 const footerInfo = (source: DataSource): { label: string; time: string } => {
     if (source.status !== 'UNKNOWN') {
         return { label: STATUS_UI[source.status].label, time: sinceLabel(source.lastDeliveryHours) };
+    }
+    if (isSemAlvoVivo(source)) {
+        return { label: 'Sem alvo vivo', time: 'reserva' };
     }
     if (isStandby(source)) {
         return { label: STANDBY_UI.label, time: 'reserva' };

@@ -175,11 +175,16 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
         porResolver.set(chaveResolver, (porResolver.get(chaveResolver) || 0) + 1);
 
         for (const id of ev.tried || []) {
-            if (!bySource.has(id)) bySource.set(id, { reached: 0, rescued: 0, missed: 0 });
+            if (!bySource.has(id)) bySource.set(id, { reached: 0, rescued: 0, missed: 0, orphaned: 0 });
             const conta = bySource.get(id);
             conta.reached += 1;
             if (ev.resolvedBy === id) conta.rescued += 1;
             else conta.missed += 1;
+            // `missed` junta duas coisas opostas: o assunto que a fonte SEGUINTE
+            // salvou (aí a falha é desta fonte) e o que ninguém salvou (aí o que
+            // faltou foi papel negociando). Separar é o que permite não acusar
+            // uma reserva por ter sido chamada só para ticker morto.
+            if (!ev.resolvedBy) conta.orphaned += 1;
         }
     }
 
@@ -248,6 +253,32 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
         const ultimaFalhou = !!source.lastFailAt
             && (!source.lastOkAt || new Date(source.lastFailAt) > new Date(source.lastOkAt));
 
+        /**
+         * RESERVA CHAMADA SÓ PARA ASSUNTO MORTO NÃO É RESERVA QUEBRADA.
+         *
+         * A taxa de falha de uma fonte `onFailure` mede a POPULAÇÃO que chega até
+         * ela, não a fonte: por construção, só lhe perguntam o que a anterior já
+         * não conseguiu — uma amostra enriquecida de ticker extinto. Em 05/09/2026
+         * o candle do Yahoo aparecia como "INSTÁVEL · 100% das 3 chamadas
+         * falharam" enquanto respondia normalmente para o resto do mercado; as
+         * três chamadas tinham sido para AVB, EQR e EA, que haviam saído da bolsa
+         * (fusão em VMRK e fechamento de capital). Card vermelho permanente por
+         * um defeito que não era dela — o alarme falso que este módulo existe
+         * para evitar.
+         *
+         * O ledger por assunto é quem desempata, e só ele consegue: se NENHUM dos
+         * assuntos que passaram por aqui foi precificado por fonte alguma, o que
+         * faltou foi papel negociando. Basta um assunto que a fonte seguinte tenha
+         * salvado para a suspeita voltar a ser legítima — aí uma peça da cadeia
+         * conseguiu onde esta falhou, e isso é sobre a fonte.
+         */
+        const led = escalada.bySource.get(source.id) || null;
+        const soAssuntoMorto = deReserva
+            && !!led
+            && led.reached > 0
+            && led.rescued === 0
+            && led.orphaned === led.reached;
+
         if (source.attempts === 0) {
             // Silêncio não é falha. Uma fonte que só roda no sync diário fica sem
             // chamada nenhuma por horas depois de um deploy, e marcá-la de vermelho
@@ -264,6 +295,12 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
             } else {
                 detail = 'Ainda não teve a vez dela desde o reinício do servidor';
             }
+        } else if (soAssuntoMorto) {
+            // Antes de qualquer régua de taxa: ela não se aplica a esta amostra.
+            status = SOURCE_STATUS.UNKNOWN;
+            detail = led.reached === 1
+                ? 'A única chamada foi para um ativo que nenhuma fonte precificou — faltou papel negociando, não resposta desta fonte'
+                : `As ${source.attempts} chamadas foram para ${led.reached} ativos que nenhuma fonte precificou — faltou papel negociando, não resposta desta fonte`;
         } else if (julgavel && rate >= FAILURE_RATE.critical) {
             status = source.critical ? SOURCE_STATUS.CRITICAL : SOURCE_STATUS.WARN;
             detail = `${pct(rate)} das ${source.attempts} chamadas falharam`;

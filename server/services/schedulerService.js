@@ -424,6 +424,8 @@ export const runDailySnapshotCore = async (force = false) => {
 
         let snapshotsCreated = 0;
         let snapshotsSkipped = 0;
+        let empty = 0;
+        let exists = 0;
         let backfilled = 0;
         let errors = 0;
 
@@ -456,17 +458,32 @@ export const runDailySnapshotCore = async (force = false) => {
             }
         });
 
+        // `skipped` era um balde com cinco desfechos de significados opostos, e o
+        // painel — que só tinha esse número — chamava o balde inteiro de "anomalias
+        // ignoradas", em laranja. Uma carteira recém-criada sem nenhum ativo (que é
+        // o caso mais banal que existe: cadastrou e ainda não lançou nada) acendia
+        // um alarme TODA noite, para sempre, e o alarme cresceria com a captação —
+        // um por assinante novo. Contar separado aqui é o que tira do painel a
+        // obrigação de adivinhar o que o número quer dizer.
         for (const outcome of outcomes) {
             backfilled += outcome.backfilled;
             if (outcome.result === 'created') snapshotsCreated++;
             else snapshotsSkipped++;
+            if (outcome.result === 'empty') empty++;
+            if (outcome.result === 'exists') exists++;
             if (outcome.error) errors++;
         }
 
         const stats = {
             created: snapshotsCreated,
+            /** Total de não-criados. Some dos três abaixo; sozinho não diz nada. */
             skipped: snapshotsSkipped,
+            /** Carteira sem patrimônio a fotografar — rotina normal, não é falha. */
+            empty,
+            /** Dia já fotografado (catch-up, cron duplo, re-run) — idempotência funcionando. */
+            exists,
             backfilled,
+            /** Anomalia de TWRR, guarda de reset de cota e exceção: o número que merece alarme. */
             errors,
             resumed: completed.size,
             concurrency: snapshotConcurrency(),
@@ -480,7 +497,11 @@ export const runDailySnapshotCore = async (force = false) => {
             { upsert: true }
         );
 
-        logger.info(`✅ Snapshot Finalizado. Criados: ${snapshotsCreated}, Recuperados: ${backfilled}, Ignorados: ${snapshotsSkipped}, Retomados: ${completed.size}, Concorrência: ${snapshotConcurrency()}`);
+        logger.info(
+            `✅ Snapshot Finalizado. Criados: ${snapshotsCreated}, Recuperados: ${backfilled}, `
+            + `Sem ativos: ${empty}, Já existiam: ${exists}, Anomalias: ${errors}, `
+            + `Retomados: ${completed.size}, Concorrência: ${snapshotConcurrency()}`,
+        );
         return { status: 'SUCCESS', stats };
 
     } catch (error) {

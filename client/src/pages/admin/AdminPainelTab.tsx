@@ -64,6 +64,35 @@ export const AdminPainelTab: React.FC<Props> = ({
 }) => {
     const isMacroDataValid = macroData && macroData.selic && macroData.ibov;
     const { theme } = useTheme();
+
+    /**
+     * A LINHA DE BAIXO DO CARD DE SNAPSHOT.
+     *
+     * Ela lia `skipped` e chamava tudo de "anomalias ignoradas". `skipped` é o
+     * total de carteiras NÃO fotografadas, e a maioria dos motivos é rotina: a
+     * carteira está vazia (cadastrou e ainda não lançou ativo) ou o dia já tinha
+     * sido fotografado. Uma única carteira vazia acendia o laranja toda noite,
+     * para sempre — e cresceria um por assinante novo. Alarme que nunca apaga é
+     * alarme que se aprende a ignorar, e aí o dia da anomalia de verdade passa
+     * despercebido.
+     *
+     * `errors` é o número que merece cor: anomalia de TWRR (variação diária
+     * absurda, snapshot abortado), guarda de reset de cota e exceção. O resto
+     * vira frase neutra, que informa sem gritar.
+     */
+    const snap = qualityStats?.snapshotStats;
+    const snapErrors = snap?.errors || 0;
+    const snapEmpty = snap?.empty || 0;
+    const snapExists = snap?.exists || 0;
+    const snapAlert = snapErrors > 0;
+    const snapNote = (() => {
+        if (!qualityStats) return '...';
+        if (snapErrors > 0) return `${snapErrors} ${snapErrors === 1 ? 'anomalia' : 'anomalias'} — snapshot abortado`;
+        const partes: string[] = [];
+        if (snapEmpty > 0) partes.push(`${snapEmpty} ${snapEmpty === 1 ? 'carteira sem ativos' : 'carteiras sem ativos'}`);
+        if (snapExists > 0) partes.push(`${snapExists} já do dia`);
+        return partes.length > 0 ? `Sem anomalias · ${partes.join(' · ')}` : 'Sem anomalias';
+    })();
     const chartTooltipStyle = theme === 'light'
         ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '12px', color: '#0f172a' }
         : { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px' };
@@ -109,15 +138,15 @@ export const AdminPainelTab: React.FC<Props> = ({
 
                 <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
                     <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shrink-0 ${qualityStats?.snapshotStats?.skipped > 0 ? 'bg-orange-900/20 text-orange-500 border-orange-900/50' : 'bg-indigo-900/20 text-indigo-500 border-indigo-900/50'}`}><Activity size={24} /></div>
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shrink-0 ${snapAlert ? 'bg-orange-900/20 text-orange-500 border-orange-900/50' : 'bg-indigo-900/20 text-indigo-500 border-indigo-900/50'}`}><Activity size={24} /></div>
                         <div>
                             <p className="text-[10px] text-slate-500 font-bold uppercase">Snapshots Noturnos</p>
                             <div className="flex items-baseline gap-1">
                                 <h3 className="text-2xl font-black text-white">{qualityStats ? (qualityStats.snapshotStats?.created || 0) : <Skel />}</h3>
                                 <span className="text-[10px] text-slate-500 font-bold">criados</span>
                             </div>
-                            <p className={`text-[9px] mt-0.5 font-bold ${qualityStats?.snapshotStats?.skipped > 0 ? 'text-orange-500' : 'text-emerald-500'}`}>
-                                {qualityStats ? `${qualityStats.snapshotStats?.skipped || 0} anomalias ignoradas` : '...'}
+                            <p className={`text-[9px] mt-0.5 font-bold ${snapAlert ? 'text-orange-500' : 'text-emerald-500'}`}>
+                                {snapNote}
                             </p>
                         </div>
                     </div>

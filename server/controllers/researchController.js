@@ -324,7 +324,10 @@ export const getDataQualityStats = async (req, res, next) => {
             typosFixed: config?.lastSyncStats?.typosFixed || 0,
             assetsProcessed: config?.lastSyncStats?.assetsProcessed || 0,
             lastSyncDate: config?.lastSyncStats?.timestamp || null,
-            snapshotStats: config?.lastSnapshotStats || { created: 0, skipped: 0, timestamp: null },
+            // `errors` e `empty` vêm no default junto de `created`: sem eles o painel
+            // cai no `skipped` (total de não-criados) e volta a chamar carteira vazia
+            // de anomalia. Ver o comentário dos contadores em schedulerService.
+            snapshotStats: config?.lastSnapshotStats || { created: 0, skipped: 0, empty: 0, exists: 0, errors: 0, timestamp: null },
             blacklistedAssets: inactiveCount,
             totalAssets,
             timeSeriesAgeHours: avgAgeHours,
