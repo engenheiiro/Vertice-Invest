@@ -46,6 +46,7 @@
  *   node server/scripts/retireDeadTickers.js --tickers=A,B --apply # alvo explícito
  *   node server/scripts/retireDeadTickers.js --tickers=MMC --successor=MRSH --apply
  *   node server/scripts/retireDeadTickers.js --successors=GUAR3:RIAA3,PETZ3:AUAU3 --apply
+ *   node server/scripts/retireDeadTickers.js --tickers=X --reason="encerrou as atividades" --apply
  *   node server/scripts/retireDeadTickers.js --tickers=X --undo --apply   # reverte
  *
  * Requer MONGO_URI no .env.
@@ -87,6 +88,24 @@ const successorMap = Object.fromEntries(
         .filter(([de, para]) => de && para),
 );
 const temMapa = Object.keys(successorMap).length > 0;
+/**
+ * O MOTIVO EM PORTUGUÊS, quando ele é sabido — e só então.
+ *
+ * O `retiredReason` automático diz o que MEDIMOS ("probe 2026-09-05: DEAD_B3"),
+ * que é a verdade disponível quando ninguém sabe o que houve. Mas quando o dono
+ * sabe o fato — "encerrou as atividades", "concluiu a venda dos empreendimentos
+ * para liquidação definitiva" — gravar só a medição joga fora a única informação
+ * que não dá para reconstruir depois: `DEAD_B3` convida alguém a re-sondar o
+ * papel daqui a seis meses; "encerrou as atividades" encerra o assunto.
+ *
+ * O motivo NÃO substitui o veredito, vem junto: o que se soube e o que se mediu
+ * são coisas diferentes e as duas envelhecem juntas melhor do que sozinhas.
+ *
+ * Exige --tickers pelo mesmo motivo do --successor: um motivo por evento
+ * societário. Herdado por uma varredura automática, ele atribuiria a história de
+ * um fundo a todos os outros da leva.
+ */
+const reason = valueOf('--reason')?.trim() || null;
 const STALE_DAYS = Number(valueOf('--days') ?? 60);
 // Janela de pregões da B3. 10 é folgado para o papel ilíquido de verdade — no
 // levantamento de 04/09/2026, EQMA3B (3 negócios/dia) apareceu em 6 dos 10.
@@ -104,6 +123,10 @@ if (successor && temMapa) {
 }
 if (successor && (!explicit || explicit.length !== 1)) {
     console.error('❌ --successor só vale para UM ticker por vez (--tickers=MMC --successor=MRSH).');
+    process.exit(1);
+}
+if (reason && !explicit) {
+    console.error('❌ --reason exige --tickers: motivo é do evento societário, não da varredura.');
     process.exit(1);
 }
 
@@ -224,6 +247,7 @@ const run = async () => {
         for (const { a, stale, verdict, held } of toRetire) {
             console.log(`   • ${a.ticker.padEnd(9)} [${String(a.type).padEnd(8)}] parado=${stale}d fail=${a.failCount}${held ? ` 🧷 held=${held}` : ''} — ${a.name || 's/nome'}`);
             console.log(`       ${verdict.label}`);
+            if (reason) console.log(`       📝 motivo a registrar: ${reason}`);
             if (successorMap[a.ticker]) console.log(`       ↪ sucessor a registrar: ${successorMap[a.ticker]}`);
         }
     }
@@ -241,7 +265,8 @@ const run = async () => {
                         isBlacklisted: true,
                         isActive: false,
                         retiredAt: new Date(),
-                        retiredReason: `probe ${new Date().toISOString().slice(0, 10)}: ${verdict.code}`,
+                        retiredReason: [reason, `probe ${new Date().toISOString().slice(0, 10)}: ${verdict.code}`]
+                            .filter(Boolean).join(' · '),
                         ...(successorMap[a.ticker] || successor
                             ? { successorTicker: successorMap[a.ticker] || successor }
                             : {}),
