@@ -213,7 +213,14 @@ export const resolveContestedChange = ({ price, ownClose = null }) => {
     const base = Number(ownClose);
     const p = Number(price);
     if (!(base > 0) || !(p > 0)) return { change: 0, previousClose: 0 };
-    return { change: movePct(p, base), previousClose: base };
+    const pct = movePct(p, base);
+    // Ruído de ponto flutuante vira ZERO, e não um zero com sinal. O candle é
+    // gravado com a precisão que o provedor manda (62,040000915527344 para um
+    // preço de 62,04), então preço parado dá -0,0000015% — que a tela arredonda
+    // para "-0,00%". O sinal de menos sugere uma queda que não houve, e é a
+    // primeira coisa que alguém pergunta ao ler o painel. Abaixo da casa que o
+    // produto exibe não há variação a afirmar.
+    return { change: Math.abs(pct) < 0.005 ? 0 : pct, previousClose: base };
 };
 
 /** Rótulos de tela, em português de dono. A tela não conhece os códigos. */

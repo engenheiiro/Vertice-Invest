@@ -895,3 +895,28 @@ describe('carteira degradada: sentinela e régua falam a mesma língua', () => {
         expect(c.detail).toContain('? (2)');
     });
 });
+
+/**
+ * A DICA TEM QUE APONTAR PARA O LUGAR CERTO.
+ *
+ * "Coluna trocada na origem ou unidade errada" descreve a raspagem de
+ * fundamentos. A variação diária vem na MESMA resposta que traz o preço, e
+ * quando ela é absurda o preço costuma estar certo — quem erra é o fechamento
+ * anterior que a fonte nunca reconciliou (XPIN11, 05/09/2026). Mandar procurar
+ * coluna trocada ali é mandar procurar onde não está.
+ */
+describe('DICAS DE PLAUSIBILIDADE', () => {
+    it('a variação diária tem dica própria, que fala de fechamento anterior', () => {
+        const facts = healthyFacts();
+        facts.implausible.change = 1;
+        const { hint } = byId(buildHealthReport(facts), 'plausibility.change');
+        expect(hint).toMatch(/fechamento anterior/i);
+        expect(hint).not.toMatch(/coluna trocada/i);
+    });
+
+    it('campo sem dica própria continua na frase genérica', () => {
+        const facts = healthyFacts();
+        facts.implausible.dy = 150;
+        expect(byId(buildHealthReport(facts), 'plausibility.dy').hint).toMatch(/coluna trocada/i);
+    });
+});

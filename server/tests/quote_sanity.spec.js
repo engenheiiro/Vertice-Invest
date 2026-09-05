@@ -165,3 +165,24 @@ describe('reancoragem da variação contestada', () => {
             .toEqual({ change: 0, previousClose: 0 });
     });
 });
+
+/**
+ * O candle é gravado com a precisão do provedor (62,040000915527344 para um
+ * preço de 62,04), então preço PARADO produz -0,0000015% — que a tela mostra
+ * como "-0,00%". O sinal de menos sugere uma queda que não houve.
+ */
+describe('reancoragem — ruído de ponto flutuante', () => {
+    it('preço parado contra candle float não vira zero negativo', () => {
+        const { change } = resolveContestedChange({ price: 62.04, ownClose: 62.040000915527344 });
+        expect(change).toBe(0);
+        expect(Object.is(change, -0)).toBe(false);
+    });
+
+    it('variação de verdade abaixo de meio centésimo continua sendo zero', () => {
+        expect(resolveContestedChange({ price: 100.004, ownClose: 100 }).change).toBe(0);
+    });
+
+    it('mas a primeira variação exibível é preservada', () => {
+        expect(resolveContestedChange({ price: 100.01, ownClose: 100 }).change).toBeCloseTo(0.01, 6);
+    });
+});

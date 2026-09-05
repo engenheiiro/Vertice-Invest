@@ -177,7 +177,23 @@ export const PLAUSIBILITY_RANGES = {
     // amarelo por 20 nomes que ninguém vai consertar. Um pregão de ±50% no nosso
     // universo é outra coisa: ou é notícia que merece o olho, ou é defeito. Nos
     // dois casos, saber QUAL ativo vale mais que a fração dele sobre 1250.
-    change: { min: -50, max: 50, label: 'Variação diária', unit: '%', categorical: true },
+    // `hint` próprio porque a causa aqui não é a dos outros campos. Os demais
+    // saem de raspagem e erram por coluna trocada ou unidade; a variação sai da
+    // MESMA resposta que traz o preço, e quando ela é absurda o preço costuma
+    // estar certo — quem está torto é o fechamento anterior que a fonte nunca
+    // reconciliou. Mandar procurar coluna trocada aqui é mandar procurar no
+    // lugar errado.
+    change: {
+        min: -50,
+        max: 50,
+        label: 'Variação diária',
+        unit: '%',
+        categorical: true,
+        hint: 'O preço costuma estar certo: quem erra é o fechamento anterior da fonte, que ela nunca'
+            + ' reconciliou (grupamento antigo, por exemplo). O ciclo de cotação reancora sozinho no'
+            + ' nosso candle na próxima passada. Se o nome continuar aqui depois disso, o ativo não'
+            + ' está sendo recotado — liquidez abaixo do mínimo — e o caso é do cleanStaleChange.js.',
+    },
 };
 
 /** Faixas de sanidade dos indicadores macro. */
@@ -415,7 +431,10 @@ const plausibilityChecks = (facts, th) => {
             value: r,
             detail: `${count} ativo(s) com ${range.label} fora de [${range.min}, ${range.max}]${range.unit ? ` ${range.unit}` : ''} (${pct(r)})`
                 + sampleSuffix(samples[field]),
-            hint: 'Valor impossível quase sempre é coluna trocada na origem ou unidade errada (fração vs. percentual).',
+            // O catálogo pode falar por si: campo com causa própria traz a dica
+            // própria, e só quem não tem cai na frase genérica.
+            hint: range.hint
+                ?? 'Valor impossível quase sempre é coluna trocada na origem ou unidade errada (fração vs. percentual).',
         }));
     }
     // Preço não-positivo é categórico: ativo ativo sem preço válido é sempre defeito,
