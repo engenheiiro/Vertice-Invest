@@ -94,7 +94,7 @@ const loginAsAdmin = async (page: import('@playwright/test').Page) => {
   await page.getByLabel('Email', { exact: true }).fill(ADMIN.email);
   await page.getByLabel('Senha', { exact: true }).fill('SenhaSegura123!');
   await page.getByRole('button', { name: /Entrar/i }).click();
-  await page.waitForURL('**/dashboard');
+  await page.waitForURL('**/wallet');
 };
 
 test('publicar tudo pendente com 429 mostra erro, não sucesso', async ({ page }) => {

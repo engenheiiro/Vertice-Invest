@@ -191,13 +191,14 @@ export default defineConfig({
         'src/main.tsx',
         'src/prerender.tsx',
       ],
-      // Piso inicial baseado na linha de base de 12/07/2026. O objetivo é
-      // impedir regressão enquanto a cobertura de páginas e contexts avança.
+      // Linha de base recalibrada após a migração para Vitest 5, cujo
+      // instrumentador V8 passou a contabilizar mais ramos e funções.
+      // Mantemos o ratchet logo abaixo da cobertura efetivamente medida.
       thresholds: {
-        lines: 20,
-        statements: 20,
-        functions: 40,
-        branches: 70,
+        lines: 39,
+        statements: 38,
+        functions: 35,
+        branches: 36,
       },
     },
   }

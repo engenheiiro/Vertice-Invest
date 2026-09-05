@@ -35,7 +35,7 @@ test('retorno de pagamento rejeitado informa o usuário e oferece nova tentativa
   await page.getByLabel('Email', { exact: true }).fill(user.email);
   await page.getByLabel('Senha', { exact: true }).fill('SenhaSegura123!');
   await page.getByRole('button', { name: /Entrar/i }).click();
-  await page.waitForURL('**/dashboard');
+  await page.waitForURL('**/wallet');
 
   await page.goto('/checkout/success?plan=PRO&status=rejected');
 

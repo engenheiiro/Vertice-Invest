@@ -15,11 +15,11 @@ export default defineConfig({
       // Foca a medição no núcleo testável (matemática financeira + engines)
       include: ['utils/**/*.js', 'services/engines/**/*.js'],
       // Gate-ratchet: thresholds logo abaixo da cobertura atual para travar o piso
-      // e impedir regressão. Subir conforme T1/T2/T8 adicionam testes.
+      // e impedir regressão. Recalibrado para a instrumentação do Vitest 5.
       // (functions baixo no mathUtils: muitos helpers pequenos ainda sem teste direto.)
       thresholds: {
-        'utils/mathUtils.js': { lines: 70, statements: 70, branches: 85, functions: 25 },
-        'services/engines/scoringEngine.js': { lines: 70, statements: 70, branches: 45, functions: 90 },
+        'utils/mathUtils.js': { lines: 70, statements: 70, branches: 82, functions: 25 },
+        'services/engines/scoringEngine.js': { lines: 70, statements: 68, branches: 45, functions: 89 },
         'services/engines/portfolioEngine.js': { lines: 80, statements: 80, branches: 70, functions: 90 },
         'services/engines/signalEngine.js': { lines: 60, statements: 60, branches: 30, functions: 70 },
       },

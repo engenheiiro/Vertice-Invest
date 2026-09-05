@@ -18,29 +18,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
-      # (8.9) Cache de node_modules entre execuções — `npm run setup` ainda
-      # roda, mas resolve quase tudo do cache local em vez de baixar/instalar.
-      - name: Cache node_modules (root, client, server)
-        uses: actions/cache@v4
-        with:
-          path: |
-            node_modules
-            client/node_modules
-            server/node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json', 'client/package-lock.json', 'server/package-lock.json') }}
-          restore-keys: |
-            node-modules-${{ runner.os }}-
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+            server/package-lock.json
 
       - name: Install (root + client + server)
-        run: npm run setup
+        run: |
+          npm ci
+          npm ci --prefix client
+          npm ci --prefix server
 
       # (S12) Auditoria de dependências — bloqueia publicação se houver
       # vulnerabilidade >= high em qualquer workspace (root / client / server).
@@ -63,10 +57,11 @@ jobs:
 
       - name: Upload cobertura backend
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-backend
           path: server/coverage/
+          if-no-files-found: ignore
           retention-days: 14
 
       - name: Test frontend (com cobertura)
@@ -74,10 +69,11 @@ jobs:
 
       - name: Upload cobertura frontend
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-frontend
           path: client/coverage/
+          if-no-files-found: ignore
           retention-days: 14
 
       - name: Build server (validação de sintaxe)
@@ -91,27 +87,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
-      - name: Cache node_modules (root, client, server)
-        uses: actions/cache@v4
-        with:
-          path: |
-            node_modules
-            client/node_modules
-            server/node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json', 'client/package-lock.json', 'server/package-lock.json') }}
-          restore-keys: |
-            node-modules-${{ runner.os }}-
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+            server/package-lock.json
 
       - name: Install (root + client + server)
-        run: npm run setup
+        run: |
+          npm ci
+          npm ci --prefix client
+          npm ci --prefix server
 
       # (2.6) Navegador do Playwright + libs do sistema (ubuntu).
       - name: Install Playwright browser (chromium)
@@ -124,8 +116,9 @@ jobs:
 
       - name: Upload relatório E2E
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: client/playwright-report/
+          if-no-files-found: ignore
           retention-days: 14

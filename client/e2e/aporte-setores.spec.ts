@@ -113,13 +113,11 @@ test('Aporte Inteligente (FIIs) mostra setor por linha e as duas pizzas', async 
   await page.getByLabel('Email', { exact: true }).fill(user.email);
   await page.getByLabel('Senha', { exact: true }).fill('SenhaSegura123!');
   await page.getByRole('button', { name: /Entrar/i }).click();
-  await page.waitForURL('**/dashboard');
+  await page.waitForURL('**/wallet');
 
   await page.goto('/research');
   await page.getByRole('button', { name: 'FIIs' }).click();
   await page.getByRole('button', { name: /Aporte/ }).click();
-
-  await page.getByRole('button', { name: 'Entendi' }).click();
 
   // O nó role=dialog é só o wrapper (filhos fixed, altura 0): o alvo visível é o painel.
   const panel = page.locator('div[role="dialog"][aria-modal="true"] .max-w-lg');

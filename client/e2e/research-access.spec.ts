@@ -45,7 +45,7 @@ test('assinante Pro acessa Research e consulta o ranking de ações brasileiras'
   await page.getByLabel('Email', { exact: true }).fill(user.email);
   await page.getByLabel('Senha', { exact: true }).fill('SenhaSegura123!');
   await page.getByRole('button', { name: /Entrar/i }).click();
-  await page.waitForURL('**/dashboard');
+  await page.waitForURL('**/wallet');
 
   await page.goto('/research');
   await expect(page.getByRole('heading', { name: 'RESEARCH CENTER' })).toBeVisible();

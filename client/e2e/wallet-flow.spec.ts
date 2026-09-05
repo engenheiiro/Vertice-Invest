@@ -212,9 +212,10 @@ test.describe(() => {
 
   // Maior alta primeiro, maior queda por último.
   await expect(dialog.getByText('PETR4')).toBeVisible();
-  // A linha marca a direção com seta (não com sinal); só o total do topo leva '+'.
-  await expect(dialog.getByText('R$ 214,80')).toBeVisible();
-  await expect(dialog.getByText('-R$ 96,70')).toBeVisible();
+  // O subtotal do grupo repete a contribuição da única linha; selecionamos a
+  // última ocorrência para validar especificamente a linha do ativo.
+  await expect(dialog.getByText('+R$ 214,80', { exact: true }).last()).toBeVisible();
+  await expect(dialog.getByText('-R$ 96,70', { exact: true }).last()).toBeVisible();
 
   // A posição sem negócio hoje continua LISTADA, com o motivo — o zero é nosso,
   // não do mercado, e escondê-lo seria esconder o limite do dado.

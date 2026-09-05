@@ -146,7 +146,7 @@ test.describe('Tutorial de primeiro acesso', () => {
     await page.waitForURL('**/wallet', { timeout: 10_000 });
 
     const wallet = await walkFlow(page, 'desktop-carteira');
-    await page.waitForURL('**/dashboard', { timeout: 10_000 });
+    await page.waitForURL('**/wallet', { timeout: 10_000 });
 
     console.log('DESKTOP terminal:', JSON.stringify(dash.seen, null, 1));
     console.log('DESKTOP carteira:', JSON.stringify(wallet.seen, null, 1));
@@ -167,7 +167,7 @@ test.describe('Tutorial de primeiro acesso', () => {
     await page.waitForURL('**/wallet', { timeout: 10_000 });
 
     const wallet = await walkFlow(page, 'mobile-carteira');
-    await page.waitForURL('**/dashboard', { timeout: 10_000 });
+    await page.waitForURL('**/wallet', { timeout: 10_000 });
 
     console.log('MOBILE terminal:', JSON.stringify(dash.seen, null, 1));
     console.log('MOBILE carteira:', JSON.stringify(wallet.seen, null, 1));
