@@ -387,6 +387,21 @@ const plausibilityChecks = (facts, th) => {
     // Preço não-positivo é categórico: ativo ativo sem preço válido é sempre defeito,
     // então UMA ocorrência já sai de OK (piso WARN) — mas só vira CRITICAL quando
     // atinge fração relevante, para um ticker órfão não pintar o painel de vermelho.
+    // Aposentado que continua ativo: invariante quebrada, e ela custa caro em
+    // silêncio. Em 04/09/2026 eram 12 ativos nesse estado — IGBR3 e BLUT4
+    // apareciam no painel de fontes descendo Yahoo → Google → Brapi e falhando
+    // nos três a cada ciclo, meses depois de terem sido aposentados.
+    const retiredButActive = num(facts.totals?.retiredButActive) ?? 0;
+    out.push(check({
+        id: 'consistency.retiredButActive',
+        label: 'Aposentado que ainda é cotado',
+        category: CATEGORY.PLAUSIBILITY,
+        status: retiredButActive === 0 ? HEALTH_STATUS.OK : HEALTH_STATUS.WARN,
+        value: retiredButActive,
+        detail: `${retiredButActive} ativo(s) na blacklist com isActive=true`,
+        hint: 'Aposentadoria é terminal: quem está na blacklist não deveria ser perguntado a nenhuma fonte. Normalize com isActive=false.',
+    }));
+
     const zeroPrice = num(facts.implausible?.nonPositivePrice) ?? 0;
     out.push(check({
         id: 'plausibility.nonPositivePrice',

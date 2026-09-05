@@ -7,6 +7,7 @@ import { createCircuitBreaker, withRetry } from '../utils/resilience.js'; // (I4
 import { recordIngestionError } from './errorLogService.js';
 import { measurePerformance } from '../utils/performanceMetrics.js';
 import { trackSource, recordEscalation } from '../utils/sourceHealth.js';
+import { B3_TICKER_RE } from '../utils/tickerShape.js';
 
 // Instancia a classe com supressão de avisos
 const yahooFinance = new YahooFinance({
@@ -46,12 +47,10 @@ const GOOGLE_FINANCE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit
 // "No data found / delisted" e o ativo nunca recebe cotação/histórico/fundamentos.
 const US_CLASS_DOT_RE = /^[A-Z]{1,4}\.[A-Z]$/;   // BRK.B, BF.B (não casa PETR4.SA)
 const US_CLASS_DASH_RE = /^[A-Z]{1,4}-[A-Z]$/;   // BRK-B (não casa BTC-USD)
-// Formato de ticker B3: raiz de 4 chars + 1-2 dígitos. A raiz normalmente é toda de
-// letras (PETR4, HGLG11), MAS há exceções com dígito na raiz — notadamente B3SA3 (a
-// própria B3). A regex antiga `^[A-Z]{4}\d{1,2}$` exigia 4 LETRAS e rejeitava B3SA3,
-// que então não recebia sufixo .SA (Yahoo falhava) nem a bolsa :BVMF (Google ia p/
-// :NASDAQ e voltava vazio) — a bolsa ficou 70 dias sem cotação por causa disso.
-const B3_TICKER_RE = /^[A-Z][A-Z0-9]{3}\d{1,2}$/; // B3SA3, PETR4, HGLG11 (não casa BRK.B/BTC-USD/AAPL)
+// Forma do ticker B3 — regra ÚNICA, em utils/tickerShape.js. Ela decide o sufixo
+// .SA no Yahoo, a bolsa :BVMF no Google, se a Brapi é tentada e se o fechamento da
+// B3 cobre a série; errar aqui não gera erro, gera silêncio ("sem preço em fonte
+// nenhuma"). Ver o módulo para o histórico de B3SA3 e EQMA3B.
 // Ticker canônico (DB) → símbolo aceito pelo Yahoo.
 export const toYahooSymbol = (sym) => (US_CLASS_DOT_RE.test(sym) ? sym.replace('.', '-') : sym);
 // Símbolo do Yahoo → ticker canônico (DB), revertendo só a classe US (preserva BTC-USD).
@@ -103,119 +102,125 @@ const mapWithConcurrency = async (items, limit, worker) => {
 
 export const externalMarketService = {
     
+    /**
+     * Bolsa que já funcionou para este ticker, por processo.
+     *
+     * Sem isto, varrer três bolsas custaria três requisições por ativo a CADA
+     * ciclo de 15 minutos — e a bolsa de um papel não muda. A primeira falha
+     * paga a descoberta; as seguintes vão direto ao alvo.
+     */
+    _googleExchangeMemo: new Map(),
+
+    /**
+     * Bolsas plausíveis, na ordem de tentativa.
+     *
+     * Era ':NASDAQ' fixo para todo papel americano — e mais da metade do S&P 500
+     * é NYSE, então a URL do fallback apontava para uma página que existe e não
+     * traz preço. Medido em 04/09/2026: AVB devolveu US$ 184,06 em ':NYSE' e nada
+     * em ':NASDAQ'. O fallback US falhava por endereço errado, não por ausência
+     * de dado, e isso ficou meses parecendo "lacuna de fonte".
+     */
+    _googleExchanges(ticker) {
+        if (ticker.endsWith('.SA') || B3_TICKER_RE.test(ticker)) return [':BVMF'];
+        // Cripto é global no Google — a URL não leva bolsa.
+        if (ticker.endsWith('-USD')) return [''];
+        if (ticker.includes('.')) return [''];
+        const lembrada = this._googleExchangeMemo.get(ticker);
+        if (lembrada !== undefined) return [lembrada];
+        return [':NASDAQ', ':NYSE', ':NYSEAMERICAN'];
+    },
+
+    /** Extrai o preço da página do Google. `null` quando a página veio sem cotação. */
+    _parseGooglePrice(html) {
+        const $ = cheerio.load(html);
+
+        // Seletor da classe de preço (Isso muda periodicamente, precisa de manutenção)
+        // .YMlKec.fxKbKc parou de existir; preço atual fica em .N6SYTe (container
+        // único da cotação principal — confirmado verificando que não aparece em
+        // tabelas de índices/sidebar, que reciclam o mesmo atributo jsname="Pdsbrc").
+        const priceText = $('.N6SYTe').first().text() || $('[data-last-price]').attr('data-last-price');
+        if (!priceText) return null;
+
+        // Limpeza: "R$ 34,50" -> 34.50 | "$12,345.00" -> 12345.00
+        const cleanPrice = priceText.replace(/[^\d.,]/g, '');
+        let finalPrice = 0;
+        if (cleanPrice.includes(',') && !cleanPrice.includes('.')) {
+            // Formato BR puro: 34,50
+            finalPrice = parseFloat(cleanPrice.replace(',', '.'));
+        } else if (cleanPrice.includes('.') && cleanPrice.includes(',')) {
+            // Formato misto: 1.234,56 (BR) ou 1,234.56 (US) — decide pelo último separador.
+            finalPrice = cleanPrice.lastIndexOf(',') > cleanPrice.lastIndexOf('.')
+                ? parseFloat(cleanPrice.replace(/\./g, '').replace(',', '.'))
+                : parseFloat(cleanPrice.replace(/,/g, ''));
+        } else {
+            finalPrice = parseFloat(cleanPrice);
+        }
+        if (!(finalPrice > 0)) return null;
+
+        const changeText = $('.JwB6zf').first().text();
+        const change = changeText
+            ? parseFloat(changeText.replace('%', '').replace(',', '.').replace('+', '')) || 0
+            : 0;
+        return { price: finalPrice, change };
+    },
+
     // Helper: Scraper do Google Finance (Fallback Secundário)
     async fetchFromGoogleFinance(ticker) {
-        try {
-            // Mapeamento de Tickers (Yahoo -> Google Finance Format)
-            let googleTicker = ticker;
-            let exchange = '';
+        // Lógica B3 — aceita TANTO o formato Yahoo (PETR4.SA) quanto o ticker cru
+        // do banco (PETR4). Sem o segundo ramo, o ticker cru caía no ramo US e
+        // recebia ':NASDAQ', fazendo o Google devolver página vazia: era a causa
+        // de "Recuperados 0/N via Google/Brapi" quando o Yahoo estava fora — o
+        // fallback de B3 nunca chegava à bolsa certa (:BVMF).
+        const googleTicker = ticker.endsWith('.SA') ? ticker.replace('.SA', '') : ticker;
 
-            // Lógica B3 — aceita TANTO o formato Yahoo (PETR4.SA) quanto o ticker cru
-            // do banco (PETR4). Sem o segundo ramo, o ticker cru caía no ramo US e
-            // recebia ':NASDAQ', fazendo o Google devolver página vazia: era a causa
-            // de "Recuperados 0/N via Google/Brapi" quando o Yahoo estava fora — o
-            // fallback de B3 nunca chegava à bolsa certa (:BVMF).
-            if (ticker.endsWith('.SA')) {
-                googleTicker = ticker.replace('.SA', '');
-                exchange = ':BVMF';
-            }
-            else if (B3_TICKER_RE.test(ticker)) {
-                googleTicker = ticker;
-                exchange = ':BVMF';
-            }
-            // Lógica Crypto
-            else if (ticker.endsWith('-USD')) {
-                exchange = ''; // Crypto geralmente é global no Google
-            }
-            // Lógica US Stock (Simplificada, assume NASDAQ/NYSE se não tiver sufixo)
-            else if (!ticker.includes('.')) {
-                // Tenta NASDAQ por padrão para tech, mas isso é falível sem saber a bolsa exata.
-                // O Google Finance é inteligente com buscas, mas a URL direta precisa da bolsa.
-                // Fallback genérico: Tenta sem bolsa na URL de busca se falhar
-                exchange = ':NASDAQ'; 
-            }
+        for (const exchange of this._googleExchanges(ticker)) {
+            try {
+                const url = `https://www.google.com/finance/quote/${googleTicker}${exchange}`;
 
-            const url = `https://www.google.com/finance/quote/${googleTicker}${exchange}`;
+                // (I4) Via circuit breaker: se o Google estiver fora, fast-fail (null)
+                // sem esperar o timeout em cada ticker do lote.
+                // Cookie de consentimento: sem ele o Google responde 302→página de consent
+                // (0 byte) a partir de IP de datacenter — o fallback devolvia null p/ TUDO,
+                // derrubava blue-chips como B3SA3 e abria o circuit breaker. Accept-Language
+                // pt-BR ancora o formato de preço BR. maxRedirects segue o novo 302 para
+                // /finance/beta/quote/. Timeout 6s tolera o hop extra + latência do datacenter.
+                 
+                const response = await trackSource('google.finance', () => googleBreaker.exec(
+                    () => axios.get(url, {
+                        headers: {
+                            'User-Agent': GOOGLE_FINANCE_UA,
+                            'Accept-Language': 'pt-BR,pt;q=0.9',
+                            Cookie: 'CONSENT=YES+cb.20210328-17-p0.en+FX+000',
+                        },
+                        timeout: 6000,
+                        maxRedirects: 5,
+                    }),
+                ), { isEmpty: (r) => !r?.data });
 
-            // (I4) Via circuit breaker: se o Google estiver fora, fast-fail (null)
-            // sem esperar o timeout em cada ticker do lote.
-            // Cookie de consentimento: sem ele o Google responde 302→página de consent
-            // (0 byte) a partir de IP de datacenter — o fallback devolvia null p/ TUDO,
-            // derrubava blue-chips como B3SA3 e abria o circuit breaker. Accept-Language
-            // pt-BR ancora o formato de preço BR. maxRedirects segue o novo 302 para
-            // /finance/beta/quote/. Timeout 6s tolera o hop extra + latência do datacenter.
-            const response = await trackSource('google.finance', () => googleBreaker.exec(
-                () => axios.get(url, {
-                    headers: {
-                        'User-Agent': GOOGLE_FINANCE_UA,
-                        'Accept-Language': 'pt-BR,pt;q=0.9',
-                        Cookie: 'CONSENT=YES+cb.20210328-17-p0.en+FX+000',
-                    },
-                    timeout: 6000,
-                    maxRedirects: 5,
-                }),
-            ), { isEmpty: (r) => !r?.data });
-
-            const $ = cheerio.load(response.data);
-            
-            // Seletor da classe de preço (Isso muda periodicamente, precisa de manutenção)
-            // .YMlKec.fxKbKc parou de existir; preço atual fica em .N6SYTe (container
-            // único da cotação principal — confirmado verificando que não aparece em
-            // tabelas de índices/sidebar, que reciclam o mesmo atributo jsname="Pdsbrc").
-            let priceText = $('.N6SYTe').first().text();
-
-            // Fallback seletor genérico via atributo data
-            if (!priceText) {
-                priceText = $('[data-last-price]').attr('data-last-price');
-            }
-
-            if (priceText) {
-                // Limpeza: "R$ 34,50" -> 34.50 | "$12,345.00" -> 12345.00
-                const cleanPrice = priceText.replace(/[^\d.,]/g, '');
-                // Detecta formato BR (vírgula decimal) vs US (ponto decimal)
-                let finalPrice = 0;
-                
-                if (cleanPrice.includes(',') && !cleanPrice.includes('.')) {
-                    // Formato BR puro: 34,50
-                    finalPrice = parseFloat(cleanPrice.replace(',', '.'));
-                } else if (cleanPrice.includes('.') && cleanPrice.includes(',')) {
-                    // Formato misto: 1.234,56 (BR) ou 1,234.56 (US)
-                    // Assume BR se a vírgula for o último separador
-                    if (cleanPrice.lastIndexOf(',') > cleanPrice.lastIndexOf('.')) {
-                        finalPrice = parseFloat(cleanPrice.replace(/\./g, '').replace(',', '.'));
-                    } else {
-                        finalPrice = parseFloat(cleanPrice.replace(/,/g, ''));
-                    }
-                } else {
-                    // Formato simples 34.50
-                    finalPrice = parseFloat(cleanPrice);
-                }
-
-                if (!isNaN(finalPrice) && finalPrice > 0) {
-                    // Extrai variação (Opcional, seletor .JwB6zf)
-                    let change = 0;
-                    const changeText = $('.JwB6zf').first().text(); // Ex: 1.25%
-                    if (changeText) {
-                        change = parseFloat(changeText.replace('%', '').replace(',', '.').replace('+', ''));
-                        if (changeText.includes('-') || $('.JwB6zf').hasClass('P2hktc')) { // Classe vermelha do google
-                             // Ajuste de sinal se necessário
-                        }
-                    }
-
+                const parsed = this._parseGooglePrice(response.data);
+                if (parsed) {
+                    this._googleExchangeMemo.set(ticker, exchange);
                     return {
                         ticker: ticker.replace('.SA', ''),
-                        price: finalPrice,
-                        change: change,
+                        price: parsed.price,
+                        change: parsed.change,
                         name: googleTicker, // Nome provisório
-                        source: 'GOOGLE_FINANCE_FALLBACK'
+                        source: 'GOOGLE_FINANCE_FALLBACK',
                     };
                 }
+                // Página sem cotação não é erro de rede: a bolsa provavelmente é
+                // outra, e a próxima da lista responde. Segue o laço.
+            } catch {
+                // Silencioso no nível de função, quem chama decide o log. Circuito
+                // aberto derruba as demais bolsas junto — é o comportamento certo:
+                // se o Google está fora, tentar outra URL só gasta tempo.
+                return null;
             }
-            return null;
-        } catch {
-            // Silencioso no nível de função, quem chama decide o log
-            return null;
         }
+        // Nenhuma bolsa trouxe preço: esquece a memória para a próxima tentativa
+        // poder redescobrir (papel pode ter migrado de listagem).
+        this._googleExchangeMemo.delete(ticker);
+        return null;
     },
 
     // Helper: Busca na Brapi (Fallback Terciário)

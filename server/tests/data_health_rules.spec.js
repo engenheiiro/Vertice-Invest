@@ -429,6 +429,25 @@ describe('PLAUSIBILIDADE', () => {
         expect(check.detail).toContain('1 ativo');
     });
 
+    /**
+     * Aposentado é estado TERMINAL: quem está na blacklist não pode continuar na
+     * fila de cotação. Em 04/09/2026, 12 ativos tinham as duas flags ligadas —
+     * IGBR3 e BLUT4 apareciam no painel de fontes descendo Yahoo → Google → Brapi
+     * e falhando nos três a cada ciclo, meses depois de aposentados.
+     */
+    it('aposentado que continua ativo sai de OK', () => {
+        const facts = healthyFacts();
+        facts.totals.retiredButActive = 12;
+        const check = byId(buildHealthReport(facts), 'consistency.retiredButActive');
+        expect(check.status).toBe(HEALTH_STATUS.WARN);
+        expect(check.detail).toContain('12 ativo');
+    });
+
+    it('invariante respeitada mantém OK', () => {
+        expect(byId(buildHealthReport(healthyFacts()), 'consistency.retiredButActive').status)
+            .toBe(HEALTH_STATUS.OK);
+    });
+
     it('preço zerado ausente mantém OK', () => {
         expect(byId(buildHealthReport(healthyFacts()), 'plausibility.nonPositivePrice').status)
             .toBe(HEALTH_STATUS.OK);

@@ -28,6 +28,9 @@
  */
 import mongoose from 'mongoose';
 import { connectScriptDb } from './lib/scriptDb.js';
+// Forma canônica do ticker B3 — a cópia local que morava aqui divergia da do
+// serviço (rejeitava B3SA3 e EQMA3B). Ver utils/tickerShape.js.
+import { B3_TICKER_RE } from '../utils/tickerShape.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -47,7 +50,6 @@ const daysArg = process.argv.find((a) => a.startsWith('--days='));
 const JANELA_DIAS = Math.min(Math.max(Number(daysArg?.split('=')[1]) || 10, 1), 90);
 
 const B3_TYPES = new Set(['STOCK', 'FII', 'ETF']);
-const B3_TICKER_RE = /^[A-Z]{4}\d{1,2}$/;
 
 /** Dias úteis da janela, do mais antigo para o mais novo. */
 const diasUteis = (janela) => {

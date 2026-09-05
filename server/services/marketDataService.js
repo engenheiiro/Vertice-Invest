@@ -461,7 +461,7 @@ export const marketDataService = {
         const threshold = new Date(now.getTime() - cacheMinutes * 60 * 1000);
 
         try {
-            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker name type updatedAt lastPrice change isActive failCount lastFailDate marketCap liquidity');
+            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker name type updatedAt lastPrice change isActive isBlacklisted failCount lastFailDate marketCap liquidity');
             
             const toUpdate = [];
             const assetMap = new Map();
@@ -471,8 +471,16 @@ export const marketDataService = {
             cleanTickers.forEach(ticker => {
                 const asset = assetMap.get(ticker);
                 
-                // Se já estiver desativado pela blacklist, ignora TOTALMENTE (mesmo com force)
-                if (asset && !asset.isActive) return;
+                // Aposentado ou desativado: fora da fila de cotação, mesmo com force.
+                //
+                // Lia só `isActive`, apostando que os dois campos andam juntos — e eles
+                // não andam. Em 04/09/2026 havia 12 ativos com isBlacklisted=true e
+                // isActive=true (blacklistados por caminhos antigos, que não desativavam),
+                // e por causa disso IGBR3 e BLUT4 eram perguntados a cada 15 minutos,
+                // desciam Yahoo → Google → Brapi e falhavam nos três, para sempre. Papel
+                // aposentado gastando as três fontes é o oposto do que a blacklist existe
+                // para fazer. `isBlacklisted` é o estado TERMINAL: ele decide sozinho.
+                if (asset && (asset.isBlacklisted || !asset.isActive)) return;
 
                 if (force) {
                     toUpdate.push(ticker);

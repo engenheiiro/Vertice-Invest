@@ -417,3 +417,40 @@ describe('histórico tipado V5 — cache e resiliência', () => {
     expect(AssetHistory.findOne).toHaveBeenCalledWith({ ticker: 'ETH-USD' });
   });
 });
+
+/**
+ * Aposentado NÃO é perguntado — e a flag que manda é `isBlacklisted`.
+ *
+ * O filtro lia só `isActive`, apostando que os dois campos andam juntos. Não
+ * andam: em 04/09/2026 havia 12 ativos com isBlacklisted=true e isActive=true,
+ * blacklistados por caminhos antigos que não desativavam. IGBR3 e BLUT4 eram
+ * perguntados a cada 15 minutos, desciam Yahoo → Google → Brapi e falhavam nos
+ * três — para sempre. Papel aposentado gastando as três fontes é o oposto do que
+ * a blacklist existe para fazer.
+ */
+describe('refreshQuotesBatch — blacklist é a flag que decide', () => {
+  it('não pergunta cotação de ativo blacklistado, mesmo com isActive=true', async () => {
+    mockFind([{ ticker: 'IGBR3', updatedAt: minutesAgo(600), lastPrice: 1.5, isActive: true, isBlacklisted: true, failCount: 1 }]);
+
+    await marketDataService.refreshQuotesBatch(['IGBR3'], false);
+
+    expect(externalMarketService.getQuotes).not.toHaveBeenCalled();
+  });
+
+  it('nem com force — aposentadoria é estado terminal', async () => {
+    mockFind([{ ticker: 'BLUT4', updatedAt: minutesAgo(600), lastPrice: 1.5, isActive: true, isBlacklisted: true, failCount: 1 }]);
+
+    await marketDataService.refreshQuotesBatch(['BLUT4'], true);
+
+    expect(externalMarketService.getQuotes).not.toHaveBeenCalled();
+  });
+
+  it('ativo normal segue sendo perguntado', async () => {
+    mockFind([{ ticker: 'PETR4', updatedAt: minutesAgo(600), lastPrice: 40, isActive: true, isBlacklisted: false, failCount: 0 }]);
+    externalMarketService.getQuotes.mockResolvedValue([{ ticker: 'PETR4', price: 42, change: 1 }]);
+
+    await marketDataService.refreshQuotesBatch(['PETR4'], false);
+
+    expect(externalMarketService.getQuotes).toHaveBeenCalledWith(['PETR4']);
+  });
+});

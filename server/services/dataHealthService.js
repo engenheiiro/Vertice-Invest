@@ -284,10 +284,16 @@ const collectFacts = async (now) => {
         jobs,
         oldestRun,
         frozenAssets,
+        retiredButActive,
     ] = await Promise.all([
         collectAssetFacts(staleCutoff, fundamentalsCutoff),
         MarketAsset.countDocuments({}),
         MarketAsset.countDocuments({ isActive: false, failCount: { $gte: 10 } }),
+        // Invariante do modelo: aposentado é estado TERMINAL, logo isBlacklisted
+        // implica isActive=false. Quebrar isso não dá erro — dá gasto silencioso:
+        // o ativo continua na fila de cotação, desce a cadeia inteira de fontes e
+        // falha nas três, a cada 15 minutos, para sempre.
+        MarketAsset.countDocuments({ isBlacklisted: true, isActive: true }),
         SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean(),
         // Data do PU mais recente entre todos os títulos. Usa a data do DADO
         // (history.date), não o instante da ingestão: um CSV velho reingerido
@@ -342,6 +348,7 @@ const collectFacts = async (now) => {
                 all: totalAll,
                 active: assetFacts.activeTotal,
                 inactive: totalInactive,
+                retiredButActive,
             },
             assets: assetFacts.assets,
             implausible: assetFacts.implausible,

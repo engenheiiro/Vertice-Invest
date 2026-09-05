@@ -1,4 +1,5 @@
 import { fetchB3DailyCloses } from './b3DailyFileService.js';
+import { B3_TICKER_RE } from '../utils/tickerShape.js';
 import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 
 /**
@@ -24,8 +25,15 @@ import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 /** Classes cujo fechamento está no arquivo do à vista. */
 export const B3_FALLBACK_TYPES = new Set(['STOCK', 'FII', 'ETF']);
 
-/** ITSA4, BOVA11, KNSC11 — exclui VOO, QQQ, AAPL e BTC-USD. */
-export const B3_TICKER_RE = /^[A-Z]{4}\d{1,2}$/;
+/**
+ * ITSA4, BOVA11, KNSC11 — exclui VOO, QQQ, AAPL e BTC-USD.
+ *
+ * Reexportado de `utils/tickerShape.js`: a cópia que morava aqui era a versão
+ * antiga, de 4 letras + dígitos, e rejeitava B3SA3 e EQMA3B — tirando os dois
+ * do reforço de candle da B3 em silêncio. Os importadores seguem funcionando;
+ * a regra passou a ter um dono só.
+ */
+export { B3_TICKER_RE };
 
 /**
  * Teto de dias buscados por alvo num run. O arquivo existe para qualquer pregão
