@@ -16,8 +16,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 // O que fica travado aqui:
 //  1. Cadência diária, e ANTES dos consumidores do mesmo dia (18:30 e 23:59).
 //  2. A gravação é UNIÃO, nunca substituição: `USD-BRL` é isento do cap de
-//     histórico porque converte compras antigas, e a fonte só devolve 730 dias.
+//     histórico porque converte compras antigas, e toda fonte tem janela finita.
 //  3. O efeito final: dias consecutivos resolvem taxas DISTINTAS.
+//  4. A série tem DUAS fontes: Yahoo (primária) e PTAX/BCB (reserva). A
+//     AwesomeAPI, primária até 05/09/2026, saiu por não atender a partir do host
+//     de produção — e aqui a chamada condenada era diária, não eventual.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Banco falso: um único documento USD-BRL em memória.
@@ -63,22 +66,24 @@ afterEach(() => { vi.restoreAllMocks(); });
 
 describe('_persistUsdHistory — união com a série existente, nunca substituição', () => {
     it('preserva candles mais antigos que a janela da fonte', async () => {
-        // A AwesomeAPI devolve 730 dias; uma compra de 2022 precisa da taxa DAQUELE
-        // dia. Um $set cru jogaria fora tudo que a fonte não repete.
+        // O Yahoo começa em 2020-01-01 e a PTAX na data que pedirmos (2 anos);
+        // uma compra de 2018 precisa da taxa DAQUELE dia. Um $set cru jogaria
+        // fora tudo que a fonte não repete.
         db.usdBrl = { ticker: 'USD-BRL', history: [candle('2022-03-10', 5.02)] };
 
         const out = await macroDataService._persistUsdHistory(
             [candle('2026-08-20', 5.31), candle('2026-08-21', 5.28)],
-            'AwesomeAPI',
+            'Yahoo',
         );
 
         expect(db.usdBrl.history.map((h) => h.date)).toEqual(['2022-03-10', '2026-08-20', '2026-08-21']);
-        expect(out).toMatchObject({ total: 3, fetched: 2, lastDate: '2026-08-21', source: 'AwesomeAPI' });
+        expect(out).toMatchObject({ total: 3, fetched: 2, lastDate: '2026-08-21', source: 'Yahoo' });
     });
 
     it('resposta curta/parcial não amputa a série', async () => {
-        // A validação antiga só exigia "não-vazia": uma resposta com 1 dia passava e
-        // substituía os 730 do banco. Agora a escrita acontece 7x por semana.
+        // A validação antiga só exigia "não-vazia": uma resposta com 1 dia passava
+        // e substituía os anos guardados no banco. E a escrita acontece 7x por
+        // semana.
         db.usdBrl = {
             ticker: 'USD-BRL',
             history: Array.from({ length: 300 }, (_, i) => {
@@ -87,7 +92,7 @@ describe('_persistUsdHistory — união com a série existente, nunca substitui�
             }),
         };
 
-        await macroDataService._persistUsdHistory([candle('2026-08-21', 5.28)], 'AwesomeAPI');
+        await macroDataService._persistUsdHistory([candle('2026-08-21', 5.28)], 'Yahoo');
 
         expect(db.usdBrl.history).toHaveLength(301);
         expect(db.usdBrl.history[0].date).toBe('2024-01-01');
@@ -97,7 +102,7 @@ describe('_persistUsdHistory — união com a série existente, nunca substitui�
     it('data repetida fica com o valor NOVO (correção da fonte vale)', async () => {
         db.usdBrl = { ticker: 'USD-BRL', history: [candle('2026-08-20', 9.99)] };
 
-        await macroDataService._persistUsdHistory([candle('2026-08-20', 5.31)], 'AwesomeAPI');
+        await macroDataService._persistUsdHistory([candle('2026-08-20', 5.31)], 'Yahoo');
 
         expect(db.usdBrl.history).toEqual([{ date: '2026-08-20', close: 5.31, adjClose: 5.31 }]);
     });
@@ -105,7 +110,7 @@ describe('_persistUsdHistory — união com a série existente, nunca substitui�
     it('descarta candle corrompido (taxa ≤ 0 ou data malformada)', async () => {
         await macroDataService._persistUsdHistory(
             [candle('2026-08-20', 5.31), candle('2026-08-21', 0), candle('ontem', 5.4), { close: 5.5 }],
-            'AwesomeAPI',
+            'Yahoo',
         );
 
         expect(db.usdBrl.history).toEqual([{ date: '2026-08-20', close: 5.31, adjClose: 5.31 }]);
@@ -114,40 +119,71 @@ describe('_persistUsdHistory — união com a série existente, nunca substitui�
     it('sem nenhuma entrada válida, não escreve e preserva o que já existe', async () => {
         db.usdBrl = { ticker: 'USD-BRL', history: [candle('2026-08-20', 5.31)] };
 
-        const out = await macroDataService._persistUsdHistory([{ date: 'lixo', close: -1 }], 'AwesomeAPI');
+        const out = await macroDataService._persistUsdHistory([{ date: 'lixo', close: -1 }], 'Yahoo');
 
         expect(out).toBeNull();
         expect(db.usdBrl.history).toEqual([candle('2026-08-20', 5.31)]);
     });
 
     it('grava em ordem cronológica mesmo com a fonte invertida', async () => {
-        // A AwesomeAPI devolve do mais recente para o mais antigo, e a busca binária
-        // do resolvedor depende da ordem.
+        // A PTAX devolve em ordem crescente e o Yahoo também, mas a busca binária
+        // do resolvedor depende da ordem — e ela é garantida aqui, não lá fora.
         await macroDataService._persistUsdHistory(
             [candle('2026-08-21', 5.28), candle('2026-08-19', 5.33), candle('2026-08-20', 5.31)],
-            'AwesomeAPI',
+            'Yahoo',
         );
 
         expect(db.usdBrl.history.map((h) => h.date)).toEqual(['2026-08-19', '2026-08-20', '2026-08-21']);
     });
 });
 
-describe('syncHistoricalUSDRate — devolve o resumo do que gravou', () => {
-    it('mapeia o payload da AwesomeAPI e reporta o último candle', async () => {
+describe('syncHistoricalUSDRate — Yahoo primeiro, PTAX como reserva', () => {
+    const ptaxRow = (dia, venda) => ({ dataHoraCotacao: `${dia} 13:03:59.556874`, cotacaoVenda: venda });
+
+    it('Yahoo respondendo → grava a série dele e nem consulta a PTAX', async () => {
+        const { externalMarketService } = await import('../services/externalMarketService.js');
+        vi.spyOn(externalMarketService, 'getFullHistory').mockResolvedValue([
+            candle('2026-08-20', 5.31), candle('2026-08-21', 5.28),
+        ]);
+        const http = vi.spyOn(axios, 'get');
+
+        const out = await macroDataService.syncHistoricalUSDRate();
+
+        expect(out).toMatchObject({ total: 2, lastDate: '2026-08-21', source: 'Yahoo' });
+        expect(db.usdBrl.history[0]).toMatchObject({ date: '2026-08-20', close: 5.31 });
+        expect(http).not.toHaveBeenCalled();
+    });
+
+    // A reserva existe porque `USD-BRL` não é uma série qualquer: sem ela, um dia
+    // sem Yahoo deixa o rebuild de carteira convertendo compras antigas pela
+    // cotação de hoje.
+    it('Yahoo fora → a PTAX cobre, e a fonte gravada diz quem entregou', async () => {
+        const { externalMarketService } = await import('../services/externalMarketService.js');
+        vi.spyOn(externalMarketService, 'getFullHistory').mockResolvedValue(null);
         vi.spyOn(axios, 'get').mockResolvedValue({
-            data: [
-                { bid: '5.2800', timestamp: String(Math.floor(Date.UTC(2026, 7, 21, 20, 0) / 1000)) },
-                { bid: '5.3100', timestamp: String(Math.floor(Date.UTC(2026, 7, 20, 20, 0) / 1000)) },
-            ],
+            data: { value: [ptaxRow('2026-08-20', 5.3120), ptaxRow('2026-08-21', 5.2800)] },
         });
 
         const out = await macroDataService.syncHistoricalUSDRate();
 
-        expect(out).toMatchObject({ total: 2, lastDate: '2026-08-21', source: 'AwesomeAPI' });
-        expect(db.usdBrl.history[0]).toMatchObject({ date: '2026-08-20', close: 5.31 });
+        expect(out).toMatchObject({ total: 2, lastDate: '2026-08-21', source: 'PTAX/BCB' });
+        expect(db.usdBrl.history.at(-1)).toMatchObject({ date: '2026-08-21', close: 5.28 });
     });
 
-    it('fonte fora do ar e fallback também → null, sem tocar na série', async () => {
+    // Diferente da cadeia ao vivo, aqui a fixação da véspera NÃO é recusada: a
+    // pergunta é "qual era o câmbio naquele dia", e cada linha vem carimbada com
+    // o seu próprio dia.
+    it('exceção do Yahoo não impede a reserva de rodar', async () => {
+        const { externalMarketService } = await import('../services/externalMarketService.js');
+        vi.spyOn(externalMarketService, 'getFullHistory').mockRejectedValue(new Error('ECONNRESET'));
+        vi.spyOn(axios, 'get').mockResolvedValue({
+            data: { value: [ptaxRow('2026-08-21', 5.2800)] },
+        });
+
+        expect(await macroDataService.syncHistoricalUSDRate()).toMatchObject({ source: 'PTAX/BCB' });
+    });
+
+    it('as duas fontes fora → null, sem tocar na série', async () => {
         db.usdBrl = { ticker: 'USD-BRL', history: [candle('2026-08-20', 5.31)] };
         vi.spyOn(axios, 'get').mockRejectedValue(new Error('ECONNRESET'));
         const { externalMarketService } = await import('../services/externalMarketService.js');
@@ -169,7 +205,7 @@ describe('efeito no resolvedor de câmbio por data', () => {
     const SPOT = 5.2800;
 
     it('série em dia → cada dia útil resolve a SUA taxa', async () => {
-        await macroDataService._persistUsdHistory([candle('2026-08-14', 5.4455), ...SEMANA], 'AwesomeAPI');
+        await macroDataService._persistUsdHistory([candle('2026-08-14', 5.4455), ...SEMANA], 'Yahoo');
 
         const resolve = await loadUsdRateResolver(SPOT);
         const taxas = DIAS.map(resolve);
@@ -180,7 +216,7 @@ describe('efeito no resolvedor de câmbio por data', () => {
 
     it('regressão: com a série parada em D-7, os quatro dias colapsam na cotação de hoje', async () => {
         // Estado observado em 21/08/2026 com o cron semanal.
-        await macroDataService._persistUsdHistory([candle('2026-08-14', 5.4455)], 'AwesomeAPI');
+        await macroDataService._persistUsdHistory([candle('2026-08-14', 5.4455)], 'Yahoo');
 
         const resolve = await loadUsdRateResolver(SPOT);
         const taxas = DIAS.map(resolve);
@@ -237,11 +273,18 @@ describe('cadência do cron fx-history', () => {
         const fx = minutoDoDia(expressaoDe.get('fx-history'));
 
         // A régua de baixo é a fonte, não o pregão. O fechamento do câmbio à vista
-        // é 17:00, mas o candle diário da AwesomeAPI só é carimbado ~19:30 (medido
-        // em 17-20/08/2026: 19:30:07, 19:31:33, 19:30:05, 19:30:06). Às 18:10 —
-        // a cadência original — o job trazia D-1 todo dia e a série ficava
-        // permanentemente um dia atrás do presente.
+        // é 17:00, mas o candle diário da AwesomeAPI — primária até 05/09/2026 —
+        // só era carimbado ~19:30 (medido em 17-20/08/2026: 19:30:07, 19:31:33,
+        // 19:30:05, 19:30:06). Às 18:10 — a cadência original — o job trazia D-1
+        // todo dia e a série ficava permanentemente um dia atrás do presente.
         expect(fx).toBeGreaterThanOrEqual(19 * 60 + 30);
+
+        // A régua de cima nasceu com o Yahoo no lugar dela, e é de outra natureza:
+        // `getFullHistoryDetailed` recorta a janela pela data UTC de hoje. Às
+        // 20:59 BRT ainda são 23:59 UTC do mesmo dia; às 21:00 a data UTC vira, o
+        // Yahoo devolve o candle recém-nascido do dia seguinte e ele seria gravado
+        // como FECHAMENTO de um dia que aqui nem começou.
+        expect(fx).toBeLessThan(21 * 60);
 
         // A régua de cima é o snapshot patrimonial: ele resolve câmbio POR DATA e
         // é a base do TWRR e do Sharpe.

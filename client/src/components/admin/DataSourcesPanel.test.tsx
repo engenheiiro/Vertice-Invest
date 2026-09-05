@@ -89,12 +89,12 @@ describe('DataSourcesPanel', () => {
         render(<DataSourcesPanel
             sources={[src({
                 id: 'a', short: 'Yahoo', label: 'Yahoo Finance — câmbio',
-                backups: ['AwesomeAPI', 'Coinbase', 'PTAX — Banco Central'], covers: null,
+                backups: ['Coinbase', 'PTAX — Banco Central'], covers: null,
             })]}
             groups={groups}
         />);
         fireEvent.click(screen.getByRole('button', { name: /Yahoo/ }));
-        expect(screen.getByText(/AwesomeAPI → Coinbase → PTAX/)).toBeInTheDocument();
+        expect(screen.getByText(/Coinbase → PTAX/)).toBeInTheDocument();
     });
 
     it('a reserva diz de quem ela é reserva', () => {
@@ -134,7 +134,7 @@ describe('DataSourcesPanel', () => {
     it('o detalhe abre ao clicar no card e fecha ao clicar de novo', () => {
         render(<DataSourcesPanel
             sources={[src({
-                id: 'a', short: 'AwesomeAPI', label: 'AwesomeAPI', status: 'CRITICAL',
+                id: 'a', short: 'Coinbase', label: 'Coinbase', status: 'CRITICAL',
                 detail: '100% das 8 chamadas falharam', lastError: 'ETIMEDOUT',
             })]}
             groups={groups}
@@ -143,7 +143,7 @@ describe('DataSourcesPanel', () => {
 
         // Pelo papel de botão: aberto o detalhe, o nome passa a aparecer duas
         // vezes (no card e no cabeçalho do detalhe).
-        const card = () => screen.getByRole('button', { name: /AwesomeAPI/ });
+        const card = () => screen.getByRole('button', { name: /Coinbase/ });
 
         fireEvent.click(card());
         expect(screen.getByText(/ETIMEDOUT/)).toBeInTheDocument();
@@ -244,8 +244,8 @@ describe('DataSourcesPanel — ordem da cadeia', () => {
         render(<DataSourcesPanel
             sources={[
                 src({ id: 'a', short: 'Yahoo', group: 'fx', chain: 'fx', chainPosition: 1, chainSize: 3 }),
-                src({ id: 'b', short: 'AwesomeAPI', group: 'fx', chain: 'fx', chainPosition: 2, chainSize: 3 }),
-                src({ id: 'c', short: 'Coinbase', group: 'fx', chain: 'fx', chainPosition: 3, chainSize: 3 }),
+                src({ id: 'b', short: 'Coinbase', group: 'fx', chain: 'fx', chainPosition: 2, chainSize: 3 }),
+                src({ id: 'c', short: 'PTAX', group: 'fx', chain: 'fx', chainPosition: 3, chainSize: 3 }),
             ]}
             groups={groups}
         />);

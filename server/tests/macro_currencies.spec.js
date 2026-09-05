@@ -2,24 +2,24 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import axios from 'axios';
 import { macroDataService, isPlausibleUsd, isPlausibleBtc } from '../services/macroDataService.js';
 import { externalMarketService } from '../services/externalMarketService.js';
+import AssetHistory from '../models/AssetHistory.js';
 
-// Incidente de 04/09/2026: a AwesomeAPI parou de responder, o `catch` vazio
-// devolvia null, o gravador preservava o valor anterior e `lastUpdated` era
-// carimbado assim mesmo. Dólar e BTC ficaram um dia inteiro no fechamento da
-// véspera — na barra de indicadores E no multiplicador de posição dolarizada —
-// sem log, sem flag e sem alarme. O contrato abaixo é o que impede a repetição.
+// Incidente de 04/09/2026: a fonte de câmbio de então (AwesomeAPI) parou de
+// responder, o `catch` vazio devolvia null, o gravador preservava o valor
+// anterior e `lastUpdated` era carimbado assim mesmo. Dólar e BTC ficaram um dia
+// inteiro no fechamento da véspera — na barra de indicadores E no multiplicador
+// de posição dolarizada — sem log, sem flag e sem alarme. O contrato abaixo é o
+// que impede a repetição.
 //
-// A ordem da cadeia (Yahoo → AwesomeAPI → Coinbase → PTAX) é deliberada e está
-// coberta: as duas últimas são especialistas de uma moeda só, e existem porque
-// as duas primeiras já falharam JUNTAS a partir do host de produção.
-
-const awesomeBody = (over = {}) => ({
-    data: {
-        USDBRL: { bid: '5.1263', pctChange: '0.519626' },
-        BTCUSD: { bid: '79533.56', pctChange: '-2.137073' },
-        ...over,
-    },
-});
+// A ordem da cadeia (Yahoo → Coinbase → PTAX → Coinbase taxas) é deliberada e
+// está coberta: as duas do meio são especialistas de uma moeda só, e existem
+// porque a chamada de câmbio do Yahoo já falhou a partir do host de produção. A
+// última cobre as duas moedas e vem depois delas mesmo assim, porque é a única
+// que não mede a variação — deriva.
+//
+// A AwesomeAPI foi REMOVIDA da cadeia em 05/09/2026: respondia da máquina do
+// desenvolvedor e nunca a partir do host. O que sobrou dela aqui é a memória do
+// incidente, não um elo.
 
 const yahooBody = {
     usd: { value: 5.13, change: 0.5 },
@@ -29,9 +29,11 @@ const yahooBody = {
 describe('updateCurrencies — cadeia de fontes', () => {
     afterEach(() => vi.restoreAllMocks());
 
-    it('Yahoo no ar → resolve tudo e nem chega na AwesomeAPI', async () => {
+    it('Yahoo no ar → resolve tudo e nem chega nos especialistas', async () => {
         vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue(yahooBody);
-        const awesome = vi.spyOn(macroDataService, '_fetchCurrenciesAwesome');
+        const coinbase = vi.spyOn(macroDataService, '_fetchBtcCoinbase');
+        const ptax = vi.spyOn(macroDataService, '_fetchPtaxUsd');
+        const rates = vi.spyOn(macroDataService, '_fetchCurrenciesCoinbaseRates');
 
         const out = await macroDataService.updateCurrencies();
 
@@ -39,29 +41,52 @@ describe('updateCurrencies — cadeia de fontes', () => {
         expect(out.btc).toBe(79000);
         expect(out.usdSource).toBe('Yahoo');
         expect(out.btcSource).toBe('Yahoo');
-        expect(awesome).not.toHaveBeenCalled();
+        expect(coinbase).not.toHaveBeenCalled();
+        expect(ptax).not.toHaveBeenCalled();
+        expect(rates).not.toHaveBeenCalled();
     });
 
-    it('Yahoo fora → a AwesomeAPI cobre as duas moedas e a fonte fica declarada', async () => {
+    // A janela que o 4º elo existe para cobrir: manhã, Yahoo fora e PTAX ainda
+    // não publicada. Antes dele o dólar ficava `null` até as ~13h, e com ele o
+    // multiplicador de posição dolarizada continua sendo o de hoje.
+    it('manhã sem Yahoo e sem PTAX → a Coinbase de taxas cobre o dólar', async () => {
         vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
-        vi.spyOn(axios, 'get').mockResolvedValue(awesomeBody());
+        vi.spyOn(macroDataService, '_fetchBtcCoinbase').mockResolvedValue(null);
+        vi.spyOn(macroDataService, '_fetchPtaxUsd').mockResolvedValue(null);
+        vi.spyOn(macroDataService, '_fetchCurrenciesCoinbaseRates')
+            .mockResolvedValue({ usd: 5.127075, usdChange: 0.3, btc: 79997.92, btcChange: -1.2 });
+
+        const out = await macroDataService.updateCurrencies();
+
+        expect(out.usd).toBeCloseTo(5.127075, 6);
+        expect(out.usdSource).toBe('Coinbase (taxas)');
+        expect(out.btcSource).toBe('Coinbase (taxas)');
+    });
+
+    it('Yahoo fora → cada especialista cobre a sua moeda e a fonte fica declarada', async () => {
+        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
+        vi.spyOn(macroDataService, '_fetchBtcCoinbase').mockResolvedValue({ btc: 79533.56, btcChange: -2.13 });
+        vi.spyOn(macroDataService, '_fetchPtaxUsd').mockResolvedValue({ usd: 5.1263, usdChange: 0.51 });
 
         const out = await macroDataService.updateCurrencies();
 
         expect(out.usd).toBeCloseTo(5.1263, 4);
         expect(out.btc).toBeCloseTo(79533.56, 2);
-        expect(out.usdSource).toBe('AwesomeAPI');
-        expect(out.btcSource).toBe('AwesomeAPI');
+        expect(out.usdSource).toBe('PTAX/BCB');
+        expect(out.btcSource).toBe('Coinbase');
     });
 
     it('cobertura parcial: cada moeda guarda a sua própria fonte', async () => {
         vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({ usd: yahooBody.usd });
-        vi.spyOn(axios, 'get').mockResolvedValue(awesomeBody());
+        vi.spyOn(macroDataService, '_fetchBtcCoinbase').mockResolvedValue({ btc: 79533.56, btcChange: -2.13 });
+        const ptax = vi.spyOn(macroDataService, '_fetchPtaxUsd');
 
         const out = await macroDataService.updateCurrencies();
 
-        expect(out.usdSource).toBe('Yahoo');       // primária resolveu o dólar
-        expect(out.btcSource).toBe('AwesomeAPI');  // e a segunda completou o BTC
+        expect(out.usdSource).toBe('Yahoo');     // primária resolveu o dólar
+        expect(out.btcSource).toBe('Coinbase');  // e o especialista completou o BTC
+        // Com as duas moedas resolvidas, a cadeia para: o elo seguinte nem é chamado.
+        expect(ptax).not.toHaveBeenCalled();
     });
 
     // O ponto do incidente: sem valor de hoje, o retorno é `null` — nunca o
@@ -79,17 +104,18 @@ describe('updateCurrencies — cadeia de fontes', () => {
         expect(out.btcSource).toBeNull();
     });
 
-    it('valor implausível da primária é rejeitado e a segunda assume', async () => {
+    it('valor implausível da primária é rejeitado e o elo seguinte assume', async () => {
         vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({
             usd: { value: 0, change: 0 },   // fonte devolveu lixo
             btc: yahooBody.btc,
         });
-        vi.spyOn(axios, 'get').mockResolvedValue(awesomeBody());
+        vi.spyOn(macroDataService, '_fetchBtcCoinbase').mockResolvedValue({ btc: 79533.56, btcChange: -2.13 });
+        vi.spyOn(macroDataService, '_fetchPtaxUsd').mockResolvedValue({ usd: 5.1263, usdChange: 0.51 });
 
         const out = await macroDataService.updateCurrencies();
 
         expect(out.usd).toBeCloseTo(5.1263, 4);
-        expect(out.usdSource).toBe('AwesomeAPI');
+        expect(out.usdSource).toBe('PTAX/BCB');
         expect(out.btcSource).toBe('Yahoo'); // o BTC da primária estava bom
     });
 });
@@ -118,11 +144,10 @@ describe('_fetchBtcCoinbase — rede final do bitcoin', () => {
         await expect(macroDataService._fetchBtcCoinbase()).resolves.toBeNull();
     });
 
-    // O buraco que ela fecha: em 04/09/2026 as duas primeiras fontes falharam
-    // juntas a partir do host e o BTC ficou sem ninguém — a PTAX cobre só dólar.
-    it('na cadeia, cobre o BTC quando as duas primeiras caem juntas', async () => {
+    // O buraco que ela fecha: em 04/09/2026 o câmbio do Yahoo falhou a partir do
+    // host e o BTC ficou sem ninguém — a PTAX cobre só dólar.
+    it('na cadeia, cobre o BTC quando o Yahoo cai', async () => {
         vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
-        vi.spyOn(macroDataService, '_fetchCurrenciesAwesome').mockResolvedValue(null);
         vi.spyOn(macroDataService, '_fetchBtcCoinbase').mockResolvedValue({ btc: 79762.41, btcChange: -2.45 });
         vi.spyOn(macroDataService, '_fetchPtaxUsd').mockResolvedValue({ usd: 5.1253, usdChange: 0.57 });
 
@@ -170,7 +195,7 @@ describe('_fetchPtaxUsd — rede final, só dólar e só do dia', () => {
 
     it('na cadeia, cobre o dólar e deixa o BTC declaradamente ausente', async () => {
         vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
-        vi.spyOn(macroDataService, '_fetchCurrenciesAwesome').mockResolvedValue(null);
+        vi.spyOn(macroDataService, '_fetchBtcCoinbase').mockResolvedValue(null);
         vi.spyOn(axios, 'get').mockResolvedValue({
             data: { value: [ptax('2026-09-03', 5.0962), ptax(hojeBr(), 5.1253)] },
         });
@@ -184,20 +209,73 @@ describe('_fetchPtaxUsd — rede final, só dólar e só do dia', () => {
     });
 });
 
-describe('_fetchCurrenciesAwesome — corpo inesperado', () => {
+describe('_fetchCurrenciesCoinbaseRates — último recurso, as duas moedas', () => {
     afterEach(() => vi.restoreAllMocks());
 
-    // Rate-limit da AwesomeAPI responde HTTP 200 com outro corpo. Antes, o acesso
-    // a `.bid` lançava TypeError e caía no mesmo catch da queda de rede: silêncio
-    // idêntico para duas causas que pedem conserto diferente.
-    it('resposta de rate-limit (200 sem os pares) vira null, não exceção', async () => {
-        vi.spyOn(axios, 'get').mockResolvedValue({ data: { status: 429, code: 'RateLimit' } });
-        await expect(macroDataService._fetchCurrenciesAwesome()).resolves.toBeNull();
+    const serie = (history) => vi.spyOn(AssetHistory, 'findOne').mockReturnValue({
+        select: () => ({ lean: async () => ({ history }) }),
     });
 
-    it('payload sem BTC não devolve meia leitura silenciosa', async () => {
-        vi.spyOn(axios, 'get').mockResolvedValue({ data: { USDBRL: { bid: '5.12', pctChange: '0.5' } } });
-        await expect(macroDataService._fetchCurrenciesAwesome()).resolves.toBeNull();
+    // `rates.BRL` é quanto vale 1 dólar; `rates.BTC` é quantos BITCOINS valem 1
+    // dólar — o preço do BTC sai do inverso, e trocar isso por leitura direta
+    // gravaria 0,0000125 como cotação do bitcoin.
+    it('lê o dólar direto e o bitcoin pelo INVERSO da taxa', async () => {
+        serie([{ date: '2026-09-04', close: 5.1 }]);
+        vi.spyOn(axios, 'get').mockResolvedValue({
+            data: { data: { currency: 'USD', rates: { BRL: '5.127075', BTC: '0.0000125003250085' } } },
+        });
+
+        const out = await macroDataService._fetchCurrenciesCoinbaseRates();
+
+        expect(out.usd).toBeCloseTo(5.127075, 6);
+        expect(out.btc).toBeCloseTo(79997.92, 1);
+    });
+
+    it('sem BTC utilizável, o dólar ainda passa e a cripto sai declaradamente ausente', async () => {
+        serie([{ date: '2026-09-04', close: 5.1 }]);
+        vi.spyOn(axios, 'get').mockResolvedValue({ data: { data: { rates: { BRL: '5.127075' } } } });
+
+        const out = await macroDataService._fetchCurrenciesCoinbaseRates();
+
+        expect(out.usd).toBeCloseTo(5.127075, 6);
+        expect(Number.isFinite(out.btc)).toBe(false);  // e o chamador filtra por plausibilidade
+    });
+
+    it('corpo inesperado vira null, não exceção', async () => {
+        vi.spyOn(axios, 'get').mockResolvedValue({ data: { errors: [{ id: 'not_found' }] } });
+        await expect(macroDataService._fetchCurrenciesCoinbaseRates()).resolves.toBeNull();
+    });
+});
+
+describe('_changeVsPreviousClose — a variação que a fonte não mede', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    const hojeBr = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const serie = (history) => vi.spyOn(AssetHistory, 'findOne').mockReturnValue({
+        select: () => ({ lean: async () => ({ history }) }),
+    });
+
+    it('mede contra o último fechamento anterior', async () => {
+        serie([{ date: '2026-09-03', close: 5.0 }, { date: '2026-09-04', close: 5.1 }]);
+        await expect(macroDataService._changeVsPreviousClose('USD-BRL', 5.151)).resolves.toBeCloseTo(1.0, 3);
+    });
+
+    // O candle de HOJE já pode estar gravado (worker das 18:30, fx-history das
+    // 19:45). Medir o preço contra ele mesmo devolveria ~0% justamente no dia de
+    // maior movimento — uma variação plausível e falsa, que é o pior tipo.
+    it('IGNORA o candle de hoje, mesmo já gravado', async () => {
+        serie([{ date: '2026-09-04', close: 5.0 }, { date: hojeBr(), close: 5.151 }]);
+        await expect(macroDataService._changeVsPreviousClose('USD-BRL', 5.151)).resolves.toBeCloseTo(3.02, 2);
+    });
+
+    it('série ausente ou banco fora → 0, e o preço segue valendo', async () => {
+        vi.spyOn(AssetHistory, 'findOne').mockReturnValue({
+            select: () => ({ lean: async () => null }),
+        });
+        await expect(macroDataService._changeVsPreviousClose('BTC-USD', 79997.92)).resolves.toBe(0);
+
+        vi.spyOn(AssetHistory, 'findOne').mockImplementation(() => { throw new Error('sem conexão'); });
+        await expect(macroDataService._changeVsPreviousClose('BTC-USD', 79997.92)).resolves.toBe(0);
     });
 });
 

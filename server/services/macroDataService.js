@@ -42,19 +42,21 @@ export const isPlausibleBtc = (value) => Number.isFinite(value) && value >= 1000
  * gravada em `currenciesSources` — trocar a ordem aqui é a única mudança
  * necessária para promover ou rebaixar uma fonte.
  *
- * O Yahoo é a primária desde 05/09/2026. A AwesomeAPI vinha primeiro e parou de
- * atender ESPECIFICAMENTE a partir do host de produção (o mesmo endereço
- * respondia normalmente de fora), provavelmente por limite de requisições no IP
- * compartilhado do Render. Enquanto ela liderava, todo run gastava uma chamada
- * condenada antes de chegar na fonte que funciona. Ela segue na cadeia porque
- * o defeito é do lado dela e pode passar — e porque uma fonte só de câmbio, com
- * infraestrutura independente do Yahoo, é justamente o que salva o bloco quando
- * o Yahoo cai.
+ * O Yahoo é a primária desde 05/09/2026, quando tomou o lugar da AwesomeAPI —
+ * que foi REMOVIDA da cadeia no mesmo dia. O motivo está medido, não suposto:
+ * o endereço responde da nossa máquina em ~80ms e NUNCA responde a partir do
+ * host de produção, quase certamente por limite de requisições no IP
+ * compartilhado do Render. Reserva que nunca cobre não é reserva — custava uma
+ * chamada condenada sempre que faltasse moeda (que é justamente o momento em
+ * que a cadeia chama o próximo elo) e pintava um card permanentemente amarelo
+ * no painel de Saúde, dizendo que o câmbio tinha quatro elos quando tinha três.
+ * Rebaixá-la não resolveria: a posição não muda o fato de que a chamada é feita
+ * exatamente quando o sistema mais precisa de resposta.
  *
  * A variação NÃO significa exatamente o mesmo em todas: em cripto, Yahoo e
- * Coinbase reportam as últimas 24h corridas e a AwesomeAPI, o fechamento
- * anterior. Em USD/BRL todas medem contra o fechamento — que é o que
- * `walletController` usa para reconstruir o câmbio-âncora do dia.
+ * Coinbase reportam as últimas 24h corridas. Em USD/BRL todas medem contra o
+ * fechamento — que é o que `walletController` usa para reconstruir o
+ * câmbio-âncora do dia.
  *
  * Fora da cadeia, e por quê: o **arquivo diário da B3** (`b3DailyFileService`)
  * não tem dólar nem bitcoin à vista. O que ele traz é DERIVATIVO — no dia
@@ -81,14 +83,10 @@ const CURRENCY_SOURCES = [
             };
         },
     },
-    {
-        name: 'AwesomeAPI',
-        fetch: (service) => service._fetchCurrenciesAwesome(),
-    },
-    // As duas últimas são ESPECIALISTAS — cada uma cobre só uma moeda, e existem
-    // porque as duas primeiras já falharam juntas em produção (04/09/2026), a
-    // partir do host, enquanto respondiam normalmente de fora. A ordem entre elas
-    // não disputa nada: uma preenche o BTC, a outra o dólar.
+    // As duas seguintes são ESPECIALISTAS — cada uma cobre só uma moeda, e
+    // existem porque a chamada de câmbio do Yahoo já falhou em produção
+    // (04/09/2026), a partir do host, enquanto respondia normalmente de fora. A
+    // ordem entre elas não disputa nada: uma preenche o BTC, a outra o dólar.
     //
     // A Coinbase vem antes da PTAX por ser cotação viva; a PTAX é fixação diária.
     {
@@ -98,6 +96,19 @@ const CURRENCY_SOURCES = [
     {
         name: 'PTAX/BCB',
         fetch: (service) => service._fetchPtaxUsd(),
+    },
+    // ÚLTIMO RECURSO, e existe por causa de uma lacuna com HORA MARCADA: a PTAX
+    // só é aceita quando a fixação é do dia e o boletim sai ~13h BRT, então numa
+    // manhã em que o Yahoo caísse o dólar ficava descoberto até lá — a Coinbase
+    // acima cobre só o BTC. Este elo fecha essa janela.
+    //
+    // Vem por ÚLTIMO de propósito, apesar de cobrir as duas moedas: é o único da
+    // cadeia que não sabe dizer quanto o preço mudou no dia, e variação derivada
+    // por nós (ver `_fetchCurrenciesCoinbaseRates`) é pior que variação medida na
+    // fonte. Enquanto houver quem responda antes, ele não é chamado.
+    {
+        name: 'Coinbase (taxas)',
+        fetch: (service) => service._fetchCurrenciesCoinbaseRates(),
     },
 ];
 
@@ -438,8 +449,9 @@ export const macroDataService = {
     /**
      * Cotação corrente de USD/BRL e BTC/USD.
      *
-     * Este bloco já falhou em silêncio por um dia inteiro (04/09/2026): a
-     * AwesomeAPI parou de responder, o `catch` vazio devolvia `null`, o gravador
+     * Este bloco já falhou em silêncio por um dia inteiro (04/09/2026): a fonte
+     * de então (AwesomeAPI, desde 05/09/2026 fora da cadeia) parou de responder,
+     * o `catch` vazio devolvia `null`, o gravador
      * preservava o valor anterior e `lastUpdated` era carimbado assim mesmo — a
      * barra de indicadores e a conversão de posição dolarizada exibiam o
      * fechamento da véspera como se fosse o preço de agora, e nenhum alarme podia
@@ -488,13 +500,13 @@ export const macroDataService = {
 
     /**
      * Coinbase — rede final do BITCOIN (a PTAX cobre o dólar, mas o BCB não cota
-     * cripto, então sem esta o BTC ficava sem terceira fonte).
+     * cripto, então sem esta o BTC ficava com fonte única).
      *
      * Endpoint público de estatísticas do par BTC-USD, sem chave. `last` é a
      * negociação mais recente e `open` é a abertura das últimas 24h — a variação
-     * daqui é 24h CORRIDAS, a mesma régua do Yahoo (a AwesomeAPI mede contra o
-     * fechamento anterior). Preferida à Binance porque esta bloqueia IPs de
-     * algumas regiões, e a máquina que faz a chamada é a de produção, não a nossa.
+     * daqui é 24h CORRIDAS, a mesma régua do Yahoo. Preferida à Binance porque
+     * esta bloqueia IPs de algumas regiões, e a máquina que faz a chamada é a de
+     * produção, não a nossa.
      *
      * É BTC/USD de verdade, não BTC/USDT: não carrega o desvio da stablecoin.
      */
@@ -516,6 +528,93 @@ export const macroDataService = {
         } catch (error) {
             logger.warn(`⚠️ [Câmbio] Coinbase falhou: ${error.message}`);
             return null;
+        }
+    },
+
+    /**
+     * Coinbase v2 — o ÚLTIMO recurso, e o único que cobre as duas moedas.
+     *
+     * Endpoint público de taxas de conversão da Coinbase de varejo, sem chave:
+     * `data.rates.BRL` é quantos reais valem 1 dólar e `data.rates.BTC`, quantos
+     * bitcoins — daí o BTC/USD sair do INVERSO. Medido em 05/09/2026: R$ 5,127075
+     * contra 5,1253 da PTAX do mesmo dia (0,04% de desvio) e o mesmo BTC/USD que
+     * `api.exchange.coinbase.com` devolveu no mesmo minuto.
+     *
+     * É outro serviço, não outro fornecedor, e essa é a ressalva honesta: se a
+     * Coinbase inteira ficar inalcançável do host, este elo cai junto com o de
+     * cima. Entrou mesmo assim porque o que ele fecha não tinha ninguém — o dólar
+     * da manhã, antes da PTAX — e porque a alternativa medida no mesmo dia era
+     * pior: a brapi cobra plano Startup para câmbio e cripto (HTTP 403 no nosso
+     * token), o stooq respondeu 404, e er-api/frankfurter só atualizam 1×/dia,
+     * que é servir o câmbio de ontem com cara de hoje — o defeito de 04/09/2026.
+     *
+     * **A variação daqui é DERIVADA, não medida.** O endpoint entrega só o preço.
+     * Em vez de devolver zero (que a tela leria como "não mudou hoje", uma
+     * afirmação falsa), a variação sai do último fechamento ANTERIOR da nossa
+     * própria série — a mesma pergunta que as outras fontes respondem, com a
+     * ressalva de que em cripto Yahoo e Coinbase medem 24h corridas e aqui a
+     * régua é o fechamento. Essa dependência de um dado nosso é a razão de este
+     * elo ser o último, e não o segundo.
+     */
+    async _fetchCurrenciesCoinbaseRates() {
+        try {
+            const res = await trackSource('coinbase.rates', () => axios.get('https://api.coinbase.com/v2/exchange-rates?currency=USD', {
+                headers: BASE_HEADERS,
+                timeout: 8000,
+            }), { isEmpty: (r) => !(Number(r?.data?.data?.rates?.BRL) > 0) });
+
+            const rates = res.data?.data?.rates || {};
+            const usd = Number(rates.BRL);
+            const btcPerUsd = Number(rates.BTC);
+            // Sem BTC utilizável o campo sai NaN de propósito: o chamador filtra
+            // por plausibilidade e a moeda fica declaradamente ausente, em vez de
+            // virar zero.
+            const btc = btcPerUsd > 0 ? 1 / btcPerUsd : NaN;
+
+            if (!(usd > 0)) {
+                logger.warn(`⚠️ [Câmbio] Coinbase (taxas) devolveu corpo inesperado: ${JSON.stringify(res.data).slice(0, 160)}`);
+                return null;
+            }
+
+            const [usdChange, btcChange] = await Promise.all([
+                this._changeVsPreviousClose('USD-BRL', usd),
+                Number.isFinite(btc) ? this._changeVsPreviousClose('BTC-USD', btc) : 0,
+            ]);
+
+            return { usd, usdChange, btc, btcChange };
+        } catch (error) {
+            logger.warn(`⚠️ [Câmbio] Coinbase (taxas) falhou: ${error.message}`);
+            return null;
+        }
+    },
+
+    /**
+     * Variação do preço corrente contra o último fechamento ANTERIOR da série.
+     *
+     * "Anterior" é literal: o candle de HOJE já pode estar gravado (o worker das
+     * 18:30 e o `fx-history` das 19:45 escrevem o dia corrente), e medir o preço
+     * contra ele mesmo devolveria ~0% justamente nos dias de maior movimento.
+     *
+     * Falha para 0 em vez de propagar erro: quem chama já tem o preço, que é a
+     * parte que move patrimônio — perder a variação degrada a tela, perder o
+     * preço congela a conversão de toda posição dolarizada.
+     */
+    async _changeVsPreviousClose(ticker, price) {
+        try {
+            const doc = await AssetHistory.findOne({ ticker }).select('history').lean();
+            const hoje = brazilDateKey();
+            const serie = doc?.history || [];
+
+            for (let i = serie.length - 1; i >= 0; i -= 1) {
+                const close = Number(serie[i]?.close);
+                if (serie[i]?.date < hoje && close > 0) return ((price / close) - 1) * 100;
+            }
+
+            logger.warn(`⚠️ [Câmbio] Sem fechamento anterior em ${ticker}; a variação fica em 0.`);
+            return 0;
+        } catch (error) {
+            logger.warn(`⚠️ [Câmbio] Fechamento anterior de ${ticker} indisponível: ${error.message}`);
+            return 0;
         }
     },
 
@@ -583,33 +682,6 @@ export const macroDataService = {
             return { usd: venda, usdChange };
         } catch (error) {
             logger.warn(`⚠️ [Câmbio] PTAX/BCB falhou: ${error.message}`);
-            return null;
-        }
-    },
-
-    /** Fonte secundária. Devolve `null` (com log) em erro de rede, rate-limit ou payload inesperado. */
-    async _fetchCurrenciesAwesome() {
-        try {
-            const res = await trackSource('awesomeapi', () => axios.get('https://economia.awesomeapi.com.br/last/USD-BRL,BTC-USD', { timeout: 8000 }), { isEmpty: (r) => !r?.data?.USDBRL?.bid || !r?.data?.BTCUSD?.bid });
-            const usdRaw = res.data?.USDBRL;
-            const btcRaw = res.data?.BTCUSD;
-
-            // Rate-limit da AwesomeAPI responde 200 com outro corpo ({status, code}).
-            // Sem esta checagem o acesso a `.bid` lançava TypeError e caía no catch
-            // como se fosse queda de rede — mesmo silêncio, diagnóstico errado.
-            if (!usdRaw?.bid || !btcRaw?.bid) {
-                logger.warn(`⚠️ [Câmbio] AwesomeAPI devolveu corpo inesperado: ${JSON.stringify(res.data).slice(0, 160)}`);
-                return null;
-            }
-
-            return {
-                usd: parseFloat(usdRaw.bid),
-                usdChange: parseFloat(usdRaw.pctChange),
-                btc: parseFloat(btcRaw.bid),
-                btcChange: parseFloat(btcRaw.pctChange),
-            };
-        } catch (error) {
-            logger.warn(`⚠️ [Câmbio] AwesomeAPI falhou: ${error.message}`);
             return null;
         }
     },
@@ -1010,11 +1082,13 @@ export const macroDataService = {
      *
      * Nunca sobrescrever o array inteiro: `USD-BRL` está em
      * HISTORY_CAP_EXEMPT_TICKERS porque o rebuild da carteira converte compras
-     * ANTIGAS pela taxa da data delas, e a AwesomeAPI só devolve os últimos 730
-     * dias. Um `$set` cru descarta tudo que for mais velho que a janela da fonte
-     * — e uma resposta curta/parcial (que ainda passa no teste de "não-vazia")
-     * amputaria a série inteira. Com a união, data repetida fica com o valor
-     * novo (correção da fonte vale) e o passado sobrevive.
+     * ANTIGAS pela taxa da data delas, e TODA fonte tem janela finita (o Yahoo
+     * começa em 2020-01-01; a PTAX, na data que pedirmos). Um `$set` cru descarta
+     * tudo que for mais velho que a janela da fonte — e uma resposta curta/parcial
+     * (que ainda passa no teste de "não-vazia") amputaria a série inteira. Com a
+     * união, data repetida fica com o valor novo (correção da fonte vale, e é o
+     * que faz o Yahoo reescrever por cima de um dia que a PTAX cobriu) e o
+     * passado sobrevive.
      *
      * Passou a importar quando a sincronização virou DIÁRIA: o que antes era uma
      * escrita destrutiva por semana são agora sete, e basta uma resposta ruim
@@ -1070,45 +1144,28 @@ export const macroDataService = {
     // variação cambial de vários dias seguidos na curva de patrimônio (e, por
     // tabela, no TWRR e no Sharpe, que saem do WalletSnapshot).
     //
-    // Custo: uma requisição HTTP — a fonte devolve 730 dias de uma vez.
+    // Custo: uma requisição HTTP — cada fonte devolve anos de uma vez.
+    //
+    // O Yahoo é a primária desde 05/09/2026. Antes dele vinha a AwesomeAPI, que
+    // saiu junto com a cadeia ao vivo pelo mesmo motivo (não atende a partir do
+    // host de produção): aqui ela era ainda mais cara, porque a chamada
+    // condenada acontecia TODO dia, e não só quando faltava moeda.
     async syncHistoricalUSDRate() {
+        logger.info('💱 [Câmbio] Sincronizando histórico USD/BRL...');
+
         try {
-            logger.info('💱 [Câmbio] Sincronizando histórico USD/BRL...');
-
-            // AwesomeAPI: /daily/USD-BRL/730 retorna os últimos 730 dias úteis
-            const res = await axios.get('https://economia.awesomeapi.com.br/json/daily/USD-BRL/730', {
-                headers: BASE_HEADERS,
-                timeout: 10000
-            });
-
-            if (!res.data || !Array.isArray(res.data) || res.data.length === 0) {
-                logger.warn('⚠️ [Câmbio] AwesomeAPI não retornou dados históricos. Tentando fallback Yahoo Finance...');
-                return await this._syncHistoricalUSDRateYahoo();
-            }
-
-            // AwesomeAPI retorna do mais recente para o mais antigo
-            const historyEntries = res.data
-                .filter(d => d.bid && parseFloat(d.bid) > 0)
-                .map(d => {
-                    // timestamp em segundos → Date → YYYY-MM-DD
-                    const dateStr = new Date(parseInt(d.timestamp) * 1000).toISOString().split('T')[0];
-                    return {
-                        date: dateStr,
-                        close: parseFloat(d.bid),
-                        adjClose: parseFloat(d.bid)
-                    };
-                });
-
-            return await this._persistUsdHistory(historyEntries, 'AwesomeAPI');
+            const yahoo = await this._syncHistoricalUSDRateYahoo();
+            if (yahoo) return yahoo;
+            logger.warn('⚠️ [Câmbio] Yahoo não devolveu histórico USD/BRL. Tentando a PTAX/BCB...');
         } catch (error) {
-            logger.error(`❌ [Câmbio] Erro ao sincronizar histórico USD/BRL: ${error.message}`);
-            // Tenta fallback via Yahoo Finance (BRL=X)
-            try {
-                return await this._syncHistoricalUSDRateYahoo();
-            } catch (e) {
-                logger.error(`❌ [Câmbio] Fallback Yahoo também falhou: ${e.message}`);
-                return null;
-            }
+            logger.error(`❌ [Câmbio] Histórico USD/BRL pelo Yahoo: ${error.message}`);
+        }
+
+        try {
+            return await this._syncHistoricalUSDRatePtax();
+        } catch (error) {
+            logger.error(`❌ [Câmbio] Histórico USD/BRL pela PTAX/BCB também falhou: ${error.message}`);
+            return null;
         }
     },
 
@@ -1116,6 +1173,57 @@ export const macroDataService = {
         const history = await externalMarketService.getFullHistory('USD-BRL', 'CURRENCY');
         if (!history || history.length === 0) return null;
         return await this._persistUsdHistory(history, 'Yahoo');
+    },
+
+    /**
+     * Reserva do HISTÓRICO — a PTAX de um PERÍODO, não a do dia.
+     *
+     * Existe porque a saída da AwesomeAPI deixaria esta série com fonte única, e
+     * `USD-BRL` não é uma série qualquer: é ela que converte compras antigas no
+     * rebuild da carteira e no snapshot patrimonial. Uma requisição traz 2 anos
+     * (504 pregões medidos em 05/09/2026, 47KB, ~0,2s), sem chave e em
+     * infraestrutura que não é a do Yahoo — que é o ponto de ter reserva.
+     *
+     * O que ela NÃO é: o mesmo número. A PTAX é a fixação de ~13h BRT e o Yahoo
+     * publica o fechamento do dia — a diferença é de fração de por cento, o
+     * bastante para não misturar por preferência, e pouco para valer mais que um
+     * buraco na série. Como a gravação é união com "o novo vence", o primeiro run
+     * do Yahoo que voltar a funcionar reescreve por cima os dias cobertos aqui.
+     *
+     * Sem o filtro de "fixação de hoje" que `_fetchPtaxUsd` aplica: lá a pergunta
+     * é "qual o câmbio AGORA" e servir a fixação de ontem seria mentira; aqui a
+     * pergunta é "qual era o câmbio NAQUELE dia", e cada linha já vem carimbada
+     * com o seu próprio dia.
+     */
+    async _syncHistoricalUSDRatePtax() {
+        const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${d.getFullYear()}`;
+        const hoje = new Date();
+        const inicio = new Date(hoje);
+        inicio.setFullYear(inicio.getFullYear() - 2);
+
+        // $top=1000 é folga sobre os ~500 pregões de 2 anos: a API pagina em 100
+        // por padrão, e uma resposta truncada viraria série amputada se o
+        // gravador não fizesse união.
+        const url = 'https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/'
+            + 'CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)'
+            + `?@dataInicial='${fmt(inicio)}'&@dataFinalCotacao='${fmt(hoje)}'&$top=1000&$format=json`;
+
+        const res = await trackSource('ptax', () => axios.get(url, {
+            headers: BASE_HEADERS,
+            httpsAgent: bcbAgent,
+            timeout: 15000,
+        }), { isEmpty: (r) => !(r?.data?.value?.length > 0) });
+
+        const entries = (Array.isArray(res.data?.value) ? res.data.value : [])
+            .filter((c) => Number(c?.cotacaoVenda) > 0 && typeof c?.dataHoraCotacao === 'string')
+            .map((c) => ({ date: c.dataHoraCotacao.slice(0, 10), close: Number(c.cotacaoVenda) }));
+
+        if (entries.length === 0) {
+            logger.warn('⚠️ [Câmbio] PTAX: período sem cotação utilizável; série preservada.');
+            return null;
+        }
+
+        return await this._persistUsdHistory(entries, 'PTAX/BCB');
     },
 
     async performMacroSync() {

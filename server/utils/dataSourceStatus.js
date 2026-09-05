@@ -64,9 +64,11 @@ const deliveryFacts = (facts) => {
 
     return {
         'yahoo.currencies': currencyDelivery('Yahoo'),
-        awesomeapi: currencyDelivery('AwesomeAPI'),
         coinbase: currencyDelivery('Coinbase'),
         ptax: currencyDelivery('PTAX/BCB'),
+        // Nome distinto do elo acima de propósito: os dois são Coinbase, e um
+        // rótulo compartilhado creditaria a entrega ao card errado.
+        'coinbase.rates': currencyDelivery('Coinbase (taxas)'),
         'bcb.series': rateSources.selic === 'BCB' || rateSources.ipca === 'BCB'
             ? macro.ratesUpdatedAt || null : null,
         brasilapi: rateSources.selic === 'BrasilAPI' || rateSources.ipca === 'BrasilAPI'

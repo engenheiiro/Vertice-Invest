@@ -33,7 +33,10 @@ const SystemConfigSchema = new mongoose.Schema({
   // quando só as moedas falham, então era impossível distinguir "dólar de agora"
   // de "dólar de ontem preservado" — foi assim por um dia inteiro em 04/09/2026.
   currenciesStale: { type: Boolean, default: false },
-  // Fonte efetiva de cada moeda: 'AwesomeAPI' | 'Yahoo' | null (nenhuma respondeu).
+  // Fonte efetiva de cada moeda: 'Yahoo' | 'Coinbase' | 'PTAX/BCB' |
+  // 'Coinbase (taxas)' | null
+  // (nenhuma respondeu). Valores antigos podem trazer 'AwesomeAPI', fora da
+  // cadeia desde 05/09/2026 — o campo é histórico, não enumeração fechada.
   currenciesSources: {
     usd: { type: String, default: null },
     btc: { type: String, default: null },

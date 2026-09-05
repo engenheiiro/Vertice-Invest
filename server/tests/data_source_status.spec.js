@@ -251,19 +251,27 @@ describe('cadeia de cobertura', () => {
     it('a principal lista quem assume, na ordem de tentativa', () => {
         const yahoo = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'yahoo.currencies');
         expect(yahoo.covers).toBeNull();
-        expect(yahoo.backups).toEqual(['AwesomeAPI', 'Coinbase', 'PTAX — Banco Central']);
+        expect(yahoo.backups).toEqual([
+            'Coinbase',
+            'PTAX — Banco Central',
+            'Coinbase — taxas de câmbio',
+        ]);
     });
 
     it('a reserva diz quem ela cobre e quem vem depois dela', () => {
         const coinbase = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'coinbase');
         expect(coinbase.covers).toBe('Yahoo Finance — câmbio');
-        expect(coinbase.backups).toEqual(['PTAX — Banco Central']);
+        expect(coinbase.backups).toEqual(['PTAX — Banco Central', 'Coinbase — taxas de câmbio']);
     });
 
     it('a última da cadeia não tem mais ninguém atrás', () => {
-        const ptax = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'ptax');
-        expect(ptax.backups).toEqual([]);
-        expect(ptax.covers).toBe('Yahoo Finance — câmbio');
+        const rows = buildSourceStatuses(factsBase(), getSourceStats());
+        expect(byId(rows, 'coinbase.rates').backups).toEqual([]);
+        expect(byId(rows, 'coinbase.rates').covers).toBe('Yahoo Finance — câmbio');
+        // E a PTAX deixou de ser a última em 05/09/2026: ela cobre só o dólar, e
+        // só depois das 13h — a manhã sem Yahoo não tinha ninguém.
+        expect(byId(rows, 'ptax').chainPosition).toBe(3);
+        expect(byId(rows, 'coinbase.rates').chainPosition).toBe(4);
     });
 
     // O que mais importa saber: onde NÃO há rede de proteção. Bloco não é cadeia —

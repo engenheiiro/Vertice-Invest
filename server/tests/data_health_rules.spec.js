@@ -57,7 +57,7 @@ const healthyFacts = (overrides = {}) => ({
         updatedAt: hoursAgo(0.5),
         currenciesUpdatedAt: hoursAgo(0.2),
         currenciesStale: false,
-        currenciesSources: { usd: 'AwesomeAPI', btc: 'AwesomeAPI' },
+        currenciesSources: { usd: 'Yahoo', btc: 'Yahoo' },
     },
     treasury: { titles: 14, businessDaysStale: 1 },
     treasuryCatalog: {

@@ -118,6 +118,12 @@ export const SOURCE_CATALOG = {
     },
 
     // --- Câmbio e cripto: cadeia de 4 elos, cada um cobrindo o que faltou ---
+    //
+    // A AwesomeAPI saiu em 05/09/2026 por não atender a partir do host de
+    // produção — respondia da máquina do desenvolvedor e nunca de lá. Um card que
+    // fica amarelo para sempre não avisa nada; ensina a ignorar a cor. No mesmo
+    // dia entrou a Coinbase de taxas, que cobre a única janela sem ninguém: o
+    // dólar da manhã, antes de a PTAX do dia ser publicada.
     'yahoo.currencies': {
         label: 'Yahoo Finance — câmbio',
         short: 'Yahoo',
@@ -128,22 +134,12 @@ export const SOURCE_CATALOG = {
         chain: 'fx',
         critical: false,
     },
-    awesomeapi: {
-        label: 'AwesomeAPI',
-        short: 'AwesomeAPI',
-        role: 'Dólar e Bitcoin',
-        group: 'fx',
-        feeds: 'Dólar e Bitcoin, quando o Yahoo não responde',
-        schedule: { kind: 'onFailure' },
-        chain: 'fx',
-        critical: false,
-    },
     coinbase: {
         label: 'Coinbase',
         short: 'Coinbase',
         role: 'Só Bitcoin',
         group: 'fx',
-        feeds: 'Bitcoin, quando as duas primeiras falham',
+        feeds: 'Bitcoin, quando o Yahoo não responde',
         schedule: { kind: 'onFailure' },
         chain: 'fx',
         critical: false,
@@ -153,7 +149,19 @@ export const SOURCE_CATALOG = {
         short: 'PTAX',
         role: 'Só dólar (oficial)',
         group: 'fx',
-        feeds: 'Dólar oficial, quando as duas primeiras falham',
+        feeds: 'Dólar oficial, quando o Yahoo não responde — e só depois das 13h, quando o Banco Central publica a fixação do dia',
+        schedule: { kind: 'onFailure' },
+        chain: 'fx',
+        critical: false,
+    },
+    'coinbase.rates': {
+        label: 'Coinbase — taxas de câmbio',
+        short: 'Coinbase taxas',
+        role: 'Dólar e Bitcoin',
+        group: 'fx',
+        // O card precisa dizer QUANDO ela salva o dia, senão "última da fila"
+        // parece decoração: a janela é a manhã, quando a PTAX ainda não saiu.
+        feeds: 'Dólar e Bitcoin quando todas as outras falham — principalmente pela manhã, antes de o Banco Central publicar a taxa do dia',
         schedule: { kind: 'onFailure' },
         chain: 'fx',
         critical: false,

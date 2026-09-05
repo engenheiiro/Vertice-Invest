@@ -910,11 +910,19 @@ export const initScheduler = () => {
     // WalletSnapshot é a base do TWRR e do Sharpe, o degrau virava ruído de risco.
     //
     // Passou de 18:10 para 19:45 depois de medir a FONTE, não o pregão: o candle
-    // diário da AwesomeAPI é carimbado ~19:30 (17/08 19:30:07, 18/08 19:31:33,
-    // 19/08 19:30:05, 20/08 19:30:06), e não às 17:00 do fechamento à vista. Às
-    // 18:10 o job trazia D-1 e a série ficava PERMANENTEMENTE um dia atrás — o
-    // gap de vários dias sumia, mas todo rebuild rodado antes das 19:30 ainda
-    // marcava o dia corrente pelo spot e precisava ser refeito no dia seguinte.
+    // diário da AwesomeAPI — primária até 05/09/2026 — era carimbado ~19:30
+    // (17/08 19:30:07, 18/08 19:31:33, 19/08 19:30:05, 20/08 19:30:06), e não às
+    // 17:00 do fechamento à vista. Às 18:10 o job trazia D-1 e a série ficava
+    // PERMANENTEMENTE um dia atrás — o gap de vários dias sumia, mas todo rebuild
+    // rodado antes das 19:30 ainda marcava o dia corrente pelo spot.
+    //
+    // Com o Yahoo no lugar dela o horário continua o mesmo, por uma razão NOVA e
+    // com TETO: `getFullHistoryDetailed` recorta a janela pela data UTC de hoje,
+    // e às 19:45 BRT ainda são 22:45 UTC do MESMO dia. A partir das 21:00 BRT a
+    // data UTC vira, o Yahoo devolve o candle recém-nascido do dia seguinte e ele
+    // seria gravado como fechamento de um dia que aqui nem começou. A janela útil
+    // é 19:30–20:59 BRT: depois do fechamento do câmbio à vista e antes da virada
+    // do dia em UTC.
     //
     // Sair de antes do 'daily-evening' (18:30) não custa nada: aquele resolve o
     // DIA CORRENTE, e para o dia corrente o resolvedor usa o spot de qualquer
