@@ -12,7 +12,7 @@ import { summarizeTrackRecord } from '../utils/trackRecord.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { getTunablesSync } from './configService.js'; // (I13) tunables editáveis pelo admin
 import DividendEvent from '../models/DividendEvent.js';
-import { historyStorageKey } from '../utils/assetHistory.js';
+import { historyStorageKey, mergeCandleSeries } from '../utils/assetHistory.js';
 import { brazilDateKey } from '../utils/dateUtils.js';
 import { loadLatestCloseBefore } from '../utils/dayCloses.js';
 import { deriveDividendFromGap } from '../utils/dividendGap.js';
@@ -808,6 +808,35 @@ export const marketDataService = {
         }
     },
 
+    /**
+     * Série guardada de um ticker, re-buscada quando o cache passa de 12h.
+     *
+     * O nome mente por herança: nasceu para o `^BVSP` do beta, mas hoje é o
+     * carregador de série de `financialService._loadPriceCacheMap` (TODO ticker em
+     * carteira, no rebuild) e do motor da Carteira Recomendada. Quem mexer aqui
+     * está mexendo no patrimônio.
+     *
+     * GRAVA MESCLANDO, e nunca por substituição. Até 06/09/2026 esta era a ÚLTIMA
+     * escrita de `AssetHistory` do sistema que fazia `historyEntry.history = o que
+     * a fonte devolveu`; todas as outras já passavam por `mergeCandleSeries` (o
+     * worker, o caminho da carteira, o reparo de cripto). E a substituição é
+     * exatamente o que transforma uma degradação passageira da fonte em perda
+     * permanente: em 22/08/2026 o Yahoo passou a devolver UM candle para o HSRE11
+     * e os 623 guardados foram embora.
+     *
+     * O dano aqui seria pior que naquele caso, porque este é o caminho do rebuild:
+     * `_loadPriceCacheMap` exige que a série alcance o primeiro dia da posição, e
+     * série encurtada faz o rebuild marcar TODO o período anterior pelo preço de
+     * compra — TWRR e Sharpe falsos, sem erro nenhum na tela.
+     *
+     * Sem teto de pontos (`maxPoints: Infinity`) de propósito: o cap de 400 do
+     * worker existe para o universo de pesquisa, e aplicá-lo aqui encurtaria
+     * justamente a profundidade de que o rebuild depende — hoje 1.664 candles
+     * desde 02/01/2020 nos tickers em carteira, que é o piso do `period1` de
+     * `getFullHistory`. O `type` entra pelo filtro de dia sem pregão: esta escrita
+     * não tinha barreira nenhuma contra candle de sábado, e candle em dia sem
+     * pregão congela a série inteira — `isHistoryStale` só olha a data do último.
+     */
     async getBenchmarkHistory(ticker = '^BVSP', type = 'INDEX') {
         let historyEntry = null;
         try {
@@ -828,13 +857,21 @@ export const marketDataService = {
                 
                 if (externalHistory && externalHistory.length > 0) {
                     if (historyEntry) {
-                        historyEntry.history = externalHistory;
+                        historyEntry.history = mergeCandleSeries(
+                            historyEntry.history, externalHistory,
+                            { maxPoints: Infinity, type: normalizedType, now },
+                        );
                         historyEntry.lastUpdated = now;
                         await historyEntry.save();
                     } else {
                         historyEntry = await AssetHistory.create({
                             ticker: storageKey,
-                            history: externalHistory,
+                            // Série nova não tem o que perder, mas tem o que recusar:
+                            // o filtro de dia sem pregão vale nos dois caminhos.
+                            history: mergeCandleSeries(
+                                [], externalHistory,
+                                { maxPoints: Infinity, type: normalizedType, now },
+                            ),
                             lastUpdated: now
                         });
                     }

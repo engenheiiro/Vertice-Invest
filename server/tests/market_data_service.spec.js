@@ -364,13 +364,17 @@ describe('getMarketDataMap — lote sem N+1 (5.8) / cada uma por si (5.3)', () =
 
 describe('histórico tipado V5 — cache e resiliência', () => {
   const candles = [{ date: '2026-07-30', close: 64_725, adjClose: 64_725 }];
+  // A gravação passa por `mergeCandleSeries` desde 06/09/2026, e ela normaliza o
+  // candle — `volume` ausente vira 0, como já acontecia no worker e no caminho da
+  // carteira. É o formato que fica guardado, então é o que o teste cobra.
+  const guardados = candles.map((c) => ({ ...c, volume: 0 }));
 
   it('cripto consulta e cria BTC-USD sem colidir com a ação BTC', async () => {
     AssetHistory.findOne.mockResolvedValue(null);
     externalMarketService.getFullHistory.mockResolvedValue(candles);
     AssetHistory.create.mockImplementation(async (doc) => doc);
 
-    await expect(marketDataService.getBenchmarkHistory('btc', 'crypto')).resolves.toEqual(candles);
+    await expect(marketDataService.getBenchmarkHistory('btc', 'crypto')).resolves.toEqual(guardados);
     expect(AssetHistory.findOne).toHaveBeenCalledWith({ ticker: 'BTC-USD' });
     expect(externalMarketService.getFullHistory).toHaveBeenCalledWith('BTC', 'CRYPTO');
     expect(AssetHistory.create).toHaveBeenCalledWith(expect.objectContaining({ ticker: 'BTC-USD' }));
