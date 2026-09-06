@@ -407,7 +407,31 @@ export const timeSeriesWorker = {
                             logger.warn(`[TimeSeriesWorker] Reforço da B3 falhou para ${asset.ticker}: ${e.message}`);
                         }
 
-                        if (!historyEntry || !historyEntry.history || historyEntry.history.length < 20) return;
+                        // SÉRIE CURTA DEMAIS PARA MEDIR: apaga a medida velha, não a preserva.
+                        //
+                        // Sair calado aqui parece inofensivo — "sem dado novo, fica o que
+                        // havia" — e é o contrário: o que havia foi calculado sobre a série
+                        // ANTERIOR, que pode não ser mais a série deste ativo. Medido em
+                        // 06/09/2026 no TON: a correção do símbolo de cripto apagou a série
+                        // do impostor (`repairCryptoSymbols`), o símbolo certo
+                        // (`TON11419-USD`) só publica 2 candles diários, e a SMA200 do
+                        // impostor (0,0060) ficou colada num preço de 1,42 — o scoring lia
+                        // "236x acima da tendência" e penalizava o ativo por isso.
+                        //
+                        // Zero é o que o resto do sistema já entende por ausente (todo
+                        // consumidor guarda `m.sma200 > 0`), então limpar é a mesma decisão
+                        // de "métrica inaplicável = ausente" que vale no scoring. Beta fica
+                        // de fora de propósito: para STOCK_US/ETF/CRYPTO ele vem do sync de
+                        // fundamentos, não daqui, e zerá-lo apagaria dado bom de outra fonte.
+                        if (!historyEntry || !historyEntry.history || historyEntry.history.length < 20) {
+                            operations.push({
+                                updateOne: {
+                                    filter: { ticker: asset.ticker },
+                                    update: { $set: { sma200: 0, ema50: 0, volatility: 0 } },
+                                },
+                            });
+                            return;
+                        }
 
                         // Ordena do mais recente para o mais antigo
                         const sortedHistory = historyEntry.history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
