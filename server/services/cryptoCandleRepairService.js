@@ -31,6 +31,7 @@ import logger from '../config/logger.js';
 import AssetHistory from '../models/AssetHistory.js';
 import MarketAsset from '../models/MarketAsset.js';
 import { historyStorageKey, mergeCandleSeries } from '../utils/assetHistory.js';
+import { cryptoYahooSymbol } from '../config/cryptoList.js';
 import { externalMarketService } from './externalMarketService.js';
 
 /**
@@ -174,12 +175,27 @@ export const repairCryptoCandleGaps = async ({
     const byTicker = {};
 
     for (const [storageKey, dias] of faltantesPorChave) {
+        // A CHAVE DA SÉRIE NÃO É O SÍMBOLO DO PROVEDOR — e confundir os dois aqui
+        // reintroduz exatamente o estrago que `config/cryptoList.js` existe para
+        // impedir. A chave sai do ticker canônico (`ARB` → `ARB-USD`); quando dois
+        // tokens disputam a sigla, o símbolo curto é o do IMPOSTOR e só o catálogo
+        // tem o certo (`ARB11841-USD`). Medido em 06/09/2026, a barra horária de
+        // 04/09 pelos dois caminhos:
+        //
+        //   ARB-USD 0,000629  ·  ARB11841-USD 0,1320   (210x)
+        //   TON-USD 0,005339  ·  TON11419-USD 1,3921   (261x)
+        //   MNT-USD 0,097784  ·  MNT27075-USD 0,5741     (6x)
+        //
+        // São 10 moedas do catálogo nessa condição. O reparo MESCLA na série do
+        // token certo, então UM buraco bastaria para enfiar o preço do impostor no
+        // meio de uma história boa — e depois de mesclado não há como separar.
+        // Por isso o símbolo vem do catálogo, nunca da chave.
+        const simbolo = cryptoYahooSymbol(chaves.get(storageKey)) || storageKey;
         const novos = [];
         for (const dia of dias) {
             if (buscas >= CRYPTO_REPAIR_MAX_FETCHES) break;
             buscas += 1;
-            // A chave de armazenamento da cripto JÁ é o símbolo do provedor (BTC-USD).
-            const candle = await externalMarketService.fetchDailyCloseFromHourly(storageKey, dia);
+            const candle = await externalMarketService.fetchDailyCloseFromHourly(simbolo, dia);
             if (candle) novos.push(candle);
             else unresolved += 1;
         }

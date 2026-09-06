@@ -14,7 +14,14 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { externalMarketService, HOURLY_MIN_BARS } from '../services/externalMarketService.js';
-import { calendarWindowDays, missingCalendarDays, previousUtcDay } from '../services/cryptoCandleRepairService.js';
+import {
+  calendarWindowDays,
+  missingCalendarDays,
+  previousUtcDay,
+  repairCryptoCandleGaps,
+} from '../services/cryptoCandleRepairService.js';
+import MarketAsset from '../models/MarketAsset.js';
+import AssetHistory from '../models/AssetHistory.js';
 
 const yahoo = vi.hoisted(() => ({ chart: vi.fn() }));
 
@@ -27,6 +34,10 @@ vi.mock('../config/logger.js', () => ({
   default: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
 }));
 vi.mock('../services/errorLogService.js', () => ({ recordIngestionError: vi.fn() }));
+vi.mock('../models/MarketAsset.js', () => ({ default: { find: vi.fn() } }));
+vi.mock('../models/AssetHistory.js', () => ({
+  default: { aggregate: vi.fn(), find: vi.fn(), updateOne: vi.fn() },
+}));
 
 /** Dia completo de barras horárias; `ate` é a última hora COM preço. */
 const diaHorario = (dia, { ate = 23, base = 100 } = {}) => Array.from({ length: 24 }, (_, h) => ({
@@ -129,5 +140,54 @@ describe('janela de varredura', () => {
 
   it('série vazia não vira 5 buscas inúteis', () => {
     expect(missingCalendarDays([], '2026-09-07', 5)).toEqual([]);
+  });
+});
+
+
+/**
+ * O SÍMBOLO DA BUSCA SAI DO CATÁLOGO, NÃO DA CHAVE DA SÉRIE.
+ *
+ * A chave de `AssetHistory` é derivada do ticker canônico (`ARB` → `ARB-USD`), e
+ * durante um bom tempo o reparo a usou como se fosse o símbolo do provedor. Para
+ * as 39 moedas de sigla livre as duas coisas coincidem; para as 10 de sigla
+ * disputada, o símbolo curto é o do IMPOSTOR — a mesma armadilha que
+ * `config/cryptoList.js` documenta. Medido em 06/09/2026 na barra horária de
+ * 04/09: `ARB-USD` devolvia 0,000629 (ARbit) contra 0,1320 do Arbitrum.
+ *
+ * O que torna isso pior que um preço errado numa tela: o reparo MESCLA o
+ * resultado na série do token certo. Um único buraco bastaria para deixar o
+ * preço do impostor no meio de uma história boa, e depois não há como separar.
+ */
+describe('repairCryptoCandleGaps — símbolo do provedor', () => {
+  const comSerie = (ticker, dates) => {
+    MarketAsset.find.mockReturnValue({
+      select: () => ({ lean: async () => [{ ticker, type: 'CRYPTO' }] }),
+    });
+    AssetHistory.aggregate.mockResolvedValue([{ ticker: `${ticker}-USD`, dates }]);
+    AssetHistory.find.mockReturnValue({
+      lean: async () => [{ ticker: `${ticker}-USD`, history: dates.map((d) => ({ date: d, close: 1 })) }],
+    });
+    AssetHistory.updateOne.mockResolvedValue({});
+  };
+
+  it('pede a barra horária pelo símbolo do catálogo, e não pela chave da série', async () => {
+    comSerie('ARB', ['2026-09-03', '2026-09-05']);
+    const spy = vi.spyOn(externalMarketService, 'fetchDailyCloseFromHourly').mockResolvedValue(null);
+
+    await repairCryptoCandleGaps({ throughDay: '2026-09-05', maxDays: 5 });
+
+    expect(spy).toHaveBeenCalledWith('ARB11841-USD', '2026-09-04');
+    expect(spy).not.toHaveBeenCalledWith('ARB-USD', expect.anything());
+    spy.mockRestore();
+  });
+
+  it('sigla livre continua caindo em TICKER-USD', async () => {
+    comSerie('BTC', ['2026-09-03', '2026-09-05']);
+    const spy = vi.spyOn(externalMarketService, 'fetchDailyCloseFromHourly').mockResolvedValue(null);
+
+    await repairCryptoCandleGaps({ throughDay: '2026-09-05', maxDays: 5 });
+
+    expect(spy).toHaveBeenCalledWith('BTC-USD', '2026-09-04');
+    spy.mockRestore();
   });
 });
