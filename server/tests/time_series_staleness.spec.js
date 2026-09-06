@@ -11,6 +11,7 @@ import {
     buildCandleClock,
     candleDaysStale,
     summarizeCandleStaleness,
+    toleranceFor,
 } from '../utils/candleStaleness.js';
 
 const NOW = new Date('2026-07-03T18:30:00Z');
@@ -191,5 +192,72 @@ describe('summarizeCandleStaleness', () => {
     it('não conta o mesmo ticker duas vezes (posições em carteiras diferentes)', () => {
         const cohort = [{ ticker: 'PETR4', type: 'STOCK' }, { ticker: 'PETR4', type: 'STOCK' }];
         expect(summarizeCandleStaleness(cohort, candles, clock, 2).total).toBe(1);
+    });
+});
+
+/**
+ * A CRIPTO EM CARTEIRA NÃO TEM A MESMA REDE QUE O RESTO DA COORTE.
+ *
+ * A tolerância de 2 dias da carteira se apoia numa garantia: o snapshot busca o
+ * candle do dia dos tickers em carteira antes de gravar. Só que o snapshot roda
+ * em DIA ÚTIL, e a cripto negocia 7 dias e é medida em dias CORRIDOS — no sábado
+ * e no domingo a garantia simplesmente não existe e sobra o `timeSeriesWorker`,
+ * que passa uma vez por dia e tolera 2 dias corridos por conta própria.
+ *
+ * Com a mesma régua para todos, o alarme acusava a folga do próprio worker:
+ * 06/09/2026, um domingo, o USDC apareceu com candle de 04/09 e nada quebrado —
+ * o worker o pulara no sábado (1,90 dia) e o run do domingo ainda não tinha
+ * acontecido. Duas vezes seguidas, o mesmo ticker, o mesmo nada.
+ */
+describe('tolerância por classe na coorte da carteira', () => {
+    // Domingo 06/09/2026 — o dia em que o alarme tocou sem defeito.
+    const DOM = new Date('2026-09-06T17:00:00Z');
+    const clock = buildCandleClock(DOM);
+    const REGUA = { default: 2, CRYPTO: 3 };
+
+    it('cripto parada há 2 dias corridos NÃO é acusada — é a folga do worker', () => {
+        const summary = summarizeCandleStaleness(
+            [{ ticker: 'USDC', type: 'CRYPTO' }],
+            new Map([['USDC-USD', '2026-09-04']]),
+            clock,
+            REGUA,
+        );
+
+        expect(summary.stale).toBe(0);
+    });
+
+    it('cripto parada há 3 dias corridos é acusada — aí o worker perdeu um ciclo', () => {
+        const summary = summarizeCandleStaleness(
+            [{ ticker: 'USDC', type: 'CRYPTO' }],
+            new Map([['USDC-USD', '2026-09-03']]),
+            clock,
+            REGUA,
+        );
+
+        expect(summary.stale).toBe(1);
+        expect(summary.worst[0].daysStale).toBe(3);
+    });
+
+    it('a régua do resto da coorte fica onde estava', () => {
+        // 04/09 é sexta; no domingo ela está a 2 dias ÚTEIS (05 e 06 não contam).
+        const summary = summarizeCandleStaleness(
+            [{ ticker: 'BOVA11', type: 'ETF' }],
+            new Map([['BOVA11', '2026-09-02']]),
+            clock,
+            REGUA,
+        );
+
+        expect(summary.stale).toBe(1);
+    });
+
+    it('número puro continua valendo para todo mundo — o universo não muda', () => {
+        expect(toleranceFor('CRYPTO', 3)).toBe(3);
+        expect(toleranceFor('STOCK', 3)).toBe(3);
+    });
+
+    it('classe fora do mapa cai no default, e classe ausente também', () => {
+        expect(toleranceFor('STOCK', REGUA)).toBe(2);
+        expect(toleranceFor(undefined, REGUA)).toBe(2);
+        expect(toleranceFor('crypto', REGUA)).toBe(3);
     });
 });

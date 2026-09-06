@@ -65,6 +65,20 @@ export const candleDaysStale = (lastCandleDate, type, clock) => {
 };
 
 /**
+ * A tolerância que vale para ESTA classe.
+ *
+ * Aceita número (a mesma régua para todos) ou mapa por classe com `default` —
+ * porque nem toda classe da coorte tem a mesma rede embaixo dela. Ver a nota da
+ * cripto em `DEFAULT_THRESHOLDS.timeSeriesWalletDaysStaleCrypto`.
+ */
+export const toleranceFor = (type, tolerance) => {
+    if (typeof tolerance === 'number') return tolerance;
+    const key = String(type || '').trim().toUpperCase();
+    const byClass = tolerance?.[key];
+    return Number.isFinite(byClass) ? byClass : Number(tolerance?.default) || 0;
+};
+
+/**
  * Resume o atraso de uma COORTE de ativos.
  *
  * A conta é dirigida pela coorte, nunca pelo conteúdo de `AssetHistory`: a coleção
@@ -77,7 +91,8 @@ export const candleDaysStale = (lastCandleDate, type, clock) => {
  * @param {Array<{ticker:string,type:string}>} cohort ativos relevantes
  * @param {Map<string,string|null>} lastCandleByKey data do último candle por historyStorageKey
  * @param {{calendarDays:string[],businessDays:string[]}} clock de `buildCandleClock`
- * @param {number} toleranceDays atraso a partir do qual o ativo conta como parado
+ * @param {number|Object} toleranceDays atraso a partir do qual o ativo conta como
+ *   parado — número, ou mapa `{default, CLASSE}` quando a régua muda por classe
  */
 export const summarizeCandleStaleness = (
     cohort = [],
@@ -94,7 +109,7 @@ export const summarizeCandleStaleness = (
         seen.add(key);
         const lastCandle = lastCandleByKey.get(key) || null;
         const daysStale = candleDaysStale(lastCandle, asset?.type, clock);
-        if (daysStale >= toleranceDays) {
+        if (daysStale >= toleranceFor(asset?.type, toleranceDays)) {
             stale.push({ ticker: asset.ticker, lastCandle, daysStale });
         }
     }

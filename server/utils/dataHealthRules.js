@@ -125,6 +125,20 @@ export const DEFAULT_THRESHOLDS = {
     // dezenas de tickers e um só pode valer a maior parte do patrimônio em renda
     // variável — BOVA11 + IVVB11 eram 68% de uma carteira real em 19/08/2026.
     timeSeriesWalletDaysStale: 2,
+    // CRIPTO EM CARTEIRA TEM UMA RÉGUA PRÓPRIA, e não por capricho: a garantia
+    // acima é do snapshot, que só roda em DIA ÚTIL. A cripto negocia 7 dias e é
+    // medida em dias CORRIDOS, então no sábado e no domingo ela fica sem a rede —
+    // sobra o `timeSeriesWorker`, que roda uma vez por dia (18:30) e só re-busca
+    // acima de HISTORY_MAX_CANDLE_AGE_DAYS (2 dias corridos). Com 2 aqui, o alarme
+    // acusava a PRÓPRIA folga do worker: o USDC apareceu em 06/09/2026 (domingo)
+    // com candle de 04/09 sem nada quebrado — o worker o pulara no sábado por ele
+    // ter 1,90 dia, e o do domingo ainda não tinha rodado.
+    //
+    // 3 é o primeiro valor que o regime normal não alcança — o mesmo raciocínio já
+    // aplicado à coorte do universo logo abaixo. Custa até um dia a mais para
+    // acusar cripto travada de verdade, e em troca o alarme para de tocar todo fim
+    // de semana. Alarme que toca todo sábado é alarme que se aprende a ignorar.
+    timeSeriesWalletDaysStaleCrypto: 3,
     timeSeriesWalletStale: { warn: 1, critical: 3 },
     // (2) UNIVERSO DE PESQUISA — tolerância maior, porque o dano é gradual: SMA200,
     // RSI, beta e volatilidade envelhecem e o ranking deriva, mas nada fica errado
@@ -643,7 +657,8 @@ const timeSeriesChecks = (facts, th) => {
             : walletStale === 0
                 ? `${walletTotal} ativo(s) em carteira com candle em dia`
                 : `${walletStale}/${walletTotal} ativo(s) em carteira sem candle novo há `
-                  + `${th.timeSeriesWalletDaysStale}+ dias úteis (corridos, na cripto): `
+                  + `${th.timeSeriesWalletDaysStale}+ dias úteis `
+                  + `(${th.timeSeriesWalletDaysStaleCrypto}+ corridos, na cripto): `
                   + candleSample(wallet.worst),
         hint: 'O snapshot das 23:59 marca a renda variável pelo FECHAMENTO do dia e só cai no '
             + 'preço do instante quando o candle falta — e WalletSnapshot é a base do TWRR e do '

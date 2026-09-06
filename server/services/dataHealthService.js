@@ -139,7 +139,13 @@ const collectCandleFacts = async (now, th) => {
 
     return {
         wallet: summarizeCandleStaleness(
-            holdings, lastCandleByKey, clock, th.timeSeriesWalletDaysStale,
+            holdings, lastCandleByKey, clock,
+            // Mapa, e não número: a cripto em carteira fica sem a garantia do
+            // snapshot no fim de semana (ver DEFAULT_THRESHOLDS).
+            {
+                default: th.timeSeriesWalletDaysStale,
+                CRYPTO: th.timeSeriesWalletDaysStaleCrypto,
+            },
         ),
         universe: summarizeCandleStaleness(
             universe, lastCandleByKey, clock, th.timeSeriesUniverseDaysStale,
@@ -334,6 +340,8 @@ const collectFacts = async (now) => {
     const candleTolerances = {
         timeSeriesWalletDaysStale: Number(overrides?.timeSeriesWalletDaysStale)
             || DEFAULT_THRESHOLDS.timeSeriesWalletDaysStale,
+        timeSeriesWalletDaysStaleCrypto: Number(overrides?.timeSeriesWalletDaysStaleCrypto)
+            || DEFAULT_THRESHOLDS.timeSeriesWalletDaysStaleCrypto,
         timeSeriesUniverseDaysStale: Number(overrides?.timeSeriesUniverseDaysStale)
             || DEFAULT_THRESHOLDS.timeSeriesUniverseDaysStale,
     };
