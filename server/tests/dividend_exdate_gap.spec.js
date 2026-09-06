@@ -128,6 +128,17 @@ const chain = (rows = []) => {
 const todayBr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
 const yesterdayBr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' })
   .format(new Date(Date.now() - 86400000));
+// O candle bruto tem de ser o do DIA ÚTIL anterior, não o de ontem no calendário:
+// `deriveDividendFromGap` exige `rawPrevCloseDate === previousWeekdayKey(priceDate)`
+// e devolve null fora disso. Com "ontem" cru, esta suíte passava de segunda a
+// sexta e falhava todo sábado e domingo — verde que depende do dia da semana é
+// pior que vermelho, porque some sozinho antes de alguém investigar.
+const previousWeekdayBr = (dayKey) => {
+  const d = new Date(`${dayKey}T12:00:00.000Z`);
+  do { d.setUTCDate(d.getUTCDate() - 1); } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+  return d.toISOString().slice(0, 10);
+};
+const vesperaBr = previousWeekdayBr(todayBr);
 const nowInSession = new Date(`${todayBr}T17:00:00.000-03:00`);
 
 describe('marketDataService.detectExDateDividends', () => {
@@ -136,7 +147,7 @@ describe('marketDataService.detectExDateDividends', () => {
     DividendEvent.find.mockReturnValue(chain([]));
     DividendEvent.updateOne.mockResolvedValue({ upsertedCount: 1 });
     AssetHistory.aggregate.mockResolvedValue([
-      { ticker: 'TRXF11', candle: { date: yesterdayBr, close: 79.30 } },
+      { ticker: 'TRXF11', candle: { date: vesperaBr, close: 79.30 } },
     ]);
   });
 
