@@ -26,7 +26,9 @@ vi.mock('../config/logger.js', () => ({
   default: { info: mocks.loggerInfo, warn: mocks.loggerWarn, error: vi.fn(), debug: vi.fn() },
 }));
 
-const { healWalletCandleGaps } = await import('../services/walletDayCandleService.js');
+const { healWalletCandleGaps, ensureWalletDayCandles } = await import('../services/walletDayCandleService.js');
+const { externalMarketService } = await import('../services/externalMarketService.js');
+const { getEscalations, resetSourceStats } = await import('../utils/sourceHealth.js');
 
 const CARTEIRA = [
   { ticker: 'BOVA11', type: 'ETF', quantity: 7 },
@@ -122,5 +124,58 @@ describe('healWalletCandleGaps', () => {
   it('posição zerada não pesa no patrimônio e não vira busca', async () => {
     await healWalletCandleGaps([{ ticker: 'BOVA11', type: 'ETF', quantity: 0 }], '2026-09-03');
     expect(mocks.aggregate).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * O CAMINHO DO FECHAMENTO, no painel de fontes.
+ *
+ * O bloco "Histórico e índices" mostrava a B3 verde, chamada havia horas, e não
+ * dizia QUAIS ativos ela socorreu — nem quais ficaram sem fechamento nenhum, que
+ * é o conjunto com consequência: o patrimônio deles é marcado pelo preço das
+ * 23:59 em vez do fechamento do pregão.
+ *
+ * Quem a B3 não cobre (cripto, ativo americano) entra com a trilha de um elo só.
+ * Aqui isso é notícia — na carteira, ativo sem fechamento do dia degrada o
+ * snapshot daquele dia —, e é a diferença em relação ao worker do universo, onde
+ * o calendário de outro mercado tornaria o registro alarme falso.
+ */
+describe('ensureWalletDayCandles — o que o painel aprende com a cadeia', () => {
+  beforeEach(() => {
+    resetSourceStats();
+    mocks.aggregate.mockResolvedValue([]);
+  });
+
+  it('separa quem a B3 socorreu de quem ficou sem fechamento em fonte nenhuma', async () => {
+    wireFind([{ ticker: 'BOVA11', history: [{ date: '2026-09-02', close: 100 }] }]);
+    externalMarketService.getFullHistoryDetailed.mockResolvedValue(null);
+    mocks.fetchB3.mockResolvedValue(new Map([['BOVA11', { close: 101.5, volume: 10 }]]));
+
+    await ensureWalletDayCandles(
+      [{ ticker: 'BOVA11', type: 'ETF', quantity: 7 }, { ticker: 'BTC', type: 'CRYPTO', quantity: 1 }],
+      '2026-09-03',
+    );
+
+    const porAtivo = new Map(getEscalations().map((e) => [e.subject, e]));
+    expect(porAtivo.get('BOVA11').chain).toBe('candle');
+    expect(porAtivo.get('BOVA11').tried).toEqual(['yahoo.history', 'b3']);
+    expect(porAtivo.get('BOVA11').resolvedBy).toBe('b3');
+    // A cripto não tem arquivo de pregão: a trilha dela para no Yahoo, e dizer
+    // que a B3 foi tentada seria inventar uma chamada que nunca houve.
+    expect(porAtivo.get('BTC').tried).toEqual(['yahoo.history']);
+    expect(porAtivo.get('BTC').resolvedBy).toBeNull();
+  });
+
+  it('Yahoo entregando o dia não deixa rastro no ledger', async () => {
+    wireFind([]);
+    externalMarketService.getFullHistoryDetailed.mockResolvedValue({
+      candles: [{ date: '2026-09-03', close: 101.5, adjClose: 101.5, volume: 10 }],
+      emptyDates: [],
+    });
+
+    await ensureWalletDayCandles([{ ticker: 'BOVA11', type: 'ETF', quantity: 7 }], '2026-09-03');
+
+    expect(getEscalations()).toHaveLength(0);
+    expect(mocks.fetchB3).not.toHaveBeenCalled();
   });
 });

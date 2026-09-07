@@ -206,8 +206,40 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
     // Cadeia instrumentada começa vazia, não ausente: "nada escalou" é notícia
     // boa e precisa aparecer como tal. Cadeia sem ledger não entra de jeito
     // nenhum — ver LEDGERED_CHAINS.
-    for (const chain of LEDGERED_CHAINS) {
-        chains[chain] = { chain, total: 0, unresolved: 0, expected: 0, byResolver: [], items: [], truncated: 0 };
+    for (const [chain, vocabulario] of LEDGERED_CHAINS) {
+        chains[chain] = {
+            chain,
+            total: 0,
+            unresolved: 0,
+            expected: 0,
+            byResolver: [],
+            items: [],
+            truncated: 0,
+            /**
+             * QUANDO foi a escalada mais recente desta cadeia.
+             *
+             * Sem ela a linha do painel é uma afirmação sem tempo — "43 ativos
+             * precisaram de reserva" — cercada de cards que falam do agora
+             * ("Recebendo · agora"). Um estouro de sete horas atrás lia-se como
+             * estando acontecendo, e a única régua na tela ("desde o último
+             * reinício") só aparecia no texto do estado VAZIO, que é justamente
+             * o que ninguém precisa ler.
+             *
+             * Calculado aqui, e não pegando `items[0].at`: a lista é ordenada
+             * por "sem resolver primeiro, depois mais recente", então o primeiro
+             * item pode ser uma escalada antiga que ninguém resolveu.
+             */
+            lastAt: null,
+            /**
+             * O VOCABULÁRIO da cadeia — as frases prontas, escritas aqui e não na
+             * tela. O painel nasceu falando só de cotações, então "ativo" e
+             * "preço" estavam escritos no componente; com câmbio, indicadores e
+             * fechamento medidos pelo mesmo mecanismo, a mesma frase passaria a
+             * dizer "2 ativo(s) sem preço" para o dólar e o Bitcoin. Quem sabe o
+             * nome das coisas é a cadeia.
+             */
+            vocabulary: { ...vocabulario },
+        };
     }
 
     const porResolver = new Map();
@@ -218,6 +250,7 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
         alvo.total += 1;
         if (!ev.resolvedBy) alvo.unresolved += 1;
         if (ev.expected) alvo.expected += 1;
+        if (ev.at && (!alvo.lastAt || new Date(ev.at) > new Date(alvo.lastAt))) alvo.lastAt = ev.at;
 
         const chaveResolver = `${ev.chain}|${ev.resolvedBy || ''}`;
         porResolver.set(chaveResolver, (porResolver.get(chaveResolver) || 0) + 1);
@@ -346,9 +379,11 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
         } else if (soAssuntoMorto) {
             // Antes de qualquer régua de taxa: ela não se aplica a esta amostra.
             status = SOURCE_STATUS.UNKNOWN;
+            const vocab = LEDGERED_CHAINS.get(source.chain);
+            const morto = vocab?.deadSubject || 'que nenhuma fonte resolveu';
             detail = led.reached === 1
-                ? 'A única chamada foi para um ativo que nenhuma fonte precificou — faltou papel negociando, não resposta desta fonte'
-                : `As ${source.attempts} chamadas foram para ${led.reached} ativos que nenhuma fonte precificou — faltou papel negociando, não resposta desta fonte`;
+                ? `A única chamada foi para um ${vocab?.noun || 'assunto'} ${morto}, não resposta desta fonte`
+                : `As ${source.attempts} chamadas foram para ${led.reached} ${vocab?.noun || 'assunto'}(s) ${morto}, não resposta desta fonte`;
         } else if (julgavel && rate >= FAILURE_RATE.critical) {
             status = source.critical ? SOURCE_STATUS.CRITICAL : SOURCE_STATUS.WARN;
             detail = `${pct(rate)} das ${source.attempts} chamadas falharam`;

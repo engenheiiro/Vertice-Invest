@@ -150,13 +150,33 @@ export interface ChainEscalation {
 export interface ChainFlow {
     chain: string;
     total: number;
-    /** Ativos que nenhuma fonte precificou — a única categoria com consequência. */
+    /** Assuntos que nenhuma fonte resolveu — a única categoria com consequência. */
     unresolved: number;
     expected: number;
     byResolver: { id: string | null; label: string | null; count: number }[];
     items: ChainEscalation[];
     /** Quantos ficaram de fora de `items` pelo teto de transporte. */
     truncated: number;
+    /**
+     * Quando foi a escalada mais recente. `null` = nenhuma desde o reinício.
+     *
+     * A linha do painel afirmava "43 ativos precisaram de reserva" sem tempo
+     * nenhum, cercada de cards que falam do agora — um estouro de sete horas
+     * atrás lia-se como estando acontecendo.
+     */
+    lastAt: string | null;
+    /**
+     * As palavras da cadeia, escritas no servidor. Cotação fala de ativo e preço;
+     * câmbio, de moeda e cotação; indicadores, de valor; candle, de fechamento.
+     */
+    vocabulary: {
+        noun: string;
+        none: string;
+        rescued: string;
+        allFromPrimary: string;
+        missingBadge: string;
+        missingLong: string;
+    };
 }
 
 /** Um motivo pelo qual a cotação chegou fora do esperado. */

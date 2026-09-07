@@ -33,6 +33,7 @@ import MarketAsset from '../models/MarketAsset.js';
 import { historyStorageKey, mergeCandleSeries } from '../utils/assetHistory.js';
 import { cryptoYahooSymbol } from '../config/cryptoList.js';
 import { externalMarketService } from './externalMarketService.js';
+import { recordEscalation } from '../utils/sourceHealth.js';
 
 /**
  * Janela de varredura, em dias corridos. Curta de propósito: o reparo custa uma
@@ -192,12 +193,28 @@ export const repairCryptoCandleGaps = async ({
         // Por isso o símbolo vem do catálogo, nunca da chave.
         const simbolo = cryptoYahooSymbol(chaves.get(storageKey)) || storageKey;
         const novos = [];
+        let tentou = false;
         for (const dia of dias) {
             if (buscas >= CRYPTO_REPAIR_MAX_FETCHES) break;
             buscas += 1;
+            tentou = true;
             const candle = await externalMarketService.fetchDailyCloseFromHourly(simbolo, dia);
             if (candle) novos.push(candle);
             else unresolved += 1;
+        }
+        // Para o painel: a barra HORÁRIA é o terceiro elo da cadeia do candle, e o
+        // único socorro que a cripto tem (ela não tem arquivo de pregão). O card
+        // dela vivia em "espera · reserva" sem nunca dizer por quais moedas passou.
+        // Só registra quem foi de fato buscado: alvo cortado pelo teto de buscas do
+        // run não escalou coisa nenhuma, e contá-lo seria inventar uma tentativa.
+        if (tentou) {
+            recordEscalation({
+                chain: 'candle',
+                subject: chaves.get(storageKey) || storageKey,
+                tried: ['yahoo.history', 'yahoo.hourly'],
+                resolvedBy: novos.length > 0 ? 'yahoo.hourly' : null,
+                reason: 'O Yahoo publicou a barra diária sem preço',
+            });
         }
         if (novos.length === 0) continue;
         try {

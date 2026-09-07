@@ -50,7 +50,7 @@ vi.mock('../config/logger.js', () => ({
     default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const { timeSeriesWorker, orderByStaleness, METRICS_FLUSH_SIZE } =
+const { timeSeriesWorker, orderByStaleness, sessaoJaFechou, METRICS_FLUSH_SIZE } =
     await import('../services/workers/timeSeriesWorker.js');
 const logger = (await import('../config/logger.js')).default;
 
@@ -224,4 +224,33 @@ describe('timeSeriesWorker.run — cobertura e durabilidade', () => {
         expect(stats).toMatchObject({ complete: true, visited: 12, total: 12, fetched: 12, failed: 0 });
         expect(stats.assetsProcessed).toBe(12);
     });
+});
+
+/**
+ * O REGISTRO DE ESCALADA NÃO PODE ALARMAR POR PREGÃO EM ANDAMENTO.
+ *
+ * O reforço da B3 roda para toda série cuja ponta não alcança o último pregão. O
+ * cron oficial é às 18:30, depois do fechamento das 17:30, e aí "não alcança"
+ * significa mesmo buraco. Num `sync` manual às 15h significa outra coisa: o dia
+ * ainda está acontecendo. Sem esta régua, aquela execução escreveria centenas de
+ * linhas de "sem fechamento em fonte nenhuma" no painel — o alarme mais caro que
+ * existe, o que está errado e parece certo.
+ */
+describe('sessaoJaFechou', () => {
+  const asDate = (iso) => new Date(iso);
+
+  it('pregão de ontem já fechou, a qualquer hora de hoje', () => {
+    // 09:00 BRT de 04/09, perguntando pelo pregão de 03/09.
+    expect(sessaoJaFechou('2026-09-03', asDate('2026-09-04T12:00:00.000Z'))).toBe(true);
+  });
+
+  it('durante o pregão de hoje, a sessão do dia ainda não fechou', () => {
+    // 15:00 BRT (18:00Z) de 03/09, perguntando pelo pregão de 03/09.
+    expect(sessaoJaFechou('2026-09-03', asDate('2026-09-03T18:00:00.000Z'))).toBe(false);
+  });
+
+  it('depois das 18h BRT, o fechamento do dia é cobrável', () => {
+    // 18:30 BRT (21:30Z), o horário do cron oficial.
+    expect(sessaoJaFechou('2026-09-03', asDate('2026-09-03T21:30:00.000Z'))).toBe(true);
+  });
 });

@@ -13,7 +13,7 @@ import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
 import { fetchTesouroCsv } from './treasuryPriceService.js';
 import { isBusinessDay, brazilDateKey } from '../utils/dateUtils.js';
-import { trackSource } from '../utils/sourceHealth.js';
+import { trackSource, recordEscalation } from '../utils/sourceHealth.js';
 
 const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391, SELIC_DAILY: 11 };
 
@@ -73,6 +73,13 @@ export const isPlausibleBtc = (value) => Number.isFinite(value) && value >= 1000
 const CURRENCY_SOURCES = [
     {
         name: 'Yahoo',
+        // `id` é a chave do SOURCE_CATALOG e `covers` diz o que este elo tem como
+        // cotar. Os dois existem para o ledger do painel (ver `updateCurrencies`):
+        // sem `covers`, a PTAX apareceria como tentada-e-falhada para o Bitcoin,
+        // que ela nunca teve como cotar, e o card do Banco Central ficaria com uma
+        // falha que não é dele.
+        id: 'yahoo.currencies',
+        covers: ['usd', 'btc'],
         fetch: async () => {
             const quotes = await externalMarketService.getCurrencyQuotes();
             return {
@@ -91,10 +98,14 @@ const CURRENCY_SOURCES = [
     // A Coinbase vem antes da PTAX por ser cotação viva; a PTAX é fixação diária.
     {
         name: 'Coinbase',
+        id: 'coinbase',
+        covers: ['btc'],
         fetch: (service) => service._fetchBtcCoinbase(),
     },
     {
         name: 'PTAX/BCB',
+        id: 'ptax',
+        covers: ['usd'],
         fetch: (service) => service._fetchPtaxUsd(),
     },
     // ÚLTIMO RECURSO, e existe por causa de uma lacuna com HORA MARCADA: a PTAX
@@ -108,6 +119,8 @@ const CURRENCY_SOURCES = [
     // fonte. Enquanto houver quem responda antes, ele não é chamado.
     {
         name: 'Coinbase (taxas)',
+        id: 'coinbase.rates',
+        covers: ['usd', 'btc'],
         fetch: (service) => service._fetchCurrenciesCoinbaseRates(),
     },
 ];
@@ -170,8 +183,16 @@ export const macroDataService = {
         let selicSource = selicVal != null ? 'BCB' : null;
         let ipcaSource = ipcaVal != null ? 'BCB' : null;
 
+        // Trilha por INDICADOR, pelo mesmo motivo do câmbio: o IBGE só publica
+        // IPCA, e uma trilha por chamada o acusaria de ter falhado na Selic, que
+        // ele nunca teve como responder. O BCB é sempre tentado nos dois — são
+        // duas séries, duas chamadas.
+        const trilha = { selic: ['bcb.series'], ipca: ['bcb.series'] };
+
         // Secundária unificada: BrasilAPI entrega Selic e IPCA numa única chamada (tokenless).
         if (selicVal == null || ipcaVal == null) {
+            if (selicVal == null) trilha.selic.push('brasilapi');
+            if (ipcaVal == null) trilha.ipca.push('brasilapi');
             const brasilApi = await this.fetchRatesFromBrasilApi();
             if (selicVal == null && brasilApi.selic != null) { selicVal = brasilApi.selic; selicSource = 'BrasilAPI'; }
             if (ipcaVal == null && brasilApi.ipca != null) { ipcaVal = brasilApi.ipca; ipcaSource = 'BrasilAPI'; }
@@ -179,6 +200,7 @@ export const macroDataService = {
 
         // Terciária para IPCA: IBGE SIDRA (fonte autoritativa do índice, tokenless).
         if (ipcaVal == null) {
+            trilha.ipca.push('ibge');
             ipcaVal = await this.fetchIpcaFromIbge();
             if (ipcaVal != null) ipcaSource = 'IBGE';
         }
@@ -209,6 +231,30 @@ export const macroDataService = {
         }
 
         logger.info(`📊 [Macro] Taxas oficiais: SELIC ${selicVal}% (${selicFrozen ? 'congelado' : selicSource || 'fallback'}) · IPCA 12m ${ipcaVal}% (${ipcaSource || 'fallback'}).`);
+
+        // Para o painel: quem precisou de reserva, e quem ficou sem fonte alguma.
+        //
+        // Duas afirmações honestas que o número sozinho não faz. O fallback
+        // hardcoded NÃO é fonte: o indicador entra como não resolvido, porque foi
+        // isso que aconteceu — nenhuma fonte publicou e o sistema seguiu com uma
+        // constante nossa. A Selic CONGELADA pelo guard de autoridade também
+        // entra como não resolvida, e pelo mesmo motivo: o valor que ficou no
+        // banco é o último bom que já tínhamos, não o que a secundária trouxe.
+        const ID_TAXA = { BCB: 'bcb.series', BrasilAPI: 'brasilapi', IBGE: 'ibge' };
+        const registrarTaxa = (assunto, tried, source, motivo) => {
+            const resolvedBy = ID_TAXA[source] || null;
+            if (tried.length <= 1 && resolvedBy) return;
+            recordEscalation({ chain: 'rates', subject: assunto, tried, resolvedBy, reason: motivo });
+        };
+        registrarTaxa(
+            'SELIC',
+            trilha.selic,
+            selicFrozen ? null : selicSource,
+            selicFrozen
+                ? `Fonte secundária divergiu do último valor bom (${lastGoodSelic}%) e só o Banco Central pode mover a Selic — valor congelado`
+                : 'O Banco Central não trouxe este indicador',
+        );
+        registrarTaxa('IPCA', trilha.ipca, ipcaSource, 'O Banco Central não trouxe este indicador');
 
         return {
             selic: selicVal,
@@ -483,16 +529,51 @@ export const macroDataService = {
         const missingLabel = () =>
             [reading.usd === null && 'USD', reading.btc === null && 'BTC'].filter(Boolean).join('/');
 
-        for (const [i, { name, fetch }] of CURRENCY_SOURCES.entries()) {
+        /**
+         * O CAMINHO DE CADA MOEDA, para o painel.
+         *
+         * O bloco de câmbio mostrava quatro cards verdes e não sabia dizer quem
+         * trouxe o dólar e quem trouxe o Bitcoin — que é exatamente o incidente de
+         * 04/09/2026 que fez o painel nascer. Três dos quatro ficavam verdes por
+         * terem sido chamados e respondido, não por estarem entregando.
+         *
+         * A trilha é acumulada por MOEDA, e só com quem cobre aquela moeda: a
+         * Coinbase resolve só BTC, a PTAX só o dólar. Registrar por chamada faria
+         * cada uma aparecer como tentada-e-falhada na moeda que ela nunca teve
+         * como cotar.
+         */
+        const trilha = { usd: [], btc: [] };
+
+        for (const [i, { name, id, covers, fetch }] of CURRENCY_SOURCES.entries()) {
             if (reading.usd !== null && reading.btc !== null) break;
             if (i > 0) {
                 logger.warn(`⚠️ [Câmbio] ${CURRENCY_SOURCES[i - 1].name} não cobriu ${missingLabel()}; tentando ${name}.`);
+            }
+            for (const moeda of covers) {
+                if (reading[moeda] === null) trilha[moeda].push(id);
             }
             apply(await fetch(this), name);
         }
 
         if (reading.usd === null || reading.btc === null) {
             logger.error(`❌ [Câmbio] Nenhuma fonte devolveu ${missingLabel()}. O valor anterior é PRESERVADO e marcado como defasado.`);
+        }
+
+        // Escalada é a moeda que a PRIMEIRA fonte não trouxe. Quando o Yahoo
+        // entrega as duas, a trilha tem um elo só e nada é registrado — o ledger
+        // é a lista de quem precisou de reserva, não o log de toda coleta.
+        const porNome = new Map(CURRENCY_SOURCES.map((f) => [f.name, f.id]));
+        for (const [moeda, assunto] of [['usd', 'USD'], ['btc', 'BTC']]) {
+            const tried = trilha[moeda];
+            const resolvedBy = porNome.get(reading[`${moeda}Source`]) || null;
+            if (tried.length <= 1 && resolvedBy) continue;
+            recordEscalation({
+                chain: 'fx',
+                subject: assunto,
+                tried,
+                resolvedBy,
+                reason: 'O Yahoo não trouxe esta cotação',
+            });
         }
 
         return reading;

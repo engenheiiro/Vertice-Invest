@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
     recordEscalation,
     getEscalations,
@@ -109,19 +109,77 @@ describe('cruzamento do ledger com as fontes', () => {
     });
 
     // Zero afirma que nada escalou; ausência admite que não medimos. Uma cadeia
-    // sem instrumentação não tem direito à primeira afirmação.
-    it('só cria resumo para cadeia com ledger — a de câmbio não entra', () => {
-        recordEscalation({ chain: 'fx', subject: 'USD', tried: ['yahoo.currencies', 'ptax'], resolvedBy: 'ptax' });
+    // sem instrumentação não tem direito à primeira afirmação. Hoje as quatro do
+    // catálogo são medidas — o contrato abaixo vale para a PRÓXIMA que entrar, e
+    // é o que impede que ela chegue à tela dizendo "nada escalou" sem ter olhado.
+    it('só cria resumo para cadeia com ledger', () => {
+        recordEscalation({ chain: 'nao-instrumentada', subject: 'X', tried: ['fonte.nova'], resolvedBy: null });
         const { chains } = buildEscalationView(getEscalations(), stats());
-        expect(chains.fx).toBeUndefined();
+        expect(chains['nao-instrumentada']).toBeUndefined();
         expect(chains.quotes).toBeDefined();
         expect(chains.quotes.total).toBe(0);
     });
 
     it('fonte de cadeia sem ledger vem com escalated null, nunca zerado', () => {
         const facts = { now: new Date(), macro: {}, fundamentals: {} };
-        const linhas = buildSourceStatuses(facts, stats(), getEscalations());
-        expect(linhas.find((l) => l.id === 'coinbase').escalated).toBeNull();
+        const semLedger = [...stats(), { id: 'fonte.nova', short: 'Nova', chain: 'nao-instrumentada', schedule: { kind: 'onFailure' } }];
+        const linhas = buildSourceStatuses(facts, semLedger, getEscalations());
+        expect(linhas.find((l) => l.id === 'fonte.nova').escalated).toBeNull();
         expect(linhas.find((l) => l.id === 'brapi').escalated).toEqual({ reached: 0, rescued: 0, missed: 0 });
+    });
+
+    /**
+     * O RELÓGIO DA CADEIA.
+     *
+     * A linha do painel afirmava "43 ativos precisaram de reserva" sem tempo
+     * nenhum, ao lado de cards que dizem "recebendo · agora" — e o ledger não
+     * expira por idade, então uma escalada da manhã continuava na tela à noite
+     * com cara de estar acontecendo.
+     *
+     * `items[0].at` não serve para isso: a lista é ordenada por "sem resolver
+     * primeiro", então o primeiro item pode ser justamente o mais antigo.
+     */
+    it('carrega o instante da escalada mais recente, não o do primeiro da lista', () => {
+        const antigo = new Date('2026-09-06T10:00:00.000Z');
+        const recente = new Date('2026-09-06T18:00:00.000Z');
+        vi.setSystemTime(antigo);
+        cadeiaCompleta('ZZZZ11', null);
+        vi.setSystemTime(recente);
+        cadeiaCompleta('PETR4', 'brapi');
+        vi.useRealTimers();
+
+        const { chains } = buildEscalationView(getEscalations(), stats());
+        expect(chains.quotes.items[0].subject).toBe('ZZZZ11');
+        expect(new Date(chains.quotes.lastAt).toISOString()).toBe(recente.toISOString());
+    });
+
+    // As palavras são da cadeia, não da tela: o painel nasceu falando de "ativo"
+    // e "preço", e a mesma frase diria "2 ativos sem preço" para o dólar e o
+    // Bitcoin. Quem sabe o nome das coisas é quem as mede.
+    it('cada cadeia leva o próprio vocabulário para a tela', () => {
+        const { chains } = buildEscalationView(getEscalations(), stats());
+        expect(chains.quotes.vocabulary.noun).toBe('ativo');
+        expect(chains.fx.vocabulary.noun).toBe('moeda');
+        expect(chains.fx.vocabulary.missingBadge).toBe('sem cotação');
+        expect(chains.rates.vocabulary.noun).toBe('indicador');
+        expect(chains.candle.vocabulary.missingBadge).toBe('sem fechamento');
+    });
+
+    /**
+     * TETO POR CADEIA.
+     *
+     * Com quatro cadeias no mesmo registro, um dia em que o Yahoo publica a série
+     * de centenas de papéis sem o fechamento empurraria as duas linhas do câmbio
+     * para fora — e a pergunta que o ledger do câmbio existe para responder
+     * sumiria justamente no dia ruim.
+     */
+    it('cadeia cheia não expulsa o vizinho', () => {
+        recordEscalation({ chain: 'fx', subject: 'USD', tried: ['yahoo.currencies', 'ptax'], resolvedBy: 'ptax' });
+        for (let i = 0; i < 700; i += 1) {
+            recordEscalation({ chain: 'candle', subject: `TICK${i}`, tried: ['yahoo.history', 'b3'], resolvedBy: 'b3' });
+        }
+        const { chains } = buildEscalationView(getEscalations(), stats());
+        expect(chains.fx.total).toBe(1);
+        expect(chains.candle.total).toBe(600);
     });
 });

@@ -340,9 +340,21 @@ const cadeia: DataSource[] = [
     src({ id: 'brapi', short: 'Brapi', chain: 'quotes', chainPosition: 3, chainSize: 3, trigger: 'onFailure', status: 'WARN', escalated: { reached: 2, rescued: 1, missed: 1 } }),
 ];
 
+/** Palavras da cadeia de cotações, como o servidor as manda. */
+const vocabCotacoes = {
+    noun: 'ativo',
+    none: 'Nenhum ativo',
+    rescued: 'tiveram o preço trazido por esta fonte',
+    allFromPrimary: 'esta fonte trouxe o preço de todos',
+    missingBadge: 'sem preço',
+    missingLong: 'sem preço em nenhuma',
+};
+
 const flow: Record<string, ChainFlow> = {
     quotes: {
         chain: 'quotes',
+        lastAt: new Date().toISOString(),
+        vocabulary: vocabCotacoes,
         total: 3,
         unresolved: 1,
         expected: 0,
@@ -365,6 +377,59 @@ describe('DataSourcesPanel — quem precisou de reserva', () => {
         render(<DataSourcesPanel sources={cadeia} groups={groups} chains={flow} />);
         expect(screen.getByText(/precisaram de reserva/)).toBeInTheDocument();
         expect(screen.getByText('1 sem preço em nenhuma')).toBeInTheDocument();
+    });
+
+    /**
+     * A LINHA PRECISA DIZER QUANDO.
+     *
+     * Ela vive cercada de cards que falam do agora ("Recebendo · agora") e não
+     * carregava relógio nenhum: em 06/09/2026 uma escalada de 43 ativos das
+     * 15:47 continuava na tela às 22h com cara de estar acontecendo. O ledger
+     * acumula desde o reinício e nada nele expira por idade — a idade da última
+     * escalada é o que separa "está estourando" de "estourou hoje de manhã".
+     */
+    it('carimba a hora da escalada mais recente', () => {
+        const setehoras = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
+        render(<DataSourcesPanel
+            sources={cadeia}
+            groups={groups}
+            chains={{ quotes: { ...flow.quotes, lastAt: setehoras } }}
+        />);
+        expect(screen.getByText(/último há 7h/)).toBeInTheDocument();
+    });
+
+    /**
+     * O câmbio percorre a MESMA cadeia e não fala de ativo nem de preço: os
+     * assuntos são o dólar e o Bitcoin. A frase é escrita no servidor, junto da
+     * cadeia — quem sabe o nome das coisas é quem as mede.
+     */
+    it('usa as palavras da cadeia: no câmbio é moeda, não ativo', () => {
+        render(<DataSourcesPanel
+            sources={[src({ id: 'yahoo.currencies', short: 'Yahoo', group: 'fx', chain: 'fx', chainPosition: 1, chainSize: 2, escalated: { reached: 1, rescued: 0, missed: 1 } })]}
+            groups={groups}
+            chains={{
+                fx: {
+                    chain: 'fx',
+                    total: 1,
+                    unresolved: 0,
+                    expected: 0,
+                    lastAt: new Date().toISOString(),
+                    byResolver: [{ id: 'ptax', label: 'PTAX', count: 1 }],
+                    items: [{ subject: 'USD', tried: ['yahoo.currencies', 'ptax'], resolvedBy: 'ptax', reason: null, expected: false, count: 1, at: new Date().toISOString() }],
+                    truncated: 0,
+                    vocabulary: {
+                        noun: 'moeda',
+                        none: 'Nenhuma moeda',
+                        rescued: 'tiveram a cotação trazida por esta fonte',
+                        allFromPrimary: 'esta fonte trouxe a cotação das duas',
+                        missingBadge: 'sem cotação',
+                        missingLong: 'sem cotação em nenhuma',
+                    },
+                },
+            }}
+        />);
+        expect(screen.getByText(/moeda.s. precisaram de reserva/)).toBeInTheDocument();
+        expect(screen.queryByText(/ativo.s. precisaram de reserva/)).not.toBeInTheDocument();
     });
 
     // Zero é notícia boa e precisa de frase própria: significa que a principal
@@ -405,7 +470,7 @@ describe('DataSourcesPanel — quem precisou de reserva', () => {
 
         const dialog = screen.getByRole('dialog');
         expect(dialog).toHaveTextContent('Ativos que passaram por aqui');
-        expect(dialog).toHaveTextContent('Trouxe o preço');
+        expect(dialog).toHaveTextContent('Resolvido por esta fonte');
         expect(dialog).toHaveTextContent('PETR4');
         expect(dialog).toHaveTextContent('Ficou sem preço em fonte nenhuma');
         expect(dialog).toHaveTextContent('EURP11');

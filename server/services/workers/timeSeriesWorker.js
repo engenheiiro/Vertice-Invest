@@ -6,6 +6,8 @@ import { marketDataService } from '../marketDataService.js';
 import { historyStorageKey, mergeCandleSeries } from '../../utils/assetHistory.js';
 import { externalMarketService } from '../externalMarketService.js';
 import { collectB3Candles, isB3Coverable, lastBusinessDayUpTo } from '../b3HistoryFallback.js';
+import { recordEscalation } from '../../utils/sourceHealth.js';
+import { brNow } from '../../utils/sourceSchedule.js';
 import { brazilDayKey } from '../../utils/walletSnapshot.js';
 import { ASSET_HISTORY_MAX_POINTS, HISTORY_CAP_EXEMPT_TICKERS } from '../../config/financialConstants.js';
 import { isTransientMongoError, withMongoRetry } from '../../utils/mongoResilience.js';
@@ -188,6 +190,19 @@ export const latestCandleDate = (history = []) => {
  * não tem continua dependendo do Yahoo. Prometer mais que isso na tela seria
  * inventar uma cobertura que não existe.
  */
+/**
+ * A sessão de `throughDay` já fechou?
+ *
+ * Só existe para o LEDGER, não para o reforço: rodar antes do fechamento não
+ * torna a busca na B3 errada (o arquivo simplesmente não está lá), mas torna o
+ * registro mentiroso. Um `sync` manual às 15h com `throughDay` = hoje veria a
+ * série de todo papel da bolsa "atrasada" e escreveria centenas de linhas de
+ * "sem fechamento em fonte nenhuma" — o painel gritaria por um pregão que ainda
+ * está acontecendo. O cron oficial roda às 18:30, depois do fechamento das
+ * 17:30; a margem até as 18h absorve a publicação do arquivo.
+ */
+export const sessaoJaFechou = (throughDay, now) => throughDay < brazilDayKey(now) || brNow(now).hour >= 18;
+
 const reinforceWithB3 = async ({ asset, storageKey, historyEntry, throughDay, now }) => {
     if (!throughDay || !isB3Coverable(asset.ticker, asset.type)) return null;
 
@@ -197,11 +212,33 @@ const reinforceWithB3 = async ({ asset, storageKey, historyEntry, throughDay, no
     const ultimo = latestCandleDate(guardada);
     if (!ultimo || ultimo >= throughDay) return null;
 
+    // Daqui para baixo é ESCALADA: o Yahoo não trouxe o fechamento deste pregão e
+    // a cadeia desce um degrau. Registrar o caminho é o que permite ao painel
+    // dizer QUAIS ativos a B3 socorreu — o card dela ficava verde ("recebendo,
+    // há 4h") sem que nada na tela ligasse aquela chamada a um ativo.
+    //
+    // O registro fica DEPOIS das guardas de propósito. Ativo que a B3 não cobre
+    // (ação americana, cripto) não entra: o calendário dele não é o da B3, e
+    // acusar atraso a cada feriado de lá seria alarme falso. Série vazia também
+    // não — a B3 estende a ponta de quem já tem histórico, não reconstrói, e
+    // série ausente é assunto da sentinela, não da cadeia.
+    const registrar = (resolvedBy) => {
+        if (!sessaoJaFechou(throughDay, now)) return;
+        recordEscalation({
+            chain: 'candle',
+            subject: asset.ticker,
+            tried: ['yahoo.history', 'b3'],
+            resolvedBy,
+            reason: `O Yahoo publicou a série sem o fechamento de ${throughDay}`,
+        });
+    };
+
     const novos = (await collectB3Candles(
         [{ key: storageKey, ticker: asset.ticker, type: asset.type, lastCandleDate: ultimo }],
         throughDay,
     )).get(storageKey);
-    if (!novos?.length) return null;
+    if (!novos?.length) { registrar(null); return null; }
+    registrar('b3');
 
     // Mesma mescla do caminho do Yahoo: o cap de pontos e a recusa de candle em dia
     // sem pregão valem igual, venha o fechamento de onde vier.

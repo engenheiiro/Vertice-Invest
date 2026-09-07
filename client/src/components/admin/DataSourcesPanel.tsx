@@ -142,6 +142,40 @@ const footerInfo = (source: DataSource): { label: string; time: string } => {
     return { label: 'Aguardando', time: source.nextRun ?? '—' };
 };
 
+/**
+ * Palavras da cadeia, quando ela não veio no payload.
+ *
+ * Só entra em cena entre um deploy do cliente e um do servidor. Fala de "assunto"
+ * de propósito: um default que dissesse "ativo" mentiria no bloco do câmbio, e
+ * palavra genérica é melhor que palavra errada.
+ */
+const VOCAB_PADRAO = {
+    noun: 'assunto',
+    none: 'Nenhum assunto',
+    rescued: 'foram resolvidos por esta fonte',
+    allFromPrimary: 'esta fonte resolveu todos',
+    missingBadge: 'sem dado',
+    missingLong: 'sem dado em nenhuma',
+};
+
+/** "Ativos", "Moedas" — o substantivo da cadeia em início de frase. */
+const capitalizar = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
+/**
+ * "há 7h" — a idade da escalada mais recente da cadeia.
+ *
+ * Calculada no cliente, e é o único lugar do painel onde isso acontece: a idade
+ * dos cards vem pronta do servidor. Aqui o dado transportado é o instante, e a
+ * diferença entre o relógio do navegador e o do host não muda nada numa régua
+ * que arredonda para minutos e horas.
+ */
+const agoLabel = (iso: string | null | undefined) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return null;
+    return sinceLabel((Date.now() - d.getTime()) / 3600000);
+};
+
 const sinceLabel = (hours: number | null) => {
     if (hours === null) return '—';
     if (hours < 0.02) return 'agora';
@@ -302,7 +336,11 @@ const TickerGroup = ({
  * riscado. É a mesma fonte podendo aparecer verde numa linha e riscada na de
  * baixo — que é exatamente a verdade que faltava.
  */
-const EscalationPath = ({ item, labelOf }: { item: ChainEscalation; labelOf: (id: string) => string }) => (
+const EscalationPath = ({ item, labelOf, missingBadge }: {
+    item: ChainEscalation;
+    labelOf: (id: string) => string;
+    missingBadge: string;
+}) => (
     <div className="flex items-center gap-1 flex-wrap">
         {item.tried.map((id, i) => {
             const entregou = item.resolvedBy === id;
@@ -323,7 +361,7 @@ const EscalationPath = ({ item, labelOf }: { item: ChainEscalation; labelOf: (id
         })}
         {!item.resolvedBy && (
             <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-red-900/25 text-red-400 border border-red-900/50">
-                sem preço
+                {missingBadge}
             </span>
         )}
     </div>
@@ -341,13 +379,15 @@ const EscalationPath = ({ item, labelOf }: { item: ChainEscalation; labelOf: (id
  * principal cobriu o universo inteiro e as reservas nem foram chamadas.
  */
 const ChainFlowLine = ({ flow, onOpen }: { flow: ChainFlow; onOpen: () => void }) => {
+    const vocab = flow.vocabulary ?? VOCAB_PADRAO;
     if (flow.total === 0) {
         return (
             <p className="text-[10px] text-slate-600">
-                Nenhum ativo precisou de reserva desde o último reinício do servidor.
+                {vocab.none} precisou de reserva desde o último reinício do servidor.
             </p>
         );
     }
+    const idade = agoLabel(flow.lastAt);
     return (
         <button
             type="button"
@@ -356,7 +396,7 @@ const ChainFlowLine = ({ flow, onOpen }: { flow: ChainFlow; onOpen: () => void }
         >
             <GitBranch size={11} className="text-slate-500 shrink-0" />
             <span className="text-[10px] text-slate-300">
-                <span className="font-bold text-white">{flow.total}</span> ativo(s) precisaram de reserva
+                <span className="font-bold text-white">{flow.total}</span> {vocab.noun}(s) precisaram de reserva
             </span>
             {flow.byResolver.map((r) => (
                 <span
@@ -367,10 +407,23 @@ const ChainFlowLine = ({ flow, onOpen }: { flow: ChainFlow; onOpen: () => void }
                             : 'bg-red-900/25 text-red-400 font-bold border border-red-900/50'
                     }`}
                 >
-                    {r.count} {r.id ? `por ${r.label}` : 'sem preço em nenhuma'}
+                    {r.count} {r.id ? `por ${r.label}` : vocab.missingLong}
                 </span>
             ))}
-            <span className="text-[10px] text-blue-400 ml-auto shrink-0">ver ativos →</span>
+            {/* O RELÓGIO DA LINHA, e ele é a diferença entre notícia e susto.
+                A linha fica cercada de cards que falam do agora ("Recebendo ·
+                agora"); sem tempo próprio, um estouro de sete horas atrás lê-se
+                como estando acontecendo agora. O título carrega o instante
+                exato, porque relativo sozinho perde o dia. */}
+            {idade && (
+                <span
+                    className="text-[10px] text-slate-500 shrink-0"
+                    title={`Escalada mais recente: ${absoluteTime(flow.lastAt)}`}
+                >
+                    · último {idade === 'agora' ? 'agora' : `há ${idade}`}
+                </span>
+            )}
+            <span className="text-[10px] text-blue-400 ml-auto shrink-0">ver {vocab.noun}s →</span>
         </button>
     );
 };
@@ -534,6 +587,8 @@ const ChainFlowModal = ({
     labelOf: (id: string) => string;
     onClose: () => void;
 }) => {
+    const vocab = flow.vocabulary ?? VOCAB_PADRAO;
+
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', onKey);
@@ -549,7 +604,7 @@ const ChainFlowModal = ({
             <div
                 role="dialog"
                 aria-modal="true"
-                aria-label="Ativos que precisaram de fonte de reserva"
+                aria-label={`${capitalizar(vocab.noun)}s que precisaram de fonte de reserva`}
                 onClick={(e) => e.stopPropagation()}
                 className="w-full max-w-xl bg-panel border border-slate-700 rounded-2xl p-5 max-h-[85vh] overflow-y-auto"
             >
@@ -560,8 +615,8 @@ const ChainFlowModal = ({
                             Quem precisou de reserva
                         </h3>
                         <p className="text-[11px] text-slate-500 mt-0.5">
-                            {flow.total} ativo(s) desceram a cadeia · {flow.unresolved} ficaram sem preço em
-                            fonte nenhuma
+                            {flow.total} {vocab.noun}(s) desceram a cadeia · {flow.unresolved} ficaram{' '}
+                            {vocab.missingBadge} em fonte nenhuma
                         </p>
                     </div>
                     <button
@@ -597,7 +652,7 @@ const ChainFlowModal = ({
                                 )}
                             </div>
                             <div className="flex flex-col items-end gap-1 shrink-0">
-                                <EscalationPath item={item} labelOf={labelOf} />
+                                <EscalationPath item={item} labelOf={labelOf} missingBadge={vocab.missingBadge} />
                                 <span className="text-[9px] font-mono text-slate-600">{shortTime(item.at)}</span>
                             </div>
                         </div>
@@ -606,14 +661,14 @@ const ChainFlowModal = ({
 
                 {flow.truncated > 0 && (
                     <p className="text-[10px] text-slate-500 mt-3">
-                        + {flow.truncated} ativo(s) não listados — a tela mostra os {flow.items.length} mais
-                        relevantes (sem preço primeiro, depois os mais recentes).
+                        + {flow.truncated} {vocab.noun}(s) não listados — a tela mostra os {flow.items.length} mais
+                        relevantes ({vocab.missingBadge} primeiro, depois os mais recentes).
                     </p>
                 )}
 
                 <p className="text-[10px] text-slate-600 mt-4">
-                    A lista zera a cada reinício do servidor e guarda uma linha por ativo: repetir a mesma
-                    escalada atualiza a linha em vez de criar outra.
+                    A lista zera a cada reinício do servidor e guarda uma linha por {vocab.noun}: repetir a
+                    mesma escalada atualiza a linha em vez de criar outra — o `2×` ao lado do nome é isso.
                 </p>
             </div>
         </div>,
@@ -653,6 +708,9 @@ const SourceDetailModal = ({
     const salvos = passaram.filter((i) => i.resolvedBy === source.id).map((i) => i.subject);
     const seguiram = passaram.filter((i) => i.resolvedBy && i.resolvedBy !== source.id).map((i) => i.subject);
     const semPreco = passaram.filter((i) => !i.resolvedBy).map((i) => i.subject);
+    // As palavras vêm da CADEIA: este mesmo bloco descreve ativo e preço em
+    // cotações, moeda e cotação no câmbio, indicador e valor nas taxas.
+    const vocab = flow?.vocabulary ?? VOCAB_PADRAO;
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -779,25 +837,25 @@ const SourceDetailModal = ({
                     <div className="mt-4 pt-3 border-t border-slate-800">
                         <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
                             <GitBranch size={11} />
-                            Ativos que passaram por aqui
+                            {capitalizar(vocab.noun)}s que passaram por aqui
                         </p>
                         {source.escalated.reached === 0 ? (
                             <p className="text-[11px] text-slate-400 mt-1.5">
                                 {source.chainPosition === 1
-                                    ? 'Nenhum ativo precisou de reserva: esta fonte trouxe o preço de todos.'
-                                    : 'Nenhum ativo chegou até aqui — a fonte anterior deu conta de todos.'}
+                                    ? `${vocab.none} precisou de reserva: ${vocab.allFromPrimary}.`
+                                    : `${vocab.none} chegou até aqui — a fonte anterior deu conta de todos.`}
                             </p>
                         ) : (
                             <>
                                 <p className="text-[11px] text-slate-300 mt-1.5">
                                     <span className="font-bold text-white">{source.escalated.reached}</span>
                                     {source.chainPosition === 1
-                                        ? ' ativo(s) não tiveram preço aqui e desceram para a reserva'
-                                        : ` ativo(s) chegaram até aqui · ${source.escalated.rescued} tiveram o preço trazido por esta fonte · ${source.escalated.missed} não`}
+                                        ? ` ${vocab.noun}(s) ficaram ${vocab.missingBadge} aqui e desceram para a reserva`
+                                        : ` ${vocab.noun}(s) chegaram até aqui · ${source.escalated.rescued} ${vocab.rescued} · ${source.escalated.missed} não`}
                                 </p>
                                 <div className="mt-2 space-y-1.5">
                                     <TickerGroup
-                                        rotulo="Trouxe o preço"
+                                        rotulo="Resolvido por esta fonte"
                                         tickers={salvos}
                                         total={source.escalated.rescued}
                                         tone="text-emerald-300 bg-emerald-900/20 border-emerald-900/50"
@@ -809,7 +867,7 @@ const SourceDetailModal = ({
                                         tone="text-slate-400 bg-elevated border-slate-700"
                                     />
                                     <TickerGroup
-                                        rotulo="Ficou sem preço em fonte nenhuma"
+                                        rotulo={`Ficou ${vocab.missingBadge} em fonte nenhuma`}
                                         tickers={semPreco}
                                         total={semPreco.length}
                                         tone="text-red-400 bg-red-900/20 border-red-900/50"

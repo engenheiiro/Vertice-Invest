@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import axios from 'axios';
 import { macroDataService, isPlausibleUsd, isPlausibleBtc } from '../services/macroDataService.js';
 import { externalMarketService } from '../services/externalMarketService.js';
 import AssetHistory from '../models/AssetHistory.js';
+import { getEscalations, getSourceStats, resetSourceStats } from '../utils/sourceHealth.js';
+import { buildEscalationView } from '../utils/dataSourceStatus.js';
 
 // Incidente de 04/09/2026: a fonte de câmbio de então (AwesomeAPI) parou de
 // responder, o `catch` vazio devolvia null, o gravador preservava o valor
@@ -117,6 +119,73 @@ describe('updateCurrencies — cadeia de fontes', () => {
         expect(out.usd).toBeCloseTo(5.1263, 4);
         expect(out.usdSource).toBe('PTAX/BCB');
         expect(out.btcSource).toBe('Yahoo'); // o BTC da primária estava bom
+    });
+});
+
+/**
+ * O CAMINHO DE CADA MOEDA, no painel de fontes.
+ *
+ * O bloco de câmbio mostrava os quatro cards verdes e não sabia dizer quem
+ * trouxe o dólar e quem trouxe o Bitcoin — que é exatamente o incidente de
+ * 04/09/2026 que fez o painel nascer. Três dos quatro ficavam verdes por terem
+ * sido chamados e respondido, não por estarem entregando.
+ *
+ * O detalhe que decide o desenho: aqui uma fonte cobre METADE. A Coinbase só
+ * resolve BTC, a PTAX só o dólar — a trilha é acumulada por MOEDA, e só com quem
+ * cobre aquela moeda. Registrar por chamada faria a PTAX aparecer como
+ * tentada-e-falhada no Bitcoin, que ela nunca teve como cotar.
+ */
+describe('updateCurrencies — o que o painel aprende com a cadeia', () => {
+    beforeEach(() => resetSourceStats());
+    afterEach(() => vi.restoreAllMocks());
+
+    it('Yahoo cobrindo tudo não gera escalada: o ledger é de quem precisou de reserva', async () => {
+        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue(yahooBody);
+        await macroDataService.updateCurrencies();
+        expect(getEscalations()).toHaveLength(0);
+    });
+
+    it('cada moeda registra só as fontes que tinham como cotá-la', async () => {
+        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
+        vi.spyOn(macroDataService, '_fetchBtcCoinbase').mockResolvedValue({ btc: 79533.56, btcChange: -2.13 });
+        vi.spyOn(macroDataService, '_fetchPtaxUsd').mockResolvedValue({ usd: 5.1263, usdChange: 0.51 });
+
+        await macroDataService.updateCurrencies();
+
+        const porMoeda = new Map(getEscalations().map((e) => [e.subject, e]));
+        // A PTAX não aparece no caminho do Bitcoin, e a Coinbase não aparece no
+        // do dólar: nenhuma das duas foi capaz de cotar a outra moeda.
+        expect(porMoeda.get('USD').tried).toEqual(['yahoo.currencies', 'ptax']);
+        expect(porMoeda.get('USD').resolvedBy).toBe('ptax');
+        expect(porMoeda.get('BTC').tried).toEqual(['yahoo.currencies', 'coinbase']);
+        expect(porMoeda.get('BTC').resolvedBy).toBe('coinbase');
+    });
+
+    it('moeda resolvida pela primária não entra, mesmo quando a outra escala', async () => {
+        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({ usd: yahooBody.usd });
+        vi.spyOn(macroDataService, '_fetchBtcCoinbase').mockResolvedValue({ btc: 79533.56, btcChange: -2.13 });
+
+        await macroDataService.updateCurrencies();
+
+        expect(getEscalations().map((e) => e.subject)).toEqual(['BTC']);
+    });
+
+    // O caso com consequência: sem cotação de hoje, o valor da véspera é
+    // preservado e a tela precisa poder dizer QUAL moeda ficou para trás.
+    it('cadeia inteira fora → as duas moedas ficam sem quem as resolva', async () => {
+        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
+        vi.spyOn(axios, 'get').mockRejectedValue(new Error('ETIMEDOUT'));
+
+        await macroDataService.updateCurrencies();
+
+        const { chains } = buildEscalationView(getEscalations(), getSourceStats());
+        expect(chains.fx.total).toBe(2);
+        expect(chains.fx.unresolved).toBe(2);
+        expect(chains.fx.vocabulary.missingBadge).toBe('sem cotação');
+        // A trilha do dólar passa pelos três elos que cotam dólar; a do BTC, pelos
+        // três que cotam BTC — e a soma é o que o card de cada fonte vai mostrar.
+        const usd = getEscalations().find((e) => e.subject === 'USD');
+        expect(usd.tried).toEqual(['yahoo.currencies', 'ptax', 'coinbase.rates']);
     });
 });
 

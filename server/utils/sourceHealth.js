@@ -362,14 +362,18 @@ export const resetSourceStats = () => { stats.clear(); escalations.clear(); susp
  */
 
 /**
- * Teto de assuntos guardados. Dimensionado acima do universo de tickers que
- * escala num run (dezenas), com folga para um dia ruim em que o Yahoo cai
- * inteiro e o lote todo passa pela reserva.
+ * Teto de assuntos guardados POR CADEIA, e o "por cadeia" é o ponto.
+ *
+ * Um teto global era suficiente enquanto só as cotações escreviam aqui. Com
+ * quatro cadeias no mesmo Map, um dia em que o Yahoo publica a série de 600
+ * papéis sem o fechamento empurraria as duas linhas do câmbio para fora — e a
+ * pergunta que o ledger do câmbio existe para responder sumiria justamente no
+ * dia ruim. Cada cadeia gasta o seu teto e não invade o do vizinho.
  */
 const ESCALATION_CAP = 600;
 
 /**
- * Cadeias que têm ledger por assunto.
+ * Cadeias que têm ledger por assunto, e como cada uma se chama na tela.
  *
  * Existe para a tela não mentir por omissão. Sem esta lista, uma cadeia que
  * ninguém instrumentou apareceria com "0 ativos precisaram de reserva" — que se
@@ -377,8 +381,55 @@ const ESCALATION_CAP = 600;
  * opostas, e a segunda é a única que temos direito de fazer. Instrumentou o
  * fallback de uma cadeia nova? Acrescente o id aqui, e só então o painel passa a
  * falar por ela.
+ *
+ * O valor é o VOCABULÁRIO, e ele mora aqui pela mesma razão que o `feeds` do
+ * catálogo: o texto da tela é decisão de quem conhece o assunto. O painel nasceu
+ * medindo só cotações, então "ativo" e "preço" estavam escritos dentro do
+ * componente — e a mesma frase, aplicada ao câmbio, diria "2 ativo(s) sem preço"
+ * para o dólar e o Bitcoin. Cada cadeia mede coisas diferentes e precisa poder
+ * dizer o nome delas: moeda e cotação, indicador e valor, ativo e fechamento.
+ *
+ * As quatro cadeias do catálogo estão medidas desde 06/09/2026. A quinta, se
+ * vier, fica de fora até alguém chamar `recordEscalation` por ela.
  */
-export const LEDGERED_CHAINS = new Set(['quotes']);
+export const LEDGERED_CHAINS = new Map([
+    ['quotes', {
+        noun: 'ativo',
+        none: 'Nenhum ativo',
+        rescued: 'tiveram o preço trazido por esta fonte',
+        allFromPrimary: 'esta fonte trouxe o preço de todos',
+        missingBadge: 'sem preço',
+        missingLong: 'sem preço em nenhuma',
+        deadSubject: 'que nenhuma fonte precificou — faltou papel negociando',
+    }],
+    ['fx', {
+        noun: 'moeda',
+        none: 'Nenhuma moeda',
+        rescued: 'tiveram a cotação trazida por esta fonte',
+        allFromPrimary: 'esta fonte trouxe a cotação das duas',
+        missingBadge: 'sem cotação',
+        missingLong: 'sem cotação em nenhuma',
+        deadSubject: 'que nenhuma fonte cotou',
+    }],
+    ['rates', {
+        noun: 'indicador',
+        none: 'Nenhum indicador',
+        rescued: 'tiveram o valor trazido por esta fonte',
+        allFromPrimary: 'esta fonte trouxe o valor de todos',
+        missingBadge: 'sem valor',
+        missingLong: 'sem valor em nenhuma',
+        deadSubject: 'que nenhuma fonte publicou',
+    }],
+    ['candle', {
+        noun: 'ativo',
+        none: 'Nenhum ativo',
+        rescued: 'tiveram o fechamento trazido por esta fonte',
+        allFromPrimary: 'esta fonte trouxe o fechamento de todos',
+        missingBadge: 'sem fechamento',
+        missingLong: 'sem fechamento em nenhuma',
+        deadSubject: 'que nenhuma fonte fechou — faltou pregão para o papel',
+    }],
+]);
 
 const escalations = new Map();
 
@@ -414,8 +465,17 @@ export const recordEscalation = ({ chain, subject, tried = [], resolvedBy = null
         at: new Date(),
         count: (anterior?.count || 0) + 1,
     });
-    while (escalations.size > ESCALATION_CAP) {
-        escalations.delete(escalations.keys().next().value);
+    // Descarte por CADEIA: varre do mais antigo e tira só quem é da mesma fila.
+    // A varredura só roda quando a cadeia estoura o teto, e nunca passa de uma
+    // remoção por chamada (o Map já estava no limite antes desta inserção).
+    let daCadeia = 0;
+    for (const chave of escalations.keys()) {
+        if (chave.startsWith(`${chain}|`)) daCadeia += 1;
+    }
+    if (daCadeia > ESCALATION_CAP) {
+        for (const chave of escalations.keys()) {
+            if (chave.startsWith(`${chain}|`)) { escalations.delete(chave); break; }
+        }
     }
 };
 

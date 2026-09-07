@@ -22,6 +22,7 @@ import {
 } from '../services/cryptoCandleRepairService.js';
 import MarketAsset from '../models/MarketAsset.js';
 import AssetHistory from '../models/AssetHistory.js';
+import { getEscalations, resetSourceStats } from '../utils/sourceHealth.js';
 
 const yahoo = vi.hoisted(() => ({ chart: vi.fn() }));
 
@@ -188,6 +189,39 @@ describe('repairCryptoCandleGaps — símbolo do provedor', () => {
     await repairCryptoCandleGaps({ throughDay: '2026-09-05', maxDays: 5 });
 
     expect(spy).toHaveBeenCalledWith('BTC-USD', '2026-09-04');
+    spy.mockRestore();
+  });
+
+  /**
+   * A BARRA HORÁRIA É O TERCEIRO ELO DA CADEIA DO CANDLE, e o único socorro que a
+   * cripto tem — ela não tem arquivo de pregão. No painel o card dela vivia em
+   * "espera · reserva" sem nunca dizer por quais moedas passou, então nada ligava
+   * uma chamada bem-sucedida a um buraco fechado.
+   */
+  it('registra o caminho da série para o painel de fontes', async () => {
+    resetSourceStats();
+    comSerie('BTC', ['2026-09-03', '2026-09-05']);
+    const spy = vi.spyOn(externalMarketService, 'fetchDailyCloseFromHourly')
+      .mockResolvedValue({ date: '2026-09-04', close: 79000, volume: 0 });
+
+    await repairCryptoCandleGaps({ throughDay: '2026-09-05', maxDays: 5 });
+
+    const [ev] = getEscalations();
+    expect(ev.chain).toBe('candle');
+    expect(ev.subject).toBe('BTC');
+    expect(ev.tried).toEqual(['yahoo.history', 'yahoo.hourly']);
+    expect(ev.resolvedBy).toBe('yahoo.hourly');
+    spy.mockRestore();
+  });
+
+  it('buraco que a barra horária não cobre fica registrado como sem fechamento', async () => {
+    resetSourceStats();
+    comSerie('BTC', ['2026-09-03', '2026-09-05']);
+    const spy = vi.spyOn(externalMarketService, 'fetchDailyCloseFromHourly').mockResolvedValue(null);
+
+    await repairCryptoCandleGaps({ throughDay: '2026-09-05', maxDays: 5 });
+
+    expect(getEscalations()[0].resolvedBy).toBeNull();
     spy.mockRestore();
   });
 });

@@ -7,8 +7,10 @@ import {
     B3_TICKER_RE,
     MAX_B3_FALLBACK_DAYS,
     collectB3Candles,
+    isB3Coverable,
     missingBusinessDays,
 } from './b3HistoryFallback.js';
+import { recordEscalation } from '../utils/sourceHealth.js';
 import { historyStorageKey, mergeCandleSeries } from '../utils/assetHistory.js';
 import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { ASSET_HISTORY_MAX_POINTS } from '../config/financialConstants.js';
@@ -298,6 +300,31 @@ export const ensureWalletDayCandles = async (assetRefs = [], dayStr, closeMap = 
     // O Yahoo desistiu destes; a B3 tem o fechamento oficial do mesmo pregão.
     const recuperados = await recoverWithB3(unresolved, storedByKey, dayStr, resolved);
     const semCandle = unresolved.filter((u) => !recuperados.has(u.ticker));
+
+    // O CAMINHO DE CADA ATIVO, para o painel de fontes.
+    //
+    // A lista de `unresolved` já era escrita no log, e log ninguém relê. No painel
+    // ela responde a pergunta que a linha do bloco "Histórico e índices" não
+    // tinha: a B3 aparecia verde, chamada há horas, sem que nada dissesse QUAIS
+    // ativos ela socorreu — nem quais ficaram sem fechamento nenhum, que é o
+    // conjunto com consequência (o patrimônio deles é marcado pelo preço das
+    // 23:59 em vez do fechamento).
+    //
+    // Quem a B3 não cobre (cripto, ativo americano) entra com a trilha de um elo
+    // só: aqui, ao contrário do worker do universo, isso é notícia — a carteira é
+    // pequena e o ativo sem fechamento do dia degrada o snapshot daquele dia.
+    for (const alvo of unresolved) {
+        recordEscalation({
+            chain: 'candle',
+            subject: alvo.ticker,
+            // A mesma régua de cobertura que `recoverWithB3` usa para escolher os
+            // alvos — importada, não recopiada: trilha que discorda de quem foi
+            // chamado de verdade é pior que trilha nenhuma.
+            tried: isB3Coverable(alvo.ticker, alvo.type) ? ['yahoo.history', 'b3'] : ['yahoo.history'],
+            resolvedBy: recuperados.has(alvo.ticker) ? 'b3' : null,
+            reason: alvo.reason,
+        });
+    }
 
     logger.info('[DayCandle] Candles do dia garantidos para ativos em carteira', {
         day: dayStr,
