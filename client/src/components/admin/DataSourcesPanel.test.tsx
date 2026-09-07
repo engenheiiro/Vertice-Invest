@@ -688,3 +688,61 @@ describe('DataSourcesPanel — preço já corrigido pela nossa série', () => {
         expect(screen.getByText(/gravados, para conferir/)).toBeInTheDocument();
     });
 });
+
+/**
+ * O rodapé do card e a frase do modal têm que contar a MESMA história. No
+ * feriado de 07/09/2026 contavam duas: "Sem alvo vivo" na grade e "não foi
+ * chamada: feriado" no detalhe, porque a tela rededuzia o estado com uma regra
+ * mais frouxa que a do servidor.
+ */
+describe('DataSourcesPanel — a razão do silêncio vem do servidor', () => {
+    const reserva = (over: Partial<DataSource>) => src({
+        id: 'ptax', short: 'PTAX', status: 'UNKNOWN', attempts: 0, failures: 0,
+        failureRate: null, trigger: 'onFailure', lastDeliveryAt: null, lastDeliveryHours: null,
+        ...over,
+    });
+
+    it('fonte pulada não diz "sem alvo vivo" nem "em espera"', () => {
+        render(<DataSourcesPanel
+            sources={[reserva({
+                idleReason: 'SKIPPED',
+                detail: 'Sem fixação em fim de semana ou feriado',
+                escalated: { reached: 1, rescued: 0, missed: 1 },
+            })]}
+            groups={groups}
+        />);
+
+        expect(screen.getByText('Não chamada hoje')).toBeInTheDocument();
+        expect(screen.queryByText('Sem alvo vivo')).not.toBeInTheDocument();
+    });
+
+    it('alvo morto de verdade continua dizendo o que dizia', () => {
+        render(<DataSourcesPanel
+            sources={[reserva({ idleReason: 'NO_LIVE_SUBJECT', escalated: { reached: 3, rescued: 0, missed: 3 } })]}
+            groups={groups}
+        />);
+
+        expect(screen.getByText('Sem alvo vivo')).toBeInTheDocument();
+    });
+
+    it('reserva que ninguém precisou segue em espera', () => {
+        render(<DataSourcesPanel
+            sources={[reserva({ idleReason: 'STANDBY', escalated: { reached: 0, rescued: 0, missed: 0 } })]}
+            groups={groups}
+        />);
+
+        expect(screen.queryByText('Sem alvo vivo')).not.toBeInTheDocument();
+        expect(screen.queryByText('Não chamada hoje')).not.toBeInTheDocument();
+    });
+
+    // Servidor mais antigo que o cliente: a regra local volta a valer, e ela é a
+    // de antes — nem melhor nem pior, só não pode quebrar a tela.
+    it('sem idleReason no payload, a leitura antiga é preservada', () => {
+        render(<DataSourcesPanel
+            sources={[reserva({ escalated: { reached: 2, rescued: 0, missed: 2 } })]}
+            groups={groups}
+        />);
+
+        expect(screen.getByText('Sem alvo vivo')).toBeInTheDocument();
+    });
+});

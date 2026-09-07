@@ -116,7 +116,15 @@ const isStandby = (source: DataSource) => source.status === 'UNKNOWN' && source.
  * rodapé, que é onde o card não tem espaço para a frase.
  */
 const isSemAlvoVivo = (source: DataSource) =>
-    isStandby(source) && (source.escalated?.reached ?? 0) > 0;
+    // `idleReason` é a decisão do SERVIDOR, e ela manda. A regra local abaixo é
+    // fallback para um servidor mais antigo que o cliente — e ela é frouxa de
+    // propósito conhecido: checa só `reached > 0`, enquanto a regra de verdade
+    // exige que ninguém tenha resolvido aquele assunto. Foi essa folga que fez o
+    // card da PTAX dizer "Sem alvo vivo" no feriado de 07/09/2026 enquanto o
+    // modal, com a frase do servidor, dizia "não foi chamada: feriado".
+    (source.idleReason
+        ? source.idleReason === 'NO_LIVE_SUBJECT'
+        : isStandby(source) && (source.escalated?.reached ?? 0) > 0);
 
 const visualFor = (source: DataSource) => (isStandby(source) ? STANDBY_UI : STATUS_UI[source.status]);
 
@@ -144,6 +152,11 @@ const clockHours = (source: DataSource): number | null =>
 const footerInfo = (source: DataSource): { label: string; time: string } => {
     if (source.status !== 'UNKNOWN') {
         return { label: STATUS_UI[source.status].label, time: sinceLabel(clockHours(source)) };
+    }
+    if (source.idleReason === 'SKIPPED') {
+        // Não é "em espera" nem "aguardando": ninguém vai chamá-la hoje, e dizer
+        // que ela espera a vez sugere que o silêncio se resolve sozinho.
+        return { label: 'Não chamada hoje', time: 'por decisão nossa' };
     }
     if (isSemAlvoVivo(source)) {
         return { label: 'Sem alvo vivo', time: 'reserva' };

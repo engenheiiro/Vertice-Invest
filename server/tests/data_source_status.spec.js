@@ -488,3 +488,48 @@ describe('buildChainMap — posição declarada, não inferida da tela', () => {
         expect(linhas[1]).toMatchObject({ chain: null, chainPosition: null, chainSize: null });
     });
 });
+
+/**
+ * ── O RÓTULO DO CARD SAI DA MESMA DECISÃO QUE A FRASE ───────────────────────
+ *
+ * No feriado de 07/09/2026 o card da PTAX dizia "Sem alvo vivo" enquanto o
+ * modal, com a frase do servidor, dizia "não foi chamada: feriado". A tela tinha
+ * uma cópia MAIS FROUXA da regra: checava só `reached > 0`, e a regra de verdade
+ * exige também que ninguém tenha resolvido aquele assunto. O dólar tinha passado
+ * pela PTAX e sido resolvido pela Coinbase logo depois — alvo bem vivo.
+ */
+describe('a razão do silêncio é decidida no servidor', () => {
+    beforeEach(() => resetSourceStats());
+
+    const escalada = (subject, resolvedBy, tried) => ({
+        chain: 'fx', subject, tried, resolvedBy, at: new Date(),
+    });
+
+    it('fonte pulada é SKIPPED, mesmo com assunto tendo passado por ela', () => {
+        recordSourceSkip('ptax', 'Sem fixação em fim de semana ou feriado');
+
+        const rows = buildSourceStatuses(factsBase(), getSourceStats(), [
+            // O dólar passou pela PTAX e foi salvo pelo elo seguinte.
+            escalada('USD', 'coinbase.rates', ['yahoo.currencies', 'ptax', 'coinbase.rates']),
+        ]);
+
+        expect(byId(rows, 'ptax').idleReason).toBe('SKIPPED');
+    });
+
+    it('assunto que a cadeia resolveu NUNCA é alvo morto', () => {
+        const rows = buildSourceStatuses(factsBase(), getSourceStats(), [
+            escalada('USD', 'coinbase.rates', ['yahoo.currencies', 'ptax', 'coinbase.rates']),
+        ]);
+
+        expect(byId(rows, 'ptax').idleReason).not.toBe('NO_LIVE_SUBJECT');
+    });
+
+    it('reserva que ninguém precisou é STANDBY', () => {
+        expect(byId(buildSourceStatuses(factsBase(), getSourceStats()), 'ptax').idleReason).toBe('STANDBY');
+    });
+
+    it('fonte julgada pelas próprias chamadas não tem razão de silêncio', async () => {
+        await trackSource('yahoo.quotes', async () => ({ ok: true }));
+        expect(byId(buildSourceStatuses(factsBase(), getSourceStats()), 'yahoo.quotes').idleReason).toBeNull();
+    });
+});

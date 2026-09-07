@@ -358,6 +358,22 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
 
         let status = SOURCE_STATUS.OK;
         let detail;
+        /**
+         * POR QUE ESTA FONTE ESTÁ QUIETA — decidido AQUI, nunca rededuzido na tela.
+         *
+         * O card mostrava "Sem alvo vivo" para a PTAX no feriado de 07/09/2026
+         * enquanto o detalhe, no modal, dizia "não foi chamada: feriado". Duas
+         * explicações para o mesmo card, porque a tela tinha uma cópia MAIS FROUXA
+         * da regra do servidor: ela checava só `reached > 0`, e a regra de verdade
+         * exige também que ninguém tenha resolvido aquele assunto
+         * (`soAssuntoMorto`). O dólar tinha passado pela PTAX e sido resolvido pela
+         * Coinbase logo depois — alvo bem vivo.
+         *
+         * Dois lugares decidindo o mesmo estado divergem; é a mesma lição da faixa
+         * do modal, que já foi unificada com a cor do card. O servidor decide e
+         * manda o código; a tela só escolhe a palavra curta do rodapé.
+         */
+        let idleReason = null;
 
         const deReserva = source.schedule?.kind === 'onFailure';
         // A última tentativa terminou em falha? É o estado CORRENTE da fonte, e
@@ -404,20 +420,25 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
                 // que o Yahoo falhou e ela deixou de ser chamada por decisão nossa.
                 // Quem pulou fomos nós, e a razão é mais informativa que o silêncio.
                 detail = source.lastSkipReason;
+                idleReason = 'SKIPPED';
             } else if (deReserva) {
                 // Aqui o cinza é BOA notícia: a cadeia não precisou da reserva.
                 detail = 'Nenhuma chamada porque a fonte anterior da cadeia deu conta — é o esperado';
+                idleReason = 'STANDBY';
             } else if (lastDeliveryAt) {
                 // Entrega gravada ANTES do reinício. Dizer só "sem chamadas" ao lado
                 // de "há 12 min" faz a linha se contradizer na tela; o que aconteceu
                 // é que o dado dela está no banco e o processo atual ainda não a usou.
                 detail = 'Entregou antes do último reinício; ainda sem novas chamadas neste processo';
+                idleReason = 'DELIVERED_BEFORE_RESTART';
             } else {
                 detail = 'Ainda não teve a vez dela desde o reinício do servidor';
+                idleReason = 'NOT_YET';
             }
         } else if (soAssuntoMorto) {
             // Antes de qualquer régua de taxa: ela não se aplica a esta amostra.
             status = SOURCE_STATUS.UNKNOWN;
+            idleReason = 'NO_LIVE_SUBJECT';
             const vocab = LEDGERED_CHAINS.get(source.chain);
             const morto = vocab?.deadSubject || 'que nenhuma fonte resolveu';
             detail = led.reached === 1
@@ -478,6 +499,12 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
             covers: cadeia.get(source.id)?.covers ?? null,
             status,
             detail,
+            /**
+             * A razão do silêncio, quando há silêncio. `null` sempre que a fonte
+             * está sendo julgada pelas chamadas dela — aí o estado é `status`, e
+             * não há o que explicar.
+             */
+            idleReason,
             lastDeliveryAt,
             lastDeliveryHours: idade === null ? null : Math.round(idade * 10) / 10,
             /**

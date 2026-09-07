@@ -574,7 +574,15 @@ export const externalMarketService = {
 
                 // (MEM) Concorrência limitada: cada scrape carrega uma árvore cheerio
                 // pesada. Promise.all sem teto mantinha todas em memória de uma vez.
-                const fallbackRaw = await mapWithConcurrency(failedTickers, GOOGLE_FALLBACK_CONCURRENCY, (ticker) => this.recoverQuote(ticker));
+                // `type` VAI JUNTO, e a omissão aqui era a porta de trás do caso
+                // Seagate/Stacks. `_providerSymbol` só sabe que `STX` não é cripto
+                // se alguém disser a classe; sem ela o palpite pelo catálogo vence e
+                // o fallback pede `STX-USD` — o Stacks — para uma ação do S&P 500.
+                // O caminho principal já passava `typeByTicker`; a reserva, não. E é
+                // exatamente quando a principal falha que a reserva roda: em
+                // 07/09/2026, com o Yahoo devolvendo 429 no endpoint de cotação, ela
+                // atendeu 600 ativos por ciclo.
+                const fallbackRaw = await mapWithConcurrency(failedTickers, GOOGLE_FALLBACK_CONCURRENCY, (ticker) => this.recoverQuote(ticker, { type: tipoDe(ticker) }));
 
                 // O warn é do RESULTADO da cadeia, não da primeira tentativa. Avisar
                 // logo que o Yahoo falhou fazia o report repetir todo run três linhas
@@ -605,7 +613,7 @@ export const externalMarketService = {
             // (MEM) Mesmo no modo de emergência usamos pool limitado em vez de varrer
             // o lote inteiro: protege o heap (árvores cheerio) quando o Yahoo cai e
             // TODOS os tickers caem no scraping de uma vez.
-            const emergencyRaw = await mapWithConcurrency(tickers, GOOGLE_FALLBACK_CONCURRENCY, (t) => this.recoverQuote(t, { reason: 'O Yahoo caiu e o lote inteiro foi para a reserva' }));
+            const emergencyRaw = await mapWithConcurrency(tickers, GOOGLE_FALLBACK_CONCURRENCY, (t) => this.recoverQuote(t, { reason: 'O Yahoo caiu e o lote inteiro foi para a reserva', type: tipoDe(t) }));
             const emergencyResults = emergencyRaw.filter(Boolean);
             logger.info(`✅ [Emergência] Recuperados ${emergencyResults.length}/${tickers.length} ativos via Google/Brapi.`);
             return emergencyResults;

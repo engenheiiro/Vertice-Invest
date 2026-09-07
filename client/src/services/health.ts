@@ -101,6 +101,12 @@ export interface DataSource {
     critical: boolean;
     status: SourceStatus;
     detail: string;
+    /**
+     * Por que a fonte está quieta, decidido no SERVIDOR. `null`/ausente quando
+     * ela está sendo julgada pelas próprias chamadas. A tela escolhe a palavra
+     * curta do rodapé a partir daqui — nunca rededuz o estado.
+     */
+    idleReason?: 'SKIPPED' | 'STANDBY' | 'DELIVERED_BEFORE_RESTART' | 'NOT_YET' | 'NO_LIVE_SUBJECT' | null;
     lastDeliveryAt: string | null;
     lastDeliveryHours: number | null;
     /**

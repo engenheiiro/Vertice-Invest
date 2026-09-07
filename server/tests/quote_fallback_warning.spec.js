@@ -135,3 +135,45 @@ describe('recoverQuote — registro do trajeto de cada ativo', () => {
     expect(getEscalations()[0].reason).toMatch(/lote inteiro/);
   });
 });
+
+/**
+ * ── A CLASSE DO ATIVO TEM QUE ATRAVESSAR A CADEIA INTEIRA ───────────────────
+ *
+ * `_providerSymbol` só sabe que `STX` não é cripto se alguém disser a classe;
+ * sem ela o palpite pelo catálogo vence e a reserva pede `STX-USD` — o Stacks —
+ * para uma ação do S&P 500. Foi assim que a Seagate passou meses cotada a
+ * US$ 0,0028. O caminho principal já passava `typeByTicker`; a reserva, não.
+ *
+ * E é exatamente quando a principal falha que a reserva roda: em 07/09/2026, com
+ * o Yahoo devolvendo 429 no endpoint de cotação, ela atendeu 600 ativos por
+ * ciclo — a porta de trás escancarada no dia de maior tráfego por ela.
+ */
+describe('getQuotes — a reserva recebe a classe do ativo', () => {
+  it('fallback por ticker faltante leva o type junto', async () => {
+    const spy = vi.spyOn(externalMarketService, 'recoverQuote').mockResolvedValue(null);
+
+    await externalMarketService.getQuotes(['STX'], { typeByTicker: new Map([['STX', 'STOCK_US']]) });
+
+    expect(spy).toHaveBeenCalledWith('STX', expect.objectContaining({ type: 'STOCK_US' }));
+    spy.mockRestore();
+  });
+
+  it('e o protocolo de emergência (Yahoo fora do ar) também', async () => {
+    yahoo.quote.mockRejectedValue(new Error('Failed to get crumb, status 429'));
+    const spy = vi.spyOn(externalMarketService, 'recoverQuote').mockResolvedValue(null);
+
+    await externalMarketService.getQuotes(['STX'], { typeByTicker: new Map([['STX', 'STOCK_US']]) });
+
+    expect(spy).toHaveBeenCalledWith('STX', expect.objectContaining({ type: 'STOCK_US' }));
+    spy.mockRestore();
+  });
+
+  it('sem typeByTicker o comportamento antigo fica de pé (null, não undefined)', async () => {
+    const spy = vi.spyOn(externalMarketService, 'recoverQuote').mockResolvedValue(null);
+
+    await externalMarketService.getQuotes(['NGRD3']);
+
+    expect(spy).toHaveBeenCalledWith('NGRD3', expect.objectContaining({ type: null }));
+    spy.mockRestore();
+  });
+});
