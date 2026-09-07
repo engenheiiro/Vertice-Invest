@@ -183,8 +183,8 @@ export const externalMarketService = {
      * e mais confiável do que sair do Yahoo.
      *
      * O que ele devolve é o ÚLTIMO FECHAMENTO, não a cotação viva — por isso vem
-     * depois do `quote`, nunca antes. A variação sai dos DOIS últimos candles, e
-     * não de um zero de conveniência: `change` é gravado direto no ativo, então
+     * depois do `quote`, nunca antes. A variação sai das DUAS últimas sessões com
+     * negócio, e não de um zero de conveniência: `change` é gravado direto no ativo, então
      * zero aqui não se lê como "não sei", se lê como "não mexeu" — some da lista
      * de altas e baixas do dia um papel que andou.
      */
@@ -201,7 +201,25 @@ export const externalMarketService = {
                 { period1: new Date(Date.now() - 10 * 86400000), interval: '1d' },
             )), { isEmpty: (r) => !(r?.quotes?.length > 0) });
 
-            const candles = (result?.quotes || []).filter((c) => c?.close > 0);
+            // SESSÃO É A QUE TEVE NEGÓCIO — barra sem volume é continuação.
+            //
+            // Para símbolo extinto o Yahoo não para de publicar: ele repete a
+            // barra diária, com o MESMO fechamento e `volume: 0`, a cada pregão,
+            // indefinidamente. HGPO11 (Pátria Prime Offices) foi liquidado e
+            // deixou de negociar em 25/05/2026; em 07/09 a reserva ainda
+            // entregava os mesmos R$ 153,42 carimbados com a sessão da véspera —
+            // 73 barras seguidas sem um único negócio. Como o `quote` não serve o
+            // papel, ERA ESTA FUNÇÃO que o mantinha vivo: preço datado de ontem
+            // vira sucesso lá em `refreshQuotesBatch`, que zera `failCount` e
+            // empurra `updatedAt` a cada 15 minutos. Imortalidade por eco.
+            //
+            // A data não denuncia (a fonte carimba a sessão de ontem) e o preço
+            // também não (às vezes vem com variação inventada por cima). Quem
+            // denuncia é o volume, e ele estava na resposta o tempo todo.
+            //
+            // Volume AUSENTE é "não sei", não "ninguém negociou": conta como
+            // sessão, que é o lado seguro. Só o zero explícito exclui a barra.
+            const candles = (result?.quotes || []).filter((c) => c?.close > 0 && c?.volume !== 0);
             const ultimo = candles[candles.length - 1];
             if (!ultimo) return null;
 
@@ -217,7 +235,10 @@ export const externalMarketService = {
                 change,
                 marketTime: ultimo.date || null,
                 previousClose: anterior,
-                volume: ultimo.volume || 0,
+                // A barra escolhida teve negócio (o filtro acima garante); volume
+                // ausente segue como `null` — "não sei" nunca vira zero, que aqui
+                // significaria o oposto do que este candle acabou de provar.
+                volume: Number.isFinite(ultimo.volume) ? ultimo.volume : null,
                 name: ticker,
                 source: 'YAHOO_CHART_FALLBACK',
             };
@@ -378,7 +399,10 @@ export const externalMarketService = {
                     marketTime: data.regularMarketTime || null,
                     previousClose: data.regularMarketPreviousClose || null,
                     // Volume p/ liquidez de ETFs B3 (.SA): o Yahoo costuma devolver 0 aqui.
-                    volume: data.regularMarketVolume || 0,
+                    // Ausente vira `null`, nunca 0: zero é a assinatura da sessão sem
+                    // negócio (ver `isNoTradeQuote`), e um campo que a fonte não
+                    // publicou não pode se passar por prova de que ninguém negociou.
+                    volume: Number.isFinite(data.regularMarketVolume) ? data.regularMarketVolume : null,
                     name: data.longName || cleanTicker,
                     source: 'BRAPI_FALLBACK'
                 };
@@ -551,7 +575,8 @@ export const externalMarketService = {
                     // "desde o fechamento de ontem" que o resto da carteira usa.
                     previousClose: item.regularMarketPreviousClose || null,
                     marketCap: item.marketCap || 0,
-                    volume: item.regularMarketVolume || item.volume || 0,
+                    // Ausente vira `null`, nunca 0 — ver a mesma nota no fallback da Brapi.
+                    volume: [item.regularMarketVolume, item.volume].find(Number.isFinite) ?? null,
                     name: item.longName || item.shortName || symbol,
                     source: 'YAHOO'
                 };

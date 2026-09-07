@@ -159,6 +159,35 @@ describe('refreshQuotesBatch — data da sessão', () => {
     expect(set.priceDate).toBeNull();
     expect(set.previousClose).toBe(0); // 0 = não publicado; a cripto cai na janela de 24h
   });
+
+  // A fonte carimba a sessão de ontem em cima de uma barra em que ninguém
+  // negociou. Gravar isso zera failCount e renova updatedAt — foi assim que
+  // HGPO11 (liquidado em 25/05/2026) seguia sendo cotado a cada 15 minutos.
+  it('sessão datada sem negócio (volume 0) não é gravada — vira falha, não sucesso', async () => {
+    mockFind([{ ticker: 'AERO11', updatedAt: minutesAgo(60), lastPrice: 100.01, isActive: true, failCount: 0, type: 'FII' }]);
+    externalMarketService.getQuotes.mockResolvedValue([
+      { ticker: 'AERO11', price: 100.01, change: 0, marketTime: new Date(), volume: 0, source: 'YAHOO' },
+    ]);
+
+    await marketDataService.refreshQuotesBatch(['AERO11'], false);
+
+    const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(set.lastPrice).toBeUndefined(); // nenhum preço gravado
+    expect(set.failCount).toBe(1); // caminho de falha: o ativo volta a envelhecer
+  });
+
+  it('sessão datada COM negócio segue sendo gravada', async () => {
+    mockFind([{ ticker: 'ITSA4', updatedAt: minutesAgo(60), lastPrice: 13.9, isActive: true, failCount: 0, type: 'STOCK' }]);
+    externalMarketService.getQuotes.mockResolvedValue([
+      { ticker: 'ITSA4', price: 13.95, change: 0.36, previousClose: 13.9, marketTime: new Date(), volume: 26704700, source: 'YAHOO' },
+    ]);
+
+    await marketDataService.refreshQuotesBatch(['ITSA4'], false);
+
+    const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(set.lastPrice).toBe(13.95);
+    expect(set.failCount).toBe(0);
+  });
 });
 
 describe('refreshQuotesBatch — blacklist dinâmica', () => {
@@ -280,16 +309,37 @@ describe('tryReactivateAssets — aposentadoria automática após a quarentena',
     expect(MarketAsset.bulkWrite).not.toHaveBeenCalled();
   });
 
-  it('candle recente segura a baixa: papel que negocia mas não cota via quote fica', async () => {
-    // HGPO11: FII ilíquido sem quote no Yahoo, com candle de 2 dias atrás.
-    mockFind([{ ticker: 'HGPO11', failCount: 10, type: 'FII', marketCap: 2.7e8, updatedAt: daysAgo(120) }]);
+  it('sessão recente segura a baixa: papel que negocia mas não cota via quote fica', async () => {
+    // FII ilíquido sem quote no Yahoo, com candle NEGOCIADO de 2 dias atrás.
+    mockFind([{ ticker: 'RBRI11', failCount: 10, type: 'FII', marketCap: 2.7e8, updatedAt: daysAgo(120) }]);
     externalMarketService.getQuotes.mockResolvedValue([]);
-    externalMarketService.getFullHistory.mockResolvedValue([{ date: daysAgo(2).toISOString().slice(0, 10), close: 153.42 }]);
+    externalMarketService.getFullHistory.mockResolvedValue([
+      { date: daysAgo(2).toISOString().slice(0, 10), close: 225.02, volume: 310 },
+    ]);
 
     const res = await marketDataService.tryReactivateAssets();
 
     expect(res.retired).toBe(0);
     expect(MarketAsset.bulkWrite).not.toHaveBeenCalled();
+  });
+
+  it('barra de continuação (volume 0) NÃO segura a baixa — era o álibi do papel morto', async () => {
+    // HGPO11 foi liquidado e parou de negociar em 25/05/2026. A guarda acima
+    // nasceu citando ele como exemplo de "papel vivo que só não cota", com base
+    // num candle de dois dias atrás — que era o Yahoo repetindo o último
+    // fechamento com volume zero, todo pregão, desde a liquidação.
+    mockFind([{ ticker: 'HGPO11', failCount: 10, type: 'FII', marketCap: 2.7e8, updatedAt: daysAgo(120) }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+    externalMarketService.getFullHistory.mockResolvedValue([
+      { date: daysAgo(105).toISOString().slice(0, 10), close: 153.42, volume: 5155 },
+      { date: daysAgo(2).toISOString().slice(0, 10), close: 153.42, volume: 0 },
+      { date: daysAgo(1).toISOString().slice(0, 10), close: 153.42, volume: 0 },
+    ]);
+
+    const res = await marketDataService.tryReactivateAssets();
+
+    expect(res.retired).toBe(1);
+    expect(MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set.isBlacklisted).toBe(true);
   });
 
   it('failCount baixo não aposenta, por mais parado que esteja (doc recém-criado)', async () => {
@@ -597,6 +647,38 @@ describe('aposentadoria — a idade é da última prova de pregão', () => {
   it('e vale a MAIS RECENTE das duas, não a média nem a pior', async () => {
     mockFind([{ ticker: 'MEIO11', failCount: 10, type: 'FII', marketCap: 1e8, updatedAt: daysAgo(10), priceDate: dayKeyAgo(200) }]);
     AssetHistory.aggregate.mockResolvedValue([{ ticker: 'MEIO11', lastDate: dayKeyAgo(5) }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+
+    expect((await marketDataService.tryReactivateAssets()).retired).toBe(0);
+  });
+
+  // ...mas "a mais recente das duas" só vale entre testemunhas honestas, e
+  // `priceDate` é justamente o campo que o eco de volume zero forjava.
+  it('série que cobre a data da cotação refuta o priceDate forjado pelo eco', async () => {
+    // HGPO11: último pregão em 25/05 (105d), e a série seguiu recebendo barras de
+    // continuação — foi uma delas que gravou o priceDate da véspera.
+    mockFind([{ ticker: 'HGPO11', failCount: 10, type: 'FII', marketCap: 2.7e8, updatedAt: daysAgo(1), priceDate: dayKeyAgo(3) }]);
+    AssetHistory.aggregate.mockResolvedValue([
+      { ticker: 'HGPO11', lastDate: dayKeyAgo(105), lastAnyDate: dayKeyAgo(3) },
+    ]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+    externalMarketService.getFullHistory.mockResolvedValue(null);
+    MarketAsset.bulkWrite.mockResolvedValue({ modifiedCount: 1 });
+
+    const res = await marketDataService.tryReactivateAssets();
+
+    expect(res.retired).toBe(1);
+    expect(MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set.retiredReason)
+      .toMatch(/105d sem pregão \(último candle\)/);
+  });
+
+  it('série ATRASADA em relação à cotação não refuta nada — a cotação volta a valer', async () => {
+    // O worker pode estar para trás. Aí a série não tem o que dizer sobre a
+    // sessão que a cotação afirma, e a testemunha mais recente segue valendo.
+    mockFind([{ ticker: 'LENTO11', failCount: 10, type: 'FII', marketCap: 1e8, updatedAt: daysAgo(1), priceDate: dayKeyAgo(2) }]);
+    AssetHistory.aggregate.mockResolvedValue([
+      { ticker: 'LENTO11', lastDate: dayKeyAgo(120), lastAnyDate: dayKeyAgo(120) },
+    ]);
     externalMarketService.getQuotes.mockResolvedValue([]);
 
     expect((await marketDataService.tryReactivateAssets()).retired).toBe(0);

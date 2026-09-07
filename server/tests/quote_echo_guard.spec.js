@@ -84,3 +84,53 @@ describe('sessão velha demais para valer como preço de hoje', () => {
         expect(marketDataService.isStaleSessionQuote({ price: 1, marketTime: 'lixo' })).toBe(false);
     });
 });
+
+/**
+ * A terceira irmã: a fonte DATA a sessão certa e ainda assim não houve pregão.
+ *
+ * Buraco que as outras duas deixavam aberto, medido em 07/09/2026 a partir do
+ * HGPO11 — FII liquidado, negociação encerrada na B3 em 25/05/2026, e ainda
+ * assim `isActive: true`, `failCount: 0` e `updatedAt` de minutos atrás. O Yahoo
+ * repete a barra diária do símbolo extinto com o mesmo fechamento e
+ * `volume: 0` a cada pregão; o eco não o pega (a fonte data a resposta) e a
+ * sessão velha também não (a data é de ontem). Eram 19 ativos assim, o mais
+ * antigo sem negociar desde 28/01/2026.
+ *
+ * A régua tem as mesmas duas forças opostas do eco: severa demais mata papel
+ * ilíquido vivo que passou um pregão sem negócio; frouxa demais deixa o morto
+ * cotando para sempre. Por isso ela olha só o volume — e só o zero explícito.
+ */
+describe('sessão datada, mas sem negócio nenhum', () => {
+    const semNegocio = (quote) => marketDataService.isNoTradeQuote(quote);
+    const ontem = new Date(Date.now() - 86400000);
+
+    it('volume zero na sessão de ontem não é prova de pregão', () => {
+        expect(semNegocio({ price: 153.42, marketTime: ontem, volume: 0 })).toBe(true);
+    });
+
+    it('variação inventada não salva a barra sem negócio', () => {
+        // BIPD11 chegou com +1,4% sem ter negociado desde março: o movimento do
+        // preço não distingue vivo de morto aqui, só o volume distingue.
+        expect(semNegocio({ price: 989.33, change: 1.4, marketTime: ontem, volume: 0 })).toBe(true);
+    });
+
+    it('sessão com negócio é sessão', () => {
+        expect(semNegocio({ price: 13.95, marketTime: ontem, volume: 26704700 })).toBe(false);
+        expect(semNegocio({ price: 1.12, marketTime: ontem, volume: 2000 })).toBe(false);
+    });
+
+    it('volume ausente é "não sei", não "ninguém negociou"', () => {
+        // O scraping do Google não publica o campo. Tratar a ausência como zero
+        // mandaria para a baixa justamente o papel que a outra guarda protege.
+        expect(semNegocio({ price: 10, marketTime: ontem })).toBe(false);
+        expect(semNegocio({ price: 10, marketTime: ontem, volume: null })).toBe(false);
+    });
+
+    it('sem data não é problema desta guarda — é do eco', () => {
+        expect(semNegocio({ price: 10, volume: 0 })).toBe(false);
+    });
+
+    it('cotação ausente não é sessão vazia', () => {
+        expect(semNegocio(null)).toBe(false);
+    });
+});

@@ -392,6 +392,38 @@ export const marketDataService = {
         return (Date.now() - t) / 86400000 > RETIRE_RECENT_CANDLE_DAYS;
     },
 
+    /**
+     * A FONTE DATOU A SESSÃO — MAS ALGUÉM NEGOCIOU NELA?
+     *
+     * Terceira irmã de `isEchoQuote` e `isStaleSessionQuote`, e a que fecha o
+     * buraco que as duas deixavam aberto: a fonte RESPONDE, DATA a resposta com
+     * a sessão da véspera, e mesmo assim não está falando de pregão nenhum.
+     *
+     * Levantamento de 07/09/2026: 19 ativos ATIVOS, todos com `failCount: 0` e
+     * `updatedAt` de minutos atrás, sem um único negócio há 30 dias ou mais —
+     * AERO11 parou em 28/01 e seguia sendo cotado sete meses depois. O Yahoo
+     * publica a barra do símbolo extinto com `regularMarketVolume: 0` a cada
+     * pregão, às vezes com variação inventada em cima (BIPD11 chegou com +1,4%
+     * sem negociar desde março) e às vezes com preço diferente do que está
+     * gravado (SPMO11). Ou seja: nem a data, nem o movimento, nem a comparação
+     * com o banco separam o vivo do morto aqui. O volume separa.
+     *
+     * Zero é o único valor que acusa. Volume AUSENTE é "não sei" — o Google não
+     * publica o campo — e "não sei" não pode matar papel vivo. Medido contra 45
+     * papéis da B3 que negociaram na última sessão: zero falsos positivos; nas
+     * outras classes (cripto, EUA, ETF) o volume vem sempre.
+     *
+     * Consequência, junto com as irmãs: o papel não vira sucesso, envelhece
+     * 1 falha/dia e sai pela porta de sempre (10 falhas → inativo; 90 dias sem
+     * pregão → aposentadoria). Papel vivo que passe um pregão sem negócio perde
+     * um dia de contagem e o recupera no primeiro negócio seguinte — a mesma
+     * frouxidão deliberada do `isEchoQuote`, pelo mesmo motivo.
+     */
+    isNoTradeQuote(quote) {
+        if (!quote?.marketTime) return false; // sem data, quem responde é isEchoQuote
+        return quote.volume === 0;
+    },
+
     // Regra ÚNICA da blacklist dinâmica por falha de cotação. Recebe os docs de
     // ativos (com failCount/lastFailDate/marketCap/liquidity) e o conjunto de
     // tickers que cotaram com sucesso; devolve os bulkOps de failCount/desativação.
@@ -596,6 +628,8 @@ export const marketDataService = {
             const echoedTickers = [];
             // Cotação datada de uma sessão velha demais (ver isStaleSessionQuote).
             const staleTickers = [];
+            // Cotação datada da sessão certa, em barra sem negócio (ver isNoTradeQuote).
+            const noTradeTickers = [];
             // Preço que chegou fora da magnitude esperada (ver utils/quoteSanity).
             // NÃO é caminho de falha: o preço é gravado do mesmo jeito, porque
             // grupamento e desdobramento têm a mesma assinatura de um erro de
@@ -635,6 +669,13 @@ export const marketDataService = {
                     // baixa em vez de parecer atualizado para sempre.
                     if (this.isStaleSessionQuote(quote)) {
                         staleTickers.push(`${ticker}@${sessionDateKey(quote.marketTime)}`);
+                        continue;
+                    }
+                    // Sessão de ontem, volume zero: a fonte datou uma barra em que
+                    // ninguém negociou. Mesmo destino do eco e da sessão velha —
+                    // não é sucesso, e o ativo volta a envelhecer. Ver isNoTradeQuote.
+                    if (this.isNoTradeQuote(quote)) {
+                        noTradeTickers.push(`${ticker}@${sessionDateKey(quote.marketTime)}`);
                         continue;
                     }
                     successfulTickers.add(ticker);
@@ -841,6 +882,19 @@ export const marketDataService = {
                 logger.warn(
                     `🕰️ [MarketData] ${staleTickers.length} ativo(s) com cotação de sessão antiga (> ${RETIRE_RECENT_CANDLE_DAYS}d) — não gravada como preço de hoje: ${staleTickers.join(', ')}`,
                     { stale: staleTickers },
+                );
+            }
+
+            // O papel que "cota" todo dia sem negociar nenhum precisa aparecer
+            // NOMEADO: ele não some em "falhou em todas as fontes" (uma fonte
+            // respondeu, e com data de ontem) nem no eco (o preço até muda). Sem
+            // esta linha, o único vestígio de HGPO11 & cia. no log era um ativo
+            // saudável sendo cotado a cada 15 minutos.
+            if (noTradeTickers.length > 0) {
+                logger.warn(
+                    `🈳 [MarketData] ${noTradeTickers.length} ativo(s) com sessão datada mas SEM negócio `
+                    + `(volume zero) — não gravada como preço: ${noTradeTickers.join(', ')}`,
+                    { noTrade: noTradeTickers },
                 );
             }
 
@@ -1155,7 +1209,10 @@ export const marketDataService = {
      *
      * Sem nenhuma das duas resta `updatedAt`, e aí ele é a resposta certa por ser
      * a única: ativo recém-criado, que nunca cotou e nunca teve série, não pode
-     * ser aposentado no primeiro dia nem virar imortal.
+     * ser aposentado no primeiro dia nem virar imortal. É também onde cai o fundo
+     * que listou e nunca negociou — série cheia de barras sem volume e nenhum
+     * pregão para datar. Ele fica de fora da baixa automática, que é o lado
+     * seguro: "nunca provou que negocia" não é o mesmo que "parou de negociar".
      *
      * Uma consulta para o lote inteiro; a série não é hidratada (só a data máxima
      * é projetada), porque puxar ~400 candles de cada inativo seria caro à toa.
@@ -1177,6 +1234,7 @@ export const marketDataService = {
         }
 
         let candlePorChave = new Map();
+        let coberturaPorChave = new Map();
         try {
             const rows = await AssetHistory.aggregate([
                 { $match: { ticker: { $in: [...porChave.keys()] } } },
@@ -1184,6 +1242,40 @@ export const marketDataService = {
                     $project: {
                         ticker: 1,
                         lastDate: {
+                            $max: {
+                                $map: {
+                                    input: {
+                                        $filter: {
+                                            input: { $ifNull: ['$history', []] },
+                                            as: 'h',
+                                            // Candle com fechamento E com negócio. A barra de
+                                            // continuação do símbolo extinto entra na nossa série
+                                            // como qualquer outra (fechamento repetido, volume 0) e,
+                                            // contada como sessão, reiniciava este relógio todo dia:
+                                            // HGPO11 tinha 73 delas em cima do último pregão real
+                                            // (25/05/2026) e aparecia com 1 dia de idade.
+                                            //
+                                            // Volume ausente (série antiga, antes do campo) conta
+                                            // como sessão — fail-closed: sem prova de morte, ninguém
+                                            // é aposentado.
+                                            cond: {
+                                                $and: [
+                                                    { $gt: ['$$h.close', 0] },
+                                                    { $ne: [{ $ifNull: ['$$h.volume', 1] }, 0] },
+                                                ],
+                                            },
+                                        },
+                                    },
+                                    as: 'h',
+                                    in: '$$h.date',
+                                },
+                            },
+                        },
+                        // Último candle de QUALQUER espécie — inclusive a barra de
+                        // continuação. Não é prova de pregão; é prova de que a nossa
+                        // série tem opinião sobre aquele período (ver o desempate das
+                        // testemunhas, abaixo).
+                        lastAnyDate: {
                             $max: {
                                 $map: {
                                     input: {
@@ -1202,6 +1294,7 @@ export const marketDataService = {
                 },
             ]);
             candlePorChave = new Map(rows.map((r) => [r.ticker, r.lastDate]));
+            coberturaPorChave = new Map(rows.map((r) => [r.ticker, r.lastAnyDate]));
         } catch (error) {
             // Fail-CLOSED: sem a série não há prova de morte, e a ausência da
             // consulta não pode virar sentença. Todo mundo fica com idade nula e
@@ -1211,18 +1304,38 @@ export const marketDataService = {
         }
 
         for (const a of lista) {
-            const candle = daysSinceDayKey(candlePorChave.get(historyStorageKey(a.ticker, a.type)));
+            const chave = historyStorageKey(a.ticker, a.type);
+            const candle = daysSinceDayKey(candlePorChave.get(chave));
             const quote = daysSinceDayKey(a.priceDate);
+
+            // TESTEMUNHA QUE COBRE O PERÍODO REFUTA A QUE SÓ O ATRAVESSA.
+            //
+            // "A mais recente das duas" era certo enquanto as duas eram honestas.
+            // Só que `priceDate` é exatamente o campo que o eco de volume zero
+            // forjava: em 07/09/2026, 19 ativos sem um único negócio há 30 dias ou
+            // mais carregavam `priceDate` da véspera, gravado por uma barra em que
+            // ninguém negociou. Barrar a gravação nova (ver `isNoTradeQuote`) não
+            // apaga o carimbo velho — e ele sozinho adiaria a baixa em mais 90 dias.
+            //
+            // Quando a nossa série TEM candle no dia da cotação ou depois dele, ela
+            // já respondeu sobre aquele período: se não houve negócio ali, não houve.
+            // A cotação só fala quando a série está calada (ativo sem série, ou série
+            // atrasada em relação à cotação) — e aí ela volta a ser a única prova, que
+            // é como PTNT3/PTNT4 chegaram aqui.
+            const cobertura = coberturaPorChave.get(chave) || null;
+            const serieCobreACotacao = Boolean(cobertura) && Boolean(a.priceDate) && cobertura >= a.priceDate;
+
             const candidatos = [
                 candle === null ? null : { days: candle, basis: 'último candle' },
-                quote === null ? null : { days: quote, basis: 'última cotação datada' },
+                (quote === null || serieCobreACotacao) ? null : { days: quote, basis: 'última cotação datada' },
             ].filter(Boolean);
 
             if (candidatos.length === 0) {
                 idade.set(a.ticker, { days: daysSince(a.updatedAt), basis: 'sem sessão conhecida' });
                 continue;
             }
-            // A mais RECENTE das provas: basta uma testemunha para o papel estar vivo.
+            // A mais RECENTE das provas restantes: basta uma testemunha para o papel
+            // estar vivo.
             idade.set(a.ticker, candidatos.reduce((m, c) => (c.days < m.days ? c : m)));
         }
         return idade;
@@ -1249,19 +1362,26 @@ export const marketDataService = {
         if (candidates.length === 0) return [];
 
         // Última prova antes da baixa: o endpoint de cotação e o de histórico do
-        // Yahoo não cobrem o mesmo conjunto de papéis — HGPO11 (FII ilíquido) não
-        // devolve quote nenhum e mesmo assim tem candle de dois dias atrás. Candle
-        // recente = papel vivo: mantém inativo (o quote é que não o serve) e NÃO
-        // aposenta. Histórico sem resposta conta como ausência de prova de vida —
-        // o papel já falhou cotação nos 90 dias da quarentena, a baixa é reversível
-        // (`retireDeadTickers.js --undo`) e o log nomeia quem saiu.
+        // Yahoo não cobrem o mesmo conjunto de papéis — um FII ilíquido pode não
+        // devolver quote nenhum e mesmo assim ter candle de dois dias atrás.
+        // Sessão recente = papel vivo: mantém inativo (o quote é que não o serve)
+        // e NÃO aposenta. Histórico sem resposta conta como ausência de prova de
+        // vida — o papel já falhou cotação nos 90 dias da quarentena, a baixa é
+        // reversível (`retireDeadTickers.js --undo`) e o log nomeia quem saiu.
+        //
+        // SESSÃO, não barra: o exemplo que originou esta guarda era o próprio
+        // HGPO11, e ele estava morto desde 25/05/2026. O "candle de dois dias
+        // atrás" era continuação com volume 0 — a última prova antes da baixa
+        // absolvia justamente quem ela existia para condenar.
         const targets = [];
         for (const a of candidates) {
             let candles = null;
             try {
                 candles = await externalMarketService.getFullHistory(a.ticker, a.type);
             } catch { /* fonte fora → segue como "sem candle" e a baixa acontece */ }
-            const last = Array.isArray(candles) ? [...candles].reverse().find(c => c?.close > 0) : null;
+            const last = Array.isArray(candles)
+                ? [...candles].reverse().find(c => c?.close > 0 && c?.volume !== 0)
+                : null;
             const candleAge = last ? daysSince(last.date) : null;
             if (candleAge !== null && candleAge <= RETIRE_RECENT_CANDLE_DAYS) {
                 logger.info(`↩️ [Reativação] ${a.ticker} segue negociando (candle de ${candleAge}d) — não aposenta, só não cota via quote.`);
