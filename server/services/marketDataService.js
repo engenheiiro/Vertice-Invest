@@ -67,6 +67,28 @@ const RETIRE_AFTER_INACTIVE_DAYS = 90;
 // Idade máxima do último candle para considerar que o papel ainda negocia (e,
 // portanto, NÃO pode ser aposentado, por mais que o endpoint de cotação o ignore).
 const RETIRE_RECENT_CANDLE_DAYS = 10;
+// "MORREU" E "NUNCA NEGOCIOU AQUI" TÊM A MESMA APARÊNCIA DEPOIS DO FATO.
+//
+// Zero negócio há meses descreve os dois: o fundo liquidado e o FII de oferta
+// restrita que negocia 1 a 9 vezes por semestre sem estar morto (FTCE11 tem
+// R$ 3,9 bi de patrimônio e um negócio em seis meses). Em 05/09/2026 o dono
+// conferiu 26 desses a dedo, aposentou 7 com prova externa (informe, comunicado,
+// falência) e manteve 19 justamente por isso — a automação não pode desfazer
+// aquela triagem sozinha.
+//
+// A segunda evidência que faltava está na nossa própria série: quem MORREU teve
+// mercado antes de parar; quem nunca teve mercado nunca o teve. Medido em
+// 07/09/2026, nas 120 sessões até o último negócio de cada um — HGPO11
+// (liquidado) 120/120, ITSA4 (vivo) 120/120, e todos os 18 de oferta restrita
+// entre 1% e 18%. O corte de 50% cai no meio de um vão enorme.
+//
+// Janela curta demais não julga nada: AERO11 tem dois negócios no começo da
+// série e 100% de um denominador de dois. Sem sessões suficientes, o papel sai
+// do automático e vai para a triagem a dedo (`retireDeadTickers.js`), que mede
+// o pregão da B3 em vez de inferir da nossa série.
+const REGULAR_MARKET_WINDOW = 120;
+const REGULAR_MARKET_MIN_SESSIONS = 60;
+const REGULAR_MARKET_MIN_RATIO = 0.5;
 // Single-flight por processo: uma tela com vários consumidores do mesmo ticker
 // não dispara várias renovações enquanto o primeiro refresh ainda está em voo.
 const interactiveRefreshes = new Map();
@@ -1341,6 +1363,54 @@ export const marketDataService = {
         return idade;
     },
 
+    /**
+     * ── ESTE PAPEL CHEGOU A TER MERCADO? ───────────────────────────────────────
+     *
+     * Lê a nossa série e devolve, por ticker, a densidade de pregões com negócio
+     * na janela de `REGULAR_MARKET_WINDOW` sessões que TERMINA no último negócio
+     * conhecido — não nas últimas 120 sessões do calendário, que para um papel
+     * morto seriam todas vazias por definição e não distinguiriam nada.
+     *
+     * `regular: false` não é veredito de vida: é "esta evidência não serve para
+     * dar baixa neste papel". Ver a nota nas constantes.
+     *
+     * @param {Array<{ticker: string, type: string}>} assets
+     * @returns {Promise<Map<string, {regular: boolean, traded: number, sessions: number}>>}
+     */
+    async hadRegularMarketByTicker(assets) {
+        const out = new Map();
+        const lista = assets || [];
+        if (lista.length === 0) return out;
+
+        const chavePorTicker = new Map(lista.map((a) => [a.ticker, historyStorageKey(a.ticker, a.type)]));
+        const rows = await AssetHistory
+            .find({ ticker: { $in: [...new Set([...chavePorTicker.values()].filter(Boolean))] } })
+            .select('ticker history')
+            .lean();
+        const serie = new Map(rows.map((r) => [r.ticker, r.history || []]));
+
+        for (const a of lista) {
+            const hist = (serie.get(chavePorTicker.get(a.ticker)) || []).filter((c) => c?.close > 0);
+            // Volume ausente conta como negócio, pela mesma razão de sempre: série
+            // antiga não tinha o campo, e "não sei" não pode virar prova de morte.
+            const negociou = hist.map((c) => c?.volume !== 0);
+            const ultimo = negociou.lastIndexOf(true);
+            if (ultimo < 0) {
+                out.set(a.ticker, { regular: false, traded: 0, sessions: hist.length });
+                continue;
+            }
+            const janela = negociou.slice(Math.max(0, ultimo - (REGULAR_MARKET_WINDOW - 1)), ultimo + 1);
+            const traded = janela.filter(Boolean).length;
+            out.set(a.ticker, {
+                regular: janela.length >= REGULAR_MARKET_MIN_SESSIONS
+                    && traded / janela.length >= REGULAR_MARKET_MIN_RATIO,
+                traded,
+                sessions: janela.length,
+            });
+        }
+        return out;
+    },
+
     async retireStaleInactiveAssets(stillInactive) {
         const comFalhas = (stillInactive || []).filter(a =>
             (a.failCount || 0) >= MAX_FAILURES_BEFORE_BLACKLIST,
@@ -1361,6 +1431,31 @@ export const marketDataService = {
         const candidates = eligible.filter(a => !held.has(a.ticker));
         if (candidates.length === 0) return [];
 
+        // Papel que nunca teve mercado sai do automático e vai para a triagem a
+        // dedo, com prova externa. Ver a nota em REGULAR_MARKET_MIN_RATIO.
+        let comMercado = candidates;
+        try {
+            const mercado = await this.hadRegularMarketByTicker(candidates);
+            comMercado = candidates.filter((a) => mercado.get(a.ticker)?.regular);
+            const semMercado = candidates.filter((a) => !mercado.get(a.ticker)?.regular);
+            if (semMercado.length > 0) {
+                const detalhe = semMercado
+                    .map((a) => `${a.ticker} (${mercado.get(a.ticker)?.traded}/${mercado.get(a.ticker)?.sessions})`)
+                    .join(', ');
+                logger.warn(
+                    `🫥 [Reativação] ${semMercado.length} ativo(s) sem pregão há ${RETIRE_AFTER_INACTIVE_DAYS}d+ mas que nunca `
+                    + `tiveram mercado regular — fora da baixa automática, decidir a dedo: ${detalhe}`,
+                    { noRegularMarket: semMercado.map((a) => a.ticker) },
+                );
+            }
+        } catch (error) {
+            // Fail-CLOSED: sem a medida não há como separar o liquidado do fundo
+            // de oferta restrita, e a baixa automática espera a próxima rodada.
+            logger.warn(`[Reativação] Densidade de pregão indisponível (${error.message}); nenhuma baixa automática nesta rodada.`);
+            return [];
+        }
+        if (comMercado.length === 0) return [];
+
         // Última prova antes da baixa: o endpoint de cotação e o de histórico do
         // Yahoo não cobrem o mesmo conjunto de papéis — um FII ilíquido pode não
         // devolver quote nenhum e mesmo assim ter candle de dois dias atrás.
@@ -1374,7 +1469,7 @@ export const marketDataService = {
         // atrás" era continuação com volume 0 — a última prova antes da baixa
         // absolvia justamente quem ela existia para condenar.
         const targets = [];
-        for (const a of candidates) {
+        for (const a of comMercado) {
             let candles = null;
             try {
                 candles = await externalMarketService.getFullHistory(a.ticker, a.type);

@@ -35,6 +35,26 @@ const mockHistoryFind = (docs) => {
   AssetHistory.find.mockReturnValue({ select: vi.fn().mockResolvedValue(docs) });
 };
 
+// Helper: faz AssetHistory.find(...).select(...).lean() resolver para os docs dados.
+const mockHistorySeries = (docs) => {
+  AssetHistory.find.mockReturnValue({
+    select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(docs) }),
+  });
+};
+
+// Série de um papel que TEVE mercado: negócio em todo pregão até `desde` dias
+// atrás, quando parou. É o retrato do liquidado — e o que separa ele do FII de
+// oferta restrita, que negocia meia dúzia de vezes por semestre. Ver
+// `hadRegularMarketByTicker`.
+const serieComMercado = (ticker, desde, sessoes = 120) => ([{
+  ticker,
+  history: Array.from({ length: sessoes }, (_, i) => ({
+    date: new Date(Date.now() - (desde + sessoes - 1 - i) * 86400000).toISOString().slice(0, 10),
+    close: 10,
+    volume: 5000,
+  })),
+}]);
+
 const minutesAgo = (m) => new Date(Date.now() - m * 60 * 1000);
 
 beforeEach(() => {
@@ -272,6 +292,7 @@ describe('tryReactivateAssets — aposentadoria automática após a quarentena',
 
   it('aposenta (blacklist) quem passou 90d inativo sem cotar em nenhuma fonte', async () => {
     mockFind([{ ticker: 'MMC', failCount: 10, type: 'STOCK_US', marketCap: 0, updatedAt: daysAgo(127) }]);
+    mockHistorySeries(serieComMercado('MMC', 127));
     externalMarketService.getQuotes.mockResolvedValue([]); // segue sem cotar
     externalMarketService.getFullHistory.mockResolvedValue(null); // nem histórico
     MarketAsset.bulkWrite.mockResolvedValue({ modifiedCount: 1 });
@@ -329,6 +350,7 @@ describe('tryReactivateAssets — aposentadoria automática após a quarentena',
     // num candle de dois dias atrás — que era o Yahoo repetindo o último
     // fechamento com volume zero, todo pregão, desde a liquidação.
     mockFind([{ ticker: 'HGPO11', failCount: 10, type: 'FII', marketCap: 2.7e8, updatedAt: daysAgo(120) }]);
+    mockHistorySeries(serieComMercado('HGPO11', 105));
     externalMarketService.getQuotes.mockResolvedValue([]);
     externalMarketService.getFullHistory.mockResolvedValue([
       { date: daysAgo(105).toISOString().slice(0, 10), close: 153.42, volume: 5155 },
@@ -609,6 +631,7 @@ describe('aposentadoria — a idade é da última prova de pregão', () => {
 
   it('PTNT3 — candle de 104d aposenta mesmo com updatedAt de 40d', async () => {
     mockFind([{ ticker: 'PTNT3', failCount: 10, type: 'STOCK', marketCap: 4e8, updatedAt: daysAgo(40), priceDate: null }]);
+    mockHistorySeries(serieComMercado('PTNT3', 104));
     AssetHistory.aggregate.mockResolvedValue([{ ticker: 'PTNT3', lastDate: dayKeyAgo(104) }]);
     externalMarketService.getQuotes.mockResolvedValue([]);
     externalMarketService.getFullHistory.mockResolvedValue(null);
@@ -658,6 +681,7 @@ describe('aposentadoria — a idade é da última prova de pregão', () => {
     // HGPO11: último pregão em 25/05 (105d), e a série seguiu recebendo barras de
     // continuação — foi uma delas que gravou o priceDate da véspera.
     mockFind([{ ticker: 'HGPO11', failCount: 10, type: 'FII', marketCap: 2.7e8, updatedAt: daysAgo(1), priceDate: dayKeyAgo(3) }]);
+    mockHistorySeries(serieComMercado('HGPO11', 105));
     AssetHistory.aggregate.mockResolvedValue([
       { ticker: 'HGPO11', lastDate: dayKeyAgo(105), lastAnyDate: dayKeyAgo(3) },
     ]);
@@ -670,6 +694,49 @@ describe('aposentadoria — a idade é da última prova de pregão', () => {
     expect(res.retired).toBe(1);
     expect(MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set.retiredReason)
       .toMatch(/105d sem pregão \(último candle\)/);
+  });
+
+  // O dono conferiu 26 papéis sem negócio a dedo em 05/09/2026 e manteve 19:
+  // fundo de oferta restrita negocia meia dúzia de vezes por semestre sem estar
+  // morto. A automação não pode desfazer aquela triagem sozinha.
+  it('quem nunca teve mercado fica fora da baixa automática, por mais parado que esteja', async () => {
+    // FTCE11: R$ 3,9 bi de patrimônio e UM negócio em seis meses.
+    mockFind([{ ticker: 'FTCE11', failCount: 10, type: 'FII', marketCap: 3.9e9, updatedAt: daysAgo(1), priceDate: null }]);
+    AssetHistory.aggregate.mockResolvedValue([{ ticker: 'FTCE11', lastDate: dayKeyAgo(144), lastAnyDate: dayKeyAgo(3) }]);
+    // 120 sessões até o último negócio, e só ele teve volume.
+    mockHistorySeries([{
+      ticker: 'FTCE11',
+      history: Array.from({ length: 120 }, (_, i) => ({
+        date: dayKeyAgo(144 + 119 - i),
+        close: 2914.9,
+        volume: i === 119 ? 3 : 0,
+      })),
+    }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+
+    const res = await marketDataService.tryReactivateAssets();
+
+    expect(res.retired).toBe(0);
+    expect(MarketAsset.bulkWrite).not.toHaveBeenCalled();
+    expect(externalMarketService.getFullHistory).not.toHaveBeenCalled(); // nem gasta o probe
+  });
+
+  it('janela curta demais não julga: papel com dois negócios no começo da série fica', async () => {
+    // AERO11 negociou duas vezes em janeiro e nunca mais. 100% de um
+    // denominador de dois não é prova de mercado regular.
+    mockFind([{ ticker: 'AERO11', failCount: 10, type: 'FII', marketCap: 1e8, updatedAt: daysAgo(1), priceDate: null }]);
+    AssetHistory.aggregate.mockResolvedValue([{ ticker: 'AERO11', lastDate: dayKeyAgo(222), lastAnyDate: dayKeyAgo(3) }]);
+    mockHistorySeries([{
+      ticker: 'AERO11',
+      history: [
+        { date: dayKeyAgo(223), close: 100.01, volume: 12 },
+        { date: dayKeyAgo(222), close: 100.01, volume: 7 },
+        ...Array.from({ length: 150 }, (_, i) => ({ date: dayKeyAgo(150 - i), close: 100.01, volume: 0 })),
+      ],
+    }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+
+    expect((await marketDataService.tryReactivateAssets()).retired).toBe(0);
   });
 
   it('série ATRASADA em relação à cotação não refuta nada — a cotação volta a valer', async () => {
