@@ -18,7 +18,10 @@ import { loadLatestCloseBefore } from '../utils/dayCloses.js';
 import { deriveDividendFromGap } from '../utils/dividendGap.js';
 import { isAccumulatingBrEtf } from '../config/brEtfList.js';
 import { recordCacheAccess } from '../utils/performanceMetrics.js';
-import { judgeQuote, contestsChange, resolveContestedChange } from '../utils/quoteSanity.js';
+import {
+    judgeQuote, contestsChange, resolveContestedChange,
+    needsOwnAnchor, arbitrateStoredJump, applyStoredJumpArbitration,
+} from '../utils/quoteSanity.js';
 import { recordSuspectQuote } from '../utils/sourceHealth.js';
 
 /**
@@ -70,6 +73,19 @@ const interactiveRefreshes = new Map();
 
 /** Dias inteiros desde `date` (null quando a data não existe). */
 const daysSince = (date) => (date ? Math.floor((Date.now() - new Date(date).getTime()) / 86400000) : null);
+
+/** Uma data-chave de pregão bem formada ('YYYY-MM-DD'). */
+const DAY_KEY_RE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
+
+/**
+ * Idade, em dias, de uma data-chave de PREGÃO. Ao meio-dia UTC para o resultado
+ * não depender do fuso de quem pergunta.
+ */
+const daysSinceDayKey = (dayKey) => (
+    DAY_KEY_RE.test(String(dayKey || ''))
+        ? daysSince(new Date(String(dayKey) + 'T12:00:00.000Z'))
+        : null
+);
 
 /** Valor ausente/zerado vira `null` — a UI mostra vazio em vez de número inventado. */
 const nullIfAbsent = (value) => (Number.isFinite(value) && value !== 0 ? value : null);
@@ -299,7 +315,13 @@ export const marketDataService = {
                 if (!data) continue;
                 const set = { updatedAt: new Date() };
                 if (Number(data.dy) >= 0) set.dy = Number(data.dy) || 0;
-                if (Number(data.price) > 0) set.lastPrice = Number(data.price);
+                // Sem `priceDate` junto, de propósito: o scraping não diz de que
+                // sessão é o preço. A assinatura é o que permite ao juiz saber que
+                // o par (preço, data) do banco veio de duas escritas diferentes.
+                if (Number(data.price) > 0) {
+                    set.lastPrice = Number(data.price);
+                    set.priceSource = 'FUNDAMENTUS';
+                }
                 operations.push({ updateOne: { filter: { ticker }, update: { $set: set } } });
             }
             if (operations.length > 0) await MarketAsset.bulkWrite(operations);
@@ -527,7 +549,7 @@ export const marketDataService = {
             // `priceDate` entra no select por causa do juiz de magnitude: comparar
             // o preço novo com o guardado só faz sentido sabendo de que sessão o
             // guardado é (ver STORED_PRICE_MAX_AGE_DAYS em utils/quoteSanity).
-            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker name type updatedAt lastPrice priceDate change isActive isBlacklisted failCount lastFailDate marketCap liquidity');
+            const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker name type updatedAt lastPrice priceDate priceSource change isActive isBlacklisted failCount lastFailDate marketCap liquidity');
             
             const toUpdate = [];
             const assetMap = new Map();
@@ -580,6 +602,12 @@ export const marketDataService = {
             // fonte e barrar por magnitude congelaria o ativo para sempre. O que
             // muda é que ele passa a aparecer NOMEADO no painel de Saúde.
             const suspectTickers = [];
+            // Cotações com achado do juiz, com a referência ao payload. O registro
+            // no painel (`recordSuspectQuote`) acontece DEPOIS do laço, e não aqui:
+            // parte dos achados só fica completa com o nosso candle na mão — ver
+            // `arbitrateStoredJump`, que decide se o suspeito é o preço novo ou o
+            // que estava guardado. Registrar durante o laço nomearia o inocente.
+            const julgados = [];
             // Ativos cuja VARIAÇÃO a fonte não sustenta. O preço segue sendo dela;
             // o par (change, previousClose) é reancorado no nosso próprio candle
             // logo depois do laço — ver `resolveContestedChange`.
@@ -621,18 +649,9 @@ export const marketDataService = {
                         change: quote.change,
                         storedPrice: currentAsset?.lastPrice,
                         storedPriceDate: currentAsset?.priceDate || null,
+                        storedPriceSource: currentAsset?.priceSource || null,
                         now,
                     });
-                    if (achados.length > 0) {
-                        recordSuspectQuote({
-                            subject: ticker,
-                            type: currentAsset?.type || null,
-                            source: quote.source || null,
-                            price: newPrice,
-                            findings: achados,
-                        });
-                        suspectTickers.push(`${ticker} (${achados[0].detail})`);
-                    }
 
                     const updatePayload = {
                         lastPrice: newPrice,
@@ -640,6 +659,12 @@ export const marketDataService = {
                         // Data da sessão anda SEMPRE junto do change: gravar um sem o
                         // outro é como o cache volta a mentir sobre a idade do dado.
                         priceDate: sessionDateKey(quote.marketTime),
+                        // QUEM trouxe este preço. `lastPrice` tem cinco escritores e
+                        // até 07/09/2026 nenhum assinava: RBRL11 passou o fim de
+                        // semana valendo 58,45 — o preço do RBHG11 — e a apuração
+                        // não tinha como nomear a fonte. Sem assinatura, todo preço
+                        // errado é anônimo, e preço anônimo não se conserta na raiz.
+                        priceSource: quote.source || 'YAHOO',
                         previousClose: Number(quote.previousClose) > 0 ? Number(quote.previousClose) : 0,
                         updatedAt: now,
                         isActive: true,
@@ -670,19 +695,24 @@ export const marketDataService = {
                         }
                     }
 
-                    // A variação contestada é reancorada DEPOIS do laço, porque a
-                    // âncora está no banco (`AssetHistory`) e ir lá por ativo, no
-                    // meio do lote, custaria uma consulta por cotação suspeita. A
-                    // referência ao payload é guardada aqui e o par é corrigido
-                    // numa passada só, com uma agregação por sessão.
-                    if (contestsChange(achados)) {
-                        contestados.push({
+                    // A âncora do nosso candle é buscada DEPOIS do laço, porque ela
+                    // está no banco (`AssetHistory`) e ir lá por ativo, no meio do
+                    // lote, custaria uma consulta por cotação suspeita. A referência
+                    // ao payload é guardada aqui e tudo se resolve numa passada só,
+                    // com uma agregação por sessão — vale para a variação contestada
+                    // e para o desempate de quem estava errado no salto.
+                    if (achados.length > 0) {
+                        julgados.push({
                             ticker,
                             type: currentAsset?.type || null,
+                            source: quote.source || null,
                             sessionDate: updatePayload.priceDate,
                             price: newPrice,
+                            storedPrice: currentAsset?.lastPrice ?? null,
+                            achados,
                             payload: updatePayload,
                         });
+                        if (contestsChange(achados)) contestados.push(julgados.at(-1));
                     }
 
                     operations.push({
@@ -696,7 +726,7 @@ export const marketDataService = {
                 }
             }
 
-            // --- VARIAÇÃO CONTESTADA: REANCORA NO NOSSO PRÓPRIO FECHAMENTO ---
+            // --- O NOSSO CANDLE COMO ÁRBITRO DO QUE A FONTE AFIRMOU ---
             // O preço da fonte fica (ele é auditável contra o fechamento oficial
             // da B3 e passa); o par variação/fechamento-anterior, não. XPIN11
             // estava gravado com +108% e previousClose de 29,82 enquanto a nossa
@@ -707,9 +737,15 @@ export const marketDataService = {
             // vem da mesma fonte que o snapshot diário usa para marcar patrimônio,
             // e usar outra aqui reintroduziria a divergência que `dayCloses.js`
             // existe para fechar.
-            if (contestados.length > 0) {
+            //
+            // A MESMA âncora responde à outra pergunta que o juiz não resolve
+            // sozinho: no salto contra o banco, QUEM estava errado? Por isso a
+            // consulta cobre todo julgado que precise de candle, e não só os
+            // contestados — é a mesma agregação, com mais tickers no $in.
+            const precisamDeAncora = julgados.filter((j) => needsOwnAnchor(j.achados));
+            if (precisamDeAncora.length > 0) {
                 const porSessao = new Map();
-                for (const c of contestados) {
+                for (const c of precisamDeAncora) {
                     if (!c.sessionDate) continue; // sem sessão não há "antes de"
                     if (!porSessao.has(c.sessionDate)) porSessao.set(c.sessionDate, []);
                     porSessao.get(c.sessionDate).push(c);
@@ -718,17 +754,53 @@ export const marketDataService = {
                     try {
                         const closes = await loadLatestCloseBefore(itens, sessao);
                         for (const item of itens) {
-                            item.ownClose = closes.get(historyStorageKey(item.ticker, item.type))?.close ?? null;
+                            const achado = closes.get(historyStorageKey(item.ticker, item.type));
+                            item.ownClose = achado?.close ?? null;
+                            item.ownCloseDate = achado?.date ?? null;
                         }
                     } catch (err) {
                         // A âncora é um LUXO comparada à cotação: sem o candle, a
-                        // variação contestada cai em zero (que é o veredito seguro)
-                        // e o lote inteiro de preços segue para o banco. Deixar a
-                        // exceção subir custaria todas as cotações do lote por uma
-                        // consulta acessória.
+                        // variação contestada cai em zero (que é o veredito seguro),
+                        // o desempate simplesmente não acontece, e o lote inteiro de
+                        // preços segue para o banco. Deixar a exceção subir custaria
+                        // todas as cotações do lote por uma consulta acessória.
                         logger.warn(`[MarketData] Sem âncora para reancorar variação (${sessao}): ${err.message}`);
                     }
                 }
+
+                // Desempate do salto contra o banco, com a nossa série de árbitro.
+                for (const j of precisamDeAncora) {
+                    const veredito = arbitrateStoredJump({
+                        type: j.type,
+                        price: j.price,
+                        storedPrice: j.storedPrice,
+                        ownClose: j.ownClose,
+                    });
+                    if (veredito) {
+                        j.achados = applyStoredJumpArbitration(j.achados, {
+                            verdict: veredito,
+                            ownClose: j.ownClose,
+                            ownCloseDate: j.ownCloseDate,
+                        });
+                    }
+                }
+            }
+
+            // O painel só é alimentado AGORA, com os achados já arbitrados: é a
+            // diferença entre "RBRL11 saltou 26%" e "o 58,45 que estava guardado
+            // é que era do RBHG11, e acabou de ser corrigido".
+            for (const j of julgados) {
+                recordSuspectQuote({
+                    subject: j.ticker,
+                    type: j.type,
+                    source: j.source,
+                    price: j.price,
+                    findings: j.achados,
+                });
+                suspectTickers.push(`${j.ticker} (${j.achados[0].detail})`);
+            }
+
+            if (contestados.length > 0) {
                 for (const c of contestados) {
                     const { change, previousClose } = resolveContestedChange({
                         price: c.price,
@@ -974,7 +1046,9 @@ export const marketDataService = {
             // breaker e starvando os vivos) e poluíam os warnings apesar da blacklist.
             // `lastPrice` entra no select porque é a base de comparação do eco:
             // sem ele, isEchoQuote não tem contra o que comparar e deixa passar.
-            const inactiveAssets = await MarketAsset.find({ isActive: false, isBlacklisted: false }).select('ticker failCount type marketCap updatedAt lastPrice');
+            // `priceDate` entra por causa do relógio da aposentadoria: é uma das
+            // duas testemunhas de pregão (ver `lastTradeAgeByTicker`).
+            const inactiveAssets = await MarketAsset.find({ isActive: false, isBlacklisted: false }).select('ticker failCount type marketCap updatedAt lastPrice priceDate');
             if (inactiveAssets.length === 0) {
                 logger.info(`✅ [Reativação] Nenhum ativo inativo para verificar.`);
                 return { reactivated: 0, stillInactive: 0, retired: 0 };
@@ -1007,7 +1081,7 @@ export const marketDataService = {
                     operations.push({
                         updateOne: {
                             filter: { ticker: this.normalizeSymbol(quote.ticker) },
-                            update: { $set: { isActive: true, failCount: 0, lastFailDate: null, lastPrice: quote.price, change: quote.change || 0, priceDate: sessionDateKey(quote.marketTime), updatedAt: new Date() } }
+                            update: { $set: { isActive: true, failCount: 0, lastFailDate: null, lastPrice: quote.price, change: quote.change || 0, priceDate: sessionDateKey(quote.marketTime), priceSource: quote.source || 'YAHOO', updatedAt: new Date() } }
                         }
                     });
                     reactivatedCount++;
@@ -1042,7 +1116,7 @@ export const marketDataService = {
             const importantStillInactive = stillInactive.filter(a => (a.marketCap || 0) > 1000000000 && !retiredSet.has(a.ticker));
             if (importantStillInactive.length > 0) {
                 const detail = importantStillInactive
-                    .map(a => `${a.ticker} (${daysSince(a.updatedAt) ?? '?'}d)`)
+                    .map(a => `${a.ticker} (${daysSinceDayKey(a.priceDate) ?? daysSince(a.updatedAt) ?? '?'}d)`)
                     .join(', ');
                 logger.warn(`⚠️ [Reativação] Ativos grandes ainda inativos (aposentam em ${RETIRE_AFTER_INACTIVE_DAYS}d sem cotação): ${detail}`);
             }
@@ -1059,11 +1133,113 @@ export const marketDataService = {
     // tentativa de reativação — ou seja, só chega aqui quem acabou de falhar mais
     // uma vez, com todos os fallbacks (Google/Brapi) já esgotados no getQuotes.
     // Devolve os tickers aposentados.
+    /**
+     * ── QUANDO ESTE PAPEL PROVOU, PELA ÚLTIMA VEZ, QUE NEGOCIA? ─────────────────
+     *
+     * O relógio da aposentadoria media `updatedAt`, e `updatedAt` é — nas palavras
+     * do próprio modelo — *quando NÓS perguntamos*. Qualquer rotina que toque o
+     * documento por outro motivo (backfill de setor, de logo, de fundamento)
+     * reinicia o relógio da morte de um papel extinto.
+     *
+     * Medido em 07/09/2026: PTNT3 e PTNT4 (Pettenati) não negociam desde 26 e
+     * 27/05 — 104 dias, cada um com UM único candle na série, `priceDate` nulo e
+     * `failCount` no teto. Uma escrita de 29/07 tinha empurrado o `updatedAt`, e
+     * com ele os dois marcavam 40 dias de quarentena em vez de 104: a baixa só
+     * aconteceria no fim de outubro, e voltaria a ser adiada a cada toque.
+     *
+     * A prova honesta de pregão é a data da ÚLTIMA SESSÃO conhecida, e ela tem
+     * duas testemunhas independentes, as duas nossas:
+     *   - o último candle com fechamento > 0 na série (`AssetHistory`);
+     *   - `priceDate`, o dia da sessão que veio junto da última cotação DATADA.
+     * Vale a mais recente das duas — uma pode faltar sem que o papel esteja morto.
+     *
+     * Sem nenhuma das duas resta `updatedAt`, e aí ele é a resposta certa por ser
+     * a única: ativo recém-criado, que nunca cotou e nunca teve série, não pode
+     * ser aposentado no primeiro dia nem virar imortal.
+     *
+     * Uma consulta para o lote inteiro; a série não é hidratada (só a data máxima
+     * é projetada), porque puxar ~400 candles de cada inativo seria caro à toa.
+     *
+     * @param {Array<{ticker: string, type: string, priceDate?: string, updatedAt?: Date}>} assets
+     * @returns {Promise<Map<string, {days: number|null, basis: string}>>} ticker → idade
+     */
+    async lastTradeAgeByTicker(assets) {
+        const lista = assets || [];
+        const idade = new Map();
+        if (lista.length === 0) return idade;
+
+        const porChave = new Map();
+        for (const a of lista) {
+            const chave = historyStorageKey(a.ticker, a.type);
+            if (!chave) continue;
+            if (!porChave.has(chave)) porChave.set(chave, []);
+            porChave.get(chave).push(a.ticker);
+        }
+
+        let candlePorChave = new Map();
+        try {
+            const rows = await AssetHistory.aggregate([
+                { $match: { ticker: { $in: [...porChave.keys()] } } },
+                {
+                    $project: {
+                        ticker: 1,
+                        lastDate: {
+                            $max: {
+                                $map: {
+                                    input: {
+                                        $filter: {
+                                            input: { $ifNull: ['$history', []] },
+                                            as: 'h',
+                                            cond: { $gt: ['$$h.close', 0] },
+                                        },
+                                    },
+                                    as: 'h',
+                                    in: '$$h.date',
+                                },
+                            },
+                        },
+                    },
+                },
+            ]);
+            candlePorChave = new Map(rows.map((r) => [r.ticker, r.lastDate]));
+        } catch (error) {
+            // Fail-CLOSED: sem a série não há prova de morte, e a ausência da
+            // consulta não pode virar sentença. Todo mundo fica com idade nula e
+            // ninguém é aposentado nesta rodada.
+            logger.warn(`[Reativação] Última sessão indisponível (${error.message}); nenhuma baixa automática nesta rodada.`);
+            return idade;
+        }
+
+        for (const a of lista) {
+            const candle = daysSinceDayKey(candlePorChave.get(historyStorageKey(a.ticker, a.type)));
+            const quote = daysSinceDayKey(a.priceDate);
+            const candidatos = [
+                candle === null ? null : { days: candle, basis: 'último candle' },
+                quote === null ? null : { days: quote, basis: 'última cotação datada' },
+            ].filter(Boolean);
+
+            if (candidatos.length === 0) {
+                idade.set(a.ticker, { days: daysSince(a.updatedAt), basis: 'sem sessão conhecida' });
+                continue;
+            }
+            // A mais RECENTE das provas: basta uma testemunha para o papel estar vivo.
+            idade.set(a.ticker, candidatos.reduce((m, c) => (c.days < m.days ? c : m)));
+        }
+        return idade;
+    },
+
     async retireStaleInactiveAssets(stillInactive) {
-        const eligible = (stillInactive || []).filter(a =>
-            (a.failCount || 0) >= MAX_FAILURES_BEFORE_BLACKLIST
-            && (daysSince(a.updatedAt) ?? 0) >= RETIRE_AFTER_INACTIVE_DAYS,
+        const comFalhas = (stillInactive || []).filter(a =>
+            (a.failCount || 0) >= MAX_FAILURES_BEFORE_BLACKLIST,
         );
+        if (comFalhas.length === 0) return [];
+
+        // O relógio é a última PROVA DE PREGÃO, não o último toque no documento.
+        const idades = await this.lastTradeAgeByTicker(comFalhas);
+        const eligible = comFalhas.filter((a) => {
+            const idade = idades.get(a.ticker);
+            return (idade?.days ?? null) !== null && idade.days >= RETIRE_AFTER_INACTIVE_DAYS;
+        });
         if (eligible.length === 0) return [];
 
         // Detido em carteira → fora do automático (a baixa muda a tela do dono).
@@ -1109,15 +1285,15 @@ export const marketDataService = {
                         // deixado o documento no estado certo.
                         isActive: false,
                         retiredAt: now,
-                        retiredReason: `auto: ${daysSince(a.updatedAt)}d sem cotação em nenhuma fonte`,
+                        retiredReason: `auto: ${idades.get(a.ticker)?.days}d sem pregão (${idades.get(a.ticker)?.basis}) e sem cotação em nenhuma fonte`,
                     },
                 },
             },
         })));
 
-        const detail = targets.map(a => `${a.ticker} (${daysSince(a.updatedAt)}d)`).join(', ');
+        const detail = targets.map(a => `${a.ticker} (${idades.get(a.ticker)?.days}d, ${idades.get(a.ticker)?.basis})`).join(', ');
         logger.info(
-            `🪦 [Reativação] ${targets.length} ativo(s) aposentado(s) após ${RETIRE_AFTER_INACTIVE_DAYS}d sem cotação: ${detail}`,
+            `🪦 [Reativação] ${targets.length} ativo(s) aposentado(s) após ${RETIRE_AFTER_INACTIVE_DAYS}d sem pregão: ${detail}`,
             { retired: targets.map(a => a.ticker), quarantineDays: RETIRE_AFTER_INACTIVE_DAYS },
         );
         if (held.size > 0) {

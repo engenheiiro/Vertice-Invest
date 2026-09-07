@@ -57,6 +57,54 @@ export const MOVE_LIMIT_PCT = {
 export const DEFAULT_MOVE_LIMIT_PCT = 30;
 
 /**
+ * ── O TIQUE, QUANDO ELE VALE MAIS QUE A RÉGUA ────────────────────────────────
+ *
+ * Percentual não é medida de risco em papel de centavos. PMAM3 subiu de 0,23
+ * para 0,32 em 04/09/2026 e disparou o alarme com 39,13% — mas o passo mínimo
+ * da B3 ali é R$ 0,01, que sobre 0,23 já vale 4,3%: nove tiques estouram
+ * qualquer régua de 30%. A série mostrava 0,13 → 0,14 → 0,15 → 0,16 → 0,17 →
+ * 0,19 → 0,23 → 0,32, todos em dois decimais — uma alta real, contada em tiques
+ * miúdos.
+ *
+ * A correção não é afrouxar a régua para todo mundo: é reconhecer que abaixo de
+ * R$ 1,00 o denominador é pequeno demais para o percentual significar o que ele
+ * significa em PETR4. O limite efetivo passa a ser o MAIOR entre a régua da
+ * classe e o que `PENNY_TICK_COUNT` tiques valem naquele preço — e como o
+ * segundo encolhe conforme o preço sobe, a regra desaparece sozinha ao chegar
+ * em R$ 1,00 (10 tiques sobre 0,90 são 11%, abaixo dos 30% da ação). Nada muda
+ * para o resto da base.
+ *
+ * O teto existe porque o alívio não pode ser infinito: um papel de R$ 0,02
+ * teria limite de 500%, e dobrar de preço num dia merece o olho de qualquer
+ * jeito.
+ *
+ * Vale só nas classes de tique de um centavo (B3). Ação americana negocia em
+ * frações de centavo e cripto não tem tique — ali o denominador pequeno não
+ * produz o mesmo artefato.
+ */
+export const PENNY_TICK = 0.01;
+export const PENNY_TICK_COUNT = 10;
+export const PENNY_PRICE_CEILING = 1;
+export const PENNY_MAX_LIMIT_PCT = 100;
+const PENNY_TICK_TYPES = new Set(['STOCK', 'FII', 'ETF']);
+
+/**
+ * Régua de magnitude para esta classe NESTE preço.
+ *
+ * @param {string} type classe do ativo
+ * @param {number} [basePrice] preço que serve de denominador ao salto
+ * @returns {number} limite em %
+ */
+export const effectiveMoveLimit = (type, basePrice = null) => {
+    const t = String(type || '').toUpperCase();
+    const limite = MOVE_LIMIT_PCT[t] ?? DEFAULT_MOVE_LIMIT_PCT;
+    const base = Number(basePrice);
+    if (!PENNY_TICK_TYPES.has(t) || !(base > 0) || base >= PENNY_PRICE_CEILING) return limite;
+    const tiquesPct = ((PENNY_TICK * PENNY_TICK_COUNT) / base) * 100;
+    return Math.min(PENNY_MAX_LIMIT_PCT, Math.max(limite, tiquesPct));
+};
+
+/**
  * Distância tolerada entre a variação DECLARADA pela fonte e a que os próprios
  * preços dela implicam (em pontos percentuais).
  *
@@ -75,8 +123,6 @@ export const CHANGE_MISMATCH_PP = 1.5;
  * a resposta certa: não temos base para julgar.
  */
 export const STORED_PRICE_MAX_AGE_DAYS = 5;
-
-const limitFor = (type) => MOVE_LIMIT_PCT[String(type || '').toUpperCase()] ?? DEFAULT_MOVE_LIMIT_PCT;
 
 const movePct = (novo, base) => ((novo - base) / base) * 100;
 
@@ -99,6 +145,7 @@ const diasDesde = (dataKey, now) => {
  * @param {number} [entrada.change] variação declarada pela fonte (%)
  * @param {number} [entrada.storedPrice] `lastPrice` que já está no banco
  * @param {string} [entrada.storedPriceDate] `priceDate` do preço guardado ('YYYY-MM-DD')
+ * @param {string} [entrada.storedPriceSource] quem escreveu o `lastPrice` guardado
  * @param {Date} [entrada.now]
  * @returns {Array<{code: string, detail: string, movePct: number|null}>} achados,
  *   do mais forte para o mais fraco. Lista vazia = nada a dizer.
@@ -110,15 +157,19 @@ export const judgeQuote = ({
     change = null,
     storedPrice = null,
     storedPriceDate = null,
+    storedPriceSource = null,
     now = new Date(),
 } = {}) => {
     const achados = [];
     const p = Number(price);
     if (!(p > 0)) return achados; // preço ausente é outro assunto, e já tem dono
 
-    const limite = limitFor(type);
     const pc = Number(previousClose);
     const guardado = Number(storedPrice);
+    // A régua é do DENOMINADOR de cada comparação, não do ativo: em papel de
+    // centavos o mesmo ticker pode ter limites diferentes contra o fechamento da
+    // fonte e contra o preço guardado, porque as duas bases são preços distintos.
+    const limite = effectiveMoveLimit(type, pc > 0 ? pc : guardado);
 
     // 1. SALTO CONTRA O PRÓPRIO FECHAMENTO ANTERIOR DA FONTE.
     //    A comparação mais forte que existe: os dois números saíram da MESMA
@@ -129,7 +180,7 @@ export const judgeQuote = ({
             achados.push({
                 code: 'SALTO_NA_FONTE',
                 detail: `${fmt(delta)}% contra o fechamento anterior da própria fonte `
-                    + `(${fmt(pc)} → ${fmt(p)}), acima dos ${limite}% previstos para ${type || 'a classe'}`,
+                    + `(${fmt(pc)} → ${fmt(p)}), acima dos ${fmt(limite)}% previstos para ${type || 'a classe'}`,
                 movePct: delta,
             });
         }
@@ -141,12 +192,24 @@ export const judgeQuote = ({
     //    sem isso a régua vira "variação do trimestre" e acusa o que é normal.
     const idade = diasDesde(storedPriceDate, now);
     if (guardado > 0 && idade !== null && idade <= STORED_PRICE_MAX_AGE_DAYS) {
+        const limiteBanco = effectiveMoveLimit(type, guardado);
         const delta = movePct(p, guardado);
-        if (Math.abs(delta) > limite) {
+        if (Math.abs(delta) > limiteBanco) {
+            // A PROCEDÊNCIA DO PREÇO GUARDADO ENTRA NA FRASE.
+            //
+            // `lastPrice` tem cinco escritores e nem todos gravam `priceDate`
+            // junto: o caminho de fundamentos (Fundamentus) escreve o preço e
+            // deixa a data do último quote no lugar. Quando isso acontece, a
+            // régua desta comparação é um Frankenstein — preço de uma fonte com
+            // data de outra —, e quem lê o painel precisa saber disso antes de
+            // acusar o preço novo. `priceSource` no MarketAsset existe por causa
+            // do RBRL11 de 07/09/2026, que passou o fim de semana valendo 58,45
+            // (o preço do RBHG11) sem que nada soubesse dizer quem escreveu.
+            const proveniencia = storedPriceSource ? ` [guardado via ${storedPriceSource}]` : '';
             achados.push({
                 code: 'SALTO_VS_BANCO',
                 detail: `${fmt(delta)}% contra o preço que tínhamos de ${storedPriceDate} `
-                    + `(${fmt(guardado)} → ${fmt(p)})`,
+                    + `(${fmt(guardado)} → ${fmt(p)})${proveniencia}`,
                 movePct: delta,
             });
         }
@@ -184,6 +247,98 @@ const CONTESTED_CHANGE_CODES = new Set(['SALTO_NA_FONTE', 'VARIACAO_INCOERENTE']
 
 /** A fonte se contradisse sobre a variação deste ativo? */
 export const contestsChange = (findings = []) => findings.some((f) => CONTESTED_CHANGE_CODES.has(f.code));
+
+/** Este julgamento precisa do nosso candle para ser concluído? */
+export const needsOwnAnchor = (findings = []) =>
+    contestsChange(findings) || findings.some((f) => f.code === 'SALTO_VS_BANCO');
+
+/**
+ * ── QUEM ESTÁ ERRADO: O PREÇO NOVO OU O GUARDADO? ───────────────────────────
+ *
+ * `SALTO_VS_BANCO` compara dois números e escreve a frase como se o NOVO fosse o
+ * suspeito. Em 07/09/2026, nos dois casos que a lista trouxe, era o contrário:
+ *
+ *   - **RBRL11** — acusado de +26,45% saindo de 58,45. Os 400 candles nossos vão
+ *     de 60,59 (mínimo histórico, fev/2025) a 73,91, e 58,45 não aparece em
+ *     nenhum deles: é o preço do RBHG11, outro FII. O 58,45 é que era o intruso.
+ *   - **STX** — acusado de +306.168% saindo de 0,28. O 0,28 era o Stacks; a série
+ *     sempre foi da Seagate (798,61 · 808,53 · 849,28).
+ *
+ * Nos dois o alarme apontou para o número certo e deixou o errado passar como
+ * régua. E o árbitro estava em casa o tempo todo: a NOSSA série de candles, que
+ * é a mesma fonte que o snapshot diário usa para marcar patrimônio
+ * (`utils/dayCloses.js`). Se ela endossa o preço novo e repudia o guardado, o
+ * caso está resolvido — não é um preço a investigar, é um preço a corrigir, e
+ * ele já vai ser corrigido pela própria gravação.
+ *
+ * Inconclusivo quando os dois estão perto (não havia salto de verdade) ou os
+ * dois estão longe (o candle também é velho, e aí não há árbitro). Nesses casos
+ * devolve `null` e o achado segue como estava: acusar sem prova é o que se está
+ * tentando evitar, e isso vale para os dois lados.
+ *
+ * @param {object} entrada
+ * @param {string} entrada.type classe do ativo
+ * @param {number} entrada.price preço que acabou de chegar
+ * @param {number} entrada.storedPrice `lastPrice` que estava no banco
+ * @param {number|null} [entrada.ownClose] nosso fechamento ANTES desta sessão
+ * @returns {'NOVO_CONFIRMADO'|'GUARDADO_CONFIRMADO'|null}
+ */
+export const arbitrateStoredJump = ({ type, price, storedPrice, ownClose = null } = {}) => {
+    const base = Number(ownClose);
+    const novo = Number(price);
+    const guardado = Number(storedPrice);
+    if (!(base > 0) || !(novo > 0) || !(guardado > 0)) return null;
+
+    // Cada distância é medida com a régua do SEU denominador — o candle é a base
+    // comum, então as duas usam o mesmo limite; explicitar evita que uma mudança
+    // futura em `effectiveMoveLimit` desalinhe os dois lados da comparação.
+    const limite = effectiveMoveLimit(type, base);
+    const pertoDoNovo = Math.abs(movePct(novo, base)) <= limite;
+    const pertoDoGuardado = Math.abs(movePct(guardado, base)) <= limite;
+
+    if (pertoDoNovo && !pertoDoGuardado) return 'NOVO_CONFIRMADO';
+    if (pertoDoGuardado && !pertoDoNovo) return 'GUARDADO_CONFIRMADO';
+    return null;
+};
+
+/**
+ * Reescreve o achado de salto contra o banco à luz do veredito da nossa série.
+ *
+ * Devolve uma LISTA NOVA (a original é do juiz puro e não se altera). O achado
+ * ganha `arbitration` — que a tela usa para decidir se aquilo ainda é pergunta
+ * aberta — e um `detail` que diz o que a série provou, em vez de só apontar a
+ * distância entre dois números.
+ *
+ * @param {Array} findings achados de `judgeQuote`
+ * @param {object} entrada
+ * @param {'NOVO_CONFIRMADO'|'GUARDADO_CONFIRMADO'|null} entrada.verdict
+ * @param {number|null} [entrada.ownClose] fechamento nosso que serviu de árbitro
+ * @param {string|null} [entrada.ownCloseDate] data desse fechamento
+ * @returns {Array} achados, com o de banco anotado quando houve veredito
+ */
+export const applyStoredJumpArbitration = (findings = [], { verdict, ownClose = null, ownCloseDate = null } = {}) => {
+    if (!verdict) return findings;
+    return findings.map((f) => {
+        if (f.code !== 'SALTO_VS_BANCO') return f;
+        const ancora = `nosso fechamento de ${ownCloseDate || 'antes da sessão'} (${fmt(Number(ownClose))})`;
+        return {
+            ...f,
+            arbitration: verdict,
+            detail: verdict === 'NOVO_CONFIRMADO'
+                ? `${f.detail} — ${ancora} confirma o preço NOVO: quem estava errado era o guardado`
+                : `${f.detail} — ${ancora} confirma o preço GUARDADO: o número novo é que destoa`,
+        };
+    });
+};
+
+/**
+ * O julgamento ainda é uma pergunta em aberto para o dono?
+ *
+ * `NOVO_CONFIRMADO` não é: o preço bom acabou de entrar e a própria gravação
+ * fecha o caso. Fica de fora da contagem do painel para a lista não acumular
+ * incidentes já resolvidos — que é como um alarme perde a credibilidade.
+ */
+export const isSettledFinding = (finding) => finding?.arbitration === 'NOVO_CONFIRMADO';
 
 /**
  * A VARIAÇÃO QUANDO A FONTE NÃO MERECE FÉ.
@@ -228,4 +383,10 @@ export const SUSPECT_LABEL = {
     SALTO_NA_FONTE: 'Salto fora do normal',
     SALTO_VS_BANCO: 'Preço distante do que tínhamos',
     VARIACAO_INCOERENTE: 'Variação não bate com o preço',
+};
+
+/** Rótulos do veredito da nossa série, quando ela conseguiu desempatar. */
+export const ARBITRATION_LABEL = {
+    NOVO_CONFIRMADO: 'Corrigido — o errado era o preço guardado',
+    GUARDADO_CONFIRMADO: 'Nossa série não confirma o preço novo',
 };

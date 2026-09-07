@@ -221,6 +221,13 @@ export const syncService = {
 
                 const updateFields = {
                     lastPrice: Number(data.price) || 0,
+                    // Assinatura do preço. Este caminho grava `lastPrice` e NÃO grava
+                    // `priceDate` — o scraping não diz de que sessão é o número —,
+                    // então depois de uma passada aqui o par (preço, data) pode ter
+                    // dois donos diferentes. É exatamente isso que o juiz de
+                    // magnitude precisa saber antes de acusar o preço novo de
+                    // destoar do guardado (ver utils/quoteSanity.js).
+                    priceSource: 'FUNDAMENTUS',
                     dy: Number(data.dy) || 0,
                     p_vp: Number(data.pvp) || 0,
                     liquidity: liquidity,
@@ -404,6 +411,8 @@ export const syncService = {
                     const updateData = {
                         lastPrice: quote.price,
                         change: quote.change,
+                        // Assinatura do preço — ver `priceSource` em models/MarketAsset.
+                        priceSource: quote.source || 'YAHOO',
                         updatedAt: timestamp,
                         isActive: true,
                         failCount: 0

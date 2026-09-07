@@ -58,6 +58,18 @@ const MarketAssetSchema = new mongoose.Schema({
   
   // --- Dados Financeiros Persistidos (Cache Avançado) ---
   lastPrice: { type: Number, default: 0 },
+  // QUEM escreveu o `lastPrice` acima ('YAHOO', 'GOOGLE_FINANCE_FALLBACK',
+  // 'BRAPI_FALLBACK', 'FUNDAMENTUS'…). Nasceu do RBRL11 em 07/09/2026: o ativo
+  // passou o fim de semana valendo 58,45 — que é o preço do RBHG11, outro FII —
+  // e a apuração parou na primeira pergunta, porque `lastPrice` tem cinco
+  // escritores e nenhum assinava. Preço errado anônimo não se conserta na raiz:
+  // dá para reescrever o número, nunca para saber de onde ele veio.
+  //
+  // Anda junto de `priceDate` no caminho de cotação; o caminho de fundamentos
+  // grava o preço SEM data de sessão, e é por isso que o par (preço, data) nem
+  // sempre vem da mesma escrita — o juiz de magnitude precisa saber disso antes
+  // de acusar o preço novo (ver utils/quoteSanity.js).
+  priceSource: { type: String, default: null },
   change: { type: Number, default: 0 },
   // Dia CIVIL brasileiro do PREGÃO que produziu lastPrice/change — não confundir
   // com `updatedAt`, que diz quando NÓS perguntamos. À 00:20 de um dia útil o sync

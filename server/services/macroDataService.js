@@ -13,7 +13,8 @@ import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
 import { fetchTesouroCsv } from './treasuryPriceService.js';
 import { isBusinessDay, brazilDateKey } from '../utils/dateUtils.js';
-import { trackSource, recordEscalation } from '../utils/sourceHealth.js';
+import { trackSource, recordEscalation, recordSourceSkip } from '../utils/sourceHealth.js';
+import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 
 const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391, SELIC_DAILY: 11 };
 
@@ -713,6 +714,16 @@ export const macroDataService = {
      *    marcado como defasado, que é a resposta honesta.
      * 2. **Só dólar.** O BCB não cota cripto; `btc` sai indefinido de propósito e
      *    o chamador trata a cobertura parcial.
+     * 3. **Em dia não útil ela nem é chamada.** Consequência direta do item 1, e
+     *    não uma otimização: se a aceitação exige fixação de HOJE e o BCB não fixa
+     *    em sábado, domingo ou feriado, a chamada está condenada antes de sair.
+     *    Em 07/09/2026 (feriado da Independência) o Yahoo falhou no dólar às
+     *    12h20, a PTAX foi consultada, respondeu 200 com os 10 dias pedidos, e a
+     *    fixação mais recente era de sexta — recusada, corretamente. O painel
+     *    ficou dizendo "1 de 1 chamadas com dado" ao lado de "0 moedas resolvidas
+     *    aqui", que é uma contradição só na aparência: são dois relógios, o da
+     *    resposta HTTP e o da decisão de negócio. Pular resolve os dois de uma vez
+     *    — a chamada não é gasta e a razão do silêncio fica escrita no card.
      *
      * Usa `cotacaoVenda` (a ponta que o comprador de dólar paga). O spread para a
      * compra é de ~0,01%, irrelevante para marcação de patrimônio, mas fixar a
@@ -724,6 +735,13 @@ export const macroDataService = {
      */
     async _fetchPtaxUsd() {
         try {
+            const hojeBr = brazilDateKey();
+            if (!isBrBusinessDay(hojeBr)) {
+                recordSourceSkip('ptax', 'Sem fixação em fim de semana ou feriado — o Banco Central não publica hoje');
+                logger.info(`ℹ️ [Câmbio] PTAX não consultada: ${hojeBr} não é dia útil no Brasil e não há fixação a buscar.`);
+                return null;
+            }
+
             // Janela de 10 dias corridos: cobre feriado prolongado e ainda garante
             // um dia útil anterior para a variação.
             const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${d.getFullYear()}`;
@@ -735,7 +753,14 @@ export const macroDataService = {
                 + 'CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)'
                 + `?@dataInicial='${fmt(inicio)}'&@dataFinalCotacao='${fmt(hoje)}'&$top=200&$format=json`;
 
-            const res = await trackSource('ptax', () => axios.get(url, { headers: BASE_HEADERS, httpsAgent: bcbAgent, timeout: 8000 }), { isEmpty: (r) => !(r?.data?.value?.length > 0) });
+            // "Sem dado" aqui é a AUSÊNCIA DA FIXAÇÃO DE HOJE, não a série vazia: o
+            // boletim sai ~13h BRT e, antes disso, o Olinda devolve 200 com os dias
+            // anteriores — resposta cheia, e sem a única linha que serve. Medir
+            // pelo tamanho da série marcaria como entrega o que a regra abaixo vai
+            // recusar, e o card contradiria o ledger de escaladas.
+            const temFixacaoDeHoje = (r) => (Array.isArray(r?.data?.value) ? r.data.value : [])
+                .some((c) => Number(c?.cotacaoVenda) > 0 && String(c?.dataHoraCotacao || '').slice(0, 10) === hojeBr);
+            const res = await trackSource('ptax', () => axios.get(url, { headers: BASE_HEADERS, httpsAgent: bcbAgent, timeout: 8000 }), { isEmpty: (r) => !temFixacaoDeHoje(r) });
             const linhas = (Array.isArray(res.data?.value) ? res.data.value : [])
                 .filter((c) => Number(c?.cotacaoVenda) > 0 && typeof c?.dataHoraCotacao === 'string')
                 .sort((a, b) => a.dataHoraCotacao.localeCompare(b.dataHoraCotacao));
@@ -749,7 +774,6 @@ export const macroDataService = {
             // `dataHoraCotacao` já vem no horário de Brasília ("2026-09-04 13:03:59"),
             // então o dia da fixação é o prefixo — sem conversão de fuso pelo meio.
             const diaFixacao = ultima.dataHoraCotacao.slice(0, 10);
-            const hojeBr = brazilDateKey();
             if (diaFixacao !== hojeBr) {
                 logger.warn(`⚠️ [Câmbio] PTAX mais recente é de ${diaFixacao}, não de ${hojeBr} (boletim sai ~13h BRT). Recusada para não servir câmbio velho como atual.`);
                 return null;

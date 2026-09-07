@@ -5,7 +5,9 @@ import {
     summarizeSources,
     SOURCE_STATUS,
 } from '../utils/dataSourceStatus.js';
-import { trackSource, getSourceStats, resetSourceStats, SOURCE_CATALOG } from '../utils/sourceHealth.js';
+import {
+    trackSource, getSourceStats, resetSourceStats, recordSourceSkip, SOURCE_CATALOG,
+} from '../utils/sourceHealth.js';
 
 // O painel de fontes nasceu de uma pergunta que não tinha resposta na tela em
 // 04/09/2026: "de onde a gente puxa dado, e o que está funcionando agora?".
@@ -240,6 +242,99 @@ describe('buildSourceStatuses — veredito por fonte', () => {
         expect(byId(rows, 'coinbase').lastDeliveryAt).toEqual(facts.macro.currenciesUpdatedAt);
         // O Yahoo não é a origem de nenhuma das moedas nesse cenário.
         expect(byId(rows, 'yahoo.currencies').lastDeliveryAt).toBeNull();
+    });
+});
+
+/**
+ * ── RESPONDER NÃO É ENTREGAR ────────────────────────────────────────────────
+ *
+ * O card da PTAX em 07/09/2026 (feriado) anunciava "ÚLTIMA ENTREGA 12:20" logo
+ * abaixo de "0 moedas resolvidas por esta fonte". Aquele 12:20 era o `lastOkAt`
+ * — a última chamada que voltou —, usado como substituto quando não havia
+ * carimbo de entrega. O painel creditava à fonte uma entrega que não houve, que
+ * é exatamente o oposto do que ele existe para fazer.
+ */
+describe('entrega e resposta são dois relógios', () => {
+    beforeEach(() => resetSourceStats());
+
+    it('fonte que respondeu mas não é a origem do dado NÃO ganha data de entrega', async () => {
+        await trackSource('ptax', async () => ({ ok: true }));
+        const facts = factsBase(); // o dólar gravado veio do Yahoo
+
+        const ptax = byId(buildSourceStatuses(facts, getSourceStats()), 'ptax');
+
+        expect(ptax.lastDeliveryAt).toBeNull();     // não entregou
+        expect(ptax.lastResponseAt).not.toBeNull(); // mas respondeu
+        expect(ptax.deliveryTracked).toBe(true);    // e o vazio aqui é uma afirmação
+    });
+
+    it('fonte sem carimbo de entrega admite que não mede, em vez de inventar', async () => {
+        await trackSource('yahoo.quotes', async () => ({ ok: true }));
+
+        const yahoo = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'yahoo.quotes');
+
+        // Chave AUSENTE no mapa de entregas ≠ chave presente com valor vazio.
+        expect(yahoo.deliveryTracked).toBe(false);
+        expect(yahoo.lastDeliveryAt).toBeNull();
+        expect(yahoo.lastResponseAt).not.toBeNull();
+    });
+
+    it('quando ela É a origem, os dois relógios convivem', () => {
+        const facts = factsBase();
+        facts.macro.currenciesSources = { usd: 'PTAX/BCB', btc: 'Coinbase' };
+
+        const ptax = byId(buildSourceStatuses(facts, getSourceStats()), 'ptax');
+
+        expect(ptax.lastDeliveryAt).toEqual(facts.macro.currenciesUpdatedAt);
+        expect(ptax.deliveryTracked).toBe(true);
+    });
+});
+
+/**
+ * ── SILÊNCIO TEM DUAS CAUSAS, E ELAS PEDEM LEITURAS OPOSTAS ─────────────────
+ *
+ * A reserva não chamada porque a anterior deu conta é boa notícia. A fonte não
+ * chamada porque hoje ela não teria o dado é informação. Sem registro, as duas
+ * ficam idênticas na tela — e a PTAX, sendo `onFailure`, herdava a frase errada.
+ */
+describe('fonte que NÃO foi chamada por decisão nossa', () => {
+    beforeEach(() => resetSourceStats());
+
+    it('a razão do salto aparece no lugar do "a anterior deu conta"', () => {
+        recordSourceSkip('ptax', 'Sem fixação em fim de semana ou feriado — o Banco Central não publica hoje');
+
+        const ptax = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'ptax');
+
+        expect(ptax.status).toBe(SOURCE_STATUS.UNKNOWN);
+        expect(ptax.detail).toMatch(/feriado/i);
+        expect(ptax.skipped).toBe(1);
+    });
+
+    it('pular não conta como tentativa, e não suja a taxa de falha', () => {
+        recordSourceSkip('ptax', 'feriado');
+        recordSourceSkip('ptax', 'feriado');
+
+        const ptax = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'ptax');
+
+        expect(ptax.attempts).toBe(0);
+        expect(ptax.failures).toBe(0);
+        expect(ptax.failureRate).toBeNull();
+    });
+
+    it('sem salto nenhum, a reserva volta a dizer que a anterior deu conta', () => {
+        const ptax = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'ptax');
+        expect(ptax.detail).toMatch(/fonte anterior/i);
+    });
+
+    it('assim que ela é chamada de verdade, quem fala é a chamada', async () => {
+        recordSourceSkip('ptax', 'feriado');
+        await trackSource('ptax', async () => ({ ok: true }));
+
+        const ptax = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'ptax');
+
+        expect(ptax.attempts).toBe(1);
+        expect(ptax.detail).not.toMatch(/feriado/i);
+        expect(ptax.skipped).toBe(1); // o registro continua visível no detalhe
     });
 });
 

@@ -103,6 +103,19 @@ export interface DataSource {
     detail: string;
     lastDeliveryAt: string | null;
     lastDeliveryHours: number | null;
+    /**
+     * Dá para medir a ENTREGA desta fonte, ou só a conectividade dela?
+     * `false` = o painel não pode dizer "última entrega" sem inventar.
+     * Opcional para o cliente sobreviver a um servidor mais antigo.
+     */
+    deliveryTracked?: boolean;
+    /** Última chamada que VOLTOU com dado — conectividade, nunca entrega. */
+    lastResponseAt?: string | null;
+    lastResponseHours?: number | null;
+    /** Chamadas que não foram feitas por decisão nossa (ex.: PTAX em feriado). */
+    skipped?: number;
+    lastSkipAt?: string | null;
+    lastSkipReason?: string | null;
     attempts: number;
     failures: number;
     failureRate: number | null;
@@ -186,6 +199,13 @@ export interface QuoteSuspectFinding {
     /** A frase pronta, escrita no servidor. A tela não recalcula nada. */
     detail: string;
     movePct: number | null;
+    /**
+     * O que a NOSSA série de candles decidiu sobre o salto contra o banco:
+     * 'NOVO_CONFIRMADO' = o preço guardado é que estava errado (caso encerrado);
+     * 'GUARDADO_CONFIRMADO' = a série não sustenta o preço novo;
+     * `null` = ela não conseguiu desempatar, ou o achado é de outro tipo.
+     */
+    arbitration?: 'NOVO_CONFIRMADO' | 'GUARDADO_CONFIRMADO' | null;
 }
 
 /** Uma cotação que foi GRAVADA, mas com número fora da magnitude esperada. */
@@ -196,6 +216,8 @@ export interface QuoteSuspect {
     source: string | null;
     price: number | null;
     findings: QuoteSuspectFinding[];
+    /** A nossa série já disse que o errado era o preço guardado: nada a investigar. */
+    settled?: boolean;
     /** Quantas vezes desde o reinício — repetir atualiza a mesma linha. */
     count: number;
     at: string;
@@ -211,6 +233,8 @@ export interface QuoteSuspect {
 export interface QuoteSuspectView {
     total: number;
     items: QuoteSuspect[];
+    /** Quantos dos listados já foram resolvidos pela nossa própria série. */
+    settled?: number;
     truncated: number;
 }
 

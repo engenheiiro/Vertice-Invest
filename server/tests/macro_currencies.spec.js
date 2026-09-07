@@ -28,6 +28,24 @@ const yahooBody = {
     btc: { value: 79000, change: -2.1 },
 };
 
+/**
+ * RELÓGIO CONGELADO NUMA SEXTA ÚTIL (04/09/2026).
+ *
+ * A PTAX só é consultada em dia útil brasileiro — o Banco Central não fixa em
+ * fim de semana nem em feriado, e perguntar nesses dias é gastar uma chamada
+ * condenada (ver `_fetchPtaxUsd`). Sem congelar o relógio, metade destes testes
+ * passaria de segunda a sexta e falharia no sábado, o que é pior que não
+ * existir: a suíte viraria um alarme que depende do dia em que se roda.
+ *
+ * Só o `Date` é falsificado; timers não entram, porque nada aqui espera tempo.
+ */
+const SEXTA_UTIL = new Date('2026-09-04T15:00:00.000Z');
+beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(SEXTA_UTIL);
+});
+afterEach(() => vi.useRealTimers());
+
 describe('updateCurrencies — cadeia de fontes', () => {
     afterEach(() => vi.restoreAllMocks());
 
@@ -236,6 +254,7 @@ describe('_fetchPtaxUsd — rede final, só dólar e só do dia', () => {
     const hojeBr = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
 
     it('fixação de hoje é aceita, com a variação medida sobre a anterior', async () => {
+        expect(hojeBr()).toBe('2026-09-04'); // o relógio congelado é o contrato dos casos abaixo
         vi.spyOn(axios, 'get').mockResolvedValue({
             data: { value: [ptax('2026-09-03', 5.0962), ptax(hojeBr(), 5.1253)] },
         });
@@ -260,6 +279,62 @@ describe('_fetchPtaxUsd — rede final, só dólar e só do dia', () => {
     it('série vazia vira null, não exceção', async () => {
         vi.spyOn(axios, 'get').mockResolvedValue({ data: { value: [] } });
         await expect(macroDataService._fetchPtaxUsd()).resolves.toBeNull();
+    });
+
+    // ── 07/09/2026, feriado da Independência ────────────────────────────────
+    // O Yahoo falhou no dólar às 12h20, a PTAX foi consultada, respondeu 200 com
+    // os 10 dias pedidos, e a fixação mais recente era da sexta — recusada, e com
+    // razão. O painel ficou anunciando "1 de 1 chamadas com dado" ao lado de "0
+    // moedas resolvidas aqui". Em dia não útil a chamada nasce condenada.
+    it('em feriado nem chega a perguntar, e a razão fica registrada no painel', async () => {
+        resetSourceStats();
+        vi.setSystemTime(new Date('2026-09-07T15:00:00.000Z')); // segunda, Independência
+        const rede = vi.spyOn(axios, 'get');
+
+        await expect(macroDataService._fetchPtaxUsd()).resolves.toBeNull();
+
+        expect(rede).not.toHaveBeenCalled();
+        const card = getSourceStats().find((s) => s.id === 'ptax');
+        expect(card.attempts).toBe(0);        // pular não é falhar
+        expect(card.skipped).toBe(1);
+        expect(card.lastSkipReason).toMatch(/feriado/i);
+    });
+
+    it('no fim de semana também não pergunta — o BCB não fixa sábado nem domingo', async () => {
+        vi.setSystemTime(new Date('2026-09-05T15:00:00.000Z')); // sábado
+        const rede = vi.spyOn(axios, 'get');
+
+        await expect(macroDataService._fetchPtaxUsd()).resolves.toBeNull();
+
+        expect(rede).not.toHaveBeenCalled();
+    });
+
+    // Antes das ~13h o Olinda devolve 200 com os dias anteriores: resposta CHEIA,
+    // e sem a única linha que serve. Medir "dado" pelo tamanho da série faria o
+    // card se contradizer com o ledger de escaladas.
+    it('série sem a fixação de hoje conta como resposta SEM dado, não como entrega', async () => {
+        resetSourceStats();
+        vi.spyOn(axios, 'get').mockResolvedValue({
+            data: { value: [ptax('2026-09-02', 5.1273), ptax('2026-09-03', 5.0962)] },
+        });
+
+        await expect(macroDataService._fetchPtaxUsd()).resolves.toBeNull();
+
+        const card = getSourceStats().find((s) => s.id === 'ptax');
+        expect(card.attempts).toBe(1);
+        expect(card.ok).toBe(0);        // respondeu, mas não entregou
+        expect(card.failures).toBe(1);
+    });
+
+    it('com a fixação do dia, a chamada conta como entrega', async () => {
+        resetSourceStats();
+        vi.spyOn(axios, 'get').mockResolvedValue({
+            data: { value: [ptax('2026-09-03', 5.0962), ptax('2026-09-04', 5.1253)] },
+        });
+
+        await macroDataService._fetchPtaxUsd();
+
+        expect(getSourceStats().find((s) => s.id === 'ptax').ok).toBe(1);
     });
 
     it('na cadeia, cobre o dólar e deixa o BTC declaradamente ausente', async () => {
@@ -324,8 +399,10 @@ describe('_changeVsPreviousClose — a variação que a fonte não mede', () => 
         select: () => ({ lean: async () => ({ history }) }),
     });
 
+    // As datas são ANTERIORES ao relógio congelado do arquivo (04/09/2026): a
+    // função ignora, de propósito, o candle do dia corrente.
     it('mede contra o último fechamento anterior', async () => {
-        serie([{ date: '2026-09-03', close: 5.0 }, { date: '2026-09-04', close: 5.1 }]);
+        serie([{ date: '2026-09-02', close: 5.0 }, { date: '2026-09-03', close: 5.1 }]);
         await expect(macroDataService._changeVsPreviousClose('USD-BRL', 5.151)).resolves.toBeCloseTo(1.0, 3);
     });
 
@@ -333,7 +410,7 @@ describe('_changeVsPreviousClose — a variação que a fonte não mede', () => 
     // 19:45). Medir o preço contra ele mesmo devolveria ~0% justamente no dia de
     // maior movimento — uma variação plausível e falsa, que é o pior tipo.
     it('IGNORA o candle de hoje, mesmo já gravado', async () => {
-        serie([{ date: '2026-09-04', close: 5.0 }, { date: hojeBr(), close: 5.151 }]);
+        serie([{ date: '2026-09-03', close: 5.0 }, { date: hojeBr(), close: 5.151 }]);
         await expect(macroDataService._changeVsPreviousClose('USD-BRL', 5.151)).resolves.toBeCloseTo(3.02, 2);
     });
 

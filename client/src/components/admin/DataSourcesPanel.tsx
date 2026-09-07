@@ -129,9 +129,21 @@ const visualFor = (source: DataSource) => (isStandby(source) ? STANDBY_UI : STAT
  * anterior falha (silêncio ali é o sistema funcionando). Sem separar, "que horas
  * isso roda?" não tinha resposta — e metade dos cards nem tem horário para dar.
  */
+/**
+ * Relógio do rodapé do card, na ordem de quem responde melhor à pergunta "esta
+ * fonte está viva?": a entrega, quando ela é medível; a última resposta, quando
+ * não é (Yahoo de cotações não deixa carimbo por fonte no MarketAsset).
+ *
+ * Não é o mesmo que trocar um pelo outro no servidor — lá os dois são campos
+ * distintos, e o detalhe da fonte nomeia qual está mostrando. Aqui, no espaço de
+ * um card, o que importa é não deixar o canto vazio quando há informação.
+ */
+const clockHours = (source: DataSource): number | null =>
+    source.lastDeliveryHours ?? source.lastResponseHours ?? null;
+
 const footerInfo = (source: DataSource): { label: string; time: string } => {
     if (source.status !== 'UNKNOWN') {
-        return { label: STATUS_UI[source.status].label, time: sinceLabel(source.lastDeliveryHours) };
+        return { label: STATUS_UI[source.status].label, time: sinceLabel(clockHours(source)) };
     }
     if (isSemAlvoVivo(source)) {
         return { label: 'Sem alvo vivo', time: 'reserva' };
@@ -463,7 +475,16 @@ const SuspectLine = ({ suspects, onOpen }: { suspects: QuoteSuspectView; onOpen:
                 <span className="font-bold text-white">{suspects.total}</span> ativo(s) chegaram com preço fora
                 do esperado
             </span>
-            <span className="text-[10px] text-slate-500">— gravados, para conferir</span>
+            {/* Quantos já não são pergunta: a nossa série disse que o errado era o
+                preço GUARDADO, e ele acabou de ser trocado pelo certo. Sem esta
+                contagem o dono abre a lista para conferir caso já resolvido. */}
+            {(suspects.settled ?? 0) > 0 ? (
+                <span className="text-[10px] text-emerald-400">
+                    — {suspects.settled} já corrigido(s) pela nossa série
+                </span>
+            ) : (
+                <span className="text-[10px] text-slate-500">— gravados, para conferir</span>
+            )}
             <span className="text-[10px] text-blue-400 ml-auto shrink-0">ver ativos →</span>
         </button>
     );
@@ -505,6 +526,9 @@ const SuspectModal = ({ suspects, onClose }: { suspects: QuoteSuspectView; onClo
                         </h3>
                         <p className="text-[11px] text-slate-500 mt-0.5">
                             {suspects.total} ativo(s) desde o último reinício · o preço foi gravado
+                            {(suspects.settled ?? 0) > 0 && (
+                                <span className="text-emerald-400"> · {suspects.settled} já corrigido(s)</span>
+                            )}
                         </p>
                     </div>
                     <button
@@ -533,12 +557,18 @@ const SuspectModal = ({ suspects, onClose }: { suspects: QuoteSuspectView; onClo
                                 {item.count > 1 && (
                                     <span className="text-[9px] text-slate-500 font-mono">{item.count}×</span>
                                 )}
+                                {item.settled && (
+                                    <span className="text-[9px] uppercase font-bold text-emerald-400 bg-emerald-900/20 border border-emerald-900/50 px-1 rounded">
+                                        corrigido
+                                    </span>
+                                )}
                                 <span className="text-[9px] font-mono text-slate-600 ml-auto">{shortTime(item.at)}</span>
                             </div>
                             <ul className="mt-1 space-y-0.5">
                                 {item.findings.map((f) => (
                                     <li key={f.code} className="text-[11px] text-slate-300">
-                                        <span className="text-yellow-500/80">↳</span> {f.detail}
+                                        <span className={f.arbitration === 'NOVO_CONFIRMADO' ? 'text-emerald-400' : 'text-yellow-500/80'}>↳</span>{' '}
+                                        {f.detail}
                                     </li>
                                 ))}
                             </ul>
@@ -557,7 +587,9 @@ const SuspectModal = ({ suspects, onClose }: { suspects: QuoteSuspectView; onClo
                     O preço é gravado mesmo assim, de propósito: grupamento e desdobramento produzem a mesma
                     assinatura de um erro de fonte, e recusar por magnitude congelaria o ativo no valor
                     anterior ao evento. Esta lista existe para você olhar e decidir — ela zera a cada reinício
-                    do servidor.
+                    do servidor. Onde houver <span className="text-emerald-400">a marca verde</span>, a nossa
+                    própria série de fechamentos já apontou que o número errado era o que estava guardado, e
+                    ele acabou de ser substituído: não há o que decidir.
                 </p>
             </div>
         </div>,
@@ -699,6 +731,11 @@ const SourceDetailModal = ({
     const ui = visualFor(source);
     const footer = footerInfo(source);
     const entrega = absoluteTime(source.lastDeliveryAt);
+    const resposta = absoluteTime(source.lastResponseAt ?? source.lastOkAt ?? null);
+    // Fonte com carimbo de entrega e carimbo vazio não é fonte sem informação: é
+    // uma fonte que respondeu e não é a origem do dado que está gravado agora.
+    // Era exatamente esse o caso da PTAX em 07/09/2026, e o card dizia o oposto.
+    const entregaMedida = source.deliveryTracked !== false;
     const falha = absoluteTime(source.lastFailAt);
     const semReserva = (source.backups?.length ?? 0) === 0 && !source.covers;
     // Três destinos possíveis para quem passou por esta fonte, e eles se leem
@@ -777,12 +814,27 @@ const SourceDetailModal = ({
                             {source.nextRun && <span className="text-slate-500"> · próxima {source.nextRun}</span>}
                         </Linha>
                     )}
-                    <Linha rotulo="Última entrega">
-                        {entrega ? <>{entrega} <span className="text-slate-500">({sinceLabel(source.lastDeliveryHours)})</span></> : 'sem registro'}
+                    {entregaMedida && (
+                        <Linha rotulo="Última entrega">
+                            {entrega
+                                ? <>{entrega} <span className="text-slate-500">({sinceLabel(source.lastDeliveryHours)})</span></>
+                                : <span className="text-slate-400">nada gravado veio desta fonte agora</span>}
+                        </Linha>
+                    )}
+                    <Linha rotulo="Última resposta">
+                        {resposta
+                            ? <>{resposta} <span className="text-slate-500">({sinceLabel(source.lastResponseHours ?? null)})</span></>
+                            : 'sem registro'}
                     </Linha>
                     {(source.attempts ?? 0) > 0 && (
                         <Linha rotulo="Chamadas">
                             {source.attempts} desde o reinício · {source.ok ?? 0} com dado · {source.failures} sem
+                        </Linha>
+                    )}
+                    {(source.skipped ?? 0) > 0 && (
+                        <Linha rotulo="Não chamada">
+                            {source.skipped}× por decisão nossa
+                            {source.lastSkipReason && <span className="text-slate-500"> — {source.lastSkipReason}</span>}
                         </Linha>
                     )}
                     {/* Ancorado no ERRO, não na data: o registro sempre grava os dois
@@ -879,8 +931,10 @@ const SourceDetailModal = ({
                 )}
 
                 <p className="text-[10px] text-slate-600 mt-4">
-                    A contagem de chamadas zera a cada reinício do servidor; a data de entrega vem do banco
-                    e sobrevive a ele.
+                    São dois relógios diferentes: <b>última resposta</b> é a última chamada que voltou (vive
+                    no processo e zera a cada reinício); <b>última entrega</b> é quando o dado desta fonte foi
+                    o gravado no banco — vem do banco e sobrevive ao reinício. Uma fonte pode responder
+                    perfeitamente e não estar entregando nada, e é essa diferença que a linha mostra.
                 </p>
             </div>
         </div>,

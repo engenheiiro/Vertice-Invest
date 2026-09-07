@@ -267,7 +267,10 @@ export const SOURCE_CATALOG = {
 
 const stats = new Map();
 
-const blank = () => ({ ok: 0, fail: 0, empty: 0, lastOkAt: null, lastFailAt: null, lastError: null });
+const blank = () => ({
+    ok: 0, fail: 0, empty: 0, lastOkAt: null, lastFailAt: null, lastError: null,
+    skipped: 0, lastSkipAt: null, lastSkipReason: null,
+});
 
 const entry = (id) => {
     if (!stats.has(id)) stats.set(id, blank());
@@ -287,6 +290,35 @@ const entry = (id) => {
  * @param {Function} fn chamada a executar
  * @param {{isEmpty?: (result: any) => boolean}} [opts]
  */
+/**
+ * A FONTE NÃO FOI CHAMADA, E ISSO FOI DECISÃO NOSSA.
+ *
+ * O quarto desfecho, e o único que não é sobre a fonte. Há chamada que o sistema
+ * sabe, de antemão, que não pode dar certo: a PTAX é a fixação do dia e o Banco
+ * Central não fixa em fim de semana nem em feriado, então em 07/09/2026 —
+ * feriado da Independência — a série do Olinda simplesmente não tinha linha de
+ * hoje. Perguntar assim mesmo gasta a chamada e, pior, deixa o painel com uma
+ * história sem sentido: o card dizia "1 de 1 chamadas com dado" (a resposta HTTP
+ * veio, com os 10 dias) ao lado de "0 moedas resolvidas por esta fonte".
+ *
+ * Silêncio tem duas causas muito diferentes, e o painel precisa distingui-las:
+ * a reserva que não foi chamada porque a anterior deu conta (boa notícia) e a
+ * fonte que não foi chamada porque hoje ela não teria o dado (informação). Sem
+ * este registro, as duas ficam idênticas na tela.
+ *
+ * NÃO conta como tentativa: pular não é falhar, e somar isso à taxa de falha
+ * pintaria de amarelo uma fonte que está funcionando perfeitamente.
+ *
+ * @param {string} id chave do SOURCE_CATALOG
+ * @param {string} reason em português de dono — vai para a tela
+ */
+export const recordSourceSkip = (id, reason) => {
+    const stat = entry(id);
+    stat.skipped += 1;
+    stat.lastSkipAt = new Date();
+    stat.lastSkipReason = String(reason || '').slice(0, 200) || null;
+};
+
 export const trackSource = async (id, fn, { isEmpty } = {}) => {
     const stat = entry(id);
     try {
@@ -331,6 +363,10 @@ export const getSourceStats = () => Object.entries(SOURCE_CATALOG).map(([id, met
         lastOkAt: stat.lastOkAt,
         lastFailAt: stat.lastFailAt,
         lastError: stat.lastError,
+        // Fora de `attempts` de propósito — ver recordSourceSkip.
+        skipped: stat.skipped,
+        lastSkipAt: stat.lastSkipAt,
+        lastSkipReason: stat.lastSkipReason,
     };
 });
 

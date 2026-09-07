@@ -10,6 +10,7 @@ import AssetHistory from '../models/AssetHistory.js';
 import UserAsset from '../models/UserAsset.js';
 import { externalMarketService } from '../services/externalMarketService.js';
 import { marketDataService } from '../services/marketDataService.js';
+import { getSuspectQuotes, resetSourceStats } from '../utils/sourceHealth.js';
 
 vi.mock('../models/MarketAsset.js', () => ({
   default: { find: vi.fn(), findOne: vi.fn(), bulkWrite: vi.fn() },
@@ -255,7 +256,7 @@ describe('tryReactivateAssets — aposentadoria automática após a quarentena',
     // Estado terminal COMPLETO na mesma escrita: baixa sem desativar deixava o
     // aposentado na fila de cotação (isBlacklisted=true + isActive=true).
     expect(op.update.$set.isActive).toBe(false);
-    expect(op.update.$set.retiredReason).toMatch(/127d sem cotação/);
+    expect(op.update.$set.retiredReason).toMatch(/127d sem pregão/);
   });
 
   it('não aposenta dentro da quarentena — papel ainda pode voltar sozinho', async () => {
@@ -541,5 +542,179 @@ describe('refreshQuotesBatch — variação contestada', () => {
     expect(set.change).toBe(1.4983);
     expect(set.previousClose).toBe(41.38);
     expect(AssetHistory.aggregate).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ── O RELÓGIO DA BAIXA MEDE PREGÃO, NÃO O ÚLTIMO TOQUE NO DOCUMENTO ──────────
+ *
+ * PTNT3/PTNT4 (Pettenati) não negociam desde 26 e 27/05/2026 — 104 dias em
+ * 07/09 —, com UM único candle na série, `priceDate` nulo e failCount no teto.
+ * Uma escrita de 29/07 (backfill) tinha empurrado o `updatedAt`, e os dois
+ * marcavam 40 dias de quarentena em vez de 104: a baixa era adiada a cada toque.
+ */
+describe('aposentadoria — a idade é da última prova de pregão', () => {
+  const daysAgo = (d) => new Date(Date.now() - d * 86400000);
+  const dayKeyAgo = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+
+  it('PTNT3 — candle de 104d aposenta mesmo com updatedAt de 40d', async () => {
+    mockFind([{ ticker: 'PTNT3', failCount: 10, type: 'STOCK', marketCap: 4e8, updatedAt: daysAgo(40), priceDate: null }]);
+    AssetHistory.aggregate.mockResolvedValue([{ ticker: 'PTNT3', lastDate: dayKeyAgo(104) }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+    externalMarketService.getFullHistory.mockResolvedValue(null);
+    MarketAsset.bulkWrite.mockResolvedValue({ modifiedCount: 1 });
+
+    const res = await marketDataService.tryReactivateAssets();
+
+    expect(res.retired).toBe(1);
+    const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(set.isBlacklisted).toBe(true);
+    expect(set.retiredReason).toMatch(/104d sem pregão \(último candle\)/);
+  });
+
+  it('o inverso também vale: updatedAt velho não mata quem negociou ontem', async () => {
+    // A prova de vida pode estar só na série — e basta ela.
+    mockFind([{ ticker: 'VIVO3', failCount: 10, type: 'STOCK', marketCap: 4e8, updatedAt: daysAgo(300), priceDate: null }]);
+    AssetHistory.aggregate.mockResolvedValue([{ ticker: 'VIVO3', lastDate: dayKeyAgo(1) }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+
+    const res = await marketDataService.tryReactivateAssets();
+
+    expect(res.retired).toBe(0);
+    expect(externalMarketService.getFullHistory).not.toHaveBeenCalled(); // nem chega ao probe
+  });
+
+  it('basta UMA testemunha: priceDate recente segura a baixa sem candle nenhum', async () => {
+    mockFind([{ ticker: 'RARO11', failCount: 10, type: 'FII', marketCap: 1e8, updatedAt: daysAgo(300), priceDate: dayKeyAgo(3) }]);
+    AssetHistory.aggregate.mockResolvedValue([]); // série ausente
+    externalMarketService.getQuotes.mockResolvedValue([]);
+
+    const res = await marketDataService.tryReactivateAssets();
+
+    expect(res.retired).toBe(0);
+  });
+
+  it('e vale a MAIS RECENTE das duas, não a média nem a pior', async () => {
+    mockFind([{ ticker: 'MEIO11', failCount: 10, type: 'FII', marketCap: 1e8, updatedAt: daysAgo(10), priceDate: dayKeyAgo(200) }]);
+    AssetHistory.aggregate.mockResolvedValue([{ ticker: 'MEIO11', lastDate: dayKeyAgo(5) }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+
+    expect((await marketDataService.tryReactivateAssets()).retired).toBe(0);
+  });
+
+  it('sem candle e sem priceDate, o updatedAt volta a ser a resposta — é a única', async () => {
+    mockFind([{ ticker: 'NOVO11', failCount: 10, type: 'FII', marketCap: 0, updatedAt: daysAgo(5), priceDate: null }]);
+    AssetHistory.aggregate.mockResolvedValue([]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+
+    expect((await marketDataService.tryReactivateAssets()).retired).toBe(0);
+  });
+
+  // Fail-CLOSED: a ausência da consulta não pode virar sentença de morte.
+  it('série indisponível não aposenta ninguém nesta rodada', async () => {
+    mockFind([{ ticker: 'PTNT4', failCount: 10, type: 'STOCK', marketCap: 4e8, updatedAt: daysAgo(400), priceDate: null }]);
+    AssetHistory.aggregate.mockRejectedValue(new Error('mongo fora'));
+    externalMarketService.getQuotes.mockResolvedValue([]);
+
+    expect((await marketDataService.tryReactivateAssets()).retired).toBe(0);
+    expect(MarketAsset.bulkWrite).not.toHaveBeenCalled();
+  });
+
+  it('o probe ao vivo continua sendo a última palavra sobre quem passou do prazo', async () => {
+    // Nossa série diz 200 dias; a fonte diz que ele negociou há 2. Vence a fonte.
+    mockFind([{ ticker: 'HGPO11', failCount: 10, type: 'FII', marketCap: 2.7e8, updatedAt: daysAgo(200), priceDate: null }]);
+    AssetHistory.aggregate.mockResolvedValue([{ ticker: 'HGPO11', lastDate: dayKeyAgo(200) }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+    externalMarketService.getFullHistory.mockResolvedValue([{ date: dayKeyAgo(2), close: 153.42 }]);
+
+    expect((await marketDataService.tryReactivateAssets()).retired).toBe(0);
+  });
+
+  it('cripto é procurada pela chave de série do provedor, não pelo ticker cru', async () => {
+    mockFind([{ ticker: 'SOL', failCount: 10, type: 'CRYPTO', marketCap: 0, updatedAt: daysAgo(300), priceDate: null }]);
+    AssetHistory.aggregate.mockResolvedValue([{ ticker: 'SOL-USD', lastDate: dayKeyAgo(2) }]);
+    externalMarketService.getQuotes.mockResolvedValue([]);
+
+    expect((await marketDataService.tryReactivateAssets()).retired).toBe(0);
+    const match = AssetHistory.aggregate.mock.calls[0][0][0].$match;
+    expect(match.ticker.$in).toContain('SOL-USD');
+  });
+});
+
+/**
+ * ── O SALTO CONTRA O BANCO, JULGADO COM A NOSSA SÉRIE NA MÃO ────────────────
+ *
+ * Caso real de 07/09/2026: RBRL11 chegou a 73,91 e o banco tinha 58,45 — que é
+ * o preço do RBHG11, outro FII, e não existe em nenhum dos nossos 400 candles
+ * (o mínimo da série é 60,59, de fev/2025). O alarme apontava para o número
+ * certo. Como o registro no painel agora acontece DEPOIS da busca da âncora, o
+ * que se cobra aqui é que ele ainda aconteça — e com o veredito junto.
+ */
+describe('refreshQuotesBatch — quem estava errado no salto', () => {
+  beforeEach(() => resetSourceStats());
+
+  const quoteRBRL = { ticker: 'RBRL11', price: 73.91, change: 0.5, previousClose: 73.54, marketTime: new Date('2026-09-04T20:55:00.000Z'), source: 'YAHOO' };
+
+  it('a nossa série absolve o preço novo e o painel diz isso', async () => {
+    mockFind([{ ticker: 'RBRL11', type: 'FII', updatedAt: minutesAgo(60), lastPrice: 58.45, priceDate: '2026-09-04', priceSource: 'YAHOO', isActive: true, failCount: 0 }]);
+    externalMarketService.getQuotes.mockResolvedValue([quoteRBRL]);
+    AssetHistory.aggregate.mockResolvedValue([{ ticker: 'RBRL11', candle: { date: '2026-09-03', close: 73.54 } }]);
+
+    await marketDataService.refreshQuotesBatch(['RBRL11'], false);
+
+    const [linha] = getSuspectQuotes();
+    expect(linha.subject).toBe('RBRL11');
+    const salto = linha.findings.find((f) => f.code === 'SALTO_VS_BANCO');
+    expect(salto.arbitration).toBe('NOVO_CONFIRMADO');
+    expect(salto.detail).toMatch(/quem estava errado era o guardado/);
+    // E o preço bom entra assim mesmo — o conserto é a própria gravação.
+    expect(MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set.lastPrice).toBe(73.91);
+  });
+
+  it('sem candle nosso o achado fica como estava — acusar sem prova é o que se evita', async () => {
+    mockFind([{ ticker: 'RBRL11', type: 'FII', updatedAt: minutesAgo(60), lastPrice: 58.45, priceDate: '2026-09-04', isActive: true, failCount: 0 }]);
+    externalMarketService.getQuotes.mockResolvedValue([quoteRBRL]);
+    AssetHistory.aggregate.mockResolvedValue([]);
+
+    await marketDataService.refreshQuotesBatch(['RBRL11'], false);
+
+    const [linha] = getSuspectQuotes();
+    expect(linha.findings.find((f) => f.code === 'SALTO_VS_BANCO').arbitration).toBeUndefined();
+  });
+
+  it('a procedência do preço guardado vai junto na frase', async () => {
+    mockFind([{ ticker: 'RBRL11', type: 'FII', updatedAt: minutesAgo(60), lastPrice: 58.45, priceDate: '2026-09-04', priceSource: 'FUNDAMENTUS', isActive: true, failCount: 0 }]);
+    externalMarketService.getQuotes.mockResolvedValue([quoteRBRL]);
+    AssetHistory.aggregate.mockResolvedValue([]);
+
+    await marketDataService.refreshQuotesBatch(['RBRL11'], false);
+
+    expect(getSuspectQuotes()[0].findings[0].detail).toMatch(/guardado via FUNDAMENTUS/);
+  });
+
+  // Sem assinatura, todo preço errado é anônimo — e preço anônimo não se
+  // conserta na raiz: dá para reescrever o número, nunca para saber de onde veio.
+  it('toda gravação de preço assina a fonte', async () => {
+    mockFind([{ ticker: 'PETR4', type: 'STOCK', updatedAt: minutesAgo(60), lastPrice: 41.38, priceDate: '2026-09-03', isActive: true, failCount: 0 }]);
+    externalMarketService.getQuotes.mockResolvedValue([
+      { ticker: 'PETR4', price: 42, change: 1.4983, previousClose: 41.38, marketTime: new Date('2026-09-04T20:55:00.000Z'), source: 'GOOGLE_FINANCE_FALLBACK' },
+    ]);
+
+    await marketDataService.refreshQuotesBatch(['PETR4'], false);
+
+    expect(MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set.priceSource)
+      .toBe('GOOGLE_FINANCE_FALLBACK');
+  });
+
+  it('papel de centavos que só andou alguns tiques não vira linha no painel', async () => {
+    mockFind([{ ticker: 'PMAM3', type: 'STOCK', updatedAt: minutesAgo(60), lastPrice: 0.23, priceDate: '2026-09-03', isActive: true, failCount: 0 }]);
+    externalMarketService.getQuotes.mockResolvedValue([
+      { ticker: 'PMAM3', price: 0.32, change: 39.13, previousClose: 0.23, marketTime: new Date('2026-09-04T20:55:00.000Z'), source: 'YAHOO' },
+    ]);
+
+    await marketDataService.refreshQuotesBatch(['PMAM3'], false);
+
+    expect(getSuspectQuotes()).toHaveLength(0);
+    expect(MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set.lastPrice).toBe(0.32);
   });
 });

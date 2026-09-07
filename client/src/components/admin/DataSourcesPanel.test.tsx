@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { DataSourcesPanel } from './DataSourcesPanel';
 import type { ChainFlow, DataSource, QuoteSuspectView, SourceGroup } from '../../services/health';
 
@@ -567,5 +567,124 @@ describe('DataSourcesPanel — preços fora do esperado', () => {
         fireEvent.click(screen.getByText(/chegaram com preço fora/));
         expect(screen.getByRole('dialog', { name: /valor fora do esperado/i }))
             .toHaveTextContent(/grupamento e desdobramento/i);
+    });
+});
+
+/**
+ * ── RESPONDER NÃO É ENTREGAR ────────────────────────────────────────────────
+ *
+ * O card da PTAX em 07/09/2026 (feriado) mostrava "ÚLTIMA ENTREGA 12:20" logo
+ * acima de "0 moedas tiveram a cotação trazida por esta fonte". Os 12:20 eram a
+ * última CHAMADA que voltou, servindo de substituto para um carimbo de entrega
+ * que não existia — o painel creditava à fonte uma entrega que não houve.
+ */
+describe('DataSourcesPanel — entrega e resposta no detalhe da fonte', () => {
+    const abrir = (over: Partial<DataSource>) => {
+        render(<DataSourcesPanel sources={[src({ id: 'ptax', short: 'PTAX', ...over })]} groups={groups} />);
+        fireEvent.click(screen.getByRole('button', { name: /PTAX/ }));
+    };
+
+    it('fonte que respondeu sem entregar diz isso, em vez de mostrar a hora da chamada', () => {
+        abrir({
+            deliveryTracked: true,
+            lastDeliveryAt: null,
+            lastDeliveryHours: null,
+            lastResponseAt: new Date().toISOString(),
+            lastResponseHours: 3,
+        });
+
+        expect(screen.getByText(/nada gravado veio desta fonte agora/)).toBeInTheDocument();
+        expect(screen.getByText('Última resposta')).toBeInTheDocument();
+    });
+
+    it('fonte sem carimbo de entrega não finge ter um', () => {
+        abrir({
+            id: 'yahoo.quotes',
+            deliveryTracked: false,
+            lastDeliveryAt: null,
+            lastDeliveryHours: null,
+            lastResponseAt: new Date().toISOString(),
+            lastResponseHours: 0.1,
+        });
+
+        expect(screen.queryByText('Última entrega')).not.toBeInTheDocument();
+        expect(screen.getByText('Última resposta')).toBeInTheDocument();
+    });
+
+    it('a razão de a fonte não ter sido chamada aparece nomeada', () => {
+        abrir({
+            deliveryTracked: true,
+            lastDeliveryAt: null,
+            lastDeliveryHours: null,
+            skipped: 2,
+            lastSkipReason: 'Sem fixação em fim de semana ou feriado',
+        });
+
+        expect(screen.getByText('Não chamada')).toBeInTheDocument();
+        expect(screen.getByText(/Sem fixação em fim de semana ou feriado/)).toBeInTheDocument();
+    });
+});
+
+/**
+ * Duas das sete linhas de 07/09/2026 (RBRL11 e STX) eram o momento em que um
+ * preço ERRADO que estava guardado foi substituído pelo certo — nada a
+ * investigar. Contá-las junto com as outras cinco é como um alarme perde a
+ * credibilidade: o dono abre a lista, confere caso já resolvido, e para de abrir.
+ */
+describe('DataSourcesPanel — preço já corrigido pela nossa série', () => {
+    const corrigidos: QuoteSuspectView = {
+        total: 2,
+        settled: 1,
+        truncated: 0,
+        items: [
+            {
+                subject: 'RBRL11',
+                type: 'FII',
+                source: 'YAHOO',
+                price: 73.91,
+                count: 1,
+                settled: true,
+                at: new Date().toISOString(),
+                findings: [{
+                    code: 'SALTO_VS_BANCO',
+                    detail: '26.45% contra o preço que tínhamos de 2026-09-04 (58.45 → 73.91) — nosso '
+                        + 'fechamento de 2026-09-03 (73.54) confirma o preço NOVO: quem estava errado era o guardado',
+                    movePct: 26.45,
+                    arbitration: 'NOVO_CONFIRMADO',
+                }],
+            },
+            {
+                subject: 'NAUI11',
+                type: 'FII',
+                source: 'YAHOO',
+                price: 1000,
+                count: 3,
+                at: new Date().toISOString(),
+                findings: [{
+                    code: 'VARIACAO_INCOERENTE',
+                    detail: 'a fonte declara 4.02% mas os preços dela implicam 0.00%',
+                    movePct: 0,
+                    arbitration: null,
+                }],
+            },
+        ],
+    };
+
+    it('a linha do painel separa o que ainda é pergunta do que já foi resolvido', () => {
+        render(<DataSourcesPanel sources={cadeia} groups={groups} chains={flow} suspects={corrigidos} />);
+        expect(screen.getByText(/1 já corrigido\(s\) pela nossa série/)).toBeInTheDocument();
+    });
+
+    it('e o ativo resolvido é marcado como tal na lista', () => {
+        render(<DataSourcesPanel sources={cadeia} groups={groups} chains={flow} suspects={corrigidos} />);
+        fireEvent.click(screen.getByText(/chegaram com preço fora/));
+        const dialog = screen.getByRole('dialog', { name: /valor fora do esperado/i });
+        expect(within(dialog).getByText('corrigido')).toBeInTheDocument();
+        expect(within(dialog).getByText(/quem estava errado era o guardado/)).toBeInTheDocument();
+    });
+
+    it('sem nenhum resolvido, a frase volta a ser a de conferir', () => {
+        render(<DataSourcesPanel sources={cadeia} groups={groups} chains={flow} suspects={suspeitos} />);
+        expect(screen.getByText(/gravados, para conferir/)).toBeInTheDocument();
     });
 });

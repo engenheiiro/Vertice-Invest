@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     judgeQuote, contestsChange, resolveContestedChange, MOVE_LIMIT_PCT,
+    effectiveMoveLimit, arbitrateStoredJump, applyStoredJumpArbitration,
+    isSettledFinding, needsOwnAnchor,
 } from '../utils/quoteSanity.js';
 import { recordSuspectQuote, getSuspectQuotes, resetSourceStats } from '../utils/sourceHealth.js';
 import { buildSuspectView } from '../utils/dataSourceStatus.js';
@@ -118,7 +120,7 @@ describe('registro de cotações suspeitas', () => {
     });
 
     it('sem nada registrado, a visão afirma zero (e não some)', () => {
-        expect(buildSuspectView(getSuspectQuotes())).toEqual({ total: 0, items: [], truncated: 0 });
+        expect(buildSuspectView(getSuspectQuotes())).toEqual({ total: 0, settled: 0, items: [], truncated: 0 });
     });
 });
 
@@ -184,5 +186,141 @@ describe('reancoragem — ruído de ponto flutuante', () => {
 
     it('mas a primeira variação exibível é preservada', () => {
         expect(resolveContestedChange({ price: 100.01, ownClose: 100 }).change).toBeCloseTo(0.01, 6);
+    });
+});
+
+/**
+ * ── PAPEL DE CENTAVOS ────────────────────────────────────────────────────────
+ *
+ * PMAM3 disparou o alarme em 04/09/2026 com +39,13% (0,23 → 0,32) sendo que o
+ * tique da B3 ali é R$ 0,01 — 4,3% do preço. A série mostrava 0,13 → 0,14 →
+ * 0,15 → 0,16 → 0,17 → 0,19 → 0,23 → 0,32: alta real, contada em tiques miúdos.
+ */
+describe('régua de magnitude em papel abaixo de R$ 1,00', () => {
+    const hoje = new Date('2026-09-07T12:00:00.000Z');
+
+    it('afrouxa quando o tique domina o denominador', () => {
+        // 10 tiques sobre 0,23 valem 43,5% — acima dos 30% da classe.
+        expect(effectiveMoveLimit('STOCK', 0.23)).toBeCloseTo(43.48, 1);
+    });
+
+    it('não muda nada a partir de R$ 1,00', () => {
+        expect(effectiveMoveLimit('STOCK', 1)).toBe(30);
+        expect(effectiveMoveLimit('STOCK', 42)).toBe(30);
+        expect(effectiveMoveLimit('FII', 100)).toBe(20);
+    });
+
+    it('desaparece sozinha conforme o preço sobe (0,90 já não precisa dela)', () => {
+        expect(effectiveMoveLimit('STOCK', 0.9)).toBe(30);
+    });
+
+    it('tem teto: dobrar de preço num dia merece o olho em qualquer preço', () => {
+        expect(effectiveMoveLimit('STOCK', 0.02)).toBe(100);
+    });
+
+    it('não vale para ação americana nem cripto — outro tique, outro artefato', () => {
+        expect(effectiveMoveLimit('STOCK_US', 0.2)).toBe(35);
+        expect(effectiveMoveLimit('CRYPTO', 0.2)).toBe(50);
+    });
+
+    it('PMAM3 (0,23 → 0,32) deixa de ser acusado', () => {
+        expect(judgeQuote({
+            type: 'STOCK', price: 0.32, previousClose: 0.23, change: 39.13,
+            storedPrice: 0.23, storedPriceDate: '2026-09-03', now: hoje,
+        })).toHaveLength(0);
+    });
+
+    it('mas um papel de centavos que TRIPLICA continua sendo acusado', () => {
+        const achados = judgeQuote({
+            type: 'STOCK', price: 0.69, previousClose: 0.23, change: 200, now: hoje,
+        });
+        expect(achados.map((f) => f.code)).toContain('SALTO_NA_FONTE');
+    });
+
+    it('o alívio é do DENOMINADOR, não do ativo: papel caro segue na régua da classe', () => {
+        const achados = judgeQuote({
+            type: 'STOCK', price: 60, previousClose: 40, change: 50, now: hoje,
+        });
+        expect(achados.map((f) => f.code)).toContain('SALTO_NA_FONTE');
+    });
+});
+
+/**
+ * ── QUEM ESTAVA ERRADO: O PREÇO NOVO OU O GUARDADO? ──────────────────────────
+ *
+ * Os dois casos são reais, de 07/09/2026, e nos dois o alarme apontava para o
+ * número CERTO: RBRL11 acusado de sair de 58,45 (que é o preço do RBHG11, e não
+ * aparece em nenhum dos nossos 400 candles) e STX acusado de sair de 0,28 (o
+ * Stacks, enquanto a série sempre foi da Seagate).
+ */
+describe('arbitragem do salto contra o banco', () => {
+    it('RBRL11 — a série confirma o preço novo; o guardado é que era intruso', () => {
+        expect(arbitrateStoredJump({
+            type: 'FII', price: 73.91, storedPrice: 58.45, ownClose: 73.54,
+        })).toBe('NOVO_CONFIRMADO');
+    });
+
+    it('STX — mesma conclusão com a ordem de grandeza toda errada', () => {
+        expect(arbitrateStoredJump({
+            type: 'STOCK_US', price: 849.28, storedPrice: 0.28, ownClose: 798.61,
+        })).toBe('NOVO_CONFIRMADO');
+    });
+
+    it('quando a série sustenta o guardado, o suspeito é mesmo o preço novo', () => {
+        expect(arbitrateStoredJump({
+            type: 'STOCK', price: 300, storedPrice: 40, ownClose: 41,
+        })).toBe('GUARDADO_CONFIRMADO');
+    });
+
+    it('sem candle nosso não há árbitro, e acusar sem prova é o que se evita', () => {
+        expect(arbitrateStoredJump({
+            type: 'FII', price: 73.91, storedPrice: 58.45, ownClose: null,
+        })).toBeNull();
+    });
+
+    it('os dois longe do candle é inconclusivo — o candle também pode estar velho', () => {
+        expect(arbitrateStoredJump({
+            type: 'STOCK', price: 300, storedPrice: 40, ownClose: 150,
+        })).toBeNull();
+    });
+
+    it('os dois perto do candle: não havia salto de verdade a julgar', () => {
+        expect(arbitrateStoredJump({
+            type: 'STOCK', price: 41, storedPrice: 40, ownClose: 40.5,
+        })).toBeNull();
+    });
+
+    it('a frase do achado passa a dizer o que a série provou', () => {
+        const achados = judgeQuote({
+            type: 'FII', price: 73.91, previousClose: 73.54, change: 0.5,
+            storedPrice: 58.45, storedPriceDate: '2026-09-04',
+            now: new Date('2026-09-07T12:00:00.000Z'),
+        });
+        const arbitrados = applyStoredJumpArbitration(achados, {
+            verdict: 'NOVO_CONFIRMADO', ownClose: 73.54, ownCloseDate: '2026-09-03',
+        });
+        const salto = arbitrados.find((f) => f.code === 'SALTO_VS_BANCO');
+        expect(salto.arbitration).toBe('NOVO_CONFIRMADO');
+        expect(salto.detail).toMatch(/confirma o preço NOVO/);
+        expect(isSettledFinding(salto)).toBe(true);
+    });
+
+    it('sem veredito a lista volta intocada — nada é afirmado à toa', () => {
+        const achados = [{ code: 'SALTO_VS_BANCO', detail: 'x', movePct: 30 }];
+        expect(applyStoredJumpArbitration(achados, { verdict: null })).toBe(achados);
+    });
+
+    it('a procedência do preço guardado entra na frase quando é conhecida', () => {
+        const [salto] = judgeQuote({
+            type: 'FII', price: 73.91, storedPrice: 58.45, storedPriceDate: '2026-09-04',
+            storedPriceSource: 'FUNDAMENTUS', now: new Date('2026-09-07T12:00:00.000Z'),
+        });
+        expect(salto.detail).toMatch(/guardado via FUNDAMENTUS/);
+    });
+
+    it('o desempate só é buscado quando há candle a buscar', () => {
+        expect(needsOwnAnchor([{ code: 'SALTO_VS_BANCO' }])).toBe(true);
+        expect(needsOwnAnchor([{ code: 'VARIACAO_INCOERENTE' }])).toBe(true);
+        expect(needsOwnAnchor([])).toBe(false);
     });
 });

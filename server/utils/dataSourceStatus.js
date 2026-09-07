@@ -47,8 +47,21 @@ const pct = (value) => `${Math.round(value * 100)}%`;
 
 /**
  * Frescor persistido por fonte. Cada entrada responde "quando o DADO desta fonte
- * chegou ao banco pela última vez", e é `null` quando a fonte não tem um carimbo
- * próprio (aí o veredito fica só com a conectividade).
+ * chegou ao banco pela última vez".
+ *
+ * ── A CHAVE PRESENTE COM VALOR `null` É UMA AFIRMAÇÃO ───────────────────────
+ *
+ * Ela diz: *esta fonte tem carimbo de entrega, e hoje ela não é a origem do que
+ * está gravado*. Não é o mesmo que a chave AUSENTE, que diz: *não sabemos medir
+ * a entrega desta fonte* — o Yahoo de cotações não deixa carimbo por fonte no
+ * `MarketAsset`, então dele só temos conectividade.
+ *
+ * A distinção existe porque as duas viravam a mesma coisa na tela. O card da
+ * PTAX em 07/09/2026 anunciava "ÚLTIMA ENTREGA 12:20" logo abaixo de "0 moedas
+ * resolvidas por esta fonte": aquele 12:20 era o `lastOkAt` — a última chamada
+ * que voltou —, usado como substituto quando não havia carimbo de entrega. O
+ * painel creditava à fonte uma entrega que não houve, que é o oposto do que ele
+ * existe para fazer.
  */
 const deliveryFacts = (facts) => {
     const macro = facts.macro || {};
@@ -168,12 +181,29 @@ export const buildSuspectView = (suspects = []) => {
             code: f.code,
             detail: f.detail,
             movePct: f.movePct ?? null,
+            /** Veredito da nossa série sobre quem estava errado; null = não desempatou. */
+            arbitration: f.arbitration ?? null,
         })),
+        /**
+         * JÁ RESOLVIDO — e por isso não é pergunta em aberto.
+         *
+         * A lista misturava dois estados muito diferentes sob a mesma cor. Em
+         * 07/09/2026, de sete linhas, duas (RBRL11 e STX) eram o momento em que
+         * um preço ERRADO que estava guardado foi substituído pelo certo: nada a
+         * investigar, o conserto já entrou na mesma gravação. Contá-las junto com
+         * as outras cinco é como um alarme perde a credibilidade — o dono abre a
+         * lista, vê sete, checa duas que já estavam resolvidas e para de abrir.
+         */
+        settled: (s.findings || []).some((f) => f.arbitration === 'NOVO_CONFIRMADO'),
         count: s.count ?? 1,
         at: s.at,
     }));
     return {
         total: suspects.length,
+        // Contado sobre a AMOSTRA, que é o único conjunto de que temos os achados
+        // — e a amostra é a lista inteira até 40 ativos. Acima disso a pergunta
+        // deixou de ser sobre ativo e virou sobre a fonte, e o total já diz isso.
+        settled: items.filter((i) => i.settled).length,
         items,
         truncated: Math.max(0, suspects.length - items.length),
     };
@@ -319,7 +349,10 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
     const escalada = buildEscalationView(escalations, sourceStats);
 
     return sourceStats.map((source) => {
-        const lastDeliveryAt = delivery[source.id] || source.lastOkAt || null;
+        // Sem substituto: entrega é entrega. Quando a fonte tem carimbo e ele veio
+        // vazio, o vazio é o dado — ver deliveryFacts.
+        const deliveryTracked = Object.prototype.hasOwnProperty.call(delivery, source.id);
+        const lastDeliveryAt = deliveryTracked ? (delivery[source.id] || null) : null;
         const rate = source.failureRate;
         const julgavel = source.attempts >= MIN_ATTEMPTS && rate !== null;
 
@@ -365,7 +398,13 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
             // chamada nenhuma por horas depois de um deploy, e marcá-la de vermelho
             // aí é o alarme falso que ensina o operador a ignorar o painel.
             status = SOURCE_STATUS.UNKNOWN;
-            if (deReserva) {
+            if (source.skipped > 0 && source.lastSkipReason) {
+                // ANTES do ramo de reserva, e não depois: a PTAX é `onFailure`, então
+                // ela cairia em "a fonte anterior deu conta" — frase falsa num dia em
+                // que o Yahoo falhou e ela deixou de ser chamada por decisão nossa.
+                // Quem pulou fomos nós, e a razão é mais informativa que o silêncio.
+                detail = source.lastSkipReason;
+            } else if (deReserva) {
                 // Aqui o cinza é BOA notícia: a cadeia não precisou da reserva.
                 detail = 'Nenhuma chamada porque a fonte anterior da cadeia deu conta — é o esperado';
             } else if (lastDeliveryAt) {
@@ -407,6 +446,7 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
         }
 
         const idade = hoursSince(lastDeliveryAt, now);
+        const idadeResposta = hoursSince(source.lastOkAt, now);
 
         return {
             id: source.id,
@@ -440,6 +480,18 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
             detail,
             lastDeliveryAt,
             lastDeliveryHours: idade === null ? null : Math.round(idade * 10) / 10,
+            /**
+             * Temos como medir a ENTREGA desta fonte? `false` = só conectividade,
+             * e a tela precisa dizer "última resposta" em vez de "última entrega".
+             */
+            deliveryTracked,
+            /** Última chamada que voltou COM dado. Responde por conectividade, não por entrega. */
+            lastResponseAt: source.lastOkAt || null,
+            lastResponseHours: idadeResposta === null ? null : Math.round(idadeResposta * 10) / 10,
+            /** Chamadas que NÃO foram feitas por decisão nossa, e a razão da última. */
+            skipped: source.skipped || 0,
+            lastSkipAt: source.lastSkipAt || null,
+            lastSkipReason: source.lastSkipReason || null,
             // Contagem aberta: a frase de `detail` resume, mas o detalhe da fonte
             // mostra os três números, que é o que permite julgar sozinho.
             attempts: source.attempts,
