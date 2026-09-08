@@ -18,7 +18,7 @@ import { escapeRegex } from '../utils/regexEscape.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from '../services/treasuryPriceService.js';
 import { isDollarized, resolveAssetCurrency, resolveTransactionCurrency, needsCurrencyFallback } from '../utils/assetCurrency.js';
 import { positionCostBRL, positionRealizedProfitBRL } from '../utils/fxRate.js';
-import { sumTransactionFlowBRL, transactionsAfterSnapshotFilter } from '../utils/walletSnapshot.js';
+import { businessDaysBetween, sumTransactionFlowBRL, transactionsAfterSnapshotFilter } from '../utils/walletSnapshot.js';
 import { historyStorageKey } from '../utils/assetHistory.js';
 import { loadClosesForDay } from '../utils/dayCloses.js';
 import { DAY_CHANGE_REASON } from '../utils/dayChangeReason.js';
@@ -744,9 +744,19 @@ const computeWalletMetrics = async ({ userId, walletId, snapshots, riskSnapshots
     const lastSnapshot = selectAnchorSnapshot(snapshots);
 
     if (lastSnapshot && lastSnapshot.quotaPrice) {
-        // Se o snapshot encontrado for muito antigo (> 3 dias), a qualidade cai para Estimada
-        const diffDays = (now.getTime() - new Date(lastSnapshot.date).getTime()) / (1000 * 3600 * 24);
-        if (diffDays > 3) dataQuality = 'ESTIMATED';
+        // SELO: a cota live é "Auditada" enquanto estiver ancorada no ÚLTIMO
+        // fechamento que deveria existir. O que degrada a medida é fechamento que
+        // FALTA — não tempo de calendário.
+        //
+        // Media-se em DIAS ÚTEIS BR, pela mesma lista que o backfill usa para
+        // decidir o que reconstruir: se não há nada a preencher, não há buraco.
+        // A régua antiga (`> 3 dias corridos`) não conhecia fim de semana nem
+        // feriado, e por isso acusava a carteira sadia em todo feriadão — numa
+        // terça após o 7 de Setembro, o âncora legítimo (sexta) tinha 3,6 dias de
+        // idade e o selo caía para "Estimado" com ZERO fechamentos faltando.
+        const anchorDayKey = lastSnapshot.dayKey || snapshotDayKey(lastSnapshot);
+        const missedCloses = businessDaysBetween(anchorDayKey, brazilDateKey(now));
+        if (missedCloses.length > 0) dataQuality = 'ESTIMATED';
 
         const periodFlow = await computePendingFlowBRL({
             userId, walletId, anchor: lastSnapshot, currentUsd,

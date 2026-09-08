@@ -35,6 +35,41 @@ export const isBrBusinessDay = (dayStr) => {
     return !holidayService.isHoliday(dayStr);
 };
 
+// Próximo dia BR (string). Âncora ao meio-dia UTC evita bordas de fuso/DST.
+const nextBrDayKey = (dayKey) => {
+    const d = new Date(`${dayKey}T12:00:00.000Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return brazilDayKey(d);
+};
+
+// Teto de varredura: um buraco maior que isto não é "atraso", é série morta — e
+// quem consome só precisa saber que há buraco, não medi-lo até o fim.
+export const MAX_SNAPSHOT_GAP_SCAN_DAYS = 60;
+
+/**
+ * Dias úteis estritamente APÓS `fromDayKey` e estritamente ANTES de `untilDayKey`
+ * — os fechamentos que DEVERIAM existir entre um snapshot e hoje e não existem.
+ *
+ * Fonte ÚNICA de duas leituras que precisam concordar:
+ *  - o backfill (`backfillUserGap`) usa a lista para saber o que reconstruir;
+ *  - o selo Auditado/Estimado do KPI usa o TAMANHO dela para dizer se a cota
+ *    live está ancorada no último fechamento ou extrapolando sobre um buraco.
+ *
+ * Excluir as duas pontas não é detalhe: o snapshot de HOJE só nasce às 23:59 BRT,
+ * então durante o pregão a ausência dele é o estado normal, não um buraco.
+ */
+export const businessDaysBetween = (fromDayKey, untilDayKey) => {
+    const days = [];
+    if (!isValidDayKey(fromDayKey) || !isValidDayKey(untilDayKey)) return days;
+    let cur = nextBrDayKey(fromDayKey);
+    let guard = 0;
+    while (cur < untilDayKey && guard++ < MAX_SNAPSHOT_GAP_SCAN_DAYS) {
+        if (isBrBusinessDay(cur)) days.push(cur);
+        cur = nextBrDayKey(cur);
+    }
+    return days;
+};
+
 export const snapshotInstantForDay = (dayKey) => {
     assertDayKey(dayKey);
     return new Date(`${dayKey}T23:59:00.000-03:00`);

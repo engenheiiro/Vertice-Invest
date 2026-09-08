@@ -40,6 +40,7 @@ import { positionCostBRL } from '../utils/fxRate.js';
 import { historyStorageKey } from '../utils/assetHistory.js';
 import {
     brazilDayKey,
+    businessDaysBetween,
     isBrBusinessDay,
     isTwrrReturnAnomalous,
     snapshotInstantForDay,
@@ -139,23 +140,10 @@ const brDayBounds = (dayStr) => ({
     start: new Date(`${dayStr}T00:00:00.000-03:00`),
     end: new Date(`${dayStr}T23:59:59.999-03:00`),
 });
-// Próximo dia BR (string). Âncora ao meio-dia UTC evita bordas de fuso/DST.
-const nextBrDay = (dayStr) => {
-    const d = new Date(`${dayStr}T12:00:00.000Z`);
-    d.setUTCDate(d.getUTCDate() + 1);
-    return brDayStr(d);
-};
-// Dias úteis estritamente APÓS fromDayStr e estritamente ANTES de untilDayStr.
-const businessDaysBetween = (fromDayStr, untilDayStr) => {
-    const days = [];
-    let cur = nextBrDay(fromDayStr);
-    let guard = 0;
-    while (cur < untilDayStr && guard++ < 60) {
-        if (isBrBusinessDay(cur)) days.push(cur);
-        cur = nextBrDay(cur);
-    }
-    return days;
-};
+// `businessDaysBetween` mora em utils/walletSnapshot.js: o backfill decide o que
+// reconstruir e o selo Auditado/Estimado do KPI decide se a cota está ancorada —
+// pela MESMA lista. Duas cópias divergiriam, e o selo passaria a mentir sobre o
+// que o backfill considera buraco.
 
 // Contexto compartilhado (macro + cotações em lote) de um run de snapshot.
 // `ensureDayCandles` só é ligado por quem vai GRAVAR o snapshot de hoje: o
