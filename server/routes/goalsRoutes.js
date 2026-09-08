@@ -7,6 +7,7 @@ import validate from '../middleware/validateResource.js';
 import {
     listGoals,
     getGoal,
+    getRateSuggestion,
     createGoal,
     updateGoal,
     deleteGoal,
@@ -38,6 +39,10 @@ const writeLimiter = walletWriteLimiter;
 router.get('/', listGoals);
 router.delete('/', writeLimiter, clearAllGoals);
 router.post('/', writeLimiter, validate(createGoalSchema), createGoal);
+// ANTES de '/:id': registrada depois, a rota paramétrica capturaria
+// "rate-suggestion" como id de meta e o validate devolveria 400.
+router.get('/rate-suggestion', getRateSuggestion);
+
 router.get('/:id', validate(goalIdParamSchema), getGoal);
 router.put('/:id', writeLimiter, validate(updateGoalSchema), updateGoal);
 router.delete('/:id', writeLimiter, validate(goalIdParamSchema), deleteGoal);

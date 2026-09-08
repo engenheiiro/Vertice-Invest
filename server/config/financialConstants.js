@@ -161,3 +161,32 @@ export const CAPITAL_GAINS_TAX = {
     FIXED_INCOME: 0,  // Renda Fixa: IR retido na fonte — não estimado aqui
     CASH: 0,
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Metas — taxa esperada (% a.a.) usada para projetar a data de chegada.
+//
+// A meta espelha a CARTEIRA, e carteira não rende "um número redondo": rende a
+// média ponderada do que ela tem dentro. Caixa/renda fixa acompanham o CDI;
+// classes de risco só se justificam se pagarem um PRÊMIO sobre o juro sem risco
+// de longo prazo (NTN-B longa, que é taxa REAL — por isso soma-se o IPCA para
+// chegar ao nominal). Os prêmios abaixo são premissas explícitas e conservadoras,
+// não previsão: existem para que a sugestão de taxa saia de fontes vivas
+// (SystemConfig MACRO_INDICATORS) em vez de um chute digitado à mão.
+// Ver server/utils/goalRate.js.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Prêmio de risco (pp sobre NTN-B longa + IPCA) para ações/ETF de ações.
+export const GOAL_PREMIUM_EQUITY = Number(process.env.GOAL_PREMIUM_EQUITY) || 4;
+// Prêmio para FIIs: menor que o de ações — parte do retorno é aluguel contratado.
+export const GOAL_PREMIUM_FII = Number(process.env.GOAL_PREMIUM_FII) || 2;
+// IPCA de fallback quando o macro não trouxe inflação (compõe o juro nominal).
+export const DEFAULT_IPCA_FALLBACK = Number(process.env.DEFAULT_IPCA_FALLBACK) || 4.5;
+// Divergência (pp) entre a taxa salva na meta e a sugerida a partir da carteira
+// a partir da qual o app avisa que a premissa envelheceu. Abaixo disso é ruído.
+export const GOAL_RATE_DRIFT_TOLERANCE_PP = Number(process.env.GOAL_RATE_DRIFT_TOLERANCE_PP) || 2;
+// Histórico mínimo (dias) para transformar rentabilidade acumulada da carteira em
+// taxa anual. Anualizar 60 dias de alta eleva o ruído do bimestre à 6ª potência.
+export const GOAL_RATE_MIN_HISTORY_DAYS = Number(process.env.GOAL_RATE_MIN_HISTORY_DAYS) || 180;
+// Teto de sanidade (% a.a.) para taxa DERIVADA de histórico. Um ano de +60% não
+// vira promessa de 60% a.a. na projeção de uma meta.
+export const GOAL_RATE_SANITY_CAP = Number(process.env.GOAL_RATE_SANITY_CAP) || 30;

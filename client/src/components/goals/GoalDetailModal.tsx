@@ -10,7 +10,7 @@ import { useWallet } from '../../contexts/WalletContext';
 import { useConfirm } from '../../hooks/useConfirm';
 import { goalsService, type Goal } from '../../services/goals';
 import { formatCurrency, formatCompact } from '../../utils/format';
-import { monthsRemaining, monthsSaved, addMonths } from '../../utils/goalMath';
+import { monthsRemaining, monthsSaved, addMonths, annualToMonthly, calendarMonthsBetween } from '../../utils/goalMath';
 import { getCoachMessages, type CoachTone, type CoachMessage } from '../../utils/goalCoach';
 import { getGoalTheme, getGoalIcon, formatMonths } from './goalTheme';
 import { ContributionModal } from './ContributionModal';
@@ -23,6 +23,9 @@ interface GoalDetailModalProps {
   goalId: string;
   privacy?: boolean;
 }
+
+const fmtPct = (v: number): string => `${v.toFixed(1).replace('.', ',')}%`;
+const fmtPp = (v: number): string => `${v.toFixed(1).replace('.', ',')} pp`;
 
 const TONE_STYLES: Record<CoachTone, { wrap: string; icon: React.ReactNode }> = {
   success: { wrap: 'bg-emerald-500/5 border-emerald-500/20', icon: <CheckCircle2 className="text-emerald-400 shrink-0" size={16} /> },
@@ -72,7 +75,7 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
   const goal: Goal | undefined = data?.goal;
 
   const updateMutation = useMutation({
-    mutationFn: (payload: Partial<{ monthlyTarget: number; lastCelebratedMilestone: number }>) => goalsService.updateGoal(goalId, payload, activeWalletId),
+    mutationFn: (payload: Partial<{ monthlyTarget: number; lastCelebratedMilestone: number; expectedAnnualRate: number }>) => goalsService.updateGoal(goalId, payload, activeWalletId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] });
       queryClient.invalidateQueries({ queryKey: ['goal', goalId] });
@@ -134,6 +137,24 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
       avgContribution3m: data.avgContribution3m,
     });
   }, [goal, data]);
+
+  /**
+   * Premissa de rendimento — o que a taxa está fazendo pela projeção.
+   *
+   * Com patrimônio grande e aporte pequeno, a MAIOR PARTE do avanço previsto vem
+   * da taxa, não do bolso do usuário: R$ 46,6 mil a 13,9% a.a. rendem ~R$ 509/mês
+   * ao lado de um aporte de R$ 500 — e a data prevista cai de 7 meses para 3 por
+   * causa disso. Sem esta caixa, "faltam 3 meses" parece aritmética do aporte e
+   * vira promessa; com ela, o usuário vê a premissa e o cenário sem rendimento.
+   */
+  const premise = useMemo(() => {
+    if (!goal || goal.achieved) return null;
+    const monthlyYield = goal.currentValue * annualToMonthly(goal.expectedAnnualRate);
+    const nNoYield = monthsRemaining(goal.currentValue, goal.monthlyTarget, 0, goal.targetAmount);
+    const dateNoYield = Number.isFinite(nNoYield) ? addMonths(new Date(), nNoYield) : null;
+    const monthsNoYield = dateNoYield ? calendarMonthsBetween(new Date(), dateNoYield) : null;
+    return { monthlyYield, dateNoYield, monthsNoYield };
+  }, [goal]);
 
   // Simulador what-if.
   const whatIf = useMemo(() => {
@@ -243,6 +264,41 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
                 </>
               )}
             </div>
+
+            {/* Premissa de rendimento: de onde vem a data prevista */}
+            {premise && (
+              <div className="bg-base border border-slate-800 rounded-xl p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Premissa de rendimento</p>
+                  <span className="text-sm font-bold text-slate-200">{fmtPct(goal.expectedAnnualRate)} ao ano</span>
+                </div>
+                <p className="text-xs text-slate-400 leading-snug mt-1.5">
+                  A projeção soma seu aporte de <strong className="text-slate-300">{formatCurrency(goal.monthlyTarget, 'BRL', { privacy })}</strong> com
+                  {' '}<strong className="text-slate-300">{formatCurrency(premise.monthlyYield, 'BRL', { privacy })}</strong> de rendimento por mês.
+                  {premise.dateNoYield && (
+                    <> Sem nenhum rendimento, a chegada seria em <strong className="text-slate-300">{premise.dateNoYield.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</strong> ({formatMonths(premise.monthsNoYield)}).</>
+                  )}
+                </p>
+                {goal.rateStale && data?.rateContext && (
+                  <div className="mt-3 flex items-start gap-2 bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-2.5">
+                    <AlertTriangle className="text-yellow-400 shrink-0 mt-0.5" size={14} />
+                    <div className="flex-1">
+                      <p className="text-xs text-slate-300 leading-snug">
+                        Sua carteira hoje sugere <strong>{fmtPct(data.rateContext.suggested)} ao ano</strong> — {fmtPp(Math.abs(goal.rateDeltaPp))} {goal.rateDeltaPp > 0 ? 'abaixo' : 'acima'} da premissa salva nesta meta.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => updateMutation.mutate({ expectedAnnualRate: data.rateContext.suggested })}
+                        disabled={updateMutation.isPending}
+                        className="mt-1.5 text-[11px] font-semibold text-yellow-300 hover:text-yellow-200 transition-colors"
+                      >
+                        Atualizar para {fmtPct(data.rateContext.suggested)}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

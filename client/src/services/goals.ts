@@ -42,6 +42,33 @@ export interface Goal {
     requiredMonthlyForDeadline: number | null;
     onTrack: boolean;
     achieved: boolean;
+    /** Divergência (pp) entre a taxa salva na meta e a sugerida pela carteira. */
+    rateDeltaPp: number;
+    /** true quando a divergência passa da tolerância — premissa envelhecida. */
+    rateStale: boolean;
+}
+
+/** Rentabilidade da carteira já anualizada (null enquanto a janela for curta). */
+export interface WalletReturn {
+    value: number | null;
+    days: number;
+    totalReturnPct: number;
+    enough: boolean;
+    capped: boolean;
+}
+
+/**
+ * Contexto da taxa esperada da carteira ativa. `suggested` é premissa para o
+ * FUTURO (ponderada pela composição da carteira); `walletReturn` é medição do
+ * PASSADO. As duas nunca devem ser apresentadas como a mesma coisa.
+ */
+export interface RateContext {
+    suggested: number;
+    breakdown: Array<{ type: string; value: number; weight: number; rate: number }>;
+    cdi: number;
+    ipca: number;
+    ntnbLong: number;
+    walletReturn: WalletReturn;
 }
 
 export interface TrajectoryPoint {
@@ -80,6 +107,7 @@ export interface GoalDetail {
     avgContribution3m: number;
     walletEquity: number;
     snapshotDate: string | null;
+    rateContext: RateContext;
 }
 
 export interface CreateGoalPayload {
@@ -96,9 +124,19 @@ export interface CreateGoalPayload {
 }
 
 export const goalsService = {
-    async getGoals(walletId?: string): Promise<{ goals: Goal[]; walletEquity: number; snapshotDate: string | null }> {
+    async getGoals(walletId?: string): Promise<{ goals: Goal[]; walletEquity: number; snapshotDate: string | null; rateContext: RateContext }> {
         const response = await authService.api(withWallet('/api/goals', walletId));
         if (!response.ok) throw new Error('Falha ao carregar metas');
+        return await response.json();
+    },
+
+    /**
+     * Taxa sugerida para a carteira ativa — o formulário precisa dela ANTES de a
+     * meta existir, então não dá para tirá-la de /goals/:id.
+     */
+    async getRateSuggestion(walletId?: string): Promise<RateContext> {
+        const response = await authService.api(withWallet('/api/goals/rate-suggestion', walletId));
+        if (!response.ok) throw new Error('Falha ao carregar taxa sugerida');
         return await response.json();
     },
 

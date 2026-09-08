@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Sparkles, Wallet, TrendingUp, Link2 } from 'lucide-react';
+import { Sparkles, Wallet, TrendingUp, Link2, History } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -8,7 +8,6 @@ import { Button } from '../ui/Button';
 import { useToast } from '../../contexts/ToastContext';
 import { useWallet } from '../../contexts/WalletContext';
 import { goalsService, type Goal } from '../../services/goals';
-import { researchService } from '../../services/research';
 import { STALE_TIME } from '../../config/queryConfig';
 import { parseCurrencyToFloat } from '../../utils/assetTransaction';
 import { formatCurrency } from '../../utils/format';
@@ -26,6 +25,8 @@ const num = (v: string): number => {
   const n = parseCurrencyToFloat(v);
   return Number.isFinite(n) ? n : 0;
 };
+
+const pct = (v: number): string => `${v.toFixed(1).replace('.', ',')}%`;
 
 export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClose, goal }) => {
   const isEdit = !!goal;
@@ -47,12 +48,37 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
   // capturado do patrimônio ao vivo).
   const [startValue, setStartValue] = useState(goal ? String((goal.startValue || 0).toFixed(2)).replace('.', ',') : '');
 
-  // Sugestão de taxa: CDI atual (macro) e TWRR real da carteira.
-  const { data: macro } = useQuery({ queryKey: ['macroData'], queryFn: researchService.getMacroData, staleTime: STALE_TIME.LONG });
+  // Sugestões de taxa vindas do servidor (goalRate.js): a esperada, ponderada
+  // pela composição REAL da carteira, o CDI e o histórico da carteira JÁ
+  // ANUALIZADO. Até 08/09/2026 o atalho "Minha carteira" colava
+  // `kpis.weightedRentability` — rentabilidade ACUMULADA da cota, de 2 meses ou
+  // de 5 anos — num campo que significa "ao ano". Nunca voltar a ler taxa anual
+  // de um KPI acumulado.
+  const { data: rateCtx } = useQuery({
+    queryKey: ['goalRateSuggestion', activeWalletId],
+    queryFn: () => goalsService.getRateSuggestion(activeWalletId),
+    staleTime: STALE_TIME.LONG,
+    enabled: isOpen,
+  });
   // Metas existentes para o seletor de encadeamento (usa cache da página de Metas).
   const { data: goalsData } = useQuery({ queryKey: ['goals', activeWalletId], queryFn: () => goalsService.getGoals(activeWalletId), staleTime: STALE_TIME.REALTIME });
-  const cdiRate = macro?.cdi?.value || macro?.selic?.value || null;
-  const twrr = kpis.weightedRentability || null;
+  const cdiRate = rateCtx?.cdi ?? null;
+  const suggestedRate = rateCtx?.suggested ?? null;
+  const walletReturn = rateCtx?.walletReturn;
+
+  // Meta NOVA começa na taxa da carteira, não num "10" redondo — mas só até o
+  // usuário encostar no campo: sobrescrever o que ele digitou porque a sugestão
+  // chegou depois seria roubar a premissa dele.
+  const rateTouched = useRef(false);
+  useEffect(() => {
+    if (isEdit || rateTouched.current || suggestedRate === null) return;
+    setRate(String(suggestedRate));
+  }, [isEdit, suggestedRate]);
+
+  const pickRate = (value: number) => {
+    rateTouched.current = true;
+    setRate(String(value));
+  };
 
   // Metas que já têm outra meta apontando para elas (não podem ser "previous" de mais ninguém).
   const allGoals = goalsData?.goals || [];
@@ -171,20 +197,36 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
             type="number"
             step="0.1"
             value={rate}
-            onChange={(e) => setRate(e.target.value)}
+            onChange={(e) => { rateTouched.current = true; setRate(e.target.value); }}
           />
           <div className="flex flex-wrap gap-2 mt-2">
-            {cdiRate && (
-              <button type="button" onClick={() => setRate(String(cdiRate))} className="text-[11px] px-2 py-1 rounded-md bg-blue-500/10 text-blue-300 border border-blue-500/20 hover:bg-blue-500/20 transition-colors inline-flex items-center gap-1">
-                <Sparkles size={11} /> CDI ({cdiRate.toFixed(2).replace('.', ',')}%)
+            {suggestedRate !== null && (
+              <button type="button" onClick={() => pickRate(suggestedRate)} className="text-[11px] px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors inline-flex items-center gap-1">
+                <Sparkles size={11} /> Minha carteira ({pct(suggestedRate)})
               </button>
             )}
-            {twrr ? (
-              <button type="button" onClick={() => setRate(twrr.toFixed(1))} className="text-[11px] px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors inline-flex items-center gap-1">
-                <TrendingUp size={11} /> Minha carteira ({twrr.toFixed(1).replace('.', ',')}%)
+            {cdiRate !== null && (
+              <button type="button" onClick={() => pickRate(cdiRate)} className="text-[11px] px-2 py-1 rounded-md bg-blue-500/10 text-blue-300 border border-blue-500/20 hover:bg-blue-500/20 transition-colors inline-flex items-center gap-1">
+                <TrendingUp size={11} /> CDI ({pct(cdiRate)})
               </button>
-            ) : null}
+            )}
+            {walletReturn?.enough && walletReturn.value !== null && (
+              <button type="button" onClick={() => pickRate(walletReturn.value!)} className="text-[11px] px-2 py-1 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/20 hover:bg-purple-500/20 transition-colors inline-flex items-center gap-1">
+                <History size={11} /> Meu histórico ({pct(walletReturn.value)})
+              </button>
+            )}
           </div>
+          {/* A taxa é METADE da projeção: com patrimônio grande e aporte pequeno,
+              a maior parte do avanço previsto vem daqui. Dizer de onde ela sai
+              evita que a data prevista pareça mágica. */}
+          <p className="text-[11px] text-slate-500 mt-2 leading-snug">
+            {suggestedRate !== null
+              ? <>"Minha carteira" é a média do que cada classe da sua carteira deve render (caixa e renda fixa no CDI, renda variável com prêmio de risco). É premissa, não promessa.</>
+              : <>Quanto você espera que o dinheiro renda por ano. É premissa, não promessa.</>}
+            {walletReturn && !walletReturn.enough && walletReturn.days > 0 && (
+              <> Seu histórico ainda tem {Math.round(walletReturn.days)} dias — curto demais para virar taxa anual.</>
+            )}
+          </p>
         </div>
 
         {/* Encadeamento sequencial */}

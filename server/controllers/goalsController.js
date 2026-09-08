@@ -11,6 +11,7 @@ import { marketDataService } from '../services/marketDataService.js';
 import { valueFixedIncomeAsset, brazilToday } from '../utils/fixedIncome.js';
 import { loadTreasuryPricing } from '../services/treasuryPriceService.js';
 import { monthsRemaining, requiredMonthly, decomposeProgress, fv, annualToMonthly, computeStreak, resolveGoalStatus, calendarMonthsBetween } from '../utils/goalMath.js';
+import { suggestExpectedRate, annualizedWalletReturn, rateDrift } from '../utils/goalRate.js';
 import { orderChainFrom } from '../utils/goalChain.js';
 import { safeCurrency, safeFloat, safeSub, safeMult, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
@@ -93,7 +94,7 @@ const getLiveWalletEquity = async (userId, walletId) => {
         const assets = await UserAsset.find({ user: userId, wallet: walletId, quantity: { $gt: QUANTITY_EPSILON } });
         // Carteira vazia (reset ou remoção de todos os ativos) = patrimônio 0.
         // Não cair no snapshot aqui, senão a meta manteria um valor fantasma.
-        if (assets.length === 0) return { equity: 0, snapshot };
+        if (assets.length === 0) return { equity: 0, snapshot, composition: {}, macro: null };
 
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean();
         const cdi = config?.cdi || DEFAULT_SELIC_FALLBACK;
@@ -111,6 +112,11 @@ const getLiveWalletEquity = async (userId, walletId) => {
         const treasuryPricing = await loadTreasuryPricing(assets);
 
         let totalEquity = 0;
+        // Valor de mercado por CLASSE — peso da taxa esperada por classe na
+        // sugestão de rentabilidade (goalRate.suggestExpectedRate). Sai do mesmo
+        // laço que já valoriza tudo: composição e patrimônio da meta nunca
+        // podem discordar sobre quanto vale cada ativo.
+        const composition = {};
         for (const asset of assets) {
             const multiplier = isDollarized(asset) ? usdRate : 1;
             let val;
@@ -123,13 +129,51 @@ const getLiveWalletEquity = async (userId, walletId) => {
                 const mData = marketMap.get(asset.ticker);
                 val = safeValue(asset.quantity, mData?.price || 0);
             }
-            totalEquity += safeMult(val, multiplier);
+            const brl = safeMult(val, multiplier);
+            totalEquity += brl;
+            composition[asset.type] = safeCurrency((composition[asset.type] || 0) + brl);
         }
-        return { equity: safeCurrency(totalEquity), snapshot };
+        return { equity: safeCurrency(totalEquity), snapshot, composition, macro: config || null };
     } catch (e) {
         logger.warn(`getLiveWalletEquity fallback to snapshot: ${e.message}`);
-        return { equity: snapshot?.totalEquity || 0, snapshot };
+        return { equity: snapshot?.totalEquity || 0, snapshot, composition: {}, macro: null };
     }
+};
+
+/**
+ * Contexto da TAXA esperada: o que a carteira deveria render (sugestão ponderada
+ * pela composição) e o que ela realmente rendeu (cota anualizada).
+ *
+ * As duas coisas alimentam telas diferentes e NÃO podem ser confundidas: a
+ * sugestão é premissa para o futuro; o histórico é medição do passado, e só vira
+ * taxa quando há janela suficiente (ver goalRate.annualizeReturn). O front usa
+ * isto para oferecer atalhos honestos no formulário e para avisar quando a taxa
+ * salva na meta parou de descrever a carteira.
+ *
+ * Custo: 1 query de macro (só se o cálculo do patrimônio não a trouxe) + 2
+ * findOne de snapshot (primeiro e último) — não carrega a série inteira.
+ */
+const buildRateContext = async (userId, walletId, { composition = {}, macro = null } = {}) => {
+    const config = macro || await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean();
+    const suggestion = suggestExpectedRate(composition, config || {});
+
+    const projection = { date: 1, quotaPrice: 1, _id: 0 };
+    const [first, last] = await Promise.all([
+        WalletSnapshot.findOne({ user: userId, wallet: walletId }).sort({ date: 1 }).select(projection).lean(),
+        WalletSnapshot.findOne({ user: userId, wallet: walletId }).sort({ date: -1 }).select(projection).lean(),
+    ]);
+    const walletReturn = annualizedWalletReturn([first, last].filter(Boolean));
+
+    return {
+        suggested: suggestion.rate,
+        breakdown: suggestion.breakdown,
+        cdi: suggestion.inputs.cdi,
+        ipca: suggestion.inputs.ipca,
+        ntnbLong: suggestion.inputs.ntnbLong,
+        // Rentabilidade real da carteira, anualizada. `enough: false` = janela
+        // curta demais; o front NÃO deve oferecer o número nesse caso.
+        walletReturn,
+    };
 };
 
 /**
@@ -408,17 +452,37 @@ export const buildTrajectory = (goal, snapshots, contributions, projection, now 
     });
 };
 
+/**
+ * GET /goals/rate-suggestion — taxa esperada sugerida para a carteira ativa.
+ *
+ * Existe separado das metas porque o formulário de CRIAÇÃO precisa dela antes de
+ * existir meta alguma. Devolve o mesmo `rateContext` de listGoals/getGoal, para
+ * que o atalho do formulário e o aviso do detalhe nunca mostrem taxas diferentes.
+ */
+export const getRateSuggestion = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const walletId = req.walletId;
+        const { composition, macro } = await getLiveWalletEquity(userId, walletId);
+        res.json(await buildRateContext(userId, walletId, { composition, macro }));
+    } catch (error) {
+        logger.error(`Erro ao sugerir taxa de meta: ${error.message}`);
+        next(error);
+    }
+};
+
 // GET /goals — lista as metas do usuário já com projeções.
 export const listGoals = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const walletId = req.walletId;
-        const [goals, { equity: walletEquity, snapshot }] = await Promise.all([
+        const [goals, { equity: walletEquity, snapshot, composition, macro }] = await Promise.all([
             InvestmentGoal.find({ user: userId, wallet: walletId, status: { $ne: 'ARCHIVED' } })
                 .sort({ createdAt: 1 })
                 .populate('journey', 'name'),
             getLiveWalletEquity(userId, walletId),
         ]);
+        const rateContext = await buildRateContext(userId, walletId, { composition, macro });
 
         // Snapshots só quando alguma meta precisa do fallback de baseline (metas
         // antigas sem startValue) — evita carregar o histórico à toa.
@@ -430,9 +494,16 @@ export const listGoals = async (req, res, next) => {
         for (const goal of goals) {
             const projection = computeGoalProjection(goal, walletEquity, { startValue: resolveStartValue(goal, snapshots) });
             await syncGoalStatus(goal, projection);
-            result.push({ ...goal.toObject(), status: goal.status, ...projection });
+            const drift = rateDrift(goal.expectedAnnualRate, rateContext.suggested);
+            result.push({
+                ...goal.toObject(),
+                status: goal.status,
+                ...projection,
+                rateDeltaPp: drift.deltaPp,
+                rateStale: drift.stale,
+            });
         }
-        res.json({ goals: result, walletEquity, snapshotDate: snapshot?.date || null });
+        res.json({ goals: result, walletEquity, snapshotDate: snapshot?.date || null, rateContext });
     } catch (error) {
         logger.error(`Erro ao listar metas: ${error.message}`);
         next(error);
@@ -447,7 +518,8 @@ export const getGoal = async (req, res, next) => {
         const goal = await InvestmentGoal.findOne({ _id: req.params.id, user: userId, wallet: walletId });
         if (!goal) return res.status(404).json({ message: 'Meta não encontrada.' });
 
-        const { equity: walletEquity, snapshot } = await getLiveWalletEquity(userId, walletId);
+        const { equity: walletEquity, snapshot, composition, macro } = await getLiveWalletEquity(userId, walletId);
+        const rateContext = await buildRateContext(userId, walletId, { composition, macro });
 
         // Histórico patrimonial p/ a trajetória (ordem cronológica).
         const snapshots = await WalletSnapshot.find({ user: userId, wallet: walletId }).sort({ date: 1 }).lean();
@@ -500,8 +572,16 @@ export const getGoal = async (req, res, next) => {
         const last3 = amounts.slice(-3);
         const avgContribution3m = safeCurrency(last3.reduce((a, b) => a + b, 0) / (last3.length || 1));
 
+        const drift = rateDrift(goal.expectedAnnualRate, rateContext.suggested);
         res.json({
-            goal: { ...goal.toObject(), status: goal.status, ...projection },
+            goal: {
+                ...goal.toObject(),
+                status: goal.status,
+                ...projection,
+                rateDeltaPp: drift.deltaPp,
+                rateStale: drift.stale,
+            },
+            rateContext,
             contributions,
             currentMonth: {
                 contributions: contributionsThisMonth,
