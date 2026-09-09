@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Settings, HardDrive, Scissors, ShieldAlert, ClipboardList, Search, RefreshCw, Zap, Trash2, Play, CalendarClock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { TunablesCard } from '../../components/admin/TunablesCard';
 import { useDemo } from '../../contexts/DemoContext';
 import { useToast } from '../../contexts/ToastContext';
-import { researchService, type DividendPaymentBackfillResult } from '../../services/research';
+import { researchService, type DividendPaymentBackfillState } from '../../services/research';
 import { getErrorMessage } from '../../utils/errorMessages';
 import type { BillingMode } from '../../services/subscription';
 import type { BillingCycle } from '../../constants/subscription';
@@ -23,20 +23,65 @@ import type { BillingCycle } from '../../constants/subscription';
  */
 const DividendPaymentDatesCard: React.FC = () => {
     const { addToast } = useToast();
-    const [isRunning, setIsRunning] = useState(false);
-    const [result, setResult] = useState<DividendPaymentBackfillResult['stats'] | null>(null);
+    const [estado, setEstado] = useState<DividendPaymentBackfillState | null>(null);
+    const [isStarting, setIsStarting] = useState(false);
+    // Reinicia o acompanhamento depois de um disparo (a consulta anterior já tinha
+    // parado ao ver o job terminado).
+    const [ciclo, setCiclo] = useState(0);
+    // O aviso de conclusão é para quem disparou. Sem estas duas travas, abrir a aba
+    // sobre um backfill antigo dispararia o toast de novo, toda vez.
+    const iniciadoAqui = useRef(false);
+    const jaAvisou = useRef(false);
+
+    const isRunning = estado?.status === 'RUNNING' || isStarting;
+    const result = estado?.status === 'DONE' ? estado.stats : null;
+
+    // O progresso mora no servidor, e a tela só pergunta. É isso que faz sair da
+    // página não interromper nada: ao voltar, este efeito reencontra o job em
+    // andamento e volta a acompanhar de onde ele parou.
+    useEffect(() => {
+        let vivo = true;
+        let timer: ReturnType<typeof setTimeout>;
+
+        const consultar = async () => {
+            try {
+                const s = await researchService.getDividendPaymentBackfillStatus();
+                if (!vivo) return;
+                setEstado(s);
+                setIsStarting(false);
+                if (s.status === 'RUNNING') {
+                    timer = setTimeout(consultar, 1500);
+                    return;
+                }
+                if (iniciadoAqui.current && !jaAvisou.current && (s.status === 'DONE' || s.status === 'ERROR')) {
+                    jaAvisou.current = true;
+                    addToast(
+                        s.message || 'Backfill concluído.',
+                        s.status === 'ERROR' ? 'error' : (s.stats?.preenchidos ? 'success' : 'info'),
+                    );
+                }
+            } catch {
+                // Falha de consulta não cancela o trabalho no servidor: tenta de novo.
+                if (vivo) timer = setTimeout(consultar, 5000);
+            }
+        };
+
+        consultar();
+        return () => { vivo = false; clearTimeout(timer); };
+    }, [addToast, ciclo]);
 
     const handleRun = async () => {
-        setIsRunning(true);
-        setResult(null);
+        setIsStarting(true);
+        iniciadoAqui.current = true;
+        jaAvisou.current = false;
         try {
             const res = await researchService.backfillDividendPaymentDates();
-            setResult(res.stats);
-            addToast(res.message, res.stats.preenchidos > 0 ? 'success' : 'info');
+            setEstado(res.estado);
+            setCiclo((c) => c + 1);
+            addToast(res.message, 'info');
         } catch (error) {
-            addToast(getErrorMessage(error, 'Falha ao preencher as datas de pagamento.'), 'error');
-        } finally {
-            setIsRunning(false);
+            setIsStarting(false);
+            addToast(getErrorMessage(error, 'Falha ao iniciar o preenchimento das datas.'), 'error');
         }
     };
 
@@ -61,9 +106,28 @@ const DividendPaymentDatesCard: React.FC = () => {
                 {isRunning ? 'Consultando fonte por fonte…' : 'Preencher datas de pagamento'}
             </button>
             {isRunning && (
-                <p className="text-[10px] text-slate-500 mt-2 text-center">
-                    Uma requisição por ativo, com pausa entre elas. Pode levar alguns minutos.
-                </p>
+                <div className="mt-3 space-y-1.5">
+                    {/* A fila só é conhecida depois da primeira consulta ao banco;
+                        até lá a barra fica indeterminada em vez de mentir 0%. */}
+                    <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                            className={`h-full bg-blue-500 rounded-full ${estado?.total ? 'transition-all duration-500' : 'animate-pulse w-1/3'}`}
+                            style={estado?.total ? { width: `${Math.round((estado.feitos / estado.total) * 100)}%` } : undefined}
+                        />
+                    </div>
+                    <p className="text-[10px] text-slate-400 text-center tabular-nums">
+                        {estado?.total
+                            ? `${estado.feitos} de ${estado.total} ativo(s) · ${estado.preenchidos} data(s) gravada(s)${estado.ticker ? ` · ${estado.ticker}` : ''}`
+                            : 'Montando a fila de ativos sem data…'}
+                    </p>
+                    <p className="text-[10px] text-slate-500 text-center">
+                        Uma requisição por ativo, com pausa entre elas. Roda no servidor: pode sair desta
+                        página que o trabalho continua.
+                    </p>
+                </div>
+            )}
+            {estado?.status === 'ERROR' && (
+                <p className="mt-3 text-[10px] text-red-400 text-center">{estado.message}</p>
             )}
             {result && (
                 <div className="mt-4 pt-4 border-t border-slate-800 space-y-1 text-[11px] text-slate-400">

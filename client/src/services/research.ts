@@ -407,6 +407,27 @@ export interface DividendPaymentBackfillResult {
     };
 }
 
+/**
+ * Estado do backfill de datas de pagamento.
+ *
+ * A varredura roda no servidor e é acompanhada por consulta (ver
+ * `services/dividendPaymentBackfillJob.js`): sair da página não a interrompe, e
+ * voltar reencontra o job onde ele está.
+ */
+export interface DividendPaymentBackfillState {
+    status: 'IDLE' | 'RUNNING' | 'DONE' | 'ERROR';
+    iniciadoEm: string | null;
+    atualizadoEm: string | null;
+    terminadoEm: string | null;
+    feitos: number;
+    total: number;
+    ticker: string | null;
+    preenchidos: number;
+    stats: DividendPaymentBackfillResult['stats'] | null;
+    message: string | null;
+    erro: string | null;
+}
+
 export const researchService = {
     async crunchNumbers(assetClass?: string, isBulk: boolean = false) {
         const response = await authService.api('/api/research/crunch', {
@@ -428,13 +449,23 @@ export const researchService = {
      * é a máquina do desenvolvedor. Varre a base inteira e faz uma requisição por
      * ativo — pode demorar minutos.
      */
-    async backfillDividendPaymentDates(): Promise<DividendPaymentBackfillResult> {
+    async backfillDividendPaymentDates(): Promise<{ message: string; estado: DividendPaymentBackfillState }> {
         const response = await authService.api('/api/research/dividend-payment-dates/backfill', {
             method: 'POST',
         });
         if (!response.ok) {
             const data = await response.json().catch(() => ({}));
             throw new Error(data.message || 'Erro ao preencher datas de pagamento.');
+        }
+        return await response.json();
+    },
+
+    /** Progresso da varredura em andamento (ou resultado da última que rodou). */
+    async getDividendPaymentBackfillStatus(): Promise<DividendPaymentBackfillState> {
+        const response = await authService.api('/api/research/dividend-payment-dates/backfill');
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.message || 'Erro ao consultar o progresso.');
         }
         return await response.json();
     },

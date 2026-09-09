@@ -269,28 +269,57 @@ export const clearRadarHistory = async (req, res, next) => {
  * a janela de 12 meses, então provento novo não envelhece sem data. Este botão
  * existe para o passivo histórico e para quando o card de saúde acusar.
  */
+const resumirBackfill = (stats) => {
+    const semAcesso = stats.falhas.filter((f) => /403|HTTP 4|HTTP 5/.test(f.motivo || ''));
+    return {
+        message: stats.preenchidos > 0
+            ? `${stats.preenchidos} data(s) de pagamento gravada(s) em ${stats.ativos} ativo(s).`
+            : `Nenhuma data nova: os ${stats.tentados} evento(s) sem data não foram publicados por nenhuma fonte.`,
+        stats: {
+            ...stats,
+            // A lista inteira de falhas pode ter centenas de linhas iguais; o
+            // que decide a ação é o total e uma amostra.
+            falhas: stats.falhas.slice(0, 10),
+            totalFalhas: stats.falhas.length,
+            bloqueioDeAcesso: semAcesso.length,
+        },
+    };
+};
+
 export const runDividendPaymentBackfill = async (req, res, next) => {
     try {
         const { backfillPaymentDates } = await import('../services/dividendPaymentDateService.js');
+        const { startBackfill } = await import('../services/dividendPaymentBackfillJob.js');
+
+        // Responde na hora e deixa a varredura correndo (ver
+        // services/dividendPaymentBackfillJob.js): são minutos de requisições, uma
+        // por ativo, e prendê-los numa resposta HTTP deixava a tela sem progresso e
+        // fazia sair da página parecer cancelar o trabalho.
+        const { iniciado, estado } = startBackfill(
+            (opcoes) => backfillPaymentDates(opcoes),
+            resumirBackfill,
+        );
+
+        if (!iniciado) {
+            return res.status(409).json({
+                message: 'Já existe um backfill em andamento. Acompanhe o progresso nesta mesma tela.',
+                estado,
+            });
+        }
+
         logger.info('📅 [Admin] Backfill de data de pagamento iniciado', { admin: String(req.user._id) });
-        const stats = await backfillPaymentDates();
-
-        const semAcesso = stats.falhas.filter((f) => /403|HTTP 4|HTTP 5/.test(f.motivo || ''));
-        const mensagem = stats.preenchidos > 0
-            ? `${stats.preenchidos} data(s) de pagamento gravada(s) em ${stats.ativos} ativo(s).`
-            : `Nenhuma data nova: os ${stats.tentados} evento(s) sem data não foram publicados por nenhuma fonte.`;
-
-        res.json({
-            message: mensagem,
-            stats: {
-                ...stats,
-                // A lista inteira de falhas pode ter centenas de linhas iguais; o
-                // que decide a ação é o total e uma amostra.
-                falhas: stats.falhas.slice(0, 10),
-                totalFalhas: stats.falhas.length,
-                bloqueioDeAcesso: semAcesso.length,
-            },
+        res.status(202).json({
+            message: 'Backfill iniciado. O progresso aparece aqui e continua mesmo se você sair da página.',
+            estado,
         });
+    } catch (error) { next(error); }
+};
+
+/** Estado do backfill em andamento (ou do último que rodou nesta instância). */
+export const getDividendPaymentBackfillStatus = async (req, res, next) => {
+    try {
+        const { getBackfillState } = await import('../services/dividendPaymentBackfillJob.js');
+        res.json(getBackfillState());
     } catch (error) { next(error); }
 };
 

@@ -26,6 +26,7 @@ import {
     generateExplainableAI,
     runStorageCleanupHandler,
     runDividendPaymentBackfill,
+    getDividendPaymentBackfillStatus,
     backfillSectorsHandler,
     getBuyAndHoldShadow,
     publishAnchorRankingHandler
@@ -89,6 +90,9 @@ router.post('/cleanup-storage', researchHeavyLimiter, requireAdmin, runStorageCl
 // Varre a base inteira e faz uma requisição HTTP por ativo — limiter pesado, como
 // as demais rotas que raspam fonte externa em lote.
 router.post('/dividend-payment-dates/backfill', researchHeavyLimiter, requireAdmin, runDividendPaymentBackfill);
+// Progresso do backfill: leitura barata de estado em memória, consultada de
+// segundo em segundo pela tela — por isso no limiter de admin, não no pesado.
+router.get('/dividend-payment-dates/backfill', adminLimiter, requireAdmin, getDividendPaymentBackfillStatus);
 
 // Monitor de Qualidade & Acurácia
 router.get('/data-quality', adminLimiter, requireAdmin, getDataQualityStats);
