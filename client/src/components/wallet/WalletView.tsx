@@ -199,11 +199,14 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
                 </div>
 
                 {!isReadOnly && (
-                    <div id="tour-wallet-actions" className={`grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 md:gap-3 transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
-                        {/* No mobile, rótulos curtos deixam as ações reconhecíveis sem
-                            apertar o layout; aria-label preserva o nome completo. */}
-                        <button aria-label="Nova Transação" title="Nova Transação" className="w-full sm:w-auto flex items-center justify-center gap-2 px-3 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={() => setIsAddModalOpen(true)}>
-                            <PlusCircle size={16} /> <span className="sm:hidden">Transação</span><span className="hidden sm:inline">Nova Transação</span>
+                    <div id="tour-wallet-actions" className={`flex flex-wrap items-center gap-2 md:gap-3 transition-opacity duration-500 ${isDemoMode && 'relative z-[100]'}`}>
+                        {/* No mobile as quatro ações são SÓ o ícone, numa linha só: com
+                            rótulo, mesmo curto, cada botão ocupava meia tela e a barra
+                            virava duas fileiras largas em cima do conteúdo. O nome
+                            continua no `aria-label`/`title` — quem usa leitor de tela ou
+                            segura o dedo no botão recebe a mesma frase de sempre. */}
+                        <button aria-label="Nova Transação" title="Nova Transação" className="w-11 sm:w-auto flex items-center justify-center gap-2 px-0 sm:px-3 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95" onClick={() => setIsAddModalOpen(true)}>
+                            <PlusCircle size={16} /> <span className="hidden sm:inline">Nova Transação</span>
                         </button>
 
                         {/* Importar carteira NÃO fica aqui: a barra de ações é do dia
@@ -212,20 +215,24 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
                             some sozinha assim que existe o primeiro ativo. */}
 
                         {/* Botão Aporte Inteligente */}
-                        <button aria-label="Aporte Inteligente" title="Aporte Inteligente" className="w-full sm:w-auto flex items-center justify-center gap-2 px-3 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={handleOpenSmartContribution}>
-                            {(user?.plan === 'GUEST' || user?.plan === 'ESSENTIAL') && <Lock size={12} />}
-                            <TrendingUp size={16} /> <span className="sm:hidden">Aporte</span><span className="hidden sm:inline">Aporte Inteligente</span>
+                        {/* Cadeado NO LUGAR do ícone da ação, e não ao lado dele: num
+                            botão de 44px dois ícones ficam ilegíveis, e o cadeado é a
+                            informação que decide se vale clicar. É a mesma regra que o
+                            botão de Rebalanceamento já seguia. */}
+                        <button aria-label="Aporte Inteligente" title="Aporte Inteligente" className="w-11 sm:w-auto flex items-center justify-center gap-2 px-0 sm:px-3 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 border border-transparent whitespace-nowrap transition-all active:scale-95" onClick={handleOpenSmartContribution}>
+                            {(user?.plan === 'GUEST' || user?.plan === 'ESSENTIAL') ? <Lock size={16} /> : <TrendingUp size={16} />}
+                            <span className="hidden sm:inline">Aporte Inteligente</span>
                         </button>
 
                         {/* Botão Rebalanceamento (Black) */}
-                        <button aria-label="Rebalanceamento IA" title="Rebalanceamento IA" className="w-full sm:w-auto flex items-center justify-center gap-2 px-3 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-gradient-to-r from-[#D4AF37] via-[#F2D06B] to-[#D4AF37] text-black hover:brightness-110 shadow-lg shadow-[#D4AF37]/20 border-none whitespace-nowrap transition-all active:scale-95 min-w-[44px]" onClick={handleRebalance}>
-                            {(user?.plan !== 'BLACK' && user?.plan !== 'ELITE') ? <Lock size={12} className="text-black/80" /> : <RefreshCw size={16} className="text-black/80" />}
-                            <span className="sm:hidden">Rebalancear</span><span className="hidden sm:inline">Rebalanceamento IA</span>
+                        <button aria-label="Rebalanceamento IA" title="Rebalanceamento IA" className="w-11 sm:w-auto flex items-center justify-center gap-2 px-0 sm:px-3 md:px-5 py-2.5 h-10 rounded-xl text-xs font-bold bg-gradient-to-r from-[#D4AF37] via-[#F2D06B] to-[#D4AF37] text-black hover:brightness-110 shadow-lg shadow-[#D4AF37]/20 border-none whitespace-nowrap transition-all active:scale-95" onClick={handleRebalance}>
+                            {(user?.plan !== 'BLACK' && user?.plan !== 'ELITE') ? <Lock size={16} className="text-black/80" /> : <RefreshCw size={16} className="text-black/80" />}
+                            <span className="hidden sm:inline">Rebalanceamento IA</span>
                         </button>
 
                         <div className="w-px h-8 bg-slate-800 hidden lg:block mx-1"></div>
-                        <button onClick={() => assets.length > 0 && setIsResetModalOpen(true)} className={`w-full sm:w-10 px-3 sm:px-0 flex items-center justify-center gap-2 h-10 rounded-xl transition-all border min-w-[44px] text-xs font-bold ${assets.length === 0 ? 'opacity-50 cursor-not-allowed border-slate-800 text-slate-600' : 'bg-red-900/10 border-red-900/30 text-red-500 hover:bg-red-900/30 hover:text-red-400 hover:border-red-800'}`} title="Resetar Carteira" aria-label="Resetar Carteira" disabled={assets.length === 0}>
-                            <Trash2 size={16} /><span className="sm:hidden">Resetar</span>
+                        <button onClick={() => assets.length > 0 && setIsResetModalOpen(true)} className={`w-11 sm:w-10 px-0 flex items-center justify-center gap-2 h-10 rounded-xl transition-all border text-xs font-bold ${assets.length === 0 ? 'opacity-50 cursor-not-allowed border-slate-800 text-slate-600' : 'bg-red-900/10 border-red-900/30 text-red-500 hover:bg-red-900/30 hover:text-red-400 hover:border-red-800'}`} title="Resetar Carteira" aria-label="Resetar Carteira" disabled={assets.length === 0}>
+                            <Trash2 size={16} />
                         </button>
                     </div>
                 )}
