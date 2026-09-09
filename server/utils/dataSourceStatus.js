@@ -392,7 +392,10 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
          */
         let idleReason = null;
 
-        const deReserva = source.schedule?.kind === 'onFailure';
+        // Manual entra junto com a reserva: nenhuma das duas tem hora marcada, e
+        // o silêncio de ambas é estado normal, não atraso. A diferença — "ninguém
+        // precisou" contra "ninguém clicou" — está em `cadenceLabel`.
+        const deReserva = source.schedule?.kind === 'onFailure' || source.schedule?.kind === 'manual';
         // A última tentativa terminou em falha? É o estado CORRENTE da fonte, e
         // vale mais que a média: uma fonte que roda duas vezes por dia levaria
         // dias para a taxa acusar algo, enquanto "a última chamada falhou" é
@@ -438,6 +441,13 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
                 // Quem pulou fomos nós, e a razão é mais informativa que o silêncio.
                 detail = source.lastSkipReason;
                 idleReason = 'SKIPPED';
+            } else if (source.schedule?.kind === 'manual') {
+                // Manual entra ANTES do ramo de reserva: as duas ficam cinza pelo
+                // mesmo motivo aparente, mas por causas opostas. Dizer "a fonte
+                // anterior deu conta" numa fonte que só roda por clique inventaria
+                // um fallback que nunca aconteceu.
+                detail = 'Nenhuma chamada porque ninguém disparou — esta fonte roda por botão no Admin, não por agendamento';
+                idleReason = 'STANDBY';
             } else if (deReserva) {
                 // Aqui o cinza é BOA notícia: a cadeia não precisou da reserva.
                 detail = 'Nenhuma chamada porque a fonte anterior da cadeia deu conta — é o esperado';

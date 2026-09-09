@@ -256,6 +256,44 @@ export const clearRadarHistory = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
+/**
+ * Preenche a data de pagamento dos proventos que estão sem ela.
+ *
+ * A cadeia é B3 → Fundamentus, e o segundo elo é a razão de este ser um BOTÃO e
+ * não um cron: o Fundamentus responde 403 ao IP do Render, então ele só entrega
+ * quando o servidor é a máquina do desenvolvedor. Em produção o botão continua
+ * valendo — roda a B3 e para aí —, e a resposta diz quantas datas vieram de cada
+ * fonte para que a diferença fique visível em vez de ser folclore.
+ *
+ * Não tem periodicidade: a B3 já roda sozinha no sync diário de proventos e cobre
+ * a janela de 12 meses, então provento novo não envelhece sem data. Este botão
+ * existe para o passivo histórico e para quando o card de saúde acusar.
+ */
+export const runDividendPaymentBackfill = async (req, res, next) => {
+    try {
+        const { backfillPaymentDates } = await import('../services/dividendPaymentDateService.js');
+        logger.info('📅 [Admin] Backfill de data de pagamento iniciado', { admin: String(req.user._id) });
+        const stats = await backfillPaymentDates();
+
+        const semAcesso = stats.falhas.filter((f) => /403|HTTP 4|HTTP 5/.test(f.motivo || ''));
+        const mensagem = stats.preenchidos > 0
+            ? `${stats.preenchidos} data(s) de pagamento gravada(s) em ${stats.ativos} ativo(s).`
+            : `Nenhuma data nova: os ${stats.tentados} evento(s) sem data não foram publicados por nenhuma fonte.`;
+
+        res.json({
+            message: mensagem,
+            stats: {
+                ...stats,
+                // A lista inteira de falhas pode ter centenas de linhas iguais; o
+                // que decide a ação é o total e uma amostra.
+                falhas: stats.falhas.slice(0, 10),
+                totalFalhas: stats.falhas.length,
+                bloqueioDeAcesso: semAcesso.length,
+            },
+        });
+    } catch (error) { next(error); }
+};
+
 export const runStorageCleanupHandler = async (req, res, next) => {
     try {
         const { runStorageCleanup } = await import('../services/cleanupService.js');

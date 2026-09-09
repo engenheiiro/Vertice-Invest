@@ -1,12 +1,38 @@
 # Medição das fontes de DATA DE PAGAMENTO de provento — 09/09/2026
 
-Item "B" do diagnóstico de 09/09/2026. **Nada foi implementado**: este documento traz a
-medição pedida para que a escolha da fonte seja do dono. O script que produz os números é
-`server/scripts/auditDividendPaymentSources.js` (read-only, re-executável).
+Item "B" do diagnóstico de 09/09/2026. Este documento é a **medição** que embasou a escolha
+da fonte. O script que produz os números é `server/scripts/auditDividendPaymentSources.js`
+(read-only, re-executável).
 
 ```bash
 node server/scripts/auditDividendPaymentSources.js --limit=90 --meses=12
 ```
+
+---
+
+## DECIDIDO E IMPLEMENTADO em 09/09/2026
+
+A recomendação da §9 foi aprovada e está no ar. O que mudou:
+
+| Peça | Onde |
+|---|---|
+| Regra de casamento (pura, testável) | `server/utils/dividendPaymentMatch.js` |
+| Clientes B3 + Fundamentus e orquestração | `server/services/dividendPaymentDateService.js` |
+| Fonte viva no sync diário | `financialService.syncDividends` chama `fillPaymentDatesForTicker` |
+| Procedência da data | `DividendEvent.paymentDateSource` (`B3` \| `FUNDAMENTUS`) |
+| Limpeza dos 442 | `server/scripts/cleanFabricatedPaymentDates.js` — **executada** |
+| Backfill manual | `server/scripts/backfillDividendPaymentDates.js` e botão em Admin › Ferramentas |
+| Saúde | checks `coverage.dividendPaymentDate` e `consistency.dividendPaymentProvenance` |
+| Painel de fontes | `b3.dividends` (agendada) e `fundamentus.dividends` (manual), cadeia `paymentDate` |
+
+**Sobre a periodicidade do botão: não existe.** A B3 roda sozinha no sync diário e cobre os
+12 meses da sua janela, então nenhum provento novo envelhece sem data. O botão serve para o
+passivo histórico — uma passada — e depois só quando o card "Data de pagamento dos
+proventos" acusar. É o painel que avisa, não o calendário. Por isso o passivo antigo entra no
+*detalhe* do card, e não na cor: um amarelo que só some com trabalho manual é um amarelo que
+ensina a ignorar o painel.
+
+O restante do documento é a medição original, preservada como está.
 
 ---
 

@@ -263,6 +263,34 @@ export const SOURCE_CATALOG = {
         schedule: { kind: 'dailyTimes', at: ['09:00', '18:30'] },
         critical: true,
     },
+
+    // --- Calendário de pagamento de proventos ---
+    //
+    // Cadeia de DOIS elos que não é uma escolha, é uma restrição: o Fundamentus
+    // responde 403 ao IP do Render (o mesmo bloqueio que faz o `sync:prod` ser
+    // manual), então em produção só a B3 roda. O segundo elo existe para a máquina
+    // do desenvolvedor, disparado à mão pelo botão do Admin — e é por isso que o
+    // cinza dele em produção é o estado NORMAL, não um alarme.
+    'b3.dividends': {
+        label: 'B3 — calendário de proventos',
+        short: 'B3 proventos',
+        role: 'Últimos 12 meses',
+        group: 'reference',
+        feeds: 'Data em que o provento cai na conta, para ação e FII brasileiros',
+        schedule: { kind: 'dailyTimes', at: ['04:00'] },
+        chain: 'paymentDate',
+        critical: false,
+    },
+    'fundamentus.dividends': {
+        label: 'Fundamentus — calendário de proventos',
+        short: 'Fundamentus proventos',
+        role: 'Histórico antigo, só no dev',
+        group: 'reference',
+        feeds: 'Data de pagamento anterior ao alcance da B3; bloqueada em produção, roda no ambiente de desenvolvimento',
+        schedule: { kind: 'manual' },
+        chain: 'paymentDate',
+        critical: false,
+    },
 };
 
 const stats = new Map();
@@ -477,6 +505,21 @@ export const LEDGERED_CHAINS = new Map([
         expectedBadge: 'não negociou',
         expectedLong: 'sem pregão no papel',
         deadSubject: 'que nenhuma fonte fechou — faltou pregão para o papel',
+    }],
+    // Calendário de pagamento. "Ausência esperada" aqui tem sentido próprio e
+    // frequente: o provento cuja data a fonte não publica porque o emissor ainda
+    // não anunciou. Isso não é falha de ninguém — é o mundo, e o card precisa
+    // dizer isso em vez de pintar de amarelo.
+    ['paymentDate', {
+        noun: 'ativo',
+        none: 'Nenhum ativo',
+        rescued: 'tiveram a data de pagamento trazida por esta fonte',
+        allFromPrimary: 'esta fonte datou os proventos de todos',
+        missingBadge: 'sem data',
+        missingLong: 'sem data em nenhuma',
+        expectedBadge: 'ainda não anunciado',
+        expectedLong: 'pagamento ainda não anunciado pelo emissor',
+        deadSubject: 'cujo pagamento nenhuma fonte datou — o emissor ainda não anunciou',
     }],
 ]);
 

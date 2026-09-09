@@ -533,3 +533,39 @@ describe('a razão do silêncio é decidida no servidor', () => {
         expect(byId(buildSourceStatuses(factsBase(), getSourceStats()), 'yahoo.quotes').idleReason).toBeNull();
     });
 });
+
+/**
+ * A FONTE MANUAL FICA CINZA PELO MOTIVO CERTO.
+ *
+ * `fundamentus.dividends` só roda quando alguém clica no Admin — ela bloqueia o IP
+ * de produção. Cinza ali é o normal. O que não pode é o painel explicar esse cinza
+ * com a frase da reserva ("a fonte anterior deu conta"), porque nenhuma cadeia foi
+ * percorrida: ninguém disparou.
+ */
+describe('fonte manual: cinza normal, explicação certa', () => {
+    beforeEach(() => resetSourceStats());
+
+    it('é STANDBY, e não "ainda não teve a vez dela"', () => {
+        const row = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'fundamentus.dividends');
+        expect(row.idleReason).toBe('STANDBY');
+        expect(row.status).toBe('UNKNOWN');
+    });
+
+    it('a explicação fala em disparo, não em fonte anterior', () => {
+        const row = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'fundamentus.dividends');
+        expect(row.detail).toMatch(/ninguém disparou/i);
+        expect(row.detail).not.toMatch(/fonte anterior/i);
+    });
+
+    it('não promete horário de próximo disparo', () => {
+        const row = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'fundamentus.dividends');
+        expect(row.nextRun).toBeNull();
+        expect(row.trigger).toBe('onFailure');
+    });
+
+    it('a B3 de proventos, essa sim, é agendada', () => {
+        const row = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'b3.dividends');
+        expect(row.trigger).toBe('scheduled');
+        expect(row.nextRun).toBeTruthy();
+    });
+});

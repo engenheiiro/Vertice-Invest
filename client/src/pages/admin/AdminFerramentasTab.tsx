@@ -1,10 +1,94 @@
-import React from 'react';
-import { Settings, HardDrive, Scissors, ShieldAlert, ClipboardList, Search, RefreshCw, Zap, Trash2, Play } from 'lucide-react';
+import React, { useState } from 'react';
+import { Settings, HardDrive, Scissors, ShieldAlert, ClipboardList, Search, RefreshCw, Zap, Trash2, Play, CalendarClock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { TunablesCard } from '../../components/admin/TunablesCard';
 import { useDemo } from '../../contexts/DemoContext';
+import { useToast } from '../../contexts/ToastContext';
+import { researchService, type DividendPaymentBackfillResult } from '../../services/research';
+import { getErrorMessage } from '../../utils/errorMessages';
 import type { BillingMode } from '../../services/subscription';
 import type { BillingCycle } from '../../constants/subscription';
+
+/**
+ * Preencher datas de pagamento de provento.
+ *
+ * POR QUE É UM BOTÃO E NÃO UM CRON, e por que ele NÃO tem periodicidade:
+ * a B3 já roda sozinha no sync diário de proventos e cobre os últimos 12 meses,
+ * então nenhum provento novo envelhece sem data. O que sobra é o passivo
+ * histórico, anterior ao alcance da B3, e esse só o Fundamentus alcança — que
+ * responde 403 ao IP de produção. Daí o botão: ele existe para ser clicado UMA
+ * vez, do ambiente de desenvolvimento, e depois só quando o card "Data de
+ * pagamento dos proventos" da aba Saúde acusar. É o painel que avisa, não o
+ * calendário.
+ */
+const DividendPaymentDatesCard: React.FC = () => {
+    const { addToast } = useToast();
+    const [isRunning, setIsRunning] = useState(false);
+    const [result, setResult] = useState<DividendPaymentBackfillResult['stats'] | null>(null);
+
+    const handleRun = async () => {
+        setIsRunning(true);
+        setResult(null);
+        try {
+            const res = await researchService.backfillDividendPaymentDates();
+            setResult(res.stats);
+            addToast(res.message, res.stats.preenchidos > 0 ? 'success' : 'info');
+        } catch (error) {
+            addToast(getErrorMessage(error, 'Falha ao preencher as datas de pagamento.'), 'error');
+        } finally {
+            setIsRunning(false);
+        }
+    };
+
+    return (
+        <div className="bg-base border border-slate-800 rounded-2xl p-6 shadow-lg">
+            <div className="flex items-center gap-2 mb-4">
+                <CalendarClock size={18} className="text-blue-500" />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Datas de Pagamento</h3>
+            </div>
+            <p className="text-[10px] text-slate-400 mb-4">
+                Busca no calendário da B3 e do Fundamentus a data em que cada provento cai na conta.
+                O sync diário já faz isso pelos últimos 12 meses — este botão serve para o histórico
+                mais antigo, que só o Fundamentus tem. <strong className="text-slate-300">Rode em dev:</strong> o
+                Fundamentus bloqueia o IP de produção. Não tem periodicidade; clique quando a aba Saúde acusar.
+            </p>
+            <button
+                onClick={handleRun}
+                disabled={isRunning}
+                className="w-full py-2 bg-blue-600/10 border border-blue-600/30 text-blue-400 hover:bg-blue-600/20 hover:text-blue-300 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                {isRunning ? <RefreshCw size={14} className="animate-spin" /> : <CalendarClock size={14} />}
+                {isRunning ? 'Consultando fonte por fonte…' : 'Preencher datas de pagamento'}
+            </button>
+            {isRunning && (
+                <p className="text-[10px] text-slate-500 mt-2 text-center">
+                    Uma requisição por ativo, com pausa entre elas. Pode levar alguns minutos.
+                </p>
+            )}
+            {result && (
+                <div className="mt-4 pt-4 border-t border-slate-800 space-y-1 text-[11px] text-slate-400">
+                    <p>
+                        <strong className="text-white">{result.preenchidos}</strong> data(s) gravada(s)
+                        {' '}em {result.ativos} ativo(s), de {result.tentados} evento(s) sem data.
+                    </p>
+                    {Object.keys(result.porFonte).length > 0 && (
+                        <p>Total no banco por fonte: {Object.entries(result.porFonte).map(([f, n]) => `${f} ${n}`).join(' · ')}</p>
+                    )}
+                    {result.bloqueioDeAcesso > 0 && (
+                        <p className="text-yellow-500">
+                            {result.bloqueioDeAcesso} ativo(s) com acesso bloqueado pela fonte — esperado se
+                            você rodou isto em produção. Repita a partir do ambiente de desenvolvimento.
+                        </p>
+                    )}
+                    <p className="text-slate-500">
+                        O que ficou sem data segue na estimativa, marcada como “Previsto” na tela — ou o
+                        emissor ainda não anunciou, ou o pagamento está dividido em datas diferentes.
+                    </p>
+                </div>
+            )}
+        </div>
+    );
+};
 
 interface CacheData {
     ticker: string;
@@ -128,6 +212,8 @@ export const AdminFerramentasTab: React.FC<Props> = ({
                     Iniciar Demonstração
                 </button>
             </div>
+
+            <DividendPaymentDatesCard />
         </div>
 
         {/* Testar Pagamento */}

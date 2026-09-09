@@ -390,6 +390,23 @@ export interface ResearchReport {
     };
 }
 
+/** Resultado do backfill de data de pagamento (Admin › Ferramentas). */
+export interface DividendPaymentBackfillResult {
+    message: string;
+    stats: {
+        ativos: number;
+        preenchidos: number;
+        tentados: number;
+        porFonte: Record<string, number>;
+        foraDeEscopo: number;
+        duracaoMs: number;
+        falhas: { ticker: string; fonte: string; motivo: string }[];
+        totalFalhas: number;
+        /** Falhas que são bloqueio de acesso (403/HTTP) — o caso do Fundamentus em produção. */
+        bloqueioDeAcesso: number;
+    };
+}
+
 export const researchService = {
     async crunchNumbers(assetClass?: string, isBulk: boolean = false) {
         const response = await authService.api('/api/research/crunch', {
@@ -399,6 +416,25 @@ export const researchService = {
         if (!response.ok) {
             const data = await response.json().catch(() => ({}));
             throw new Error(data.message || "Erro ao processar números.");
+        }
+        return await response.json();
+    },
+
+    /**
+     * Preenche a data de pagamento dos proventos que estão sem ela.
+     *
+     * A cadeia é B3 → Fundamentus, e o segundo elo é a razão de isto ser um botão:
+     * o Fundamentus bloqueia o IP de produção, então só entrega quando o servidor
+     * é a máquina do desenvolvedor. Varre a base inteira e faz uma requisição por
+     * ativo — pode demorar minutos.
+     */
+    async backfillDividendPaymentDates(): Promise<DividendPaymentBackfillResult> {
+        const response = await authService.api('/api/research/dividend-payment-dates/backfill', {
+            method: 'POST',
+        });
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.message || 'Erro ao preencher datas de pagamento.');
         }
         return await response.json();
     },

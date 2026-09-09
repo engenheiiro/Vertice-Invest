@@ -77,6 +77,18 @@ const healthyFacts = (overrides = {}) => ({
         universe: { total: 1022, stale: 120, worst: [], dates: [] },
     },
     fundamentals: { healthy: true, timestamp: hoursAgo(6), errorCode: null },
+    // Cobertura saudável de data de pagamento NÃO é 100%: sobra sempre o
+    // pagamento que o emissor não anunciou e o evento cujo pagamento está
+    // dividido em datas diferentes. 208/228 nos OFICIAIS é o que a B3 entregou de
+    // verdade em 09/09/2026; os 404 provisórios, com 155 datados, ficam fora do
+    // denominador de propósito — eles medem o nosso detector de gap.
+    dividendPayment: {
+        windowDays: 365,
+        recent: { total: 228, dated: 208 },
+        old: { total: 900, dated: 900 },
+        provisional: { total: 404, dated: 155 },
+        withoutProvenance: 0,
+    },
     jobs: [
         { jobId: 'quotes-sync', label: 'Cotações', severity: 'CRITICAL', maxSilenceHours: 2, lastRunAt: hoursAgo(0.3), lastStatus: 'SUCCESS' },
         { jobId: 'daily-snapshot', label: 'Snapshot', severity: 'CRITICAL', maxSilenceHours: 30, lastRunAt: hoursAgo(12), lastStatus: 'SUCCESS' },
@@ -918,5 +930,123 @@ describe('DICAS DE PLAUSIBILIDADE', () => {
         const facts = healthyFacts();
         facts.implausible.dy = 150;
         expect(byId(buildHealthReport(facts), 'plausibility.dy').hint).toMatch(/coluna trocada/i);
+    });
+});
+
+/**
+ * DATA DE PAGAMENTO DOS PROVENTOS.
+ *
+ * Dois checks e duas falhas diferentes. A cobertura olha só a janela de 12 meses
+ * (o alcance da B3); o passivo mais antigo vai para o DETALHE, não para a cor,
+ * porque um amarelo que só some quando alguém roda um backfill manual é um
+ * amarelo que ensina a ignorar o painel. A procedência é invariante: data sem
+ * fonte é o defeito dos 442 eventos ex+16 voltando.
+ */
+describe('DATA DE PAGAMENTO DOS PROVENTOS', () => {
+    it('o resto legítimo (~9%) não alarma', () => {
+        const { status } = byId(buildHealthReport(healthyFacts()), 'coverage.dividendPaymentDate');
+        expect(status).toBe(HEALTH_STATUS.OK);
+    });
+
+    it('metade dos proventos recentes sem data vira CRITICAL', () => {
+        const facts = healthyFacts();
+        facts.dividendPayment.recent = { total: 200, dated: 90 };
+        expect(byId(buildHealthReport(facts), 'coverage.dividendPaymentDate').status)
+            .toBe(HEALTH_STATUS.CRITICAL);
+    });
+
+    it('um terço sem data vira WARN', () => {
+        const facts = healthyFacts();
+        facts.dividendPayment.recent = { total: 300, dated: 200 };
+        expect(byId(buildHealthReport(facts), 'coverage.dividendPaymentDate').status)
+            .toBe(HEALTH_STATUS.WARN);
+    });
+
+    it('passivo histórico entra no detalhe e na dica, mas NÃO muda a cor', () => {
+        const facts = healthyFacts();
+        facts.dividendPayment.old = { total: 900, dated: 100 };
+        const c = byId(buildHealthReport(facts), 'coverage.dividendPaymentDate');
+        expect(c.status).toBe(HEALTH_STATUS.OK);
+        expect(c.detail).toContain('800');
+        expect(c.hint).toMatch(/Preencher datas de pagamento/);
+        expect(c.hint).toMatch(/dev/);
+    });
+
+    it('a dica avisa que reclicar não recupera o que sobrou', () => {
+        // Sem isso o card manda clicar para sempre: depois de uma passada, o que
+        // continua sem data é provento que nenhuma fonte publica — o backfill de
+        // 09/09/2026 rodou duas vezes e a segunda trouxe ZERO datas novas.
+        const facts = healthyFacts();
+        facts.dividendPayment.old = { total: 900, dated: 100 };
+        const { hint } = byId(buildHealthReport(facts), 'coverage.dividendPaymentDate');
+        expect(hint).toMatch(/clicar de novo não muda/i);
+        expect(hint).toMatch(/não há periodicidade/i);
+    });
+
+    it('sem passivo, a dica não manda clicar em nada', () => {
+        const c = byId(buildHealthReport(healthyFacts()), 'coverage.dividendPaymentDate');
+        expect(c.hint).not.toMatch(/Preencher datas de pagamento/);
+    });
+
+    it('janela sem provento nenhum não vira divisão por zero', () => {
+        const facts = healthyFacts();
+        facts.dividendPayment.recent = { total: 0, dated: 0 };
+        const c = byId(buildHealthReport(facts), 'coverage.dividendPaymentDate');
+        expect(c.status).toBe(HEALTH_STATUS.OK);
+        expect(c.value).toBe(0);
+    });
+
+    it('UMA data sem procedência já é CRITICAL', () => {
+        const facts = healthyFacts();
+        facts.dividendPayment.withoutProvenance = 1;
+        const c = byId(buildHealthReport(facts), 'consistency.dividendPaymentProvenance');
+        expect(c.status).toBe(HEALTH_STATUS.CRITICAL);
+        expect(c.hint).toMatch(/cleanFabricatedPaymentDates/);
+    });
+
+    it('relatório antigo, sem o fato coletado, não inventa check nem quebra', () => {
+        const facts = healthyFacts();
+        delete facts.dividendPayment;
+        const report = buildHealthReport(facts);
+        expect(report.checks.some((c) => c.id === 'coverage.dividendPaymentDate')).toBe(false);
+        expect(report.status).toBe(HEALTH_STATUS.OK);
+    });
+});
+
+/**
+ * O DENOMINADOR DO ALARME SÃO OS PROVENTOS OFICIAIS.
+ *
+ * Medido em 09/09/2026, logo depois do backfill: oficiais 91,2% datados (FII em
+ * 100%), provisórios 38%. Somados dariam 57%, e o card viveria amarelo por causa
+ * do NOSSO detector de gap, não da B3 — provisório é dedução do gap do dia-ex, e
+ * boa parte nem é provento: o preço caiu por outro motivo e a fonte, com razão,
+ * não publica pagamento nenhum.
+ */
+describe('provisórios não puxam o alarme da data de pagamento', () => {
+    it('provisório sem data não muda a cor do card', () => {
+        const facts = healthyFacts();
+        facts.dividendPayment.provisional = { total: 800, dated: 0 };
+        expect(byId(buildHealthReport(facts), 'coverage.dividendPaymentDate').status)
+            .toBe(HEALTH_STATUS.OK);
+    });
+
+    it('mas aparece no detalhe, para não sumir da tela', () => {
+        const facts = healthyFacts();
+        facts.dividendPayment.provisional = { total: 404, dated: 155 };
+        const c = byId(buildHealthReport(facts), 'coverage.dividendPaymentDate');
+        expect(c.detail).toContain('249');
+        expect(c.detail).toMatch(/provisóri/i);
+    });
+
+    it('sem provisório pendente, o detalhe não fala deles', () => {
+        const facts = healthyFacts();
+        facts.dividendPayment.provisional = { total: 10, dated: 10 };
+        expect(byId(buildHealthReport(facts), 'coverage.dividendPaymentDate').detail)
+            .not.toMatch(/provisóri/i);
+    });
+
+    it('o detalhe diz "oficiais", para o número não ser lido como cobertura total', () => {
+        expect(byId(buildHealthReport(healthyFacts()), 'coverage.dividendPaymentDate').detail)
+            .toMatch(/oficiais/);
     });
 });

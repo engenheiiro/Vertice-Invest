@@ -20,6 +20,7 @@ import AssetHistory from '../models/AssetHistory.js';
 import TreasuryPriceHistory from '../models/TreasuryPriceHistory.js';
 import TreasuryBond from '../models/TreasuryBond.js';
 import UserAsset from '../models/UserAsset.js';
+import DividendEvent from '../models/DividendEvent.js';
 import DataHealthReport from '../models/DataHealthReport.js';
 import ErrorLog from '../models/ErrorLog.js';
 import JobRun from '../models/JobRun.js';
@@ -97,6 +98,74 @@ const businessDaysStale = (latestDateStr, now) => {
 
 /** Posições de mercado da carteira: só o que tem candle. Espelha loadSnapshotContext. */
 const NON_MARKET_WALLET_TYPES = ['CASH', 'FIXED_INCOME'];
+
+/**
+ * Janela do calendário de proventos da B3, em dias.
+ *
+ * Não é escolha nossa: o endpoint "supplement" que traz a data de pagamento é
+ * móvel e guarda ~12 meses (medido em 09/09/2026, evento mais antigo em
+ * 2025-09-10). É essa fronteira que separa dois estados MUITO diferentes e que
+ * o painel precisa distinguir — provento recente sem data é a fonte falhando (ou
+ * o emissor ainda não ter anunciado); provento antigo sem data é passivo
+ * histórico, que só o backfill manual pelo Fundamentus alcança.
+ */
+const B3_PAYMENT_WINDOW_DAYS = 365;
+
+/**
+ * Cobertura da data de PAGAMENTO dos proventos.
+ *
+ * DOIS RECORTES, e a diferença entre eles é a diferença entre alarme e ruído.
+ *
+ * Restrito a ação e FII brasileiros porque são as únicas classes que as fontes de
+ * calendário cobrem — contar provento de papel americano aqui inventaria um buraco
+ * permanente que ninguém pode fechar.
+ *
+ * E, dentro deles, o denominador do ALARME são só os eventos OFICIAIS. O provento
+ * PROVISÓRIO (`source: 'DERIVED'`) tem o valor deduzido do gap do dia-ex, e muitos
+ * deles não são provento nenhum: o preço caiu por outro motivo e a fonte, com
+ * razão, não publica pagamento algum. Medido em 09/09/2026, depois do backfill:
+ * os oficiais estavam em 91,2% datados (FII em 100%), e os provisórios em 38% —
+ * um número que fala do NOSSO detector de gap, não da B3. Somados, davam 57%, e o
+ * card viveria amarelo por algo que consertar a fonte não conserta. Os provisórios
+ * seguem contados à parte, para não sumirem da tela.
+ */
+const collectDividendPaymentFacts = async (now) => {
+    const brTickers = (await MarketAsset.find({ type: { $in: ['STOCK', 'FII'] } }).select('ticker').lean())
+        .map((a) => a.ticker);
+    const noEscopo = { ticker: { $in: brTickers } };
+    // Documentos anteriores a set/2026 não têm `source`; ausência = PROVIDER (ver
+    // o modelo). `$ne: 'DERIVED'` cobre os dois casos, `$eq: 'PROVIDER'` não.
+    const oficial = { source: { $ne: 'DERIVED' } };
+    const comFonte = { paymentDateSource: { $ne: null, $exists: true } };
+    const recente = { date: { $gte: new Date(now.getTime() - B3_PAYMENT_WINDOW_DAYS * 86400000) } };
+    const antigo = { date: { $lt: new Date(now.getTime() - B3_PAYMENT_WINDOW_DAYS * 86400000) } };
+
+    const [
+        recentes, recentesComData, antigos, antigosComData,
+        provisorios, provisoriosComData, semProcedencia,
+    ] = await Promise.all([
+        DividendEvent.countDocuments({ ...noEscopo, ...oficial, ...recente }),
+        DividendEvent.countDocuments({ ...noEscopo, ...oficial, ...recente, ...comFonte }),
+        DividendEvent.countDocuments({ ...noEscopo, ...oficial, ...antigo }),
+        DividendEvent.countDocuments({ ...noEscopo, ...oficial, ...antigo, ...comFonte }),
+        DividendEvent.countDocuments({ ...noEscopo, source: 'DERIVED', ...recente }),
+        DividendEvent.countDocuments({ ...noEscopo, source: 'DERIVED', ...recente, ...comFonte }),
+        // Invariante: data sem procedência é data de origem desconhecida — o
+        // defeito que colocou 442 estimativas no banco com cara de anúncio.
+        DividendEvent.countDocuments({
+            paymentDate: { $ne: null, $exists: true },
+            paymentDateSource: { $in: [null, undefined] },
+        }),
+    ]);
+
+    return {
+        windowDays: B3_PAYMENT_WINDOW_DAYS,
+        recent: { total: recentes, dated: recentesComData },
+        old: { total: antigos, dated: antigosComData },
+        provisional: { total: provisorios, dated: provisoriosComData },
+        withoutProvenance: semProcedencia,
+    };
+};
 
 /**
  * Atraso do último candle, por coorte.
@@ -371,6 +440,7 @@ const collectFacts = async (now) => {
         oldestRun,
         frozenAssets,
         retiredButActive,
+        dividendPayment,
     } = await resolveAll({
         assetFacts: collectAssetFacts(staleCutoff, fundamentalsCutoff),
         totalAll: MarketAsset.countDocuments({}),
@@ -422,6 +492,7 @@ const collectFacts = async (now) => {
         // o ativo continua na fila de cotação, desce a cadeia inteira de fontes e
         // falha em todas, a cada 15 minutos, para sempre.
         retiredButActive: MarketAsset.countDocuments({ isBlacklisted: true, isActive: true }),
+        dividendPayment: collectDividendPaymentFacts(now),
     });
 
     const treasury = treasuryRows[0] || {};
@@ -487,6 +558,7 @@ const collectFacts = async (now) => {
                 // Só os 10 mais parados no detalhe — a lista inteira não cabe num card.
                 tickers: frozenAssets.slice(0, 10).map((a) => a.ticker),
             },
+            dividendPayment,
         },
         overrides,
     };

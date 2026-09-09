@@ -71,3 +71,25 @@ describe('sourceSchedule', () => {
         expect(nextRunLabel(undefined)).toBeNull();
     });
 });
+
+/**
+ * FONTE MANUAL — a que roda por clique, não por relógio.
+ *
+ * Existe por causa do calendário de proventos do Fundamentus: ele bloqueia o IP
+ * de produção, então só entrega quando o servidor é a máquina do desenvolvedor.
+ * Ela fica cinza para sempre em produção, e isso é o estado NORMAL. Tratá-la como
+ * agendada faria o painel prometer um disparo que nunca vem; tratá-la como reserva
+ * faria ele afirmar que a fonte anterior deu conta, o que também não aconteceu.
+ */
+describe('fonte manual', () => {
+    it('não promete próximo disparo', () => {
+        expect(minutesUntilNextRun({ kind: 'manual' })).toBeNull();
+        expect(nextRunLabel({ kind: 'manual' })).toBeNull();
+    });
+
+    it('a cadência diz que depende de alguém clicar, e não que é reserva', () => {
+        const frase = cadenceLabel({ kind: 'manual' });
+        expect(frase).toMatch(/Admin/);
+        expect(frase).not.toMatch(/fonte anterior/);
+    });
+});

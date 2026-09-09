@@ -18,6 +18,7 @@ import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculate
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
 import { normalizeToUtcDay, resolvePaymentDate as resolvePaymentDateUtil } from '../utils/dividendPaymentDate.js';
+import { fillPaymentDatesForTicker } from './dividendPaymentDateService.js';
 import { classifyUsAsset } from '../utils/usClassification.js';
 import { isGoldTicker } from '../utils/goldClassification.js';
 import { isDollarized as isDollarizedAsset, resolveTransactionCurrency } from '../utils/assetCurrency.js';
@@ -946,6 +947,21 @@ export const financialService = {
                     await DividendEvent.deleteMany({ _id: { $in: orphanIds } });
                     logger.info('[Dividends] Provisórios substituídos pelo oficial', { ticker: key, removidos: orphanIds.length });
                 }
+            }
+
+            // Data de PAGAMENTO — quando o dinheiro cai na conta. O Yahoo não
+            // publica, então vem do calendário da B3 (ver dividendPaymentDateService).
+            // Roda DEPOIS da reconciliação de propósito: o provisório já virou
+            // oficial aqui, e assim ele é datado no mesmo passe em vez de esperar o
+            // sync do dia seguinte.
+            //
+            // Falha desta etapa não derruba o sync de proventos: sem data o evento
+            // fica na estimativa, que é o comportamento que já existia. Deixar a
+            // exceção subir trocaria uma degradação por uma parada.
+            try {
+                await fillPaymentDatesForTicker(key, type);
+            } catch (error) {
+                logger.warn('[Dividends] Falha ao buscar data de pagamento', { ticker: key, erro: error.message });
             }
         }
 

@@ -13,6 +13,11 @@
  *  - **De reserva** (`onFailure`): só é chamada quando a fonte anterior da cadeia
  *    falha. Cinza aqui é BOA notícia: ninguém precisou dela. Marcar isso de
  *    amarelo seria alarmar por um sistema funcionando como projetado.
+ *  - **Manual** (`manual`): não tem hora e não entra em fallback automático —
+ *    alguém clica. É o caso do calendário de proventos do Fundamentus, bloqueado
+ *    no IP de produção e disparado do ambiente de desenvolvimento. Cinza aqui é o
+ *    estado NORMAL em produção; tratá-la como agendada faria o painel prometer um
+ *    disparo que nunca vem.
  *
  * Sem dependência de parser de cron: as formas usadas são poucas e conhecidas, e
  * o horário do Brasil não tem horário de verão desde 2019 — então a distância até
@@ -38,11 +43,12 @@ const doisDigitos = (n) => String(n).padStart(2, '0');
  * Minutos até o próximo disparo, ou `null` para fonte de reserva.
  *
  * @param {object|null} schedule `{kind:'minutes', at:[5,20,35,50]}` |
- *   `{kind:'dailyTimes', at:['09:00','18:30']}` | `{kind:'onFailure'}`
+ *   `{kind:'dailyTimes', at:['09:00','18:30']}` | `{kind:'onFailure'}` |
+ *   `{kind:'manual'}`
  * @param {Date} [now]
  */
 export const minutesUntilNextRun = (schedule, now = new Date()) => {
-    if (!schedule || schedule.kind === 'onFailure') return null;
+    if (!schedule || schedule.kind === 'onFailure' || schedule.kind === 'manual') return null;
     const { hour, minute } = brNow(now);
 
     if (schedule.kind === 'minutes') {
@@ -97,6 +103,9 @@ export const nextRunLabel = (schedule, now = new Date()) => {
 export const cadenceLabel = (schedule) => {
     if (!schedule || schedule.kind === 'onFailure') {
         return 'Só é chamada quando a fonte anterior da cadeia falha';
+    }
+    if (schedule.kind === 'manual') {
+        return 'Não tem hora: roda quando alguém dispara pelo Admin';
     }
     if (schedule.kind === 'minutes') {
         const n = (schedule.at || []).length;

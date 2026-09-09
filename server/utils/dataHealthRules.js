@@ -94,6 +94,18 @@ export const DEFAULT_THRESHOLDS = {
     // e a posição volta para o accrual. 3 dias úteis (~5 corridos) avisa com folga;
     // 5 (~7 corridos) é crítico e ainda sobra margem antes do desligamento.
     treasuryBusinessDaysStale: { warn: 3, critical: 5 },
+    // Fração de proventos RECENTES (dentro da janela de 12 meses da B3) sem data
+    // de pagamento de fonte.
+    //
+    // O piso saudável NÃO é zero, e forçar isso pintaria o painel de amarelo para
+    // sempre. Medido em 09/09/2026 sobre 222 eventos oficiais: a B3 data 91,4%.
+    // Os ~9% que sobram têm duas causas legítimas e permanentes:
+    //  · pagamento que o emissor ainda não anunciou — nenhuma fonte tem;
+    //  · evento AMBÍGUO, em que o Yahoo agrega numa linha só pagamentos que caem
+    //    em datas diferentes (20% dos eventos de ação, 0% dos de FII). Aí não
+    //    existe "a" data, e ficar sem ela é o comportamento correto.
+    // 25% avisa que algo mudou de patamar; 50% é a B3 fora do ar há semanas.
+    dividendPaymentMissingRatio: { warn: 0.25, critical: 0.50 },
     // CATÁLOGO de títulos (TreasuryBond) — outra coisa que a série de PU acima.
     // Contagem de defeitos estruturais (duplicata, taxa fora da faixa da família,
     // índice incoerente, mínimo acima do PU). Um só já merece olhar: o catálogo tem
@@ -484,6 +496,77 @@ const plausibilityChecks = (facts, th) => {
         detail: `${zeroPrice} ativo(s) ativo(s) com preço ≤ 0` + sampleSuffix(samples.nonPositivePrice),
         hint: 'Ativo ativo sem preço válido entra em ranking e carteira com valor errado. Verifique o fallback de cotação.',
     }));
+    return out;
+};
+
+/**
+ * Data de PAGAMENTO dos proventos — dois checks, porque são duas falhas distintas.
+ *
+ * O primeiro é COBERTURA e olha só a janela de 12 meses, que é o alcance da B3, e
+ * dentro dela só os proventos OFICIAIS — que é o que as fontes respondem por.
+ * Duas coisas ficam de fora do denominador e dentro do detalhe, cada uma por seu
+ * motivo:
+ *  · o passivo anterior à janela, que só o backfill manual alcança;
+ *  · o provento PROVISÓRIO, cujo valor é dedução nossa do gap do dia-ex e que
+ *    muitas vezes não é provento nenhum — a fonte não publica pagamento porque
+ *    não houve pagamento.
+ * Alarmar por qualquer um dos dois deixaria o painel amarelo por algo que
+ * consertar a fonte não conserta, e um amarelo que não muda ensina a ignorar a cor.
+ *
+ * O segundo é PROCEDÊNCIA, e é uma invariante: data gravada sem dizer de onde
+ * veio. Em 09/09/2026 havia 442 assim — todas exatamente ex+16, incluindo 25/12 e
+ * 01/01 — e como `resolvePaymentDate` trata qualquer data não-nula como oficial, a
+ * tela afirmava "Agendado" sobre número inventado. Uma só já é defeito.
+ */
+const dividendPaymentChecks = (facts, th) => {
+    const dp = facts.dividendPayment;
+    if (!dp) return [];
+    const out = [];
+
+    const recentes = num(dp.recent?.total) ?? 0;
+    const datados = num(dp.recent?.dated) ?? 0;
+    const semData = Math.max(0, recentes - datados);
+    const antigosSemData = Math.max(0, (num(dp.old?.total) ?? 0) - (num(dp.old?.dated) ?? 0));
+
+    const passivo = antigosSemData > 0
+        ? ` · ${antigosSemData} evento(s) anteriores a ${dp.windowDays} dias seguem sem data (fora do alcance da B3)`
+        : '';
+    // Provisórios entram no detalhe, nunca no denominador do alarme: o valor deles
+    // é dedução nossa do gap do dia-ex, e boa parte não é provento nenhum — a
+    // fonte não publica pagamento porque não há pagamento.
+    const provTotal = num(dp.provisional?.total) ?? 0;
+    const provSemData = Math.max(0, provTotal - (num(dp.provisional?.dated) ?? 0));
+    const provisorios = provSemData > 0
+        ? ` · ${provSemData} provisório(s) do detector de gap seguem sem data`
+        : '';
+
+    out.push(check({
+        id: 'coverage.dividendPaymentDate',
+        label: 'Data de pagamento dos proventos',
+        category: CATEGORY.COVERAGE,
+        status: recentes === 0 ? HEALTH_STATUS.OK : gradeAscending(ratio(semData, recentes), th.dividendPaymentMissingRatio),
+        value: recentes === 0 ? 0 : ratio(semData, recentes),
+        detail: recentes === 0
+            ? 'Nenhum provento oficial de ação ou FII na janela'
+            : `${datados} de ${recentes} proventos oficiais dos últimos ${dp.windowDays} dias têm data de fonte${passivo}${provisorios}`,
+        hint: antigosSemData > 0
+            ? 'A B3 roda sozinha no sync diário e cobre 12 meses: não há periodicidade para clicar nada, e provento novo não envelhece sem data. Para o passivo antigo, o botão "Preencher datas de pagamento" (Admin › Ferramentas) tenta o Fundamentus — rode em dev, que ele bloqueia o IP de produção. Depois de uma passada, o que continuar aqui é provento que nenhuma fonte publica: clicar de novo não muda. Sem data o provento cai na estimativa e a tela marca "Previsto".'
+            : 'Vem do calendário da B3 no sync diário de proventos. Sobra sempre um resto legítimo: pagamento ainda não anunciado, ou evento cujo pagamento está dividido em datas diferentes. Sem data o provento cai na estimativa, marcada como "Previsto".',
+    }));
+
+    const semProcedencia = num(dp.withoutProvenance) ?? 0;
+    out.push(check({
+        id: 'consistency.dividendPaymentProvenance',
+        label: 'Data de pagamento sem procedência',
+        category: CATEGORY.PLAUSIBILITY,
+        status: semProcedencia === 0 ? HEALTH_STATUS.OK : HEALTH_STATUS.CRITICAL,
+        value: semProcedencia,
+        detail: semProcedencia === 0
+            ? 'Toda data gravada diz de que fonte veio'
+            : `${semProcedencia} evento(s) com data e sem paymentDateSource`,
+        hint: 'Data sem fonte é data de origem desconhecida, e a tela a exibe com selo de oficial ("Agendado"/"Creditado") em vez de "Previsto". Rode server/scripts/cleanFabricatedPaymentDates.js.',
+    }));
+
     return out;
 };
 
@@ -905,6 +988,7 @@ export const buildHealthReport = (facts = {}, thresholdOverrides = null) => {
         ...treasuryCatalogChecks(ctx, th),
         ...timeSeriesChecks(ctx, th),
         ...coverageChecks(ctx, th),
+        ...dividendPaymentChecks(ctx, th),
         ...plausibilityChecks(ctx, th),
         ...macroChecks(ctx, th),
         ...ingestionChecks(ctx, th),

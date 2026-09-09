@@ -25,6 +25,7 @@ import {
     getPublishStatus,
     generateExplainableAI,
     runStorageCleanupHandler,
+    runDividendPaymentBackfill,
     backfillSectorsHandler,
     getBuyAndHoldShadow,
     publishAnchorRankingHandler
@@ -85,6 +86,9 @@ router.get('/config/tunables', adminLimiter, requireAdmin, getTunablesHandler);
 router.put('/config/tunables', adminLimiter, requireAdmin, validate(tunablesPatchSchema), updateTunablesHandler);
 router.delete('/signals/history', adminLimiter, requireAdmin, clearRadarHistory);
 router.post('/cleanup-storage', researchHeavyLimiter, requireAdmin, runStorageCleanupHandler);
+// Varre a base inteira e faz uma requisição HTTP por ativo — limiter pesado, como
+// as demais rotas que raspam fonte externa em lote.
+router.post('/dividend-payment-dates/backfill', researchHeavyLimiter, requireAdmin, runDividendPaymentBackfill);
 
 // Monitor de Qualidade & Acurácia
 router.get('/data-quality', adminLimiter, requireAdmin, getDataQualityStats);

@@ -59,9 +59,6 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import axios from 'axios';
-import * as cheerio from 'cheerio';
-import iconv from 'iconv-lite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -70,8 +67,10 @@ const { connectScriptDb } = await import('./lib/scriptDb.js');
 const DividendEvent = (await import('../models/DividendEvent.js')).default;
 const MarketAsset = (await import('../models/MarketAsset.js')).default;
 const UserAsset = (await import('../models/UserAsset.js')).default;
-const { addBusinessDays, toDateKey } = await import('../utils/dateUtils.js');
+const { toDateKey } = await import('../utils/dateUtils.js');
 const { estimatedPaymentDate } = await import('../utils/dividendPaymentDate.js');
+const { matchPaymentDate } = await import('../utils/dividendPaymentMatch.js');
+const { FONTES: CLIENTES } = await import('../services/dividendPaymentDateService.js');
 
 // ————————————————————————————————————————————————— argumentos
 
@@ -85,250 +84,28 @@ const LIMITE = Number(arg('limit', '40'));
 const MESES = Number(arg('meses', '24'));
 const FONTES = (arg('sources', 'b3,fundamentus')).split(',').map((s) => s.trim().toLowerCase());
 
-// Casamento data-a-data: a fonte publica "última data com" e o Yahoo publica a
-// ex-date, que é o pregão seguinte. Aceitamos uma folga de 3 dias corridos para
-// medir o deslocamento real em vez de presumir que ele é sempre +1 dia útil.
-const TOLERANCIA_DIAS = 3;
-// Duas leituras do mesmo pagamento divergem no arredondamento (0,109829 × 0,109744).
-// 5% separa "mesmo provento" de "provento diferente no mesmo dia".
-const TOLERANCIA_VALOR = 0.05;
 const DIA_MS = 86400000;
 
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ————————————————————————————————————————————————— parsing comum
-
-const HEADERS_NAVEGADOR = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'pt-BR,pt;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    Referer: 'https://www.google.com/',
-};
-
-/** "dd/mm/aaaa" → meia-noite UTC do dia. Rejeita o sentinela 31/12/9999 da B3. */
-const parseDataBr = (str) => {
-    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(str || '').trim());
-    if (!m) return null;
-    const [, d, mo, y] = m;
-    const ano = Number(y);
-    if (ano < 1990 || ano > 2100) return null; // 31/12/9999 = "sem data com" na B3
-    const dt = new Date(Date.UTC(ano, Number(mo) - 1, Number(d)));
-    return Number.isNaN(dt.getTime()) ? null : dt;
-};
-
-/** "0,10000000000" / "1.234,56" → número. */
-const parseValorBr = (str) => {
-    const limpo = String(str || '').replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '').trim();
-    const n = Number.parseFloat(limpo);
-    return Number.isFinite(n) ? n : null;
-};
-
-const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64');
-
-// ————————————————————————————————————————————————— fonte: B3
-
-const b3Get = async (url) => {
-    const r = await axios.get(url, {
-        headers: { ...HEADERS_NAVEGADOR, Accept: 'application/json, text/plain, */*', Referer: 'https://www.b3.com.br/' },
-        timeout: 25000,
-        validateStatus: () => true,
-    });
-    if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
-    return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
-};
-
-/**
- * Classe do papel a partir do ISIN brasileiro. `BRITSAACNOR0` é ON, `BRITSAACNPR7`
- * é PN, `BRSANBCDAM13` é UNIT. O sufixo numérico do ticker diz a mesma coisa
- * (3=ON, 4=PN, 5=PNA, 6=PNB, 11=UNIT) — sem esse filtro, ITSA3 e ITSA4 herdariam
- * os proventos um do outro.
- */
-const classeDoIsin = (isin) => {
-    const s = String(isin || '').toUpperCase();
-    if (/ACNOR\d?$/.test(s)) return 'ON';
-    if (/ACNPR\d?$/.test(s)) return 'PN';
-    if (/ACNPA\d?$/.test(s)) return 'PNA';
-    if (/ACNPB\d?$/.test(s)) return 'PNB';
-    if (/CDAM\d*$/.test(s)) return 'UNIT';
-    return null;
-};
-
-const classeDoTicker = (ticker) => {
-    const m = /^[A-Z]{4}(\d{1,2})$/.exec(String(ticker || '').toUpperCase());
-    if (!m) return null;
-    return { 3: 'ON', 4: 'PN', 5: 'PNA', 6: 'PNB', 11: 'UNIT' }[Number(m[1])] || null;
-};
-
-const normalizaB3 = (cd) => ({
-    dataCom: parseDataBr(cd.lastDatePrior),
-    dataPagamento: parseDataBr(cd.paymentDate),
-    valor: parseValorBr(cd.rate),
-    rotulo: String(cd.label || '').trim(),
-    isin: cd.isinCode || cd.assetIssued || null,
-});
-
-const b3Fii = async (ticker) => {
-    const identificador = ticker.replace(/\d+$/, '').toUpperCase();
-    const d = await b3Get(`https://sistemaswebb3-listados.b3.com.br/fundsProxy/fundsCall/GetListedSupplementFunds/${b64({ typeFund: 7, identifierFund: identificador })}`);
-    const cd = d?.cashDividends || [];
-    return { eventos: cd.map(normalizaB3), rotulo: (d?.fund || '').trim() };
-};
-
-const b3Acao = async (ticker) => {
-    const busca = await b3Get(`https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetInitialCompanies/${b64({ language: 'pt-br', pageNumber: 1, pageSize: 5, company: ticker })}`);
-    const empresa = busca?.results?.[0]?.issuingCompany;
-    if (!empresa) return { eventos: [], rotulo: null, motivo: 'ticker não resolve em empresa' };
-
-    const bruto = await b3Get(`https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetListedSupplementCompany/${b64({ issuingCompany: empresa, language: 'pt-br' })}`);
-    const doc = Array.isArray(bruto) ? bruto[0] : bruto;
-    const classeAlvo = classeDoTicker(ticker);
-    const todos = (doc?.cashDividends || []).map(normalizaB3);
-    // Sem classe reconhecida no ticker, é mais honesto não filtrar e marcar o caso
-    // do que arriscar colar o provento da ON no papel PN.
-    const eventos = classeAlvo ? todos.filter((e) => classeDoIsin(e.isin) === classeAlvo) : todos;
-    return { eventos, rotulo: empresa, semFiltroDeClasse: !classeAlvo };
-};
-
-const fonteB3 = async (ticker, tipo) => (tipo === 'FII' ? b3Fii(ticker) : b3Acao(ticker));
-
-// ————————————————————————————————————————————————— fonte: Fundamentus
-
-const fundamentusHtml = async (url) => {
-    const r = await axios.get(url, { headers: HEADERS_NAVEGADOR, responseType: 'arraybuffer', timeout: 25000, decompress: true, validateStatus: () => true });
-    if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
-    return cheerio.load(iconv.decode(r.data, 'iso-8859-1'));
-};
-
-/**
- * As duas páginas têm colunas DIFERENTES e a ordem importa:
- *   FII  → Última Data Com | Tipo | Data de Pagamento | Valor
- *   Ação → Data | Valor | Tipo | Data de Pagamento | Por quantas ações
- * Ler pelo cabeçalho (e não por índice fixo) é o mesmo cuidado que
- * `config/scraperSchemas.js` aplica ao resto do Fundamentus: se o site trocar as
- * colunas de lugar, a leitura falha em vez de trocar valor por data.
- */
-const fonteFundamentus = async (ticker, tipo) => {
-    const url = tipo === 'FII'
-        ? `https://www.fundamentus.com.br/fii_proventos.php?papel=${ticker}&tipo=2`
-        : `https://www.fundamentus.com.br/proventos.php?papel=${ticker}&tipo=2`;
-    const $ = await fundamentusHtml(url);
-    const tabela = $('#resultado').first();
-    if (!tabela.length) return { eventos: [], rotulo: null, motivo: 'tabela #resultado ausente' };
-
-    const cabecalho = tabela.find('thead th').map((_, th) => $(th).text().trim().toLowerCase()).get();
-    const col = (...nomes) => cabecalho.findIndex((h) => nomes.some((n) => h.includes(n)));
-    const iCom = col('data com', 'última data com');
-    const iPag = col('data de pagamento');
-    const iVal = col('valor');
-    const iTipo = col('tipo');
-    // "Data" sozinha é a data-com na página de ações; só vale se não houver outra.
-    const iComAcao = iCom >= 0 ? iCom : cabecalho.findIndex((h) => h === 'data');
-    if (iComAcao < 0 || iPag < 0 || iVal < 0) {
-        return { eventos: [], rotulo: null, motivo: `layout inesperado: [${cabecalho.join(' | ')}]` };
-    }
-
-    const eventos = [];
-    tabela.find('tbody tr').each((_, tr) => {
-        const tds = $(tr).find('td').map((__, td) => $(td).text().trim()).get();
-        const dataCom = parseDataBr(tds[iComAcao]);
-        if (!dataCom) return;
-        eventos.push({
-            dataCom,
-            dataPagamento: parseDataBr(tds[iPag]),
-            valor: parseValorBr(tds[iVal]),
-            rotulo: iTipo >= 0 ? tds[iTipo] : '',
-            isin: null,
-        });
-    });
-    return { eventos, rotulo: `${eventos.length} linhas` };
-};
-
+// Os clientes HTTP vivem no SERVIÇO, não aqui: a auditoria tem de medir o mesmo
+// código que a ingestão executa. Uma cópia local do raspador mediria uma fonte
+// que o produto não usa — que é o jeito mais discreto de a medição mentir.
 const FONTE = {
-    b3: { nome: 'B3', buscar: fonteB3, pausaMs: 350 },
-    fundamentus: { nome: 'Fundamentus', buscar: fonteFundamentus, pausaMs: 700 },
+    b3: { nome: 'B3', buscar: CLIENTES.B3.buscar, pausaMs: 350 },
+    fundamentus: { nome: 'Fundamentus', buscar: CLIENTES.FUNDAMENTUS.buscar, pausaMs: 700 },
 };
 
 // ————————————————————————————————————————————————— casamento
 
-/**
- * Casa um evento nosso (ex-date do Yahoo) com o que a fonte publica (data-com).
- * Devolve o desfecho, e não só a data: a auditoria precisa distinguir "a fonte
- * não conhece este pagamento" de "a fonte conhece mas publica DUAS datas para
- * ele" — só o primeiro caso é falta de cobertura; o segundo é ambiguidade, e
- * importar qualquer uma das datas ali seria inventar precisão.
- */
-const casar = (nosso, eventosFonte) => {
-    const alvo = nosso.date.getTime();
-    // Candidatos pela data: comparando a ex-date com data-com e com data-com + 1
-    // dia útil, o que for mais perto. O histograma do deslocamento sai daqui.
-    const proximos = eventosFonte.filter((e) => {
-        if (!e.dataCom) return false;
-        const dCom = Math.abs(alvo - e.dataCom.getTime());
-        const dEx = Math.abs(alvo - addBusinessDays(e.dataCom, 1).getTime());
-        return Math.min(dCom, dEx) <= TOLERANCIA_DIAS * DIA_MS;
-    });
-    if (proximos.length === 0) return { desfecho: 'SEM_EVENTO' };
-
-    const bate = (v) => v != null && nosso.amount > 0 && Math.abs(v - nosso.amount) / nosso.amount <= TOLERANCIA_VALOR;
-
-    // 1) um único pagamento com o mesmo valor — o caso limpo.
-    const exatos = proximos.filter((e) => bate(e.valor));
-    if (exatos.length === 1 && exatos[0].dataPagamento) {
-        return { desfecho: 'CASADO', evento: exatos[0], offsetDias: Math.round((alvo - exatos[0].dataCom.getTime()) / DIA_MS) };
-    }
-    if (exatos.length === 1) return { desfecho: 'SEM_DATA', evento: exatos[0] };
-
-    // 2) vários pagamentos com o mesmo valor na mesma data-com: só é ambíguo se
-    //    as datas de pagamento divergirem. Iguais, a resposta é única.
-    const datasExatas = new Set(exatos.map((e) => toDateKey(e.dataPagamento)).filter(Boolean));
-    if (exatos.length > 1 && datasExatas.size === 1) {
-        return { desfecho: 'CASADO', evento: exatos[0], offsetDias: Math.round((alvo - exatos[0].dataCom.getTime()) / DIA_MS) };
-    }
-    if (exatos.length > 1) return { desfecho: 'AMBIGUO', datas: [...datasExatas] };
-
-    // 3) nenhum valor isolado bate: o Yahoo AGREGA numa linha só um SUBCONJUNTO do
-    //    que a fonte publica naquela data-com. Medido em 09/09/2026: CMIG4 em
-    //    26/12/2025 é a soma de 2 dos 3 JCP publicados, e SHUL4 em 29/12/2025 é a
-    //    soma de 3 dos 4. Testar só a soma TOTAL classificava esses casos como
-    //    "valor divergente" e cobrava da fonte um buraco que era nosso.
-    //
-    //    Duas travas contra achar subconjunto por acaso: tolerância apertada (1%,
-    //    não os 5% do casamento simples) e unicidade — se dois subconjuntos
-    //    diferentes somam o mesmo valor, o casamento não decide nada e a resposta
-    //    honesta é não casar.
-    const bateApertado = (v) => v != null && nosso.amount > 0 && Math.abs(v - nosso.amount) / nosso.amount <= 0.01;
-    const comValor = proximos.filter((e) => e.valor > 0);
-    if (comValor.length > 0 && comValor.length <= 10) {
-        const achados = [];
-        for (let mask = 1; mask < (1 << comValor.length); mask += 1) {
-            let soma = 0;
-            const membros = [];
-            for (let k = 0; k < comValor.length; k += 1) {
-                if (mask & (1 << k)) { soma += comValor[k].valor; membros.push(comValor[k]); }
-            }
-            if (bateApertado(soma)) achados.push(membros);
-        }
-        // Subconjuntos com o MESMO conjunto de datas de pagamento são a mesma
-        // resposta: contam como um só.
-        const assinatura = (m) => [...new Set(m.map((e) => toDateKey(e.dataPagamento)))].sort().join('|');
-        const distintos = new Map(achados.map((m) => [assinatura(m), m]));
-        if (distintos.size === 1) {
-            const membros = [...distintos.values()][0];
-            const datas = [...new Set(membros.map((e) => toDateKey(e.dataPagamento)).filter(Boolean))];
-            if (datas.length === 1 && membros.length && membros[0].dataCom) {
-                const comData = membros.find((e) => e.dataPagamento);
-                return { desfecho: 'CASADO', evento: comData, agregado: membros.length > 1, offsetDias: Math.round((alvo - comData.dataCom.getTime()) / DIA_MS) };
-            }
-            return { desfecho: 'AMBIGUO', datas };
-        }
-        if (distintos.size > 1) {
-            return { desfecho: 'AMBIGUO', datas: [...distintos.keys()] };
-        }
-    }
-
-    return { desfecho: 'VALOR_DIVERGENTE', candidatos: proximos.map((e) => e.valor) };
-};
+// A regra vive em utils/dividendPaymentMatch.js, a MESMA que a ingestão usa. Ela
+// nasceu aqui, mas duplicá-la faria a auditoria medir uma régua diferente da que
+// o produto aplica — e o número deixaria de dizer o que promete dizer.
+const casar = (nosso, eventosFonte) => matchPaymentDate(nosso, eventosFonte, {
+    // Provento provisório tem o valor deduzido do gap do dia-ex: aproximado por
+    // construção. Mesma exceção da ingestão.
+    permitirSoData: nosso.source === 'DERIVED',
+});
 
 // ————————————————————————————————————————————————— relatório
 
@@ -412,7 +189,7 @@ const run = async () => {
             if (!cfg) continue;
             let resultado = null;
             try {
-                resultado = await cfg.buscar(ticker, tipo);
+                resultado = { eventos: await cfg.buscar(ticker, tipo) };
                 await pausa(cfg.pausaMs);
             } catch (e) {
                 falhas[f].push({ ticker, motivo: e.message });
@@ -436,12 +213,12 @@ const run = async () => {
                 p[r.desfecho] += 1;
                 if (r.desfecho === 'CASADO') {
                     offsets[f][r.offsetDias] = (offsets[f][r.offsetDias] || 0) + 1;
-                    casadosPorFonte[f].set(String(nosso._id), r.evento.dataPagamento);
+                    casadosPorFonte[f].set(String(nosso._id), r.dataPagamento);
                     const estimada = estimatedPaymentDate(nosso.date);
-                    errosEstimativa.push(Math.round((estimada.getTime() - r.evento.dataPagamento.getTime()) / DIA_MS));
+                    errosEstimativa.push(Math.round((estimada.getTime() - r.dataPagamento.getTime()) / DIA_MS));
                     if (nosso.paymentDate) {
                         jaConhecido.conferidos += 1;
-                        if (toDateKey(nosso.paymentDate) === toDateKey(r.evento.dataPagamento)) jaConhecido.iguais += 1;
+                        if (toDateKey(nosso.paymentDate) === toDateKey(r.dataPagamento)) jaConhecido.iguais += 1;
                     }
                 } else if (r.desfecho === 'VALOR_DIVERGENTE' && amostraRuim[f].length < 12) {
                     amostraRuim[f].push(`${ticker} ex=${toDateKey(nosso.date)} nosso=${nosso.amount} fonte=[${r.candidatos.join(', ')}]`);
