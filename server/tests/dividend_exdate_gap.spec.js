@@ -25,7 +25,7 @@ const REAL = {
   KNSC11: { raw: 9.14, adj: 9.05, div: 0.09 },
   HGBS11: { raw: 18.69, adj: 18.52, div: 0.17 },
 };
-const base = { type: 'FII', priceDate: '2026-09-01', rawPrevCloseDate: '2026-08-31' };
+const base = { type: 'FII', priceDate: '2026-09-01', rawPrevCloseDate: '2026-08-31', sessionVolume: 120000 };
 
 describe('deriveDividendFromGap — derivação', () => {
   it('recupera o provento dos seis FIIs que foram ex em 01/09/2026', () => {
@@ -78,7 +78,30 @@ describe('deriveDividendFromGap — derivação', () => {
       rawPrevCloseDate: '2026-08-31',
       rawPrevClose: 449.35,
       adjustedPrevClose: 444.35,
+      sessionVolume: 50000,
     })).toBeNull();
+  });
+
+  it('exige prova de pregão: sem volume não se deriva renda', () => {
+    // Caso real de 07/09/2026 (Independência): a B3 não abriu, o Yahoo datou a
+    // barra de continuação no feriado e o gap contra o candle da véspera virou um
+    // provento de R$ 0,45 no KNCR11 que a B3 nunca publicou.
+    const feriado = { ...base, priceDate: '2026-09-07', rawPrevCloseDate: '2026-09-04', rawPrevClose: 106.82 };
+    expect(deriveDividendFromGap({ ...feriado, adjustedPrevClose: 106.37, sessionVolume: 0 })).toBeNull();
+    // Volume AUSENTE é "não sei", e "não sei" também não autoriza inventar renda.
+    expect(deriveDividendFromGap({ ...feriado, adjustedPrevClose: 106.37, sessionVolume: undefined })).toBeNull();
+    // Com pregão comprovado, a mesma conta passa.
+    expect(deriveDividendFromGap({ ...feriado, adjustedPrevClose: 106.37, sessionVolume: 90000 })).not.toBeNull();
+  });
+
+  it('descarta resíduo de arredondamento do papel caro (piso relativo)', () => {
+    // Medido em 09/09/2026: o `previousClose` do papel americano chega 1-2
+    // pontos-base distante do nosso candle e virava "provento" de US$ 0,01.
+    const us = { ...base, type: 'STOCK_US', sessionVolume: 1600000 };
+    expect(deriveDividendFromGap({ ...us, rawPrevClose: 313.70, adjustedPrevClose: 313.66 })).toBeNull(); // HD, 0,01%
+    expect(deriveDividendFromGap({ ...us, rawPrevClose: 50.41, adjustedPrevClose: 50.40 })).toBeNull(); // VZ, 0,02%
+    // Provento de verdade do mesmo dia continua passando (HPQ 0,30 em 31,68).
+    expect(deriveDividendFromGap({ ...us, rawPrevClose: 31.98, adjustedPrevClose: 31.68 })).not.toBeNull();
   });
 
   it('descarta ruído abaixo de um centavo e gap negativo', () => {
@@ -151,7 +174,7 @@ describe('marketDataService.detectExDateDividends', () => {
     ]);
   });
 
-  const quotes = [{ ticker: 'TRXF11', previousClose: 78.37, marketTime: nowInSession }];
+  const quotes = [{ ticker: 'TRXF11', previousClose: 78.37, marketTime: nowInSession, volume: 120000 }];
   const assetMap = new Map([['TRXF11', { ticker: 'TRXF11', type: 'FII' }]]);
 
   it('grava o provisório com a data-ex do dia e marca a procedência', async () => {
@@ -177,7 +200,7 @@ describe('marketDataService.detectExDateDividends', () => {
   });
 
   it('não deriva provento de IVVB11, que reinveste rendimentos na cota', async () => {
-    const ivvbQuotes = [{ ticker: 'IVVB11', previousClose: 444.35, marketTime: nowInSession }];
+    const ivvbQuotes = [{ ticker: 'IVVB11', previousClose: 444.35, marketTime: nowInSession, volume: 50000 }];
     const ivvbAssets = new Map([['IVVB11', { ticker: 'IVVB11', type: 'ETF' }]]);
 
     expect(await marketDataService.detectExDateDividends(ivvbQuotes, ivvbAssets)).toBe(0);
@@ -186,13 +209,13 @@ describe('marketDataService.detectExDateDividends', () => {
   });
 
   it('ignora cotação que não é da sessão de hoje', async () => {
-    const stale = [{ ticker: 'TRXF11', previousClose: 78.37, marketTime: new Date(`${yesterdayBr}T17:00:00.000-03:00`) }];
+    const stale = [{ ticker: 'TRXF11', previousClose: 78.37, marketTime: new Date(`${yesterdayBr}T17:00:00.000-03:00`), volume: 120000 }];
     expect(await marketDataService.detectExDateDividends(stale, assetMap)).toBe(0);
     expect(AssetHistory.aggregate).not.toHaveBeenCalled();
   });
 
   it('não consulta proventos quando nenhum gap sobrevive às travas', async () => {
-    const noGap = [{ ticker: 'TRXF11', previousClose: 79.30, marketTime: nowInSession }];
+    const noGap = [{ ticker: 'TRXF11', previousClose: 79.30, marketTime: nowInSession, volume: 120000 }];
     expect(await marketDataService.detectExDateDividends(noGap, assetMap)).toBe(0);
     expect(DividendEvent.find).not.toHaveBeenCalled();
   });

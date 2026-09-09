@@ -36,6 +36,28 @@ const DERIVABLE_TYPES = new Set(['STOCK', 'FII', 'ETF', 'STOCK_US', 'REIT']);
 const MIN_GAP = 0.01;
 
 /**
+ * PISO RELATIVO — o centavo só é ruído em relação ao PREÇO.
+ *
+ * Um centavo num FII de R$ 8 é 0,12% e pode ser provento; o mesmo centavo na
+ * Verizon de US$ 50 é 0,02% e nunca foi. Medido em 09/09/2026, o `previousClose`
+ * do papel americano chega ~1 a 2 pontos-base distante do nosso candle da véspera
+ * (o mesmo fechamento, mas arredondado em menos casas na cotação do que no
+ * histórico) e o teto absoluto de um centavo deixava esse resíduo passar: dos 45
+ * "proventos" derivados de papel dos EUA naquele dia, 40 eram de 0,00% a 0,13% do
+ * preço — VZ 0,01, HD 0,04, BRK.B 0,01 — enquanto os 5 verdadeiros (HPQ 0,95%,
+ * SPG 1,09%, YUM 0,52%, BDX 0,58%, DELL) ficavam acima de meio por cento. Nos FIIs
+ * do mesmo dia, os 35 derivados ficaram entre 0,62% e 1,80%.
+ *
+ * 0,2% passa no meio dessa distância com folga dos dois lados. O que ele custa é
+ * o JCP mensal miúdo (ITUB4 paga ~R$ 0,015 em R$ 35, 0,04%): esse não é derivado e
+ * espera a fonte publicar — que é o comportamento que existia antes desta ponte.
+ * Perder a ponte adia um crédito por 1-3 dias; deixar o resíduo passar inventa
+ * renda que nunca existiu, e inventada ela vira base do Yield on Cost, da projeção
+ * mensal e do informe de rendimentos.
+ */
+const MIN_GAP_RATIO = 0.002;
+
+/**
  * Teto de 10% do preço. O gap do `previousClose` também aparece em SPLIT e
  * BONIFICAÇÃO — que mudam a quantidade, não geram renda, e viriam aqui como um
  * "provento" gigante. Desdobramentos ficam muito acima de 10%; proventos de
@@ -91,6 +113,7 @@ const median = (values) => {
  * @param {number}   p.adjustedPrevClose `previousClose` da cotação (ajustado pelo provedor)
  * @param {string}   p.priceDate         dia BR da sessão da cotação (YYYY-MM-DD) → vira a data-ex
  * @param {string}   p.rawPrevCloseDate  dia do candle bruto (YYYY-MM-DD)
+ * @param {number}   [p.sessionVolume]   volume negociado na sessão da cotação
  * @param {number[]} [p.knownAmounts]    proventos por cota já conhecidos do ticker
  * @returns {{amount: number, exDate: string, ratio: number} | null}
  */
@@ -100,9 +123,20 @@ export const deriveDividendFromGap = ({
     adjustedPrevClose,
     priceDate,
     rawPrevCloseDate,
+    sessionVolume,
     knownAmounts = [],
 }) => {
     if (!DERIVABLE_TYPES.has(String(type || '').toUpperCase())) return null;
+
+    // PROVA DE PREGÃO, e não apenas de data. A fonte carimba a sessão do dia
+    // mesmo quando ela não existiu — feriado, madrugada antes da abertura, papel
+    // parado — e nessa barra de continuação o `previousClose` não é o par do
+    // nosso candle da véspera: aponta uma sessão mais atrás. Em 07/09/2026
+    // (Independência, B3 fechada) essa diferença virou 44 "proventos" inventados,
+    // entre eles um KNCR11 de R$ 0,45 que a B3 nunca publicou e que a carteira
+    // exibia como provisão a receber. Volume ausente é "não sei" e cai no mesmo
+    // lugar do zero: sem prova de negócio não se deriva renda.
+    if (!(Number(sessionVolume) > 0)) return null;
 
     const raw = Number(rawPrevClose);
     const adjusted = Number(adjustedPrevClose);
@@ -118,6 +152,7 @@ export const deriveDividendFromGap = ({
     if (!(gap >= MIN_GAP)) return null;
 
     const ratio = gap / raw;
+    if (!(ratio >= MIN_GAP_RATIO)) return null;
     if (!(ratio <= MAX_GAP_RATIO)) return null;
 
     // Plausibilidade contra o histórico do próprio ticker. Com menos de 3
@@ -134,6 +169,7 @@ export const deriveDividendFromGap = ({
 
 export const DIVIDEND_GAP_LIMITS = {
     MIN_GAP,
+    MIN_GAP_RATIO,
     MAX_GAP_RATIO,
     PLAUSIBILITY_MAX_MULTIPLE,
     PLAUSIBILITY_MIN_DIVISOR,
@@ -146,3 +182,11 @@ export const DIVIDEND_GAP_LIMITS = {
  * documentos coexistiriam e o pagamento seria contado duas vezes.
  */
 export const DERIVED_RECONCILE_WINDOW_MS = 4 * 86400000;
+
+/**
+ * Prazo do provisório. A fonte atrasa de 1 a 3 dias; uma semana é o dobro da
+ * pior espera medida. Depois disso, provisório sem oficial por perto não é
+ * atraso — é gap que nunca foi provento (ver
+ * `financialService.expireUnconfirmedDerivedDividends`).
+ */
+export const DERIVED_EXPIRY_MS = 7 * 86400000;

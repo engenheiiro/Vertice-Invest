@@ -811,7 +811,17 @@ describe('aposentadoria — a idade é da última prova de pregão', () => {
  * que se cobra aqui é que ele ainda aconteça — e com o veredito junto.
  */
 describe('refreshQuotesBatch — quem estava errado no salto', () => {
-  beforeEach(() => resetSourceStats());
+  // Relógio fixo na própria data do caso. O julgamento do salto contra o banco só
+  // vale com preço guardado recente (`STORED_PRICE_MAX_AGE_DAYS` = 5 dias), então
+  // com o relógio real esta suíte passava até 09/09/2026 e ficava vermelha depois,
+  // sem nada ter mudado no código — teste que apodrece pela passagem do tempo
+  // acusa o inocente, que é justamente o defeito que ele descreve.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-05T12:00:00.000Z'));
+    resetSourceStats();
+  });
+  afterEach(() => vi.useRealTimers());
 
   const quoteRBRL = { ticker: 'RBRL11', price: 73.91, change: 0.5, previousClose: 73.54, marketTime: new Date('2026-09-04T20:55:00.000Z'), source: 'YAHOO' };
 

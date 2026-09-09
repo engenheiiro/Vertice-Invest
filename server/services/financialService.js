@@ -13,7 +13,7 @@ import AuditLog from '../models/AuditLog.js'; // Novo
 import { marketDataService } from './marketDataService.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { externalMarketService } from './externalMarketService.js';
-import { DERIVED_RECONCILE_WINDOW_MS } from '../utils/dividendGap.js';
+import { DERIVED_EXPIRY_MS, DERIVED_RECONCILE_WINDOW_MS } from '../utils/dividendGap.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz, safeQuantity, addQty, subQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
@@ -865,7 +865,7 @@ export const financialService = {
      * datas coincidem, ou removido quando a fonte publica a data deslocada.
      */
     async syncDividends(assets) {
-        if (!Array.isArray(assets) || assets.length === 0) return { tickers: 0, events: 0 };
+        if (!Array.isArray(assets) || assets.length === 0) return { tickers: 0, events: 0, expirados: 0 };
 
         const seen = new Set();
         let tickerCount = 0;
@@ -965,8 +965,71 @@ export const financialService = {
             }
         }
 
+        const expirados = await this.expireUnconfirmedDerivedDividends();
+
         logger.info(`[Dividends] Sync concluído: ${eventCount} novos eventos em ${tickerCount} tickers.`);
-        return { tickers: tickerCount, events: eventCount };
+        return { tickers: tickerCount, events: eventCount, expirados };
+    },
+
+    /**
+     * O provisório tem PRAZO DE VALIDADE — e DUAS chances de ser confirmado.
+     *
+     * O provento derivado do gap é uma ponte sobre o atraso da fonte, medido em
+     * 1 a 3 dias. Passada uma semana sem que ninguém confirme aquele pagamento, a
+     * ponte não está atrasada: ela foi construída sobre um gap que não era provento
+     * — barra de continuação em dia sem pregão, `previousClose` apontando uma sessão
+     * mais atrás, resíduo de arredondamento. Sem esta expiração o provisório fica
+     * para sempre: em 09/09/2026 havia 928 eventos DERIVED, 36% de todo o razão de
+     * proventos, e nenhum caminho os retirava.
+     *
+     * CONFIRMAR NÃO É SÓ O YAHOO PUBLICAR. Medido no mesmo dia: dos 139 provisórios
+     * de FII com data-ex em 01/09, o Yahoo publicou o oficial de quase nenhum, mas
+     * a B3 datou o pagamento de 133 — com o valor batendo no centavo (HGLG11 1,17;
+     * XPLG11 0,82; MXRF11 0,10). Renda de verdade que a nossa fonte de VALOR
+     * simplesmente não conhece. Por isso `paymentDateSource` vale como confirmação:
+     * ele só é escrito quando a B3 (ou o Fundamentus) publica um pagamento cujo
+     * valor e cuja data-com casam com os nossos — ver `dividendPaymentDateService`.
+     * Sem essa segunda porta, esta rotina apagaria 133 pagamentos reais.
+     *
+     * Só apaga o que a reconciliação de `syncDividends` já teve chance de promover
+     * ou remover — por isso a janela de expiração é MAIOR que a de reconciliação.
+     * O que some é exatamente o que NENHUMA das duas fontes reconheceu.
+     */
+    async expireUnconfirmedDerivedDividends(now = new Date()) {
+        const limite = new Date(now.getTime() - DERIVED_EXPIRY_MS);
+        const provisorios = await DividendEvent.find({
+            source: 'DERIVED',
+            date: { $lt: limite },
+            paymentDateSource: { $in: [null, undefined] },
+        }).select('ticker date').lean();
+        if (provisorios.length === 0) return 0;
+
+        const tickers = [...new Set(provisorios.map((p) => p.ticker))];
+        const oficiais = await DividendEvent.find({
+            ticker: { $in: tickers },
+            source: { $ne: 'DERIVED' },
+        }).select('ticker date').lean();
+
+        const oficiaisPorTicker = new Map();
+        for (const o of oficiais) {
+            if (!oficiaisPorTicker.has(o.ticker)) oficiaisPorTicker.set(o.ticker, []);
+            oficiaisPorTicker.get(o.ticker).push(new Date(o.date).getTime());
+        }
+
+        const orfaos = provisorios.filter((p) => {
+            const t = new Date(p.date).getTime();
+            const perto = (oficiaisPorTicker.get(p.ticker) || [])
+                .some((o) => Math.abs(o - t) <= DERIVED_RECONCILE_WINDOW_MS);
+            return !perto;
+        });
+        if (orfaos.length === 0) return 0;
+
+        await DividendEvent.deleteMany({ _id: { $in: orfaos.map((o) => o._id) } });
+        logger.info('[Dividends] Provisórios expirados sem confirmação da fonte', {
+            removidos: orfaos.length,
+            tickers: [...new Set(orfaos.map((o) => o.ticker))].slice(0, 20),
+        });
+        return orfaos.length;
     },
 
     /**
@@ -1136,6 +1199,13 @@ export const financialService = {
                 }
             }
         }
+
+        // Provisões em ordem de PAGAMENTO. O laço acima varre ativo por ativo, então
+        // sem esta ordenação o card "Provisões Futuras" sai agrupado por ativo — e a
+        // pergunta que ele responde ("o que cai primeiro?") fica ilegível justamente
+        // em quem tem muitos pagadores. Empate resolvido pelo ticker, para a lista não
+        // trocar de ordem entre dois carregamentos idênticos.
+        provisioned.sort((a, b) => (a.date - b.date) || a.ticker.localeCompare(b.ticker));
 
         const yieldOnCost = relevantAssets
             .map((asset) => {

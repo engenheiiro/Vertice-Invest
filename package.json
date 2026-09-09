@@ -25,6 +25,7 @@
     "sync:dividends": "node server/scripts/syncDividends.js",
     "dividends:payment-dates": "node server/scripts/backfillDividendPaymentDates.js",
     "dividends:clean-fake-dates": "node server/scripts/cleanFabricatedPaymentDates.js",
+    "dividends:clean-phantom": "node server/scripts/cleanPhantomDerivedDividends.js",
     "audit:payment-sources": "node server/scripts/auditDividendPaymentSources.js",
     "sync:treasury": "node server/scripts/syncTreasuryPrices.js",
     "audit:rf-mtm": "node server/scripts/auditFixedIncomeMTM.js",

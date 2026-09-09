@@ -15,7 +15,7 @@
  *  - frouxa demais mantém papel morto com preço congelado no ranking para sempre.
  */
 import { describe, it, expect } from 'vitest';
-import { marketDataService } from '../services/marketDataService.js';
+import { marketDataService, isExpectedNoTrade } from '../services/marketDataService.js';
 
 const eco = (quote, asset) => marketDataService.isEchoQuote(quote, asset);
 
@@ -132,5 +132,41 @@ describe('sessão datada, mas sem negócio nenhum', () => {
 
     it('cotação ausente não é sessão vazia', () => {
         expect(semNegocio(null)).toBe(false);
+    });
+});
+
+/**
+ * PAPEL PARADO x PREGÃO QUE NÃO ABRIU — a mesma resposta da fonte, duas leituras.
+ *
+ * `isNoTradeQuote` responde "ninguém negociou nesta barra", e essa recusa é
+ * sempre certa. O que muda é o que ela SIGNIFICA: às 06h de um dia útil ela vale
+ * para todo papel da B3 e não descreve defeito nenhum — o log de um `npm run dev`
+ * de manhã abria com 14 ativos (BOVA11, PETR4, ITSA4…) num alerta que não tinha o
+ * que alertar, e o alerta de verdade sumia no meio.
+ */
+describe('sem negócio: alerta ou estado normal do mundo', () => {
+    const naHora = (dia, hora) => new Date(`${dia}T${hora}:00.000-03:00`);
+
+    it('antes da abertura, volume zero é o estado normal do mercado', () => {
+        expect(isExpectedNoTrade('2026-09-08', naHora('2026-09-08', '06:08'))).toBe(true);
+    });
+
+    it('com o pregão em curso, o papel que não negociou é o achado', () => {
+        expect(isExpectedNoTrade('2026-09-08', naHora('2026-09-08', '15:30'))).toBe(false);
+        expect(isExpectedNoTrade('2026-09-08', naHora('2026-09-08', '19:00'))).toBe(false);
+    });
+
+    it('feriado e fim de semana nunca são achado', () => {
+        // 07/09/2026 (Independência) e 06/09/2026 (domingo).
+        expect(isExpectedNoTrade('2026-09-07', naHora('2026-09-07', '11:00'))).toBe(true);
+        expect(isExpectedNoTrade('2026-09-06', naHora('2026-09-06', '11:00'))).toBe(true);
+    });
+
+    it('sessão de um dia útil passado é achado a qualquer hora', () => {
+        expect(isExpectedNoTrade('2026-09-04', naHora('2026-09-08', '06:08'))).toBe(false);
+    });
+
+    it('sem data de sessão não há o que classificar', () => {
+        expect(isExpectedNoTrade(null)).toBe(false);
     });
 });

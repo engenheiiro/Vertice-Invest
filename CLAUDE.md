@@ -40,6 +40,7 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 | Câmbio de compra e custo em BRL | `server/utils/fxRate.js` |
 | Data de pagamento de provento (fontes) | `server/services/dividendPaymentDateService.js` |
 | Casamento provento nosso × calendário da fonte | `server/utils/dividendPaymentMatch.js` |
+| Provento provisório derivado do gap do dia-ex | `server/utils/dividendGap.js` |
 | Valorização de RF (curva × mercado) | `server/utils/fixedIncome.js` |
 | Série de PU do Tesouro (ingestão) | `server/services/treasuryPriceService.js` |
 | Identidade de título do Tesouro | `server/utils/treasuryTitle.js` |
@@ -191,7 +192,7 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < ELITE (3) < BLACK (4). Definid
 
 - **Auth:** `POST /register`, `/login` (aceita `mfaToken`; responde `{mfaRequired:true}` se MFA ativo), `/logout`, `/refresh`, `/forgot-password`, `/reset-password`, `PUT /me`, `POST /tutorial-seen`
 - **MFA (auth):** `GET /mfa/status` · `POST /mfa/setup`, `/mfa/enable`, `/mfa/disable`
-- **Research:** `GET /research/latest?assetClass`, `/research/macro`, `/research/signals`, `/research/discard-logs`, `/research/accuracy`, `/research/config/tunables` (admin) · `POST /research/full-pipeline`, `/research/sync-market`, `/research/sync-macro`, `/research/publish`, `/research/crunch`, `/research/dividend-payment-dates/backfill` (admin) · `PUT /research/config/tunables` (admin)
+- **Research:** `GET /research/latest?assetClass`, `/research/macro`, `/research/signals`, `/research/discard-logs`, `/research/accuracy`, `/research/config/tunables`, `/research/dividend-payment-dates/backfill` (progresso do job; admin) · `POST /research/full-pipeline`, `/research/sync-market`, `/research/sync-macro`, `/research/publish`, `/research/crunch`, `/research/dividend-payment-dates/backfill` (dispara e responde na hora; admin) · `PUT /research/config/tunables` (admin)
 - **Docs:** `GET /api/docs` (Swagger UI), `/api/docs.json` (OpenAPI) · `GET /api/health`
 - **Wallet:** `GET /wallet`, `/wallet/history`, `/wallet/dividends`, `/wallet/cashflow`, `/wallet/transactions/:ticker`, `/wallet/performance` · `POST /wallet/add` · `PUT /wallet/:id` · `DELETE /wallet/:id`
 - **Import de carteira:** `GET /wallet/import` · `POST /wallet/import/preview` (resolve, não escreve), `/wallet/import/commit` · `DELETE /wallet/import/:batchId` (desfaz o lote)

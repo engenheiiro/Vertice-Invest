@@ -55,7 +55,7 @@ describe('financialService.syncDividends', () => {
     // upsert filtra por ticker normalizado (uppercase) + date + amount
     const firstCall = DividendEvent.updateOne.mock.calls[0][0];
     expect(firstCall.ticker).toBe('MXRF11');
-    expect(res).toEqual({ tickers: 1, events: 2 });
+    expect(res).toEqual({ tickers: 1, events: 2, expirados: 0 });
   });
 
   it('não conta evento já existente (upsertedCount 0)', async () => {
@@ -63,7 +63,7 @@ describe('financialService.syncDividends', () => {
     DividendEvent.updateOne.mockResolvedValue({ upsertedCount: 0 });
 
     const res = await financialService.syncDividends([{ ticker: 'MXRF11', type: 'FII' }]);
-    expect(res).toEqual({ tickers: 1, events: 0 });
+    expect(res).toEqual({ tickers: 1, events: 0, expirados: 0 });
   });
 
   it('ignora cripto/renda fixa/caixa e tickers repetidos', async () => {
@@ -85,7 +85,7 @@ describe('financialService.syncDividends', () => {
   it('lista vazia retorna zero sem buscar nada', async () => {
     const res = await financialService.syncDividends([]);
     expect(externalMarketService.getDividendsHistory).not.toHaveBeenCalled();
-    expect(res).toEqual({ tickers: 0, events: 0 });
+    expect(res).toEqual({ tickers: 0, events: 0, expirados: 0 });
   });
 
   it('IVVB11 não busca proventos e remove o provisório falso já gravado', async () => {
@@ -96,6 +96,58 @@ describe('financialService.syncDividends', () => {
     expect(externalMarketService.getDividendsHistory).not.toHaveBeenCalled();
     expect(DividendEvent.updateOne).not.toHaveBeenCalled();
     expect(DividendEvent.deleteMany).toHaveBeenCalledWith({ ticker: 'IVVB11', source: 'DERIVED' });
-    expect(res).toEqual({ tickers: 0, events: 0 });
+    expect(res).toEqual({ tickers: 0, events: 0, expirados: 0 });
+  });
+});
+
+/**
+ * ── O PROVISÓRIO TEM PRAZO — E DUAS CHANCES DE SER CONFIRMADO ───────────────
+ *
+ * Medido em 09/09/2026: 928 eventos DERIVED no banco (36% do razão de proventos)
+ * e nenhum caminho que os retirasse. Entre eles, 44 nasceram no feriado de 07/09,
+ * quando a B3 não abriu. Mas entre eles também estavam 133 pagamentos REAIS de
+ * FII que o Yahoo nunca publicou e que só a B3 datou — por isso confirmar não é
+ * só "a fonte de valor publicou".
+ */
+describe('financialService.expireUnconfirmedDerivedDividends', () => {
+  const dias = (n) => new Date(Date.now() - n * 86400000);
+
+  it('apaga o provisório vencido que nenhuma fonte reconheceu', async () => {
+    DividendEvent.find
+      .mockReturnValueOnce(chain([{ _id: 'p1', ticker: 'KNCR11', date: dias(10) }]))
+      .mockReturnValueOnce(chain([{ ticker: 'KNCR11', date: dias(40) }]));
+
+    expect(await financialService.expireUnconfirmedDerivedDividends()).toBe(1);
+    expect(DividendEvent.deleteMany).toHaveBeenCalledWith({ _id: { $in: ['p1'] } });
+  });
+
+  it('preserva o provisório que a fonte oficial confirmou por perto', async () => {
+    DividendEvent.find
+      .mockReturnValueOnce(chain([{ _id: 'p1', ticker: 'KNCR11', date: dias(10) }]))
+      .mockReturnValueOnce(chain([{ ticker: 'KNCR11', date: dias(9) }]));
+
+    expect(await financialService.expireUnconfirmedDerivedDividends()).toBe(0);
+    expect(DividendEvent.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('não olha para quem tem data de pagamento de fonte — a B3 já confirmou', async () => {
+    DividendEvent.find.mockReturnValue(chain([]));
+
+    expect(await financialService.expireUnconfirmedDerivedDividends()).toBe(0);
+    // O filtro exclui na consulta quem tem paymentDateSource: sem isso, os 133
+    // pagamentos de FII datados pela B3 sairiam junto com os fantasmas.
+    expect(DividendEvent.find.mock.calls[0][0]).toMatchObject({
+      source: 'DERIVED',
+      paymentDateSource: { $in: [null, undefined] },
+    });
+  });
+
+  it('provisório recente fica: a fonte ainda está no prazo de publicar', async () => {
+    DividendEvent.find.mockReturnValue(chain([]));
+    await financialService.expireUnconfirmedDerivedDividends();
+
+    const corte = DividendEvent.find.mock.calls[0][0].date.$lt;
+    const idadeDias = (Date.now() - corte.getTime()) / 86400000;
+    expect(idadeDias).toBeCloseTo(7, 1);
   });
 });

@@ -14,6 +14,7 @@ import { getTunablesSync } from './configService.js'; // (I13) tunables editáve
 import DividendEvent from '../models/DividendEvent.js';
 import { historyStorageKey, mergeCandleSeries } from '../utils/assetHistory.js';
 import { brazilDateKey } from '../utils/dateUtils.js';
+import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { loadLatestCloseBefore } from '../utils/dayCloses.js';
 import { deriveDividendFromGap } from '../utils/dividendGap.js';
 import { isAccumulatingBrEtf } from '../config/brEtfList.js';
@@ -37,6 +38,34 @@ const sessionDateKey = (marketTime) => {
     if (!marketTime) return null;
     const d = new Date(marketTime);
     return Number.isNaN(d.getTime()) ? null : brazilDateKey(d);
+};
+
+/** Hora cheia no relógio de Brasília, independente do fuso do processo. */
+const brazilHour = (date = new Date()) => Number(
+    new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }).format(date),
+);
+
+/** Abertura do pregão da B3 (BRT). Antes disso, volume zero é o estado normal do mundo. */
+const B3_OPEN_HOUR_BRT = 10;
+
+/**
+ * VOLUME ZERO É PROVA DE PAPEL PARADO — OU SÓ DE PREGÃO QUE AINDA NÃO ABRIU?
+ *
+ * A mesma resposta da fonte (sessão datada, volume 0) significa duas coisas
+ * opostas conforme a hora: às 06h de um dia útil ela vale para TODO papel da B3,
+ * porque ninguém negociou nada ainda; às 18h ela vale só para o papel que passou
+ * o pregão inteiro sem negócio — que é o sinal que `isNoTradeQuote` existe para
+ * mostrar. Sem separar as duas, o log de um `npm run dev` de manhã abria com 14
+ * ativos "sem negócio" (BOVA11, PETR4, ITSA4…) num alerta que não descreve
+ * defeito nenhum, e o alerta que descreve some no meio.
+ *
+ * Dia sem pregão (fim de semana, feriado) cai no mesmo balde: a barra de
+ * continuação do Yahoo data o dia, mas não houve sessão para negociar.
+ */
+export const isExpectedNoTrade = (sessionKey, now = new Date()) => {
+    if (!sessionKey) return false;
+    if (!isBrBusinessDay(sessionKey)) return true;
+    return sessionKey === brazilDateKey(now) && brazilHour(now) < B3_OPEN_HOUR_BRT;
 };
 
 const MAX_FAILURES_BEFORE_BLACKLIST = 10;
@@ -502,7 +531,7 @@ export const marketDataService = {
                 // ficam na cota e nunca podem virar crédito em DividendEvent.
                 if (asset.type === 'ETF' && isAccumulatingBrEtf(ticker)) continue;
                 if (sessionDateKey(quote.marketTime) !== todayBr) continue;
-                candidates.push({ ticker, type: asset.type, adjusted });
+                candidates.push({ ticker, type: asset.type, adjusted, volume: quote.volume });
             }
             if (candidates.length === 0) return 0;
 
@@ -520,6 +549,7 @@ export const marketDataService = {
                     adjustedPrevClose: c.adjusted,
                     priceDate: todayBr,
                     rawPrevCloseDate: prev.date,
+                    sessionVolume: c.volume,
                 });
                 if (derived) hits.push({ ...c, prev });
             }
@@ -562,6 +592,7 @@ export const marketDataService = {
                     adjustedPrevClose: hit.adjusted,
                     priceDate: todayBr,
                     rawPrevCloseDate: hit.prev.date,
+                    sessionVolume: hit.volume,
                     knownAmounts,
                 });
                 if (!derived) continue;
@@ -912,12 +943,28 @@ export const marketDataService = {
             // respondeu, e com data de ontem) nem no eco (o preço até muda). Sem
             // esta linha, o único vestígio de HGPO11 & cia. no log era um ativo
             // saudável sendo cotado a cada 15 minutos.
+            //
+            // Só entra como ALERTA o que aconteceu num pregão que houve e já
+            // começou (ver isExpectedNoTrade). O resto — madrugada, feriado, fim de
+            // semana — é registrado em debug: continua auditável no arquivo, sem
+            // gastar a atenção de quem lê o terminal.
             if (noTradeTickers.length > 0) {
-                logger.warn(
-                    `🈳 [MarketData] ${noTradeTickers.length} ativo(s) com sessão datada mas SEM negócio `
-                    + `(volume zero) — não gravada como preço: ${noTradeTickers.join(', ')}`,
-                    { noTrade: noTradeTickers },
-                );
+                const esperados = noTradeTickers.filter((e) => isExpectedNoTrade(e.split('@')[1], now));
+                const alertaveis = noTradeTickers.filter((e) => !isExpectedNoTrade(e.split('@')[1], now));
+                if (alertaveis.length > 0) {
+                    logger.warn(
+                        `🈳 [MarketData] ${alertaveis.length} ativo(s) com sessão datada mas SEM negócio `
+                        + `(volume zero) — não gravada como preço: ${alertaveis.join(', ')}`,
+                        { noTrade: alertaveis },
+                    );
+                }
+                if (esperados.length > 0) {
+                    logger.debug(
+                        `🈳 [MarketData] ${esperados.length} ativo(s) sem negócio fora do pregão `
+                        + '(mercado fechado ou ainda não aberto) — nada gravado.',
+                        { noTradeExpected: esperados },
+                    );
+                }
             }
 
             // Suspeita não é falha, e o log precisa dizer isso: o preço FOI
