@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWallet } from '../../contexts/WalletContext';
 import { AssetList } from './AssetList';
@@ -253,5 +253,32 @@ describe('AssetList — subdivisão de Exterior', () => {
         render(<AssetList />);
 
         expect(screen.getAllByText('Stocks 10% · REITs 10% · ETFs 70% · Dólar 10%')).toHaveLength(2);
+    });
+});
+
+describe('AssetList — repartição por setor no mobile', () => {
+    beforeEach(() => {
+        vi.mocked(useWallet).mockReturnValue({
+            assets: [asset({ id: 'stock', ticker: 'PETR4', totalValue: 100, totalCost: 80 })],
+            removeAsset: vi.fn(),
+            kpis: { totalEquity: 100 },
+            targetAllocation: {},
+            isPrivacyMode: false,
+        } as any);
+    });
+
+    // O chip mora numa faixa própria (botão dentro de botão é HTML inválido), e
+    // no mobile toda classe nasce contraída: deixá-lo sempre visível abria uma
+    // segunda linha meio vazia em cada classe com setor/indexador.
+    it('mostra o chip de setores só com a classe aberta', () => {
+        setMobileViewport(true);
+        const { container } = render(<AssetList />);
+        const mobile = container.querySelector('[class~="md:hidden"]') as HTMLElement;
+
+        expect(within(mobile).queryByText('Setores')).not.toBeInTheDocument();
+
+        fireEvent.click(within(mobile).getByRole('button', { expanded: false }));
+
+        expect(within(mobile).getByText('Setores')).toBeInTheDocument();
     });
 });

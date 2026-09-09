@@ -329,8 +329,15 @@ export const AssetList = () => {
                                     </span>
                                 </button>
 
-                                {/* Fora do <button> do cabeçalho: botão dentro de botão é HTML inválido. */}
-                                {sectorKind && (
+                                {/* Fora do <button> do cabeçalho: botão dentro de botão é HTML inválido —
+                                    daí a faixa própria. Ela só existe com a classe ABERTA: no mobile
+                                    todas nascem contraídas, e uma faixa extra em três das seis classes
+                                    quebrava o ritmo da lista (linhas de alturas diferentes, chip solto
+                                    à esquerda sem nada ao lado). Contraído, cada classe é uma linha só;
+                                    a repartição por setor/indexador é detalhe do grupo que você abriu.
+                                    Não cabe no cabeçalho: o alvo de toque de 36px come a largura do
+                                    rótulo, e "Fundos Imobiliários" já vai no limite em 375px. */}
+                                {sectorKind && !isCollapsed && (
                                     <div className="flex px-4 pb-3 -mt-1 bg-panel">
                                         <SectorPopover items={groupItems} kind={sectorKind} isPrivacyMode={isPrivacyMode} variant="touch" />
                                     </div>
