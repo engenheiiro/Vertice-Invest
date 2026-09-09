@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutGrid, Wallet, BrainCircuit, Radar, MoreHorizontal,
+  LayoutGrid, Wallet, Bot, Radar, MoreHorizontal,
   BarChart3, Calculator, GraduationCap, Crown, User as UserIcon, Settings, LogOut, X, Target, GitCompare,
   Anchor,
 } from 'lucide-react';
@@ -22,7 +22,9 @@ import { HOME_ROUTE, TERMINAL_ROUTE } from '../../config/homeRoute';
 const PRIMARY = [
   { to: HOME_ROUTE, label: 'Carteira', icon: Wallet },
   { to: TERMINAL_ROUTE, label: 'Terminal', icon: LayoutGrid },
-  { to: '/research', label: 'Research', icon: BrainCircuit },
+  // Mesmo robô do menu Análise no desktop: o Research é o mesmo destino nas
+  // duas larguras e trocar de ícone entre elas fazia parecer outra seção.
+  { to: '/research', label: 'Research', icon: Bot },
   { to: '/radar', label: 'Radar', icon: Radar },
 ];
 
