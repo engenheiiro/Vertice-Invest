@@ -626,6 +626,17 @@ describe('refreshQuotesBatch — variação contestada', () => {
  * marcavam 40 dias de quarentena em vez de 104: a baixa era adiada a cada toque.
  */
 describe('aposentadoria — a idade é da última prova de pregão', () => {
+  // Relógio fixo ao MEIO-DIA UTC: o serviço conta idade por chave de dia
+  // (`YYYY-MM-DD` lido como meio-dia UTC), enquanto o teste monta as datas
+  // subtraindo 24h do instante corrente. Rodando perto da virada do dia em UTC
+  // (21h BRT), as duas réguas discordavam em 1 dia e "104d" virava "103d".
+  const HOJE = new Date('2026-09-08T12:00:00.000Z');
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(HOJE);
+  });
+  afterEach(() => vi.useRealTimers());
+
   const daysAgo = (d) => new Date(Date.now() - d * 86400000);
   const dayKeyAgo = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
 
