@@ -3,6 +3,7 @@ import AssetTransaction from '../models/AssetTransaction.js';
 import UserAsset from '../models/UserAsset.js';
 import DividendEvent from '../models/DividendEvent.js';
 import { financialService } from './financialService.js';
+import { resolvePaymentDate } from '../utils/dividendPaymentDate.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { isBusinessDay } from '../utils/dateUtils.js';
 
@@ -427,9 +428,13 @@ export const taxReportService = {
             seen.add(identity);
 
             const exDate = new Date(ev.date);
-            // Data de recebimento: pagamento informado ou ex-date + 15 dias (mesma
-            // heurística do calculateUserDividends).
-            const payDate = ev.paymentDate ? new Date(ev.paymentDate) : new Date(new Date(ev.date).setDate(exDate.getUTCDate() + 15));
+            // Data de recebimento pela régua ÚNICA do serviço (oficial, ou ex+15
+            // em UTC). Aqui havia a conta feita à mão, lendo o dia em UTC e
+            // escrevendo com setDate LOCAL: para ex-date no dia 1º o mês local
+            // ainda era o anterior e o pagamento voltava um MÊS (2027-01-01 →
+            // 2026-12-17), jogando a renda de um FII que fica ex em 1º de janeiro
+            // para o ano ANTERIOR do informe de rendimentos.
+            const payDate = resolvePaymentDate(ev).date;
             if (payDate.getUTCFullYear() !== year) continue;
 
             const qty = qtyHeldOn(ev.ticker, exDate);

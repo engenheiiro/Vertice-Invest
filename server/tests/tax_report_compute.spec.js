@@ -126,3 +126,41 @@ describe('taxReportService.computeReport — cenário completo', () => {
         expect(r.positions).toHaveLength(0);
     });
 });
+
+/**
+ * Ano do provento SEM data de pagamento publicada (82% dos eventos do banco).
+ * A data de recebimento é estimada (ex + 15 dias) e o informe filtra por ANO —
+ * então a aritmética da estimativa decide em qual declaração a renda entra.
+ * O cálculo antigo lia o dia em UTC e escrevia com setDate LOCAL: num processo em
+ * BRT, ex-date no dia 1º voltava um MÊS (2027-01-01 → 2026-12-17) e a renda de um
+ * FII que fica ex em 1º de janeiro era declarada no ano ANTERIOR.
+ */
+describe('taxReportService.computeReport — ano do provento estimado', () => {
+    const ASSETS = [{ ticker: 'HGLG11', type: 'FII', currency: 'BRL', name: 'CSHG Logística' }];
+    const TXS = [{ ticker: 'HGLG11', type: 'BUY', quantity: 100, price: 100, date: d('2026-02-01') }];
+    // Ex-date em 1º de janeiro de 2027, sem paymentDate: recebimento estimado 16/01/2027.
+    const EVENTS = [{ ticker: 'HGLG11', type: 'DIVIDEND', amount: 1, date: new Date('2027-01-01T00:00:00.000Z') }];
+
+    it('ex-date em 1º de janeiro entra na declaração do ANO da ex-date', async () => {
+        mockTxs(TXS); mockAssets(ASSETS); mockDividends(EVENTS);
+        const r = await taxReportService.computeReport('user1', 2027);
+        expect(r.dividends.total).toBeCloseTo(100, 2);
+    });
+
+    it('e NÃO vaza para a declaração do ano anterior', async () => {
+        mockTxs(TXS); mockAssets(ASSETS); mockDividends(EVENTS);
+        const r = await taxReportService.computeReport('user1', 2026);
+        expect(r.dividends.total).toBe(0);
+    });
+
+    it('data de pagamento oficial continua mandando no ano (vira 2028)', async () => {
+        mockTxs(TXS); mockAssets(ASSETS);
+        mockDividends([{
+            ticker: 'HGLG11', type: 'DIVIDEND', amount: 1,
+            date: new Date('2027-12-28T00:00:00.000Z'),
+            paymentDate: new Date('2028-01-10T00:00:00.000Z'),
+        }]);
+        expect((await taxReportService.computeReport('user1', 2027)).dividends.total).toBe(0);
+        expect((await taxReportService.computeReport('user1', 2028)).dividends.total).toBeCloseTo(100, 2);
+    });
+});

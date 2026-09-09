@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, AreaChart, Area, YAxis, CartesianGrid } from 'recharts';
-import { Coins, CalendarCheck, TrendingUp, CheckCircle2, Clock, Calculator, Award } from 'lucide-react';
+import { Coins, CalendarCheck, TrendingUp, CheckCircle2, Clock, Calculator, Award, HelpCircle } from 'lucide-react';
 import { useDemo } from '../../contexts/DemoContext';
 import { useWallet } from '../../contexts/WalletContext';
 import { DEMO_DIVIDENDS } from '../../data/DEMO_DATA';
@@ -16,7 +16,12 @@ interface DividendData {
         value: number;
         breakdown?: { ticker: string; amount: number }[];
     }[];
-    provisioned: { ticker: string; date: string; amount: number }[];
+    // `isEstimatedDate`: a data não foi anunciada pelo emissor — é ex-date + 15
+    // dias, a estimativa do backend (a fonte de proventos só publica a ex-date).
+    // Ausente/false = data oficial. A tela precisa distinguir as duas: exibir a
+    // estimativa como se fosse fato faz o usuário achar que o sistema errou
+    // quando o dinheiro cai antes (caso real: GGRC11 pago em 09/09, exibido 16/09).
+    provisioned: { ticker: string; date: string; amount: number; isEstimatedDate?: boolean }[];
     totalAllTime?: number;
     projectedMonthly?: number;
     yieldOnCost?: YieldOnCostItem[];
@@ -27,6 +32,10 @@ interface DividendData {
 }
 
 const SIMULATOR_PERIODS = [5, 10, 20, 30] as const;
+
+// Explica o "~" e o selo "Previsto" sem poluir o card: a fonte de proventos
+// publica a data-ex (quem recebe), nunca a data de pagamento (quando cai).
+const ESTIMATED_DATE_HINT = 'Data estimada (data-ex + 15 dias). O emissor ainda não anunciou a data de pagamento — o crédito pode cair antes ou depois.';
 
 export const DividendDashboard = () => {
     const [data, setData] = useState<DividendData>({ history: [], provisioned: [], totalAllTime: 0, projectedMonthly: 0, yieldOnCost: [], accrued: undefined, goal: null });
@@ -290,7 +299,11 @@ export const DividendDashboard = () => {
                 <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 max-h-[220px]">
                     {data.provisioned.length > 0 ? (
                         data.provisioned.map((item, idx) => {
-                            const received = isDatePassed(item.date);
+                            // "Creditado" só com data OFICIAL: numa data estimada o
+                            // sistema não sabe se o dinheiro caiu, e afirmar que caiu
+                            // é pior do que dizer que não sabe.
+                            const isEstimated = item.isEstimatedDate === true;
+                            const received = !isEstimated && isDatePassed(item.date);
                             const ticker = (item.ticker || 'DIV').trim().toUpperCase().replace(/\.SA$/, '');
                             const asset = assetsByTicker.get(ticker);
                             return (
@@ -307,8 +320,13 @@ export const DividendDashboard = () => {
                                         />
                                         <div>
                                             <p className="text-xs font-bold text-white">{item.ticker}</p>
-                                            <p className="text-[10px] text-slate-500">
-                                                {item.date ? new Date(item.date).toLocaleDateString('pt-BR') : '-'}
+                                            <p
+                                                className="text-[10px] text-slate-500"
+                                                title={isEstimated ? ESTIMATED_DATE_HINT : undefined}
+                                            >
+                                                {item.date
+                                                    ? `${isEstimated ? '~ ' : ''}${new Date(item.date).toLocaleDateString('pt-BR')}`
+                                                    : '-'}
                                             </p>
                                         </div>
                                     </div>
@@ -318,6 +336,13 @@ export const DividendDashboard = () => {
                                         {received ? (
                                             <span className="text-[9px] text-emerald-500 flex items-center justify-end gap-1 font-bold">
                                                 <CheckCircle2 size={10} /> Creditado
+                                            </span>
+                                        ) : isEstimated ? (
+                                            <span
+                                                className="text-[9px] text-slate-400 flex items-center justify-end gap-1 font-bold"
+                                                title={ESTIMATED_DATE_HINT}
+                                            >
+                                                <HelpCircle size={10} /> Previsto
                                             </span>
                                         ) : (
                                             <span className="text-[9px] text-blue-400 flex items-center justify-end gap-1 font-bold">

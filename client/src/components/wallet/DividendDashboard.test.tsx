@@ -127,3 +127,52 @@ describe('simulador de reinvestimento', () => {
     });
   });
 });
+
+/**
+ * Data prevista x data anunciada nas Provisões Futuras.
+ *
+ * Regressão do relato de 09/09/2026: GGRC11 ficou ex em 02/09, PAGOU em 09/09, e o
+ * card exibia "Agendado 16/09" — uma data que ninguém anunciou, apenas a estimativa
+ * ex+15 do backend. Exibir chute com cara de fato faz o usuário concluir que o
+ * sistema errou. Quando `isEstimatedDate` vem true, a data sai com "~" e o selo é
+ * "Previsto"; "Creditado" fica reservado a data OFICIAL já vencida.
+ */
+describe('provisões futuras — data estimada x oficial', () => {
+  const renderWith = async (provisioned: any[]) => {
+    getDividends.mockResolvedValue({
+      history: [], provisioned, totalAllTime: 0, projectedMonthly: 0, yieldOnCost: [], goal: null,
+    } as any);
+    render(<DividendDashboard />);
+    await waitFor(() => expect(screen.getByText('Provisões Futuras')).toBeInTheDocument());
+  };
+
+  it('data estimada aparece com "~" e selo "Previsto"', async () => {
+    await renderWith([{ ticker: 'GGRC11', date: '2026-09-17T00:00:00.000Z', amount: 0.20, isEstimatedDate: true }]);
+
+    expect(screen.getByText('Previsto')).toBeInTheDocument();
+    expect(screen.getByText(/^~ \d{2}\/\d{2}\/\d{4}$/)).toBeInTheDocument();
+    expect(screen.queryByText('Agendado')).not.toBeInTheDocument();
+    expect(screen.queryByText('Creditado')).not.toBeInTheDocument();
+  });
+
+  it('data oficial futura continua "Agendado", sem "~"', async () => {
+    await renderWith([{ ticker: 'KNCR11', date: '2099-09-15T00:00:00.000Z', amount: 12.5 }]);
+
+    expect(screen.getByText('Agendado')).toBeInTheDocument();
+    expect(screen.queryByText('Previsto')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^~ /)).not.toBeInTheDocument();
+  });
+
+  // Os dois testes abaixo usam a MESMA data no passado: só a procedência muda o
+  // selo, porque sobre uma estimativa o sistema não sabe se o dinheiro caiu.
+  it('data OFICIAL vencida vira "Creditado"', async () => {
+    await renderWith([{ ticker: 'HGLG11', date: '2020-01-10T00:00:00.000Z', amount: 5 }]);
+    expect(screen.getByText('Creditado')).toBeInTheDocument();
+  });
+
+  it('estimativa vencida NÃO afirma o crédito — continua "Previsto"', async () => {
+    await renderWith([{ ticker: 'HGLG11', date: '2020-01-10T00:00:00.000Z', amount: 5, isEstimatedDate: true }]);
+    expect(screen.getByText('Previsto')).toBeInTheDocument();
+    expect(screen.queryByText('Creditado')).not.toBeInTheDocument();
+  });
+});

@@ -17,6 +17,7 @@ import { DERIVED_RECONCILE_WINDOW_MS } from '../utils/dividendGap.js';
 import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz, safeQuantity, addQty, subQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
+import { normalizeToUtcDay, resolvePaymentDate as resolvePaymentDateUtil } from '../utils/dividendPaymentDate.js';
 import { classifyUsAsset } from '../utils/usClassification.js';
 import { isGoldTicker } from '../utils/goldClassification.js';
 import { isDollarized as isDollarizedAsset, resolveTransactionCurrency } from '../utils/assetCurrency.js';
@@ -50,12 +51,18 @@ export const financialService = {
     // soma de proventos. Por isso o valor NÃO entra na identidade: mesmo ticker
     // + mesma ex-date = mesmo provento. `type` distingue DIVIDEND × JCP etc.
     normalizeDividendDate(date) {
-        const d = new Date(date);
-        return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+        return normalizeToUtcDay(date);
     },
 
     roundDividendAmount(amount) {
         return Math.round((Number(amount) || 0) * 1e6) / 1e6;
+    },
+
+    // Data de pagamento pela régua ÚNICA do projeto (utils/dividendPaymentDate.js):
+    // a oficial quando a fonte publica, senão ex-date + 15 dias em UTC, marcada como
+    // estimativa. Mantido como método porque os call sites internos usam `this`.
+    resolvePaymentDate(event) {
+        return resolvePaymentDateUtil(event);
     },
 
     // Chave de deduplicação: ticker + dia (UTC) + type. Sem o valor por ação.
@@ -297,8 +304,8 @@ export const financialService = {
                         sinceTotal = safeAdd(sinceTotal, value);
                         sinceByTicker[div.ticker] = safeAdd(sinceByTicker[div.ticker] || 0, value);
                     }
-                    // Sem paymentDate, a mesma convenção do resto do serviço: ex + 15d.
-                    const payKey = this.toDateKey(div.paymentDate || new Date(new Date(day).getTime() + 15 * 86400000));
+                    // Oficial quando existe; senão a estimativa única do serviço.
+                    const payKey = this.toDateKey(this.resolvePaymentDate({ date: day, paymentDate: div.paymentDate }).date);
                     if (payKey <= throughDayKey) paid = safeAdd(paid, value);
                 }
             }
@@ -1077,12 +1084,21 @@ export const financialService = {
                 const totalValue = safeMult(asset.quantity, event.amount);
 
                 if (totalValue > 0) {
-                    const pDate = event.paymentDate || new Date(new Date(event.date).setDate(event.date.getDate() + 15));
+                    const { date: pDate, isEstimated } = this.resolvePaymentDate(event);
                     const today = new Date();
                     const isFuture = pDate > today;
 
                     if (isFuture) {
-                        provisioned.push({ ticker: asset.ticker, date: pDate, amount: totalValue, isProvisioned: true });
+                        // `isEstimatedDate` viaja até a tela: sem ele o card exibia
+                        // ex+15 como se fosse data anunciada pelo emissor (caso real:
+                        // GGRC11 pago em 09/09/2026 e exibido como "Agendado 16/09").
+                        provisioned.push({
+                            ticker: asset.ticker,
+                            date: pDate,
+                            amount: totalValue,
+                            isProvisioned: true,
+                            isEstimatedDate: isEstimated,
+                        });
                     } else {
                         const monthKey = pDate.toISOString().substring(0, 7);
                         if (!dividendMap.has(monthKey)) dividendMap.set(monthKey, { total: 0, breakdown: [] });

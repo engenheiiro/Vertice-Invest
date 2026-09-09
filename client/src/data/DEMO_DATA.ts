@@ -178,9 +178,13 @@ export const DEMO_DIVIDENDS = {
         { month: demoMonthKey(2),  value: 5.10, breakdown: [{ ticker: 'WEGE3', amount: 5.10 }] },
         { month: demoMonthKey(1),  value: 7.12, breakdown: [{ ticker: 'NVDA', amount: 7.12 }] },
     ],
+    // `isEstimatedDate` espelha o mundo real: a fonte de proventos publica a
+    // data-ex, não a de pagamento — no BR a data quase sempre é estimada; a
+    // demo mostra os dois selos ("Previsto" e "Agendado") em vez de sugerir
+    // uma precisão que o produto não tem.
     provisioned: [
-        { ticker: 'WEGE3', date: demoFutureDate(1, 20), amount: 2.80 },
-        { ticker: 'SBSP3', date: demoFutureDate(2, 15), amount: 3.15 },
+        { ticker: 'WEGE3', date: demoFutureDate(1, 20), amount: 2.80, isEstimatedDate: true },
+        { ticker: 'SBSP3', date: demoFutureDate(2, 15), amount: 3.15, isEstimatedDate: true },
         { ticker: 'NVDA', date: demoFutureDate(2, 28), amount: 5.20 }
     ],
     totalAllTime: 46.72,
