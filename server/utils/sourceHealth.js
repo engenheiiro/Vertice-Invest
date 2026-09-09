@@ -241,7 +241,23 @@ export const SOURCE_CATALOG = {
         group: 'series',
         feeds: 'A barra de indicadores do topo do site',
         schedule: { kind: 'minutes', at: [5, 20, 35, 50] },
+        chain: 'indices',
         critical: true,
+    },
+    // Ganhou reserva em 09/09/2026, e até ali era o único ponto único de falha
+    // entre as chamadas do Yahoo que precisam de crumb: quando o 429 do crumb
+    // derrubou cotação, câmbio e índices no mesmo minuto, os dois primeiros
+    // tinham para onde ir e este não tinha — o macro-sync só deixava de escrever
+    // `ibov`/`spx` e a barra do topo seguia exibindo o número da véspera.
+    'yahoo.indices.chart': {
+        label: 'Yahoo Finance — índices (candle)',
+        short: 'Índice candle',
+        role: 'Último fechamento',
+        group: 'series',
+        feeds: 'Fechamento do Ibovespa e do S&P 500 quando a cotação ao vivo do Yahoo falha',
+        schedule: { kind: 'onFailure' },
+        chain: 'indices',
+        critical: false,
     },
 
     // --- Renda fixa e fundamentos ---

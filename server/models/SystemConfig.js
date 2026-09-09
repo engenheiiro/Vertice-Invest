@@ -48,11 +48,27 @@ const SystemConfigSchema = new mongoose.Schema({
   // Cache de Índices
   ibov: { type: Number, default: 128000 },
   ibovChange: { type: Number, default: 0 },
-  ibovReturn12m: { type: Number, default: 15.50 }, 
-  
+  ibovReturn12m: { type: Number, default: 15.50 },
+
   spx: { type: Number, default: 5800 },
   spxChange: { type: Number, default: 0 },
   spxReturn12m: { type: Number, default: 32.50 },
+
+  // Observabilidade do bloco de ÍNDICES — mesmo motivo, e mesmo defeito, do
+  // bloco de moedas acima. O painel de fontes creditava a entrega dos índices a
+  // `lastUpdated`, que avança a cada run do macro-sync mesmo quando os índices
+  // não vieram: em 09/09/2026 o card exibia "recebeu há 6 min" ao lado de
+  // "SEM RECEBER", porque os dois relógios liam coisas diferentes e só um era
+  // sobre índice. Sem carimbo próprio, Ibovespa congelado é indistinguível de
+  // Ibovespa parado porque o mercado fechou.
+  indicesStale: { type: Boolean, default: false },
+  // Fonte efetiva de cada índice: 'Yahoo' | 'Yahoo (candle)' | null.
+  indicesSources: {
+    ibov: { type: String, default: null },
+    spx: { type: String, default: null },
+  },
+  // Último instante em que OS DOIS índices vieram de fonte real.
+  indicesUpdatedAt: { type: Date, default: null },
   
   btc: { type: Number, default: 90000 },
   btcChange: { type: Number, default: 0 },

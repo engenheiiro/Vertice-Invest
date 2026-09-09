@@ -22,7 +22,26 @@ const yahooFinance = new YahooFinance({
 // Cooldown do Yahoo bem mais longo que os demais: quando a Yahoo rate-limita o
 // endpoint de crumb (datacenter IP), insistir a cada 30s só prolonga o bloqueio.
 // 2min dá tempo de Yahoo "esfriar" e ainda recupera bem dentro da cadência dos crons.
-const yahooBreaker = createCircuitBreaker({ name: 'yahoo', failureThreshold: 4, cooldownMs: 120_000 });
+//
+// SÃO DOIS BREAKERS PORQUE SÃO DOIS PORTÕES, e um deles é o crumb.
+//
+// O `quote` (v7) exige crumb: a biblioteca busca cookie + crumb em
+// `/v1/test/getcrumb` antes de cada chamada, e é ESSE endpoint que a Yahoo
+// rate-limita por IP de datacenter. O `chart` (v8) não pede crumb nenhum —
+// `needsCrumb` só está ligado em quote/quoteSummary/options/screener. Por isso
+// eles não caem juntos, e por isso o candle é o segundo elo da cadeia de cotação.
+//
+// Enquanto os dois dividiam um breaker, o arranjo podia se anular sozinho: um
+// fusível só, para dois portões independentes. Quatro falhas de crumb no lote
+// abriam o circuito do candle junto — e o candle é o elo que ATENDE o lote
+// quando ele cai (182 ativos em 09/09/2026, com a cotação em 429).
+//
+// O custo de perdê-lo não é "ficar sem preço" (o Google atende), é a QUALIDADE
+// do que entra: o scraping do Google não publica volume e devolve variação
+// zerada, e é volume que separa papel morto de papel vivo (`isNoTradeQuote`) e
+// variação que alimenta as altas e baixas do dia. O candle traz os dois.
+const yahooQuoteBreaker = createCircuitBreaker({ name: 'yahoo-quote', failureThreshold: 4, cooldownMs: 120_000 });
+const yahooChartBreaker = createCircuitBreaker({ name: 'yahoo-chart', failureThreshold: 4, cooldownMs: 120_000 });
 
 // Teto da chamada de câmbio. Curto de propósito: quem espera por ela é o
 // macro-sync inteiro, e há duas fontes atrás na cadeia — desistir rápido e cair
@@ -34,7 +53,7 @@ const brapiBreaker = createCircuitBreaker({ name: 'brapi', failureThreshold: 5, 
 // report só mostra "breaker aberto após N falhas" (opaco) e leva a diagnosticar
 // tickers BR como "deslistados" quando o fallback está apenas sem cota do plano free.
 let brapiQuotaWarned = false;
-// Breaker dedicado a proventos: não reaproveita o `yahooBreaker` de cotações
+// Breaker dedicado a proventos: não reaproveita o `yahooQuoteBreaker` de cotações
 // (chamado em lote, alta frequência) para que falhas de uma responsabilidade
 // não abram o circuito da outra. Sem fallback de terceiro provedor — o Brapi
 // não inclui o módulo `dividends` no plano de token atual do projeto.
@@ -196,7 +215,7 @@ export const externalMarketService = {
             // existe, em vez de `TAO22974-USD`).
             const symbol = this._providerSymbol(ticker, type);
             // 10 dias cobre feriado prolongado sem trazer série longa à toa.
-            const result = await trackSource('yahoo.chart', () => yahooBreaker.exec(() => yahooFinance.chart(
+            const result = await trackSource('yahoo.chart', () => yahooChartBreaker.exec(() => yahooFinance.chart(
                 symbol,
                 { period1: new Date(Date.now() - 10 * 86400000), interval: '1d' },
             )), { isEmpty: (r) => !(r?.quotes?.length > 0) });
@@ -276,7 +295,7 @@ export const externalMarketService = {
         try {
             const inicio = new Date(`${dayStr}T00:00:00.000Z`);
             const fim = new Date(inicio.getTime() + 86400000);
-            const result = await trackSource('yahoo.hourly', () => yahooBreaker.exec(() => yahooFinance.chart(
+            const result = await trackSource('yahoo.hourly', () => yahooChartBreaker.exec(() => yahooFinance.chart(
                 symbol,
                 { period1: inicio, period2: fim, interval: '1h' },
             )), { isEmpty: (r) => !(r?.quotes?.length > 0) });
@@ -542,7 +561,7 @@ export const externalMarketService = {
             // Sem retry em 429/crumb: é rate-limit de IP, repetir em 300ms não ajuda
             // e só soma mais uma tacada no endpoint já bloqueado.
             const results = await measurePerformance('external', 'YAHOO quote-batch', () => trackSource('yahoo.quotes', () =>
-                yahooBreaker.exec(() => withRetry(
+                yahooQuoteBreaker.exec(() => withRetry(
                     () => yahooFinance.quote(yahooTickers, {}, { validateResult: false }),
                     { retries: 1, baseDelayMs: 300, shouldRetry: (err) => !/429|crumb/i.test(err?.message || '') },
                 ))));
@@ -645,24 +664,102 @@ export const externalMarketService = {
         }
     },
 
-    // Busca índices globais para Dashboard (Snapshot Instantâneo)
+    /**
+     * ÍNDICES GLOBAIS (Ibovespa e S&P 500) — barra do topo e Dashboard.
+     *
+     * Era a ÚNICA chamada com crumb sem reserva nenhuma, e o painel de fontes
+     * dizia isso com todas as letras: "INDEPENDENTE — NÃO SUBSTITUI AS DE CIMA".
+     * Em 09/09/2026 o custo apareceu: o `quote` do Yahoo caiu por 429 no crumb e
+     * as três chamadas que dependem dele caíram juntas (cotação, câmbio, índices).
+     * Cotação tinha o candle atrás, câmbio tinha Coinbase e PTAX — os índices não
+     * tinham ninguém, e o `catch` devolvia `{}` em silêncio. `performMacroSync`
+     * então simplesmente não escrevia `ibov`/`spx`, e a barra do topo seguia
+     * mostrando o número da última vez que deu certo, sem nada dizer que era velho.
+     *
+     * A reserva é o mesmo provedor por um endpoint que NÃO pede crumb (v8/chart),
+     * exatamente como na cadeia de cotação. Custa duas requisições e responde com
+     * o último fechamento — que é pior que o valor ao vivo e muito melhor que o
+     * valor de anteontem apresentado como o de hoje.
+     *
+     * Cobre só `^BVSP` e `^GSPC`: são os dois que alguém consome. `^IXIC` continua
+     * sendo pedido na principal (barato, e o dia em que a Nasdaq for exibida ele
+     * já está lá), mas não vale uma requisição extra na reserva por ninguém.
+     */
     async getGlobalIndices() {
+        // `source` viaja junto com o número porque quem grava precisa dizer, no
+        // painel, QUAL elo entregou — e "veio do candle" é a diferença entre o
+        // índice ao vivo e o fechamento anterior.
+        const montar = (q) => (q && q.regularMarketPrice > 0
+            ? { value: q.regularMarketPrice, change: q.regularMarketChangePercent || 0, source: 'Yahoo' }
+            : null);
+
         try {
             const quotes = await measurePerformance('external', 'YAHOO global-indices', () => trackSource('yahoo.indices', () =>
-                yahooFinance.quote(['^BVSP', '^GSPC', '^IXIC'])));
-            const result = {};
+                yahooFinance.quote(['^BVSP', '^GSPC', '^IXIC']), { isEmpty: (r) => !(Array.isArray(r) ? r.length : r) }));
             const find = (s) => (Array.isArray(quotes) ? quotes : [quotes]).find(q => q.symbol === s);
-            
-            const ibov = find('^BVSP');
-            if (ibov) result.ibov = { value: ibov.regularMarketPrice, change: ibov.regularMarketChangePercent };
-            
-            const spx = find('^GSPC');
-            if (spx) result.spx = { value: spx.regularMarketPrice, change: spx.regularMarketChangePercent };
 
-            return result;
+            const result = {};
+            const ibov = montar(find('^BVSP'));
+            if (ibov) result.ibov = ibov;
+            const spx = montar(find('^GSPC'));
+            if (spx) result.spx = spx;
+
+            // Cobertura PARCIAL também é falha desta fonte: com um dos dois
+            // faltando, quem completa é a reserva. Sem isto, o índice ausente
+            // ficaria congelado do mesmo jeito, só que sem 429 para culpar.
+            if (result.ibov && result.spx) return result;
+            return { ...(await this.fetchIndicesFromChart()), ...result };
         } catch {
-            return {};
+            return await this.fetchIndicesFromChart();
         }
+    },
+
+    /**
+     * Índices pelo candle — a reserva crumb-free de `getGlobalIndices`.
+     *
+     * NÃO reaproveita `fetchFromYahooChart`: aquela função registra em
+     * `yahoo.chart`, que é o 2º elo da cadeia de COTAÇÃO. Creditar ali a
+     * recuperação de um índice sujaria o card que responde "quantos ativos da
+     * carteira precisaram de reserva" com dois eventos que não são ativos. Mesmo
+     * endpoint, responsabilidade diferente, contador diferente.
+     *
+     * Também não filtra a barra por volume, como a de cotação faz: lá o volume é
+     * quem denuncia símbolo extinto ainda sendo republicado; aqui o assunto é um
+     * índice, que não morre nem é renomeado.
+     *
+     * Devolve `{}` (nunca `null`) porque quem chama espalha o resultado por cima
+     * do que a principal trouxe: um `null` aqui viraria exceção lá, no caminho que
+     * existe justamente para não ter caminho de erro.
+     */
+    async fetchIndicesFromChart() {
+        const ALVOS = [['ibov', '^BVSP'], ['spx', '^GSPC']];
+        const resultado = {};
+        await Promise.all(ALVOS.map(async ([chave, simbolo]) => {
+            try {
+                const r = await trackSource(
+                    'yahoo.indices.chart',
+                    () => yahooChartBreaker.exec(() => yahooFinance.chart(
+                        simbolo,
+                        { period1: new Date(Date.now() - 10 * 86400000), interval: '1d' },
+                    )),
+                    { isEmpty: (res) => !(res?.quotes?.some((c) => c?.close > 0)) },
+                );
+                const fechamentos = (r?.quotes || []).filter((c) => c?.close > 0);
+                const ultimo = fechamentos[fechamentos.length - 1];
+                if (!ultimo) return;
+                // Variação contra o fechamento anterior. Sem base de comparação vai
+                // 0, que é o que o consumidor faria com o campo ausente.
+                const anterior = fechamentos[fechamentos.length - 2]?.close ?? null;
+                resultado[chave] = {
+                    value: ultimo.close,
+                    change: anterior > 0 ? ((ultimo.close - anterior) / anterior) * 100 : 0,
+                    source: 'Yahoo (candle)',
+                };
+            } catch {
+                // Silencioso: é a última tentativa, e quem chama já trata a ausência.
+            }
+        }));
+        return resultado;
     },
 
     /**
@@ -689,7 +786,7 @@ export const externalMarketService = {
                 // falha transitória, NENHUMA em 429/crumb — rate-limit de IP não
                 // melhora em 300ms, e insistir só prolonga o bloqueio. Sem breaker
                 // dedicado porque isto roda uma vez a cada 15 min: não há martelo
-                // a interromper, e reaproveitar o `yahooBreaker` do lote deixaria
+                // a interromper, e reaproveitar o `yahooQuoteBreaker` do lote deixaria
                 // uma falha de câmbio abrir o circuito da sincronização inteira.
                 { retries: 1, baseDelayMs: 300, shouldRetry: (err) => !/429|crumb/i.test(err?.message || '') },
             )));

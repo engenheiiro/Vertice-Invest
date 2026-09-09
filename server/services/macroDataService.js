@@ -1390,6 +1390,11 @@ export const macroDataService = {
             config.currenciesUpdatedAt = new Date();
         }
         
+        // Escrita por ÍNDICE e com carimbo próprio, pelo mesmo motivo do bloco de
+        // moedas logo acima: `lastUpdated` avança a cada run do macro-sync, então
+        // sozinho ele dava frescor verde a um Ibovespa que a fonte não trouxe.
+        // Índice que não veio preserva o valor anterior — e agora isso APARECE,
+        // em vez de ficar escondido atrás do relógio do documento.
         if (globalIndices) {
             if (globalIndices.ibov) {
                 config.ibov = globalIndices.ibov.value;
@@ -1399,6 +1404,14 @@ export const macroDataService = {
                 config.spx = globalIndices.spx.value;
                 config.spxChange = globalIndices.spx.change;
             }
+        }
+        config.indicesSources = {
+            ibov: globalIndices?.ibov?.source || null,
+            spx: globalIndices?.spx?.source || null,
+        };
+        config.indicesStale = !globalIndices?.ibov || !globalIndices?.spx;
+        if (!config.indicesStale) {
+            config.indicesUpdatedAt = new Date();
         }
 
         if (spxReturn12m) config.spxReturn12m = spxReturn12m;
