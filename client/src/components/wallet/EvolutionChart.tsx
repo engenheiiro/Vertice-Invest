@@ -41,7 +41,7 @@ const RoundedBar = (props: any): React.ReactElement => {
 
 // Custom Tick para exibir o ponto pulsante no dia LIVE
 const CustomXAxisTick = (props: any) => {
-    const { x, y, payload, data } = props;
+    const { x, y, payload, data, plotWidth } = props;
 
     // Encontra o item correspondente ao tick atual
     const item = data && data[payload.index];
@@ -54,7 +54,19 @@ const CustomXAxisTick = (props: any) => {
     const label = String(payload.value ?? '');
     const textHalf = (label.length * 5.4) / 2; // ~5,4px por caractere em fontSize 10
     const DOT_SPACE = 16;                      // espaço reservado ao ponto + respiro
-    const shift = isLive ? DOT_SPACE / 2 : 0;  // recentra o conjunto ponto + texto
+    const base = isLive ? DOT_SPACE / 2 : 0;   // recentra o conjunto ponto + texto
+
+    // O ÚLTIMO rótulo nasce centrado EM CIMA da borda direita do plot (no modo
+    // linha o último ponto vive exatamente lá) e o SVG recorta tudo que passa da
+    // sua largura: a data de hoje aparecia partida ("09/09" virava "09/0"). Em vez
+    // de reservar margem morta à direita no gráfico inteiro, empurramos para
+    // dentro do desenho só o rótulo que estouraria. No modo barras o centro da
+    // última banda já tem folga e o limite não age.
+    const EDGE_PAD = 2;
+    const dotExtent = isLive ? 12 : 0;         // raio do ponto + respiro até o texto
+    const maxShift = (plotWidth ?? Infinity) - EDGE_PAD - x - textHalf;
+    const minShift = EDGE_PAD - x + textHalf + dotExtent;
+    const shift = Math.max(minShift, Math.min(base, maxShift));
     const dotX = shift - textHalf - 9;
 
     return (
@@ -408,7 +420,7 @@ export const EvolutionChart = React.memo(() => {
                             tickLine={false}
                             minTickGap={10}
                             // Usa o componente customizado para desenhar o ponto live
-                            tick={(props) => <CustomXAxisTick {...props} data={renderData} />}
+                            tick={(props) => <CustomXAxisTick {...props} data={renderData} plotWidth={plotRef.current?.clientWidth} />}
                         />
 
                         <YAxis
