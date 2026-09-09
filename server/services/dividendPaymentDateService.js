@@ -324,15 +324,28 @@ export const resolvePaymentDatesForTicker = async (ticker, tipo, eventos, opcoes
     // esta distinção o card ficaria amarelo por um sistema funcionando.
     const sourceIdPorFonte = new Map(cadeia.map((f) => [f.id, f.sourceId]));
     const resolvedBy = [...datas.values()][0]?.fonte || null;
-    const soAmbiguo = !resolvedBy && (desfechos[DESFECHO.AMBIGUO] || 0) > 0
-        && (desfechos[DESFECHO.SEM_EVENTO] || 0) === 0;
+    const divergente = (desfechos[DESFECHO.VALOR_DIVERGENTE] || 0) > 0;
+    const ambiguo = (desfechos[DESFECHO.AMBIGUO] || 0) > 0;
+
+    const razao = () => {
+        if (falhas.length) return 'fonte indisponível';
+        if (divergente) return 'a fonte publica pagamento nessa data, mas com valor que não confere';
+        if (ambiguo) return 'pagamento dividido em datas diferentes';
+        return 'pagamento ainda não anunciado';
+    };
+
     recordEscalation({
         chain: 'paymentDate',
         subject: ticker,
         tried: tentadas.map((id) => sourceIdPorFonte.get(id)).filter(Boolean),
         resolvedBy: resolvedBy ? sourceIdPorFonte.get(resolvedBy) || null : null,
-        reason: resolvedBy ? null : (soAmbiguo ? 'pagamento dividido em datas diferentes' : 'pagamento ainda não anunciado'),
-        expected: !resolvedBy && falhas.length === 0,
+        reason: resolvedBy ? null : razao(),
+        // `expected` quer dizer "ninguém PODERIA ter resolvido", e é o que o painel
+        // subtrai antes de pintar a linha de vermelho. Duas coisas não cabem aí:
+        // fonte fora do ar, e valor que não confere — nesta a fonte TEM o
+        // pagamento naquela data e quem não conseguiu casar fomos nós. Marcá-las
+        // como esperadas esconderia justamente o buraco que dá para fechar.
+        expected: !resolvedBy && falhas.length === 0 && !divergente,
     });
 
     return { datas, tentadas, falhas, desfechos };

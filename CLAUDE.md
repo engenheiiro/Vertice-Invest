@@ -38,6 +38,8 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 | Constantes financeiras | `server/config/financialConstants.js` |
 | Matemática financeira segura | `server/utils/mathUtils.js` |
 | Câmbio de compra e custo em BRL | `server/utils/fxRate.js` |
+| Data de pagamento de provento (fontes) | `server/services/dividendPaymentDateService.js` |
+| Casamento provento nosso × calendário da fonte | `server/utils/dividendPaymentMatch.js` |
 | Valorização de RF (curva × mercado) | `server/utils/fixedIncome.js` |
 | Série de PU do Tesouro (ingestão) | `server/services/treasuryPriceService.js` |
 | Identidade de título do Tesouro | `server/utils/treasuryTitle.js` |
@@ -97,6 +99,7 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 8. **Câmbio congelado no custo:** custo de posição em dólar **nunca** é reconvertido pela cotação de hoje — use `positionCostBRL()`/`positionRealizedProfitBRL()` de `utils/fxRate.js`, que leem `totalCostBrl`/`realizedProfitBrl` (acumulados com o câmbio de cada lançamento em `recalculatePosition`). Multiplicar custo **e** saldo pela mesma taxa cancela o câmbio: o resultado vira retorno em dólar e o ganho cambial some. Só o **saldo** é marcado a mercado.
 9. **Renda fixa: curva × mercado.** Todo caminho de patrimônio (KPI ao vivo, snapshot diário, rebuild de histórico, metas) valoriza CASH/FIXED_INCOME por `valueFixedIncomeAsset()` de `utils/fixedIncome.js` — nunca chamando `accrueFixedIncomeValue()` direto. Título público identificado sem ambiguidade e **sem cupom semestral** é marcado pelo PU oficial do Tesouro; o resto fica na curva. A marcação é por **razão de PU** sobre o custo do lote (`custo × PU_hoje / PU_compra`), nunca quantidade × PU: `quantity`/`price` de RF não seguem convenção confiável nas posições reais. Qualquer lote sem PU derruba a marcação do ativo inteiro (fail-closed → accrual). Divergir entre os caminhos reintroduz a divergência KPI × snapshot.
 10. **Rate limiting em novas rotas:** usar os limiters **por usuário** de `middleware/rateLimiters.js` (`walletWriteLimiter` 50/15min em POST/PUT/DELETE de wallet; `researchHeavyLimiter` 20/15min em rotas caras). Auth já tem `authLimiter` (20/15min); geral `apiLimiter` (3000/15min). Validar escrita com schema Zod (`validate`).
+11. **Data de pagamento de provento só vem de FONTE.** `DividendEvent.paymentDate` é preenchido apenas por `dividendPaymentDateService` (B3 no sync diário; Fundamentus no backfill manual), sempre com `paymentDateSource` junto. Nulo é o estado honesto: `resolvePaymentDate` cai na estimativa ex+15 e a tela marca "Previsto". **Nunca gravar data deduzida** — pagamento ambíguo (uma linha nossa somando pagamentos com datas diferentes), valor que não bate ou fonte fora do ar deixam o campo nulo. Como qualquer valor não-nulo é tratado como oficial, uma data inventada vira "Agendado" na tela: foi o defeito dos 442 eventos ex+16 apagados em 09/09/2026.
 
 ---
 
@@ -188,7 +191,7 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < ELITE (3) < BLACK (4). Definid
 
 - **Auth:** `POST /register`, `/login` (aceita `mfaToken`; responde `{mfaRequired:true}` se MFA ativo), `/logout`, `/refresh`, `/forgot-password`, `/reset-password`, `PUT /me`, `POST /tutorial-seen`
 - **MFA (auth):** `GET /mfa/status` · `POST /mfa/setup`, `/mfa/enable`, `/mfa/disable`
-- **Research:** `GET /research/latest?assetClass`, `/research/macro`, `/research/signals`, `/research/discard-logs`, `/research/accuracy`, `/research/config/tunables` (admin) · `POST /research/full-pipeline`, `/research/sync-market`, `/research/sync-macro`, `/research/publish`, `/research/crunch` · `PUT /research/config/tunables` (admin)
+- **Research:** `GET /research/latest?assetClass`, `/research/macro`, `/research/signals`, `/research/discard-logs`, `/research/accuracy`, `/research/config/tunables` (admin) · `POST /research/full-pipeline`, `/research/sync-market`, `/research/sync-macro`, `/research/publish`, `/research/crunch`, `/research/dividend-payment-dates/backfill` (admin) · `PUT /research/config/tunables` (admin)
 - **Docs:** `GET /api/docs` (Swagger UI), `/api/docs.json` (OpenAPI) · `GET /api/health`
 - **Wallet:** `GET /wallet`, `/wallet/history`, `/wallet/dividends`, `/wallet/cashflow`, `/wallet/transactions/:ticker`, `/wallet/performance` · `POST /wallet/add` · `PUT /wallet/:id` · `DELETE /wallet/:id`
 - **Import de carteira:** `GET /wallet/import` · `POST /wallet/import/preview` (resolve, não escreve), `/wallet/import/commit` · `DELETE /wallet/import/:batchId` (desfaz o lote)

@@ -23,6 +23,7 @@ vi.mock('../models/MarketAsset.js', () => ({ default: { find: vi.fn() } }));
 
 const DividendEvent = (await import('../models/DividendEvent.js')).default;
 const { fillPaymentDatesForTicker } = await import('../services/dividendPaymentDateService.js');
+const { getEscalations, resetSourceStats } = await import('../utils/sourceHealth.js');
 
 const dia = (iso) => new Date(`${iso}T00:00:00.000Z`);
 const chain = (rows = []) => {
@@ -185,5 +186,75 @@ describe('fillPaymentDatesForTicker — cadeia de fontes', () => {
             cadeia: [fonteFake([publicado('2026-09-01', '2026-09-09', 0.66)])],
         });
         expect(r.preenchidos).toBe(0);
+    });
+});
+
+/**
+ * A TRILHA POR ASSUNTO DIZ A VERDADE SOBRE O QUE FALTOU.
+ *
+ * `expected` é o que o painel de fontes SUBTRAI antes de pintar a linha de
+ * vermelho — significa "ninguém poderia ter resolvido". Provento que o emissor
+ * ainda não anunciou e pagamento dividido em datas diferentes cabem ali. Valor
+ * que não confere, NÃO: a fonte tem o pagamento naquela data e quem não casou
+ * fomos nós, então marcar como esperado esconderia o único buraco fechável.
+ */
+describe('trilha por assunto (painel de fontes)', () => {
+    const um = (amount, source = 'PROVIDER') => {
+        DividendEvent.find.mockReturnValue(chain([{ _id: 'ev1', date: dia('2026-09-02'), amount, source }]));
+    };
+    const trilha = (ticker) => getEscalations().find((e) => e.chain === 'paymentDate' && e.subject === ticker);
+
+    beforeEach(() => resetSourceStats());
+
+    it('resolvido registra a fonte que resolveu', async () => {
+        um(0.1);
+        await fillPaymentDatesForTicker('GGRC11', 'FII', { cadeia: [fonteFake([publicado('2026-09-01', '2026-09-09', 0.1)])] });
+        expect(trilha('GGRC11').resolvedBy).toBe('b3.dividends');
+    });
+
+    it('fonte que não conhece o provento é ausência ESPERADA', async () => {
+        um(0.1);
+        await fillPaymentDatesForTicker('GGRC11', 'FII', { cadeia: [fonteFake([publicado('2020-01-10', '2020-01-20', 0.1)])] });
+        const t = trilha('GGRC11');
+        expect(t.expected).toBe(true);
+        expect(t.reason).toMatch(/ainda não anunciado/);
+    });
+
+    it('pagamento dividido em datas diferentes é ausência ESPERADA', async () => {
+        um(0.70097272);
+        await fillPaymentDatesForTicker('PETR4', 'STOCK', {
+            cadeia: [fonteFake([
+                publicado('2026-09-01', '2026-11-23', 0.35048636),
+                publicado('2026-09-01', '2026-12-21', 0.35048636),
+            ])],
+        });
+        const t = trilha('PETR4');
+        expect(t.expected).toBe(true);
+        expect(t.reason).toMatch(/dividido em datas diferentes/);
+    });
+
+    it('valor que não confere NÃO é esperado — a fonte tem o pagamento', async () => {
+        um(0.815);
+        await fillPaymentDatesForTicker('KNHF11', 'FII', {
+            cadeia: [fonteFake([publicado('2026-09-01', '2026-09-09', 0.66)])],
+        });
+        const t = trilha('KNHF11');
+        expect(t.expected).toBe(false);
+        expect(t.reason).toMatch(/valor que não confere/);
+    });
+
+    it('fonte fora do ar NÃO é esperado', async () => {
+        um(0.1);
+        await fillPaymentDatesForTicker('GGRC11', 'FII', {
+            cadeia: [{ id: 'FAKE', sourceId: 'b3.dividends', rotulo: 'FAKE', buscar: vi.fn().mockRejectedValue(new Error('HTTP 503')) }],
+        });
+        const t = trilha('GGRC11');
+        expect(t.expected).toBe(false);
+        expect(t.reason).toMatch(/indisponível/);
+    });
+
+    it('classe fora de escopo não suja a trilha', async () => {
+        await fillPaymentDatesForTicker('AAPL', 'STOCK_US', { cadeia: [fonteFake([])] });
+        expect(trilha('AAPL')).toBeUndefined();
     });
 });
