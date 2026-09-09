@@ -441,6 +441,7 @@ const collectFacts = async (now) => {
         frozenAssets,
         retiredButActive,
         dividendPayment,
+        priceDelivery,
     } = await resolveAll({
         assetFacts: collectAssetFacts(staleCutoff, fundamentalsCutoff),
         totalAll: MarketAsset.countDocuments({}),
@@ -493,6 +494,22 @@ const collectFacts = async (now) => {
         // falha em todas, a cada 15 minutos, para sempre.
         retiredButActive: MarketAsset.countDocuments({ isBlacklisted: true, isActive: true }),
         dividendPayment: collectDividendPaymentFacts(now),
+        // QUEM ESTÁ PRECIFICANDO A CARTEIRA, lido do banco e não do processo.
+        //
+        // A cadeia de cotação era a única do painel sem relógio de ENTREGA, e é a
+        // mais crítica que existe: em 09/09/2026 o card da fonte principal dizia
+        // "SEM RECEBER — 100% das 15 chamadas falharam" enquanto 980 ativos
+        // carregavam preço escrito por ela minutos antes. Os dois estavam certos:
+        // o contador do processo conta CHAMADAS (e o lote realmente vinha
+        // falhando), e o banco guarda o RESULTADO. Sem o segundo, o painel
+        // anunciava apagão numa cadeia que estava entregando.
+        //
+        // `priceSource` já registra quem escreveu cada `lastPrice` — a resposta
+        // estava gravada, faltava alguém perguntar.
+        priceDelivery: MarketAsset.aggregate([
+            { $match: { ...ACTIVE_UNIVERSE, priceSource: { $ne: null } } },
+            { $group: { _id: '$priceSource', at: { $max: '$updatedAt' }, assets: { $sum: 1 } } },
+        ]),
     });
 
     const treasury = treasuryRows[0] || {};
@@ -531,6 +548,12 @@ const collectFacts = async (now) => {
                     currenciesUpdatedAt: macroConfig.currenciesUpdatedAt || null,
                     currenciesStale: !!macroConfig.currenciesStale,
                     currenciesSources: macroConfig.currenciesSources || null,
+                    // Mesma separação, agora para os ÍNDICES. Sem estes três, o
+                    // painel só tinha `lastUpdated` para responder pelo Ibovespa,
+                    // e `lastUpdated` responde pelo documento inteiro.
+                    indicesUpdatedAt: macroConfig.indicesUpdatedAt || null,
+                    indicesStale: !!macroConfig.indicesStale,
+                    indicesSources: macroConfig.indicesSources || null,
                 }
                 : {},
             treasury: {
@@ -559,6 +582,12 @@ const collectFacts = async (now) => {
                 tickers: frozenAssets.slice(0, 10).map((a) => a.ticker),
             },
             dividendPayment,
+            // Chave = `priceSource` gravado no ativo; valor = quando aquela fonte
+            // escreveu preço pela última vez, e para quantos ativos. É o relógio
+            // de ENTREGA da cadeia de cotação — ver a consulta em `collectFacts`.
+            priceDelivery: Object.fromEntries(
+                (priceDelivery || []).map((r) => [r._id, { at: r.at || null, assets: r.assets || 0 }]),
+            ),
         },
         overrides,
     };

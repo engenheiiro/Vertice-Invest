@@ -67,6 +67,8 @@ const deliveryFacts = (facts) => {
     const macro = facts.macro || {};
     const currencySources = macro.currenciesSources || {};
     const rateSources = macro.ratesSources || {};
+    const indexSources = macro.indicesSources || {};
+    const price = facts.priceDelivery || {};
 
     // Uma fonte de câmbio "entregou" se ela é a origem gravada de alguma moeda.
     const currencyDelivery = (nome) => (
@@ -75,7 +77,25 @@ const deliveryFacts = (facts) => {
             : null
     );
 
+    // Mesma regra para índice: entregou quem está gravado como origem do valor.
+    const indexDelivery = (nome) => (
+        indexSources.ibov === nome || indexSources.spx === nome
+            ? macro.indicesUpdatedAt || null
+            : null
+    );
+
+    // E para cotação: quem escreveu `lastPrice` em algum ativo vivo. O `priceSource`
+    // do ativo é o registro, e ele sobrevive ao reinício — que é a diferença
+    // inteira entre este relógio e o contador de chamadas do processo.
+    const priceDelivery = (fonte) => price[fonte]?.at || null;
+
     return {
+        // A cadeia de cotação, lida do banco. `YAHOO` é o rótulo histórico do
+        // caminho principal (`quote.source || 'YAHOO'` em marketDataService).
+        'yahoo.quotes': priceDelivery('YAHOO'),
+        'yahoo.chart': priceDelivery('YAHOO_CHART_FALLBACK'),
+        'google.finance': priceDelivery('GOOGLE_FINANCE_FALLBACK'),
+        brapi: priceDelivery('BRAPI_FALLBACK'),
         'yahoo.currencies': currencyDelivery('Yahoo'),
         coinbase: currencyDelivery('Coinbase'),
         ptax: currencyDelivery('PTAX/BCB'),
@@ -87,7 +107,12 @@ const deliveryFacts = (facts) => {
         brasilapi: rateSources.selic === 'BrasilAPI' || rateSources.ipca === 'BrasilAPI'
             ? macro.ratesUpdatedAt || null : null,
         ibge: rateSources.ipca === 'IBGE' ? macro.ratesUpdatedAt || null : null,
-        'yahoo.indices': macro.updatedAt || null,
+        // Era `macro.updatedAt`, o carimbo do DOCUMENTO inteiro: ele avança a cada
+        // run do macro-sync mesmo quando o índice não veio, então o card exibia
+        // "recebeu há 6 min" ao lado de "SEM RECEBER" (09/09/2026). Agora responde
+        // pelo índice, e só quando o índice foi de fato gravado por esta fonte.
+        'yahoo.indices': indexDelivery('Yahoo'),
+        'yahoo.indices.chart': indexDelivery('Yahoo (candle)'),
         tesouro: facts.treasury?.latestDate || null,
         fundamentus: facts.fundamentals?.timestamp || null,
     };

@@ -269,14 +269,42 @@ describe('entrega e resposta são dois relógios', () => {
     });
 
     it('fonte sem carimbo de entrega admite que não mede, em vez de inventar', async () => {
-        await trackSource('yahoo.quotes', async () => ({ ok: true }));
+        await trackSource('yahoo.history', async () => ({ ok: true }));
 
-        const yahoo = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'yahoo.quotes');
+        const yahoo = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'yahoo.history');
 
         // Chave AUSENTE no mapa de entregas ≠ chave presente com valor vazio.
         expect(yahoo.deliveryTracked).toBe(false);
         expect(yahoo.lastDeliveryAt).toBeNull();
         expect(yahoo.lastResponseAt).not.toBeNull();
+    });
+
+    /**
+     * A CADEIA DE COTAÇÃO GANHOU RELÓGIO DE ENTREGA EM 09/09/2026, e ela era a
+     * única sem — na cadeia mais crítica que existe no produto.
+     *
+     * O card da fonte principal dizia "SEM RECEBER — 100% das 15 chamadas
+     * falharam" enquanto 980 ativos carregavam preço escrito por ela minutos
+     * antes. Nenhum dos dois mentia: o contador conta CHAMADAS (e o lote vinha
+     * mesmo falhando por 429 no crumb), o banco guarda o RESULTADO. Faltava o
+     * segundo, e sem ele o painel anunciava apagão numa cadeia que entregava.
+     */
+    it('a cadeia de cotação responde pelo que está gravado no ativo, não pela chamada', () => {
+        const facts = factsBase();
+        const agora = new Date('2026-09-09T18:20:08.000Z');
+        facts.priceDelivery = {
+            YAHOO: { at: agora, assets: 980 },
+            YAHOO_CHART_FALLBACK: { at: new Date('2026-09-09T18:15:44.000Z'), assets: 182 },
+        };
+
+        const rows = buildSourceStatuses(facts, getSourceStats());
+
+        expect(byId(rows, 'yahoo.quotes').lastDeliveryAt).toEqual(agora);
+        expect(byId(rows, 'yahoo.chart').deliveryTracked).toBe(true);
+        // Reserva que ninguém precisou tem entrega vazia — e o vazio é afirmação,
+        // não ausência de medida: aqui ele significa "não salvou ninguém".
+        expect(byId(rows, 'google.finance').lastDeliveryAt).toBeNull();
+        expect(byId(rows, 'google.finance').deliveryTracked).toBe(true);
     });
 
     it('quando ela É a origem, os dois relógios convivem', () => {
@@ -373,10 +401,20 @@ describe('cadeia de cobertura', () => {
     // o Fundamentus não substitui o Tesouro só por estarem no mesmo agrupamento.
     it('fonte sem cadeia é ponto único de falha, e isso fica explícito', () => {
         const rows = buildSourceStatuses(factsBase(), getSourceStats());
-        for (const id of ['tesouro', 'fundamentus', 'yahoo.indices']) {
+        for (const id of ['tesouro', 'fundamentus']) {
             expect(byId(rows, id).backups).toEqual([]);
             expect(byId(rows, id).covers).toBeNull();
         }
+    });
+
+    // Os índices SAÍRAM dessa lista em 09/09/2026, e o motivo é o mesmo 429 no
+    // crumb que derrubou cotação e câmbio no mesmo minuto: os dois tinham para
+    // onde ir, os índices não. O candle do próprio Yahoo (v8, sem crumb) entrou
+    // atrás — e o painel só pode afirmar isso porque `getGlobalIndices` faz.
+    it('os índices deixaram de ser ponto único de falha', () => {
+        const rows = buildSourceStatuses(factsBase(), getSourceStats());
+        expect(byId(rows, 'yahoo.indices').backups).toEqual(['Yahoo Finance — índices (candle)']);
+        expect(byId(rows, 'yahoo.indices.chart').covers).toBe('Yahoo Finance — índices');
     });
 
     // A série diária DEIXOU de ser ponto único em 04/09/2026: o arquivo da B3
