@@ -172,6 +172,14 @@ export interface ChainFlow {
     /** Assuntos que nenhuma fonte resolveu — a única categoria com consequência. */
     unresolved: number;
     expected: number;
+    /**
+     * Dos `unresolved`, quantos ninguém PODERIA ter resolvido — papel que não
+     * negociou não tem fechamento em fonte alguma. Vermelho é o que sobra.
+     *
+     * Opcional porque o cliente pode subir antes do servidor: ausente, a tela
+     * volta ao comportamento antigo em vez de mostrar `NaN` no lugar da conta.
+     */
+    unresolvedExpected?: number;
     byResolver: { id: string | null; label: string | null; count: number }[];
     items: ChainEscalation[];
     /** Quantos ficaram de fora de `items` pelo teto de transporte. */
@@ -195,6 +203,9 @@ export interface ChainFlow {
         allFromPrimary: string;
         missingBadge: string;
         missingLong: string;
+        /** As palavras da ausência que a cadeia não tinha como evitar. */
+        expectedBadge?: string;
+        expectedLong?: string;
     };
 }
 

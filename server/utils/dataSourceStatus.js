@@ -242,6 +242,16 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
             total: 0,
             unresolved: 0,
             expected: 0,
+            /**
+             * Dos `unresolved`, quantos ninguém PODERIA ter resolvido.
+             *
+             * Papel que não negociou não tem fechamento em fonte alguma. Contado
+             * junto, ele afogava o alarme: em 08/09/2026 a linha dizia "49 sem
+             * fechamento em fonte nenhuma" em vermelho, e os 49 eram ilíquidos
+             * num dia em que o arquivo da B3 estava publicado e perfeito. O que
+             * sobra depois desta subtração é o conjunto com consequência.
+             */
+            unresolvedExpected: 0,
             byResolver: [],
             items: [],
             truncated: 0,
@@ -280,6 +290,7 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
         alvo.total += 1;
         if (!ev.resolvedBy) alvo.unresolved += 1;
         if (ev.expected) alvo.expected += 1;
+        if (!ev.resolvedBy && ev.expected) alvo.unresolvedExpected += 1;
         if (ev.at && (!alvo.lastAt || new Date(ev.at) > new Date(alvo.lastAt))) alvo.lastAt = ev.at;
 
         const chaveResolver = `${ev.chain}|${ev.resolvedBy || ''}`;
@@ -318,9 +329,15 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
 
     // Não resolvido primeiro, depois o mais recente: o teto da lista corta o que
     // sobra, e o que sobra tem que ser o menos importante.
+    //
+    // Três pesos, não dois: entre "ninguém resolveu" e "a reserva resolveu" mora
+    // a ausência ESPERADA, que ninguém tinha como resolver. Com dois pesos, 49
+    // papéis sem pregão empurravam para fora da amostra justamente o ativo que
+    // ficou sem fechamento por falha de fonte.
+    const peso = (ev) => (ev.resolvedBy ? 2 : (ev.expected ? 1 : 0));
     const ordenados = [...escalations].sort((a, b) => {
-        const pesoA = a.resolvedBy ? 1 : 0;
-        const pesoB = b.resolvedBy ? 1 : 0;
+        const pesoA = peso(a);
+        const pesoB = peso(b);
         if (pesoA !== pesoB) return pesoA - pesoB;
         return new Date(b.at) - new Date(a.at);
     });

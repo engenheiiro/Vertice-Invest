@@ -10,7 +10,8 @@ const fetchB3DailyCloses = vi.fn();
 vi.mock('../services/b3DailyFileService.js', () => ({ fetchB3DailyCloses: (...a) => fetchB3DailyCloses(...a) }));
 
 const {
-    collectB3Candles, isB3Coverable, lastBusinessDayUpTo, missingBusinessDays,
+    B3_TIP_OUTCOME, collectB3Candles, collectB3CandlesDetailed,
+    isB3Coverable, lastBusinessDayUpTo, missingBusinessDays,
 } = await import('../services/b3HistoryFallback.js');
 
 beforeEach(() => vi.clearAllMocks());
@@ -108,5 +109,68 @@ describe('collectB3Candles', () => {
             { key: 'ITSA4', ticker: 'ITSA4', type: 'STOCK', lastCandleDate: '2026-01-02' },
         ], '2026-09-04', { maxDays: 3 });
         expect(fetchB3DailyCloses).toHaveBeenCalledTimes(3);
+    });
+});
+
+/**
+ * "NÃO VEIO CANDLE" ERA UMA RESPOSTA SÓ PARA DUAS PERGUNTAS DIFERENTES.
+ *
+ * O chamador não tinha como saber se a B3 ainda não publicou o pregão (o
+ * fechamento existe e vai chegar) ou se publicou tudo e o papel não estava lá
+ * (não houve negócio, e fechamento nenhum vai chegar). São diagnósticos opostos:
+ * o primeiro é a cadeia sem fonte, o segundo é o mercado sem negócio.
+ *
+ * Em 08/09/2026 os dois apareciam iguais no painel — 49 ativos "sem fechamento em
+ * fonte nenhuma", em vermelho, sendo todos ilíquidos num dia em que o arquivo da
+ * B3 estava publicado com 1.610 papéis.
+ */
+describe('desfecho da ponta', () => {
+    const alvo = (key, ticker, type = 'STOCK') => (
+        [{ key, ticker, type, lastCandleDate: '2026-09-03' }]
+    );
+
+    it('papel no arquivo do dia: COBERTO', async () => {
+        fetchB3DailyCloses.mockResolvedValue(arquivo({ ITSA4: { close: 12.84, volume: 100 } }));
+        const { tipOutcome } = await collectB3CandlesDetailed(alvo('ITSA4', 'ITSA4'), '2026-09-04');
+        expect(tipOutcome.get('ITSA4')).toBe(B3_TIP_OUTCOME.COBERTO);
+    });
+
+    // Arquivo publicado, Final, com o mercado inteiro dentro — e o papel fora dele.
+    // Não é ausência de fonte: é ausência de negócio.
+    it('arquivo publicado SEM o papel: SEM_NEGOCIO', async () => {
+        fetchB3DailyCloses.mockResolvedValue(arquivo({ ITSA4: { close: 12.84, volume: 100 } }));
+        const { tipOutcome } = await collectB3CandlesDetailed(alvo('COCE3', 'COCE3'), '2026-09-04');
+        expect(tipOutcome.get('COCE3')).toBe(B3_TIP_OUTCOME.SEM_NEGOCIO);
+    });
+
+    it('pregão ainda não publicado: SEM_ARQUIVO', async () => {
+        fetchB3DailyCloses.mockResolvedValue(null);
+        const { tipOutcome } = await collectB3CandlesDetailed(alvo('ITSA4', 'ITSA4'), '2026-09-04');
+        expect(tipOutcome.get('ITSA4')).toBe(B3_TIP_OUTCOME.SEM_ARQUIVO);
+    });
+
+    // O julgamento é sobre a PONTA, que é o dia que o alarme nomeia. Recuperar um
+    // buraco antigo não muda o fato de o papel não ter negociado hoje.
+    it('recuperar dia velho não faz a ponta de hoje virar COBERTO', async () => {
+        fetchB3DailyCloses.mockImplementation(async (dia) => (dia === '2026-09-03'
+            ? arquivo({ COCE3: { close: 40, volume: 100 } })
+            : arquivo({ ITSA4: { close: 12.84, volume: 100 } })));
+        const { candles, tipOutcome } = await collectB3CandlesDetailed(
+            [{ key: 'COCE3', ticker: 'COCE3', type: 'STOCK', lastCandleDate: '2026-09-02' }],
+            '2026-09-04',
+        );
+        expect(candles.get('COCE3')).toEqual([{ date: '2026-09-03', close: 40, volume: 100 }]);
+        expect(tipOutcome.get('COCE3')).toBe(B3_TIP_OUTCOME.SEM_NEGOCIO);
+    });
+
+    it('ativo fora da B3 não recebe desfecho — ninguém o consultou', async () => {
+        const { tipOutcome } = await collectB3CandlesDetailed(alvo('AAPL', 'AAPL', 'STOCK_US'), '2026-09-04');
+        expect(tipOutcome.size).toBe(0);
+    });
+
+    it('a versão enxuta continua devolvendo só os candles', async () => {
+        fetchB3DailyCloses.mockResolvedValue(arquivo({ ITSA4: { close: 12.84, volume: 100 } }));
+        const out = await collectB3Candles(alvo('ITSA4', 'ITSA4'), '2026-09-04');
+        expect(out.get('ITSA4')).toEqual([{ date: '2026-09-04', close: 12.84, volume: 100 }]);
     });
 });

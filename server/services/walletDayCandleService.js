@@ -5,8 +5,9 @@ import { fetchB3DailyCloses } from './b3DailyFileService.js';
 import {
     B3_FALLBACK_TYPES,
     B3_TICKER_RE,
+    B3_TIP_OUTCOME,
     MAX_B3_FALLBACK_DAYS,
-    collectB3Candles,
+    collectB3CandlesDetailed,
     isB3Coverable,
     missingBusinessDays,
 } from './b3HistoryFallback.js';
@@ -170,19 +171,22 @@ export const missingDaysInWindow = (existingDates, throughDay, maxDays = MAX_B3_
  * candles vindos do Yahoo, e o snapshot não deve saber de qual fonte veio cada
  * fechamento.
  *
- * @returns {Promise<Set<string>>} tickers cujo candle DO DIA foi recuperado
+ * @returns {Promise<{recuperados: Set<string>, semNegocio: Set<string>}>} tickers cujo
+ *   candle DO DIA foi recuperado, e os que não têm fechamento porque não houve
+ *   negócio no papel (arquivo oficial publicado e o ticker fora dele).
  */
 const recoverWithB3 = async (unresolved, storedByKey, dayStr, resolved) => {
+    const vazio = { recuperados: new Set(), semNegocio: new Set() };
     const alvos = unresolved.filter((u) => B3_FALLBACK_TYPES.has(String(u.type || '').trim().toUpperCase())
         && B3_TICKER_RE.test(String(u.ticker || '').trim().toUpperCase()));
-    if (alvos.length === 0) return new Set();
+    if (alvos.length === 0) return vazio;
 
     // A busca é a compartilhada com o worker do universo; só a gravação fica aqui,
     // porque as regras de mescla legitimamente divergem entre os dois caminhos.
     // Sem `adjClose`: o arquivo da B3 não ajusta por provento, e `normalizeCandle`
     // já espelha o close quando ele falta — igual ao que o Yahoo devolve enquanto
     // não há provento no meio.
-    const candlesPorChave = await collectB3Candles(
+    const { candles: candlesPorChave, tipOutcome } = await collectB3CandlesDetailed(
         alvos.map((alvo) => {
             const guardada = storedByKey.get(alvo.storageKey) || [];
             return {
@@ -195,9 +199,17 @@ const recoverWithB3 = async (unresolved, storedByKey, dayStr, resolved) => {
         }),
         dayStr,
     );
-    if (candlesPorChave.size === 0) return new Set();
 
+    // O papel que não negociou não tem fechamento em fonte alguma — nem hoje nem
+    // depois. Sem essa distinção o ledger acusa a cadeia por uma ausência que é
+    // do MERCADO, e o alarme vira ruído (ver B3_TIP_OUTCOME).
     const recuperados = new Set();
+    const semNegocio = new Set();
+    for (const alvo of alvos) {
+        if (tipOutcome.get(alvo.storageKey) === B3_TIP_OUTCOME.SEM_NEGOCIO) semNegocio.add(alvo.ticker);
+    }
+    if (candlesPorChave.size === 0) return { recuperados, semNegocio };
+
     for (const alvo of alvos) {
         const novos = candlesPorChave.get(alvo.storageKey);
         if (!novos?.length) continue;
@@ -217,7 +229,7 @@ const recoverWithB3 = async (unresolved, storedByKey, dayStr, resolved) => {
             logger.warn(`[DayCandle] Reforço da B3 falhou ao gravar ${alvo.ticker}: ${e.message}`);
         }
     }
-    return recuperados;
+    return { recuperados, semNegocio };
 };
 
 /**
@@ -298,7 +310,7 @@ export const ensureWalletDayCandles = async (assetRefs = [], dayStr, closeMap = 
     }
 
     // O Yahoo desistiu destes; a B3 tem o fechamento oficial do mesmo pregão.
-    const recuperados = await recoverWithB3(unresolved, storedByKey, dayStr, resolved);
+    const { recuperados, semNegocio } = await recoverWithB3(unresolved, storedByKey, dayStr, resolved);
     const semCandle = unresolved.filter((u) => !recuperados.has(u.ticker));
 
     // O CAMINHO DE CADA ATIVO, para o painel de fontes.
@@ -322,7 +334,13 @@ export const ensureWalletDayCandles = async (assetRefs = [], dayStr, closeMap = 
             // chamado de verdade é pior que trilha nenhuma.
             tried: isB3Coverable(alvo.ticker, alvo.type) ? ['yahoo.history', 'b3'] : ['yahoo.history'],
             resolvedBy: recuperados.has(alvo.ticker) ? 'b3' : null,
-            reason: alvo.reason,
+            // Quando a B3 confirma que não houve negócio, o motivo do Yahoo ("não
+            // trouxe o candle") descreve o sintoma; o fato é o papel não ter
+            // negociado, e é ele que decide se isto merece atenção.
+            reason: semNegocio.has(alvo.ticker)
+                ? `O papel não negociou em ${dayStr} — ausente também no arquivo oficial da B3`
+                : alvo.reason,
+            expected: semNegocio.has(alvo.ticker),
         });
     }
 

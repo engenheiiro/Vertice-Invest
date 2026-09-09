@@ -46,6 +46,7 @@ vi.mock('../config/logger.js', () => ({
 }));
 
 const { timeSeriesWorker } = await import('../services/workers/timeSeriesWorker.js');
+const { getEscalations, resetSourceStats } = await import('../utils/sourceHealth.js');
 
 // 2026-09-04 é sexta; o worker roda "hoje" e cobra o candle desse pregão.
 const HOJE = new Date('2026-09-04T21:30:00.000Z');
@@ -81,6 +82,7 @@ const gravados = () => mocks.historyUpdateOne.mock.calls.map((c) => c[1].$set.hi
 
 beforeEach(() => {
     vi.clearAllMocks();
+    resetSourceStats();
     vi.useFakeTimers();
     vi.setSystemTime(HOJE);
     mocks.getBenchmarkHistory.mockResolvedValue([]);
@@ -174,5 +176,58 @@ describe('timeSeriesWorker — reforço da B3', () => {
 
         const stats = mocks.systemConfigUpdate.mock.calls.at(-1)[1].$set.lastTimeSeriesStats;
         expect(stats.recoveredByB3).toBe(1);
+    });
+});
+
+/**
+ * O LEDGER NÃO PODE ACUSAR A CADEIA POR AUSÊNCIA DE NEGÓCIO.
+ *
+ * Em 08/09/2026 o painel mostrou 49 ativos "sem fechamento em fonte nenhuma", em
+ * vermelho — COCE3, PATI4, RPAD5, TELB3, CGAS3 e companhia. O arquivo oficial da
+ * B3 daquele pregão estava publicado, com 1.610 papéis; os 49 simplesmente não
+ * negociaram. Fechamento que não existe não é dado que faltou, e alarme que
+ * dispara pela iliquidez do papel ensina a ignorar a lista inteira — inclusive no
+ * dia em que a B3 atrasar de verdade.
+ */
+describe('timeSeriesWorker — o que o ledger registra', () => {
+    it('papel sem negócio no pregão é escalada ESPERADA, com a frase certa', async () => {
+        prepara(serieParada());
+        mocks.getFullHistory.mockResolvedValue(candles(40, VESPERA));
+        // Arquivo publicado, com o mercado dentro — e sem o nosso papel.
+        mocks.fetchB3DailyCloses.mockResolvedValue(new Map([['PETR4', { close: 42.7, volume: 100 }]]));
+
+        await runWorker();
+
+        const [ev] = getEscalations();
+        expect(ev.subject).toBe('ITSA4');
+        expect(ev.resolvedBy).toBeNull();
+        expect(ev.expected).toBe(true);
+        expect(ev.reason).toContain('não negociou');
+    });
+
+    // O outro lado da moeda, e é o que o alarme existe para pegar: a B3 publica ao
+    // longo da tarde/noite, e às 18:30 o pregão às vezes ainda não subiu.
+    it('pregão ainda não publicado continua sendo escalada NÃO esperada', async () => {
+        prepara(serieParada());
+        mocks.getFullHistory.mockResolvedValue(candles(40, VESPERA));
+        mocks.fetchB3DailyCloses.mockResolvedValue(null);
+
+        await runWorker();
+
+        const [ev] = getEscalations();
+        expect(ev.resolvedBy).toBeNull();
+        expect(ev.expected).toBe(false);
+        expect(ev.reason).toContain('sem o fechamento');
+    });
+
+    it('ponta fechada pela B3 é escalada RESOLVIDA', async () => {
+        prepara(serieParada());
+        mocks.getFullHistory.mockResolvedValue(candles(40, VESPERA));
+
+        await runWorker();
+
+        const [ev] = getEscalations();
+        expect(ev.resolvedBy).toBe('b3');
+        expect(ev.expected).toBe(false);
     });
 });

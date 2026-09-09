@@ -427,6 +427,11 @@ const ESCALATION_CAP = 600;
  *
  * As quatro cadeias do catálogo estão medidas desde 06/09/2026. A quinta, se
  * vier, fica de fora até alguém chamar `recordEscalation` por ela.
+ *
+ * `expectedBadge`/`expectedLong` são o par que faltava: a ausência que a cadeia
+ * NÃO tinha como evitar. Papel que não negociou não tem fechamento em fonte
+ * nenhuma, hoje nem depois — pintar isso de vermelho ao lado de uma fonte que
+ * caiu de verdade é dizer as duas coisas com a mesma palavra, e a palavra some.
  */
 export const LEDGERED_CHAINS = new Map([
     ['quotes', {
@@ -436,6 +441,8 @@ export const LEDGERED_CHAINS = new Map([
         allFromPrimary: 'esta fonte trouxe o preço de todos',
         missingBadge: 'sem preço',
         missingLong: 'sem preço em nenhuma',
+        expectedBadge: 'não negociou',
+        expectedLong: 'sem papel negociando',
         deadSubject: 'que nenhuma fonte precificou — faltou papel negociando',
     }],
     ['fx', {
@@ -445,6 +452,8 @@ export const LEDGERED_CHAINS = new Map([
         allFromPrimary: 'esta fonte trouxe a cotação das duas',
         missingBadge: 'sem cotação',
         missingLong: 'sem cotação em nenhuma',
+        expectedBadge: 'esperado',
+        expectedLong: 'ausência esperada',
         deadSubject: 'que nenhuma fonte cotou',
     }],
     ['rates', {
@@ -454,6 +463,8 @@ export const LEDGERED_CHAINS = new Map([
         allFromPrimary: 'esta fonte trouxe o valor de todos',
         missingBadge: 'sem valor',
         missingLong: 'sem valor em nenhuma',
+        expectedBadge: 'esperado',
+        expectedLong: 'ausência esperada',
         deadSubject: 'que nenhuma fonte publicou',
     }],
     ['candle', {
@@ -463,6 +474,8 @@ export const LEDGERED_CHAINS = new Map([
         allFromPrimary: 'esta fonte trouxe o fechamento de todos',
         missingBadge: 'sem fechamento',
         missingLong: 'sem fechamento em nenhuma',
+        expectedBadge: 'não negociou',
+        expectedLong: 'sem pregão no papel',
         deadSubject: 'que nenhuma fonte fechou — faltou pregão para o papel',
     }],
 ]);

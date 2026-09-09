@@ -432,6 +432,76 @@ describe('DataSourcesPanel — quem precisou de reserva', () => {
         expect(screen.queryByText(/ativo.s. precisaram de reserva/)).not.toBeInTheDocument();
     });
 
+    /**
+     * O VERMELHO TEM QUE SIGNIFICAR UMA COISA SÓ.
+     *
+     * Em 08/09/2026 a linha do bloco de histórico dizia "49 sem fechamento em
+     * fonte nenhuma", em vermelho, e os 49 eram COCE3, PATI4, RPAD5, TELB3 e
+     * companhia — papéis que não negociaram naquele pregão, num dia em que o
+     * arquivo oficial da B3 estava publicado com 1.610 papéis. Fechamento que não
+     * existe não é dado que faltou; misturar as duas ausências no mesmo alarme
+     * ensina a ignorar a lista, inclusive no dia em que a B3 atrasar de verdade.
+     */
+    const candleFlow = (over: Partial<ChainFlow> = {}): ChainFlow => ({
+        chain: 'candle',
+        lastAt: new Date().toISOString(),
+        total: 50,
+        unresolved: 50,
+        expected: 49,
+        unresolvedExpected: 49,
+        byResolver: [{ id: null, label: null, count: 50 }],
+        items: [
+            { subject: 'BOVA11', tried: ['yahoo.history', 'b3'], resolvedBy: null, reason: 'O Yahoo publicou a série sem o fechamento de 2026-09-08', expected: false, count: 1, at: new Date().toISOString() },
+            { subject: 'COCE3', tried: ['yahoo.history', 'b3'], resolvedBy: null, reason: 'O papel não negociou em 2026-09-08 — ausente também no arquivo oficial da B3', expected: true, count: 1, at: new Date().toISOString() },
+        ],
+        truncated: 0,
+        vocabulary: {
+            noun: 'ativo',
+            none: 'Nenhum ativo',
+            rescued: 'tiveram o fechamento trazido por esta fonte',
+            allFromPrimary: 'esta fonte trouxe o fechamento de todos',
+            missingBadge: 'sem fechamento',
+            missingLong: 'sem fechamento em nenhuma',
+            expectedBadge: 'não negociou',
+            expectedLong: 'sem pregão no papel',
+        },
+        ...over,
+    });
+
+    const cadeiaCandle: DataSource[] = [
+        src({ id: 'yahoo.history', short: 'Yahoo histórico', group: 'history', chain: 'candle', chainPosition: 1, chainSize: 2 }),
+        src({ id: 'b3', short: 'B3', group: 'history', chain: 'candle', chainPosition: 2, chainSize: 2, trigger: 'onFailure' }),
+    ];
+    const gruposCandle: SourceGroup[] = [
+        ...groups, { id: 'history', label: 'Histórico e índices', hint: 'Gráficos e rentabilidade' },
+    ];
+
+    it('separa, na linha, quem ficou sem fonte de quem ficou sem pregão', () => {
+        render(<DataSourcesPanel sources={cadeiaCandle} groups={gruposCandle} chains={{ candle: candleFlow() }} />);
+        expect(screen.getByText('1 sem fechamento em nenhuma')).toBeInTheDocument();
+        expect(screen.getByText('49 sem pregão no papel')).toBeInTheDocument();
+        expect(screen.queryByText('50 sem fechamento em nenhuma')).not.toBeInTheDocument();
+    });
+
+    it('na lista, o papel sem negócio não leva o selo vermelho da ausência de fonte', () => {
+        render(<DataSourcesPanel sources={cadeiaCandle} groups={gruposCandle} chains={{ candle: candleFlow() }} />);
+        fireEvent.click(screen.getByText(/ver ativos/));
+        expect(screen.getByText('não negociou')).toBeInTheDocument();
+        // Um só: o BOVA11, que é o caso com consequência.
+        expect(screen.getAllByText('sem fechamento')).toHaveLength(1);
+    });
+
+    // Cliente pode subir antes do servidor. Sem o campo, a tela volta ao
+    // comportamento antigo — nunca a uma conta com `NaN`.
+    it('servidor antigo, sem a contagem separada, não quebra a linha', () => {
+        render(<DataSourcesPanel
+            sources={cadeiaCandle}
+            groups={gruposCandle}
+            chains={{ candle: candleFlow({ unresolvedExpected: undefined }) }}
+        />);
+        expect(screen.getByText('50 sem fechamento em nenhuma')).toBeInTheDocument();
+    });
+
     // Zero é notícia boa e precisa de frase própria: significa que a principal
     // cobriu o universo inteiro.
     it('diz em voz alta quando ninguém precisou de reserva', () => {

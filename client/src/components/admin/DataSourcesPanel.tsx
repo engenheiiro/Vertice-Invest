@@ -181,6 +181,8 @@ const VOCAB_PADRAO = {
     allFromPrimary: 'esta fonte resolveu todos',
     missingBadge: 'sem dado',
     missingLong: 'sem dado em nenhuma',
+    expectedBadge: 'esperado',
+    expectedLong: 'ausência esperada',
 };
 
 /** "Ativos", "Moedas" — o substantivo da cadeia em início de frase. */
@@ -361,10 +363,19 @@ const TickerGroup = ({
  * riscado. É a mesma fonte podendo aparecer verde numa linha e riscada na de
  * baixo — que é exatamente a verdade que faltava.
  */
-const EscalationPath = ({ item, labelOf, missingBadge }: {
+/**
+ * O ÚLTIMO SELO DA TRILHA TEM DUAS CORES, porque são duas notícias.
+ *
+ * Vermelho é "ninguém trouxe o dado" — alguma fonte devia ter trazido. Mas papel
+ * que não negociou não tem fechamento em lugar nenhum, hoje nem depois: ali não
+ * faltou fonte, faltou pregão. Pintar as duas de vermelho ensina a ignorar a
+ * lista, e foi o que 49 ilíquidos fizeram com a tela em 08/09/2026.
+ */
+const EscalationPath = ({ item, labelOf, missingBadge, expectedBadge }: {
     item: ChainEscalation;
     labelOf: (id: string) => string;
     missingBadge: string;
+    expectedBadge: string;
 }) => (
     <div className="flex items-center gap-1 flex-wrap">
         {item.tried.map((id, i) => {
@@ -385,8 +396,14 @@ const EscalationPath = ({ item, labelOf, missingBadge }: {
             );
         })}
         {!item.resolvedBy && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-red-900/25 text-red-400 border border-red-900/50">
-                {missingBadge}
+            <span
+                className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                    item.expected
+                        ? 'bg-elevated text-slate-400 border border-slate-700'
+                        : 'bg-red-900/25 text-red-400 border border-red-900/50'
+                }`}
+            >
+                {item.expected ? expectedBadge : missingBadge}
             </span>
         )}
     </div>
@@ -413,6 +430,7 @@ const ChainFlowLine = ({ flow, onOpen }: { flow: ChainFlow; onOpen: () => void }
         );
     }
     const idade = agoLabel(flow.lastAt);
+    const esperadosSemFonte = flow.unresolvedExpected ?? 0;
     return (
         <button
             type="button"
@@ -423,18 +441,35 @@ const ChainFlowLine = ({ flow, onOpen }: { flow: ChainFlow; onOpen: () => void }
             <span className="text-[10px] text-slate-300">
                 <span className="font-bold text-white">{flow.total}</span> {vocab.noun}(s) precisaram de reserva
             </span>
-            {flow.byResolver.map((r) => (
-                <span
-                    key={r.id ?? 'nenhuma'}
-                    className={`text-[10px] px-1.5 py-0.5 rounded ${
-                        r.id
-                            ? 'bg-elevated text-slate-300'
-                            : 'bg-red-900/25 text-red-400 font-bold border border-red-900/50'
-                    }`}
-                >
-                    {r.count} {r.id ? `por ${r.label}` : vocab.missingLong}
-                </span>
-            ))}
+            {flow.byResolver.map((r) => {
+                if (r.id) {
+                    return (
+                        <span key={r.id} className="text-[10px] px-1.5 py-0.5 rounded bg-elevated text-slate-300">
+                            {r.count} por {r.label}
+                        </span>
+                    );
+                }
+                // O balde do "ninguém resolveu" se PARTE em dois, e a divisão é a
+                // linha inteira: um lado é fonte que faltou, o outro é papel que
+                // não negociou. Somados, davam 49 em vermelho num dia em que o
+                // arquivo oficial da B3 estava publicado e completo.
+                const esperados = Math.min(esperadosSemFonte, r.count);
+                const reais = r.count - esperados;
+                return (
+                    <React.Fragment key="nenhuma">
+                        {reais > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/25 text-red-400 font-bold border border-red-900/50">
+                                {reais} {vocab.missingLong}
+                            </span>
+                        )}
+                        {esperados > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-elevated text-slate-400 border border-slate-700">
+                                {esperados} {vocab.expectedLong ?? VOCAB_PADRAO.expectedLong}
+                            </span>
+                        )}
+                    </React.Fragment>
+                );
+            })}
             {/* O RELÓGIO DA LINHA, e ele é a diferença entre notícia e susto.
                 A linha fica cercada de cards que falam do agora ("Recebendo ·
                 agora"); sem tempo próprio, um estouro de sete horas atrás lê-se
@@ -633,6 +668,11 @@ const ChainFlowModal = ({
     onClose: () => void;
 }) => {
     const vocab = flow.vocabulary ?? VOCAB_PADRAO;
+    // A ausência que a cadeia não tinha como evitar sai da conta do alarme e vira
+    // contagem própria: papel sem negócio no dia não tem fechamento em fonte
+    // alguma, e somá-lo ao "sem fonte" era o que dava 49 em vermelho.
+    const semPregao = Math.min(flow.unresolvedExpected ?? 0, flow.unresolved);
+    const semFonte = flow.unresolved - semPregao;
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -659,9 +699,13 @@ const ChainFlowModal = ({
                             <GitBranch size={14} className="text-blue-500" />
                             Quem precisou de reserva
                         </h3>
+                        {/* Duas contagens, porque são dois assuntos: o que faltou
+                            de fonte e o que faltou de pregão. A segunda só aparece
+                            quando existe — número zero em texto de resumo é ruído. */}
                         <p className="text-[11px] text-slate-500 mt-0.5">
-                            {flow.total} {vocab.noun}(s) desceram a cadeia · {flow.unresolved} ficaram{' '}
+                            {flow.total} {vocab.noun}(s) desceram a cadeia · {semFonte} ficaram{' '}
                             {vocab.missingBadge} em fonte nenhuma
+                            {semPregao > 0 && ` · ${semPregao} ${vocab.expectedLong ?? VOCAB_PADRAO.expectedLong}`}
                         </p>
                     </div>
                     <button
@@ -697,7 +741,12 @@ const ChainFlowModal = ({
                                 )}
                             </div>
                             <div className="flex flex-col items-end gap-1 shrink-0">
-                                <EscalationPath item={item} labelOf={labelOf} missingBadge={vocab.missingBadge} />
+                                <EscalationPath
+                                    item={item}
+                                    labelOf={labelOf}
+                                    missingBadge={vocab.missingBadge}
+                                    expectedBadge={vocab.expectedBadge ?? VOCAB_PADRAO.expectedBadge}
+                                />
                                 <span className="text-[9px] font-mono text-slate-600">{shortTime(item.at)}</span>
                             </div>
                         </div>

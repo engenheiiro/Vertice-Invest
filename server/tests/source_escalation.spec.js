@@ -98,6 +98,46 @@ describe('cruzamento do ledger com as fontes', () => {
         expect(chains.quotes.byResolver.map((r) => r.id)).toEqual(['google.finance', 'brapi', null]);
     });
 
+    /**
+     * VERMELHO É O QUE SOBRA DEPOIS DE TIRAR A AUSÊNCIA INEVITÁVEL.
+     *
+     * Papel que não negociou não tem fechamento em fonte alguma — nem agora nem
+     * depois. Contá-lo junto com quem ficou sem dado por falha de fonte foi o que
+     * pintou 49 ilíquidos de vermelho em 08/09/2026, num dia em que o arquivo da
+     * B3 estava publicado e completo.
+     */
+    it('separa a ausência que ninguém poderia ter resolvido', () => {
+        cadeiaCompleta('EURP11', null);
+        cadeiaCompleta('COCE3', null, { expected: true });
+        cadeiaCompleta('PATI4', null, { expected: true });
+        cadeiaCompleta('PETR4', 'brapi');
+
+        const { chains } = buildEscalationView(getEscalations(), stats());
+        expect(chains.quotes.unresolved).toBe(3);
+        expect(chains.quotes.unresolvedExpected).toBe(2);
+    });
+
+    // Escalada esperada que foi RESOLVIDA não entra: a subtração é sobre o balde
+    // do vermelho, e ali só existe quem ficou sem dado.
+    it('esperado que a reserva salvou não conta como ausência esperada', () => {
+        cadeiaCompleta('B3SA3', 'google.finance', { expected: true });
+        const { chains } = buildEscalationView(getEscalations(), stats());
+        expect(chains.quotes.expected).toBe(1);
+        expect(chains.quotes.unresolvedExpected).toBe(0);
+    });
+
+    // Com dois pesos, 49 papéis sem pregão empurravam para fora da amostra
+    // justamente o ativo que ficou sem fechamento por falha de fonte.
+    it('ordena sem-fonte, depois ausência esperada, depois resolvido', () => {
+        cadeiaCompleta('RESOLVIDO3', 'google.finance');
+        cadeiaCompleta('ESPERADO3', null, { expected: true });
+        cadeiaCompleta('SEMFONTE3', null);
+
+        const { chains } = buildEscalationView(getEscalations(), stats());
+        expect(chains.quotes.items.map((i) => i.subject))
+            .toEqual(['SEMFONTE3', 'ESPERADO3', 'RESOLVIDO3']);
+    });
+
     // A lista tem teto de transporte; o que sobra tem que ser o menos importante.
     it('lista quem ficou sem preço PRIMEIRO', () => {
         cadeiaCompleta('AAAA3', 'google.finance');

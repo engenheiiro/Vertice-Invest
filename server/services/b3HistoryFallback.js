@@ -83,8 +83,34 @@ export const lastBusinessDayUpTo = (dayStr) => {
     return null;
 };
 
+
 /**
- * Busca na B3 os candles que faltam na ponta de cada alvo.
+ * O DESFECHO DA BUSCA NA PONTA, por alvo — e ele tem TRÊS valores, não dois.
+ *
+ * A busca devolvia só os candles, então "não veio nada" cobria duas situações
+ * opostas e o chamador não tinha como distingui-las:
+ *
+ *  - `SEM_ARQUIVO`: a B3 ainda não publicou o pregão. O fechamento existe e vai
+ *    chegar mais tarde; a cadeia realmente ficou sem fonte agora.
+ *  - `SEM_NEGOCIO`: o arquivo do dia está publicado, `Final`, com o mercado
+ *    inteiro dentro — e o papel não está lá. Não houve negócio, logo não existe
+ *    fechamento em fonte nenhuma, nem hoje nem depois. Não é falha de ninguém.
+ *
+ * A diferença não é acadêmica. Em 08/09/2026 o painel acusou 49 ativos "sem
+ * fechamento em fonte nenhuma" em vermelho, e os 49 eram COCE3, PATI4, RPAD5,
+ * TELB3, CGAS3 e companhia — papéis que fazem de 2 a 7 negócios por PREGÃO
+ * quando negociam. O arquivo daquele dia estava publicado, com 1.610 papéis.
+ * Alarme que dispara pela iliquidez do papel ensina o operador a ignorar a
+ * lista, e aí o dia em que a B3 atrasar de verdade passa despercebido no meio
+ * dos 49.
+ *
+ * O julgamento é sobre `throughDay` — a ponta, que é o dia que o ledger nomeia.
+ * Buraco no meio da janela é assunto da varredura de lacuna, não do alarme.
+ */
+export const B3_TIP_OUTCOME = { COBERTO: 'COBERTO', SEM_NEGOCIO: 'SEM_NEGOCIO', SEM_ARQUIVO: 'SEM_ARQUIVO' };
+
+/**
+ * Busca na B3 os candles que faltam na ponta de cada alvo, COM o desfecho.
  *
  * Não grava nada. Os dois chamadores mesclam com regras próprias — o worker aplica
  * o teto de pontos da série e a guarda de dia sem pregão, o caminho da carteira não
@@ -98,10 +124,14 @@ export const lastBusinessDayUpTo = (dayStr) => {
  * @param {Array<{key:string, ticker:string, type:string, lastCandleDate:string|null}>} alvos
  * @param {string} throughDay último dia desejado (YYYY-MM-DD)
  * @param {{maxDays?: number}} [opts]
- * @returns {Promise<Map<string, Array<{date:string, close:number, volume:number}>>>} candles novos por `key`
+ * @returns {Promise<{candles: Map<string, Array<{date:string, close:number, volume:number}>>, tipOutcome: Map<string, string>}>}
+ *   `candles`: candles novos por `key`. `tipOutcome`: o desfecho de `throughDay`
+ *   por `key` (ver B3_TIP_OUTCOME), só para quem foi de fato consultado.
  */
-export const collectB3Candles = async (alvos = [], throughDay, { maxDays = MAX_B3_FALLBACK_DAYS } = {}) => {
-    const saida = new Map();
+export const collectB3CandlesDetailed = async (alvos = [], throughDay, { maxDays = MAX_B3_FALLBACK_DAYS } = {}) => {
+    const candles = new Map();
+    const tipOutcome = new Map();
+    const saida = { candles, tipOutcome };
     if (!throughDay || alvos.length === 0) return saida;
 
     const cobertos = alvos.filter((a) => isB3Coverable(a?.ticker, a?.type));
@@ -120,6 +150,10 @@ export const collectB3Candles = async (alvos = [], throughDay, { maxDays = MAX_B
     const porDia = new Map();
     for (const dia of [...todosOsDias].sort()) porDia.set(dia, await fetchB3DailyCloses(dia));
 
+    // `null` = a B3 não entregou o arquivo daquele pregão; Map = entregou (e o
+    // parser já recusou o preliminar). É a distinção inteira, e ela mora aqui.
+    const arquivoDaPonta = porDia.get(throughDay) || null;
+
     for (const alvo of cobertos) {
         const dias = diasPorAlvo.get(alvo.key);
         if (!dias) continue;
@@ -131,7 +165,24 @@ export const collectB3Candles = async (alvos = [], throughDay, { maxDays = MAX_B
             // dia sem negócio não tem fechamento, e inventar um seria pior.
             if (linha) novos.push({ date: dia, close: linha.close, volume: linha.volume });
         }
-        if (novos.length > 0) saida.set(alvo.key, novos);
+        if (novos.length > 0) candles.set(alvo.key, novos);
+        if (dias.includes(throughDay)) {
+            tipOutcome.set(alvo.key, arquivoDaPonta?.has(ticker)
+                ? B3_TIP_OUTCOME.COBERTO
+                : (arquivoDaPonta ? B3_TIP_OUTCOME.SEM_NEGOCIO : B3_TIP_OUTCOME.SEM_ARQUIVO));
+        }
     }
     return saida;
 };
+
+/**
+ * A mesma busca, só com os candles.
+ *
+ * Mantida porque nem todo chamador precisa do desfecho: quem só vai gravar
+ * candle não deveria ter que desempacotar um objeto para isso.
+ *
+ * @returns {Promise<Map<string, Array<{date:string, close:number, volume:number}>>>} candles novos por `key`
+ */
+export const collectB3Candles = async (alvos = [], throughDay, opts) => (
+    await collectB3CandlesDetailed(alvos, throughDay, opts)
+).candles;

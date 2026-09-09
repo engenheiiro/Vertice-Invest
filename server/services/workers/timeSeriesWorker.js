@@ -5,7 +5,7 @@ import SystemConfig from '../../models/SystemConfig.js';
 import { marketDataService } from '../marketDataService.js';
 import { historyStorageKey, mergeCandleSeries } from '../../utils/assetHistory.js';
 import { externalMarketService } from '../externalMarketService.js';
-import { collectB3Candles, isB3Coverable, lastBusinessDayUpTo } from '../b3HistoryFallback.js';
+import { B3_TIP_OUTCOME, collectB3CandlesDetailed, isB3Coverable, lastBusinessDayUpTo } from '../b3HistoryFallback.js';
 import { recordEscalation } from '../../utils/sourceHealth.js';
 import { brNow } from '../../utils/sourceSchedule.js';
 import { brazilDayKey } from '../../utils/walletSnapshot.js';
@@ -222,23 +222,39 @@ const reinforceWithB3 = async ({ asset, storageKey, historyEntry, throughDay, no
     // acusar atraso a cada feriado de lá seria alarme falso. Série vazia também
     // não — a B3 estende a ponta de quem já tem histórico, não reconstrói, e
     // série ausente é assunto da sentinela, não da cadeia.
-    const registrar = (resolvedBy) => {
+    //
+    // O DESFECHO manda na frase e na cor. "Sem fechamento em fonte nenhuma" é
+    // acusação contra a cadeia, e ela é falsa quando o arquivo oficial do pregão
+    // está publicado e o papel simplesmente não está lá: aí não houve negócio, e
+    // fechamento que não existe não é dado que faltou (ver B3_TIP_OUTCOME).
+    const registrar = (resolvedBy, desfecho) => {
         if (!sessaoJaFechou(throughDay, now)) return;
+        const semNegocio = desfecho === B3_TIP_OUTCOME.SEM_NEGOCIO;
         recordEscalation({
             chain: 'candle',
             subject: asset.ticker,
             tried: ['yahoo.history', 'b3'],
             resolvedBy,
-            reason: `O Yahoo publicou a série sem o fechamento de ${throughDay}`,
+            reason: semNegocio
+                ? `O papel não negociou em ${throughDay} — ausente também no arquivo oficial da B3`
+                : `O Yahoo publicou a série sem o fechamento de ${throughDay}`,
+            // Escalada conhecida e sem novidade: a linha fica na lista, mas fora
+            // do caminho da atenção. Foram 49 ilíquidos em 08/09/2026 — volume
+            // suficiente para enterrar o dia em que a B3 atrasar de verdade.
+            expected: semNegocio,
         });
     };
 
-    const novos = (await collectB3Candles(
+    const { candles, tipOutcome } = await collectB3CandlesDetailed(
         [{ key: storageKey, ticker: asset.ticker, type: asset.type, lastCandleDate: ultimo }],
         throughDay,
-    )).get(storageKey);
-    if (!novos?.length) { registrar(null); return null; }
-    registrar('b3');
+    );
+    const desfecho = tipOutcome.get(storageKey) || null;
+    const novos = candles.get(storageKey);
+    if (!novos?.length) { registrar(null, desfecho); return null; }
+    // Preencher buraco antigo não resolve a PONTA, que é o dia que o ledger
+    // nomeia: quem só recuperou dia velho segue sem o fechamento de hoje.
+    registrar(desfecho === B3_TIP_OUTCOME.COBERTO ? 'b3' : null, desfecho);
 
     // Mesma mescla do caminho do Yahoo: o cap de pontos e a recusa de candle em dia
     // sem pregão valem igual, venha o fechamento de onde vier.
