@@ -3,6 +3,7 @@ import https from 'https';
 import logger from '../config/logger.js';
 import { withRetry } from '../utils/resilience.js';
 import { trackSource } from '../utils/sourceHealth.js';
+import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 
 /**
  * FECHAMENTO OFICIAL DO PREGÃO, DIRETO DA B3.
@@ -213,7 +214,25 @@ const downloadDay = async (dayStr) => {
                 httpsAgent: B3_AGENT,
                 timeout: 30000,
                 validateStatus: (s) => s === 200 || s === 400 || s === 404,
-            }));
+            }), {
+                // O comentário acima sempre prometeu este `isEmpty`, e ele nunca
+                // chegou a ser passado. Com `validateStatus` aceitando 400/404, o
+                // pregão que a B3 ainda não publicou entrava como ENTREGA: em
+                // 09/09/2026 o arquivo não estava no ar às 18:30, ~584 séries do
+                // universo ficaram sem o fechamento do dia — e o card da B3 seguiu
+                // calmo, ao lado da própria linha da cadeia dizendo "sem fechamento
+                // em fonte nenhuma" em vermelho. Mesma falha, duas cores.
+                //
+                // Quem decide é o TOKEN, não o status: sem ele não há arquivo para
+                // baixar, e não há entrega para creditar à fonte.
+                //
+                // Dia sem pregão fica FORA da régua. Os chamadores de produção só
+                // pedem dia útil (`missingBusinessDays`, `businessWindowDays`), mas
+                // um script de backfill pode pedir um sábado — e ali o 400 é a
+                // resposta certa da B3, não uma falha dela.
+                isEmpty: (r) => isBrBusinessDay(dayStr)
+                    && !String(r?.data?.redirectUrl || '').includes('token='),
+            });
             // Dia sem arquivo: a B3 recusa o pedido do token. Não é erro nosso e
             // não deve ser re-tentado — devolvemos null e o chamador segue.
             //

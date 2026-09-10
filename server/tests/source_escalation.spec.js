@@ -80,9 +80,9 @@ describe('cruzamento do ledger com as fontes', () => {
         // separa "esta fonte falhou onde a seguinte deu conta" de "o ativo não
         // negocia mais". Só EURP11 é órfão aqui — PETR4 saiu pela Brapi e NGRD3
         // pelo Google, então nesses dois a falha é mesmo da fonte.
-        expect(bySource.get('yahoo.quotes')).toEqual({ reached: 3, rescued: 0, missed: 3, orphaned: 1 });
-        expect(bySource.get('google.finance')).toEqual({ reached: 3, rescued: 1, missed: 2, orphaned: 1 });
-        expect(bySource.get('brapi')).toEqual({ reached: 2, rescued: 1, missed: 1, orphaned: 1 });
+        expect(bySource.get('yahoo.quotes')).toEqual({ reached: 3, rescued: 0, missed: 3, orphaned: 1, orphanedExpected: 0 });
+        expect(bySource.get('google.finance')).toEqual({ reached: 3, rescued: 1, missed: 2, orphaned: 1, orphanedExpected: 0 });
+        expect(bySource.get('brapi')).toEqual({ reached: 2, rescued: 1, missed: 1, orphaned: 1, orphanedExpected: 0 });
     });
 
     it('resume a cadeia com o "sem preço" contado à parte', () => {

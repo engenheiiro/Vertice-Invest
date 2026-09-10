@@ -233,6 +233,50 @@ describe('buildSourceStatuses — veredito por fonte', () => {
         expect(byId(rows, 'yahoo.chart').detail).toContain('100%');
     });
 
+    // Só 'candle' exige que TODO órfão seja uma ausência esperada — porque só ali
+    // `expected` significa "confirmadamente sem negócio" (SEM_NEGOCIO). Em 'quotes'
+    // ele significa outra coisa (PREFER_GOOGLE_TICKERS), e por isso os dois testes
+    // do AVB/EQR/EA acima continuam de pé sem passar `expected`.
+    const escaladaCandle = (subject, resolvedBy, expected = false) => ({
+        chain: 'candle', subject, tried: ['yahoo.history', 'b3'], resolvedBy, expected, count: 1, at: NOW,
+    });
+
+    it('B3 sem arquivo do pregão não é assunto morto — é falha real da cadeia', () => {
+        const rows = buildSourceStatuses(
+            factsBase(),
+            stats({ id: 'b3', attempts: 3, ok: 0, failures: 3, failureRate: 1 }),
+            [escaladaCandle('ITSA4', null), escaladaCandle('PETR4', null), escaladaCandle('VALE3', null)],
+        );
+        const b3 = byId(rows, 'b3');
+        // SEM_ARQUIVO nunca marca `expected`: os três ficam órfãos e nenhum é
+        // ausência esperada, então a régua de "assunto morto" não se aplica — o
+        // card cai na taxa de falha normal, igual a qualquer outra fonte instável.
+        expect(b3.status).not.toBe(SOURCE_STATUS.UNKNOWN);
+        expect(b3.idleReason).not.toBe('NO_LIVE_SUBJECT');
+    });
+
+    it('B3 só com papel confirmadamente sem negócio continua "sem alvo vivo"', () => {
+        const rows = buildSourceStatuses(
+            factsBase(),
+            stats({ id: 'b3', attempts: 2, ok: 0, failures: 2, failureRate: 1 }),
+            [escaladaCandle('COCE3', null, true), escaladaCandle('PATI4', null, true)],
+        );
+        const b3 = byId(rows, 'b3');
+        expect(b3.status).toBe(SOURCE_STATUS.UNKNOWN);
+        expect(b3.idleReason).toBe('NO_LIVE_SUBJECT');
+    });
+
+    it('B3 com um SEM_ARQUIVO misturado a papéis sem negócio some da calmaria', () => {
+        const rows = buildSourceStatuses(
+            factsBase(),
+            stats({ id: 'b3', attempts: 3, ok: 0, failures: 3, failureRate: 1 }),
+            [escaladaCandle('COCE3', null, true), escaladaCandle('PATI4', null, true), escaladaCandle('ITSA4', null, false)],
+        );
+        // Um único órfão que não é ausência esperada já basta: a maioria expected
+        // não pode diluir a falha real do meio.
+        expect(byId(rows, 'b3').idleReason).not.toBe('NO_LIVE_SUBJECT');
+    });
+
     it('a entrega registrada no banco vira a data de referência da fonte', () => {
         const facts = factsBase();
         facts.macro.currenciesSources = { usd: 'PTAX/BCB', btc: 'Coinbase' };

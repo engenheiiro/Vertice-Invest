@@ -322,7 +322,7 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
         porResolver.set(chaveResolver, (porResolver.get(chaveResolver) || 0) + 1);
 
         for (const id of ev.tried || []) {
-            if (!bySource.has(id)) bySource.set(id, { reached: 0, rescued: 0, missed: 0, orphaned: 0 });
+            if (!bySource.has(id)) bySource.set(id, { reached: 0, rescued: 0, missed: 0, orphaned: 0, orphanedExpected: 0 });
             const conta = bySource.get(id);
             conta.reached += 1;
             if (ev.resolvedBy === id) conta.rescued += 1;
@@ -331,7 +331,16 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
             // salvou (aí a falha é desta fonte) e o que ninguém salvou (aí o que
             // faltou foi papel negociando). Separar é o que permite não acusar
             // uma reserva por ter sido chamada só para ticker morto.
-            if (!ev.resolvedBy) conta.orphaned += 1;
+            if (!ev.resolvedBy) {
+                conta.orphaned += 1;
+                // Dos órfãos, quantos eram ausência ESPERADA (ticker morto, papel
+                // sem pregão) — é o que separa "só recebeu assunto morto" (calmo)
+                // de "só recebeu assunto que ninguém resolveu, e não era esperado"
+                // (falha real). Sem isso, `soAssuntoMorto` em `buildSourceStatuses`
+                // via `orphaned === reached` também ficava calmo quando a causa era
+                // SEM_ARQUIVO — o arquivo da B3 não veio, não o papel sem negócio.
+                if (ev.expected) conta.orphanedExpected += 1;
+            }
         }
     }
 
@@ -446,13 +455,34 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
          * faltou foi papel negociando. Basta um assunto que a fonte seguinte tenha
          * salvado para a suspeita voltar a ser legítima — aí uma peça da cadeia
          * conseguiu onde esta falhou, e isso é sobre a fonte.
+         *
+         * Mas só em 'candle' "ninguém resolveu" basta sozinho — e é preciso dizer
+         * por quê, porque a própria cadeia de cotações do exemplo do AVB/EQR/EA
+         * acima segue sem essa exigência, de propósito. `expected` não quer dizer
+         * a mesma coisa nas duas: em 'candle' ele é o SEM_NEGOCIO do
+         * `timeSeriesWorker`/`walletDayCandleService` — o papel confirmadamente
+         * não negociou, então não vai ter fechamento em fonte nenhuma, hoje nem
+         * depois. Em 'quotes' ele é `PREFER_GOOGLE_TICKERS`, uma lista de ticker
+         * que NEGOCIA normalmente e só falha no Yahoo — o oposto de "não existe
+         * fechamento". Exigir `orphanedExpected` ali apagaria de propósito o caso
+         * que este bloco existe para cobrir.
+         *
+         * Em 'candle', porém, "ninguém resolveu" sozinho engolia SEM_ARQUIVO (o
+         * arquivo da B3 não veio) junto com SEM_NEGOCIO: os dois deixam
+         * `orphaned === reached`, mas só o segundo é ausência inevitável. O card
+         * da B3 ficava azul e calmo bem ao lado da própria linha da cadeia
+         * dizendo "N sem fechamento em fonte nenhuma" em vermelho — mesma falha,
+         * duas cores. `orphanedExpected` é o desempate: só é assunto morto se
+         * TODO órfão que chegou aqui também é uma ausência esperada.
          */
         const led = escalada.bySource.get(source.id) || null;
+        const exigeTodosEsperados = source.chain === 'candle';
         const soAssuntoMorto = deReserva
             && !!led
             && led.reached > 0
             && led.rescued === 0
-            && led.orphaned === led.reached;
+            && led.orphaned === led.reached
+            && (!exigeTodosEsperados || led.orphaned === (led.orphanedExpected || 0));
 
         if (source.attempts === 0) {
             // Silêncio não é falha. Uma fonte que só roda no sync diário fica sem
