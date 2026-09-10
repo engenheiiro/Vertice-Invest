@@ -271,6 +271,190 @@ const reinforceWithB3 = async ({ asset, storageKey, historyEntry, throughDay, no
     return { ticker: storageKey, history: historyToStore, lastUpdated: now };
 };
 
+/**
+ * O último pregão que JÁ FECHOU — o alvo legítimo de uma varredura de ponta.
+ *
+ * Não é `lastBusinessDayUpTo(hoje)`, e a diferença é a rotina inteira. Numa
+ * quinta às 09:25 aquele devolve a própria quinta; a sessão ainda está aberta,
+ * `sessaoJaFechou` recusa, e a varredura sairia sem fazer nada JUSTAMENTE nas
+ * horas em que ela existe para trabalhar — o fechamento pendente é o de ONTEM.
+ * Depois das 18h o pregão do dia entra como alvo e as duas réguas coincidem de
+ * novo.
+ */
+export const lastClosedSessionDay = (now = new Date()) => {
+    const hoje = brazilDayKey(now);
+    const util = lastBusinessDayUpTo(hoje);
+    if (!util) return null;
+    if (util !== hoje || sessaoJaFechou(util, now)) return util;
+    const anterior = new Date(`${util}T12:00:00.000Z`);
+    anterior.setUTCDate(anterior.getUTCDate() - 1);
+    return lastBusinessDayUpTo(anterior.toISOString().slice(0, 10));
+};
+
+/** Quantas séries são lidas por vez para a mescla. Limita memória; não há rede aqui. */
+const UNIVERSE_TIP_BATCH = 100;
+
+/**
+ * SEGUNDA CHANCE DA PONTA DO UNIVERSO — o que só a carteira tinha.
+ *
+ * O buraco era estrutural, e foi medido em 09/09/2026: das 1.253 séries ativas,
+ * 1.002 ficaram sem o fechamento do dia, nenhuma delas por falha de fonte. São
+ * duas réguas nossas discordando que produzem esse estado:
+ *
+ *  - `isHistoryStale` tolera ~1 pregão de atraso DE PROPÓSITO (ver
+ *    HISTORY_MAX_CANDLE_AGE_DAYS): série com ponta em D-1 passa por fresca no run
+ *    das 18:30, e o Yahoo nem chega a ser consultado. É a economia que mantém o
+ *    universo dentro do orçamento de chamadas.
+ *  - `reinforceWithB3` olha essa MESMA ponta, vê que falta o pregão do dia e
+ *    desce para a B3 — cujo arquivo, naquele dia, ainda não estava publicado às
+ *    18:30. Resultado: ~584 escaladas `SEM_ARQUIVO` de uma vez, em vermelho.
+ *
+ * O arquivo subiu no fim da noite e ficou disponível o dia seguinte inteiro. Não
+ * havia quem voltasse lá: a recuperação horária existente
+ * (`reconcilePreviousWalletSnapshot`) só cobre ativo EM CARTEIRA, porque nasceu
+ * para consertar o snapshot patrimonial. O universo — as séries que alimentam
+ * SMA, RSI, beta, volatilidade e o backtest — só teria nova chance no run
+ * seguinte, 24h depois.
+ *
+ * Esta rotina é a contraparte daquela, com a mesma filosofia: em vez de apostar
+ * na hora em que a B3 publica, tentar enquanto a lacuna existir. E é barata por
+ * construção — UM arquivo por pregão para o universo inteiro (memo em
+ * `b3DailyFileService`), zero chamadas ao Yahoo, e saída em duas consultas
+ * quando não há o que fazer, que é o caso na esmagadora maioria das horas.
+ *
+ * NÃO renova `lastCheckedAt`. Aquele relógio é a fila do `timeSeriesWorker` (ver
+ * orderByStaleness), e esta varredura não é uma visita dele: não busca no Yahoo e
+ * não calcula métrica nenhuma. Renová-lo faria um conserto de candle se passar
+ * por visita completa e reordenaria uma fila que ela não está atendendo.
+ *
+ * @returns {Promise<{status: string, day: string|null, targets: number,
+ *   recovered: number, written: number, noTrade: number, missing: number}>}
+ */
+export const recoverUniverseTipWithB3 = async ({ now = new Date() } = {}) => {
+    const vazio = (status, day = null) => ({
+        status, day, targets: 0, recovered: 0, written: 0, noTrade: 0, missing: 0,
+    });
+
+    const throughDay = lastClosedSessionDay(now);
+    if (!throughDay) return vazio('SKIPPED');
+
+    const assets = (await withMongoRetry(
+        () => MarketAsset.find({ isActive: true }).select('ticker type').lean(),
+        { label: 'universo para varredura de ponta' },
+    )).filter((a) => isB3Coverable(a.ticker, a.type));
+    if (assets.length === 0) return vazio('SKIPPED', throughDay);
+
+    const chavePorAtivo = new Map(assets.map((a) => [a, historyStorageKey(a.ticker, a.type)]));
+    // A ponta de cada série, sem trazer o array inteiro para o processo. É a mesma
+    // agregação que a sentinela de saúde já roda de hora em hora — custo conhecido,
+    // e o `$match` a deixa mais barata que aquela.
+    const pontas = await withMongoRetry(
+        () => AssetHistory.aggregate([
+            { $match: { ticker: { $in: [...chavePorAtivo.values()] } } },
+            { $project: { _id: 0, ticker: 1, tip: { $max: '$history.date' } } },
+        ]),
+        { label: 'ponta das séries do universo' },
+    );
+    const pontaPorChave = new Map(pontas.map((r) => [r.ticker, r.tip || null]));
+
+    const alvos = [];
+    for (const asset of assets) {
+        const key = chavePorAtivo.get(asset);
+        const tip = pontaPorChave.get(key) || null;
+        // Série vazia fica de fora: a B3 ESTENDE a ponta de quem já tem histórico,
+        // não reconstrói (um ano custaria ~250 downloads). Série já na ponta
+        // também não — é a saída barata, e é o caso normal.
+        if (!tip || tip >= throughDay) continue;
+        alvos.push({ key, ticker: asset.ticker, type: asset.type, lastCandleDate: tip });
+    }
+    if (alvos.length === 0) return vazio('SUCCESS', throughDay);
+
+    const { candles, tipOutcome } = await collectB3CandlesDetailed(alvos, throughDay);
+
+    // O LEDGER PRIMEIRO, e ele vale por si. Cada linha aqui SOBRESCREVE a que o run
+    // das 18:30 deixou para o mesmo ticker (a chave é `cadeia|assunto`), e é assim
+    // que o painel deixa de exibir por 24h uma falha já curada: o vermelho "sem
+    // fechamento em fonte nenhuma" vira "resolvidos pela B3" assim que o arquivo
+    // entra no ar. Sem isto, consertar o dado não conserta a tela.
+    let recovered = 0;
+    let noTrade = 0;
+    let missing = 0;
+    for (const alvo of alvos) {
+        const desfecho = tipOutcome.get(alvo.key) || null;
+        const coberto = desfecho === B3_TIP_OUTCOME.COBERTO;
+        const semNegocio = desfecho === B3_TIP_OUTCOME.SEM_NEGOCIO;
+        if (coberto) recovered += 1;
+        else if (semNegocio) noTrade += 1;
+        else missing += 1;
+        recordEscalation({
+            chain: 'candle',
+            subject: alvo.ticker,
+            tried: ['yahoo.history', 'b3'],
+            resolvedBy: coberto ? 'b3' : null,
+            reason: semNegocio
+                ? `O papel não negociou em ${throughDay} — ausente também no arquivo oficial da B3`
+                : `A série parou em ${alvo.lastCandleDate} e o fechamento de ${throughDay} não veio pelo Yahoo`,
+            expected: semNegocio,
+        });
+    }
+
+    const comCandles = alvos.filter((a) => (candles.get(a.key) || []).length > 0);
+    let written = 0;
+    for (let i = 0; i < comCandles.length; i += UNIVERSE_TIP_BATCH) {
+        const lote = comCandles.slice(i, i + UNIVERSE_TIP_BATCH);
+        const docs = await withMongoRetry(
+            () => AssetHistory.find(
+                { ticker: { $in: lote.map((a) => a.key) } }, { ticker: 1, history: 1 },
+            ).lean(),
+            { label: 'séries para a mescla da varredura de ponta' },
+        );
+        const guardadaPorChave = new Map(docs.map((d) => [d.ticker, d.history || []]));
+
+        const ops = [];
+        for (const alvo of lote) {
+            const guardada = guardadaPorChave.get(alvo.key);
+            // Sem série guardada não se mescla — mesma recusa de `reinforceWithB3`.
+            // Aqui ela cobre também a corrida com o run das 18:30, que pode ter
+            // reescrito o documento entre a leitura da ponta e esta.
+            if (!guardada?.length) continue;
+            // Mesma mescla dos outros dois caminhos: o cap de pontos e a recusa de
+            // candle em dia sem pregão valem igual, venha o fechamento de onde vier.
+            const merged = mergeCandleSeries(guardada, candles.get(alvo.key), {
+                maxPoints: HISTORY_CAP_EXEMPT_TICKERS.has(alvo.ticker) ? Infinity : ASSET_HISTORY_MAX_POINTS,
+                type: alvo.type,
+                now,
+            });
+            ops.push({
+                updateOne: {
+                    filter: { ticker: alvo.key },
+                    update: { $set: { history: merged, lastUpdated: now } },
+                },
+            });
+        }
+        if (ops.length === 0) continue;
+        await withMongoRetry(() => AssetHistory.bulkWrite(ops), { label: 'varredura de ponta do universo' });
+        written += ops.length;
+    }
+
+    // Silêncio quando não houve conserto: a rotina roda 15 vezes por dia e, no dia
+    // bom, não tem nada a dizer. Log de rotina ociosa é o que treina o olho a pular
+    // justamente a linha que interessa.
+    if (written > 0) {
+        logger.info('🩹 [UniverseTip] Fechamento oficial entrou depois do run e a ponta do universo foi fechada', {
+            day: throughDay, targets: alvos.length, recovered, written, noTrade, missing,
+        });
+    } else if (missing > 0) {
+        // A B3 não publicou o arquivo do pregão e a hora do run já passou. Não é
+        // defeito nosso, mas é o estado que deixa a série curta — e a execução
+        // seguinte tenta de novo.
+        logger.warn('⚠️ [UniverseTip] Arquivo do pregão ainda ausente na B3 — ponta do universo segue curta', {
+            day: throughDay, targets: alvos.length, missing, noTrade,
+        });
+    }
+
+    return { status: 'SUCCESS', day: throughDay, targets: alvos.length, recovered, written, noTrade, missing };
+};
+
 export const timeSeriesWorker = {
     async run() {
         logger.info("📈 [TimeSeriesWorker] Iniciando cálculo de Volatilidade, Beta, SMA e EMA...");

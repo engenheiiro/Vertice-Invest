@@ -48,7 +48,7 @@ import {
     transactionsAfterSnapshotFilter,
     upsertWalletSnapshotForDay,
 } from '../utils/walletSnapshot.js';
-import { timeSeriesWorker } from './workers/timeSeriesWorker.js';
+import { recoverUniverseTipWithB3, timeSeriesWorker } from './workers/timeSeriesWorker.js';
 import { ensureWalletDayCandles } from './walletDayCandleService.js';
 import { reconcilePreviousWalletSnapshot, reconcileTreasurySnapshot } from './walletCandleRecoveryService.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
@@ -714,6 +714,27 @@ export const initScheduler = () => {
         if (resultado.recovered > 0 || resultado.healed > 0) {
             logger.info('⏰ Recuperação de candle: fechamento oficial entrou e o snapshot foi refeito', resultado);
         }
+    });
+
+    // 5a-ter. Recuperação da PONTA DO UNIVERSO (de hora em hora, 07:45–21:45)
+    //
+    // Irmã da rotina acima, para a outra população. Aquela conserta o snapshot
+    // patrimonial e por isso só olha ativo EM CARTEIRA; esta fecha a ponta das
+    // ~1.250 séries que alimentam SMA, RSI, beta, volatilidade e o backtest.
+    //
+    // Existe por um estado medido em 09/09/2026: o run das 18:30 deixou 1.002
+    // séries sem o fechamento do dia — a régua de staleness do worker tolera um
+    // pregão de atraso de propósito, e o arquivo da B3 ainda não estava no ar
+    // naquele horário. O arquivo subiu à noite e ficou disponível o dia seguinte
+    // inteiro sem que ninguém voltasse lá. Mesma lição da rotina acima: não
+    // apostar na hora em que um terceiro publica.
+    //
+    // Custa um download por pregão (o memo de b3DailyFileService é por dia, então
+    // a segunda das duas rotinas pega o arquivo da primeira de graça) e sai em
+    // duas consultas ao Mongo quando não há lacuna — o caso normal. Em :45 e não
+    // :25 para que uma lentidão longa da B3 não segure as duas no mesmo minuto.
+    schedule('45 7-21 * * *', 'universe-candle-recovery', async () => {
+        await recoverUniverseTipWithB3();
     });
 
     // 5b. Sync Tarde/Pós-Mercado (18:30) — B3 fecha às 17:30, dados completos do dia

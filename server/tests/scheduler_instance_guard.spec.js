@@ -40,7 +40,7 @@ const { initScheduler, runDailySnapshot } = await import('../services/schedulerS
 // Os jobs que initScheduler registra hoje, na ordem em que aparecem no arquivo.
 const JOBS_ESPERADOS = [
     'macro-sync', 'quotes-sync', 'radar-alpha', 'backtest-intraday', 'daily-morning',
-    'wallet-candle-recovery', 'daily-evening', 'weekly-autopublish',
+    'wallet-candle-recovery', 'universe-candle-recovery', 'daily-evening', 'weekly-autopublish',
     'monthly-anchor-publish', 'daily-snapshot',
     'subscriptions-check', 'dividends-sync', 'holidays-sync', 'us-fundamentals',
     'fx-history', 'assets-reactivation', 'storage-cleanup', 'treasury-prices',

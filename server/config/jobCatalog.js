@@ -62,6 +62,18 @@ export const JOB_CATALOG = {
         maxSilenceHours: 816,
         severity: 'WARN',
     },
+    'universe-candle-recovery': {
+        label: 'Recuperação da ponta das séries do universo (horária, 07:45–21:45)',
+        // Data de entrada no catálogo — ver a nota em 'wallet-candle-recovery'.
+        since: '2026-09-10',
+        // Mesmo vão noturno da irmã: 21:45 → 07:45 = 10h, com folga para uma
+        // execução perdida sem alarmar de madrugada.
+        maxSilenceHours: 14,
+        // WARN: parada aqui deixa a série do universo um pregão curta até o run
+        // das 18:30 seguinte — degrada SMA/RSI/beta, não produz número errado na
+        // tela do usuário.
+        severity: 'WARN',
+    },
     'wallet-candle-recovery': {
         label: 'Recuperação do fechamento oficial (horária, 07:25–21:25)',
         // Data de entrada no catálogo. A sentinela conta a carência de "nunca
