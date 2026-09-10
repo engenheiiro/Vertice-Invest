@@ -854,12 +854,28 @@ const jobChecks = (facts) => {
     // comportamento antigo.
     const monitoredHours = (job) => {
         const instrumentado = facts.instrumentationSince || facts.now;
-        const entrada = job.since ? new Date(`${job.since}T00:00:00.000Z`) : null;
+        const dia = job.since ? new Date(`${job.since}T00:00:00.000Z`) : null;
         // Data inválida ou no futuro (erro de digitação) não pode virar carência
         // eterna: nesse caso vale só a instrumentação.
-        const valida = entrada && Number.isFinite(entrada.getTime()) && entrada <= new Date(facts.now);
-        const inicio = valida && entrada > new Date(instrumentado) ? entrada : instrumentado;
-        return hoursBetween(inicio, facts.now) ?? 0;
+        const valida = dia && Number.isFinite(dia.getTime()) && dia <= new Date(facts.now);
+        // A carência conta do FIM do dia de entrada, não da meia-noite UTC dele.
+        //
+        // `since` tem granularidade de DIA e não sabe a hora do deploy; ancorar na
+        // meia-noite descontava da carência as horas do dia que já tinham passado.
+        // Para job com teto MENOR que 24h — todos os horários — isso a zerava antes
+        // do primeiro tique: 'universe-candle-recovery' entrou no catálogo em
+        // 10/09/2026 às 15h BRT (18h UTC) com teto de 14h e nasceu em WARN, com o
+        // painel sugerindo que o scheduler não tinha subido. É o mesmo alarme falso
+        // que `since` foi criado para evitar, um degrau adiante.
+        //
+        // Fim do dia é a leitura conservadora possível com data pura: o job pode ter
+        // entrado em serviço às 23h59. Custa, no máximo, um dia a mais de silêncio —
+        // uma vez na vida de cada job, no dia em que ele nasce.
+        const entrada = valida ? new Date(dia.getTime() + 24 * 60 * 60 * 1000) : null;
+        const inicio = entrada && entrada > new Date(instrumentado) ? entrada : instrumentado;
+        // Enquanto o dia de entrada não fechou, `inicio` está no futuro e a conta sai
+        // negativa. Zero é a leitura certa: nenhuma hora de monitoramento passou.
+        return Math.max(0, hoursBetween(inicio, facts.now) ?? 0);
     };
 
     for (const job of facts.jobs || []) {

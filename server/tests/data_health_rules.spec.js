@@ -730,6 +730,52 @@ describe('ROTINAS (crons)', () => {
         expect(check.detail).toContain('Aguardando primeira execução');
     });
 
+    it('job que entrou HOJE não perde a carência pelas horas já passadas do dia', () => {
+        // 10/09/2026: 'universe-candle-recovery' entrou no catálogo às 15h BRT (18h
+        // UTC) com teto de 14h. Ancorada na meia-noite UTC do dia de entrada, a
+        // carência nascia VENCIDA (18h > 14h) e o painel acusou "nunca executado"
+        // antes do primeiro tique da rotina, sugerindo scheduler morto. `since` tem
+        // granularidade de DIA e não sabe a hora do deploy — a régua tem que contar
+        // do fim do dia, que é a leitura conservadora possível.
+        //
+        // O caso só aparece com teto MENOR que 24h, ou seja, em todo job horário: o
+        // teste antigo desta carência passava por sorte, com NOW às 12h UTC contra
+        // um teto de 14h.
+        const facts = healthyFacts({ now: new Date('2026-09-10T18:00:00Z') });
+        facts.instrumentationSince = new Date('2026-01-01T00:00:00Z');
+        facts.jobs.push({
+            jobId: 'universe-candle-recovery',
+            label: 'Recuperação da ponta das séries do universo',
+            severity: 'WARN',
+            maxSilenceHours: 14,
+            since: '2026-09-10',
+            lastRunAt: null,
+            lastStatus: null,
+        });
+        const check = byId(buildHealthReport(facts), 'jobs.universe-candle-recovery');
+        expect(check.status).toBe(HEALTH_STATUS.OK);
+        expect(check.detail).toContain('Aguardando primeira execução');
+    });
+
+    it('fechado o dia de entrada, o teto volta a valer e o silêncio vira falha', () => {
+        // A carência é generosa, não eterna: fim do dia 10 (= 11 às 00h UTC) + 15h
+        // já passou do teto de 14h. Um cron novo que nunca subiu tem que aparecer.
+        const facts = healthyFacts({ now: new Date('2026-09-11T15:00:00Z') });
+        facts.instrumentationSince = new Date('2026-01-01T00:00:00Z');
+        facts.jobs.push({
+            jobId: 'universe-candle-recovery',
+            label: 'Recuperação da ponta das séries do universo',
+            severity: 'WARN',
+            maxSilenceHours: 14,
+            since: '2026-09-10',
+            lastRunAt: null,
+            lastStatus: null,
+        });
+        const check = byId(buildHealthReport(facts), 'jobs.universe-candle-recovery');
+        expect(check.status).toBe(HEALTH_STATUS.WARN);
+        expect(check.detail).toContain('Nunca executado');
+    });
+
     it('passada a carência do próprio job, "nunca executado" volta a ser falha', () => {
         const facts = healthyFacts();
         facts.jobs.push({
