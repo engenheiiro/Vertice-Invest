@@ -471,6 +471,38 @@ export const resetSourceStats = () => { stats.clear(); escalations.clear(); susp
 const ESCALATION_CAP = 600;
 
 /**
+ * A CADEIA DE CANDLE ESCREVE NA ESCALA DO UNIVERSO, e 600 não era teto: era corte.
+ *
+ * O run das 18:30 registra uma linha para praticamente todo ativo da B3 — a
+ * série a que só falta hoje tem 1,8 dia e passa por fresca na régua de 2, então
+ * o Yahoo não é consultado e quem fecha a ponta é a B3, todo dia. São ~1.000
+ * linhas por run contra 2 do câmbio e 4 das taxas. Em 10/09/2026 o painel exibia
+ * exatamente "600 ativos": o número não era a medida, era o teto.
+ *
+ * ~1.300 séries ativas hoje; 1.400 dá folga de crescimento sem virar memória
+ * relevante (o registro é um objeto raso por assunto).
+ */
+const ESCALATION_CAP_BY_CHAIN = { candle: 1400 };
+const escalationCapOf = (chain) => ESCALATION_CAP_BY_CHAIN[chain] ?? ESCALATION_CAP;
+
+/**
+ * QUÃO DISPENSÁVEL É ESTA LINHA — a régua única do descarte e da ordenação.
+ *
+ * 0 = ninguém resolveu e não era ausência esperada. É o conjunto com
+ * consequência, o que a tela pinta de vermelho, a razão de o ledger existir.
+ * 1 = ninguém resolveu, mas ninguém poderia (papel sem pregão, provento não
+ * anunciado). 2 = alguém trouxe o dado; a linha é histórico, não notícia.
+ *
+ * Vale para os dois lugares onde se decide o que fica de fora — a amostra que
+ * vai para a tela (`buildEscalationView`) e o descarte por teto aqui — porque
+ * duas réguas discordando é como o alarme some: o descarte por IDADE jogava fora
+ * as ~400 primeiras linhas do mesmo laço sem olhar a cor, então num dia em que a
+ * B3 atrasasse o vermelho chegava à tela subnotificado. O teto passa a limitar
+ * quanto CONTEXTO se guarda, nunca o que o dono fica sabendo.
+ */
+export const escalationDiscardRank = (ev) => (ev?.resolvedBy ? 2 : (ev?.expected ? 1 : 0));
+
+/**
  * Cadeias que têm ledger por assunto, e como cada uma se chama na tela.
  *
  * Existe para a tela não mentir por omissão. Sem esta lista, uma cadeia que
@@ -635,18 +667,26 @@ export const recordEscalation = ({ chain, subject, tried = [], skipped = [], res
         at: new Date(),
         count: (anterior?.count || 0) + 1,
     });
-    // Descarte por CADEIA: varre do mais antigo e tira só quem é da mesma fila.
-    // A varredura só roda quando a cadeia estoura o teto, e nunca passa de uma
-    // remoção por chamada (o Map já estava no limite antes desta inserção).
+    // Descarte por CADEIA e por IMPORTÂNCIA: sai a linha mais dispensável da
+    // mesma fila (ver escalationDiscardRank), e entre iguais a mais antiga — a
+    // ordem do Map já é essa, e por isso o primeiro máximo encontrado ganha.
+    //
+    // A linha recém-inserida concorre como qualquer outra: se ela for a mais
+    // dispensável da cadeia cheia, é ela que sai. É o desfecho certo — nada aqui
+    // vale mais que uma linha vermelha já guardada.
+    //
+    // Uma varredura só, contando e escolhendo, e no máximo uma remoção por
+    // chamada (a cadeia estava no limite antes desta inserção).
     let daCadeia = 0;
-    for (const chave of escalations.keys()) {
-        if (chave.startsWith(`${chain}|`)) daCadeia += 1;
+    let vitima = null;
+    let vitimaRank = -1;
+    for (const [chave, ev] of escalations) {
+        if (!chave.startsWith(`${chain}|`)) continue;
+        daCadeia += 1;
+        const rank = escalationDiscardRank(ev);
+        if (rank > vitimaRank) { vitimaRank = rank; vitima = chave; }
     }
-    if (daCadeia > ESCALATION_CAP) {
-        for (const chave of escalations.keys()) {
-            if (chave.startsWith(`${chain}|`)) { escalations.delete(chave); break; }
-        }
-    }
+    if (daCadeia > escalationCapOf(chain) && vitima) escalations.delete(vitima);
 };
 
 /**

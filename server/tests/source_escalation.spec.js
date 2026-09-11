@@ -302,11 +302,50 @@ describe('cruzamento do ledger com as fontes', () => {
      */
     it('cadeia cheia não expulsa o vizinho', () => {
         recordEscalation({ chain: 'fx', subject: 'USD', tried: ['yahoo.currencies', 'ptax'], resolvedBy: 'ptax' });
-        for (let i = 0; i < 700; i += 1) {
+        for (let i = 0; i < 1500; i += 1) {
             recordEscalation({ chain: 'candle', subject: `TICK${i}`, tried: ['yahoo.history', 'b3'], resolvedBy: 'b3' });
         }
         const { chains } = buildEscalationView(getEscalations(), stats());
         expect(chains.fx.total).toBe(1);
-        expect(chains.candle.total).toBe(600);
+        expect(chains.candle.total).toBe(1400);
+    });
+
+    // O teto de 600 não era teto para esta cadeia, era corte: o run das 18:30
+    // escreve ~1.000 linhas (a série a que só falta hoje passa por fresca na
+    // régua de 2 dias, e quem fecha a ponta é a B3). Em 10/09/2026 a tela exibia
+    // exatamente "600 ativos" — o número era o limite, não a medida.
+    it('a cadeia de candle cabe no universo, as outras seguem em 600', () => {
+        for (let i = 0; i < 900; i += 1) {
+            recordEscalation({ chain: 'candle', subject: `T${i}`, tried: ['yahoo.history', 'b3'], resolvedBy: 'b3' });
+            recordEscalation({ chain: 'quotes', subject: `Q${i}`, tried: ['yahoo.quotes', 'brapi'], resolvedBy: 'brapi' });
+        }
+        const { chains } = buildEscalationView(getEscalations(), stats());
+        expect(chains.candle.total).toBe(900);
+        expect(chains.quotes.total).toBe(600);
+    });
+
+    /**
+     * O DESCARTE OLHA A COR, NÃO A IDADE — é o que impede o teto de calar o alarme.
+     *
+     * As ~1.000 linhas de um run saem no mesmo laço, em ordem do universo, então
+     * descartar "a mais antiga" jogava fora as primeiras do próprio laço sem olhar
+     * o desfecho. Num dia em que a B3 atrasasse, o vermelho — a única coisa que
+     * essa linha existe para mostrar — chegaria à tela subnotificado.
+     */
+    it('teto estourado sacrifica o resolvido, nunca o que ninguém resolveu', () => {
+        // O vermelho entra PRIMEIRO: pela idade, seria o primeiro a sair.
+        recordEscalation({ chain: 'candle', subject: 'SEMFONTE', tried: ['yahoo.history', 'b3'], resolvedBy: null });
+        // E o "ninguém poderia" logo atrás, que também não é dispensável como um
+        // resolvido: ele explica por que a linha vermelha não é maior.
+        recordEscalation({ chain: 'candle', subject: 'NAONEGOCIOU', tried: ['yahoo.history', 'b3'], resolvedBy: null, expected: true });
+        for (let i = 0; i < 1500; i += 1) {
+            recordEscalation({ chain: 'candle', subject: `OK${i}`, tried: ['yahoo.history', 'b3'], resolvedBy: 'b3' });
+        }
+
+        const { chains } = buildEscalationView(getEscalations(), stats());
+        const assuntos = chains.candle.items.map((i) => i.subject);
+        expect(assuntos).toContain('SEMFONTE');
+        expect(assuntos).toContain('NAONEGOCIOU');
+        expect(chains.candle.unresolved).toBe(2);
     });
 });

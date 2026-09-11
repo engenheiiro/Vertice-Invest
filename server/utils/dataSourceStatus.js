@@ -20,7 +20,7 @@
  */
 
 import { cadenceLabel, nextRunLabel } from './sourceSchedule.js';
-import { LEDGERED_CHAINS } from './sourceHealth.js';
+import { escalationDiscardRank, LEDGERED_CHAINS } from './sourceHealth.js';
 
 export const SOURCE_STATUS = { OK: 'OK', WARN: 'WARN', CRITICAL: 'CRITICAL', UNKNOWN: 'UNKNOWN' };
 
@@ -166,7 +166,7 @@ export const buildChainMap = (sourceStats = []) => {
 /**
  * Quantos assuntos a tela lista por cadeia. O RESUMO é sempre exato (contado
  * sobre o ledger inteiro); o que o teto corta é só a lista nominal — ninguém
- * varre 600 tickers na tela, e um payload que cresce sem limite é o começo de um
+ * varre mil tickers na tela, e um payload que cresce sem limite é o começo de um
  * painel lento justamente no dia em que tudo está falhando.
  */
 const ESCALATION_SAMPLE = 60;
@@ -374,10 +374,13 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
     // a ausência ESPERADA, que ninguém tinha como resolver. Com dois pesos, 49
     // papéis sem pregão empurravam para fora da amostra justamente o ativo que
     // ficou sem fechamento por falha de fonte.
-    const peso = (ev) => (ev.resolvedBy ? 2 : (ev.expected ? 1 : 0));
+    //
+    // A régua é IMPORTADA, e não recopiada: é a mesma que decide quem o teto do
+    // ledger descarta. Duas cópias que discordem fazem a tela e o registro terem
+    // opiniões diferentes sobre o que é dispensável — e o alarme some no meio.
     const ordenados = [...escalations].sort((a, b) => {
-        const pesoA = peso(a);
-        const pesoB = peso(b);
+        const pesoA = escalationDiscardRank(a);
+        const pesoB = escalationDiscardRank(b);
         if (pesoA !== pesoB) return pesoA - pesoB;
         return new Date(b.at) - new Date(a.at);
     });
