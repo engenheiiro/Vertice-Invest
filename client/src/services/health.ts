@@ -207,6 +207,19 @@ export interface ChainFlow {
     vocabulary: {
         noun: string;
         none: string;
+        /**
+         * A frase da LINHA, do título da lista e da relação entre os elos.
+         *
+         * Opcionais porque só uma cadeia as reescreve: candle, onde a segunda
+         * fonte não é reserva da primeira (a B3 fecha a ponta do pregão porque é
+         * a função dela, não porque o Yahoo falhou — na maior parte da semana ele
+         * nem chega a ser consultado). Ausentes, a tela usa a frase de reserva,
+         * que é a verdade nas outras três cadeias.
+         */
+        escalatedLine?: string;
+        escalatedNone?: string;
+        escalatedTitle?: string;
+        backupOf?: string;
         rescued: string;
         allFromPrimary: string;
         missingBadge: string;

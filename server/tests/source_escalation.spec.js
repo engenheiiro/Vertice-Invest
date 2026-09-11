@@ -140,6 +140,38 @@ describe('cruzamento do ledger com as fontes', () => {
         expect(bySource.get('google.finance')).toMatchObject({ reached: 1, rescued: 1, missed: 0 });
     });
 
+    /**
+     * SÓ A CADEIA DE CANDLE REESCREVE A FRASE, e é o que a prende aqui.
+     *
+     * Em cotações, câmbio e taxas a fila é de reserva de verdade: a seguinte só é
+     * chamada porque a anterior não trouxe, e "precisaram de reserva" descreve
+     * exatamente isso. Em candle as duas fontes respondem perguntas diferentes —
+     * o Yahoo entrega a SÉRIE, a B3 entrega a PONTA do pregão —, e a régua de 2
+     * dias faz o Yahoo nem ser consultado de terça a sexta. A frase de reserva
+     * ali acusa uma falha que não houve.
+     */
+    it('a cadeia de candle não descreve a B3 como reserva do Yahoo', () => {
+        const { chains } = buildEscalationView([], stats());
+
+        expect(chains.candle.vocabulary.escalatedLine).toContain('fechamento');
+        expect(chains.candle.vocabulary.escalatedLine).not.toContain('reserva');
+        expect(chains.candle.vocabulary.backupOf).not.toContain('reserva');
+
+        // As outras seguem sem frase própria: a da reserva é a verdade lá, e a
+        // tela cai nela sozinha.
+        expect(chains.quotes.vocabulary.escalatedLine).toBeUndefined();
+        expect(chains.fx.vocabulary.escalatedLine).toBeUndefined();
+    });
+
+    // O texto do card da B3 dizia "quando o Yahoo publica o dia sem preço" —
+    // condição que não é a dela: ela roda para todo ativo com a ponta em aberto,
+    // todo dia, tenha o Yahoo sido consultado ou não.
+    it('o catálogo descreve a B3 pela função, não por uma falha do Yahoo', () => {
+        const b3 = getSourceStats().find((s) => s.id === 'b3');
+        expect(b3.feeds).toContain('todo dia');
+        expect(b3.feeds).not.toContain('quando o Yahoo');
+    });
+
     it('resume a cadeia com o "sem preço" contado à parte', () => {
         cadeiaCompleta('PETR4', 'brapi');
         cadeiaCompleta('EURP11', null);

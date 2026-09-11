@@ -458,6 +458,10 @@ describe('DataSourcesPanel — quem precisou de reserva', () => {
         vocabulary: {
             noun: 'ativo',
             none: 'Nenhum ativo',
+            escalatedLine: 'ficaram sem o fechamento do dia na série',
+            escalatedNone: 'ficou sem o fechamento do dia na série',
+            escalatedTitle: 'Quem ficou sem o fechamento na série',
+            backupOf: 'Fecha a ponta do pregão na série de',
             rescued: 'tiveram o fechamento trazido por esta fonte',
             allFromPrimary: 'esta fonte trouxe o fechamento de todos',
             missingBadge: 'sem fechamento',
@@ -469,8 +473,11 @@ describe('DataSourcesPanel — quem precisou de reserva', () => {
     });
 
     const cadeiaCandle: DataSource[] = [
-        src({ id: 'yahoo.history', short: 'Yahoo histórico', group: 'history', chain: 'candle', chainPosition: 1, chainSize: 2 }),
-        src({ id: 'b3', short: 'B3', group: 'history', chain: 'candle', chainPosition: 2, chainSize: 2, trigger: 'onFailure' }),
+        src({ id: 'yahoo.history', short: 'Yahoo histórico', group: 'history', chain: 'candle', chainPosition: 1, chainSize: 2, backups: ['B3 — arquivo diário'] }),
+        src({
+            id: 'b3', short: 'B3', group: 'history', chain: 'candle', chainPosition: 2, chainSize: 2,
+            trigger: 'onFailure', backups: [], covers: 'Yahoo Finance — histórico',
+        }),
     ];
     const gruposCandle: SourceGroup[] = [
         ...groups, { id: 'history', label: 'Histórico e índices', hint: 'Gráficos e rentabilidade' },
@@ -516,8 +523,40 @@ describe('DataSourcesPanel — quem precisou de reserva', () => {
         expect(elo?.className).not.toContain('line-through');
     });
 
+    /**
+     * A CADEIA DE CANDLE NÃO É UMA FILA DE RESERVAS, e a linha dizia que era.
+     *
+     * "Precisaram de reserva" afirma que a principal foi chamada e não deu conta.
+     * Em candle isso é falso na maior parte da semana: a série passa por fresca na
+     * régua de 2 dias, o Yahoo não é consultado, e a B3 fecha a ponta porque é a
+     * função dela. A linha tem que dizer o ESTADO, não a culpa.
+     */
+    it('a linha da cadeia de candle fala do fechamento, não de reserva', () => {
+        render(<DataSourcesPanel sources={cadeiaCandle} groups={gruposCandle} chains={{ candle: candleFlow() }} />);
+        expect(screen.getByText(/ficaram sem o fechamento do dia na série/)).toBeInTheDocument();
+        expect(screen.queryByText(/precisaram de reserva/)).not.toBeInTheDocument();
+    });
+
+    // O detalhe da B3 dizia "Esta é reserva de Yahoo Finance — histórico", e é o
+    // contrário do que acontece: ela fecha a ponta todo dia, tenha o Yahoo sido
+    // consultado ou não. Reserva é a palavra certa nas outras três cadeias.
+    it('a B3 não é apresentada como reserva do Yahoo', () => {
+        render(<DataSourcesPanel sources={cadeiaCandle} groups={gruposCandle} chains={{ candle: candleFlow() }} />);
+        fireEvent.click(screen.getByRole('button', { name: /B3/ }));
+
+        expect(screen.getByText(/Fecha a ponta do pregão na série de/)).toBeInTheDocument();
+        expect(screen.queryByText(/Esta é reserva de/)).not.toBeInTheDocument();
+    });
+
     // Cliente pode subir antes do servidor. Sem o campo, a tela volta ao
     // comportamento antigo — nunca a uma conta com `NaN`.
+    it('servidor antigo, sem as frases próprias, volta a falar em reserva', () => {
+        const semFrases = candleFlow();
+        delete (semFrases.vocabulary as Record<string, unknown>).escalatedLine;
+        render(<DataSourcesPanel sources={cadeiaCandle} groups={gruposCandle} chains={{ candle: semFrases }} />);
+        expect(screen.getByText(/precisaram de reserva/)).toBeInTheDocument();
+    });
+
     it('servidor antigo, sem a contagem separada, não quebra a linha', () => {
         render(<DataSourcesPanel
             sources={cadeiaCandle}

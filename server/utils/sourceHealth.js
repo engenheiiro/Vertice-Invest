@@ -200,12 +200,32 @@ export const SOURCE_CATALOG = {
     },
 
     // --- Histórico e índices ---
+    /*
+     * AS DUAS PRIMEIRAS NÃO DISPUTAM O MESMO POSTO, e por muito tempo o texto
+     * daqui dizia que sim.
+     *
+     * Em cotações a cadeia é uma fila de reservas de verdade: Yahoo, Google e
+     * Brapi devolvem a MESMA coisa (um preço), e a seguinte só é chamada porque a
+     * anterior não trouxe. Em candle não é isso. O Yahoo entrega a SÉRIE (centenas
+     * de candles, ajustados por evento corporativo, e é o único que cobre cripto e
+     * ativo americano); a B3 entrega a PONTA (o fechamento oficial de UM pregão,
+     * do mercado brasileiro inteiro, num arquivo só). Uma não substitui a outra: a
+     * B3 estende série que já existe e não reconstrói histórico — um ano custaria
+     * ~250 downloads —, e fora da B3 o Yahoo não tem quem o cubra.
+     *
+     * E o desencontro fica maior por causa de uma régua nossa: `isHistoryStale`
+     * tolera 2 dias, e série a que só falta hoje tem 1,8 dia. De terça a sexta ela
+     * passa por fresca e o Yahoo nem é consultado — quem fecha a ponta é a B3,
+     * todo dia. O Yahoo volta a ser chamado na segunda, quando o fim de semana
+     * finalmente envelhece a série. Enquanto o texto dizia "quando o Yahoo publica
+     * o dia sem preço", a tela contava uma falha dele em cada uma dessas linhas.
+     */
     'yahoo.history': {
         label: 'Yahoo Finance — histórico',
         short: 'Yahoo histórico',
         role: 'Série de fechamentos',
         group: 'series',
-        feeds: 'Gráficos e cálculo de rentabilidade da carteira',
+        feeds: 'A série inteira — gráficos, rentabilidade da carteira e as métricas do ranking',
         schedule: { kind: 'dailyTimes', at: ['18:30'] },
         chain: 'candle',
         critical: true,
@@ -213,11 +233,9 @@ export const SOURCE_CATALOG = {
     b3: {
         label: 'B3 — arquivo diário',
         short: 'B3',
-        role: 'Só ações, FIIs e ETFs da B3',
+        role: 'Fechamento do dia da bolsa',
         group: 'series',
-        // O que ela faz é ESTENDER a ponta de uma série que já existe — o arquivo é
-        // por pregão, então reconstruir histórico custaria centenas de downloads.
-        feeds: 'Fechamento oficial do pregão quando o Yahoo publica o dia sem preço',
+        feeds: 'O fechamento oficial do pregão — só ações, FIIs e ETFs da B3 — nas séries que ainda não o têm: todo dia, tenha o Yahoo sido consultado ou não',
         schedule: { kind: 'onFailure' },
         chain: 'candle',
         critical: false,
@@ -514,6 +532,24 @@ export const LEDGERED_CHAINS = new Map([
     ['candle', {
         noun: 'ativo',
         none: 'Nenhum ativo',
+        /*
+         * A ÚNICA CADEIA QUE NÃO É UMA FILA DE RESERVAS (ver a nota do catálogo,
+         * em 'yahoo.history'), e por isso a única que reescreve estas frases.
+         *
+         * "Precisaram de reserva" afirma duas coisas: que a principal foi chamada
+         * e que ela não deu conta. Nas outras três cadeias as duas são verdade. Em
+         * candle, nenhuma das duas é na maior parte da semana — a série passa por
+         * fresca na régua de 2 dias, o Yahoo não chega a ser consultado, e a B3
+         * fecha a ponta porque é a função dela, não porque alguém falhou.
+         *
+         * O que a linha tem a dizer é o ESTADO, não a culpa: o fechamento do dia
+         * não estava na série. Os selos ao lado é que completam a frase — quem
+         * fechou, e quantos não negociaram.
+         */
+        escalatedLine: 'ficaram sem o fechamento do dia na série',
+        escalatedNone: 'ficou sem o fechamento do dia na série',
+        escalatedTitle: 'Quem ficou sem o fechamento na série',
+        backupOf: 'Fecha a ponta do pregão na série de',
         rescued: 'tiveram o fechamento trazido por esta fonte',
         allFromPrimary: 'esta fonte trouxe o fechamento de todos',
         missingBadge: 'sem fechamento',

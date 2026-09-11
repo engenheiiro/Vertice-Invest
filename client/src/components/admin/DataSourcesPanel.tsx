@@ -177,6 +177,10 @@ const footerInfo = (source: DataSource): { label: string; time: string } => {
 const VOCAB_PADRAO = {
     noun: 'assunto',
     none: 'Nenhum assunto',
+    escalatedLine: 'precisaram de reserva',
+    escalatedNone: 'precisou de reserva',
+    escalatedTitle: 'Quem precisou de reserva',
+    backupOf: 'Esta é reserva de',
     rescued: 'foram resolvidos por esta fonte',
     allFromPrimary: 'esta fonte resolveu todos',
     missingBadge: 'sem dado',
@@ -437,7 +441,7 @@ const ChainFlowLine = ({ flow, onOpen }: { flow: ChainFlow; onOpen: () => void }
     if (flow.total === 0) {
         return (
             <p className="text-[10px] text-slate-600">
-                {vocab.none} precisou de reserva desde o último reinício do servidor.
+                {vocab.none} {vocab.escalatedNone ?? VOCAB_PADRAO.escalatedNone} desde o último reinício do servidor.
             </p>
         );
     }
@@ -451,7 +455,8 @@ const ChainFlowLine = ({ flow, onOpen }: { flow: ChainFlow; onOpen: () => void }
         >
             <GitBranch size={11} className="text-slate-500 shrink-0" />
             <span className="text-[10px] text-slate-300">
-                <span className="font-bold text-white">{flow.total}</span> {vocab.noun}(s) precisaram de reserva
+                <span className="font-bold text-white">{flow.total}</span> {vocab.noun}(s){' '}
+                {vocab.escalatedLine ?? VOCAB_PADRAO.escalatedLine}
             </span>
             {flow.byResolver.map((r) => {
                 if (r.id) {
@@ -701,7 +706,7 @@ const ChainFlowModal = ({
             <div
                 role="dialog"
                 aria-modal="true"
-                aria-label={`${capitalizar(vocab.noun)}s que precisaram de fonte de reserva`}
+                aria-label={`${capitalizar(vocab.noun)}s: ${vocab.escalatedTitle ?? VOCAB_PADRAO.escalatedTitle}`}
                 onClick={(e) => e.stopPropagation()}
                 className="w-full max-w-xl bg-panel border border-slate-700 rounded-2xl p-5 max-h-[85vh] overflow-y-auto"
             >
@@ -709,7 +714,7 @@ const ChainFlowModal = ({
                     <div className="min-w-0">
                         <h3 className="text-sm font-black text-white flex items-center gap-2">
                             <GitBranch size={14} className="text-blue-500" />
-                            Quem precisou de reserva
+                            {vocab.escalatedTitle ?? VOCAB_PADRAO.escalatedTitle}
                         </h3>
                         {/* Duas contagens, porque são dois assuntos: o que faltou
                             de fonte e o que faltou de pregão. A segunda só aparece
@@ -942,7 +947,8 @@ const SourceDetailModal = ({
                         <div className="mt-1.5 space-y-1">
                             {source.covers && (
                                 <p className="text-[11px] text-slate-400">
-                                    Esta é reserva de <span className="text-slate-200">{source.covers}</span>.
+                                    {vocab.backupOf ?? VOCAB_PADRAO.backupOf}{' '}
+                                    <span className="text-slate-200">{source.covers}</span>.
                                 </p>
                             )}
                             {(source.backups?.length ?? 0) > 0 ? (
@@ -972,7 +978,7 @@ const SourceDetailModal = ({
                         {source.escalated.reached === 0 ? (
                             <p className="text-[11px] text-slate-400 mt-1.5">
                                 {source.chainPosition === 1
-                                    ? `${vocab.none} precisou de reserva: ${vocab.allFromPrimary}.`
+                                    ? `${vocab.none} ${vocab.escalatedNone ?? VOCAB_PADRAO.escalatedNone}: ${vocab.allFromPrimary}.`
                                     : `${vocab.none} chegou até aqui — a fonte anterior deu conta de todos.`}
                             </p>
                         ) : (
