@@ -217,6 +217,43 @@ describe('timeSeriesWorker — o que o ledger registra', () => {
         const [ev] = getEscalations();
         expect(ev.resolvedBy).toBeNull();
         expect(ev.expected).toBe(false);
+    });
+
+    /**
+     * O REFORÇO RODA FORA DO RAMO DE STALENESS, e o ledger tem que dizer isso.
+     *
+     * A série desta fixture para na véspera: ~1,9 dia de idade, dentro da
+     * tolerância de 2 — o Yahoo não é consultado por ela, e é justamente o caso
+     * mais comum do universo. Enquanto a linha afirmava "o Yahoo publicou a série
+     * sem o fechamento", o painel riscava a fonte e o card dela somava um
+     * `missed` por uma chamada que nunca saiu (523 delas em 10/09/2026).
+     */
+    it('série dentro da tolerância: o Yahoo entra como NÃO CONSULTADO', async () => {
+        prepara(serieParada());
+        mocks.fetchB3DailyCloses.mockResolvedValue(null);
+
+        await runWorker();
+
+        expect(mocks.getFullHistory).not.toHaveBeenCalled();
+        const [ev] = getEscalations();
+        expect(ev.skipped).toEqual(['yahoo.history']);
+        expect(ev.reason).toContain('não foi consultado');
+        expect(ev.session).toBe(PREGAO);
+    });
+
+    // E o outro lado: série velha de verdade passa pelo Yahoo, ele não traz o
+    // fechamento, e aí a acusação é medida — não pode virar "não consultada".
+    it('série velha: o Yahoo foi chamado, e a linha continua cobrando dele', async () => {
+        const ANTIGO = '2026-08-20';
+        prepara([{ ticker: 'ITSA4', history: candles(40, ANTIGO), lastCheckedAt: null }]);
+        mocks.getFullHistory.mockResolvedValue(candles(40, ANTIGO));
+        mocks.fetchB3DailyCloses.mockResolvedValue(null);
+
+        await runWorker();
+
+        expect(mocks.getFullHistory).toHaveBeenCalled();
+        const [ev] = getEscalations();
+        expect(ev.skipped).toEqual([]);
         expect(ev.reason).toContain('sem o fechamento');
     });
 

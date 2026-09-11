@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
     recordEscalation,
+    getEscalation,
     getEscalations,
     getSourceStats,
     resetSourceStats,
@@ -49,6 +50,45 @@ describe('ledger de escaladas', () => {
         expect(getSourceStats().find((s) => s.id === 'brapi').attempts).toBe(0);
     });
 
+    /**
+     * PULAR NÃO É FALHAR — o terceiro estado do elo.
+     *
+     * Com dois estados ("entregou" e, por eliminação, "falhou"), toda rotina que
+     * desce direto para a reserva porque a régua de staleness mandou poupar a
+     * principal acusava a principal de uma falha que nunca houve: em 10/09/2026
+     * o painel riscou "Yahoo histórico" em 523 linhas de chamadas que não saíram.
+     */
+    it('guarda quais elos NÃO foram consultados', () => {
+        recordEscalation({
+            chain: 'candle', subject: 'ITSA4', tried: ['yahoo.history', 'b3'],
+            skipped: ['yahoo.history'], resolvedBy: 'b3',
+        });
+        const [ev] = getEscalations();
+        expect(ev.tried).toEqual(['yahoo.history', 'b3']);
+        expect(ev.skipped).toEqual(['yahoo.history']);
+    });
+
+    // Elo fora do caminho não teria onde aparecer na tela, e viraria desconto
+    // fantasma nas contagens do card.
+    it('descarta "não consultada" que nem estava no caminho', () => {
+        recordEscalation({
+            chain: 'candle', subject: 'ITSA4', tried: ['yahoo.history', 'b3'],
+            skipped: ['brapi'], resolvedBy: 'b3',
+        });
+        expect(getEscalations()[0].skipped).toEqual([]);
+    });
+
+    // A leitura existe para quem SOBRESCREVE a linha de outra rotina e precisa
+    // saber se as duas falam do mesmo pregão antes de apagar o que ela mediu.
+    it('devolve a linha do assunto, com o pregão de que ela fala', () => {
+        recordEscalation({
+            chain: 'candle', subject: 'ITSA4', tried: ['yahoo.history', 'b3'],
+            resolvedBy: null, session: '2026-09-09',
+        });
+        expect(getEscalation('candle', 'ITSA4')).toMatchObject({ session: '2026-09-09', resolvedBy: null });
+        expect(getEscalation('candle', 'PETR4')).toBeNull();
+    });
+
     it('ignora evento sem cadeia ou sem assunto', () => {
         recordEscalation({ chain: 'quotes', subject: '', tried: ['yahoo.quotes'] });
         recordEscalation({ chain: '', subject: 'PETR4', tried: ['yahoo.quotes'] });
@@ -83,6 +123,21 @@ describe('cruzamento do ledger com as fontes', () => {
         expect(bySource.get('yahoo.quotes')).toEqual({ reached: 3, rescued: 0, missed: 3, orphaned: 1, orphanedExpected: 0 });
         expect(bySource.get('google.finance')).toEqual({ reached: 3, rescued: 1, missed: 2, orphaned: 1, orphanedExpected: 0 });
         expect(bySource.get('brapi')).toEqual({ reached: 2, rescued: 1, missed: 1, orphaned: 1, orphanedExpected: 0 });
+    });
+
+    // O contrário do teste acima: a fonte que a rotina decidiu não consultar não
+    // foi alcançada, não perdeu nada e não ficou com órfão. Sem esta subtração, o
+    // card do Yahoo histórico exibia 523 `missed` de chamadas que não existiram.
+    it('fonte não consultada fica FORA das contas do card', () => {
+        recordEscalation({
+            chain: 'quotes', subject: 'PETR4', tried: ['yahoo.quotes', 'google.finance'],
+            skipped: ['yahoo.quotes'], resolvedBy: 'google.finance',
+        });
+
+        const { bySource } = buildEscalationView(getEscalations(), stats());
+
+        expect(bySource.get('yahoo.quotes')).toBeUndefined();
+        expect(bySource.get('google.finance')).toMatchObject({ reached: 1, rescued: 1, missed: 0 });
     });
 
     it('resume a cadeia com o "sem preço" contado à parte', () => {

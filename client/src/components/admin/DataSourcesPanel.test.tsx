@@ -491,6 +491,31 @@ describe('DataSourcesPanel — quem precisou de reserva', () => {
         expect(screen.getAllByText('sem fechamento')).toHaveLength(1);
     });
 
+    /**
+     * O ELO TEM TRÊS ESTADOS, e o terceiro é "não perguntei".
+     *
+     * A varredura horária da ponta das séries não consulta o Yahoo: desce direto
+     * ao arquivo da B3, e é isso que a deixa barata o bastante para rodar de hora
+     * em hora. Enquanto a tela só sabia pintar "entregou" e "falhou", as 523
+     * séries que a B3 socorreu em 10/09/2026 apareceram com o Yahoo RISCADO — uma
+     * acusação por chamadas que nunca saíram. Risco aqui se lê como culpa.
+     */
+    it('elo não consultado aparece apagado, não riscado', () => {
+        const naoConsultado = candleFlow({
+            items: [{
+                subject: 'ITSA4', tried: ['yahoo.history', 'b3'], skipped: ['yahoo.history'],
+                resolvedBy: 'b3', reason: 'sem consultar o Yahoo', expected: false,
+                count: 1, at: new Date().toISOString(),
+            }],
+        });
+        render(<DataSourcesPanel sources={cadeiaCandle} groups={gruposCandle} chains={{ candle: naoConsultado }} />);
+        fireEvent.click(screen.getByText(/ver ativos/));
+
+        const elo = within(screen.getByRole('dialog')).getByText('não consultada').parentElement;
+        expect(elo?.textContent).toContain('Yahoo histórico');
+        expect(elo?.className).not.toContain('line-through');
+    });
+
     // Cliente pode subir antes do servidor. Sem o campo, a tela volta ao
     // comportamento antigo — nunca a uma conta com `NaN`.
     it('servidor antigo, sem a contagem separada, não quebra a linha', () => {

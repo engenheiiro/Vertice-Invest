@@ -362,6 +362,13 @@ const TickerGroup = ({
  * fonte: quem trouxe o preço fica verde, quem foi tentado e não trouxe fica
  * riscado. É a mesma fonte podendo aparecer verde numa linha e riscada na de
  * baixo — que é exatamente a verdade que faltava.
+ *
+ * TRÊS estados, e não dois. O terceiro é o elo que a rotina decidiu não
+ * consultar: ele fica apagado, sem risco, porque risco aqui se lê como acusação.
+ * A varredura horária da ponta das séries não chama o Yahoo (desce direto ao
+ * arquivo da B3, que é o que a deixa barata), e enquanto os dois estados eram
+ * "entregou" e "por eliminação, falhou", o painel de 10/09/2026 exibia 523
+ * linhas com "Yahoo histórico" riscado por chamadas que nunca saíram.
  */
 /**
  * O ÚLTIMO SELO DA TRILHA TEM DUAS CORES, porque são duas notícias.
@@ -380,17 +387,22 @@ const EscalationPath = ({ item, labelOf, missingBadge, expectedBadge }: {
     <div className="flex items-center gap-1 flex-wrap">
         {item.tried.map((id, i) => {
             const entregou = item.resolvedBy === id;
+            const naoConsultada = (item.skipped ?? []).includes(id);
             return (
                 <React.Fragment key={id}>
                     {i > 0 && <ChevronRight size={10} className="text-slate-700 shrink-0" aria-hidden="true" />}
                     <span
+                        title={naoConsultada ? `${labelOf(id)} não foi consultada nesta busca` : undefined}
                         className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                             entregou
                                 ? 'bg-emerald-900/30 text-emerald-300 border border-emerald-900/60'
-                                : 'bg-elevated text-slate-500 line-through decoration-slate-600'
+                                : naoConsultada
+                                    ? 'bg-elevated/50 text-slate-600 border border-dashed border-slate-700'
+                                    : 'bg-elevated text-slate-500 line-through decoration-slate-600'
                         }`}
                     >
                         {labelOf(id)}
+                        {naoConsultada && <span className="ml-1 text-slate-700">não consultada</span>}
                     </span>
                 </React.Fragment>
             );
@@ -803,7 +815,11 @@ const SourceDetailModal = ({
     // Três destinos possíveis para quem passou por esta fonte, e eles se leem
     // por LINHA do ledger, não pelo estado geral da fonte: a mesma Brapi salva
     // um ticker e falha no seguinte no mesmo minuto.
-    const passaram = (flow?.items ?? []).filter((i) => i.tried.includes(source.id));
+    // Quem a rotina decidiu não consultar não "passou" por lugar nenhum: listar o
+    // ativo aqui faria a fonte responder por uma chamada que nunca recebeu.
+    const passaram = (flow?.items ?? []).filter(
+        (i) => i.tried.includes(source.id) && !(i.skipped ?? []).includes(source.id),
+    );
     const salvos = passaram.filter((i) => i.resolvedBy === source.id).map((i) => i.subject);
     const seguiram = passaram.filter((i) => i.resolvedBy && i.resolvedBy !== source.id).map((i) => i.subject);
     const semPreco = passaram.filter((i) => !i.resolvedBy).map((i) => i.subject);

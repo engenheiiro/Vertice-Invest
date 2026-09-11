@@ -150,8 +150,16 @@ export interface DataSource {
 export interface ChainEscalation {
     /** O ticker (ou o que se buscava). */
     subject: string;
-    /** Ids das fontes tentadas, na ordem — a primeira é a que falhou. */
+    /** Ids das fontes do caminho, na ordem — a primeira é a que não entregou. */
     tried: string[];
+    /**
+     * Dos `tried`, quais NÃO foram consultadas — decisão nossa, não falha delas.
+     *
+     * Rotina que desce direto para a reserva porque a régua de staleness mandou
+     * poupar a principal não pode riscar a principal na tela: pular não é falhar.
+     * Ausente em ledger antigo, e aí a lista vazia é a leitura certa.
+     */
+    skipped?: string[];
     /** Id de quem trouxe o dado; `null` = nenhuma fonte trouxe. */
     resolvedBy: string | null;
     reason: string | null;

@@ -321,7 +321,13 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
         const chaveResolver = `${ev.chain}|${ev.resolvedBy || ''}`;
         porResolver.set(chaveResolver, (porResolver.get(chaveResolver) || 0) + 1);
 
+        // A fonte que a rotina decidiu NÃO consultar não entra em conta nenhuma:
+        // não foi alcançada, não perdeu nada e não ficou com órfão. Somá-la aqui
+        // era o que dava ao Yahoo 523 `missed` num dia em que ele não recebeu
+        // nenhuma dessas chamadas — a régua de staleness é que o poupou.
+        const naoConsultadas = new Set(ev.skipped || []);
         for (const id of ev.tried || []) {
+            if (naoConsultadas.has(id)) continue;
             if (!bySource.has(id)) bySource.set(id, { reached: 0, rescued: 0, missed: 0, orphaned: 0, orphanedExpected: 0 });
             const conta = bySource.get(id);
             conta.reached += 1;
@@ -382,6 +388,7 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
         alvo.items.push({
             subject: ev.subject,
             tried: ev.tried,
+            skipped: ev.skipped || [],
             resolvedBy: ev.resolvedBy,
             reason: ev.reason,
             expected: ev.expected,

@@ -547,16 +547,37 @@ const escalations = new Map();
  * @param {object} evento
  * @param {string} evento.chain cadeia do SOURCE_CATALOG (ex.: 'quotes')
  * @param {string} evento.subject o que se buscava (ticker, 'USD'…)
- * @param {string[]} evento.tried ids tentados, NA ORDEM — incluindo a principal
- *   que falhou. É ela que dá sentido ao resto: sem o primeiro elo na lista, não
+ * @param {string[]} evento.tried o CAMINHO, na ordem — incluindo a principal que
+ *   não entregou. É ela que dá sentido ao resto: sem o primeiro elo na lista, não
  *   dá para dizer de onde o ativo veio.
+ * @param {string[]} [evento.skipped] dos `tried`, quais NÃO foram consultadas —
+ *   ver a nota abaixo. Elo fora desta lista é afirmação de que a fonte foi
+ *   chamada e não entregou.
  * @param {string|null} evento.resolvedBy id que trouxe o dado; `null` = ninguém
  * @param {string} [evento.reason] por que escalou, em português
  * @param {boolean} [evento.expected] escalada conhecida e sem novidade (ticker
  *   que sempre falha na principal). Separar isso do resto é o que impede a lista
  *   de virar ruído permanente que se aprende a ignorar.
+ * @param {string|null} [evento.session] o pregão/dia de que esta linha fala,
+ *   quando a cadeia tem um. Serve para quem SOBRESCREVE a linha de outra rotina
+ *   saber se as duas falam do mesmo dia (ver `getEscalation`).
  */
-export const recordEscalation = ({ chain, subject, tried = [], resolvedBy = null, reason = null, expected = false }) => {
+/*
+ * A FONTE ESTAVA NA CADEIA E NÃO FOI PERGUNTADA — o `recordSourceSkip` deste
+ * ledger, um degrau abaixo: lá o sujeito é a fonte, aqui é o assunto.
+ *
+ * Sem isto, `tried` só tem dois estados, na tela e nas contas: quem entregou e
+ * quem, por eliminação, falhou. Então toda rotina que desce direto para a reserva
+ * — porque a régua de staleness mandou poupar a principal, não porque a principal
+ * caiu — acusava a principal de uma falha que nunca houve. Medido em 10/09/2026
+ * na varredura de ponta do universo: 523 séries socorridas pela B3 pintaram o
+ * Yahoo com 523 `missed` de chamadas que ele nunca recebeu, e cada linha da tela
+ * exibia "Yahoo histórico" riscado.
+ *
+ * Pular NÃO é falhar, a mesma regra do quarto desfecho de fonte: o elo não conta
+ * como alcançado nem como perdido, e na tela aparece apagado, não riscado.
+ */
+export const recordEscalation = ({ chain, subject, tried = [], skipped = [], resolvedBy = null, reason = null, expected = false, session = null }) => {
     if (!chain || !subject) return;
     const key = `${chain}|${subject}`;
     const anterior = escalations.get(key);
@@ -567,9 +588,14 @@ export const recordEscalation = ({ chain, subject, tried = [], resolvedBy = null
         chain,
         subject,
         tried: [...tried],
+        // Só vale como "não consultada" o elo que está no caminho: `skipped` com
+        // fonte fora de `tried` não teria onde aparecer na tela e viraria uma
+        // contagem fantasma nas do painel.
+        skipped: skipped.filter((id) => tried.includes(id)),
         resolvedBy: resolvedBy || null,
         reason: reason || null,
         expected: !!expected,
+        session: session || null,
         at: new Date(),
         count: (anterior?.count || 0) + 1,
     });
@@ -585,6 +611,22 @@ export const recordEscalation = ({ chain, subject, tried = [], resolvedBy = null
             if (chave.startsWith(`${chain}|`)) { escalations.delete(chave); break; }
         }
     }
+};
+
+/**
+ * A LINHA QUE JÁ EXISTE PARA ESTE ASSUNTO, se existe.
+ *
+ * Existe para uma situação só: a rotina que sobrescreve a linha de OUTRA rotina.
+ * A varredura horária da ponta cura o vermelho que o run das 18:30 deixou e, ao
+ * fazer isso, reescreve um caminho que não foi ela quem percorreu — se disser "o
+ * Yahoo não foi consultado" (verdade dela, que só chama a B3), apaga a medição do
+ * run anterior, onde o Yahoo foi chamado de verdade e não entregou.
+ *
+ * Devolve cópia: o ledger é do módulo, e quem lê para decidir não escreve.
+ */
+export const getEscalation = (chain, subject) => {
+    const ev = escalations.get(`${chain}|${subject}`);
+    return ev ? { ...ev, tried: [...ev.tried], skipped: [...(ev.skipped || [])] } : null;
 };
 
 /** Fotografia do ledger, do mais recente para o mais antigo. */

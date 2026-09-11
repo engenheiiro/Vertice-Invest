@@ -196,6 +196,61 @@ describe('recoverUniverseTipWithB3', () => {
         expect(mocks.fetchB3DailyCloses).not.toHaveBeenCalled();
     });
 
+    /**
+     * O CAMINHO QUE ESTA ROTINA PODE DECLARAR é só o dela: ela não chama o Yahoo.
+     *
+     * Enquanto o elo só tinha dois estados, as 523 séries que a B3 socorreu em
+     * 10/09/2026 saíram na tela com "Yahoo histórico" riscado — e o card dele
+     * levou 523 `missed` de chamadas que nunca aconteceram. Quem não entregou o
+     * fechamento ali foi a régua de staleness, que poupou a fonte de propósito.
+     */
+    it('o Yahoo entra como NÃO CONSULTADO — esta varredura não o chama', async () => {
+        cenario();
+
+        await recoverUniverseTipWithB3({ now: AGORA });
+
+        expect(mocks.getFullHistory).not.toHaveBeenCalled();
+        const ev = escaladaDe('ITSA4');
+        expect(ev.tried).toEqual(['yahoo.history', 'b3']);
+        expect(ev.skipped).toEqual(['yahoo.history']);
+        expect(ev.resolvedBy).toBe('b3');
+        expect(ev.reason).toContain('sem consultar o Yahoo');
+        expect(ev.session).toBe(PREGAO);
+    });
+
+    // A cura do ledger reescreve a linha de OUTRA rotina, e aí o cuidado se
+    // inverte: se o run das 18:30 chamou o Yahoo de verdade para este mesmo
+    // pregão e não recebeu o fechamento, essa medição não é nossa para apagar.
+    it('medição do run das 18:30 sobrevive à cura', async () => {
+        recordEscalation({
+            chain: 'candle', subject: 'ITSA4', tried: ['yahoo.history', 'b3'],
+            skipped: [], resolvedBy: null, session: PREGAO,
+            reason: 'O Yahoo publicou a série sem o fechamento de 2026-09-09',
+        });
+
+        cenario();
+        await recoverUniverseTipWithB3({ now: AGORA });
+
+        const ev = escaladaDe('ITSA4');
+        expect(ev.resolvedBy).toBe('b3');
+        expect(ev.skipped).toEqual([]);
+        expect(ev.reason).toContain('sem o fechamento');
+    });
+
+    // Herança presa ao pregão: a linha de ontem fala de outro dia, e assumi-la
+    // reintroduziria a acusação falsa um dia atrasada.
+    it('não herda a medição de OUTRO pregão', async () => {
+        recordEscalation({
+            chain: 'candle', subject: 'ITSA4', tried: ['yahoo.history', 'b3'],
+            skipped: [], resolvedBy: null, session: VESPERA,
+        });
+
+        cenario();
+        await recoverUniverseTipWithB3({ now: AGORA });
+
+        expect(escaladaDe('ITSA4').skipped).toEqual(['yahoo.history']);
+    });
+
     it('ativo fora do alcance da B3 nem entra na conta', async () => {
         // Cripto e ação americana não passam pelo regex da bolsa brasileira. Cobrar
         // delas o calendário da B3 seria alarme falso a cada feriado de lá.

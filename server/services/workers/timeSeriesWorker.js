@@ -6,7 +6,7 @@ import { marketDataService } from '../marketDataService.js';
 import { historyStorageKey, mergeCandleSeries } from '../../utils/assetHistory.js';
 import { externalMarketService } from '../externalMarketService.js';
 import { B3_TIP_OUTCOME, collectB3CandlesDetailed, isB3Coverable, lastBusinessDayUpTo } from '../b3HistoryFallback.js';
-import { recordEscalation } from '../../utils/sourceHealth.js';
+import { getEscalation, recordEscalation } from '../../utils/sourceHealth.js';
 import { brNow } from '../../utils/sourceSchedule.js';
 import { brazilDayKey } from '../../utils/walletSnapshot.js';
 import { ASSET_HISTORY_MAX_POINTS, HISTORY_CAP_EXEMPT_TICKERS } from '../../config/financialConstants.js';
@@ -203,7 +203,7 @@ export const latestCandleDate = (history = []) => {
  */
 export const sessaoJaFechou = (throughDay, now) => throughDay < brazilDayKey(now) || brNow(now).hour >= 18;
 
-const reinforceWithB3 = async ({ asset, storageKey, historyEntry, throughDay, now }) => {
+const reinforceWithB3 = async ({ asset, storageKey, historyEntry, throughDay, now, yahooConsultado = true }) => {
     if (!throughDay || !isB3Coverable(asset.ticker, asset.type)) return null;
 
     const guardada = historyEntry?.history || [];
@@ -234,14 +234,23 @@ const reinforceWithB3 = async ({ asset, storageKey, historyEntry, throughDay, no
             chain: 'candle',
             subject: asset.ticker,
             tried: ['yahoo.history', 'b3'],
+            // O REFORÇO RODA FORA DO RAMO DE STALENESS (ver o chamador), então
+            // metade das vezes o Yahoo nem foi perguntado: a série com ponta em
+            // D-1 passa por fresca na régua de 2 dias e o run pula direto para
+            // cá. Dizer "tentado" nesse caso é acusação — o elo aparece riscado
+            // na tela e a fonte leva um `missed` por uma chamada que não houve.
+            skipped: yahooConsultado ? [] : ['yahoo.history'],
             resolvedBy,
             reason: semNegocio
                 ? `O papel não negociou em ${throughDay} — ausente também no arquivo oficial da B3`
-                : `O Yahoo publicou a série sem o fechamento de ${throughDay}`,
+                : yahooConsultado
+                    ? `O Yahoo publicou a série sem o fechamento de ${throughDay}`
+                    : `A série parou em ${ultimo} e ainda estava dentro da tolerância de ${HISTORY_MAX_CANDLE_AGE_DAYS} dias — o Yahoo não foi consultado neste run`,
             // Escalada conhecida e sem novidade: a linha fica na lista, mas fora
             // do caminho da atenção. Foram 49 ilíquidos em 08/09/2026 — volume
             // suficiente para enterrar o dia em que a B3 atrasar de verdade.
             expected: semNegocio,
+            session: throughDay,
         });
     };
 
@@ -386,15 +395,33 @@ export const recoverUniverseTipWithB3 = async ({ now = new Date() } = {}) => {
         if (coberto) recovered += 1;
         else if (semNegocio) noTrade += 1;
         else missing += 1;
+        // ESTA VARREDURA NÃO TEM OPINIÃO SOBRE O YAHOO: ela não o consulta (zero
+        // chamadas, é o que a torna barata o bastante para rodar de hora em hora).
+        // Então o elo entra no caminho como NÃO CONSULTADO — e não como falho, que
+        // é o que a linha dizia enquanto escrevia as 523 escaladas de 10/09/2026.
+        //
+        // A exceção é herdada, e ela existe porque esta rotina sobrescreve a linha
+        // de outra: se o run das 18:30 CHAMOU o Yahoo para este mesmo pregão e não
+        // recebeu o fechamento, essa medição é verdadeira e não é nossa para
+        // apagar. Curar o desfecho ("a B3 cobriu") não pode desmedir o caminho.
+        const anterior = getEscalation('candle', alvo.ticker);
+        const yahooMedido = !!anterior
+            && anterior.session === throughDay
+            && anterior.tried.includes('yahoo.history')
+            && !anterior.skipped.includes('yahoo.history');
         recordEscalation({
             chain: 'candle',
             subject: alvo.ticker,
             tried: ['yahoo.history', 'b3'],
+            skipped: yahooMedido ? [] : ['yahoo.history'],
             resolvedBy: coberto ? 'b3' : null,
             reason: semNegocio
                 ? `O papel não negociou em ${throughDay} — ausente também no arquivo oficial da B3`
-                : `A série parou em ${alvo.lastCandleDate} e o fechamento de ${throughDay} não veio pelo Yahoo`,
+                : yahooMedido
+                    ? `O Yahoo publicou a série sem o fechamento de ${throughDay}`
+                    : `A série parou em ${alvo.lastCandleDate}; esta varredura busca o fechamento de ${throughDay} direto no arquivo da B3, sem consultar o Yahoo`,
             expected: semNegocio,
+            session: throughDay,
         });
     }
 
@@ -553,7 +580,14 @@ export const timeSeriesWorker = {
                         // lastUpdated, que o touch renovava sem dados novos.
                         const isStale = isHistoryStale(historyEntry, now);
 
-                        if (!historyEntry || isStale || !historyEntry.history || historyEntry.history.length < 20) {
+                        // A MESMA CONDIÇÃO que abre o ramo abaixo, nomeada — é ela
+                        // que decide se o Yahoo chega a ser chamado por este ativo,
+                        // e o ledger precisa dessa verdade para não riscar na tela
+                        // uma fonte que ninguém perguntou (ver `registrar`).
+                        const yahooConsultado = !historyEntry || isStale
+                            || !historyEntry.history || historyEntry.history.length < 20;
+
+                        if (yahooConsultado) {
                             batchDidFetch = true;
                             let fetched = false;
 
@@ -633,7 +667,7 @@ export const timeSeriesWorker = {
                         // o último pregão custa uma comparação de string por ativo, e
                         // o arquivo do dia desce uma vez só para o run inteiro.
                         try {
-                            const reforcado = await reinforceWithB3({ asset, storageKey, historyEntry, throughDay, now });
+                            const reforcado = await reinforceWithB3({ asset, storageKey, historyEntry, throughDay, now, yahooConsultado });
                             if (reforcado) {
                                 historyEntry = reforcado;
                                 stats.b3 += 1;
