@@ -321,15 +321,22 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
         const chaveResolver = `${ev.chain}|${ev.resolvedBy || ''}`;
         porResolver.set(chaveResolver, (porResolver.get(chaveResolver) || 0) + 1);
 
-        // A fonte que a rotina decidiu NÃO consultar não entra em conta nenhuma:
-        // não foi alcançada, não perdeu nada e não ficou com órfão. Somá-la aqui
-        // era o que dava ao Yahoo 523 `missed` num dia em que ele não recebeu
-        // nenhuma dessas chamadas — a régua de staleness é que o poupou.
+        // A fonte que a rotina decidiu NÃO consultar não entra nas contas de
+        // desempenho: não foi alcançada, não perdeu nada e não ficou com órfão.
+        // Somá-la ali era o que dava ao Yahoo 523 `missed` num dia em que ele não
+        // recebeu nenhuma dessas chamadas — a régua de staleness é que o poupou.
+        //
+        // Mas ela precisa CONTAR em algum lugar, e é por isso que `skipped` existe
+        // aqui: sem ele a fonte sumia do mapa, o card caía no ramo de "reached
+        // igual a zero" e afirmava "esta fonte trouxe o fechamento de todos" ao
+        // lado de uma linha dizendo que mil ativos ficaram sem fechamento na
+        // série. Silêncio por não ter sido chamada e silêncio por não ter tido o
+        // que fazer são estados opostos, e o painel tem que saber qual é qual.
         const naoConsultadas = new Set(ev.skipped || []);
         for (const id of ev.tried || []) {
-            if (naoConsultadas.has(id)) continue;
-            if (!bySource.has(id)) bySource.set(id, { reached: 0, rescued: 0, missed: 0, orphaned: 0, orphanedExpected: 0 });
+            if (!bySource.has(id)) bySource.set(id, { reached: 0, rescued: 0, missed: 0, orphaned: 0, orphanedExpected: 0, skipped: 0 });
             const conta = bySource.get(id);
+            if (naoConsultadas.has(id)) { conta.skipped += 1; continue; }
             conta.reached += 1;
             if (ev.resolvedBy === id) conta.rescued += 1;
             else conta.missed += 1;
@@ -627,7 +634,7 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
              * null admite que não medimos.
              */
             escalated: LEDGERED_CHAINS.has(source.chain)
-                ? (escalada.bySource.get(source.id) || { reached: 0, rescued: 0, missed: 0 })
+                ? (escalada.bySource.get(source.id) || { reached: 0, rescued: 0, missed: 0, skipped: 0 })
                 : null,
         };
     });

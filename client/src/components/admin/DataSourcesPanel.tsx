@@ -181,6 +181,7 @@ const VOCAB_PADRAO = {
     escalatedNone: 'precisou de reserva',
     escalatedTitle: 'Quem precisou de reserva',
     backupOf: 'Esta é reserva de',
+    skippedLine: 'passaram pela cadeia sem que esta fonte fosse consultada',
     rescued: 'foram resolvidos por esta fonte',
     allFromPrimary: 'esta fonte resolveu todos',
     missingBadge: 'sem dado',
@@ -825,6 +826,9 @@ const SourceDetailModal = ({
     const passaram = (flow?.items ?? []).filter(
         (i) => i.tried.includes(source.id) && !(i.skipped ?? []).includes(source.id),
     );
+    // Contado no servidor sobre o ledger INTEIRO, não sobre a amostra de 60 que
+    // veio para a tela: é afirmação de quantidade, e amostra não sustenta isso.
+    const naoPerguntados = source.escalated?.skipped ?? 0;
     const salvos = passaram.filter((i) => i.resolvedBy === source.id).map((i) => i.subject);
     const seguiram = passaram.filter((i) => i.resolvedBy && i.resolvedBy !== source.id).map((i) => i.subject);
     const semPreco = passaram.filter((i) => !i.resolvedBy).map((i) => i.subject);
@@ -977,9 +981,16 @@ const SourceDetailModal = ({
                         </p>
                         {source.escalated.reached === 0 ? (
                             <p className="text-[11px] text-slate-400 mt-1.5">
-                                {source.chainPosition === 1
-                                    ? `${vocab.none} ${vocab.escalatedNone ?? VOCAB_PADRAO.escalatedNone}: ${vocab.allFromPrimary}.`
-                                    : `${vocab.none} chegou até aqui — a fonte anterior deu conta de todos.`}
+                                {/* TRÊS silêncios, não um. "Não fui chamada" é o
+                                    estado normal desta fonte de terça a sexta, e
+                                    dizer no lugar dele "resolveu todos" contradiz,
+                                    na mesma tela, a linha que acabou de contar mil
+                                    ativos sem fechamento na série. */}
+                                {naoPerguntados > 0
+                                    ? `${naoPerguntados} ${vocab.noun}(s) ${vocab.skippedLine ?? VOCAB_PADRAO.skippedLine}.`
+                                    : source.chainPosition === 1
+                                        ? `${vocab.none} ${vocab.escalatedNone ?? VOCAB_PADRAO.escalatedNone}: ${vocab.allFromPrimary}.`
+                                        : `${vocab.none} chegou até aqui — a fonte anterior deu conta de todos.`}
                             </p>
                         ) : (
                             <>
@@ -988,6 +999,7 @@ const SourceDetailModal = ({
                                     {source.chainPosition === 1
                                         ? ` ${vocab.noun}(s) ficaram ${vocab.missingBadge} aqui e desceram para a reserva`
                                         : ` ${vocab.noun}(s) chegaram até aqui · ${source.escalated.rescued} ${vocab.rescued} · ${source.escalated.missed} não`}
+                                    {naoPerguntados > 0 && ` · ${naoPerguntados} nem foram perguntados`}
                                 </p>
                                 <div className="mt-2 space-y-1.5">
                                     <TickerGroup

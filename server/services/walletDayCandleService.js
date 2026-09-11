@@ -341,6 +341,15 @@ export const ensureWalletDayCandles = async (assetRefs = [], dayStr, closeMap = 
                 ? `O papel não negociou em ${dayStr} — ausente também no arquivo oficial da B3`
                 : alvo.reason,
             expected: semNegocio.has(alvo.ticker),
+            // O PREGÃO DE QUE ESTA LINHA FALA, e aqui ele é defesa.
+            //
+            // A varredura do universo (`recoverUniverseTipWithB3`) sobrescreve a
+            // linha deste mesmo ticker para curar o vermelho, e ela não consulta o
+            // Yahoo — então declara o elo como "não consultado". Aqui o Yahoo FOI
+            // chamado, ativo por ativo, e não trouxe o candle: é medição, não
+            // suposição. Sem datar a linha, a herança lá não reconhece o pregão e
+            // a medição se perde na primeira varredura que passar.
+            session: dayStr,
         });
     }
 

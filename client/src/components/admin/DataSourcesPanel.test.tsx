@@ -548,6 +548,27 @@ describe('DataSourcesPanel — quem precisou de reserva', () => {
         expect(screen.queryByText(/Esta é reserva de/)).not.toBeInTheDocument();
     });
 
+    /**
+     * O CARD NÃO PODE DIZER O CONTRÁRIO DA LINHA.
+     *
+     * De terça a sexta o Yahoo histórico não é consultado por ativo nenhum: a
+     * régua de 2 dias o poupa e a B3 fecha a ponta. Com a fonte pulada fora de
+     * `reached`, o card caía no ramo de "não precisou de reserva" e afirmava ter
+     * resolvido todos — na mesma tela em que a linha conta mil sem fechamento.
+     */
+    it('fonte não consultada não se declara resolvedora de todos', () => {
+        const yahooPulado = src({
+            id: 'yahoo.history', short: 'Yahoo histórico', group: 'history', chain: 'candle',
+            chainPosition: 1, chainSize: 2, backups: ['B3 — arquivo diário'],
+            escalated: { reached: 0, rescued: 0, missed: 0, skipped: 1000 },
+        });
+        render(<DataSourcesPanel sources={[yahooPulado, cadeiaCandle[1]]} groups={gruposCandle} chains={{ candle: candleFlow() }} />);
+        fireEvent.click(screen.getByRole('button', { name: /Yahoo histórico/ }));
+
+        expect(screen.getByText(/^1000 ativo/)).toHaveTextContent('passaram pela cadeia sem que esta fonte fosse consultada');
+        expect(screen.queryByText(/trouxe o fechamento de todos/)).not.toBeInTheDocument();
+    });
+
     // Cliente pode subir antes do servidor. Sem o campo, a tela volta ao
     // comportamento antigo — nunca a uma conta com `NaN`.
     it('servidor antigo, sem as frases próprias, volta a falar em reserva', () => {

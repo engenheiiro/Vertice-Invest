@@ -78,6 +78,16 @@ describe('ledger de escaladas', () => {
         expect(getEscalations()[0].skipped).toEqual([]);
     });
 
+    // Quem entregou foi consultado por definição. Os dois estados no mesmo elo
+    // dariam um selo verde com "não consultada" escrito dentro.
+    it('quem resolveu não pode constar como não consultada', () => {
+        recordEscalation({
+            chain: 'candle', subject: 'ITSA4', tried: ['yahoo.history', 'b3'],
+            skipped: ['yahoo.history', 'b3'], resolvedBy: 'b3',
+        });
+        expect(getEscalations()[0].skipped).toEqual(['yahoo.history']);
+    });
+
     // A leitura existe para quem SOBRESCREVE a linha de outra rotina e precisa
     // saber se as duas falam do mesmo pregão antes de apagar o que ela mediu.
     it('devolve a linha do assunto, com o pregão de que ela fala', () => {
@@ -120,9 +130,9 @@ describe('cruzamento do ledger com as fontes', () => {
         // separa "esta fonte falhou onde a seguinte deu conta" de "o ativo não
         // negocia mais". Só EURP11 é órfão aqui — PETR4 saiu pela Brapi e NGRD3
         // pelo Google, então nesses dois a falha é mesmo da fonte.
-        expect(bySource.get('yahoo.quotes')).toEqual({ reached: 3, rescued: 0, missed: 3, orphaned: 1, orphanedExpected: 0 });
-        expect(bySource.get('google.finance')).toEqual({ reached: 3, rescued: 1, missed: 2, orphaned: 1, orphanedExpected: 0 });
-        expect(bySource.get('brapi')).toEqual({ reached: 2, rescued: 1, missed: 1, orphaned: 1, orphanedExpected: 0 });
+        expect(bySource.get('yahoo.quotes')).toEqual({ reached: 3, rescued: 0, missed: 3, orphaned: 1, orphanedExpected: 0, skipped: 0 });
+        expect(bySource.get('google.finance')).toEqual({ reached: 3, rescued: 1, missed: 2, orphaned: 1, orphanedExpected: 0, skipped: 0 });
+        expect(bySource.get('brapi')).toEqual({ reached: 2, rescued: 1, missed: 1, orphaned: 1, orphanedExpected: 0, skipped: 0 });
     });
 
     // O contrário do teste acima: a fonte que a rotina decidiu não consultar não
@@ -136,7 +146,7 @@ describe('cruzamento do ledger com as fontes', () => {
 
         const { bySource } = buildEscalationView(getEscalations(), stats());
 
-        expect(bySource.get('yahoo.quotes')).toBeUndefined();
+        expect(bySource.get('yahoo.quotes')).toMatchObject({ reached: 0, missed: 0, orphaned: 0, skipped: 1 });
         expect(bySource.get('google.finance')).toMatchObject({ reached: 1, rescued: 1, missed: 0 });
     });
 
@@ -170,6 +180,29 @@ describe('cruzamento do ledger com as fontes', () => {
         const b3 = getSourceStats().find((s) => s.id === 'b3');
         expect(b3.feeds).toContain('todo dia');
         expect(b3.feeds).not.toContain('quando o Yahoo');
+    });
+
+    /**
+     * SILÊNCIO POR NÃO TER SIDO CHAMADA ≠ SILÊNCIO POR NÃO TER O QUE FAZER.
+     *
+     * Tirar a fonte pulada de `reached` (correto) a fazia sumir do mapa, e o card
+     * caía no ramo de "reached = 0": para a primeira da cadeia, isso imprime
+     * "esta fonte trouxe o fechamento de todos" — ao lado de uma linha dizendo
+     * que mil ativos ficaram sem o fechamento na série. A contradição aparecia na
+     * mesma tela, e num dia normal de terça a sexta.
+     */
+    it('fonte pulada some das contas de desempenho, mas não do mapa', () => {
+        for (let i = 0; i < 3; i += 1) {
+            recordEscalation({
+                chain: 'candle', subject: `T${i}`, tried: ['yahoo.history', 'b3'],
+                skipped: ['yahoo.history'], resolvedBy: 'b3',
+            });
+        }
+
+        const { bySource } = buildEscalationView(getEscalations(), stats());
+
+        expect(bySource.get('yahoo.history')).toMatchObject({ reached: 0, missed: 0, skipped: 3 });
+        expect(bySource.get('b3')).toMatchObject({ reached: 3, rescued: 3, skipped: 0 });
     });
 
     it('resume a cadeia com o "sem preço" contado à parte', () => {
@@ -252,7 +285,7 @@ describe('cruzamento do ledger com as fontes', () => {
         const semLedger = [...stats(), { id: 'fonte.nova', short: 'Nova', chain: 'nao-instrumentada', schedule: { kind: 'onFailure' } }];
         const linhas = buildSourceStatuses(facts, semLedger, getEscalations());
         expect(linhas.find((l) => l.id === 'fonte.nova').escalated).toBeNull();
-        expect(linhas.find((l) => l.id === 'brapi').escalated).toEqual({ reached: 0, rescued: 0, missed: 0 });
+        expect(linhas.find((l) => l.id === 'brapi').escalated).toEqual({ reached: 0, rescued: 0, missed: 0, skipped: 0 });
     });
 
     /**

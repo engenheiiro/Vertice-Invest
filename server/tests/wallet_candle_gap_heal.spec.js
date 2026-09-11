@@ -164,6 +164,12 @@ describe('ensureWalletDayCandles — o que o painel aprende com a cadeia', () =>
     // que a B3 foi tentada seria inventar uma chamada que nunca houve.
     expect(porAtivo.get('BTC').tried).toEqual(['yahoo.history']);
     expect(porAtivo.get('BTC').resolvedBy).toBeNull();
+    // Aqui o Yahoo foi CHAMADO, ativo por ativo, e não trouxe o candle: medição,
+    // não suposição. E a linha é datada porque a varredura do universo
+    // sobrescreve este mesmo ticker sem consultar o Yahoo — sem o pregão, a
+    // herança de lá não reconhece a medição e ela se perde.
+    expect(porAtivo.get('BOVA11').skipped).toEqual([]);
+    expect(porAtivo.get('BOVA11').session).toBe('2026-09-03');
   });
 
   it('Yahoo entregando o dia não deixa rastro no ledger', async () => {

@@ -579,6 +579,7 @@ export const LEDGERED_CHAINS = new Map([
          * fechou, e quantos não negociaram.
          */
         escalatedLine: 'ficaram sem o fechamento do dia na série',
+        skippedLine: 'passaram pela cadeia sem que esta fonte fosse consultada — a série estava fresca na régua de 2 dias e a ponta foi fechada adiante',
         escalatedNone: 'ficou sem o fechamento do dia na série',
         escalatedTitle: 'Quem ficou sem o fechamento na série',
         backupOf: 'Fecha a ponta do pregão na série de',
@@ -658,8 +659,10 @@ export const recordEscalation = ({ chain, subject, tried = [], skipped = [], res
         tried: [...tried],
         // Só vale como "não consultada" o elo que está no caminho: `skipped` com
         // fonte fora de `tried` não teria onde aparecer na tela e viraria uma
-        // contagem fantasma nas do painel.
-        skipped: skipped.filter((id) => tried.includes(id)),
+        // contagem fantasma nas do painel. E quem ENTREGOU o dado foi consultado
+        // por definição — deixar os dois estados no mesmo elo pintaria o selo de
+        // verde e escreveria "não consultada" dentro dele.
+        skipped: skipped.filter((id) => tried.includes(id) && id !== resolvedBy),
         resolvedBy: resolvedBy || null,
         reason: reason || null,
         expected: !!expected,

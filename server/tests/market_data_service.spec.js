@@ -155,6 +155,14 @@ describe('refreshQuotesBatch — data da sessão', () => {
   // updatedAt não serve: ele marca quando perguntamos, e o refresh da madrugada
   // regrava o fechamento da véspera com um carimbo de hoje.
   it('grava priceDate no calendário BRASILEIRO junto do change', async () => {
+    // Relógio parado logo depois da sessão da fixture, como no describe do salto:
+    // `isStaleSessionQuote` mede a idade da cotação contra `Date.now()` e recusa
+    // acima de RETIRE_RECENT_CANDLE_DAYS (10). Com o relógio real, a fixture de
+    // 31/08 envelheceu sozinha e o teste ficou vermelho em 11/09/2026 — a
+    // gravação estava certa o tempo todo, e o que apodreceu foi a data escrita
+    // aqui. Teste que apodrece acusa o inocente.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-31T21:30:00.000Z'));
     mockFind([{ ticker: 'PETR4', updatedAt: minutesAgo(60), lastPrice: 40, isActive: true, failCount: 0 }]);
     // 31/08 às 17:55 BRT (fechamento da B3) = 20:55Z.
     externalMarketService.getQuotes.mockResolvedValue([
@@ -167,6 +175,7 @@ describe('refreshQuotesBatch — data da sessão', () => {
     expect(set.priceDate).toBe('2026-08-31');
     expect(set.change).toBe(1.5);
     expect(set.previousClose).toBe(41.38);
+    vi.useRealTimers();
   });
 
   it('fonte sem horário grava null — nunca a data de hoje por conveniência', async () => {
@@ -553,6 +562,18 @@ describe('refreshQuotesBatch — blacklist é a flag que decide', () => {
  * certo. A saída é reancorar no candle que o snapshot diário já usa.
  */
 describe('refreshQuotesBatch — variação contestada', () => {
+  // Mesmo relógio fixo do describe do salto, e pelo mesmo motivo: as cotações
+  // desta suíte são datadas em 03/09 e `isStaleSessionQuote` as recusaria a
+  // partir de 13/09/2026 — dez dias depois, sem nada ter mudado no código.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-03T21:30:00.000Z'));
+    // O registro de suspeitas é do MÓDULO e sobrevive entre testes: sem zerar,
+    // a linha do XPIN11 de um teste vira prova falsa no seguinte.
+    resetSourceStats();
+  });
+  afterEach(() => vi.useRealTimers());
+
   const anchor = (close) => AssetHistory.aggregate.mockResolvedValue([
     { ticker: 'XPIN11', candle: { date: '2026-09-02', close } },
   ]);
@@ -613,7 +634,12 @@ describe('refreshQuotesBatch — variação contestada', () => {
     const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
     expect(set.change).toBe(1.4983);
     expect(set.previousClose).toBe(41.38);
-    expect(AssetHistory.aggregate).not.toHaveBeenCalled();
+    // Sem achado do juiz não há reancoragem, e é ISSO que o teste quer dizer.
+    // `AssetHistory.aggregate` não serve de prova: a varredura do provento do
+    // dia-ex usa a mesma agregação para toda cotação da sessão de HOJE, e com o
+    // relógio real a fixture já tinha envelhecido para fora de "hoje" — o teste
+    // passava pelo motivo errado.
+    expect(getSuspectQuotes()).toHaveLength(0);
   });
 });
 

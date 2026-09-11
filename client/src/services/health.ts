@@ -143,6 +143,14 @@ export interface DataSource {
          * para sempre por um defeito que não é dela.
          */
         orphaned?: number;
+        /**
+         * Quantos NEM CHEGARAM a ser perguntados a esta fonte — decisão da rotina,
+         * não falha dela. Fora de `reached` de propósito, e por isso precisa ser
+         * contado à parte: sem este número, "não fui chamada" e "não houve o que
+         * fazer" viram o mesmo silêncio, e o card chega a afirmar que a fonte
+         * resolveu todos num dia em que ela não recebeu uma única chamada.
+         */
+        skipped?: number;
     } | null;
 }
 
@@ -220,6 +228,7 @@ export interface ChainFlow {
         escalatedNone?: string;
         escalatedTitle?: string;
         backupOf?: string;
+        skippedLine?: string;
         rescued: string;
         allFromPrimary: string;
         missingBadge: string;
