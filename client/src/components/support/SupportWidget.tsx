@@ -97,12 +97,18 @@ export const SupportWidget: React.FC = () => {
             </button>
 
             {open && createPortal(
+                // EXCEÇÃO deliberada à receita de modal do projeto (`backdrop-blur-md
+                // bg-black/95`). Aquele fundo existe para modal de decisão, onde a tela
+                // atrás é distração. Aqui ela é o ASSUNTO: a pessoa abre o suporte para
+                // relatar o número errado que está vendo, e o fundo opaco apagava
+                // justamente o que ela ia descrever. Fundo leve e sem desfoque, com
+                // sombra forte no painel fazendo a separação que a cor deixou de fazer.
                 <div
-                    className="fixed inset-0 z-[100] backdrop-blur-md bg-black/95 flex items-end sm:items-center justify-center sm:justify-end p-0 sm:p-6"
+                    className="fixed inset-0 z-[100] bg-black/40 flex items-end sm:items-center justify-center sm:justify-end p-0 sm:p-6"
                     onClick={() => setOpen(false)}
                 >
                     <div
-                        className="relative w-full sm:w-[420px] max-h-[92vh] bg-panel border border-slate-800 rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col animate-fade-in"
+                        className="relative w-full sm:w-[420px] max-h-[92vh] bg-panel border border-slate-700 rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col animate-fade-in shadow-2xl shadow-black/70"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <SupportCenter onClose={() => setOpen(false)} />
