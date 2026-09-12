@@ -102,7 +102,17 @@ app.use(helmet({
       ],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https://images.unsplash.com", "https://*.unsplash.com", "https://http2.mlstatic.com", "https://www.googletagmanager.com", "https://*.google-analytics.com"],
+      // `blob:` é o que faz o anexo de ticket existir, nas DUAS pontas: para
+      // enviar, a imagem escolhida é lida num <img> a partir de um object URL
+      // antes de ser comprimida; para exibir, o anexo chega por fetch com o
+      // token da sessão e vira object URL (um <img src="/api/...">  não manda
+      // header de autorização). Sem `blob:` aqui o navegador BLOQUEIA os dois —
+      // e o erro que chega na tela é "Arquivo de imagem inválido", que acusa o
+      // arquivo do usuário em vez da política. Foi o defeito do VT-0001.
+      //
+      // Object URL é criado pelo nosso próprio script e é same-origin: liberar
+      // `blob:` não abre porta para origem externa nenhuma.
+      imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://*.unsplash.com", "https://http2.mlstatic.com", "https://www.googletagmanager.com", "https://*.google-analytics.com"],
       // GA4 manda os eventos por fetch/beacon: sem estes o gtag carrega e mede nada.
       connectSrc: [
         "'self'",

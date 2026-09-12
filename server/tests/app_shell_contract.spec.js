@@ -74,6 +74,26 @@ describe('CSP do shell', () => {
         const scriptSrc = csp.split(';').find((d) => d.trim().startsWith('script-src ')) || '';
         expect(scriptSrc).not.toContain("'unsafe-inline'");
     });
+
+    it('libera blob: em img-src — sem isso o anexo de ticket não entra NEM sai', async () => {
+        // Este teste nasceu de um defeito real (VT-0001) e cobre os dois lados
+        // do mesmo object URL:
+        //   enviar  → a imagem escolhida é decodificada num <img> antes de comprimir;
+        //   exibir  → o anexo vem por fetch autenticado e vira object URL.
+        // Bloqueado, o navegador dispara `onerror` e a tela acusa "Arquivo de
+        // imagem inválido" — culpando o arquivo do usuário, não a política.
+        //
+        // Nenhum teste de componente pega isso: jsdom não aplica CSP, e o Vite
+        // de desenvolvimento não manda esse header. Só o app de verdade manda.
+        const res = await fetch(`${base}/login`);
+        const csp = res.headers.get('content-security-policy') || '';
+        const imgSrc = csp.split(';').find((d) => d.trim().startsWith('img-src ')) || '';
+
+        expect(imgSrc).toContain('blob:');
+        // `data:` continua necessário: é o formato em que o anexo comprimido
+        // viaja no corpo da requisição e aparece na pré-visualização.
+        expect(imgSrc).toContain('data:');
+    });
 });
 
 describe('fallback da SPA', () => {
