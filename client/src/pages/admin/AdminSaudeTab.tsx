@@ -43,14 +43,19 @@ const STATUS_UI: Record<HealthStatus, { text: string; bg: string; border: string
  * é o `category` que o backend manda; sem isso a tela mostra "PLAUSIBILITY" e
  * "FRESHNESS" para quem só quer saber se o preço da carteira está certo.
  */
+// As chaves são os VALORES que `CATEGORY` do backend carrega ('FRESCOR'), não os
+// nomes das constantes ('FRESHNESS'). Estavam em inglês desde sempre, então
+// nenhuma linha casava e o painel vinha mostrando a etiqueta crua em caixa alta
+// — o mapa existia e não fazia efeito nenhum.
 const CATEGORY_LABEL: Record<string, string> = {
-    FRESHNESS: 'Dado atualizado',
-    COVERAGE: 'Dado completo',
-    PLAUSIBILITY: 'Dado plausível',
+    FRESCOR: 'Dado atualizado',
+    COBERTURA: 'Dado completo',
+    PLAUSIBILIDADE: 'Dado plausível',
     MACRO: 'Indicadores',
-    JOBS: 'Rotinas',
-    ERRORS: 'Erros',
-    INGESTION: 'Coleta',
+    ROTINAS: 'Rotinas',
+    ERROS: 'Erros',
+    'INGESTÃO': 'Coleta',
+    ENTREGA: 'Envio de e-mail',
 };
 
 /**

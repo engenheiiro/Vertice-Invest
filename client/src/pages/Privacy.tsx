@@ -126,7 +126,7 @@ export const Privacy = () => {
           <li><strong>Tokens de sessão:</strong> 7 dias ou até revogação manual.</li>
           <li><strong>Dados financeiros (carteira, transações):</strong> conforme exigência legal fiscal e contábil vigente.</li>
           <li><strong>Sinais e análises de mercado:</strong> prazo técnico definido internamente, excluídos após expiração.</li>
-          <li><strong>Tickets de suporte:</strong> mantidos como histórico de atendimento. Ao excluir sua conta, o ticket é <strong>anonimizado</strong> (deixa de identificar você) e as imagens anexadas são apagadas.</li>
+          <li><strong>Tickets de suporte:</strong> o texto do atendimento é mantido como histórico. As <strong>imagens anexadas são apagadas 30 dias após o encerramento</strong> do ticket. Ao excluir sua conta, o ticket é <strong>anonimizado</strong> (deixa de identificar você) e todas as imagens que você enviou são apagadas imediatamente.</li>
           <li><strong>Cookies de medição (<code>_ga</code>):</strong> até 2 anos no seu navegador, ou até você revogar a permissão — o que ocorrer primeiro.</li>
         </ul>
 

@@ -30,6 +30,7 @@ import { JOB_CATALOG } from '../config/jobCatalog.js';
 import { brazilDayKey, isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { buildCandleClock, summarizeCandleStaleness } from '../utils/candleStaleness.js';
 import { auditTreasuryCatalog } from '../utils/treasuryCatalogAudit.js';
+import { verifyEmailTransport } from './emailService.js';
 import {
     COVERAGE_SPEC,
     DEFAULT_THRESHOLDS,
@@ -571,6 +572,10 @@ const collectFacts = async (now) => {
                 errorCode: macroConfig?.lastSyncStats?.errorCode || null,
             },
             jobs,
+            // Handshake com o SMTP — não envia nada. É o único fato coletado de
+            // um serviço externo de SAÍDA, e vem com teto de tempo próprio para
+            // não pendurar a sentinela.
+            email: await verifyEmailTransport(),
             errors: { last24h: errors24h[0]?.total || 0 },
             // Carteiras degradadas: total nas 24h e QUAIS buscas caíram — é o que
             // decide o conserto.

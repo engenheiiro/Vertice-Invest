@@ -84,10 +84,13 @@ export interface AdminSummary {
 /** Erro de regra vindo do servidor, com a mensagem que o usuário deve ler. */
 export class SupportRequestError extends Error {
     needsNewTicket: boolean;
-    constructor(message: string, needsNewTicket = false) {
+    /** Status HTTP, quando houve resposta. Separa "sumiu" de "nao consegui perguntar". */
+    status: number | null;
+    constructor(message: string, needsNewTicket = false, status: number | null = null) {
         super(message);
         this.name = 'SupportRequestError';
         this.needsNewTicket = needsNewTicket;
+        this.status = status;
     }
 }
 
@@ -101,7 +104,7 @@ const parse = async (response: Response) => {
     // andamento"). Trocá-la por um genérico aqui joga fora a única explicação
     // que o usuário teria.
     const data = await response.json().catch(() => ({}));
-    throw new SupportRequestError(data.message || 'Não foi possível completar a operação.', Boolean(data.needsNewTicket));
+    throw new SupportRequestError(data.message || 'Não foi possível completar a operação.', Boolean(data.needsNewTicket), response.status);
 };
 
 const query = (params: Record<string, string | number | undefined>) => {
@@ -168,7 +171,9 @@ export const supportService = {
         if (cached) return cached;
 
         const response = await authService.api(`/api/support/attachments/${id}`);
-        if (!response.ok) throw new SupportRequestError('Anexo indisponível.');
+        // O status importa para a tela: 404 é "não existe mais" (retenção), o
+        // resto é "não consegui buscar agora".
+        if (!response.ok) throw new SupportRequestError('Anexo indisponível.', false, response.status);
 
         const url = URL.createObjectURL(await response.blob());
         attachmentCache.set(id, url);

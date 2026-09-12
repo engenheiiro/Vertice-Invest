@@ -102,6 +102,11 @@ const SupportTicketSchema = new mongoose.Schema({
     // O usuário tem resposta nova que ainda não abriu (bolinha no botão flutuante).
     hasUnreadForUser: { type: Boolean, default: false },
 
+    // Quando a limpeza apagou as imagens deste ticket (retenção de 30 dias após
+    // o encerramento). Preenchido = as miniaturas vazias são POLÍTICA, não
+    // defeito — e a tela consegue dizer isso em vez de mostrar erro.
+    attachmentsPurgedAt: { type: Date, default: null },
+
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
 });

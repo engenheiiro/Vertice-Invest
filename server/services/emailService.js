@@ -16,6 +16,39 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+/**
+ * Testa o canal de e-mail SEM enviar mensagem alguma.
+ *
+ * `verify()` abre a conexão e autentica — é o handshake, não o envio. Existe
+ * porque o e-mail é a única dependência do sistema que falha em silêncio total:
+ * ninguém reclama de um e-mail que não chegou, a pessoa só some. E o caminho que
+ * mais depende dele é a redefinição de senha, usada exatamente por quem já não
+ * consegue entrar para avisar que não conseguiu entrar.
+ *
+ * Nunca lança: devolve o veredito para a sentinela de saúde decidir o alarme.
+ *
+ * @returns {Promise<{ ok: boolean, error: string|null, host: string }>}
+ */
+export const verifyEmailTransport = async ({ timeoutMs = 8000 } = {}) => {
+  const host = process.env.SMTP_HOST || '(não configurado)';
+
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    return { ok: false, error: 'SMTP_HOST, SMTP_USER ou SMTP_PASS ausente no ambiente.', host };
+  }
+
+  try {
+    // Teto próprio: um SMTP que aceita a conexão e nunca responde travaria a
+    // sentinela inteira, que roda de hora em hora e não pode ficar pendurada.
+    await Promise.race([
+      transporter.verify(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('tempo esgotado no handshake')), timeoutMs)),
+    ]);
+    return { ok: true, error: null, host };
+  } catch (error) {
+    return { ok: false, error: error.message || 'falha desconhecida', host };
+  }
+};
+
 export const sendResetPasswordEmail = async (to, token, origin) => {
   const resetLink = `${origin}/reset-password?token=${token}`;
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ImageOff, Loader2 } from 'lucide-react';
-import { supportService } from '../../services/support';
+import { supportService, SupportRequestError } from '../../services/support';
 
 /**
  * Miniatura de um anexo, carregada com o token da sessão.
@@ -15,22 +15,41 @@ import { supportService } from '../../services/support';
  */
 export const AttachmentImage: React.FC<{ id: string; onOpen?: (url: string) => void }> = ({ id, onOpen }) => {
     const [url, setUrl] = useState<string | null>(null);
-    const [failed, setFailed] = useState(false);
+    const [failure, setFailure] = useState<'none' | 'gone' | 'transient'>('none');
     const [attempt, setAttempt] = useState(0);
 
     useEffect(() => {
         let alive = true;
-        setFailed(false);
+        setFailure('none');
         supportService.loadAttachment(id)
             .then((objectUrl) => { if (alive) setUrl(objectUrl); })
-            .catch(() => { if (alive) setFailed(true); });
+            .catch((err) => {
+                if (!alive) return;
+                // 404 é o servidor dizendo "não existe mais" — imagem apagada pela
+                // retenção de 30 dias ou por exclusão de conta. Qualquer outra
+                // coisa é "não consegui buscar agora", e tem conserto na hora.
+                const gone = err instanceof SupportRequestError && err.status === 404;
+                setFailure(gone ? 'gone' : 'transient');
+            });
         return () => { alive = false; };
     }, [id, attempt]);
 
-    if (failed) {
-        // Não dizemos "removido": só o servidor sabe se o arquivo sumiu (conta
-        // excluída) ou se a rede caiu. Afirmar exclusão numa falha passageira faz
-        // o atendimento concluir que o print nunca existiu.
+    if (failure === 'gone') {
+        return (
+            <div
+                className="w-20 h-20 rounded-lg border border-slate-800 bg-slate-900/50 flex flex-col items-center justify-center gap-1 text-slate-600"
+                title="Anexo não está mais disponível. Imagens de tickets encerrados são apagadas 30 dias depois."
+            >
+                <ImageOff size={16} />
+                <span className="text-[9px]">expirado</span>
+            </div>
+        );
+    }
+
+    if (failure === 'transient') {
+        // Aqui NÃO se afirma exclusão: a rede pode ter caído. Dizer "removido"
+        // numa falha passageira faz o atendimento concluir que o print nunca
+        // existiu.
         return (
             <button
                 type="button"

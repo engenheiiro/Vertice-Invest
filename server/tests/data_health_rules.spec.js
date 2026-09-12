@@ -1096,3 +1096,50 @@ describe('provisórios não puxam o alarme da data de pagamento', () => {
             .toMatch(/oficiais/);
     });
 });
+
+/**
+ * Canal de e-mail (adicionado em 12/09/2026).
+ *
+ * Entrou no painel porque é a única dependência que falha em silêncio absoluto:
+ * quem não recebe o link de redefinição não tem como avisar que não recebeu — o
+ * e-mail ERA o canal de aviso. Na auditoria, a credencial local não autenticava
+ * (535) e nada em lugar nenhum dizia isso.
+ */
+describe('check de envio de e-mail', () => {
+    const comEmail = (email) => buildHealthReport({ now: new Date(), email });
+    const doCheck = (report) => report.checks.find((c) => c.id === 'delivery.email');
+
+    it('SMTP autenticado passa', () => {
+        const check = doCheck(comEmail({ ok: true, error: null, host: 'smtp.mailgun.org' }));
+        expect(check.status).toBe(HEALTH_STATUS.OK);
+        expect(check.detail).toContain('smtp.mailgun.org');
+    });
+
+    it('falha de autenticação é CRÍTICA, não alerta — sem e-mail não há recuperação de conta', () => {
+        const check = doCheck(comEmail({ ok: false, error: 'Invalid login: 535', host: 'smtp.mailgun.org' }));
+        expect(check.status).toBe(HEALTH_STATUS.CRITICAL);
+        expect(check.detail).toContain('535');
+    });
+
+    it('a falha derruba o veredito global do relatório', () => {
+        const report = comEmail({ ok: false, error: 'Invalid login: 535', host: 'x' });
+        expect(report.status).toBe(HEALTH_STATUS.CRITICAL);
+    });
+
+    it('diz onde olhar', () => {
+        const check = doCheck(comEmail({ ok: false, error: 'x', host: 'y' }));
+        expect(check.hint).toMatch(/SMTP_USER|SMTP_PASS/);
+    });
+
+    it('não inventa aprovação quando o fato não foi coletado', () => {
+        // Ausência de medição não é OK nem CRÍTICO: o check simplesmente não
+        // aparece. Fabricar "OK" aqui repetiria o defeito que ele veio consertar.
+        const report = buildHealthReport({ now: new Date() });
+        expect(doCheck(report)).toBeUndefined();
+    });
+
+    it('vive na categoria de ENTREGA, separada da coleta', () => {
+        const check = doCheck(comEmail({ ok: true, error: null, host: 'x' }));
+        expect(check.category).toBe(CATEGORY.DELIVERY);
+    });
+});

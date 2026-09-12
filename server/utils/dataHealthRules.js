@@ -34,6 +34,10 @@ export const CATEGORY = {
     JOBS: 'ROTINAS',
     INGESTION: 'INGESTÃO',
     ERRORS: 'ERROS',
+    // Canais de SAÍDA — o que o sistema manda para fora. Separado de INGESTÃO
+    // porque falha aqui não corrompe dado nenhum: ela simplesmente faz o aviso
+    // não chegar, e ninguém reclama de um e-mail que nunca viu.
+    DELIVERY: 'ENTREGA',
 };
 
 /**
@@ -932,6 +936,43 @@ const jobChecks = (facts) => {
     return out;
 };
 
+/**
+ * O canal de e-mail está de pé?
+ *
+ * É o único check que pergunta algo a um serviço EXTERNO de saída. Entrou no
+ * painel porque a falha dele é invisível por construção: o reset de senha
+ * devolve 500 para quem já não consegue entrar, e o sistema não tem como saber
+ * que a pessoa desistiu. Em 12/09/2026 a credencial do ambiente local não
+ * autenticava (535) e nada em lugar nenhum dizia isso.
+ *
+ * CRÍTICO, não alerta: sem e-mail não há recuperação de conta.
+ *
+ * Devolve lista vazia quando o fato não foi coletado (fixture antiga, relatório
+ * gravado antes deste check). Ausência de medição não é aprovação, mas também
+ * não é reprovação — e inventar OK aqui seria repetir o defeito que o check
+ * existe para evitar.
+ */
+const emailCheck = (facts) => {
+    const email = facts.email;
+    if (!email) return [];
+
+    return [
+        check({
+            id: 'delivery.email',
+            label: 'Envio de e-mail (SMTP)',
+            category: CATEGORY.DELIVERY,
+            status: email.ok ? HEALTH_STATUS.OK : HEALTH_STATUS.CRITICAL,
+            value: email.ok ? 1 : 0,
+            detail: email.ok
+                ? `Autenticado em ${email.host}`
+                : `Falha ao autenticar em ${email.host}: ${email.error}`,
+            hint: email.ok
+                ? 'Handshake com o servidor de e-mail; nenhuma mensagem é enviada nesta checagem.'
+                : 'Sem isto, redefinição de senha, recibos de assinatura e resposta de ticket não saem. Confira SMTP_USER/SMTP_PASS no ambiente do Render.',
+        }),
+    ];
+};
+
 const errorChecks = (facts, th) => {
     const count = num(facts.errors?.last24h) ?? 0;
     return [
@@ -1010,6 +1051,7 @@ export const buildHealthReport = (facts = {}, thresholdOverrides = null) => {
         ...ingestionChecks(ctx, th),
         ...jobChecks(ctx),
         ...errorChecks(ctx, th),
+        ...emailCheck(ctx),
     ];
 
     const summary = { ok: 0, warn: 0, critical: 0 };
