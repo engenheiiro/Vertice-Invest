@@ -5,7 +5,7 @@ import logger from '../config/logger.js';
 /**
  * Cria uma notificação para um único usuário.
  *
- * @param {{ user: string, type: string, title: string, message: string, relatedAssetClass?: string }} opts
+ * @param {{ user: string, type: string, title: string, message: string, relatedAssetClass?: string, link?: string }} opts
  */
 export async function createNotification({ user, type, title, message, relatedAssetClass, link }) {
   try {

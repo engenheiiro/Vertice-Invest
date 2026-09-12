@@ -208,7 +208,9 @@ export const NotificationBell: React.FC = () => {
                         // usuário a procurar sozinho o que acabou de ser avisado.
                         // Só caminho interno: destino vindo do banco nunca vira
                         // navegação para fora do app.
-                        if (n.link && n.link.startsWith('/')) {
+                        // '//evil.com' também começa com '/' e resolveria para outro
+                        // domínio — o segundo teste faz a frase acima ser verdade ao pé da letra.
+                        if (n.link && n.link.startsWith('/') && !n.link.startsWith('//')) {
                           setOpen(false);
                           navigate(n.link);
                         }
