@@ -12,6 +12,7 @@ import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js
 import { adminLimiter, supportReadLimiter, supportWriteLimiter } from '../middleware/rateLimiters.js';
 import validate from '../middleware/validateResource.js';
 import {
+    adminDelete,
     adminExportCsv,
     adminGetTicket,
     adminList,
@@ -47,6 +48,9 @@ router.get('/admin/export.csv', adminLimiter, requireAdmin, validate(adminListSc
 router.get('/admin/tickets/:id', adminLimiter, requireAdmin, validate(idParamSchema), adminGetTicket);
 router.post('/admin/tickets/:id/reply', adminLimiter, requireAdmin, validate(adminReplySchema), adminReply);
 router.put('/admin/tickets/:id', adminLimiter, requireAdmin, validate(adminUpdateTicketSchema), adminUpdate);
+// Exclusão definitiva. Mesmo id, mesmo guard — o que muda é o verbo, e é o
+// único aqui que não tem volta.
+router.delete('/admin/tickets/:id', adminLimiter, requireAdmin, validate(idParamSchema), adminDelete);
 
 // ─── Usuário ─────────────────────────────────────────────────────────────────
 router.get('/tickets', supportReadLimiter, listMyTickets);

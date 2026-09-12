@@ -209,5 +209,5 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < ELITE (3) < BLACK (4). Definid
 - **Admin:** `GET /admin/funnel?months` (admin) — coortes, ativação, conversão 30d, receita, retenção e origem, lidos do banco
 - **Webhooks:** `POST /webhooks/mercadopago`
 - **Suporte:** `GET /support/meta`, `/support/tickets`, `/support/tickets/:id`, `/support/attachments/:id` · `POST /support/tickets`, `/support/tickets/:id/reply` (409 `needsNewTicket` quando a thread já encerrou)
-- **Suporte (admin):** `GET /support/admin/summary`, `/support/admin/tickets`, `/support/admin/tickets/:id`, `/support/admin/export.csv` · `POST /support/admin/tickets/:id/reply` · `PUT /support/admin/tickets/:id`
+- **Suporte (admin):** `GET /support/admin/summary`, `/support/admin/tickets`, `/support/admin/tickets/:id`, `/support/admin/export.csv` · `POST /support/admin/tickets/:id/reply` · `PUT /support/admin/tickets/:id` · `DELETE /support/admin/tickets/:id` (exclusão definitiva, com registro em AuditLog)
 - **Academy:** `GET /academy/courses`, `/academy/lessons/:id`, `/academy/progress/:courseId` · `POST /academy/progress`, `/academy/quiz/submit`

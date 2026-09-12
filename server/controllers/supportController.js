@@ -3,6 +3,7 @@
  * `SupportError` em status code. Nenhuma regra mora aqui.
  */
 import logger from '../config/logger.js';
+import AuditLog from '../models/AuditLog.js';
 import * as supportService from '../services/supportService.js';
 import { SupportError } from '../services/supportService.js';
 
@@ -119,6 +120,32 @@ export const adminUpdate = handle(async (req, res) => {
     });
     logger.info('[support] ticket atualizado', { code: ticket.code, status: ticket.status, priority: ticket.priority });
     res.json(await supportService.getTicketForAdmin(ticket._id));
+});
+
+/**
+ * Exclusão definitiva do ticket.
+ *
+ * O registro que some é a conversa com um cliente, então a exclusão fica na
+ * trilha de auditoria — que sobrevive a ela (TTL de 2 anos). Guardamos QUEM
+ * apagou, QUANDO e o CÓDIGO do ticket; nada do conteúdo, nem e-mail nem assunto:
+ * uma auditoria que preserva o texto do relato transformaria "excluir" em
+ * "mover de lugar".
+ *
+ * A auditoria falhar não desfaz a exclusão (já aconteceu) — por isso o erro é
+ * registrado e a resposta segue.
+ */
+export const adminDelete = handle(async (req, res) => {
+    const info = await supportService.deleteTicket(req.params.id);
+
+    await AuditLog.create({
+        user: req.user.id,
+        action: 'SUPPORT_TICKET_DELETED',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        details: `Ticket ${info.code} excluído (${info.attachments} anexo(s))`,
+    }).catch((err) => logger.error('[support] falha ao auditar exclusão', { error: err.message }));
+
+    res.json({ ok: true, code: info.code });
 });
 
 /**

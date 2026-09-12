@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     adminGet: vi.fn(),
     adminReply: vi.fn(),
     adminUpdate: vi.fn(),
+    adminDelete: vi.fn(),
     adminDownloadCsv: vi.fn(),
     loadAttachment: vi.fn(),
     addToast: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('../../services/support', async (importOriginal) => {
             adminGet: mocks.adminGet,
             adminReply: mocks.adminReply,
             adminUpdate: mocks.adminUpdate,
+            adminDelete: mocks.adminDelete,
             adminDownloadCsv: mocks.adminDownloadCsv,
             loadAttachment: mocks.loadAttachment,
         },
@@ -247,5 +249,51 @@ describe('transições oferecidas (auditoria)', () => {
         await userEvent.click(await screen.findByText('Rentabilidade zerou hoje'));
         // Degrada para "só o status atual" em vez de derrubar a tela inteira.
         expect(await screen.findByText(/Contexto técnico/i)).toBeInTheDocument();
+    });
+});
+
+describe('exclusão do ticket', () => {
+    /** Abre a conversa — o botão de excluir só existe no detalhe. */
+    const abrirTicket = async () => {
+        renderTab();
+        await userEvent.click(await screen.findByText('Rentabilidade zerou hoje'));
+        return await screen.findByRole('button', { name: /excluir ticket/i });
+    };
+
+    it('o primeiro clique pergunta, não apaga', async () => {
+        const botao = await abrirTicket();
+        await userEvent.click(botao);
+
+        expect(mocks.adminDelete).not.toHaveBeenCalled();
+        expect(screen.getByText(/some para sempre/i)).toBeInTheDocument();
+    });
+
+    it('a confirmação aponta a saída certa para quem só quer encerrar', async () => {
+        // "Excluir" e "Fechado" são confundíveis, e só um tem volta.
+        const botao = await abrirTicket();
+        await userEvent.click(botao);
+
+        expect(screen.getByText(/use o status/i)).toHaveTextContent(/Fechado/);
+    });
+
+    it('cancelar fecha a pergunta sem tocar no ticket', async () => {
+        const botao = await abrirTicket();
+        await userEvent.click(botao);
+        await userEvent.click(screen.getByRole('button', { name: /^cancelar$/i }));
+
+        expect(screen.queryByText(/some para sempre/i)).not.toBeInTheDocument();
+        expect(mocks.adminDelete).not.toHaveBeenCalled();
+    });
+
+    it('confirmar exclui e a tela volta para "selecione um ticket"', async () => {
+        mocks.adminDelete.mockResolvedValue({ ok: true, code: 'VT-0001' });
+        const botao = await abrirTicket();
+        await userEvent.click(botao);
+        await userEvent.click(screen.getByRole('button', { name: /excluir definitivamente/i }));
+
+        await waitFor(() => expect(mocks.adminDelete).toHaveBeenCalledWith('ticket-1'));
+        // A seleção precisa ser limpa: manter o detalhe aberto pediria de volta
+        // ao servidor um ticket que acabou de deixar de existir.
+        expect(await screen.findByText(/Selecione um ticket/i)).toBeInTheDocument();
     });
 });

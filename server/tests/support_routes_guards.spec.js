@@ -59,8 +59,14 @@ vi.mock('../services/supportService.js', () => {
         getTicketForAdmin: async () => ({ ticket: {}, profile: null }),
         getAttachment: async () => ({ mimeType: 'image/png', data: 'data:image/png;base64,AAAA' }),
         anonymizeUserTickets: async () => 0,
+        deleteTicket: record('deleteTicket'),
     };
 });
+
+// O controller de exclusão escreve na trilha de auditoria. Sem banco, o mongoose
+// ficaria bufferizando até estourar — e um teste de GUARD não tem nada a ver com
+// isso.
+vi.mock('../models/AuditLog.js', () => ({ default: { create: async () => ({}) } }));
 
 let server;
 let base;
@@ -101,6 +107,7 @@ const ADMIN_ROUTES = [
     ['GET', `/admin/tickets/${ID}`],
     ['POST', `/admin/tickets/${ID}/reply`],
     ['PUT', `/admin/tickets/${ID}`],
+    ['DELETE', `/admin/tickets/${ID}`],
 ];
 
 const USER_ROUTES = [
@@ -129,6 +136,15 @@ describe('rotas administrativas', () => {
         const res = await call('/admin/summary', { role: 'ADMIN' });
         expect(res.status).toBe(200);
         expect(calls.some((c) => c.name === 'adminSummary')).toBe(true);
+    });
+
+    it('exclusão chega ao handler só para admin — e é o verbo que a distingue', async () => {
+        // Mesmo caminho do GET e do PUT: se o DELETE ficasse sem `requireAdmin`,
+        // nada quebraria em runtime — um usuário comum simplesmente apagaria
+        // ticket dos outros. É o descuido que este arquivo existe para pegar.
+        const res = await call(`/admin/tickets/${ID}`, { role: 'ADMIN', method: 'DELETE' });
+        expect(res.status).toBe(200);
+        expect(calls.some((c) => c.name === 'deleteTicket')).toBe(true);
     });
 
     it('"admin" não é confundido com um id de ticket', async () => {

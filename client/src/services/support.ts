@@ -227,6 +227,13 @@ export const supportService = {
         }));
     },
 
+    /** Exclusão definitiva — o ticket e as imagens dele somem do banco. */
+    async adminDelete(id: string): Promise<{ ok: boolean; code: string }> {
+        return parse(await authService.api(`/api/support/admin/tickets/${id}`, {
+            method: 'DELETE',
+        }));
+    },
+
     /**
      * Baixa o CSV do filtro corrente. Mesma razão do anexo: um `<a href>` comum
      * sairia sem o header de autorização e baixaria um arquivo com "Sem token".

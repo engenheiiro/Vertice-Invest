@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     AlertTriangle, ChevronDown, ChevronUp, Download, Inbox, Loader2, Lock,
-    MessageSquare, RefreshCw, Search, Send, User as UserIcon,
+    MessageSquare, RefreshCw, Search, Send, Trash2, User as UserIcon,
 } from 'lucide-react';
 import {
     supportService, SupportRequestError,
@@ -162,6 +162,7 @@ export const AdminSuporteTab: React.FC = () => {
                         key={selectedId}
                         ticketId={selectedId}
                         onChanged={() => queryClient.invalidateQueries({ queryKey: ['support', 'admin'] })}
+                        onDeleted={() => setSelectedId(null)}
                     />
                 ) : (
                     <div className="bg-card border border-slate-800 rounded-xl flex flex-col items-center justify-center py-20 text-slate-600 gap-2">
@@ -255,7 +256,11 @@ const TicketQueue: React.FC<{
 
 // ─── Detalhe ─────────────────────────────────────────────────────────────────
 
-const TicketDetail: React.FC<{ ticketId: string; onChanged: () => void }> = ({ ticketId, onChanged }) => {
+const TicketDetail: React.FC<{
+    ticketId: string;
+    onChanged: () => void;
+    onDeleted: () => void;
+}> = ({ ticketId, onChanged, onDeleted }) => {
     const { addToast } = useToast();
     const queryClient = useQueryClient();
     const [body, setBody] = useState('');
@@ -263,6 +268,7 @@ const TicketDetail: React.FC<{ ticketId: string; onChanged: () => void }> = ({ t
     const [nextStatus, setNextStatus] = useState<TicketStatus | ''>('');
     const [showContext, setShowContext] = useState(false);
     const [lightbox, setLightbox] = useState<string | null>(null);
+    const [confirmDelete, setConfirmDelete] = useState(false);
 
     const queryKey = ['support', 'admin', 'ticket', ticketId];
 
@@ -300,6 +306,23 @@ const TicketDetail: React.FC<{ ticketId: string; onChanged: () => void }> = ({ t
         onSuccess: afterWrite,
         onError: (err: unknown) => {
             addToast(err instanceof SupportRequestError ? err.message : 'Não foi possível atualizar.', 'error');
+        },
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: () => supportService.adminDelete(ticketId),
+        onSuccess: (res) => {
+            addToast(`Ticket ${res.code} excluído.`, 'success');
+            // `remove`, não `invalidate`: invalidar mandaria buscar de novo um
+            // ticket que acabou de deixar de existir, e a tela piscaria um 404
+            // antes de a seleção ser limpa.
+            queryClient.removeQueries({ queryKey });
+            onDeleted();
+            onChanged();
+        },
+        onError: (err: unknown) => {
+            setConfirmDelete(false);
+            addToast(err instanceof SupportRequestError ? err.message : 'Não foi possível excluir.', 'error');
         },
     });
 
@@ -351,8 +374,51 @@ const TicketDetail: React.FC<{ ticketId: string; onChanged: () => void }> = ({ t
                                 <option key={p} value={p}>{PRIORITY_UI[p].label}</option>
                             ))}
                         </select>
+                        {/* Discreto e cinza em repouso: é a única ação da tela que
+                            não tem desfazer, e ela não deve competir por atenção
+                            com os controles do dia a dia. */}
+                        <button
+                            type="button"
+                            onClick={() => setConfirmDelete(true)}
+                            title="Excluir ticket"
+                            aria-label="Excluir ticket"
+                            className="p-1.5 rounded-lg border border-slate-800 text-slate-500 hover:text-red-400 hover:border-red-900/70 transition-colors"
+                        >
+                            <Trash2 size={13} />
+                        </button>
                     </div>
                 </div>
+
+                {/* Confirmação no lugar onde a ação foi pedida, em vez de um
+                    modal por cima: a pessoa continua vendo QUAL ticket está
+                    prestes a apagar. O texto aponta a saída certa para o caso
+                    mais comum — quem quer encerrar quer "Fechado", não excluir. */}
+                {confirmDelete && (
+                    <div className="mt-2.5 p-2.5 rounded-lg border border-red-900/60 bg-red-950/30 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] text-red-200 leading-relaxed">
+                            Excluir <strong className="font-mono">{ticket.code}</strong> e as imagens dele? A conversa
+                            some para sempre — para encerrar sem apagar, use o status <strong>Fechado</strong>.
+                        </p>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setConfirmDelete(false)}
+                                className="px-2.5 py-1.5 rounded-lg border border-slate-700 text-[11px] font-bold text-slate-300 hover:text-white transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => deleteMutation.mutate()}
+                                disabled={deleteMutation.isPending}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-700 hover:bg-red-600 disabled:opacity-50 text-[11px] font-bold text-white transition-colors"
+                            >
+                                {deleteMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                Excluir definitivamente
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Ficha do usuário: o estado de HOJE. `planAtOpen` guarda o de ontem. */}
                 {profile && (

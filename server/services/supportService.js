@@ -566,3 +566,34 @@ export async function anonymizeUserTickets(userId, { session } = {}) {
     }
     return result.modifiedCount ?? 0;
 }
+
+/**
+ * Apaga o ticket e as imagens dele. IRREVERSÍVEL e sem lixeira.
+ *
+ * Existe para o que não devia ter sido escrito: teste do próprio time, duplicata
+ * de um usuário que clicou duas vezes, ou um relato aberto com dado sensível que
+ * a pessoa pede para remover. Não é a ferramenta de encerrar atendimento — para
+ * isso existe FECHADO, que preserva o histórico.
+ *
+ * Os anexos vão PRIMEIRO. Se a segunda etapa falhar, sobra um ticket cujas
+ * imagens aparecem como indisponíveis, e repetir a exclusão termina o serviço.
+ * Na ordem inversa, uma falha deixaria imagens de 900KB penduradas num ticket
+ * que não existe mais — invisíveis para qualquer tela e para a rotina de
+ * limpeza, que varre a partir do ticket.
+ */
+export async function deleteTicket(ticketId) {
+    const ticket = await SupportTicket.findById(ticketId).select('code subject user').lean();
+    if (!ticket) throw new SupportError('Ticket não encontrado.', 404);
+
+    const removed = await SupportAttachment.deleteMany({ ticket: ticket._id });
+    await SupportTicket.deleteOne({ _id: ticket._id });
+
+    // `warn` de propósito: é a única operação do módulo que destrói registro de
+    // atendimento, e no arquivo de log ela precisa saltar aos olhos.
+    logger.warn('[support] ticket EXCLUÍDO', {
+        code: ticket.code,
+        attachments: removed.deletedCount ?? 0,
+    });
+
+    return { code: ticket.code, attachments: removed.deletedCount ?? 0 };
+}
