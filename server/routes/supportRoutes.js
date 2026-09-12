@@ -20,7 +20,6 @@ import {
     adminUpdate,
     createTicket,
     getAttachment,
-    getMeta,
     getMyTicket,
     listMyTickets,
     replyToMyTicket,
@@ -50,7 +49,6 @@ router.post('/admin/tickets/:id/reply', adminLimiter, requireAdmin, validate(adm
 router.put('/admin/tickets/:id', adminLimiter, requireAdmin, validate(adminUpdateTicketSchema), adminUpdate);
 
 // ─── Usuário ─────────────────────────────────────────────────────────────────
-router.get('/meta', supportReadLimiter, getMeta);
 router.get('/tickets', supportReadLimiter, listMyTickets);
 router.get('/tickets/:id', supportReadLimiter, validate(idParamSchema), getMyTicket);
 router.post('/tickets', supportWriteLimiter, validate(createTicketSchema), createTicket);

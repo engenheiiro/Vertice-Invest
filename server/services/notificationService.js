@@ -7,9 +7,9 @@ import logger from '../config/logger.js';
  *
  * @param {{ user: string, type: string, title: string, message: string, relatedAssetClass?: string }} opts
  */
-export async function createNotification({ user, type, title, message, relatedAssetClass }) {
+export async function createNotification({ user, type, title, message, relatedAssetClass, link }) {
   try {
-    const doc = await Notification.create({ user, type, title, message, relatedAssetClass });
+    const doc = await Notification.create({ user, type, title, message, relatedAssetClass, link });
     logger.info(`[notification] criada id=${doc._id} type=${type} user=${user}`);
     return doc;
   } catch (err) {

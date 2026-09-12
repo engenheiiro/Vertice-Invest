@@ -5,7 +5,10 @@
 import logger from '../config/logger.js';
 import * as supportService from '../services/supportService.js';
 import { SupportError } from '../services/supportService.js';
-import { TICKET_CATEGORIES } from '../utils/supportRules.js';
+
+// Teto de linhas do CSV. Igual ao teto da própria listagem — o arquivo é
+// ferramenta de triagem, não dump do banco.
+const CSV_MAX_ROWS = 200;
 
 /** Converte erro de regra em 4xx; o resto sobe para o errorHandler. */
 const handle = (fn) => async (req, res, next) => {
@@ -29,6 +32,7 @@ export const createTicket = handle(async (req, res) => {
         body: req.body.body,
         attachments: req.body.attachments,
         context: req.body.context,
+        relatedTicket: req.body.relatedTicket,
     });
     res.status(201).json(ticket);
 });
@@ -78,11 +82,6 @@ export const getAttachment = handle(async (req, res) => {
     res.send(buffer);
 });
 
-/** Vocabulário para o formulário (categorias) — evita duplicar a lista no front. */
-export const getMeta = (_req, res) => {
-    res.json({ categories: TICKET_CATEGORIES });
-};
-
 // ─── Admin ───────────────────────────────────────────────────────────────────
 
 export const adminList = handle(async (req, res) => {
@@ -129,10 +128,24 @@ export const adminUpdate = handle(async (req, res) => {
  * a planilha numa coluna só e sem comer os acentos.
  */
 export const adminExportCsv = handle(async (req, res) => {
-    const { tickets } = await supportService.listAdminTickets({ ...req.query, limit: 200 });
+    const { tickets, total } = await supportService.listAdminTickets({ ...req.query, limit: CSV_MAX_ROWS });
 
     const header = ['Codigo', 'Abertura', 'Status', 'Prioridade', 'Categoria', 'Plano', 'Usuario', 'Email', 'Assunto', 'Mensagens'];
-    const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+
+    /**
+     * Aspas escapadas E fórmula neutralizada.
+     *
+     * Metade das colunas é texto que o USUÁRIO escreveu (assunto, nome, e-mail).
+     * O Excel trata uma célula iniciada por `=`, `+`, `-` ou `@` como fórmula, e
+     * este arquivo é aberto justamente por quem tem acesso a tudo: um assunto
+     * como `=HYPERLINK(...)` viraria código executando na sua máquina. O
+     * apóstrofo à frente faz a planilha tratar como texto, que é o que é.
+     */
+    const cell = (v) => {
+        const text = String(v ?? '');
+        const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+        return `"${safe.replace(/"/g, '""')}"`;
+    };
     const rows = tickets.map((t) => [
         t.code,
         new Date(t.createdAt).toLocaleString('pt-BR'),
@@ -142,5 +155,12 @@ export const adminExportCsv = handle(async (req, res) => {
 
     res.set('Content-Type', 'text/csv; charset=utf-8');
     res.set('Content-Disposition', `attachment; filename="tickets-${new Date().toISOString().slice(0, 10)}.csv"`);
-    res.send('﻿' + [header.join(';'), ...rows].join('\n'));
+    // O filtro pode casar mais linhas do que o arquivo leva. Dizer isso DENTRO do
+    // arquivo é o que evita alguém contar tickets numa planilha truncada achando
+    // que contou todos — o cabeçalho da resposta ninguém lê depois de salvar.
+    const truncated = total > tickets.length
+        ? [`"Exportadas as ${tickets.length} primeiras de ${total} linhas do filtro. Refine o período para levar o resto."`]
+        : [];
+
+    res.send('﻿' + [header.join(';'), ...rows, ...truncated].join('\n'));
 });

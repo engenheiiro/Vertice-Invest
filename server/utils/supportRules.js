@@ -37,11 +37,19 @@ export const REOPEN_WINDOW_DAYS = 7;
 export const MAX_ATTACHMENTS_PER_MESSAGE = 3;
 export const MAX_ATTACHMENTS_PER_TICKET = 8;
 
-// ~1MB por imagem DEPOIS da compressão no navegador. O base64 infla ~33% sobre
-// o binário, então o teto é medido na string que chega — é ela que ocupa o banco.
-export const MAX_ATTACHMENT_BYTES = 1_400_000;
+// Teto da data-URL de UMA imagem, medido na string que chega — é ela que ocupa
+// o banco e o corpo da requisição (o base64 infla ~33% sobre o binário).
+//
+// 900KB não é número escolhido por conforto: 3 imagens no teto somam 2,7MB e
+// precisam caber no parser de 3mb que o app.js monta só para /api/support. Subir
+// aqui sem subir lá devolve 413 ANTES de a rota rodar — falha que não aparece em
+// teste de unidade nenhum.
+export const MAX_ATTACHMENT_BYTES = 900_000;
 
 export const ALLOWED_ATTACHMENT_MIME = ['image/png', 'image/jpeg', 'image/webp'];
+
+// Assinatura única do atendimento para o usuário — a tela e o JSON dizem o mesmo.
+export const SUPPORT_DISPLAY_NAME = 'Suporte Vértice';
 
 // Mesma disciplina do avatar: data-URL fechada por regex, nunca `startsWith`.
 export const ATTACHMENT_DATAURL_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
@@ -92,8 +100,17 @@ const ADMIN_TRANSITIONS = {
   EM_ANALISE: ['ABERTO', 'RESPONDIDO', 'RESOLVIDO', 'FECHADO'],
   RESPONDIDO: ['EM_ANALISE', 'RESOLVIDO', 'FECHADO'],
   RESOLVIDO:  ['EM_ANALISE', 'FECHADO', 'ABERTO'],
-  FECHADO:    [], // terminal: o que morreu, morreu — resposta nova vira ticket novo
+  // FECHADO é terminal PARA O USUÁRIO: `statusAfterUserReply` devolve null e a
+  // resposta dele vira ticket novo. Para o admin existe uma saída — e tem que
+  // existir: sem ela, um clique errado em "Encerrar" tranca o atendimento para
+  // sempre, e a única saída seria mexer no banco na mão.
+  FECHADO:    ['EM_ANALISE'],
 };
+
+/** Transições que o painel deve oferecer a partir do status atual. */
+export function allowedTransitionsFrom(status) {
+  return ADMIN_TRANSITIONS[status] ?? [];
+}
 
 /**
  * @returns {{ ok: boolean, reason?: string }}
@@ -164,7 +181,7 @@ export function validateAttachments(dataUrls = [], alreadyInTicket = 0) {
       return { ok: false, reason: 'Formato de imagem não suportado. Use PNG, JPEG ou WEBP.' };
     }
     if (url.length > MAX_ATTACHMENT_BYTES) {
-      return { ok: false, reason: 'Imagem muito grande. Envie um print de até 1 MB.' };
+      return { ok: false, reason: 'Imagem muito grande mesmo depois da compressão. Envie um recorte da tela em vez da tela inteira.' };
     }
   }
   return { ok: true };
@@ -193,6 +210,13 @@ export function serializeTicketForUser(ticket) {
     ...visible,
     messages: (plain.messages ?? [])
       .filter((m) => !m.isInternal)
-      .map(({ isInternal, ...m }) => m),
+      .map(({ isInternal, author, authorName, ...m }) => ({
+        ...m,
+        // Quem responde é "o suporte", não uma pessoa. A tela já rotula assim;
+        // mandar o nome e o id de quem atendeu no JSON só criaria a chance de
+        // os dois discordarem — e expõe quem está do outro lado sem necessidade.
+        authorName: m.authorRole === 'ADMIN' ? SUPPORT_DISPLAY_NAME : authorName,
+        author: m.authorRole === 'ADMIN' ? null : author,
+      })),
   };
 }

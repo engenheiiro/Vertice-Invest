@@ -61,6 +61,7 @@ const row = (override: Partial<AdminTicketRow> = {}): AdminTicketRow => ({
 });
 
 const detail = (override: Partial<AdminTicketDetail['ticket']> = {}): AdminTicketDetail => ({
+    allowedTransitions: ['EM_ANALISE', 'RESPONDIDO', 'RESOLVIDO', 'FECHADO'],
     ticket: {
         ...row(),
         priority: 'ALTA',
@@ -190,5 +191,61 @@ describe('resposta', () => {
 
         expect(await screen.findByDisplayValue(/Recebemos seu ticket/i)).toBeInTheDocument();
         expect(mocks.adminReply).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * Achados da auditoria de 12/09/2026.
+ */
+describe('falha de leitura (auditoria)', () => {
+    it('erro na fila NÃO se disfarça de fila vazia', async () => {
+        // "Nada nesta fila" é uma afirmação: ninguém precisa de você. Dizê-la
+        // quando o servidor não respondeu é o jeito de perder um cliente sem
+        // nunca saber que ele escreveu.
+        mocks.adminList.mockRejectedValue(new Error('Falha de conexão.'));
+        renderTab();
+
+        expect(await screen.findByText(/Não consegui carregar a fila/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Nada nesta fila/i)).not.toBeInTheDocument();
+    });
+
+    it('e oferece tentar de novo', async () => {
+        mocks.adminList.mockRejectedValue(new Error('Falha de conexão.'));
+        renderTab();
+
+        await userEvent.click(await screen.findByRole('button', { name: /Tentar de novo/i }));
+        await waitFor(() => expect(mocks.adminList.mock.calls.length).toBeGreaterThan(1));
+    });
+});
+
+describe('transições oferecidas (auditoria)', () => {
+    it('o select mostra só o status atual e o que a regra aceita', async () => {
+        mocks.adminGet.mockResolvedValue({
+            ...detail(),
+            // Ticket encerrado: a única saída que a regra dá ao admin é reabrir
+            // a análise.
+            allowedTransitions: ['EM_ANALISE'],
+            ticket: { ...detail().ticket, status: 'FECHADO' },
+        });
+        renderTab();
+        await userEvent.click(await screen.findByText('Rentabilidade zerou hoje'));
+
+        const status = (await screen.findAllByRole('combobox'))
+            .find((el) => (el as HTMLSelectElement).value === 'FECHADO') as HTMLSelectElement;
+        const opcoes = Array.from(status.options).map((o) => o.value);
+
+        expect(opcoes).toEqual(['FECHADO', 'EM_ANALISE']);
+        expect(opcoes).not.toContain('RESOLVIDO');
+    });
+
+    it('não quebra se a resposta vier sem a lista de transições', async () => {
+        const semCampo = detail();
+        delete (semCampo as Partial<AdminTicketDetail>).allowedTransitions;
+        mocks.adminGet.mockResolvedValue(semCampo);
+        renderTab();
+
+        await userEvent.click(await screen.findByText('Rentabilidade zerou hoje'));
+        // Degrada para "só o status atual" em vez de derrubar a tela inteira.
+        expect(await screen.findByText(/Contexto técnico/i)).toBeInTheDocument();
     });
 });

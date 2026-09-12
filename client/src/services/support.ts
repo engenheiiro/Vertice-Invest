@@ -43,6 +43,9 @@ export interface AdminTicketRow extends TicketSummary {
 }
 
 export interface AdminTicketDetail {
+    // Status que a regra do servidor aceita a partir do atual. A tela oferece
+    // só estes — a tabela de transições vive no servidor e não é reescrita aqui.
+    allowedTransitions: TicketStatus[];
     ticket: Ticket & {
         priority: TicketPriority;
         userName: string;
@@ -114,9 +117,7 @@ export const supportService = {
     // ─── Usuário ─────────────────────────────────────────────────────────────
 
     async listMyTickets(): Promise<TicketSummary[]> {
-        const response = await authService.api('/api/support/tickets');
-        if (!response.ok) return [];
-        const data = await response.json();
+        const data = await parse(await authService.api('/api/support/tickets'));
         return data.tickets ?? [];
     },
 
@@ -133,6 +134,9 @@ export const supportService = {
         subject: string;
         body: string;
         attachments?: string[];
+        // Ticket que originou este, quando o anterior já estava encerrado. O
+        // servidor só aceita o vínculo se o ticket antigo for do mesmo usuário.
+        relatedTicket?: string | null;
     }): Promise<Ticket> {
         return parse(await authService.api('/api/support/tickets', {
             method: 'POST',
@@ -173,19 +177,27 @@ export const supportService = {
 
     // ─── Admin ───────────────────────────────────────────────────────────────
 
+    /**
+     * Contadores do badge.
+     *
+     * Propaga o erro em vez de devolver zeros. Um número inventado aqui é pior
+     * que número nenhum: o badge sumiria e o painel afirmaria, com a autoridade
+     * de um contador, que ninguém está esperando — justamente quando o servidor
+     * parou de responder. Sem dado, o React Query segura o último valor
+     * conhecido e não fabrica nada.
+     */
     async adminSummary(): Promise<AdminSummary> {
-        const response = await authService.api('/api/support/admin/summary');
-        if (!response.ok) return { open: 0, waiting: 0, highPriority: 0, byStatus: {} };
-        return response.json();
+        return parse(await authService.api('/api/support/admin/summary'));
     },
 
     async adminList(filters: {
         status?: string; category?: string; priority?: string; search?: string;
         from?: string; to?: string; limit?: number; skip?: number;
     } = {}): Promise<{ total: number; tickets: AdminTicketRow[] }> {
-        const response = await authService.api(`/api/support/admin/tickets${query(filters)}`);
-        if (!response.ok) return { total: 0, tickets: [] };
-        return response.json();
+        // Falha NÃO vira lista vazia: numa fila de atendimento, "nada aqui" é uma
+        // afirmação forte — significa que ninguém precisa de você. A tela precisa
+        // poder distinguir isso de "não consegui perguntar".
+        return parse(await authService.api(`/api/support/admin/tickets${query(filters)}`));
     },
 
     async adminGet(id: string): Promise<AdminTicketDetail> {

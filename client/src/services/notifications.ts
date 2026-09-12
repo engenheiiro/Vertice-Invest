@@ -7,6 +7,8 @@ export interface AppNotification {
   title: string;
   message: string;
   relatedAssetClass?: string;
+  /** Destino interno do clique, quando houver (ex.: '/suporte?ticket=VT-0042'). */
+  link?: string | null;
   isRead: boolean;
   readBy: string[];
   createdAt: string;

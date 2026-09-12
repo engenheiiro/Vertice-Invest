@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, BellRing, CheckCheck, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { notificationsService, AppNotification } from '../../services/notifications';
 import { useAuth } from '../../contexts/AuthContext';
@@ -32,6 +33,7 @@ export const NotificationBell: React.FC = () => {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { user } = useAuth();
 
   // userId usado para decidir se um broadcast já foi lido por este usuário
@@ -202,6 +204,14 @@ export const NotificationBell: React.FC = () => {
                       `}
                       onClick={() => {
                         if (!read) markReadMutation.mutate(n._id);
+                        // Notificação que anuncia algo sem levar até lá obriga o
+                        // usuário a procurar sozinho o que acabou de ser avisado.
+                        // Só caminho interno: destino vindo do banco nunca vira
+                        // navegação para fora do app.
+                        if (n.link && n.link.startsWith('/')) {
+                          setOpen(false);
+                          navigate(n.link);
+                        }
                       }}
                     >
                       {/* Dot de não-lida */}

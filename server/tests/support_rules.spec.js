@@ -15,6 +15,8 @@ import {
     canReopen,
     validateAttachments,
     serializeTicketForUser,
+    allowedTransitionsFrom,
+    TICKET_STATUSES,
     MAX_ATTACHMENTS_PER_TICKET,
     MAX_ATTACHMENT_BYTES,
 } from '../utils/supportRules.js';
@@ -81,9 +83,19 @@ describe('canTransition', () => {
         expect(canTransition('RESOLVIDO', 'FECHADO').ok).toBe(true);
     });
 
-    it('trata FECHADO como terminal', () => {
+    it('dá ao admin UMA saída do FECHADO — sem ela, um clique errado tranca o ticket para sempre', () => {
+        expect(canTransition('FECHADO', 'EM_ANALISE').ok).toBe(true);
+    });
+
+    it('e só essa: FECHADO não volta direto para aberto nem resolvido', () => {
         expect(canTransition('FECHADO', 'ABERTO').ok).toBe(false);
-        expect(canTransition('FECHADO', 'EM_ANALISE').ok).toBe(false);
+        expect(canTransition('FECHADO', 'RESOLVIDO').ok).toBe(false);
+        expect(canTransition('FECHADO', 'RESPONDIDO').ok).toBe(false);
+    });
+
+    it('para o USUÁRIO o FECHADO continua terminal — a saída é só do admin', () => {
+        expect(statusAfterUserReply({ status: 'FECHADO' })).toBeNull();
+        expect(canTransition('FECHADO', 'EM_ANALISE', 'USER').ok).toBe(false);
     });
 
     it('recusa status que não existe', () => {
@@ -220,5 +232,70 @@ describe('serializeTicketForUser', () => {
         const out = serializeTicketForUser(ticket);
         expect(out.code).toBe('VT-0001');
         expect(out.subject).toBe('Preço errado');
+    });
+});
+
+/**
+ * Achados da auditoria de 12/09/2026. Cada bloco aqui existe porque o defeito
+ * correspondente não quebrava nada de forma visível.
+ */
+describe('orçamento do anexo (auditoria)', () => {
+    it('cabe no parser de 3mb que o app.js monta para /api/support', () => {
+        // Este é o teste que faltava quando o teto era 1,4MB: três imagens no
+        // limite somavam 4,2MB e o Express devolvia 413 ANTES da rota, com o
+        // usuário vendo só "não foi possível".
+        const orcamento = MAX_ATTACHMENT_BYTES * 3;
+        expect(orcamento).toBeLessThan(3 * 1024 * 1024);
+    });
+
+    it('recusa imagem acima do teto', () => {
+        const r = validateAttachments([`data:image/png;base64,${'A'.repeat(MAX_ATTACHMENT_BYTES + 1)}`]);
+        expect(r.ok).toBe(false);
+        expect(r.reason).toMatch(/recorte/i);
+    });
+});
+
+describe('assinatura do atendimento (auditoria)', () => {
+    const comResposta = {
+        messages: [
+            { authorRole: 'USER', author: 'u1', authorName: 'Maria', body: 'oi', isInternal: false },
+            { authorRole: 'ADMIN', author: 'admin-1', authorName: 'Matheus Ambrózio', body: 'resolvido', isInternal: false },
+        ],
+    };
+
+    it('o usuário lê "Suporte Vértice", não o nome de quem atendeu', () => {
+        const out = serializeTicketForUser(comResposta);
+        const resposta = out.messages.find((m) => m.authorRole === 'ADMIN');
+
+        expect(resposta.authorName).toBe('Suporte Vértice');
+        expect(JSON.stringify(out)).not.toMatch(/Matheus/);
+    });
+
+    it('nem o id de quem atendeu vai junto', () => {
+        const out = serializeTicketForUser(comResposta);
+        expect(out.messages.find((m) => m.authorRole === 'ADMIN').author).toBeNull();
+    });
+
+    it('o próprio nome do usuário continua intacto na mensagem dele', () => {
+        const out = serializeTicketForUser(comResposta);
+        expect(out.messages.find((m) => m.authorRole === 'USER').authorName).toBe('Maria');
+    });
+});
+
+describe('transições oferecidas ao painel (auditoria)', () => {
+    it('o painel só pode oferecer o que a regra aceita', () => {
+        // O select do Admin listava os cinco status sempre: metade das escolhas
+        // voltava 400. Agora a lista sai da mesma tabela que valida.
+        for (const status of TICKET_STATUSES) {
+            for (const alvo of allowedTransitionsFrom(status)) {
+                expect(canTransition(status, alvo, 'ADMIN').ok).toBe(true);
+            }
+        }
+    });
+
+    it('nenhum status fica sem saída', () => {
+        for (const status of TICKET_STATUSES) {
+            expect(allowedTransitionsFrom(status).length).toBeGreaterThan(0);
+        }
     });
 });

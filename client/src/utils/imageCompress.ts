@@ -9,9 +9,18 @@
  * transparência — e JPEG a 0,82 economiza uma ordem de grandeza sobre o PNG.
  */
 
-const MAX_EDGE = 1600;
-const TARGET_BYTES = 1_300_000; // folga sob o teto do servidor (1,4 MB)
-const MIN_QUALITY = 0.5;
+// Escadas de redução, tentadas em ordem até a imagem caber no orçamento.
+//
+// A largura entra na escada junto com a qualidade porque print de tela é quase
+// todo texto: baixar só a qualidade do JPEG borra as letras sem economizar
+// muito, enquanto reduzir a dimensão economiza de verdade. Tentar 1600px antes
+// de 1280px preserva a legibilidade de quem manda um recorte pequeno.
+const EDGE_STEPS = [1600, 1280, 1024];
+const QUALITY_STEPS = [0.82, 0.7, 0.58];
+
+// Teto por imagem, com folga sob MAX_ATTACHMENT_BYTES (900.000) do servidor.
+// Três imagens aqui somam 2,4MB e cabem no parser de 3mb de `/api/support`.
+const TARGET_BYTES = 800_000;
 
 export class ImageTooLargeError extends Error {
     constructor() {
@@ -38,25 +47,25 @@ export async function compressImage(file: File): Promise<string> {
 
     const img = await loadImage(file);
 
-    const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(img.width * scale);
-    canvas.height = Math.round(img.height * scale);
+    for (const edge of EDGE_STEPS) {
+        const scale = Math.min(1, edge / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Não foi possível processar a imagem neste navegador.');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Não foi possível processar a imagem neste navegador.');
 
-    // Fundo branco: JPEG não tem canal alfa, e sem isso um PNG com transparência
-    // vira um retângulo preto — que é exatamente o print inútil.
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        // Fundo branco: JPEG não tem canal alfa, e sem isso um PNG com
+        // transparência vira um retângulo preto — o print inútil.
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    // Cai a qualidade em degraus até caber. Tela cheia de texto comprime mal;
-    // uma passada só de 0,82 não garante o teto.
-    for (let quality = 0.82; quality >= MIN_QUALITY; quality -= 0.12) {
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
-        if (dataUrl.length <= TARGET_BYTES) return dataUrl;
+        for (const quality of QUALITY_STEPS) {
+            const dataUrl = canvas.toDataURL('image/jpeg', quality);
+            if (dataUrl.length <= TARGET_BYTES) return dataUrl;
+        }
     }
 
     throw new ImageTooLargeError();

@@ -15,20 +15,25 @@ import { SupportCenter } from './SupportCenter';
  * depois, dentro de um menu, ela já esqueceu em que tela estava (e o contexto
  * técnico que vai junto no ticket apontaria para a tela errada).
  *
- * Não aparece na própria rota `/suporte`: lá a central já está aberta em página
- * inteira, e o botão seria um atalho para onde a pessoa já está.
+ * Não aparece em `/suporte` nem em `/admin`: na primeira a central já está
+ * aberta em página inteira, e na segunda quem está na tela é o atendimento, não
+ * quem precisa dele. Nos dois casos o botão seria um atalho para onde a pessoa
+ * já está.
  */
 export const SupportWidget: React.FC = () => {
     const { isAuthenticated } = useAuth();
     const { pathname } = useLocation();
     const [open, setOpen] = useState(false);
 
+    // Calculado antes da query: escondido também significa não perguntar.
+    const hidden = !isAuthenticated || pathname === '/suporte' || pathname.startsWith('/admin');
+
     // A lista serve a duas coisas: alimentar a bolinha de resposta nova e já
     // deixar os tickets em cache quando o painel abrir.
     const { data: tickets = [] } = useQuery({
         queryKey: ['support', 'tickets'],
         queryFn: supportService.listMyTickets,
-        enabled: isAuthenticated,
+        enabled: !hidden,
         refetchInterval: 120_000,
         refetchOnWindowFocus: true,
         staleTime: 60_000,
@@ -45,7 +50,7 @@ export const SupportWidget: React.FC = () => {
         return () => window.removeEventListener('keydown', onKey);
     }, [open]);
 
-    if (!isAuthenticated || pathname === '/suporte') return null;
+    if (hidden) return null;
 
     return (
         <>

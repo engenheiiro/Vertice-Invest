@@ -49,6 +49,16 @@ const CANNED_REPLIES = [
     },
 ];
 
+// Rótulos em forma de AÇÃO para o seletor de "o que acontece ao enviar" — ali o
+// status não é um estado, é a consequência do clique.
+const STATUS_AFTER_REPLY_LABEL: Partial<Record<TicketStatus, string>> = {
+    EM_ANALISE: 'Deixar em análise',
+    RESPONDIDO: 'Marcar como Respondido',
+    RESOLVIDO: 'Marcar como Resolvido',
+    FECHADO: 'Encerrar',
+    ABERTO: 'Devolver para a fila',
+};
+
 const STATUS_FILTERS: { value: string; label: string }[] = [
     { value: 'OPEN', label: 'Em andamento' },
     { value: 'ABERTO', label: 'Aberto' },
@@ -74,7 +84,7 @@ export const AdminSuporteTab: React.FC = () => {
 
     const filters = useMemo(() => ({ status, category, priority, search }), [status, category, priority, search]);
 
-    const { data, isFetching, refetch } = useQuery({
+    const { data, isFetching, isError, error, refetch } = useQuery({
         queryKey: ['support', 'admin', 'list', filters],
         queryFn: () => supportService.adminList(filters),
         refetchInterval: 120_000,
@@ -140,6 +150,9 @@ export const AdminSuporteTab: React.FC = () => {
                     tickets={tickets}
                     total={data?.total ?? 0}
                     isLoading={isFetching && !data}
+                    isError={isError}
+                    errorMessage={error instanceof Error ? error.message : ''}
+                    onRetry={() => refetch()}
                     selectedId={selectedId}
                     onSelect={setSelectedId}
                 />
@@ -167,12 +180,15 @@ const TicketQueue: React.FC<{
     tickets: AdminTicketRow[];
     total: number;
     isLoading: boolean;
+    isError: boolean;
+    errorMessage: string;
+    onRetry: () => void;
     selectedId: string | null;
     onSelect: (id: string) => void;
-}> = ({ tickets, total, isLoading, selectedId, onSelect }) => (
+}> = ({ tickets, total, isLoading, isError, errorMessage, onRetry, selectedId, onSelect }) => (
     <div className="bg-card border border-slate-800 rounded-xl overflow-hidden flex flex-col max-h-[70vh]">
         <div className="px-3 py-2 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
-            {total} ticket{total === 1 ? '' : 's'}
+            {isError ? 'fila indisponível' : `${total} ticket${total === 1 ? '' : 's'}`}
         </div>
 
         <div className="overflow-y-auto divide-y divide-slate-800/60">
@@ -180,7 +196,27 @@ const TicketQueue: React.FC<{
                 <div className="flex justify-center py-10"><Loader2 size={18} className="animate-spin text-slate-600" /></div>
             )}
 
-            {!isLoading && tickets.length === 0 && (
+            {/* Erro de leitura NÃO pode se parecer com fila vazia: numa tela de
+                atendimento, "nada aqui" significa "ninguém precisa de você", e é
+                a última coisa que se pode afirmar por engano. */}
+            {isError && (
+                <div className="px-4 py-10 text-center">
+                    <AlertTriangle size={20} className="mx-auto text-red-400 mb-2" />
+                    <p className="text-[11px] text-red-400 font-bold">Não consegui carregar a fila.</p>
+                    <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                        {errorMessage || 'O servidor não respondeu.'}<br />
+                        Isto <strong>não</strong> quer dizer que não há tickets.
+                    </p>
+                    <button
+                        onClick={onRetry}
+                        className="mt-3 px-3 py-1.5 rounded-lg border border-slate-700 text-[10px] font-bold text-slate-300 hover:text-white hover:border-slate-600 transition-colors"
+                    >
+                        Tentar de novo
+                    </button>
+                </div>
+            )}
+
+            {!isLoading && !isError && tickets.length === 0 && (
                 <p className="text-center text-[11px] text-slate-600 py-10 px-4">Nada nesta fila.</p>
             )}
 
@@ -277,6 +313,10 @@ const TicketDetail: React.FC<{ ticketId: string; onChanged: () => void }> = ({ t
 
     const { ticket, profile } = data;
     const context = ticket.context ?? {};
+    // Default vazio: uma resposta sem o campo (versão antiga em cache, payload
+    // truncado) tem que degradar para "só o status atual", nunca derrubar a tela
+    // de atendimento inteira por causa de um select.
+    const transitions = data.allowedTransitions ?? [];
 
     return (
         <div className="bg-card border border-slate-800 rounded-xl overflow-hidden flex flex-col max-h-[70vh]">
@@ -290,12 +330,15 @@ const TicketDetail: React.FC<{ ticketId: string; onChanged: () => void }> = ({ t
                         <h3 className="text-sm font-bold text-slate-100 mt-0.5">{ticket.subject}</h3>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Só o status atual e os que a REGRA aceita a partir dele.
+                            Listar os cinco sempre fazia metade das escolhas voltar
+                            400 — e o painel ensinava um caminho que não existe. */}
                         <select
                             value={ticket.status}
                             onChange={(e) => updateMutation.mutate({ status: e.target.value as TicketStatus })}
                             className={selectClass}
                         >
-                            {(Object.keys(STATUS_UI) as TicketStatus[]).map((s) => (
+                            {[ticket.status, ...transitions].map((s) => (
                                 <option key={s} value={s}>{STATUS_UI[s].label}</option>
                             ))}
                         </select>
@@ -440,10 +483,10 @@ const TicketDetail: React.FC<{ ticketId: string; onChanged: () => void }> = ({ t
                                 className={selectClass}
                                 title="Status após enviar"
                             >
-                                <option value="">Marcar como Respondido</option>
-                                <option value="EM_ANALISE">Deixar em análise</option>
-                                <option value="RESOLVIDO">Marcar como Resolvido</option>
-                                <option value="FECHADO">Encerrar</option>
+                                <option value="">Status padrão ao responder</option>
+                                {transitions.map((s) => (
+                                    <option key={s} value={s}>{STATUS_AFTER_REPLY_LABEL[s] ?? STATUS_UI[s].label}</option>
+                                ))}
                             </select>
                         )}
                         <button

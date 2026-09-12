@@ -100,3 +100,44 @@ describe('fallback da SPA', () => {
         expect(res.headers.get('content-type') || '').not.toContain('text/html');
     });
 });
+
+/**
+ * Orçamento de corpo do suporte.
+ *
+ * O app parseia JSON com teto de 1mb. O ticket de suporte é a única rota que
+ * recebe imagem no corpo, e o teto global rejeitava o anexo com 413 ANTES de
+ * qualquer rota rodar — o usuário via "não foi possível" e nada no servidor
+ * registrava o motivo. O parser dedicado de 3mb do `/api/support` é o que
+ * conserta isso, e só um teste no nível do HTTP consegue vê-lo.
+ */
+describe('corpo do ticket de suporte', () => {
+    // ~2,5MB: três anexos no teto (900KB cada) mais o texto. Sem Mongo o app
+    // responde 503 na guarda de disponibilidade; com banco de pé responderia 401
+    // por falta de token. O que se afirma aqui é só uma coisa — NÃO é 413.
+    const corpoGrande = JSON.stringify({
+        category: 'BUG',
+        subject: 'Print grande',
+        body: 'x'.repeat(50),
+        attachments: [`data:image/png;base64,${'A'.repeat(2_500_000)}`],
+    });
+
+    it('aceita o payload de três anexos sem devolver 413', async () => {
+        const res = await fetch(`${base}/api/support/tickets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: corpoGrande,
+        });
+
+        expect(res.status).not.toBe(413);
+    });
+
+    it('e o resto da API continua em 1mb — o teto maior é só do suporte', async () => {
+        const res = await fetch(`${base}/api/wallet/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: corpoGrande,
+        });
+
+        expect(res.status).toBe(413);
+    });
+});

@@ -17,6 +17,7 @@ import { sendSupportReplyEmail } from './emailService.js';
 import {
     OPEN_STATUSES,
     MAX_OPEN_TICKETS_PER_USER,
+    allowedTransitionsFrom,
     canReopen,
     canTransition,
     mimeOfDataUrl,
@@ -43,12 +44,27 @@ export class SupportError extends Error {
  * repetiria o número e esbarraria no índice único de `code`.
  */
 async function nextTicketCode() {
-    const counter = await SupportCounter.findOneAndUpdate(
-        { key: 'TICKET' },
-        { $inc: { seq: 1 } },
-        { new: true, upsert: true },
-    );
-    return `VT-${String(counter.seq).padStart(4, '0')}`;
+    try {
+        const counter = await SupportCounter.findOneAndUpdate(
+            { key: 'TICKET' },
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true },
+        );
+        return `VT-${String(counter.seq).padStart(4, '0')}`;
+    } catch (err) {
+        // Duas aberturas simultâneas com o contador AINDA inexistente podem tentar
+        // inserir o mesmo documento e uma leva E11000 (a corrida clássica do
+        // upsert). Acontece uma vez na vida — no primeiro ticket do sistema — e a
+        // segunda tentativa já encontra o documento criado.
+        if (err?.code !== 11000) throw err;
+
+        const counter = await SupportCounter.findOneAndUpdate(
+            { key: 'TICKET' },
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true },
+        );
+        return `VT-${String(counter.seq).padStart(4, '0')}`;
+    }
 }
 
 // ─── Anexos ──────────────────────────────────────────────────────────────────
@@ -77,6 +93,29 @@ async function persistAttachments(dataUrls, { ticketId, userId }) {
     return docs.map((d) => d._id);
 }
 
+/**
+ * Grava a mensagem e, se o ticket não salvar, apaga as imagens que já subiram.
+ *
+ * A imagem é escrita ANTES do ticket (a mensagem precisa dos ids). Sem esta
+ * compensação, qualquer falha depois do upload — transição de status recusada,
+ * validação do documento, queda de conexão — deixaria até três imagens de 900KB
+ * no banco sem nenhum ticket apontando para elas, e não existe faxineiro que as
+ * encontre depois.
+ */
+async function saveWithAttachmentRollback(ticket, attachmentIds) {
+    try {
+        await ticket.save();
+    } catch (err) {
+        if (attachmentIds.length) {
+            await SupportAttachment.deleteMany({ _id: { $in: attachmentIds } })
+                .catch((cleanupErr) => logger.error('[support] anexo órfão não pôde ser removido', {
+                    erro: cleanupErr.message, anexos: attachmentIds.length,
+                }));
+        }
+        throw err;
+    }
+}
+
 // ─── Abertura ────────────────────────────────────────────────────────────────
 
 /**
@@ -84,7 +123,7 @@ async function persistAttachments(dataUrls, { ticketId, userId }) {
  * `planAtOpen`: um downgrade posterior não pode reescrever a história do
  * atendimento.
  */
-export async function createTicket({ userId, category, subject, body, attachments = [], context = {} }) {
+export async function createTicket({ userId, category, subject, body, attachments = [], context = {}, relatedTicket = null }) {
     const user = await User.findById(userId).select('name email plan').lean();
     if (!user) throw new SupportError('Usuário não encontrado.', 404);
 
@@ -99,8 +138,16 @@ export async function createTicket({ userId, category, subject, body, attachment
     const check = validateAttachments(attachments, 0);
     if (!check.ok) throw new SupportError(check.reason);
 
+    // Continuação de um atendimento encerrado: o vínculo só vale se o ticket
+    // antigo for DESTE usuário. Aceitar o id cru deixaria qualquer pessoa
+    // pendurar o próprio ticket na conversa de outra.
+    const previous = relatedTicket && mongoose.Types.ObjectId.isValid(relatedTicket)
+        ? await SupportTicket.exists({ _id: relatedTicket, user: userId })
+        : null;
+
     const now = new Date();
     const ticket = new SupportTicket({
+        relatedTicket: previous ? relatedTicket : null,
         code: await nextTicketCode(),
         user: userId,
         userEmail: user.email,
@@ -124,7 +171,7 @@ export async function createTicket({ userId, category, subject, body, attachment
         createdAt: now,
     });
 
-    await ticket.save();
+    await saveWithAttachmentRollback(ticket, attachmentIds);
     logger.info('[support] ticket aberto', {
         code: ticket.code, category, plan: user.plan, priority: ticket.priority,
     });
@@ -193,7 +240,7 @@ export async function replyAsUser({ ticketId, userId, body, attachments = [] }) 
     ticket.lastUserMessageAt = now;
     if (reopened) ticket.resolvedAt = null;
 
-    await ticket.save();
+    await saveWithAttachmentRollback(ticket, attachmentIds);
     logger.info('[support] resposta do usuário', { code: ticket.code, reopened });
 
     return { ticket: serializeTicketForUser(ticket), reopened };
@@ -214,6 +261,15 @@ export async function replyAsAdmin({ ticketId, adminId, adminName, body, attachm
     const check = validateAttachments(attachments, countAttachments(ticket));
     if (!check.ok) throw new SupportError(check.reason);
 
+    // A transição é decidida ANTES de a imagem subir: recusar depois do upload
+    // deixaria anexos órfãos a cada clique numa combinação inválida de status.
+    let target = null;
+    if (!isInternal) {
+        target = newStatus || (ticket.status === 'RESOLVIDO' || ticket.status === 'FECHADO' ? ticket.status : 'RESPONDIDO');
+        const t = canTransition(ticket.status, target, 'ADMIN');
+        if (!t.ok) throw new SupportError(t.reason);
+    }
+
     const now = new Date();
     const attachmentIds = await persistAttachments(attachments, { ticketId: ticket._id, userId: adminId });
 
@@ -228,16 +284,12 @@ export async function replyAsAdmin({ ticketId, adminId, adminName, body, attachm
     });
 
     if (!isInternal) {
-        const target = newStatus || (ticket.status === 'RESOLVIDO' || ticket.status === 'FECHADO' ? ticket.status : 'RESPONDIDO');
-        const t = canTransition(ticket.status, target, 'ADMIN');
-        if (!t.ok) throw new SupportError(t.reason);
-
         applyStatus(ticket, target, now);
         ticket.lastAdminMessageAt = now;
         ticket.hasUnreadForUser = true;
     }
 
-    await ticket.save();
+    await saveWithAttachmentRollback(ticket, attachmentIds);
 
     // Aviso ao usuário: nunca derruba a resposta se falhar. Mesma disciplina do
     // notificationService — atendimento salvo é o que importa.
@@ -268,6 +320,9 @@ async function notifyUserOfReply(ticket) {
         type: 'SUPPORT_REPLY',
         title: `Resposta do suporte · ${ticket.code}`,
         message: ticket.subject,
+        // Sem isto o sino anuncia uma resposta e não diz onde ela está: o
+        // usuário lê "respondemos" e fica procurando pela tela.
+        link: `/suporte?ticket=${encodeURIComponent(ticket.code)}`,
     });
 
     if (ticket.userEmail) {
@@ -334,8 +389,12 @@ export async function getTicketForUser(ticketId, userId) {
     if (!ticket) throw new SupportError('Ticket não encontrado.', 404);
 
     if (ticket.hasUnreadForUser) {
+        // `updateOne` e não `save()`: o hook de `save` carimba `updatedAt`, e a
+        // lista "Meus tickets" ordena e rotula por esse campo. Com `save`, ABRIR
+        // um ticket de três semanas o jogava para o topo dizendo "agora" — a tela
+        // afirmava que houve novidade porque o usuário foi conferir que não houve.
+        await SupportTicket.updateOne({ _id: ticket._id }, { $set: { hasUnreadForUser: false } });
         ticket.hasUnreadForUser = false;
-        await ticket.save();
     }
 
     return { ...serializeTicketForUser(ticket), canReopen: canReopen(ticket) };
@@ -384,8 +443,12 @@ export async function listAdminTickets({ status, category, priority, search, fro
         SupportTicket.find(query)
             .sort({ priorityRank: -1, lastUserMessageAt: 1 })
             .skip(skip)
-            .limit(Math.min(limit, 200))
-            .select('-messages.attachments -context')
+            .limit(Math.min(Number(limit) || 100, 200))
+            // A fila mostra assunto e status — nunca o corpo das mensagens. Sem
+            // este corte, listar 100 tickets baixava a conversa inteira de cada
+            // um para renderizar uma tabela que não exibe nenhuma delas.
+            // `messageCount` é desnormalizado no modelo justamente para caber aqui.
+            .select('-messages -context')
             .lean(),
         SupportTicket.countDocuments(query),
     ]);
@@ -405,7 +468,7 @@ export async function listAdminTickets({ status, category, priority, search, fro
             createdAt: t.createdAt,
             lastUserMessageAt: t.lastUserMessageAt,
             lastAdminMessageAt: t.lastAdminMessageAt,
-            messageCount: (t.messages ?? []).length,
+            messageCount: t.messageCount ?? 0,
         })),
     };
 }
@@ -436,7 +499,12 @@ export async function getTicketForAdmin(ticketId) {
 
     // O anexo não viaja junto: a thread manda só o id, e a imagem é buscada
     // uma a uma pela rota própria.
-    return { ticket, profile };
+    //
+    // `allowedTransitions` vai junto para o painel oferecer só o que a regra
+    // aceita. Reescrever a tabela de estados no TypeScript da tela seria criar
+    // uma segunda verdade, que diverge da primeira no dia em que alguém mudar
+    // uma das duas — e o sintoma seria um select cheio de opções que voltam 400.
+    return { ticket, profile, allowedTransitions: allowedTransitionsFrom(ticket.status) };
 }
 
 /**

@@ -17,6 +17,11 @@ const NotificationSchema = new mongoose.Schema({
   // Campo opcional — ex.: 'STOCK', 'FII', 'CRYPTO'
   relatedAssetClass: { type: String },
 
+  // Para onde o clique leva, quando levar a algum lugar (ex.: '/suporte?ticket=VT-0042').
+  // Caminho INTERNO do app: o sino navega com o router e nunca abre destino externo
+  // a partir de um campo do banco.
+  link: { type: String, default: null },
+
   // Para notificações pessoais (user != null)
   isRead: { type: Boolean, default: false },
 

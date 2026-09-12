@@ -66,7 +66,11 @@ const SupportTicketSchema = new mongoose.Schema({
 
     category: { type: String, enum: TICKET_CATEGORIES, required: true },
     subject: { type: String, required: true },
-    status: { type: String, enum: TICKET_STATUSES, default: 'ABERTO', index: true },
+    // Sem `index: true`: o composto abaixo começa por `status` e um índice
+    // composto atende também as consultas pelo seu prefixo. Declarar nos dois
+    // lugares criaria um segundo índice, pago em toda escrita e usado em nenhuma
+    // leitura — mesmo cuidado documentado no ErrorLog.
+    status: { type: String, enum: TICKET_STATUSES, default: 'ABERTO' },
     priority: { type: String, enum: TICKET_PRIORITIES, default: 'NORMAL', index: true },
     // Espelho numérico da prioridade, derivado no `pre('save')`.
     //
@@ -77,6 +81,10 @@ const SupportTicketSchema = new mongoose.Schema({
 
     context: { type: TicketContextSchema, default: () => ({}) },
     messages: { type: [TicketMessageSchema], default: [] },
+    // Tamanho da thread, desnormalizado no `pre('save')`. Existe para a fila do
+    // Admin e o CSV poderem projetar `-messages`: sem ele, contar mensagens
+    // obrigaria a baixar todas elas só para exibir um número.
+    messageCount: { type: Number, default: 0 },
 
     // Etiquetas internas de triagem (só admin vê e escreve).
     internalTags: [{ type: String }],
@@ -102,14 +110,17 @@ const SupportTicketSchema = new mongoose.Schema({
 SupportTicketSchema.index({ status: 1, priorityRank: -1, lastUserMessageAt: 1 });
 // "Meus tickets" do usuário, mais recentes primeiro.
 SupportTicketSchema.index({ user: 1, createdAt: -1 });
-// Busca textual por assunto e corpo (filtro do painel).
-SupportTicketSchema.index({ subject: 'text', 'messages.body': 'text' });
+// Não existe índice de texto aqui de propósito. A busca do painel é por regex
+// case-insensitive sobre código, assunto, nome e e-mail — um índice `text` não
+// seria usado por ela, e ainda assim custaria análise linguística de TODO corpo
+// de mensagem a cada gravação. Se um dia a busca virar $text, ele volta junto.
 
 SupportTicketSchema.pre('save', function markUpdated(next) {
     this.updatedAt = new Date();
     // Fonte única: quem escreve é `priority`; `priorityRank` só acompanha. Deixar
     // os dois a cargo do chamador é como eles se separam.
     this.priorityRank = PRIORITY_RANK[this.priority] ?? 1;
+    this.messageCount = this.messages.length;
     next();
 });
 

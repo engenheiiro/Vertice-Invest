@@ -121,6 +121,16 @@ app.use(helmet({
 
 app.use(compression());
 app.use(cookieParser());
+// Suporte é a ÚNICA rota que recebe imagem no corpo (print da tela, base64), e
+// 1mb não cobre nem um screenshot comprimido — o teto global rejeitaria o anexo
+// com 413 antes de qualquer rota rodar. Parser próprio, montado ANTES do global:
+// o body-parser marca `req._body` e o parser seguinte se abstém, então este teto
+// vale só para `/api/support` e o resto do sistema continua em 1mb.
+//
+// 3mb é o orçamento declarado: 3 imagens × 900KB de data-URL + texto. Mexer aqui
+// sem mexer em MAX_ATTACHMENT_BYTES (utils/supportRules.js) quebra um dos dois
+// lados em silêncio.
+app.use('/api/support', express.json({ limit: '3mb' }));
 // Limite generoso o suficiente para payloads legítimos (ex.: rankings com 100+
 // ativos e auditLog completo), mantendo proteção contra corpos abusivos.
 app.use(express.json({ limit: '1mb' }));

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     AlertCircle, ArrowLeft, ImagePlus, Loader2, MessageSquarePlus, Paperclip,
@@ -39,8 +40,11 @@ export const SupportCenter: React.FC<Props> = ({ initialTicketCode, variant = 'p
     const [view, setView] = useState<'list' | 'new' | 'thread'>('list');
     const [openTicketId, setOpenTicketId] = useState<string | null>(null);
     const [lightbox, setLightbox] = useState<string | null>(null);
+    // Ticket encerrado de onde veio a continuação — o novo nasce apontando para
+    // ele, para o atendimento ler os dois lados da mesma história.
+    const [continuingFrom, setContinuingFrom] = useState<string | null>(null);
 
-    const { data: tickets = [], isLoading: loadingList } = useQuery({
+    const { data: tickets = [], isLoading: loadingList, isError: listFailed } = useQuery({
         queryKey: ['support', 'tickets'],
         queryFn: supportService.listMyTickets,
         staleTime: 30_000,
@@ -114,13 +118,15 @@ export const SupportCenter: React.FC<Props> = ({ initialTicketCode, variant = 'p
                     <TicketList
                         tickets={tickets}
                         isLoading={loadingList}
+                        hasFailed={listFailed}
                         onOpen={openThread}
-                        onNew={() => setView('new')}
+                        onNew={() => { setContinuingFrom(null); setView('new'); }}
                     />
                 )}
 
                 {view === 'new' && (
                     <NewTicketForm
+                        relatedTicket={continuingFrom}
                         onCreated={(ticket) => {
                             addToast(`Ticket ${ticket.code} aberto. Respondemos por aqui e por e-mail.`, 'success');
                             queryClient.invalidateQueries({ queryKey: ['support', 'tickets'] });
@@ -136,18 +142,24 @@ export const SupportCenter: React.FC<Props> = ({ initialTicketCode, variant = 'p
                         ticket={thread}
                         isLoading={loadingThread}
                         onImage={setLightbox}
-                        onNeedsNewTicket={() => setView('new')}
+                        onNeedsNewTicket={() => { setContinuingFrom(openTicketId); setView('new'); }}
                     />
                 )}
             </div>
 
-            {lightbox && (
+            {/* Portal + fixed, como todo modal do projeto. Como `absolute` dentro
+                da árvore, a ampliação ficava presa ao painel de 420px — e na
+                rota /suporte, dentro de um card com `overflow-hidden`, mostrava
+                a imagem recortada. Ampliar é justamente o caso em que ela não
+                pode caber no container. */}
+            {lightbox && createPortal(
                 <div
-                    className="absolute inset-0 z-10 bg-black/90 backdrop-blur-sm flex items-center justify-center p-6"
+                    className="fixed inset-0 z-[110] backdrop-blur-md bg-black/95 flex items-center justify-center p-6 cursor-zoom-out"
                     onClick={() => setLightbox(null)}
                 >
                     <img src={lightbox} alt="Anexo ampliado" className="max-w-full max-h-full rounded-lg" />
-                </div>
+                </div>,
+                document.body,
             )}
         </div>
     );
@@ -158,9 +170,10 @@ export const SupportCenter: React.FC<Props> = ({ initialTicketCode, variant = 'p
 const TicketList: React.FC<{
     tickets: TicketSummary[];
     isLoading: boolean;
+    hasFailed: boolean;
     onOpen: (t: TicketSummary) => void;
     onNew: () => void;
-}> = ({ tickets, isLoading, onOpen, onNew }) => (
+}> = ({ tickets, isLoading, hasFailed, onOpen, onNew }) => (
     <div className="p-4 space-y-3">
         <button
             onClick={onNew}
@@ -176,7 +189,18 @@ const TicketList: React.FC<{
             </div>
         )}
 
-        {!isLoading && tickets.length === 0 && (
+        {/* "Você não tem tickets" só pode ser dito quando a pergunta foi
+            respondida. Com a leitura falhando, dizer isso apagaria da tela uma
+            conversa em andamento — e o botão de abrir continua ali, convidando a
+            pessoa a relatar de novo o que ela já relatou. */}
+        {hasFailed && (
+            <p className="text-center text-xs text-red-400 py-10 px-6 leading-relaxed">
+                Não consegui carregar seus tickets agora.<br />
+                <span className="text-slate-500">Se você já abriu algum, ele continua lá — tente novamente em instantes.</span>
+            </p>
+        )}
+
+        {!isLoading && !hasFailed && tickets.length === 0 && (
             <p className="text-center text-xs text-slate-500 py-10 px-6 leading-relaxed">
                 Você ainda não abriu nenhum ticket.<br />
                 Encontrou um erro, um número estranho ou tem uma dúvida? Conte aqui.
@@ -296,7 +320,8 @@ const AttachmentPicker: React.FC<{
 const NewTicketForm: React.FC<{
     onCreated: (ticket: Ticket) => void;
     onCancel: () => void;
-}> = ({ onCreated, onCancel }) => {
+    relatedTicket?: string | null;
+}> = ({ onCreated, onCancel, relatedTicket }) => {
     const { addToast } = useToast();
     const [category, setCategory] = useState<TicketCategory>('BUG');
     const [subject, setSubject] = useState('');
@@ -304,7 +329,7 @@ const NewTicketForm: React.FC<{
     const [attachments, setAttachments] = useState<string[]>([]);
 
     const mutation = useMutation({
-        mutationFn: () => supportService.createTicket({ category, subject, body, attachments }),
+        mutationFn: () => supportService.createTicket({ category, subject, body, attachments, relatedTicket }),
         onSuccess: onCreated,
         onError: (err: unknown) => {
             addToast(err instanceof SupportRequestError ? err.message : 'Não foi possível abrir o ticket.', 'error');

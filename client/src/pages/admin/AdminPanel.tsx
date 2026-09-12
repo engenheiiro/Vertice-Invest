@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Header } from '../../components/dashboard/Header';
 import { researchService, SECTION_LABEL, ResearchReport, PublishStatus } from '../../services/research';
 import { marketService } from '../../services/market';
@@ -72,8 +73,22 @@ export const AdminPanel = () => {
     const [isSyncingTimeSeries, setIsSyncingTimeSeries] = useState(false);
 
     const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
-    // Tickets esperando resposta — alimenta o badge da aba Suporte.
-    const [supportWaiting, setSupportWaiting] = useState(0);
+
+    // Badge do Suporte: ticket novo chega a qualquer hora e não avisa por e-mail
+    // (foi decisão de projeto), então o número é o único aviso.
+    //
+    // MESMA query key do badge no Header — de propósito. Com dois relógios
+    // independentes (um `setInterval` aqui, o React Query lá), responder um
+    // ticket atualizava um e não o outro, e a mesma tela exibia dois números
+    // diferentes para a mesma pergunta. Compartilhando a chave, uma resposta
+    // invalida os dois e o polling é um só.
+    const { data: supportSummary } = useQuery({
+        queryKey: ['support', 'admin', 'summary'],
+        queryFn: supportService.adminSummary,
+        refetchInterval: 120_000,
+        staleTime: 60_000,
+    });
+    const supportWaiting = supportSummary?.waiting ?? 0;
     const [qualityStats, setQualityStats] = useState<any>(null);
     const [accuracyData, setAccuracyData] = useState<any[]>([]);
     const [accuracyWindow, setAccuracyWindow] = useState<number>(30);
@@ -161,21 +176,6 @@ export const AdminPanel = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // Badge do Suporte: ticket novo chega a qualquer hora e não avisa por e-mail
-    // (foi decisão de projeto), então o número na aba é o único aviso. 2 min é
-    // frequente o bastante para não deixar alguém esperando sem ninguém saber, e
-    // barato dentro do adminLimiter.
-    useEffect(() => {
-        const loadSupportBadge = async () => {
-            try {
-                const summary = await supportService.adminSummary();
-                setSupportWaiting(summary.waiting);
-            } catch { setSupportWaiting(0); }
-        };
-        loadSupportBadge();
-        const timer = setInterval(loadSupportBadge, 120000);
-        return () => clearInterval(timer);
-    }, [activeTab]);
     // Recarrega a acurácia só quando um FILTRO muda. `loadAccuracy` é recriada a
     // cada render e grava estado — como dependência, buscaria em loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps

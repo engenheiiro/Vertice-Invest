@@ -16,21 +16,31 @@ import { supportService } from '../../services/support';
 export const AttachmentImage: React.FC<{ id: string; onOpen?: (url: string) => void }> = ({ id, onOpen }) => {
     const [url, setUrl] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
+    const [attempt, setAttempt] = useState(0);
 
     useEffect(() => {
         let alive = true;
+        setFailed(false);
         supportService.loadAttachment(id)
             .then((objectUrl) => { if (alive) setUrl(objectUrl); })
             .catch(() => { if (alive) setFailed(true); });
         return () => { alive = false; };
-    }, [id]);
+    }, [id, attempt]);
 
     if (failed) {
+        // Não dizemos "removido": só o servidor sabe se o arquivo sumiu (conta
+        // excluída) ou se a rede caiu. Afirmar exclusão numa falha passageira faz
+        // o atendimento concluir que o print nunca existiu.
         return (
-            <div className="w-20 h-20 rounded-lg border border-slate-800 bg-slate-900/50 flex flex-col items-center justify-center gap-1 text-slate-600">
+            <button
+                type="button"
+                onClick={() => setAttempt((n) => n + 1)}
+                className="w-20 h-20 rounded-lg border border-slate-800 bg-slate-900/50 flex flex-col items-center justify-center gap-1 text-slate-600 hover:text-slate-400 hover:border-slate-700 transition-colors"
+                title="Não foi possível carregar este anexo. Clique para tentar de novo."
+            >
                 <ImageOff size={16} />
-                <span className="text-[9px]">removido</span>
-            </div>
+                <span className="text-[9px]">recarregar</span>
+            </button>
         );
     }
 
