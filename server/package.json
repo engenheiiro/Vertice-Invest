@@ -25,7 +25,8 @@
     "seed:wallet": "node scripts/seedFullWallet.js",
     "benchmark:http": "node scripts/benchmarkHttp.js",
     "benchmark:mongo": "node scripts/benchmarkMongo.js",
-    "benchmark:phase3": "node scripts/benchmarkPhase3.js"
+    "benchmark:phase3": "node scripts/benchmarkPhase3.js",
+    "check:email": "node scripts/checkEmail.js"
   },
   "dependencies": {
     "@google/genai": "^1.38.0",
