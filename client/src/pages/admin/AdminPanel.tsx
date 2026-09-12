@@ -5,7 +5,7 @@ import { marketService } from '../../services/market';
 import { authService } from '../../services/auth';
 import { subscriptionService, type BillingMode } from '../../services/subscription';
 import type { BillingCycle } from '../../constants/subscription';
-import { Bot, CheckCircle2, AlertCircle, Activity, Settings, Play, HeartPulse, TrendingUp } from 'lucide-react';
+import { Bot, CheckCircle2, AlertCircle, Activity, Settings, Play, HeartPulse, TrendingUp, LifeBuoy } from 'lucide-react';
 import { AuditDetailModal } from '../../components/admin/AuditDetailModal';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -14,6 +14,8 @@ import { AdminOperacoesTab } from './AdminOperacoesTab';
 import { AdminFerramentasTab } from './AdminFerramentasTab';
 import { AdminSaudeTab } from './AdminSaudeTab';
 import { AdminFunilTab } from './AdminFunilTab';
+import { AdminSuporteTab } from './AdminSuporteTab';
+import { supportService } from '../../services/support';
 import { healthService, type HealthStatus } from '../../services/health';
 import { getErrorMessage } from '../../utils/errorMessages';
 
@@ -24,12 +26,13 @@ interface CacheData {
     dataPoints?: number;
 }
 
-type TabId = 'painel' | 'saude' | 'funil' | 'operacoes' | 'ferramentas';
+type TabId = 'painel' | 'saude' | 'funil' | 'suporte' | 'operacoes' | 'ferramentas';
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
     { id: 'painel', label: 'Painel', Icon: Activity },
     { id: 'saude', label: 'Saúde', Icon: HeartPulse },
     { id: 'funil', label: 'Funil', Icon: TrendingUp },
+    { id: 'suporte', label: 'Suporte', Icon: LifeBuoy },
     { id: 'operacoes', label: 'Operações', Icon: Play },
     { id: 'ferramentas', label: 'Ferramentas', Icon: Settings },
 ];
@@ -69,6 +72,8 @@ export const AdminPanel = () => {
     const [isSyncingTimeSeries, setIsSyncingTimeSeries] = useState(false);
 
     const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
+    // Tickets esperando resposta — alimenta o badge da aba Suporte.
+    const [supportWaiting, setSupportWaiting] = useState(0);
     const [qualityStats, setQualityStats] = useState<any>(null);
     const [accuracyData, setAccuracyData] = useState<any[]>([]);
     const [accuracyWindow, setAccuracyWindow] = useState<number>(30);
@@ -155,6 +160,22 @@ export const AdminPanel = () => {
         const timer = setInterval(loadHealthBadge, 300000);
         return () => clearInterval(timer);
     }, []);
+
+    // Badge do Suporte: ticket novo chega a qualquer hora e não avisa por e-mail
+    // (foi decisão de projeto), então o número na aba é o único aviso. 2 min é
+    // frequente o bastante para não deixar alguém esperando sem ninguém saber, e
+    // barato dentro do adminLimiter.
+    useEffect(() => {
+        const loadSupportBadge = async () => {
+            try {
+                const summary = await supportService.adminSummary();
+                setSupportWaiting(summary.waiting);
+            } catch { setSupportWaiting(0); }
+        };
+        loadSupportBadge();
+        const timer = setInterval(loadSupportBadge, 120000);
+        return () => clearInterval(timer);
+    }, [activeTab]);
     // Recarrega a acurácia só quando um FILTRO muda. `loadAccuracy` é recriada a
     // cada render e grava estado — como dependência, buscaria em loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -404,6 +425,17 @@ export const AdminPanel = () => {
                             {label}
                             {/* Aviso visual: a bolinha aparece na aba Saúde sempre que a
                                 última avaliação da sentinela não fechou em OK. */}
+                            {/* Suporte mostra o NÚMERO, não uma bolinha: "tem
+                                alguém esperando" e "tem sete pessoas esperando"
+                                pedem reações diferentes. */}
+                            {id === 'suporte' && supportWaiting > 0 && (
+                                <span
+                                    title={`${supportWaiting} ticket(s) aguardando resposta`}
+                                    className="absolute top-1 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-blue-500 text-[9px] font-black text-white flex items-center justify-center"
+                                >
+                                    {supportWaiting}
+                                </span>
+                            )}
                             {id === 'saude' && healthStatus && healthStatus !== 'OK' && (
                                 <span
                                     title={healthStatus === 'CRITICAL' ? 'Problema crítico nos dados' : 'Alertas na saúde dos dados'}
@@ -444,6 +476,8 @@ export const AdminPanel = () => {
                 {activeTab === 'saude' && <AdminSaudeTab />}
 
                 {activeTab === 'funil' && <AdminFunilTab />}
+
+                {activeTab === 'suporte' && <AdminSuporteTab />}
 
                 {activeTab === 'operacoes' && (
                     <AdminOperacoesTab

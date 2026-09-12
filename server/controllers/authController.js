@@ -27,6 +27,7 @@ import { encrypt, decrypt, blindIndex } from '../utils/encryption.js'; // (S) cr
 import { issueCsrfToken, clearCsrfToken } from '../middleware/csrf.js'; // (1.4) CSRF double-submit
 import { validateCpf } from '../utils/cpfUtils.js';
 import { sanitizeAcquisition } from '../utils/acquisition.js'; // origem da conta (funil)
+import { anonymizeUserTickets } from '../services/supportService.js'; // LGPD: atendimento sem titular
 
 // Mascara e-mail para logs de auditoria — ex: j***@gmail.com
 const maskEmail = (email) => {
@@ -833,6 +834,10 @@ export const deleteAccount = async (req, res, next) => {
             // Notificações pessoais: apaga. Broadcasts: remove o id da lista de leitura.
             await Notification.deleteMany({ user: userId }, { session });
             await Notification.updateMany({ readBy: userId }, { $pull: { readBy: userId } }, { session });
+            // Suporte: anonimiza a thread e apaga os anexos enviados pelo titular.
+            // Mesmo critério da auditoria — o atendimento é registro do negócio,
+            // mas deixa de apontar para uma pessoa.
+            await anonymizeUserTickets(userId, { session });
             // Auditoria: anonimiza (mantém a trilha de segurança sem identificar o titular).
             // O IP/userAgent permanecem sob legítimo interesse de segurança (Art. 7 IX).
             await AuditLog.updateMany({ user: userId }, { $set: { user: null, email: null } }, { session });

@@ -34,6 +34,10 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 | Funil comercial (regras puras) | `server/utils/funnelMath.js` |
 | Funil comercial (consulta + painel) | `server/services/funnelService.js`, `client/src/pages/admin/AdminFunilTab.tsx` |
 | Consentimento de analytics / eventos | `client/src/utils/analyticsConsent.ts`, `client/src/utils/analytics.ts` |
+| Suporte — regras do ticket (puras) | `server/utils/supportRules.js` |
+| Suporte — serviço, rotas e anexos | `server/services/supportService.js`, `routes/supportRoutes.js` |
+| Suporte — tela do usuário (widget + `/suporte`) | `client/src/components/support/SupportCenter.tsx` |
+| Suporte — fila do Admin | `client/src/pages/admin/AdminSuporteTab.tsx` |
 | Setores macro | `server/config/sectorTaxonomy.js` |
 | Constantes financeiras | `server/config/financialConstants.js` |
 | Matemática financeira segura | `server/utils/mathUtils.js` |
@@ -101,6 +105,7 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 9. **Renda fixa: curva × mercado.** Todo caminho de patrimônio (KPI ao vivo, snapshot diário, rebuild de histórico, metas) valoriza CASH/FIXED_INCOME por `valueFixedIncomeAsset()` de `utils/fixedIncome.js` — nunca chamando `accrueFixedIncomeValue()` direto. Título público identificado sem ambiguidade e **sem cupom semestral** é marcado pelo PU oficial do Tesouro; o resto fica na curva. A marcação é por **razão de PU** sobre o custo do lote (`custo × PU_hoje / PU_compra`), nunca quantidade × PU: `quantity`/`price` de RF não seguem convenção confiável nas posições reais. Qualquer lote sem PU derruba a marcação do ativo inteiro (fail-closed → accrual). Divergir entre os caminhos reintroduz a divergência KPI × snapshot.
 10. **Rate limiting em novas rotas:** usar os limiters **por usuário** de `middleware/rateLimiters.js` (`walletWriteLimiter` 50/15min em POST/PUT/DELETE de wallet; `researchHeavyLimiter` 20/15min em rotas caras). Auth já tem `authLimiter` (20/15min); geral `apiLimiter` (3000/15min). Validar escrita com schema Zod (`validate`).
 11. **Data de pagamento de provento só vem de FONTE.** `DividendEvent.paymentDate` é preenchido apenas por `dividendPaymentDateService` (B3 no sync diário; Fundamentus no backfill manual), sempre com `paymentDateSource` junto. Nulo é o estado honesto: `resolvePaymentDate` cai na estimativa ex+15 e a tela marca "Previsto". **Nunca gravar data deduzida** — pagamento ambíguo (uma linha nossa somando pagamentos com datas diferentes), valor que não bate ou fonte fora do ar deixam o campo nulo. Como qualquer valor não-nulo é tratado como oficial, uma data inventada vira "Agendado" na tela: foi o defeito dos 442 eventos ex+16 apagados em 09/09/2026.
+12. **Nota interna de ticket nunca cruza a fronteira.** O corte do que o usuário vê acontece no SERVIDOR (`serializeTicketForUser`), não na tela: nota interna, contexto técnico e etiquetas de triagem são removidos antes de o JSON sair. Filtrar no front deixaria o texto trafegando — mesma disciplina do link público de carteira, onde o valor sai normalizado da API em vez de mascarado no CSS.
 
 ---
 
@@ -117,6 +122,8 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 - **`TreasuryPriceHistory`**: série diária de PU por título do Tesouro (`titleKey` `FAMILIA|YYYY-MM-DD`, `history[{date, pu, puBuy, rate}]`). Base da marcação a mercado da RF. Alimentada por `npm run sync:treasury` / cron 18:30 em dia útil.
 - **`RefreshToken`**: tokens de refresh persistidos no banco — `token`, `user`, `expiresAt`.
 - **`UsageLog`**: auditoria de uso por feature e plano.
+- **`SupportTicket`**: atendimento — `code` (`VT-0042`), `category`, `status`, `priority`/`priorityRank`, `messages[]` (com `isInternal`), `context` (técnico), `planAtOpen`. Anexo NÃO mora aqui.
+- **`SupportAttachment`**: imagem do ticket em coleção própria (listagem do Admin não arrasta base64; thread longa não estoura o teto de 16MB do documento).
 
 ---
 
@@ -200,4 +207,6 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < ELITE (3) < BLACK (4). Definid
 - **Subscription:** `GET /subscription/status`, `/subscription/check-access` · `POST /subscription/checkout`, `/subscription/register-usage`
 - **Admin:** `GET /admin/funnel?months` (admin) — coortes, ativação, conversão 30d, receita, retenção e origem, lidos do banco
 - **Webhooks:** `POST /webhooks/mercadopago`
+- **Suporte:** `GET /support/meta`, `/support/tickets`, `/support/tickets/:id`, `/support/attachments/:id` · `POST /support/tickets`, `/support/tickets/:id/reply` (409 `needsNewTicket` quando a thread já encerrou)
+- **Suporte (admin):** `GET /support/admin/summary`, `/support/admin/tickets`, `/support/admin/tickets/:id`, `/support/admin/export.csv` · `POST /support/admin/tickets/:id/reply` · `PUT /support/admin/tickets/:id`
 - **Academy:** `GET /academy/courses`, `/academy/lessons/:id`, `/academy/progress/:courseId` · `POST /academy/progress`, `/academy/quiz/submit`

@@ -1,6 +1,9 @@
 
 import { API_URL } from '../config';
 import { User } from '../contexts/AuthContext';
+// Funil único de rede do app — é daqui que o ticket de suporte descobre qual
+// foi a última falha de API antes de o usuário reclamar.
+import { recordApiError } from '../utils/supportContext';
 
 interface LoginCredentials {
   email: string;
@@ -146,9 +149,15 @@ export const authService = {
         }
       }
 
-      return retryOriginalRequest;
+      // O 401 em si não é anotado: ele é o fluxo normal do refresh. O que
+      // interessa ao diagnóstico é o resultado DEPOIS da renovação.
+      return retryOriginalRequest.then((retried) => {
+        if (!retried.ok) recordApiError(endpoint, retried.status);
+        return retried;
+      });
     }
 
+    if (!response.ok) recordApiError(endpoint, response.status);
     return response;
   },
 

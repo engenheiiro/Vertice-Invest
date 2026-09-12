@@ -37,6 +37,7 @@ import webhookRoutes from './routes/webhookRoutes.js'; // Nova Rota
 import academyRoutes from './routes/academyRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
+import supportRoutes from './routes/supportRoutes.js';
 import sitemapRouter from './routes/sitemapRouter.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -311,6 +312,7 @@ app.use('/api/market', marketRoutes);
 app.use('/api/webhooks', webhookRoutes); // Registro dos Webhooks
 app.use('/api/academy', academyRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/support', supportRoutes);
 // (C4) Rota pública de carteira — sem auth (o próprio router aplica o limiter por IP).
 app.use('/api/public', publicRoutes);
 

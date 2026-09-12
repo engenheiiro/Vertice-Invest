@@ -140,4 +140,24 @@ export const subscriptionWriteLimiter = createUserLimiter({
   message: 'Muitas operações de assinatura. Aguarde alguns minutos.',
 });
 
+// Abertura e resposta de ticket: 10/hora por usuário.
+//
+// O teto real do abuso é outro — `MAX_OPEN_TICKETS_PER_USER` impede acumular
+// threads abertas. Este limiter cuida do que aquele não vê: cada mensagem pode
+// carregar três imagens de 1MB, então dez por hora é o orçamento de BYTES que
+// uma conta escreve no banco, não o de tickets.
+export const supportWriteLimiter = createUserLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: 'Muitas mensagens de suporte seguidas. Aguarde alguns minutos.',
+});
+
+// Leitura de ticket e anexo: 120/15min. Abrir uma thread com três prints já são
+// quatro chamadas, e o painel do usuário recarrega ao voltar o foco da janela.
+export const supportReadLimiter = createUserLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  message: 'Muitas requisições. Aguarde alguns minutos.',
+});
+
 export { createUserLimiter };

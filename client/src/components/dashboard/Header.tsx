@@ -5,6 +5,7 @@ import {
   GraduationCap, LogOut, User as UserIcon, Crown, Settings, BarChart3,
   Radar, Calculator, Target, ChevronRight, ChevronDown, Sun, Moon, Anchor
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -14,6 +15,7 @@ import { PrivacyToggle } from '../ui/PrivacyToggle';
 import { NotificationBell } from './NotificationBell';
 import { WalletSwitcher } from '../wallet/WalletSwitcher';
 import { HOME_ROUTE, TERMINAL_ROUTE } from '../../config/homeRoute';
+import { supportService } from '../../services/support';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuth();
@@ -44,6 +46,17 @@ export const Header: React.FC = () => {
 
   const activeTab = getActiveTab();
   const isAdmin = user?.role === 'ADMIN';
+
+  // Fila de suporte no botão Admin. Só consulta para quem é admin — para o
+  // usuário comum a rota devolveria 403 a cada 2 minutos.
+  const { data: supportSummary } = useQuery({
+    queryKey: ['support', 'admin', 'summary'],
+    queryFn: supportService.adminSummary,
+    enabled: isAdmin,
+    refetchInterval: 120_000,
+    staleTime: 60_000,
+  });
+  const supportWaiting = supportSummary?.waiting ?? 0;
 
   return (
     <>
@@ -117,13 +130,24 @@ export const Header: React.FC = () => {
               {isAdmin && (
                   <Link to="/admin">
                      <div className={`
-                        flex items-center gap-[7px] px-2.5 py-[7px] rounded-lg text-[13px] leading-4 font-bold transition-all cursor-pointer ml-2
-                        ${activeTab === 'admin' 
-                            ? 'bg-indigo-900/50 text-indigo-300 border border-indigo-700/50 shadow-sm' 
+                        relative flex items-center gap-[7px] px-2.5 py-[7px] rounded-lg text-[13px] leading-4 font-bold transition-all cursor-pointer ml-2
+                        ${activeTab === 'admin'
+                            ? 'bg-indigo-900/50 text-indigo-300 border border-indigo-700/50 shadow-sm'
                             : 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-900/20 border border-transparent'}
                      `}>
                         <Settings size={16} />
                         Admin
+                        {/* Ticket esperando resposta. Fora do painel não há outro
+                            aviso — não mandamos e-mail de ticket novo —, então é
+                            aqui que o número precisa aparecer. */}
+                        {supportWaiting > 0 && (
+                           <span
+                              title={`${supportWaiting} ticket(s) de suporte aguardando`}
+                              className="min-w-[16px] h-4 px-1 rounded-full bg-blue-500 text-[9px] font-black text-white flex items-center justify-center"
+                           >
+                              {supportWaiting}
+                           </span>
+                        )}
                      </div>
                   </Link>
               )}

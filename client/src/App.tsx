@@ -15,6 +15,7 @@ import { DemoProvider } from './contexts/DemoContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { TutorialOverlay } from './components/tutorial/TutorialOverlay';
 import { BottomNav } from './components/layout/BottomNav';
+import { SupportWidget } from './components/support/SupportWidget';
 import { InstallPrompt } from './components/pwa/InstallPrompt';
 import { ReloadPrompt } from './components/pwa/ReloadPrompt';
 import { homeRouteFor } from './config/homeRoute';
@@ -45,7 +46,8 @@ const Goals = lazy(() => import('./pages/Goals').then(module => ({ default: modu
 const Comparator = lazy(() => import('./pages/Comparator').then(module => ({ default: module.Comparator })));
 const PublicWallet = lazy(() => import('./pages/PublicWallet').then(module => ({ default: module.PublicWallet })));
 const Chinelada = lazy(() => import('./pages/Chinelada').then(module => ({ default: module.Chinelada })));
-const AdminPanel = lazy(() => import('./pages/admin/AdminPanel').then(module => ({ default: module.AdminPanel }))); 
+const AdminPanel = lazy(() => import('./pages/admin/AdminPanel').then(module => ({ default: module.AdminPanel })));
+const Support = lazy(() => import('./pages/Support'));
 
 const PageLoader = () => (
   <div className="fixed inset-0 bg-deep flex items-center justify-center z-[9999]">
@@ -81,6 +83,9 @@ const ProtectedAppLayout = () => {
             <Outlet />
           </Suspense>
           <BottomNav />
+          {/* Porta de entrada do atendimento: sempre à mão, em qualquer tela
+              logada. Some sozinho na rota /suporte, onde a central já está aberta. */}
+          <SupportWidget />
         </WalletProvider>
       </DemoProvider>
     </ProtectedRoute>
@@ -166,6 +171,10 @@ export default function App() {
               <Route path="/courses" element={<Courses />} />
               <Route path="/courses/:courseId" element={<CoursePlayer />} />
               <Route path="/profile" element={<Profile />} />
+              {/* Fora do menu de propósito: a entrada do dia a dia é o botão
+                  flutuante. Esta rota existe para o link do e-mail de resposta
+                  ter onde aterrissar (`/suporte?ticket=VT-0042`). */}
+              <Route path="/suporte" element={<Support />} />
               
               <Route path="/admin" element={
                   <AdminRoute>

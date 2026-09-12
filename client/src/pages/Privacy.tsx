@@ -20,7 +20,7 @@ export const Privacy = () => {
         </Link>
         <div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">Política de Privacidade</h2>
-            <p className="text-slate-500 text-[10px] font-medium uppercase tracking-wider">Versão 1.1 — Agosto de 2026 • Lei nº 13.709/2018 (LGPD)</p>
+            <p className="text-slate-500 text-[10px] font-medium uppercase tracking-wider">Versão 1.2 — Setembro de 2026 • Lei nº 13.709/2018 (LGPD)</p>
         </div>
       </div>
 
@@ -56,6 +56,7 @@ export const Privacy = () => {
           <li><strong>Tokens de sessão:</strong> refresh tokens armazenados com hash SHA-256, expirando em 7 dias.</li>
           <li><strong>Origem do cadastro:</strong> por qual canal você chegou até nós (parâmetros de campanha do link, endereço do site que indicou e página de entrada). É registrado <strong>uma única vez, no momento do cadastro</strong>, fica guardado com a sua conta e não envolve cookie de terceiros nem acompanha sua navegação em outros sites. Base legal: legítimo interesse (Art. 7º, IX) — saber por qual canal chegam nossos clientes.</li>
           <li><strong>Navegação (opcional):</strong> páginas visitadas dentro da plataforma, de forma agregada e com IP anonimizado — coletadas <strong>apenas</strong> se você autorizar os cookies de medição (seção 6).</li>
+          <li><strong>Atendimento (tickets de suporte):</strong> o texto que você escreve, as imagens que anexa e, junto delas, dados técnicos da sessão em que o ticket foi aberto — página em que você estava, navegador e sistema, tamanho da janela, fuso horário e as últimas falhas de comunicação com nossos servidores. Esses dados técnicos são coletados <strong>somente no momento em que você envia um ticket</strong>, servem para reproduzir o problema relatado e ficam visíveis apenas para a nossa equipe de atendimento. Base legal: execução de contrato (Art. 7º, V).</li>
         </ul>
 
         <h3 className="text-slate-900 font-bold text-base mb-2">3. Bases Legais (Art. 7º)</h3>
@@ -74,6 +75,7 @@ export const Privacy = () => {
           <li>Processamento de assinaturas e pagamentos.</li>
           <li>Segurança da conta: autenticação, MFA e detecção de acessos suspeitos.</li>
           <li>Comunicações transacionais (redefinição de senha, recibos).</li>
+          <li>Atendimento ao cliente: resposta a tickets de suporte e diagnóstico de problemas relatados.</li>
           <li>Comunicações de marketing (apenas com consentimento explícito).</li>
         </ul>
 
@@ -124,6 +126,7 @@ export const Privacy = () => {
           <li><strong>Tokens de sessão:</strong> 7 dias ou até revogação manual.</li>
           <li><strong>Dados financeiros (carteira, transações):</strong> conforme exigência legal fiscal e contábil vigente.</li>
           <li><strong>Sinais e análises de mercado:</strong> prazo técnico definido internamente, excluídos após expiração.</li>
+          <li><strong>Tickets de suporte:</strong> mantidos como histórico de atendimento. Ao excluir sua conta, o ticket é <strong>anonimizado</strong> (deixa de identificar você) e as imagens anexadas são apagadas.</li>
           <li><strong>Cookies de medição (<code>_ga</code>):</strong> até 2 anos no seu navegador, ou até você revogar a permissão — o que ocorrer primeiro.</li>
         </ul>
 

@@ -174,7 +174,7 @@ const formatBRL = (value) => (typeof value === 'number'
  * Envelope visual compartilhado por todos os e-mails transacionais de assinatura.
  * `accent` colore o cabeçalho conforme a natureza do aviso (positivo/alerta).
  */
-const renderShell = ({ title, accent = '#2563eb', bodyHtml, ctaLabel, ctaPath = '/profile' }) => `
+const renderShell = ({ title, accent = '#2563eb', bodyHtml, ctaLabel, ctaPath = '/profile', footerNote }) => `
     <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
       <div style="background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%); padding: 28px; text-align: center;">
         <h1 style="color: #60a5fa; margin: 0; font-size: 26px; letter-spacing: 1px;">Vértice Invest</h1>
@@ -186,7 +186,7 @@ const renderShell = ({ title, accent = '#2563eb', bodyHtml, ctaLabel, ctaPath = 
         ${ctaLabel ? `<div style="text-align: center; margin: 28px 0;">
           <a href="${CLIENT_URL}${ctaPath}" style="background: ${accent}; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px;">${ctaLabel}</a>
         </div>` : ''}
-        <p style="font-size: 13px; color: #94a3b8;">Gerencie sua assinatura a qualquer momento no seu <a href="${CLIENT_URL}/profile" style="color: #2563eb;">perfil</a>.</p>
+        <p style="font-size: 13px; color: #94a3b8;">${footerNote ?? `Gerencie sua assinatura a qualquer momento no seu <a href="${CLIENT_URL}/profile" style="color: #2563eb;">perfil</a>.`}</p>
       </div>
       <div style="background-color: #f8fafc; padding: 18px; text-align: center; font-size: 12px; color: #94a3b8;">
         © ${new Date().getFullYear()} Vértice Invest. Todos os direitos reservados.
@@ -305,6 +305,51 @@ export const sendSubscriptionCanceledEmail = async (to, plan, accessUntil) => {
           <p style="margin: 0; color: #334155;">Você continua com acesso completo até <strong>${untilDate}</strong> — o período já pago é seu.</p>
         </div>` : ''}
         <p style="font-size: 13px; color: #64748b;">Se foi engano, é só reativar. Seus dados e sua carteira continuam intactos.</p>
+      `,
+    }),
+  });
+};
+
+// --- SUPORTE ---
+
+// O corpo da resposta é texto escrito à mão e vai para dentro de HTML. Escapar
+// não é sobre desconfiar de quem responde: é sobre um `<` no meio de uma
+// explicação técnica ("se o P/L for < 10") não engolir metade do e-mail.
+const escapeHtml = (text) => String(text ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
+
+const textToHtml = (text) => escapeHtml(text).replace(/\n/g, '<br>');
+
+/**
+ * Avisa o usuário de que o suporte respondeu o ticket dele.
+ *
+ * Manda um TRECHO da resposta, não ela inteira: o e-mail é o empurrão para
+ * voltar ao app, onde a conversa tem contexto, anexo e histórico. Resposta
+ * completa por e-mail convida a responder por e-mail — e aí a thread se parte
+ * em dois lugares.
+ */
+export const sendSupportReplyEmail = async ({ to, name, code, subject, body }) => {
+  const preview = String(body ?? '').slice(0, 400);
+  const truncated = String(body ?? '').length > 400;
+
+  await sendSafely({
+    to,
+    subject: `Resposta do suporte · ${code} — Vértice Invest`,
+    logLabel: 'resposta de suporte',
+    html: renderShell({
+      title: 'Respondemos seu ticket',
+      ctaLabel: 'Ver a conversa →',
+      ctaPath: `/suporte?ticket=${encodeURIComponent(code)}`,
+      footerNote: 'Responda pelo aplicativo para manter o histórico do atendimento no mesmo lugar.',
+      bodyHtml: `
+        <p style="color: #475569;">Olá${name ? `, <strong>${escapeHtml(name)}</strong>` : ''} — o suporte respondeu o ticket <strong>${escapeHtml(code)}</strong>.</p>
+        <p style="color: #64748b; font-size: 14px; margin-bottom: 4px;">Assunto: <strong>${escapeHtml(subject)}</strong></p>
+        <div style="background: #f8fafc; border-left: 3px solid #2563eb; border-radius: 6px; padding: 18px; margin: 20px 0; color: #334155; font-size: 14px; line-height: 1.6;">
+          ${textToHtml(preview)}${truncated ? '<br><span style="color:#94a3b8;">[...]</span>' : ''}
+        </div>
       `,
     }),
   });
