@@ -139,6 +139,29 @@ html[data-tour-active] [data-tour-hide] { display: none !important; }
   .tour-ring { animation: none; }
 }
 
+/* ─── Painel de Suporte: nasce no botão ──────────────────────────────────────
+ * O painel abre ancorado logo acima do botão flutuante, e a animação sai do
+ * mesmo canto (`transform-origin: bottom right`). Sem isso o cartão aparecia
+ * solto no meio da tela, sem relação visível com a bolinha que o abriu — e o
+ * usuário não liga uma coisa à outra.
+ *
+ * Mora aqui, e não no tailwind.config.js, pelo mesmo motivo do bloco acima:
+ * keyframe declarado no config só entra no bundle quando o dev server
+ * reinicia. ──────────────────────────────────────────────────────────────── */
+@keyframes supportPop {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+.support-pop {
+  transform-origin: bottom right;
+  animation: supportPop 0.18s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .support-pop { animation: none; }
+}
+
 /* ─── Dark mode: neutros do mockup "Minha Carteira" ──────────────────────────
  * O dark usa classes Tailwind soltas (não tokens semânticos). Aqui remapeamos
  * os neutros mais usados para a paleta do mockup: texto #E6EDF3 (primário) /

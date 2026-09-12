@@ -147,7 +147,7 @@ Hierarquia: GUEST (0) < ESSENTIAL (1) < PRO (2) < ELITE (3) < BLACK (4). Definid
 - **Largura de conteúdo:** trilho global `max-w-[1360px] mx-auto` (Header, MarketStatusBar, páginas largas); formulários/feeds em `1200px`.
 - **Tipografia:** `Manrope` (Google Fonts, pesos 400–800).
 - **Semáforo:** COMPRAR → `emerald-400/500`; AGUARDAR → `yellow-400/500`; perfis/risco → `blue-400/500` e `purple-400/500`; erros → `red-400/500`.
-- **Modais:** `createPortal` + `z-[100]` + `backdrop-blur-md bg-black/95`. **Exceção:** o painel de Suporte (`SupportWidget`) usa `bg-black/40` sem desfoque — ali a tela atrás é o assunto do ticket, não distração, e o fundo opaco apagava o que a pessoa ia descrever. A separação vem da sombra, não da cor.
+- **Modais:** `createPortal` + `z-[100]` + `backdrop-blur-md bg-black/95`. **Exceção:** o painel de Suporte (`SupportWidget`) usa `bg-black/40` sem desfoque — ali a tela atrás é o assunto do ticket, não distração, e o fundo opaco apagava o que a pessoa ia descrever. A separação vem da sombra, não da cor. Esse painel também **não é centralizado**: fica ancorado ao botão flutuante (canto inferior direito, deslocamento = posição do botão + `h-12` + respiro) e cresce para cima — centralizado, o painel curto boiava longe da bolinha que o abriu.
 - **Hooks primeiro:** `useState`/`useMemo` no topo; guards (`if (!data) return null`) só após todos os hooks.
 - **Moeda:** Cripto → `$`; B3 → `R$`. Formatar com `Intl.NumberFormat`.
 - Não criar CSS customizado quando Tailwind resolve.
