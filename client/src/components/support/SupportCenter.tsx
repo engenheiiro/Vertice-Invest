@@ -237,23 +237,28 @@ const TicketList: React.FC<{
 // ─── Anexos (compartilhado entre abertura e resposta) ────────────────────────
 
 /**
- * Seletor de imagens com compressão no navegador.
+ * Entrada de imagens, com compressão no navegador.
  *
  * Comprimir aqui, e não no servidor, é o que faz o print de tela cheia caber:
  * o arquivo bruto de 6 MB sequer chegaria à rota (o Express rejeita o corpo
  * antes) e o usuário levaria um erro sem explicação.
+ *
+ * Mora num hook, e não dentro do seletor, porque print quase nunca chega por
+ * "escolher arquivo": no Windows, `PrtScn` e `Win+Shift+S` colocam a imagem na
+ * ÁREA DE TRANSFERÊNCIA e não geram arquivo nenhum para o seletor abrir. Quem
+ * tentava colar com Ctrl+V num campo que não escutava colagem enviava o ticket
+ * achando que tinha anexado — foi o que aconteceu no VT-0001, que chegou ao
+ * servidor sem imagem e sem erro nenhum. Por isso a MESMA entrada atende os três
+ * caminhos: escolher, colar e arrastar.
  */
-const AttachmentPicker: React.FC<{
-    files: string[];
-    onChange: (files: string[]) => void;
-    disabled?: boolean;
-}> = ({ files, onChange, disabled }) => {
-    const inputRef = useRef<HTMLInputElement>(null);
-    const [busy, setBusy] = useState(false);
+const useAttachmentIntake = (files: string[], onChange: (files: string[]) => void) => {
     const { addToast } = useToast();
+    const [busy, setBusy] = useState(false);
 
-    const handleFiles = async (list: FileList | null) => {
-        if (!list?.length) return;
+    const ingest = async (incoming: File[]) => {
+        const images = incoming.filter((f) => f.type.startsWith('image/'));
+        if (!images.length) return;
+
         const room = MAX_FILES - files.length;
         if (room <= 0) {
             addToast(`Máximo de ${MAX_FILES} imagens.`, 'error');
@@ -262,7 +267,7 @@ const AttachmentPicker: React.FC<{
 
         setBusy(true);
         const accepted: string[] = [];
-        for (const file of Array.from(list).slice(0, room)) {
+        for (const file of images.slice(0, room)) {
             try {
                 accepted.push(await compressImage(file));
             } catch (err) {
@@ -271,6 +276,44 @@ const AttachmentPicker: React.FC<{
         }
         setBusy(false);
         if (accepted.length) onChange([...files, ...accepted]);
+    };
+
+    /**
+     * Para o container do formulário — colagem e arraste valem em qualquer campo
+     * dele, não só sobre o quadradinho de anexo.
+     *
+     * `onDragOver` precisa barrar o padrão MESMO sem nada ser solto: sem isso o
+     * evento de drop nunca chega e o navegador abre a imagem na própria aba,
+     * levando junto o texto que a pessoa já tinha escrito.
+     */
+    const dropHandlers = {
+        onPaste: (e: React.ClipboardEvent) => {
+            const images = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith('image/'));
+            if (!images.length) return;   // colagem de texto segue normal
+            e.preventDefault();
+            void ingest(images);
+        },
+        onDragOver: (e: React.DragEvent) => e.preventDefault(),
+        onDrop: (e: React.DragEvent) => {
+            e.preventDefault();
+            void ingest(Array.from(e.dataTransfer?.files ?? []));
+        },
+    };
+
+    return { busy, ingest, dropHandlers };
+};
+
+const AttachmentPicker: React.FC<{
+    files: string[];
+    onChange: (files: string[]) => void;
+    onPick: (incoming: File[]) => void;
+    busy: boolean;
+    disabled?: boolean;
+}> = ({ files, onChange, onPick, busy, disabled }) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const handleFiles = (list: FileList | null) => {
+        onPick(Array.from(list ?? []));
         if (inputRef.current) inputRef.current.value = '';
     };
 
@@ -327,6 +370,7 @@ const NewTicketForm: React.FC<{
     const [subject, setSubject] = useState('');
     const [body, setBody] = useState('');
     const [attachments, setAttachments] = useState<string[]>([]);
+    const { busy: attachBusy, ingest, dropHandlers } = useAttachmentIntake(attachments, setAttachments);
 
     const mutation = useMutation({
         mutationFn: () => supportService.createTicket({ category, subject, body, attachments, relatedTicket }),
@@ -341,6 +385,7 @@ const NewTicketForm: React.FC<{
     return (
         <form
             className="p-4 space-y-4"
+            {...dropHandlers}
             onSubmit={(e) => { e.preventDefault(); if (canSubmit) mutation.mutate(); }}
         >
             <div>
@@ -400,7 +445,18 @@ const NewTicketForm: React.FC<{
                 <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                     <Paperclip size={11} /> Print da tela (opcional)
                 </label>
-                <AttachmentPicker files={attachments} onChange={setAttachments} disabled={mutation.isPending} />
+                <AttachmentPicker
+                    files={attachments}
+                    onChange={setAttachments}
+                    onPick={ingest}
+                    busy={attachBusy}
+                    disabled={mutation.isPending}
+                />
+                {/* A dica é o conserto de verdade: quem recorta a tela com
+                    Win+Shift+S não tem arquivo para escolher, só a colagem. */}
+                <p className="text-[10px] text-slate-600 mt-1.5">
+                    Clique para escolher, ou <strong className="text-slate-500">cole com Ctrl+V</strong> / arraste a imagem aqui.
+                </p>
             </div>
 
             <p className="text-[10px] text-slate-600 leading-relaxed">
@@ -441,6 +497,7 @@ const TicketThread: React.FC<{
     const queryClient = useQueryClient();
     const [body, setBody] = useState('');
     const [attachments, setAttachments] = useState<string[]>([]);
+    const { busy: attachBusy, ingest, dropHandlers } = useAttachmentIntake(attachments, setAttachments);
 
     const mutation = useMutation({
         mutationFn: () => supportService.reply(ticket!._id, body, attachments),
@@ -505,7 +562,7 @@ const TicketThread: React.FC<{
             </div>
 
             {canReply ? (
-                <div className="p-4 border-t border-slate-800 space-y-2 sticky bottom-0 bg-panel">
+                <div className="p-4 border-t border-slate-800 space-y-2 sticky bottom-0 bg-panel" {...dropHandlers}>
                     <textarea
                         value={body}
                         onChange={(e) => setBody(e.target.value)}
@@ -515,7 +572,13 @@ const TicketThread: React.FC<{
                         className="w-full px-3 py-2.5 rounded-lg bg-base border border-slate-800 text-sm text-slate-100 placeholder:text-slate-600 focus:border-blue-700 focus:outline-none resize-none"
                     />
                     <div className="flex items-end justify-between gap-3">
-                        <AttachmentPicker files={attachments} onChange={setAttachments} disabled={mutation.isPending} />
+                        <AttachmentPicker
+                            files={attachments}
+                            onChange={setAttachments}
+                            onPick={ingest}
+                            busy={attachBusy}
+                            disabled={mutation.isPending}
+                        />
                         <button
                             onClick={() => mutation.mutate()}
                             disabled={body.trim().length < 10 || mutation.isPending}
