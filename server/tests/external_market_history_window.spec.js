@@ -46,8 +46,12 @@ describe('externalMarketService.getFullHistoryDetailed — janela inclusiva', ()
     expect(chartMock).toHaveBeenCalledWith(
       'BOVA11.SA',
       expect.objectContaining({ period1: '2020-01-01', period2: '2026-09-01', interval: '1d' }),
-      { validateResult: false },
+      expect.objectContaining({ validateResult: false }),
     );
+    // O TETO DE TEMPO É CONTRATO, não detalhe da chamada. Sem ele esta busca
+    // pendurava a rotina inteira: foi o que travou 'daily-morning' em 13, 14 e
+    // 15/09/2026, com cada execução presa segurando memória do processo.
+    expect(chartMock.mock.calls[0][2].fetchOptions?.signal).toBeInstanceOf(AbortSignal);
     expect(payload.candles.at(-1)).toMatchObject({ date: '2026-08-31', close: 174.78 });
   });
 

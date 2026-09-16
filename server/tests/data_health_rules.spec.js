@@ -680,6 +680,45 @@ describe('ROTINAS (crons)', () => {
         expect(check.detail).toContain('ECONNRESET no Yahoo');
     });
 
+    it('execução ABERTA além do teto de duração alarma, mesmo tendo começado há pouco', () => {
+        // Regressão de 13–15/09/2026: 'daily-morning' abria execução às 09:00 e
+        // nunca fechava. Como a sentinela só perguntava "faz quanto tempo não
+        // roda?", e o cron abria uma execução nova por dia, `lastRunAt` ficava
+        // sempre fresco e o painel ficava VERDE com o job travado há três dias.
+        const facts = healthyFacts();
+        facts.jobs.push({
+            jobId: 'daily-morning', label: 'Rotina da manhã', severity: 'CRITICAL',
+            maxSilenceHours: 30, maxRuntimeMinutes: 20,
+            lastRunAt: hoursAgo(3), lastStatus: 'RUNNING',
+        });
+        const check = byId(buildHealthReport(facts), 'jobs.daily-morning');
+        expect(check.status).toBe(HEALTH_STATUS.CRITICAL);
+        expect(check.detail).toContain('ainda ABERTA');
+        expect(check.detail).toContain('20 min');
+    });
+
+    it('execução em andamento dentro do teto continua OK', () => {
+        // O outro lado da mesma régua: rotina longa rodando agora não é defeito.
+        const facts = healthyFacts();
+        facts.jobs.push({
+            jobId: 'daily-evening', label: 'Rotina da tarde', severity: 'CRITICAL',
+            maxSilenceHours: 30, maxRuntimeMinutes: 40,
+            lastRunAt: hoursAgo(0.2), lastStatus: 'RUNNING',
+        });
+        expect(byId(buildHealthReport(facts), 'jobs.daily-evening').status)
+            .toBe(HEALTH_STATUS.OK);
+    });
+
+    it('sem teto de duração nos fatos, execução aberta não inventa alarme', () => {
+        const facts = healthyFacts();
+        facts.jobs.push({
+            jobId: 'treasury-prices', label: 'PU do Tesouro', severity: 'CRITICAL',
+            maxSilenceHours: 80, lastRunAt: hoursAgo(10), lastStatus: 'RUNNING',
+        });
+        expect(byId(buildHealthReport(facts), 'jobs.treasury-prices').status)
+            .toBe(HEALTH_STATUS.OK);
+    });
+
     it('cron que nunca rodou, com instrumentação madura, é falha', () => {
         const facts = healthyFacts();
         facts.jobs[1].lastRunAt = null;

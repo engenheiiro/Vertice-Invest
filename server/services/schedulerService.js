@@ -54,6 +54,7 @@ import { reconcilePreviousWalletSnapshot, reconcileTreasurySnapshot } from './wa
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { trackJobSafe } from '../utils/jobRun.js';
 import { withJobLease } from '../utils/jobLease.js';
+import { withJobWatchdog } from '../utils/jobWatchdog.js';
 import { mapWithConcurrency } from '../utils/concurrency.js';
 import { loadCompletedCheckpoints, saveCheckpoint } from '../utils/jobCheckpoint.js';
 import { runDataHealthCheck } from './dataHealthService.js';
@@ -73,7 +74,12 @@ const schedule = (expression, jobId, fn) => cron.schedule.call(
     expression,
     // trackJob fica por fora para registrar também o nó que perdeu a disputa
     // como SKIPPED/LEASE_HELD. O corpo do job só roda em uma instância.
-    () => trackJobSafe(jobId, () => withJobLease(jobId, fn)),
+    //
+    // O watchdog fica por DENTRO do lease, e a ordem é obrigatória: é o `finally`
+    // do lease que libera o registro no Mongo e para o heartbeat. Invertido, uma
+    // execução derrubada por tempo continuaria renovando o lease por baixo e o
+    // job não rodaria nunca mais. Ver utils/jobWatchdog.js.
+    () => trackJobSafe(jobId, () => withJobLease(jobId, () => withJobWatchdog(jobId, fn))),
     { timezone: SCHEDULER_TZ },
 );
 

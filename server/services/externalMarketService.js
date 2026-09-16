@@ -47,6 +47,54 @@ const yahooChartBreaker = createCircuitBreaker({ name: 'yahoo-chart', failureThr
 // macro-sync inteiro, e há duas fontes atrás na cadeia — desistir rápido e cair
 // para a próxima vale mais que insistir numa resposta que já atrasou.
 const CURRENCY_TIMEOUT_MS = 8000;
+
+/*
+ * TODA CHAMADA AO YAHOO TEM RELÓGIO. Não é otimização, é o que impede uma
+ * resposta que não vem de virar um processo travado.
+ *
+ * O circuit breaker aqui do lado protege contra a fonte que FALHA — ele conta
+ * erros. Não existe erro nenhum numa chamada que simplesmente não volta: ela não
+ * abre o circuito, não entra em retry, não vira log. Ela fica. E como a rotina
+ * que a chamou está dentro de um `await`, o job inteiro fica junto, segurando na
+ * memória tudo o que já tinha carregado.
+ *
+ * Foi assim que 'daily-morning' parou em 13, 14 e 15/09/2026 — três execuções
+ * abertas para sempre, num processo de 512 MB, no `getFullHistory` da Carteira
+ * Recomendada. A manhã é a única rotina que encontra o cache de 12h vencido
+ * (a noite roda 9,5h depois dela, e o timeSeriesWorker das 18:30 já renovou a
+ * série), então é a única que vai à rede buscar a série de todos os tickers.
+ * O `getCurrencyQuotes` abaixo já tinha o teto desde 04/09/2026 pelo mesmo
+ * motivo; faltava estender a todas as outras.
+ *
+ * Três tamanhos, e a diferença entre eles é o CUSTO DE DESISTIR, não o tamanho
+ * do payload:
+ *
+ *  - cotação de punhado fixo (câmbio, 3 índices): resposta de ~1s, com fonte
+ *    atrás na cadeia. Desistir cedo é barato.
+ *  - LOTE de cotações: até 50 tickers numa chamada só, e perdê-la não é "esperar
+ *    mais" — é cair para o scraping do Google, que não publica volume e devolve
+ *    variação zerada. Teto generoso de propósito: aqui o erro caro é desistir de
+ *    uma resposta que ia chegar.
+ *  - série histórica: payload de 2020→hoje, o mais pesado que pedimos.
+ *
+ * Nenhum dos três é generoso o bastante para caber um travamento, que é o único
+ * caso que eles precisam cortar.
+ */
+const YAHOO_QUOTE_TIMEOUT_MS = 8000;
+const YAHOO_QUOTE_BATCH_TIMEOUT_MS = 15000;
+const YAHOO_CHART_TIMEOUT_MS = 20000;
+
+/**
+ * Acrescenta o teto de tempo às opções da chamada, sem mexer no resto.
+ *
+ * Preserva as flags de quem chama (`validateResult`) e não inventa nenhuma:
+ * passar `validateResult: false` onde o chamador não pediu silenciaria erro de
+ * schema em quem hoje o vê.
+ */
+export const comTeto = (timeoutMs, options = {}) => ({
+    ...options,
+    fetchOptions: { ...(options.fetchOptions || {}), signal: AbortSignal.timeout(timeoutMs) },
+});
 const googleBreaker = createCircuitBreaker({ name: 'google-finance', failureThreshold: 8, cooldownMs: 60_000 });
 const brapiBreaker = createCircuitBreaker({ name: 'brapi', failureThreshold: 5, cooldownMs: 60_000 });
 // Sinaliza UMA vez por processo o 429 de cota mensal esgotada da brapi. Sem isto o
@@ -218,6 +266,7 @@ export const externalMarketService = {
             const result = await trackSource('yahoo.chart', () => yahooChartBreaker.exec(() => yahooFinance.chart(
                 symbol,
                 { period1: new Date(Date.now() - 10 * 86400000), interval: '1d' },
+                comTeto(YAHOO_CHART_TIMEOUT_MS),
             )), { isEmpty: (r) => !(r?.quotes?.length > 0) });
 
             // SESSÃO É A QUE TEVE NEGÓCIO — barra sem volume é continuação.
@@ -298,6 +347,7 @@ export const externalMarketService = {
             const result = await trackSource('yahoo.hourly', () => yahooChartBreaker.exec(() => yahooFinance.chart(
                 symbol,
                 { period1: inicio, period2: fim, interval: '1h' },
+                comTeto(YAHOO_CHART_TIMEOUT_MS),
             )), { isEmpty: (r) => !(r?.quotes?.length > 0) });
 
             // Filtro explícito pelo dia: o Yahoo entrega a barra viva ALÉM do
@@ -562,7 +612,7 @@ export const externalMarketService = {
             // e só soma mais uma tacada no endpoint já bloqueado.
             const results = await measurePerformance('external', 'YAHOO quote-batch', () => trackSource('yahoo.quotes', () =>
                 yahooQuoteBreaker.exec(() => withRetry(
-                    () => yahooFinance.quote(yahooTickers, {}, { validateResult: false }),
+                    () => yahooFinance.quote(yahooTickers, {}, comTeto(YAHOO_QUOTE_BATCH_TIMEOUT_MS, { validateResult: false })),
                     { retries: 1, baseDelayMs: 300, shouldRetry: (err) => !/429|crumb/i.test(err?.message || '') },
                 ))));
             const validResults = Array.isArray(results) ? results : [results];
@@ -695,7 +745,8 @@ export const externalMarketService = {
 
         try {
             const quotes = await measurePerformance('external', 'YAHOO global-indices', () => trackSource('yahoo.indices', () =>
-                yahooFinance.quote(['^BVSP', '^GSPC', '^IXIC']), { isEmpty: (r) => !(Array.isArray(r) ? r.length : r) }));
+                yahooFinance.quote(['^BVSP', '^GSPC', '^IXIC'], {}, comTeto(YAHOO_QUOTE_TIMEOUT_MS)),
+                { isEmpty: (r) => !(Array.isArray(r) ? r.length : r) }));
             const find = (s) => (Array.isArray(quotes) ? quotes : [quotes]).find(q => q.symbol === s);
 
             const result = {};
@@ -741,6 +792,7 @@ export const externalMarketService = {
                     () => yahooChartBreaker.exec(() => yahooFinance.chart(
                         simbolo,
                         { period1: new Date(Date.now() - 10 * 86400000), interval: '1d' },
+                        comTeto(YAHOO_CHART_TIMEOUT_MS),
                     )),
                     { isEmpty: (res) => !(res?.quotes?.some((c) => c?.close > 0)) },
                 );
@@ -774,14 +826,12 @@ export const externalMarketService = {
     async getCurrencyQuotes() {
         try {
             const quotes = await measurePerformance('external', 'YAHOO currencies', () => trackSource('yahoo.currencies', () => withRetry(
-                () => yahooFinance.quote(['BRL=X', 'BTC-USD'], {}, {
-                    validateResult: false,
-                    // Sem teto explícito, a chamada pendurava até o timeout do
-                    // socket: as execuções do macro-sync em 04/09/2026 iam de 3s
-                    // para 21s quando esta falhava, e o resto da rotina esperava
-                    // junto. 8s é folgado para uma resposta que normalmente leva ~1s.
-                    fetchOptions: { signal: AbortSignal.timeout(CURRENCY_TIMEOUT_MS) },
-                }),
+                // Sem teto explícito, a chamada pendurava até o timeout do socket:
+                // as execuções do macro-sync em 04/09/2026 iam de 3s para 21s
+                // quando esta falhava, e o resto da rotina esperava junto. 8s é
+                // folgado para uma resposta que normalmente leva ~1s. Foi o
+                // primeiro teto do arquivo; hoje todos passam pelo `comTeto`.
+                () => yahooFinance.quote(['BRL=X', 'BTC-USD'], {}, comTeto(CURRENCY_TIMEOUT_MS, { validateResult: false })),
                 // Mesma política do lote de cotações: uma retentativa curta para
                 // falha transitória, NENHUMA em 429/crumb — rate-limit de IP não
                 // melhora em 300ms, e insistir só prolonga o bloqueio. Sem breaker
@@ -828,7 +878,7 @@ export const externalMarketService = {
                     period1: period1,
                     period2: period2,
                     interval: '1d'
-                }, { validateResult: false }));
+                }, comTeto(YAHOO_CHART_TIMEOUT_MS, { validateResult: false })));
 
             if (!result || !result.quotes || result.quotes.length < 10) {
                 logger.warn("⚠️ SPX Chart: Dados insuficientes (Length < 10). Usando Fallback 32.50%.");
@@ -893,7 +943,7 @@ export const externalMarketService = {
                     period1: period1,
                     period2: period2,
                     interval: '1d'
-                }, { validateResult: false }));
+                }, comTeto(YAHOO_CHART_TIMEOUT_MS, { validateResult: false })));
 
             if (!result || !result.quotes || result.quotes.length < 10) {
                 logger.warn("⚠️ IBOV Chart: Dados insuficientes. Usando Fallback 15.50%.");
@@ -1005,7 +1055,7 @@ export const externalMarketService = {
             // devolve meta incompleto (currency null / sem regularMarketPrice) — payload
             // de quotes ainda vem íntegro e já filtramos close>0 abaixo.
             const result = await measurePerformance('external', 'YAHOO chart-history', () => trackSource('yahoo.history', () =>
-                yahooFinance.chart(symbol, queryOptions, { validateResult: false })));
+                yahooFinance.chart(symbol, queryOptions, comTeto(YAHOO_CHART_TIMEOUT_MS, { validateResult: false }))));
 
             if (!result || !result.quotes || !Array.isArray(result.quotes)) return null;
 
@@ -1083,7 +1133,7 @@ export const externalMarketService = {
                         period2: today,
                         interval: '1d',
                         events: 'dividends',
-                    }, { validateResult: false }),
+                    }, comTeto(YAHOO_CHART_TIMEOUT_MS, { validateResult: false })),
                     {
                         retries: 2,
                         baseDelayMs: 300,

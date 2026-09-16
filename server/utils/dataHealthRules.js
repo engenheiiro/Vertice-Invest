@@ -883,7 +883,10 @@ const jobChecks = (facts) => {
     };
 
     for (const job of facts.jobs || []) {
-        const { jobId, label, severity = 'WARN', maxSilenceHours, lastRunAt, lastStatus, lastError } = job;
+        const {
+            jobId, label, severity = 'WARN', maxSilenceHours,
+            lastRunAt, lastStatus, lastError, maxRuntimeMinutes,
+        } = job;
 
         if (!lastRunAt) {
             const instrumentedForHours = monitoredHours(job);
@@ -912,12 +915,28 @@ const jobChecks = (facts) => {
         const overdue = Number.isFinite(maxSilenceHours) && age > maxSilenceHours;
         const failed = lastStatus === 'FAILED';
 
+        // EXECUÇÃO ABERTA HÁ TEMPO DEMAIS — o ponto cego que deixou 'daily-morning'
+        // travado por três dias com o painel verde (13–15/09/2026).
+        //
+        // A regra acima só sabia perguntar "faz quanto tempo não roda?", e um job
+        // preso responde bem a essa pergunta: ele COMEÇOU agora há pouco. Enquanto
+        // o cron abrir uma execução nova por dia, `lastRunAt` fica sempre fresco e
+        // o silêncio nunca aparece — a falha era invisível por construção.
+        //
+        // O teto vem do jobCatalog e é o pior caso medido com folga, então passar
+        // dele não é lentidão: é execução que não vai terminar. Só alarma com o
+        // `maxRuntimeMinutes` presente nos fatos — sem ele a pergunta não tem
+        // régua, e inventar uma aqui seria pior que não perguntar.
+        const maxRuntimeHours = Number.isFinite(maxRuntimeMinutes) ? maxRuntimeMinutes / 60 : null;
+        const stuck = lastStatus === 'RUNNING' && maxRuntimeHours !== null && age > maxRuntimeHours;
+
         let status = HEALTH_STATUS.OK;
-        if (failed || overdue) {
+        if (failed || overdue || stuck) {
             status = severity === 'CRITICAL' ? HEALTH_STATUS.CRITICAL : HEALTH_STATUS.WARN;
         }
 
         const parts = [`Última execução há ${age.toFixed(1)}h`];
+        if (stuck) parts.push(`ainda ABERTA, acima do teto de ${maxRuntimeMinutes} min de duração`);
         if (overdue) parts.push(`acima do teto de ${maxSilenceHours}h`);
         if (failed) parts.push(`falhou: ${lastError || 'erro não registrado'}`);
 
@@ -928,9 +947,11 @@ const jobChecks = (facts) => {
             status,
             value: age,
             detail: parts.join(' — '),
-            hint: failed
-                ? 'Veja o erro completo na aba de Erros do painel.'
-                : 'Silêncio acima do teto indica scheduler parado, deploy que derrubou o processo, ou EXTERNAL_SCHEDULER mal configurado.',
+            hint: stuck
+                ? 'Execução travada segura memória do processo até ele reiniciar. O watchdog derruba as novas; esta ficou de antes.'
+                : failed
+                    ? 'Veja o erro completo na aba de Erros do painel.'
+                    : 'Silêncio acima do teto indica scheduler parado, deploy que derrubou o processo, ou EXTERNAL_SCHEDULER mal configurado.',
         }));
     }
     return out;

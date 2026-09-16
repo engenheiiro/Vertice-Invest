@@ -22,6 +22,7 @@ import EconomicIndex from '../models/EconomicIndex.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
+import { mapWithConcurrency } from '../utils/concurrency.js';
 import logger from '../config/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -30,6 +31,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const MS_DAY = 86400000;
 const WINDOW_DAYS = 180;          // horizonte máximo da curva
+const PRICE_MAP_CONCURRENCY = 4;  // séries carregadas ao mesmo tempo (ver buildCurveForClass)
 const DEFAULT_PROFILE = 'MODERATE';
 const PROFILES = ['DEFENSIVE', 'MODERATE', 'BOLD'];
 
@@ -178,10 +180,18 @@ const buildCurveForClass = async (pseudoClass, profile) => {
     const allAssets = new Map();
     rebalances.forEach((r) => r.holdings.forEach((h) => allAssets.set(h.ticker, h.type || 'STOCK')));
     const priceMaps = new Map();
-    await Promise.all([...allAssets].map(async ([t, type]) => {
+    // TETO DE PARALELISMO, não elegância. Com `Promise.all` sobre a cesta inteira,
+    // cada ticker cujo cache de 12h tivesse vencido disparava a própria busca de
+    // série ao mesmo tempo — dezenas de payloads de 2020→hoje vivos de uma vez,
+    // cada um virando documento hidratado do Mongoose, num processo de 512 MB.
+    // É a manhã que paga essa conta (ver o comentário do teto em
+    // externalMarketService.js): a rotina das 18:30 chega com a série já renovada
+    // pelo timeSeriesWorker e não vai à rede. Quatro por vez mantém o pico baixo
+    // e não muda o tempo total de forma perceptível — o gargalo é a rede, não nós.
+    await mapWithConcurrency([...allAssets], PRICE_MAP_CONCURRENCY, async ([t, type]) => {
         const m = await loadPriceMap(t, type);
         if (m) priceMaps.set(t, m);
-    }));
+    });
 
     // Benchmarks — só os que a classe usa (config.benchmarks). Séries não pedidas
     // ficam null → retorno 0 → o front oculta a linha.

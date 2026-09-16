@@ -26,7 +26,7 @@ import ErrorLog from '../models/ErrorLog.js';
 import JobRun from '../models/JobRun.js';
 import logger from '../config/logger.js';
 import { isTransientMongoError } from '../utils/mongoResilience.js';
-import { JOB_CATALOG } from '../config/jobCatalog.js';
+import { JOB_CATALOG, getJobMaxRuntimeMinutes } from '../config/jobCatalog.js';
 import { brazilDayKey, isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { buildCandleClock, summarizeCandleStaleness } from '../utils/candleStaleness.js';
 import { auditTreasuryCatalog } from '../utils/treasuryCatalogAudit.js';
@@ -376,6 +376,10 @@ const collectJobFacts = async () => {
                 label: meta.label,
                 severity: meta.severity,
                 maxSilenceHours: meta.maxSilenceHours,
+                // Teto de DURAÇÃO (o de silêncio é o de cima): é ele que deixa a
+                // regra acusar execução aberta demais. Resolvido aqui, e não na
+                // regra, para as regras seguirem puras — elas recebem fatos.
+                maxRuntimeMinutes: getJobMaxRuntimeMinutes(jobId),
                 // Entrada do job no catálogo: a carência de "nunca executado" é
                 // contada dela quando é mais recente que a instrumentação.
                 since: meta.since || null,

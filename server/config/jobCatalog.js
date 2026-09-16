@@ -13,18 +13,41 @@
  *
  * `severity` define o peso da falha/silêncio: 'CRITICAL' derruba o painel inteiro
  * (dado que o produto usa fica errado), 'WARN' sinaliza sem alarmar.
+ *
+ * `maxRuntimeMinutes` é a outra ponta, e responde à pergunta oposta: não "faz
+ * quanto tempo não roda?", mas "faz quanto tempo ESTÁ rodando?". Job travado é
+ * pior que job parado, porque a sentinela o lê como execução recente e fica
+ * verde — foi o que aconteceu com 'daily-morning' em 13, 14 e 15/09/2026: três
+ * execuções abertas para sempre numa chamada ao Yahoo sem teto, cada uma
+ * segurando na memória tudo que carregou, num processo de 512 MB. Este teto é o
+ * que transforma o travamento em falha: o watchdog derruba a execução presa e a
+ * sentinela acusa a que ficou aberta.
+ *
+ * O número é o PIOR caso medido com folga larga, nunca a média — matar execução
+ * legítima troca um defeito por outro. Ausente = DEFAULT_MAX_RUNTIME_MINUTES.
  */
+
+/**
+ * Teto padrão de duração. 15 minutos é folgado para o perfil real da grade (a
+ * maioria das 21 rotinas fecha em menos de 30s); quem precisa de mais declara.
+ */
+export const DEFAULT_MAX_RUNTIME_MINUTES = 15;
 
 export const JOB_CATALOG = {
     'macro-sync': {
         label: 'Macroeconomia (15 min)',
         maxSilenceHours: 2,
         severity: 'CRITICAL',
+        maxRuntimeMinutes: 10, // pior caso medido em 30 dias: 208s
     },
     'quotes-sync': {
         label: 'Cotações em tempo real (15 min)',
         maxSilenceHours: 2,
         severity: 'CRITICAL',
+        // Pior caso medido: 838s (13,9 min), num lote que desceu a cadeia de
+        // fallback inteira. 20 min deixa esse caso passar e ainda corta o que
+        // passar disso, que já não é lentidão — é travamento.
+        maxRuntimeMinutes: 20,
     },
     'radar-alpha': {
         label: 'Radar Alpha (15 min)',
@@ -40,11 +63,18 @@ export const JOB_CATALOG = {
         label: 'Rotina diária — manhã (09:00)',
         maxSilenceHours: 30,
         severity: 'CRITICAL',
+        // Pior caso medido: 295s. 20 min é quatro vezes isso — e é justamente a
+        // rotina que travou, porque é a única que encontra o cache de histórico
+        // vencido (12h) e vai ao Yahoo buscar a série de todos os tickers.
+        maxRuntimeMinutes: 20,
     },
     'daily-evening': {
         label: 'Rotina diária — pós-mercado (18:30)',
         maxSilenceHours: 30,
         severity: 'CRITICAL',
+        // A mais longa da grade (596s no pior caso): carrega o timeSeriesWorker,
+        // o research e os dois backtests no mesmo fôlego.
+        maxRuntimeMinutes: 40,
         // Desligado in-app quando EXTERNAL_SCHEDULER=true (roda como Render Cron Job).
         heavy: true,
     },
@@ -52,6 +82,7 @@ export const JOB_CATALOG = {
         label: 'Auto-publish semanal (seg 09:30)',
         maxSilenceHours: 192, // 8 dias
         severity: 'WARN',
+        maxRuntimeMinutes: 20,
     },
     'monthly-anchor-publish': {
         label: 'Publicação da lista âncora Buy-and-Hold (dia 1, 07:30)',
@@ -165,6 +196,15 @@ export const JOB_CATALOG = {
 export const getJobMeta = (jobId) => JOB_CATALOG[jobId] || null;
 
 export const getJobLabel = (jobId) => JOB_CATALOG[jobId]?.label || jobId;
+
+/** Teto de duração de UMA execução, em minutos (declarado no catálogo ou padrão). */
+export const getJobMaxRuntimeMinutes = (jobId) => {
+    const declared = JOB_CATALOG[jobId]?.maxRuntimeMinutes;
+    return Number.isFinite(declared) && declared > 0 ? declared : DEFAULT_MAX_RUNTIME_MINUTES;
+};
+
+/** O mesmo teto na unidade do watchdog. */
+export const getJobMaxRuntimeMs = (jobId) => getJobMaxRuntimeMinutes(jobId) * 60 * 1000;
 
 /** Jobs que a sentinela cobra presença (exclui anuais e disparos manuais). */
 export const monitoredJobIds = () =>
